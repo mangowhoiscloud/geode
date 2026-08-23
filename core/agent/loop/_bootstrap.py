@@ -92,18 +92,18 @@ def initialize_runtime(
     loop._last_llm_error = None
     loop._response_schema = config.response_schema
 
-    from core.llm.adapters import resolve_for
     from core.llm.adapters.registry import (
         AdapterNotFoundError,
-        get_adapter,
         normalize_registry_provider,
     )
 
     registry_provider = normalize_registry_provider(loop._provider)
     try:
-        loop._new_adapter = get_adapter(loop._source)
+        loop._new_adapter = loop._adapter_registry_snapshot.get_adapter(loop._source)
     except AdapterNotFoundError:
-        loop._new_adapter = resolve_for(registry_provider, loop._source)
+        loop._new_adapter = loop._adapter_registry_snapshot.resolve_for(
+            registry_provider, loop._source
+        )
     loop._op_logger = OperationLogger(quiet=quiet)
     loop._error_recovery = ErrorRecoveryStrategy(tool_executor)
 

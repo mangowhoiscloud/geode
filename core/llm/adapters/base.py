@@ -329,8 +329,8 @@ class LLMAdapter(Protocol):
     """Minimum adapter contract: route identity plus one completion operation.
 
     Concrete implementations live in ``core/llm/adapters/<name>.py``. External
-    plugins implement this Protocol without subclassing and register via
-    :func:`core.llm.adapters.registry.register_adapter`.
+    packages implement this Protocol without subclassing and expose a factory
+    through the ``geode.llm_adapters`` package entry-point group.
 
     Streaming and operator introspection are separate runtime-checkable
     capability protocols below. A completion-only adapter does not implement

@@ -145,6 +145,13 @@ functional change.
   their provider-call behavior and no longer claim an unavailable quota API;
   completion-only adapters can register without implementing empty methods.
 
+- **LLM adapter discovery is generation-bound.** Built-in factories and the
+  supported `geode.llm_adapters` package entry-point group now produce an
+  immutable registry snapshot with origin and validation evidence. Duplicate
+  canonical IDs fail unless an explicit override records the winning origin,
+  priority, and trust decision. New sessions capture the current generation;
+  live sessions retain their original routing snapshot across reloads.
+
 - **MCP runtime responsibilities now have one owner each.**
   `MCPServerManager` remains the public compatibility facade, while concrete
   catalog, connection-pool, discovery, invocation/trace, and lifecycle

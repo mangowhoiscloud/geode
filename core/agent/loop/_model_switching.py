@@ -11,6 +11,8 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from core.llm.adapters.base import LLMAdapter
+
     from .agent_loop import AgenticLoop
 
 log = logging.getLogger(__name__)
@@ -25,7 +27,10 @@ def _resolve_provider(model: str) -> str:
     return _loop_pkg._resolve_provider(model)
 
 
-def _resolve_path_b_adapter(provider: str, source: str):  # type: ignore[no-untyped-def]
+def _resolve_path_b_adapter(
+    provider: str,
+    source: str,
+) -> LLMAdapter | None:
     """Resolve a Path-B :class:`LLMAdapter` for ``(provider, source)``.
 
     PR-MAINPATH-4 (2026-05-24) — mirrors the
@@ -42,12 +47,12 @@ def _resolve_path_b_adapter(provider: str, source: str):  # type: ignore[no-unty
     of the legacy resolver surface; this function is now the sole
     adapter factory used by ``/model`` switching.
     """
-    from core.llm.adapters import CONCRETE_SOURCES, resolve_for
-    from core.llm.adapters.registry import normalize_registry_provider
+    from core.llm.adapters import CONCRETE_SOURCES
+    from core.llm.adapters.registry import active_registry_snapshot, normalize_registry_provider
 
     if source not in CONCRETE_SOURCES:
         return None
-    return resolve_for(normalize_registry_provider(provider), source)
+    return active_registry_snapshot().resolve_for(normalize_registry_provider(provider), source)
 
 
 def _settings_model_target(loop: AgenticLoop) -> str | None:
@@ -159,7 +164,13 @@ def _apply_model_update(
                     model,
                 )
                 loop._source = new_source
-        loop._new_adapter = _resolve_path_b_adapter(new_provider, getattr(loop, "_source", ""))
+        from core.llm.adapters.registry import use_registry_snapshot
+
+        with use_registry_snapshot(loop._adapter_registry_snapshot):
+            loop._new_adapter = _resolve_path_b_adapter(
+                new_provider,
+                getattr(loop, "_source", ""),
+            )
     loop.model = model
     loop._tool_processor._model = model
     loop._tool_processor._provider = getattr(

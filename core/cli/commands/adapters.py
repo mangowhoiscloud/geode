@@ -43,11 +43,10 @@ def adapters_list() -> None:
     from core.llm.adapters import (
         EnvironmentDiagnosticCapable,
         bootstrap_builtins,
-        list_adapters,
     )
 
-    bootstrap_builtins(policy_sources=EMPTY_POLICY_SOURCES)
-    adapters = list_adapters()
+    snapshot = bootstrap_builtins(policy_sources=EMPTY_POLICY_SOURCES)
+    adapters = snapshot.list_adapters()
     if not adapters:
         typer.echo("No LLM adapters registered.")
         raise typer.Exit()
@@ -64,7 +63,7 @@ def adapters_list() -> None:
         typer.echo(
             f"{a.name:<20} {a.provider:<10} {a.source:<14} {a.billing_type.value:<22} {status}"
         )
-    typer.echo(f"\n{len(adapters)} adapter(s) registered.")
+    typer.echo(f"\nRegistry generation {snapshot.generation}: {len(adapters)} adapter(s).")
     typer.echo(
         'Override per role via ~/.geode/config.toml [seed_generation.role.<role>] source = "..."'
     )

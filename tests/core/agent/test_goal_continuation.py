@@ -8,12 +8,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.agent.loop import AgenticLoop, AgenticResult, _goal, _guards
 from core.hooks import HookEvent, HookName
+from core.llm.adapters.registry import registry_snapshot
 from core.llm.token_tracker import LLMUsage
 from core.memory.goals import GoalStatus, GoalStore
 
 
 def test_goal_continues_after_success_and_settles_public_usage(tmp_path: Path) -> None:
     loop = object.__new__(AgenticLoop)
+    loop._adapter_registry_snapshot = registry_snapshot()
     loop._session_id = "s-goal"
     loop._goal_store = GoalStore(tmp_path / "sessions.db")
     loop._timeline = MagicMock()
@@ -61,6 +63,7 @@ def test_goal_continues_after_success_and_settles_public_usage(tmp_path: Path) -
 
 def test_active_goal_does_not_hide_new_user_steering(tmp_path: Path) -> None:
     loop = object.__new__(AgenticLoop)
+    loop._adapter_registry_snapshot = registry_snapshot()
     loop._session_id = "s-goal"
     loop._goal_store = GoalStore(tmp_path / "sessions.db")
     loop._timeline = None
@@ -87,6 +90,7 @@ def test_active_goal_does_not_hide_new_user_steering(tmp_path: Path) -> None:
 
 def test_goal_budget_stops_before_another_continuation(tmp_path: Path) -> None:
     loop = object.__new__(AgenticLoop)
+    loop._adapter_registry_snapshot = registry_snapshot()
     loop._session_id = "s-goal"
     loop._goal_store = GoalStore(tmp_path / "sessions.db")
     loop._timeline = None
@@ -118,6 +122,7 @@ def test_goal_budget_stops_before_another_continuation(tmp_path: Path) -> None:
 
 def test_repeated_text_only_continuation_leaves_goal_active(tmp_path: Path) -> None:
     loop = object.__new__(AgenticLoop)
+    loop._adapter_registry_snapshot = registry_snapshot()
     loop._session_id = "s-goal"
     loop._goal_store = GoalStore(tmp_path / "sessions.db")
     loop._timeline = None
@@ -149,6 +154,7 @@ def test_automatic_continuation_safety_cap_leaves_goal_active(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     loop = object.__new__(AgenticLoop)
+    loop._adapter_registry_snapshot = registry_snapshot()
     loop._session_id = "s-goal"
     loop._goal_store = GoalStore(tmp_path / "sessions.db")
     loop._timeline = None
@@ -178,6 +184,7 @@ def test_automatic_continuation_safety_cap_leaves_goal_active(
 
 def test_hosted_continuation_enters_as_internal_goal_turn(tmp_path: Path) -> None:
     loop = object.__new__(AgenticLoop)
+    loop._adapter_registry_snapshot = registry_snapshot()
     loop._session_id = "s-goal"
     loop._goal_store = GoalStore(tmp_path / "sessions.db")
     loop._timeline = None

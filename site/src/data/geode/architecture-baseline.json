@@ -20,11 +20,11 @@
     "classification_counts": {
       "cache": 1,
       "diagnostic_scope": 7,
-      "request_identity": 7,
+      "request_identity": 8,
       "request_local_mutable_state": 9,
       "service_locator": 0
     },
-    "count": 24,
+    "count": 25,
     "items": [
       {
         "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
@@ -190,6 +190,21 @@
         "setter": "core.llm.adapters.dispatch.begin_session_adapter_tracking",
         "symbol": "_session_adapter_usage_ctx",
         "teardown": "session finalization replaces the counter with None"
+      },
+      {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_identity",
+        "context_name": "active_adapter_registry_snapshot",
+        "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one AgenticLoop arun or goal-continuation task",
+        "line": 169,
+        "owner": "core.agent.loop.AgenticLoop",
+        "path": "core/llm/adapters/registry.py",
+        "resetter": "core.llm.adapters.registry.use_registry_snapshot finally resets its token",
+        "setter": "core.llm.adapters.registry.use_registry_snapshot",
+        "symbol": "_ACTIVE_SNAPSHOT",
+        "teardown": "the scope resets its token and task exit discards the inherited context"
       },
       {
         "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
@@ -393,7 +408,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 12,
-      "file_loc": 1112,
+      "file_loc": 1121,
       "method_count": 38,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -528,7 +543,7 @@
   "packages": {
     "core": {
       "python_files": 403,
-      "python_loc": 119784
+      "python_loc": 120134
     },
     "geode_product": {
       "python_files": 154,
@@ -540,7 +555,7 @@
     },
     "tests": {
       "python_files": 685,
-      "python_loc": 183468
+      "python_loc": 183677
     }
   },
   "schema_version": 4,
