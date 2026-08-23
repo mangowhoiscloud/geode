@@ -49,6 +49,14 @@ functional change.
 
 ### Added
 
+- **GEO visibility measurements now have an executable receipt contract.** A
+  frozen 24-query workload binds a separate live-approval receipt and exact
+  model/K=5 inputs; native outcomes, verifier identity/rubric, run spec, and
+  complete audited-claim counts are digest-checked before separate R/C/P/A/Q
+  denominators are emitted. Public site preflight v2 additionally
+  requires one self-canonical URL for every sitemap page and never invents F,
+  O, or an aggregate GEO score.
+
 - **Public runtime boundaries now use explicit versioned envelopes.** Thin CLI
   IPC negotiates `geode.ipc.v1` features, bounds line-delimited JSON, keeps a
   stable streaming-event vocabulary, and correlates every event and response

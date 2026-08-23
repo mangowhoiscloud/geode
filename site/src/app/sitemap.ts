@@ -13,5 +13,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "portfolio",
     ...flattenSitemap().map((page) => `docs${page.slug ? `/${page.slug}` : ""}`),
   ];
-  return paths.map((path) => ({ url: `${SITE}/${path}` }));
+  return paths.map((path) => ({ url: `${SITE}/${path}${path ? "/" : ""}` }));
 }

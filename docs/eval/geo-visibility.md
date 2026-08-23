@@ -15,6 +15,9 @@ eval_contracts:
   - core/observability/schemas/trajectory-release.schema.json
   - core/observability/schemas/trajectory.schema.json
   - docs/eval/artifact-publish-manifest.template.json
+  - docs/eval/schemas/geo-live-approval.schema.json
+  - docs/eval/schemas/geo-native-results.schema.json
+  - docs/eval/schemas/geo-workload.schema.json
   - docs/eval/schemas/publication.schema.json
   - docs/eval/schemas/run-spec.schema.json
 ---
@@ -110,6 +113,11 @@ an aggregate GEO score.
 | Q | Support/credibility/answer quality | audited claims and sources | entailment, completeness, source authority, factuality |
 | O | First-party outcome | eligible impressions/referrals/sessions | impression, referral, engagement, conversion, separately reported |
 
+The executable v1 validator measures only the claim-support component of Q.
+It therefore reports Q as `partial` even when every target-cited response has a
+verifier receipt; completeness, authority, and factuality need their own frozen
+rubrics and receipts.
+
 ## Protocol
 
 1. Run deterministic preflight first: exported site build, internal links,
@@ -126,7 +134,24 @@ an aggregate GEO score.
 2. For live engines, use every frozen root and paraphrase in fresh sessions at
    `k=5` repetitions per engine. Record engine/model surface, locale, account
    state, timestamp, search activation, cited URLs, answer, and screenshots or
-   native receipts where permitted.
+   native receipts where permitted. The frozen workload must digest-bind an
+   operator-owned `geode.geo-live-approval@1` receipt for the same run, engine,
+   model, locale, account state, and repetition count.
+   Bind the frozen workload and native/verifier receipts through the executable
+   measurement contract:
+
+   ```bash
+   uv run python scripts/eval/geo_visibility.py \
+     --run-spec <run-dir>/run-spec.json \
+     --workload <run-dir>/workload.json \
+     --native-results <run-dir>/native-results.json \
+     --out <run-dir>/geo-vector.json
+   ```
+
+   The command validates the complete 24×K observation matrix and emits
+   separate R/C/P/A/Q denominators, the run-spec digest, native producer,
+   verifier/rubric identity, and audited-claim coverage. It does not infer F or
+   O and has no aggregate score field.
 3. For offline intervention evaluation, hash original, sham, and targeted
    repair arms; reindex every arm and re-run retrieval, reranking, and
    generation. Include initial-rank controls and a multi-actor adoption arm.

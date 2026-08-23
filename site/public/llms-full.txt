@@ -47,7 +47,7 @@ GEODE 를 가르는 핵심은 **두 개의 루프**입니다.
 
 [05-operateGEODE 운영Serve와 게이트웨이, 메신저 연동, 작업 예약, 스케줄러 내부, …](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md)
 
-[06-benchmarks벤치마크Tau2, MCPMark](https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2.md)
+[06-benchmarks벤치마크GEO 가시성, Tau2, MCPMark](https://mangowhoiscloud.github.io/geode/docs/benchmarks/geo.md)
 
 [07-guides가이드도구 작성, 훅과 미들웨어 등록, Trajectory 게시, LLM 어댑터 추가, …](https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool.md)
 
@@ -3130,6 +3130,56 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/run/troubleshooting.md
 ---
 
 ## Benchmarks . 벤치마크
+
+### GEO visibility (GEO 가시성)
+
+URL: https://mangowhoiscloud.github.io/geode/docs/benchmarks/geo
+Markdown: https://mangowhoiscloud.github.io/geode/docs/benchmarks/geo.md
+
+## 무엇을 검증하는가
+
+GEO는 문장을 다시 쓰는 최적화 점수가 아니라 증거 상태머신입니다.`preflight → offline_measure → live_observe → experiment`의 앞 단계가 뒤 단계를 대신하지 못하며, 측정하지 못한 값은 0이 아니라`not_measured`로 남습니다.
+
+| Stage | 질문 | 분모 |
+| --- | --- | --- |
+| `F` | Fetch / index 적격성 | 감사한 URL |
+| `R` | 검색 포함 | 검색 표면이 노출된 반복 질의 |
+| `C` | 인용 선택 | 모든 반복 질의 |
+| `P` | 가시 배치 | target 인용 응답 |
+| `A` | 답변 흡수 | 검증된 target 인용 응답 |
+| `Q` | claim support (품질 부분지표) | 감사한 target 연결 claim |
+| `O` | 1차 outcome | 적격 impression / referral / session |
+
+## 실행 계약
+
+1.  6개 root마다 root query 1개와 paraphrase 3개, 총 24개 문자열을 고정합니다.
+2.  `run-spec.json`이 workload SHA-256과 모델을 동결하고, live는 동일 surface의 별도 operator approval receipt와 정확히 K=5를 요구합니다.
+3.  24×K 각 셀은 하나의 native receipt로 돌아가며 검색 활성화, retrieval, citation의 JSON Pointer가 원본과 일치해야 합니다.
+4.  absorption과 quality는 별도 verifier receipt·producer/version·digest-bound rubric이 없으면 측정값으로 인정하지 않습니다.
+5.  Q는 verifier가 선언한 전체 target-linked claim 수와 실제 감사 행 수가 같아야 계산합니다.
+6.  v1은 Q 중 claim support만 측정하므로, 모든 영수증이 있어도 Q 전체는 `partial`입니다.
+
+```
+uv run python scripts/eval/geo_visibility.py \
+  --run-spec <run-dir>/run-spec.json \
+  --workload <run-dir>/workload.json \
+  --native-results <run-dir>/native-results.json \
+  --out <run-dir>/geo-vector.json
+```
+
+## 현재 경계
+
+저장소 CI는 export, sitemap, self-canonical, indexability와 LLM index를`geode.geo-preflight.v2` 영수증으로 확인합니다. R–Q 측정기는 실행 가능하지만 공개된 live 결과는 아직 없습니다. O는 Search Console, referral과 전환 같은 1차 analytics가 들어오기 전까지 측정하지 않습니다.
+
+native outcome, verifier 판단, GEODE trajectory, analysis와 publication manifest는 서로 다른 권한입니다. Inspect가 실행하지 않은 slash run을`.eval`로 포장하지도 않습니다.
+
+## 근거
+
+-   [Google generative AI optimization guide](https://developers.google.com/search/docs/fundamentals/ai-optimization-guide)
+-   [C-SEO Bench](https://proceedings.neurips.cc/paper_files/paper/2025/hash/27aa3aeff0f8460a7b43d30fa6c5c032-Abstract-Datasets_and_Benchmarks_Track.html)
+-   [Canonical GEO evaluation profile](https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/geo-visibility.md)
+
+---
 
 ### Tau2 (Tau2)
 
@@ -6297,7 +6347,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 587 |
-| 테스트 Python 파일 | 687 |
+| 테스트 Python 파일 | 688 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 86 / 89 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 5 |

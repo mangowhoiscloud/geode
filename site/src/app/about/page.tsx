@@ -1,4 +1,9 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "https://mangowhoiscloud.github.io/geode/about/" },
+};
 
 type Entry = {
   id: string;

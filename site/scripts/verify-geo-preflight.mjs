@@ -19,7 +19,9 @@ const sitemapPath = join(out, "sitemap.xml");
 if (!existsSync(sitemapPath)) throw new Error("out/sitemap.xml is missing; run npm run build");
 const xml = readFileSync(sitemapPath, "utf8");
 const urls = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
-const expectedUrls = expectedPaths.map((path) => `${publicBase}/${path}`);
+const expectedUrls = expectedPaths.map(
+  (path) => `${publicBase}/${path}${path ? "/" : ""}`,
+);
 if (urls.length !== new Set(urls).size) throw new Error("sitemap.xml contains duplicate URLs");
 const missingUrls = expectedUrls.filter((url) => !urls.includes(url));
 const extraUrls = urls.filter((url) => !expectedUrls.includes(url));
@@ -29,12 +31,24 @@ if (missingUrls.length || extraUrls.length) {
   );
 }
 
+const canonicalUrls = [];
 for (const path of expectedPaths) {
   const htmlPath = join(out, path, "index.html");
   if (!existsSync(htmlPath)) throw new Error(`${path || "/"}: exported HTML is missing`);
   const html = readFileSync(htmlPath, "utf8");
   if (!/<title>[^<]+<\/title>/.test(html)) throw new Error(`${path || "/"}: title is missing`);
   if (/name="robots"[^>]+noindex/i.test(html)) throw new Error(`${path || "/"}: noindex detected`);
+  const canonicals = [...html.matchAll(/<link\b[^>]*>/gi)]
+    .map((match) => match[0])
+    .filter((tag) => /\brel="canonical"/i.test(tag))
+    .map((tag) => tag.match(/\bhref="([^"]+)"/i)?.[1]);
+  const expectedCanonical = `${publicBase}/${path}${path ? "/" : ""}`;
+  if (canonicals.length !== 1 || canonicals[0] !== expectedCanonical) {
+    throw new Error(
+      `${path || "/"}: expected one self-canonical ${expectedCanonical}, got ${JSON.stringify(canonicals)}`,
+    );
+  }
+  canonicalUrls.push(canonicals[0]);
 }
 
 for (const name of ["llms.txt", "llms-full.txt"]) {
@@ -45,13 +59,17 @@ for (const name of ["llms.txt", "llms-full.txt"]) {
 console.log(
   JSON.stringify(
     {
-      schema: "geode.geo-preflight.v1",
+      schema: "geode.geo-preflight.v2",
       status: "pass",
-      exported_pages: expectedPaths.length,
-      sitemap_urls: urls.length,
-      noindex_pages: 0,
+      checks: {
+        export: { numerator: expectedPaths.length, denominator: expectedPaths.length },
+        sitemap: { numerator: urls.length, denominator: expectedUrls.length },
+        self_canonical: { numerator: canonicalUrls.length, denominator: expectedUrls.length },
+        indexable: { numerator: expectedPaths.length, denominator: expectedPaths.length },
+      },
       llm_indexes: ["llms.txt", "llms-full.txt"],
-      unmeasured: ["search_activation", "selection", "citation", "absorption", "outcome"],
+      locators: ["out/sitemap.xml", "out/**/index.html", "out/llms.txt", "out/llms-full.txt"],
+      unmeasured: ["retrieval", "citation", "placement", "absorption", "quality", "outcome"],
     },
     null,
     2,
