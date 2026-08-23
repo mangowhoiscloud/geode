@@ -102,6 +102,11 @@ The agentic loop. `while(tool_use)` primitive that drives every turn.
 Read this first when changing termination paths, loop bounds, or system prompt
 assembly.
 
+For coding-agent state ownership, recovery, workspace/process limits, review,
+and cross-domain task lookup, read
+[`docs/architecture/coding-runtime-authority.md`](docs/architecture/coding-runtime-authority.md)
+before adding a runtime record or store.
+
 ### `core/llm/`
 
 LLM router, providers, prompt assembly, hashing.
