@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from core.extensions import ExtensionPolicy, ExtensionState
 from core.llm.adapters import (
     AdapterAlreadyRegisteredError,
     AdapterBillingType,
@@ -235,6 +236,22 @@ class _FakeEntryPoint:
         return self._factory
 
 
+def _trusted_extension_policy(name: str) -> ExtensionPolicy:
+    return ExtensionPolicy.from_mapping(
+        {
+            "version": 1,
+            "extensions": {
+                f"llm-adapter:{name}": {
+                    "enabled": True,
+                    "trusted": True,
+                    "execution": "trusted",
+                    "capabilities": [],
+                }
+            },
+        }
+    )
+
+
 def test_entry_point_discovery_publishes_generation_and_report(monkeypatch) -> None:
     plugin = _Stub("acme-adapter", "acme", SOURCE_ADAPTER)
     monkeypatch.setattr(
@@ -242,7 +259,7 @@ def test_entry_point_discovery_publishes_generation_and_report(monkeypatch) -> N
         lambda *, group: [_FakeEntryPoint("acme-adapter", lambda: plugin)],
     )
 
-    snapshot = reload_adapters()
+    snapshot = reload_adapters(extension_policy=_trusted_extension_policy("acme-adapter"))
 
     assert snapshot.generation == 1
     assert snapshot.get_adapter("acme-adapter") is plugin
@@ -251,6 +268,28 @@ def test_entry_point_discovery_publishes_generation_and_report(monkeypatch) -> N
         "acme-adapter",
         "entrypoint:acme-geode-adapter:acme-adapter",
     )
+
+
+def test_entry_point_factory_receives_narrow_extension_context(monkeypatch) -> None:
+    plugin = _Stub("acme-adapter", "acme", SOURCE_ADAPTER)
+    observed: list[object] = []
+
+    def factory(context):
+        observed.append(context)
+        return plugin
+
+    monkeypatch.setattr(
+        "importlib.metadata.entry_points",
+        lambda *, group: [_FakeEntryPoint("acme-adapter", factory)],
+    )
+
+    reload_adapters(extension_policy=_trusted_extension_policy("acme-adapter"))
+
+    assert len(observed) == 1
+    context = observed[0]
+    assert context.extension_id == "llm-adapter:acme-adapter"
+    assert context.capabilities == ()
+    assert dict(context.ports) == {}
 
 
 def test_entry_point_preserves_explicit_provider_composition(monkeypatch) -> None:
@@ -276,7 +315,7 @@ def test_entry_point_preserves_explicit_provider_composition(monkeypatch) -> Non
         lambda *, group: [_FakeEntryPoint("acme-adapter", lambda: plugin)],
     )
 
-    snapshot = reload_adapters()
+    snapshot = reload_adapters(extension_policy=_trusted_extension_policy("acme-adapter"))
 
     assert snapshot.get_registration("acme-adapter").provider_spec is plugin.provider_spec
 
@@ -314,13 +353,14 @@ def test_entry_point_duplicate_requires_audited_override(monkeypatch) -> None:
         reload_adapters()
 
     snapshot = reload_adapters(
+        extension_policy=_trusted_extension_policy("anthropic-payg"),
         overrides={
             "anthropic-payg": AdapterOverride(
                 origin="entrypoint:acme-geode-adapter:anthropic-payg",
                 priority=200,
                 trust_decision="operator approved acme distribution",
             )
-        }
+        },
     )
     assert snapshot.get_adapter("anthropic-payg") is plugin
     assert snapshot.report.overrides == (
@@ -331,6 +371,22 @@ def test_entry_point_duplicate_requires_audited_override(monkeypatch) -> None:
             "operator approved acme distribution",
         ),
     )
+
+
+def test_untrusted_entry_point_is_never_loaded(monkeypatch) -> None:
+    class PoisonEntryPoint(_FakeEntryPoint):
+        def load(self) -> object:
+            raise AssertionError("untrusted entry point was loaded")
+
+    monkeypatch.setattr(
+        "importlib.metadata.entry_points",
+        lambda *, group: [PoisonEntryPoint("poison", object())],
+    )
+
+    snapshot = reload_adapters(extension_policy=ExtensionPolicy.empty())
+
+    assert "poison" not in snapshot.registrations
+    assert snapshot.report.extensions[0].state is ExtensionState.REJECTED
 
 
 def test_discovery_rejects_unused_override(monkeypatch) -> None:

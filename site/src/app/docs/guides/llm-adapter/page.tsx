@@ -80,7 +80,7 @@ class AcmePaygAdapter:
               어댑터는 <code>core/llm/adapters/registry.py</code>가 발행한 불변
               generation snapshot으로 조회됩니다. 내장 어댑터는 명시적 factory
               목록에서 생성합니다. 외부 패키지는 전역 dict를 직접 수정하지 않고{" "}
-              <code>geode.llm_adapters</code> 패키지 진입점에 인자 없는 factory를
+              <code>geode.llm_adapters</code> 패키지 진입점에 factory를
               선언합니다. 진입점 이름은 factory가 반환한 canonical adapter name과
               같아야 합니다. <code>resolve_for(provider, source)</code>는{" "}
               <code>(provider, source)</code> 쌍이 정확히 하나의 어댑터에
@@ -94,6 +94,17 @@ acme-payg = "acme_geode:create_adapter"
 # acme_geode/__init__.py
 def create_adapter():
     return AcmePaygAdapter()`}</pre>
+            <p>
+              진입점 이름과 배포 패키지 metadata는 실행 없이 먼저 열거됩니다.
+              GEODE는 이름 충돌을 해결한 다음
+              <a href="/geode/docs/config/basics">확장 신뢰 정책</a>의
+              <code>llm-adapter:acme-payg</code> 승인을 확인하고 나서야
+              <code>entry_point.load()</code>를 호출합니다. 승인이 없으면 validation
+              report에 <code>REJECTED</code>로 남고 factory는 import되지 않습니다.
+              factory는 기존처럼 인자 없이 만들거나, 정확히 하나의
+              <code>context</code> 인자를 받아 불변 확장 ID와 승인된 포트를 확인할
+              수 있습니다. 다른 signature는 session 시작 전에 실패합니다.
+            </p>
             <p>
               기존 factory는 보수적인 호환 composition을 자동으로 얻습니다.
               실제 인증 선택과 API shape를 선언하려면 반환 객체에 불변
@@ -280,7 +291,7 @@ class AcmePaygAdapter:
               Adapters are looked up through immutable generation snapshots
               published by <code>core/llm/adapters/registry.py</code>. Built-ins
               come from an explicit factory list. External packages do not mutate
-              a global dictionary; they expose a no-argument factory through the{" "}
+              a global dictionary; they expose a factory through the{" "}
               <code>geode.llm_adapters</code> package entry-point group. The entry
               point name must equal the returned adapter&apos;s canonical name.{" "}
               <code>resolve_for(provider, source)</code> enforces that a{" "}
@@ -295,6 +306,18 @@ acme-payg = "acme_geode:create_adapter"
 # acme_geode/__init__.py
 def create_adapter():
     return AcmePaygAdapter()`}</pre>
+            <p>
+              GEODE enumerates the entry-point name and distribution metadata
+              without executing it. It resolves name collisions, checks the
+              <code>llm-adapter:acme-payg</code> grant in the
+              <a href="/geode/docs/config/basics">extension trust policy</a>,
+              and only then calls <code>entry_point.load()</code>. Without that
+              grant the validation report records <code>REJECTED</code> and the
+              factory is never imported. A factory may keep the legacy
+              no-argument signature or accept exactly one <code>context</code>
+              parameter to inspect its immutable extension ID and granted ports.
+              Any other signature fails before a session starts.
+            </p>
             <p>
               The legacy factory receives a conservative compatibility
               composition automatically. To declare the real credential

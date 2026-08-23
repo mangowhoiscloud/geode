@@ -49,6 +49,15 @@ functional change.
 
 ### Added
 
+- **Third-party extensions now authorize before executable load.** Filesystem
+  hooks, package LLM adapters, project/personal skills, and MCP servers project
+  their existing manifests into one immutable operator-policy decision. Trusted
+  in-process factories receive a capability-scoped context; brokered MCP
+  servers launch only behind an available deny-default OS sandbox with an exact
+  environment and declared mutation resource keys. Rejected, disabled, and
+  degraded extensions remain visible in bounded runtime health, while Hook and
+  MCP owners retain deterministic cleanup.
+
 - **Public runtime boundaries now use explicit versioned envelopes.** Thin CLI
   IPC negotiates `geode.ipc.v1` features, bounds line-delimited JSON, keeps a
   stable streaming-event vocabulary, and correlates every event and response

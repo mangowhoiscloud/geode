@@ -198,7 +198,7 @@
         "has_default": true,
         "implementation": "ContextVar",
         "lifetime": "one AgenticLoop arun or goal-continuation task",
-        "line": 198,
+        "line": 210,
         "owner": "core.agent.loop.AgenticLoop",
         "path": "core/llm/adapters/registry.py",
         "resetter": "core.llm.adapters.registry.use_registry_snapshot finally resets its token",
@@ -542,8 +542,8 @@
   },
   "packages": {
     "core": {
-      "python_files": 404,
-      "python_loc": 120992
+      "python_files": 406,
+      "python_loc": 121933
     },
     "geode_product": {
       "python_files": 154,
@@ -554,8 +554,8 @@
       "python_loc": 193
     },
     "tests": {
-      "python_files": 687,
-      "python_loc": 184421
+      "python_files": 689,
+      "python_loc": 185110
     }
   },
   "schema_version": 4,

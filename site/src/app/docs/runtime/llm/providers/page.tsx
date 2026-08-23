@@ -29,7 +29,7 @@ export default function Page() {
                 <tr><td>프로바이더 유틸리티</td><td><code>core/llm/providers/anthropic.py</code>, <code>codex.py</code>, <code>glm.py</code>. 재시도·quota·request shaping을 어댑터에 제공</td></tr>
                 <tr><td>비동기 호출 어댑터</td><td><code>core/llm/adapters/</code>. SDK client와 <code>acomplete()</code> 호출 표면 소유</td></tr>
                 <tr><td>프로바이더 composition</td><td><code>core/llm/registry.py</code>. 모델 identity, credential route, transport/API shape를 분리해 선언</td></tr>
-                <tr><td>어댑터 레지스트리</td><td><code>core/llm/adapters/registry.py</code>의 <code>bootstrap_builtins()</code>. 내장 factory와 <code>geode.llm_adapters</code> 진입점을 불변 generation snapshot으로 검색</td></tr>
+                <tr><td>어댑터 레지스트리</td><td><code>core/llm/adapters/registry.py</code>의 <code>bootstrap_builtins()</code>. 내장 factory와 운영자 정책이 승인한 <code>geode.llm_adapters</code> 진입점을 불변 generation snapshot으로 검색</td></tr>
                 <tr><td>라우팅 매니페스트</td><td><code>core/config/routing.toml</code> (+ <code>~/.geode/routing.toml</code> 사용자 오버라이드). 모델 id prefix로 프로바이더 결정</td></tr>
               </tbody>
             </table>
@@ -159,7 +159,7 @@ export default function Page() {
                 <tr><td>Provider utilities</td><td><code>core/llm/providers/anthropic.py</code>, <code>codex.py</code>, and <code>glm.py</code>; provide retry, quota, and request shaping to adapters</td></tr>
                 <tr><td>Async call adapters</td><td><code>core/llm/adapters/</code>; own SDK clients and the <code>acomplete()</code> call surface</td></tr>
                 <tr><td>Provider composition</td><td><code>core/llm/registry.py</code>; separately declares model identity, credential route, and transport/API shape</td></tr>
-                <tr><td>Adapter registry</td><td><code>bootstrap_builtins()</code> in <code>core/llm/adapters/registry.py</code>; discovers built-in factories and <code>geode.llm_adapters</code> entry points into an immutable generation snapshot</td></tr>
+                <tr><td>Adapter registry</td><td><code>bootstrap_builtins()</code> in <code>core/llm/adapters/registry.py</code>; discovers built-in factories and operator-authorized <code>geode.llm_adapters</code> entry points into an immutable generation snapshot</td></tr>
                 <tr><td>Routing manifest</td><td><code>core/config/routing.toml</code> (+ user override <code>~/.geode/routing.toml</code>); provider resolved by model-id prefix</td></tr>
               </tbody>
             </table>

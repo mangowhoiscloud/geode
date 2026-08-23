@@ -6,6 +6,7 @@ Extracted from core.runtime as standalone functions (formerly GeodeRuntime stati
 from __future__ import annotations
 
 import logging
+import weakref
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -565,8 +566,9 @@ def build_hooks(
         from core.hooks.discovery import HookPluginLoader
         from core.paths import PROJECT_HOOKS_DIR
 
-        loader = HookPluginLoader()
+        loader = HookPluginLoader(ports={"events": weakref.proxy(hooks)})
         loader.load_from_dirs([PROJECT_HOOKS_DIR])
+        hooks.set_extension_decisions(loader.decisions)
         loader.register_all(hooks)
         hooks.add_owner_cleanup("filesystem_hook_plugins", loader.unregister_all)
 
@@ -838,7 +840,7 @@ def build_skill_registry() -> Any:
     try:
         SkillLoader().load_all(registry=registry)
     except Exception:
-        log.debug("Skill loading skipped", exc_info=True)
+        log.warning("Skill discovery rejected", exc_info=True)
     return registry
 
 
