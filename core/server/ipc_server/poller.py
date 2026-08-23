@@ -315,6 +315,8 @@ class CLIPoller:
         *,
         socket_path: Path | None = None,
         scheduler_service: Any = None,
+        command_handler: Callable[..., tuple[bool, bool, Any]] | None = None,
+        context_initializer: Callable[[], None] | None = None,
     ) -> None:
         self._services = services
         self._socket_path = socket_path or DEFAULT_SOCKET_PATH
@@ -327,6 +329,8 @@ class CLIPoller:
         self._active_clients: set[_AsyncClientEndpoint] = set()
         self._clients_lock = threading.Lock()
         self._scheduler_service = scheduler_service
+        self._command_handler = command_handler
+        self._context_initializer = context_initializer
 
     @property
     def channel_name(self) -> str:
@@ -478,7 +482,7 @@ class CLIPoller:
         execution for each IPC session.
         """
         from core.agent.conversation import ConversationContext
-        from core.server.supervised.services import SessionMode
+        from core.agent.session_mode import SessionMode
 
         self._propagate_contextvars()
 
@@ -1015,11 +1019,17 @@ class CLIPoller:
             model_before = (getattr(_pre_settings, "model", "") or "").strip()
             effort_before = (getattr(_pre_settings, "agentic_effort", "") or "").strip()
         try:
-            from core.cli import _handle_command
             from core.ui.console import capture_output
 
+            if self._command_handler is None:
+                return {
+                    "type": "command_result",
+                    "cmd": cmd,
+                    "status": "error",
+                    "message": "daemon command handler is not configured",
+                }
             with capture_output() as buf:
-                should_break, _verbose, _resume = _handle_command(
+                should_break, _verbose, _resume = self._command_handler(
                     cmd,
                     args,
                     False,
@@ -1217,11 +1227,9 @@ class CLIPoller:
 
     def _propagate_contextvars(self) -> None:
         """Set request-local CLI readiness in this thread."""
+        if self._context_initializer is None:
+            return
         try:
-            from core.cli import _set_readiness
-            from core.wiring.startup import check_readiness
-
-            _set_readiness(check_readiness())
-
+            self._context_initializer()
         except Exception:
             log.debug("ContextVar propagation skipped", exc_info=True)

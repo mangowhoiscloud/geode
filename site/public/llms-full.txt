@@ -6392,14 +6392,14 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 589 |
+| 프로덕션 Python 파일 | 590 |
 | 테스트 Python 파일 | 689 |
-| 도구 정의 / 실행 등록 / 유효 스키마 | 86 / 89 / 86 |
+| 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 5 |
 | 프로덕션 ContextVar | 25 |
 | core → product import 지점 / 파일 | 0 / 0 |
-| import-linter 예외 edge | 16 |
+| import-linter 예외 edge | 0 |
 
 ## 최상위 진입 모듈
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import tomllib
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +18,23 @@ PRECOMMIT_CONFIG = (REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="u
 def _pyproject() -> dict[str, Any]:
     with (REPO_ROOT / "pyproject.toml").open("rb") as handle:
         return tomllib.load(handle)
+
+
+def _sample_import_edge() -> dict[str, object]:
+    return {
+        "id": "IMP-999",
+        "edge": "core.cli.typer_serve -> core.server.supervised.services",
+        "contracts": ["CLI must not import server/messaging (process boundary)"],
+        "owner": "core.cli.typer_serve",
+        "reason": "Schema validation fixture with meaningful ownership context.",
+        "created": "2026-08-24",
+        "target": "VER-001",
+        "expires_when": "The fixture is replaced by an equivalent complete record.",
+    }
+
+
+def _sample_ledger() -> dict[str, object]:
+    return {"schema_version": 1, "import_edge": [_sample_import_edge()], "ruff_debt": []}
 
 
 def test_live_repository_exception_ledger_is_consistent() -> None:
@@ -36,8 +52,7 @@ def test_ci_and_precommit_run_exception_checker() -> None:
 
 
 def test_ledger_schema_fails_closed_on_missing_metadata() -> None:
-    with (REPO_ROOT / checker.LEDGER_RELATIVE).open("rb") as handle:
-        raw = tomllib.load(handle)
+    raw = _sample_ledger()
     del raw["import_edge"][0]["expires_when"]
 
     with pytest.raises(checker.ExceptionLedgerError, match="schema mismatch"):
@@ -59,8 +74,7 @@ def test_ledger_schema_requires_integer_version(schema_version: object) -> None:
 
 
 def test_ledger_schema_rejects_invalid_calendar_date() -> None:
-    with (REPO_ROOT / checker.LEDGER_RELATIVE).open("rb") as handle:
-        raw = tomllib.load(handle)
+    raw = _sample_ledger()
     raw["import_edge"][0]["created"] = "2026-02-30"
 
     with pytest.raises(checker.ExceptionLedgerError, match="real calendar date"):
@@ -69,8 +83,7 @@ def test_ledger_schema_rejects_invalid_calendar_date() -> None:
 
 @pytest.mark.parametrize("owner", [".", "/external/module", "core..agent", "core/agent"])
 def test_ledger_schema_rejects_non_module_owner(owner: str) -> None:
-    with (REPO_ROOT / checker.LEDGER_RELATIVE).open("rb") as handle:
-        raw = tomllib.load(handle)
+    raw = _sample_ledger()
     raw["import_edge"][0]["owner"] = owner
 
     with pytest.raises(checker.ExceptionLedgerError, match="dotted Python module name"):
@@ -79,9 +92,12 @@ def test_ledger_schema_rejects_non_module_owner(owner: str) -> None:
 
 def test_import_linter_ignore_without_record_is_rejected() -> None:
     ledger = checker.load_ledger(REPO_ROOT / checker.LEDGER_RELATIVE)
-    missing_first = replace(ledger, import_edges=ledger.import_edges[1:])
+    pyproject = copy.deepcopy(_pyproject())
+    pyproject["tool"]["importlinter"]["contracts"][0]["ignore_imports"] = [
+        "core.cli.typer_serve -> core.server.supervised.services"
+    ]
 
-    errors = checker.validate_import_edges(REPO_ROOT, _pyproject(), missing_first)
+    errors = checker.validate_import_edges(REPO_ROOT, pyproject, ledger)
 
     assert any("unregistered import exception" in error for error in errors)
 

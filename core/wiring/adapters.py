@@ -13,6 +13,52 @@ from core.wiring.bootstrap import _plugin_status
 log = logging.getLogger(__name__)
 
 
+def build_slack_transport() -> Any:
+    """Construct the direct Slack transport at the outer wiring boundary."""
+    from core.messaging.slack_transport import SlackTransport
+
+    return SlackTransport()
+
+
+async def open_slack_socket_mode_url(app_token: str) -> str:
+    """Open one temporary Slack Socket Mode URL through outer wiring."""
+    from core.messaging.slack_transport import open_socket_mode_url
+
+    return await open_socket_mode_url(app_token)
+
+
+def get_gateway_manager() -> Any:
+    """Return the active messaging gateway from outer composition."""
+    from core.messaging.binding import get_gateway
+
+    return get_gateway()
+
+
+def start_gateway_webhook(processor: Any, *, port: int) -> Any:
+    """Start the supervised webhook server at the wiring boundary."""
+    from core.server.supervised.webhook_handler import start_webhook_server
+
+    return start_webhook_server(processor, port=port)
+
+
+def build_cli_poller(
+    services: Any,
+    *,
+    scheduler_service: Any,
+    command_handler: Any,
+    context_initializer: Any,
+) -> Any:
+    """Build the daemon IPC poller with CLI capabilities injected."""
+    from core.server.ipc_server.poller import CLIPoller
+
+    return CLIPoller(
+        services,
+        scheduler_service=scheduler_service,
+        command_handler=command_handler,
+        context_initializer=context_initializer,
+    )
+
+
 def _load_mcp_manager_for_plugin(
     plugin_name: str,
 ) -> Any | None:

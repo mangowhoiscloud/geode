@@ -6,30 +6,12 @@ drain leftover stdin bytes, SIGINT handling.
 
 from __future__ import annotations
 
-import logging
 import sys
-import termios
 from typing import Any
 
-log = logging.getLogger(__name__)
+import core.ui.console as _console
 
-
-def restore_terminal() -> None:
-    """Restore terminal to sane cooked mode.
-
-    Rich Status/Live can leave the terminal in raw mode (echo off, no
-    line-editing) if interrupted or if an exception escapes their context
-    manager.  This ensures the terminal is usable before reading input.
-    """
-    try:
-        fd = sys.stdin.fileno()
-        attrs = termios.tcgetattr(fd)
-        # Ensure ECHO and ICANON (cooked mode) are enabled
-        attrs[3] |= termios.ECHO | termios.ICANON
-        termios.tcsetattr(fd, termios.TCSANOW, attrs)
-    except (ValueError, OSError, termios.error):
-        # Non-TTY or stdin not available — nothing to restore
-        pass
+restore_terminal = _console.restore_terminal
 
 
 def make_sigint_handler() -> Any:

@@ -16,6 +16,7 @@ from typing import Any
 
 import typer
 
+from core.agent.session_mode import SessionMode
 from core.cli.session_state import _set_readiness
 from core.ui.console import console
 from core.wiring.startup import check_readiness
@@ -162,6 +163,9 @@ def _serve(  # noqa: PLR0915
     import signal
     import time as _time
 
+    if services_builder is None:
+        raise RuntimeError("serve requires an injected product services builder")
+
     # PR-DISPATCH-OBS-EXT (2026-05-28) / S-6 (2026-06-11) — serve.log file
     # handler via the unified entry-point switchboard. The lifecycle
     # status command depends on SERVE_LOG_PATH existing (``commands/lifecycle.py``);
@@ -205,9 +209,9 @@ def _serve(  # noqa: PLR0915
 
     # Wire AgenticLoop as gateway processor
     from core.agent.conversation import ConversationContext
-    from core.messaging.binding import get_gateway
+    from core.wiring.adapters import get_gateway_manager
 
-    gateway = get_gateway()
+    gateway = get_gateway_manager()
     if gateway is None:
         console.print("  [warning]No gateway available after runtime init.[/warning]")
         raise typer.Exit(1)
@@ -239,14 +243,6 @@ def _serve(  # noqa: PLR0915
         "- You have access to prior messages in this thread as conversation history.\n"
         "- Format responses for messaging: use short paragraphs, avoid excessive markdown."
     )
-
-    # Build SharedServices for serve mode (same factory as REPL)
-    from core.server.supervised.services import SessionMode
-
-    if services_builder is None:
-        from core.server.supervised.services import build_shared_services
-
-        services_builder = build_shared_services
 
     # ``0`` means unlimited rounds; the per-message gateway time budget remains
     # the active-run safety net. Fallback ``0`` preserves legacy objects.
@@ -463,9 +459,9 @@ def _serve(  # noqa: PLR0915
     _webhook_server = None
     if settings.gateway_enabled and settings.webhook_enabled:
         try:
-            from core.server.supervised.webhook_handler import start_webhook_server
+            from core.wiring.adapters import start_gateway_webhook
 
-            _webhook_server = start_webhook_server(
+            _webhook_server = start_gateway_webhook(
                 _gateway_processor_sync,
                 port=settings.webhook_port,
             )
@@ -480,9 +476,15 @@ def _serve(  # noqa: PLR0915
     # blocking poll loop from start(), but thin CLI clients still need a socket.
     _cli_poller = None
     try:
-        from core.server.ipc_server.poller import CLIPoller
+        from core.cli.dispatcher import _handle_command
+        from core.wiring.adapters import build_cli_poller
 
-        _cli_poller = CLIPoller(_gw_services, scheduler_service=_sched_svc)
+        _cli_poller = build_cli_poller(
+            _gw_services,
+            scheduler_service=_sched_svc,
+            command_handler=_handle_command,
+            context_initializer=lambda: _set_readiness(check_readiness()),
+        )
         _cli_poller.start()
         console.print(f"  [success]CLI channel: {_cli_poller.socket_path}[/success]")
     except Exception as exc:

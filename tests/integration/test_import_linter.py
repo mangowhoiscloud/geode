@@ -6,6 +6,8 @@
   2. core.agent ↛ core.cli, core.server (agent loop 은 process-pure)
   3. core.server ↛ core.cli (server 는 agent 만 host, CLI 모름)
   4. core.messaging ↛ core.cli, core.server, core.agent (외부 IO 추상화 순수)
+  5. classified kernel ↛ bundled self-improving product
+  6. core.tools.handlers ↛ agent, CLI, server, UI
 
 Pre-v0.52 결함이었던 "/login openai 가 daemon RPC 로 가서 OAuth UI 안 보임"
 같은 process binding 위반은 PR 단계에서 lint-imports 로 즉시 차단된다.
@@ -24,7 +26,7 @@ import pytest
 
 
 def test_lint_imports_passes() -> None:
-    """``uv run lint-imports`` invariant — 4 contracts 모두 통과해야 한다."""
+    """``uv run lint-imports`` invariant — all six contracts must pass."""
     if shutil.which("lint-imports") is None and shutil.which("uv") is None:
         pytest.skip("import-linter not available in this environment")
 
@@ -38,7 +40,6 @@ def test_lint_imports_passes() -> None:
     )
     assert result.returncode == 0, (
         "import-linter contracts violated. Either move the module to the right "
-        "process boundary, or invert the dependency through an interface in "
-        "core.shared/.\n\n"
+        "process boundary, or inject the capability through core.wiring.\n\n"
         f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     )

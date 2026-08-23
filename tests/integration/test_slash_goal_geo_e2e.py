@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+from core.cli.dispatcher import _handle_command
 from core.cli.ipc_client import IPCClient
 from core.cli.routing import compose_command_registry
 from core.memory.goals import GoalStatus, GoalStore
@@ -88,7 +89,11 @@ def test_real_slash_input_routes_goal_plan_grill_and_geo(tmp_path: Path) -> None
     SkillLoader(skills_dir=Path(".geode/skills")).load_all(registry=registry)
     loop = _loop(tmp_path)
     socket_path = Path(tempfile.gettempdir()) / f"geode-slash-{uuid.uuid4().hex[:8]}.sock"
-    poller = CLIPoller(_Services(loop, registry), socket_path=socket_path)
+    poller = CLIPoller(
+        _Services(loop, registry),
+        socket_path=socket_path,
+        command_handler=_handle_command,
+    )
     poller.start()
     client = IPCClient(socket_path)
     try:

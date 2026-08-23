@@ -13,10 +13,25 @@ from __future__ import annotations
 
 import copy
 import logging
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
 log = logging.getLogger(__name__)
+
+_conversation_ctx: ContextVar[ConversationContext | None] = ContextVar(
+    "conversation_ctx", default=None
+)
+
+
+def set_conversation_context(ctx: ConversationContext | None) -> None:
+    """Bind the active conversation for request-local command handlers."""
+    _conversation_ctx.set(ctx)
+
+
+def get_conversation_context() -> ConversationContext | None:
+    """Return the active request-local conversation, if any."""
+    return _conversation_ctx.get()
 
 
 @dataclass

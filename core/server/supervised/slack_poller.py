@@ -16,9 +16,9 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from core.messaging.models import InboundMessage
+from core.messaging.poller import BasePoller
 from core.messaging.slack_socket_mode import SlackSocketModeClient
 from core.messaging.slack_transport import SlackTransportError
-from core.server.supervised.poller_base import BasePoller
 
 log = logging.getLogger(__name__)
 

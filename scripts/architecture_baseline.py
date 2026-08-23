@@ -1732,9 +1732,10 @@ def _tool_inventory(root: Path) -> dict[str, Any]:
     from core.agent.tool_executor.executor import SPECIAL_EXECUTION_BINDINGS
     from core.cli.tool_handlers import _build_tool_handler_catalog
     from core.llm.tool_defer import TOOL_SEARCH_ALWAYS_LOADED
-    from geode_product.tool_handlers import product_handler_groups
+    from geode_product.tool_handlers import compose_tool_plan, product_handler_groups
 
     handler_catalog = _build_tool_handler_catalog(extra_groups=product_handler_groups())
+    bound_plan, transient_handlers = compose_tool_plan()
     handler_names = sorted(handler_catalog.handlers)
     execution_names = sorted(set(handler_names) | set(SPECIAL_EXECUTION_BINDINGS))
     definitions = set(definition_names)
@@ -1744,6 +1745,9 @@ def _tool_inventory(root: Path) -> dict[str, Any]:
     definition_only = sorted(definitions - executions)
     invalid_schemas = sorted(definitions - schemas)
     unknown_always_loaded = sorted(always_loaded - definitions)
+    plan_names = set(bound_plan.tool_names)
+    policy_names = {registration.spec.name for registration in bound_plan.plan.registrations}
+    transient_names = set(transient_handlers)
 
     fatal_errors: list[str] = []
     if duplicate_names:
@@ -1756,6 +1760,23 @@ def _tool_inventory(root: Path) -> dict[str, Any]:
         fatal_errors.append(f"definitions without valid schemas: {invalid_schemas}")
     if unknown_always_loaded:
         fatal_errors.append(f"unknown always-loaded tools: {unknown_always_loaded}")
+    if plan_names != definitions:
+        fatal_errors.append(
+            "model tool-plan parity drift: "
+            f"missing={sorted(definitions - plan_names)}, extra={sorted(plan_names - definitions)}"
+        )
+    if policy_names != definitions:
+        fatal_errors.append(
+            "tool policy parity drift: "
+            f"missing={sorted(definitions - policy_names)}, "
+            f"extra={sorted(policy_names - definitions)}"
+        )
+    if executions - definitions != transient_names:
+        fatal_errors.append(
+            "internal execution parity drift: "
+            f"catalog_only={sorted(executions - definitions)}, "
+            f"transient={sorted(transient_names)}"
+        )
     if fatal_errors:
         raise ValueError("tool inventory invariant failed; " + "; ".join(fatal_errors))
 
@@ -1774,11 +1795,16 @@ def _tool_inventory(root: Path) -> dict[str, Any]:
         "special_execution_bindings": sorted(SPECIAL_EXECUTION_BINDINGS),
         "execution_registration_count": len(execution_names),
         "execution_registration_names": execution_names,
+        "model_execution_registration_count": len(plan_names),
+        "model_execution_registration_names": sorted(plan_names),
+        "policy_registration_count": len(policy_names),
+        "policy_registration_names": sorted(policy_names),
         "definition_only": definition_only,
         "execution_only": sorted(executions - definitions),
         "definition_without_valid_schema": invalid_schemas,
         "schema_without_definition": sorted(schemas - definitions),
-        "exact_parity": definitions == executions == schemas and not duplicate_names,
+        "exact_parity": definitions == plan_names == schemas == policy_names
+        and not duplicate_names,
         "deferred_loading": {
             "always_loaded_count": len(always_loaded),
             "always_loaded_names": sorted(always_loaded),
@@ -1798,7 +1824,7 @@ def build_baseline(root: Path = REPO_ROOT) -> dict[str, Any]:
         if (inventory := measure_python_inventory(root, relative))
     }
     self_improving_facades = _self_improving_facades(root)
-    return {
+    baseline = {
         "schema_version": 4,
         "packages": packages,
         "tools": _tool_inventory(root),
@@ -1814,6 +1840,23 @@ def build_baseline(root: Path = REPO_ROOT) -> dict[str, Any]:
         "coordinators": _coordinator_metrics(root),
         "complexity_thresholds": _complexity_thresholds(root),
     }
+    validate_architecture_invariants(baseline)
+    return baseline
+
+
+def validate_architecture_invariants(baseline: dict[str, Any]) -> None:
+    """Reject forbidden architecture states instead of blessing them on update."""
+    violations: list[str] = []
+    if baseline["core_to_product_imports"]["site_count"]:
+        violations.append("kernel-to-product imports must remain zero")
+    if baseline["import_linter"]["ignored_edge_count"]:
+        violations.append("import-linter ignored edges must remain zero")
+    if baseline["context_vars"]["service_locator_count"]:
+        violations.append("service-locator ContextVars must remain zero")
+    if not baseline["tools"]["exact_parity"]:
+        violations.append("tool definition/plan/schema/policy parity must remain exact")
+    if violations:
+        raise ValueError("architecture invariant failed; " + "; ".join(violations))
 
 
 def serialize_baseline(baseline: dict[str, Any]) -> str:
@@ -1883,10 +1926,11 @@ def render_roadmap_block(baseline: dict[str, Any]) -> str:
             f"| `plugins/` Python LOC | {_number(packages['plugins']['python_loc'])} |",
             f"| Test Python LOC | {_number(packages['tests']['python_loc'])} |",
             (
-                f"| Tool definitions / executable registrations / valid schemas "
+                f"| Tool definitions / model executions / valid schemas / policies "
                 f"| {_number(tools['definition_count'])} / "
-                f"{_number(tools['execution_registration_count'])} / "
-                f"{_number(tools['schema_count'])} ({parity}) |"
+                f"{_number(tools['model_execution_registration_count'])} / "
+                f"{_number(tools['schema_count'])} / "
+                f"{_number(tools['policy_registration_count'])} ({parity}) |"
             ),
             f"| `RuntimeEvent` members | {_number(baseline['hook_events']['count'])} |",
             f"| Built-in LLM adapters | {_number(baseline['built_in_adapters']['count'])} |",
