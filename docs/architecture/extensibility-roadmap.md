@@ -1,9 +1,9 @@
 ---
 status: active
 authority: architecture-extensibility-execution-sot
-baseline_commit: 34257503767e24f0531f6b2c2df7e53288eabd22
+baseline_commit: 2e238a828e0b170080fcb70fe71d7451f615acf2
 baseline_branch: origin/develop
-last_audited: 2026-07-17
+last_audited: 2026-08-24
 owners: GEODE maintainers
 ---
 
@@ -229,12 +229,11 @@ normal review and CI; implementations start only after the claim merges.
 
 ## 1. Program objective
 
-GEODE already has strong extension seams—Skills, MCP, hooks, `Tool`, LLM
-adapters, and narrow Calendar/Notification/Session ports—but its product
-composition is not uniformly extensible. The current verdict is **B+,
-conditionally approved**: the runtime is extensible at its edges, while the
-agent loop, product/plugin boundary, tool registration path, and service
-ownership still concentrate architectural knowledge.
+The initial audit verdict was **B+, conditionally approved**. At the
+2026-08-24 full-ledger audit, the primary architecture work is released and
+closed: 48 of 57 GAPs are `DONE` and three are `SUPERSEDED`. Final program
+closure still waits on the three-package R8 compatibility lifecycle and the
+R7.4 closure of R7.2/R7.3; §14 owns the exact remaining order.
 
 The program is complete when GEODE has:
 
@@ -2140,233 +2139,40 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Immediate next unit
 
-R1.7 (`REL-003`) is `DONE` after the v1.0.23 promotion, tracking-only main
-closure [#3037](https://github.com/mangowhoiscloud/geode/pull/3037), and
-CI-gated main-to-develop sync
-[#3038](https://github.com/mangowhoiscloud/geode/pull/3038).
+This full-ledger audit is pinned to
+`origin/develop@2e238a828e0b170080fcb70fe71d7451f615acf2` after the
+architecture promotion [#3134](https://github.com/mangowhoiscloud/geode/pull/3134),
+tracking-only main closure
+[#3135](https://github.com/mangowhoiscloud/geode/pull/3135), and CI-gated
+main-to-develop sync
+[#3136](https://github.com/mangowhoiscloud/geode/pull/3136).
 
-R8.3 (`REL-004`) is `IN_PROGRESS` under the active claim for
-`feature/r8-3-publication-grace-evidence`. Its candidate interval starts at
-PyPI file availability at `2026-08-20T06:53:01.550033Z`; no closure is eligible
-before `2026-09-19T06:53:01.550033Z`, and any intervening incompatible release
-restarts the interval. This evidence-only package reuses the public
-distribution verifier and does not authorize runtime or schema changes.
+The master ledger contains 57 GAPs: 48 `DONE`, three `SUPERSEDED`, three
+`IN_DEVELOP`, one `IN_PROGRESS`, and two `OPEN`. There are no `READY`,
+`BLOCKED`, `REJECTED`, or unexplained rows. R8.3 (`REL-004`) is the sole
+active claim.
 
-R2.1 (`CAP-001`, `CAP-002`) is `IN_DEVELOP` after feature
-[#3043](https://github.com/mangowhoiscloud/geode/pull/3043) merged as
-`ba7eea3288bd443a52181151de13032f5280d263`. The delivered boundary retains
-one immutable, generation/hash-bound native `ToolPlan` beside the compatibility
-handler map and validates ordered schema, execution, safety, and capability
-parity before product daemon sessions. R2.3 now supplies the immutable CAP-002
-“every tool consumer” evidence for live `AgenticLoop`/`ToolExecutor`,
-provider/deferred, and worker/MCP roots; R2.1 remains `IN_DEVELOP` until the
-corresponding main closure records complete package evidence.
+R8.3 is evidence-only. The qualifying interval starts at the later official
+publication timestamp, PyPI sdist availability at
+`2026-08-20T06:53:01.550033Z`. As of this audit, GitHub Releases and PyPI
+still identify v1.0.23 as latest, and the public distribution verifier confirms
+that its annotated tag, GitHub assets, PyPI files, and SHA-256 digests agree.
+No closure is eligible before `2026-09-19T06:53:01.550033Z`; an intervening
+incompatible release restarts the interval.
 
-R2.2 (`CAP-004`) is `IN_DEVELOP` after feature
-[#3047](https://github.com/mangowhoiscloud/geode/pull/3047) merged as
-`9038d635d0ed3989b11569de5dbfd6cb7a47db43`. One frozen association now maps
-all 14 Google and Calendar tool names to service alternatives and derives the
-migrated safety, approval, profile-policy, personal-data, delegated-handler,
-and direct-Google scope projections. Native Workspace registrations record
-declarative OAuth capabilities while Calendar remains enabled for its Google,
-MCP, and Apple alternatives. R2.3 now closes the remaining independent
-`definitions.json` schema, handler-ownership, and provider/deferred projection
-surfaces. Deterministic resource-key and data-policy derivation remains R2.4;
-R2.2 remains `IN_DEVELOP` until main closure. The active R8.3 claim and
-publication clock remain independent and unchanged.
+The remaining legal order is:
 
-R2.3 (`CAP-003`, `CAP-005`) is `IN_DEVELOP` after feature
-[#3053](https://github.com/mangowhoiscloud/geode/pull/3053) merged as
-`ffeb41e13d4bd9c59bc1ba286300c352800f6a03`. One immutable,
-generation/hash-bound plan now owns handler construction,
-`AgenticLoop`/`ToolExecutor`, worker/MCP, provider, and deferred projections
-with exact schema/execution parity, explicit transient overlays, and bounded
-diagnostics. Public product worker and daemon roots inject composition; the
-direct kernel worker and uncomposed `SharedServices` construction fail closed.
-R2.4 (`TRUST-003`) is `IN_DEVELOP` after feature
-[#3060](https://github.com/mangowhoiscloud/geode/pull/3060) merged as
-`709ccb0d0eb31080ed3b17896d4056f784db0281`. One hash-bound native plan now
-owns minimum effect, data handling, approval lifetime, profile restrictions,
-and deterministic resource strategies. Effective middleware and hook rewrites
-cannot weaken that minimum; durable personal-data projections are redacted;
-and one process-owned lock pool serializes conflicting daemon-session and MCP
-mutations while preserving unrelated concurrency and sync-handler lease
-lifetime through timeout or cancellation.
+1. After the complete qualifying interval, R8.3 may record official evidence
+   and reconcile `REL-004` to `IN_DEVELOP`.
+2. R8.2 (`STORE-003`) may then move from `OPEN` to `READY`, followed by
+   its separate claim, implementation, and reconciliation.
+3. R8.4 (`BND-008`) may become `READY` only after both `REL-004` and
+   `STORE-003` are `IN_DEVELOP` or `DONE`; it then retires only the
+   compatibility facade and legacy launchers.
+4. R7.4 performs the final release and main closure. R7.2
+   (`CAP-006`, `VER-002`) and R7.3 (`VER-004`) remain `IN_DEVELOP`
+   until that full-program audit closes their cross-package evidence.
 
-R3.1 (`LOOP-001`, `LOOP-002`) is `IN_DEVELOP` after feature
-[#3067](https://github.com/mangowhoiscloud/geode/pull/3067) merged as
-`c3e309f01e939e69bd22876df7f79b41731ac733` and corrective follow-up
-[#3068](https://github.com/mangowhoiscloud/geode/pull/3068) merged as
-`e6ccaf73e1ff6027e510bfc5e4e16b8679f369e4`. One immutable `StepSnapshot`
-now carries the authoritative model, tool, policy, middleware, trace, and
-usage identity for each step, while `TurnState` owns mutable turn
-accumulation. Additive event schema v5 persists `step_id`; public-hook v1
-queries and prior stored rows remain compatible.
-
-R3.2 (`LOOP-003`) is `IN_DEVELOP` after feature
-[#3071](https://github.com/mangowhoiscloud/geode/pull/3071) merged as
-`a130ceb75364e128cf0e273edbff65302273bb3e`. The physical turn now calls six
-ordered input, model-call, provider/retry, tool, observation/compaction, and
-termination/result collaborators while preserving the existing public
-`AgenticLoop.arun`, `StepSnapshot`, and `TurnState` behavior.
-
-R3.3 (`LOOP-004`) is `IN_DEVELOP` after feature
-[#3074](https://github.com/mangowhoiscloud/geode/pull/3074) merged as
-`8469092baddff2d0b453b03230c46ec2b7e79bac`. Executable ratchets now hold
-`agent_loop.py` at 1,113 LOC, 38 `AgenticLoop` methods, 12 direct constructor
-arguments, complexity at most 30, branches at most 35, and statements at most
-120; the obsolete constructor exception is removed and legacy policy keywords
-still map to `AgenticLoopConfig`.
-
-R3.4 (`LOOP-005`) is `IN_DEVELOP` after feature
-[#3079](https://github.com/mangowhoiscloud/geode/pull/3079) merged as
-`8a73c6be74f31d7611730d44321b9cdceabdaad5`. `SubagentProtocol` now owns
-request construction, role resolution, and result validation, while
-`SubagentAnnouncements` owns runtime/public hook and timeline projection.
-`SubAgentManager` remains the depth-one orchestration, session-cap, durable
-collaboration, and cancellation owner at 811 LOC, 17 methods, and 18
-constructor arguments; the existing `IsolatedRunner`, role registry, and
-candidate-sampling judge remain the single worker-launch, policy, and best-of
-implementations.
-
-R4.1 (`DI-001`) is `IN_DEVELOP` after feature
-[#3088](https://github.com/mangowhoiscloud/geode/pull/3088) merged as
-`90e039ceab5b510f26a7a38df1aceebad1fd35f7`. Its generated manifest first
-classified 35 module/class-scoped `ContextVar`-backed bindings, including the
-eleven service-locator removal inputs. R4.2 has now removed those inputs; the
-current inventory contains 24 bindings limited to seven request identities,
-nine request-local mutable states, seven diagnostic scopes, and one cache. CI
-continues to own declaration, lifecycle, propagation, reset, teardown, and
-literal dynamic-import drift checks, and rejects any new service locator.
-
-R4.2 (`DI-002`, `DI-003`) is `IN_DEVELOP` after feature
-[#3091](https://github.com/mangowhoiscloud/geode/pull/3091) merged as
-`d7f566e12ce96adabd74e6c268d53336ec12fc81`. Six lifecycle-owned execution,
-persistence, lifecycle, integration, authentication, and identity groups now
-contain at most seven cohesive fields; runtime, daemon, worker, MCP one-shot,
-tool, scheduler, hook, and adapter paths receive their owned services through
-composition-root, constructor, or `ToolContext` injection. The eleven ambient
-service locators are removed, lifecycle shutdown remains runtime-owned, and no
-durable schema or provider/tool contract migrated.
-
-R4.3 (`DI-004`) is `IN_DEVELOP` after feature
-[#3094](https://github.com/mangowhoiscloud/geode/pull/3094) merged as
-`4c2c68a7535b1c1bf5705fc898d052c9d6a16105`. `MCPServerManager` now delegates
-configuration, pooled connection ownership, invocation/result guarding,
-trace persistence, and lifecycle cleanup to focused collaborators while its
-public facade and behavior remain compatible. No other manager, R5 adapter,
-or R6 protocol responsibility moved.
-
-R5.1 (`LLM-001`) is `IN_DEVELOP` after feature
-[#3097](https://github.com/mangowhoiscloud/geode/pull/3097) merged as
-`7e95c9f42abd77d17bca79b8398105a9c6cf0c99`. `LLMAdapter` now requires only
-route identity plus `acomplete`; streaming and operator introspection are
-independent structural capabilities, unsupported quota stubs are gone, and
-provider wire behavior is unchanged.
-
-R5.2 (`LLM-002`) is `IN_DEVELOP` after feature
-[#3100](https://github.com/mangowhoiscloud/geode/pull/3100) merged as
-`3be2c070551591f5bee34b52bdb811a87066cd68`. Explicit built-in and supported
-entry-point discovery now publishes immutable generation-bound registry
-snapshots, deterministic validation reports, and fail-loud collision evidence.
-An existing session keeps its captured snapshot across model switches and
-goal continuation, while reload affects only new sessions. The compatibility
-registry view remains read-only and no R5.3 provider-profile/transport or R5.4
-retry/failover responsibility moved.
-
-R5.3 (`LLM-003`) is `IN_DEVELOP` after feature
-[#3103](https://github.com/mangowhoiscloud/geode/pull/3103) merged as
-`773dacdc588415f7bec471e1a577357b185a1447`. One immutable provider registry
-now composes provider/model profiles, credential routes, transport/API shapes,
-native capabilities, and adapter selection while preserving external-provider
-registration and existing adapter-name compatibility. Retry, quota, billing,
-fallback, and hook ordering remain unchanged.
-
-R5.4 (`LLM-004`) is `IN_DEVELOP` after feature
-[#3106](https://github.com/mangowhoiscloud/geode/pull/3106) merged as
-`20307e437a87a3ba18fce38c6e92d01c3e3785c8`. Interactive turns, auxiliary
-model chains, and provider compatibility wrappers now derive retry actions,
-classification, delay, and bounded telemetry from one immutable policy
-substrate. Their intentional call counts, terminal outcomes, model-fallback
-boundaries, OAuth refresh, billing-fatal precedence, context recovery, hook
-order, and visible-stream replay guard remain distinct and verified. No R6
-protocol or extension-trust responsibility moved.
-
-R6.1 (`PROTO-001`, `PROTO-002`) is `IN_DEVELOP` after feature
-[#3109](https://github.com/mangowhoiscloud/geode/pull/3109) merged as
-`d6381dc34f5614d5a726e4aae1da45b3db2ab2ca`. Public clients now negotiate the
-bounded, typed `geode.ipc.v1` envelope with legacy v0 compatibility; request
-correlation, stable public event projections, gateway message identities, and
-explicit unknown-field/event behavior are covered by v0, v1, and future-version
-golden and poison tests. Internal `RuntimeEvent` and `HookEvent` taxonomies
-remain private and can evolve without becoming external protocol contracts.
-
-R6.3 (`BND-004`, `TRUST-001`, `TRUST-002`) is `IN_DEVELOP` after feature
-[#3112](https://github.com/mangowhoiscloud/geode/pull/3112) merged as
-`3c79e23cd9a7d758d6aa06c72a1f50efa5a98348`. Existing Hook, LLM-adapter,
-Skill, and MCP metadata now reaches one immutable trust decision before load or
-spawn. Trusted in-process factories receive narrow granted ports; brokered MCP
-requires an available deny-default OS sandbox, exact environment, isolated
-scratch space, and declared mutation resource keys. Bounded health preserves
-rejected, disabled, granted, and degraded states, and stateful owners retain
-deterministic cleanup. Ordinary Python remains explicitly trusted rather than
-being mislabeled as capability-confined.
-
-R7.1 (`VER-001`) is `IN_DEVELOP` after feature
-[#3115](https://github.com/mangowhoiscloud/geode/pull/3115) merged as
-`edac60747d82d941be23517a5c7081fe442d49c5`. The delivered architecture CI
-inventory rejects generated-baseline drift, kernel reverse imports,
-import-contract exceptions, service-locator `ContextVar` bindings, and
-tool-plan parity loss before a snapshot can bless them. Named CI steps also
-exercise installed kernel isolation, registry generation/collisions,
-structural budgets, public protocol compatibility, roadmap legality, and
-official-documentation drift. R7.2 scenario fixtures and R7.3 performance
-baselines remain outside this package.
-
-R7.2 (`CAP-006`, `VER-002`) is `IN_DEVELOP` after feature
-[#3118](https://github.com/mangowhoiscloud/geode/pull/3118) merged as
-`dc1dfafda209e2c0f89ce990cab45e106e39c346`. Its named CI contract exercises
-all six §8 extension paths through their real seams: project Skill,
-filesystem hook, MCP server, third-party adapter, native tool, and Google
-Workspace service. Each scenario discovers, composes, invokes, and tears down
-the extension without patching forbidden central files or adding another
-runtime registry. R7.2 remains ineligible for `DONE` until the final R7.4
-closure audit verifies the cross-package change-surface budget on `main`.
-
-R7.3 (`VER-004`) is `IN_DEVELOP` after feature
-[#3122](https://github.com/mangowhoiscloud/geode/pull/3122) merged as
-`3e6f025e498e74241209910e95ba3a29792323e7`. One provider-network-free CI
-baseline now measures 13 independent import, lifecycle, first-turn, tool-plan,
-dispatch, MCP, persistence, and memory/descriptor budgets in isolated
-processes. The recorded `ubuntu-latest` calibration and separate cold-build
-and steady-state heap probes prevent averaging or instrumentation overhead from
-hiding a regression, while the named behavior matrix pins architecture
-semantics. R7.3 remains `IN_DEVELOP` until full-program main closure.
-
-R9.1 (`CODE-001`) is `IN_DEVELOP` after documentation feature
-[#3126](https://github.com/mangowhoiscloud/geode/pull/3126) merged as
-`d81e76b00ea3c7d0fb9b03bb4605f9ba18f3e771`. The canonical coding-runtime
-authority contract maps current writers, readers, lifetime, persistence,
-recovery, compatibility, redaction, failure, and rollback across coding task,
-session/turn, workspace, process, mutation/diff, review,
-instructions/context, and cross-domain lookup. It keeps messages/checkpoints
-as recovery authority, SessionTimeline as append-only history, and Goal,
-scheduler, collaboration, and evaluation/promotion as their domain sources of
-truth. Prospective CodingTask, workspace/instruction snapshot, process,
-ChangeSet, review, and lookup work still requires its own measured GAP
-transaction; R9.1 added no runtime API, persisted store, task ledger, policy
-plane, review hook, or migration.
-
-R9.2 (`CODE-002`) is `IN_DEVELOP` after feature
-[#3131](https://github.com/mangowhoiscloud/geode/pull/3131) merged as
-`bd7d79c3d004508eadf379e9403a0a2fb3c2a30a`. Checkpoint `loop_guards` remain
-the sole verify/replan recovery authority; the write-only lifecycle mirror,
-unused `SessionManager` writer/accessor, and fresh/legacy schema addition of
-their seven columns are removed. Databases already carrying those columns
-remain load-compatible as inert extra schema, while current metrics, runtime
-events, and checkpoint restore behavior are unchanged. No replacement store,
-schema migration, event, hook, or runtime abstraction was added.
-
-The active R8.3 claim and publication clock remain unchanged. R8.2
-(`STORE-003`) remains `OPEN` behind REL-004 and STORE-001; R8.4 (`BND-008`)
-additionally waits for STORE-003.
+No package is currently `READY`. The R8.3 claim and publication clock remain
+unchanged, and no additional implementation claim or worktree is authorized
+before its official evidence gate is satisfied.
