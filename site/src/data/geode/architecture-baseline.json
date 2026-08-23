@@ -523,7 +523,7 @@
   "packages": {
     "core": {
       "python_files": 407,
-      "python_loc": 121943
+      "python_loc": 121804
     },
     "geode_product": {
       "python_files": 154,
@@ -535,7 +535,7 @@
     },
     "tests": {
       "python_files": 691,
-      "python_loc": 185670
+      "python_loc": 185522
     }
   },
   "schema_version": 4,
