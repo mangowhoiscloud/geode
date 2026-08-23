@@ -7,20 +7,30 @@ from core.llm.adapters import (
     AdapterAlreadyRegisteredError,
     AdapterBillingType,
     AdapterNotFoundError,
+    AdapterOverride,
     adapter_health,
     bootstrap_builtins,
     get_adapter,
     list_adapters,
     register_adapter,
+    registry_snapshot,
+    reload_adapters,
     resolve_for,
     unregister_adapter,
+    use_registry_snapshot,
 )
 from core.llm.adapters.base import (
+    SOURCE_ADAPTER,
     SOURCE_AUTO,
     SOURCE_PAYG,
     SOURCE_SUBSCRIPTION,
 )
-from core.llm.adapters.registry import _reset_for_test
+from core.llm.adapters.registry import (
+    AdapterRegistration,
+    AdapterRegistrySnapshot,
+    AdapterValidationReport,
+    _reset_for_test,
+)
 
 
 class _Stub:
@@ -66,8 +76,17 @@ def test_register_duplicate_raises() -> None:
 def test_register_duplicate_with_replace_overwrites() -> None:
     register_adapter(_Stub("dup", "x", SOURCE_PAYG))
     new = _Stub("dup", "y", SOURCE_SUBSCRIPTION)
-    register_adapter(new, replace=True)
+    register_adapter(new, replace=True, trust_decision="test override")
     assert get_adapter("dup") is new
+    assert registry_snapshot().report.overrides == (
+        ("dup", f"runtime:{type(new).__module__}:{type(new).__qualname__}", 0, "test override"),
+    )
+
+
+def test_replace_requires_explicit_trust_decision() -> None:
+    register_adapter(_Stub("dup", "x", SOURCE_PAYG))
+    with pytest.raises(ValueError, match="requires trust_decision"):
+        register_adapter(_Stub("dup", "y", SOURCE_SUBSCRIPTION), replace=True)
 
 
 def test_register_rejects_empty_name() -> None:
@@ -124,13 +143,10 @@ def test_resolve_for_no_match_raises() -> None:
         resolve_for("openai", SOURCE_PAYG)
 
 
-def test_resolve_for_duplicate_pair_raises() -> None:
+def test_register_duplicate_pair_fails_before_session() -> None:
     register_adapter(_Stub("a", "anthropic", SOURCE_PAYG))
-    # Bypass the duplicate-name guard by registering with a different name
-    # but the same (provider, source) — invariant violation.
-    register_adapter(_Stub("b", "anthropic", SOURCE_PAYG))
-    with pytest.raises(RuntimeError, match="multiple adapters match"):
-        resolve_for("anthropic", SOURCE_PAYG)
+    with pytest.raises(ValueError, match="both own route"):
+        register_adapter(_Stub("b", "anthropic", SOURCE_PAYG))
 
 
 def test_bootstrap_builtins_registers_five() -> None:
@@ -146,9 +162,123 @@ def test_bootstrap_builtins_registers_five() -> None:
 
 
 def test_bootstrap_builtins_idempotent() -> None:
-    bootstrap_builtins()
-    bootstrap_builtins()  # Second call must not raise.
+    first = bootstrap_builtins()
+    second = bootstrap_builtins()  # Second call must not publish a generation.
+    assert second is first
     assert len(list_adapters()) == 5
+
+
+class _FakeDistribution:
+    metadata = {"Name": "acme-geode-adapter"}
+
+
+class _FakeEntryPoint:
+    value = "acme_adapter:create"
+    dist = _FakeDistribution()
+
+    def __init__(self, name: str, factory: object) -> None:
+        self.name = name
+        self._factory = factory
+
+    def load(self) -> object:
+        return self._factory
+
+
+def test_entry_point_discovery_publishes_generation_and_report(monkeypatch) -> None:
+    plugin = _Stub("acme-adapter", "acme", SOURCE_ADAPTER)
+    monkeypatch.setattr(
+        "importlib.metadata.entry_points",
+        lambda *, group: [_FakeEntryPoint("acme-adapter", lambda: plugin)],
+    )
+
+    snapshot = reload_adapters()
+
+    assert snapshot.generation == 1
+    assert snapshot.get_adapter("acme-adapter") is plugin
+    assert snapshot.report.loaded[-1] == "acme-adapter"
+    assert snapshot.report.origins[-1] == (
+        "acme-adapter",
+        "entrypoint:acme-geode-adapter:acme-adapter",
+    )
+
+
+def test_entry_point_duplicate_requires_audited_override(monkeypatch) -> None:
+    plugin = _Stub("anthropic-payg", "acme", SOURCE_ADAPTER)
+    monkeypatch.setattr(
+        "importlib.metadata.entry_points",
+        lambda *, group: [_FakeEntryPoint("anthropic-payg", lambda: plugin)],
+    )
+    with pytest.raises(AdapterAlreadyRegisteredError, match="multiple origins"):
+        reload_adapters()
+
+    snapshot = reload_adapters(
+        overrides={
+            "anthropic-payg": AdapterOverride(
+                origin="entrypoint:acme-geode-adapter:anthropic-payg",
+                priority=200,
+                trust_decision="operator approved acme distribution",
+            )
+        }
+    )
+    assert snapshot.get_adapter("anthropic-payg") is plugin
+    assert snapshot.report.overrides == (
+        (
+            "anthropic-payg",
+            "entrypoint:acme-geode-adapter:anthropic-payg",
+            200,
+            "operator approved acme distribution",
+        ),
+    )
+
+
+def test_discovery_rejects_unused_override(monkeypatch) -> None:
+    monkeypatch.setattr("importlib.metadata.entry_points", lambda **_kwargs: [])
+    with pytest.raises(ValueError, match="did not resolve a collision"):
+        reload_adapters(
+            overrides={
+                "missing": AdapterOverride(
+                    origin="entrypoint:missing:missing",
+                    priority=1,
+                    trust_decision="operator approved",
+                )
+            }
+        )
+
+
+def test_session_binding_retains_immutable_generation() -> None:
+    first = _Stub("first", "first", SOURCE_PAYG)
+    second = _Stub("second", "second", SOURCE_PAYG)
+    register_adapter(first)
+    captured = registry_snapshot()
+    register_adapter(second)
+    current = registry_snapshot()
+
+    assert current.generation == captured.generation + 1
+    assert not hasattr(captured.registrations, "__setitem__")
+    with use_registry_snapshot(captured):
+        assert list_adapters() == [first]
+        with pytest.raises(AdapterNotFoundError):
+            get_adapter("second")
+    assert list_adapters() == [first, second]
+
+
+def test_snapshot_rejects_a_validation_report_for_different_contents() -> None:
+    record = AdapterRegistration(
+        adapter=_Stub("actual", "actual", SOURCE_PAYG),
+        origin="test:actual",
+        priority=0,
+        trust_decision="test fixture",
+    )
+    with pytest.raises(ValueError, match="report does not match"):
+        AdapterRegistrySnapshot(
+            generation=1,
+            registrations={"actual": record},
+            report=AdapterValidationReport(
+                generation=1,
+                loaded=("claimed",),
+                origins=(("claimed", "test:claimed"),),
+            ),
+        )
 
 
 def test_bootstrap_builtins_provider_source_pairs() -> None:

@@ -214,11 +214,11 @@ def test_builder_is_idempotent(tmp_path: Path) -> None:
         autoresearch_root=FIXTURE_ROOT / "autoresearch",
     )
     second = _read_built(out)
-    # Strip any timestamp-bearing date stamp (build_date) before comparing —
-    # we don't want clock differences to fail this. The version-stamp date
-    # comes from datetime.now() so it can vary between runs.
-    date_re = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
-    assert date_re.sub("DATE", first) == date_re.sub("DATE", second), (
+    # Strip timestamp-bearing build stamps before comparing; two consecutive
+    # builds may cross a minute boundary.
+    timestamp_re = re.compile(r"\b\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?\b")
+    assert timestamp_re.fullmatch("2026-08-23 02:09")
+    assert timestamp_re.sub("TIMESTAMP", first) == timestamp_re.sub("TIMESTAMP", second), (
         "non-date content drifted between two builder runs"
     )
 

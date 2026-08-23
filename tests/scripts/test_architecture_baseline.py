@@ -96,6 +96,15 @@ def _bind_context_boundary(
         module = importlib.import_module("core.llm.adapters.dispatch")
         module.begin_session_adapter_tracking()
         return variable.get(), module.end_session_adapter_tracking, True
+    if label == "core/llm/adapters/registry.py:_ACTIVE_SNAPSHOT":
+        module = importlib.import_module("core.llm.adapters.registry")
+        scope = module.use_registry_snapshot(module.registry_snapshot())
+        scope.__enter__()
+        return (
+            module.active_registry_snapshot(),
+            partial(scope.__exit__, None, None, None),
+            True,
+        )
     if label == "core/llm/platform_hints.py:_current_surface":
         module = importlib.import_module("core.llm.platform_hints")
         token = module.set_current_surface("cli")
@@ -202,7 +211,7 @@ def test_context_var_inventory_has_complete_lifecycle_classification() -> None:
     inventory = baseline.build_baseline()["context_vars"]
 
     assert inventory["classification_counts"] == {
-        "request_identity": 7,
+        "request_identity": 8,
         "request_local_mutable_state": 9,
         "diagnostic_scope": 7,
         "cache": 1,

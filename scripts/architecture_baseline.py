@@ -175,28 +175,27 @@ def _hook_events(root: Path) -> dict[str, Any]:
 def _built_in_adapters(root: Path) -> dict[str, Any]:
     path = root / "core/llm/adapters/registry.py"
     module = _parse_python(path)
-    bootstrap = next(
+    builder = next(
         (
             node
             for node in module.body
-            if isinstance(node, ast.FunctionDef) and node.name == "bootstrap_builtins"
+            if isinstance(node, ast.FunctionDef) and node.name == "_builtin_registrations"
         ),
         None,
     )
-    if bootstrap is None:
-        raise ValueError(f"{path}: bootstrap_builtins() not found")
+    if builder is None:
+        raise ValueError(f"{path}: _builtin_registrations() not found")
 
     classes: list[str] = []
-    for node in ast.walk(bootstrap):
-        if not isinstance(node, ast.For):
+    for node in ast.walk(builder):
+        if not isinstance(node, ast.AnnAssign):
             continue
-        if not isinstance(node.target, ast.Name) or node.target.id != "adapter_cls":
+        if not isinstance(node.target, ast.Name) or node.target.id != "factories":
             continue
-        if not isinstance(node.iter, ast.Tuple):
-            continue
-        classes.extend(item.id for item in node.iter.elts if isinstance(item, ast.Name))
+        if isinstance(node.value, ast.Tuple):
+            classes.extend(item.id for item in node.value.elts if isinstance(item, ast.Name))
     if not classes:
-        raise ValueError(f"{path}: built-in adapter tuple not found")
+        raise ValueError(f"{path}: built-in adapter factory tuple not found")
     return {"count": len(classes), "classes": classes}
 
 

@@ -87,6 +87,14 @@
     "lifetime": "one AgenticLoop session",
     "teardown": "session finalization replaces the counter with None"
   },
+  "core/llm/adapters/registry.py:_ACTIVE_SNAPSHOT": {
+    "classification": "request_identity",
+    "owner": "core.agent.loop.AgenticLoop",
+    "setter": "core.llm.adapters.registry.use_registry_snapshot",
+    "resetter": "core.llm.adapters.registry.use_registry_snapshot finally resets its token",
+    "lifetime": "one AgenticLoop arun or goal-continuation task",
+    "teardown": "the scope resets its token and task exit discards the inherited context"
+  },
   "core/llm/platform_hints.py:_current_surface": {
     "classification": "request_identity",
     "owner": "core.llm.platform_hints",

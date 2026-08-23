@@ -301,6 +301,9 @@ class AgenticLoop:
         self._session_generation = 1
         self._public_session_started = False
         self._public_session_ended = False
+        from core.llm.adapters.registry import registry_snapshot
+
+        self._adapter_registry_snapshot = registry_snapshot()
         _bootstrap.initialize_runtime(self, tool_executor, hooks, config, quiet=quiet)
 
     # ------------------------------------------------------------------
@@ -948,11 +951,14 @@ class AgenticLoop:
         _verify_continuation: HookCorrelation | None = None,
     ) -> AgenticResult:
         """Run one user turn plus any explicitly activated goal continuations."""
-        return await _goal.run(
-            self,
-            user_input,
-            verify_continuation=_verify_continuation,
-        )
+        from core.llm.adapters.registry import use_registry_snapshot
+
+        with use_registry_snapshot(self._adapter_registry_snapshot):
+            return await _goal.run(
+                self,
+                user_input,
+                verify_continuation=_verify_continuation,
+            )
 
     async def acontinue_goal(
         self,
@@ -960,7 +966,10 @@ class AgenticLoop:
         trigger: str = "serve_idle",
     ) -> AgenticResult | None:
         """Continue this session's active Goal through the normal turn loop."""
-        return await _goal.continue_active(self, trigger=trigger)
+        from core.llm.adapters.registry import use_registry_snapshot
+
+        with use_registry_snapshot(self._adapter_registry_snapshot):
+            return await _goal.continue_active(self, trigger=trigger)
 
     async def _arun_once(
         self,

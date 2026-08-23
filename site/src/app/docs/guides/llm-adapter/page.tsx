@@ -8,8 +8,8 @@ export default function Page() {
       slug="guides/llm-adapter"
       title="Add an LLM adapter"
       titleKo="LLM 어댑터 추가"
-      summary="Add a provider to the router and adapter layer, with a fallback entry."
-      summaryKo="라우터와 어댑터 레이어에 프로바이더를 추가하고 폴백 항목을 거는 방법입니다."
+      summary="Add a provider through the immutable adapter registry and package entry-point discovery."
+      summaryKo="불변 어댑터 레지스트리와 패키지 진입점 검색으로 프로바이더를 추가하는 방법입니다."
     >
       <Bi
         ko={
@@ -77,28 +77,33 @@ class AcmePaygAdapter:
 
             <h2>2. 레지스트리에 등록합니다</h2>
             <p>
-              어댑터는 프로세스 전역{" "}
-              <code>core/llm/adapters/registry.py</code> 레지스트리로 조회됩니다.
-              내장 어댑터는 <code>bootstrap_builtins()</code>에서 등록되므로,
-              새 내장 어댑터라면 그 함수의 클래스 튜플에 추가합니다. 외부
-              플러그인이면 진입점에서 <code>register_adapter(AcmePaygAdapter())</code>를
-              직접 호출합니다. <code>resolve_for(provider, source)</code>는{" "}
+              어댑터는 <code>core/llm/adapters/registry.py</code>가 발행한 불변
+              generation snapshot으로 조회됩니다. 내장 어댑터는 명시적 factory
+              목록에서 생성합니다. 외부 패키지는 전역 dict를 직접 수정하지 않고{" "}
+              <code>geode.llm_adapters</code> 패키지 진입점에 인자 없는 factory를
+              선언합니다. 진입점 이름은 factory가 반환한 canonical adapter name과
+              같아야 합니다. <code>resolve_for(provider, source)</code>는{" "}
               <code>(provider, source)</code> 쌍이 정확히 하나의 어댑터에
               매칭되도록 강제하므로, 같은 쌍을 둘 등록하면 invariant 위반으로
               곧바로 실패합니다.
             </p>
-            <pre>{`# core/llm/adapters/registry.py — bootstrap_builtins()
-from core.llm.adapters.acme_payg import AcmePaygAdapter
+            <pre>{`# acme-geode-adapter/pyproject.toml
+[project.entry-points."geode.llm_adapters"]
+acme-payg = "acme_geode:create_adapter"
 
-for adapter_cls in (..., AcmePaygAdapter):
-    instance = adapter_cls()
-    if instance.name in _REGISTRY:
-        continue
-    register_adapter(instance)`}</pre>
+# acme_geode/__init__.py
+def create_adapter():
+    return AcmePaygAdapter()`}</pre>
             <p>
               서브프로세스(워커·audit)는 부모의 wiring 컨테이너를 거치지 않으므로{" "}
               <code>bootstrap_builtins()</code>를 명시 호출해야 합니다. 안 그러면
-              레지스트리가 비어 <code>AdapterNotFoundError</code>가 납니다.
+              레지스트리가 비어 <code>AdapterNotFoundError</code>가 납니다. 이 호출은
+              내장 factory와 지원 진입점을 함께 검색하며, generation과 validation
+              report가 붙은 snapshot을 반환합니다. 새 세션은 현재 snapshot을
+              캡처하고, 이미 실행 중인 세션은 reload 뒤에도 기존 generation을
+              유지합니다. canonical ID 충돌은 기본적으로 실패합니다. 의도적인
+              교체만 <code>AdapterOverride</code>로 승자 origin, priority, trust
+              decision을 명시해 <code>reload_adapters()</code>에 전달합니다.
             </p>
 
             <h2>3. 라우팅과 폴백 체인을 연결합니다</h2>
@@ -154,10 +159,11 @@ for adapter_cls in (..., AcmePaygAdapter):
               확인합니다.
             </p>
             <pre>{`uv run python -c "
-from core.llm.adapters.registry import bootstrap_builtins, resolve_for
+from core.llm.adapters.registry import bootstrap_builtins
 from core.llm.adapters import EnvironmentDiagnosticCapable
-bootstrap_builtins()
-a = resolve_for('acme', 'payg')
+snapshot = bootstrap_builtins()
+a = snapshot.resolve_for('acme', 'payg')
+print(snapshot.generation, snapshot.report.origins)
 print(a.name, a.provider, a.source)
 if isinstance(a, EnvironmentDiagnosticCapable):
     print(a.test_environment().ok)
@@ -240,29 +246,36 @@ class AcmePaygAdapter:
 
             <h2>2. Register it in the registry</h2>
             <p>
-              Adapters are looked up through the process-global registry in{" "}
-              <code>core/llm/adapters/registry.py</code>. Built-in adapters
-              register in <code>bootstrap_builtins()</code>, so for a new built-in,
-              add the class to that function&apos;s tuple. For an external plugin, call{" "}
-              <code>register_adapter(AcmePaygAdapter())</code> from your entry
-              point. <code>resolve_for(provider, source)</code> enforces that a{" "}
+              Adapters are looked up through immutable generation snapshots
+              published by <code>core/llm/adapters/registry.py</code>. Built-ins
+              come from an explicit factory list. External packages do not mutate
+              a global dictionary; they expose a no-argument factory through the{" "}
+              <code>geode.llm_adapters</code> package entry-point group. The entry
+              point name must equal the returned adapter&apos;s canonical name.{" "}
+              <code>resolve_for(provider, source)</code> enforces that a{" "}
               <code>(provider, source)</code> pair matches exactly one adapter, so
               registering two for the same pair fails loudly as an invariant
               violation.
             </p>
-            <pre>{`# core/llm/adapters/registry.py — bootstrap_builtins()
-from core.llm.adapters.acme_payg import AcmePaygAdapter
+            <pre>{`# acme-geode-adapter/pyproject.toml
+[project.entry-points."geode.llm_adapters"]
+acme-payg = "acme_geode:create_adapter"
 
-for adapter_cls in (..., AcmePaygAdapter):
-    instance = adapter_cls()
-    if instance.name in _REGISTRY:
-        continue
-    register_adapter(instance)`}</pre>
+# acme_geode/__init__.py
+def create_adapter():
+    return AcmePaygAdapter()`}</pre>
             <p>
               Subprocesses (worker, audit) do not pass through the parent wiring
               container, so they must call <code>bootstrap_builtins()</code>{" "}
               explicitly. Without it the registry is empty and you get an{" "}
-              <code>AdapterNotFoundError</code>.
+              <code>AdapterNotFoundError</code>. The call discovers built-in
+              factories and supported entry points together and returns a snapshot
+              with a generation and validation report. New sessions capture the
+              current snapshot; a running session retains its generation after a
+              reload. Canonical-ID collisions fail by default. An intentional
+              replacement must pass an <code>AdapterOverride</code> to{" "}
+              <code>reload_adapters()</code> that records the winning origin,
+              priority, and trust decision.
             </p>
 
             <h2>3. Wire routing and the fallback chain</h2>
@@ -317,10 +330,11 @@ for adapter_cls in (..., AcmePaygAdapter):
               your adapter.
             </p>
             <pre>{`uv run python -c "
-from core.llm.adapters.registry import bootstrap_builtins, resolve_for
+from core.llm.adapters.registry import bootstrap_builtins
 from core.llm.adapters import EnvironmentDiagnosticCapable
-bootstrap_builtins()
-a = resolve_for('acme', 'payg')
+snapshot = bootstrap_builtins()
+a = snapshot.resolve_for('acme', 'payg')
+print(snapshot.generation, snapshot.report.origins)
 print(a.name, a.provider, a.source)
 if isinstance(a, EnvironmentDiagnosticCapable):
     print(a.test_environment().ok)
