@@ -291,12 +291,22 @@ async def call_provider(
 
     adapter_exc = getattr(loop._new_adapter, "_last_error", None)
     from core.llm.errors import _ERROR_CLASSIFICATION
+    from core.llm.fallback import (
+        RetryAction,
+        RetryAttempt,
+        classify_retry_error,
+        interactive_retry_policy,
+    )
 
+    retry_policy = interactive_retry_policy(max_attempts=loop._LLM_RETRY_CAP)
     error_type, severity, hint = _ERROR_CLASSIFICATION["unknown"]
     if adapter_exc is not None:
-        from core.llm.errors import classify_llm_error
-
-        error_type, severity, hint = classify_llm_error(adapter_exc)
+        error_type = classify_retry_error(adapter_exc)
+        _classification = _ERROR_CLASSIFICATION.get(
+            error_type,
+            _ERROR_CLASSIFICATION["unknown"],
+        )
+        _, severity, hint = _classification
         if error_type == "context_overflow":
             log.warning("Context overflow detected from 400 — attempting recovery")
             recovered = await _context.aggressive_context_recovery(
@@ -371,7 +381,24 @@ async def call_provider(
     _context.sync_messages_to_context(loop, turn.messages)
     loop._save_checkpoint(turn.user_input, round_idx=round_idx)
 
+    retry_action = retry_policy.action_for(error_type)
     if error_type == "rate_limit":
+        result = _guards._build_model_action_result(
+            loop,
+            error_type=error_type,
+            severity=severity,
+            hint=hint,
+            rounds=round_idx + 1,
+            detail=loop._last_llm_error or str(adapter_exc),
+        )
+        return await assemble_termination(
+            loop,
+            result,
+            user_input=turn.user_input,
+            round_idx=round_idx + 1,
+        )
+
+    if retry_action is RetryAction.TERMINAL:
         result = _guards._build_model_action_result(
             loop,
             error_type=error_type,
@@ -408,30 +435,37 @@ async def call_provider(
             loop._set_llm_retry_count(0)
             return None
 
-    if loop._consecutive_llm_failures < loop._LLM_RETRY_CAP:
-        delay = min(2**loop._consecutive_llm_failures, 30)
+    if loop._consecutive_llm_failures < retry_policy.max_attempts:
+        delay = retry_policy.delay_for(loop._consecutive_llm_failures)
+        retry_event = RetryAttempt(
+            policy=retry_policy.name,
+            model=loop.model,
+            error_type=(type(adapter_exc).__name__ if adapter_exc is not None else "UnknownError"),
+            classification=error_type,
+            attempt=loop._consecutive_llm_failures,
+            max_attempts=retry_policy.max_attempts,
+            delay_s=delay,
+            elapsed_s=None,
+        )
         log.info(
             "LLM call failed (%s) — retrying in %ds (attempt %d/%d)",
             error_type,
             delay,
             loop._consecutive_llm_failures,
-            loop._LLM_RETRY_CAP,
+            retry_policy.max_attempts,
         )
         if not loop._quiet:
             from core.ui.agentic_ui import emit_llm_retry
 
-            emit_llm_retry(delay, loop._consecutive_llm_failures, loop._LLM_RETRY_CAP)
+            emit_llm_retry(int(delay), loop._consecutive_llm_failures, retry_policy.max_attempts)
         if loop._hooks:
             await loop._hooks.trigger_async(
                 HookEvent.LLM_CALL_RETRIED,
                 {
                     **(asdict(response_step.correlation) if response_step is not None else {}),
-                    "model": loop.model,
+                    **retry_event.payload(),
                     "provider": loop._provider,
                     "error_type": error_type,
-                    "delay_s": delay,
-                    "attempt": loop._consecutive_llm_failures,
-                    "max_attempts": loop._LLM_RETRY_CAP,
                 },
             )
         await asyncio.sleep(delay)

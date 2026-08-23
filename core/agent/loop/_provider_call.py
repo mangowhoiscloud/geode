@@ -83,7 +83,7 @@ async def _acomplete_with_fail_fast_pre_execution_retry(
     except Exception as exc:
         if not _fail_fast_adapter_errors_enabled():
             raise
-        from core.llm.adapters.dispatch import _is_connection_transient
+        from core.llm.fallback import classify_retry_error
 
         if isinstance(exc, EmptyModelOutputError):
             empty_errors = [exc]
@@ -114,7 +114,7 @@ async def _acomplete_with_fail_fast_pre_execution_retry(
                     empty_error.mark_recovered()
                 return result
             raise AssertionError("bounded empty-output retry loop did not terminate") from exc
-        if not _is_connection_transient(exc):
+        if classify_retry_error(exc) != "connection":
             raise
         log.warning(
             "AgenticLoop: fail-fast transport error (%s); retrying the same adapter once",
@@ -484,6 +484,18 @@ async def call_llm(
             complete=_complete_attempt,
         )
     except Exception as exc:
+        from core.llm.errors import BillingError
+        from core.llm.fallback import billing_error_from_exception, classify_retry_error
+
+        if isinstance(exc, BillingError):
+            raise
+        if classify_retry_error(exc) == "billing":
+            raise billing_error_from_exception(
+                exc,
+                model=req.model,
+                message="API billing/credit error.",
+                routing_sources=loop._policy_sources.get("provider_routing"),
+            ) from exc
         error_detail = str(exc) or type(exc).__name__
         loop._last_llm_error = error_detail
         log.warning(

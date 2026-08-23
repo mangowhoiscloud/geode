@@ -138,6 +138,12 @@ functional change.
 
 ### Architecture
 
+- **LLM retries now share an explicit policy substrate.** Interactive turns,
+  auxiliary model chains, and provider compatibility retries use one error
+  classification and telemetry contract while retaining their existing call
+  counts, delay shapes, fallback boundaries, OAuth refresh, billing-fatal
+  short-circuit, and stream replay safeguards.
+
 - **LLM adapters no longer require unsupported stubs.** The core adapter
   contract now requires only route identity plus `acomplete`; streaming,
   environment diagnostics, model listing, quota inspection, and credential

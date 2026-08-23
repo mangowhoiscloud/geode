@@ -183,7 +183,7 @@
         "has_default": true,
         "implementation": "ContextVar",
         "lifetime": "one AgenticLoop session",
-        "line": 86,
+        "line": 91,
         "owner": "core.agent.loop",
         "path": "core/llm/adapters/dispatch.py",
         "resetter": "core.llm.adapters.dispatch.end_session_adapter_tracking",
@@ -543,7 +543,7 @@
   "packages": {
     "core": {
       "python_files": 403,
-      "python_loc": 120458
+      "python_loc": 120695
     },
     "geode_product": {
       "python_files": 154,
@@ -554,8 +554,8 @@
       "python_loc": 193
     },
     "tests": {
-      "python_files": 685,
-      "python_loc": 183868
+      "python_files": 686,
+      "python_loc": 184186
     }
   },
   "schema_version": 4,

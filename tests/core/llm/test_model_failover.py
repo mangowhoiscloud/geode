@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import anthropic
 import pytest
@@ -488,6 +488,46 @@ class TestAgenticLoopFailover:
         )
         assert result is None
         assert loop._last_llm_error is not None
+
+    def test_call_llm_propagates_billing_to_the_operator_boundary(self) -> None:
+        """Billing must bypass ordinary retry and reach `_dispatch_llm_call`."""
+        from core.llm.errors import BillingError
+
+        loop = self._make_loop()
+        billing = BillingError("credit exhausted")
+        self._install_acomplete_stub(loop, billing)
+
+        with pytest.raises(BillingError) as exc_info:
+            asyncio.run(loop._call_llm("system", [{"role": "user", "content": "go"}]))
+
+        assert exc_info.value is billing
+
+    def test_call_llm_uses_active_routing_source_for_raw_billing(self) -> None:
+        from core.config.policy_source import PolicySourcePaths
+        from core.llm.errors import BillingError
+
+        loop = self._make_loop()
+        routing_source = PolicySourcePaths("GEODE_TEST_ROUTING")
+        loop._policy_sources = {"provider_routing": routing_source}
+
+        class RawBillingError(RuntimeError):
+            body = {"error": {"code": "insufficient_quota"}}
+
+        raw_billing = RawBillingError("insufficient quota")
+        self._install_acomplete_stub(loop, raw_billing)
+        captured: dict[str, Any] = {}
+
+        def normalize(exc: Exception, **kwargs: Any) -> BillingError:
+            captured.update(kwargs)
+            return BillingError(str(exc))
+
+        with (
+            patch("core.llm.fallback.billing_error_from_exception", side_effect=normalize),
+            pytest.raises(BillingError),
+        ):
+            asyncio.run(loop._call_llm("system", [{"role": "user", "content": "go"}]))
+
+        assert captured["routing_sources"] is routing_source
 
     def test_call_llm_no_api_key_returns_none(self) -> None:
         """When ``acomplete`` raises an auth-style failure, ``_call_llm``
