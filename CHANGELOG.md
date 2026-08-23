@@ -49,6 +49,13 @@ functional change.
 
 ### Architecture
 
+- **Architecture performance now has independent regression budgets.** A
+  no-network CI probe measures cold import, runtime lifecycle, first turn,
+  tool-plan build and refresh, dispatch, MCP first and warm calls, event
+  persistence, memory peaks, and descriptor/registry size. Each metric fails
+  against its own committed ceiling; behavior contracts separately pin
+  termination, retry, approval, Google consent, storage, and IPC semantics.
+
 - **Extension change surfaces are now executable CI contracts.** Six black-box
   scenarios add a project Skill, filesystem hook, MCP server, package LLM
   adapter, native tool, and Google Workspace service through their supported
