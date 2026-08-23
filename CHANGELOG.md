@@ -49,6 +49,12 @@ functional change.
 
 ### Architecture
 
+- **Extension change surfaces are now executable CI contracts.** Six black-box
+  scenarios add a project Skill, filesystem hook, MCP server, package LLM
+  adapter, native tool, and Google Workspace service through their supported
+  seams while leaving the forbidden kernel, CLI, provider, policy, and OAuth
+  edit sites untouched.
+
 - **Architecture regressions now fail on explicit CI contracts.** Runtime,
   CLI, server, and messaging dependencies cross neutral or product-owned
   composition seams instead of ignored reverse imports. CI now executes the

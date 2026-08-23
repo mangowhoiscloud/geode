@@ -54,6 +54,8 @@ def test_ci_exposes_every_r7_1_architecture_gate() -> None:
         "Architecture import contracts",
         "uv run lint-imports --no-cache",
         "Architecture behavior contracts",
+        "Extension change-surface contracts",
+        "tests/integration/test_extension_change_surfaces.py",
         "tests/core/agent/test_loop_architecture_budget.py",
         "tests/core/agent/test_subagent_architecture_budget.py",
         "tests/core/agent/test_tool_plan_runtime_policy.py",

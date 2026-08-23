@@ -230,6 +230,9 @@ jobs:
             tests/core/tools/test_tool_plan.py \
             tests/integration/test_architecture_site_inventory.py \
             tests/integration/test_product_composition.py
+      - name: Extension change-surface contracts
+        if: needs.changes.outputs.code == 'true'
+        run: uv run pytest -q tests/integration/test_extension_change_surfaces.py
       - name: Run tests with coverage (xdist parallel, loadfile)
         if: needs.changes.outputs.code == 'true'
         # --dist=loadfile pins same-file tests to the same worker. Without
