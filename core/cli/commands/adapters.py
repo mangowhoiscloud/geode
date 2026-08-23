@@ -46,24 +46,29 @@ def adapters_list() -> None:
     )
 
     snapshot = bootstrap_builtins(policy_sources=EMPTY_POLICY_SOURCES)
-    adapters = snapshot.list_adapters()
-    if not adapters:
+    registrations = tuple(snapshot.registrations.values())
+    if not registrations:
         typer.echo("No LLM adapters registered.")
         raise typer.Exit()
 
-    header = f"{'NAME':<20} {'PROVIDER':<10} {'SOURCE':<14} {'BILLING':<22} STATUS"
+    header = f"{'NAME':<20} {'PROVIDER':<10} {'SOURCE':<14} {'API':<25} {'BILLING':<22} STATUS"
     typer.echo(header)
     typer.echo("-" * len(header))
-    for a in adapters:
+    for registration in registrations:
+        a = registration.adapter
+        assert registration.provider_spec is not None
+        spec = registration.provider_spec
         if isinstance(a, EnvironmentDiagnosticCapable):
             report = a.test_environment()
             status = "ok" if report.ok else "missing — " + (report.hints[0] if report.hints else "")
         else:
             status = "n/a — diagnostics unsupported"
         typer.echo(
-            f"{a.name:<20} {a.provider:<10} {a.source:<14} {a.billing_type.value:<22} {status}"
+            f"{a.name:<20} {spec.profile.provider:<10} "
+            f"{spec.credential.source:<14} {spec.transport.api:<25} "
+            f"{spec.credential.billing_type.value:<22} {status}"
         )
-    typer.echo(f"\nRegistry generation {snapshot.generation}: {len(adapters)} adapter(s).")
+    typer.echo(f"\nRegistry generation {snapshot.generation}: {len(registrations)} adapter(s).")
     typer.echo(
         'Override per role via ~/.geode/config.toml [seed_generation.role.<role>] source = "..."'
     )

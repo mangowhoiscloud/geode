@@ -379,7 +379,7 @@ GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), GLM 세 프로�
 | OpenAI / Codex | `gpt-5.5` | `gpt-`, `o3-`, `o4-` 접두사. 단 `gpt-5.5`, `gpt-5.5-pro`와 `-codex` 계열 접미사는 Codex OAuth 백엔드로만 라우팅. `gpt-5.6-sol/terra/luna`와 `gpt-5.4` 계열은 듀얼 레인 — 로그인 상태(API 키 ↔ 구독 OAuth)가 백엔드를 결정 | ChatGPT 구독 OAuth(`~/.codex/auth.json`) 또는 `OPENAI_API_KEY` |
 | GLM (ZhipuAI) | `glm-5.2` (무료 티어 `glm-4.7-flash`) | `glm-` 접두사 | `ZAI_API_KEY`. Coding Plan과 PAYG 엔드포인트가 분리되어 있습니다. |
 
-(프로바이더, 자격 소스) 조합마다 어댑터가 하나씩 등록됩니다 (`core/llm/adapters/`). `geode adapters list`로 현재 등록 상태와 자격 환경을 확인할 수 있습니다.
+(프로바이더, 자격 소스) 조합마다 어댑터가 하나씩 등록됩니다 (`core/llm/adapters/`). `geode adapters list`로 현재 등록 상태, API transport, billing, 자격 환경을 확인할 수 있습니다.
 
 ## 키와 설정이 사는 곳
 
@@ -1165,8 +1165,9 @@ GEODE는 세 프로바이더를 라우팅합니다. Anthropic, OpenAI(+ChatGPT �
 
 | 구성 | 코드 |
 | --- | --- |
-| 프로바이더 구현 | `core/llm/providers/anthropic.py`, `openai.py`, `codex.py`, `glm.py` |
-| 라우터 | `core/llm/router/` (text / json / parsed / streaming / tools 호출 표면) |
+| 프로바이더 유틸리티 | `core/llm/providers/anthropic.py`, `codex.py`, `glm.py`. 재시도·quota·request shaping을 어댑터에 제공 |
+| 비동기 호출 어댑터 | `core/llm/adapters/`. SDK client와 `acomplete()` 호출 표면 소유 |
+| 프로바이더 composition | `core/llm/registry.py`. 모델 identity, credential route, transport/API shape를 분리해 선언 |
 | 어댑터 레지스트리 | `core/llm/adapters/registry.py`의 `bootstrap_builtins()`. 내장 factory와 `geode.llm_adapters` 진입점을 불변 generation snapshot으로 검색 |
 | 라우팅 매니페스트 | `core/config/routing.toml` (+ `~/.geode/routing.toml` 사용자 오버라이드). 모델 id prefix로 프로바이더 결정 |
 
@@ -1219,7 +1220,7 @@ CLI 인자
 -   [프로바이더 설정 가이드](https://mangowhoiscloud.github.io/geode/docs/run/providers.md). 자격과 경로 선택.
 -   [도구 호출](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/tool-calling.md). ToolSpec, 선택 모드, 실행과 결과 replay.
 -   [구조화 출력](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/structured-output.md). JSON Schema 배선과 검증 경계.
--   [인증](https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md). OAuth, API 키, CLI 레인.
+-   [인증](https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md). OAuth, API 키, credential 경로.
 -   [어댑터 추가 가이드](https://mangowhoiscloud.github.io/geode/docs/guides/llm-adapter.md). 새 모델, 새 레인 붙이기.
 
 ---
@@ -4529,7 +4530,7 @@ GEODE release manifest는 verdict를 소유하거나 candidate를 승격하지 �
 URL: https://mangowhoiscloud.github.io/geode/docs/guides/llm-adapter
 Markdown: https://mangowhoiscloud.github.io/geode/docs/guides/llm-adapter.md
 
-어댑터는 하나의 `(provider, source)` 조합을 실제 호출로 바꾸는 계층입니다. PAYG API 키 호출이든, OAuth 구독 호출이든, 로컬 CLI 서브프로세스든 전부 같은 프로토콜을 따릅니다. 새 백엔드를 붙이는 작업은 어댑터 작성, 레지스트리 등록, 라우팅 연결, 호출 계약 문서화의 네 단계입니다.
+어댑터는 하나의 `(provider, source)` 조합을 실제 호출로 바꾸는 계층입니다. PAYG API 키 호출이든, OAuth 구독 호출이든, 설치된 외부 어댑터든 전부 같은 프로토콜을 따릅니다. 새 백엔드를 붙이는 작업은 어댑터 작성, 레지스트리 등록, 라우팅 연결, 호출 계약 문서화의 네 단계입니다.
 
 ## 1\. 어댑터를 작성합니다
 
@@ -4579,11 +4580,39 @@ def create_adapter():
     return AcmePaygAdapter()
 ```
 
+기존 factory는 보수적인 호환 composition을 자동으로 얻습니다. 실제 인증 선택과 API shape를 선언하려면 반환 객체에 불변`ProviderSpec`을 추가하십시오. 이 값은`ProviderProfile`, `CredentialRoute`,`TransportSpec`으로 나뉘며 secret이나 SDK client를 담지 않습니다. 선언한 provider/source/billing/capability가 adapter 호환 속성과 다르면 session 시작 전에 등록이 실패합니다.
+
+```
+# acme_geode/__init__.py
+from core.llm.registry import (
+    AdapterBillingType, CredentialRoute, ProviderProfile,
+    ProviderSpec, TransportSpec,
+)
+
+ACME_SPEC = ProviderSpec(
+    profile=ProviderProfile("acme", "acme", "Acme", "acme"),
+    credential=CredentialRoute(
+        source="payg", account_provider="acme", selector="plugin",
+        auth_type="bearer", billing_type=AdapterBillingType.API,
+    ),
+    transport=TransportSpec(
+        id="acme-responses", api="acme-responses",
+        default_base_url="https://api.acme.example/v1",
+    ),
+)
+
+class AcmeComposedAdapter(AcmePaygAdapter):
+    provider_spec = ACME_SPEC
+
+def create_adapter():
+    return AcmeComposedAdapter()
+```
+
 서브프로세스(워커·audit)는 부모의 wiring 컨테이너를 거치지 않으므로 `bootstrap_builtins()`를 명시 호출해야 합니다. 안 그러면 레지스트리가 비어 `AdapterNotFoundError`가 납니다. 이 호출은 내장 factory와 지원 진입점을 함께 검색하며, generation과 validation report가 붙은 snapshot을 반환합니다. 새 세션은 현재 snapshot을 캡처하고, 이미 실행 중인 세션은 reload 뒤에도 기존 generation을 유지합니다. canonical ID 충돌은 기본적으로 실패합니다. 의도적인 교체만 `AdapterOverride`로 승자 origin, priority, trust decision을 명시해 `reload_adapters()`에 전달합니다.
 
 ## 3\. 라우팅과 폴백 체인을 연결합니다
 
-`core/llm/router/calls/_route.py`의 `_route_provider(model)`이 모델 이름을 프로바이더로 해석합니다. 등록된 Plan이 있으면 그것을 따르고, 없으면 `core.config`의 정적 `_resolve_provider`로 떨어집니다. 모델 접두사와 프로바이더의 매핑은 `core/config/routing.toml`의 `[routing.prefixes]`가 SoT이고, 사용자 override는 `~/.geode/routing.toml`입니다. 새 프로바이더의 모델 접두사를 여기에 추가합니다. 다중 모델 폴백은 `core/llm/router/calls/_failover.py`의 `call_with_failover(models, call_fn)`이 처리합니다. 모델 체인을 순서대로 시도하며, 재시도 가능한 오류(rate-limit, timeout, connection, server)는 백오프 후 다음 모델로 넘어가고, 인증 오류 같은 비재시도 오류는 즉시 전파됩니다. 단, 폴백 체인은 기본 출하값이 전부 빈 리스트입니다(`[model.fallbacks]`). 조용한 모델 교체 대신 실패를 드러내는 설계이므로, 새 어댑터의 모델을 폴백 후보로 쓰려면 `~/.geode/routing.toml`에서 직접 체인을 켜야 합니다.
+`core.config._resolve_provider(model)`이 모델 이름을 프로바이더로 해석하고, adapter dispatch가 credential metadata로 source를 결정합니다. 등록된 Plan은 별도의 routing target으로 endpoint와 credential을 선택합니다. 모델 접두사와 프로바이더의 매핑은 `core/config/routing.toml`의 `[routing.prefixes]`가 SoT이고, 사용자 override는 `~/.geode/routing.toml`입니다. 새 프로바이더의 모델 접두사를 여기에 추가합니다. 다중 모델 폴백은 `core/llm/router/calls/_failover.py`의 `call_with_failover(models, call_fn)`이 처리합니다. 모델 체인을 순서대로 시도하며, 재시도 가능한 오류(rate-limit, timeout, connection, server)는 백오프 후 다음 모델로 넘어가고, 인증 오류 같은 비재시도 오류는 즉시 전파됩니다. 단, 폴백 체인은 기본 출하값이 전부 빈 리스트입니다(`[model.fallbacks]`). 조용한 모델 교체 대신 실패를 드러내는 설계이므로, 새 어댑터의 모델을 폴백 후보로 쓰려면 `~/.geode/routing.toml`에서 직접 체인을 켜야 합니다.
 
 ## 4\. 호출 계약을 문서화합니다
 

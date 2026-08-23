@@ -39,7 +39,14 @@ from pathlib import Path
 import pytest
 from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
 from core.llm.adapters._source_inference import infer_source
-from core.llm.adapters.base import SOURCE_PAYG, SOURCE_SUBSCRIPTION
+from core.llm.adapters.base import SOURCE_PAYG, SOURCE_SUBSCRIPTION, AdapterBillingType
+from core.llm.registry import (
+    PROVIDER_VARIANTS,
+    CredentialRoute,
+    ProviderProfile,
+    ProviderSpec,
+    TransportSpec,
+)
 
 # ---------------------------------------------------------------------------
 # Layer 1 — infer_source resolution priority
@@ -162,6 +169,36 @@ def test_infer_source_unknown_provider_falls_back_to_payg(
     _patch_store(monkeypatch, None)
     assert infer_source("glm") == SOURCE_PAYG
     assert infer_source("unknown") == SOURCE_PAYG
+
+
+def test_infer_source_consumes_credential_route_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_settings(monkeypatch, openai_credential_source="acme-sub")
+    monkeypatch.setitem(
+        PROVIDER_VARIANTS,
+        "acme-sub",
+        ProviderSpec(
+            profile=ProviderProfile("acme-sub", "acme", "Acme", "openai"),
+            credential=CredentialRoute(
+                source=SOURCE_SUBSCRIPTION,
+                account_provider="acme:account",
+                selector="plugin",
+                auth_type="adapter",
+                billing_type=AdapterBillingType.SUBSCRIPTION,
+                settings_field="openai_credential_source",
+                settings_values=("acme-sub",),
+            ),
+            transport=TransportSpec(
+                id="acme",
+                api="acme",
+                default_base_url="",
+                retry_policy="adapter-owned",
+            ),
+        ),
+    )
+
+    assert infer_source("acme") == SOURCE_SUBSCRIPTION
 
 
 def test_infer_source_anthropic_setting_independent(monkeypatch: pytest.MonkeyPatch) -> None:

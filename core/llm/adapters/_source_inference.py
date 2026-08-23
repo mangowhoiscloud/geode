@@ -24,9 +24,9 @@ Resolution order (highest precedence first):
    credential source — :func:`resolve_for` will still surface the PAYG
    adapter's own credential miss with its operator-grade hint.
 
-Only ``openai`` / ``openai-codex`` and ``anthropic`` participate; ``glm`` and
-external adapters route through their provider-specific paths and never reach
-this helper.
+Built-in settings/account selection comes from the immutable
+``CredentialRoute`` records. External adapters without an explicit selection
+route keep the historical PAYG fallback.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from core.llm.adapters.base import SOURCE_PAYG, SOURCE_SUBSCRIPTION
+from core.llm.adapters.base import SOURCE_PAYG
 
 if TYPE_CHECKING:
     from core.auth.profiles import ProfileStore
@@ -42,29 +42,27 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-_SETTINGS_FIELD: dict[str, str] = {
-    "openai": "openai_credential_source",
-    "openai-codex": "openai_credential_source",
-    "anthropic": "anthropic_credential_source",
-}
-
-_OAUTH_PROVIDER_KEY: dict[str, str] = {
-    "openai": "openai-codex",
-    "openai-codex": "openai-codex",
-}
-
-
 def infer_source(provider: str) -> str:
     """Pick the adapter-registry source for *provider* based on operator state.
 
-    Returns one of the three concrete adapter sources. Falls back
-    to :data:`SOURCE_PAYG` for any provider not in :data:`_SETTINGS_FIELD` so
-    the AgenticLoop registry lookup stays consistent with the historical
-    default (the loop's ``source or "payg"`` had no concept of inference).
+    Returns one of the three concrete adapter sources. Falls back to PAYG for
+    providers without a declared built-in route.
     """
-    field = _SETTINGS_FIELD.get(provider)
-    if field is None:
+    from core.llm.adapters.registry import normalize_registry_provider
+    from core.llm.registry import provider_specs_for
+
+    canonical = normalize_registry_provider(provider)
+    specs = provider_specs_for(canonical)
+    if not specs:
         return SOURCE_PAYG
+
+    fields = {spec.credential.settings_field for spec in specs if spec.credential.settings_field}
+    if len(fields) > 1:
+        raise RuntimeError(f"provider {canonical!r} declares multiple credential setting fields")
+    field = next(iter(fields), "")
+    if not field:
+        defaults = [spec.credential.source for spec in specs if spec.credential.default]
+        return defaults[0] if len(defaults) == 1 else SOURCE_PAYG
 
     raw = _read_setting(field)
     if raw == "none":
@@ -72,19 +70,22 @@ def infer_source(provider: str) -> str:
             f"provider {provider!r} is disabled by {field}='none'; "
             "select another credential source with /login source"
         )
-    if raw == "claude-cli" or (provider == "anthropic" and raw == "oauth"):
+    if raw == "claude-cli" or (canonical == "anthropic" and raw == "oauth"):
         from core.config.credential_source import CLAUDE_CLI_RETIRED_MESSAGE
 
         raise RuntimeError(CLAUDE_CLI_RETIRED_MESSAGE)
-    if provider == "anthropic" and raw == "openai-codex":
+    if canonical == "anthropic" and raw == "openai-codex":
         raise RuntimeError("openai-codex is not a credential source for provider 'anthropic'")
-    if provider in ("openai", "openai-codex") and raw in ("oauth", "openai-codex"):
-        return SOURCE_SUBSCRIPTION
-    if raw == "api_key":
-        return SOURCE_PAYG
-    if _has_oauth_profile(provider):
-        return SOURCE_SUBSCRIPTION
-    return SOURCE_PAYG
+    for spec in specs:
+        if raw in spec.credential.settings_values:
+            return spec.credential.source
+    if raw == "auto":
+        for spec in specs:
+            route = spec.credential
+            if route.auto_select and _has_oauth_profile(route.account_provider):
+                return route.source
+    defaults = [spec.credential.source for spec in specs if spec.credential.default]
+    return defaults[0] if len(defaults) == 1 else SOURCE_PAYG
 
 
 def _read_setting(field: str) -> str:
@@ -97,16 +98,13 @@ def _read_setting(field: str) -> str:
     return str(raw or "auto").lower()
 
 
-def _has_oauth_profile(provider: str) -> bool:
-    profile_key = _OAUTH_PROVIDER_KEY.get(provider)
-    if profile_key is None:
-        return False
+def _has_oauth_profile(account_provider: str) -> bool:
     store = _load_profile_store()
     if store is None:
         return False
     from core.auth.profiles import CredentialType
 
-    for profile in store.list_by_provider(profile_key):
+    for profile in store.list_by_provider(account_provider):
         if profile.credential_type == CredentialType.OAUTH:
             return True
     return False

@@ -17,7 +17,7 @@ export default function Page() {
             <p>
               어댑터는 하나의 <code>(provider, source)</code> 조합을 실제 호출로
               바꾸는 계층입니다. PAYG API 키 호출이든, OAuth 구독 호출이든,
-              로컬 CLI 서브프로세스든 전부 같은 프로토콜을 따릅니다. 새 백엔드를
+              설치된 외부 어댑터든 전부 같은 프로토콜을 따릅니다. 새 백엔드를
               붙이는 작업은 어댑터 작성, 레지스트리 등록, 라우팅 연결,
               호출 계약 문서화의 네 단계입니다.
             </p>
@@ -95,6 +95,38 @@ acme-payg = "acme_geode:create_adapter"
 def create_adapter():
     return AcmePaygAdapter()`}</pre>
             <p>
+              기존 factory는 보수적인 호환 composition을 자동으로 얻습니다.
+              실제 인증 선택과 API shape를 선언하려면 반환 객체에 불변
+              <code>ProviderSpec</code>을 추가하십시오. 이 값은
+              <code>ProviderProfile</code>, <code>CredentialRoute</code>,
+              <code>TransportSpec</code>으로 나뉘며 secret이나 SDK client를
+              담지 않습니다. 선언한 provider/source/billing/capability가
+              adapter 호환 속성과 다르면 session 시작 전에 등록이 실패합니다.
+            </p>
+            <pre>{`# acme_geode/__init__.py
+from core.llm.registry import (
+    AdapterBillingType, CredentialRoute, ProviderProfile,
+    ProviderSpec, TransportSpec,
+)
+
+ACME_SPEC = ProviderSpec(
+    profile=ProviderProfile("acme", "acme", "Acme", "acme"),
+    credential=CredentialRoute(
+        source="payg", account_provider="acme", selector="plugin",
+        auth_type="bearer", billing_type=AdapterBillingType.API,
+    ),
+    transport=TransportSpec(
+        id="acme-responses", api="acme-responses",
+        default_base_url="https://api.acme.example/v1",
+    ),
+)
+
+class AcmeComposedAdapter(AcmePaygAdapter):
+    provider_spec = ACME_SPEC
+
+def create_adapter():
+    return AcmeComposedAdapter()`}</pre>
+            <p>
               서브프로세스(워커·audit)는 부모의 wiring 컨테이너를 거치지 않으므로{" "}
               <code>bootstrap_builtins()</code>를 명시 호출해야 합니다. 안 그러면
               레지스트리가 비어 <code>AdapterNotFoundError</code>가 납니다. 이 호출은
@@ -108,11 +140,10 @@ def create_adapter():
 
             <h2>3. 라우팅과 폴백 체인을 연결합니다</h2>
             <p>
-              <code>core/llm/router/calls/_route.py</code>의{" "}
-              <code>_route_provider(model)</code>이 모델 이름을 프로바이더로
-              해석합니다. 등록된 Plan이 있으면 그것을 따르고, 없으면{" "}
-              <code>core.config</code>의 정적 <code>_resolve_provider</code>로
-              떨어집니다. 모델 접두사와 프로바이더의 매핑은{" "}
+              <code>core.config._resolve_provider(model)</code>이 모델 이름을
+              프로바이더로 해석하고, adapter dispatch가 credential metadata로
+              source를 결정합니다. 등록된 Plan은 별도의 routing target으로
+              endpoint와 credential을 선택합니다. 모델 접두사와 프로바이더의 매핑은{" "}
               <code>core/config/routing.toml</code>의{" "}
               <code>[routing.prefixes]</code>가 SoT이고, 사용자 override는{" "}
               <code>~/.geode/routing.toml</code>입니다. 새 프로바이더의 모델
@@ -188,7 +219,7 @@ if isinstance(a, EnvironmentDiagnosticCapable):
             <p>
               An adapter is the layer that turns one{" "}
               <code>(provider, source)</code> pair into a real call. PAYG API-key
-              calls, OAuth subscription calls, and local CLI subprocess calls all
+              calls, OAuth subscription calls, and installed external adapters all
               satisfy the same protocol. Adding a backend has four parts: write the
               adapter, register it, wire routing, and document the call contract.
             </p>
@@ -265,6 +296,40 @@ acme-payg = "acme_geode:create_adapter"
 def create_adapter():
     return AcmePaygAdapter()`}</pre>
             <p>
+              The legacy factory receives a conservative compatibility
+              composition automatically. To declare the real credential
+              selection and API shape, attach an immutable
+              <code>ProviderSpec</code> to the returned object. It separates
+              <code>ProviderProfile</code>, <code>CredentialRoute</code>, and
+              <code>TransportSpec</code> and contains no secret or SDK client.
+              Registration fails before a session when its
+              provider/source/billing/capabilities disagree with the adapter
+              compatibility attributes.
+            </p>
+            <pre>{`# acme_geode/__init__.py
+from core.llm.registry import (
+    AdapterBillingType, CredentialRoute, ProviderProfile,
+    ProviderSpec, TransportSpec,
+)
+
+ACME_SPEC = ProviderSpec(
+    profile=ProviderProfile("acme", "acme", "Acme", "acme"),
+    credential=CredentialRoute(
+        source="payg", account_provider="acme", selector="plugin",
+        auth_type="bearer", billing_type=AdapterBillingType.API,
+    ),
+    transport=TransportSpec(
+        id="acme-responses", api="acme-responses",
+        default_base_url="https://api.acme.example/v1",
+    ),
+)
+
+class AcmeComposedAdapter(AcmePaygAdapter):
+    provider_spec = ACME_SPEC
+
+def create_adapter():
+    return AcmeComposedAdapter()`}</pre>
+            <p>
               Subprocesses (worker, audit) do not pass through the parent wiring
               container, so they must call <code>bootstrap_builtins()</code>{" "}
               explicitly. Without it the registry is empty and you get an{" "}
@@ -280,11 +345,11 @@ def create_adapter():
 
             <h2>3. Wire routing and the fallback chain</h2>
             <p>
-              <code>_route_provider(model)</code> in{" "}
-              <code>core/llm/router/calls/_route.py</code> resolves a model name to
-              a provider. It honors a registered Plan if present, otherwise falls
-              back to the static <code>_resolve_provider</code> in{" "}
-              <code>core.config</code>. The model-prefix-to-provider mapping is
+              <code>core.config._resolve_provider(model)</code> resolves a model
+              name to a provider, and adapter dispatch resolves the source from
+              credential metadata. A registered Plan separately selects the
+              routing target&apos;s endpoint and credential. The
+              model-prefix-to-provider mapping is
               owned by <code>[routing.prefixes]</code> in{" "}
               <code>core/config/routing.toml</code>, with the user override at{" "}
               <code>~/.geode/routing.toml</code>; add your provider&apos;s model

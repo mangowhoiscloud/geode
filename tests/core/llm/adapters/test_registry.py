@@ -31,6 +31,7 @@ from core.llm.adapters.registry import (
     AdapterValidationReport,
     _reset_for_test,
 )
+from core.llm.registry import CredentialRoute, ProviderProfile, ProviderSpec, TransportSpec
 
 
 class _Stub:
@@ -127,6 +128,56 @@ def test_resolve_for_returns_unique_match() -> None:
     assert resolve_for("anthropic", SOURCE_SUBSCRIPTION) is b
 
 
+def test_explicit_third_party_composition_needs_no_builtin_provider_entry() -> None:
+    adapter = _Stub("acme-oauth", "acme", SOURCE_ADAPTER)
+    spec = ProviderSpec(
+        profile=ProviderProfile("acme", "acme", "Acme", "acme"),
+        credential=CredentialRoute(
+            source=SOURCE_ADAPTER,
+            account_provider="acme:user",
+            selector="plugin",
+            auth_type="adapter",
+            billing_type=AdapterBillingType.UNKNOWN,
+            default=True,
+        ),
+        transport=TransportSpec(
+            id="acme-rpc",
+            api="acme-rpc",
+            default_base_url="https://acme.invalid",
+            retry_policy="adapter-owned",
+        ),
+    )
+
+    register_adapter(adapter, provider_spec=spec)
+
+    record = registry_snapshot().get_registration("acme-oauth")
+    assert record.provider_spec is spec
+    assert resolve_for("acme", SOURCE_ADAPTER) is adapter
+
+
+def test_registration_rejects_compatibility_identity_drift() -> None:
+    adapter = _Stub("drift", "acme", SOURCE_PAYG)
+    mismatched = ProviderSpec(
+        profile=ProviderProfile("other", "other", "Other", "other"),
+        credential=CredentialRoute(
+            source=SOURCE_PAYG,
+            account_provider="other",
+            selector="adapter",
+            auth_type="adapter",
+            billing_type=AdapterBillingType.UNKNOWN,
+            default=True,
+        ),
+        transport=TransportSpec(
+            id="other",
+            api="adapter",
+            default_base_url="",
+            retry_policy="adapter-owned",
+        ),
+    )
+    with pytest.raises(ValueError, match="compatibility identity"):
+        register_adapter(adapter, provider_spec=mismatched)
+
+
 def test_resolve_for_rejects_auto_sentinel() -> None:
     with pytest.raises(ValueError, match="picker sentinel"):
         resolve_for("anthropic", SOURCE_AUTO)
@@ -200,6 +251,57 @@ def test_entry_point_discovery_publishes_generation_and_report(monkeypatch) -> N
         "acme-adapter",
         "entrypoint:acme-geode-adapter:acme-adapter",
     )
+
+
+def test_entry_point_preserves_explicit_provider_composition(monkeypatch) -> None:
+    plugin = _Stub("acme-adapter", "acme", SOURCE_ADAPTER)
+    plugin.provider_spec = ProviderSpec(
+        profile=ProviderProfile("acme", "acme", "Acme", "acme"),
+        credential=CredentialRoute(
+            source=SOURCE_ADAPTER,
+            account_provider="acme:user",
+            selector="plugin",
+            auth_type="adapter",
+            billing_type=AdapterBillingType.UNKNOWN,
+        ),
+        transport=TransportSpec(
+            id="acme-rpc",
+            api="acme-rpc",
+            default_base_url="https://acme.invalid",
+            retry_policy="adapter-owned",
+        ),
+    )
+    monkeypatch.setattr(
+        "importlib.metadata.entry_points",
+        lambda *, group: [_FakeEntryPoint("acme-adapter", lambda: plugin)],
+    )
+
+    snapshot = reload_adapters()
+
+    assert snapshot.get_registration("acme-adapter").provider_spec is plugin.provider_spec
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "error"),
+    [
+        ("auth_type", "invalid", ValueError),
+        ("billing_type", "api", TypeError),
+        ("settings_values", "api_key", TypeError),
+        ("settings_values", (1,), TypeError),
+    ],
+)
+def test_credential_route_rejects_invalid_public_input(field, value, error) -> None:
+    kwargs = {
+        "source": SOURCE_PAYG,
+        "account_provider": "acme",
+        "selector": "plugin",
+        "auth_type": "adapter",
+        "billing_type": AdapterBillingType.UNKNOWN,
+    }
+    kwargs[field] = value
+
+    with pytest.raises(error):
+        CredentialRoute(**kwargs)
 
 
 def test_entry_point_duplicate_requires_audited_override(monkeypatch) -> None:
@@ -290,6 +392,30 @@ def test_bootstrap_builtins_provider_source_pairs() -> None:
         ("openai", "subscription"),
         ("glm", "payg"),
         ("glm", "subscription"),
+    }
+
+
+def test_builtin_registrations_pin_profile_credential_transport() -> None:
+    snapshot = bootstrap_builtins()
+    actual = {
+        name: (
+            record.provider_spec.profile.id,
+            record.provider_spec.credential.selector,
+            record.provider_spec.transport.id,
+        )
+        for name, record in snapshot.registrations.items()
+        if record.provider_spec is not None
+    }
+    assert actual == {
+        "anthropic-payg": ("anthropic", "settings", "anthropic-messages"),
+        "openai-payg": ("openai", "settings", "openai-platform-responses"),
+        "codex-oauth": ("openai-codex", "codex-oauth", "openai-codex-responses"),
+        "glm-payg": ("glm", "settings", "glm-payg-chat-completions"),
+        "glm-coding-plan": (
+            "glm-coding",
+            "profile-store",
+            "glm-coding-chat-completions",
+        ),
     }
 
 

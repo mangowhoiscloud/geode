@@ -26,8 +26,9 @@ export default function Page() {
                 <tr><th>구성</th><th>코드</th></tr>
               </thead>
               <tbody>
-                <tr><td>프로바이더 구현</td><td><code>core/llm/providers/anthropic.py</code>, <code>openai.py</code>, <code>codex.py</code>, <code>glm.py</code></td></tr>
-                <tr><td>라우터</td><td><code>core/llm/router/</code> (text / json / parsed / streaming / tools 호출 표면)</td></tr>
+                <tr><td>프로바이더 유틸리티</td><td><code>core/llm/providers/anthropic.py</code>, <code>codex.py</code>, <code>glm.py</code>. 재시도·quota·request shaping을 어댑터에 제공</td></tr>
+                <tr><td>비동기 호출 어댑터</td><td><code>core/llm/adapters/</code>. SDK client와 <code>acomplete()</code> 호출 표면 소유</td></tr>
+                <tr><td>프로바이더 composition</td><td><code>core/llm/registry.py</code>. 모델 identity, credential route, transport/API shape를 분리해 선언</td></tr>
                 <tr><td>어댑터 레지스트리</td><td><code>core/llm/adapters/registry.py</code>의 <code>bootstrap_builtins()</code>. 내장 factory와 <code>geode.llm_adapters</code> 진입점을 불변 generation snapshot으로 검색</td></tr>
                 <tr><td>라우팅 매니페스트</td><td><code>core/config/routing.toml</code> (+ <code>~/.geode/routing.toml</code> 사용자 오버라이드). 모델 id prefix로 프로바이더 결정</td></tr>
               </tbody>
@@ -136,7 +137,7 @@ export default function Page() {
               <li><a href="/geode/docs/run/providers">프로바이더 설정 가이드</a>. 자격과 경로 선택.</li>
               <li><a href="/geode/docs/runtime/llm/tool-calling">도구 호출</a>. ToolSpec, 선택 모드, 실행과 결과 replay.</li>
               <li><a href="/geode/docs/runtime/llm/structured-output">구조화 출력</a>. JSON Schema 배선과 검증 경계.</li>
-              <li><a href="/geode/docs/runtime/auth">인증</a>. OAuth, API 키, CLI 레인.</li>
+              <li><a href="/geode/docs/runtime/auth">인증</a>. OAuth, API 키, credential 경로.</li>
               <li><a href="/geode/docs/guides/llm-adapter">어댑터 추가 가이드</a>. 새 모델, 새 레인 붙이기.</li>
             </ul>
           </>
@@ -155,8 +156,9 @@ export default function Page() {
                 <tr><th>Piece</th><th>Code</th></tr>
               </thead>
               <tbody>
-                <tr><td>Provider implementations</td><td><code>core/llm/providers/anthropic.py</code>, <code>openai.py</code>, <code>codex.py</code>, <code>glm.py</code></td></tr>
-                <tr><td>Router</td><td><code>core/llm/router/</code> (text / json / parsed / streaming / tools call surfaces)</td></tr>
+                <tr><td>Provider utilities</td><td><code>core/llm/providers/anthropic.py</code>, <code>codex.py</code>, and <code>glm.py</code>; provide retry, quota, and request shaping to adapters</td></tr>
+                <tr><td>Async call adapters</td><td><code>core/llm/adapters/</code>; own SDK clients and the <code>acomplete()</code> call surface</td></tr>
+                <tr><td>Provider composition</td><td><code>core/llm/registry.py</code>; separately declares model identity, credential route, and transport/API shape</td></tr>
                 <tr><td>Adapter registry</td><td><code>bootstrap_builtins()</code> in <code>core/llm/adapters/registry.py</code>; discovers built-in factories and <code>geode.llm_adapters</code> entry points into an immutable generation snapshot</td></tr>
                 <tr><td>Routing manifest</td><td><code>core/config/routing.toml</code> (+ user override <code>~/.geode/routing.toml</code>); provider resolved by model-id prefix</td></tr>
               </tbody>
@@ -265,7 +267,7 @@ export default function Page() {
               <li><a href="/geode/docs/run/providers">Provider setup guide</a>. Credentials and path selection.</li>
               <li><a href="/geode/docs/runtime/llm/tool-calling">Tool calling</a>. ToolSpec, selection modes, execution, and result replay.</li>
               <li><a href="/geode/docs/runtime/llm/structured-output">Structured output</a>. JSON Schema wiring and validation boundaries.</li>
-              <li><a href="/geode/docs/runtime/auth">Authentication</a>. OAuth, API keys, CLI lanes.</li>
+              <li><a href="/geode/docs/runtime/auth">Authentication</a>. OAuth, API keys, credential routes.</li>
               <li><a href="/geode/docs/guides/llm-adapter">Add an LLM adapter</a>. Attaching a new model or lane.</li>
             </ul>
           </>

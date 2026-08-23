@@ -17,40 +17,17 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any, Protocol, runtime_checkable
 
+from core.llm.registry import (
+    CONCRETE_SOURCES,
+    SOURCE_ADAPTER,
+    SOURCE_AUTO,
+    SOURCE_PAYG,
+    SOURCE_SUBSCRIPTION,
+    AdapterBillingType,
+)
 from core.tools.plan import ToolSpec
-
-
-class AdapterBillingType(str, Enum):  # noqa: UP042 — needs str+Enum for older serialisers
-    """How an adapter's call gets billed.
-
-    Mirrors paperclip ``packages/adapter-utils/src/types.ts:34-43``
-    ``AdapterBillingType``. The 8-value taxonomy lets the UI surface
-    ("PAYG, Subscription, Adapter") map cleanly while still capturing
-    overage/credits/fixed-fee edge cases for non-Anthropic/OpenAI providers.
-    """
-
-    API = "api"
-    SUBSCRIPTION = "subscription"
-    METERED_API = "metered_api"
-    SUBSCRIPTION_INCLUDED = "subscription_included"
-    SUBSCRIPTION_OVERAGE = "subscription_overage"
-    CREDITS = "credits"
-    FIXED = "fixed"
-    UNKNOWN = "unknown"
-
-
-# Concrete source values that picker / overrides emit. Adapter implementations
-# pin themselves to exactly one. ``auto`` is a picker-time sentinel only — never
-# stored on a concrete adapter and never accepted by ``resolve_for``.
-SOURCE_PAYG = "payg"
-SOURCE_SUBSCRIPTION = "subscription"
-SOURCE_ADAPTER = "adapter"
-SOURCE_AUTO = "auto"  # picker sentinel
-
-CONCRETE_SOURCES: frozenset[str] = frozenset({SOURCE_PAYG, SOURCE_SUBSCRIPTION, SOURCE_ADAPTER})
 
 
 class EmptyModelOutputError(RuntimeError):

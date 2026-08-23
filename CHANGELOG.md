@@ -152,6 +152,12 @@ functional change.
   priority, and trust decision. New sessions capture the current generation;
   live sessions retain their original routing snapshot across reloads.
 
+- **Provider routes are explicit compositions.** Every built-in adapter
+  registration now binds immutable provider/model identity, non-secret
+  credential selection, transport/API shape, and native-capability metadata.
+  Source inference and `geode adapters list` consume that composition, while
+  legacy and explicitly composed third-party entry points remain compatible.
+
 - **MCP runtime responsibilities now have one owner each.**
   `MCPServerManager` remains the public compatibility facade, while concrete
   catalog, connection-pool, discovery, invocation/trace, and lifecycle
