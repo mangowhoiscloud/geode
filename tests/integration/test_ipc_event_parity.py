@@ -4,15 +4,16 @@ Root cause prevention: PR #638 added emit_llm_retry/emit_llm_error/
 emit_retry_wait to agentic_ui.py but forgot to register them in
 ipc_client.py, causing raw dicts to leak to the user console.
 
-This test extracts all send_event("event_name") calls from the
-production code and verifies each one appears in ipc_client.py's
-recognized event type list.
+This test extracts all send_event("event_name") calls from production code
+and verifies each one appears in the versioned public event vocabulary.
 """
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
+
+from core.ipc_protocol import IPC_EVENT_TYPES
 
 
 def _extract_produced_events() -> set[str]:
@@ -32,32 +33,12 @@ def _extract_produced_events() -> set[str]:
     return events
 
 
-def _extract_consumed_events() -> set[str]:
-    """Extract all event types registered in ipc_client.py's rtype check."""
-    ipc_path = Path(__file__).resolve().parents[2] / "core" / "cli" / "ipc_client.py"
-    text = ipc_path.read_text(encoding="utf-8")
-
-    # Find the block: if rtype in ( ... ):
-    pattern = re.compile(r'"([a-z_]+)"')
-    # Extract from the rtype in (...) block
-    in_block = False
-    events: set[str] = set()
-    for line in text.splitlines():
-        if "if rtype in (" in line:
-            in_block = True
-        if in_block:
-            events.update(pattern.findall(line))
-            if "):" in line and in_block and len(events) > 2:
-                break
-    return events
-
-
 class TestIPCEventParity:
     """Every send_event() type must be registered in ipc_client.py."""
 
     def test_all_produced_events_are_consumed(self):
         produced = _extract_produced_events()
-        consumed = _extract_consumed_events()
+        consumed = set(IPC_EVENT_TYPES)
 
         missing = produced - consumed
         assert not missing, (
@@ -72,5 +53,5 @@ class TestIPCEventParity:
 
     def test_consumed_events_not_empty(self):
         """Sanity check: extraction should find registered events."""
-        consumed = _extract_consumed_events()
+        consumed = set(IPC_EVENT_TYPES)
         assert len(consumed) >= 20, f"Expected 20+ events, got {len(consumed)}"

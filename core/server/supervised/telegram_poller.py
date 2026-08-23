@@ -78,6 +78,7 @@ class TelegramPoller(BasePoller):
                     sender_name=sender.get("first_name", sender.get("username", "")),
                     content=message.get("text", ""),
                     timestamp=float(message.get("date", time.time())),
+                    message_id=str(update_id),
                 )
 
                 response = await self._manager.aroute_message(inbound)

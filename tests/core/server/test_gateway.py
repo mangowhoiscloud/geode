@@ -11,8 +11,15 @@ from contextlib import asynccontextmanager
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
 from core.messaging.binding import ChannelManager, get_gateway, set_gateway
-from core.messaging.models import ChannelBinding, InboundMessage
+from core.messaging.models import (
+    GATEWAY_SCHEMA_VERSION,
+    MAX_GATEWAY_CONTENT_BYTES,
+    MAX_GATEWAY_METADATA_BYTES,
+    ChannelBinding,
+    InboundMessage,
+)
 from core.server.supervised.discord_poller import DiscordPoller
 from core.server.supervised.poller_base import BasePoller
 from core.server.supervised.slack_poller import SlackPoller
@@ -36,6 +43,41 @@ class TestInboundMessage:
         assert msg.channel == "slack"
         assert msg.content == "analyze Project Atlas"
         assert msg.thread_id == ""
+        assert msg.schema_version == GATEWAY_SCHEMA_VERSION
+        assert len(msg.message_id) == 32
+
+    def test_rejects_oversized_content_and_metadata(self):
+        base = {
+            "channel": "slack",
+            "channel_id": "C1",
+            "sender_id": "U1",
+            "sender_name": "Alice",
+            "timestamp": time.time(),
+        }
+
+        with pytest.raises(ValueError, match="content"):
+            InboundMessage(**base, content="x" * (MAX_GATEWAY_CONTENT_BYTES + 1))
+        with pytest.raises(ValueError, match="metadata"):
+            InboundMessage(
+                **base,
+                content="hello",
+                metadata={"future_field": "x" * MAX_GATEWAY_METADATA_BYTES},
+            )
+
+    @pytest.mark.parametrize("field,value", [("timestamp", True), ("message_id", None)])
+    def test_rejects_wrong_public_envelope_types(self, field, value):
+        payload = {
+            "channel": "slack",
+            "channel_id": "C1",
+            "sender_id": "U1",
+            "sender_name": "Alice",
+            "content": "hello",
+            "timestamp": time.time(),
+        }
+        payload[field] = value
+
+        with pytest.raises(ValueError):
+            InboundMessage(**payload)
 
 
 # ---------------------------------------------------------------------------
@@ -681,6 +723,8 @@ class TestMultiTurnMetadata:
         assert "1234567890_123456" in meta["session_key"]
         assert meta["thread_id"] == "1234567890.123456"
         assert meta["channel"] == "slack"
+        assert meta["gateway_schema_version"] == GATEWAY_SCHEMA_VERSION
+        assert meta["message_id"] == msg.message_id
 
     def test_metadata_without_thread_id(self):
         """Messages without thread_id still get session_key."""

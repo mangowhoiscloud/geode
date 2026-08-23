@@ -198,6 +198,8 @@ class ChannelManager:
         )
 
         metadata: dict[str, Any] = {
+            "gateway_schema_version": message.schema_version,
+            "message_id": message.message_id,
             "session_key": session_key,
             "thread_id": message.thread_id,
             "channel": message.channel,

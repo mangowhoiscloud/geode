@@ -99,6 +99,22 @@ class TestIPCClient:
         assert "\udcff" not in decoded
         assert json.loads(decoded)["text"].startswith("bad:")
 
+    def test_client_does_not_deliver_a_mismatched_request(self) -> None:
+        from core.cli.ipc_client import IPCClient
+        from core.ipc_protocol import encode_message
+
+        client = IPCClient()
+        cast(Any, client)._sock = MagicMock()
+        cast(Any, client)._buf = encode_message(
+            {"type": "result", "request_id": "other", "text": "wrong"}
+        ) + encode_message({"type": "result", "request_id": "wanted", "text": "right"})
+
+        assert client._recv_for("wanted") == {
+            "type": "result",
+            "request_id": "wanted",
+            "text": "right",
+        }
+
 
 # ---------------------------------------------------------------------------
 # CLIPoller unit tests
@@ -107,6 +123,17 @@ class TestIPCClient:
 
 class TestCLIPoller:
     """Test the Unix socket server for CLI IPC."""
+
+    def test_stream_writer_rejects_unknown_public_event(self) -> None:
+        from core.ipc_protocol import IPCProtocolError
+        from core.server.ipc_server.poller import _StreamingWriter
+
+        endpoint = MagicMock()
+        writer = _StreamingWriter(endpoint)
+
+        with pytest.raises(IPCProtocolError, match="Unknown public IPC event"):
+            writer.send_event("future_internal_event")
+        endpoint.send_json_threadsafe.assert_not_called()
 
     def test_start_creates_socket(self) -> None:
         from core.server.ipc_server.poller import CLIPoller
@@ -387,7 +414,7 @@ class TestCLIPoller:
 
             async def arun(prompt: str) -> MagicMock:
                 writer = getattr(_ipc_writer_local, "writer", None)
-                writer.send_event("probe", prompt=prompt, client=name)
+                writer.send_event("context_event", prompt=prompt, client=name)
                 console_at_runtime = getattr(_ConsoleProxy._local, "console", None)
                 console_bindings.append((name, console_at_runtime._file._client.name))
                 await asyncio.sleep(0)
@@ -423,9 +450,13 @@ class TestCLIPoller:
 
         assert result_a["text"] == "done:a:prompt-a"
         assert result_b["text"] == "done:b:prompt-b"
-        assert any(m.get("type") == "probe" and m.get("client") == "a" for m in client_a.messages)
+        assert any(
+            m.get("type") == "context_event" and m.get("client") == "a" for m in client_a.messages
+        )
         assert not any(m.get("client") == "b" for m in client_a.messages)
-        assert any(m.get("type") == "probe" and m.get("client") == "b" for m in client_b.messages)
+        assert any(
+            m.get("type") == "context_event" and m.get("client") == "b" for m in client_b.messages
+        )
         assert not any(m.get("client") == "a" for m in client_b.messages)
         assert sorted(console_bindings) == [("a", "a"), ("b", "b")]
 
@@ -458,6 +489,12 @@ class TestCLIChannelIntegration:
             client = IPCClient(socket_path=sock_path)
             assert client.connect()
             assert client.session_id.startswith("cli-")
+            assert client.protocol_version == "geode.ipc.v1"
+            assert set(client.features) == {
+                "bounded_json",
+                "request_correlation",
+                "stable_events",
+            }
             client.close()
         finally:
             poller.stop()
@@ -477,8 +514,14 @@ class TestCLIChannelIntegration:
         mock_result.termination_reason = "natural"
         mock_result.summary = ""
 
+        async def run_with_event(_prompt: str) -> MagicMock:
+            from core.ui.agentic_ui import _ipc_writer_local
+
+            _ipc_writer_local.writer.send_event("context_event", source="test")
+            return mock_result
+
         mock_loop = MagicMock()
-        mock_loop.arun = AsyncMock(return_value=mock_result)
+        mock_loop.arun = AsyncMock(side_effect=run_with_event)
         mock_loop.run = MagicMock(side_effect=AssertionError("sync loop.run path used"))
         mock_loop.model = "test-model"
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
@@ -492,16 +535,52 @@ class TestCLIChannelIntegration:
             client = IPCClient(socket_path=sock_path)
             client.connect()
 
-            result = client.send_prompt("analyze Project Atlas")
+            events: list[dict[str, Any]] = []
+            result = client.send_prompt("analyze Project Atlas", on_event=events.append)
             assert result["type"] == "result"
             assert "Project Atlas" in result["text"]
             assert result["rounds"] == 3
             assert result["tool_calls"] == []
+            assert result["request_id"]
+            assert events[0]["type"] == "context_event"
+            assert events[0]["request_id"] == result["request_id"]
             mock_loop.arun.assert_awaited_once_with("analyze Project Atlas")
             mock_loop.run.assert_not_called()
 
             client.close()
         finally:
+            poller.stop()
+
+    def test_protocol_errors_keep_request_correlation(self) -> None:
+        from core.cli.ipc_client import IPCClient
+        from core.server.ipc_server.poller import CLIPoller
+
+        sock_path = _test_sock()
+        mock_services = MagicMock()
+        mock_services.create_session.return_value = (MagicMock(), MagicMock())
+        poller = CLIPoller(mock_services, socket_path=sock_path)
+        poller.start()
+        time.sleep(0.1)
+
+        try:
+            client = IPCClient(socket_path=sock_path)
+            assert client.connect()
+
+            unknown_id = client._send({"type": "future_request", "future_field": True})
+            unknown = client._recv_for(unknown_id)
+            assert unknown == {
+                "type": "error",
+                "message": "Unknown message type: future_request",
+                "request_id": unknown_id,
+            }
+
+            invalid_id = client._send({"type": "prompt", "text": 42})
+            invalid = client._recv_for(invalid_id)
+            assert invalid is not None
+            assert invalid["type"] == "protocol_error"
+            assert invalid["request_id"] == invalid_id
+        finally:
+            client.close()
             poller.stop()
 
     def test_send_prompt_error_handling(self) -> None:

@@ -26,7 +26,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import importlib
-import json
 import logging
 import os
 import queue
@@ -35,7 +34,17 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.unicode_safety import sanitize_jsonable
+from core.ipc_protocol import (
+    IPC_EVENT_TYPES,
+    IPC_FEATURES,
+    IPC_PROTOCOL_VERSION,
+    MAX_IPC_MESSAGE_BYTES,
+    IPCProtocolError,
+    decode_message,
+    encode_message,
+    negotiate_protocol,
+    validate_client_message,
+)
 
 log = logging.getLogger(__name__)
 
@@ -58,7 +67,13 @@ def _session_greeting(session_id: str) -> dict[str, Any]:
     """
     from core import __version__
 
-    return {"type": "session", "session_id": session_id, "version": __version__}
+    return {
+        "type": "session",
+        "session_id": session_id,
+        "version": __version__,
+        "protocol_version": IPC_PROTOCOL_VERSION,
+        "features": list(IPC_FEATURES),
+    }
 
 
 def _adopt_skip_permissions(msg: dict[str, Any]) -> None:
@@ -98,12 +113,19 @@ class _AsyncClientEndpoint:
         self._approval_responses: queue.Queue[tuple[str, str]] = queue.Queue()
         self._is_tty = True
         self._width = 120
+        self._request_id = ""
 
     async def send_json_async(self, obj: dict[str, Any]) -> None:
-        payload = json.dumps(sanitize_jsonable(obj), ensure_ascii=False) + "\n"
+        if self._request_id and "request_id" not in obj:
+            obj = {**obj, "request_id": self._request_id}
+        payload = encode_message(obj)
         async with self._write_lock:
-            self._writer.write(payload.encode("utf-8"))
+            self._writer.write(payload)
             await self._writer.drain()
+
+    def set_request_id(self, request_id: object) -> None:
+        """Correlate outbound events with the request currently being handled."""
+        self._request_id = request_id if isinstance(request_id, str) else ""
 
     def send_json_nowait(self, obj: dict[str, Any]) -> None:
         """Schedule a write from the endpoint's own event-loop thread."""
@@ -249,6 +271,8 @@ class _StreamingWriter:
 
     def send_event(self, event_type: str, **data: Any) -> None:
         """Send a structured event (tool_start, tool_end, etc.)."""
+        if event_type not in IPC_EVENT_TYPES:
+            raise IPCProtocolError(f"Unknown public IPC event type: {event_type!r}")
         self._send_json({"type": event_type, **data})
 
     def _send_json(self, obj: dict[str, Any]) -> None:
@@ -391,6 +415,7 @@ class CLIPoller:
             self._handle_async_client,
             path=str(self._socket_path),
             backlog=5,
+            limit=MAX_IPC_MESSAGE_BYTES + 1,
         )
         os.chmod(str(self._socket_path), 0o600)
         self._ready_event.set()
@@ -515,8 +540,8 @@ class CLIPoller:
                     if not line:
                         return
                     try:
-                        msg = json.loads(line.decode("utf-8"))
-                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        msg = decode_message(line.rstrip(b"\n"))
+                    except IPCProtocolError:
                         _enqueue({"type": "_invalid_json"})
                         continue
                     if msg.get("type") == "approval_response":
@@ -547,6 +572,7 @@ class CLIPoller:
                     if msg.get("type") == "_invalid_json":
                         await endpoint.send_json_async({"type": "error", "message": "Invalid JSON"})
                         continue
+                    endpoint.set_request_id(msg.get("request_id"))
                     msg["_client"] = endpoint
                     response = await self._process_message_async(
                         msg,
@@ -564,6 +590,8 @@ class CLIPoller:
                 except Exception:
                     log.warning("CLI handler error", exc_info=True)
                     await endpoint.send_json_async({"type": "error", "message": "Internal error"})
+                finally:
+                    endpoint.set_request_id("")
         finally:
             pump_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -577,6 +605,10 @@ class CLIPoller:
         session_id: str,
     ) -> dict[str, Any] | None:
         msg_type = msg.get("type", "")
+        try:
+            validate_client_message(msg)
+        except IPCProtocolError as exc:
+            return {"type": "protocol_error", "message": str(exc)}
 
         if msg_type == "prompt":
             text = msg.get("text", "").strip()
@@ -614,6 +646,12 @@ class CLIPoller:
             return await self._handle_resume_async(msg, loop, conversation)
 
         if msg_type == "client_capability":
+            try:
+                protocol_version, features = negotiate_protocol(
+                    msg.get("protocol_version"), msg.get("features")
+                )
+            except IPCProtocolError as exc:
+                return {"type": "protocol_error", "message": str(exc)}
             endpoint = msg.get("_client")
             is_tty = bool(msg.get("is_tty", True))
             width_raw = msg.get("width", 120)
@@ -648,7 +686,11 @@ class CLIPoller:
                     )
             _adopt_skip_permissions(msg)
             log.debug("client_capability: is_tty=%s width=%d", is_tty, width if width > 0 else 120)
-            return {"type": "ack"}
+            return {
+                "type": "ack",
+                "protocol_version": protocol_version,
+                "features": list(features),
+            }
 
         if msg_type == "exit":
             # Clean client exit — the REPL surface's ACTIVE -> COMPLETED

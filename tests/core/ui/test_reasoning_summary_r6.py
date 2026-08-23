@@ -183,14 +183,10 @@ class TestIPCAllowlistAndRenderer:
     (``event_renderer.py``)."""
 
     def test_event_in_ipc_allowlist(self) -> None:
-        # Read the source verbatim — assertion-by-grep is sufficient
-        # because the allowlist is a literal tuple.
-        from core.cli import ipc_client
+        from core.ipc_protocol import IPC_EVENT_TYPES
 
-        with open(ipc_client.__file__, encoding="utf-8") as f:
-            text = f.read()
-        assert '"reasoning_summary"' in text, (
-            "ipc_client.py must include 'reasoning_summary' in the "
+        assert "reasoning_summary" in IPC_EVENT_TYPES, (
+            "the public IPC protocol must include 'reasoning_summary' in the "
             "structured-events allowlist or the daemon's events will be "
             "silently dropped on the thin client side"
         )

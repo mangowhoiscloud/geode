@@ -28,7 +28,9 @@ export default function Page() {
               <code>geode</code>를 실행하면 thin CLI가 뜹니다. CLI 프로세스는
               모델을 직접 호출하지 않습니다. 대신 Unix 도메인 소켓{" "}
               <code>~/.geode/cli.sock</code>(경로 상수는 <code>core/paths.py</code>)
-              으로 serve 데몬에 요청을 넘깁니다. 프로토콜은 줄 단위 JSON입니다.
+              으로 serve 데몬에 요청을 넘깁니다. <code>geode.ipc.v1</code>은
+              크기가 제한된 줄 단위 JSON, 기능 협상, 요청 ID 상관관계를
+              정의합니다.
               데몬이 떠 있지 않으면 <code>core/cli/ipc_client.py</code>의
               자동 시작 로직이 백그라운드에서 데몬을 띄운 뒤 연결합니다.
             </p>
@@ -161,7 +163,9 @@ export default function Page() {
               never calls the model itself. It hands the request to the serve
               daemon over a Unix domain socket at{" "}
               <code>~/.geode/cli.sock</code> (the path constant lives in{" "}
-              <code>core/paths.py</code>). The protocol is line-delimited JSON.
+              <code>core/paths.py</code>). <code>geode.ipc.v1</code> defines
+              bounded line-delimited JSON, feature negotiation, and request-ID
+              correlation.
               If no daemon is running, the auto-start logic in{" "}
               <code>core/cli/ipc_client.py</code> launches one in the
               background, then connects.
