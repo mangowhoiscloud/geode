@@ -1,7 +1,7 @@
 # GEO live-only simplification and subscription measurement
 
 Date: 2026-08-24  
-Status: implemented; non-live gates passed; paid/live execution pending
+Status: implemented; non-live gates passed; paid/live diagnostic in progress
 Working branch: `codex/geo-benchmark-quality@e30b50ed2c79`  
 Implementation sync target: `origin/develop@0ac0eecc0`
 
@@ -216,6 +216,9 @@ replace a provider-native observation.
    correlation, privacy classification, and artifact bundle validation pass.
 10. No live result is published until exact-byte privacy review, release
     staging, immutable artifact commit, and remote read-back succeed.
+11. A failed live cell leaves frozen-workload-matched native checkpoints but
+    no final matrix; rerunning the same frozen run resumes those cells and
+    rejects unexpected or drifted checkpoint bytes.
 
 ## Non-goals
 

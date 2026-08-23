@@ -788,3 +788,61 @@ def test_geo_collector_preserves_retrieval_and_citations_separately(
     )
     assert measured["vector"]["R"]["numerator"] == 0
     assert measured["vector"]["C"]["numerator"] == 120
+
+
+def test_geo_collector_resumes_digest_checked_cell_receipts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_spec, workload, results = _fixture(tmp_path)
+    results.unlink()
+    workload_payload = json.loads(workload.read_text(encoding="utf-8"))
+    workload_payload["engine"] = "codex-oauth"
+    workload_payload["provider"] = "openai"
+    approval = tmp_path / str(workload_payload["live_approval_receipt"]["path"])
+    approval_payload = json.loads(approval.read_text(encoding="utf-8"))
+    approval_payload["engine"] = "codex-oauth"
+    approval_payload["provider"] = "openai"
+    _write_json(approval, approval_payload)
+    workload_payload["live_approval_receipt"]["sha256"] = _sha256(approval)
+    _write_json(workload, workload_payload)
+    run_payload = json.loads(run_spec.read_text(encoding="utf-8"))
+    run_payload["reproduction"]["model"]["provider"] = "openai"
+    run_payload["reproduction"]["model"]["route"] = "subscription"
+    run_payload["reproduction"]["environment"]["initial_state_ref"] = (
+        f"workload.json#sha256={_sha256(workload)}"
+    )
+    run_payload["reproduction"]["execution"]["max_concurrency"] = 1
+    _write_json(run_spec, run_payload)
+
+    calls = 0
+
+    async def flaky_search(query: str, **_: Any) -> WebSearchResult:
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            raise RuntimeError("connection lost")
+        return WebSearchResult(
+            query=query,
+            text="answer",
+            source_urls=("https://example.com/retrieved",),
+            citation_urls=("https://mangowhoiscloud.github.io/geode/docs/",),
+            adapter_name="codex-oauth",
+            adapter_provider="openai",
+            adapter_source="subscription",
+            search_activated=True,
+            retrieval_exposed=True,
+            model="example-model",
+        )
+
+    monkeypatch.setattr("scripts.eval.geo_collect.web_search_via_adapters", flaky_search)
+    with pytest.raises(RuntimeError, match="connection lost"):
+        asyncio.run(collect(run_spec_path=run_spec, workload_path=workload, output_path=results))
+    assert len(list((tmp_path / "native").glob("*.json"))) == 119
+    assert not results.exists()
+
+    calls = 0
+    payload = asyncio.run(
+        collect(run_spec_path=run_spec, workload_path=workload, output_path=results)
+    )
+    assert calls == 1
+    assert len(payload["observations"]) == 120

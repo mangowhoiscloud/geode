@@ -94,6 +94,10 @@ functional change.
   optional experiment phase for preregistered treatment claims. Codex OAuth
   hosted search now honors the frozen model hint and fails at the canary
   instead of silently substituting its default model.
+  The collector checkpoints each successful native cell and resumes only
+  frozen-workload-matched receipts, while withholding the final matrix until
+  all 120 cells validate; a late subscription transport failure no longer
+  discards prior successful calls.
 
 - **Third-party extensions now authorize before executable load.** Filesystem
   hooks, package LLM adapters, project/personal skills, and MCP servers project

@@ -6,10 +6,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
-import json
-import os
-import shutil
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -39,6 +35,85 @@ def _source(route: str) -> str:
     raise ValueError("GEO collector requires a concrete api or subscription route")
 
 
+def _resume_row(
+    receipt_path: Path,
+    *,
+    workload_id: str,
+    repetition: int,
+    query: str,
+    engine: str,
+    provider: str,
+    source: str,
+    model: str,
+    locale: str,
+    account_state: str,
+    frozen_at: datetime,
+) -> dict[str, Any]:
+    receipt = _load_json_object(receipt_path)
+    observation_id = f"{workload_id}-r{repetition:03d}"
+    expected = {
+        "schema": "geode.geo-adapter-receipt.v1",
+        "observation_id": observation_id,
+        "query": query,
+        "engine": engine,
+        "model": model,
+        "locale": locale,
+        "account_state": account_state,
+        "adapter": {"name": engine, "provider": provider, "source": source},
+    }
+    if any(receipt.get(key) != value for key, value in expected.items()):
+        raise ValueError(f"GEO cached receipt drifted from the frozen workload: {receipt_path}")
+    if _parse_datetime(str(receipt.get("observed_at") or "")) <= frozen_at:
+        raise ValueError(f"GEO cached receipt predates the frozen workload: {receipt_path}")
+    retrieval = receipt.get("retrieval")
+    citations = receipt.get("citations")
+    if not isinstance(receipt.get("search_activated"), bool) or not (
+        retrieval is None or isinstance(retrieval, list)
+    ):
+        raise ValueError(f"GEO cached receipt has invalid native search fields: {receipt_path}")
+    if not isinstance(citations, list) or not isinstance(receipt.get("answer"), str):
+        raise ValueError(
+            f"GEO cached receipt has invalid citation or answer fields: {receipt_path}"
+        )
+    return {
+        "observation_id": observation_id,
+        "workload_id": workload_id,
+        "repetition": repetition,
+        **{
+            key: receipt[key]
+            for key in (
+                "query",
+                "engine",
+                "model",
+                "locale",
+                "account_state",
+                "observed_at",
+                "search_activated",
+                "retrieval",
+                "citations",
+            )
+        },
+        "native_receipt": {
+            "path": f"native/{receipt_path.name}",
+            "sha256": _sha256(receipt_path),
+        },
+        "native_source_locator": {
+            key: f"/{key}"
+            for key in (
+                "query",
+                "engine",
+                "model",
+                "locale",
+                "account_state",
+                "observed_at",
+                "search_activated",
+                "retrieval",
+                "citations",
+            )
+        },
+    }
+
+
 async def collect(
     *,
     run_spec_path: Path,
@@ -52,7 +127,7 @@ async def collect(
     workload_path = workload_path.resolve()
     output_path = output_path.resolve()
     run_dir = run_spec_path.parent
-    if output_path.exists() or (output_path.parent / "native").exists():
+    if output_path.exists():
         raise FileExistsError("GEO native output already exists")
     if (site_preflight_path is None) != (link_audit_path is None):
         raise ValueError("site preflight and link audit receipts must be supplied together")
@@ -130,10 +205,41 @@ async def collect(
     if tuple(items) != _WORKLOAD_IDS:
         raise ValueError("GEO workload must keep the canonical 24-item order")
 
+    cells = [
+        (workload_id, repetition)
+        for workload_id in _WORKLOAD_IDS
+        for repetition in range(1, repetitions + 1)
+    ]
+    native_dir = output_path.parent / "native"
+    native_dir.mkdir(parents=True, exist_ok=True)
+    expected_receipts = {
+        f"{workload_id}-r{repetition:03d}.json" for workload_id, repetition in cells
+    }
+    unexpected = sorted(
+        path.name for path in native_dir.iterdir() if path.name not in expected_receipts
+    )
+    if unexpected:
+        raise ValueError(f"GEO native checkpoint contains unexpected entries: {unexpected[:8]}")
+
     bootstrap_builtins()
 
-    async def run_one(workload_id: str, repetition: int) -> tuple[dict[str, Any], dict[str, Any]]:
+    async def run_one(workload_id: str, repetition: int) -> dict[str, Any]:
         query = items[workload_id]
+        receipt_path = native_dir / f"{workload_id}-r{repetition:03d}.json"
+        if receipt_path.exists():
+            return _resume_row(
+                receipt_path,
+                workload_id=workload_id,
+                repetition=repetition,
+                query=query,
+                engine=str(workload["engine"]),
+                provider=provider,
+                source=source,
+                model=str(workload["model"]),
+                locale=str(workload["locale"]),
+                account_state=str(workload["account_state"]),
+                frozen_at=frozen_at,
+            )
         async with semaphore, asyncio.timeout(timeout):
             result = await web_search_via_adapters(
                 query,
@@ -213,35 +319,14 @@ async def collect(
                 )
             },
         }
-        return receipt, row
+        _write_exclusive(receipt_path, receipt)
+        row["native_receipt"] = {
+            "path": f"native/{receipt_path.name}",
+            "sha256": hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
+        }
+        return row
 
-    cells = [
-        (workload_id, repetition)
-        for workload_id in _WORKLOAD_IDS
-        for repetition in range(1, repetitions + 1)
-    ]
-    collected = await asyncio.gather(*(run_one(*cell) for cell in cells))
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=".geo-native-", dir=output_path.parent))
-    try:
-        rows: list[dict[str, Any]] = []
-        for (receipt, row), (workload_id, repetition) in zip(collected, cells, strict=True):
-            filename = f"{workload_id}-r{repetition:03d}.json"
-            receipt_path = staging / filename
-            receipt_path.write_text(
-                json.dumps(receipt, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
-            row["native_receipt"] = {
-                "path": f"native/{filename}",
-                "sha256": hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
-            }
-            rows.append(row)
-        os.rename(staging, output_path.parent / "native")
-    except Exception:
-        shutil.rmtree(staging, ignore_errors=True)
-        raise
+    rows = await asyncio.gather(*(run_one(*cell) for cell in cells))
 
     payload = {
         "schema_id": "geode.geo-native-results@1",
@@ -259,12 +344,8 @@ async def collect(
         "preflight_context": preflight_context,
         "observations": rows,
     }
-    try:
-        _validate_schema(payload, "geo-native-results.schema.json", label=str(output_path))
-        _write_exclusive(output_path, payload)
-    except Exception:
-        shutil.rmtree(output_path.parent / "native", ignore_errors=True)
-        raise
+    _validate_schema(payload, "geo-native-results.schema.json", label=str(output_path))
+    _write_exclusive(output_path, payload)
     return payload
 
 
