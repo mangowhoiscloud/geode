@@ -226,7 +226,6 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
-| R6.1 | PROTO-001, PROTO-002 | `session=codex-root task=r6-1-versioned-public-projection` | `feature/r6-1-versioned-public-projection` | Readiness [#3092](https://github.com/mangowhoiscloud/geode/pull/3092); R5.4 delivery reconciliation [#3107](https://github.com/mangowhoiscloud/geode/pull/3107) and whole-package acceptance re-audited | `2026-08-23T07:27:10Z` |
 
 ## 1. Program objective
 
@@ -538,8 +537,8 @@ and closure evidence are appended in §10.
 | LLM-002 | `PARTIAL` | Eight built-ins use a mutable registry with broad bootstrap lifetime | Built-in plus entry-point discovery yields immutable session snapshots with generation and collision policy | R5.2 | LLM-001, BND-001 | `IN_DEVELOP` |
 | LLM-003 | `PARTIAL` | Provider identity, credential source, transport, and adapter selection overlap | Provider profile, credential route, and transport are separate composable records | R5.3 | LLM-001, LLM-002 | `IN_DEVELOP` |
 | LLM-004 | `PARTIAL` | Interactive and autonomous LLM paths share taxonomy but retain multiple retry/failover implementations | Explicit `RetryPolicy` preserves intentional differences on one classification/telemetry substrate | R5.4 | LLM-003 | `IN_DEVELOP` |
-| PROTO-001 | `MISFIT` | Internal `HookEvent` taxonomy can leak into persistence/IPC expectations | Public activity/event projections are separate from internal dispatch events | R6.1 | LOOP-002, DI-002 | `IN_PROGRESS` |
-| PROTO-002 | `PARTIAL` | IPC has typed behavior but no single versioned external compatibility contract | Versioned envelopes, capability negotiation, unknown-field behavior, and golden compatibility tests | R6.1 | PROTO-001 | `IN_PROGRESS` |
+| PROTO-001 | `MISFIT` | Internal `HookEvent` taxonomy can leak into persistence/IPC expectations | Public activity/event projections are separate from internal dispatch events | R6.1 | LOOP-002, DI-002 | `IN_DEVELOP` |
+| PROTO-002 | `PARTIAL` | IPC has typed behavior but no single versioned external compatibility contract | Versioned envelopes, capability negotiation, unknown-field behavior, and golden compatibility tests | R6.1 | PROTO-001 | `IN_DEVELOP` |
 | STORE-001 | `PARTIAL` | `SessionStorePort`, `SessionManager`, checkpoints, transcripts, and event store have overlapping ownership | Ports and writers conform to the existing sessions.db/JSONL destination matrix; projections are rebuildable | R6.2 | — | `DONE` |
 | STORE-002 | `PARTIAL` | Logging/transcript/resume/replay plan still contains staged/open parity work | Each subsystem has one declared writer, resume contract, replay doctrine, retention, and redaction test | R6.2 | STORE-001 | `DONE` |
 | TRUST-001 | `ABSENT` | Registration/enabled status does not uniformly distinguish trusted authority | Installed, enabled, trusted, and granted-capability states are separate and observable; executable code is never imported before trust approval | R6.3 | BND-004 | `READY` |
@@ -1942,6 +1941,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R5.2 | LLM-002 | [#3100](https://github.com/mangowhoiscloud/geode/pull/3100) | `3be2c070551591f5bee34b52bdb811a87066cd68` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (final feature CI Gate, 10,418 CI tests at 80.50% coverage, 10,328 local non-live tests, lint/format, type check, security, six import contracts, official-doc and Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 398 modules and 49 kernel tests, exact session-generation/collision/provider-switch evidence, and the minute-boundary idempotence regression rerun all passed) |
 | R5.3 | LLM-003 | [#3103](https://github.com/mangowhoiscloud/geode/pull/3103) | `773dacdc588415f7bec471e1a577357b185a1447` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,433 CI tests at 80.69% coverage, 10,338 local non-live tests, lint/format, type check, security, six import contracts, official-doc and Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 398 modules and 57 kernel tests, exact built-in and external provider-composition parity, and committed-diff review all passed) |
 | R5.4 | LLM-004 | [#3106](https://github.com/mangowhoiscloud/geode/pull/3106) | `20307e437a87a3ba18fce38c6e92d01c3e3785c8` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,442 CI tests at 80.54% coverage, 10,352 local non-live tests, lint/format, type check, security, six import contracts, official-doc and Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 398 modules and 57 kernel tests, exact interactive/auxiliary/provider retry-policy parity, and independent review with all six findings resolved all passed) |
+| R6.1 | PROTO-001, PROTO-002 | [#3109](https://github.com/mangowhoiscloud/geode/pull/3109) | `d6381dc34f5614d5a726e4aae1da45b3db2ab2ca` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,368 local non-live tests with 56 skipped and one deselected, lint/format, type check, security, official-doc parity, Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 399 isolated kernel modules and 57 kernel tests, exact IPC and gateway protocol-version, request-correlation, public-event projection, and v0/v1/future golden compatibility coverage all passed) |
 
 ### 10.2 Main closure evidence
 
@@ -2230,23 +2230,23 @@ boundaries, OAuth refresh, billing-fatal precedence, context recovery, hook
 order, and visible-stream replay guard remain distinct and verified. No R6
 protocol or extension-trust responsibility moved.
 
-R6.1 (`PROTO-001`, `PROTO-002`) is `IN_PROGRESS` under the active claim for
-`feature/r6-1-versioned-public-projection`, selected after R5.4 delivery
-reconciliation [#3107](https://github.com/mangowhoiscloud/geode/pull/3107).
-The package owns a versioned public activity/event projection and one
-negotiated IPC compatibility envelope with explicit capability and
-unknown-field behavior, while internal `RuntimeEvent`/`HookEvent` growth
-remains private. Implementation may begin only after this claim merges and a
-fresh worktree is allocated from the updated `origin/develop`; it authorizes
-no R6.3 extension trust or discovery work.
+R6.1 (`PROTO-001`, `PROTO-002`) is `IN_DEVELOP` after feature
+[#3109](https://github.com/mangowhoiscloud/geode/pull/3109) merged as
+`d6381dc34f5614d5a726e4aae1da45b3db2ab2ca`. Public clients now negotiate the
+bounded, typed `geode.ipc.v1` envelope with legacy v0 compatibility; request
+correlation, stable public event projections, gateway message identities, and
+explicit unknown-field/event behavior are covered by v0, v1, and future-version
+golden and poison tests. Internal `RuntimeEvent` and `HookEvent` taxonomies
+remain private and can evolve without becoming external protocol contracts.
 
-R6.3 (`BND-004`, `TRUST-001`, `TRUST-002`) is also package-atomically `READY`
-after the same dependency reconciliation. BND-001, LLM-002, DI-002, and
+R6.3 (`BND-004`, `TRUST-001`, `TRUST-002`) remains the sole next unclaimed,
+package-atomically `READY` unit after R6.1 delivery reconciliation. BND-001,
+LLM-002, DI-002, and
 TRUST-003 are `IN_DEVELOP`; BND-004 → TRUST-001 → TRUST-002 is package-internal
 implementation order. Current extension surfaces still discover, enable,
 trust, load, isolate, and tear down through separate rules, and executable
 entry points are not governed by one manifest-first trust and capability-grant
-contract. R6.3 follows R6.1 in master order, requires its own claim, and does
+contract. R6.3 requires its own claim before implementation, and does
 not turn narrow in-process ports into a Python security sandbox.
 
 R9.1 (`CODE-001`) was already dependency-satisfied and remains `OPEN` pending
