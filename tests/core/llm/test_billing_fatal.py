@@ -15,10 +15,8 @@ This invariant pins:
 
 from __future__ import annotations
 
-import inspect
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import core.llm.fallback as _fallback
 import pytest
 from core.llm.errors import (
     BillingError,
@@ -97,30 +95,40 @@ def test_response_attr_fallback() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_fallback_loop_calls_is_billing_fatal_before_retry() -> None:
-    """Source-level invariant: the retryable_errors except block must call
-    is_billing_fatal and raise BillingError BEFORE the retry sleep / fallback
-    iteration. If a future refactor moves the check after sleep, the 40s
-    waste regression returns.
-    """
-    src = inspect.getsource(_fallback)
-    assert "is_billing_fatal" in src, (
-        "fallback.py must import and call is_billing_fatal from core.llm.errors"
-    )
-    # Locate the except retryable_errors block and assert is_billing_fatal
-    # appears before the time.sleep / on_retry callback in the same block.
-    block_start = src.find("except retryable_errors as exc:")
-    assert block_start >= 0
-    next_except = src.find("except Exception as exc:", block_start)
-    block = src[block_start : next_except if next_except > 0 else len(src)]
-    fatal_pos = block.find("is_billing_fatal(exc)")
-    sleep_pos = block.find("asyncio.sleep(delay)")
-    assert fatal_pos >= 0, "is_billing_fatal call missing inside retryable block"
-    assert sleep_pos >= 0, "retry sleep removed?"
-    assert fatal_pos < sleep_pos, (
-        "is_billing_fatal must be checked BEFORE the retry sleep — otherwise we "
-        "waste an entire backoff cycle on a billing-fatal error"
-    )
+def test_shared_retry_runner_short_circuits_billing_before_retry() -> None:
+    """Billing classification must precede callbacks, sleep, and fallback."""
+    import asyncio
+
+    from core.llm.fallback import auxiliary_retry_policy, run_with_retry_policy
+
+    calls = 0
+    retry_callback = MagicMock()
+
+    async def fn(_model: str) -> None:
+        nonlocal calls
+        calls += 1
+        raise _make_exc_with_body({"error": {"code": "1113", "message": "balance"}})
+
+    with (
+        patch("core.llm.fallback.asyncio.sleep", new_callable=AsyncMock) as sleep,
+        pytest.raises(BillingError),
+    ):
+        asyncio.run(
+            run_with_retry_policy(
+                ["glm-5.1", "glm-5"],
+                fn,
+                policy=auxiliary_retry_policy(
+                    max_attempts=5,
+                    base_delay_s=0.0,
+                    max_delay_s=0.0,
+                ),
+                on_retry=retry_callback,
+            )
+        )
+
+    assert calls == 1
+    retry_callback.assert_not_called()
+    sleep.assert_not_awaited()
 
 
 def test_fallback_loop_raises_billing_error_on_glm_1113() -> None:

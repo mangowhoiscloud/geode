@@ -1058,6 +1058,9 @@ class TestAgenticLoop:
             dispatch.data for dispatch in dispatches if dispatch.event is HookEvent.LLM_CALL_RETRIED
         ]
         assert retry_payloads
+        assert {payload["retry_policy"] for payload in retry_payloads} == {"interactive"}
+        assert {payload["classification"] for payload in retry_payloads} == {"unknown"}
+        assert {payload["exception_type"] for payload in retry_payloads} == {"UnknownError"}
         assert {
             (payload["step_id"], payload["session_generation"], payload["verify_attempt"])
             for payload in retry_payloads

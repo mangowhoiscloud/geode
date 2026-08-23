@@ -226,7 +226,7 @@ def test_failover_enforces_model_allowlist_per_model() -> None:
         attempted.append(model)
         return "ok"
 
-    with patch.object(_failover_mod, "is_model_allowed", side_effect=lambda m: m != "blocked"):
+    with patch("core.config.is_model_allowed", side_effect=lambda m: m != "blocked"):
         result, used = asyncio.run(_failover_mod.call_with_failover(["blocked", "allowed"], _call))
 
     assert attempted == ["allowed"], "policy-disallowed model must not be called"
