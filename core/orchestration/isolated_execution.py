@@ -160,7 +160,7 @@ class IsolatedRunner:
 
     Usage::
 
-        runner = IsolatedRunner(hooks=hook_system, worker_module="geode_product.worker")
+        runner = IsolatedRunner(hooks=hook_system, worker_module="core.worker")
         config = IsolationConfig(timeout_s=60, post_mode=PostToMainMode.FULL)
         result = await runner.arun(my_callable, args=("hello",), config=config)
 

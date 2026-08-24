@@ -1,0 +1,278 @@
+"""Unit tests for the /petri slash command (P1-F).
+
+The interactive TerminalMenu picker (``_picker_for_role``) requires a TTY
+and is exercised only via smoke + non-TTY fallback here. The sub-command
+sub-commands (status / model / source / reset) cover the bulk of the
+behaviour.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from evals.petri import credential_source as cs
+from evals.petri import user_overrides as uo
+from evals.petri.cli import cmd_petri
+from evals.petri.manifest import clear_manifest_cache
+
+
+@pytest.fixture(autouse=True)
+def _petri_toml(tmp_path: Path, monkeypatch):
+    """Redirect petri.toml + clear all stateful caches."""
+    target = tmp_path / "petri.toml"
+    monkeypatch.setenv("GEODE_PETRI_TOML", str(target))
+    # PR-δ2 — pin GEODE_CONFIG_TOML at a non-existent tmp path so the
+    # self-improving-loop loader (now consulted by read_role_override) returns
+    # defaults regardless of the host's real ~/.geode/config.toml.
+    monkeypatch.setenv(
+        "GEODE_CONFIG_TOML", str(tmp_path / "self_improving_loop_isolation_sentinel.toml")
+    )
+    clear_manifest_cache()
+    cs.clear_suppressions()
+    yield target
+    cs.clear_suppressions()
+    clear_manifest_cache()
+
+
+@pytest.fixture(autouse=True)
+def _scrub_env(monkeypatch):
+    for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "ZHIPUAI_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _stub_settings(monkeypatch):
+    monkeypatch.setattr(cs, "_settings_source", lambda provider: None)
+
+
+@pytest.fixture(autouse=True)
+def _stub_oauth(monkeypatch):
+    from evals.petri.adapters import openai_codex_oauth
+
+    monkeypatch.setattr(openai_codex_oauth, "is_available", lambda: False)
+
+
+@pytest.fixture
+def captured(monkeypatch):
+    """Capture every console.print call for assertion."""
+    from core.cli import commands as _pkg
+
+    lines: list[str] = []
+
+    class _StubConsole:
+        def print(self, *args, **kwargs):
+            lines.append(" ".join(str(a) for a in args))
+
+        def input(self, prompt: str = "") -> str:
+            lines.append(f"<input>{prompt}")
+            return "y"
+
+    monkeypatch.setattr(_pkg, "console", _StubConsole())
+    return lines
+
+
+# ── Status (/petri with no args) ────────────────────────────────────────────
+
+
+def test_status_lists_three_roles(captured, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    cmd_petri("")
+    joined = "\n".join(captured)
+    assert "auditor" in joined
+    assert "target" in joined
+    assert "judge" in joined
+    assert "Petri bindings" in joined
+
+
+def test_status_marks_missing_env(captured):
+    # No env vars set → resolver raises → status shows 'unresolved' + missing env.
+    cmd_petri("")
+    joined = "\n".join(captured)
+    assert "unresolved" in joined
+    assert "Missing env" in joined
+    assert "ANTHROPIC_API_KEY" in joined
+
+
+def test_status_target_geode_prefix(captured, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    cmd_petri("")
+    joined = "\n".join(captured)
+    assert "geode/" in joined  # target row uses geode prefix
+
+
+# ── /petri model ───────────────────────────────────────────────────────────
+
+
+def test_set_model_updates_override(captured, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    cmd_petri("model auditor claude-opus-4-7")
+    assert uo.read_role_override("auditor") == {"model": "claude-opus-4-7"}
+    joined = "\n".join(captured)
+    assert "claude-opus-4-7" in joined
+
+
+def test_set_model_rejects_disallowed(captured):
+    cmd_petri("model auditor glm-4-6")  # auditor doesn't allow GLM
+    joined = "\n".join(captured)
+    assert "not in allowed" in joined
+    assert uo.read_role_override("auditor") == {}
+
+
+def test_set_model_normalised_match(captured, monkeypatch):
+    """Hyphens / case-insensitive match works (mirrors /model behaviour)."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    cmd_petri("model auditor CLAUDEOPUS47")  # normalised → claude-opus-4-7
+    assert uo.read_role_override("auditor").get("model") == "claude-opus-4-7"
+
+
+def test_set_model_provider_change_resets_source(captured, monkeypatch):
+    """Switching provider (claude- → gpt-) erases the now-incompatible source."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    # Initial — Claude provider + API-key source.
+    uo.save_role_override("auditor", model="claude-opus-4-7", source="api_key")
+    cmd_petri("model auditor gpt-5.5")
+    out = uo.read_role_override("auditor")
+    assert out.get("model") == "gpt-5.5"
+    assert "source" not in out  # erased
+
+
+def test_set_model_unknown_role(captured):
+    cmd_petri("model imposter claude-opus-4-7")
+    joined = "\n".join(captured)
+    assert "Unknown petri role" in joined
+
+
+def test_set_model_missing_args(captured):
+    cmd_petri("model auditor")  # missing model name
+    joined = "\n".join(captured)
+    assert "Usage" in joined
+
+
+# ── /petri source ──────────────────────────────────────────────────────────
+
+
+def test_set_source_updates_override(captured, monkeypatch):
+    """PR-SIL-5THEME C6 (2026-05-23) — D1 provider closure 후 ``api_key``
+    가 Source literal 에서 제거됐다. Test 가 explicit override 의 SAVE +
+    READ round-trip 을 verify — ``openai-codex`` (non-default subscription
+    source) 으로 explicit override 시 read 가 그대로 반환."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    # Switch auditor's default model to GPT-5 first (so openai-codex source
+    # is provider-compatible — auditor manifest default is claude-*).
+    cmd_petri("model auditor gpt-5.5")
+    cmd_petri("source auditor openai-codex")
+    override = uo.read_role_override("auditor")
+    assert override.get("source") == "openai-codex"
+
+
+def test_set_source_rejects_invalid(captured):
+    cmd_petri("source auditor imposter")
+    joined = "\n".join(captured)
+    assert "not allowed for provider" in joined
+    assert uo.read_role_override("auditor") == {}
+
+
+def test_set_source_provider_aware(captured):
+    """A source belonging to a different provider is rejected.
+    auditor's default model is claude-* (provider=anthropic) → openai-codex
+    is not allowed for that provider."""
+    cmd_petri("source auditor openai-codex")
+    joined = "\n".join(captured)
+    assert "not allowed for provider" in joined
+
+
+def test_set_source_auto(captured):
+    """'auto' is always a valid source for any provider that lists it.
+
+    SoT-flip (2026-05-22) — the literal ``"auto"`` lands in
+    ``[self_improving_loop.petri.<role>]`` of config.toml, but the
+    loader's ``_read_role_from_self_improving_loop`` filter treats
+    ``source == "auto"`` as "no override" (it's the manifest default
+    anyway). The user-facing semantic is unchanged — operator's
+    ``/petri source <role> auto`` still resets the role to manifest
+    default — but the read returns an empty override map instead of
+    round-tripping the explicit ``"auto"`` literal that the legacy
+    petri.toml writer used to surface. Pin the new contract.
+    """
+    cmd_petri("source auditor auto")
+    assert "source" not in uo.read_role_override("auditor")
+
+
+# ── /petri reset ───────────────────────────────────────────────────────────
+
+
+def test_reset_single_role(captured, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    uo.save_role_override("auditor", model="claude-opus-4-7")
+    cmd_petri("reset auditor")
+    assert uo.read_role_override("auditor") == {}
+
+
+def test_reset_all_with_confirmation(captured):
+    """'/petri reset' wipes after y confirmation (stub_console returns 'y')."""
+    uo.save_role_override("auditor", model="claude-opus-4-7")
+    uo.save_role_override("judge", source="api_key")
+    cmd_petri("reset")
+    assert uo.load_user_overrides() == {}
+
+
+def test_reset_all_cancelled(captured, monkeypatch):
+    """A 'no' answer at the confirmation prompt leaves overrides intact."""
+    from core.cli import commands as _pkg
+
+    class _DenyConsole:
+        def print(self, *args, **kwargs):
+            captured.append(" ".join(str(a) for a in args))
+
+        def input(self, prompt: str = "") -> str:
+            return "n"
+
+    monkeypatch.setattr(_pkg, "console", _DenyConsole())
+
+    uo.save_role_override("auditor", model="claude-opus-4-7")
+    cmd_petri("reset")
+    assert uo.read_role_override("auditor").get("model") == "claude-opus-4-7"
+
+
+def test_reset_unknown_role(captured):
+    cmd_petri("reset imposter")
+    joined = "\n".join(captured)
+    assert "Unknown petri role" in joined
+
+
+# ── Interactive picker non-TTY fallback ────────────────────────────────────
+
+
+def test_picker_non_tty_falls_back_to_status(captured, monkeypatch):
+    """/petri auditor in a non-tty pipe shows status + usage hint instead
+    of raising on TerminalMenu init."""
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    cmd_petri("auditor")
+    joined = "\n".join(captured)
+    assert "Petri bindings" in joined
+    assert "Usage" in joined
+
+
+def test_picker_unknown_role(captured):
+    cmd_petri("imposter")
+    joined = "\n".join(captured)
+    assert "Unknown petri role" in joined
+
+
+# ── Command map registration ───────────────────────────────────────────────
+
+
+def test_product_registry_contains_petri():
+    from core.cli.routing import compose_command_registry, lookup
+    from evals.slash_commands import EVAL_COMMAND_SPECS
+
+    spec = lookup("/petri", compose_command_registry(EVAL_COMMAND_SPECS))
+    assert spec is not None
+    assert spec.handler_path == "evals.petri.cli:cmd_petri"
+
+
+def test_core_action_map_does_not_own_petri():
+    from core.cli.commands import resolve_action
+
+    assert resolve_action("/petri") is None

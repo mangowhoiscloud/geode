@@ -1,0 +1,263 @@
+# Seed pipeline plugin manifest — declarative 7-role + 3-judge-panel binding.
+#
+# Per ADR-003 the source / adapter layers (per-provider credential resolution +
+# concrete adapter modules) are REUSED from `evals/petri/petri.plugin.toml`.
+# This manifest defines only:
+#
+#   1. [seed_generation]              — enabled roles
+#   2. [seed_generation.role.<name>]  — per-role default + allowed model set
+#   3. [seed_generation.judge_panel]  — Ranker phase's 3-voter binding +
+#                                     required_diversity_providers gate
+#
+# Loader: evals.seed_generation.manifest.load_manifest() →
+#         SeedGenerationManifest (pydantic). Validates against the Petri source
+#         table so voter sources are always one of petri.source.<provider>.allowed.
+#
+# 7-role topology — ADR-001 §Topology (paper's 6 agents + Pilot for GEODE):
+#
+#   generator → proximity → critic → pilot → ranker → evolver → meta_reviewer
+#
+# Defaults reflect ADR-003's settled-decision table (Plan §13). Override
+# via ~/.geode/seed-generation.toml is wired in S5.5 (picker).
+#
+# Supported model lineup. Anthropic models use the API adapter; OpenAI models
+# may use PAYG or the Codex subscription adapter. Anthropic surface: claude-opus-4-8 /
+# claude-opus-4-7 / claude-sonnet-4-6 / claude-haiku-4-5. Codex surface:
+# gpt-5.5 / gpt-5.4 /
+# gpt-5.4-mini / gpt-5.3-codex (see core/llm/model_pricing.toml).
+
+[seed_generation]
+# Sorted alphabetically for stable diffs + dedup auditability.
+# Validation: ``manifest.PetriSeedManifest._roles_match_enabled`` requires
+# ``set(enabled_roles) == set(role_keys)``, so the order is purely
+# canonical-presentation — runtime behaviour matches any permutation.
+enabled_roles = [
+    "critic",
+    "evolver",
+    "generator",
+    "literature_review",
+    "meta_reviewer",
+    "pilot",
+    "proximity",
+    "ranker",
+    # PR-SUPERVISOR-ENABLE (2026-05-26) — pre-fix the supervisor role
+    # had no ``[seed_generation.role.supervisor]`` section AND was not
+    # in this enabled_roles list, so ``_registry_builder.py`` 's
+    # ``for role_name in manifest.enabled_roles`` loop never registered
+    # it. The orchestrator emitted ``phase_skipped
+    # reason=agent_not_registered`` for supervisor on every run.
+    # Smoke 19 confirmed: checkpoints/ had no ``supervisor.json``,
+    # ``sub_agents/`` had no ``supervisor-*`` dir, transcript line 4
+    # carried the explicit skip reason. PR-1 (#1698) SUPERVISOR_SCHEMA
+    # wire was a partial fix — necessary but not sufficient.
+    "supervisor",
+]
+
+# ── Roles ────────────────────────────────────────────────────────────────────
+
+[seed_generation.role.generator]
+default_model = "claude-opus-4-8"
+allowed_models = [
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5",
+    "gpt-5.4",
+]
+role_contract = "agents/generator.md"
+# CSP-13 (2026-05-23) — Loop 2 (debate-turn) of the 3-loop port. 0 =
+# off (single-shot, back-compat default). 2-6 = N-turn debate inside
+# each candidate sub-agent's AgenticLoop, recorded via the
+# ``seed_debate_turn`` tool. Operators flip this in
+# ``~/.geode/config.toml``'s ``[self_improving_loop.seed_generation.roles.generator]``
+# section; the manifest default keeps the existing free behavior.
+num_turns = 0
+
+[seed_generation.role.critic]
+default_model = "claude-opus-4-8"
+# ``claude-opus-4-7`` remains accepted for API-backed runs.
+allowed_models = [
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5",
+    "gpt-5.4-mini",
+]
+role_contract = "agents/critic.md"
+
+[seed_generation.role.proximity]
+# CSP-8 (2026-05-22) — Proximity reverted to LLM-clustering pattern
+# (paper §3). Pre-CSP-8 was an embedding call to text-embedding-3-small;
+# now an LLM completion call like every other role. CSP-10 dropped the
+# ``kind`` field from the schema (every role is completion now).
+default_model = "claude-opus-4-8"
+# ``claude-opus-4-7`` remains accepted for API-backed runs; proximity is
+# also a reasoning-heavy role.
+allowed_models = [
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5",
+    "gpt-5.4-mini",
+]
+role_contract = "agents/proximity.md"
+
+[seed_generation.role.pilot]
+# PR-PILOT-UNIFY-DIM-EXTRACT (2026-06-04) — the Pilot runs the Petri audit
+# directly (``evals.petri.runner.run_audit`` +
+# ``core.audit.dim_extractor.extract_dim_aggregates``); it spawns NO LLM
+# sub-agent, so there is no ``role_contract`` prompt. The audit's
+# target/auditor/judge models come from the petri binding stack, NOT this
+# role's binding — ``default_model`` / ``allowed_models`` are retained only
+# for picker-provenance symmetry with the other roles.
+default_model = "claude-opus-4-8"
+allowed_models = [
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-haiku-4-5",
+    "gpt-5.4-mini",
+    "gpt-5.3-codex",
+]
+
+[seed_generation.role.ranker]
+# 3-judge panel orchestrator. Its own default_model is a placeholder —
+# the panel's voter binding (below) drives actual LLM calls.
+default_model = "claude-opus-4-8"
+allowed_models = [
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5",
+]
+role_contract = "agents/ranker.md"
+
+[seed_generation.role.evolver]
+default_model = "claude-opus-4-8"
+allowed_models = [
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5",
+]
+role_contract = "agents/evolver.md"
+
+[seed_generation.role.meta_reviewer]
+default_model = "claude-opus-4-8"
+allowed_models = [
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5",
+]
+role_contract = "agents/meta_reviewer.md"
+
+# PR-SUPERVISOR-ENABLE (2026-05-26) — supervisor role spec section.
+# Defaults mirror ``evals/seed_generation/agents/supervisor.py``'s
+# ``_DEFAULT_SUPERVISOR_MODEL = "claude-opus-4-8"`` (per the role
+# docstring: "Run-level strategy synthesis. Dispatches ONE Opus
+# sub-agent" — Opus chosen because supervisor's output gates the
+# value of every downstream call). Allowed list mirrors meta_reviewer
+# (same single-shot, run-level analyst pattern).
+[seed_generation.role.supervisor]
+default_model = "claude-opus-4-8"
+allowed_models = [
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5",
+]
+role_contract = "agents/supervisor.md"
+
+# CSP-14 (2026-05-23) — Loop 3 (literature paper-analysis) role of the
+# 3-loop port. Runs once per run, after Supervisor + before Generator.
+# ``max_papers = 0`` is the default — the phase short-circuits to a
+# no-op so existing runs are byte-equivalent. Operators flip to ≥1
+# in ``[self_improving_loop.seed_generation.roles.literature_review] max_papers``
+# in ``~/.geode/config.toml`` to opt into the external arxiv fetch +
+# git-tracked snapshot loop.
+[seed_generation.role.literature_review]
+default_model = "claude-opus-4-8"
+allowed_models = [
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5",
+    "gpt-5.4",
+]
+role_contract = "agents/literature_review.md"
+max_papers = 0
+queries_per_run = 3
+
+# ── Judge panel (Ranker sub-section, not a role) ─────────────────────────────
+#
+# Per ADR-003: 3-voter panel with provider diversity gate. Each voter's
+# (provider, source) pair must match evals/petri/petri.plugin.toml's
+# [petri.source.<provider>].allowed list so the existing adapter binding
+# applies. The manifest loader validates this cross-manifest constraint
+# at load time, NOT lazily.
+
+[seed_generation.judge_panel]
+# Default voter mix: 2 reviewers on OpenAI gpt-5.5 via api_key (OpenAI PAYG,
+# Tier 4) + 1 reviewer on Anthropic claude-opus-4-8 via api_key (Anthropic PAYG).
+# PR-VOTER-PAYG-PARALLEL (2026-06-03): the default uses PAYG HTTP-API paths so the ranker's 177
+# voter calls (59 matches × 3 voters) fan out CONCURRENTLY — a PAYG voter rides
+# the ``openai_api_lane`` / ``anthropic_api_lane`` (env-tunable: GEODE_OPENAI_API_LANE_MAX
+# / GEODE_ANTHROPIC_API_LANE_MAX), so concurrency is bounded by the
+# tunable API-lane caps + GEODE_RANKER_MAX_INFLIGHT_MATCHES, not a CLI bottleneck.
+# Both diversity gates are satisfied:
+#   * providers ≥ 2 (openai + anthropic)
+#   * (provider, source) pairs ≥ 2 ((openai, api_key) + (anthropic, api_key))
+# Subscription-path deploys override via ``~/.geode/config.toml``'s
+# ``[self_improving_loop.seed_generation.judge_panel.voters]`` array — now WIRED
+# (the picker reads it over this manifest default; see picker.pick_bindings).
+required_diversity_providers = 2
+
+[[seed_generation.judge_panel.voters]]
+model = "gpt-5.5"
+provider = "openai"
+source = "api_key"
+
+[[seed_generation.judge_panel.voters]]
+model = "gpt-5.5"
+provider = "openai"
+source = "api_key"
+
+[[seed_generation.judge_panel.voters]]
+model = "claude-opus-4-8"
+provider = "anthropic"
+source = "api_key"

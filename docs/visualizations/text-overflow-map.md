@@ -77,7 +77,7 @@
 | ranker | Elo tournament (S6) | Elo 토너먼트 (S6) |
 | evolver | Top survivors refinement (S6.5) | 상위 survivor 정제 (S6.5) |
 | meta_reviewer | Cross-run priors generator (S7) | 세대 간 priors 생성 (S7) |
-| Petri | `geode audit` subprocess (measurement) | `geode audit` subprocess (측정) |
+| Petri | `geode-eval audit` subprocess (measurement) | `geode-eval audit` subprocess (측정) |
 | dim | One rubric axis (20 total) | 한 rubric 축 (총 20개) |
 | critical / auxiliary / info | Tier classification (5 / 12 / 3) | 축 분류 (5 / 12 / 3) |
 | dim_means | Per-dim mean (1-10, lower better) | dim 별 평균 (1-10, 낮을수록 좋음) |

@@ -59,7 +59,7 @@ _RAW_EXCERPT_LIMIT = 2000
 
 # First fenced ```json``` block (optional lang tag). Sister anchors:
 # ``core/agent/sub_agent.py:_JSON_CODEBLOCK_RE`` (producer-side strip)
-# and ``geode_product/seed_generation/agents/base.py`` (consumer-side strip).
+# and ``evals/seed_generation/agents/base.py`` (consumer-side strip).
 # Kept local so this module stays a leaf (stdlib + pydantic only) —
 # importing sub_agent here would invert the dependency direction.
 _FENCED_JSON_RE = re.compile(r"```(?:json|JSON)?\s*\n?(.*?)\n?\s*```", re.DOTALL)

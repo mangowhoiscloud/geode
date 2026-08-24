@@ -199,7 +199,7 @@ def test_helpers_applies_descriptions_before_tool_policy() -> None:
 
 
 def test_product_bundle_owns_tool_descriptions_source() -> None:
-    from geode_product.self_improving.policy_sources import build_policy_source_bundle
+    from core.config.runtime_policy_sources import build_policy_source_bundle
 
     source = build_policy_source_bundle()["tool_descriptions"]
     assert source.packaged_default is not None
@@ -211,7 +211,7 @@ def test_product_bundle_owns_tool_descriptions_source() -> None:
 
 def test_train_py_sets_descriptions_override_env() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    src = (repo_root / "geode_product/self_improving/measure.py").read_text(encoding="utf-8")
+    src = (repo_root / "evolve/scaffold_search/measure.py").read_text(encoding="utf-8")
     assert "GEODE_TOOL_DESCRIPTIONS_OVERRIDE" in src
     assert "AUTORESEARCH_TOOL_DESCRIPTIONS_PATH" in src
 

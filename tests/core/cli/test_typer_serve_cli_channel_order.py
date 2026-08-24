@@ -41,7 +41,7 @@ def test_serve_starts_cli_socket_with_external_gateway_disabled() -> None:
             [
                 sys.executable,
                 "-c",
-                "from geode_product.cli import app; app()",
+                "from core.cli import app; app()",
                 "serve",
                 "--poll",
                 "0.05",
@@ -96,7 +96,7 @@ def test_local_only_serve_exits_when_cli_socket_cannot_start() -> None:
             [
                 sys.executable,
                 "-c",
-                "from geode_product.cli import app; app()",
+                "from core.cli import app; app()",
                 "serve",
                 "--poll",
                 "0.05",

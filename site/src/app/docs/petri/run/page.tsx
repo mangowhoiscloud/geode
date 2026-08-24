@@ -8,8 +8,8 @@ export default function Page() {
       slug="petri/run"
       title="Run an audit"
       titleKo="감사 실행"
-      summary="geode audit, or inspect eval for the raw path. Choose model roles, dimension set, seeds, and turn budget. Dry-run by default."
-      summaryKo="geode audit, 또는 raw 경로인 inspect eval을 씁니다. 모델 역할, 차원 세트, seeds, 턴 예산을 고릅니다. 기본은 dry-run입니다."
+      summary="geode-eval audit, or inspect eval for the raw path. Choose model roles, dimension set, seeds, and turn budget. Dry-run by default."
+      summaryKo="geode-eval audit, 또는 raw 경로인 inspect eval을 씁니다. 모델 역할, 차원 세트, seeds, 턴 예산을 고릅니다. 기본은 dry-run입니다."
     >
       <Bi
         ko={
@@ -29,15 +29,15 @@ export default function Page() {
 
             <h2>기본 명령</h2>
             <pre>{`# 1) dry-run (기본값). 명령 조립과 seed 해석만 검증
-geode audit
+geode-eval audit
 
 # 2) 실측. live로 올리고 audit-mode 가드레일 전환
-geode audit --live --unrestricted \\
+geode-eval audit --live --unrestricted \\
   --seeds 3 --max-turns 10`}</pre>
             <p>
               같은 인터페이스가 세션 안에서는 <code>/audit</code> 슬래시
               명령입니다. 둘 다{" "}
-              <code>geode_product/petri_audit/cli_audit.py</code>로 들어갑니다.
+              <code>evals/petri/cli_audit.py</code>로 들어갑니다.
             </p>
 
             <h2>플래그</h2>
@@ -100,7 +100,7 @@ inspect view --log-dir ~/.geode/petri/logs/`}</pre>
             <p>
               This guide runs a Petri × GEODE audit end to end. The defaults
               are designed to protect your budget: with no flags at all,{" "}
-              <code>geode audit</code> finishes as a dry-run with no real LLM
+              <code>geode-eval audit</code> finishes as a dry-run with no real LLM
               calls. Going live is an explicit step.
             </p>
 
@@ -112,15 +112,15 @@ inspect view --log-dir ~/.geode/petri/logs/`}</pre>
 
             <h2>The basic command</h2>
             <pre>{`# 1) dry-run (the default). validates command assembly + seed resolution
-geode audit
+geode-eval audit
 
 # 2) real measurement. go live and lift guardrails for the run
-geode audit --live --unrestricted \\
+geode-eval audit --live --unrestricted \\
   --seeds 3 --max-turns 10`}</pre>
             <p>
               The same interface exists in-session as the <code>/audit</code>{" "}
               slash command. Both enter{" "}
-              <code>geode_product/petri_audit/cli_audit.py</code>.
+              <code>evals/petri/cli_audit.py</code>.
             </p>
 
             <h2>Flags</h2>

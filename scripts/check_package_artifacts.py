@@ -18,27 +18,27 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 SELF_IMPROVING_RUNTIME_PATHS = {
-    "geode_product/self_improving/__init__.py",
-    "geode_product/self_improving/campaign.py",
-    "geode_product/self_improving/cli_commands.py",
-    "geode_product/self_improving/config.py",
-    "geode_product/self_improving/loop/mutate/runner.py",
-    "geode_product/self_improving/loop/observe/run_timeline.py",
-    "geode_product/self_improving/mcp.py",
-    "geode_product/self_improving/mcp_tools.json",
-    "geode_product/self_improving/outer_bundle.py",
-    "geode_product/self_improving/program.md",
-    "geode_product/self_improving/train.py",
+    "evals/config.py",
+    "evals/run_timeline.py",
+    "evolve/scaffold_search/__init__.py",
+    "evolve/scaffold_search/campaign.py",
+    "evolve/scaffold_search/cli_commands.py",
+    "evolve/scaffold_search/loop/mutate/runner.py",
+    "evolve/scaffold_search/mcp.py",
+    "evolve/scaffold_search/mcp_tools.json",
+    "evolve/scaffold_search/outer_bundle.py",
+    "evolve/scaffold_search/program.md",
+    "evolve/scaffold_search/train.py",
 }
 
 SELF_IMPROVING_STATE_PATHS = {
-    "geode_product/self_improving/state/README.md",
-    "geode_product/self_improving/state/baseline_archive.jsonl",
-    "geode_product/self_improving/state/baseline_epochs.json",
-    "geode_product/self_improving/state/mutations.jsonl",
-    "geode_product/self_improving/state/policies/hyperparam.json",
-    "geode_product/self_improving/state/results.jsonl",
-    "geode_product/self_improving/state/results.tsv",
+    "evolve/scaffold_search/state/README.md",
+    "evolve/scaffold_search/state/baseline_archive.jsonl",
+    "evolve/scaffold_search/state/baseline_epochs.json",
+    "evolve/scaffold_search/state/mutations.jsonl",
+    "evolve/scaffold_search/state/policies/hyperparam.json",
+    "evolve/scaffold_search/state/results.jsonl",
+    "evolve/scaffold_search/state/results.tsv",
 }
 
 REQUIRED_WHEEL_PATHS = (
@@ -46,29 +46,35 @@ REQUIRED_WHEEL_PATHS = (
         ".geode/skills/geo/SKILL.md",
         ".geode/skills/grilling/SKILL.md",
         "core/GEODE.md",
+        "core/worker.py",
         "core/tools/definitions.json",
         "core/tools/mcp_tools.json",
         "core/config/routing.toml",
         "core/llm/model_pricing.toml",
         "core/llm/prompts/router.md",
-        "geode_product/benchmark_harness/benchmark_harness.plugin.toml",
-        "geode_product/benchmark_harness/tau2_agent_policy.md",
-        "geode_product/benchmark_harness/patches/mcpmark-cd45b7f-filesystem-standard-verifier-missing-output.patch",
-        "geode_product/petri_audit/petri.plugin.toml",
-        "geode_product/petri_audit/roles/auditor.md",
-        "geode_product/petri_audit/roles/target.md",
-        "geode_product/petri_audit/roles/judge.md",
-        "geode_product/petri_audit/judge_dims/geode_judge_subset.yaml",
-        "geode_product/petri_audit/seeds/auxiliary/overrefusal/01_base.md",
-        "geode_product/seed_generation/seed_generation.plugin.toml",
-        "geode_product/seed_generation/agents/generator.md",
-        "geode_product/seed_generation/agents/critic.md",
-        "geode_product/seed_generation/agents/proximity.md",
-        "geode_product/seed_generation/agents/ranker.md",
-        "geode_product/seed_generation/agents/evolver.md",
-        "geode_product/seed_generation/agents/meta_reviewer.md",
-        "geode_product/seed_generation/agents/supervisor.md",
-        "geode_product/seed_generation/agents/literature_review.md",
+        "evals/__init__.py",
+        "evals/cli.py",
+        "evals/worker.py",
+        "evals/benchmarks/benchmark_harness.plugin.toml",
+        "evals/benchmarks/tau2_agent_policy.md",
+        "evals/benchmarks/patches/mcpmark-cd45b7f-filesystem-standard-verifier-missing-output.patch",
+        "evals/petri/petri.plugin.toml",
+        "evals/petri/roles/auditor.md",
+        "evals/petri/roles/target.md",
+        "evals/petri/roles/judge.md",
+        "evals/petri/judge_dims/geode_judge_subset.yaml",
+        "evals/petri/seeds/auxiliary/overrefusal/01_base.md",
+        "evals/seed_generation/seed_generation.plugin.toml",
+        "evals/seed_generation/agents/generator.md",
+        "evals/seed_generation/agents/critic.md",
+        "evals/seed_generation/agents/proximity.md",
+        "evals/seed_generation/agents/ranker.md",
+        "evals/seed_generation/agents/evolver.md",
+        "evals/seed_generation/agents/meta_reviewer.md",
+        "evals/seed_generation/agents/supervisor.md",
+        "evals/seed_generation/agents/literature_review.md",
+        "evolve/__init__.py",
+        "evolve/cli.py",
     }
     | SELF_IMPROVING_RUNTIME_PATHS
     | SELF_IMPROVING_STATE_PATHS
@@ -86,7 +92,10 @@ REQUIRED_SDIST_PATHS = (
         "LICENSE",
         "NOTICE",
         "core/__init__.py",
-        "geode_product/__init__.py",
+        "core/worker.py",
+        "evals/__init__.py",
+        "evals/worker.py",
+        "evolve/__init__.py",
     }
     | SELF_IMPROVING_RUNTIME_PATHS
     | SELF_IMPROVING_STATE_PATHS
@@ -217,7 +226,7 @@ def _check_removed_compatibility_layout(label: str, paths: set[str]) -> list[str
     removed_paths = {
         path
         for path in paths
-        if path.startswith("plugins/") or path.startswith("core/self_improving/")
+        if path.startswith(("geode_product/", "plugins/", "core/self_improving/"))
     }
     problems = [
         f"{label}: removed compatibility path is packaged: {path}" for path in sorted(removed_paths)

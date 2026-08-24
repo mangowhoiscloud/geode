@@ -10,11 +10,16 @@ def test_core_module_names_come_only_from_installed_kernel_python_files() -> Non
             "core/agent/__init__.py",
             "core/agent/loop.py",
             "core/tools/definitions.json",
-            "geode_product/cli.py",
+            "core/cli/__init__.py",
         }
     )
 
-    assert installed._core_module_names(paths) == ("core", "core.agent", "core.agent.loop")
+    assert installed._core_module_names(paths) == (
+        "core",
+        "core.agent",
+        "core.agent.loop",
+        "core.cli",
+    )
 
 
 def test_kernel_runtime_constructs_defaults_and_shuts_down() -> None:

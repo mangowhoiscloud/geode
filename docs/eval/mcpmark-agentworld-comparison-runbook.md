@@ -68,7 +68,7 @@ Play 칼럼이 `playwright`(4)만인지 `playwright_webarena`(21) 포함인지 �
 ```bash
 cd artifacts/eval/harnesses/mcpmark
 set -a; source .mcp_env; set +a
-OPENAI_API_KEY=dummy .venv/bin/python -m geode_product.benchmark_harness.run_mcpmark \
+OPENAI_API_KEY=dummy .venv/bin/python -m evals.benchmarks.run_mcpmark \
   --mcp <filesystem|notion|github|postgres|playwright|playwright_webarena> \
   --task-suite standard \
   --tasks <category/task | all> \
@@ -87,7 +87,7 @@ OPENAI_API_KEY=dummy .venv/bin/python -m geode_product.benchmark_harness.run_mcp
 실행 전 점검:
 
 ```bash
-.venv/bin/python -m geode_product.benchmark_harness.cli preflight mcpmark --env-file .mcp_env
+.venv/bin/python -m evals.benchmarks.cli preflight mcpmark --env-file .mcp_env
 docker ps --format '{{.Names}} {{.Status}}' | grep mcpmark-postgres   # postgres
 docker images -q ghcr.io/github/github-mcp-server:v0.15.0             # github MCP
 npx -y @playwright/mcp@0.0.68 --version                               # playwright MCP

@@ -28,7 +28,7 @@ export default function Page() {
                 <tr><td><strong>Runtime</strong></td><td>시스템콜 + 드라이버</td><td>도구, MCP, 메모리, 스킬. LLM이 외부와 닿는 모든 경로</td><td><code>core/tools/</code>, <code>core/mcp/</code>, <code>core/memory/</code></td></tr>
                 <tr><td><strong>Harness</strong></td><td>셸 + init</td><td>CLI, serve, 훅, 게이트웨이, 레인. 사용자와 메신저가 시스템에 닿는 경로</td><td><code>core/cli/</code>, <code>core/server/</code>, <code>core/hooks/</code>, <code>core/orchestration/</code></td></tr>
                 <tr><td><strong>Agent</strong></td><td>실행 루프</td><td>while(tool_use). 항상 도는 실행 단위와 서브에이전트</td><td><code>core/agent/loop/</code>, <code>core/agent/sub_agent.py</code></td></tr>
-                <tr><td><strong>Self-Improving</strong></td><td>패키지 매니저 + 업데이트 채널</td><td>에이전트가 도는 스캐폴드 자체를 변이하고, 감사로 선택하고, 계보를 보존</td><td><code>geode_product/self_improving/</code></td></tr>
+                <tr><td><strong>Self-Improving</strong></td><td>패키지 매니저 + 업데이트 채널</td><td>에이전트가 도는 스캐폴드 자체를 변이하고, 감사로 선택하고, 계보를 보존</td><td><code>evolve/scaffold_search/</code></td></tr>
               </tbody>
             </table>
 
@@ -99,7 +99,7 @@ export default function Page() {
                 <tr><td><strong>Runtime</strong></td><td>Syscalls + drivers</td><td>Tools, MCP, memory, skills: every path the LLM uses to touch the outside</td><td><code>core/tools/</code>, <code>core/mcp/</code>, <code>core/memory/</code></td></tr>
                 <tr><td><strong>Harness</strong></td><td>Shell + init</td><td>CLI, serve, hooks, gateway, lanes: every path users and messengers use to reach the system</td><td><code>core/cli/</code>, <code>core/server/</code>, <code>core/hooks/</code>, <code>core/orchestration/</code></td></tr>
                 <tr><td><strong>Agent</strong></td><td>Execution loop</td><td>while(tool_use): the always-running execution unit and sub-agents</td><td><code>core/agent/loop/</code>, <code>core/agent/sub_agent.py</code></td></tr>
-                <tr><td><strong>Self-Improving</strong></td><td>Package manager + update channel</td><td>Mutates the scaffold the agent runs on, selects via audits, preserves lineage</td><td><code>geode_product/self_improving/</code></td></tr>
+                <tr><td><strong>Self-Improving</strong></td><td>Package manager + update channel</td><td>Mutates the scaffold the agent runs on, selects via audits, preserves lineage</td><td><code>evolve/scaffold_search/</code></td></tr>
               </tbody>
             </table>
 

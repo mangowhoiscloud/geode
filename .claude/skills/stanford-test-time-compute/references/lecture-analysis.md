@@ -518,15 +518,15 @@ Generator
 → Meta Reviewer
 ```
 
-- 전체 phase order는 `geode_product/seed_generation/orchestrator.py:210-251`에 고정된다.
+- 전체 phase order는 `evals/seed_generation/orchestrator.py:210-251`에 고정된다.
 - `Generator`는 독립 candidate를 병렬 생성한다
-  (`geode_product/seed_generation/agents/generator.py:85-224`).
+  (`evals/seed_generation/agents/generator.py:85-224`).
 - `Critic`은 각 seed의 strengths·weaknesses와 discrimination risk를 구조화한다
-  (`geode_product/seed_generation/agents/critic.py:93-203`).
+  (`evals/seed_generation/agents/critic.py:93-203`).
 - `Pilot`은 Petri를 직접 호출해 dimension mean과 uncertainty를 보존한다
-  (`geode_product/seed_generation/agents/pilot.py:125-260`).
+  (`evals/seed_generation/agents/pilot.py:125-260`).
 - `Ranker`는 panel vote와 pilot evidence를 결합해 survivor를 고른다
-  (`geode_product/seed_generation/agents/ranker.py:172-465`).
+  (`evals/seed_generation/agents/ranker.py:172-465`).
 
 Proximity와 Meta Reviewer는 Archon 표 밖의 dataset-quality operator다. Evolver도
 여러 후보를 한 답으로 합치지 않고 survivor를 개별 수정하므로 Fuser로 부르지
@@ -546,11 +546,11 @@ failure evidence + bounded JSON contract
 ```
 
 - Mutation contract는 한 cycle에 policy section 하나만 바꾼다
-  (`geode_product/self_improving/loop/mutate/runner.py:451-545,1581-1660`).
+  (`evolve/scaffold_search/loop/mutate/runner.py:451-545,1581-1660`).
 - Gate는 hard contract, critical veto, margin과 targeted dimension을 확인한다
-  (`geode_product/self_improving/gate.py:353-514`).
+  (`evolve/scaffold_search/gate.py:353-514`).
 - Reject는 SoT를 직전 상태로 되돌린다
-  (`geode_product/self_improving/gate.py:789-945`).
+  (`evolve/scaffold_search/gate.py:789-945`).
 
 따라서 mutation LLM은 experiment-plane Generator에 대응하지만, `(1+1)` keep/revert는
 Ranker가 아니라 state promotion gate다. Petri는 external Verifier/Evaluator 대응이다.
@@ -572,19 +572,19 @@ failure codes + bounded surface + knowledge graph
 ```
 
 - Contract는 mutation, task pack, measurement hash와 budget을 동결한다
-  (`geode_product/crucible/contract.py:1-29`).
+  (`evolve/crucible/contract.py:1-29`).
 - Producer와 evaluator는 별도 process command다
-  (`geode_product/crucible/supervisor.py:1164-1272`).
+  (`evolve/crucible/supervisor.py:1164-1272`).
 - Supervisor가 bounded loop와 private ref를 소유한다
-  (`geode_product/crucible/supervisor.py:1318-1510`).
+  (`evolve/crucible/supervisor.py:1318-1510`).
 - `PromotionVerdict`와 paired decision은 release 권한 없이 KEEP·REJECT·INVALID만
-  반환한다 (`geode_product/crucible/promotion.py:195-246,342-520`).
+  반환한다 (`evolve/crucible/promotion.py:195-246,342-520`).
 
 Candidate producer는 experiment-plane Generator에 대응한다. Trusted evaluator는
 Unit Test Evaluator보다 executable assay에 가깝고, paired promotion decision은
 Ranker가 아니다. Fuser·top-K pool·in-loop test generator는 없다. Task pack을 미리
 고정하고 opaque test를 producer에서 숨기는 이유는 candidate가 평가 기준까지
-바꾸는 오염을 막기 위해서다 (`geode_product/crucible/program.md:98-101,158`). 다음
+바꾸는 오염을 막기 위해서다 (`evolve/crucible/program.md:98-101,158`). 다음
 cycle에 돌려주는 closed failure code는 Critic과 유사한 진단 신호지만, candidate의
 장단점을 자유문으로 노출하지 않으므로 별도 feedback-projection operation으로 둔다.
 

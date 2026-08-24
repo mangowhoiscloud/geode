@@ -3,11 +3,11 @@
 > **English** | [한국어](autoresearch-axis-decision.ko.md)
 
 > **Status**: Accepted (2026-05-18)
-> **Scope**: The axis representation of the fitness function in `geode_product/self_improving/train.py`, plus baseline IO simplification. Separation of responsibilities from the emit schema of the Petri-side `core/audit/dim_extractor.py`.
+> **Scope**: The axis representation of the fitness function in `evolve/scaffold_search/train.py`, plus baseline IO simplification. Separation of responsibilities from the emit schema of the Petri-side `core/audit/dim_extractor.py`.
 
 ## Context
 
-The current fitness in `geode_product/self_improving/train.py` buckets the 19-dim Petri rubric into 5 axes (`predictive / robustness / logic / diversity / stability`) by averaging. The `AXIS_DIMS` dict holds the dim→axis mapping. However:
+The current fitness in `evolve/scaffold_search/train.py` buckets the 19-dim Petri rubric into 5 axes (`predictive / robustness / logic / diversity / stability`) by averaging. The `AXIS_DIMS` dict holds the dim→axis mapping. However:
 
 1. **Effective information loss**: of the 12 fitness-active dims, only 5 dims feed fitness (the averaging targets in `AXIS_DIMS` are 1-2 dims/axis). The signal of the remaining 10 dims is discarded.
 2. **Weak statistical effect**: the √k stderr reduction from bucket averaging does not work when most axes have k=1.
@@ -147,26 +147,26 @@ When `baseline_means=None / baseline_stderr=None`: the gate is disabled and a si
 
 ## Implementation pointers (S9 + S10)
 
-- `geode_product/self_improving/train.py`:
+- `evolve/scaffold_search/train.py`:
   - Remove `AXIS_DIMS`; introduce `AXIS_TIERS` + `DIM_WEIGHTS` + `STABILITY_WEIGHT`.
   - Remove `_axis_score`.
   - `compute_axis_scores` → `compute_dim_aggregates(dim_means)` (dict pass-through).
   - `compute_fitness(dim_means, dim_stderr, baseline_means=None, baseline_stderr=None, critical_margin=0.0, aux_lambda=0.5)`: raw dict arguments.
   - Delete `FitnessBaseline` + `baseline_from_summary` + `_load_baseline`; a single `_load_baseline_dict()` function.
-- `geode_product/self_improving/program.md`:
+- `evolve/scaffold_search/program.md`:
   - § "Cross-axis gate": critical 2 → critical 4, with the dim names spelled out.
   - § "Output format": `^<axis>_score:` → `^<dim>_score:` (12 substantive dims).
   - § "Logging results": 9-col → 10-col schema.
 - `~/.geode/self-improving/baseline.json` schema: the Petri summary JSON as-is (`{dim_means: {...}, dim_stderr: {...}}`).
-- `geode_product/self_improving/state/results.tsv`: update to the 10-col header.
-- `geode_product/self_improving/state/results.jsonl`: new (line-per-gen raw dim aggregates).
+- `evolve/scaffold_search/state/results.tsv`: update to the 10-col header.
+- `evolve/scaffold_search/state/results.jsonl`: new (line-per-gen raw dim aggregates).
 - `tests/test_autoresearch_train.py`: update 15 tests (weights readjusted to keep the dry-run baseline at 0.535895).
 
 ## References
 
 - ADR-001 (Seed Generation): justification for the seed N expansion
-- `geode_product/self_improving/train.py:240-540`: the region under change
-- `geode_product/self_improving/program.md`: the self-improving-loop SOT
+- `evolve/scaffold_search/train.py:240-540`: the region under change
+- `evolve/scaffold_search/program.md`: the self-improving-loop SOT
 - `core/audit/dim_extractor.py`: raw signal emit (unchanged)
 - AlphaEval (parity abandoned): arXiv:2508.13174
 - `[[project_autoresearch_self_improving_loop]]`: the state just before closed-loop

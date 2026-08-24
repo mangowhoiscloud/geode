@@ -14,7 +14,7 @@ from core.orchestration.isolated_execution import (
 
 
 def _runner(*, lane: object | None = None) -> IsolatedRunner:
-    return IsolatedRunner(lane=lane, worker_module="geode_product.worker")
+    return IsolatedRunner(lane=lane, worker_module="core.worker")
 
 
 class TestSubprocessMode:

@@ -90,7 +90,7 @@ cards).
 string in both languages** (not translated). Only the tagline is localized.
 
 The 7 kinds are the verified mutation surface — `TARGET_KINDS` in
-`geode_product/self_improving/loop/policies.py:207-242`, kept in exact snake_case:
+`evolve/scaffold_search/loop/policies.py:207-242`, kept in exact snake_case:
 
 ```
 reinforced each cycle
@@ -146,7 +146,7 @@ confidence = 1 / (1 + (stderr / 1.0)²)
 α = β = 1.0 (DEFAULT_ELO_WEIGHT / DEFAULT_DIFFICULTY_WEIGHT)
 ```
 
-Source: `geode_product/seed_generation/tournament.py:444-501` (`blend_scores`),
+Source: `evals/seed_generation/tournament.py:444-501` (`blend_scores`),
 `difficulty_confidence` at line 397. The difficulty term degrades
 **per candidate**: a candidate with no usable pilot signal gets a pure
 `α · z(elo)` score, and when no candidate has a signal the whole
@@ -224,13 +224,13 @@ Three measures, layered:
 
 1. **Control arms.** The campaign runs `never` / `random` / `gate` arms
    (`DEFAULT_ARMS = ("never", "random", "gate")`, gate LAST,
-   `geode_product/self_improving/campaign.py:144`; `scripts/run_campaign.py`).
+   `evolve/scaffold_search/campaign.py:144`; `scripts/run_campaign.py`).
    Running a never-promote and a random-promote arm alongside the gate
    separates "gate beats random-accept" from noise.
 2. **A tighter rubric.** Two analytics dims — `verbose_padding` and
    `redundant_tool_invocation` — were dropped because their coarse
    4-bucket step scale saturated and could not register continuous
-   improvement (`geode_product/self_improving/train.py:626-637`). The dim count
+   improvement (`evolve/scaffold_search/train.py:626-637`). The dim count
    goes **20 → 18** (`AXIS_TIERS`) and the weighted count **17 → 15**
    (`DIM_WEIGHTS`); fitness is now 100% LLM-judge-scored — the judge
    writes `dim_means` / `dim_stderr` directly, with no separate
@@ -325,7 +325,7 @@ The work splits cleanly by dependency. The baseline replicates and the
 measures the same frozen baseline, with no champion chain to corrupt, so
 they fan out concurrently via `asyncio.gather` — each worker a separate
 `train.py` subprocess with its own state tree
-(`geode_product/self_improving/campaign.py:919-946`). The `gate` arm is
+(`evolve/scaffold_search/campaign.py:919-946`). The `gate` arm is
 **path-dependent** (a promote mutates the champion and steers the next
 propose — a champion-chain), so it must stay the sequential `run_arm`
 path. Splitting this way compresses the campaign to **6–7.5 hours**. A
@@ -375,7 +375,7 @@ recorded as numeric dim means only — you cannot read **which** contract
 failed, **where**.
 
 This is grounded in the current eval: as of v3 (PR-DROP-ANALYTICS-DIMS,
-2026-06-02, `geode_product/self_improving/train.py:715-721`) **every** remaining dim
+2026-06-02, `evolve/scaffold_search/train.py:715-721`) **every** remaining dim
 is `judge_llm` — there is no script-computed / deterministic dim left. The
 two formerly-deterministic analytics dims (`verbose_padding`,
 `redundant_tool_invocation`) were removed, so all 18 dims are now scored by
@@ -531,14 +531,14 @@ Everything else is code-grounded:
 | Claim | Source |
 |---|---|
 | `be-001` fitness = 0.7915 (≈0.8), ceiling implicit | `state/autoresearch/baseline_archive.jsonl` |
-| `final = α·z(elo) + β·conf·z(diff)`, `conf = 1/(1+(stderr/1.0)²)`, α=β=1.0 | `geode_product/seed_generation/tournament.py:397, 444-501`; `DEFAULT_ELO_WEIGHT`/`DEFAULT_DIFFICULTY_WEIGHT` = 1.0 |
+| `final = α·z(elo) + β·conf·z(diff)`, `conf = 1/(1+(stderr/1.0)²)`, α=β=1.0 | `evals/seed_generation/tournament.py:397, 444-501`; `DEFAULT_ELO_WEIGHT`/`DEFAULT_DIFFICULTY_WEIGHT` = 1.0 |
 | per-candidate graceful degrade to pure Elo | `tournament.py:blend_scores` docstring |
-| `DEFAULT_ARMS = ("never","random","gate")`, gate LAST | `geode_product/self_improving/campaign.py:144` |
+| `DEFAULT_ARMS = ("never","random","gate")`, gate LAST | `evolve/scaffold_search/campaign.py:144` |
 | dropped `verbose_padding` + `redundant_tool_invocation` (saturated 4-bucket step scale) | `train.py:626-637` |
 | dim count 20→18 (`AXIS_TIERS`), weighted 17→15 (`DIM_WEIGHTS`); 5 critical / 10 auxiliary / 3 info | `train.py:582-606` |
 | margin = `max(_MARGIN_GAIN_SIGMA·√(σp²+σc²), 0.005)`, σ=1.0 | `train.py:722-743, 3463-3488, 3911` |
 | `target_dim` reshaped targeted sub-fitness, env `GEODE_SIL_EXPECTED_DIM` | `train.py:2067-2073, 2798` |
-| path-independent fan-out via `asyncio.gather`; gate arm sequential `run_arm` | `geode_product/self_improving/campaign.py:919-946` |
+| path-independent fan-out via `asyncio.gather`; gate arm sequential `run_arm` | `evolve/scaffold_search/campaign.py:919-946` |
 | per-audit `wait_for` 45-min bound + process-group kill | `campaign.py:147` (`DEFAULT_PER_AUDIT_TIMEOUT_S = 2700.0`) |
 | Act 4 problem: all 18 dims `judge_llm` on transcript text, no deterministic dim | `train.py:715-721` (v3 PR-DROP-ANALYTICS-DIMS) |
 | Act 4 contracts (`required_tool_path`/`args_shape_valid`/`claim_grounded`/`contract_results`) DESIGN-STAGE — absent from code | verified absent in `core/` + `plugins/`, 2026-06-03 (no metric attached) |

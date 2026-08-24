@@ -3,7 +3,7 @@
 > Status: SOT for the post-2026-05-11 architecture (PR #1024 + #1026 + #1027).
 > Companion ground-truth report: `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-11-petri-observability-audit.md`.
 
-`geode audit --live` is a 3-model dance: an inspect_petri **auditor** (red-team
+`geode-eval audit --live` is a 3-model dance: an inspect_petri **auditor** (red-team
 prompts), a GEODE-wrapped **target** (`geode/<model>` via
 `GeodeModelAPI`), and a **judge** (16-dim rubric scoring). Every turn the
 three models combine cache-heavy prompts + thinking + multi-call subloops, so
@@ -150,7 +150,7 @@ TestUsageRecordExtensionFields::test_from_json_legacy_record_compat`.
 
 Append-only, git-tracked, one line per archive. Producer:
 `core.audit.manifest.append_manifest`, called by
-`geode_product.petri_audit.runner._append_manifest_line` after every
+`evals.petri.runner._append_manifest_line` after every
 `_maybe_auto_archive` succeeds. Idempotent via `archive_sha`
 (file sha1).
 
@@ -217,7 +217,7 @@ to bypass two walls at once:
    chain but their effective level falls back to root's `WARNING`
    default, so a plain `log.info(...)` is filtered at the logger
    level and never reaches the LogHandler. PR #1034 fixed this for
-   `geode_product.petri_audit.*` by setting that namespace to INFO at
+   `evals.petri.*` by setting that namespace to INFO at
    import time — but only for that one namespace, and the fix relies
    on inspect_ai's transcript-capture path still being healthy
    (which Defect B-3's evidence showed was not always the case).
@@ -258,7 +258,7 @@ without try/except guards.
 ## Cross-layer flow (one audit, end-to-end)
 
 ```
-geode audit --live
+geode-eval audit --live
   │
   ├─ inspect eval (subprocess) ──► writes logs/<...>.eval (Layer 1, worktree-local)
   │
@@ -323,8 +323,8 @@ mutated by GEODE.
 - `core/audit/manifest.py` — Layer 1 → Layer 3 extractor
 - `core/llm/token_tracker.py` — Layer 2 producer (per-call)
 - `core/llm/usage_store.py` — Layer 2 storage
-- `geode_product/petri_audit/runner.py:_maybe_auto_archive` — orchestration seam
-- `geode_product/petri_audit/eval_archive.py:archive_eval` — Layer 1 copy + YAML
+- `evals/petri/runner.py:_maybe_auto_archive` — orchestration seam
+- `evals/petri/eval_archive.py:archive_eval` — Layer 1 copy + YAML
 - `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-11-petri-observability-audit.md` — ground-truth report
 - `docs/architecture/observability-report.md` — older system-wide inventory
 - inspect_ai source: `.venv/lib/python3.12/site-packages/inspect_ai/`

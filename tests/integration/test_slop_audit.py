@@ -38,7 +38,8 @@ def slop_audit() -> ModuleType:
 def test_scan_roots_cover_every_production_package(slop_audit: ModuleType) -> None:
     assert slop_audit.SCAN_ROOTS == (
         "core/",
-        "geode_product/",
+        "evals/",
+        "evolve/",
         "scripts/",
     )
 

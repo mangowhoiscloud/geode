@@ -29,7 +29,7 @@ def test_train_session_index_merges_metrics_without_clobbering_identity(
 ) -> None:
     """The product summary owns identity while SessionMetrics contributes counters."""
     import core.observability
-    from geode_product.self_improving import train
+    from evolve.scaffold_search import train
 
     class _Metrics:
         def to_session_row(self) -> dict[str, object]:
@@ -160,7 +160,7 @@ def test_every_entry_point_uses_switchboard() -> None:
         "core/cli/typer_serve.py": '"serve"',
         "core/mcp_server.py": '"mcp"',
         "core/agent/worker.py": '"worker"',
-        "geode_product/self_improving/campaign.py": '"campaign"',
+        "evolve/scaffold_search/campaign.py": '"campaign"',
     }
     for rel_path, mode_literal in entry_points.items():
         src = (REPO_ROOT / rel_path).read_text(encoding="utf-8")

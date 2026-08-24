@@ -306,11 +306,11 @@ def test_producer_string_payload_normalized_by_reader(
 ) -> None:
     """``write_policy("tool_policy", {...string...})`` → reader 가 정규화.
 
-    Producer ``geode_product/self_improving/loop/mutate/policies.py:write_policy`` 는
+    Producer ``evolve/scaffold_search/loop/mutate/policies.py:write_policy`` 는
     ``dict[str, str]`` 만 직렬화한다 (mutation 의 ``new_value`` 가 string).
     Reader 가 그 string payload (comma/newline-separated) 를 list 로
     정규화해야 read-write parity 가 성립."""
-    from geode_product.self_improving.loop.mutate import policies as policies_mod
+    from evolve.scaffold_search.loop.mutate import policies as policies_mod
 
     monkeypatch.setattr(policies_mod, "policy_path", lambda kind: isolated_sot)
     # Producer 처럼 dict[str, str] 로 직렬화 — mutation 시뮬레이션
@@ -327,7 +327,7 @@ def test_producer_newline_separated_payload(
     isolated_sot: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Newline-separated string payload 도 list 로 정규화."""
-    from geode_product.self_improving.loop.mutate import policies as policies_mod
+    from evolve.scaffold_search.loop.mutate import policies as policies_mod
 
     monkeypatch.setattr(policies_mod, "policy_path", lambda kind: isolated_sot)
     policies_mod.write_policy("tool_policy", {"allowed_tools": "bash\nread\ngrep"})
@@ -343,7 +343,7 @@ def test_producer_reader_e2e_filters_get_agentic_tools(
     """End-to-end — producer (string payload) → reader → get_agentic_tools.
 
     이게 통과해야 mutation 이 실제 fitness 압력을 만들 수 있음."""
-    from geode_product.self_improving.loop.mutate import policies as policies_mod
+    from evolve.scaffold_search.loop.mutate import policies as policies_mod
 
     monkeypatch.setattr(policies_mod, "policy_path", lambda kind: isolated_sot)
     base = get_agentic_tools(policy_sources=_bundle(isolated_sot))
@@ -367,7 +367,7 @@ def test_producer_reader_e2e_filters_get_agentic_tools(
 
 
 def test_product_bundle_owns_tool_policy_source() -> None:
-    from geode_product.self_improving.policy_sources import build_policy_source_bundle
+    from core.config.runtime_policy_sources import build_policy_source_bundle
 
     source = build_policy_source_bundle()["tool_policy"]
     assert source.packaged_default is not None

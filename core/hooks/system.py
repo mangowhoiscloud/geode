@@ -240,7 +240,7 @@ class RuntimeEvent(Enum):
 
     # Self-improving runner system-prompt source (PR-FALLBACK-HOOK-CONTROL,
     # 2026-06-09; demoted to plain notify in PR-HOOK-TAXONOMY D4). Fired by
-    # ``geode_product.self_improving.loop.mutate.runner._build_system_prompt`` when
+    # ``evolve.scaffold_search.loop.mutate.runner._build_system_prompt`` when
     # ``program.md`` is unreadable, then the runner fails loud —
     # program.md ships with the package, so a missing file is a packaging
     # bug, not a routine fallback. The former ``trigger_with_result``

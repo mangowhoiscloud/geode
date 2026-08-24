@@ -89,7 +89,7 @@ _RATCHET_SITES = (
         "_settings.temperature_reflection",
     ),
     (
-        Path("geode_product/self_improving/loop/mutate/runner.py"),
+        Path("evolve/scaffold_search/loop/mutate/runner.py"),
         "_settings.temperature_self_improving_mutation",
     ),
 )

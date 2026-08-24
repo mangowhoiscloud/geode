@@ -78,7 +78,7 @@ runs            count
 
 ## 8. Empty state
 
-`<em>No runs published yet. Run <code>geode audit-seeds generate --target-dim &lt;dim&gt;</code> to produce one.</em>`
+`<em>No runs published yet. Run <code>geode-eval audit-seeds generate --target-dim &lt;dim&gt;</code> to produce one.</em>`
 
 ## 9. Verification checklist
 

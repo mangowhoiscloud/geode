@@ -49,6 +49,14 @@ functional change.
 
 ### Architecture
 
+- **Runtime, evaluation, and evolution now have explicit package owners.**
+  `core` owns the GEODE runtime and the `geode`/`geode-mcp` operator surfaces,
+  `evals` owns audits and benchmarks under `geode-eval`, and `evolve` owns
+  scaffold search and Crucible under `geode-evolve`. Import contracts enforce
+  the one-way `evolve -> evals -> core` dependency graph; the retired
+  `geode_product`, `plugins`, and `core.self_improving` namespaces have no
+  compatibility aliases.
+
 - **Architecture performance now has independent regression budgets.** A
   no-network CI probe measures cold import, runtime lifecycle, first turn,
   tool-plan build and refresh, dispatch, MCP first and warm calls, event
@@ -97,7 +105,7 @@ functional change.
 ### Fixed
 
 - **Audit-identified compatibility paths now keep one implementation owner.**
-  The slop audit scans `geode_product`, both public web-search names share one
+  The slop audit scans all three production roots, both public web-search names share one
   routed dispatch/error projection, Crucible identities share canonical JSON
   hashing and exact scalar validators, and the interactive self-improving
   preflight now states that paid measurement is skipped.
@@ -180,17 +188,13 @@ functional change.
   execution path exists.
 
 - **Removed duplicate product compatibility packages.** The forwarding-only
-  `plugins.*` package and five `core.self_improving` Python launchers are gone;
-  callers, package data, CLIs, docs, and tests use the existing
-  `geode_product.*` implementations directly. Ten tracked self-improving state
-  files move through a byte-preserving `git mv` to
-  `geode_product/self_improving/state/`; the eight data/marker files retain
-  their bytes and the two README files name the new path. Package/install gates
-  reject any remaining `core/self_improving` path. The wrapper-only Tau2 script
-  was also removed in favor of the canonical module entrypoint. Development
-  scaffolds, Claude aliases, runtime skills, external evaluator entrypoints,
-  durable runtime homes, and historical release evidence remain in their
-  distinct roles.
+  `plugins.*` package, five `core.self_improving` launchers, and the mixed
+  `geode_product` shell are gone. Their canonical implementations now live in
+  `core`, `evals`, or `evolve` without aliases. Ten tracked scaffold-search
+  state files move through byte-preserving `git mv` operations to
+  `evolve/scaffold_search/state/`; package and installed-wheel gates reject all
+  retired roots. Development scaffolds, runtime skills, durable user-data
+  homes, and historical release evidence remain in their distinct roles.
 
 - **Verification recovery now has one persistence authority.** Removed the
   write-only `SessionManager` verify-state mirror; checkpoint loop guards remain

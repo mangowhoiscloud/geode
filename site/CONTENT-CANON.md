@@ -26,9 +26,10 @@ CLI와 메신저(Slack, Discord, Telegram)에서 수행한다. 자기개선 루�
 → margin 게이트 → 승격 또는 되돌림 (옵티마이저 = git champion chain)
 ```
 
-근거 코드: `geode_product/self_improving/train.py`(루프 드라이버),
+근거 코드: `evolve/scaffold_search/train.py`(루프 드라이버),
 `measure.py` / `fitness.py` / `gate.py` / `ledger.py`(장비),
-`geode_product/self_improving/loop/{mutate,observe,inject}`(Mode B 런타임).
+`evolve/scaffold_search/loop/{mutate,observe}`와
+`core/agent/policy_injection/`(Mode B 런타임 주입).
 
 | 구분 | 공식 어휘 | 금지 어휘 |
 |------|----------|----------|
@@ -61,8 +62,9 @@ RUNTIME         ToolRegistry, MCP Registry, Skills, Memory(5-Tier), Reports
 MODEL           ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider routing)
 ```
 
-엔트리 포인트는 둘: `geode`(Typer CLI) + `geode-mcp`(1급 MCP 서버,
-`core/mcp_server.py`). 문서가 CLI만 언급하면 불완전하다.
+엔트리 포인트는 런타임 `geode`와 `geode-mcp`, 측정 `geode-eval`, 탐색
+`geode-evolve`로 분리된다. `geode-mcp`의 구현은 `core/mcp_server.py`다.
+문서는 기능을 소유한 진입점을 함께 명시한다.
 
 ## 4. 근거 규칙 (코드와의 일치)
 

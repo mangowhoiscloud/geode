@@ -252,7 +252,7 @@ def test_apply_respects_max_entries_cap() -> None:
 
 
 def test_product_source_candidates_present() -> None:
-    from geode_product.self_improving.policy_sources import build_policy_source_bundle
+    from core.config.runtime_policy_sources import build_policy_source_bundle
 
     sources = build_policy_source_bundle()["few_shot_pool"]
     assert sources.packaged_default is not None
@@ -265,7 +265,7 @@ def test_product_source_candidates_present() -> None:
 
 def test_train_py_sets_few_shot_pool_env_pair() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    src = (repo_root / "geode_product/self_improving/measure.py").read_text(encoding="utf-8")
+    src = (repo_root / "evolve/scaffold_search/measure.py").read_text(encoding="utf-8")
     assert "GEODE_FEW_SHOT_POOL_OVERRIDE" in src
     assert "GEODE_FEW_SHOT_POOL_STRICT" in src
     assert "AUTORESEARCH_FEW_SHOT_POOL_PATH" in src
@@ -273,8 +273,6 @@ def test_train_py_sets_few_shot_pool_env_pair() -> None:
 
 def test_few_shot_pool_jsonl_referenced_in_inference_path() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    composition = (repo_root / "geode_product/self_improving/policy_sources.py").read_text(
-        encoding="utf-8"
-    )
+    composition = (repo_root / "core/config/runtime_policy_sources.py").read_text(encoding="utf-8")
     assert '"few_shot_pool"' in composition
     assert "AUTORESEARCH_FEW_SHOT_POOL_PATH" in composition

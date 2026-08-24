@@ -1,0 +1,760 @@
+"""Seed-pipeline picker — role auth resolver + subscription notice.
+
+For each enabled role in the seed-generation manifest, the picker resolves
+the concrete ``(model, provider, source)`` binding the role will use at
+runtime, factoring in:
+
+1. The role's ``default_model`` from
+   ``evals/seed_generation/seed_generation.plugin.toml``.
+2. The model's provider, inferred from a prefix table (claude-*
+   → anthropic, gpt-* → openai, glm-* → zhipuai).
+3. The Petri source table's ``default`` (typically ``auto``) for that
+   provider.
+4. The Codex OAuth probe when the OpenAI source is ``auto``.
+5. The user override at ``~/.geode/seed_generation.toml`` (per-role
+   ``source = "<concrete>"`` lines), which wins over the auto-resolve.
+
+The built-in paths spanned by the picker are:
+
+============== ====================== ===================
+provider         subscription source    PAYG source
+============== ====================== ===================
+anthropic      —                      ``api_key``
+openai         ``openai-codex``       ``api_key``
+============== ====================== ===================
+
+ToS notice
+==========
+
+Subscription-backed paths (currently ``openai-codex``) may draw from
+subscription quota or usage credits. The picker surfaces a one-time warning
+when any role resolves to a subscription path. The notice is
+emitted once per process via :func:`print_tos_notice` (idempotent under a
+module-level flag); CLI front-ends can suppress with ``quiet=True``.
+
+Diversity validator
+===================
+
+The :class:`JudgePanelSpec` already enforces ``required_diversity_providers``
+at manifest load. The picker adds a *runtime* check
+(:func:`validate_runtime_diversity`) that the *resolved* voter sources
+remain on ≥ N distinct ``(provider, source)`` pairs after OAuth probing
+and user overrides — a user override that collapses all judges onto one
+source would defeat the bias guarantee even though the
+manifest-time providers check still passes (all voters claim
+``provider=anthropic`` but two of them now share an identical source).
+
+P1-P7 prevention checklist application:
+
+- **P4 Environment Anchor**: ``GLOBAL_SEED_PIPELINE_TOML`` is the single
+  filesystem anchor (``core/paths.py``), NOT a cwd-relative or
+  module-relative path. Mirrors :data:`core.paths.GLOBAL_PETRI_TOML`.
+"""
+
+from __future__ import annotations
+
+import logging
+import sys
+import tomllib
+from collections.abc import Iterable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import IO
+
+from core.paths import GLOBAL_CONFIG_TOML, GLOBAL_SEED_PIPELINE_TOML
+
+from evals.seed_generation.manifest import (
+    SeedGenerationManifest,
+    SeedRoleSpec,
+    VoterSpec,
+    load_manifest,
+)
+
+log = logging.getLogger(__name__)
+
+__all__ = [
+    "SUBSCRIPTION_SOURCES",
+    "PickerResult",
+    "RoleBinding",
+    "VoterBinding",
+    "binding_to_adapter_source",
+    "infer_provider",
+    "load_user_overrides",
+    "pick_bindings",
+    "print_tos_notice",
+    "reset_tos_notice",
+    "resolve_binding_to_adapter",
+    "validate_runtime_diversity",
+]
+
+
+SUBSCRIPTION_SOURCES = frozenset({"openai-codex"})
+
+
+_PROVIDER_PREFIX_MAP: tuple[tuple[str, str], ...] = (
+    ("claude-", "anthropic"),
+    ("gpt-", "openai"),
+    ("glm-", "zhipuai"),
+)
+
+
+_PROVIDER_DEFAULT_OAUTH: dict[str, str] = {
+    "openai": "openai-codex",
+}
+
+_PROVIDER_DEFAULT_PAYG: dict[str, str] = {
+    "anthropic": "api_key",
+    "openai": "api_key",
+    "zhipuai": "api_key",
+}
+
+
+# Module-level flag so :func:`print_tos_notice` is idempotent across
+# repeated picker calls in the same process (e.g. CLI smoke + CLI run).
+_TOS_NOTICE_SHOWN = False
+
+
+@dataclass(frozen=True)
+class RoleBinding:
+    """Resolved auth binding for one seed-generation role.
+
+    All fields are concrete after :func:`pick_bindings` returns — no
+    ``auto`` sentinel, no ``None`` source. Every role goes through the
+    completion path; CSP-10 dropped the pre-CSP-8 ``kind`` discriminator
+    once Proximity reverted to LLM clustering.
+    """
+
+    role: str
+    model: str
+    provider: str
+    source: str
+
+
+@dataclass(frozen=True)
+class VoterBinding:
+    """Resolved auth binding for one judge-panel voter.
+
+    ``effort`` is the per-voter ``reasoning.effort`` override (Sprint G/H
+    operator escape-hatch, 2026-05-26). Empty string lets the caller
+    (ranker / mutation_eval) apply its own default; operators set this
+    via ``~/.geode/config.toml`` voter entries when the default proves
+    wrong for a specific model.
+    """
+
+    model: str
+    provider: str
+    source: str
+    effort: str = ""
+
+
+@dataclass(frozen=True)
+class PickerResult:
+    """Top-level picker output — per-role bindings + voter panel.
+
+    The orchestrator (S6 Ranker, S11 CLI) reads
+    :attr:`bindings` to look up each role's binding and :attr:`voters`
+    for the 3-judge panel's resolved auth. :attr:`subscription_paths_in_use`
+    lists the distinct subscription sources currently routed through so
+    :func:`print_tos_notice` can render the right warning lines.
+    """
+
+    bindings: dict[str, RoleBinding]
+    voters: list[VoterBinding]
+    diversity_providers: int
+    subscription_paths_in_use: frozenset[str]
+
+
+def infer_provider(model: str) -> str:
+    """Return the provider for ``model`` (best-effort by prefix).
+
+    Raises ``ValueError`` for unrecognised prefixes — better to fail
+    loudly at picker time than to bind to the wrong adapter.
+    """
+    for prefix, provider in _PROVIDER_PREFIX_MAP:
+        if model.startswith(prefix):
+            return provider
+    raise ValueError(
+        f"infer_provider: model {model!r} did not match any known prefix "
+        f"({[p for p, _ in _PROVIDER_PREFIX_MAP]})"
+    )
+
+
+_LEGACY_OVERRIDE_WARNED = False
+
+
+def load_user_overrides(
+    path: Path | str | None = None,
+) -> dict[str, dict[str, str]]:
+    """Load per-role overrides — config.toml first, legacy file as fallback.
+
+    CSP-15 (v0.99.39) — config SoT consolidation. The canonical surface is
+    ``~/.geode/config.toml`` with the following schema, mirroring the
+    Session 66 ``[self_improving_loop.petri.<role>]`` consolidation:
+
+    .. code-block:: toml
+
+       [seed_generation.role.generator]
+       source = "payg"
+
+       [seed_generation.role.pilot]
+       source = "api_key"
+       model  = "claude-opus-4-7"
+
+    The legacy ``~/.geode/seed_generation.toml`` schema (per-role top-level
+    table) is still read when ``[seed_generation.role.*]`` is absent from
+    ``config.toml``. The first time the legacy fallback is used, a one-time
+    warning is logged with the migration command. Removal target: v1.0.0.
+
+    The ``source`` value accepts ``openai-codex`` / ``api_key`` and adapter
+    category names (``payg`` / ``subscription`` / ``adapter``) —
+    see :func:`binding_to_adapter_source`.
+
+    Returns ``{role: {key: value, …}}``. Empty dict when neither file holds
+    overrides (the surface is OPTIONAL).
+    """
+    if path is not None:
+        return _load_overrides_from_file(Path(path))
+
+    # 1. Canonical SoT: ~/.geode/config.toml [seed_generation.role.*]
+    canonical_overrides = _load_config_toml_seed_overrides(GLOBAL_CONFIG_TOML)
+    if canonical_overrides:
+        return canonical_overrides
+
+    # 2. Legacy fallback: ~/.geode/seed_generation.toml
+    legacy_overrides = _load_overrides_from_file(GLOBAL_SEED_PIPELINE_TOML)
+    if legacy_overrides:
+        global _LEGACY_OVERRIDE_WARNED
+        if not _LEGACY_OVERRIDE_WARNED:
+            log.warning(
+                "seed-generation picker: reading legacy %s. Migrate per-role "
+                "overrides to ~/.geode/config.toml under [seed_generation.role.<role>] "
+                "(see docs/plans/2026-05-23-llm-adapter-abstraction.md). "
+                "Removal is deferred until operators have migrated — the "
+                "original 'removed in v1.0.0' pledge lapsed unmet (2026-07-29 "
+                "audit); it will not be dropped while this fallback is the "
+                "only source of a live configuration.",
+                GLOBAL_SEED_PIPELINE_TOML,
+            )
+            _LEGACY_OVERRIDE_WARNED = True
+    return legacy_overrides
+
+
+def _load_overrides_from_file(target: Path) -> dict[str, dict[str, str]]:
+    """Parse a flat ``[<role>]`` override TOML — legacy seed_generation.toml shape."""
+    if not target.is_file():
+        return {}
+    try:
+        raw = tomllib.loads(target.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        log.warning(
+            "seed-generation picker: %s is not valid TOML (%s) — ignoring overrides",
+            target,
+            exc,
+        )
+        return {}
+    out: dict[str, dict[str, str]] = {}
+    for role, body in raw.items():
+        if not isinstance(body, dict):
+            log.warning(
+                "seed-generation picker: override entry %r is not a table — ignoring",
+                role,
+            )
+            continue
+        out[role] = {k: str(v) for k, v in body.items() if isinstance(v, (str, int, float))}
+    return out
+
+
+def _load_config_toml_seed_overrides(target: Path) -> dict[str, dict[str, str]]:
+    """Read ``[seed_generation.role.*]`` from the unified config.toml SoT.
+
+    Returns an empty dict when the file is missing, malformed, or carries no
+    ``[seed_generation.role.*]`` table — caller falls back to legacy path.
+    """
+    if not target.is_file():
+        return {}
+    try:
+        raw = tomllib.loads(target.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        log.warning(
+            "seed-generation picker: %s is not valid TOML (%s) — ignoring overrides",
+            target,
+            exc,
+        )
+        return {}
+    seed_section = raw.get("seed_generation")
+    if not isinstance(seed_section, dict):
+        return {}
+    role_section = seed_section.get("role")
+    if not isinstance(role_section, dict):
+        return {}
+    out: dict[str, dict[str, str]] = {}
+    for role, body in role_section.items():
+        if not isinstance(body, dict):
+            log.warning(
+                "seed-generation picker: config.toml entry [seed_generation.role.%s] "
+                "is not a table — ignoring",
+                role,
+            )
+            continue
+        out[role] = {k: str(v) for k, v in body.items() if isinstance(v, (str, int, float))}
+    return out
+
+
+def _load_config_toml_voter_overrides(target: Path) -> list[VoterSpec] | None:
+    """Read ``[[seed_generation.judge_panel.voters]]`` from
+    ``~/.geode/config.toml`` so operators can override the whole voter
+    panel (PR-VOTER-EFFORT-OVERRIDE-HATCH, Sprint G/H follow-up,
+    2026-05-26). Returns ``None`` when the file is missing, malformed,
+    or carries no voter array — caller falls back to the bundled
+    manifest. Returns an empty list when the operator deliberately
+    wants to leave the panel empty (caller will fail the diversity
+    gate, surfacing the misconfiguration clearly).
+
+    The operator config replaces the WHOLE panel rather than patching
+    individual voters by index — there is no stable unique identifier
+    for a voter (``(provider, source)`` can repeat), so a partial
+    override would need an index-based shape that's fragile against
+    manifest evolution. A full-panel override is simpler and matches
+    the role-override semantics already in use.
+    """
+    if not target.is_file():
+        return None
+    try:
+        raw = tomllib.loads(target.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        log.warning(
+            "seed-generation picker: %s is not valid TOML (%s) — ignoring voter overrides",
+            target,
+            exc,
+        )
+        return None
+    seed_section = raw.get("seed_generation")
+    if not isinstance(seed_section, dict):
+        return None
+    judge_section = seed_section.get("judge_panel")
+    if not isinstance(judge_section, dict):
+        return None
+    voters_raw = judge_section.get("voters")
+    if voters_raw is None:
+        return None
+    if not isinstance(voters_raw, list):
+        log.warning(
+            "seed-generation picker: config.toml [[seed_generation.judge_panel.voters]] "
+            "is not a TOML array — ignoring voter overrides"
+        )
+        return None
+    out: list[VoterSpec] = []
+    for entry in voters_raw:
+        if not isinstance(entry, dict):
+            log.warning(
+                "seed-generation picker: config.toml voter entry %r is not a table — ignoring",
+                entry,
+            )
+            continue
+        try:
+            out.append(VoterSpec.model_validate(entry))
+        except (ValueError, TypeError) as exc:
+            log.warning(
+                "seed-generation picker: config.toml voter entry %r is invalid (%s) — ignoring",
+                entry,
+                exc,
+            )
+            continue
+    return out
+
+
+# Picker source → adapter source translation. The picker emits source
+# strings (``openai-codex`` / ``api_key``) for backwards
+# compatibility with existing overrides; the new adapter Protocol uses
+# ``payg`` / ``subscription`` / ``adapter`` (paperclip-aligned). The mapping
+# below is the single SoT for the translation.
+_PICKER_SOURCE_TO_ADAPTER_SOURCE: dict[str, str] = {
+    "api_key": "payg",
+    "payg": "payg",
+    "openai-codex": "subscription",  # ChatGPT OAuth endpoint (NOT the codex binary)
+    "subscription": "subscription",
+    "adapter": "adapter",
+}
+
+
+def binding_to_adapter_source(picker_source: str) -> str:
+    """Translate the picker's legacy source name → adapter Protocol source.
+
+    Picker emits one of ``api_key`` / ``openai-codex``
+    (historical). The new :class:`core.llm.adapters.LLMAdapter` uses
+    ``payg`` / ``subscription`` / ``adapter``. This helper bridges the gap
+    so callers can resolve a registered adapter from a :class:`RoleBinding`.
+
+    Raises :class:`ValueError` for unknown source strings.
+    """
+    out = _PICKER_SOURCE_TO_ADAPTER_SOURCE.get(picker_source)
+    if out is None:
+        raise ValueError(
+            f"binding_to_adapter_source: unknown picker source {picker_source!r}. "
+            f"Known: {sorted(_PICKER_SOURCE_TO_ADAPTER_SOURCE)}"
+        )
+    return out
+
+
+def resolve_binding_to_adapter(binding: RoleBinding) -> object:
+    """Resolve a :class:`RoleBinding` to a concrete :class:`LLMAdapter`.
+
+    Combines :func:`binding_to_adapter_source` with the adapter registry's
+    ``resolve_for(provider, source)``. The return type is ``object`` to avoid
+    a hard module-level import of :class:`LLMAdapter` (keeps picker import
+    lightweight); callers cast via ``isinstance(...)`` or trust the duck type.
+
+    Raises :class:`core.llm.adapters.AdapterNotFoundError` when no adapter
+    matches the binding (e.g. the binding references a provider × source pair
+    the registry doesn't carry — opportunity for an external plugin).
+    """
+    from core.llm.adapters import resolve_for
+
+    adapter_source = binding_to_adapter_source(binding.source)
+    return resolve_for(binding.provider, adapter_source)
+
+
+def _probe_oauth(provider: str) -> bool:
+    """Lazy subscription probe — imports a provider helper only when needed."""
+    if provider == "openai":
+        from evals.petri.codex_provider import is_codex_oauth_available
+
+        return is_codex_oauth_available()
+    return False
+
+
+def _resolve_source(
+    provider: str,
+    *,
+    hint: str | None = None,
+    auto_probe: bool = True,
+) -> str:
+    """Resolve a concrete source for ``provider``.
+
+    - ``hint`` may be one of: a concrete source (returned as-is after
+      provider-allowance check via the caller); ``"auto"`` (probe OAuth →
+      fall back to api_key); or ``None`` (equivalent to ``"auto"``).
+    - ``auto_probe=False`` skips the OAuth probe (used by tests and by
+      pre-flight dry-runs that don't want to invoke a provider CLI).
+    """
+    if hint == "claude-cli":
+        from core.config.credential_source import CLAUDE_CLI_RETIRED_MESSAGE
+
+        raise RuntimeError(CLAUDE_CLI_RETIRED_MESSAGE)
+    if hint and hint != "auto":
+        return hint
+    if auto_probe and provider in _PROVIDER_DEFAULT_OAUTH:
+        try:
+            if _probe_oauth(provider):
+                return _PROVIDER_DEFAULT_OAUTH[provider]
+        except Exception as exc:  # pragma: no cover - defensive
+            log.debug(
+                "seed-generation picker: OAuth probe for provider=%r raised %s — "
+                "falling back to PAYG",
+                provider,
+                exc,
+            )
+    return _PROVIDER_DEFAULT_PAYG.get(provider, "api_key")
+
+
+def pick_bindings(
+    manifest: SeedGenerationManifest | None = None,
+    *,
+    overrides: dict[str, dict[str, str]] | None = None,
+    auto_probe: bool = True,
+    enforce_diversity: bool = True,
+) -> PickerResult:
+    """Resolve concrete bindings for every enabled role + judge voter.
+
+    Parameters
+    ----------
+    manifest
+        Loaded :class:`SeedGenerationManifest`. Defaults to
+        :func:`load_manifest`'s result (with its lru_cache).
+    overrides
+        Per-role override map as returned by :func:`load_user_overrides`.
+        Defaults to reading :data:`GLOBAL_SEED_PIPELINE_TOML`. Pass
+        ``{}`` explicitly to ignore the override file (used by tests).
+    auto_probe
+        When False, skip the OAuth credential probe and resolve any
+        ``auto`` to the PAYG source. Used by pre-flight dry-runs.
+    enforce_diversity
+        When True (default), call :func:`validate_runtime_diversity`
+        on the resolved panel before returning so a user override that
+        collapses the judges cannot silently make it to S6. Tests that
+        construct deliberately-collapsed fixtures pass ``False``.
+
+    Override validation
+    -------------------
+    For each role, an override ``model`` field is dropped (with a
+    WARNING) when it is not in the role's ``allowed_models`` —
+    falling back to ``default_model``. Override ``source`` values are
+    cross-checked against Petri's source table and dropped (with a
+    WARNING) when they are not in ``petri.source.<provider>.allowed``,
+    falling back to the resolved auto / PAYG source. This keeps a
+    typo or unsupported pairing from producing a bad ``RoleBinding``
+    that the S6 Ranker would then dispatch against the wrong adapter.
+    """
+    if manifest is None:
+        manifest = load_manifest()
+    if overrides is None:
+        overrides = load_user_overrides()
+    petri_sources = _load_petri_sources()
+
+    bindings: dict[str, RoleBinding] = {}
+    subscription_paths: set[str] = set()
+    for role_name in manifest.enabled_roles:
+        spec = manifest.get_role(role_name)
+        override = overrides.get(role_name, {})
+        model = _validate_override_model(role_name, override.get("model"), spec)
+        try:
+            provider = infer_provider(model)
+        except ValueError:
+            log.warning(
+                "seed-generation picker: role=%r model=%r — provider inference failed, "
+                "defaulting to anthropic",
+                role_name,
+                model,
+            )
+            provider = "anthropic"
+        source_hint = _validate_override_source(
+            role_name, override.get("source"), provider, petri_sources
+        )
+        source = _resolve_source(provider, hint=source_hint, auto_probe=auto_probe)
+        bindings[role_name] = RoleBinding(
+            role=role_name,
+            model=model,
+            provider=provider,
+            source=source,
+        )
+        if source in SUBSCRIPTION_SOURCES:
+            subscription_paths.add(source)
+
+    # PR-VOTER-EFFORT-OVERRIDE-HATCH (Sprint G/H follow-up,
+    # 2026-05-26) — when the operator has supplied a
+    # ``[[seed_generation.judge_panel.voters]]`` array in
+    # ``~/.geode/config.toml`` it replaces the bundled manifest's
+    # voter list entirely. Empty / missing → bundled manifest stays.
+    voter_overrides = _load_config_toml_voter_overrides(GLOBAL_CONFIG_TOML)
+    voter_specs = voter_overrides if voter_overrides is not None else manifest.judge_panel.voters
+    voters: list[VoterBinding] = []
+    for voter in voter_specs:
+        resolved_source = _resolve_voter_source(voter, auto_probe=auto_probe)
+        voters.append(
+            VoterBinding(
+                model=voter.model,
+                provider=voter.provider,
+                source=resolved_source,
+                effort=voter.effort,
+            )
+        )
+        if resolved_source in SUBSCRIPTION_SOURCES:
+            subscription_paths.add(resolved_source)
+
+    diversity_providers = len({v.provider for v in voters})
+
+    result = PickerResult(
+        bindings=bindings,
+        voters=voters,
+        diversity_providers=diversity_providers,
+        subscription_paths_in_use=frozenset(subscription_paths),
+    )
+    if enforce_diversity:
+        validate_runtime_diversity(
+            result,
+            required_provider_count=manifest.judge_panel.required_diversity_providers,
+        )
+    return result
+
+
+def _validate_override_model(role_name: str, override_model: str | None, spec: SeedRoleSpec) -> str:
+    """Return a model name, replacing an out-of-allowlist override with the default."""
+    default_model = spec.default_model
+    allowed = spec.allowed_models
+    if override_model is None:
+        return default_model
+    if override_model not in allowed:
+        log.warning(
+            "seed-generation picker: role=%r override model=%r not in allowed_models=%s "
+            "— falling back to default %r",
+            role_name,
+            override_model,
+            allowed,
+            default_model,
+        )
+        return default_model
+    return override_model
+
+
+def _load_petri_sources() -> dict[str, set[str]]:
+    """Build ``{provider: allowed_sources}`` from the Petri manifest.
+
+    Loaded lazily and tolerantly — if the Petri manifest is unavailable
+    in a test fixture, override-source validation falls back to a
+    permissive mode (logs WARNING but does not block). The seed-generation
+    manifest's cross-validator already rejects voter rows with bad
+    providers/sources at load time, so override validation is the second
+    line of defence.
+    """
+    try:
+        from evals.petri.manifest import load_manifest as load_petri_manifest
+
+        petri = load_petri_manifest()
+    except Exception as exc:
+        log.debug(
+            "seed-generation picker: petri manifest unavailable (%s) — "
+            "skipping override-source allowlist check",
+            exc,
+        )
+        return {}
+    out: dict[str, set[str]] = {}
+    for provider, spec in getattr(petri, "sources", {}).items():
+        out[provider] = set(getattr(spec, "allowed", []))
+    return out
+
+
+def _validate_override_source(
+    role_name: str,
+    override_source: str | None,
+    provider: str,
+    petri_sources: dict[str, set[str]],
+) -> str | None:
+    """Return an override source if allowed, else None (caller will auto-resolve).
+
+    Allows ``auto`` because that's an explicit sentinel handled by
+    :func:`_resolve_source`. A blank or invalid override falls through
+    to None so the OAuth/PAYG resolver picks a safe default.
+    """
+    if override_source is None:
+        return None
+    if override_source == "claude-cli":
+        return override_source
+    if override_source == "auto":
+        return "auto"
+    allowed = petri_sources.get(provider)
+    if allowed and override_source not in allowed:
+        log.warning(
+            "seed-generation picker: role=%r override source=%r not in "
+            "petri.source.%s.allowed=%s — falling back to auto-resolve",
+            role_name,
+            override_source,
+            provider,
+            sorted(allowed),
+        )
+        return None
+    return override_source
+
+
+def _resolve_voter_source(voter: VoterSpec, *, auto_probe: bool) -> str:
+    """Voter sources are concrete-by-construction (``auto`` is rejected
+    at manifest load), but call through :func:`_resolve_source` so a
+    future relaxation of that rule transparently picks up OAuth probing.
+    """
+    return _resolve_source(voter.provider, hint=voter.source, auto_probe=auto_probe)
+
+
+def print_tos_notice(
+    result: PickerResult,
+    *,
+    file: IO[str] | None = None,
+    quiet: bool = False,
+    force: bool = False,
+) -> None:
+    """Render the ToS notice when any subscription source is in use.
+
+    Idempotent within a process — call from CLI startup. Pass
+    ``force=True`` to override the once-per-process flag (tests).
+    """
+    global _TOS_NOTICE_SHOWN
+    if quiet:
+        return
+    if not result.subscription_paths_in_use:
+        return
+    if _TOS_NOTICE_SHOWN and not force:
+        return
+    out = file if file is not None else sys.stderr
+    paths_in_use = ", ".join(sorted(result.subscription_paths_in_use))
+    out.write(
+        "\n"
+        "─── seed-generation ToS notice ─────────────────────────────────────\n"
+        f"Subscription-backed auth path(s) in use: {paths_in_use}\n"
+        "These paths may charge the run against subscription quota or usage credits.\n"
+        "Subscription use remains subject to the provider's terms.\n"
+        "  - OpenAI: https://openai.com/policies/usage-policies\n"
+        "Switch a role to PAYG via ~/.geode/seed_generation.toml\n"
+        "  e.g.  [ranker]\n"
+        '        source = "api_key"\n'
+        "──────────────────────────────────────────────────────────────────\n"
+    )
+    out.flush()
+    _TOS_NOTICE_SHOWN = True
+
+
+def reset_tos_notice() -> None:
+    """Reset the once-per-process flag — used by tests."""
+    global _TOS_NOTICE_SHOWN
+    _TOS_NOTICE_SHOWN = False
+
+
+def validate_runtime_diversity(
+    result: PickerResult,
+    *,
+    required_provider_count: int = 2,
+    required_voter_path_count: int = 2,
+) -> None:
+    """Verify the resolved bindings preserve panel diversity at runtime.
+
+    Two checks:
+
+    1. ``len({v.provider for v in result.voters}) >= required_provider_count``
+       — same gate as the manifest, re-run after override merge so a
+       user override that swaps a voter's provider is caught.
+    2. ``len({(v.provider, v.source) for v in result.voters}) >= required_voter_path_count``
+       — voters must span at least ``required_voter_path_count`` distinct
+       *paths* (provider + source pair), not just providers. A panel that
+       collapses all judges onto a single path
+       binding would pass check #1 in some pathological override flows
+       but fails this stricter runtime check.
+
+    Raises ``ValueError`` on either failure.
+    """
+    provider_set = {v.provider for v in result.voters}
+    if len(provider_set) < required_provider_count:
+        raise ValueError(
+            f"judge panel runtime diversity violated — resolved voters "
+            f"span providers {sorted(provider_set)} ({len(provider_set)} of "
+            f"required {required_provider_count})"
+        )
+    path_set = {(v.provider, v.source) for v in result.voters}
+    if len(path_set) < required_voter_path_count:
+        raise ValueError(
+            f"judge panel runtime path diversity violated — resolved voters "
+            f"collapsed onto {sorted(path_set)} ({len(path_set)} of required "
+            f"{required_voter_path_count}). Check user overrides at "
+            f"~/.geode/seed_generation.toml."
+        )
+
+
+def list_subscription_roles(result: PickerResult) -> list[str]:
+    """Return the list of role names currently bound to a subscription
+    source. Used by CLI front-ends to highlight specific roles in the
+    ToS notice / pre-flight summary.
+    """
+    return [
+        role for role, binding in result.bindings.items() if binding.source in SUBSCRIPTION_SOURCES
+    ]
+
+
+def iter_distinct_paths(result: PickerResult) -> Iterable[tuple[str, str]]:
+    """Iterate distinct ``(provider, source)`` pairs across roles + voters."""
+    seen: set[tuple[str, str]] = set()
+    for binding in result.bindings.values():
+        key = (binding.provider, binding.source)
+        if key not in seen:
+            seen.add(key)
+            yield key
+    for voter in result.voters:
+        key = (voter.provider, voter.source)
+        if key not in seen:
+            seen.add(key)
+            yield key

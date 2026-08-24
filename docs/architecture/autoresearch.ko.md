@@ -24,9 +24,9 @@
 
 | Karpathy 원본 | GEODE fork | Mutation? |
 |---|---|---|
-| `prepare.py` (data + tokenizer + eval, ~300 LOC) | `autoresearch/prepare.py` (seed pool + rubric sanity check) + `geode_product/petri_audit/` (audit pipeline) | NO (read-only) |
-| `train.py` (GPT model + optimizer, ~630 LOC) | `geode_product/self_improving/train.py` (`WRAPPER_PROMPT_SECTIONS` dict + audit invoke + fitness 추출, ~300 LOC) | **YES** (agent가 mutate) |
-| `program.md` (human-authored instruction) | `geode_product/self_improving/program.md` | NO (human only) |
+| `prepare.py` (data + tokenizer + eval, ~300 LOC) | `autoresearch/prepare.py` (seed pool + rubric sanity check) + `evals/petri/` (audit pipeline) | NO (read-only) |
+| `train.py` (GPT model + optimizer, ~630 LOC) | `evolve/scaffold_search/train.py` (`WRAPPER_PROMPT_SECTIONS` dict + audit invoke + fitness 추출, ~300 LOC) | **YES** (agent가 mutate) |
+| `program.md` (human-authored instruction) | `evolve/scaffold_search/program.md` | NO (human only) |
 | Loop (5분 train run → grep metric → keep/reset) | outer-loop agent(Claude Code / Codex)가 `program.md`의 instruction에 따라 LOOP FOREVER를 수행하고 `git commit` / `git reset --hard`로 ratchet한다 | (agent-driven) |
 
 핵심 design pattern(Karpathy 5원칙)을 보존한다:
@@ -44,14 +44,14 @@
 
 ## 3. 실제 디렉터리 구조
 
-PR-SELF-IMPROVING-UMBRELLA(2026-05-31)로 코드는 `geode_product/self_improving/`
+PR-SELF-IMPROVING-UMBRELLA(2026-05-31)로 코드는 `evolve/scaffold_search/`
 패키지에 안착했고, PR-STATE-SOT-RUNTIME-SPLIT(2026-06-14)로 데이터가
 lifecycle의 두 home으로 분리되었다. git-tracked SoT는 in-repo에, runtime
 scratch는 out-of-repo(`~/.geode`)에 둔다.
 
 ```
 geode/
-├── geode_product/self_improving/         ← 루프 코드 (Karpathy 3-file 패턴의 umbrella)
+├── evolve/scaffold_search/         ← 루프 코드 (Karpathy 3-file 패턴의 umbrella)
 │   ├── program.md               ← human-authored research direction (instruction)
 │   ├── prepare.py               ← seed pool + rubric sanity check (do not modify)
 │   ├── train.py                 ← mutation target (agent modifies WRAPPER_PROMPT_SECTIONS)
@@ -68,11 +68,11 @@ geode/
 │   ├── run.log, wrapper-override.json
 │   ├── campaign/{gen-0-snapshot/, runs/<id>.json}
 │   └── handoff/, seed_generation/<run_id>/
-├── geode_product/petri_audit/         ← inner-loop harness (Karpathy prepare 등가, 고정)
+├── evals/petri/         ← inner-loop harness (Karpathy prepare 등가, 고정)
 └── core/agent/system_prompt.py  ← `_load_wrapper_override` (active hook)
 ```
 
-`geode_product/self_improving/state/`는 `core/` 아래에 있어 자연히 git-tracked다
+`evolve/scaffold_search/state/`는 `core/` 아래에 있어 자연히 git-tracked다
 (negation dance가 필요 없다). runtime 경로는
 `core.paths.RUNTIME_ROOT`(`GEODE_STATE_ROOT`/`GEODE_HOME`으로 override)를
 따른다. 워커 격리 시에는 `GEODE_STATE_ROOT` 하나로 tracked와 runtime이
@@ -88,7 +88,7 @@ geode/
 
 ### Step 2 -- hypothesis 적용 (mutation)
 
-`geode_product/self_improving/train.py`의 `WRAPPER_PROMPT_SECTIONS` dict에서 한
+`evolve/scaffold_search/train.py`의 `WRAPPER_PROMPT_SECTIONS` dict에서 한
 섹션을 직접 hack한다. wording 변경, 추가, 삭제, 순서 변경 모두 fair
 game이다. self-improving-loop agent가 코드를 직접 편집한다(별도
 `hypothesis.py` 모듈 없음, Karpathy 원본 패턴과 동일).
@@ -101,16 +101,16 @@ game이다. self-improving-loop agent가 코드를 직접 편집한다(별도
 ### Step 4 -- inner-loop audit 실행
 
 ```bash
-uv run python geode_product/self_improving/train.py > ~/.geode/self-improving/run.log 2>&1
+uv run python evolve/scaffold_search/train.py > ~/.geode/self-improving/run.log 2>&1
 ```
 
 train.py가 내부적으로 수행하는 일:
 
 1. `WRAPPER_PROMPT_SECTIONS`를 `~/.geode/self-improving/wrapper-override.json`으로 dump한다.
-2. `GEODE_WRAPPER_OVERRIDE=<path>` env로 `geode audit` subprocess를 호출한다.
+2. `GEODE_WRAPPER_OVERRIDE=<path>` env로 `geode-eval audit` subprocess를 호출한다.
 3. subprocess 안에서 `core/agent/system_prompt.py:_load_wrapper_override`가
    이 dict를 AgenticLoop system prompt의 static wrapper로 inject한다.
-4. `geode_product/petri_audit/runner.py`가 `inspect eval inspect_petri/audit`
+4. `evals/petri/runner.py`가 `inspect eval inspect_petri/audit`
    subprocess를 호출한다 → 19 dim AlphaEval judge → `.eval` log를 archive.
 5. archive의 sample.scores를 dim_means + dim_stderr로 aggregate하여 stdout
    마지막 라인에 JSON으로 emit한다(Karpathy의 grep-friendly 패턴).
@@ -126,7 +126,7 @@ grep "^fitness:\|^input_hallucination_mean:" ~/.geode/self-improving/run.log
 
 ### Step 6 -- `results.tsv` append
 
-`geode_product/self_improving/state/results.tsv`(tab-separated, git-tracked). 모든
+`evolve/scaffold_search/state/results.tsv`(tab-separated, git-tracked). 모든
 non-dry-run에서 runner가 자동으로 append하므로 수동 append는 없다.
 
 ### Step 7 -- ratchet 결정 (promote / reject)
@@ -142,7 +142,7 @@ non-dry-run에서 runner가 자동으로 append하므로 수동 append는 없다
 
 **reject 조건**: 위 조건 중 하나라도 실패. `git reset --hard HEAD~1`.
 
-이 규약이 `geode_product/self_improving/train.py::compute_fitness`의 implementation
+이 규약이 `evolve/scaffold_search/train.py::compute_fitness`의 implementation
 contract다. single scalar weighted sum 대신 baseline-aware per-axis gate를
 쓴다. 두 hypothesis의 fitness가 같으면 더 단순한 wrapper가 우선한다
 (Karpathy Simplicity Selection).
@@ -156,7 +156,7 @@ rejection이면 같은 baseline 위에서 다른 hypothesis를 시도한다.
 
 ## 5. Fitness 정의
 
-`geode_product/self_improving/train.py::compute_fitness`의 5-axis weighted aggregate:
+`evolve/scaffold_search/train.py::compute_fitness`의 5-axis weighted aggregate:
 
 ```
 fitness = (
@@ -225,7 +225,7 @@ append-only이며 9개 column이다.
 - env가 set됐는데 파일이 없거나, JSON 파싱이 실패하거나, schema가 맞지
   않으면 `RuntimeError`로 fail-closed한다.
 
-이 hook이 `geode_product/self_improving/train.py::WRAPPER_PROMPT_SECTIONS`의
+이 hook이 `evolve/scaffold_search/train.py::WRAPPER_PROMPT_SECTIONS`의
 mutation을 실제 GEODE runtime의 system prompt까지 propagate하는 단일
 통로다.
 
@@ -259,7 +259,7 @@ archive 역할을 한다.
 | mutation이 GEODE syntax를 깨뜨림 | wrapper override JSON의 schema가 단순하다(str→str dict). syntax break가 없다. env가 잘못되면 `core/agent/system_prompt.py`의 load가 fail-closed하므로 fitness가 기본 wrapper로 조용히 오염되지 않는다. |
 | Generation drift (누적 bias) | per-generation `results.tsv` + cross-axis ratchet(§5) + critical axis strict gate. |
 | long-running loop의 비용 폭주 | per-audit budget 5분 + self-improving-loop agent의 timeout(program.md). ChatGPT OAuth는 구독 quota를, Anthropic은 설정한 API 예산을 소비한다. |
-| Goodhart's law (rubric self-mutation) | AlphaEval rubric(`geode_product/petri_audit/judge_dims/geode_judge_subset.yaml`)은 program.md의 CANNOT 항목이다. seed pool(`geode_product/petri_audit/seeds_safe10/`)도 mutation 불가. |
+| Goodhart's law (rubric self-mutation) | AlphaEval rubric(`evals/petri/judge_dims/geode_judge_subset.yaml`)은 program.md의 CANNOT 항목이다. seed pool(`evals/petri/seeds_safe10/`)도 mutation 불가. |
 | 자기참조 loop (autoresearch가 autoresearch를 mutate) | mutation target이 `WRAPPER_PROMPT_SECTIONS` dict 한 곳이다. `autoresearch/` 디렉터리 자체는 mutate할 수 없다(program.md의 in-scope 파일 4개 외 불가). |
 | rejected hypothesis의 정보 손실 | `results.tsv`의 discard row가 다음 hypothesis의 부정적 prior가 된다. agent context에 결과가 누적된다. |
 
@@ -280,10 +280,10 @@ PR로 추가될 수 있는 컴포넌트(현재는 미구현):
 
 - 이 architecture: `docs/architecture/autoresearch.md` (본 문서)
 - Fork README: `docs/self-improving/loop-overview.md`
-- Agent instruction: `geode_product/self_improving/program.md`
+- Agent instruction: `evolve/scaffold_search/program.md`
 - Karpathy reference: `~/.claude/projects/-Users-mango-workspace-geode/memory/research_karpathy_autoresearch_agenthub.md` + `~/workspace/autoresearch/` (228791f)
 - Gen 0 plan + signal: `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-15-autoresearch-gen0-plan.md` + `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-15-petri-insights.md`
 - Gen 0 baseline 시도 (BLOCKED): `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-16-autoresearch-gen0-baseline.md`
 - Wrapper override hook 구현: `core/agent/system_prompt.py:_load_wrapper_override`
-- Petri audit harness: `geode_product/petri_audit/runner.py` + `geode_product/petri_audit/judge_dims/geode_judge_subset.yaml`
+- Petri audit harness: `evals/petri/runner.py` + `evals/petri/judge_dims/geode_judge_subset.yaml`
 - Karpathy 5원칙 skill: `karpathy-patterns` (`.claude/skills/`)

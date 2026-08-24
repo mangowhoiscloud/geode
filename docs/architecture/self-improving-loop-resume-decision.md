@@ -46,7 +46,7 @@ Net: **co-scientist neither in paper nor reference impl provides a usable design
 | Autoresearch | `~/.geode/self-improving/baseline.json` (P0a) | ✅ atomic | ✅ `_load_baseline()` | partial (promote/run only) |
 | Primitive | `core/utils/atomic_io.py` | tmp + `os.replace` + `fsync` | — | ✅ |
 
-**Key insight**: GEODE already has `SessionCheckpoint` — a production-ready C3 checkpoint+resume layer with `atomic_write_json` + SQLite + `/resume` CLI. The self-improving-loop drivers (seed-generation + autoresearch) are NOT yet layered on top of it. The S8 `_persist_state` comment says *"S11 CLI `geode audit-seeds resume` will re-hydrate"* but the load path is not implemented.
+**Key insight**: GEODE already has `SessionCheckpoint` — a production-ready C3 checkpoint+resume layer with `atomic_write_json` + SQLite + `/resume` CLI. The self-improving-loop drivers (seed-generation + autoresearch) are NOT yet layered on top of it. The S8 `_persist_state` comment says *"S11 CLI `geode-eval audit-seeds resume` will re-hydrate"* but the load path is not implemented.
 
 ## Decision
 
@@ -109,7 +109,7 @@ On resume:
 
 A separate dimension from the cross-source PAYG ramp blocked by PR-β1: **multiple accounts inside the same `family.source`** (e.g., two Claude Code OAuth accounts the operator has both stored). The 2026-05-19 user directive — "roll out using locally recorded account records, as in the paperclip and crumb cases" — refers to this case. paperclip / crumb (cf. `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-18-i2-paperclip-review.md`, external repo `~/workspace/crumb/`) achieve it via `claude -p` subprocess picking up `~/.claude/credentials` automatically + symlink swap or env var for account selection. The pattern is **non-interactive subprocess + locally-recorded credential**.
 
-GEODE already has a richer, in-process equivalent — `core/auth/profiles.py` (AuthProfile / ProfileStore / EligibilityResult), `core/auth/rotation.py` (`ProfileRotator.resolve(provider)` returning best-eligible, `mark_failure` → cooldown, managed-token auto-refresh ≤120 s pre-expiry), `core/auth/credential_breadcrumb.py` (LLM-readable hint per ProfileRejectReason — Claude Code `createModelSwitchBreadcrumbs` parity). Outer-loop currently uses none of it; `geode_product/petri_audit/credential_source.py` only does process-local `suppress_credential_source(family, source)` (no profile dimension).
+GEODE already has a richer, in-process equivalent — `core/auth/profiles.py` (AuthProfile / ProfileStore / EligibilityResult), `core/auth/rotation.py` (`ProfileRotator.resolve(provider)` returning best-eligible, `mark_failure` → cooldown, managed-token auto-refresh ≤120 s pre-expiry), `core/auth/credential_breadcrumb.py` (LLM-readable hint per ProfileRejectReason — Claude Code `createModelSwitchBreadcrumbs` parity). Outer-loop currently uses none of it; `evals/petri/credential_source.py` only does process-local `suppress_credential_source(family, source)` (no profile dimension).
 
 **Decision** (Phase ζ extension):
 
@@ -182,11 +182,11 @@ Implementation reuses `pick_model_and_effort`'s raw-tty 2-axis input loop. Per d
 Lives as Phase ζ in `docs/plans/2026-05-19-self-improving-loop-config-consolidation.md`. **8 PRs** (~2100 LOC + 1 backfill) — expanded from 6 after the 2026-05-19 paperclip/crumb directive:
 
 - **PR-ζ1**: extend `SessionCheckpoint` schema for self-improving-loop fields (active_sources, completed_units, next_unit, fallback_to_payg, active_profile). Tests round-trip.
-- **PR-ζ2**: `_load_state()` companion for `geode_product/seed_generation/orchestrator.py:PipelineState`. CLI flag `geode audit-seeds resume <run_id>`.
-- **PR-ζ3**: autoresearch `_load_pending_audit()` + `--resume <session_id>` flag in `geode_product/self_improving/train.py`.
+- **PR-ζ2**: `_load_state()` companion for `evals/seed_generation/orchestrator.py:PipelineState`. CLI flag `geode-eval audit-seeds resume <run_id>`.
+- **PR-ζ3**: autoresearch `_load_pending_audit()` + `--resume <session_id>` flag in `evolve/scaffold_search/train.py`.
 - **PR-ζ4**: idempotency-key embedding in LLM call metadata + local response cache lookup (`~/.geode/self-improving-loop/<session>/idempotency.db`).
 - **PR-ζ5**: credential-rollover detection — at resume, compare active sources to checkpoint; emit `credential_rolled_over_at` event into journal.
-- **PR-ζ5.5** (NEW): wire `ProfileRotator` into the self-improving-loop credential path. `resolve_self_improving_loop_binding(family) → (source, profile)` adds the profile dimension. `geode_product/petri_audit/credential_source.py` routes failures through `ProfileRotator.mark_failure(profile)` instead of the in-process suppress set. autoresearch + seed-generation pass `profile.name` through LLM call metadata so cooldowns track per-account.
+- **PR-ζ5.5** (NEW): wire `ProfileRotator` into the self-improving-loop credential path. `resolve_self_improving_loop_binding(family) → (source, profile)` adds the profile dimension. `evals/petri/credential_source.py` routes failures through `ProfileRotator.mark_failure(profile)` instead of the in-process suppress set. autoresearch + seed-generation pass `profile.name` through LLM call metadata so cooldowns track per-account.
 - **PR-ζ5.6** (NEW): 2-axis account picker (provider ←→ × profile ↑↓), mirroring `core/cli/effort_picker.py`. Two entry points: (a) `/login picker` slash command + auto-trigger from the red banner abort dialog (PR-γ1 trigger condition), (b) agent loop natural-language phrase recogniser invokes the picker programmatically. Action row: Enter (swap+resume) / n (open the provider-owned login path; Claude uses `claude auth login --claudeai`) / w (wait for reset) / p (opt-in PAYG for this run) / Esc (keep aborted).
 - **PR-ζ6**: docs + sample resume run-book (`https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-19-resume-rollout-runbook.md`) + CHANGELOG.
 

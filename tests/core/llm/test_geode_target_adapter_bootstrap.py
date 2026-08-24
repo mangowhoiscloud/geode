@@ -1,4 +1,4 @@
-"""Regression pin for ``geode_product/petri_audit/geode_target.py``'s
+"""Regression pin for ``evals/petri/geode_target.py``'s
 adapter-registry bootstrap.
 
 The inspect-ai audit subprocess (``uv run inspect eval inspect_petri/audit``)
@@ -28,13 +28,13 @@ import ast
 import inspect
 import textwrap
 
-from geode_product.petri_audit.geode_target import _default_geode_runner
+from evals.petri.geode_target import _default_geode_runner
 
 
 def test_default_geode_runner_calls_bootstrap_builtins() -> None:
     """Source-level pin: the runner module references ``bootstrap_builtins``.
 
-    Greps ``geode_product/petri_audit/geode_target.py`` for the
+    Greps ``evals/petri/geode_target.py`` for the
     ``bootstrap_builtins`` symbol so a future refactor that drops the
     call (e.g. import rearrangement, function extraction) fails the
     test before the audit subprocess fake-success regression re-lands.
@@ -100,7 +100,7 @@ def test_bootstrap_registers_codex_oauth_for_petri_target() -> None:
 
     ``config.toml`` pins ``[self_improving_loop.petri.target] source =
     "openai-codex"`` — a Petri-surface alias that
-    ``geode_product/petri_audit/models.py`` routes to the canonical
+    ``evals/petri/models.py`` routes to the canonical
     ``codex-oauth`` adapter inside the GEODE registry.
     ``_default_geode_runner`` resolves the source via
     ``resolve_for(provider, source)`` inside ``AgenticLoop``. If the

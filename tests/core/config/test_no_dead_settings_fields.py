@@ -8,7 +8,7 @@ got silently ignored — the same "setting surface with no wired consumer" slop
 class as the ``.env.example`` empty-placeholder footgun (PR-HERMES-ENV-ALIGN).
 
 This pins that every non-allowlisted field is actually consumed somewhere in
-``core/``, ``geode_product/``, or ``plugins/`` outside the config declaration
+``core/``, ``evals/``, or ``evolve/`` outside the config declaration
 and tests, so a future dead knob fails CI instead of shipping.
 """
 
@@ -31,7 +31,7 @@ def _consumer_texts() -> list[str]:
     """Read production Python files except the config declaration and tests."""
     skip_suffixes = ("core/config/_settings.py", "core/config/__init__.py")
     texts: list[str] = []
-    for pkg in ("core", "geode_product", "plugins"):
+    for pkg in ("core", "evals", "evolve"):
         for path in (REPO_ROOT / pkg).rglob("*.py"):
             as_str = path.as_posix()
             if as_str.endswith(skip_suffixes) or "test" in as_str:

@@ -23,11 +23,13 @@ PR.
 
 ---
 
-## 1. Bundled-feature layout
+## 1. Package ownership
 
-Bundled first-party features live under `geode_product/`. The `plugins/`
-directory contains only curated compatibility facades and is not an external
-extension contract or implementation root. The exhaustive classification is fixed by
+`core/` owns the GEODE runtime, `evals/` owns measurement, and `evolve/` owns
+scaffold search. Dependencies flow only as `evolve -> evals -> core`.
+`geode_product/`, the top-level `plugins/` package, and
+`core/self_improving/` are retired names rather than compatibility surfaces.
+The exhaustive classification is fixed by
 [`package-classification.md`](package-classification.md).
 
 ---
@@ -93,7 +95,7 @@ of every relocated symbol with its origin release.
 
 ---
 
-## 5. Tool class names (`core/tools/`, `geode_product/*/tools/`)
+## 5. Tool class names (`core/tools/`, `evals/*/tools/`)
 
 `<Verb><Noun>Tool` (action-oriented) or `<Noun>Tool` (resource-oriented) are
 both accepted; pick whichever reads better for the operation. Be consistent

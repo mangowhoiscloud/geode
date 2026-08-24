@@ -7,7 +7,7 @@ was previously defined four different ways, with *inconsistent membership*:
   (no ``api_key``)
 - the mutator-config ``source`` Literal — ``{auto, api_key, claude-cli, openai-codex}``
   (with ``api_key``)
-- ``geode_product.seed_generation.auth_coverage.Source`` — ``{claude-cli, openai-codex,
+- ``evals.seed_generation.auth_coverage.Source`` — ``{claude-cli, openai-codex,
   api_key}`` (no ``auto``)
 - ``settings.{anthropic,openai}_credential_source`` — bare ``str``
 
@@ -26,7 +26,7 @@ PAYG safety
 ``API_KEY`` is a **valid member everywhere**. Preventing a subscription-only
 run from silently falling through to PAYG is enforced at *resolution* time by
 ``[self_improving_loop] fallback_to_payg`` /
-``geode_product.petri_audit.credential_source.resolve_credential_source(fallback_to_payg=…)``
+``evals.petri.credential_source.resolve_credential_source(fallback_to_payg=…)``
 — **not** by narrowing this enum. This moves ``project_payg_exclusion_decision``
 from a type-level exclusion to a runtime gate (the gate is the real safety
 boundary; the type-level narrowing only caused the fragmentation above and
