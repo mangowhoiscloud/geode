@@ -1,7 +1,7 @@
 ---
 status: active
 authority: architecture-extensibility-execution-sot
-baseline_commit: 2e238a828e0b170080fcb70fe71d7451f615acf2
+baseline_commit: 1a0f65f93160bbf74f077be2ed1088f7e38a6d08
 baseline_branch: origin/develop
 last_audited: 2026-08-24
 owners: GEODE maintainers
@@ -229,11 +229,12 @@ normal review and CI; implementations start only after the claim merges.
 
 ## 1. Program objective
 
-The initial audit verdict was **B+, conditionally approved**. At the
-2026-08-24 full-ledger audit, the primary architecture work is released and
-closed: 48 of 58 GAPs are `DONE` and six are `SUPERSEDED`. Final program
-closure still waits on the replacement R8 namespace-convergence package and the
-R7.4 closure of R7.2/R7.3; §14 owns the exact remaining order.
+The initial audit verdict was **B+, conditionally approved**. The 2026-08-24
+full-ledger audit against
+`origin/develop@1a0f65f93160bbf74f077be2ed1088f7e38a6d08` confirms that all
+58 GAPs are terminal: 52 are `DONE` and six are `SUPERSEDED`. There is no
+remaining execution unit or active claim; §14 records the final release and
+GitFlow evidence.
 
 The program is complete when GEODE has:
 
@@ -2190,28 +2191,34 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
   and the
   [`google-workspace` Skill](https://github.com/NousResearch/hermes-agent/blob/0f102fa4dc04b7dfdab048169aaaa640d09d7523/skills/productivity/google-workspace/SKILL.md).
 
-## 14. Immediate next unit
+## 14. Program closure
 
-R8.5 (`BND-009`) is `IN_DEVELOP` after feature PR
-[#3148](https://github.com/mangowhoiscloud/geode/pull/3148) merged as
-`24a6992a9e3ab9610c749dc1a875e0179342bd6f`. The implementation leaves one
-documented `core`/`evals`/`evolve` dependency graph, removes every retired
-package and unsupported scaffold without a facade or archive, preserves the
-eight tracked state payloads byte-for-byte, and passes source, package,
-installed-wheel, kernel-only, documentation, and anti-deception gates. The
-active claim is released by this reconciliation.
+The final implementation bytes reached `main` through
+[#3152](https://github.com/mangowhoiscloud/geode/pull/3152) at
+`fba838cc54382f90599b9e51e4518531a2de27b6`. Release workflow
+[run 32703721477](https://github.com/mangowhoiscloud/geode/actions/runs/32703721477)
+published the annotated
+[`v1.0.24`](https://github.com/mangowhoiscloud/geode/releases/tag/v1.0.24)
+tag and passed the full non-live, architecture, package, clean-install,
+kernel-only, GitHub, PyPI, and public-command gates. GitHub and PyPI expose the
+same wheel SHA-256
+`ad5d46f297b37dc237e0dfed4042e1ff2705d7e9b6a2a38b5ef27fbda129b6c7`
+and sdist SHA-256
+`9bf9a340d6608b3343a8db37a8d23eaf33dbc525d81ac06a22e07c93e4f587c5`;
+`uvx --no-cache --from geode-agent==1.0.24 geode version` reports
+`GEODE v1.0.24`.
 
-R8.5 is not eligible for `DONE` until the same bytes reach `main` in the
-v1.0.24 release and the tracking-only closure records the annotated tag,
-GitHub Release, exact PyPI wheel/sdist SHA-256 parity, and public `uvx` smoke.
-The next executable unit is therefore the ordinary v1.0.24 release-stamp PR
-from current `develop`, followed by the required GitFlow promotion and stable
-release workflow. No compatibility alias, second wheel, plugin SDK, hidden
-package split, or live-provider evaluation is authorized by this handoff.
+Tracking-only closure
+[#3153](https://github.com/mangowhoiscloud/geode/pull/3153) merged to `main`
+as `2dbbeed3e8411551a7a6d8f73b5ae87d4c975942`, and the required canonical
+`main` → `develop` sync
+[#3154](https://github.com/mangowhoiscloud/geode/pull/3154) merged as
+`1a0f65f93160bbf74f077be2ed1088f7e38a6d08`. The master ledger now contains
+58 terminal GAPs: 52 `DONE` and six `SUPERSEDED`, with no active claims and no
+`OPEN`, `READY`, `IN_PROGRESS`, `IN_DEVELOP`, `BLOCKED`, `REJECTED`, or
+unexplained rows.
 
-The master ledger contains 58 GAPs: 48 `DONE`, six `SUPERSEDED`, and four
-`IN_DEVELOP`. There are no active claims and no `OPEN`, `READY`,
-`IN_PROGRESS`, `BLOCKED`, `REJECTED`, or unexplained rows.
-
-R7.2 (`CAP-006`, `VER-002`) and R7.3 (`VER-004`) remain `IN_DEVELOP` until
-the same final full-program release audit closes their cross-package evidence.
+The architecture and extensibility completion program has no remaining
+executable unit. Future architecture work must begin with a new GAP and closure
+package through the serialized registration protocol in §0.3; it must not
+reopen or rewrite this evidence.
