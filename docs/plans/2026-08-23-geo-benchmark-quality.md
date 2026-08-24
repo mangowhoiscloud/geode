@@ -1,7 +1,7 @@
 # GEO benchmark quality closure
 
-Date: 2026-08-23  
-Branch: `codex/geo-benchmark-quality`  
+Date: 2026-08-23
+Branch: `codex/geo-benchmark-quality`
 Base: `origin/develop@586e29b663a959742ab4b4dac1dafb542b394f73`
 
 ## Scope

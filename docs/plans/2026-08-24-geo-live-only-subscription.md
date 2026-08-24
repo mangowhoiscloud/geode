@@ -1,6 +1,6 @@
 # GEO live-only simplification and subscription measurement
 
-Date: 2026-08-24  
+Date: 2026-08-24
 Status: implemented; native 24×5 complete; A/Q verification in progress
 Working branch: `codex/geo-benchmark-quality@b16e6aa0a`
 Implementation sync target: `origin/develop@0ac0eecc0`
