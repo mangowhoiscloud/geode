@@ -1,8 +1,8 @@
 # GEO live-only simplification and subscription measurement
 
 Date: 2026-08-24  
-Status: implemented; non-live gates passed; paid/live diagnostic in progress
-Working branch: `codex/geo-benchmark-quality@e30b50ed2c79`  
+Status: implemented; native 24×5 complete; A/Q verification in progress
+Working branch: `codex/geo-benchmark-quality@b16e6aa0a`
 Implementation sync target: `origin/develop@0ac0eecc0`
 
 ## Decision
@@ -188,6 +188,36 @@ replace a provider-native observation.
    baseline/treatment experiment for a specific repair. Do not promote from
    the diagnostic.
 
+## Post-diagnostic repair plan
+
+This continuation is planned, not implemented. The current live diagnostic
+must finish and pass receipt, vector, verifier, trajectory, and publication
+audits before any item below starts.
+
+1. **Targeted repair candidate**: for one observed failure stage and one
+   operator-owned Markdown/HTML target, produce the smallest unified diff.
+   Bind the base digest, patch digest, failure evidence, changed lines, source
+   support, and deterministic build/link/schema checks. Do not publish it.
+2. **Paired live experiment**: after operator preregistration and preview-host
+   publication, run baseline and treatment with the same frozen query matrix,
+   subscription adapter, model, locale, account state, repetitions, budget,
+   and observation schedule. Reject route, index-state, or timing drift.
+3. **Verdict and release boundary**: require the target stage to improve
+   without F/R or source-supported Q regression, including held-out
+   paraphrases. Preserve a rollback reference and keep release authority with
+   the operator. The first OSS release path is a reviewed Git patch/PR; CMS
+   adapters are out of scope.
+4. **Strategy distillation**: only after independent valid experiments span
+   multiple documents or domains, reuse the existing SIL mutation surface to
+   retain stage-, engine-, and domain-scoped repair patterns. Do not add a
+   surrogate critic, MAP-Elites, or a global strategy bank before that evidence
+   exists.
+
+The repair candidate, paired result, native provider receipts, verifier
+receipts, first-party outcome receipt, and `geode.trajectory@1` remain separate
+digest-bound authorities. No Inspect `.eval` is created unless Inspect
+produced the run, and no aggregate GEO score is introduced.
+
 ## Acceptance criteria
 
 1. Active runtime, tool schema, runtime skill, scaffold skill, canonical v1
@@ -219,6 +249,9 @@ replace a provider-native observation.
 11. A failed live cell leaves frozen-workload-matched native checkpoints but
     no final matrix; rerunning the same frozen run resumes those cells and
     rejects unexpected or drifted checkpoint bytes.
+12. A failed A/Q call likewise preserves validated source and verifier
+    receipts, emits no final overlay, and resumes only missing observations
+    after rejecting source, rubric, model, or producer drift.
 
 ## Non-goals
 

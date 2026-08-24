@@ -7,9 +7,6 @@ import argparse
 import asyncio
 import hashlib
 import json
-import os
-import shutil
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -111,7 +108,7 @@ async def verify(
     rubric_path = rubric_path.resolve()
     output_path = output_path.resolve()
     evidence_dir = output_path.parent / f"{output_path.stem}-evidence"
-    if output_path.exists() or evidence_dir.exists():
+    if output_path.exists():
         raise FileExistsError("GEO verifier output already exists")
 
     workload = _load_json_object(workload_path)
@@ -143,8 +140,31 @@ async def verify(
 
     fetcher = WebFetchTool()
     unique_urls = tuple(dict.fromkeys(url for _, urls in selected for url in urls))
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    source_paths = {
+        url: evidence_dir / f"source-{hashlib.sha256(url.encode()).hexdigest()[:16]}.json"
+        for url in unique_urls
+    }
+    verdict_paths = {
+        str(observation["observation_id"]): evidence_dir
+        / f"verdict-{observation['observation_id']}.json"
+        for observation, _ in selected
+    }
+    expected_files = {path.name for path in (*source_paths.values(), *verdict_paths.values())}
+    unexpected = sorted(
+        path.name for path in evidence_dir.iterdir() if path.name not in expected_files
+    )
+    if unexpected:
+        raise ValueError(f"GEO verifier checkpoint contains unexpected entries: {unexpected[:8]}")
 
     async def fetch(url: str) -> tuple[str, dict[str, Any]]:
+        path = source_paths[url]
+        if path.exists():
+            receipt = _load_json_object(path)
+            _validate_schema(receipt, "geo-source-receipt.schema.json", label=str(path))
+            if receipt["url"] != url:
+                raise ValueError(f"GEO cached source receipt drifted from its URL: {path}")
+            return url, receipt
         result = await fetcher.aexecute(url=url, max_chars=10_000)
         payload = result.get("result")
         if (
@@ -153,14 +173,65 @@ async def verify(
             or payload.get("tls_verified") is not True
         ):
             raise ValueError(f"GEO verifier source fetch failed: {url}")
-        return url, payload
+        receipt = {
+            **payload,
+            "schema_id": "geode.geo-source-receipt@1",
+            "fetched_at": datetime.now(UTC).isoformat(),
+        }
+        _validate_schema(receipt, "geo-source-receipt.schema.json", label=str(path))
+        _write_exclusive(path, receipt)
+        return url, receipt
 
     fetched = dict(await asyncio.gather(*(fetch(url) for url in unique_urls)))
+    source_refs = {
+        url: {
+            "path": f"{evidence_dir.name}/{source_paths[url].name}",
+            "sha256": _sha256(source_paths[url]),
+        }
+        for url in unique_urls
+    }
     bootstrap_builtins()
     adapter = get_adapter(adapter_name)
     semaphore = asyncio.Semaphore(concurrency)
 
     async def judge(observation: dict[str, Any], target_urls: tuple[str, ...]) -> dict[str, Any]:
+        observation_id = str(observation["observation_id"])
+        receipt_path = verdict_paths[observation_id]
+        expected_sources = [source_refs[url] for url in target_urls]
+        if receipt_path.exists():
+            receipt = _load_json_object(receipt_path)
+            _validate_schema(
+                receipt,
+                "geo-verifier-receipt.schema.json",
+                label=f"GEO verifier receipt {observation_id}",
+            )
+            expected = {
+                "observation_id": observation_id,
+                "producer": adapter.name,
+                "model": model,
+                "rubric_sha256": _sha256(rubric_path),
+                "sources": expected_sources,
+            }
+            if any(receipt[key] != value for key, value in expected.items()):
+                raise ValueError(
+                    f"GEO cached verifier receipt drifted from the frozen run: {receipt_path}"
+                )
+            verdict = _validate_verdict(
+                {key: receipt[key] for key in _VERDICT_SCHEMA["required"]},
+                target_urls=target_urls,
+                fetched=fetched,
+            )
+            return {
+                "observation_id": observation_id,
+                **{
+                    key: verdict[key]
+                    for key in ("absorption", "quality", "quality_claims_expected")
+                },
+                "verifier_receipt": {
+                    "path": f"{evidence_dir.name}/{receipt_path.name}",
+                    "sha256": _sha256(receipt_path),
+                },
+            }
         sources = [{"url": url, "content": str(fetched[url]["content"])} for url in target_urls]
         prompt = json.dumps(
             {
@@ -188,79 +259,37 @@ async def verify(
                     max_tokens=4096,
                 )
             )
-        return _validate_verdict(
+        verdict = _validate_verdict(
             _strict_json_loads(response.text, label="GEO verifier response"),
             target_urls=target_urls,
             fetched=fetched,
         )
+        receipt = {
+            "schema_id": "geode.geo-verifier-receipt@1",
+            "observation_id": observation_id,
+            "producer": adapter.name,
+            "model": model,
+            "verified_at": datetime.now(UTC).isoformat(),
+            "rubric_sha256": _sha256(rubric_path),
+            "sources": expected_sources,
+            **verdict,
+        }
+        _validate_schema(
+            receipt,
+            "geo-verifier-receipt.schema.json",
+            label=f"GEO verifier receipt {observation_id}",
+        )
+        _write_exclusive(receipt_path, receipt)
+        return {
+            "observation_id": observation_id,
+            **{key: verdict[key] for key in ("absorption", "quality", "quality_claims_expected")},
+            "verifier_receipt": {
+                "path": f"{evidence_dir.name}/{receipt_path.name}",
+                "sha256": _sha256(receipt_path),
+            },
+        }
 
-    verdicts = await asyncio.gather(*(judge(*item) for item in selected))
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=".geo-verifier-", dir=output_path.parent))
-    try:
-        source_refs: dict[str, dict[str, str]] = {}
-        for url, source in fetched.items():
-            filename = f"source-{hashlib.sha256(url.encode()).hexdigest()[:16]}.json"
-            path = staging / filename
-            receipt = {
-                **source,
-                "schema_id": "geode.geo-source-receipt@1",
-                "fetched_at": datetime.now(UTC).isoformat(),
-            }
-            _validate_schema(
-                receipt,
-                "geo-source-receipt.schema.json",
-                label=f"GEO source receipt {url}",
-            )
-            path.write_text(
-                json.dumps(receipt, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
-            source_refs[url] = {
-                "path": f"{evidence_dir.name}/{filename}",
-                "sha256": _sha256(path),
-            }
-
-        rows = []
-        for (observation, target_urls), verdict in zip(selected, verdicts, strict=True):
-            observation_id = str(observation["observation_id"])
-            receipt = {
-                "schema_id": "geode.geo-verifier-receipt@1",
-                "observation_id": observation_id,
-                "producer": adapter.name,
-                "model": model,
-                "verified_at": datetime.now(UTC).isoformat(),
-                "rubric_sha256": _sha256(rubric_path),
-                "sources": [source_refs[url] for url in target_urls],
-                **verdict,
-            }
-            _validate_schema(
-                receipt,
-                "geo-verifier-receipt.schema.json",
-                label=f"GEO verifier receipt {observation_id}",
-            )
-            filename = f"verdict-{observation_id}.json"
-            path = staging / filename
-            path.write_text(
-                json.dumps(receipt, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-            )
-            rows.append(
-                {
-                    "observation_id": observation_id,
-                    **{
-                        key: verdict[key]
-                        for key in ("absorption", "quality", "quality_claims_expected")
-                    },
-                    "verifier_receipt": {
-                        "path": f"{evidence_dir.name}/{filename}",
-                        "sha256": _sha256(path),
-                    },
-                }
-            )
-        os.rename(staging, evidence_dir)
-    except Exception:
-        shutil.rmtree(staging, ignore_errors=True)
-        raise
+    rows = await asyncio.gather(*(judge(*item) for item in selected))
 
     rubric_ref = {
         "path": _relative(rubric_path, output_path.parent, label="GEO verifier rubric"),
@@ -280,12 +309,8 @@ async def verify(
         },
         "observations": rows,
     }
-    try:
-        _validate_schema(payload, "geo-verifier-results.schema.json", label=str(output_path))
-        _write_exclusive(output_path, payload)
-    except Exception:
-        shutil.rmtree(evidence_dir, ignore_errors=True)
-        raise
+    _validate_schema(payload, "geo-verifier-results.schema.json", label=str(output_path))
+    _write_exclusive(output_path, payload)
     return payload
 
 

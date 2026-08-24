@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.llm.adapters.base import WebSearchResult
+from core.llm.adapters.base import AdapterCallResult, UsageSummary, WebSearchResult
 from scripts.eval.geo_collect import collect
-from scripts.eval.geo_verify import _validate_verdict
+from scripts.eval.geo_verify import _validate_verdict, verify
 from scripts.eval.geo_visibility import _validate_live_approval, validate_and_measure
 
 
@@ -572,6 +572,113 @@ def test_geo_verifier_rejects_unbound_support_evidence(source_quote: str, messag
         )
 
 
+def _assert_geo_verifier_resumes_digest_checked_receipts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, workload, native_results = _fixture(tmp_path)
+    native = json.loads(native_results.read_text(encoding="utf-8"))
+    for observation in native["observations"][2:]:
+        observation["citations"] = []
+    native_receipt = tmp_path / "native.json"
+    receipt_payload = json.loads(native_receipt.read_text(encoding="utf-8"))
+    receipt_payload["answer"] = "GEODE documentation describes the runtime."
+    _write_json(native_receipt, receipt_payload)
+    for observation in native["observations"]:
+        observation["native_receipt"]["sha256"] = _sha256(native_receipt)
+    _write_json(native_results, native)
+    rubric = tmp_path / "rubric.json"
+    _write_json(rubric, {"schema_id": "geode.geo-verifier-rubric@1"})
+    output = tmp_path / "verifier-results.json"
+
+    fetch_calls = 0
+
+    async def fake_fetch(*_: Any, **__: Any) -> dict[str, Any]:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return {
+            "result": {
+                "url": "https://mangowhoiscloud.github.io/geode/docs/",
+                "source": "https://mangowhoiscloud.github.io/geode/docs/",
+                "content": "GEODE documentation describes the runtime.",
+                "truncated": False,
+                "content_type": "text/html; charset=utf-8",
+                "status_code": 200,
+                "tls_verified": True,
+            }
+        }
+
+    calls = 0
+
+    class FakeAdapter:
+        name = "test-verifier"
+
+        async def acomplete(self, _: Any) -> AdapterCallResult:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError("connection lost")
+            return AdapterCallResult(
+                text=json.dumps(
+                    {
+                        "absorption": True,
+                        "quality": [
+                            {
+                                "claim_id": "claim-1",
+                                "claim_text": "GEODE has documentation.",
+                                "source_url": ("https://mangowhoiscloud.github.io/geode/docs/"),
+                                "source_quote": "GEODE documentation",
+                                "supported": True,
+                                "reason": "The fetched source supports the claim.",
+                            }
+                        ],
+                        "quality_claims_expected": 1,
+                        "rationale": "One target-linked claim was audited.",
+                    }
+                ),
+                usage=UsageSummary(),
+                stop_reason="end_turn",
+            )
+
+    monkeypatch.setattr("scripts.eval.geo_verify.WebFetchTool.aexecute", fake_fetch)
+    monkeypatch.setattr("scripts.eval.geo_verify.bootstrap_builtins", lambda: None)
+    monkeypatch.setattr("scripts.eval.geo_verify.get_adapter", lambda _: FakeAdapter())
+
+    with pytest.raises(RuntimeError, match="connection lost"):
+        asyncio.run(
+            verify(
+                workload_path=workload,
+                native_results_path=native_results,
+                rubric_path=rubric,
+                output_path=output,
+                model="test-model",
+                adapter_name="test-verifier",
+                producer_version="test-v1",
+                concurrency=1,
+            )
+        )
+    evidence_dir = tmp_path / "verifier-results-evidence"
+    assert len(list(evidence_dir.glob("source-*.json"))) == 1
+    assert len(list(evidence_dir.glob("verdict-*.json"))) == 1
+    assert not output.exists()
+
+    calls = 0
+    payload = asyncio.run(
+        verify(
+            workload_path=workload,
+            native_results_path=native_results,
+            rubric_path=rubric,
+            output_path=output,
+            model="test-model",
+            adapter_name="test-verifier",
+            producer_version="test-v1",
+            concurrency=1,
+        )
+    )
+    assert calls == 1
+    assert fetch_calls == 1
+    assert len(payload["observations"]) == 2
+
+
 def test_geo_visibility_rejects_observation_matrix_drift(tmp_path: Path) -> None:
     run_spec, workload, results = _fixture(tmp_path)
     payload = json.loads(results.read_text(encoding="utf-8"))
@@ -846,3 +953,6 @@ def test_geo_collector_resumes_digest_checked_cell_receipts(
     )
     assert calls == 1
     assert len(payload["observations"]) == 120
+    verifier_path = tmp_path / "verifier-resume"
+    verifier_path.mkdir()
+    _assert_geo_verifier_resumes_digest_checked_receipts(verifier_path, monkeypatch)
