@@ -193,7 +193,9 @@ def _validate_claims(payload: object, *, answer: str) -> dict[str, Any]:
         quote = str(row["answer_quote"])
         start = answer.find(quote)
         if start < 0:
-            raise ValueError("GEO claim answer quote does not occur in the native answer")
+            raise ValueError(
+                f"GEO claim answer quote does not occur in the native answer: {quote[:200]!r}"
+            )
         spans.append((start, start + len(quote), quote))
     ordered = sorted(spans)
     if len(ordered) != len(set(ordered)) or any(
@@ -483,7 +485,7 @@ async def verify(
                 break
             except ValueError as exc:
                 if attempt == 1:
-                    raise
+                    raise ValueError(f"{observation_id}: {exc}") from exc
                 messages.extend(
                     (
                         Message(role="assistant", content=response.text),

@@ -649,6 +649,17 @@ def test_geo_verifier_v2_canonicalizes_repeated_answer_text() -> None:
     assert claims[0]["answer_end"] == len("GEODE records trajectories.")
 
 
+def test_geo_verifier_v2_identifies_an_invented_answer_quote() -> None:
+    with pytest.raises(ValueError, match="invented text"):
+        _validate_claims(
+            {
+                "claims": [{"answer_quote": "invented text"}],
+                "rationale": "A malformed extraction.",
+            },
+            answer="GEODE records trajectories.",
+        )
+
+
 def test_geo_verifier_retries_one_connection_transient(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -99,7 +99,9 @@ functional change.
   selects exact answer quotes while the host derives, orders, and rejects
   duplicate or overlapping spans and canonicalizes repeated answer text to its
   first occurrence; producer version and extractor/verifier effort are bound
-  into their receipts and overlay contexts;
+  into their receipts and overlay contexts. Rejected extraction corrections
+  identify the observation and bounded offending quote without fuzzy-matching
+  invented text;
   exact unique source spans and complete source snapshots are required, and A
   is derived from supported claims rather than accepted from model prose. An
   optional digest-bound blind human sidecar records claim-completeness and
