@@ -566,7 +566,7 @@ and closure evidence are appended in §10.
 | REL-004 | `ABSENT` | No registered gate prevents the v1.0.23 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.23, and every release inside that interval retained them | R8.3 | REL-003 | `SUPERSEDED` |
 | BND-008 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-004, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.4 | REL-004, STORE-003 | `SUPERSEDED` |
 | CODE-002 | `MISFIT` | Verification state is restored from checkpoint `loop_guards`, but `_persist_verify_state` still mirrors every result into `SessionManager` columns whose accessor has no production reader | Production verify-mirror writes and the unused accessor are removed; legacy databases containing the columns still load, checkpoint recovery remains authoritative, and no new store or schema migration is introduced | R9.2 | CODE-001 | `DONE` |
-| BND-009 | `MISFIT` | `geode_product` combines runtime composition with evaluation and hill-climbing, while `plugins`, `core/self_improving`, Homebrew candidate files, and the unverified computer sandbox preserve duplicate or unsupported ownership surfaces | One documented migration leaves `core` as the GEODE runtime, moves measurement to `evals` and hill-climbing to `evolve`, removes every obsolete package/scaffold without a replacement stub, preserves one-way `evolve -> evals -> core` dependencies and operator behavior, migrates tracked state with byte parity, and proves the final wheel/sdist/install/release contain only the declared roots | R8.5 | BND-006, REL-003 | `OPEN` |
+| BND-009 | `MISFIT` | `geode_product` combines runtime composition with evaluation and hill-climbing, while `plugins`, `core/self_improving`, Homebrew candidate files, and the unverified computer sandbox preserve duplicate or unsupported ownership surfaces | One documented migration leaves `core` as the GEODE runtime, moves measurement to `evals` and hill-climbing to `evolve`, removes every obsolete package/scaffold without a replacement stub, preserves one-way `evolve -> evals -> core` dependencies and operator behavior, migrates tracked state with byte parity, and proves the final wheel/sdist/install/release contain only the declared roots | R8.5 | BND-006, REL-003 | `READY` |
 
 ## 6. Dependency and merge sequence
 
@@ -2187,20 +2187,22 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Immediate next unit
 
-The operator-directed namespace decision was re-audited against
-`origin/develop@6f665ad951854a4e4e429a9c73f2ea6afa290a77`. It supersedes the
-remaining R8.3 publication claim and the separately staged R8.2/R8.4 path;
-their immutable criteria and decision evidence remain in this ledger.
+R8.5 (`BND-009`) is the sole unclaimed `READY` package after a whole-package
+re-audit against
+`origin/develop@ae585a8e591994d0fb25a1d75a05968209be0524`. Its external
+dependencies, `BND-006` and `REL-003`, are `DONE`. The measured gap remains
+exactly the mixed `geode_product` ownership, duplicate `plugins` and
+`core/self_improving` paths, unsupported Homebrew/sandbox scaffolds, and the
+absence of a committed `core`/`evals`/`evolve` migration record and package
+gate. Readiness authorizes only the registered namespace convergence and
+verified patch release; it does not authorize a compatibility facade, archive,
+new plugin framework, or a second runtime.
 
 The master ledger contains 58 GAPs: 48 `DONE`, six `SUPERSEDED`, three
-`IN_DEVELOP`, and one `OPEN`. There are no active claims and no `READY`,
-`IN_PROGRESS`, `BLOCKED`, `REJECTED`, or unexplained rows.
-
-R8.5 (`BND-009`) is the sole next package. Its external dependencies,
-`BND-006` and `REL-003`, are `DONE`, but this registration does not authorize
-implementation. A separate whole-package readiness PR must move it from
-`OPEN` to `READY`; a later claim PR must name the implementation owner and
-branch before a new worktree is allocated.
+`IN_DEVELOP`, and one `READY`. There are no active claims and no `OPEN`,
+`IN_PROGRESS`, `BLOCKED`, `REJECTED`, or unexplained rows. A separate claim PR
+must name the implementation owner and branch before a new worktree is
+allocated.
 
 R7.2 (`CAP-006`, `VER-002`) and R7.3 (`VER-004`) remain `IN_DEVELOP` until
 the final full-program release audit closes their cross-package evidence.
