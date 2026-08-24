@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.25] - 2026-08-24
+
+> Post-migration integrity release: packaged guidance, release checks, and
+> generated documentation now agree on the shipped `core` / `evals` / `evolve`
+> boundary, with duplicate and speculative state authorities removed.
+
 ### Fixed
 
 - **Post-migration package guidance now matches the shipped roots.** Bundled

@@ -19,7 +19,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": "### Fixed\n\n- **Post-migration package guidance now matches the shipped roots.** Bundled\n  runtime skills and release scaffolds describe `core`, `evals`, and `evolve`;\n  package gates require those skill contracts, the self-improving hub reuses\n  the ledger's TSV schema, an unused deferred epoch-archive stub is removed,\n  and explicit retirement assertions no longer create slop-audit false\n  positives."
+    "body": ""
+  },
+  {
+    "version": "1.0.25",
+    "date": "2026-08-24",
+    "body": "> Post-migration integrity release: packaged guidance, release checks, and\n> generated documentation now agree on the shipped `core` / `evals` / `evolve`\n> boundary, with duplicate and speculative state authorities removed.\n\n### Fixed\n\n- **Post-migration package guidance now matches the shipped roots.** Bundled\n  runtime skills and release scaffolds describe `core`, `evals`, and `evolve`;\n  package gates require those skill contracts, the self-improving hub reuses\n  the ledger's TSV schema, an unused deferred epoch-archive stub is removed,\n  and explicit retirement assertions no longer create slop-audit false\n  positives."
   },
   {
     "version": "1.0.24",
