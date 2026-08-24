@@ -64,7 +64,7 @@ in the env it passes to each subprocess:
 * ``GEODE_HELD_OUT_BENCH=<repo>/state/seed-pools/held-out`` — the version-frozen
   ruler (``geode_product.self_improving.train._resolve_held_out_bench``).
 * ``GEODE_AUDIT_MAX_SAMPLES`` / ``GEODE_AUDIT_MAX_CONNECTIONS`` (default 3 / 8) —
-  the fan-out caps. NOTE: today ``plugins/petri_audit/runner.py::build_command``
+  the fan-out caps. NOTE: today ``geode_product/petri_audit/runner.py::build_command``
   hard-codes ``--max-samples 1 --max-connections 1`` for the single-OAuth lane
   (campaign-procedure.md §8). The driver exports these as a forward-looking knob
   the operator's multi-account lane can honour; it does not silently change the
@@ -122,7 +122,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 """The git repo root. ``geode_product/self_improving/campaign.py`` → ``parents[2]`` = repo root."""
 
 # Single canonical state-dir constant (``core.paths.AUTORESEARCH_STATE_DIR`` =
-# in-repo ``core/self_improving/state/`` by default; under
+# in-repo ``geode_product/self_improving/state/`` by default; under
 # ``$GEODE_STATE_ROOT/autoresearch`` for an isolated worker). No local
 # re-definition — no dual SoT (CLAUDE.md). Module aliases → the single-SoT
 # core.paths constants (no literal re-construction). Note post
@@ -345,7 +345,7 @@ def build_campaign_env(
 # SoT snapshot / restore (campaign-procedure.md §6 — matched gen-0 reset)
 # ---------------------------------------------------------------------------
 
-#: Glob patterns under the tracked SoT (``core/self_improving/state/``) that make
+#: Glob patterns under the tracked SoT (``geode_product/self_improving/state/``) that make
 #: up the full scaffold SoT a matched reset round-trips (campaign-procedure.md §1).
 _SNAPSHOT_SOURCES: tuple[tuple[Path, str], ...] = (
     (POLICIES_DIR, "*.json"),
@@ -356,7 +356,7 @@ _SNAPSHOT_SOURCES: tuple[tuple[Path, str], ...] = (
 def snapshot_sot(dest_dir: Path) -> list[Path]:
     """Copy the full scaffold SoT into ``dest_dir`` for a matched reset.
 
-    Captures every tracked ``core/self_improving/state/policies/*.{json,jsonl}``
+    Captures every tracked ``geode_product/self_improving/state/policies/*.{json,jsonl}``
     plus the runtime ``baseline.json``. Returns the destination paths written. Dest
     dir is wiped first so a re-snapshot is a clean overwrite (never a merge of a
     stale snapshot with a fresh one).
@@ -385,7 +385,7 @@ def restore_sot(snapshot_dir: Path) -> list[Path]:
     matched reset.
 
     Round-trips ``snapshot_sot`` exactly: the policy files are copied back into the
-    tracked ``core/self_improving/state/policies/`` and ``baseline.json`` back into
+    tracked ``geode_product/self_improving/state/policies/`` and ``baseline.json`` back into
     the runtime root. Crucially this is a *mirror*, not an overlay: any
     live ``policies/*.{json,jsonl}`` file that is NOT in the snapshot is DELETED,
     so an earlier arm that created a new policy file (e.g. the gate arm inserting
@@ -628,7 +628,7 @@ def degeneracy_guard(
 
 def _count_scored_dims(samples: Sequence[Any]) -> int:
     """Count distinct scored dims across the samples — mirrors
-    ``plugins/petri_audit/eval_archive.py`` (``scores["audit_judge"].value`` is a
+    ``geode_product/petri_audit/eval_archive.py`` (``scores["audit_judge"].value`` is a
     per-dim dict)."""
     dims: set[str] = set()
     for s in samples:
@@ -2074,7 +2074,7 @@ def run_arm(
         # Dry-run is read-only w.r.t. the git-tracked policy SoT: the offline
         # runner writes nothing, so a matched reset would only re-copy identical
         # bytes. Skipping restore_sot keeps the smoke from touching
-        # ``core/self_improving/state/policies/*`` at all (Codex MCP finding #5).
+        # ``geode_product/self_improving/state/policies/*`` at all (Codex MCP finding #5).
         progress.emit(f"arm '{arm}' (index {arm_index}): dry-run (gen-0 restore skipped)")
     else:
         progress.emit(f"arm '{arm}' (index {arm_index}): restoring gen-0 SoT snapshot")

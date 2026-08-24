@@ -283,6 +283,8 @@ def test_cmd_run_dry_run_skips_apply(
     out = capsys.readouterr().out
     assert "--dry-run" in out
     assert "improved" in out
+    assert "measurement  skipped (interactive mutation only)" in out
+    assert "PR-OPS-2b" not in out
 
 
 def test_cmd_run_target_kind_filter_skips_mismatched(

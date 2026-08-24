@@ -12,7 +12,6 @@ WORKFLOW_PATH = REPO_ROOT / ".github/workflows/release.yml"
 PORTFOLIO_PATH = REPO_ROOT / "site/src/app/portfolio/page.tsx"
 DISTRIBUTION_SKILL_PATH = REPO_ROOT / ".claude/skills/geode-distribution/SKILL.md"
 RELEASE_DOC_PATH = REPO_ROOT / "site/src/app/docs/ops/release-pypi-lifecycle/page.tsx"
-HOMEBREW_GUIDE_PATH = REPO_ROOT / "packaging/homebrew/README.md"
 
 
 def _workflow() -> dict[str, object]:
@@ -169,7 +168,6 @@ def test_current_distribution_surfaces_do_not_restore_the_deleted_tap() -> None:
             PORTFOLIO_PATH,
             DISTRIBUTION_SKILL_PATH,
             RELEASE_DOC_PATH,
-            HOMEBREW_GUIDE_PATH,
         )
     )
 
@@ -190,10 +188,8 @@ def test_release_retry_preserves_release_body_bytes() -> None:
 
 def test_public_install_commands_use_the_stable_pypi_channel() -> None:
     text = PORTFOLIO_PATH.read_text(encoding="utf-8")
-    release_doc = RELEASE_DOC_PATH.read_text(encoding="utf-8")
 
     assert "brew install" not in text
-    assert "brew install geode-agent" not in release_doc
     assert "mangowhoiscloud/tap" not in text
     assert 'useState("uv-tool")' in text
     assert 'copy: "uv tool install geode-agent"' in text

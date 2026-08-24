@@ -176,7 +176,7 @@ def test_geode_target_translates_petri_surface_alias() -> None:
 def test_petri_to_registry_map_covers_every_petri_concrete_source() -> None:
     """Map coverage — every Petri concrete source resolves on the GEODE side.
 
-    ``plugins/petri_audit/petri.plugin.toml`` declares the concrete
+    ``geode_product/petri_audit/petri.plugin.toml`` declares the concrete
     sources per provider:
 
     - anthropic: ``api_key``

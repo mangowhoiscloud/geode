@@ -536,7 +536,7 @@ gh pr checks <PR#> --watch --repo mangowhoiscloud/geode
 
 <!-- Why one script instead of a command list: CI enforces 17 gates while this
      checklist listed 5, and 3 of those 5 were documented at a NARROWER scope
-     than CI runs them (`mypy core/` vs CI's `mypy core/ plugins/ scripts/`).
+     than CI runs them (`mypy core/` vs CI's `mypy core/ geode_product/ scripts/`).
      A branch could pass the checklist verbatim and still fail CI — 5 of 60
      sampled July 2026 failures were exactly that scope gap. Keep preflight.sh
      as the single source; if CI gains a gate, add it there, not here. -->

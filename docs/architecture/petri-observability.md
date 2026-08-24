@@ -150,7 +150,7 @@ TestUsageRecordExtensionFields::test_from_json_legacy_record_compat`.
 
 Append-only, git-tracked, one line per archive. Producer:
 `core.audit.manifest.append_manifest`, called by
-`plugins.petri_audit.runner._append_manifest_line` after every
+`geode_product.petri_audit.runner._append_manifest_line` after every
 `_maybe_auto_archive` succeeds. Idempotent via `archive_sha`
 (file sha1).
 
@@ -217,7 +217,7 @@ to bypass two walls at once:
    chain but their effective level falls back to root's `WARNING`
    default, so a plain `log.info(...)` is filtered at the logger
    level and never reaches the LogHandler. PR #1034 fixed this for
-   `plugins.petri_audit.*` by setting that namespace to INFO at
+   `geode_product.petri_audit.*` by setting that namespace to INFO at
    import time — but only for that one namespace, and the fix relies
    on inspect_ai's transcript-capture path still being healthy
    (which Defect B-3's evidence showed was not always the case).
@@ -323,8 +323,8 @@ mutated by GEODE.
 - `core/audit/manifest.py` — Layer 1 → Layer 3 extractor
 - `core/llm/token_tracker.py` — Layer 2 producer (per-call)
 - `core/llm/usage_store.py` — Layer 2 storage
-- `plugins/petri_audit/runner.py:_maybe_auto_archive` — orchestration seam
-- `plugins/petri_audit/eval_archive.py:archive_eval` — Layer 1 copy + YAML
+- `geode_product/petri_audit/runner.py:_maybe_auto_archive` — orchestration seam
+- `geode_product/petri_audit/eval_archive.py:archive_eval` — Layer 1 copy + YAML
 - `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-11-petri-observability-audit.md` — ground-truth report
 - `docs/architecture/observability-report.md` — older system-wide inventory
 - inspect_ai source: `.venv/lib/python3.12/site-packages/inspect_ai/`

@@ -8,8 +8,8 @@ export default function Page() {
       slug="ops/release-pypi-lifecycle"
       title="Release and PyPI lifecycle"
       titleKo="릴리스와 PyPI 라이프사이클"
-      summary="The five version locations, GitFlow rotation, verified GitHub and PyPI promotion, Homebrew/core admission, and the rebuild cadence."
-      summaryKo="버전 5개 위치, GitFlow 로테이션, 검증된 GitHub·PyPI 승격, Homebrew/core 입성, rebuild 절차를 다룹니다."
+      summary="The five version locations, GitFlow rotation, verified GitHub and PyPI promotion, and the rebuild cadence."
+      summaryKo="버전 5개 위치, GitFlow 로테이션, 검증된 GitHub·PyPI 승격, rebuild 절차를 다룹니다."
     >
       <Bi
         ko={
@@ -78,25 +78,6 @@ export default function Page() {
               GitHub asset, PyPI 파일, SHA-256이 모두 같은 릴리스인지 확인합니다.
             </p>
 
-            <h2>Homebrew는 core 입성 절차가 따로 있습니다</h2>
-            <p>
-              Homebrew는 stable promotion의 일부가 아닙니다. 기존 custom
-              배포 저장소는 삭제됐고, namespace가 붙는 설치 명령도 다시
-              만들지 않습니다. <code>packaging/homebrew</code>의 formula
-              template과 renderer는 immutable GitHub Release sdist를 쓰는{" "}
-              <code>geode-agent</code> Homebrew/core 후보만 만듭니다.
-            </p>
-            <p>
-              첫 upstream PR은 Homebrew의 최신 acceptable-formula 정책을
-              따릅니다. GEODE가 beta 표기를 벗어나고 외부 사용 및 notability
-              조건을 충족하기 전에는 검증된 후보를 fork에만 보관합니다.
-              Homebrew/core가 수락한 뒤 공식 formula API와 깨끗한 macOS·Linux
-              환경에서 unqualified install, version, formula test, uninstall
-              게이트가 모두 통과해야 공개 설치 화면에 Homebrew를 다시 추가할
-              수 있습니다. 실제 후보 갱신과 검증 명령은 저장소의{" "}
-              <code>packaging/homebrew/README.md</code>에만 둡니다.
-            </p>
-
             <h2>릴리스 후 rebuild</h2>
             <p>
               main 머지 후 로컬 런타임을 새 코드로 올립니다. 두 함정이
@@ -119,7 +100,6 @@ geode serve &                            # 데몬 재기동`}</pre>
               <li><code>scripts/resolve_architecture_roadmap_trust.py</code>. 충돌 해결형 main → develop sync의 정확한 부모·출처 검증.</li>
               <li><code>docs/workflow.md</code>. pre-sync와 GitFlow 운영 정본.</li>
               <li><code>scripts/verify_public_distribution.py</code>. GitHub·PyPI 공개 배포 일치 검증.</li>
-              <li><code>packaging/homebrew</code>. Homebrew/core 후보 template과 운영 지침.</li>
               <li><code>CHANGELOG.md</code>. Keep a Changelog + SemVer 정본.</li>
             </ul>
           </>
@@ -195,27 +175,6 @@ geode serve &                            # 데몬 재기동`}</pre>
               SHA-256 digests to describe the same release.
             </p>
 
-            <h2>Homebrew has a separate core-admission path</h2>
-            <p>
-              Homebrew is not part of the stable-promotion workflow. The former
-              custom distribution repository is deleted, and a qualified
-              install command must not return. The formula template and
-              renderer under <code>packaging/homebrew</code> prepare only a{" "}
-              <code>geode-agent</code> Homebrew/core candidate backed by the
-              immutable GitHub Release sdist.
-            </p>
-            <p>
-              A first upstream PR must satisfy Homebrew&apos;s current acceptable-
-              formula policy. Until GEODE is no longer marked beta and meets
-              the external-use and notability requirements, keep the audited
-              candidate in the fork. After Homebrew/core accepts it, add
-              Homebrew back to the public install UI only after the official
-              formula API and clean macOS and Linux install, version, formula-
-              test, and uninstall gates pass. Keep the concrete candidate and
-              verification commands in the repository-only{" "}
-              <code>packaging/homebrew/README.md</code> until then.
-            </p>
-
             <h2>Rebuild after a release</h2>
             <p>
               After the main merge, bring the local runtime up to the new code.
@@ -239,7 +198,6 @@ geode serve &                            # restart the daemon`}</pre>
               <li><code>scripts/resolve_architecture_roadmap_trust.py</code>. Exact-parent and source validation for conflict-resolved main → develop syncs.</li>
               <li><code>docs/workflow.md</code>. Canonical pre-sync and GitFlow procedure.</li>
               <li><code>scripts/verify_public_distribution.py</code>. Public GitHub/PyPI parity verification.</li>
-              <li><code>packaging/homebrew</code>. Homebrew/core candidate template and operating guide.</li>
               <li><code>CHANGELOG.md</code>. Keep a Changelog + SemVer source of truth.</li>
             </ul>
           </>

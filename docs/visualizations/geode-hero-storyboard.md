@@ -146,7 +146,7 @@ confidence = 1 / (1 + (stderr / 1.0)²)
 α = β = 1.0 (DEFAULT_ELO_WEIGHT / DEFAULT_DIFFICULTY_WEIGHT)
 ```
 
-Source: `plugins/seed_generation/tournament.py:444-501` (`blend_scores`),
+Source: `geode_product/seed_generation/tournament.py:444-501` (`blend_scores`),
 `difficulty_confidence` at line 397. The difficulty term degrades
 **per candidate**: a candidate with no usable pilot signal gets a pure
 `α · z(elo)` score, and when no candidate has a signal the whole
@@ -531,7 +531,7 @@ Everything else is code-grounded:
 | Claim | Source |
 |---|---|
 | `be-001` fitness = 0.7915 (≈0.8), ceiling implicit | `state/autoresearch/baseline_archive.jsonl` |
-| `final = α·z(elo) + β·conf·z(diff)`, `conf = 1/(1+(stderr/1.0)²)`, α=β=1.0 | `plugins/seed_generation/tournament.py:397, 444-501`; `DEFAULT_ELO_WEIGHT`/`DEFAULT_DIFFICULTY_WEIGHT` = 1.0 |
+| `final = α·z(elo) + β·conf·z(diff)`, `conf = 1/(1+(stderr/1.0)²)`, α=β=1.0 | `geode_product/seed_generation/tournament.py:397, 444-501`; `DEFAULT_ELO_WEIGHT`/`DEFAULT_DIFFICULTY_WEIGHT` = 1.0 |
 | per-candidate graceful degrade to pure Elo | `tournament.py:blend_scores` docstring |
 | `DEFAULT_ARMS = ("never","random","gate")`, gate LAST | `geode_product/self_improving/campaign.py:144` |
 | dropped `verbose_padding` + `redundant_tool_invocation` (saturated 4-bucket step scale) | `train.py:626-637` |

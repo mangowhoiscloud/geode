@@ -230,7 +230,7 @@ def _build_computer_use_handler() -> UniqueEntries[str, Any]:
             return {
                 "error": "computer-use is disabled",
                 "error_type": "permission",
-                "hint": "Enable computer_use_enabled and configure host or sandbox execution.",
+                "hint": "Enable computer_use_enabled and configure a host desktop driver.",
             }
         # OpenAI Responses GA path: ``computer_call`` delivers a BATCHED
         # ``actions[]`` array (the adapter maps it onto ``input.actions``). Run
@@ -254,7 +254,7 @@ def _build_computer_use_handler() -> UniqueEntries[str, Any]:
             return {
                 "error": "computer-use is disabled",
                 "error_type": "permission",
-                "hint": "Enable computer_use_enabled and configure host or sandbox execution.",
+                "hint": "Enable computer_use_enabled and configure a host desktop driver.",
             }
         return await execute_emulated_computer_use(harness, **kwargs)
 

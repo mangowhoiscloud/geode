@@ -30,7 +30,7 @@ Like Meta-reviewer, Supervisor dispatches ONE sub-agent (single-item
 work. Costs one Opus call at the front of the run (paid once for all
 the downstream sub-agent spawns to consume).
 
-Sub-agent contract (``plugins/seed_generation/agents/supervisor.md``)::
+Sub-agent contract (``geode_product/seed_generation/agents/supervisor.md``)::
 
     {
       "research_goal_analysis": {
@@ -213,7 +213,7 @@ class Supervisor(BaseSeedAgent):
     ) -> str:
         """Compose the per-run user message for the single sub-agent.
 
-        The system prompt is owned by ``plugins/seed_generation/agents/supervisor.md``;
+        The system prompt is owned by ``geode_product/seed_generation/agents/supervisor.md``;
         the description fills in the per-run context (target dim, cohort,
         and the *summary* of the snapshots — never the raw rows). Keeping
         the description compact (< 1KB) so the Opus call is dominated by

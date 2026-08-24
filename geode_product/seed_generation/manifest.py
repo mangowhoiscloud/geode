@@ -1,8 +1,8 @@
 """Seed pipeline manifest loader — declarative 7-role + 3-judge-panel schema.
 
-Reads ``plugins/seed_generation/seed_generation.plugin.toml`` into a validated
+Reads ``geode_product/seed_generation/seed_generation.plugin.toml`` into a validated
 pydantic tree. Source / adapter layers are intentionally NOT defined here
-— they are reused from ``plugins/petri_audit/petri.plugin.toml`` (the
+— they are reused from ``geode_product/petri_audit/petri.plugin.toml`` (the
 Petri manifest is the SOT for credential provider/source binding). The
 seed-generation manifest's voter rows are cross-validated against the
 Petri source table at load time so a typo'd ``provider`` or ``source`` is

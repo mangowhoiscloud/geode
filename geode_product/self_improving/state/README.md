@@ -1,4 +1,4 @@
-# `core/self_improving/state/` — tracked self-improving SoT (PR-STATE-SOT-RUNTIME-SPLIT, 2026-06-14)
+# `geode_product/self_improving/state/` — tracked self-improving SoT (PR-STATE-SOT-RUNTIME-SPLIT, 2026-06-14)
 
 This directory is the **git-tracked Source of Truth** for the self-improving
 (autoresearch) loop: the versioned INPUTS + ledgers a reviewer must see and the
@@ -13,7 +13,7 @@ into history nor loses them on `git clean`.
 ## What lives here (tracked, in-repo)
 
 ```
-core/self_improving/state/
+geode_product/self_improving/state/
 ├── README.md                  (this file)
 ├── mutations.jsonl            mutation audit ledger (git-as-optimiser trail)
 ├── baseline_archive.jsonl     promoted baseline-history registry
@@ -47,8 +47,8 @@ core/self_improving/state/
 
 | Constant | Lifecycle | Default |
 |----------|-----------|---------|
-| `SELF_IMPROVING_SOT_DIR` / `AUTORESEARCH_STATE_DIR` | TRACKED | `core/self_improving/state/` (this dir) |
-| `SEED_POOLS_DIR` | TRACKED (always repo-pinned) | `core/self_improving/state/seed_pools/` |
+| `SELF_IMPROVING_SOT_DIR` / `AUTORESEARCH_STATE_DIR` | TRACKED | `geode_product/self_improving/state/` (this dir) |
+| `SEED_POOLS_DIR` | TRACKED (always repo-pinned) | `geode_product/self_improving/state/seed_pools/` |
 | `RUNTIME_ROOT` | RUNTIME | `~/.geode/self-improving/` |
 | `BASELINE_JSON_PATH` | RUNTIME | `~/.geode/self-improving/baseline.json` |
 

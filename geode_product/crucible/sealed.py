@@ -18,7 +18,13 @@ from typing import Any, Literal, Protocol, cast
 
 from .artifacts import contained_path, load_json_object, write_exclusive_json
 from .bundle import PromotionBundle
-from .contract import ContractError, ExperimentContract, validate_test_parent
+from .contract import (
+    ContractError,
+    ExperimentContract,
+    canonical_json_bytes,
+    canonical_json_sha256,
+    validate_test_parent,
+)
 from .evidence import EvidenceEnvelope, load_evidence
 from .promotion import PromotionVerdict, decide
 from .ref_journal import (
@@ -76,25 +82,14 @@ class SealedInfrastructureError(RuntimeError):
 
 def _hash(payload: Mapping[str, Any]) -> str:
     try:
-        encoded = json.dumps(
-            payload,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode()
+        return canonical_json_sha256(payload)
     except (TypeError, ValueError) as exc:
         raise SealedError("sealed artifact must contain canonical JSON values") from exc
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def _canonical_bytes(payload: Mapping[str, Any]) -> bytes:
     try:
-        return json.dumps(
-            payload,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
+        return canonical_json_bytes(payload)
     except (TypeError, ValueError) as exc:
         raise SealedError("sealed attestation must contain canonical JSON values") from exc
 

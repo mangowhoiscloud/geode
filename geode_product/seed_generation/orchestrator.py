@@ -335,7 +335,7 @@ class PipelineState:
     # CSP-4 (2026-05-22) — run-level strategy synthesis emitted by the
     # Supervisor phase (paper §3 Supervisor). Empty dict before
     # Supervisor runs OR when the role isn't registered (test fixtures).
-    # Structure mirrors ``plugins/seed_generation/agents/supervisor.md`` contract:
+    # Structure mirrors ``geode_product/seed_generation/agents/supervisor.md`` contract:
     # ``research_goal_analysis`` + ``phase_guidance`` (keys: generation,
     # critique, evolution) + ``session_summary``. Downstream sub-agents
     # prefix the relevant ``phase_guidance.*`` value into their own

@@ -6,7 +6,7 @@ OL-A3 (2026-05-22) prerequisite stack now in place:
   — per-firing JSONL, one row per terminal state of the auto-trigger
   state machine (fired / lock_busy / interval_blocked / runner_error /
   parse_error).
-- ``core/self_improving/state/mutations.jsonl`` — git-tracked mutation audit
+- ``geode_product/self_improving/state/mutations.jsonl`` — git-tracked mutation audit
   ledger (one row per ``apply_mutation`` call: applied / rejected /
   rolled_back).
 - ``~/.geode/self-improving/baseline.json`` — current fitness baseline
@@ -304,7 +304,7 @@ def outer_bundle_command(
     Output (default) is a Rich table sorted ascending by timestamp.
     ``--json`` switches to JSONL-on-stdout for downstream tools.
 
-    Files outside ``~/.geode/`` and ``core/self_improving/state/`` are
+    Files outside ``~/.geode/`` and ``geode_product/self_improving/state/`` are
     ignored. Missing files render as an empty bundle (no error).
     """
     events = load_bundle_events(limit=limit)

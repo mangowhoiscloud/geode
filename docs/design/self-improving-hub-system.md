@@ -287,10 +287,10 @@ The version values are **build-time substituted** from `pyproject.toml` + CHANGE
 When citing data that may change, anchor to source with version:
 
 - ❌ "the 22 judge dimensions"
-- ✅ "the 22 judge dimensions ([`plugins/petri_audit/judge_dims/geode_judge_subset.yaml`](../../plugins/petri_audit/judge_dims/geode_judge_subset.yaml), as of v0.99.65)"
+- ✅ "the 22 judge dimensions ([`geode_product/petri_audit/judge_dims/geode_judge_subset.yaml`](../../geode_product/petri_audit/judge_dims/geode_judge_subset.yaml), as of v0.99.65)"
 
 - ❌ "8 pipeline phases"
-- ✅ "8 pipeline phases ([`plugins/seed_generation/orchestrator.py:_PHASE_ORDER`](../../plugins/seed_generation/orchestrator.py), as of v0.99.65)"
+- ✅ "8 pipeline phases ([`geode_product/seed_generation/orchestrator.py:_PHASE_ORDER`](../../geode_product/seed_generation/orchestrator.py), as of v0.99.65)"
 
 - ❌ "schema v2 baseline.json"
 - ✅ "schema v2 baseline.json (PR-2 of petri-schema-v2 cascade, v0.99.37+)"
@@ -302,9 +302,9 @@ When citing data that may change, anchor to source with version:
 
 | Constant | Value as of v0.99.65 | Source |
 |---|---|---|
-| Judge dimension count (subset) | 22 | `plugins/petri_audit/judge_dims/geode_judge_subset.yaml` |
+| Judge dimension count (subset) | 22 | `geode_product/petri_audit/judge_dims/geode_judge_subset.yaml` |
 | Judge dimension count (full) | 38 | inspect-petri default |
-| Pipeline phase count | 8 | `plugins/seed_generation/orchestrator.py:_PHASE_ORDER` |
+| Pipeline phase count | 8 | `geode_product/seed_generation/orchestrator.py:_PHASE_ORDER` |
 | Baseline schema version | v2 | PR-2 of petri-schema-v2 cascade |
 | Mutation row schema | W4 | `geode_product/self_improving/loop/runner.py:81` ApplyRecord |
 | Fitness axes count | 4 (dim / ux / admire / bench) | ADR-012 §Decision.2 amendment |

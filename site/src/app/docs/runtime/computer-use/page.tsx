@@ -96,13 +96,11 @@ computer_use ←────── compact observation(base64 omitted) ◄┘`}<
               게이트는 <code>is_computer_use_enabled()</code>
               (<code>core/llm/providers/anthropic.py</code>) 하나입니다. 설정{" "}
               <code>computer_use_enabled</code>(<code>core/config/_settings.py</code>)가
-              켜져 있고 선택한 실행 경로가 준비되어 있어야 true입니다. sandbox
-              경로는 host pyautogui가 필요 없고, helper 경로는 설치된 helper를,
-              python 경로는 pyautogui를 요구합니다.
+              켜져 있고 선택한 host driver가 준비되어 있어야 true입니다. helper
+              경로는 설치된 helper를, python 경로는 pyautogui를 요구합니다.
             </p>
             <pre>{`[computer_use]
 enabled = true
-env = "host"
 driver = "helper"
 # helper_path = "/absolute/path/to/geode-computer-helper"`}</pre>
             <p>
@@ -126,7 +124,8 @@ driver = "helper"
               <code>[gateway] allow_computer_use = true</code>를 명시했을 때만
               executor가 두 computer-use surface의 실행을 허용합니다. 옵션이
               꺼져 있으면 provider-visible schema가 있더라도 dispatch 전에
-              거부합니다.
+              거부합니다. unrestricted Petri audit에는 검증된 격리 경로가
+              없으므로 두 surface가 항상 비활성화됩니다.
             </p>
 
             <h2>실패 모드</h2>
@@ -247,13 +246,11 @@ computer_use ←────── compact observation(base64 omitted) ◄┘`}<
               in <code>core/llm/providers/anthropic.py</code>. It is true when
               the <code>computer_use_enabled</code> setting
               (<code>core/config/_settings.py</code>) is on and the selected
-              execution path is ready. Sandbox mode needs no host pyautogui;
-              helper mode requires an installed helper, and python mode
-              requires pyautogui.
+              host driver is ready. Helper mode requires an installed helper,
+              and python mode requires pyautogui.
             </p>
             <pre>{`[computer_use]
 enabled = true
-env = "host"
 driver = "helper"
 # helper_path = "/absolute/path/to/geode-computer-helper"`}</pre>
             <p>
@@ -279,7 +276,9 @@ driver = "helper"
               <code>[gateway] allow_computer_use = true</code> before the
               executor permits either computer-use surface. While it is off,
               execution is rejected before dispatch even if a provider-visible
-              schema is present.
+              schema is present. Both surfaces are always disabled during an
+              unrestricted Petri audit because no verified isolated execution
+              path remains.
             </p>
 
             <h2>Failure modes</h2>

@@ -41,7 +41,7 @@ use_oauth = true
 seed_limit = 10
 # Seed pool path (hierarchical tree, post-PR-0). The `AUTORESEARCH_SEED_SELECT`
 # env var overrides this for cross-loop handoff from seed-generation.
-seed_select = "plugins/petri_audit/seeds"
+seed_select = "geode_product/petri_audit/seeds"
 # Which dim manifest the audit measures (`5axes` / `legacy` / custom yaml path).
 dim_set  = "5axes"
 # Per-rollout max tool-use turns. 1–200.
@@ -55,7 +55,7 @@ max_turns = 10
 # This is the shape the runtime reads: one nested table per role under
 # `[self_improving_loop.autoresearch.<role>]`, each with `model` + `source`.
 # Each role table is optional; an absent role falls back to the manifest
-# defaults in `plugins/petri_audit/petri.plugin.toml`
+# defaults in `geode_product/petri_audit/petri.plugin.toml`
 # (auditor: claude-opus-4-7, target: claude-haiku-4-5, judge: claude-sonnet-4-6).
 # `source` selects `api_key` or `openai-codex` (ChatGPT subscription OAuth).
 # Retired `claude-cli` values load only to emit a migration error.
@@ -77,7 +77,7 @@ model  = "claude-sonnet-4-6"
 source = "api_key"
 
 # ---------------------------------------------------------------------------
-# seed-generation driver (plugins/seed_generation/)
+# seed-generation driver (geode_product/seed_generation/)
 # ---------------------------------------------------------------------------
 [self_improving_loop.seed_generation]
 # Default `--candidates` for `geode audit-seeds generate` when omitted on
@@ -87,7 +87,7 @@ candidates_default = 15
 # explicit tags per run; this is the bare-CLI fallback.
 default_gen_tag = "gen1"
 # Optional per-role binding (model, provider, source). When unset, the
-# picker derives the binding from `plugins/seed_generation/seed_generation.plugin.toml`
+# picker derives the binding from `geode_product/seed_generation/seed_generation.plugin.toml`
 # defaults. Example:
 # [self_improving_loop.seed_generation.roles.generator]
 # model    = "gpt-5.5"

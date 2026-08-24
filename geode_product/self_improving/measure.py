@@ -139,7 +139,7 @@ def _load_hyperparam_overrides() -> dict[str, str]:
     Resolution order matches the other policy SoTs:
       1. ``GEODE_HYPERPARAM_OVERRIDE`` env var (set by the audit subprocess)
       2. ``AUTORESEARCH_HYPERPARAM_POLICY_PATH``
-         (``core/self_improving/state/policies/hyperparam.json``)
+         (``geode_product/self_improving/state/policies/hyperparam.json``)
 
     Return value is a flat ``dict[str, str]`` — same shape as the SoT
     JSON. Caller is responsible for type-casting + bounds validation
@@ -206,7 +206,7 @@ def _build_audit_command() -> list[str]:
 
     PR-HYPERPARAM-WIRE (2026-05-28) — ``cfg.{seed_limit, dim_set,
     max_turns}`` are now overridable by the mutation SoT at
-    ``core/self_improving/state/policies/hyperparam.json``. Resolution
+    ``geode_product/self_improving/state/policies/hyperparam.json``. Resolution
     precedence (highest wins): mutation SoT value → autoresearch
     config default. The mutator-proposed values went through
     ``parse_mutation`` 's bounds guard, so by the time they reach
@@ -238,10 +238,10 @@ def _build_audit_command() -> list[str]:
         "--yes",
     ]
     # PR-OL-AUDIT-BURST-FIX (2026-05-22) FIX-1+2 — burst caps are
-    # plumbed via ``plugins/petri_audit/runner.py::build_command``
+    # plumbed via ``geode_product/petri_audit/runner.py::build_command``
     # (the actual ``inspect eval`` command assembly site). The
     # ``geode audit`` Typer wrapper does NOT accept these flags
-    # directly — see plugins/petri_audit/cli_audit.py for the surface.
+    # directly — see geode_product/petri_audit/cli_audit.py for the surface.
     # This argv stays unchanged; the inspect_ai connection / sample
     # caps live one layer down.
     source = getattr(cfg, "source", "auto")
@@ -262,7 +262,7 @@ def _audit_sampling_params_as_sent() -> dict[str, Any]:
     that controls only a SUBSET of generation params: ``max_turns`` / ``seeds`` /
     ``dim_set`` / ``source``, and the inspect_ai connection caps
     (``max_connections=1`` / ``max_samples=1``, pinned in
-    ``plugins/petri_audit/runner.py:build_command``). These are the resolved
+    ``geode_product/petri_audit/runner.py:build_command``). These are the resolved
     EFFECTIVE values (mutation-SoT override → config), identical to what
     ``_build_audit_command`` puts on the argv.
 
@@ -469,7 +469,7 @@ def _build_audit_env(override_path: Path) -> dict[str, str]:
     # PR-HYPERPARAM-FOUNDATION (2026-05-28) — hyperparam SoT path
     # propagation. PR-2 lands the env literal so the sibling-SoT env-map
     # invariant test passes against the 8-kind TARGET_KINDS. The actual
-    # consumption — ``plugins/petri_audit/runner.py:build_command``
+    # consumption — ``geode_product/petri_audit/runner.py:build_command``
     # reading the SoT and translating each key to an inspect-petri
     # ``-T`` flag — lands in PR-3 (PR-HYPERPARAM-WIRE). Until then the
     # env var is set but no reader inside the audit subprocess loads it;

@@ -8,7 +8,7 @@ The call site derives ``repo_root`` from
 ``cwd`` to ``_run_autoresearch_subprocess``. The argv inside that
 subprocess is ``["uv", "run", "python", "-m", "geode_product.self_improving.train"]``,
 so the cwd MUST be the repo root — otherwise ``python -m`` cannot resolve
-the ``core`` package and the subprocess exits with a ``ModuleNotFoundError``
+the ``geode_product`` package and the subprocess exits with a ``ModuleNotFoundError``
 before any audit work happens.
 
 Latent bug history: PR-G5b (2026-05-20) moved the audit log from
@@ -48,12 +48,12 @@ def test_mutation_audit_log_lives_three_levels_below_repo_root(
     """``parents[3]`` of the audit log path is the repo root.
 
     Pin (post PR-STATE-SOT-RUNTIME-SPLIT): ``MUTATION_AUDIT_LOG_PATH`` =
-    ``<repo>/core/self_improving/state/mutations.jsonl`` → ``parents[3]``
+    ``<repo>/geode_product/self_improving/state/mutations.jsonl`` → ``parents[3]``
     is the repo root containing ``geode_product/self_improving/train.py`` (the move
     in-repo deepened it one level, 2 → 3).
     """
     repo_root = audit_log_path.resolve().parents[3]
-    assert (repo_root / "core" / "self_improving" / "train.py").is_file(), (
+    assert (repo_root / "geode_product" / "self_improving" / "train.py").is_file(), (
         f"repo_root={repo_root!r} does not contain geode_product/self_improving/train.py — "
         f"the parents[3] offset is wrong or the audit log path moved again."
     )
@@ -62,19 +62,19 @@ def test_mutation_audit_log_lives_three_levels_below_repo_root(
 def test_parents_two_is_not_repo_root(
     audit_log_path: Path,
 ) -> None:
-    """``parents[2]`` points at ``<repo>/core``, not the repo root.
+    """``parents[2]`` points at ``<repo>/geode_product``, not the repo root.
 
     Negative pin: if a future refactor flips back to ``parents[2]``, the
-    git ``cwd`` becomes ``<repo>/core`` and the ``-m geode_product.self_improving.train``
-    spawn cannot find the ``core`` package (which lives at the repo root). This
+    git ``cwd`` becomes ``<repo>/geode_product`` and the module spawn cannot find
+    the top-level ``geode_product`` package (whose parent is the repo root). This
     asserts ``parents[2]`` does NOT contain ``geode_product/self_improving/train.py`` so
     the wrong cwd cannot silently pass.
     """
     wrong_root = audit_log_path.resolve().parents[2]
-    wrong_path = wrong_root / "core" / "self_improving" / "train.py"
+    wrong_path = wrong_root / "geode_product" / "self_improving" / "train.py"
     assert not wrong_path.exists(), (
         f"Unexpected: {wrong_path!r} exists — runner.py uses parents[3] (not "
-        f"parents[2]) because parents[2] resolves to <repo>/core, not the repo root."
+        f"parents[2]) because parents[2] resolves to <repo>/geode_product, not the repo root."
     )
 
 
@@ -83,7 +83,7 @@ def test_runner_apply_proposal_uses_correct_parents_offset() -> None:
 
     Source-level pin: greps the runner module so a regression to ``parents[2]``
     on either call site fails before any subprocess spawn. The audit log moved
-    in-repo to ``core/self_improving/state/`` (PR-STATE-SOT-RUNTIME-SPLIT), one
+    in-repo to ``geode_product/self_improving/state/`` (PR-STATE-SOT-RUNTIME-SPLIT), one
     level deeper, so the git-cwd derivation is now ``parents[3]``.
     """
     from geode_product.self_improving.loop.mutate import runner

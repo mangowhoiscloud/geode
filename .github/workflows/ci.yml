@@ -33,7 +33,6 @@ jobs:
             code:
               - 'core/**'
               - 'geode_product/**'
-              - 'plugins/**'
               - 'scripts/**'
               - 'tests/**'
               - '.agents/**'
@@ -73,9 +72,9 @@ jobs:
       - if: needs.changes.outputs.code == 'true'
         run: uv sync
       - if: needs.changes.outputs.code == 'true'
-        run: uv run ruff check core/ geode_product/ tests/ plugins/ scripts/
+        run: uv run ruff check core/ geode_product/ tests/ scripts/
       - if: needs.changes.outputs.code == 'true'
-        run: uv run ruff format --check core/ geode_product/ tests/ plugins/ scripts/
+        run: uv run ruff format --check core/ geode_product/ tests/ scripts/
       - name: Dependency drift (deptry)
         if: needs.changes.outputs.code == 'true'
         run: uv run deptry .
@@ -196,7 +195,7 @@ jobs:
       - if: needs.changes.outputs.code == 'true'
         run: uv sync --extra audit
       - if: needs.changes.outputs.code == 'true'
-        run: uv run mypy core/ geode_product/ plugins/ scripts/
+        run: uv run mypy core/ geode_product/ scripts/
       - name: Prompt integrity check
         if: needs.changes.outputs.code == 'true'
         run: uv run python -c "from core.llm.prompts import verify_prompt_integrity; verify_prompt_integrity(raise_on_drift=True)"

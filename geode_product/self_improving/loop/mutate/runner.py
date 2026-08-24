@@ -22,7 +22,7 @@ What the runner adds:
    JSON, validate against the SoT schema.
 5. **Apply + audit log** — call ``write_wrapper_prompt_sections`` and
    append the mutation to the git-tracked audit jsonl
-   (``core/self_improving/state/mutations.jsonl``).
+   (``geode_product/self_improving/state/mutations.jsonl``).
 6. **Optional re-run** — when ``rerun=True`` (default ``False`` to
    keep dry-runs cheap), spawn ``geode_product.self_improving.train`` so the next
    baseline reflects the new wrapper.
@@ -839,7 +839,7 @@ def _default_llm_call(
 # moot — ALL hyperparam mutations are rejected — and is removed rather than
 # left as dead branches. A single clear rejection replaces it.
 #
-# PRESERVED: ``core/self_improving/state/policies/hyperparam.json`` and its RUNTIME
+# PRESERVED: ``geode_product/self_improving/state/policies/hyperparam.json`` and its RUNTIME
 # readers (``geode_product.self_improving.train._load_hyperparam_overrides`` →
 # seed_limit/max_turns/dim_set/reflection_depth consumed by the audit subprocess
 # + AgenticLoop). Only the MUTATION surface is gone.
@@ -1160,7 +1160,7 @@ def _git_commit_audit_log(
     """
     try:
         # parents[3] = repo root. ``log_path`` is
-        # ``<repo>/core/self_improving/state/mutations.jsonl`` (PR-STATE-SOT-
+        # ``<repo>/geode_product/self_improving/state/mutations.jsonl`` (PR-STATE-SOT-
         # RUNTIME-SPLIT moved it in-repo, one level deeper than the old
         # ``state/autoresearch/`` — parents went 2 → 3). parents[2] would
         # resolve to ``<repo>/core`` and silently run git in a non-root cwd.
@@ -1485,7 +1485,7 @@ class SelfImprovingLoopRunner:
             _git_commit_audit_log(log_path, mutation=proposal.mutation)
         if self.rerun_enabled:
             # MUTATION_AUDIT_LOG_PATH lives at
-            # <repo>/core/self_improving/state/mutations.jsonl, so parents[3] is
+            # <repo>/geode_product/self_improving/state/mutations.jsonl, so parents[3] is
             # the repo root (PR-STATE-SOT-RUNTIME-SPLIT moved it in-repo, depth
             # 2 → 3). parents[2] would point at <repo>/core and spawn
             # `uv run python -m geode_product.self_improving.train` with the wrong cwd.

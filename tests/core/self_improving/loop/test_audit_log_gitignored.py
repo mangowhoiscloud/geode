@@ -8,7 +8,7 @@ it.
 
 PR-STATE-SOT-RUNTIME-SPLIT (2026-06-14) retired that whole negation dance. The
 tracked SoT (``mutations.jsonl`` / ``baseline_archive.jsonl`` / ``results.*`` /
-``policies/``) moved IN-REPO to ``core/self_improving/state/`` — under ``core/``,
+``policies/``) moved IN-REPO to ``geode_product/self_improving/state/`` — under ``core/``,
 which nothing ignores, so it is *naturally* git-tracked with no negation. The
 RUNTIME scratch (``baseline.json``, ``run.log``, per-run ``seed_generation/``)
 moved OUT of the repo to ``~/.geode/self-improving/`` — so it is structurally
@@ -55,7 +55,7 @@ def test_gitignore_no_longer_carries_state_negation_dance() -> None:
     text = (_REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
     assert "state/autoresearch/*" not in text, (
         "The retired `state/autoresearch/*` ignore glob is back in .gitignore — "
-        "the tracked SoT now lives under core/self_improving/state/ and must not "
+        "the tracked SoT now lives under geode_product/self_improving/state/ and must not "
         "be re-homed at a top-level state/ that needs a negation dance."
     )
     assert "!state/autoresearch/mutations.jsonl" not in text, (
@@ -90,7 +90,7 @@ def test_tracked_sot_not_gitignored(constant_name: str) -> None:
     assert result.returncode == 1, (
         f"git check-ignore considers {repo_relative} ignored "
         f"(exit={result.returncode}, stdout={result.stdout!r}). The tracked SoT "
-        f"under core/self_improving/state/ must enter git history — a later glob "
+        f"under geode_product/self_improving/state/ must enter git history — a later glob "
         f"(`*.jsonl`?) may have re-ignored it."
     )
 

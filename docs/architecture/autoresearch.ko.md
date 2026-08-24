@@ -24,7 +24,7 @@
 
 | Karpathy 원본 | GEODE fork | Mutation? |
 |---|---|---|
-| `prepare.py` (data + tokenizer + eval, ~300 LOC) | `autoresearch/prepare.py` (seed pool + rubric sanity check) + `plugins/petri_audit/` (audit pipeline) | NO (read-only) |
+| `prepare.py` (data + tokenizer + eval, ~300 LOC) | `autoresearch/prepare.py` (seed pool + rubric sanity check) + `geode_product/petri_audit/` (audit pipeline) | NO (read-only) |
 | `train.py` (GPT model + optimizer, ~630 LOC) | `geode_product/self_improving/train.py` (`WRAPPER_PROMPT_SECTIONS` dict + audit invoke + fitness 추출, ~300 LOC) | **YES** (agent가 mutate) |
 | `program.md` (human-authored instruction) | `geode_product/self_improving/program.md` | NO (human only) |
 | Loop (5분 train run → grep metric → keep/reset) | outer-loop agent(Claude Code / Codex)가 `program.md`의 instruction에 따라 LOOP FOREVER를 수행하고 `git commit` / `git reset --hard`로 ratchet한다 | (agent-driven) |
@@ -68,11 +68,11 @@ geode/
 │   ├── run.log, wrapper-override.json
 │   ├── campaign/{gen-0-snapshot/, runs/<id>.json}
 │   └── handoff/, seed_generation/<run_id>/
-├── plugins/petri_audit/         ← inner-loop harness (Karpathy prepare 등가, 고정)
+├── geode_product/petri_audit/         ← inner-loop harness (Karpathy prepare 등가, 고정)
 └── core/agent/system_prompt.py  ← `_load_wrapper_override` (active hook)
 ```
 
-`core/self_improving/state/`는 `core/` 아래에 있어 자연히 git-tracked다
+`geode_product/self_improving/state/`는 `core/` 아래에 있어 자연히 git-tracked다
 (negation dance가 필요 없다). runtime 경로는
 `core.paths.RUNTIME_ROOT`(`GEODE_STATE_ROOT`/`GEODE_HOME`으로 override)를
 따른다. 워커 격리 시에는 `GEODE_STATE_ROOT` 하나로 tracked와 runtime이
@@ -110,7 +110,7 @@ train.py가 내부적으로 수행하는 일:
 2. `GEODE_WRAPPER_OVERRIDE=<path>` env로 `geode audit` subprocess를 호출한다.
 3. subprocess 안에서 `core/agent/system_prompt.py:_load_wrapper_override`가
    이 dict를 AgenticLoop system prompt의 static wrapper로 inject한다.
-4. `plugins/petri_audit/runner.py`가 `inspect eval inspect_petri/audit`
+4. `geode_product/petri_audit/runner.py`가 `inspect eval inspect_petri/audit`
    subprocess를 호출한다 → 19 dim AlphaEval judge → `.eval` log를 archive.
 5. archive의 sample.scores를 dim_means + dim_stderr로 aggregate하여 stdout
    마지막 라인에 JSON으로 emit한다(Karpathy의 grep-friendly 패턴).
@@ -126,7 +126,7 @@ grep "^fitness:\|^input_hallucination_mean:" ~/.geode/self-improving/run.log
 
 ### Step 6 -- `results.tsv` append
 
-`core/self_improving/state/results.tsv`(tab-separated, git-tracked). 모든
+`geode_product/self_improving/state/results.tsv`(tab-separated, git-tracked). 모든
 non-dry-run에서 runner가 자동으로 append하므로 수동 append는 없다.
 
 ### Step 7 -- ratchet 결정 (promote / reject)
@@ -259,7 +259,7 @@ archive 역할을 한다.
 | mutation이 GEODE syntax를 깨뜨림 | wrapper override JSON의 schema가 단순하다(str→str dict). syntax break가 없다. env가 잘못되면 `core/agent/system_prompt.py`의 load가 fail-closed하므로 fitness가 기본 wrapper로 조용히 오염되지 않는다. |
 | Generation drift (누적 bias) | per-generation `results.tsv` + cross-axis ratchet(§5) + critical axis strict gate. |
 | long-running loop의 비용 폭주 | per-audit budget 5분 + self-improving-loop agent의 timeout(program.md). ChatGPT OAuth는 구독 quota를, Anthropic은 설정한 API 예산을 소비한다. |
-| Goodhart's law (rubric self-mutation) | AlphaEval rubric(`plugins/petri_audit/judge_dims/geode_judge_subset.yaml`)은 program.md의 CANNOT 항목이다. seed pool(`plugins/petri_audit/seeds_safe10/`)도 mutation 불가. |
+| Goodhart's law (rubric self-mutation) | AlphaEval rubric(`geode_product/petri_audit/judge_dims/geode_judge_subset.yaml`)은 program.md의 CANNOT 항목이다. seed pool(`geode_product/petri_audit/seeds_safe10/`)도 mutation 불가. |
 | 자기참조 loop (autoresearch가 autoresearch를 mutate) | mutation target이 `WRAPPER_PROMPT_SECTIONS` dict 한 곳이다. `autoresearch/` 디렉터리 자체는 mutate할 수 없다(program.md의 in-scope 파일 4개 외 불가). |
 | rejected hypothesis의 정보 손실 | `results.tsv`의 discard row가 다음 hypothesis의 부정적 prior가 된다. agent context에 결과가 누적된다. |
 
@@ -285,5 +285,5 @@ PR로 추가될 수 있는 컴포넌트(현재는 미구현):
 - Gen 0 plan + signal: `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-15-autoresearch-gen0-plan.md` + `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-15-petri-insights.md`
 - Gen 0 baseline 시도 (BLOCKED): `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-16-autoresearch-gen0-baseline.md`
 - Wrapper override hook 구현: `core/agent/system_prompt.py:_load_wrapper_override`
-- Petri audit harness: `plugins/petri_audit/runner.py` + `plugins/petri_audit/judge_dims/geode_judge_subset.yaml`
+- Petri audit harness: `geode_product/petri_audit/runner.py` + `geode_product/petri_audit/judge_dims/geode_judge_subset.yaml`
 - Karpathy 5원칙 skill: `karpathy-patterns` (`.claude/skills/`)

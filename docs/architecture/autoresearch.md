@@ -26,7 +26,7 @@ The single-sentence mission of this self-improving loop:
 
 | Karpathy original | GEODE fork | Mutation? |
 |---|---|---|
-| `prepare.py` (data + tokenizer + eval, ~300 LOC) | `autoresearch/prepare.py` (seed pool + rubric sanity check) + `plugins/petri_audit/` (audit pipeline) | NO (read-only) |
+| `prepare.py` (data + tokenizer + eval, ~300 LOC) | `autoresearch/prepare.py` (seed pool + rubric sanity check) + `geode_product/petri_audit/` (audit pipeline) | NO (read-only) |
 | `train.py` (GPT model + optimizer, ~630 LOC) | `geode_product/self_improving/train.py` (`WRAPPER_PROMPT_SECTIONS` dict + audit invoke + fitness extraction, ~300 LOC) | **YES** (agent mutates) |
 | `program.md` (human-authored instruction) | `geode_product/self_improving/program.md` | NO (human only) |
 | Loop (5-minute train run → grep metric → keep/reset) | The outer-loop agent (Claude Code / Codex) runs LOOP FOREVER per the instructions in `program.md`, ratcheting via `git commit` / `git reset --hard` | (agent-driven) |
@@ -70,11 +70,11 @@ geode/
 │   ├── run.log, wrapper-override.json
 │   ├── campaign/{gen-0-snapshot/, runs/<id>.json}
 │   └── handoff/, seed_generation/<run_id>/
-├── plugins/petri_audit/         ← inner-loop harness (Karpathy prepare equivalent, frozen)
+├── geode_product/petri_audit/         ← inner-loop harness (Karpathy prepare equivalent, frozen)
 └── core/agent/system_prompt.py  ← `_load_wrapper_override` (active hook)
 ```
 
-`core/self_improving/state/` sits under `core/`, so it is naturally
+`geode_product/self_improving/state/` sits under `core/`, so it is naturally
 git-tracked (no negation dance needed). Runtime resolves through
 `core.paths.RUNTIME_ROOT` (`GEODE_STATE_ROOT`/`GEODE_HOME` override). For
 worker isolation, a single `GEODE_STATE_ROOT` co-locates tracked + runtime
@@ -113,7 +113,7 @@ What train.py performs internally:
 2. Invokes the `geode audit` subprocess with the `GEODE_WRAPPER_OVERRIDE=<path>` env var.
 3. Inside the subprocess, `core/agent/system_prompt.py:_load_wrapper_override`
    injects this dict as the static wrapper of the AgenticLoop system prompt.
-4. `plugins/petri_audit/runner.py` invokes the `inspect eval inspect_petri/audit`
+4. `geode_product/petri_audit/runner.py` invokes the `inspect eval inspect_petri/audit`
    subprocess → 19-dim AlphaEval judge → archives the `.eval` log.
 5. The archive's sample.scores are aggregated into dim_means + dim_stderr and
    emitted as JSON on the last line of stdout (Karpathy's grep-friendly
@@ -130,7 +130,7 @@ a simple fix.
 
 ### Step 6 -- append to `results.tsv`
 
-`core/self_improving/state/results.tsv` (tab-separated, git-tracked; the
+`geode_product/self_improving/state/results.tsv` (tab-separated, git-tracked; the
 runner appends automatically on every non-dry-run; no manual append).
 
 ### Step 7 -- ratchet decision (promote / reject)
@@ -269,7 +269,7 @@ archive of the experiment trace.
 | A mutation breaks GEODE syntax | The wrapper override JSON schema is simple (str→str dict). No syntax break. If the env var is wrong, the load in `core/agent/system_prompt.py` fails closed, so fitness is never silently contaminated by the default wrapper. |
 | Generation drift (cumulative bias) | Per-generation `results.tsv` + the cross-axis ratchet (§5) + the critical-axis strict gate. |
 | Cost blow-up of the long-running loop | Per-audit budget of 5 minutes + the self-improving-loop agent's timeout (program.md). ChatGPT OAuth consumes subscription quota; Anthropic uses the configured API budget. |
-| Goodhart's law (rubric self-mutation) | The AlphaEval rubric (`plugins/petri_audit/judge_dims/geode_judge_subset.yaml`) is a CANNOT item in program.md. The seed pool (`plugins/petri_audit/seeds_safe10/`) is also non-mutable. |
+| Goodhart's law (rubric self-mutation) | The AlphaEval rubric (`geode_product/petri_audit/judge_dims/geode_judge_subset.yaml`) is a CANNOT item in program.md. The seed pool (`geode_product/petri_audit/seeds_safe10/`) is also non-mutable. |
 | Self-referential loop (autoresearch mutating autoresearch) | The mutation target is a single site, the `WRAPPER_PROMPT_SECTIONS` dict; the `autoresearch/` directory itself cannot be mutated (nothing outside program.md's 4 in-scope files). |
 | Information loss from rejected hypotheses | The discard rows in `results.tsv` act as negative priors for the next hypothesis. Results accumulate in the agent context. |
 
@@ -296,5 +296,5 @@ When added, each §10 item gets its own spec section in this architecture.md.
 - Gen 0 plan + signal: `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-15-autoresearch-gen0-plan.md` + `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-15-petri-insights.md`
 - Gen 0 baseline attempt (BLOCKED): `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-16-autoresearch-gen0-baseline.md`
 - Wrapper override hook implementation: `core/agent/system_prompt.py:_load_wrapper_override`
-- Petri audit harness: `plugins/petri_audit/runner.py` + `plugins/petri_audit/judge_dims/geode_judge_subset.yaml`
+- Petri audit harness: `geode_product/petri_audit/runner.py` + `geode_product/petri_audit/judge_dims/geode_judge_subset.yaml`
 - Karpathy 5-principles skill: `karpathy-patterns` (`.claude/skills/`)

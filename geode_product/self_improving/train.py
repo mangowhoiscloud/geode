@@ -6,7 +6,7 @@ the self-improving-loop agent modifies. Role split with petri (the
 measurement layer) is strict:
 
 * **petri** owns *what gets measured* — the 22-dim rubric
-  (``plugins/petri_audit/judge_dims/geode_judge_subset.yaml``) defines
+  (``geode_product/petri_audit/judge_dims/geode_judge_subset.yaml``) defines
   the dim universe, ``geode audit`` runs the judge subprocess, and
   ``core/audit/dim_extractor`` emits raw ``dim_means`` /
   ``dim_stderr`` dicts on the 1–10 concerning-behaviour scale.
@@ -46,9 +46,9 @@ Agent CAN modify:
     fitness delta is attributable.
 
 Agent CANNOT modify (the ``prepare.py`` ground truth):
-  * Seed pool tree (``plugins/petri_audit/seeds/``, hierarchical
+  * Seed pool tree (``geode_product/petri_audit/seeds/``, hierarchical
     post-PR-0).
-  * AlphaEval rubric (``plugins/petri_audit/judge_dims/geode_judge_subset.yaml``).
+  * AlphaEval rubric (``geode_product/petri_audit/judge_dims/geode_judge_subset.yaml``).
   * Fitness weight definitions (22-dim tiered per ADR-002 §1 +
     PR 0 expansion).
 
@@ -438,7 +438,7 @@ try:
     from core.paths import AUTORESEARCH_WRAPPER_SECTIONS_PATH as _CORE_WRAPPER_SECTIONS_SOT
 except ImportError:
     # Keep the compatibility-window state authority under
-    # ``core/self_improving/state`` even though the code moved.
+    # ``geode_product/self_improving/state`` even though the code moved.
     _CORE_WRAPPER_SECTIONS_SOT = STATE_DIR / "policies" / "wrapper-sections.json"
 
 WRAPPER_SECTIONS_SOT_PATH = _CORE_WRAPPER_SECTIONS_SOT
@@ -1305,7 +1305,7 @@ def main() -> int:
 
     # S10 — emit results.{tsv,jsonl} lines on stdout so the self-improving-loop
     # operator (or a follow-up script) can read them, AND persist them to the
-    # rolling ``core/self_improving/state/results.{tsv,jsonl}``.
+    # rolling ``geode_product/self_improving/state/results.{tsv,jsonl}``.
     # PR-CLEANUP-D3A (2026-06-10, operator decision "pending 해소") — the row
     # is now emitted AFTER the promote gate so ``verdict`` records the gate's
     # actual outcome (promote/reject) instead of a permanent ``pending``.

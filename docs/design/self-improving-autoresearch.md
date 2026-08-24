@@ -20,10 +20,10 @@ Landing page for the autoresearch surface — the closed-loop self-improvement e
 | Datum | Lifecycle | Read from |
 |---|---|---|
 | `baseline.json` (LATEST) | RUNTIME | `~/.geode/self-improving/baseline.json` (`BASELINE_JSON_PATH`; absent on CI → graceful) |
-| `baseline_archive.jsonl` (promoted history) | TRACKED | `core/self_improving/state/baseline_archive.jsonl` |
-| `mutations.jsonl` | TRACKED | `core/self_improving/state/mutations.jsonl` |
-| `policies/*.json` | TRACKED | `core/self_improving/state/policies/` |
-| `results.{tsv,jsonl}` | TRACKED | `core/self_improving/state/results.{tsv,jsonl}` |
+| `baseline_archive.jsonl` (promoted history) | TRACKED | `geode_product/self_improving/state/baseline_archive.jsonl` |
+| `mutations.jsonl` | TRACKED | `geode_product/self_improving/state/mutations.jsonl` |
+| `policies/*.json` | TRACKED | `geode_product/self_improving/state/policies/` |
+| `results.{tsv,jsonl}` | TRACKED | `geode_product/self_improving/state/results.{tsv,jsonl}` |
 
 The tracked SoT ships in-repo (naturally git-tracked under `core/`); the runtime baseline is operator-local. No end-of-iteration mirror hook is needed — `scripts/build_self_improving_hub.py` opens the live files.
 

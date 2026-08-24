@@ -1,5 +1,4 @@
 import hashlib
-import itertools
 import json
 import subprocess
 from collections.abc import Iterator
@@ -732,13 +731,17 @@ def test_run_arm_accounts_for_actual_subprocess_elapsed_time(
         captured["usage"] = usage
         return evidence
 
-    # An inexhaustible clock: the first read anchors at 10.0 and every later
-    # read returns 13.5, so the measured delta stays 3.5 regardless of how
-    # many times the runner consults the clock. A finite two-value iterator
-    # here raised StopIteration under xdist+coverage load (release-train CI,
-    # 2026-07-13) whenever an extra monotonic() call slipped in.
-    moments = itertools.chain((10.0,), itertools.repeat(13.5))
-    monkeypatch.setattr("geode_product.crucible.tau2_live.time.monotonic", lambda: next(moments))
+    clock = {"now": 10.0}
+
+    def run(command: list[str], **kwargs: object) -> tuple[subprocess.CompletedProcess[str], bool]:
+        clock["now"] = 13.5
+        return subprocess.CompletedProcess(args=command, returncode=1), False
+
+    monkeypatch.setattr(
+        "geode_product.crucible.tau2_live.time",
+        SimpleNamespace(monotonic=lambda: clock["now"]),
+    )
+    monkeypatch.setattr("geode_product.crucible.tau2_live._run_tau2_command", run)
     monkeypatch.setattr("geode_product.crucible.tau2_live.normalize_tau2_results", normalize)
 
     _run_arm(

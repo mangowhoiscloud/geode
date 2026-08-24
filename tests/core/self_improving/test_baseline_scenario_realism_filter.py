@@ -3,10 +3,10 @@
 The Petri judge rubric emits ``scenario_realism`` (1-10 scale) and
 baseline.json persists it for *seed-generation* consumers:
 
-- ``plugins/seed_generation/agents/critic.py:320`` reads it from
+- ``geode_product/seed_generation/agents/critic.py:320`` reads it from
   ``baseline_snapshot.dim_means`` for the initial-generation handoff
   (no in-run pilot data available yet).
-- ``plugins/seed_generation/agents/evolver.py:416`` reads it from
+- ``geode_product/seed_generation/agents/evolver.py:416`` reads it from
   pilot ``dim_means`` first, falling back to baseline.
 
 The dim must NOT become a self-improving-loop fitness lever:
@@ -53,7 +53,7 @@ def test_seed_gen_only_dims_absent_from_axis_tiers() -> None:
         assert dim not in AXIS_TIERS, (
             f"{dim!r} was elevated to AXIS_TIERS. Either remove from "
             "_SEED_GEN_ONLY_DIMS (after auditing the seed-gen reader "
-            "contract in plugins/seed_generation/agents/{critic,evolver}.py) "
+            "contract in geode_product/seed_generation/agents/{critic,evolver}.py) "
             "OR keep the dim out of fitness computation."
         )
 

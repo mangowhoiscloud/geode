@@ -1,6 +1,6 @@
 """Token-set similarity primitives (CSP-6, 2026-05-22).
 
-Hoisted from ``plugins/seed_generation/agents/proximity.py`` so other
+Hoisted from ``geode_product/seed_generation/agents/proximity.py`` so other
 plugins (and the upcoming Evolver anti-convergence guard) can reuse the
 same Jaccard semantics without importing into another plugin's
 internals. The original module re-exports these names so its public

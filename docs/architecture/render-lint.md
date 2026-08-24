@@ -25,7 +25,7 @@ Files currently gated:
   `2026-05-12-petri-multi-model-partial.md` — the three caveat docs
   PR #2 edited. The README cross-links to all three.
 - `docs/architecture/render-lint.md` — this doc. Self-host the rules.
-- `plugins/petri_audit/judge_dims/*.yaml` — loaded at runtime by
+- `geode_product/petri_audit/judge_dims/*.yaml` — loaded at runtime by
   `judge_dimensions(...)`. A typo here breaks the audit pipeline, not
   Pages, but the same publish path now triggers when these change.
 - `docs/petri-bundle/**/*.json` — `listing.json` is the inspect_ai

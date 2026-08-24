@@ -205,7 +205,7 @@ def extract_summary(eval_path: Path) -> dict[str, Any]:
         samples_summary.append(sample_entry)
     summary["samples_summary"] = samples_summary
 
-    # Deterministic tool-call contract ledger (plugins → core is the allowed
+    # Deterministic tool-call contract ledger (product → core is the allowed
     # dependency direction; sibling ``runner.py`` already imports
     # ``core.audit.manifest``). Graceful ``[]`` on any read failure — the
     # contract extractor never raises (mirrors ``dim_extractor``).

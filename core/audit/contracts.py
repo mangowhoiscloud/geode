@@ -14,7 +14,7 @@ Layer rationale: this module sits at the ``core`` layer (alongside
 ``core/audit/dim_extractor.py``, the precedent ``.eval`` reader) because
 ``geode_product/self_improving/train.py`` consumes the veto and CANNOT import
 ``plugins.*`` (an upward-dependency violation). ``plugins`` may import ``core``
-(``plugins/petri_audit/eval_archive.py`` records the result into the summary
+(``geode_product/petri_audit/eval_archive.py`` records the result into the summary
 YAML), so the dependency arrow only ever points plugins → core.
 
 LOAD-BEARING EMPIRICAL FINDING (verified across 150 real ``.eval`` samples):

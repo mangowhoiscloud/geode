@@ -1,4 +1,4 @@
-"""Slop prevention audit — 6-lens scan of core/ + plugins/ + autoresearch/.
+"""Slop prevention audit — 6-lens scan of production packages + scripts.
 
 Surfaces patterns that accumulate during long PR sequences and rot
 codebase health if uncaught:
@@ -41,7 +41,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCAN_ROOTS = ("core/", "plugins/", "autoresearch/", "scripts/")
+SCAN_ROOTS = ("core/", "geode_product/", "scripts/")
 
 
 @dataclass
@@ -261,6 +261,11 @@ _STALE_REFS: tuple[str, ...] = (
     "SUBAGENT_BUDGET_WARNING",
     "seeds_safe10",
     "FitnessBaseline",
+    "plugins.benchmark_harness",
+    "plugins.crucible",
+    "plugins.petri_audit",
+    "plugins.seed_generation",
+    "core.self_improving",
 )
 
 
@@ -268,7 +273,7 @@ def lens_stale_references() -> LensResult:
     """Flag any of :data:`_STALE_REFS` that show up in production code.
 
     Comments / CHANGELOG references to *historical* changes are
-    allowed — we look at ``core/`` / ``plugins/`` / ``autoresearch/``
+    allowed — we look at ``core/`` / ``geode_product/`` / ``scripts/``
     source only, NOT ``docs/`` or ``CHANGELOG.md``. The CHANGELOG is
     the canonical home for "we removed X" prose.
 
