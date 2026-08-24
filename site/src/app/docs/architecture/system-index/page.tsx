@@ -8,8 +8,7 @@ const number = new Intl.NumberFormat("en-US");
 function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
   const productionFiles =
     architectureBaseline.packages.core.python_files +
-    architectureBaseline.packages.geode_product.python_files +
-    architectureBaseline.packages.plugins.python_files;
+    architectureBaseline.packages.geode_product.python_files;
   const rows =
     locale === "ko"
       ? [

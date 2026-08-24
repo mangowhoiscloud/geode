@@ -5,7 +5,7 @@
 # editing ~/.geode/routing.toml — only declared keys are picked up, missing
 # keys fall back to this file.
 #
-# 5 sections (mirrors plugins/petri_audit/petri.plugin.toml 4-layer design):
+# 5 sections (mirrors geode_product/petri_audit/petri.plugin.toml 4-layer design):
 #
 #   [model.defaults]                     — provider → primary model id
 #   [model.fallbacks.<provider>]         — provider → fallback chain

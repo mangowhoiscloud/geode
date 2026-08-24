@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 from core.cli import doctor_bootstrap as db
 from core.cli import onboarding as ob
-from core.config import toml_edit as te
+from core.config import toml_edit
 from core.tools import bash_sandbox as bs
 
 
@@ -46,7 +46,6 @@ class TestSandboxBinaryStatus:
 class TestDoctorCheck:
     def test_available_but_off_is_ok(self, _mode, monkeypatch) -> None:
         _mode("off")
-        monkeypatch.setattr(db, "shutil", db.shutil)  # keep real which for docker note
         monkeypatch.setattr(
             "core.tools.bash_sandbox.sandbox_binary_status",
             lambda: ("sandbox-exec", "/usr/bin/sandbox-exec"),
@@ -54,7 +53,6 @@ class TestDoctorCheck:
         r = db._check_bash_sandbox()
         assert r.ok is True
         assert "GEODE_BASH_SANDBOX=on" in r.detail
-        assert "not required" in r.detail  # Docker note present + optional
 
     def test_on_with_binary_present_is_ok(self, _mode, monkeypatch) -> None:
         _mode("on")
@@ -74,40 +72,28 @@ class TestDoctorCheck:
         assert r.ok is False
         assert "not found" in r.detail and r.fix
 
-    def test_never_fails_on_docker_absence(self, _mode, monkeypatch) -> None:
-        """Docker absent + sandbox off/available → still OK (Docker not required)."""
-        _mode("off")
-        monkeypatch.setattr(db.shutil, "which", lambda name: None)  # docker absent
-        monkeypatch.setattr(
-            "core.tools.bash_sandbox.sandbox_binary_status",
-            lambda: ("sandbox-exec", "/usr/bin/sandbox-exec"),
-        )
-        r = db._check_bash_sandbox()
-        assert r.ok is True
-        assert "Docker absent" in r.detail
-
 
 class TestSpliceConfig:
     def test_append_when_absent(self) -> None:
         assert (
-            te.splice_toml_section("", "bash_sandbox", {"mode": "on"})
+            toml_edit.splice_toml_section("", "bash_sandbox", {"mode": "on"})
             == '[bash_sandbox]\nmode = "on"\n'
         )
 
     def test_replace_existing_mode(self) -> None:
-        out = te.splice_toml_section(
+        out = toml_edit.splice_toml_section(
             '[bash_sandbox]\nmode = "off"\n', "bash_sandbox", {"mode": "strict"}
         )
         assert out == '[bash_sandbox]\nmode = "strict"\n'
 
     def test_insert_when_section_has_no_mode(self) -> None:
-        out = te.splice_toml_section(
+        out = toml_edit.splice_toml_section(
             "[bash_sandbox]\n[other]\nx=1\n", "bash_sandbox", {"mode": "on"}
         )
         assert 'mode = "on"' in out and "[other]" in out
 
     def test_coexists_with_other_sections(self) -> None:
-        out = te.splice_toml_section("[llm]\nx = 1\n", "bash_sandbox", {"mode": "on"})
+        out = toml_edit.splice_toml_section("[llm]\nx = 1\n", "bash_sandbox", {"mode": "on"})
         assert "[llm]" in out and '[bash_sandbox]\nmode = "on"' in out
 
 
@@ -115,7 +101,7 @@ class TestPersistAndConfigure:
     def test_persist_round_trips_through_settings(self, tmp_path, monkeypatch) -> None:
         cfg = tmp_path / "config.toml"
         monkeypatch.setenv("GEODE_CONFIG_TOML", str(cfg))
-        path = te.persist_toml_section("bash_sandbox", {"mode": "strict"})
+        path = toml_edit.persist_toml_section("bash_sandbox", {"mode": "strict"})
         assert path == cfg
         assert 'mode = "strict"' in cfg.read_text()
 
@@ -123,7 +109,7 @@ class TestPersistAndConfigure:
         """A ``~``-prefixed override expands to the same path the loaders read
         (write/read parity — Codex MCP catch)."""
         monkeypatch.setenv("GEODE_CONFIG_TOML", "~/some/config.toml")
-        resolved = str(te.resolve_config_toml_path())
+        resolved = str(toml_edit.resolve_config_toml_path())
         assert "~" not in resolved
         assert resolved.endswith("some/config.toml")
 

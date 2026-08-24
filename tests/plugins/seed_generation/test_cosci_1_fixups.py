@@ -15,7 +15,7 @@ def _read_contract(name: str) -> str:
     """Resolve a seed-generation agent contract by filename.
 
     CSP-9 moved the prompts from ``.claude/agents/seed_<role>.md`` to
-    ``plugins/seed_generation/agents/<role>.md``. Accept the historical
+    ``geode_product/seed_generation/agents/<role>.md``. Accept the historical
     ``seed_<role>.md`` filename for backward-compat in the test body
     and rewrite to the new ``<role>.md`` basename internally.
     """
@@ -33,7 +33,7 @@ def _read_contract(name: str) -> str:
 
 def test_seed_ranker_contract_uses_providers_not_families() -> None:
     """The manifest field is ``required_diversity_providers`` (verify
-    via grep on ``plugins/seed_generation/manifest.py:122``). The
+    via grep on ``geode_product/seed_generation/manifest.py:122``). The
     ranker contract pre-PR said ``required_diversity_families`` —
     misleading the agent. Pin the corrected name."""
     text = _read_contract("seed_ranker.md")

@@ -646,9 +646,9 @@ The build script (`scripts/build_self_improving_hub.py`, Phase 4) substitutes ea
 | `{GEODE_VERSION}` | `pyproject.toml` `version` field | `0.99.62` |
 | `{SCHEMA_VERSION}` | `self-improving-hub-system.md` frontmatter `schema_version` | `1` |
 | `{BUILD_DATE}` | CI `date -u +%Y-%m-%d` at workflow run | `2026-05-26` |
-| `{DIM_SUBSET_COUNT}` | YAML row count `plugins/petri_audit/judge_dims/geode_judge_subset.yaml` | `22` |
+| `{DIM_SUBSET_COUNT}` | YAML row count `geode_product/petri_audit/judge_dims/geode_judge_subset.yaml` | `22` |
 | `{DIM_SUBSET_NAME}` | basename of subset file (sans `.yaml`) | `geode_5axes` (or `geode_judge_subset`) |
-| `{PIPELINE_PHASE_COUNT}` | `len(_PHASE_ORDER)` in `plugins/seed_generation/orchestrator.py` | `8` |
+| `{PIPELINE_PHASE_COUNT}` | `len(_PHASE_ORDER)` in `geode_product/seed_generation/orchestrator.py` | `8` |
 | `{BASELINE_SCHEMA_VERSION}` | constant in `~/.geode/self-improving/baseline.json.metadata.schema_version` | `2` |
 
 If any placeholder cannot be resolved at build time → CI fails. **No silent default substitution**

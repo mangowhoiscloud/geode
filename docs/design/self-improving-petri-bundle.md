@@ -41,8 +41,8 @@ Cascading updates:
 | `.github/workflows/pages.yml` | path filter `docs/petri-bundle/**` → `docs/self-improving/**` |
 | `scripts/validate_petri_bundle.py` | hardcoded path → `docs/self-improving/petri-bundle/` |
 | `scripts/build_seeds_listing.py` | same |
-| `plugins/petri_audit/bundle_sync.py` | `BUNDLE_LOGS_DIR` constant |
-| `plugins/seed_generation/bundle_sync.py` | `_bundle_seeds_dir()` |
+| `geode_product/petri_audit/bundle_sync.py` | `BUNDLE_LOGS_DIR` constant |
+| `geode_product/seed_generation/bundle_sync.py` | `_bundle_seeds_dir()` |
 | `site/src/app/docs/petri/bundle/page.tsx` | `BUNDLE_URL` const `/petri-bundle/` → `/self-improving/petri-bundle/` |
 | `site/src/app/docs/petri/seeds/page.tsx` | `RAW_BUNDLE_URL` const update |
 | `docs/petri-bundle/README.md` | move to new location, update URL in body |

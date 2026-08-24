@@ -89,7 +89,7 @@ _PILOT_TARGET = "gpt-5.5"
 
 #: Built-in key for the 22-dim ``geode_judge_subset.yaml`` set — the SAME
 #: dim set the campaign measures (``DEFAULT_DIM_SET`` in
-#: ``plugins/petri_audit/runner.py``).
+#: ``geode_product/petri_audit/runner.py``).
 _PILOT_DIM_SET = "subset"
 
 #: N rollouts per candidate so ``rank_by_difficulty`` ranks by a multi-

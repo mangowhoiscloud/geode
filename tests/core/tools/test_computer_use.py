@@ -491,8 +491,27 @@ class TestExecuteDispatch:
     def _force_python_driver(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from core.config import settings
 
-        monkeypatch.setattr(settings, "computer_use_env", "host", raising=False)
         monkeypatch.setattr(settings, "computer_use_driver", "python", raising=False)
+
+    def test_auto_driver_prefers_installed_helper(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from core.config import settings
+
+        monkeypatch.setattr(settings, "computer_use_driver", "auto", raising=False)
+        h = ComputerUseHarness()
+        with (
+            patch("core.tools.computer_use.computer_use_helper_path", return_value=MagicMock()),
+            patch.object(
+                h,
+                "_helper_execute_sync",
+                return_value={"result": "success", "driver": "macos_helper"},
+            ) as helper,
+            patch.object(h, "_execute_sync") as python,
+        ):
+            result = asyncio.run(h.aexecute("screenshot"))
+
+        helper.assert_called_once_with("screenshot", {})
+        python.assert_not_called()
+        assert result["driver"] == "macos_helper"
 
     def test_unknown_action(self):
         h = ComputerUseHarness()
@@ -515,6 +534,7 @@ class TestExecuteDispatch:
         assert result["observation"]["screenshot_sha256"]
         assert result["observation"]["target_width"] == 1280
         assert result["observation"]["surface"] == "desktop"
+        assert result["observation"]["env"] == "host"
 
     def test_click_action(self):
         h = ComputerUseHarness()
@@ -592,6 +612,102 @@ class TestExecuteDispatch:
 
         assert result["result"] == "success"
         assert result["postcondition_verified"] is True
+
+
+class TestComputerUseAvailability:
+    @pytest.mark.parametrize("audit_value", ["1", "true", "TRUE", "yes", "YeS"])
+    @pytest.mark.parametrize("driver", ["helper", "auto", "python"])
+    def test_unrestricted_audit_env_disables_every_host_driver(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        audit_value: str,
+        driver: str,
+    ) -> None:
+        from core.config import settings
+        from core.llm.providers.anthropic import is_computer_use_enabled
+        from core.runtime_audit import reset_runtime_audit_active, set_runtime_audit_active
+
+        monkeypatch.setattr(settings, "computer_use_enabled", True, raising=False)
+        monkeypatch.setattr(settings, "computer_use_driver", driver, raising=False)
+        monkeypatch.setenv("GEODE_AUDIT_UNRESTRICTED", audit_value)
+        token = set_runtime_audit_active(None)
+        try:
+            with patch.dict("sys.modules", {"pyautogui": MagicMock()}):
+                assert is_computer_use_enabled() is False
+        finally:
+            reset_runtime_audit_active(token)
+
+    def test_runtime_audit_context_disables_computer_use(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from core.config import settings
+        from core.llm.providers.anthropic import is_computer_use_enabled
+        from core.runtime_audit import reset_runtime_audit_active, set_runtime_audit_active
+
+        monkeypatch.setattr(settings, "computer_use_enabled", True, raising=False)
+        monkeypatch.setattr(settings, "computer_use_driver", "python", raising=False)
+        token = set_runtime_audit_active(True)
+        try:
+            with patch.dict("sys.modules", {"pyautogui": MagicMock()}):
+                assert is_computer_use_enabled() is False
+        finally:
+            reset_runtime_audit_active(token)
+
+    def test_host_python_driver_remains_enabled_outside_audit(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from core.config import settings
+        from core.llm.providers.anthropic import is_computer_use_enabled
+        from core.runtime_audit import reset_runtime_audit_active, set_runtime_audit_active
+
+        monkeypatch.setattr(settings, "computer_use_enabled", True, raising=False)
+        monkeypatch.setattr(settings, "computer_use_driver", "python", raising=False)
+        token = set_runtime_audit_active(False)
+        try:
+            with patch.dict("sys.modules", {"pyautogui": MagicMock()}):
+                assert is_computer_use_enabled() is True
+        finally:
+            reset_runtime_audit_active(token)
+
+    def test_host_helper_driver_remains_enabled_outside_audit(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path,
+    ) -> None:
+        from core.config import settings
+        from core.llm.providers.anthropic import is_computer_use_enabled
+        from core.runtime_audit import reset_runtime_audit_active, set_runtime_audit_active
+
+        helper = tmp_path / "geode-computer-helper"
+        helper.write_text("#!/bin/sh\n")
+        helper.chmod(0o755)
+        monkeypatch.setattr(settings, "computer_use_enabled", True, raising=False)
+        monkeypatch.setattr(settings, "computer_use_driver", "helper", raising=False)
+        monkeypatch.setattr(settings, "computer_use_helper_path", str(helper), raising=False)
+        token = set_runtime_audit_active(False)
+        try:
+            assert is_computer_use_enabled() is True
+        finally:
+            reset_runtime_audit_active(token)
+
+    def test_required_host_helper_missing_fails_closed(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from core.config import settings
+        from core.llm.providers.anthropic import is_computer_use_enabled
+        from core.runtime_audit import reset_runtime_audit_active, set_runtime_audit_active
+
+        monkeypatch.setattr(settings, "computer_use_enabled", True, raising=False)
+        monkeypatch.setattr(settings, "computer_use_driver", "helper", raising=False)
+        token = set_runtime_audit_active(False)
+        try:
+            with patch("core.tools.computer_use.computer_use_helper_path", return_value=None):
+                assert is_computer_use_enabled() is False
+        finally:
+            reset_runtime_audit_active(token)
 
 
 class TestGetToolParams:

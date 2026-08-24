@@ -69,8 +69,8 @@ Sprint columns:
 | 04.4 | 04 Ops | `ops/observability` | 관측성 / Observability | How-to | ✅ | ✅ | done | wiki petri-alignment-audit + hooks |
 | 05 · Petri Audit — alignment audit (NEW chapter) |
 | 05.1 | 05 Petri | `petri/overview` | Petri 통합 / Petri × GEODE Integration | Explanation | ✅ | ✅ | done | wiki petri-alignment-audit |
-| 05.2 | 05 Petri | `petri/run` | Audit 실행 / Run an Audit | How-to | ✅ | ✅ | done | plugins/petri_audit cli_audit.py |
-| 05.3 | 05 Petri | `petri/judge-dimensions` | 38 Judge 차원 / 38 Judge Dimensions | Reference | ✅ | ✅ | done | plugins/petri_audit/judge_dims |
+| 05.2 | 05 Petri | `petri/run` | Audit 실행 / Run an Audit | How-to | ✅ | ✅ | done | geode_product/petri_audit cli_audit.py |
+| 05.3 | 05 Petri | `petri/judge-dimensions` | 38 Judge 차원 / 38 Judge Dimensions | Reference | ✅ | ✅ | done | geode_product/petri_audit/judge_dims |
 | 05.4 | 05 Petri | `petri/bundle` | Audit Bundle 뷰어 / Audit Bundle Viewer | Reference | ✅ | ✅ | done | external link `/geode/petri-bundle/` |
 | 06 · Explanation — Diátaxis Explanation (의사결정) |
 | 06.1 | 06 Why | `explanation/self-hosting` | 왜 self-hosting인가 / Why a Self-Hosting Harness | Explanation | ✅ | ✅ | done | portfolio thesis + wiki architecture |

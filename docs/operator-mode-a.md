@@ -52,7 +52,7 @@ loop autonomously.
    - Confirm the in-scope files with you (`prepare.py`,
      `train.py`, `program.md`, `README.md`).
    - Verify the seed pool tree at
-     `plugins/petri_audit/seeds/<tier>/<dim>/<NN>_<variant>.md`.
+     `geode_product/petri_audit/seeds/<tier>/<dim>/<NN>_<variant>.md`.
    - Initialise `autoresearch/state/results.tsv` header.
    - Wait for your "go" before the first audit.
 

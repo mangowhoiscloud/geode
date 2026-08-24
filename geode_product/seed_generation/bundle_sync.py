@@ -1,6 +1,6 @@
 """Seed-generation bundle sync — auto-copy finished runs to docs/self-improving/petri-bundle/seeds/.
 
-Mirrors the audit-side pattern in ``plugins/petri_audit/bundle_sync.py``
+Mirrors the audit-side pattern in ``geode_product/petri_audit/bundle_sync.py``
 (``sync_eval_to_bundle``). When a seed-generation run finishes, the
 orchestrator calls :func:`sync_run_to_bundle` which selectively copies
 the publishable subset of ``state/seed_generation/<run_id>/`` into the

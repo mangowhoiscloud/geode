@@ -56,8 +56,8 @@ def test_resolve_held_out_bench_none_when_unconfigured(
 def test_resolve_held_out_bench_reads_config(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GEODE_HELD_OUT_BENCH", raising=False)
     monkeypatch.delenv("AUTORESEARCH_HELD_OUT_BENCH", raising=False)
-    _stub_config(monkeypatch, held_out_bench="plugins/petri_audit/frozen_bench")
-    assert auto_train._resolve_held_out_bench() == "plugins/petri_audit/frozen_bench"
+    _stub_config(monkeypatch, held_out_bench="geode_product/petri_audit/frozen_bench")
+    assert auto_train._resolve_held_out_bench() == "geode_product/petri_audit/frozen_bench"
 
 
 def test_resolve_held_out_bench_geode_env_wins_over_config(

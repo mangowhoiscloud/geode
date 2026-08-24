@@ -1,7 +1,7 @@
 # Seed pipeline plugin manifest — declarative 7-role + 3-judge-panel binding.
 #
 # Per ADR-003 the source / adapter layers (per-provider credential resolution +
-# concrete adapter modules) are REUSED from `plugins/petri_audit/petri.plugin.toml`.
+# concrete adapter modules) are REUSED from `geode_product/petri_audit/petri.plugin.toml`.
 # This manifest defines only:
 #
 #   1. [seed_generation]              — enabled roles
@@ -179,7 +179,7 @@ allowed_models = [
 role_contract = "agents/meta_reviewer.md"
 
 # PR-SUPERVISOR-ENABLE (2026-05-26) — supervisor role spec section.
-# Defaults mirror ``plugins/seed_generation/agents/supervisor.py``'s
+# Defaults mirror ``geode_product/seed_generation/agents/supervisor.py``'s
 # ``_DEFAULT_SUPERVISOR_MODEL = "claude-opus-4-8"`` (per the role
 # docstring: "Run-level strategy synthesis. Dispatches ONE Opus
 # sub-agent" — Opus chosen because supervisor's output gates the
@@ -226,7 +226,7 @@ queries_per_run = 3
 # ── Judge panel (Ranker sub-section, not a role) ─────────────────────────────
 #
 # Per ADR-003: 3-voter panel with provider diversity gate. Each voter's
-# (provider, source) pair must match plugins/petri_audit/petri.plugin.toml's
+# (provider, source) pair must match geode_product/petri_audit/petri.plugin.toml's
 # [petri.source.<provider>].allowed list so the existing adapter binding
 # applies. The manifest loader validates this cross-manifest constraint
 # at load time, NOT lazily.

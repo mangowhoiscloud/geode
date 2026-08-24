@@ -31,9 +31,9 @@ Petri supports all 4 paths (P1-C 5-adapter split). seed-generation (ADR-001) nee
 
 ### 1. Manifest pattern (borrowed from the Petri P1-A 4-layer)
 
-Borrows the schema of Petri's `plugins/petri_audit/petri.plugin.toml` (`[petri]` / `[petri.role.*]` / `[petri.source.*]` / `[petri.adapter.*]`) as-is. seed-generation **does not redefine the source / adapter layers and references Petri's instead**: the same 4 paths are called through the same adapters. Only the role layer is new.
+Borrows the schema of Petri's `geode_product/petri_audit/petri.plugin.toml` (`[petri]` / `[petri.role.*]` / `[petri.source.*]` / `[petri.adapter.*]`) as-is. seed-generation **does not redefine the source / adapter layers and references Petri's instead**: the same 4 paths are called through the same adapters. Only the role layer is new.
 
-`plugins/seed_generation/seed_generation.plugin.toml`:
+`geode_product/seed_generation/seed_generation.plugin.toml`:
 
 ```toml
 # Schema layers:
@@ -107,9 +107,9 @@ voters = [
 required_diversity_families = 2
 ```
 
-source / adapter binding: reuses Petri's `[petri.source.anthropic]` / `[petri.source.openai]` / `[petri.adapter.*]` as-is. The credential_source resolver also calls `plugins.petri_audit.credential_source` directly. In other words, **provider diversity is expressed as the distribution of the `family` field across `[seed_generation.judge_panel].voters`**.
+source / adapter binding: reuses Petri's `[petri.source.anthropic]` / `[petri.source.openai]` / `[petri.adapter.*]` as-is. The credential_source resolver also calls `geode_product.petri_audit.credential_source` directly. In other words, **provider diversity is expressed as the distribution of the `family` field across `[seed_generation.judge_panel].voters`**.
 
-manifest schema + loader: `plugins/seed_generation/manifest.py` (reuses the pattern of Petri's `plugins/petri_audit/manifest.py`; pydantic + drift validator + lazy yaml import + import of the Petri manifest's source/adapter).
+manifest schema + loader: `geode_product/seed_generation/manifest.py` (reuses the pattern of Petri's `geode_product/petri_audit/manifest.py`; pydantic + drift validator + lazy yaml import + import of the Petri manifest's source/adapter).
 
 ### Default 3-judge panel composition (settled decision)
 
@@ -136,7 +136,7 @@ The provider the new tool `core/tools/text_embed.py` (S4) uses by default:
 
 ### 2. 7-role × 4-path picker (TUI)
 
-`plugins/seed_generation/picker.py`: TerminalMenu-based. Borrows the visual pattern of the `/petri` 2-axis picker.
+`geode_product/seed_generation/picker.py`: TerminalMenu-based. Borrows the visual pattern of the `/petri` 2-axis picker.
 
 ```
 ╭─ Seed-pipeline 7-role + 3-judge panel binding ─────────────────────────────╮
@@ -153,7 +153,7 @@ The provider the new tool `core/tools/text_embed.py` (S4) uses by default:
 │ Evolver         anthropic claude-cli     claude-max-<user>    ✓            │
 │ Meta-review     anthropic claude-cli     claude-max-<user>    ✓            │
 │                                                                            │
-│ Source values match plugins/petri_audit/petri.plugin.toml:                 │
+│ Source values match geode_product/petri_audit/petri.plugin.toml:                 │
 │   anthropic.allowed = [claude-cli, api_key, auto]                          │
 │   openai.allowed    = [openai-codex, api_key, auto]                        │
 │                                                                            │
@@ -185,7 +185,7 @@ The ChatGPT subscription (path B) gets an equivalent notice.
 
 ### 4. Cost preview (`geode audit-seeds quota`)
 
-`plugins/seed_generation/cost_preview.py`: combines `core/llm/pricing_loader.py` (P3-A) with the quota estimation of `core/cli/commands/login.py:_login_quota`.
+`geode_product/seed_generation/cost_preview.py`: combines `core/llm/pricing_loader.py` (P3-A) with the quota estimation of `core/cli/commands/login.py:_login_quota`.
 
 ```
 $ geode audit-seeds quota --pipeline-config seed-generation.toml --candidates 15
@@ -228,7 +228,7 @@ Checked items: token expiry / remaining quota / 3-judge diversity / available La
 
 ### 6. CLI / Slash entry points
 
-**Typer** (`plugins/seed_generation/cli.py`):
+**Typer** (`geode_product/seed_generation/cli.py`):
 
 | Sub-command | Responsibility |
 |---|---|
@@ -290,15 +290,15 @@ The existing `_login_oauth(openai|anthropic)` + `_login_set_key` are kept as-is.
 
 ## Implementation pointers
 
-- S2.5: `plugins/seed_generation/{manifest.py, seed_generation.plugin.toml}` (~220 LOC)
-- S5.5: `plugins/seed_generation/{picker.py, pre_flight.py}` + ToS notice integration (~410 LOC)
-- S6.5: `plugins/seed_generation/cost_preview.py` + budget guard (~250 LOC)
-- S11: `plugins/seed_generation/cli.py` Typer sub-app + `core/cli/routing.py` slash registration (~280 LOC)
+- S2.5: `geode_product/seed_generation/{manifest.py, seed_generation.plugin.toml}` (~220 LOC)
+- S5.5: `geode_product/seed_generation/{picker.py, pre_flight.py}` + ToS notice integration (~410 LOC)
+- S6.5: `geode_product/seed_generation/cost_preview.py` + budget guard (~250 LOC)
+- S11: `geode_product/seed_generation/cli.py` Typer sub-app + `core/cli/routing.py` slash registration (~280 LOC)
 
 ## References
 
 - ADR-001 -- seed-generation architecture
-- Petri P1-A~G manifest pattern -- `plugins/petri_audit/{petri.plugin.toml, manifest.py, cli.py:264,309}`
+- Petri P1-A~G manifest pattern -- `geode_product/petri_audit/{petri.plugin.toml, manifest.py, cli.py:264,309}`
 - 4-auth path definition -- `core/llm/routing/plans.py:PlanKind`
 - provider-policy notice -- `core/cli/commands/login.py::_print_anthropic_subscription_warning`
 - Quota estimation base -- `core/cli/commands/login.py:_login_quota` (line 886)

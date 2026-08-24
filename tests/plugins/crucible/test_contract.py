@@ -62,7 +62,7 @@ def _payload() -> dict[str, object]:
                 "hypothesis": "Confirmed writes require emitted tool calls.",
             }
         ],
-        "evaluator_paths": ["plugins/benchmark_harness", "scripts/eval"],
+        "evaluator_paths": ["geode_product/benchmark_harness", "scripts/eval"],
         "promotion": {
             "method": "paired_bootstrap.v2",
             "primary_metric": "reward",

@@ -29,8 +29,8 @@ search head SHA
   -> append-only supervisor ledger
 ```
 
-The adaptive loop lives in `plugins.crucible.supervisor` and has no import
-connection to `core/self_improving`. Train `KEEP` advances only the loop-local
+The adaptive loop lives in `geode_product.crucible.supervisor` and has no import
+connection to `geode_product/self_improving`. Train `KEEP` advances only the loop-local
 search head. Core promotion authority remains closed.
 
 The historical campaign provides train counterexamples and infrastructure

@@ -170,6 +170,28 @@ functional change.
 
 ### Removed
 
+- **Removed dormant distribution and desktop-isolation scaffolds.** The
+  unreleased Homebrew/core candidate template, renderer, tests, and current
+  operating guidance are gone; GitHub Release and PyPI/uv remain the supported
+  distribution channels. The unverified Docker/Xvfb computer-use sandbox,
+  HTTP dispatch, settings/API, diagnostics, and sandbox-only tests are also
+  removed. Interactive host computer-use remains available, while unrestricted
+  Petri audits now disable it unconditionally because no verified isolated
+  execution path exists.
+
+- **Removed duplicate product compatibility packages.** The forwarding-only
+  `plugins.*` package and five `core.self_improving` Python launchers are gone;
+  callers, package data, CLIs, docs, and tests use the existing
+  `geode_product.*` implementations directly. Ten tracked self-improving state
+  files move through a byte-preserving `git mv` to
+  `geode_product/self_improving/state/`; the eight data/marker files retain
+  their bytes and the two README files name the new path. Package/install gates
+  reject any remaining `core/self_improving` path. The wrapper-only Tau2 script
+  was also removed in favor of the canonical module entrypoint. Development
+  scaffolds, Claude aliases, runtime skills, external evaluator entrypoints,
+  durable runtime homes, and historical release evidence remain in their
+  distinct roles.
+
 - **Verification recovery now has one persistence authority.** Removed the
   write-only `SessionManager` verify-state mirror; checkpoint loop guards remain
   the recovery source, while databases carrying the former columns still open

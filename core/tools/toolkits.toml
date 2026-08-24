@@ -89,7 +89,7 @@ tools = ["arxiv_search", "paper_fetch_arxiv", "freeze_paper_snapshot"]
 
 # ---------------------------------------------------------------------------
 # Seed-generation toolkits — one per role of the co-scientist port
-# (`plugins/seed_generation/`). The agent definitions under
+# (`geode_product/seed_generation/`). The agent definitions under
 # `.claude/agents/seed_*.md` declare these via `toolkit:`.
 # ---------------------------------------------------------------------------
 
@@ -104,7 +104,7 @@ includes = ["common_read", "literature_research"]
 tools = []
 
 [toolkits.seed_proximity]
-description = "Proximity dedup — read-only; embedding API is invoked outside the tool handler layer (see plugins/seed_generation/agents/proximity.py)."
+description = "Proximity dedup — read-only; embedding API is invoked outside the tool handler layer (see geode_product/seed_generation/agents/proximity.py)."
 includes = ["common_read"]
 tools = []
 

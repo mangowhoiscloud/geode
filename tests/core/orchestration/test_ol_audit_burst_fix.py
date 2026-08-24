@@ -37,7 +37,7 @@ from geode_product.self_improving import measure
 #
 # Codex MCP catch (PR-OL-AUDIT-BURST-FIX fix-up): the burst flags must
 # land in the actual `inspect eval` argv assembled by
-# `plugins/petri_audit/runner.py::build_command`, NOT in the outer
+# `geode_product/petri_audit/runner.py::build_command`, NOT in the outer
 # `geode audit` argv assembled by `geode_product/self_improving/train.py::_build_audit_command`.
 # The `geode audit` Typer command doesn't accept `--max-connections` —
 # the flags would be rejected before reaching `inspect eval`.

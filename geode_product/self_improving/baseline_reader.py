@@ -126,7 +126,7 @@ def _default_baseline_path() -> Path | None:
     Lazy because importing :mod:`geode_product.self_improving.train` at module load
     drags every fitness helper + datetime + uuid into the seed-gen
     cold start. Importing only when the reader is actually called
-    keeps ``plugins/seed_generation`` lightweight for the tests that
+    keeps ``geode_product/seed_generation`` lightweight for the tests that
     hand-construct a :class:`BaselineSnapshot`.
 
     Returns ``None`` on import failure — the seed-gen runner treats

@@ -14,9 +14,9 @@ tool handlers, prompt assembly, or schema changes.
 ## Static Gates
 
 ```bash
-uv run ruff check core/ tests/ plugins/ scripts/
-uv run ruff format --check core/ tests/ plugins/ scripts/
-uv run mypy core/ plugins/
+uv run ruff check core/ geode_product/ tests/ scripts/
+uv run ruff format --check core/ geode_product/ tests/ scripts/
+uv run mypy core/ geode_product/
 uv run lint-imports
 git diff --check
 ```

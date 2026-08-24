@@ -155,10 +155,10 @@ def test_build_baseline_is_deterministic_and_internally_consistent() -> None:
     second = baseline.build_baseline()
 
     assert first == second
-    assert first["schema_version"] == 4
+    assert first["schema_version"] == 5
     assert baseline.serialize_baseline(first) == baseline.serialize_baseline(second)
 
-    for package in ("core", "geode_product", "plugins", "tests"):
+    for package in ("core", "geode_product", "tests"):
         inventory = first["packages"][package]
         assert inventory["python_files"] > 0
         assert inventory["python_loc"] >= inventory["python_files"]
@@ -229,13 +229,6 @@ def test_inventory_lists_traceable_architecture_details() -> None:
         "site_count": 0,
         "file_count": 0,
         "sites": [],
-    }
-    assert measured["self_improving_facades"] == {
-        "count": len(baseline.SELF_IMPROVING_FACADE_TARGETS),
-        "items": [
-            {"path": path, "target": target}
-            for path, target in sorted(baseline.SELF_IMPROVING_FACADE_TARGETS.items())
-        ],
     }
     assert measured["import_linter"]["ignored_edge_count"] == sum(
         len(contract["ignored_edges"]) for contract in measured["import_linter"]["contracts"]
@@ -1591,7 +1584,7 @@ def test_product_import_inventory_catches_static_and_dynamic_edges(tmp_path: Pat
     path = tmp_path / "core" / "sample.py"
     path.parent.mkdir(parents=True)
     path.write_text(
-        'from geode_product import wiring\nHANDLER = "plugins.petri_audit.runner:run_audit"\n',
+        'from geode_product import wiring\nHANDLER = "geode_product.petri_audit.runner:run_audit"\n',
         encoding="utf-8",
     )
 
@@ -1600,7 +1593,7 @@ def test_product_import_inventory_catches_static_and_dynamic_edges(tmp_path: Pat
     assert measured["site_count"] == 2
     assert [site["module"] for site in measured["sites"]] == [
         "geode_product",
-        "plugins.petri_audit.runner:run_audit",
+        "geode_product.petri_audit.runner:run_audit",
     ]
 
 

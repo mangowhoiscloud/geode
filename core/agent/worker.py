@@ -138,7 +138,7 @@ class WorkerRequest:
     # structured-output forcing on the spawned LLM call. Threads through
     # ``AgenticLoop.response_schema`` → ``AdapterCallRequest.response_schema``.
     # ``None`` preserves free-form output. Per-role schemas live in
-    # ``plugins/seed_generation/json_schemas.py`` and are wired in
+    # ``geode_product/seed_generation/json_schemas.py`` and are wired in
     # each role's ``_build_tasks``.
     response_schema: dict[str, Any] | None = None
     # Fleet view Stage 1.5 (docs/plans/2026-07-03-fleet-view.md) — when True the

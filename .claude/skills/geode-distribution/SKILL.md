@@ -1,6 +1,6 @@
 ---
 name: geode-distribution
-description: Publish and verify a released GEODE version across GitHub Release and PyPI/uv, prepare or update the separate Homebrew/core geode-agent formula, and prevent deleted custom-tap paths from returning. Use for Homebrew/core admission, brew formula work, uv/uvx distribution, stable promotions, release repair runs, and public installation-channel audits.
+description: Publish and verify a released GEODE version across GitHub Release and PyPI/uv. Use for uv/uvx distribution, stable promotions, release repair runs, and public installation-channel audits.
 ---
 
 # GEODE Distribution
@@ -17,13 +17,6 @@ path.
 | PyPI / uv | `uv tool install geode-agent` | wheel + sdist for the promoted version |
 | uv one-shot | `uvx --from geode-agent geode` | the same PyPI version |
 | GitHub | release `vX.Y.Z` | annotated tag on the promoted main SHA |
-| Homebrew/core, after acceptance | `brew install geode-agent` | core formula using the immutable GitHub release sdist |
-
-Treat Homebrew as a separate upstream-admission path, not part of
-`publish_stable`. Keep custom-tap repositories deleted and never recreate one
-as a fallback. Do not publish a qualified tap command. Do not advertise the
-unqualified command until Homebrew/core lists the formula and the clean-machine
-postconditions below pass.
 
 Source-edge installs are deliberately separate from stable distribution:
 
@@ -166,86 +159,6 @@ https://github.com/mangowhoiscloud/geode/releases/download/vX.Y.Z/geode_agent-X.
 
 Tag auto-tarballs under `archive/refs/tags` or a VCS-main install described as
 a stable release are failures.
-
-## Homebrew/core admission and updates
-
-Keep this workflow separate from a stable release. A successful GitHub/PyPI
-promotion may prepare a formula candidate, but it must not mutate an external
-tap or claim Homebrew availability.
-
-### 1. Check upstream eligibility
-
-Read the current official policies before every first submission:
-
-- <https://docs.brew.sh/Acceptable-Formulae>
-- <https://docs.brew.sh/Adding-Software-to-Homebrew>
-- <https://docs.brew.sh/Python-for-Formula-Authors>
-
-Confirm that the release is stable rather than alpha/beta, the project has
-external users, and the current Homebrew notability requirements are met. If
-any gate fails, stop before opening the upstream PR. Keep the audited candidate
-in the `mangowhoiscloud/homebrew-core` fork instead.
-
-The dated 2026-07-15 decision record lives in
-`packaging/homebrew/README.md`: GEODE was marked beta with 12 stars, 2 forks,
-and 0 subscribers/watchers. The then-current normal thresholds were 75 stars,
-30 forks, or 30 watchers; self-submission thresholds were 225, 90, or 90.
-Treat those figures as a snapshot and refresh the official policy and GitHub
-API before any future admission decision. Recording the state does not
-authorize an upstream PR.
-
-### 2. Refresh the core candidate
-
-Use the prior core candidate as the resource baseline, then refresh resources
-against the exact release. Use Homebrew's current default Python formula; do
-not preserve an obsolete Python dependency merely to avoid resource churn.
-
-```bash
-python scripts/render_homebrew_formula.py \
-  --version X.Y.Z \
-  --sdist-url "https://github.com/mangowhoiscloud/geode/releases/download/vX.Y.Z/geode_agent-X.Y.Z.tar.gz" \
-  --sdist-sha256 SDIST_SHA256 \
-  --resources-from-formula /path/to/homebrew-core/Formula/g/geode-agent.rb \
-  --output /path/to/homebrew-core/Formula/g/geode-agent.rb
-
-brew update-python-resources --version X.Y.Z geode-agent
-```
-
-Run the candidate from a dedicated Homebrew/core checkout or development tap;
-never add a user-facing GEODE tap. Require all of these before submission:
-
-```bash
-brew audit --strict --new --online geode-agent
-brew style Formula/g/geode-agent.rb
-brew install --build-from-source geode-agent
-brew test geode-agent
-geode version
-brew uninstall geode-agent
-```
-
-The formula name and Ruby class must remain `geode-agent` and `GeodeAgent`.
-Its stable URL must be the immutable GitHub release asset, every Python
-dependency must be a pinned resource, and tests must exercise both `geode` and
-`geode-mcp`.
-
-### 3. Submit and activate only through core
-
-Open the formula PR from the fork to `Homebrew/homebrew-core` only after the
-eligibility and candidate gates pass. Let upstream review and CI own admission.
-After merge, verify the official API and an unqualified clean install on
-supported macOS and Linux:
-
-```bash
-curl -fsS https://formulae.brew.sh/api/formula/geode-agent.json
-brew update
-brew install geode-agent
-geode version
-brew test geode-agent
-brew uninstall geode-agent
-```
-
-Only after those commands pass may the landing page, docs, or release notes
-present `brew install geode-agent` as an active channel.
 
 ## Recovery
 

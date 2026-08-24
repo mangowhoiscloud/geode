@@ -29,7 +29,7 @@ import pytest
 
 def test_policy_constants_under_in_repo_policies_dir() -> None:
     """Each of the 5 policy SoT constants must resolve under
-    ``<repo>/core/self_improving/state/policies/`` — NOT ``~/.geode/...``.
+    ``<repo>/geode_product/self_improving/state/policies/`` — NOT ``~/.geode/...``.
     The in-repo location is the CI-ratchet alignment fix
     (PR-STATE-SOT-RUNTIME-SPLIT colocated the tracked SoT with its package)."""
     from core.paths import (

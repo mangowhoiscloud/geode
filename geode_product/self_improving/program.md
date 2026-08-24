@@ -50,7 +50,7 @@ Before starting a new experiment run, confirm with the user:
    2026-06-02), so no script-computed dim remains. Report any missing
    file to the user.
 5. **Initialise `results.tsv`** — only the header row in
-   `core/self_improving/state/results.tsv`; the baseline appears after the
+   `geode_product/self_improving/state/results.tsv`; the baseline appears after the
    first run.
 6. **Confirm config precedence**. Two TOML sections can name the same
    role from different angles — keep them in sync to avoid a silent
@@ -85,7 +85,7 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
   prompt sections are fair game for wording changes, additions,
   deletions, and reorderings.
 - Mutate any of the **7 behaviour policy SoT files** at
-  `core/self_improving/state/policies/` (PR-MINIMAL-2 baseline + ADR-012
+  `geode_product/self_improving/state/policies/` (PR-MINIMAL-2 baseline + ADR-012
   M1/M2 + PR-TOOL-DESCRIPTIONS-MUTATE):
 
   | `target_kind`        | File                       | What it controls                                                |
@@ -283,10 +283,10 @@ grep "^results_jsonl:" ~/.geode/self-improving/run.log
 
 ## Logging results
 
-S10 (ADR-002) + P1a — `core/self_improving/state/results.tsv` (12-column TSV)
-\+ `core/self_improving/state/results.jsonl` (raw 18-dim JSONL per row). Both
+S10 (ADR-002) + P1a — `geode_product/self_improving/state/results.tsv` (12-column TSV)
+\+ `geode_product/self_improving/state/results.jsonl` (raw 18-dim JSONL per row). Both
 files are git-TRACKED in-repo (the tracked SoT lives under
-`core/self_improving/state/`, naturally versioned — PR-STATE-SOT-RUNTIME-SPLIT).
+`geode_product/self_improving/state/`, naturally versioned — PR-STATE-SOT-RUNTIME-SPLIT).
 
 ### results.tsv (12 columns)
 
@@ -325,7 +325,7 @@ session_id	gen_tag	commit	fitness	critical_min	critical_mean	auxiliary_mean	stab
 
 `train.py` PERSISTS the row automatically — on every non-dry-run it calls
 `ledger._append_results_row(...)`, appending to the tracked
-`core/self_improving/state/results.tsv` (header written once). It ALSO echoes a
+`geode_product/self_improving/state/results.tsv` (header written once). It ALSO echoes a
 `results_tsv: <row>` stdout line for inspection only. Do NOT manually
 `grep | >> results.tsv` — that would duplicate the auto-persisted row. To just
 inspect the row:
@@ -343,7 +343,7 @@ One JSON object per audit, single-line. Carries the full `dim_means`,
 (S8) to compute next-generation priors without re-running audits.
 
 Auto-persisted by the same `ledger._append_results_row(...)` call to the tracked
-`core/self_improving/state/results.jsonl` (non-dry-run). The `results_jsonl:`
+`geode_product/self_improving/state/results.jsonl` (non-dry-run). The `results_jsonl:`
 stdout line is for inspection only — do NOT manually append:
 
 ```bash
@@ -386,7 +386,7 @@ On the `autoresearch/<tag>` branch, **loop forever**:
    Empty result → crash; check `tail -n 50` of the log for the stack
    trace and apply a simple fix.
 6. Results are persisted AUTOMATICALLY — `train.py` appends the 12-column TSV +
-   raw 18-dim JSONL (S10 + P1a) to `core/self_improving/state/results.{tsv,jsonl}`
+   raw 18-dim JSONL (S10 + P1a) to `geode_product/self_improving/state/results.{tsv,jsonl}`
    on every non-dry-run via `ledger._append_results_row(...)`. The
    `results_tsv: …` / `results_jsonl: …` stdout lines are for inspection only —
    do NOT manually `sed | >>` them (that double-writes). Both files are
