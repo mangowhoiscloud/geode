@@ -7,13 +7,15 @@ import argparse
 import asyncio
 import hashlib
 import json
+import logging
 from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from core.llm.adapters.base import AdapterCallRequest, Message
+from core.llm.adapters.base import AdapterCallRequest, AdapterCallResult, Message
 from core.llm.adapters.registry import bootstrap_builtins, get_adapter
+from core.llm.fallback import is_connection_transient
 from core.tools.web_tools import WebFetchTool, http_get_with_tls_fallback
 from jsonschema import Draft202012Validator
 from scripts.eval.contract import _load_json_object, _strict_json_loads, _validate_schema
@@ -120,6 +122,27 @@ _VERDICT_SCHEMA_V2: dict[str, Any] = {
 
 _MAX_SOURCE_BYTES = 5 * 1024 * 1024
 _MAX_SOURCE_CHARS = 100_000
+_CONNECTION_RETRIES = 1
+log = logging.getLogger(__name__)
+
+
+async def _acomplete_with_connection_retry(
+    adapter: Any, request: AdapterCallRequest
+) -> AdapterCallResult:
+    for attempt in range(_CONNECTION_RETRIES + 1):
+        try:
+            return cast(AdapterCallResult, await adapter.acomplete(request))
+        except Exception as exc:
+            if attempt == _CONNECTION_RETRIES or not is_connection_transient(exc):
+                raise
+            delay = 2**attempt
+            log.warning(
+                "GEO verifier connection failed (%s); retrying same adapter in %ss",
+                type(exc).__name__,
+                delay,
+            )
+            await asyncio.sleep(delay)
+    raise AssertionError("unreachable")
 
 
 def _validate_verdict(
@@ -427,7 +450,8 @@ async def verify(
         messages = [Message(role="user", content=prompt)]
         for attempt in range(2):
             async with semaphore:
-                response = await extractor.acomplete(
+                response = await _acomplete_with_connection_retry(
+                    extractor,
                     AdapterCallRequest(
                         model=claim_model,
                         messages=tuple(messages),
@@ -441,7 +465,7 @@ async def verify(
                         ),
                         response_schema=_CLAIM_SCHEMA,
                         max_tokens=4096,
-                    )
+                    ),
                 )
             try:
                 extracted = _validate_claims(
@@ -562,7 +586,8 @@ async def verify(
         messages = [Message(role="user", content=prompt)]
         for attempt in range(2):
             async with semaphore:
-                response = await adapter.acomplete(
+                response = await _acomplete_with_connection_retry(
+                    adapter,
                     AdapterCallRequest(
                         model=model,
                         messages=tuple(messages),
@@ -576,7 +601,7 @@ async def verify(
                         ),
                         response_schema=_VERDICT_SCHEMA_V2,
                         max_tokens=4096,
-                    )
+                    ),
                 )
             try:
                 verdict = _validate_verdict_v2(

@@ -92,7 +92,9 @@ functional change.
   transient subscription failure resumes the frozen run without discarding or
   repeating completed model calls. A verifier response rejected by the typed
   source/claim validator receives one bounded correction request; the second
-  invalid response still fails closed. New A/Q receipts freeze an independently
+  invalid response still fails closed. A connection-class transport failure is
+  retried once on the same adapter without changing route or model. New A/Q
+  receipts freeze an independently
   extracted claim universe with exact answer spans before source verification;
   exact unique source spans and complete source snapshots are required, and A
   is derived from supported claims rather than accepted from model prose. An

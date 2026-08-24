@@ -240,6 +240,9 @@ with frozen baseline and treatment arms.
    optional `geode.geo-human-calibration@1` sidecar must attest blind labeling,
    bind the v2 overlay digest, label every sampled frozen claim, and record
    missed exact answer spans before agreement is reported.
+   A connection-class model transport failure retries once on the same adapter;
+   a terminal retry still fails closed, and rerunning resumes only
+   digest-matched source, claim, and verdict receipts.
    Requested result count is an input constraint, not a promise that
    the provider will expose exactly that many sources. The collector retains
    every provider-native source and citation and never parses answer prose into

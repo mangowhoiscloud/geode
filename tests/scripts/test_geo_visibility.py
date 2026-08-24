@@ -8,9 +8,15 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.llm.adapters.base import AdapterCallResult, UsageSummary, WebSearchResult
+from core.llm.adapters.base import (
+    AdapterCallRequest,
+    AdapterCallResult,
+    UsageSummary,
+    WebSearchResult,
+)
 from scripts.eval.geo_collect import collect
 from scripts.eval.geo_verify import (
+    _acomplete_with_connection_retry,
     _validate_claims,
     _validate_verdict,
     _validate_verdict_v2,
@@ -632,6 +638,41 @@ def test_geo_verifier_v2_rejects_overlapping_claim_spans() -> None:
             },
             answer=answer,
         )
+
+
+def test_geo_verifier_retries_one_connection_transient(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RemoteProtocolError(Exception):
+        pass
+
+    class FlakyAdapter:
+        calls = 0
+
+        async def acomplete(self, _: Any) -> AdapterCallResult:
+            self.calls += 1
+            if self.calls == 1:
+                raise RemoteProtocolError("incomplete chunked read")
+            return AdapterCallResult(
+                text="{}",
+                usage=UsageSummary(),
+                stop_reason="end_turn",
+            )
+
+    async def no_sleep(_: float) -> None:
+        return None
+
+    monkeypatch.setattr("scripts.eval.geo_verify.asyncio.sleep", no_sleep)
+    adapter = FlakyAdapter()
+    result = asyncio.run(
+        _acomplete_with_connection_retry(
+            adapter,
+            AdapterCallRequest(model="test-model", messages=()),
+        )
+    )
+
+    assert result.text == "{}"
+    assert adapter.calls == 2
 
 
 def _assert_geo_verifier_resumes_digest_checked_receipts(
