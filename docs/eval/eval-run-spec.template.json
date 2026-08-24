@@ -71,8 +71,10 @@
   },
   "artifacts": {
     "native_results": null,
+    "measurement_results": null,
     "trajectory": null,
     "verifier_receipts": null,
+    "outcome_receipts": null,
     "attempts": "<run-directory>/attempts.jsonl",
     "analysis": "<run-directory>/analysis.json",
     "publication_manifest": null

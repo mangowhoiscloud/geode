@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/schemas/geo-link-audit.schema.json",
+  "title": "GEODE docs internal-link audit v1",
+  "type": "object",
+  "required": ["schema", "generated_at", "status", "internal_links", "external_links", "unresolved"],
+  "properties": {
+    "schema": {"const": "geode.docs-link-audit.v1"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "status": {"const": "pass"},
+    "internal_links": {
+      "type": "object",
+      "required": ["numerator", "denominator", "broken"],
+      "properties": {
+        "numerator": {"type": "integer", "minimum": 0},
+        "denominator": {"type": "integer", "minimum": 1},
+        "broken": {"const": 0}
+      },
+      "additionalProperties": false
+    },
+    "external_links": {
+      "type": "object",
+      "required": ["audited", "broken"],
+      "properties": {
+        "audited": {"type": "integer", "minimum": 0},
+        "broken": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "unresolved": {"type": "integer", "minimum": 0}
+  },
+  "additionalProperties": false
+}

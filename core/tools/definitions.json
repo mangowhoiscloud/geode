@@ -960,7 +960,7 @@
   },
   {
     "name": "update_geo",
-    "description": "Mutate the current typed GEO evidence run. Configure frozen inputs, record one stage with its own denominator and evidence locators, advance phases in order, or complete only after F/R/C/P/A/Q/O are all explicitly measured, partial, or not_measured. Never emits an aggregate GEO score or grants live-execution approval.",
+    "description": "Mutate the current typed GEO evidence run. Configure frozen inputs, record one stage with its own denominator and evidence locators, advance preflight to live observation and optional experiment, or complete a diagnostic/experiment only after F/R/C/P/A/Q/O are explicit. Never emits an aggregate GEO score or grants live-execution approval or benchmark authority.",
     "category": "evaluation",
     "cost_tier": "free",
     "input_schema": {
@@ -1000,10 +1000,20 @@
         },
         "phase": {
           "type": "string",
-          "enum": ["offline_measure", "live_observe", "experiment"]
+          "enum": ["live_observe", "experiment"]
+        },
+        "completion_kind": {
+          "type": "string",
+          "enum": ["diagnostic", "experiment"]
         }
       },
       "required": ["action"],
+      "allOf": [
+        {"if": {"properties": {"action": {"const": "configure"}}}, "then": {"required": ["config"]}},
+        {"if": {"properties": {"action": {"const": "record"}}}, "then": {"required": ["evidence"]}},
+        {"if": {"properties": {"action": {"const": "advance"}}}, "then": {"required": ["phase"]}},
+        {"if": {"properties": {"action": {"const": "complete"}}}, "then": {"required": ["completion_kind"]}}
+      ],
       "additionalProperties": false
     }
   },

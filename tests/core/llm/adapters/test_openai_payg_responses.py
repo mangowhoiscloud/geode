@@ -12,9 +12,22 @@ Responses-only).
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
+from core.llm.adapters._capability_impls import openai_web_search_urls
 from core.llm.adapters._openai_common import build_responses_kwargs
 from core.llm.adapters.base import AdapterCallRequest, Message, ToolSpec
+
+
+def test_web_search_url_projection_accepts_null_sources() -> None:
+    sources, citations, activated = openai_web_search_urls(
+        [SimpleNamespace(type="web_search_call", action=SimpleNamespace(sources=None))]
+    )
+
+    assert sources == ()
+    assert citations == ()
+    assert activated is True
+
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 

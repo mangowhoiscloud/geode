@@ -17,7 +17,6 @@ from core.memory.sqlite_store import short_sqlite_connection
 
 class GeoPhase(StrEnum):
     PREFLIGHT = "preflight"
-    OFFLINE_MEASURE = "offline_measure"
     LIVE_OBSERVE = "live_observe"
     EXPERIMENT = "experiment"
     COMPLETE = "complete"
@@ -146,7 +145,7 @@ CREATE TABLE IF NOT EXISTS thread_geo_runs (
     run_id            TEXT NOT NULL UNIQUE,
     subject           TEXT NOT NULL,
     phase             TEXT NOT NULL CHECK (
-        phase IN ('preflight', 'offline_measure', 'live_observe', 'experiment', 'complete')
+        phase IN ('preflight', 'live_observe', 'experiment', 'complete')
     ),
     measurements_json TEXT NOT NULL,
     config_json       TEXT NOT NULL,
@@ -169,6 +168,51 @@ def ensure_geo_schema(conn: sqlite3.Connection) -> None:
             columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(thread_geo_runs)")}
             if "revision" not in columns:
                 raise
+    table = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'thread_geo_runs'"
+    ).fetchone()
+    if table is not None and "offline_measure" in str(table[0]):
+        _migrate_offline_projection(conn)
+
+
+def _migrate_offline_projection(conn: sqlite3.Connection) -> None:
+    rows = conn.execute("SELECT * FROM thread_geo_runs").fetchall()
+    conn.execute("ALTER TABLE thread_geo_runs RENAME TO thread_geo_runs_with_offline")
+    conn.execute(_SCHEMA)
+    for row in rows:
+        raw_measurements = dict(json.loads(str(row["measurements_json"])))
+        measurements = {
+            key: value
+            for key, value in raw_measurements.items()
+            if not isinstance(value, dict) or value.get("phase") != "offline_measure"
+        }
+        config = dict(json.loads(str(row["config_json"])))
+        retired = len(raw_measurements) - len(measurements)
+        phase = str(row["phase"])
+        if phase == "offline_measure":
+            phase = GeoPhase.PREFLIGHT.value
+            config.pop("approval_ref", None)
+            config.pop("preregistration_ref", None)
+        if retired or str(row["phase"]) == "offline_measure":
+            config["legacy_offline_retired"] = retired
+        conn.execute(
+            """INSERT INTO thread_geo_runs
+                   (session_id, run_id, subject, phase, measurements_json, config_json,
+                    revision, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                row["session_id"],
+                row["run_id"],
+                row["subject"],
+                phase,
+                json.dumps(measurements),
+                json.dumps(config),
+                row["revision"],
+                row["created_at"],
+                row["updated_at"],
+            ),
+        )
+    conn.execute("DROP TABLE thread_geo_runs_with_offline")
 
 
 class GeoStore:
@@ -261,6 +305,8 @@ class GeoStore:
 
     def preregister_experiment(self, session_id: str, preregistration_ref: str) -> GeoRun:
         """Attach an operator-owned experiment preregistration receipt."""
+        if self._require(session_id).phase is not GeoPhase.LIVE_OBSERVE:
+            raise ValueError("experiment preregistration requires live_observe")
         return self.configure(session_id, {"preregistration_ref": preregistration_ref})
 
     def record(self, session_id: str, raw: Any) -> GeoRun:
@@ -279,8 +325,7 @@ class GeoStore:
         current = self._require(session_id)
         next_phase = GeoPhase(target)
         expected = {
-            GeoPhase.PREFLIGHT: GeoPhase.OFFLINE_MEASURE,
-            GeoPhase.OFFLINE_MEASURE: GeoPhase.LIVE_OBSERVE,
+            GeoPhase.PREFLIGHT: GeoPhase.LIVE_OBSERVE,
             GeoPhase.LIVE_OBSERVE: GeoPhase.EXPERIMENT,
         }.get(current.phase)
         if expected is None:
@@ -288,7 +333,7 @@ class GeoStore:
         if next_phase is not expected:
             raise ValueError(f"GEO phase must advance from {current.phase.value} to {expected}")
         if current.phase is GeoPhase.PREFLIGHT and GeoStage.FETCH.value not in current.measurements:
-            raise ValueError("preflight must explicitly record F before offline measurement")
+            raise ValueError("preflight must explicitly record F before live observation")
         if current.phase is not GeoPhase.PREFLIGHT and not any(
             evidence.phase is current.phase for evidence in current.measurements.values()
         ):
@@ -308,22 +353,32 @@ class GeoStore:
             raise ValueError("experiment requires preregistration_ref")
         return self._update(current, phase=next_phase)
 
-    def complete(self, session_id: str) -> GeoRun:
+    def complete(self, session_id: str, completion_kind: str = "diagnostic") -> GeoRun:
         current = self._require(session_id)
         if current.phase is GeoPhase.COMPLETE:
             raise ValueError("completed GEO runs cannot be completed again")
-        if current.phase is not GeoPhase.EXPERIMENT:
-            raise ValueError("GEO runs may complete only after the experiment phase")
-        if not any(
-            evidence.phase is GeoPhase.EXPERIMENT for evidence in current.measurements.values()
-        ):
-            raise ValueError("experiment must record evidence before completion")
+        expected_phase = {
+            "diagnostic": GeoPhase.LIVE_OBSERVE,
+            "experiment": GeoPhase.EXPERIMENT,
+        }.get(completion_kind)
+        if expected_phase is None:
+            raise ValueError("GEO completion_kind must be diagnostic or experiment")
+        if current.phase is not expected_phase:
+            raise ValueError(
+                f"{completion_kind} GEO completion requires the {expected_phase.value} phase"
+            )
+        if not any(evidence.phase is current.phase for evidence in current.measurements.values()):
+            raise ValueError(f"{current.phase.value} must record evidence before completion")
         if current.missing_stages:
             raise ValueError(
                 "GEO completion requires an explicit measured/partial/not_measured "
                 f"record for every stage: {current.missing_stages}"
             )
-        return self._update(current, phase=GeoPhase.COMPLETE)
+        return self._update(
+            current,
+            phase=GeoPhase.COMPLETE,
+            config={**current.config, "completion_kind": completion_kind},
+        )
 
     def render_prompt(self, session_id: str) -> str:
         current = self.get(session_id)
@@ -475,7 +530,10 @@ def build_geo_handlers(store: GeoStore | None = None) -> Any:
             elif action == "advance":
                 run = geo_store.advance(_session_id(), str(kwargs.get("phase") or ""))
             elif action == "complete":
-                run = geo_store.complete(_session_id())
+                completion_kind = str(kwargs.get("completion_kind") or "")
+                if not completion_kind:
+                    raise ValueError("update_geo complete requires completion_kind")
+                run = geo_store.complete(_session_id(), completion_kind)
             else:
                 raise ValueError(
                     "update_geo action must be configure, record, advance, or complete"

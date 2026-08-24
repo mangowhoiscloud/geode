@@ -34,13 +34,11 @@ def test_geo_store_preserves_vector_denominators_and_phase_gates(tmp_path) -> No
     assert run.phase is GeoPhase.PREFLIGHT
 
     with pytest.raises(ValueError, match="explicitly record F"):
-        store.advance("s-1", "offline_measure")
+        store.advance("s-1", "live_observe")
     run = store.record("s-1", _evidence(GeoStage.FETCH))
     assert run.measurements["F"].denominator == 2
-    run = store.advance("s-1", "offline_measure")
-    assert run.phase is GeoPhase.OFFLINE_MEASURE
-
-    store.record("s-1", _evidence(GeoStage.RETRIEVAL, status="not_measured"))
+    with pytest.raises(ValueError, match="requires live_observe"):
+        store.preregister_experiment("s-1", "premature")
     with pytest.raises(ValueError, match="frozen config"):
         store.advance("s-1", "live_observe")
     store.configure(
@@ -56,6 +54,7 @@ def test_geo_store_preserves_vector_denominators_and_phase_gates(tmp_path) -> No
     store.authorize_live("s-1", "operator-receipt-1")
     live = store.advance("s-1", "live_observe")
     assert live.phase is GeoPhase.LIVE_OBSERVE
+    store.record("s-1", _evidence(GeoStage.RETRIEVAL, status="not_measured"))
     with pytest.raises(ValueError, match="only a trusted preregistration"):
         store.configure("s-1", {"model": "model-b"})
     preregistered = store.preregister_experiment("s-1", "prereg-receipt-1")
@@ -70,12 +69,8 @@ def test_geo_completion_requires_explicit_seven_stage_vector(tmp_path) -> None:
     store = GeoStore(tmp_path / "sessions.db")
     store.start("s-1", "Audit example.test")
     store.record("s-1", _evidence(GeoStage.FETCH))
-    with pytest.raises(ValueError, match="experiment phase"):
+    with pytest.raises(ValueError, match="live_observe phase"):
         store.complete("s-1")
-    store.advance("s-1", "offline_measure")
-    for stage in (GeoStage.RETRIEVAL, GeoStage.CITATION, GeoStage.PLACEMENT, GeoStage.ABSORPTION):
-        store.record("s-1", _evidence(stage, status="not_measured"))
-    store.record("s-1", _evidence(GeoStage.QUALITY, status="not_measured"))
     store.configure(
         "s-1",
         {
@@ -88,10 +83,8 @@ def test_geo_completion_requires_explicit_seven_stage_vector(tmp_path) -> None:
     )
     store.authorize_live("s-1", "operator-receipt-1")
     store.advance("s-1", "live_observe")
-    store.record("s-1", _evidence(GeoStage.OUTCOME, status="not_measured"))
-    store.preregister_experiment("s-1", "prereg-receipt-1")
-    store.advance("s-1", "experiment")
-    store.record("s-1", _evidence(GeoStage.QUALITY, status="not_measured"))
+    for stage in tuple(GeoStage)[1:]:
+        store.record("s-1", _evidence(stage, status="not_measured"))
     complete = store.complete("s-1")
     assert complete.phase is GeoPhase.COMPLETE
     assert complete.missing_stages == ()
@@ -115,9 +108,6 @@ def test_geo_rejects_later_measurement_during_preflight_and_terminal_mutation(
     with pytest.raises(ValueError, match="preflight may record only F"):
         store.record("s-1", _evidence(GeoStage.RETRIEVAL))
     store.record("s-1", _evidence(GeoStage.FETCH))
-    store.advance("s-1", "offline_measure")
-    for stage in tuple(GeoStage)[1:-1]:
-        store.record("s-1", _evidence(stage, status="not_measured"))
     store.configure(
         "s-1",
         {
@@ -130,15 +120,16 @@ def test_geo_rejects_later_measurement_during_preflight_and_terminal_mutation(
     )
     store.authorize_live("s-1", "operator-receipt-1")
     store.advance("s-1", "live_observe")
-    store.record("s-1", _evidence(GeoStage.OUTCOME, status="not_measured"))
+    for stage in tuple(GeoStage)[1:]:
+        store.record("s-1", _evidence(stage, status="not_measured"))
     store.preregister_experiment("s-1", "prereg-receipt-1")
     store.advance("s-1", "experiment")
     store.record("s-1", _evidence(GeoStage.QUALITY, status="not_measured"))
-    store.complete("s-1")
+    store.complete("s-1", "experiment")
     with pytest.raises(ValueError, match="completed again"):
         store.complete("s-1")
     with pytest.raises(ValueError, match="cannot advance"):
-        store.advance("s-1", "offline_measure")
+        store.advance("s-1", "live_observe")
 
 
 def test_geo_store_rejects_stale_phase_and_evidence_writes(tmp_path) -> None:
@@ -149,7 +140,7 @@ def test_geo_store_rejects_stale_phase_and_evidence_writes(tmp_path) -> None:
     recorded = store.record("s-1", _evidence(GeoStage.FETCH))
 
     with pytest.raises(ValueError, match="stale GEO"):
-        store._update(stale, phase=GeoPhase.OFFLINE_MEASURE)
+        store._update(stale, phase=GeoPhase.LIVE_OBSERVE)
     assert store.get("s-1") == recorded
 
 
@@ -160,8 +151,6 @@ def test_geo_operator_slash_receipts_are_correlated_and_model_inaccessible(
     store = GeoStore(db_path)
     store.start("s-1", "Audit")
     store.record("s-1", _evidence(GeoStage.FETCH))
-    store.advance("s-1", "offline_measure")
-    store.record("s-1", _evidence(GeoStage.RETRIEVAL, status="not_measured"))
     store.configure(
         "s-1",
         {
@@ -200,3 +189,50 @@ def test_geo_operator_slash_receipts_are_correlated_and_model_inaccessible(
     events = SessionEventStore(db_path).read("s-1")
     assert [event.kind for event in events] == ["geo.updated", "geo.updated"]
     assert all(event.turn_id for event in events)
+
+
+def test_geo_store_retires_legacy_offline_projection(tmp_path) -> None:
+    import json
+    import sqlite3
+
+    db_path = tmp_path / "sessions.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """CREATE TABLE thread_geo_runs (
+            session_id TEXT PRIMARY KEY, run_id TEXT NOT NULL UNIQUE, subject TEXT NOT NULL,
+            phase TEXT NOT NULL CHECK (phase IN ('preflight', 'offline_measure',
+                'live_observe', 'experiment', 'complete')),
+            measurements_json TEXT NOT NULL, config_json TEXT NOT NULL,
+            revision INTEGER NOT NULL DEFAULT 0, created_at REAL NOT NULL,
+            updated_at REAL NOT NULL)"""
+    )
+    conn.execute(
+        "INSERT INTO thread_geo_runs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            "s-legacy",
+            "geo-legacy",
+            "Audit legacy",
+            "offline_measure",
+            json.dumps(
+                {
+                    "F": {**_evidence(GeoStage.FETCH), "phase": "preflight"},
+                    "R": {
+                        **_evidence(GeoStage.RETRIEVAL, status="not_measured"),
+                        "phase": "offline_measure",
+                    },
+                }
+            ),
+            json.dumps({"approval_ref": "old-approval"}),
+            2,
+            1.0,
+            2.0,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    migrated = GeoStore(db_path).get("s-legacy")
+    assert migrated is not None
+    assert migrated.phase is GeoPhase.PREFLIGHT
+    assert set(migrated.measurements) == {"F"}
+    assert migrated.config == {"legacy_offline_retired": 1}

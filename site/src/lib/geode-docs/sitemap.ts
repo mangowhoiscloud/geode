@@ -133,6 +133,7 @@ export const DOCS_SITEMAP: DocSection[] = [
     title: "Benchmarks",
     titleKo: "벤치마크",
     pages: [
+      { slug: "benchmarks/geo", title: "GEO visibility", titleKo: "GEO 가시성", summary: "A stage-aware F/R/C/P/A/Q/O measurement contract with frozen workloads, digest-bound receipts, and no aggregate GEO score.", summaryKo: "고정 workload와 digest-bound receipt로 F/R/C/P/A/Q/O를 분리 측정하며 단일 GEO 점수를 만들지 않는 계약입니다.", quadrant: "reference" },
       { slug: "benchmarks/tau2", title: "Tau2", titleKo: "Tau2", summary: "GEODE's tau2-bench measurements: the native user-simulator track headline, every verifier-backed run record, and links to the raw simulation logs.", summaryKo: "GEODE의 tau2-bench 실측입니다. native user-simulator 트랙 headline, verifier-backed run 기록 전체, 원본 simulation 로그 링크를 담습니다.", quadrant: "reference" },
       { slug: "benchmarks/mcpmark", title: "MCPMark", titleKo: "MCPMark", summary: "GEODE's MCPMark measurements: the Verified available-services headline, service coverage and blockers, every run record, and links to the raw run logs.", summaryKo: "GEODE의 MCPMark 실측입니다. Verified available-services headline, 서비스 coverage와 blocker, run 기록 전체, 원본 run 로그 링크를 담습니다.", quadrant: "reference" },
     ],

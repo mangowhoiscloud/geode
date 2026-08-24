@@ -4,9 +4,14 @@
  * loop-punk portfolio directly. The reference manual stays at /docs, the
  * person page at /about; /portfolio remains as an alias of this page.
  */
+import type { Metadata } from "next";
 import GeodePortfolioPage from "./portfolio/page";
 import { JsonLd } from "@/components/json-ld";
 import { GEODE_SOT } from "@/data/geode/sot";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "https://mangowhoiscloud.github.io/geode/" },
+};
 
 export default function Page() {
   return (

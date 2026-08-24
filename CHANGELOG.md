@@ -79,6 +79,58 @@ functional change.
 
 ### Added
 
+- **GEO visibility measurements now have an executable receipt contract.** A
+  frozen 24-query workload binds a separate live-approval receipt and exact
+  model/K=5 inputs; native outcomes, verifier identity/rubric, run spec, and
+  complete audited-claim counts are digest-checked before separate R/C/P/A/Q
+  denominators are emitted. Provider adapters preserve retrieval sources and
+  visible citations separately. Local site preflight remains partial until a
+  digest-matched public-host HTTP/HTML/canonical/robots receipt is supplied;
+  a separate source-aware typed verifier overlay can add A and claim-support Q
+  without rewriting native outcomes. Failed host checks now retain a partial
+  receipt instead of disappearing as exceptions. Native results no longer
+  carry null verifier/outcome placeholders; verifier claims bind their text and
+  exact source quote, while first-party outcomes attach later through a
+  native-export-bound completed-window receipt. The evaluator never invents F,
+  A, Q, O, or an aggregate GEO score. GEO vectors and fetched verifier sources
+  now have explicit JSON Schemas, and the common eval bundle gate joins native,
+  measurement, verifier, outcome, trajectory, analysis, and publication
+  authorities without copying their payloads. Native collection and A/Q
+  verification persist digest-checked per-observation checkpoints, so a
+  transient subscription failure resumes the frozen run without discarding or
+  repeating completed model calls. A verifier response rejected by the typed
+  source/claim validator receives one bounded correction request; the second
+  invalid response still fails closed. Each call records and enforces a timeout;
+  a timeout or connection-class transport failure is retried once on the same
+  adapter without changing route or model. New A/Q receipts freeze an
+  independently extracted claim universe before source verification. The model
+  selects exact answer quotes while the host derives, orders, and rejects
+  duplicate or overlapping spans and canonicalizes repeated answer text to its
+  first occurrence; producer version and extractor/verifier effort are bound
+  into their receipts and overlay contexts. Rejected extraction corrections
+  identify the observation and bounded offending quote without fuzzy-matching
+  invented text. Case-only literal drift is rebound to the exact original
+  substring and host-derived offsets. Two invalid structured claim responses
+  now produce a digest-bound failure receipt and keep only that observation's
+  A/Q cells unmeasured; source-verifier validation failures follow the same
+  receipt-bound exclusion path, while transport failures still stop the run.
+  Extractor and verifier producer versions are independently frozen so an
+  unchanged claim stage can resume without relabeling it as newer code;
+  exact unique source spans and complete source snapshots are required, and A
+  is derived from supported claims rather than accepted from model prose. An
+  optional digest-bound blind human sidecar records claim-completeness and
+  support-label agreement without gaining promotion authority.
+  The unreleased offline-shaped branch is removed: diagnostics now move from
+  deterministic preflight directly to an operator-approved live observation,
+  bind the exact adapter/provider/credential source/model, and reserve the
+  optional experiment phase for preregistered treatment claims. Codex OAuth
+  hosted search now honors the frozen model hint and fails at the canary
+  instead of silently substituting its default model.
+  The collector checkpoints each successful native cell and resumes only
+  frozen-workload-matched receipts, while withholding the final matrix until
+  all 120 cells validate; a late subscription transport failure no longer
+  discards prior successful calls.
+
 - **Third-party extensions now authorize before executable load.** Filesystem
   hooks, package LLM adapters, project/personal skills, and MCP servers project
   their existing manifests into one immutable operator-policy decision. Trusted
@@ -103,6 +155,14 @@ functional change.
   per-stage denominators and explicit `not_measured` states.
 
 ### Fixed
+
+- **GEO fetch eligibility is now a per-URL conjunction.** Public-host preflight
+  v2 records redirect identity, HTTP and meta index controls, crawler-specific
+  robots policy, exact deployed-content parity, and every page-level failure.
+  F uses the explicit eligible-page count instead of the minimum of unrelated
+  marginal checks; immutable v1 receipts remain readable as historical
+  evidence. The Pages link ratchet remaps production canonicals to the staged
+  export so a new route is locally checked before its first deployment.
 
 - **Audit-identified compatibility paths now keep one implementation owner.**
   The slop audit scans all three production roots, both public web-search names share one

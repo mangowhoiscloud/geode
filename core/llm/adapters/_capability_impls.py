@@ -14,7 +14,7 @@ via :func:`core.llm.errors.is_billing_fatal`.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from core.llm.adapters.base import (
@@ -23,6 +23,35 @@ from core.llm.adapters.base import (
 )
 
 log = logging.getLogger(__name__)
+
+
+def _field(value: object, name: str, default: object = None) -> Any:
+    return value.get(name, default) if isinstance(value, Mapping) else getattr(value, name, default)
+
+
+def openai_web_search_urls(
+    items: Sequence[object],
+) -> tuple[tuple[str, ...], tuple[str, ...], bool]:
+    """Return provider-exposed retrieval sources and visible citations in wire order."""
+    sources: list[str] = []
+    citations: list[str] = []
+    activated = False
+    for item in items:
+        if _field(item, "type") == "web_search_call":
+            activated = True
+            action = _field(item, "action")
+            entries = (_field(action, "sources", []) or []) if action is not None else []
+            for entry in [*entries, *(_field(item, "results", []) or [])]:
+                if url := _field(entry, "url"):
+                    sources.append(str(url))
+        if _field(item, "type") == "message":
+            for part in _field(item, "content", []) or []:
+                for annotation in _field(part, "annotations", []) or []:
+                    if _field(annotation, "type") == "url_citation" and (
+                        url := _field(annotation, "url")
+                    ):
+                        citations.append(str(url))
+    return tuple(dict.fromkeys(sources)), tuple(dict.fromkeys(citations)), activated
 
 
 # ---------------------------------------------------------------------------
@@ -73,10 +102,18 @@ async def anthropic_web_search(
     response = await client.messages.create(**kwargs)
     text_parts: list[str] = []
     source_urls: list[str] = []
+    citation_urls: list[str] = []
+    search_activated = False
     for block in getattr(response, "content", []) or []:
         if hasattr(block, "text"):
             text_parts.append(block.text)
+        for citation in getattr(block, "citations", []) or []:
+            if getattr(citation, "type", "") == "web_search_result_location" and (
+                url := getattr(citation, "url", None)
+            ):
+                citation_urls.append(url)
         if getattr(block, "type", "") == "web_search_tool_result":
+            search_activated = True
             for entry in getattr(block, "content", []) or []:
                 url = getattr(entry, "url", None)
                 if url:
@@ -85,6 +122,10 @@ async def anthropic_web_search(
         query=query,
         text="\n".join(text_parts),
         source_urls=tuple(source_urls),
+        citation_urls=tuple(dict.fromkeys(citation_urls)),
+        search_activated=search_activated,
+        retrieval_exposed=search_activated,
+        model=model,
         adapter_name=adapter_name,
     )
 
@@ -142,13 +183,15 @@ async def openai_web_search(
     response = await client.responses.create(
         model=model,
         tools=[{"type": "web_search"}],
+        include=["web_search_call.action.sources"],
         input=(
             f"Search the web for: {query}. Return up to {max_results} relevant "
             "results with titles, URLs, and brief summaries."
         ),
     )
+    output = getattr(response, "output", []) or []
     text_parts: list[str] = []
-    for item in getattr(response, "output", []) or []:
+    for item in output:
         if getattr(item, "type", "") == "message":
             for sub in getattr(item, "content", []) or []:
                 if getattr(sub, "type", "") == "output_text":
@@ -157,9 +200,15 @@ async def openai_web_search(
                         text_parts.append(text)
     if not text_parts:
         raise RuntimeError("openai_web_search: empty output_text in response")
+    source_urls, citation_urls, search_activated = openai_web_search_urls(output)
     return WebSearchResult(
         query=query,
         text="\n".join(text_parts),
+        source_urls=source_urls,
+        citation_urls=citation_urls,
+        search_activated=search_activated,
+        retrieval_exposed=search_activated,
+        model=model,
         adapter_name=adapter_name,
     )
 
@@ -277,7 +326,7 @@ async def glm_web_search(
     text = (choice.message.content or "") if choice else ""
     if not text:
         raise RuntimeError("glm_web_search: empty content in response")
-    return WebSearchResult(query=query, text=text, adapter_name=adapter_name)
+    return WebSearchResult(query=query, text=text, adapter_name=adapter_name, model=model)
 
 
 __all__ = [
@@ -287,6 +336,7 @@ __all__ = [
     "openai_chat_complete_text",
     "openai_responses_complete_text",
     "openai_web_search",
+    "openai_web_search_urls",
 ]
 
 

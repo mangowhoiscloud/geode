@@ -279,10 +279,10 @@ class CodexOAuthAdapter:
         """Codex-subscription web_search via Responses API ``web_search``
         hosted tool.
 
-        ``model`` hint intentionally unused — the Codex backend's
-        per-model web_search support matrix is unverified
-        (doc-before-behaviour, CLAUDE.md §4d); CODEX_PRIMARY stays the
-        search model.
+        The caller's frozen ``model`` is sent when present; otherwise the
+        route uses ``CODEX_PRIMARY``. A GEO route canary remains responsible
+        for proving that the selected model supports hosted search on the
+        operator's account. No model fallback occurs here.
 
         Codex backend requires ``store=False`` (same constraint as
         :meth:`acomplete` — backend reject 400 without it) and uses the
@@ -299,12 +299,15 @@ class CodexOAuthAdapter:
         (because :func:`is_billing_fatal` doesn't match shape errors)
         even though the real issue is the call shape mismatch.
         """
-        del model
         from core.config import CODEX_PRIMARY
+        from core.llm.adapters._capability_impls import openai_web_search_urls
 
         client = self._get_client()
+        search_model = model or CODEX_PRIMARY
         text_parts: list[str] = []
         source_urls: list[str] = []
+        citation_urls: list[str] = []
+        search_activated = False
         # PR-CODEX-INSTRUCTIONS-FIX (2026-05-28) — live test progression:
         #
         # 1st attempt (PR-NO-FALLBACK initial) → 400 ``Instructions are
@@ -325,7 +328,7 @@ class CodexOAuthAdapter:
             "results with titles, URLs, and brief summaries."
         )
         kwargs = {
-            "model": CODEX_PRIMARY,
+            "model": search_model,
             "instructions": (
                 "Use the web_search tool to find current information. "
                 "Return up to the requested number of relevant results with "
@@ -333,6 +336,7 @@ class CodexOAuthAdapter:
             ),
             "input": [{"role": "user", "content": user_prompt}],
             "tools": [{"type": "web_search"}],
+            "include": ["web_search_call.action.sources"],
             "store": False,
         }
         async with client.responses.stream(**kwargs) as stream:
@@ -342,6 +346,10 @@ class CodexOAuthAdapter:
                     item = getattr(event, "item", None)
                     if item is None:
                         continue
+                    item_sources, item_citations, item_activated = openai_web_search_urls([item])
+                    source_urls.extend(item_sources)
+                    citation_urls.extend(item_citations)
+                    search_activated = search_activated or item_activated
                     if getattr(item, "type", "") == "message":
                         for sub in getattr(item, "content", []) or []:
                             if getattr(sub, "type", "") == "output_text":
@@ -353,7 +361,13 @@ class CodexOAuthAdapter:
                             url = getattr(entry, "url", None)
                             if url:
                                 source_urls.append(url)
-            await stream.get_final_response()
+            final = await stream.get_final_response()
+            final_sources, final_citations, final_activated = openai_web_search_urls(
+                getattr(final, "output", []) or []
+            )
+            source_urls.extend(final_sources)
+            citation_urls.extend(final_citations)
+            search_activated = search_activated or final_activated
         if not text_parts:
             raise RuntimeError(
                 "codex-oauth web_search: empty output_text — Codex backend "
@@ -363,7 +377,11 @@ class CodexOAuthAdapter:
         return WebSearchResult(
             query=query,
             text="\n".join(text_parts),
-            source_urls=tuple(source_urls),
+            source_urls=tuple(dict.fromkeys(source_urls)),
+            citation_urls=tuple(dict.fromkeys(citation_urls)),
+            search_activated=search_activated,
+            retrieval_exposed=search_activated,
+            model=search_model,
             adapter_name=self.name,
         )
 

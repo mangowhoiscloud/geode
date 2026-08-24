@@ -47,7 +47,7 @@ GEODE 를 가르는 핵심은 **두 개의 루프**입니다.
 
 [05-operateGEODE 운영Serve와 게이트웨이, 메신저 연동, 작업 예약, 스케줄러 내부, …](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md)
 
-[06-benchmarks벤치마크Tau2, MCPMark](https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2.md)
+[06-benchmarks벤치마크GEO 가시성, Tau2, MCPMark](https://mangowhoiscloud.github.io/geode/docs/benchmarks/geo.md)
 
 [07-guides가이드도구 작성, 훅과 미들웨어 등록, Trajectory 게시, LLM 어댑터 추가, …](https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool.md)
 
@@ -3147,6 +3147,125 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/run/troubleshooting.md
 
 ## Benchmarks . 벤치마크
 
+### GEO visibility (GEO 가시성)
+
+URL: https://mangowhoiscloud.github.io/geode/docs/benchmarks/geo
+Markdown: https://mangowhoiscloud.github.io/geode/docs/benchmarks/geo.md
+
+## 무엇을 검증하는가
+
+GEO는 문장을 다시 쓰는 최적화 점수가 아니라 증거 상태머신입니다.`preflight → live_observe`로 진단하며, 변경 효과를 주장할 때만 사전 등록된 `experiment`로 진행합니다. 앞 단계가 뒤 단계를 대신하지 못하며, 측정하지 못한 값은 0이 아니라`not_measured`로 남습니다.
+
+질의 실행 1회가 관측치 1개입니다. live profile은 6개 root × (원문 1개 + paraphrase 3개) × K=5, 즉 120개 관측치를 만듭니다. C는 이 120개 전체를 분모로 쓰지만, R·P·A·Q는 해당 증거가 실제로 존재하는 관측치나 claim만 각자의 분모로 사용합니다.
+
+| Stage | 분자: 무엇을 세는가 | 분모: 어떤 집합에서 보는가 |
+| --- | --- | --- |
+| `F` | 각 preflight 조건을 통과한 URL | 감사 대상 URL |
+| `R` | target URL이 retrieval 목록에 나온 실행 | retrieval 목록을 노출한 24×K 실행 |
+| `C` | target URL을 인용한 실행 | 전체 24×K 질의 실행 |
+| `P` | target 인용의 visible\_rank가 3 이하인 실행 | target URL을 인용한 실행 |
+| `A` | verifier가 target 내용 사용을 확인한 실행 | A 판정이 있는 target 인용 실행 |
+| `Q` | source support가 확인된 target 연결 claim | verifier가 선언하고 빠짐없이 감사한 target 연결 claim |
+| `O` | 관측된 referral·engagement·conversion | 측정 가능한 1차 impression·referral·session |
+
+## 빈 칸과 비교군
+
+아래 값은 2026-08-24 로컬 diagnostic receipt를 읽은 결과이며 공개 성능 주장이나 승격 근거가 아닙니다. `0`은 관측 결과,`not_measured`는 적격 분모·영수증 부재, `partial`은 해당 단계의 일부 하위 지표만 측정했다는 뜻입니다.
+
+| 상태 | 빈칸이 뜻하는 것 | 필요한 비교군 |
+| --- | --- | --- |
+| `F · partial` | 로컬 78/78 URL과 내부 링크 577/577은 통과했지만, 당시 runner는 공개 sitemap 77/78 실패를 예외로 버려 영수증을 결합하지 못했습니다. 현재 runner는 이를 partial receipt로 보존합니다. | 동일성 비교: 같은 URL digest의 로컬 export ↔ 공개 호스트 |
+| `R/C/P` | Pages는 R 0/120, C 4/120, P 4/4로 측정됐습니다. R은 빈칸이 아니라 관측된 0입니다. | 표면 진단: Pages ↔ GitHub 저장소(R 109/120, C 9/120) |
+| `A/Q` | A 4/4, Q 43/58이지만 같은 모델의 앞선 반복은 35/54였습니다. Q는 claim support만 포함해 partial입니다. | 판정 보정: 고정 claim 집합의 독립 verifier ↔ 사람 표본 판정 |
+| `O · not_measured` | 종료된 Search Console·referral·conversion 관측 기간이 없어 분모 자체를 만들지 않았습니다. | 성과 비교: 같은 기간·질의·엔진의 baseline ↔ treatment |
+| `Promotion · none` | 이번 실행은 진단 계약이며 비교 대상과 변경 arm을 사전 등록하지 않았습니다. | 승격 비교: 동결된 baseline ↔ treatment, 동일 index·budget·window |
+
+GitHub 저장소는 Pages로 권위가 전달되지 않는 위치를 찾는**표면 진단 비교군**입니다. 콘텐츠 변경의 효과를 주장하려면 별도의 **인과 비교군**인 동결 baseline과 treatment가 필요합니다.
+
+## 실행 계약
+
+1.  6개 root마다 root query 1개와 paraphrase 3개, 총 24개 문자열을 고정합니다.
+2.  `run-spec.json`이 workload SHA-256과 모델을 동결하고, live는 동일 surface의 별도 operator approval receipt와 정확히 K=5를 요구합니다.
+3.  native result는 run-spec digest와 adapter·provider·credential source·model을 함께 고정합니다.
+4.  24×K 각 셀은 하나의 native receipt로 돌아가며 검색 활성화, retrieval, citation의 JSON Pointer가 원본과 일치해야 합니다.
+5.  absorption과 quality는 별도 verifier receipt·producer/version/model·digest-bound rubric이 없으면 측정값으로 인정하지 않습니다.
+6.  Q는 verifier가 선언한 전체 target-linked claim 수와 실제 감사 행 수가 같아야 계산합니다.
+7.  Q의 support 판정은 claim 본문과 source receipt에 실제 존재하는 인용 구간을 함께 남깁니다.
+8.  실패한 public-host preflight도 partial receipt로 보존하며, O는 native 결과를 수정하지 않는 사후 analytics overlay입니다.
+9.  v1은 Q 중 claim support만 측정하므로, 모든 영수증이 있어도 Q 전체는 `partial`입니다.
+
+```
+uv run python scripts/eval/geo_collect.py \
+  --run-spec <run-dir>/run-spec.json \
+  --workload <run-dir>/workload.json \
+  --site-preflight <run-dir>/site-preflight.json \
+  --link-audit <run-dir>/link-audit.json \
+  --host-preflight <run-dir>/host-preflight.json \
+  --out <run-dir>/native-results.json
+```
+
+```
+uv run python scripts/eval/geo_verify.py \
+  --workload <run-dir>/workload.json \
+  --native-results <run-dir>/native-results.json \
+  --rubric <run-dir>/verifier-rubric.json \
+  --adapter <verifier-adapter> \
+  --model <verifier-model> \
+  --effort medium \
+  --claim-adapter <claim-extractor-adapter> \
+  --claim-model <claim-extractor-model> \
+  --claim-effort low \
+  --producer-version <version-or-revision> \
+  --out <run-dir>/verifier-results.json
+```
+
+```
+uv run python scripts/eval/geo_visibility.py \
+  --run-spec <run-dir>/run-spec.json \
+  --workload <run-dir>/workload.json \
+  --native-results <run-dir>/native-results.json \
+  --verifier-results <run-dir>/verifier-results.json \
+  --outcome <run-dir>/outcome.json \
+  --out <run-dir>/geo-vector.json
+```
+
+## 데이터·artifact 결합
+
+vector 안에 trajectory나 원본 receipt를 복제하지 않습니다.`attempts.jsonl`의 한 행이 각 파일을 상대 경로와 SHA-256으로 결합하고, `analysis.json`은 `measurement`의 분자·분모 JSON Pointer를 읽어 비율을 재계산합니다.
+
+| run-spec | attempt kind | 권한 |
+| --- | --- | --- |
+| `native_results` | `native-result` | provider 원본 |
+| `measurement_results` | `measurement` | geode.geo-vector@1 |
+| `verifier_receipts` | `verifier-receipt` | 독립 A/Q 판정 |
+| `outcome_receipts` | `outcome-receipt` | 종료된 1차 analytics |
+| `trajectory` | `trajectory` | geode.trajectory@1 / release manifest |
+
+trajectory는 행동 증거이며 점수 정본이 아닙니다. publication manifest는 선언된 모든 파일을 public 또는 withheld로 분류하고, bundle gate는 schema, digest, run ID, trajectory release scope를 한 번에 확인합니다.
+
+```
+uv run python scripts/eval/contract.py validate-run-bundle \
+  <run-dir>/run-spec.json
+```
+
+## 현재 경계
+
+로컬 export·sitemap·self-canonical·noindex·내부 링크만 확인한 F는`partial`입니다. 동일 URL 집합에 대한 공개 호스트의 HTTP·HTML· canonical·robots 영수증까지 결합돼야 `measured`가 됩니다. A/Q는 별도 source-aware verifier, O는 관측 기간이 끝난 1차 analytics 영수증 없이는 측정하지 않습니다.
+
+현재 구현은 실패한 host preflight도 보존하고, Q의 claim 본문과 실제 source quote를 검증하며, O를 immutable native result에 사후 결합합니다. 남은 빈칸은 더미가 아니라 배포·독립 판정·1차 analytics의 실제 증거 부재입니다.
+
+native outcome, verifier 판단, GEODE trajectory, analysis와 publication manifest는 서로 다른 권한입니다. Inspect가 실행하지 않은 slash run을`.eval`로 포장하지도 않습니다.
+
+slash의 typed state는 작업 진행을 위한 advisory projection입니다. 모델이 기록한 분자나 locator 자체는 벤치마크 권한이 아니며, schema와 digest를 통과한 native/vector/verifier/outcome bundle만 측정 근거가 됩니다.
+
+## 근거
+
+-   [Google generative AI optimization guide](https://developers.google.com/search/docs/fundamentals/ai-optimization-guide)
+-   [C-SEO Bench](https://proceedings.neurips.cc/paper_files/paper/2025/hash/27aa3aeff0f8460a7b43d30fa6c5c032-Abstract-Datasets_and_Benchmarks_Track.html)
+-   [Canonical GEO evaluation profile](https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/geo-visibility.md)
+
+---
+
 ### Tau2 (Tau2)
 
 URL: https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2
@@ -6229,7 +6348,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1532 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1536 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -6390,7 +6509,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 559 |
-| 테스트 Python 파일 | 689 |
+| 테스트 Python 파일 | 691 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 5 |
