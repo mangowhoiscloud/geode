@@ -30,3 +30,14 @@ def test_runtime_overlaps_are_thin_scaffolds_not_competing_contracts() -> None:
         runtime_reference = f".geode/skills/{scaffold_dir.name}/SKILL.md"
         assert runtime_reference in scaffold
         assert not runtime_contract.parent.is_symlink()
+
+
+def test_runtime_architecture_skills_name_current_package_roots() -> None:
+    context = (RUNTIME_SKILLS / "geode-context/SKILL.md").read_text(encoding="utf-8")
+    slop_audit = (RUNTIME_SKILLS / "slop-audit/SKILL.md").read_text(encoding="utf-8")
+
+    for root in ("`core/`", "`evals/`", "`evolve/`"):
+        assert root in context
+        assert root in slop_audit
+    assert "`geode_product/` — first-party composition" not in context
+    assert "scan of `core/` / `geode_product/`" not in slop_audit

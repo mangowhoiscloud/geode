@@ -59,7 +59,7 @@ def _check_full_package() -> None:
     ):
         importlib.import_module(canonical)
 
-    for removed in ("geode_product", "plugins", "core.self_improving"):
+    for removed in ("geode_product", "plugins", "core.self_improving"):  # slop:keep
         assert find_spec(removed) is None, f"installed package exposes removed {removed}"
 
     assert resources.files("evals.petri").joinpath("petri.plugin.toml").is_file()
@@ -73,7 +73,7 @@ def _check_full_package() -> None:
     registry = SkillRegistry()
     loader.load_all(registry=registry)
     assert SkillLoader().skills_dir.resolve() == bundled_skills.resolve()
-    for skill_name in ("geo", "grilling"):
+    for skill_name in ("geo", "geode-context", "grilling", "slop-audit"):
         skill = registry.get(skill_name)
         assert skill is not None and skill.body
         assert skill.source_path is not None
@@ -94,7 +94,13 @@ def _kernel_record_paths() -> frozenset[str]:
 
     assert len(matches) == 1, f"expected one distribution owning core, found {len(matches)}"
     distribution, paths = matches[0]
-    forbidden = ("evals/", "evolve/", "geode_product/", "plugins/", "core/self_improving/")
+    forbidden = (
+        "evals/",
+        "evolve/",
+        "geode_product/",  # slop:keep
+        "plugins/",
+        "core/self_improving/",
+    )
     leaked = sorted(path for path in paths if path.startswith(forbidden))
     assert not leaked, f"kernel wheel contains feature files: {leaked}"
     assert not distribution.entry_points, "kernel wheel contains package entry points"
@@ -206,7 +212,13 @@ def _check_kernel_runtime() -> None:
 
 def _check_kernel_package() -> None:
     modules = _core_module_names(_kernel_record_paths())
-    for feature in ("evals", "evolve", "geode_product", "plugins", "core.self_improving"):
+    for feature in (
+        "evals",
+        "evolve",
+        "geode_product",  # slop:keep
+        "plugins",
+        "core.self_improving",  # slop:keep
+    ):
         assert find_spec(feature) is None, f"kernel environment exposes {feature}"
     previous_cwd = Path.cwd()
     previous_geode_home = os.environ.get("GEODE_HOME")

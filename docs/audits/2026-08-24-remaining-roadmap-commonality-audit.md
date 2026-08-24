@@ -1,6 +1,6 @@
 # Remaining roadmap commonality and state-ownership audit
 
-Status: **audit complete; RR-009 through RR-012 resolved; R8 work remains roadmap-gated**
+Status: **closed by BND-009/v1.0.24; post-release residues resolved below**
 
 Canonical base: `origin/develop@d8004f7f58a3da96609a2bdde29fa1b031fe6696`
 
@@ -9,6 +9,12 @@ Non-roadmap cleanup base:
 
 Canonical execution ledger:
 [`docs/architecture/extensibility-roadmap.md`](../architecture/extensibility-roadmap.md)
+
+Closure base: `origin/develop@2be2cdc9f46631cb63e21e5103aab659d9234100`
+
+Sections 1–8 preserve the pre-BND-009 audit snapshot and its then-valid gating
+logic. Section 9 is the final disposition after the namespace migration,
+v1.0.24 release, and post-release residue pass; it is not a new status ledger.
 
 ## 1. Purpose and authority
 
@@ -208,3 +214,32 @@ cutover cannot create two active writers.
 - No paid/live audit, model, or provider call as part of this evidence pass.
 - No R8.2/R8.4 implementation worktree before the legal readiness and claim
   transactions.
+
+## 9. Post-BND-009 closure disposition
+
+BND-009 replaced the separate R8.2/R8.4 sequence and shipped the final
+`core`/`evals`/`evolve` tree in v1.0.24. The canonical roadmap now has 52
+`DONE` and six `SUPERSEDED` GAPs, with no active claim or nonterminal package.
+The earlier findings therefore close as follows rather than authorizing a new
+persistence framework:
+
+| Finding | Final disposition |
+|---|---|
+| RR-001 | Dropped. BND-009 preserved existing runtime user-data roots and introduced no schema or user-data migration, so a new global dataset registry would add an unused second authority. |
+| RR-002 | Resolved. Tracked state moved once to `evolve/scaffold_search/state` with byte-parity evidence and no alias tree. |
+| RR-003 | Retained by contract. Existing runtime and worker roots keep their on-disk semantics and current writers; they are compatibility locations, not competing Python-package owners. |
+| RR-004 | Resolved. The public hub imports `ledger.RESULTS_TSV_HEADER`; the duplicate 12-column tuple is gone. |
+| RR-005 | Dropped for this transaction. BND-009 did not change user-data schemas or writer concurrency, so replacing proven writer mechanics would be unrelated risk. |
+| RR-006 | Resolved by deletion. No consumer read the proposed epoch snapshot tree, so the empty `_archive` convention and deferred TODO were removed instead of implementing speculative I/O. |
+| RR-007 | Resolved. Active readers use the canonical `evolve` state root or the existing `core.paths` projection; explicit package/install probes remain independent expectations. |
+| RR-008 | Resolved. The compatibility facade and legacy launchers were deleted without a replacement framework. |
+| RR-009–RR-012 | Resolved before BND-009 as recorded in §3.1. |
+
+The packaged `geode-context` and `slop-audit` skills, internal release examples,
+and package-classification document now name the shipped roots. Historical
+benchmark commands and the commit-pinned 2026-07-03 layer graph keep their old
+paths because they describe immutable measurements and a dated repository
+snapshot, not current install instructions. The slop audit excludes only the
+retirement-probe lines explicitly marked `# slop:keep` because they must name
+old roots to reject them;
+the production-root stale-reference census is clean.

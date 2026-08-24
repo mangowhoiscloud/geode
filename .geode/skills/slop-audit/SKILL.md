@@ -7,8 +7,9 @@ description: 6-lens diagnostic slop audit — unused imports, dead private fns, 
 
 # Slop Prevention Audit
 
-Recurring 6-lens scan of `core/` / `geode_product/` / `scripts/` to catch the patterns that accumulate during long PR
-sequences and rot codebase health when nobody is grepping for them.
+Recurring 6-lens scan of `core/` / `evals/` / `evolve/` / `scripts/` to catch
+the patterns that accumulate during long PR sequences and rot codebase health
+when nobody is grepping for them.
 
 ## When to run
 
@@ -79,7 +80,11 @@ Current list:
 - `SUBAGENT_BUDGET_WARNING` (removed PR 1)
 - `seeds_safe10` (renamed PR 0)
 - `FitnessBaseline` (removed S9)
+- `plugins.benchmark_harness`, `plugins.crucible`, `plugins.petri_audit`, and
+  `plugins.seed_generation` (removed in v1.0.24)
+- `core.self_improving` and `geode_product` (removed in v1.0.24)
 
 Add a new entry whenever you remove a public surface. The lens
 ignores `docs/` and `CHANGELOG.md` so historical prose stays
-documented.
+documented. Independent docs/package/install probes mark only their intentional
+retirement expectations with `# slop:keep`.

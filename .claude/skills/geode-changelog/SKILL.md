@@ -157,8 +157,8 @@ git worktree add .claude/worktrees/release-vX.Y.Z \
 # (one commit covering all stamp files)
 
 # 3. Local gates
-uv run ruff check core/ geode_product/ tests/ scripts/
-uv run mypy core/ geode_product/
+uv run ruff check core/ evals/ evolve/ tests/ scripts/
+uv run mypy core/ evals/ evolve/
 uv run geode version   # confirms version stamp lands
 
 # 3b. Derived-SoT regeneration (CI blocks on any of these being stale)
