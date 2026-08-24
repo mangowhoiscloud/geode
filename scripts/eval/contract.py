@@ -26,6 +26,7 @@ RUN_SPEC_SCHEMA = "run-spec.schema.json"
 ATTEMPT_SCHEMA = "attempt.schema.json"
 ANALYSIS_SCHEMA = "analysis.schema.json"
 PUBLICATION_SCHEMA = "publication.schema.json"
+MEASUREMENT_SCHEMAS = {"geode.geo-vector@1": "geo-vector.schema.json"}
 
 PLACEHOLDER_RE = re.compile(r"<[^>\n]+>")
 URI_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
@@ -198,8 +199,8 @@ def _validate_metric_source(
     metric: dict[str, Any],
     *,
     evidence: set[tuple[str, str, str]],
-    require_native: bool,
-) -> None:
+    require_authoritative: bool,
+) -> tuple[str, object | None]:
     source_ref = str(metric["source_ref"])
     if "#" in source_ref:
         raise ValueError(f"{sidecar_path}: metric source_ref cannot contain a locator fragment")
@@ -213,21 +214,63 @@ def _validate_metric_source(
             and metric["numerator"] is None
             and metric["denominator"] is None
         )
-        if require_native and not unavailable:
+        if require_authoritative and not unavailable:
             raise ValueError(f"{sidecar_path}: measured metric requires source locators")
-        return
-    if require_native and kind != "native-result":
-        raise ValueError(f"{sidecar_path}: primary metric source must be native-result evidence")
+        return kind, None
+    if require_authoritative and kind not in {"native-result", "measurement"}:
+        raise ValueError(
+            f"{sidecar_path}: primary metric source must be native-result or measurement evidence"
+        )
     source_path = sidecar_path.parent / evidence_path
     source_payload = _strict_json_loads(
         source_path.read_text(encoding="utf-8"), label=str(source_path)
     )
     for field in ("value", "numerator", "denominator"):
+        if locator[field] is None:
+            if field != "value":
+                raise ValueError(f"{sidecar_path}: metric {field} locator cannot be null")
+            continue
         observed = _resolve_json_pointer(
             source_payload, str(locator[field]), label=str(sidecar_path)
         )
         if not _metric_values_match(metric[field], observed):
             raise ValueError(f"{sidecar_path}: metric {field} does not match metric source")
+    return kind, source_payload
+
+
+def _validate_measurement_binding(
+    sidecar_path: Path,
+    measurement: object,
+    *,
+    run_id: str,
+    run_spec_sha256: str,
+    evidence: set[tuple[str, str, str]],
+) -> None:
+    if not isinstance(measurement, dict):
+        raise ValueError(f"{sidecar_path}: measurement evidence must be a JSON object")
+    schema_id = str(measurement.get("schema_id") or "")
+    schema = MEASUREMENT_SCHEMAS.get(schema_id)
+    if schema is None:
+        raise ValueError(f"{sidecar_path}: unsupported measurement schema: {schema_id!r}")
+    _validate_schema(measurement, schema, label=str(sidecar_path))
+    if measurement["run_id"] != run_id or measurement["run_spec_sha256"] != run_spec_sha256:
+        raise ValueError(f"{sidecar_path}: measurement does not bind this run spec")
+    native_digests = {digest for kind, _path, digest in evidence if kind == "native-result"}
+    if measurement["native_results_sha256"] not in native_digests:
+        raise ValueError(f"{sidecar_path}: measurement does not bind selected native evidence")
+    verifier_digest = measurement.get("verifier_results_sha256")
+    verifier_digests = {digest for kind, _path, digest in evidence if kind == "verifier-receipt"}
+    if verifier_digest is not None and verifier_digest not in verifier_digests:
+        raise ValueError(f"{sidecar_path}: measurement verifier is not selected evidence")
+    outcome_context = measurement.get("outcome_context")
+    if isinstance(outcome_context, dict):
+        identity = (
+            "outcome-receipt",
+            str(outcome_context.get("path") or ""),
+            str(outcome_context.get("sha256") or ""),
+        )
+        if identity not in evidence:
+            raise ValueError(f"{sidecar_path}: measurement outcome is not selected evidence")
 
 
 def _validate_evidence_refs(
@@ -547,18 +590,29 @@ def validate_analysis(path: Path, *, run_spec_path: Path, attempts_path: Path) -
         raise ValueError(f"{path}: analysis metric names must be unique")
     if primary_metric not in metric_names:
         raise ValueError(f"{path}: analysis is missing primary metric {primary_metric!r}")
+    primary_source: tuple[str, object | None] | None = None
     for metric in analysis["metrics"]:
         is_primary = str(metric["name"]) == primary_metric
         numerator = metric["numerator"]
         if not is_primary and isinstance(numerator, (int, float)) and numerator < 0:
             raise ValueError(f"{path}: secondary metric numerator cannot be negative")
-        _validate_metric_source(
+        source = _validate_metric_source(
             path,
             metric,
             evidence=selected_evidence if is_primary else analysis_evidence,
-            require_native=is_primary,
+            require_authoritative=is_primary,
         )
+        if is_primary:
+            primary_source = source
     primary = next(metric for metric in analysis["metrics"] if metric["name"] == primary_metric)
+    if primary_source is not None and primary_source[0] == "measurement":
+        _validate_measurement_binding(
+            path,
+            primary_source[1],
+            run_id=run_id,
+            run_spec_sha256=_sha256(run_spec_path),
+            evidence=selected_evidence,
+        )
     if primary["unit"] != primary_spec["unit"]:
         raise ValueError(f"{path}: primary metric unit does not match the frozen run spec")
     if invalid_selected:
@@ -591,6 +645,172 @@ def validate_analysis(path: Path, *, run_spec_path: Path, attempts_path: Path) -
             expected_value *= 100
         if not math.isclose(float(primary["value"]), expected_value, rel_tol=1e-4, abs_tol=5e-7):
             raise ValueError(f"{path}: primary metric value does not match numerator/denominator")
+
+
+_RUN_ARTIFACT_KINDS = {
+    "native_results": "native-result",
+    "measurement_results": "measurement",
+    "trajectory": "trajectory",
+    "verifier_receipts": "verifier-receipt",
+    "outcome_receipts": "outcome-receipt",
+}
+
+
+def _resolve_run_artifact(run_spec_path: Path, reference: str, *, label: str) -> Path:
+    _validate_relative_reference(reference, label=label)
+    base = run_spec_path.parent.resolve()
+    target = (base / reference).resolve()
+    if not target.is_relative_to(base):
+        raise ValueError(f"{label}: artifact path escapes the run directory")
+    if not target.is_file():
+        raise ValueError(f"{label}: artifact file does not exist: {reference}")
+    return target
+
+
+def validate_run_bundle(run_spec_path: Path) -> dict[str, Any]:
+    """Validate one run's sidecars and cross-authority digest joins."""
+    run_spec_path = run_spec_path.resolve()
+    run_spec = validate_run_spec(run_spec_path)
+    artifacts = run_spec["artifacts"]
+    attempts_path = _resolve_run_artifact(
+        run_spec_path,
+        str(artifacts["attempts"]),
+        label=f"{run_spec_path}:attempts",
+    )
+    analysis_path = _resolve_run_artifact(
+        run_spec_path,
+        str(artifacts["analysis"]),
+        label=f"{run_spec_path}:analysis",
+    )
+    attempts = validate_attempts(attempts_path)
+    validate_analysis(
+        analysis_path,
+        run_spec_path=run_spec_path,
+        attempts_path=attempts_path,
+    )
+    relative_evidence = {
+        (str(ref["kind"]), str(ref["path"]), str(ref["sha256"]))
+        for attempt in attempts
+        for ref in attempt["evidence_refs"]
+    }
+    evidence = {
+        (
+            kind,
+            (attempts_path.parent / path).resolve(),
+            digest,
+        )
+        for kind, path, digest in relative_evidence
+    }
+    declared: dict[str, Path] = {}
+    trajectory_release_files: set[Path] = set()
+    measurement_payload: dict[str, Any] | None = None
+    for name, kind in _RUN_ARTIFACT_KINDS.items():
+        reference = artifacts.get(name)
+        if reference is None:
+            if any(evidence_kind == kind for evidence_kind, _path, _digest in evidence):
+                raise ValueError(
+                    f"{run_spec_path}: {kind} evidence is not declared in run-spec artifacts"
+                )
+            continue
+        target = _resolve_run_artifact(
+            run_spec_path,
+            str(reference),
+            label=f"{run_spec_path}:{name}",
+        )
+        identity = (kind, target, _sha256(target))
+        if identity not in evidence:
+            raise ValueError(f"{run_spec_path}: {name} is not digest-bound by attempts")
+        declared[name] = target
+
+        if name == "measurement_results":
+            measurement = _load_json_object(target)
+            measurement_payload = measurement
+            _validate_measurement_binding(
+                target,
+                measurement,
+                run_id=str(run_spec["run_id"]),
+                run_spec_sha256=_sha256(run_spec_path),
+                evidence=relative_evidence,
+            )
+        elif name == "trajectory":
+            trajectory = _load_json_object(target)
+            schema_id = str(trajectory.get("schema_id") or "")
+            if schema_id == "geode.trajectory@1":
+                from core.observability.record_schema import validate_record
+                from core.observability.trajectory import verify_trajectory_integrity
+
+                validate_record(trajectory, schema_id=schema_id)
+                verify_trajectory_integrity(trajectory)
+            elif schema_id == "geode.trajectory-release@1" and target.name == "manifest.json":
+                from core.observability.trajectory_release import verify_trajectory_release
+
+                release = verify_trajectory_release(
+                    target.parent,
+                    expected_manifest_sha256=_sha256(target),
+                )
+                if release["release_scope"] != run_spec["run_id"]:
+                    raise ValueError(
+                        f"{run_spec_path}: trajectory release scope does not match run"
+                    )
+                trajectory_release_files = {
+                    (target.parent / str(row["path"])).resolve() for row in release["files"]
+                }
+            else:
+                raise ValueError(f"{run_spec_path}: unsupported trajectory artifact {schema_id!r}")
+
+    if measurement_payload is not None:
+        verifier_path = declared.get("verifier_receipts")
+        verifier_digest = measurement_payload.get("verifier_results_sha256")
+        if verifier_path is not None and verifier_digest != _sha256(verifier_path):
+            raise ValueError(f"{run_spec_path}: measurement omits the declared verifier result")
+        outcome_path = declared.get("outcome_receipts")
+        if outcome_path is not None:
+            outcome_context = measurement_payload.get("outcome_context")
+            expected_context = {
+                "path": str(artifacts["outcome_receipts"]),
+                "sha256": _sha256(outcome_path),
+            }
+            if outcome_context != expected_context:
+                raise ValueError(f"{run_spec_path}: measurement omits the declared outcome receipt")
+
+    publication_status = None
+    publication_ref = artifacts.get("publication_manifest")
+    if publication_ref is not None:
+        publication_path = _resolve_run_artifact(
+            run_spec_path,
+            str(publication_ref),
+            label=f"{run_spec_path}:publication_manifest",
+        )
+        publication = validate_publication(publication_path)
+        if publication["run_id"] != run_spec["run_id"]:
+            raise ValueError(f"{run_spec_path}: publication run_id does not match run spec")
+        if publication["geode"]["revision"] != run_spec["reproduction"]["geode"]["revision"]:
+            raise ValueError(f"{run_spec_path}: publication GEODE revision does not match run spec")
+        publication_sources = set()
+        for entry in publication["entries"]:
+            local_path = str(entry["local_path"])
+            candidates = (publication_path.parent / local_path, REPO_ROOT / local_path)
+            publication_sources.add(next(path.resolve() for path in candidates if path.is_file()))
+        required_sources = {
+            run_spec_path,
+            attempts_path,
+            analysis_path,
+            *declared.values(),
+            *trajectory_release_files,
+        }
+        missing = sorted(str(path) for path in required_sources - publication_sources)
+        if missing:
+            raise ValueError(
+                f"{run_spec_path}: publication does not classify every run artifact: {missing[0]}"
+            )
+        publication_status = publication["publication"]["status"]
+
+    return {
+        "run_id": run_spec["run_id"],
+        "attempts": len(attempts),
+        "declared_artifacts": sorted(declared),
+        "publication_status": publication_status,
+    }
 
 
 def validate_publication(path: Path) -> dict[str, Any]:
@@ -683,6 +903,9 @@ def _parser() -> argparse.ArgumentParser:
 
     publication = subparsers.add_parser("validate-publication")
     publication.add_argument("path", type=Path)
+
+    bundle = subparsers.add_parser("validate-run-bundle")
+    bundle.add_argument("run_spec", type=Path)
     return parser
 
 
@@ -704,6 +927,15 @@ def main() -> None:
             publication = validate_publication(args.path)
             public = sum(entry["classification"] == "public" for entry in publication["entries"])
             print(f"publication OK: {public} public entries")
+        elif args.command == "validate-run-bundle":
+            bundle = validate_run_bundle(args.run_spec)
+            print(
+                "run bundle OK: {run_id} attempts={attempts} artifacts={artifacts}".format(
+                    run_id=bundle["run_id"],
+                    attempts=bundle["attempts"],
+                    artifacts=len(bundle["declared_artifacts"]),
+                )
+            )
     except (json.JSONDecodeError, OSError, ValueError) as exc:
         print(f"eval contract error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc

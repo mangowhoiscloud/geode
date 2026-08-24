@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/schemas/geo-source-receipt.schema.json",
+  "title": "GEODE GEO fetched source receipt v1",
+  "type": "object",
+  "required": ["schema_id", "fetched_at", "url", "source", "content", "truncated", "content_type", "status_code", "tls_verified"],
+  "properties": {
+    "schema_id": {"const": "geode.geo-source-receipt@1"},
+    "fetched_at": {"type": "string", "format": "date-time"},
+    "url": {"type": "string", "format": "uri", "maxLength": 2000},
+    "source": {"type": "string", "format": "uri", "maxLength": 2000},
+    "content": {"type": "string", "minLength": 1, "maxLength": 10000},
+    "truncated": {"type": "boolean"},
+    "content_type": {"type": "string", "minLength": 1, "maxLength": 256},
+    "status_code": {"const": 200},
+    "tls_verified": {"const": true}
+  },
+  "additionalProperties": false
+}

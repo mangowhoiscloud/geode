@@ -45,7 +45,7 @@
       "authority": "process",
       "path": "docs/eval/benchmark-publishing-cycle.md",
       "summary": "End-to-end workflow from preregistered benchmark scope through evidence preservation, publication, and deployment.",
-      "sha256": "8419062e832640c6f9c53c3fd31a298c41aa238877988c1ec0a96689f60c09b1",
+      "sha256": "12b50dc45846e4898a65e3a6f9db05c93dd3b19d6e7bb14236e82b780affeb24",
       "triggers": [
         "attempts JSONL",
         "benchmark run",
@@ -123,7 +123,7 @@
       "authority": "evidence-storage",
       "path": "docs/eval/external-artifact-repository.md",
       "summary": "Canonical append-only publication and disclosure contract for large GEODE evaluation artifacts.",
-      "sha256": "53778e2700ac50d295ee53576f609faba23cec296c17d1320c6c552ab414ae62",
+      "sha256": "0524823b0d520313851559319932d36c223c1122e4114574180f0b0bef734307",
       "triggers": [
         "artifact repository",
         "eval-artifact",
@@ -150,7 +150,7 @@
       "authority": "dated-evidence-ledger",
       "path": "docs/eval/frontier-agentic-tool-use-benchmark-cases.md",
       "summary": "Dated evidence ledger for public MCPMark, BFCL V4, and tau2 tool-use cases and GEODE comparisons.",
-      "sha256": "2c007162dd7dd1f5750746d6d53f01b161396c711b804011c9f1a1ddc5707366",
+      "sha256": "8fe16e857760fc06ac0b6feb2926b200c9cc8f6e65800a86e66109707b4f50d2",
       "triggers": [
         "BFCL cases",
         "MCPMark cases",
@@ -170,7 +170,7 @@
       "authority": "suite-profile",
       "path": "docs/eval/geo-visibility.md",
       "summary": "Reproducible GEODE profile for measuring generative discovery, citation selection, answer absorption, and fidelity without collapsing them into one GEO score.",
-      "sha256": "3cb3dc684fc992e222256bc00f6ae09acdbcc1696160c65062de071883df3529",
+      "sha256": "e6398f240cb477c8c0ab112b2291b1f2f9039ac0e4b31ceace1b371eeafc74c7",
       "triggers": [
         "AI search visibility",
         "GEO",
@@ -182,6 +182,23 @@
         "core/observability/schemas/trajectory-release.schema.json",
         "core/observability/schemas/trajectory.schema.json",
         "docs/eval/artifact-publish-manifest.template.json",
+        "docs/eval/schemas/geo-claim-universe.schema.json",
+        "docs/eval/schemas/geo-host-preflight-v2.schema.json",
+        "docs/eval/schemas/geo-host-preflight.schema.json",
+        "docs/eval/schemas/geo-human-calibration.schema.json",
+        "docs/eval/schemas/geo-link-audit.schema.json",
+        "docs/eval/schemas/geo-live-approval.schema.json",
+        "docs/eval/schemas/geo-native-results.schema.json",
+        "docs/eval/schemas/geo-outcome.schema.json",
+        "docs/eval/schemas/geo-preflight.schema.json",
+        "docs/eval/schemas/geo-source-receipt-v2.schema.json",
+        "docs/eval/schemas/geo-source-receipt.schema.json",
+        "docs/eval/schemas/geo-vector.schema.json",
+        "docs/eval/schemas/geo-verifier-receipt-v2.schema.json",
+        "docs/eval/schemas/geo-verifier-receipt.schema.json",
+        "docs/eval/schemas/geo-verifier-results-v2.schema.json",
+        "docs/eval/schemas/geo-verifier-results.schema.json",
+        "docs/eval/schemas/geo-workload.schema.json",
         "docs/eval/schemas/publication.schema.json",
         "docs/eval/schemas/run-spec.schema.json"
       ]
@@ -215,7 +232,7 @@
       "authority": "historical-environment-record",
       "path": "docs/eval/mcpmark-agentworld-comparison-runbook.md",
       "summary": "Historical MCPMark environment recovery and comparison runbook; current comparability authority lives in the Agent-World contract.",
-      "sha256": "68bd0d60c14eb13ef5252499bc7f3e5685040e53c4fd612f6da6958efa4e5393",
+      "sha256": "1663cd6f950bd7a2cfd3afcb69dcbe9313f5b7190550e823ce076b595ce45f41",
       "triggers": [
         "Agent-World MCPMark",
         "MCPMark credentials",
@@ -379,7 +396,7 @@
       "authority": "suite-profile",
       "path": "docs/eval/tau2-bench.md",
       "summary": "GEODE evaluation profile, evidence ledger, and rollout plan for the tau2 conversational tool-use benchmark.",
-      "sha256": "88ca48545c17e084c23906873540291449aa479d363bc1a8d3a6de836326d54a",
+      "sha256": "a04e8f289fc6a3c034b302991650ccd192643bdb0851e07a56d4b802a48804ce",
       "triggers": [
         "conversational tool use",
         "tau-bench",

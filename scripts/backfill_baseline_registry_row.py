@@ -1,6 +1,6 @@
 """Backfill one ``kind="baseline"`` row into ``baseline_archive.jsonl``.
 
-The baseline registry (``geode_product/self_improving/state/baseline_archive.jsonl``) is written
+The baseline registry (``evolve/scaffold_search/state/baseline_archive.jsonl``) is written
 forward by every ``--promote`` from PR-BASELINE-REGISTRY onward. Baselines
 promoted *before* the registry existed are not in it — this script backfills
 them from a saved baseline snapshot (a v2 ``baseline.json`` payload) so the hub
@@ -116,13 +116,13 @@ def main(argv: list[str] | None = None) -> int:
     # full autoresearch import; train.py pulls in the config + hooks stack.
     from datetime import UTC, datetime
 
-    from geode_product.self_improving.ledger import (
+    from evolve.scaffold_search.ledger import (
         _append_baseline_registry_row,
         _baseline_archive_path,
         _next_baseline_id,
     )
-    from geode_product.self_improving.loop.observe.baseline_epoch import HistoricalSpecOverride
-    from geode_product.self_improving.loop.observe.role_provenance import build_role_provenance
+    from evolve.scaffold_search.loop.observe.baseline_epoch import HistoricalSpecOverride
+    from evolve.scaffold_search.loop.observe.role_provenance import build_role_provenance
 
     payload = _load_snapshot(args.snapshot)
     raw = payload.get("raw") or {}

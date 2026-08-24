@@ -196,8 +196,8 @@ def _measure_probe() -> dict[str, float]:
     from core.hooks.catalog import EventRetentionClass
     from core.observability.event_store import HookEventStore, HookEventWrite
     from core.runtime import GeodeRuntime
+    from core.tools.composition import compose_tool_plan
     from core.tools.plan import thaw_tool_schema
-    from geode_product.tool_handlers import compose_tool_plan
 
     import_ms = (time.perf_counter() - import_started) * 1000.0
     root = Path.cwd()

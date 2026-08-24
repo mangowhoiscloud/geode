@@ -13,6 +13,7 @@ References:
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
 from core.llm.adapters._openai_common import _prompt_cache_key, build_responses_kwargs
@@ -74,6 +75,51 @@ def test_codex_text_completion_reuses_agent_turn_wire_shape(monkeypatch) -> None
     assert captured.messages == (Message(role="user", content="summarize"),)
     assert captured.system_prompt == "compact"
     assert captured.max_tokens == 77
+
+
+def test_codex_web_search_honors_frozen_model_hint(monkeypatch) -> None:
+    from core.llm.adapters.codex_oauth import CodexOAuthAdapter
+
+    captured: dict[str, object] = {}
+
+    class Stream:
+        async def __aenter__(self) -> Stream:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        def __aiter__(self) -> Stream:
+            return self
+
+        async def __anext__(self) -> object:
+            if captured.get("yielded"):
+                raise StopAsyncIteration
+            captured["yielded"] = True
+            return SimpleNamespace(
+                type="response.output_item.done",
+                item=SimpleNamespace(
+                    type="message",
+                    content=[SimpleNamespace(type="output_text", text="searched")],
+                ),
+            )
+
+        async def get_final_response(self) -> object:
+            return SimpleNamespace(output=[])
+
+    class Responses:
+        def stream(self, **kwargs: object) -> Stream:
+            captured.update(kwargs)
+            return Stream()
+
+    client = SimpleNamespace(responses=Responses())
+    adapter = CodexOAuthAdapter()
+    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+
+    result = asyncio.run(adapter.aweb_search("query", model="gpt-5.6-sol"))
+
+    assert captured["model"] == "gpt-5.6-sol"
+    assert result.model == "gpt-5.6-sol"
 
 
 def test_codex_kwargs_sets_store_false() -> None:

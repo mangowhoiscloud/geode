@@ -53,7 +53,7 @@ class TestProviderNormalizationAnchor:
         import core.agent.loop._model_switching as model_switching
         import core.agent.loop._reflection as reflection
         from core.agent.loop import _bootstrap
-        from geode_product.self_improving.loop.mutate import runner
+        from evolve.scaffold_search.loop.mutate import runner
 
         for src in (
             inspect.getsource(_bootstrap.initialize_runtime),

@@ -306,7 +306,7 @@ ${HOME}/workspace/geode/.venv/bin/pymarkdown \
 - 근거:
   `source/research/tau2-bench-2506.07982.pdf`,
   `wiki/geode-context-engineering.md` §12.2,
-  GEODE `plugins/benchmark_harness/tau2_geode_agent.py`와
+  GEODE `evals/benchmarks/tau2_geode_agent.py`와
   `tau2_turn_supervisor.py`
 - 시각 문법: 왼쪽은 single-control→dual-control의 측정 대상 변화,
   오른쪽은 τ² evaluator와 GEODE candidate의 ownership boundary다.
@@ -320,7 +320,7 @@ ${HOME}/workspace/geode/.venv/bin/pymarkdown \
 - 근거:
   `wiki/bounded-harness-control-2607.25415.md`의
   `GEODE의 일곱 변경 표면과 대응`,
-  GEODE `core/self_improving/loop/mutate/policies.py::TARGET_KINDS`
+  GEODE `evolve/scaffold_search/loop/mutate/policies.py::TARGET_KINDS`
 - 시각 문법: 외부 연구 3개는 압축한 experiment grammar에만 연결하고,
   오른쪽은 frozen execution plane 안의 7개 JSON behavior key를
   editable surface로 표시한다. `hyperparam`, `retrieval`, runtime
@@ -432,18 +432,18 @@ ${HOME}/workspace/geode/.venv/bin/pymarkdown \
 
 | 표시 내용 | 코드·artifact 근거 |
 |---|---|
-| Petri 22 rubric → 18 fitness taxonomy → 15 weighted + stability | `plugins/petri_audit/judge_dims/geode_judge_subset.yaml`, `core/self_improving/fitness.py` |
-| `targeted_dims`는 weighted 15의 부분집합이며 ICC reshape한 sub-fitness | `core/self_improving/ledger.py`, `core/self_improving/fitness.py`, `core/self_improving/gate.py` |
+| Petri 22 rubric → 18 fitness taxonomy → 15 weighted + stability | `evals/petri/judge_dims/geode_judge_subset.yaml`, `evolve/scaffold_search/fitness.py` |
+| `targeted_dims`는 weighted 15의 부분집합이며 ICC reshape한 sub-fitness | `evolve/scaffold_search/ledger.py`, `evolve/scaffold_search/fitness.py`, `evolve/scaffold_search/gate.py` |
 | 17→20→targeted→18 발전사 | GEODE `59feb756`, `17e410a29`, `b22969dcd`, `a0ee62a77`; eval artifact 2026-05-12·15·19 reports |
-| SIL `.eval`의 mean·stderr·sample row와 hard veto | `core/audit/dim_extractor.py`, `core/self_improving/fitness.py`, `core/self_improving/gate.py` |
-| `RunTranscript`는 lifecycle·재현·진단 원장이고 gate의 수치 입력이 아님 | `core/self_improving/loop/observe/run_transcript.py`, `core/self_improving/measure.py`, `core/self_improving/gate.py` |
-| `promote` 뒤 baseline 갱신, `reject` 뒤 `previous_value` 복원 | `core/self_improving/train.py`, `core/self_improving/gate.py` |
-| 공통 controlled-transition 표기와 SIL async-first control의 실제 경계 | `core/self_improving/campaign.py`, `core/self_improving/train.py`, `plugins/crucible/evidence.py`, `plugins/crucible/promotion.py` |
-| Crucible raw trajectory의 identity·coverage·safety·paired effect | `plugins/crucible/tau2_live.py`, `plugins/crucible/verifiers/tau2.py`, `plugins/crucible/promotion.py` |
-| `KEEP`만 private search ref 전진, `REJECT/INVALID`는 유지 | `plugins/crucible/supervisor.py`, `plugins/crucible/ref_journal.py` |
-| sealed `ELIGIBLE`에도 release authority 없음 | `plugins/crucible/sealed.py`, `plugins/crucible/program.md` |
-| Proximity는 cluster를 만들고 survivor dedup은 Ranker 뒤 Elo·Pilot로 수행 | `plugins/seed_generation/orchestrator.py`, `plugins/seed_generation/dedup.py` |
-| Seed pool→Petri→SIL은 단일 함수 체인이 아니라 file pointer와 eval artifact handoff | `plugins/seed_generation/orchestrator.py`, `core/self_improving/train.py`, `core/self_improving/measure.py` |
+| SIL `.eval`의 mean·stderr·sample row와 hard veto | `core/audit/dim_extractor.py`, `evolve/scaffold_search/fitness.py`, `evolve/scaffold_search/gate.py` |
+| `RunTranscript`는 lifecycle·재현·진단 원장이고 gate의 수치 입력이 아님 | `evolve/scaffold_search/loop/observe/run_transcript.py`, `evolve/scaffold_search/measure.py`, `evolve/scaffold_search/gate.py` |
+| `promote` 뒤 baseline 갱신, `reject` 뒤 `previous_value` 복원 | `evolve/scaffold_search/train.py`, `evolve/scaffold_search/gate.py` |
+| 공통 controlled-transition 표기와 SIL async-first control의 실제 경계 | `evolve/scaffold_search/campaign.py`, `evolve/scaffold_search/train.py`, `evolve/crucible/evidence.py`, `evolve/crucible/promotion.py` |
+| Crucible raw trajectory의 identity·coverage·safety·paired effect | `evolve/crucible/tau2_live.py`, `evolve/crucible/verifiers/tau2.py`, `evolve/crucible/promotion.py` |
+| `KEEP`만 private search ref 전진, `REJECT/INVALID`는 유지 | `evolve/crucible/supervisor.py`, `evolve/crucible/ref_journal.py` |
+| sealed `ELIGIBLE`에도 release authority 없음 | `evolve/crucible/sealed.py`, `evolve/crucible/program.md` |
+| Proximity는 cluster를 만들고 survivor dedup은 Ranker 뒤 Elo·Pilot로 수행 | `evals/seed_generation/orchestrator.py`, `evals/seed_generation/dedup.py` |
+| Seed pool→Petri→SIL은 단일 함수 체인이 아니라 file pointer와 eval artifact handoff | `evals/seed_generation/orchestrator.py`, `evolve/scaffold_search/train.py`, `evolve/scaffold_search/measure.py` |
 
 해설과 claim boundary는
 `wiki/geode-trajectory-judgment.md`의 **Baseline은 어떻게 추출되고

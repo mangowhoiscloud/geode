@@ -138,7 +138,7 @@ T: dict[str, dict[str, str]] = {
             "generation after generation."
         ),
         "coldopen_reinforce_label": "reinforced each cycle",
-        # The 7 verified mutation-surface kinds (geode_product/self_improving/loop/
+        # The 7 verified mutation-surface kinds (evolve/scaffold_search/loop/
         # policies.py:207-242 TARGET_KINDS). Rendered as a dense ·-separated
         # monospace row split over two lines — they are code identifiers, so
         # snake_case is kept exactly. NOT box cards.
@@ -2041,7 +2041,7 @@ class GeodeSelfImprovingHero(Scene):
         self.arrow_label_s2_to_s3 = arrow_label_s2_to_s3
         self.play(Create(s2_to_s3), FadeIn(arrow_label_s2_to_s3), run_time=0.4)
 
-        # Grounded against ``geode_product/self_improving/train.py`` (``compute_fitness``
+        # Grounded against ``evolve/scaffold_search/train.py`` (``compute_fitness``
         # + ``_dim_score`` + ``_stability_score``). The ``10`` is the
         # Petri rubric scale max (1-10, lower = better); ``score(m)``
         # normalises to [0, 1] with a max-floor at 0. ``w_stab = 0.10``

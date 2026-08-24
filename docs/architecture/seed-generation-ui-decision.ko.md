@@ -31,9 +31,9 @@ Petri는 4-path를 모두 지원합니다 (P1-C 5-adapter split). seed-generatio
 
 ### 1. Manifest 패턴 (Petri P1-A 4-layer 차용)
 
-Petri의 `geode_product/petri_audit/petri.plugin.toml` schema(`[petri]` / `[petri.role.*]` / `[petri.source.*]` / `[petri.adapter.*]`)를 그대로 차용합니다. seed-generation은 **source / adapter layer를 재정의하지 않고 Petri의 것을 참조합니다**: 같은 4-path를 같은 adapter로 호출합니다. role layer만 신규입니다.
+Petri의 `evals/petri/petri.plugin.toml` schema(`[petri]` / `[petri.role.*]` / `[petri.source.*]` / `[petri.adapter.*]`)를 그대로 차용합니다. seed-generation은 **source / adapter layer를 재정의하지 않고 Petri의 것을 참조합니다**: 같은 4-path를 같은 adapter로 호출합니다. role layer만 신규입니다.
 
-`geode_product/seed_generation/seed_generation.plugin.toml`:
+`evals/seed_generation/seed_generation.plugin.toml`:
 
 ```toml
 # Schema layers:
@@ -107,9 +107,9 @@ voters = [
 required_diversity_families = 2
 ```
 
-source / adapter binding은 Petri의 `[petri.source.anthropic]` / `[petri.source.openai]` / `[petri.adapter.*]`를 그대로 재사용합니다. credential_source resolver도 `geode_product.petri_audit.credential_source`를 직접 호출합니다. 즉 **provider diversity는 `[seed_generation.judge_panel].voters`의 `family` field 분포**로 표현됩니다.
+source / adapter binding은 Petri의 `[petri.source.anthropic]` / `[petri.source.openai]` / `[petri.adapter.*]`를 그대로 재사용합니다. credential_source resolver도 `evals.petri.credential_source`를 직접 호출합니다. 즉 **provider diversity는 `[seed_generation.judge_panel].voters`의 `family` field 분포**로 표현됩니다.
 
-manifest schema + loader는 `geode_product/seed_generation/manifest.py`입니다 (Petri의 `geode_product/petri_audit/manifest.py` 패턴 재사용; pydantic + drift validator + lazy yaml import + Petri manifest의 source/adapter import).
+manifest schema + loader는 `evals/seed_generation/manifest.py`입니다 (Petri의 `evals/petri/manifest.py` 패턴 재사용; pydantic + drift validator + lazy yaml import + Petri manifest의 source/adapter import).
 
 ### 기본 3-judge panel 구성 (확정 결정)
 
@@ -136,7 +136,7 @@ Source 값은 Petri의 `[petri.source.<family>].allowed`와 1:1입니다 (anthro
 
 ### 2. 7-role × 4-path picker (TUI)
 
-`geode_product/seed_generation/picker.py`는 TerminalMenu 기반입니다. `/petri` 2-axis picker의 시각 패턴을 차용합니다.
+`evals/seed_generation/picker.py`는 TerminalMenu 기반입니다. `/petri` 2-axis picker의 시각 패턴을 차용합니다.
 
 ```
 ╭─ Seed-pipeline 7-role + 3-judge panel binding ─────────────────────────────╮
@@ -153,7 +153,7 @@ Source 값은 Petri의 `[petri.source.<family>].allowed`와 1:1입니다 (anthro
 │ Evolver         anthropic claude-cli     claude-max-<user>    ✓            │
 │ Meta-review     anthropic claude-cli     claude-max-<user>    ✓            │
 │                                                                            │
-│ Source values match geode_product/petri_audit/petri.plugin.toml:                 │
+│ Source values match evals/petri/petri.plugin.toml:                 │
 │   anthropic.allowed = [claude-cli, api_key, auto]                          │
 │   openai.allowed    = [openai-codex, api_key, auto]                        │
 │                                                                            │
@@ -183,12 +183,12 @@ GEODE는 공식 `claude` subprocess만 사용하고 자격을 읽거나
 
 ChatGPT subscription(B path)에도 동등한 notice를 표시합니다.
 
-### 4. Cost preview (`geode audit-seeds quota`)
+### 4. Cost preview (`geode-eval audit-seeds quota`)
 
-`geode_product/seed_generation/cost_preview.py`는 `core/llm/pricing_loader.py`(P3-A)와 `core/cli/commands/login.py:_login_quota`의 quota 추정을 결합합니다.
+`evals/seed_generation/cost_preview.py`는 `core/llm/pricing_loader.py`(P3-A)와 `core/cli/commands/login.py:_login_quota`의 quota 추정을 결합합니다.
 
 ```
-$ geode audit-seeds quota --pipeline-config seed-generation.toml --candidates 15
+$ geode-eval audit-seeds quota --pipeline-config seed-generation.toml --candidates 15
 
 추정 cost:
 
@@ -210,7 +210,7 @@ Continue? [y/N]:
 
 **Budget guard**: soft warning $0.30/gen, hard cap $1.00 (config 가능). 초과 시 pipeline을 abort합니다.
 
-### 5. Pre-flight check (`geode audit-seeds generate` 진입 시)
+### 5. Pre-flight check (`geode-eval audit-seeds generate` 진입 시)
 
 ```
 Pre-flight check…
@@ -219,7 +219,7 @@ Pre-flight check…
   Pilot judge (codex-cli):   ✗ token EXPIRED 24h ago
 
 [ERROR] codex-cli token expired. Run `geode login openai` to refresh.
-[option] Or override pilot judge to openai-payg via `geode audit-seeds picker`.
+[option] Or override pilot judge to openai-payg via `geode-eval audit-seeds picker`.
 
 Aborting.
 ```
@@ -228,15 +228,15 @@ Aborting.
 
 ### 6. CLI / Slash 진입점
 
-**Typer** (`geode_product/seed_generation/cli.py`):
+**Typer** (`evals/seed_generation/cli.py`):
 
 | Sub-command | 책임 |
 |---|---|
-| `geode audit-seeds login` | 4-path status view |
-| `geode audit-seeds picker` | role별 binding 편집 |
-| `geode audit-seeds quota` | cost preview |
-| `geode audit-seeds generate` | pipeline 시작 (pre-flight 포함) |
-| `geode audit-seeds revoke <plan_id>` | 특정 plan disable |
+| `geode-eval audit-seeds login` | 4-path status view |
+| `geode-eval audit-seeds picker` | role별 binding 편집 |
+| `geode-eval audit-seeds quota` | cost preview |
+| `geode-eval audit-seeds generate` | pipeline 시작 (pre-flight 포함) |
+| `geode-eval audit-seeds revoke <plan_id>` | 특정 plan disable |
 
 **Slash** (`core/cli/routing.py`에 등록):
 
@@ -290,15 +290,15 @@ Aborting.
 
 ## 구현 포인터
 
-- S2.5: `geode_product/seed_generation/{manifest.py, seed_generation.plugin.toml}` (~220 LOC)
-- S5.5: `geode_product/seed_generation/{picker.py, pre_flight.py}` + ToS notice 통합 (~410 LOC)
-- S6.5: `geode_product/seed_generation/cost_preview.py` + budget guard (~250 LOC)
-- S11: `geode_product/seed_generation/cli.py` Typer sub-app + `core/cli/routing.py` slash 등록 (~280 LOC)
+- S2.5: `evals/seed_generation/{manifest.py, seed_generation.plugin.toml}` (~220 LOC)
+- S5.5: `evals/seed_generation/{picker.py, pre_flight.py}` + ToS notice 통합 (~410 LOC)
+- S6.5: `evals/seed_generation/cost_preview.py` + budget guard (~250 LOC)
+- S11: `evals/seed_generation/cli.py` Typer sub-app + `core/cli/routing.py` slash 등록 (~280 LOC)
 
 ## 참고 자료
 
 - ADR-001 -- seed-generation 아키텍처
-- Petri P1-A~G manifest 패턴 -- `geode_product/petri_audit/{petri.plugin.toml, manifest.py, cli.py:264,309}`
+- Petri P1-A~G manifest 패턴 -- `evals/petri/{petri.plugin.toml, manifest.py, cli.py:264,309}`
 - 4-auth path 정의 -- `core/llm/routing/plans.py:PlanKind`
 - provider 정책 안내 -- `core/cli/commands/login.py::_print_anthropic_subscription_warning`
 - Quota 추정 base -- `core/cli/commands/login.py:_login_quota` (line 886)

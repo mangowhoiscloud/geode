@@ -277,6 +277,7 @@ async def _run(
     from core.agent.loop import AgenticLoop, AgenticLoopConfig
     from core.agent.sub_agent import SubAgentManager, SubTask
     from core.agent.tool_executor import ToolExecutor
+    from core.config.runtime_policy_sources import build_policy_source_bundle
     from core.hooks import (
         HookAction,
         HookDecision,
@@ -294,12 +295,13 @@ async def _run(
     from core.observability.hook_persistence import HookPersistenceSink
     from core.orchestration.isolated_execution import IsolatedRunner
     from core.tools.registry import ToolRegistry
-    from geode_product.self_improving.loop.observe.run_timeline import (
+    from evals.run_timeline import (
         RunTimeline,
         run_timeline_scope,
     )
-    from geode_product.self_improving.policy_sources import build_policy_source_bundle
-    from geode_product.wiring import current_activity_sink
+    from evals.run_timeline import (
+        current_run_timeline as current_activity_sink,
+    )
 
     policy_sources = build_policy_source_bundle()
     behavior_matrix = await _run_action_matrix(policy_sources)

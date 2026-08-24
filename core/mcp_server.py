@@ -34,6 +34,29 @@ _MCP_TOOLS_PATH = Path(__file__).resolve().parent / "tools" / "mcp_tools.json"
 with _MCP_TOOLS_PATH.open(encoding="utf-8") as _f:
     _TOOL_DESCRIPTIONS: dict[str, str] = json.load(_f)
 
+_RESOURCE_LOCK_POOL: Any = None
+
+
+async def _run_agent(prompt: str, **kwargs: Any) -> Any:
+    """Run one native GEODE session with process-owned resource locks."""
+    from core.agent.tool_executor.executor import ResourceLockPool
+    from core.cli.bootstrap import arun_agentic_oneshot
+    from core.tools.composition import compose_tool_plan
+    from core.wiring.runtime import build_middleware_registry, build_policy_sources
+
+    global _RESOURCE_LOCK_POOL
+    if _RESOURCE_LOCK_POOL is None:
+        _RESOURCE_LOCK_POOL = ResourceLockPool()
+    if kwargs.get("tool_plan_builder") is None:
+        kwargs["tool_plan_builder"] = compose_tool_plan
+    return await arun_agentic_oneshot(
+        prompt,
+        policy_sources=build_policy_sources(),
+        middleware_builder=build_middleware_registry,
+        resource_lock_pool=_RESOURCE_LOCK_POOL,
+        **kwargs,
+    )
+
 
 class _StaticTokenVerifier:
     """Constant-time bearer-token check for the HTTP transport.
@@ -120,11 +143,7 @@ def create_mcp_server(
     @mcp.tool(description=_TOOL_DESCRIPTIONS["run_agent"])
     async def run_agent(prompt: str, time_budget_s: float = 120.0) -> dict[str, Any]:
         """Run one GEODE agentic one-shot and return the result."""
-        resolved_runner = agent_runner
-        if resolved_runner is None:
-            from core.cli.bootstrap import arun_agentic_oneshot
-
-            resolved_runner = arun_agentic_oneshot
+        resolved_runner = agent_runner or _run_agent
         result = await resolved_runner(
             prompt,
             quiet=True,

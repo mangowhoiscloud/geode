@@ -30,7 +30,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v1.0.23 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.24 — Autonomous Agent Runtime + Evaluation Substrate
 
 자율적인 도구 작업을 수행하는 범용 에이전트 런타임입니다. 자연어로
 요청하면 GEODE가 계획을 세우고 도구를 호출한 뒤 결과를 보고합니다. 짧은
@@ -540,7 +540,7 @@ frontier 하네스 (Claude Code, Codex CLI, OpenClaw) 옆에서 GEODE 가 어디
 | **교체 가능한 파이프라인 DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — DAG 추상화 아님) | ⚠️ 외부 패키지 책임. GEODE core 는 더 이상 파이프라인 포트를 제공하지 않음 |
 | 트레이스 / 리플레이 / Run Log | ✅ `tengu_*` 텔레메트리 + `/insights` HTML | ⚠️ `/status` + `/debug-config` 만 | ✅ ACP 세션 lineage + Task Registry | ✅ 자체 RunLog + Petri eval 통합 |
 | 안전성 게이트 기반 scaffold 최적화 | ❌ | ❌ | ❌ | ⚠️ 실험적 outer loop: scaffold 변이 + 적대적 안전성 audit + (1+1) promote/revert 계약, 공개 core 승격 0건 |
-| 크로스 프로바이더 리뷰 | ❌ | ❌ | ❌ | ⚠️ self-improving 루프의 멀티-voter 크로스 프로바이더 랭킹 패널 (≥2 providers, `geode_product/seed_generation/agents/ranker.py`); 일치도 캘리브레이션은 WIP |
+| 크로스 프로바이더 리뷰 | ❌ | ❌ | ❌ | ⚠️ self-improving 루프의 멀티-voter 크로스 프로바이더 랭킹 패널 (≥2 providers, `evals/seed_generation/agents/ranker.py`); 일치도 캘리브레이션은 WIP |
 
 </details>
 

@@ -52,7 +52,7 @@ def _capture_internal_prompt(
     Returns the captured internal system prompt string.
     """
     from core.agent.loop import agent_loop as al
-    from geode_product.petri_audit.geode_target import _default_geode_runner
+    from evals.petri.geode_target import _default_geode_runner
 
     captured: dict[str, str] = {}
 
@@ -94,7 +94,7 @@ def _auditor_messages() -> list[dict[str, Any]]:
 def test_split_messages_routes_scenario_to_system_suffix() -> None:
     """The auditor's system scenario becomes ``system_suffix`` (the prefix
     slot is reserved for the GEODE scaffold)."""
-    from geode_product.petri_audit.geode_target import _split_messages
+    from evals.petri.geode_target import _split_messages
 
     system_suffix, history, last_user = _split_messages(_auditor_messages())
     assert SCENARIO_MARKER in system_suffix
@@ -132,7 +132,7 @@ def test_mutated_scaffold_reaches_target_prompt_via_sot_fallback(
     env-less SoT-file fallback still injects the scaffold. Pins that the
     standalone ``geode audit`` path is NOT scaffold-free when the in-repo SoT
     exists."""
-    import geode_product.self_improving.policy_sources as product_sources
+    import core.config.runtime_policy_sources as product_sources
 
     sot = _write_marked_scaffold(tmp_path)
     monkeypatch.delenv("GEODE_WRAPPER_OVERRIDE", raising=False)

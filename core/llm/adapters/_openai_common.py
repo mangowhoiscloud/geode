@@ -1625,7 +1625,7 @@ def build_responses_kwargs(
     # to satisfy OpenAI's Structured Outputs subset (all object schemas
     # set ``additionalProperties: false`` AND every property listed in
     # ``required``). GEODE's seed-generation schemas in
-    # ``geode_product/seed_generation/json_schemas.py`` intentionally use the
+    # ``evals/seed_generation/json_schemas.py`` intentionally use the
     # additive helper that omits both, so unconditional strict=True would
     # cause the server to **reject the request** (400) before generation
     # — a worse retry storm than the empty-text path. Auto-detect strict

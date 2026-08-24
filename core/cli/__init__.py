@@ -5,7 +5,7 @@ Architecture (OpenClaw-inspired):
   free-text → agentic_loop.py (AgenticLoop: multi-turn tool_use loop)
 
 This module is the slim Typer entry point. Internal helpers and the
-heavyweight ``init`` command and product-injected ``serve`` host live in sibling modules
+heavyweight ``init`` command and runtime ``serve`` host live in sibling modules
 (``welcome``, ``dispatcher``, ``prompt_session``, ``interactive_loop``,
 ``typer_commands``, ``typer_init``, ``typer_serve``). Tier 3 God Object
 split — see ``CHANGELOG`` for v0.77.0.
@@ -67,6 +67,7 @@ from core.cli.welcome import _welcome_screen as _welcome_screen
 from core.hooks import HookEvent, HookSystem
 from core.hooks.dispatch import fire_hook
 from core.ui.console import console
+from core.wiring.runtime import serve
 
 log = logging.getLogger(__name__)
 
@@ -506,7 +507,7 @@ def build_app(
     return cli
 
 
-app = build_app()
+app = build_app(serve_command=serve)
 
 
 if __name__ == "__main__":

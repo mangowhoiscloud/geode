@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
+from core.observability.trajectory import build_trajectory
 from jsonschema import Draft202012Validator
 from scripts.eval import contract
 
@@ -182,6 +183,47 @@ def _analysis(
     }
 
 
+def _geo_vector(run_spec_path: Path, native_path: Path) -> dict[str, object]:
+    def metric(stage: str, *, measured: bool = False) -> dict[str, object]:
+        return {
+            "stage": stage,
+            "phase": "live_observe" if stage != "F" else "preflight",
+            "status": "measured" if measured else "not_measured",
+            "numerator": 1 if measured else None,
+            "denominator": 1 if measured else None,
+            "finding": "Fixture measurement evidence.",
+            "evidence": ["native.json#/score"] if measured else [],
+        }
+
+    return {
+        "schema_id": "geode.geo-vector@1",
+        "schema_version": 1,
+        "run_id": "tau2-smoke-test",
+        "run_spec_sha256": contract._sha256(run_spec_path),
+        "workload_sha256": "b" * 64,
+        "native_results_sha256": contract._sha256(native_path),
+        "verifier_results_sha256": None,
+        "native_producer": {
+            "adapter": "fixture",
+            "provider": "fixture",
+            "credential_source": "subscription",
+            "model": "fixture",
+        },
+        "verifier_context": None,
+        "preflight_context": None,
+        "outcome_context": None,
+        "outcome_primary_metric": None,
+        "observations": {"expected": 1, "observed": 1},
+        "search_activation": {"numerator": 1, "denominator": 1},
+        "quality_claim_coverage": {
+            "audited_claims": 0,
+            "audited_target_cited_responses": 0,
+            "target_cited_responses": 1,
+        },
+        "vector": {stage: metric(stage, measured=stage == "C") for stage in "FRCPAQO"},
+    }
+
+
 def _publication(run_dir: Path) -> dict[str, object]:
     public = run_dir / "public.json"
     private = run_dir / "private.log"
@@ -238,6 +280,8 @@ def test_eval_schemas_are_valid_draft_2020_12() -> None:
         contract.ATTEMPT_SCHEMA,
         contract.ANALYSIS_SCHEMA,
         contract.PUBLICATION_SCHEMA,
+        "geo-source-receipt.schema.json",
+        *contract.MEASUREMENT_SCHEMAS.values(),
     ):
         Draft202012Validator.check_schema(contract._load_schema(filename))
 
@@ -986,7 +1030,7 @@ def test_primary_metric_json_pointer_must_resolve(tmp_path: Path) -> None:
         )
 
 
-def test_primary_metric_requires_native_result_source(tmp_path: Path) -> None:
+def test_primary_metric_requires_authoritative_result_source(tmp_path: Path) -> None:
     run_spec_path = tmp_path / "run-spec.json"
     attempts_path = tmp_path / "attempts.jsonl"
     analysis_path = tmp_path / "analysis.json"
@@ -1000,12 +1044,137 @@ def test_primary_metric_requires_native_result_source(tmp_path: Path) -> None:
     attempts_path.write_text(json.dumps(attempt) + "\n", encoding="utf-8")
     _write_json(analysis_path, _analysis(run_spec_path, attempts_path, attempt))
 
-    with pytest.raises(ValueError, match="primary metric source must be native-result"):
+    with pytest.raises(
+        ValueError, match="primary metric source must be native-result or measurement"
+    ):
         contract.validate_analysis(
             analysis_path,
             run_spec_path=run_spec_path,
             attempts_path=attempts_path,
         )
+
+
+def test_primary_metric_accepts_digest_bound_geo_measurement(tmp_path: Path) -> None:
+    run_spec_path = tmp_path / "run-spec.json"
+    attempts_path = tmp_path / "attempts.jsonl"
+    analysis_path = tmp_path / "analysis.json"
+    run_spec = _run_spec()
+    artifacts = run_spec["artifacts"]
+    assert isinstance(artifacts, dict)
+    artifacts["measurement_results"] = "geo-vector.json"
+    artifacts["trajectory"] = "trajectory.json"
+    artifacts["verifier_receipts"] = None
+    artifacts["publication_manifest"] = "publication.json"
+    _write_json(run_spec_path, run_spec)
+    attempt = _attempt(tmp_path)
+    attempt["evidence_refs"] = [attempt["evidence_refs"][0]]
+    native_path = tmp_path / "native.json"
+    vector_path = tmp_path / "geo-vector.json"
+    trajectory_path = tmp_path / "trajectory.json"
+    _write_json(vector_path, _geo_vector(run_spec_path, native_path))
+    _write_json(
+        trajectory_path,
+        build_trajectory(
+            trajectory_id="geo-fixture-trajectory",
+            captured_at="2026-08-09T00:01:00Z",
+            source={"harness": "geode", "run": "tau2-smoke-test", "session": "fixture"},
+            events=[],
+            outcome={"scored": False},
+            provenance={"store": "fixture"},
+            privacy={"review_state": "local"},
+        ),
+    )
+    evidence_refs = attempt["evidence_refs"]
+    assert isinstance(evidence_refs, list)
+    evidence_refs.append(
+        _evidence(vector_path, kind="measurement", content=vector_path.read_text())
+    )
+    evidence_refs.append(
+        _evidence(trajectory_path, kind="trajectory", content=trajectory_path.read_text())
+    )
+    attempts_path.write_text(json.dumps(attempt) + "\n", encoding="utf-8")
+    analysis = _analysis(run_spec_path, attempts_path, attempt)
+    metrics = analysis["metrics"]
+    assert isinstance(metrics, list)
+    primary = metrics[0]
+    assert isinstance(primary, dict)
+    primary.update(
+        {
+            "source_ref": vector_path.name,
+            "source_locator": {
+                "value": None,
+                "numerator": "/vector/C/numerator",
+                "denominator": "/vector/C/denominator",
+            },
+        }
+    )
+    _write_json(analysis_path, analysis)
+    publication_path = tmp_path / "publication.json"
+    publication_sources = (
+        run_spec_path,
+        attempts_path,
+        analysis_path,
+        native_path,
+        vector_path,
+        trajectory_path,
+    )
+    _write_json(
+        publication_path,
+        {
+            "artifact_repository": {
+                "base_revision": "b" * 40,
+                "destination_prefix": "reports/e2e-validation/geo-fixture",
+                "url": "https://github.com/mangowhoiscloud/geode-eval-artifacts",
+            },
+            "entries": [
+                {
+                    "bytes": source.stat().st_size,
+                    "classification": "withheld-private",
+                    "local_path": source.name,
+                    "reason": "Fixture bytes are not approved for publication.",
+                    "remote_path": None,
+                    "sha256": contract._sha256(source),
+                }
+                for source in publication_sources
+            ],
+            "geode": {
+                "repository": "https://github.com/mangowhoiscloud/geode",
+                "revision": "a" * 40,
+                "run_record": "docs/eval/geo-visibility.md",
+            },
+            "publication": {
+                "artifact_merge_revision": None,
+                "published_at": None,
+                "status": "prepared",
+            },
+            "run_id": "tau2-smoke-test",
+            "schema": "geode.eval-artifact-publication.v1",
+            "verification": {
+                "local_identity_scrubbed": False,
+                "secret_scan_passed": False,
+                "source_hashes_verified": True,
+            },
+        },
+    )
+
+    contract.validate_analysis(
+        analysis_path,
+        run_spec_path=run_spec_path,
+        attempts_path=attempts_path,
+    )
+    bundle = contract.validate_run_bundle(run_spec_path)
+    assert bundle["declared_artifacts"] == [
+        "measurement_results",
+        "native_results",
+        "trajectory",
+    ]
+    assert bundle["publication_status"] == "prepared"
+
+    vector = json.loads(vector_path.read_text())
+    vector["native_results_sha256"] = "0" * 64
+    _write_json(vector_path, vector)
+    with pytest.raises(ValueError, match="evidence SHA-256 does not match"):
+        contract.validate_run_bundle(run_spec_path)
 
 
 def test_primary_metric_source_must_belong_to_selected_attempt(tmp_path: Path) -> None:

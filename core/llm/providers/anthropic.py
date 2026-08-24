@@ -168,7 +168,7 @@ def _build_httpx_limits() -> httpx.Limits:
 # generic ``Callable``; the banner module owns the import direction.
 #
 # Banner SoT: only this quota writer (and the trip_abort call in
-# ``geode_product.petri_audit.credential_source``, which is in the product ring and
+# ``evals.petri.credential_source``, which is in the product ring and
 # may import core.cli) feeds the banner. Per the 2026-05-19
 # observability audit §4, the banner was previously installed but never
 # fed in production code — the operator never saw a quota signal.

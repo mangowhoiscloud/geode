@@ -20,13 +20,15 @@ F fetch/index eligibility → R retrieval inclusion/rank
 → O first-party outcome
 ```
 
-Run states are `preflight → offline_measure → live_observe → experiment`.
+Run states are `preflight → live_observe`, with an optional `experiment` after
+live diagnosis.
 Finishing an earlier state never proves a later one. Without its prerequisite,
 approval, frozen workload, or receipt, preserve the later state as
 `not_measured` instead of converting it to zero or failure.
 Each executable phase must record at least one phase-bound evidence item before
-advancing; completion is legal only from `experiment` after all seven stages
-are explicit. A `not_measured` item records the boundary, but never skips it.
+advancing. A diagnostic may complete from `live_observe`; an experiment may
+complete only from `experiment`. Both require all seven stages to be explicit.
+A `not_measured` item records the boundary, but never skips it.
 
 The runtime creates a typed `geo_state` before this prompt. Use `update_geo` to
 configure frozen inputs, record each stage, advance phases, and complete the
@@ -39,6 +41,9 @@ The model-visible tool cannot set approval or preregistration receipts. The
 operator must issue `/geo approve-live <receipt>` before live observation and
 `/geo preregister <receipt>` before experiment admission. Workload, engine,
 model, locale, and repetitions freeze when live observation starts.
+Typed slash evidence is an advisory workflow projection. Only the digest-bound
+benchmark contracts in `docs/eval/geo-visibility.md` may establish measurement
+or promotion authority.
 
 ## Evidence frontier
 

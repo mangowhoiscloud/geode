@@ -15,6 +15,23 @@ eval_contracts:
   - core/observability/schemas/trajectory-release.schema.json
   - core/observability/schemas/trajectory.schema.json
   - docs/eval/artifact-publish-manifest.template.json
+  - docs/eval/schemas/geo-host-preflight.schema.json
+  - docs/eval/schemas/geo-host-preflight-v2.schema.json
+  - docs/eval/schemas/geo-claim-universe.schema.json
+  - docs/eval/schemas/geo-human-calibration.schema.json
+  - docs/eval/schemas/geo-link-audit.schema.json
+  - docs/eval/schemas/geo-live-approval.schema.json
+  - docs/eval/schemas/geo-native-results.schema.json
+  - docs/eval/schemas/geo-outcome.schema.json
+  - docs/eval/schemas/geo-preflight.schema.json
+  - docs/eval/schemas/geo-source-receipt.schema.json
+  - docs/eval/schemas/geo-source-receipt-v2.schema.json
+  - docs/eval/schemas/geo-vector.schema.json
+  - docs/eval/schemas/geo-verifier-results.schema.json
+  - docs/eval/schemas/geo-verifier-results-v2.schema.json
+  - docs/eval/schemas/geo-verifier-receipt.schema.json
+  - docs/eval/schemas/geo-verifier-receipt-v2.schema.json
+  - docs/eval/schemas/geo-workload.schema.json
   - docs/eval/schemas/publication.schema.json
   - docs/eval/schemas/run-spec.schema.json
 ---
@@ -95,41 +112,170 @@ preregistered.
 
 ## Evidence states and measurement vector
 
-Runs progress through `preflight → offline_measure → live_observe → experiment`.
-An earlier state never proves a later state. Preserve `not_measured` when a
+Runs progress through `preflight → live_observe`; a preregistered treatment
+claim may continue to `experiment`. A diagnostic can close after live
+observation, but it has no promotion authority. Preserve `not_measured` when a
 prerequisite, approval, frozen workload, or receipt is absent. Do not publish
 an aggregate GEO score.
 
-| Code | Stage | Denominator | Metric |
+One query run is one observation. The live profile has 6 roots × 4 frozen
+wordings × K=5 repetitions, so C uses 120 observations. Other stages preserve
+their own eligible populations rather than silently treating missing evidence
+as failure.
+
+| Code | Stage | Numerator | Denominator |
 |---|---|---|---|
-| F | Fetch/index eligibility | audited URLs | reachable, allowed, canonical, sitemap/internal-link coverage |
-| R | Retrieval inclusion/rank | repeated frozen prompts | source recall@k and rank distribution |
-| C | Citation selection | all repeated prompts | selected/cited-source probability |
-| P | Visible placement/rank | citation-selected responses | citation prominence and user-visible rank |
-| A | Answer absorption | citation-selected responses and audited claims | supported contribution; counterfactual where available |
-| Q | Support/credibility/answer quality | audited claims and sources | entailment, completeness, source authority, factuality |
-| O | First-party outcome | eligible impressions/referrals/sessions | impression, referral, engagement, conversion, separately reported |
+| F | Fetch/index eligibility | URLs passing each preflight condition | audited target URLs |
+| R | Retrieval inclusion/rank | runs whose exposed retrieval list contains a target URL | 24×K runs that expose retrieval |
+| C | Citation selection | runs citing a target URL | all 24×K query runs |
+| P | Visible placement/rank | target-cited runs with `visible_rank ≤ 3` | target-cited runs |
+| A | Answer absorption | runs with at least one supported frozen claim | target-cited runs with complete source receipts and an A/Q v2 verdict |
+| Q | Claim support submetric | supported frozen target-linked claims | independently extracted claims audited in full |
+| O | First-party outcome | observed referrals, engagement, or conversions | eligible first-party impressions, referrals, or sessions |
+
+The v2 verifier freezes a claim universe from exact answer spans before a
+separate model call sees source content. The evaluator derives A from supported
+claims and accepts Q support only when exact, unique answer and source spans
+survive schema and digest validation. It still reports Q as `partial`: claim
+extraction completeness and support reliability require a blind human
+calibration sidecar, while authority and broader factuality remain separate.
+
+## How to read empty cells and comparators
+
+The 2026-08-24 local diagnostic is not a public performance or promotion
+claim. A numeric zero is an observed result; `not_measured` means that no
+eligible denominator or receipt exists; `partial` means that only a submetric
+of the stage was measured.
+
+| State | What the gap means | Required comparator |
+|---|---|---|
+| F · `partial` | All 78 local URLs and 577/577 internal links passed, but the previous runner discarded the deployed 77/78 sitemap failure as an exception. The current runner preserves it as a partial receipt. | Identity check: local export vs public host with the same URL digest. |
+| R/C/P | Pages measured R 0/120, C 4/120, and P 4/4. R is an observed zero, not an empty cell. | Surface diagnostic: Pages vs GitHub repository, which appeared in retrieval in 109/120 observations and citations in 9/120. |
+| A/Q | The historical v1 run observed A 4/4 and Q 43/58; an earlier same-model repeat returned 35/54. These are diagnostic v1 receipts, not calibrated v2 results. | Blind calibration: human claim-completeness and support labels over a digest-bound v2 sample. |
+| O · `not_measured` | No completed Search Console, referral, or conversion window exists, so no eligible denominator was created. | Outcome comparison: baseline vs treatment with the same window, queries, and engine. |
+| Promotion · `none` | The run is diagnostic; no comparator or intervention arm was preregistered. | Promotion comparison: frozen baseline vs treatment under the same index, budget, and observation window. |
+
+The GitHub repository is a **surface diagnostic comparator**: it locates the
+boundary where repository authority fails to transfer to Pages. It cannot
+authorize a content-effect claim. That requires a separate **causal comparator**
+with frozen baseline and treatment arms.
 
 ## Protocol
 
-1. Run deterministic preflight first: exported site build, internal links,
-   sitemap, canonical metadata, visible evidence, and structured-data parity.
-   The repository-owned executable check is:
+1. Run deterministic preflight first. Local export evidence is intentionally
+   `partial`; F becomes `measured` only when a separate public-host receipt
+   binds the same URL-set digest. Host receipt v2 derives F from the URL-level
+   conjunction of sitemap membership, HTTP, HTML, redirect identity,
+   self-canonical, HTTP/meta index controls, crawler-specific robots access,
+   and exact deployed-content parity. It never substitutes the minimum of
+   unrelated marginal counts for eligible pages. A failed check still writes a
+   `status=fail` receipt and exits non-zero, preserving page failures plus
+   missing and unexpected sitemap URLs instead of erasing the observation:
 
    ```bash
    cd site
    npm run build
    npm run export-md
    npm run verify-metadata
-   npm run verify-geo
+   node scripts/verify-geo-preflight.mjs --receipt <run-dir>/site-preflight.json
+   cd ..
+   uv run python scripts/check_docs_links.py --receipt <run-dir>/link-audit.json
+   uv run python scripts/eval/geo_host_preflight.py \
+     --base-url https://mangowhoiscloud.github.io/geode/ \
+     --expected-sitemap site/out/sitemap.xml \
+     --expected-root site/out \
+     --crawler OAI-SearchBot \
+     --out <run-dir>/host-preflight.json
    ```
 2. For live engines, use every frozen root and paraphrase in fresh sessions at
    `k=5` repetitions per engine. Record engine/model surface, locale, account
    state, timestamp, search activation, cited URLs, answer, and screenshots or
-   native receipts where permitted.
-3. For offline intervention evaluation, hash original, sham, and targeted
-   repair arms; reindex every arm and re-run retrieval, reranking, and
-   generation. Include initial-rank controls and a multi-actor adoption arm.
+   native receipts where permitted. The frozen workload must digest-bind an
+   operator-owned `geode.geo-live-approval@1` receipt for the same run, adapter,
+   provider, credential source, model, locale, account state, and repetition
+   count.
+   Collect only provider-native retrieval and citation fields through the
+   existing adapter registry, then bind the frozen workload and receipts
+   through the measurement contract:
+
+   ```bash
+   uv run python scripts/eval/geo_collect.py \
+     --run-spec <run-dir>/run-spec.json \
+     --workload <run-dir>/workload.json \
+     --site-preflight <run-dir>/site-preflight.json \
+     --link-audit <run-dir>/link-audit.json \
+     --host-preflight <run-dir>/host-preflight.json \
+     --out <run-dir>/native-results.json
+
+   uv run python scripts/eval/geo_verify.py \
+     --workload <run-dir>/workload.json \
+     --native-results <run-dir>/native-results.json \
+     --rubric <run-dir>/verifier-rubric.json \
+     --adapter <verifier-adapter> \
+     --model <verifier-model> \
+     --effort medium \
+     --claim-adapter <claim-extractor-adapter> \
+     --claim-model <claim-extractor-model> \
+     --claim-effort low \
+     --claim-producer-version <claim-extractor-revision> \
+     --producer-version <version-or-revision> \
+     --timeout-seconds <frozen-cell-timeout> \
+     --out <run-dir>/verifier-results.json
+
+   uv run python scripts/eval/geo_visibility.py \
+     --run-spec <run-dir>/run-spec.json \
+     --workload <run-dir>/workload.json \
+     --native-results <run-dir>/native-results.json \
+     --verifier-results <run-dir>/verifier-results.json \
+     --calibration <run-dir>/human-calibration.json \
+     --outcome <run-dir>/outcome.json \
+     --out <run-dir>/geo-vector.json
+   ```
+
+   The command validates the complete 24×K observation matrix and emits
+   separate R/C/P/A/Q denominators, the run-spec digest, native adapter,
+   provider, credential source, and model,
+   verifier/model/rubric identity, preflight/outcome receipt digests, and
+   audited-claim coverage. The extractor selects exact answer quotes; when the
+   same semantic text appears more than once, the host
+   canonicalizes it to the first occurrence. It derives and orders offsets and
+   rejects duplicate or overlapping claims.
+   Claim receipts retain those exact native-answer spans;
+   verifier rows retain exact, uniquely occurring source spans and cannot add,
+   remove, or reorder claims. Sources are captured up to 100,000 characters;
+   any still-truncated source makes its observations explicitly unmeasured.
+   The extractor and verifier adapters and effort levels are independently
+   selectable and receipt-bound together with the producer code version. An
+   optional `geode.geo-human-calibration@1` sidecar must attest blind labeling,
+   bind the v2 overlay digest, label every sampled frozen claim, and record
+   missed exact answer spans before agreement is reported.
+   Each model call is bounded by the recorded `timeout_seconds`. A timeout or
+   connection-class transport failure retries once on the same adapter; a
+   terminal retry still fails closed, and rerunning resumes only
+   digest-matched source, claim, and verdict receipts.
+   Two structurally invalid claim responses do not fabricate A/Q or discard
+   other cells: the runner stores both response digests and validation errors
+   in a producer-bound `geode.geo-claim-failure@1` receipt and marks that
+   target-cited observation unmeasured. Transport failures still terminate the
+   run because they do not establish an observation-level model verdict.
+   The source verifier uses the same bounded failure-receipt rule. Extractor
+   and verifier producer versions are separate; reuse
+   `--claim-producer-version` only when the claim-stage code and configuration
+   are byte-for-byte unchanged while verifier code advances.
+   Requested result count is an input constraint, not a promise that
+   the provider will expose exactly that many sources. The collector retains
+   every provider-native source and citation and never parses answer prose into
+   either field. Native results contain no verifier or outcome placeholders.
+   A completed first-party analytics receipt binds its native export and joins
+   later through `--outcome`, without rewriting the immutable native result. It
+   has no aggregate score field. The emitted vector is validated as
+   `geode.geo-vector@1`; new source receipts are independently validated as
+   `geode.geo-source-receipt@2`, require verified TLS, and preserve v1 reading
+   only for immutable historical overlays.
+3. For intervention evaluation, preregister live baseline and targeted-repair
+   arms. Match workload, route, model, locale, account state, budget, and
+   observation window; invalidate the comparison when index state cannot be
+   made comparable.
 4. Audit citation entailment at claim level. Automatic judgments are secondary
    until a human reviews disagreements and a calibration subset.
 5. Invalidate causal claims when prompt order, engine version, indexing state,
@@ -167,11 +313,67 @@ state, so they require an explicit prospective run spec and user approval.
 Until then, `/geo` output is an audit and implementation probe, not a scored
 visibility claim.
 
+The typed slash state is an advisory workflow projection. Its model-authored
+numerators and locators do not become benchmark or promotion authority. Only
+the schema- and digest-validated native/vector/verifier/outcome bundle above
+can establish measurement evidence.
+
 The project can publish `/geode/sitemap.xml`, but this repository cannot own
 the GitHub Pages host-root `/robots.txt`. Record host-root behavior as an
 environment observation instead of claiming this project controls it.
 
+Provider-native citation annotations establish C and P, not A or Q. A is
+derived only from supported claims in a separately digest-bound claim
+universe; Q additionally requires complete cited-source content, exact spans,
+a rubric, verifier identity, and blind human calibration for reliability. O
+likewise needs a first-party Search Console, referral, or conversion receipt
+whose observation window has ended. Missing receipts remain `not_measured`;
+they are never filled from model prose or a same-run judge. GEODE does not ship
+a synthetic analytics importer: without a real native export and
+locator-preserving receipt, O stays `not_measured`.
+
+A diagnostic visibility run deliberately retains `promotion_authority=none`.
+Promotion is a different preregistered experiment: it needs a direct named
+comparator, frozen arms, matching index and observation windows, and the
+authority corresponding to its run-spec claim class. More data in one
+diagnostic run cannot manufacture that authority.
+
 ## Trajectory and artifact publication
+
+### Run-bundle joins
+
+Do not embed trajectories or raw receipts inside `geo-vector.json`. Freeze the
+expected paths in `run-spec.json`, then let one append-only attempt row join the
+authorities by relative path and SHA-256:
+
+| Run-spec artifact | Attempt evidence kind | Authority |
+|---|---|---|
+| `native_results` | `native-result` | provider-native retrieval, citation, and answer receipt |
+| `measurement_results` | `measurement` | deterministic `geode.geo-vector@1` projection |
+| `verifier_receipts` | `verifier-receipt` | independent A/Q judgement and cited-source receipts |
+| `outcome_receipts` | `outcome-receipt` | completed first-party analytics window |
+| `trajectory` | `trajectory` | `geode.trajectory@1` behavior or a scoped trajectory-release manifest |
+
+`analysis.json` may use a `measurement` as its primary source only when the
+vector binds the same run-spec digest and selected native/verifier/outcome
+digests. Its `source_locator.value` stays null: the validator reads numerator
+and denominator through RFC 6901 pointers and recomputes the ratio rather than
+requiring a duplicate value field. A trajectory remains behavior evidence; it
+never becomes the visibility score authority.
+
+After `attempts.jsonl`, `analysis.json`, and any prepared publication manifest
+exist, close the cross-file contract with one command:
+
+```bash
+uv run python scripts/eval/contract.py validate-run-bundle \
+  <run-dir>/run-spec.json
+```
+
+The bundle gate validates every component schema and digest, verifies a
+trajectory or content-addressed trajectory release, requires its release scope
+to equal the run ID, and ensures a publication manifest classifies every
+declared run artifact as public or withheld. It creates no second evidence
+copy.
 
 ### Authority and format selection
 

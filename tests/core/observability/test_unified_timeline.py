@@ -47,7 +47,7 @@ def test_sub_agent_outputs_share_one_run_directory(tmp_path: Path) -> None:
 
 
 def test_run_timeline_keeps_current_append_contract(tmp_path: Path) -> None:
-    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline
+    from evals.run_timeline import RunTimeline
 
     path = tmp_path / "events.jsonl"
     timeline = RunTimeline(

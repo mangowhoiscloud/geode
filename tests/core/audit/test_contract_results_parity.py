@@ -3,9 +3,9 @@
 The contract ledger produced by ``extract_contract_results`` must survive two
 write paths verbatim:
 
-(a) the summary YAML written by ``geode_product.petri_audit.eval_archive.archive_eval``
+(a) the summary YAML written by ``evals.petri.eval_archive.archive_eval``
     (the committable ``docs/audits/eval-logs/*.summary.yaml``), and
-(b) ``geode_product.self_improving.loop.mutate.runner.ApplyRecord.model_validate`` — the
+(b) ``evolve.scaffold_search.loop.mutate.runner.ApplyRecord.model_validate`` — the
     ``mutations.jsonl`` writer's Pydantic schema (``extra="allow"``), which must
     accept the ledger as a typed field without a ValidationError.
 
@@ -129,7 +129,7 @@ def test_ledger_round_trips_through_summary_yaml(
     eval_path = tmp_path / "2026-06-03T00-00-00_audit_fake.eval"
     eval_path.write_bytes(b"placeholder")
 
-    from geode_product.petri_audit.eval_archive import archive_eval
+    from evals.petri.eval_archive import archive_eval
 
     result = archive_eval(
         eval_path,
@@ -168,7 +168,7 @@ def test_ledger_validates_into_apply_record(
     ledger = extract_contract_results(eval_path)
     assert ledger, "extractor should produce a non-empty ledger for this sample"
 
-    from geode_product.self_improving.loop.mutate.runner import ApplyRecord
+    from evolve.scaffold_search.loop.mutate.runner import ApplyRecord
 
     row = {
         "ts": 1.0,
@@ -209,7 +209,7 @@ def test_ledger_lands_in_live_attribution_row(
     ledger = extract_contract_results(eval_path)
     assert ledger
 
-    from geode_product.self_improving.loop.observe.attribution import (
+    from evolve.scaffold_search.loop.observe.attribution import (
         AttributionRecord,
         write_attribution,
     )
@@ -235,7 +235,7 @@ def test_attribution_row_omits_empty_ledger(
 ) -> None:
     """A dry-run / archive-missing cycle (empty ledger) omits the key — the
     legacy row shape is preserved."""
-    from geode_product.self_improving.loop.observe.attribution import write_attribution
+    from evolve.scaffold_search.loop.observe.attribution import write_attribution
 
     log_path = tmp_path / "mutations.jsonl"
     payload = write_attribution(

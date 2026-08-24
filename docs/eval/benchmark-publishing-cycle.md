@@ -80,11 +80,14 @@ digest-bound: URI, UNC, drive-root, backslash, and parent traversal forms are re
 If an invalid or aborted attempt is selected for provenance, the primary metric
 must be `not-measurable` with null counts and the decision cannot promote or
 reject.
-Every measured primary metric uses RFC 6901 JSON Pointers to read value,
-numerator, and denominator from one digest-bound `native-result` JSON file.
+Every measured primary metric uses RFC 6901 JSON Pointers to read numerator and
+denominator from one digest-bound `native-result` or registered deterministic
+`measurement` JSON file. `source_locator.value` may be null when the value is
+the ratio computed from those counts, avoiding a duplicate derived field.
 Its denominator must also equal the run spec's frozen denominator; a
 nonexistent locator, changed source count, or ratio-preserving count inflation
-is invalid. A secondary metric remains digest-bound but may leave
+is invalid. A measurement must additionally bind the frozen run spec and its
+selected native/verifier/outcome evidence digests. A secondary metric remains digest-bound but may leave
 `source_locator` null when its evidence is text, CSV, or another non-JSON
 format; when locators are present, they are verified against JSON bytes.
 Promotion and rejection both require explicit authority.
@@ -98,6 +101,8 @@ uv run python scripts/eval/contract.py validate-analysis <run-dir>/analysis.json
   --attempts <run-dir>/attempts.jsonl
 uv run python scripts/eval/contract.py validate-publication \
   <run-dir>/publication-manifest.json
+uv run python scripts/eval/contract.py validate-run-bundle \
+  <run-dir>/run-spec.json
 ```
 
 ## Required Fields

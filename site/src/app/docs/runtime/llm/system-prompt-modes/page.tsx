@@ -46,7 +46,7 @@ export default function Page() {
               model_card, current_date, 호출자의 system_suffix만 남습니다.
               근거는 측정 결과입니다. Petri의 auditor는 시나리오의 정체성을
               끝까지 통제해야 하는데, GEODE 프리앰블이 트랜스크립트를
-              오염시켰습니다. 플래그는 <code>geode audit</code>의
+              오염시켰습니다. 플래그는 <code>geode-eval audit</code>의
               <code>--unrestricted</code>가 inspect 서브프로세스 앞에서
               설정합니다.
             </p>
@@ -85,8 +85,8 @@ export default function Page() {
             <p>
               변이를 제안하는 mutator 에이전트의 시스템 프롬프트는 코드
               리터럴이 아니라 패키지와 함께 출하되는
-              <code>geode_product/self_improving/program.md</code>입니다. 러너
-              (<code>geode_product/self_improving/loop/mutate/runner.py</code>)가 매
+              <code>evolve/scaffold_search/program.md</code>입니다. 러너
+              (<code>evolve/scaffold_search/loop/mutate/runner.py</code>)가 매
               호출 디스크에서 읽고, 단일 변이로 범위를 좁히는 계약을 뒤에
               붙입니다. 파일을 못 읽으면 조용한 폴백 대신 크게 실패합니다.
               교체가 필요하면 훅 핸들러가 <code>program_md</code> 본문을
@@ -163,7 +163,7 @@ export default function Page() {
               measurement: Petri&apos;s auditor must control the
               scenario&apos;s identity end to end, and a GEODE preamble
               contaminated audit transcripts. The flag is set by
-              <code>geode audit</code>&apos;s
+              <code>geode-eval audit</code>&apos;s
               <code>--unrestricted</code> before the inspect subprocess.
             </p>
 
@@ -201,9 +201,9 @@ export default function Page() {
             <h2>The program.md contract: the mutator&apos;s prompt</h2>
             <p>
               The mutation-proposing agent&apos;s system prompt is not a code
-              literal but <code>geode_product/self_improving/program.md</code>, shipped
+              literal but <code>evolve/scaffold_search/program.md</code>, shipped
               with the package. The runner
-              (<code>geode_product/self_improving/loop/mutate/runner.py</code>) reads
+              (<code>evolve/scaffold_search/loop/mutate/runner.py</code>) reads
               it from disk on every invocation and appends a contract that
               scopes it to a single mutation. If the file is unreadable the
               runner fails loud rather than silently falling back; the single

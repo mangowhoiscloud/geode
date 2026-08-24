@@ -111,7 +111,7 @@ def test_create_session_bridges_effort_to_loop(monkeypatch: pytest.MonkeyPatch) 
     the wire: ``settings.agentic_effort`` change → ``loop._effort`` reflects.
     """
     from core.server.supervised.services import SessionMode
-    from geode_product.wiring import build_shared_services
+    from core.wiring.runtime import build_shared_services
 
     services = build_shared_services()
     monkeypatch.setenv("GEODE_AGENTIC_EFFORT", "low")

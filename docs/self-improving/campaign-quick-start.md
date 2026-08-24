@@ -24,7 +24,7 @@ a run that looks like it works but measures nothing.
 | Python 3.12+ | `python --version` | Project floor (`pyproject.toml`, `requires-python >= 3.12`). |
 | `uv` | `uv --version` | Package manager + runner for every command here. |
 | Base sync | `uv sync` | Installs GEODE core. Not enough on its own for the loop. |
-| Audit extra | `uv sync --extra audit` | Installs `inspect_ai` + Petri (puts the `inspect` CLI on PATH). WITHOUT it the audit aborts loudly: `geode_product/petri_audit/runner.py` checks `shutil.which("inspect")` and returns an aborted report with `` `inspect` CLI not found on PATH — install the [audit] extra: `uv sync --extra audit`. `` (`geode_product.self_improving.train` then returns failure for that cycle). Install it before your first run. |
+| Audit extra | `uv sync --extra audit` | Installs `inspect_ai` + Petri (puts the `inspect` CLI on PATH). WITHOUT it the audit aborts loudly: `evals/petri/runner.py` checks `shutil.which("inspect")` and returns an aborted report with `` `inspect` CLI not found on PATH — install the [audit] extra: `uv sync --extra audit`. `` (`evolve.scaffold_search.train` then returns failure for that cycle). Install it before your first run. |
 | Auditor + judge model | `ANTHROPIC_API_KEY`. See model accounts below. | The Petri auditor drives each scenario, the judge scores each rollout on the rubric. No judge means no fitness. |
 | Target model | `geode/gpt-5.5` via ChatGPT / Codex OAuth, or override `[self_improving_loop.autoresearch.target] model = ...` in config. | The audit target is GEODE-as-a-system running the mutated scaffold. No target means no audit. |
 
@@ -36,7 +36,7 @@ promote).
 ### Model accounts and the three roles
 
 The audit uses three distinct roles, each with its own model + credential
-source. Manifest defaults come from `geode_product/petri_audit/petri.plugin.toml`; you
+source. Manifest defaults come from `evals/petri/petri.plugin.toml`; you
 override them per role under `[self_improving_loop.autoresearch.<role>]` in
 `~/.geode/config.toml` (each table takes `model` + `source`):
 
@@ -108,17 +108,17 @@ measures and confounds the mutated-vs-baseline comparison.
 
 ### Step c: gen-0 baseline + a single audit
 
-`python -m geode_product.self_improving.train` runs ONE audit per invocation, the
+`python -m evolve.scaffold_search.train` runs ONE audit per invocation, the
 single-audit entry. Smoke the plumbing first with `--dry-run` (synthetic
 baseline, no network, no quota): it emits the real output shape with
 `fitness` near `0.89` against the dry-run dim mock.
 
 ```bash
 # Plumbing smoke: synthetic audit, no budget spent, no PAYG/network.
-uv run python -m geode_product.self_improving.train --dry-run
+uv run python -m evolve.scaffold_search.train --dry-run
 
 # Real single audit (consumes budget). Redirect, never flood stdout.
-uv run python -m geode_product.self_improving.train > ~/.geode/self-improving/run.log 2>&1
+uv run python -m evolve.scaffold_search.train > ~/.geode/self-improving/run.log 2>&1
 ```
 
 Extract the metrics from the log:
@@ -140,20 +140,20 @@ The campaign driver runs three arms (`never`, `random`, `gate`) from a matched
 gen-0 reset so any observed gain is attributable to the gate, not to drift or
 chance. Run a short version first (`--n 1` cycle per arm).
 
-Recommended entry, the `geode campaign` command (a sibling change adds this CLI;
+Recommended entry, the `geode-evolve campaign` command (a sibling change adds this CLI;
 prefer it once available):
 
 ```bash
-geode campaign --n 1 --k 5 --arms never,random,gate
+geode-evolve campaign --n 1 --k 5 --arms never,random,gate
 ```
 
 Script form, which works today (equivalent driver, same flags):
 
 ```bash
-uv run python geode_product/self_improving/campaign.py --n 1 --k 5 --arms never,random,gate
+uv run python evolve/scaffold_search/campaign.py --n 1 --k 5 --arms never,random,gate
 ```
 
-Flags (from `geode_product/self_improving/campaign.py::_build_arg_parser`):
+Flags (from `evolve/scaffold_search/campaign.py::_build_arg_parser`):
 
 | Flag | Default | Meaning |
 |------|---------|---------|
@@ -168,7 +168,7 @@ Flags (from `geode_product/self_improving/campaign.py::_build_arg_parser`):
 Smoke the campaign wiring end to end with `--dry-run` before spending budget:
 
 ```bash
-uv run python geode_product/self_improving/campaign.py --n 1 --k 5 --arms never,random,gate --dry-run
+uv run python evolve/scaffold_search/campaign.py --n 1 --k 5 --arms never,random,gate --dry-run
 ```
 
 A real 3-arm run is long: the gate arm runs last and sequentially, so budget per
@@ -179,7 +179,7 @@ the full loop completes before scaling up.
 
 | Artifact | Path | What it holds |
 |----------|------|---------------|
-| Mutation ledger | `geode_product/self_improving/state/mutations.jsonl` | One row per mutate / apply / audit / baseline / attribution event (git-tracked). Arms are tagged via `promote_policy` / `promote_policy_seed`, so you can split the stream by arm. |
+| Mutation ledger | `evolve/scaffold_search/state/mutations.jsonl` | One row per mutate / apply / audit / baseline / attribution event (git-tracked). Arms are tagged via `promote_policy` / `promote_policy_seed`, so you can split the stream by arm. |
 | Promoted baseline | `~/.geode/self-improving/baseline.json` | The promoted baseline `dim_means` + `dim_stderr`. Advances only on a gate promote; a reject leaves it untouched. |
 | Per-cycle eval | `~/.geode/petri/logs/*.eval` (+ `latest.eval`) | The Petri `.eval` per cycle, the single source for per-dim evidence. |
 | Run logs | `~/.geode/self-improving/run.log` (single audit), `state/campaign/` (campaign progress + runs) | Stdout / progress for inspection. |
@@ -211,5 +211,5 @@ within measurement noise.
   monotone gate, and the git-as-optimiser ratchet.
 - `docs/examples/self_improving_loop.config.toml.example`: the annotated config
   template, every `[self_improving_loop.*]` key with its default and precedence.
-- `geode_product/self_improving/program.md`: the single-audit driver's instruction sheet,
+- `evolve/scaffold_search/program.md`: the single-audit driver's instruction sheet,
   including the `train.py` output format and the cross-axis gate semantics.

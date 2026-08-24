@@ -34,34 +34,37 @@ def _help_output(target: str | Path) -> str:
 
 def _check_full_package() -> None:
     scripts = {entry.name: entry for entry in metadata.entry_points(group="console_scripts")}
-    assert scripts["geode"].value == "geode_product.cli:app"
-    assert scripts["geode-mcp"].value == "geode_product.mcp_server:main"
-    scripts["geode-mcp"].load()
+    assert scripts["geode"].value == "core.cli:app"
+    assert scripts["geode-mcp"].value == "core.mcp_server:main"
+    assert scripts["geode-eval"].value == "evals.cli:app"
+    assert scripts["geode-evolve"].value == "evolve.cli:app"
+    for name in ("geode", "geode-mcp", "geode-eval", "geode-evolve"):
+        scripts[name].load()
     mcp_server = importlib.import_module("core.mcp_server").create_mcp_server()
     assert mcp_server is not None
-    importlib.import_module("geode_product.wiring")
-    importlib.import_module("geode_product.worker")
+    importlib.import_module("core.wiring.runtime")
+    importlib.import_module("core.worker")
+    importlib.import_module("evals.worker")
 
     for leaf in ("train", "campaign", "prepare", "watch_campaign"):
-        canonical = f"geode_product.self_improving.{leaf}"
-        canonical_path = Path(
-            str(resources.files("geode_product.self_improving").joinpath(f"{leaf}.py"))
-        )
+        canonical = f"evolve.scaffold_search.{leaf}"
+        canonical_path = Path(str(resources.files("evolve.scaffold_search").joinpath(f"{leaf}.py")))
         assert _help_output(canonical) == _help_output(canonical_path)
 
     for canonical in (
-        "geode_product.benchmark_harness.mcpmark_geode_agent",
-        "geode_product.petri_audit.runner",
-        "geode_product.seed_generation.tools.seed_pool_search",
+        "evals.benchmarks.mcpmark_geode_agent",
+        "evals.petri.runner",
+        "evals.seed_generation.tools.seed_pool_search",
+        "evolve.crucible.tau2_geode_agent",
     ):
         importlib.import_module(canonical)
 
-    for removed in ("plugins", "core.self_improving"):
+    for removed in ("geode_product", "plugins", "core.self_improving"):
         assert find_spec(removed) is None, f"installed package exposes removed {removed}"
 
-    assert resources.files("geode_product.petri_audit").joinpath("petri.plugin.toml").is_file()
-    assert resources.files("geode_product.self_improving").joinpath("program.md").is_file()
-    assert resources.files("geode_product.self_improving").joinpath("state/results.tsv").is_file()
+    assert resources.files("evals.petri").joinpath("petri.plugin.toml").is_file()
+    assert resources.files("evolve.scaffold_search").joinpath("program.md").is_file()
+    assert resources.files("evolve.scaffold_search").joinpath("state/results.tsv").is_file()
     distribution = metadata.distribution("geode-agent")
     bundled_skills = Path(str(distribution.locate_file(".geode/skills")))
     from core.skills.skills import SkillLoader, SkillRegistry
@@ -91,7 +94,7 @@ def _kernel_record_paths() -> frozenset[str]:
 
     assert len(matches) == 1, f"expected one distribution owning core, found {len(matches)}"
     distribution, paths = matches[0]
-    forbidden = ("geode_product/", "plugins/", "core/self_improving/")
+    forbidden = ("evals/", "evolve/", "geode_product/", "plugins/", "core/self_improving/")
     leaked = sorted(path for path in paths if path.startswith(forbidden))
     assert not leaked, f"kernel wheel contains feature files: {leaked}"
     assert not distribution.entry_points, "kernel wheel contains package entry points"
@@ -203,7 +206,7 @@ def _check_kernel_runtime() -> None:
 
 def _check_kernel_package() -> None:
     modules = _core_module_names(_kernel_record_paths())
-    for feature in ("geode_product", "plugins", "core.self_improving"):
+    for feature in ("evals", "evolve", "geode_product", "plugins", "core.self_improving"):
         assert find_spec(feature) is None, f"kernel environment exposes {feature}"
     previous_cwd = Path.cwd()
     previous_geode_home = os.environ.get("GEODE_HOME")

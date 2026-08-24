@@ -225,7 +225,6 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
-| R8.5 | BND-009 | `session=codex-root task=r8-5-runtime-eval-evolve-migration` | `feature/r8-5-runtime-eval-evolve-migration` | readiness [#3142](https://github.com/mangowhoiscloud/geode/pull/3142) | `2026-08-24T02:09:39Z` |
 | _none yet_ | — | — | — | — | — |
 
 ## 1. Program objective
@@ -282,17 +281,18 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `geode_product/`) | 556 |
-| Test Python files | 688 |
-| `core/` Python LOC | 121,527 |
-| `geode_product/` Python LOC | 61,099 |
-| Test Python LOC | 184,979 |
+| Production Python files (`core/` + `evals/` + `evolve/`) | 559 |
+| Test Python files | 691 |
+| `core/` Python LOC | 123,541 |
+| `evals/` Python LOC | 27,297 |
+| `evolve/` Python LOC | 31,921 |
+| Test Python LOC | 186,661 |
 | Tool definitions / model executions / valid schemas / policies | 86 / 86 / 86 / 86 (exact) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 5 |
 | Module/class-scoped `ContextVar`-backed bindings in production packages | 25 |
-| `core` → product import sites | 0 across 0 files |
-| Import-linter contracts / ignored edges | 6 / 0 |
+| `core` → outer import sites | 0 across 0 files |
+| Import-linter contracts / ignored edges | 7 / 0 |
 | `AgenticLoop` file LOC / methods / constructor args | 1,121 / 38 / 12 |
 | `SubAgentManager` file LOC / methods / constructor args | 811 / 17 / 18 |
 | `RuntimeCoreConfig` fields | 6 |
@@ -566,7 +566,7 @@ and closure evidence are appended in §10.
 | REL-004 | `ABSENT` | No registered gate prevents the v1.0.23 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.23, and every release inside that interval retained them | R8.3 | REL-003 | `SUPERSEDED` |
 | BND-008 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-004, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.4 | REL-004, STORE-003 | `SUPERSEDED` |
 | CODE-002 | `MISFIT` | Verification state is restored from checkpoint `loop_guards`, but `_persist_verify_state` still mirrors every result into `SessionManager` columns whose accessor has no production reader | Production verify-mirror writes and the unused accessor are removed; legacy databases containing the columns still load, checkpoint recovery remains authoritative, and no new store or schema migration is introduced | R9.2 | CODE-001 | `DONE` |
-| BND-009 | `MISFIT` | `geode_product` combines runtime composition with evaluation and hill-climbing, while `plugins`, `core/self_improving`, Homebrew candidate files, and the unverified computer sandbox preserve duplicate or unsupported ownership surfaces | One documented migration leaves `core` as the GEODE runtime, moves measurement to `evals` and hill-climbing to `evolve`, removes every obsolete package/scaffold without a replacement stub, preserves one-way `evolve -> evals -> core` dependencies and operator behavior, migrates tracked state with byte parity, and proves the final wheel/sdist/install/release contain only the declared roots | R8.5 | BND-006, REL-003 | `IN_PROGRESS` |
+| BND-009 | `MISFIT` | `geode_product` combines runtime composition with evaluation and hill-climbing, while `plugins`, `core/self_improving`, Homebrew candidate files, and the unverified computer sandbox preserve duplicate or unsupported ownership surfaces | One documented migration leaves `core` as the GEODE runtime, moves measurement to `evals` and hill-climbing to `evolve`, removes every obsolete package/scaffold without a replacement stub, preserves one-way `evolve -> evals -> core` dependencies and operator behavior, migrates tracked state with byte parity, and proves the final wheel/sdist/install/release contain only the declared roots | R8.5 | BND-006, REL-003 | `IN_DEVELOP` |
 
 ## 6. Dependency and merge sequence
 
@@ -2013,6 +2013,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R7.3 | VER-004 | [#3122](https://github.com/mangowhoiscloud/geode/pull/3122) | `3e6f025e498e74241209910e95ba3a29792323e7` | `uv run python scripts/check_architecture_performance.py --check`; `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,414 local non-live tests, lint/format, type check, security, official-doc parity and Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 402 isolated kernel modules and 59 kernel tests, 13 independent provider-network-free performance budgets calibrated from GitHub Actions `ubuntu-latest`, and anti-deception review all passed) |
 | R9.1 | CODE-001 | [#3126](https://github.com/mangowhoiscloud/geode/pull/3126) | `d81e76b00ea3c7d0fb9b03bb4605f9ba18f3e771` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate and full test-with-coverage job, 480 targeted authority tests, lint/format, type check, security, official-doc parity, 238-page static build, 74 Markdown twins, macOS/Ubuntu install smoke, exact two-file documentation scope, and anti-deception checks all passed) |
 | R9.2 | CODE-002 | [#3131](https://github.com/mangowhoiscloud/geode/pull/3131) | `bd7d79c3d004508eadf379e9403a0a2fb3c2a30a` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,412 local non-live tests and the full CI test-with-coverage job, lint/format, type check, security, six import contracts, official-doc parity and 238-page Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 402 isolated kernel modules and 59 kernel tests, fresh-schema and legacy-column compatibility coverage, and anti-deception checks all passed) |
+| R8.5 | BND-009 | [#3148](https://github.com/mangowhoiscloud/geode/pull/3148) | `24a6992a9e3ab9610c749dc1a875e0179342bd6f` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS ([CI run 32697757798](https://github.com/mangowhoiscloud/geode/actions/runs/32697757798) passed the final Gate, 9m09s test-with-coverage job, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, 659-file wheel and 661-file sdist inspection, clean full/kernel installed-package checks with 412 isolated kernel modules and 59 kernel tests, exact eight-payload state parity, zero retired import roots, seven import contracts, and the committed-diff review with all findings resolved; paid/live provider tests were not run) |
 
 ### 10.2 Main closure evidence
 
@@ -2187,23 +2188,26 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Immediate next unit
 
-R8.5 (`BND-009`) is `IN_PROGRESS` under the sole active claim owned by
-`session=codex-root task=r8-5-runtime-eval-evolve-migration` for branch
-`feature/r8-5-runtime-eval-evolve-migration`. Readiness PR #3142 merged at
-`b1300113275fc387bb2fe64782ccf4fd77de20fd`; implementation starts only after
-this claim merges and a fresh worktree is allocated from the updated canonical
-`origin/develop` tip.
+R8.5 (`BND-009`) is `IN_DEVELOP` after feature PR
+[#3148](https://github.com/mangowhoiscloud/geode/pull/3148) merged as
+`24a6992a9e3ab9610c749dc1a875e0179342bd6f`. The implementation leaves one
+documented `core`/`evals`/`evolve` dependency graph, removes every retired
+package and unsupported scaffold without a facade or archive, preserves the
+eight tracked state payloads byte-for-byte, and passes source, package,
+installed-wheel, kernel-only, documentation, and anti-deception gates. The
+active claim is released by this reconciliation.
 
-The claimed scope is exactly one documented `core`/`evals`/`evolve`
-convergence, deletion of `geode_product`, `plugins`, `core/self_improving`,
-Homebrew candidate and unverified computer sandbox surfaces, tracked-state
-parity, distribution/install proof, and a verified patch release. It does not
-authorize a compatibility facade, archive, new plugin framework, second
-runtime, unrelated tool behavior, or a hidden package split.
+R8.5 is not eligible for `DONE` until the same bytes reach `main` in the
+v1.0.24 release and the tracking-only closure records the annotated tag,
+GitHub Release, exact PyPI wheel/sdist SHA-256 parity, and public `uvx` smoke.
+The next executable unit is therefore the ordinary v1.0.24 release-stamp PR
+from current `develop`, followed by the required GitFlow promotion and stable
+release workflow. No compatibility alias, second wheel, plugin SDK, hidden
+package split, or live-provider evaluation is authorized by this handoff.
 
-The master ledger contains 58 GAPs: 48 `DONE`, six `SUPERSEDED`, three
-`IN_DEVELOP`, and one `IN_PROGRESS`. There are no `OPEN`, `READY`, `BLOCKED`,
-`REJECTED`, or unexplained rows.
+The master ledger contains 58 GAPs: 48 `DONE`, six `SUPERSEDED`, and four
+`IN_DEVELOP`. There are no active claims and no `OPEN`, `READY`,
+`IN_PROGRESS`, `BLOCKED`, `REJECTED`, or unexplained rows.
 
 R7.2 (`CAP-006`, `VER-002`) and R7.3 (`VER-004`) remain `IN_DEVELOP` until
-the final full-program release audit closes their cross-package evidence.
+the same final full-program release audit closes their cross-package evidence.

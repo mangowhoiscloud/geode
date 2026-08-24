@@ -167,7 +167,7 @@ def test_geode_target_translates_petri_surface_alias() -> None:
     registered) and the fallback ``resolve_for`` raises on the
     non-concrete source — the audit then falls back to PAYG.
     """
-    from geode_product.petri_audit.geode_target import translate_petri_source
+    from evals.petri.geode_target import translate_petri_source
 
     assert translate_petri_source("openai-codex") == "codex-oauth"
     assert translate_petri_source("api_key") == "payg"
@@ -176,7 +176,7 @@ def test_geode_target_translates_petri_surface_alias() -> None:
 def test_petri_to_registry_map_covers_every_petri_concrete_source() -> None:
     """Map coverage — every Petri concrete source resolves on the GEODE side.
 
-    ``geode_product/petri_audit/petri.plugin.toml`` declares the concrete
+    ``evals/petri/petri.plugin.toml`` declares the concrete
     sources per provider:
 
     - anthropic: ``api_key``
@@ -193,7 +193,7 @@ def test_petri_to_registry_map_covers_every_petri_concrete_source() -> None:
         bootstrap_builtins,
         list_adapters,
     )
-    from geode_product.petri_audit.geode_target import translate_petri_source
+    from evals.petri.geode_target import translate_petri_source
 
     try:
         _reset_for_test()

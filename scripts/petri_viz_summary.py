@@ -43,7 +43,7 @@ def main() -> None:
         ) from None
     from inspect_ai.log import read_eval_log
 
-    with (WORKTREE / "geode_product/petri_audit/judge_dims/geode_judge_subset.yaml").open() as f:
+    with (WORKTREE / "evals/petri/judge_dims/geode_judge_subset.yaml").open() as f:
         dims = [d if isinstance(d, str) else d.get("name") for d in yaml.safe_load(f)]
 
     def avg(path: Path) -> dict[str, float]:

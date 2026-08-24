@@ -210,7 +210,7 @@ def test_wrapper_fallback_role_is_generic_not_geode_persona() -> None:
     mutator may still *propose* a GEODE-named role; this pins only the
     shipped baseline so GEODE_PERSONA=off stays a thin wrapper.
     """
-    from geode_product.self_improving.train import _WRAPPER_PROMPT_SECTIONS_FALLBACK
+    from evolve.scaffold_search.train import _WRAPPER_PROMPT_SECTIONS_FALLBACK
 
     role = _WRAPPER_PROMPT_SECTIONS_FALLBACK["role"]
     assert "You are GEODE" not in role
@@ -281,7 +281,7 @@ def test_g2_petri_runner_no_max_rounds_cap() -> None:
     """
     import inspect
 
-    from geode_product.petri_audit import geode_target
+    from evals.petri import geode_target
 
     src = inspect.getsource(geode_target._default_geode_runner)
     code_only = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))

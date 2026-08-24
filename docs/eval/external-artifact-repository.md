@@ -167,6 +167,7 @@ diagnostic with `promotion_authority=none` and does not alter Tau2's native
 | `artifacts/eval/runs/crucible/campaigns/` | `crucible/runs/campaigns/` |
 | `artifacts/eval/runs/crucible/{row-cache,trajectory-snapshots}/` | `crucible/runs/{row-cache,trajectory-snapshots}/` |
 | approved Crucible launch/report packets | `crucible/runs/launch-packets/` |
+| validated GEO run spec, attempts, vector, analysis, and reviewed receipts | `reports/e2e-validation/<geo-run-id>/` |
 | `docs/audits/` dated Petri analysis reports + score matrices (migrated 2026-07-13) | `sil/audit-reports/` |
 | `docs/e2e/` dated validation records (migrated 2026-07-13) | `reports/e2e-validation/` |
 | `docs/eval/crucible-power-admission-2026-07-13.md` (migrated 2026-07-13) | `crucible/gate-provenance/` |
@@ -275,7 +276,7 @@ fields remain immutable and are normalized only in memory.
 
 Still in the GEODE repository after the 2026-07-13 migration: the live
 `docs/audits/eval-logs/` manifest ledger (`core/audit/manifest.py` appends to
-it on every `geode audit --live`), the code-referenced
+it on every `geode-eval audit --live`), the code-referenced
 `docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.md` and
 `docs/audits/judge-human-agreement.md`, and the three caveat reports the
 published petri-bundle README cross-links

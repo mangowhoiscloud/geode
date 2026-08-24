@@ -45,27 +45,27 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr>
-                  <td><code>geode_product/self_improving/train.py</code></td>
+                  <td><code>evolve/scaffold_search/train.py</code></td>
                   <td>루프 드라이버. 호출 1회 = 감사 1회. 에이전트가 수정하는 유일한 파일이며 <code>WRAPPER_PROMPT_SECTIONS</code>를 소유합니다.</td>
                 </tr>
                 <tr>
-                  <td><code>geode_product/self_improving/measure.py</code></td>
-                  <td>감사 실행. <code>geode audit</code> 서브프로세스를 조립해 돌리고, 마지막 줄 JSON <code>{`{"dim_means", "dim_stderr"}`}</code>을 파싱합니다.</td>
+                  <td><code>evolve/scaffold_search/measure.py</code></td>
+                  <td>감사 실행. <code>geode-eval audit</code> 서브프로세스를 조립해 돌리고, 마지막 줄 JSON <code>{`{"dim_means", "dim_stderr"}`}</code>을 파싱합니다.</td>
                 </tr>
                 <tr>
-                  <td><code>geode_product/self_improving/fitness.py</code></td>
+                  <td><code>evolve/scaffold_search/fitness.py</code></td>
                   <td>fitness 명세와 계산. 축 티어, 가중치, 안정성 축.</td>
                 </tr>
                 <tr>
-                  <td><code>geode_product/self_improving/gate.py</code></td>
+                  <td><code>evolve/scaffold_search/gate.py</code></td>
                   <td>승격 게이트. margin 규칙, 거부 시 SoT 되돌림, 하드 tool-call 계약 거부권.</td>
                 </tr>
                 <tr>
-                  <td><code>geode_product/self_improving/ledger.py</code></td>
+                  <td><code>evolve/scaffold_search/ledger.py</code></td>
                   <td>런 장부. <code>baseline.json</code>, <code>baseline_archive.jsonl</code>, results 행, 에폭 스탬프.</td>
                 </tr>
                 <tr>
-                  <td><code>geode_product/self_improving/loop/</code></td>
+                  <td><code>evolve/scaffold_search/loop/</code></td>
                   <td>Mode B 런타임. <code>mutate/</code>는 제안과 적용, <code>observe/</code>는 attribution과 provenance, <code>inject/</code>는 in-context 슬롯을 맡습니다.</td>
                 </tr>
               </tbody>
@@ -78,7 +78,7 @@ export default function Page() {
 
             <h2>변이 표면: 7개 behaviour kinds</h2>
             <p>
-              변이 가능한 표면은 <code>geode_product/self_improving/loop/mutate/policies.py</code>의
+              변이 가능한 표면은 <code>evolve/scaffold_search/loop/mutate/policies.py</code>의
               <code>TARGET_KINDS</code>가 고정합니다. 목록에 없는 kind는
               <code>parse_mutation</code>에서 fail-closed로 거부됩니다.
             </p>
@@ -99,7 +99,7 @@ export default function Page() {
 
             <h2>측정: Petri 감사</h2>
             <p>
-              <code>measure.py</code>가 <code>geode audit</code> 서브프로세스를
+              <code>measure.py</code>가 <code>geode-eval audit</code> 서브프로세스를
               띄우면서 후보 스캐폴드를 <code>GEODE_WRAPPER_OVERRIDE</code> env로
               주입합니다. 감사 대상이 정확히 그 후보인지가 측정의 전부이므로 이
               경로는 strict입니다. 파일이 없거나 파싱에 실패하면 조용히 기본
@@ -161,10 +161,10 @@ export default function Page() {
 
             <h2>실행</h2>
             <pre>{`# 단일 사이클 (변이 1회 + 감사 1회 + 게이트)
-uv run python -m geode_product.self_improving.train
+uv run python -m evolve.scaffold_search.train
 
 # 3-arm 캠페인 (gen-0 baseline K회 → never / random / gate)
-geode campaign --n 10 --k 5 --dry-run
+geode-evolve campaign --n 10 --k 5 --dry-run
 
 # 세션 안에서 상태 확인
 /self-improving status`}</pre>
@@ -219,27 +219,27 @@ geode campaign --n 10 --k 5 --dry-run
               </thead>
               <tbody>
                 <tr>
-                  <td><code>geode_product/self_improving/train.py</code></td>
+                  <td><code>evolve/scaffold_search/train.py</code></td>
                   <td>Loop driver. One invocation, one audit. The single file the agent modifies; owns <code>WRAPPER_PROMPT_SECTIONS</code>.</td>
                 </tr>
                 <tr>
-                  <td><code>geode_product/self_improving/measure.py</code></td>
-                  <td>Audit execution. Assembles and runs the <code>geode audit</code> subprocess, parses the last-line JSON <code>{`{"dim_means", "dim_stderr"}`}</code>.</td>
+                  <td><code>evolve/scaffold_search/measure.py</code></td>
+                  <td>Audit execution. Assembles and runs the <code>geode-eval audit</code> subprocess, parses the last-line JSON <code>{`{"dim_means", "dim_stderr"}`}</code>.</td>
                 </tr>
                 <tr>
-                  <td><code>geode_product/self_improving/fitness.py</code></td>
+                  <td><code>evolve/scaffold_search/fitness.py</code></td>
                   <td>Fitness spec and computation. Axis tiers, weights, stability axis.</td>
                 </tr>
                 <tr>
-                  <td><code>geode_product/self_improving/gate.py</code></td>
+                  <td><code>evolve/scaffold_search/gate.py</code></td>
                   <td>Promote gate. Margin rule, reject-and-revert, hard tool-call contract veto.</td>
                 </tr>
                 <tr>
-                  <td><code>geode_product/self_improving/ledger.py</code></td>
+                  <td><code>evolve/scaffold_search/ledger.py</code></td>
                   <td>Run ledgers. <code>baseline.json</code>, <code>baseline_archive.jsonl</code>, results rows, epoch stamping.</td>
                 </tr>
                 <tr>
-                  <td><code>geode_product/self_improving/loop/</code></td>
+                  <td><code>evolve/scaffold_search/loop/</code></td>
                   <td>Mode B runtime. <code>mutate/</code> (propose and apply), <code>observe/</code> (attribution and provenance), <code>inject/</code> (in-context slots).</td>
                 </tr>
               </tbody>
@@ -254,7 +254,7 @@ geode campaign --n 10 --k 5 --dry-run
             <h2>The mutation surface: 7 behaviour kinds</h2>
             <p>
               The mutable surface is pinned by <code>TARGET_KINDS</code> in{" "}
-              <code>geode_product/self_improving/loop/mutate/policies.py</code>. Any
+              <code>evolve/scaffold_search/loop/mutate/policies.py</code>. Any
               kind outside the list is rejected fail-closed at{" "}
               <code>parse_mutation</code>.
             </p>
@@ -275,7 +275,7 @@ geode campaign --n 10 --k 5 --dry-run
 
             <h2>Measurement: the Petri audit</h2>
             <p>
-              <code>measure.py</code> spawns a <code>geode audit</code>{" "}
+              <code>measure.py</code> spawns a <code>geode-eval audit</code>{" "}
               subprocess and injects the candidate scaffold through the{" "}
               <code>GEODE_WRAPPER_OVERRIDE</code> env. The whole point of the
               measurement is that the audited thing is exactly that candidate,
@@ -342,10 +342,10 @@ geode campaign --n 10 --k 5 --dry-run
 
             <h2>Running it</h2>
             <pre>{`# one cycle (one mutation + one audit + the gate)
-uv run python -m geode_product.self_improving.train
+uv run python -m evolve.scaffold_search.train
 
 # 3-arm campaign (K gen-0 baselines, then never / random / gate)
-geode campaign --n 10 --k 5 --dry-run
+geode-evolve campaign --n 10 --k 5 --dry-run
 
 # in-session status
 /self-improving status`}</pre>

@@ -113,7 +113,7 @@
   },
   "core/observability/run_dir.py:_active_run_dir": {
     "classification": "diagnostic_scope",
-    "owner": "geode_product.seed_generation and core.agent.worker",
+    "owner": "evals.seed_generation and core.agent.worker",
     "setter": "run_dir_scope or worker main via set_active_run_dir",
     "resetter": "run_dir_scope finally; inherited worker binding ends at process exit",
     "lifetime": "one seed/audit cycle or inherited worker process",
@@ -137,7 +137,7 @@
   },
   "core/runtime_audit.py:_runtime_audit_active": {
     "classification": "request_local_mutable_state",
-    "owner": "geode_product.petri_audit.audit_mode",
+    "owner": "evals.petri.audit_mode",
     "setter": "core.runtime_audit.set_runtime_audit_active",
     "resetter": "none in production; later publication may rebind",
     "lifetime": "Petri runner task until rebind or task teardown",
@@ -183,18 +183,18 @@
     "lifetime": "one IPC streaming prompt",
     "teardown": "the poller finally removes the console; task or thread exit discards fallback state"
   },
-  "geode_product/benchmark_harness/tau2_runtime_contract.py:_CURRENT_ATTEMPT": {
+  "evals/benchmarks/tau2_runtime_contract.py:_CURRENT_ATTEMPT": {
     "classification": "diagnostic_scope",
-    "owner": "geode_product.benchmark_harness.tau2_runtime_contract.Tau2AttemptTracker",
+    "owner": "evals.benchmarks.tau2_runtime_contract.Tau2AttemptTracker",
     "setter": "Tau2AttemptTracker.wrap sets a token around one upstream run attempt",
     "resetter": "Tau2AttemptTracker.wrap finally resets the token",
     "lifetime": "one tau2 run attempt",
     "teardown": "the wrapper finally restores the caller context even when the attempt raises"
   },
-  "geode_product/self_improving/loop/observe/run_timeline.py:_current_run_timeline": {
+  "evals/run_timeline.py:_current_run_timeline": {
     "classification": "diagnostic_scope",
-    "owner": "geode_product.self_improving.loop.observe.run_timeline and geode_product.worker",
-    "setter": "run_timeline_scope, or geode_product.wiring.bind_worker_activity at worker-process entry",
+    "owner": "evals.run_timeline and evaluation/evolution callers",
+    "setter": "run_timeline_scope at evaluation or evolution run entry",
     "resetter": "run_timeline_scope finally resets its token; a worker binding ends with its subprocess",
     "lifetime": "one self-improving run scope or one inherited worker subprocess",
     "teardown": "the context manager restores the caller binding; worker-process exit discards its inherited binding"

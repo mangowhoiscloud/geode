@@ -11,6 +11,9 @@ import pytest
 from core.agent.agent_contracts_policy import _load_agent_contracts_override
 from core.agent.decomposition_policy import _load_decomposition_policy_override
 from core.agent.heuristics_policy import _load_heuristics_override
+from core.agent.policy_injection.in_context_slots import (
+    _load_in_context_slots_override,
+)
 from core.agent.reflection_policy import _load_reflection_policy_override
 from core.agent.style_guide_policy import _load_style_guide_override
 from core.agent.tool_descriptions_policy import _load_tool_descriptions_override
@@ -27,9 +30,6 @@ from core.llm.cache_policy import _load_cache_policy_override
 from core.llm.few_shot_pool import _load_few_shot_pool_override
 from core.llm.strategies.provider_routing_policy import _load_provider_routing_override
 from core.skills.skill_catalog_policy import _load_skill_catalog_override
-from geode_product.self_improving.loop.inject.in_context_slots import (
-    _load_in_context_slots_override,
-)
 
 _OVERRIDE_ENV = "GEODE_TEST_POLICY_SOURCE_OVERRIDE"
 _STRICT_ENV = "GEODE_TEST_POLICY_SOURCE_STRICT"

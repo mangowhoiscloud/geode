@@ -94,7 +94,7 @@ GEODE_HOME = Path(os.environ.get("GEODE_HOME") or (Path.home() / ".geode")).expa
 # split applies only to the persistent DEFAULT (orchestrator / serve / CLI),
 # where the env is unset. Seed pools are the one exception: always repo-pinned
 # (below), so an isolated worker still reads the real git-tracked input pools.
-_IN_REPO_SOT_DIR = _REPO_ROOT / "geode_product" / "self_improving" / "state"
+_IN_REPO_SOT_DIR = _REPO_ROOT / "evolve" / "scaffold_search" / "state"
 _ISOLATED_STATE_ROOT = os.environ.get("GEODE_STATE_ROOT")
 if _ISOLATED_STATE_ROOT:
     STATE_ROOT = Path(_ISOLATED_STATE_ROOT).expanduser()
@@ -118,7 +118,7 @@ HELD_OUT_BENCH_POOL = SEED_POOLS_DIR / "held-out"
 
 # TRACKED ledgers + policies (mutations audit, baseline-history registry,
 # baseline_epochs map, mutation-target policy JSONs) — the in-repo SoT. The
-# Code and tracked state are colocated under ``geode_product/self_improving/``.
+# Code and tracked state are colocated under ``evolve/scaffold_search/``.
 AUTORESEARCH_STATE_DIR = SELF_IMPROVING_SOT_DIR
 
 # Cross-run handoff (latest_pointer.json, sessions.jsonl) — RUNTIME (per-run
@@ -132,7 +132,7 @@ AUTORESEARCH_HANDOFF_DIR = RUNTIME_ROOT / "handoff"
 # worker; this keeps seed-gen runtime under the same root as baseline.json /
 # run.log). Default ``~/.geode/self-improving/seed_generation/``.
 # PR-STATE-AUTORESEARCH-RENAME (2026-06-01) — snake_case ``seed_generation`` to
-# match the plugin package ``geode_product/seed_generation/`` (no hyphen/underscore
+# match the plugin package ``evals/seed_generation/`` (no hyphen/underscore
 # twin). The Pages-served bundle dir (``docs/self-improving/seed-generation/``)
 # keeps its hyphen URL — only the READ/state path goes snake.
 STATE_SEED_GENERATION_DIR = RUNTIME_ROOT / "seed_generation"
@@ -268,7 +268,7 @@ GLOBAL_ENV_FILE = GEODE_HOME / ".env"
 GLOBAL_DRY_RUN_MARKER = GEODE_HOME / ".dry-run-opt-in"
 
 # Petri audit runtime logs — single SoT (PR-CLEANUP-D2, 2026-06-10).
-# Writer: geode_product/petri_audit/cli_audit.py maintains the latest.eval
+# Writer: evals/petri/cli_audit.py maintains the latest.eval
 # symlink; readers: train.py evidence extraction, seed_generation
 # baseline_reader, campaign glob, eval_archive, bundle_sync. Six
 # independent literal copies of this path existed before the anchor —
@@ -317,7 +317,7 @@ GLOBAL_AUDIT_AGREEMENT_DIR = GEODE_HOME / "audit" / "agreement"
 # neither — it is the rollback breadcrumb the operator may still hold.
 GLOBAL_AUTORESEARCH_HANDOFF_DIR = GEODE_HOME / "autoresearch" / "handoff"
 # PR-RATCHET-1 (2026-05-21) — the 5 mutation-target files now live in
-# the in-repo ``geode_product/self_improving/state/policies/`` directory rather than
+# the in-repo ``evolve/scaffold_search/state/policies/`` directory rather than
 # the operator's ``~/.geode/autoresearch/handoff/``. The rename converges
 # on upstream Karpathy's "branch tip = current best" principle: each
 # policy is git-tracked, so ``git diff`` shows the current mutation
@@ -329,9 +329,9 @@ GLOBAL_AUTORESEARCH_HANDOFF_DIR = GEODE_HOME / "autoresearch" / "handoff"
 # names match the new directory's "policies" semantics rather than
 # the legacy "source of truth" label. Lazy migration of any legacy
 # ``~/.geode/autoresearch/handoff/<file>.json`` payload is handled
-# by :mod:`geode_product.self_improving.loop.mutate.policies`.
+# by :mod:`evolve.scaffold_search.loop.mutate.policies`.
 # The in-repo policy/ledger state dir is ``AUTORESEARCH_STATE_DIR``
-# (``geode_product/self_improving/state/``, defined at the top of this module).
+# (``evolve/scaffold_search/state/``, defined at the top of this module).
 AUTORESEARCH_POLICIES_DIR = AUTORESEARCH_STATE_DIR / "policies"
 LEGACY_SOT_DIR = GLOBAL_AUTORESEARCH_HANDOFF_DIR
 """Pre-RATCHET-1 policy dir under ``~/.geode/autoresearch/handoff/``.
@@ -340,7 +340,7 @@ operator install copies their last-known wrapper/policy state into
 the new in-repo location on first read/write."""
 # G5a (2026-05-20) — cross-process SoT for the AgenticLoop wrapper prompt
 # sections. Written by
-# ``geode_product.self_improving.train.write_wrapper_prompt_sections``
+# ``evolve.scaffold_search.train.write_wrapper_prompt_sections``
 # after a self-improving-loop promotion; read by
 # ``core.agent.system_prompt._load_wrapper_override`` for daily GEODE runs.
 AUTORESEARCH_WRAPPER_SECTIONS_PATH = AUTORESEARCH_POLICIES_DIR / "wrapper-sections.json"
@@ -350,7 +350,7 @@ AUTORESEARCH_WRAPPER_SECTIONS_PATH = AUTORESEARCH_POLICIES_DIR / "wrapper-sectio
 # ``wrapper-sections.json``. ``prompt`` keeps the legacy wrapper-
 # sections name so older mutation rows replay correctly; the others
 # land in fresh files because they evolve independently. Read /
-# written by :mod:`geode_product.self_improving.loop.mutate.policies`.
+# written by :mod:`evolve.scaffold_search.loop.mutate.policies`.
 AUTORESEARCH_TOOL_POLICY_PATH = AUTORESEARCH_POLICIES_DIR / "tool-policy.json"
 AUTORESEARCH_DECOMPOSITION_POLICY_PATH = AUTORESEARCH_POLICIES_DIR / "decomposition.json"
 AUTORESEARCH_RETRIEVAL_POLICY_PATH = AUTORESEARCH_POLICIES_DIR / "retrieval.json"
@@ -438,7 +438,7 @@ OPERATOR_LOCAL_FEW_SHOT_POOL_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "few-shot-
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are
 # co-located. Previously declared in
-# ``geode_product/self_improving/loop/mutate/runner.py``; moved here for consistency
+# ``evolve/scaffold_search/loop/mutate/runner.py``; moved here for consistency
 # with the other path constants. The runner re-exports the constant
 # for backwards compat with existing callers.
 MUTATION_AUDIT_LOG_PATH = AUTORESEARCH_STATE_DIR / "mutations.jsonl"
@@ -473,7 +473,7 @@ GLOBAL_AUTH_TOML = GEODE_HOME / "auth.toml"
 GLOBAL_MEMORY_DIR = GEODE_HOME / "memory"
 GLOBAL_EPISODES_LOG = GLOBAL_MEMORY_DIR / "episodes.jsonl"
 # P1-F (2026-05-17) — per-user Petri audit role × model × source override.
-# Read by ``geode_product.petri_audit.user_overrides`` and merged into the
+# Read by ``evals.petri.user_overrides`` and merged into the
 # binding resolver. Kept as a separate TOML (rather than wedged into
 # ``config.toml``) so main GEODE config stays decoupled from Petri-only
 # concerns; the /petri command writes here.
@@ -486,12 +486,12 @@ GLOBAL_PETRI_TOML = GEODE_HOME / "petri.toml"
 # global manifest.
 GLOBAL_ROUTING_TOML = GEODE_HOME / "routing.toml"
 # P5 (Session 63, S5.5) — per-user seed-generation role × source override.
-# Read by ``geode_product.seed_generation.picker.load_user_overrides`` and merged
+# Read by ``evals.seed_generation.picker.load_user_overrides`` and merged
 # into the picker's per-role binding resolver. Distinct from
 # ``GLOBAL_PETRI_TOML`` because seed-generation owns its own 7-role × judge-
 # panel binding model (see ADR-003 §"override surface").
 # PR-STATE-AUTORESEARCH-RENAME (2026-06-01) — snake_case ``seed_generation.toml``
-# to match the plugin package ``geode_product/seed_generation/`` (was the hyphenated
+# to match the plugin package ``evals/seed_generation/`` (was the hyphenated
 # ``seed-generation.toml`` twin). The live file is renamed by the operator
 # migration command, not by this constant.
 GLOBAL_SEED_PIPELINE_TOML = GEODE_HOME / "seed_generation.toml"

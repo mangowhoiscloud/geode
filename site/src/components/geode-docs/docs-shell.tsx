@@ -259,12 +259,15 @@ export function DocsShell({
     currentSection?.id === "04-self-improving"
       ? "var(--acc-si)"
       : "var(--acc-artifact)";
+  const canonical = `https://mangowhoiscloud.github.io/geode/docs${slug ? `/${slug}` : ""}/`;
   return (
-    <div
-      className="min-h-screen bg-[var(--paper)] text-[var(--ink)]"
-      data-doc-section={currentSection?.id}
-      style={{ ["--section-accent"]: sectionAccent } as CSSProperties}
-    >
+    <>
+      <link rel="canonical" href={canonical} />
+      <div
+        className="min-h-screen bg-[var(--paper)] text-[var(--ink)]"
+        data-doc-section={currentSection?.id}
+        style={{ ["--section-accent"]: sectionAccent } as CSSProperties}
+      >
       <header className="sticky top-0 z-30 border-b border-[var(--rule-soft)] bg-[color-mix(in_srgb,var(--paper)_85%,transparent)] backdrop-blur">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-6">
@@ -343,7 +346,8 @@ export function DocsShell({
           </span>
         </div>
       </footer>
-    </div>
+      </div>
+    </>
   );
 }
 

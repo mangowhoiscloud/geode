@@ -364,7 +364,7 @@ The self-improving loop runs a Petri audit over GEODE's own scaffold, measures t
 
 Before running a campaign, three prerequisites are BLOCKING:
 
-1. **Audit extra**: `uv sync --extra audit`. This pulls in `inspect_ai` + `petri` (putting the `inspect` CLI on PATH), which the audit subprocess and the seed-generation pilot both require. Without it the audit aborts loudly: `geode_product/petri_audit/runner.py` checks `shutil.which("inspect")` and returns an aborted report with `` `inspect` CLI not found on PATH — install the [audit] extra: `uv sync --extra audit`. ``, and the loop returns failure for that cycle.
+1. **Audit extra**: `uv sync --extra audit`. This pulls in `inspect_ai` + `petri` (putting the `inspect` CLI on PATH), which the audit subprocess and the seed-generation pilot both require. Without it the audit aborts loudly: `evals/petri/runner.py` checks `shutil.which("inspect")` and returns an aborted report with `` `inspect` CLI not found on PATH — install the [audit] extra: `uv sync --extra audit`. ``, and the loop returns failure for that cycle.
 2. **Model accounts**:
    - An **auditor + judge model** (Anthropic): the auditor drives the Petri scenario and the judge scores each rollout. Configured via the `[self_improving_loop.autoresearch.auditor]` / `[self_improving_loop.autoresearch.judge]` sections (`model` + `source`).
    - A **target model**: defaults to the manifest `claude-haiku-4-5`; override to `geode/gpt-5.5` via ChatGPT / Codex OAuth with `[self_improving_loop.autoresearch.target]` (`model = "geode/gpt-5.5"`, `source = "openai-codex"`) in config.

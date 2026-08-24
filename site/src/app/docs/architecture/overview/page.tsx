@@ -33,7 +33,7 @@ export default function Page() {
             <p>
               진입점은 둘입니다. <code>geode</code>(Typer CLI,{" "}
               <code>core/cli</code>)와 <code>geode-mcp</code>(MCP 서버,{" "}
-              <code>geode_product/mcp_server.py</code>). 어느 쪽으로 들어와도 요청은
+              <code>core/mcp_server.py</code>). 어느 쪽으로 들어와도 요청은
               아래 계층들을 같은 순서로 지납니다. 흐름 관점의 추적은{" "}
               <a href="/geode/docs/overview/how-it-runs">작업 처리 흐름</a>에
               있고, 이 페이지는 경계 관점입니다.
@@ -117,7 +117,7 @@ export default function Page() {
             <h2>SELF-IMPROVING. 시스템을 고치는 계층</h2>
             <p>
               맨 위 계층은 아래 네 계층 전체를 피험자로 다룹니다. 루프 드라이버는{" "}
-              <code>geode_product/self_improving/train.py</code>입니다. 파일명은 Karpathy
+              <code>evolve/scaffold_search/train.py</code>입니다. 파일명은 Karpathy
               autoresearch의 3-파일 관습에서 빌린 것으로, 이 안에서 모델 훈련은
               일어나지 않습니다. 갱신 대상은 모델이 아니라 모델을 감싼 스캐폴드,
               곧 시스템 프롬프트 섹션과 behaviour kinds입니다.
@@ -128,7 +128,7 @@ export default function Page() {
               이긴 변이만 승격하고 나머지는 되돌립니다. 측정과 판정 장비는{" "}
               <code>measure.py</code>, <code>fitness.py</code>,{" "}
               <code>gate.py</code>, <code>ledger.py</code>에 있고, 런타임 쪽
-              배선은 <code>geode_product/self_improving/loop/</code>의 mutate, observe,
+              배선은 <code>evolve/scaffold_search/loop/</code>의 mutate, observe,
               inject 경로가 맡습니다. 전체 루프는{" "}
               <a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>에서
               다룹니다.
@@ -152,7 +152,7 @@ export default function Page() {
                 <tr><td>도구 추가</td><td>RUNTIME</td><td><code>core/tools/definitions.json</code> + 핸들러</td></tr>
                 <tr><td>훅 핸들러 추가</td><td>HARNESS</td><td>핸들러 작성 + <code>core/wiring/bootstrap.py</code> 등록</td></tr>
                 <tr><td>루프 의미 변경</td><td>AGENT</td><td><code>core/agent/loop/agent_loop.py</code>. 드물고, 리뷰 게이트를 거칩니다.</td></tr>
-                <tr><td>변이 대상 추가</td><td>SELF-IMPROVING</td><td><code>geode_product/self_improving/loop/mutate/</code></td></tr>
+                <tr><td>변이 대상 추가</td><td>SELF-IMPROVING</td><td><code>evolve/scaffold_search/loop/mutate/</code></td></tr>
               </tbody>
             </table>
             <p>
@@ -185,7 +185,7 @@ export default function Page() {
             <p>
               There are two entry points: <code>geode</code> (the Typer CLI,{" "}
               <code>core/cli</code>) and <code>geode-mcp</code> (the MCP
-              server, <code>geode_product/mcp_server.py</code>). Whichever door a
+              server, <code>core/mcp_server.py</code>). Whichever door a
               request enters, it passes the layers below in the same order.{" "}
               <a href="/geode/docs/overview/how-it-runs">How GEODE runs a task</a>{" "}
               traces the flow; this page draws the boundaries.
@@ -277,7 +277,7 @@ export default function Page() {
             <h2>SELF-IMPROVING. The layer that fixes the system</h2>
             <p>
               The top layer treats the four layers below as its test subject.
-              The loop driver is <code>geode_product/self_improving/train.py</code>. The
+              The loop driver is <code>evolve/scaffold_search/train.py</code>. The
               file name borrows Karpathy autoresearch&apos;s three-file
               convention, and no model training happens inside it. What gets
               updated is never the model but the scaffold around it: the
@@ -291,7 +291,7 @@ export default function Page() {
               <code>measure.py</code>, <code>fitness.py</code>,{" "}
               <code>gate.py</code>, and <code>ledger.py</code>; the runtime
               wiring is mutate, observe, and inject under{" "}
-              <code>geode_product/self_improving/loop/</code>. The full loop is covered
+              <code>evolve/scaffold_search/loop/</code>. The full loop is covered
               in <a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>.
             </p>
             <p>
@@ -314,7 +314,7 @@ export default function Page() {
                 <tr><td>Add a tool</td><td>RUNTIME</td><td><code>core/tools/definitions.json</code> + a handler</td></tr>
                 <tr><td>Add a hook handler</td><td>HARNESS</td><td>Write the handler + register it in <code>core/wiring/bootstrap.py</code></td></tr>
                 <tr><td>Change loop semantics</td><td>AGENT</td><td><code>core/agent/loop/agent_loop.py</code>. Rare, and gated by review.</td></tr>
-                <tr><td>Add a mutation target</td><td>SELF-IMPROVING</td><td><code>geode_product/self_improving/loop/mutate/</code></td></tr>
+                <tr><td>Add a mutation target</td><td>SELF-IMPROVING</td><td><code>evolve/scaffold_search/loop/mutate/</code></td></tr>
               </tbody>
             </table>
             <p>

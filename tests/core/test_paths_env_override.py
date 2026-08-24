@@ -111,8 +111,8 @@ def test_state_root_unset_splits_tracked_in_repo_from_runtime_home(
     importlib.reload(paths)
     # Tracked SoT colocated with its package, in-repo.
     assert paths.SELF_IMPROVING_SOT_DIR.parts[-3:] == (
-        "geode_product",
-        "self_improving",
+        "evolve",
+        "scaffold_search",
         "state",
     )
     assert paths.MUTATION_AUDIT_LOG_PATH.is_relative_to(paths.SELF_IMPROVING_SOT_DIR)
@@ -157,8 +157,8 @@ def test_seed_pools_always_repo_pinned_even_under_state_root(
     monkeypatch.setenv("GEODE_STATE_ROOT", str(tmp_path / "w0"))
     importlib.reload(paths)
     assert paths.SEED_POOLS_DIR.parts[-4:] == (
-        "geode_product",
-        "self_improving",
+        "evolve",
+        "scaffold_search",
         "state",
         "seed_pools",
     )
