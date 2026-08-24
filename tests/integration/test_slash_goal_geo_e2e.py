@@ -16,14 +16,14 @@ from core.observability.session_metrics import SessionMetrics
 from core.observability.session_timeline import SessionEventStore, SessionTimeline
 from core.server.ipc_server.poller import CLIPoller
 from core.skills.skills import SkillLoader, SkillRegistry
-from geode_product.slash_commands import PRODUCT_COMMAND_SPECS
+from evals.slash_commands import EVAL_COMMAND_SPECS
 
 
 class _Services:
     def __init__(self, loop: Any, registry: SkillRegistry) -> None:
         self.loop = loop
         self.skill_registry = registry
-        self.command_registry = compose_command_registry(PRODUCT_COMMAND_SPECS)
+        self.command_registry = compose_command_registry(EVAL_COMMAND_SPECS)
         self.lane_queue = None
         self.mcp_manager = None
 

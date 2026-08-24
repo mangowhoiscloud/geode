@@ -148,7 +148,7 @@ export default function Page() {
                 <tr>
                   <td><code>query_memory</code></td>
                   <td>geode-mcp를 붙인 외부 호스트(Claude Code 등)에서 GEODE 메모리 계층 검색</td>
-                  <td><code>geode_product/mcp_server.py</code></td>
+                  <td><code>core/mcp_server.py</code></td>
                 </tr>
                 <tr>
                   <td><code>recall_tool_result(ref_id)</code></td>
@@ -326,7 +326,7 @@ export default function Page() {
                 <tr>
                   <td><code>query_memory</code></td>
                   <td>Search GEODE memory tiers from an external MCP host (Claude Code and friends) via geode-mcp</td>
-                  <td><code>geode_product/mcp_server.py</code></td>
+                  <td><code>core/mcp_server.py</code></td>
                 </tr>
                 <tr>
                   <td><code>recall_tool_result(ref_id)</code></td>

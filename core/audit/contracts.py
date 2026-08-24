@@ -12,10 +12,10 @@ aggregate as a discrete PASS / FAIL ledger that the promote gate can VETO on.
 
 Layer rationale: this module sits at the ``core`` layer (alongside
 ``core/audit/dim_extractor.py``, the precedent ``.eval`` reader) because
-``geode_product/self_improving/train.py`` consumes the veto and CANNOT import
-``plugins.*`` (an upward-dependency violation). ``plugins`` may import ``core``
-(``geode_product/petri_audit/eval_archive.py`` records the result into the summary
-YAML), so the dependency arrow only ever points plugins → core.
+``evolve/scaffold_search/train.py`` consumes the veto and CANNOT import
+``evals`` (an upward-dependency violation). The evaluation package may import
+``core`` (``evals/petri/eval_archive.py`` records the result into the summary
+YAML), so the dependency arrow only ever points evals → core.
 
 LOAD-BEARING EMPIRICAL FINDING (verified across 150 real ``.eval`` samples):
 the GEODE *target* emits its tool calls as TEXT, not structured ``ToolCall``
@@ -112,7 +112,7 @@ class ContractResult:
 
     ``hard`` marks a contract as veto-eligible: a ``hard`` contract whose
     ``status == "fail"`` blocks promotion (see
-    ``geode_product/self_improving/train.py:_hard_contract_violations`` +
+    ``evolve/scaffold_search/train.py:_hard_contract_violations`` +
     ``_should_promote``). ``claim_grounded`` is ``hard=False`` so its stub
     verdict can never veto.
     """

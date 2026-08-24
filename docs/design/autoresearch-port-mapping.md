@@ -123,7 +123,7 @@ FITNESS_BENCH_4AX: float = 0.25      # Capability 7-field (positive pressure)
 
 ### 2c. `mutations.jsonl` Ledger (ApplyRecord + AttributionRecord schemas, W4 2026-05-25)
 
-**Source**: `~/workspace/geode/.claude/worktrees/self-improving-p5-e2e/geode_product/self_improving/loop/runner.py:80–182`
+**Source**: `~/workspace/geode/.claude/worktrees/self-improving-p5-e2e/evolve/scaffold_search/loop/runner.py:80–182`
 
 **Karpathy**: no mutation ledger (only git history + results.tsv)
 
@@ -219,14 +219,14 @@ Each exports:
 |---|---|---|---|
 | `autoresearch/train.py` | YES — `WRAPPER_PROMPT_SECTIONS` dict (lines 466–488) + hyperparams (BUDGET_MINUTES, SEED_LIMIT, MAX_TURNS, etc. lines 132–161) | NO | Every iteration; mutator **proposes** changes, agent **commits** |
 | `autoresearch/program.md` | NO | YES — between runs (setup / goal / constraints) | Never |
-| `autoresearch/state/policies/*.json` (14 files) | YES — mutator selects target policy + section, proposes new value | NO | Every iteration; wrapped in `geode_product/self_improving/loop/runner.py` |
+| `autoresearch/state/policies/*.json` (14 files) | YES — mutator selects target policy + section, proposes new value | NO | Every iteration; wrapped in `evolve/scaffold_search/loop/runner.py` |
 | `autoresearch/state/wrapper-override.json` | YES (ephemeral) — written by `train.py:_dump_wrapper_override()` (line 732) before audit invocation | NO | Per-audit; consumed by `GEODE_WRAPPER_OVERRIDE` env hook |
 | `autoresearch/state/baseline.json` | Conditionally (auto-promote rule or `--promote` flag) | NO | After each audit; persistent SoT |
 | `autoresearch/state/mutations.jsonl` | YES — appended by runner after each audit (ApplyRecord + AttributionRecord) | NO | Per-audit; gitignored |
 | `autoresearch/state/results.tsv` | YES (emitted on stdout via `results_tsv:` prefix) | YES — operator appends via `grep + sed >> results.tsv` | After each audit |
 | `autoresearch/state/results.jsonl` | YES (emitted on stdout via `results_jsonl:` prefix) | YES — operator appends via `grep + sed >> results.jsonl` | After each audit |
 
-**Key difference**: Karpathy's agent modifies only **1 file** during the loop (`train.py`). GEODE's agent can modify **up to 15 files** (1 train.py + 14 policies). The mutator runner (`geode_product/self_improving/loop/runner.py`) orchestrates the mutations; autoresearch just runs audits and records results.
+**Key difference**: Karpathy's agent modifies only **1 file** during the loop (`train.py`). GEODE's agent can modify **up to 15 files** (1 train.py + 14 policies). The mutator runner (`evolve/scaffold_search/loop/runner.py`) orchestrates the mutations; autoresearch just runs audits and records results.
 
 ---
 
@@ -246,9 +246,9 @@ Each exports:
    │  └─ write current WRAPPER_PROMPT_SECTIONS to autoresearch/state/wrapper-override.json
    │  └─ export GEODE_WRAPPER_OVERRIDE env var (consumed by audit subprocess)
    ├─ _build_audit_command() [lines 685–729]
-   │  └─ construct argv for `geode audit --seed-select ... --seeds 10 ...`
+   │  └─ construct argv for `geode-eval audit --seed-select ... --seeds 10 ...`
    ├─ subprocess.run(argv) [inside run_audit]
-   │  └─ Petri calls geode audit, which:
+   │  └─ Petri calls geode-eval audit, which:
    │     ├─ evaluates 10 seeds against the 22-dim rubric
    │     ├─ emits dim_means / dim_stderr / sample_count / measurement_modality on stdout
    │     └─ writes EvalLog archive to ~/.geode/petri/logs/latest.eval
@@ -316,7 +316,7 @@ Each exports:
     ├─ grep "^results_tsv: " | sed 's/^results_tsv: //' >> autoresearch/state/results.tsv
     └─ grep "^results_jsonl: " | sed 's/^results_jsonl: //' >> autoresearch/state/results.jsonl
 
-13. Mutator runner (separate agent, geode_product/self_improving/loop/runner.py):
+13. Mutator runner (separate agent, evolve/scaffold_search/loop/runner.py):
     ├─ reads baseline.json (NEW promote decision)
     ├─ decides next mutation (if fitness improved, try bolder change; else rollback)
     ├─ edits policy file or train.py WRAPPER_PROMPT_SECTIONS
@@ -421,7 +421,7 @@ Each exports:
 | **UX fields** | 4 | `autoresearch/ux_means.py:71–78` (success_rate, token_cost_norm, revert_ratio_norm, latency_norm) | Behaviour axis |
 | **Admire fields** | 2 | `autoresearch/admire_means.py:55–58` (pairwise_win_rate, human_calibration_corr) | Pairwise axis |
 | **Bench fields** | 7 | `autoresearch/bench_means.py:188–196` (swe_bench_pro_pass, livecodebench_pro_accuracy, tau2_bench_success, gpqa_diamond, hle_accuracy, osworld_success, mle_bench_medal) | Capability axis |
-| **Mutation kinds** | `applied_wrapper_section`, `applied_policy`, `applied_train_param`, `applied_hyperparams` (enum TBD in full spec) | `geode_product/self_improving/loop/runner.py:ApplyRecord.kind` (field documented but enum not hardcoded) | Mutation ledger categorization |
+| **Mutation kinds** | `applied_wrapper_section`, `applied_policy`, `applied_train_param`, `applied_hyperparams` (enum TBD in full spec) | `evolve/scaffold_search/loop/runner.py:ApplyRecord.kind` (field documented but enum not hardcoded) | Mutation ledger categorization |
 | **Promotion rule: margin floor** | 0.05 | `train.py:line 1914` (fitness_margin_floor default) | Auto-promote gate threshold |
 | **Promotion rule: N=1 margin** | 0.20 | `train.py:N1_FITNESS_MARGIN_FLOOR` (line 1881) | Conservative gate when baseline N=1 |
 | **Promotion rule: bootstrap fitness floor** | 0.30 | `train.py:BOOTSTRAP_FITNESS_FLOOR` (line 1905) | Fresh-start gate (PR-L8) |
@@ -514,7 +514,7 @@ Each exports:
 
 **Current state**:
 - ✓ `autoresearch/train.py` writes baseline.json, results.tsv, results.jsonl to `autoresearch/state/`
-- ✓ `geode_product/self_improving/loop/runner.py` writes mutations.jsonl to `autoresearch/state/`
+- ✓ `evolve/scaffold_search/loop/runner.py` writes mutations.jsonl to `autoresearch/state/`
 - ✓ Mutator commits policy files under `autoresearch/state/policies/`
 - ✗ **NO publisher** that reads autoresearch/state/* and writes to docs/self-improving/autoresearch/* for web rendering
 

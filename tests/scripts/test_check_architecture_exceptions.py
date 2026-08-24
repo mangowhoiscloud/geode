@@ -154,12 +154,17 @@ def test_ruff_metric_probe_ignores_project_path_suppressions(tmp_path: Path) -> 
     )
 
 
-def test_ruff_metric_probe_includes_the_product_package(tmp_path: Path) -> None:
-    product = tmp_path / "geode_product" / "feature.py"
-    product.parent.mkdir()
-    product.write_text("VALUE = 1\n", encoding="utf-8")
+def test_ruff_metric_probe_includes_outer_packages(tmp_path: Path) -> None:
+    evaluation = tmp_path / "evals" / "feature.py"
+    evolution = tmp_path / "evolve" / "feature.py"
+    evaluation.parent.mkdir()
+    evolution.parent.mkdir()
+    evaluation.write_text("VALUE = 1\n", encoding="utf-8")
+    evolution.write_text("VALUE = 1\n", encoding="utf-8")
 
-    assert "geode_product/feature.py" in checker._production_python_files(tmp_path)
+    files = checker._production_python_files(tmp_path)
+    assert "evals/feature.py" in files
+    assert "evolve/feature.py" in files
 
 
 def test_threshold_ratchet_rejects_increase_but_allows_decrease() -> None:

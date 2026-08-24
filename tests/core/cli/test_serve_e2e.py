@@ -139,15 +139,11 @@ class TestServeToolExecution:
         assert exported["result"]["exported"] is True
 
     def test_exposed_agentic_tools_are_executable(self) -> None:
-        """Every non-special base tool exposed to the LLM has an executor path."""
-        from core.agent.tool_executor.executor import SPECIAL_EXECUTION_BINDINGS
-        from core.tools.base import load_all_tool_definitions
-        from geode_product.tool_handlers import build_tool_handlers
+        """The native runtime advertises exactly its executable bound plan."""
+        from core.tools.composition import compose_tool_plan
 
-        handlers = set(build_tool_handlers())
-        exposed = {tool["name"] for tool in load_all_tool_definitions()}
-        missing = sorted(exposed - handlers - SPECIAL_EXECUTION_BINDINGS)
-        assert missing == []
+        bound, _transient = compose_tool_plan()
+        assert tuple(bound.schema_map) == tuple(bound.execution_map)
 
     def test_daemon_thread_handlers(self) -> None:
         """Simulate serve's daemon thread — handlers must work after propagate."""

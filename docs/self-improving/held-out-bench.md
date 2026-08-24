@@ -102,7 +102,7 @@ change in the curve.
 
 ## 3. Launch wiring — `GEODE_HELD_OUT_BENCH`
 
-The held-out bench is resolved by `geode_product/self_improving/train.py` `_resolve_held_out_bench`
+The held-out bench is resolved by `evolve/scaffold_search/train.py` `_resolve_held_out_bench`
 with this precedence (mirroring `_resolve_seed_select` **minus** the
 `latest_pointer.json` auto-pick tier — the held-out ruler must never move):
 
@@ -135,11 +135,11 @@ ls "$GEODE_HELD_OUT_BENCH"/manifest.json
 When a bench is configured, EVERY cycle (not just promotes) runs a second audit
 on the frozen bench and records the result:
 
-- **`geode_product/self_improving/state/mutations.jsonl`** — the per-cycle `kind="attribution"`
+- **`evolve/scaffold_search/state/mutations.jsonl`** — the per-cycle `kind="attribution"`
   row gains `held_out_fitness` (canonical 0-1 `compute_fitness`, HIGHER-is-better)
   and `held_out_bench_id`. Ordered by `ts`, these rows ARE the cross-generation
   curve. This is the curve SoT the hub renders.
-- **`geode_product/self_improving/state/baseline_archive.jsonl`** — on a promote, the
+- **`evolve/scaffold_search/state/baseline_archive.jsonl`** — on a promote, the
   `kind="baseline"` row also carries `held_out_fitness` + `held_out_bench_id` so
   the promoted baseline records its fixed-ruler fitness.
 

@@ -42,7 +42,7 @@ def _bound_builder(**_kwargs):
     return _bound_plan("test_tool"), {}
 
 
-_TEST_WORKER_MODULE = "geode_product.worker"
+_TEST_WORKER_MODULE = "core.worker"
 
 
 class TestSessionMode:

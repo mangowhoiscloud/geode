@@ -59,10 +59,10 @@ AGENTS_END = "<!-- generated:architecture-baseline:end -->"
 ROADMAP_START = "<!-- generated:architecture-baseline:start -->"
 ROADMAP_END = "<!-- generated:architecture-baseline:end -->"
 
-PACKAGE_ROOTS: tuple[str, ...] = ("core", "geode_product", "tests")
-PRODUCT_MODULE_ROOTS = ("geode_product",)
-PRODUCT_MODULE_REFERENCE_RE = re.compile(
-    r"^geode_product(?:\.[A-Za-z_][A-Za-z0-9_]*)+(?::[A-Za-z_][A-Za-z0-9_]*)?$"
+PACKAGE_ROOTS: tuple[str, ...] = ("core", "evals", "evolve", "tests")
+OUTER_MODULE_ROOTS = ("evals", "evolve")
+OUTER_MODULE_REFERENCE_RE = re.compile(
+    r"^(?:evals|evolve)(?:\.[A-Za-z_][A-Za-z0-9_]*)+(?::[A-Za-z_][A-Za-z0-9_]*)?$"
 )
 
 
@@ -1063,7 +1063,7 @@ def _context_vars(root: Path) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     parsed_modules = {
         path: (_parse_python(path), path.relative_to(root).parent.parts)
-        for package in ("core", *PRODUCT_MODULE_ROOTS)
+        for package in ("core", *OUTER_MODULE_ROOTS)
         for path in _python_files(root, package)
     }
     for path, (module, _package_parts) in parsed_modules.items():
@@ -1448,7 +1448,7 @@ def _context_vars(root: Path) -> dict[str, Any]:
     }
 
 
-def _product_imports(root: Path) -> dict[str, Any]:
+def _outer_imports(root: Path) -> dict[str, Any]:
     sites: list[dict[str, Any]] = []
     for path in _python_files(root, "core"):
         for node in ast.walk(_parse_python(path)):
@@ -1458,16 +1458,16 @@ def _product_imports(root: Path) -> dict[str, Any]:
                 modules = [
                     alias.name
                     for alias in node.names
-                    if alias.name in PRODUCT_MODULE_ROOTS
-                    or alias.name.startswith(tuple(f"{root}." for root in PRODUCT_MODULE_ROOTS))
+                    if alias.name in OUTER_MODULE_ROOTS
+                    or alias.name.startswith(tuple(f"{root}." for root in OUTER_MODULE_ROOTS))
                 ]
                 site_line = node.lineno
             elif (
                 isinstance(node, ast.ImportFrom)
                 and node.module is not None
                 and (
-                    node.module in PRODUCT_MODULE_ROOTS
-                    or node.module.startswith(tuple(f"{root}." for root in PRODUCT_MODULE_ROOTS))
+                    node.module in OUTER_MODULE_ROOTS
+                    or node.module.startswith(tuple(f"{root}." for root in OUTER_MODULE_ROOTS))
                 )
             ):
                 modules = [node.module]
@@ -1475,7 +1475,7 @@ def _product_imports(root: Path) -> dict[str, Any]:
             elif (
                 isinstance(node, ast.Constant)
                 and isinstance(node.value, str)
-                and PRODUCT_MODULE_REFERENCE_RE.fullmatch(node.value)
+                and OUTER_MODULE_REFERENCE_RE.fullmatch(node.value)
             ):
                 modules = [node.value]
                 site_line = node.lineno
@@ -1674,13 +1674,11 @@ def _tool_inventory(root: Path) -> dict[str, Any]:
     # These imports resolve the actual runtime composition path.  They do not
     # instantiate tools or touch credentials; builders return handler closures.
     from core.agent.tool_executor.executor import SPECIAL_EXECUTION_BINDINGS
-    from core.cli.tool_handlers import _build_tool_handler_catalog
     from core.llm.tool_defer import TOOL_SEARCH_ALWAYS_LOADED
-    from geode_product.tool_handlers import compose_tool_plan, product_handler_groups
+    from evals.composition import compose_tool_plan
 
-    handler_catalog = _build_tool_handler_catalog(extra_groups=product_handler_groups())
     bound_plan, transient_handlers = compose_tool_plan()
-    handler_names = sorted(handler_catalog.handlers)
+    handler_names = sorted({*bound_plan.handlers, *transient_handlers})
     execution_names = sorted(set(handler_names) | set(SPECIAL_EXECUTION_BINDINGS))
     definitions = set(definition_names)
     schemas = set(schema_names)
@@ -1734,8 +1732,11 @@ def _tool_inventory(root: Path) -> dict[str, Any]:
         "handler_registration_count": len(handler_names),
         "handler_registration_names": handler_names,
         "handler_registration_origins": {
-            name: handler_catalog.origins[name] for name in handler_names
-        },
+            registration.spec.name: registration.execution.origin
+            for registration in bound_plan.plan.registrations
+            if registration.execution.route == "handler"
+        }
+        | dict.fromkeys(transient_handlers, "runtime-transient"),
         "special_execution_bindings": sorted(SPECIAL_EXECUTION_BINDINGS),
         "execution_registration_count": len(execution_names),
         "execution_registration_names": execution_names,
@@ -1768,13 +1769,13 @@ def build_baseline(root: Path = REPO_ROOT) -> dict[str, Any]:
         if (inventory := measure_python_inventory(root, relative))
     }
     baseline = {
-        "schema_version": 5,
+        "schema_version": 6,
         "packages": packages,
         "tools": _tool_inventory(root),
         "hook_events": _hook_events(root),
         "built_in_adapters": _built_in_adapters(root),
         "context_vars": _context_vars(root),
-        "core_to_product_imports": _product_imports(root),
+        "core_to_outer_imports": _outer_imports(root),
         "import_linter": _import_linter(root),
         "coordinators": _coordinator_metrics(root),
         "complexity_thresholds": _complexity_thresholds(root),
@@ -1786,8 +1787,8 @@ def build_baseline(root: Path = REPO_ROOT) -> dict[str, Any]:
 def validate_architecture_invariants(baseline: dict[str, Any]) -> None:
     """Reject forbidden architecture states instead of blessing them on update."""
     violations: list[str] = []
-    if baseline["core_to_product_imports"]["site_count"]:
-        violations.append("kernel-to-product imports must remain zero")
+    if baseline["core_to_outer_imports"]["site_count"]:
+        violations.append("runtime-to-outer imports must remain zero")
     if baseline["import_linter"]["ignored_edge_count"]:
         violations.append("import-linter ignored edges must remain zero")
     if baseline["context_vars"]["service_locator_count"]:
@@ -1809,7 +1810,7 @@ def _number(value: int) -> str:
 def render_agents_block(baseline: dict[str, Any]) -> str:
     packages = baseline["packages"]
     tools = baseline["tools"]
-    production_files = sum(packages[name]["python_files"] for name in ("core", "geode_product"))
+    production_files = sum(packages[name]["python_files"] for name in ("core", "evals", "evolve"))
     return "\n".join(
         (
             AGENTS_START,
@@ -1828,11 +1829,11 @@ def render_agents_block(baseline: dict[str, Any]) -> str:
 def render_roadmap_block(baseline: dict[str, Any]) -> str:
     packages = baseline["packages"]
     tools = baseline["tools"]
-    imports = baseline["core_to_product_imports"]
+    imports = baseline["core_to_outer_imports"]
     import_linter = baseline["import_linter"]
     coordinators = baseline["coordinators"]
     thresholds = baseline["complexity_thresholds"]
-    production_files = sum(packages[name]["python_files"] for name in ("core", "geode_product"))
+    production_files = sum(packages[name]["python_files"] for name in ("core", "evals", "evolve"))
     parity = (
         "exact"
         if tools["exact_parity"]
@@ -1852,12 +1853,13 @@ def render_roadmap_block(baseline: dict[str, Any]) -> str:
             "| Measure | Current tree |",
             "|---|---:|",
             (
-                "| Production Python files (`core/` + `geode_product/`) "
+                "| Production Python files (`core/` + `evals/` + `evolve/`) "
                 f"| {_number(production_files)} |"
             ),
             f"| Test Python files | {_number(packages['tests']['python_files'])} |",
             f"| `core/` Python LOC | {_number(packages['core']['python_loc'])} |",
-            f"| `geode_product/` Python LOC | {_number(packages['geode_product']['python_loc'])} |",
+            f"| `evals/` Python LOC | {_number(packages['evals']['python_loc'])} |",
+            f"| `evolve/` Python LOC | {_number(packages['evolve']['python_loc'])} |",
             f"| Test Python LOC | {_number(packages['tests']['python_loc'])} |",
             (
                 f"| Tool definitions / model executions / valid schemas / policies "
@@ -1873,7 +1875,7 @@ def render_roadmap_block(baseline: dict[str, Any]) -> str:
                 f"{_number(baseline['context_vars']['count'])} |"
             ),
             (
-                f"| `core` → product import sites | {_number(imports['site_count'])} "
+                f"| `core` → outer import sites | {_number(imports['site_count'])} "
                 f"across {_number(imports['file_count'])} files |"
             ),
             (

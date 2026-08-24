@@ -115,7 +115,7 @@ def test_reload_field_failure_warns_not_silent(monkeypatch, caplog) -> None:
 
 def test_train_env_load_uses_shared_loader() -> None:
     """C-3 follow-up: no more global-file-only load_dotenv in train."""
-    import geode_product.self_improving.train as train_mod
+    import evolve.scaffold_search.train as train_mod
 
     source = inspect.getsource(train_mod._load_global_env)
     assert "load_env_files" in source

@@ -767,7 +767,7 @@ def _login_source(args: str) -> None:
 
     Migrated from the legacy ``/auth set`` (PR #1203, removed alongside
     ``/auth`` in PR #C, 2026-05-17). The picker decides which provider
-    prefix ``geode_product.petri_audit.models.to_inspect_model`` routes a
+    prefix ``evals.petri.models.to_inspect_model`` routes a
     ``claude-*`` / ``gpt-5.*`` id through:
 
     - ``auto``     — configured credential auto-detect (default)

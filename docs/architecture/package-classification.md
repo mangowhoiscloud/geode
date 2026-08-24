@@ -24,24 +24,23 @@ evolve (Crucible and scaffold search)
 This document classifies the current checkout while that migration remains
 `IN_PROGRESS`; it does not advance the roadmap status.
 
-## Current ownership after the removal hotfix
+## Current ownership during implementation
 
 | Surface | Current role | BND-009 target |
 |---|---|---|
 | `core/` | GEODE runtime | remains `core/` |
-| `geode_product/benchmark_harness`, `petri_audit`, `seed_generation` | measurement and evaluation implementations | `evals/` |
-| `geode_product/crucible`, `self_improving` | search, campaign, and promotion implementations | `evolve/` |
-| remaining `geode_product/` composition | current outer runtime composition | `core/` or removal, per BND-009 |
-| `geode_product/self_improving/state/` | byte-preserved tracked state colocated with the current implementation | `evolve/` under BND-009 |
+| `evals/` | measurement, Petri, benchmark, seed-generation, and GEO implementations | remains `evals/` |
+| `evolve/` | Crucible, scaffold search, campaign, promotion, and tracked search state | remains `evolve/` |
 | `.agents/skills/` | cross-host development and evaluation scaffolds | remains development-only |
 | `.claude/skills/` | Claude-compatible aliases and workflow scaffolds | remains development-only |
 | `.geode/skills/` | bundled runtime-discoverable skills | remains runtime-only |
 
 The following surfaces have no independent behavior or supported extension
-contract and are removed before the namespace migration:
+contract and are absent from the final tree:
 
 - `plugins/`: forwarding-only compatibility modules;
-- `core/self_improving/*.py`: forwarding-only module launchers;
+- `core/self_improving/`: forwarding-only module launchers;
+- `geode_product/`: mixed runtime/evaluation/evolution ownership;
 - `scripts/eval/tau2_geode_agent.py`: wrapper around the canonical module;
 - `packaging/homebrew/` and its renderer: unreleased candidate scaffold;
 - `docker/computer-use-sandbox/` and its HTTP dispatch/configuration: an
@@ -56,17 +55,15 @@ or experimental replacement is created.
   behavior remain implemented by their current canonical modules.
 - Unrestricted Petri audits fail closed by disabling computer-use; there is no
   verified isolated desktop path to fall back to.
-- The ten tracked self-improving state files move out of `core/` through one
-  byte-preserving rename. Eight data/marker payloads retain their final bytes;
-  two README files update only their canonical path prose. BND-009 will move
-  the state again with its final `evolve/` owner.
+- The ten tracked scaffold-search state files live under
+  `evolve/scaffold_search/state/`. Eight data/marker payloads retain their
+  pre-migration bytes; two README files update only canonical path prose.
 - Historical changelog entries, dated plans, audits, and immutable evaluation
   evidence keep the paths that were factual when recorded.
 
 ## Non-goals
 
-This hotfix does not create `evals/` or `evolve/`, move `geode_product`, move
-tracked state to its final `evolve/` owner, change the BND-009 claim, or perform
-a release. Those actions remain owned by
-`feature/r8-5-runtime-eval-evolve-migration` after this hotfix reaches `main`
-and is synchronized back to `develop`.
+This package split does not create a second distribution, compatibility alias,
+plugin registry, user-data migration, or provider/runtime behavior change.
+Roadmap status remains owned by the separate BND-009 reconciliation and
+tracking transactions.

@@ -11,7 +11,7 @@ A general-purpose autonomous execution agent. The core runtime is an **AgenticLo
 - **Version**: 1.0.23
 - **Python**: >= 3.12
 - **Package Manager**: uv
-- **Entry Points**: `geode` (`geode_product.cli:app`, Typer) / `geode-mcp` (`geode_product.mcp_server:main`)
+- **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -42,9 +42,10 @@ uv run geode
 
 ## Project Structure
 
-Production code currently uses two top-level Python packages with one dependency direction:
-- `core/` — general-purpose autonomous agent runtime. 5-layer stack (layer diagram → `GEODE.md` → Architecture).
-- `geode_product/` — bundled first-party features and outer composition over `core`.
+Production code uses three top-level Python packages with one dependency direction:
+- `core/` — GEODE runtime and operator surface. 5-layer stack (layer diagram → `GEODE.md` → Architecture).
+- `evals/` — measurement and audit consumers of `core`.
+- `evolve/` — scaffold search and hill-climbing over `evals` and `core`.
 
 Check the generated inventory in `site/src/data/geode/architecture-baseline.json`.
 Key entry points: `core/agent/loop/`(AgenticLoop), `core/runtime.py`(bootstrap).
@@ -55,11 +56,11 @@ Key entry points: `core/agent/loop/`(AgenticLoop), `core/runtime.py`(bootstrap).
 # Test
 uv run python -m pytest tests/ -q
 
-# Lint (runtime + bundled product both gated)
-uv run ruff check core/ geode_product/ tests/
+# Lint (runtime + evaluation + evolution roots gated)
+uv run ruff check core/ evals/ evolve/ tests/
 
-# Type check (runtime + bundled product both gated)
-uv run mypy core/ geode_product/
+# Type check (all production roots gated)
+uv run mypy core/ evals/ evolve/
 ```
 
 ### Expected Test Results
@@ -104,7 +105,7 @@ Rationale cites the originating incident when one exists. The `karpathy-patterns
 | | No unauthorized live test (`-m live`) execution | Cost control (P3) |
 | | No gate / CI-status command behind an exit-code absorber — never `gate \| tail`, `gate \| grep -c`, or `check; merge`. Assert gates bare; gate merges on the REAL result (`test "$(gh pr checks N \| grep -cE 'fail\|pending')" -eq 0 && gh pr merge …`) | Gate integrity. *Incidents (2026-07-02/03, same session): PR #2463 merged with a failing Test job because the check was chained with `;`; the slop-ratchet failure on PR #2482 was invisible locally behind `\| tail -1`. A swallowed exit code turns every downstream "green" claim into fiction.* |
 | | No "graceful" return contract without applying it at every schema-typed cast (not just outer try) | Boundary completeness. *Incident: PR-G3 #1347 (2026-05-20) — `float()` on non-numeric raised before contract* |
-| | No seed / pool referencing a dim outside the live fitness taxonomy (`geode_product.self_improving.fitness.AXIS_TIERS`) — a phantom-dim "hallucination" (the audit probes a removed dimension, the held-out ruler pins at the floor, the gate rejects every cycle for a measurement reason = invalid experiment). When a dim is dropped (e.g. PR-DROP-ANALYTICS-DIMS), every pool referencing it goes stale. Validate at **assemble time** (`scripts/assemble_seed_pool.py` → `validate_pool_target_dims`), not only at campaign runtime. | Phantom-dim drift. *Incident: held-out `gen-2605-*-redundant_tool_invocation` stale after the dim was removed; the campaign HALTed but the stale pool had already shipped — fail at assemble so it never enters the pipeline (2026-06-11). Guard: `tests/scripts/test_assemble_stale_dim_guard.py`* |
+| | No seed / pool referencing a dim outside the live fitness taxonomy (`evolve.scaffold_search.fitness.AXIS_TIERS`) — a phantom-dim "hallucination" (the audit probes a removed dimension, the held-out ruler pins at the floor, the gate rejects every cycle for a measurement reason = invalid experiment). When a dim is dropped (e.g. PR-DROP-ANALYTICS-DIMS), every pool referencing it goes stale. Validate at **assemble time** (`scripts/assemble_seed_pool.py` → `validate_pool_target_dims`), not only at campaign runtime. | Phantom-dim drift. *Incident: held-out `gen-2605-*-redundant_tool_invocation` stale after the dim was removed; the campaign HALTed but the stale pool had already shipped — fail at assemble so it never enters the pipeline (2026-06-11). Guard: `tests/scripts/test_assemble_stale_dim_guard.py`* |
 | | No conflating "latest" and "promoted" SoTs — readers must document which they assume; persist both if the loop needs both | SoT clarity. *Incident: PR-G2 #1346 (2026-05-20) — downstream read stale evidence forever* |
 | | No dual SoT (disk + fallback literal) without shared anchor + drift invariant test | Drift prevention. *Incident: PR-MINIMAL-2 #1398 (2026-05-21) — `program.md` ↔ `_FALLBACK_SYSTEM_PROMPT` divergence* |
 | | No external-SDK / 3rd-party-backend capability assumption (e.g. ``supports_X=True``, hosted tool acceptance, model availability) hardcoded as ``True`` without `ctx7 library` + `ctx7 docs` verification first; if ctx7 is ambiguous, mark the assumption ``unverified — live test required`` in the docstring and surface the live-test as an explicit pending verification | Doc-before-behaviour. *Incident: PR-NO-FALLBACK #1839 (2026-05-28) — `codex_oauth.supports_web_search` flipped False → True based on SDK ``ToolParam`` Union alone; Codex backend's actual acceptance of ``{"type": "web_search"}`` is undocumented in ctx7 / Codex CLI repo, so the assumption needed a live-test gate rather than a behavioural test* |
@@ -293,9 +294,9 @@ Update project tracking from main. Backlog → In Progress → Done.
 
 | Gate | Command | Criteria |
 |------|---------|----------|
-| Lint | `uv run ruff check core/ geode_product/ tests/ scripts/` | 0 errors — `scripts/` 포함 (CI와 동일 범위) |
-| Format | `uv run ruff format --check core/ geode_product/ tests/ scripts/` | 0 reformats |
-| Type | `uv run mypy core/ geode_product/` | 0 errors |
+| Lint | `uv run ruff check core/ evals/ evolve/ tests/ scripts/` | 0 errors — `scripts/` 포함 (CI와 동일 범위) |
+| Format | `uv run ruff format --check core/ evals/ evolve/ tests/ scripts/` | 0 reformats |
+| Type | `uv run mypy core/ evals/ evolve/` | 0 errors |
 | Imports | `uv run lint-imports` | contracts kept |
 | Test | `uv run pytest tests/ -m "not live"` | 9200+ pass |
 | CLI smoke | `uv run geode version` | version prints |

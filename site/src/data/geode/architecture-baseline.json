@@ -244,7 +244,7 @@
         "implementation": "ContextVar",
         "lifetime": "one seed/audit cycle or inherited worker process",
         "line": 58,
-        "owner": "geode_product.seed_generation and core.agent.worker",
+        "owner": "evals.seed_generation and core.agent.worker",
         "path": "core/observability/run_dir.py",
         "resetter": "run_dir_scope finally; inherited worker binding ends at process exit",
         "setter": "run_dir_scope or worker main via set_active_run_dir",
@@ -289,7 +289,7 @@
         "implementation": "ContextVar",
         "lifetime": "Petri runner task until rebind or task teardown",
         "line": 19,
-        "owner": "geode_product.petri_audit.audit_mode",
+        "owner": "evals.petri.audit_mode",
         "path": "core/runtime_audit.py",
         "resetter": "none in production; later publication may rebind",
         "setter": "core.runtime_audit.set_runtime_audit_active",
@@ -379,8 +379,8 @@
         "implementation": "ContextVar",
         "lifetime": "one tau2 run attempt",
         "line": 141,
-        "owner": "geode_product.benchmark_harness.tau2_runtime_contract.Tau2AttemptTracker",
-        "path": "geode_product/benchmark_harness/tau2_runtime_contract.py",
+        "owner": "evals.benchmarks.tau2_runtime_contract.Tau2AttemptTracker",
+        "path": "evals/benchmarks/tau2_runtime_contract.py",
         "resetter": "Tau2AttemptTracker.wrap finally resets the token",
         "setter": "Tau2AttemptTracker.wrap sets a token around one upstream run attempt",
         "symbol": "_CURRENT_ATTEMPT",
@@ -394,10 +394,10 @@
         "implementation": "ContextVar",
         "lifetime": "one self-improving run scope or one inherited worker subprocess",
         "line": 32,
-        "owner": "geode_product.self_improving.loop.observe.run_timeline and geode_product.worker",
-        "path": "geode_product/self_improving/loop/observe/run_timeline.py",
+        "owner": "evals.run_timeline and evaluation/evolution callers",
+        "path": "evals/run_timeline.py",
         "resetter": "run_timeline_scope finally resets its token; a worker binding ends with its subprocess",
-        "setter": "run_timeline_scope, or geode_product.wiring.bind_worker_activity at worker-process entry",
+        "setter": "run_timeline_scope at evaluation or evolution run entry",
         "symbol": "_current_run_timeline",
         "teardown": "the context manager restores the caller binding; worker-process exit discards its inherited binding"
       }
@@ -423,7 +423,7 @@
       "path": "core/agent/sub_agent.py"
     }
   },
-  "core_to_product_imports": {
+  "core_to_outer_imports": {
     "file_count": 0,
     "site_count": 0,
     "sites": []
@@ -491,7 +491,7 @@
     ]
   },
   "import_linter": {
-    "contract_count": 6,
+    "contract_count": 7,
     "contracts": [
       {
         "ignored_edges": [],
@@ -511,7 +511,11 @@
       },
       {
         "ignored_edges": [],
-        "name": "Classified kernel does not import the bundled self-improving product"
+        "name": "Runtime does not import evaluation or evolution"
+      },
+      {
+        "ignored_edges": [],
+        "name": "Evaluation does not import evolution"
       },
       {
         "ignored_edges": [],
@@ -522,19 +526,23 @@
   },
   "packages": {
     "core": {
-      "python_files": 402,
-      "python_loc": 121527
+      "python_files": 412,
+      "python_loc": 123469
     },
-    "geode_product": {
-      "python_files": 154,
-      "python_loc": 61099
+    "evals": {
+      "python_files": 81,
+      "python_loc": 27239
+    },
+    "evolve": {
+      "python_files": 66,
+      "python_loc": 31921
     },
     "tests": {
-      "python_files": 688,
-      "python_loc": 184979
+      "python_files": 689,
+      "python_loc": 184952
     }
   },
-  "schema_version": 5,
+  "schema_version": 6,
   "tools": {
     "deferred_loading": {
       "always_loaded_count": 20,
@@ -846,21 +854,21 @@
       "calendar_list_events": "calendar",
       "calendar_sync_scheduler": "calendar",
       "check_status": "system",
-      "computer": "computer-use",
+      "computer": "runtime-transient",
       "computer_use": "computer-use",
       "create_goal": "goal",
-      "doctor_slack": "system",
+      "doctor_slack": "runtime-transient",
       "document_ingest": "delegated",
       "edit_file": "delegated",
-      "eval_dspy_optimize": "product-audit",
-      "eval_inspect_viz": "product-audit",
+      "eval_dspy_optimize": "eval-audit",
+      "eval_inspect_viz": "eval-audit",
       "export_json": "output",
-      "freeze_paper_snapshot": "product-seed",
+      "freeze_paper_snapshot": "eval-seed",
       "general_web_search": "delegated",
       "generate_data": "data",
       "generate_report": "output",
-      "geode_seed_pool_search": "product-seed",
-      "get_geo": "product-geo",
+      "geode_seed_pool_search": "eval-seed",
+      "get_geo": "eval-geo",
       "get_goal": "goal",
       "get_grill": "grill",
       "glob_files": "delegated",
@@ -888,17 +896,17 @@
       "note_save": "delegated",
       "obs_otel_export": "observability",
       "paper_fetch_arxiv": "delegated",
-      "petri_audit": "product-audit",
+      "petri_audit": "eval-audit",
       "profile_learn": "delegated",
       "profile_preference": "delegated",
       "profile_show": "delegated",
       "profile_update": "delegated",
       "rate_result": "hitl",
       "read_document": "delegated",
-      "recall_tool_result": "offload",
+      "recall_tool_result": "runtime-transient",
       "reject_result": "hitl",
       "schedule_job": "execution",
-      "seed_debate_turn": "product-seed",
+      "seed_debate_turn": "eval-seed",
       "send_notification": "notification",
       "session_search": "memory",
       "set_api_key": "system",
@@ -911,7 +919,7 @@
       "task_update": "task",
       "trigger_event": "execution",
       "ui_probe": "delegated",
-      "update_geo": "product-geo",
+      "update_geo": "eval-geo",
       "update_goal": "goal",
       "update_grill": "grill",
       "update_plan": "plan",

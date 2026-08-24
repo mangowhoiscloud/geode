@@ -26,7 +26,7 @@ def test_system_index_renders_the_generated_architecture_snapshot() -> None:
         "architectureBaseline.hook_events.count",
         "architectureBaseline.built_in_adapters.count",
         "architectureBaseline.context_vars.count",
-        "architectureBaseline.core_to_product_imports.site_count",
+        "architectureBaseline.core_to_outer_imports.site_count",
         "architectureBaseline.import_linter.ignored_edge_count",
     ):
         assert selector in source
@@ -68,7 +68,7 @@ def test_ci_exposes_every_r7_1_architecture_gate() -> None:
         "tests/core/observability/test_event_store.py",
         "tests/core/test_ipc_protocol.py",
         "tests/core/tools/test_tool_plan.py",
-        "tests/integration/test_product_composition.py",
+        "tests/integration/test_namespace_composition.py",
         "Official documentation drift",
         "scripts/check_official_docs.py --skip-build",
     ):

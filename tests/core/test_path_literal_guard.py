@@ -38,15 +38,15 @@ _FILE_ALLOWLIST: frozenset[str] = frozenset(
     }
 )
 
-# Product files allowed to define their OWN `.geode/` path SoT (a feature owns
+# Outer files allowed to define their OWN `.geode/` path SoT (a feature owns
 # its config path the way core/paths.py owns core paths). PR-PATH-MODERNIZE F9
 # extends the guard to plugins/ — a plugin must still NOT duplicate a *core*
 # path literal (e.g. `~/.geode/petri/logs`); it should import the core constant.
-_PRODUCT_FILE_ALLOWLIST: frozenset[str] = frozenset(
+_OUTER_FILE_ALLOWLIST: frozenset[str] = frozenset(
     {
         # petri_audit's worktree-local opt-in flag — a plugin-owned single
         # named SoT (`.geode/audit-mode.toml`), not a core path.
-        "geode_product/petri_audit/audit_mode.py",
+        "evals/petri/audit_mode.py",
     }
 )
 
@@ -95,7 +95,7 @@ _NOQA_RE = re.compile(r"#\s*paths-literal-ok\b")
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORE_ROOT = _REPO_ROOT / "core"
-_PRODUCT_ROOT = _REPO_ROOT / "geode_product"
+_OUTER_ROOTS = (_REPO_ROOT / "evals", _REPO_ROOT / "evolve")
 
 
 def _strip_inline_comment(line: str) -> str:
@@ -161,12 +161,13 @@ def test_no_hardcoded_geode_path_literals_in_core() -> None:
     _assert_no_literals(_CORE_ROOT, _FILE_ALLOWLIST, "core/")
 
 
-def test_no_hardcoded_geode_path_literals_in_product() -> None:
-    """Every product ``.geode`` path must come from ``core.paths``
+def test_no_hardcoded_geode_path_literals_in_outer_packages() -> None:
+    """Every outer ``.geode`` path must come from ``core.paths``
     (for *core* paths) or be a plugin-owned single SoT in
-    :data:`_PRODUCT_FILE_ALLOWLIST`. PR-PATH-MODERNIZE F9 closed the
+    :data:`_OUTER_FILE_ALLOWLIST`. PR-PATH-MODERNIZE F9 closed the
     core-only blind spot (a feature could duplicate ``~/.geode/...`` freely)."""
-    _assert_no_literals(_PRODUCT_ROOT, _PRODUCT_FILE_ALLOWLIST, "geode_product/")
+    for root in _OUTER_ROOTS:
+        _assert_no_literals(root, _OUTER_FILE_ALLOWLIST, f"{root.name}/")
 
 
 def _assert_no_literals(root: Path, allowlist: frozenset[str], label: str) -> None:

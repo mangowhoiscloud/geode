@@ -143,8 +143,8 @@ def _bind_context_boundary(
         module = importlib.import_module("core.ui.console")
         module.set_thread_console(marker)
         return marker, module.reset_thread_console, True
-    if label == ("geode_product/self_improving/loop/observe/run_timeline.py:_current_run_timeline"):
-        module = importlib.import_module("geode_product.self_improving.loop.observe.run_timeline")
+    if label == ("evals/run_timeline.py:_current_run_timeline"):
+        module = importlib.import_module("evals.run_timeline")
         scope = module.run_timeline_scope(marker)
         return scope.__enter__(), partial(scope.__exit__, None, None, None), True
     raise AssertionError(f"missing lifecycle boundary probe: {label}")
@@ -155,10 +155,10 @@ def test_build_baseline_is_deterministic_and_internally_consistent() -> None:
     second = baseline.build_baseline()
 
     assert first == second
-    assert first["schema_version"] == 5
+    assert first["schema_version"] == 6
     assert baseline.serialize_baseline(first) == baseline.serialize_baseline(second)
 
-    for package in ("core", "geode_product", "tests"):
+    for package in ("core", "evals", "evolve", "tests"):
         inventory = first["packages"][package]
         assert inventory["python_files"] > 0
         assert inventory["python_loc"] >= inventory["python_files"]
@@ -186,7 +186,7 @@ def test_build_baseline_is_deterministic_and_internally_consistent() -> None:
 @pytest.mark.parametrize(
     ("section", "field", "value", "message"),
     [
-        ("core_to_product_imports", "site_count", 1, "kernel-to-product"),
+        ("core_to_outer_imports", "site_count", 1, "runtime-to-outer"),
         ("import_linter", "ignored_edge_count", 1, "ignored edges"),
         ("context_vars", "service_locator_count", 1, "service-locator"),
         ("tools", "exact_parity", False, "tool definition/plan/schema/policy"),
@@ -199,7 +199,7 @@ def test_architecture_invariants_cannot_be_blessed_by_updating_the_snapshot(
     message: str,
 ) -> None:
     measured = {
-        "core_to_product_imports": {"site_count": 0},
+        "core_to_outer_imports": {"site_count": 0},
         "import_linter": {"ignored_edge_count": 0},
         "context_vars": {"service_locator_count": 0},
         "tools": {"exact_parity": True},
@@ -225,7 +225,7 @@ def test_inventory_lists_traceable_architecture_details() -> None:
         ],
     }
     assert measured["context_vars"]["count"] == len(measured["context_vars"]["items"])
-    assert measured["core_to_product_imports"] == {
+    assert measured["core_to_outer_imports"] == {
         "site_count": 0,
         "file_count": 0,
         "sites": [],
@@ -277,10 +277,8 @@ def test_context_var_inventory_propagates_and_resets(tmp_path: Path) -> None:
             return _context_value(label, variable, surface)
 
         before = _context_value(label, variable, surface)
-        if label == "geode_product/benchmark_harness/tau2_runtime_contract.py:_CURRENT_ATTEMPT":
-            module = importlib.import_module(
-                "geode_product.benchmark_harness.tau2_runtime_contract"
-            )
+        if label == "evals/benchmarks/tau2_runtime_contract.py:_CURRENT_ATTEMPT":
+            module = importlib.import_module("evals.benchmarks.tau2_runtime_contract")
 
             async def read_attempt() -> tuple[str, str, int, int, int]:
                 await asyncio.sleep(0)
@@ -583,12 +581,12 @@ def test_context_var_inventory_detects_reexported_constructor_modules(
     assert baseline._context_vars(tmp_path)["count"] == 1
 
 
-def test_context_var_inventory_scans_product_packages(
+def test_context_var_inventory_scans_outer_packages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    product = tmp_path / "geode_product"
-    product.mkdir()
-    (product / "sample.py").write_text(
+    outer = tmp_path / "evals"
+    outer.mkdir()
+    (outer / "sample.py").write_text(
         'from contextvars import ContextVar\ncurrent = ContextVar("current")\n',
         encoding="utf-8",
     )
@@ -596,7 +594,7 @@ def test_context_var_inventory_scans_product_packages(
     manifest.write_text(
         json.dumps(
             {
-                "geode_product/sample.py:current": {
+                "evals/sample.py:current": {
                     "classification": "request_identity",
                     "owner": "test",
                     "setter": "test",
@@ -611,9 +609,7 @@ def test_context_var_inventory_scans_product_packages(
     monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
 
     measured = baseline._context_vars(tmp_path)["items"]
-    assert [(item["path"], item["symbol"]) for item in measured] == [
-        ("geode_product/sample.py", "current")
-    ]
+    assert [(item["path"], item["symbol"]) for item in measured] == [("evals/sample.py", "current")]
 
 
 @pytest.mark.parametrize(
@@ -1580,20 +1576,20 @@ def test_context_var_inventory_rejects_an_unclassified_declaration(
         baseline._context_vars(baseline.REPO_ROOT)
 
 
-def test_product_import_inventory_catches_static_and_dynamic_edges(tmp_path: Path) -> None:
+def test_outer_import_inventory_catches_static_and_dynamic_edges(tmp_path: Path) -> None:
     path = tmp_path / "core" / "sample.py"
     path.parent.mkdir(parents=True)
     path.write_text(
-        'from geode_product import wiring\nHANDLER = "geode_product.petri_audit.runner:run_audit"\n',
+        'from evals import cli\nHANDLER = "evolve.scaffold_search.train:main"\n',
         encoding="utf-8",
     )
 
-    measured = baseline._product_imports(tmp_path)
+    measured = baseline._outer_imports(tmp_path)
 
     assert measured["site_count"] == 2
     assert [site["module"] for site in measured["sites"]] == [
-        "geode_product",
-        "geode_product.petri_audit.runner:run_audit",
+        "evals",
+        "evolve.scaffold_search.train:main",
     ]
 
 

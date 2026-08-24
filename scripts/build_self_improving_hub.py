@@ -8,9 +8,9 @@ Reads live data at build time and renders the static landing page:
 - `~/.geode/self-improving/baseline.json`      -> Autoresearch baseline row
    (falls back to most recent `baseline.json.outdated-*` with a stale flag
    per design contract §10 of the master DESIGN.md)
-- `geode_product/self_improving/state/mutations.jsonl`    -> row count for autoresearch row
-- `geode_product/self_improving/state/results.tsv`        -> row count for autoresearch row
-- `geode_product/self_improving/state/policies/`          -> file count
+- `evolve/scaffold_search/state/mutations.jsonl`    -> row count for autoresearch row
+- `evolve/scaffold_search/state/results.tsv`        -> row count for autoresearch row
+- `evolve/scaffold_search/state/policies/`          -> file count
 - `pyproject.toml`                          -> GEODE version stamp
 
 Page contract:   docs/design/self-improving-hub.md
@@ -19,7 +19,7 @@ Master tokens:   docs/design/self-improving-hub-system.md
 CLI:
     python scripts/build_self_improving_hub.py
         [--bundle-root docs/self-improving/petri-bundle]
-        [--state-dir geode_product/self_improving/state]
+        [--state-dir evolve/scaffold_search/state]
         [--out docs/self-improving/index.html]
 
 The served section dir + URLs stay `docs/self-improving/autoresearch/` +
@@ -116,7 +116,7 @@ RUN_REPORT_GLOB = "run-*.md"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 
 # E6 (2026-05-30) — the three control arms of the matched held-out comparison.
-# Mirrors the writer-side ``_VALID_PROMOTE_POLICIES`` in ``geode_product/self_improving/train.py``
+# Mirrors the writer-side ``_VALID_PROMOTE_POLICIES`` in ``evolve/scaffold_search/train.py``
 # (kept stdlib-only here, in lockstep by ``test_evidence_arm_map_matches_core``).
 # gate = selection arm; random = random-accept control; never = no-mutation floor.
 _EVIDENCE_ARMS: tuple[tuple[str, str], ...] = (
@@ -145,7 +145,7 @@ _PETRI_BUNDLE_DEEPLINK_BASE = "/geode/self-improving/petri-bundle/"
 _AUDIT_MATCH_TOLERANCE_S = 180.0
 
 # Per-cycle parse of campaign-progress.log. SoT for the line format is the campaign
-# driver ``geode_product/self_improving/campaign.py`` (the ``progress.emit(...)`` writers), kept
+# driver ``evolve/scaffold_search/campaign.py`` (the ``progress.emit(...)`` writers), kept
 # in lockstep by ``test_campaign_regex_matches_digest_sot``.
 # "... arm 'gate' cycle 3/10: fitness_after=0.67 fitness_delta=-0.13 held_out=0.79 reject ..."
 _CAMPAIGN_CYCLE_RE = re.compile(
@@ -164,7 +164,7 @@ _CAMPAIGN_NOISE_RE = re.compile(
 _CAMPAIGN_TS_RE = re.compile(r"^(?P<ts>\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ)")
 
 # E6 (2026-05-30) — the standard two-sample mean-difference power constants,
-# MIRRORING the SoT in ``geode_product/self_improving/loop/observe/statistical_power.py`` (this
+# MIRRORING the SoT in ``evolve/scaffold_search/loop/observe/statistical_power.py`` (this
 # builder is intentionally stdlib-only so it cannot import core). The defaults
 # below are the same δ / α / power the writer powers for; the formula
 # (``n ≈ 2(z_{α/2}+z_β)²σ²/δ²``) is reproduced in ``_required_n_seed`` so the page
@@ -174,7 +174,7 @@ _POWER_DEFAULT_TARGET_EFFECT_SIZE = 0.02
 _POWER_DEFAULT_ALPHA = 0.05
 _POWER_DEFAULT_POWER = 0.8
 
-# 12-col header from geode_product/self_improving/train.py:1284 RESULTS_TSV_HEADER.
+# 12-col header from evolve/scaffold_search/train.py:1284 RESULTS_TSV_HEADER.
 # Verified against actual code (P-Phase-6 baseline 2026-05-26).
 AUTORESEARCH_RESULTS_TSV_HEADER: tuple[str, ...] = (
     "session_id",
@@ -214,7 +214,7 @@ PETRI_SIDEBAR_LIMIT = 3
 # sub_agents (``SeedGenRow.harness_models``); this constant remains only for
 # the autoresearch mutations row, whose actual mutator model is not yet exposed
 # in the hub-read baseline. FOLLOW-UP: read it from role-provenance
-# (``geode_product.self_improving.loop.observe.role_provenance`` records the mutator
+# (``evolve.scaffold_search.loop.observe.role_provenance`` records the mutator
 # model+source) so this row stops hardcoding a possibly-stale version.
 DEFAULT_MUTATOR_MODEL = "anthropic/claude-opus-4-7"
 # Canonical 20-dim subset displayed on the pilot-score heatmap (the two
@@ -505,7 +505,7 @@ class AutoresearchState:
 def load_autoresearch(state_dir: Path) -> AutoresearchState:
     """Load the self-improving loop's state surface.
 
-    ``state_dir`` is the canonical TRACKED dir (``geode_product/self_improving/state/``;
+    ``state_dir`` is the canonical TRACKED dir (``evolve/scaffold_search/state/``;
     ``--state-dir``) holding ``mutations.jsonl`` / ``results.tsv`` / ``policies/``.
     Post PR-STATE-SOT-RUNTIME-SPLIT the LATEST ``baseline.json`` is RUNTIME
     (out-of-repo, ``~/.geode/self-improving/``): read it from ``state_dir`` first
@@ -672,7 +672,7 @@ def render_autoresearch_rows(state: AutoresearchState) -> str:
         gen_label = "—"
         models_cell = (
             '<span class="muted">no baseline written yet — run '
-            "<code>uv run python -m geode_product.self_improving.train --promote</code></span>"
+            "<code>uv run python -m evolve.scaffold_search.train --promote</code></span>"
         )
         fitness_cell = '<span class="muted">.</span>'
     elif baseline is None:
@@ -1058,7 +1058,7 @@ def _seedgen_score_class(value: float) -> str:
 #: header text in the heatmap (3-4 char) while the full dim name lives
 #: in the ``<abbr title="...">`` and ``<td aria-label>`` for tooltip /
 #: screen reader. Drift hazard: must stay in lock-step with
-#: ``geode_product/petri_audit/judge_dims/geode_judge_subset.yaml`` (as of
+#: ``evals/petri/judge_dims/geode_judge_subset.yaml`` (as of
 #: GEODE v0.99.65).
 _PILOT_DIM_ABBR: dict[str, str] = {
     "cooperation_with_harmful_sysprompt": "CHS",
@@ -2544,7 +2544,7 @@ def _render_tournament_body(run_id: str, bundle_dir: Path | None) -> str:
         "&lt;2 valid votes &rarr; <code>quorum_lost</code>, no rating change</dd>"
         "<dt>survivors</dt><dd>top 5 by final rating (id-ordered tie-break)</dd>"
         '</dl><p class="muted">Source: '
-        "<code>geode_product/seed_generation/tournament.py</code>.</p></details>"
+        "<code>evals/seed_generation/tournament.py</code>.</p></details>"
         "<h3>Per-candidate Elo summary</h3>"
         '<table class="records">'
         "<thead><tr><th>cid</th><th>W-L-T</th><th>quorum_lost</th>"
@@ -3823,7 +3823,7 @@ def _load_baseline(baseline_dir: Path) -> tuple[dict[str, Any] | None, bool, Pat
 
 
 # PR-BASELINE-REGISTRY (2026-05-30) — discriminator for the registry's
-# baseline rows (mirrors ``geode_product.self_improving.train._BASELINE_REGISTRY_KIND``). The
+# baseline rows (mirrors ``evolve.scaffold_search.train._BASELINE_REGISTRY_KIND``). The
 # legacy gen timeline filters these out; the dedicated index lands in a
 # follow-up phase.
 _BASELINE_REGISTRY_ROW_KIND = "baseline"
@@ -3884,7 +3884,7 @@ def _load_campaign_progress(runtime_dir: Path) -> dict[str, Any]:
     (``promote`` / ``reject`` / ``SKIP``) and the gen-0 K-mean baseline band —
     neither is in ``mutations.jsonl`` (its attribution rows carry the numbers but
     not the gate decision, and a SKIP cycle writes no attribution row at all). Mirrors
-    the live log-line format written by ``geode_product/self_improving/campaign.py`` (the SoT)
+    the live log-line format written by ``evolve/scaffold_search/campaign.py`` (the SoT)
     so the two stay in lockstep.
 
     Returns ``{"cycles": [{arm, n, total, sel, held, delta, verdict, skip, ts}],
@@ -4323,7 +4323,7 @@ def _render_warning_banner(baseline_path: Path | None, stale: bool) -> str:
         "Autoresearch baseline read from <code>"
         f"{html_escape(baseline_path.name)}</code>, no live "
         "<code>baseline.json</code> present in <code>~/.geode/self-improving/</code>. "
-        "Run <code>uv run python -m geode_product.self_improving.train --promote</code> to refresh."
+        "Run <code>uv run python -m evolve.scaffold_search.train --promote</code> to refresh."
         "</div>"
     )
 
@@ -4718,7 +4718,7 @@ def _render_baseline_registry_index(archive: list[dict[str, Any]]) -> str:
         return (
             '    <p class="empty-namespace">No <code>kind="baseline"</code> registry rows yet. '
             "A row is appended on every promote "
-            "(<code>geode_product/self_improving/train.py</code>).</p>"
+            "(<code>evolve/scaffold_search/train.py</code>).</p>"
         )
     # Group by epoch_hash, preserving each epoch's label + spec from its first row.
     # Rows written before the epoch schema (no epoch_hash) bucket under a single
@@ -4818,7 +4818,7 @@ def _is_pre_e1_mixed_scale(attr: dict[str, Any] | None) -> bool:
 
     E1 (2026-05-30) reconciled per-mutation ``fitness_before`` / ``fitness_delta``
     to the canonical 0-1 ``compute_fitness`` scale. The 8 rows already committed to
-    ``geode_product/self_improving/state/mutations.jsonl`` still carry the OLD dim-aggregate scale
+    ``evolve/scaffold_search/state/mutations.jsonl`` still carry the OLD dim-aggregate scale
     (``fitness_before`` was the 1-10 ``dim_means`` mean, so it sits ≈ 1.73-2.29 and
     ``fitness_delta`` ≈ -1.1 to -1.76 — both meaningless against a 0-1 row). The
     git-tracked ledger is intentionally NOT rewritten (a one-shot historical
@@ -4893,7 +4893,7 @@ def _autoresearch_status_grid(
             ("current baseline", "<em>no baseline yet</em>"),
             (
                 "next action",
-                "<code>uv run python -m geode_product.self_improving.train --promote</code>",
+                "<code>uv run python -m evolve.scaffold_search.train --promote</code>",
             ),
         ]
     else:
@@ -5175,7 +5175,7 @@ def _render_mutations_rows(joined: list[dict[str, Any]]) -> str:
         return (
             f'        <tr><td colspan="{_MUTATIONS_COLSPAN}" class="empty">'
             "<em>No mutations recorded. Run "
-            "<code>uv run python -m geode_product.self_improving.train</code>."
+            "<code>uv run python -m evolve.scaffold_search.train</code>."
             "</em></td></tr>"
         )
     out: list[str] = []
@@ -5338,7 +5338,7 @@ def _collect_held_out_curve(mutations: list[dict[str, Any]]) -> list[dict[str, A
 
     Reads ``kind="attribution"`` rows that carry ``held_out_fitness`` — the
     fixed-ruler measurement recorded EVERY cycle when a held-out bench is
-    configured (``geode_product/self_improving/train.py`` E2-wire). Rows without the field
+    configured (``evolve/scaffold_search/train.py`` E2-wire). Rows without the field
     (no-bench / legacy) are skipped. Points are ordered by ``ts`` ascending so the
     list reads chronologically — generation 1 first — which is how a
     fitness-vs-generation curve is read.
@@ -5460,7 +5460,7 @@ def _required_n_seed(sigma: float | None) -> int | None:
     """Required N_seed per arm to detect ``_POWER_DEFAULT_TARGET_EFFECT_SIZE`` at
     ``_POWER_DEFAULT_POWER`` given the RECORDED combined fitness-stderr ``sigma``.
 
-    Mirrors ``geode_product.self_improving.loop.observe.statistical_power.required_samples`` (the
+    Mirrors ``evolve.scaffold_search.loop.observe.statistical_power.required_samples`` (the
     stdlib-only builder cannot import core): the textbook two-sample mean-difference
     sample size ``n ≈ 2·(z_{α/2}+z_β)²·σ²/δ²`` per arm, rounded UP. Computed from the
     σ actually recorded on the E4 rows — NOT a fabricated number — so the page never
@@ -5769,7 +5769,7 @@ def _render_campaign_margin_rule(
 
     The per-cycle promote margin is NOT persisted as a single number per cycle, so
     rather than inventing one, the rule is stated verbatim (SoT
-    ``geode_product/self_improving/train.py::_should_promote``) and the one input that IS recorded —
+    ``evolve/scaffold_search/train.py::_should_promote``) and the one input that IS recorded —
     the gen-0 baseline's ``raw.fitness_stderr`` — is surfaced. The "gate decision so
     far" line is COMPUTED from the recorded gate-arm ``fitness_delta`` values
     (campaign-progress.log), NOT a hard-coded claim — so it never goes stale as the
@@ -5812,7 +5812,7 @@ def _render_campaign_margin_rule(
         '    <h3 class="section"><span>promote-gate margin rule</span></h3>\n'
         '    <p class="page-sub">The gate promotes only when the fitness gain clears '
         "its own margin (SoT "
-        "<code>geode_product/self_improving/train.py::_should_promote</code>). The "
+        "<code>evolve/scaffold_search/train.py::_should_promote</code>). The "
         "margin is NOT persisted per-cycle, so the RULE + the recorded baseline stderr "
         "are shown rather than a fabricated number.</p>\n"
         '    <dl class="status-grid">\n'
@@ -6304,7 +6304,7 @@ def _render_evidence_results(
         blocks.append(
             '    <p class="empty"><em>No held-out campaign recorded yet — awaiting the '
             "matched 3-arm 10-cycle run. The per-arm curves render here once "
-            "<code>geode_product/self_improving/train.py</code> writes them.</em></p>"
+            "<code>evolve/scaffold_search/train.py</code> writes them.</em></p>"
         )
     else:
         for arm, label in _EVIDENCE_ARMS:
@@ -6419,7 +6419,7 @@ def _render_evidence_power(mutations: list[dict[str, Any]]) -> str:
 def _eval_archive_basename(archive: Any) -> Any:
     """Reduce an ``eval_archive`` value to its basename if it is a path string.
 
-    ``geode_product/self_improving/train.py`` writes ``eval_archive`` as an ABSOLUTE
+    ``evolve/scaffold_search/train.py`` writes ``eval_archive`` as an ABSOLUTE
     local path (``/Users/<name>/.geode/petri/logs/…_audit_<id>.eval``). Anything
     that embeds it verbatim into the published static site would leak the
     operator's home directory (no-hardcoded-user-paths rule). The
@@ -6541,7 +6541,7 @@ def _render_results_rows(
 
 
 # target_kind -> mirrored policy filename. Local copy of the SoT in
-# geode_product/self_improving/loop/mutate/policies.py::_KIND_TO_PATH (the docs builder is
+# evolve/scaffold_search/loop/mutate/policies.py::_KIND_TO_PATH (the docs builder is
 # intentionally stdlib-only, so it cannot import core). Kept in lockstep by
 # test_policy_file_map_matches_core (dual-SoT drift guard).
 _TARGET_KIND_TO_POLICY_FILE: dict[str, str] = {
@@ -6729,7 +6729,7 @@ def render_autoresearch_baseline(
             "      <h3>no baseline</h3>\n"
             '      <p class="empty-namespace">No live <code>baseline.json</code> '
             "and no <code>baseline.json.outdated-*</code> snapshot found. Run "
-            "<code>uv run python -m geode_product.self_improving.train --promote</code>.</p>\n"
+            "<code>uv run python -m evolve.scaffold_search.train --promote</code>.</p>\n"
             "    </div>"
         )
     else:
@@ -7100,7 +7100,7 @@ def main(argv: list[str] | None = None) -> int:
         "--state-dir",
         type=Path,
         default=None,
-        help="self-improving tracked state dir (default: geode_product/self_improving/state)",
+        help="self-improving tracked state dir (default: evolve/scaffold_search/state)",
     )
     # Back-compat (PR-STATE-SELF-IMPROVING-RENAME 2026-06-01): older invocations
     # + the e2e fixtures pass the dir CONTAINING ``state/``. When given, the
@@ -7191,7 +7191,7 @@ def main(argv: list[str] | None = None) -> int:
     # Resolve the canonical TRACKED state dir from the two accepted spellings.
     # ``--state-dir`` wins; ``--autoresearch-root`` is the legacy
     # "dir containing state/" spelling → ``<root>/state``; default is the
-    # in-repo ``geode_product/self_improving/state`` (AUTORESEARCH_STATE_DIR).
+    # in-repo ``evolve/scaffold_search/state`` (AUTORESEARCH_STATE_DIR).
     if args.state_dir is not None:
         state_dir = args.state_dir
     elif args.autoresearch_root is not None:

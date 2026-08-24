@@ -15,7 +15,7 @@ will sit on top of — a Wilson lower-bound success-rate ranker over
 the episodic ledger.
 
 **Composition with ``tool_hints``** — the existing
-``geode_product.self_improving.loop.inject.tool_hints`` reader surfaces the *negative*
+``core.agent.policy_injection.tool_hints`` reader surfaces the *negative*
 signal (tools whose recent calls have been failing). This module is
 its positive counterpart — tools whose recent calls have been
 *succeeding* in a statistically defensible way. The two together

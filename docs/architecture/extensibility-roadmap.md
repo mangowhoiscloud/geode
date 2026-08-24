@@ -282,17 +282,18 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `geode_product/`) | 556 |
-| Test Python files | 688 |
-| `core/` Python LOC | 121,527 |
-| `geode_product/` Python LOC | 61,099 |
-| Test Python LOC | 184,979 |
+| Production Python files (`core/` + `evals/` + `evolve/`) | 559 |
+| Test Python files | 689 |
+| `core/` Python LOC | 123,469 |
+| `evals/` Python LOC | 27,239 |
+| `evolve/` Python LOC | 31,921 |
+| Test Python LOC | 184,952 |
 | Tool definitions / model executions / valid schemas / policies | 86 / 86 / 86 / 86 (exact) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 5 |
 | Module/class-scoped `ContextVar`-backed bindings in production packages | 25 |
-| `core` → product import sites | 0 across 0 files |
-| Import-linter contracts / ignored edges | 6 / 0 |
+| `core` → outer import sites | 0 across 0 files |
+| Import-linter contracts / ignored edges | 7 / 0 |
 | `AgenticLoop` file LOC / methods / constructor args | 1,121 / 38 / 12 |
 | `SubAgentManager` file LOC / methods / constructor args | 811 / 17 / 18 |
 | `RuntimeCoreConfig` fields | 6 |

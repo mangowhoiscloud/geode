@@ -78,32 +78,34 @@ Issues = "https://github.com/mangowhoiscloud/geode/issues"
 Changelog = "https://github.com/mangowhoiscloud/geode/blob/main/CHANGELOG.md"
 
 [project.scripts]
-geode = "geode_product.cli:app"
+geode = "core.cli:app"
 # D-3 (4) 2026-06-10 — first-class MCP entry point: agentic one-shot +
 # self-improving propose/apply + memory tools over stdio.
-geode-mcp = "geode_product.mcp_server:main"
+geode-mcp = "core.mcp_server:main"
+geode-eval = "evals.cli:app"
+geode-evolve = "evolve.cli:app"
 
 # inspect_ai discovers third-party model providers via the `inspect_ai`
 # entry-point group (importlib.metadata). When the [audit] extra is
 # installed and `inspect eval` runs, inspect_ai loads each entry-point
 # in this group (`ep.load()`) — that import triggers our
-# `geode_product/petri_audit/__init__.py:register()`, which registers
+# `evals/petri/__init__.py:register()`, which registers
 # `GeodeModelAPI` so `--model-role target=geode/<base>` resolves.
 #
 # PR #6 (2026-05-14) — multiple names point to the same module so that
 # inspect_ai's ``ensure_entry_points(package=<prefix>)`` finds a matching
 # ep regardless of which provider prefix appears in the model id. The
 # fast-path matches ep.name == prefix (no full-load fallback needed), so
-# ``openai-codex/gpt-5.5`` resolution loads ``geode_product.petri_audit`` and
+# ``openai-codex/gpt-5.5`` resolution loads ``evals.petri`` and
 # its top-level ``register_codex()`` runs before the model lookup retries.
 # Python's import system de-dupes the module so all registrations run
 # exactly once per process.
 #
 # Reference: inspect_ai/_util/entrypoints.py:ensure_entry_points
 [project.entry-points.inspect_ai]
-geode_audit = "geode_product.petri_audit"
-geode = "geode_product.petri_audit"
-openai-codex = "geode_product.petri_audit"
+geode_audit = "evals.petri"
+geode = "evals.petri"
+openai-codex = "evals.petri"
 
 [project.optional-dependencies]
 # Compatibility extra retained for existing ``geode-agent[mcp]`` installs.
@@ -123,7 +125,7 @@ desktop = [
 # Petri × GEODE alignment audit (PoC, P2-a). Opt-in via `uv sync --extra audit`.
 # inspect-petri 3.x is published on PyPI, so the extra remains installable from
 # public indexes and does not leak a direct VCS reference into wheel metadata.
-# Lazy-imported in geode_product/petri_audit/ so cold-start is unaffected when not
+# Lazy-imported in evals/petri/ so cold-start is unaffected when not
 # installed. See docs/plans/eval-petri-integration.md.
 audit = [
     "inspect-ai>=0.3.236",
@@ -162,7 +164,7 @@ obs = [
     "opentelemetry-api>=1.27.0",
 ]
 # Visualization for Petri audit results — matplotlib (PSF/BSD-3) for
-# static PNG/SVG. Lazy-imported in geode_product/petri_audit/viz.py. See plan
+# static PNG/SVG. Lazy-imported in evals/petri/viz.py. See plan
 # § Reporting & Visualization. seaborn / plotly / kaleido / inspect_viz
 # 는 P3-b-2b/c 진입 시 실 사용 코드 동반 별도 PR (P1=inspect_viz,
 # P3=plotly 인터랙티브).
@@ -170,7 +172,7 @@ viz = [
     "matplotlib>=3.8.0",
 ]
 # P4 D 단계 — DSPy compiler-style prompt optimization
-# (geode_product/petri_audit/optimize.py). PR-CLEANUP-D1 (2026-06-10) dropped
+# (evals/petri/optimize.py). PR-CLEANUP-D1 (2026-06-10) dropped
 # instructor + textgrad with their dead consumers (judge_schema /
 # textgrad_wrapper). lazy import — default `uv sync` cold-start 영향 0.
 reason = [
@@ -182,7 +184,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["core", "geode_product"]
+packages = ["core", "evals", "evolve"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "scripts/macos" = "scripts/macos"
@@ -199,7 +201,8 @@ include = [
     "/NOTICE",
     "/GEODE.md",
     "/core",
-    "/geode_product",
+    "/evals",
+    "/evolve",
     "/scripts/macos",
     "/.geode/skills",
 ]
@@ -211,7 +214,7 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests requiring external services",
     "live: marks tests that make real LLM API calls (deselect with '-m \"not live\"')",
-    "policy_real: PR-β1 — tests/plugins/petri_audit conftest's self_improving_loop_fallback_policy stub is bypassed for these tests so they can verify the real loader contract",
+    "policy_real: tests/evals/petri's policy fallback is bypassed so tests can verify the real loader contract",
 ]
 
 [dependency-groups]
@@ -274,7 +277,7 @@ viz = [
 # CLI/agent/server/channels 사이의 직접 import 를 정적 차단한다.
 # 위반 시 `lint-imports` 실패 → CI 에서 PR merge 차단.
 [tool.importlinter]
-root_packages = ["core", "geode_product"]
+root_packages = ["core", "evals", "evolve"]
 
 [[tool.importlinter.contracts]]
 name = "CLI must not import server/messaging (process boundary)"
@@ -305,10 +308,17 @@ source_modules = ["core.messaging"]
 forbidden_modules = ["core.cli", "core.server", "core.agent"]
 
 [[tool.importlinter.contracts]]
-name = "Classified kernel does not import the bundled self-improving product"
+name = "Runtime does not import evaluation or evolution"
 type = "forbidden"
-source_modules = ["core.agent", "core.llm", "core.memory", "core.observability", "core.skills"]
-forbidden_modules = ["core.self_improving", "geode_product.self_improving"]
+source_modules = ["core"]
+forbidden_modules = ["evals", "evolve"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Evaluation does not import evolution"
+type = "forbidden"
+source_modules = ["evals"]
+forbidden_modules = ["evolve"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
@@ -327,7 +337,7 @@ line-length = 100
 # the source-mirror convention, tests/core/<pkg>/ made ruff's first-party
 # resolver see a second `core.*` package under the tests root and silently
 # flipped isort grouping for function-body import blocks.
-src = ["core", "geode_product", "scripts"]
+src = ["core", "evals", "evolve", "scripts"]
 extend-exclude = [
     ".geode",        # runtime config + skill scripts (not part of codebase)
     ".claude",       # Claude Code session artifacts
@@ -410,7 +420,7 @@ extend_exclude = [
     ".geode",
     "scripts",
 ]
-known_first_party = ["core", "geode_product"]
+known_first_party = ["core", "evals", "evolve"]
 
 [tool.deptry.per_rule_ignores]
 # DEP001 — imported module is provided by an opt-in external benchmark checkout,
@@ -420,7 +430,7 @@ DEP001 = [
     # benchmark_harness plugin when live tau2 measurement is requested.
     "tau2",
     # MCPMark harness modules resolve via MCPMARK_ROOT sys.path insertion in
-    # geode_product/benchmark_harness/run_mcpmark.py; opt-in checkout, absent by default.
+    # evals/benchmarks/run_mcpmark.py; opt-in checkout, absent by default.
     "src",
     "pipeline",
 ]
@@ -456,7 +466,7 @@ DEP002 = [
 
 # DEP004 — module imported but the package is declared as a dev-group
 # dependency. The single entry below is a soft optional: the consumer
-# (geode_product/petri_audit/bundle_sync.py) uses ``importlib.import_module``
+# (evals/petri/bundle_sync.py) uses ``importlib.import_module``
 # at first call, falls back gracefully when the package is absent, and
 # never fails the audit return path on its absence. The package is in
 # the dev group (not [audit] extra) because zipfile-zstd is purely a
@@ -495,7 +505,7 @@ check-filenames = ""
 check-hidden = ""
 
 [tool.coverage.run]
-source = ["core", "geode_product"]
+source = ["core", "evals", "evolve"]
 branch = true
 omit = [
     "core/ui/*",
@@ -582,7 +592,7 @@ module = [
     # CI default sync does not install tau2 or its untyped in-tree modules.
     "tau2.*",
     # MCPMark harness modules resolve via MCPMARK_ROOT sys.path insertion in
-    # geode_product/benchmark_harness/run_mcpmark.py; opt-in checkout, absent in CI.
+    # evals/benchmarks/run_mcpmark.py; opt-in checkout, absent in CI.
     "src.agents",
     "pipeline",
     # PR-BROWSER-CDP-BRIDGE — websockets ships no py.typed; used only by the
@@ -599,7 +609,7 @@ ignore_missing_imports = true
 # tau2's runtime base classes are imported from the external harness checkout
 # and do not ship stubs in GEODE's default CI environment. Keep the relaxation
 # scoped to the canonical opt-in runner.
-module = ["geode_product.benchmark_harness.tau2_geode_agent"]
+module = ["evolve.crucible.tau2_geode_agent"]
 disallow_subclassing_any = false
 
 [[tool.mypy.overrides]]
@@ -613,8 +623,8 @@ disallow_untyped_decorators = false
 # Public benchmark adapters subclass base classes supplied by opt-in external
 # harness checkouts. The checkout is installed only for live benchmark runs.
 module = [
-    "geode_product.benchmark_harness.mcpmark_geode_agent",
-    "geode_product.benchmark_harness.tau2_geode_agent",
+    "evals.benchmarks.mcpmark_geode_agent",
+    "evolve.crucible.tau2_geode_agent",
 ]
 disallow_subclassing_any = false
 
@@ -641,5 +651,5 @@ ignore_errors = true
 # inspect_ai's `@agent(name=...)` decorator has no stubs, so mypy treats
 # anything it wraps as untyped. Confine the relaxation to petri_audit
 # modules that legitimately consume the external decorator.
-module = ["geode_product.petri_audit.*"]
+module = ["evals.petri.*"]
 disallow_untyped_decorators = false

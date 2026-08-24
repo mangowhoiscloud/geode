@@ -197,7 +197,7 @@ def main() -> int:
     # CSP-14 (2026-05-23) — also count synced seed runs under
     # docs/self-improving/petri-bundle/seeds/<run_id>/. Each run is a subdirectory
     # containing state.json (+ optional survivors.json + meta_review.json
-    # + candidates/). bundle_sync (geode_product/seed_generation/bundle_sync.py)
+    # + candidates/). bundle_sync (evals/seed_generation/bundle_sync.py)
     # auto-copies on Pipeline.arun finalization; 0 runs is a normal
     # state on a fresh clone.
     seeds_count = 0

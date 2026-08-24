@@ -29,8 +29,8 @@ per-cycle held-out curve still renders on the Mutations page (E2-wire's
 
 | Source | Used for |
 |---|---|
-| `geode_product/self_improving/state/mutations.jsonl` (attribution rows) | per-cycle `held_out_fitness` curve PER ARM (`promote_policy`), `gain_ci_excludes_zero` / `gain_verdict` / `gain_ci_low` / `gain_ci_high` verdicts, `within_mutation_stderr` + `between_seed_stderr` for the power σ |
-| `geode_product/self_improving/state/baseline_archive.jsonl` (`kind="baseline"` rows) | promotion count PER ARM (`promote_policy`), per-promote gain verdict |
+| `evolve/scaffold_search/state/mutations.jsonl` (attribution rows) | per-cycle `held_out_fitness` curve PER ARM (`promote_policy`), `gain_ci_excludes_zero` / `gain_verdict` / `gain_ci_low` / `gain_ci_high` verdicts, `within_mutation_stderr` + `between_seed_stderr` for the power σ |
+| `evolve/scaffold_search/state/baseline_archive.jsonl` (`kind="baseline"` rows) | promotion count PER ARM (`promote_policy`), per-promote gain verdict |
 
 Pre-E1 mixed-scale rows (`fitness_before > 1.0`) are excluded from aggregates
 (reuses the E1b heuristic). The held-out fields are read directly (they are already
@@ -55,7 +55,7 @@ on the canonical 0-1 fitness scale).
    Honest empty state per arm when no cycle recorded.
 3. **Power** — the required `N_seed × M_replicate` line computed from the recorded
    σ (`√(within²+between²)`) at δ=0.02, α=0.05, 80% power (the formula mirrors
-   `geode_product/self_improving/loop/statistical_power.py::required_samples`) + the honest
+   `evolve/scaffold_search/loop/statistical_power.py::required_samples`) + the honest
    verdict ("no evidence yet" when the gain CI includes 0; "indeterminate" when σ is
    unrecorded — never a fabricated N).
 

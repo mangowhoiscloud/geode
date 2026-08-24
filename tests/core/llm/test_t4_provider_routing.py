@@ -191,7 +191,7 @@ def test_plan_registry_uses_apply_before_iterating_chain() -> None:
 
 
 def test_product_source_candidates_present() -> None:
-    from geode_product.self_improving.policy_sources import build_policy_source_bundle
+    from core.config.runtime_policy_sources import build_policy_source_bundle
 
     sources = build_policy_source_bundle()["provider_routing"]
     assert sources.packaged_default is not None
@@ -207,7 +207,7 @@ def test_product_source_candidates_present() -> None:
 
 def test_train_py_sets_provider_routing_env_pair() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    src = (repo_root / "geode_product/self_improving/measure.py").read_text(encoding="utf-8")
+    src = (repo_root / "evolve/scaffold_search/measure.py").read_text(encoding="utf-8")
     assert "GEODE_PROVIDER_ROUTING_OVERRIDE" in src
     assert "GEODE_PROVIDER_ROUTING_STRICT" in src
     assert "AUTORESEARCH_PROVIDER_ROUTING_PATH" in src
@@ -218,8 +218,6 @@ def test_train_py_sets_provider_routing_env_pair() -> None:
 
 def test_provider_routing_json_referenced_in_inference_path() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    composition = (repo_root / "geode_product/self_improving/policy_sources.py").read_text(
-        encoding="utf-8"
-    )
+    composition = (repo_root / "core/config/runtime_policy_sources.py").read_text(encoding="utf-8")
     assert '"provider_routing"' in composition
     assert "AUTORESEARCH_PROVIDER_ROUTING_PATH" in composition

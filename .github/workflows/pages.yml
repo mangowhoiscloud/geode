@@ -25,7 +25,7 @@ on:
       - "site/**"
       - "docs/self-improving/**"
       - "docs/audits/**"
-      - "geode_product/petri_audit/judge_dims/**"
+      - "evals/petri/judge_dims/**"
       - "CHANGELOG.md"
       - "pyproject.toml"
       - "CLAUDE.md"
@@ -38,7 +38,7 @@ on:
       - "CHANGELOG.md"
       - "docs/self-improving/**"
       - "docs/audits/**"
-      - "geode_product/petri_audit/judge_dims/**"
+      - "evals/petri/judge_dims/**"
       - ".pymarkdown.json"
       - ".yamllint.yaml"
       - ".github/workflows/pages.yml"
@@ -81,8 +81,8 @@ jobs:
         run: |
           shopt -s nullglob
           targets=(
-            geode_product/petri_audit/judge_dims/*.yaml
-            geode_product/petri_audit/judge_dims/*.yml
+            evals/petri/judge_dims/*.yaml
+            evals/petri/judge_dims/*.yml
             docs/self-improving/petri-bundle/*.yaml
             docs/self-improving/petri-bundle/*.yml
           )

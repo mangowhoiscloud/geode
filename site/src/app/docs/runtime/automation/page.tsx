@@ -18,7 +18,7 @@ export default function Page() {
               자동 트리거는 자기개선 루프의 변이 러너
               (<code>SelfImprovingLoopRunner.run_once</code>)를 스케줄러에 연결해,
               키보드 앞에 운영자가 없어도 루프가 cron 주기로 도는 사이드카입니다.
-              구현은 <code>geode_product/self_improving/loop/auto_trigger.py</code>,
+              구현은 <code>evolve/scaffold_search/loop/auto_trigger.py</code>,
               배선은 <code>core/wiring/scheduling.py</code>의{" "}
               <code>build_scheduling</code>입니다.
             </p>
@@ -78,7 +78,7 @@ status dict 반환 (절대 raise하지 않음) + 히스토리 append`}</pre>
               <tbody>
                 <tr><td><code>RuntimeEvent.SELF_IMPROVING_AUTO_TRIGGER_*</code></td><td>발화 결과별 내부 이벤트. <code>FIRED</code>, <code>LOCK_BUSY</code>, <code>INTERVAL_BLOCKED</code>, <code>RUNNER_ERROR</code>, <code>PARSE_ERROR</code>, <code>MAX_GENERATION_REACHED</code> (<code>core/hooks/system.py</code>)</td></tr>
                 <tr><td><code>auto_trigger_history.jsonl</code></td><td>발화 기록 append-only 로그 (<code>~/.geode/autoresearch/handoff/</code>)</td></tr>
-                <tr><td><code>geode outer-bundle</code></td><td>발화 기록을 <code>mutations.jsonl</code>, <code>baseline.json</code>과 교차해 하나의 타임라인으로 보여 주는 뷰어 (<code>core/cli/outer_bundle.py</code>)</td></tr>
+                <tr><td><code>geode-evolve outer-bundle</code></td><td>발화 기록을 <code>mutations.jsonl</code>, <code>baseline.json</code>과 교차해 하나의 타임라인으로 보여 주는 뷰어 (<code>evolve/scaffold_search/outer_bundle.py</code>)</td></tr>
                 <tr><td><code>/schedule</code></td><td>등록된 트리거 목록에서 <code>self_improving_loop_auto_trigger</code>로 식별</td></tr>
               </tbody>
             </table>
@@ -99,7 +99,7 @@ status dict 반환 (절대 raise하지 않음) + 히스토리 append`}</pre>
             <ul>
               <li><a href="/geode/docs/capabilities/outer-loop">아우터 루프</a>. 발화된 run_once가 실제로 하는 일.</li>
               <li><a href="/geode/docs/runtime/scheduler">스케줄러</a>. cron 트리거가 사는 곳.</li>
-              <li><a href="/geode/docs/harness/cli">CLI 레퍼런스</a>. <code>geode outer-bundle</code>과 <code>/self-improving</code>.</li>
+              <li><a href="/geode/docs/harness/cli">CLI 레퍼런스</a>. <code>geode-evolve outer-bundle</code>과 <code>geode-evolve scaffold</code>.</li>
             </ul>
           </>
         }
@@ -111,7 +111,7 @@ status dict 반환 (절대 raise하지 않음) + 히스토리 append`}</pre>
               (<code>SelfImprovingLoopRunner.run_once</code>) to the scheduler,
               so the loop fires on a cron cadence without an operator at the
               keyboard. The implementation is{" "}
-              <code>geode_product/self_improving/loop/auto_trigger.py</code>; the wiring
+              <code>evolve/scaffold_search/loop/auto_trigger.py</code>; the wiring
               is <code>build_scheduling</code> in{" "}
               <code>core/wiring/scheduling.py</code>.
             </p>
@@ -171,7 +171,7 @@ returns a status dict (never raises) + appends history`}</pre>
               <tbody>
                 <tr><td><code>RuntimeEvent.SELF_IMPROVING_AUTO_TRIGGER_*</code></td><td>One internal event per outcome: <code>FIRED</code>, <code>LOCK_BUSY</code>, <code>INTERVAL_BLOCKED</code>, <code>RUNNER_ERROR</code>, <code>PARSE_ERROR</code>, <code>MAX_GENERATION_REACHED</code> (<code>core/hooks/system.py</code>)</td></tr>
                 <tr><td><code>auto_trigger_history.jsonl</code></td><td>Append-only firing log under <code>~/.geode/autoresearch/handoff/</code></td></tr>
-                <tr><td><code>geode outer-bundle</code></td><td>Crosswalks the firing log with <code>mutations.jsonl</code> and <code>baseline.json</code> into one timeline (<code>core/cli/outer_bundle.py</code>)</td></tr>
+                <tr><td><code>geode-evolve outer-bundle</code></td><td>Crosswalks the firing log with <code>mutations.jsonl</code> and <code>baseline.json</code> into one timeline (<code>evolve/scaffold_search/outer_bundle.py</code>)</td></tr>
                 <tr><td><code>/schedule</code></td><td>The trigger appears as <code>self_improving_loop_auto_trigger</code> in the registered list</td></tr>
               </tbody>
             </table>
@@ -192,7 +192,7 @@ returns a status dict (never raises) + appends history`}</pre>
             <ul>
               <li><a href="/geode/docs/capabilities/outer-loop">The outer loop</a>. What the fired run_once actually does.</li>
               <li><a href="/geode/docs/runtime/scheduler">Scheduler</a>. Where cron triggers live.</li>
-              <li><a href="/geode/docs/harness/cli">CLI reference</a>. <code>geode outer-bundle</code> and <code>/self-improving</code>.</li>
+              <li><a href="/geode/docs/harness/cli">CLI reference</a>. <code>geode-evolve outer-bundle</code> and <code>geode-evolve scaffold</code>.</li>
             </ul>
           </>
         }

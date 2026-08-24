@@ -165,12 +165,12 @@ def residual_denied_tools(
 # Expensive tools require cost confirmation before execution
 EXPENSIVE_TOOLS: dict[str, float] = {
     # Petri audit — conservative ceiling. Real estimate is rendered by
-    # ``geode_product.petri_audit.runner.estimate_cost_usd`` and shown next to
+    # ``evals.petri.runner.estimate_cost_usd`` and shown next to
     # the [Y/n] prompt; this number only needs to flip the gate on.
     "petri_audit": 5.00,
     # DSPy prompt re-compile (D 단계). Anchored to plan § R2 — Sonnet-class
     # compile averages $5-15. Real estimate / budget cap lives in
-    # ``geode_product.petri_audit.optimize`` (M3).
+    # ``evals.petri.optimize`` (M3).
     "eval_dspy_optimize": 12.00,
 }
 

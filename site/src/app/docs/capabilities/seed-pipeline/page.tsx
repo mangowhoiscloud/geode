@@ -16,11 +16,10 @@ export default function Page() {
           <>
             <h2>구성</h2>
             <p>
-              <code>geode_product/seed_generation/</code>이 자기개선 루프의 세대마다
+              <code>evals/seed_generation/</code>이 자기개선 루프의 세대마다
               새 Petri seed 묶음을 만듭니다. 입력은 직전 세대의 baseline과
               audit 결과, 출력은 다음 세대의 seed 파일과 git-tracked 번들
-              스냅샷입니다. CLI 진입점은 <code>geode audit-seeds</code>(슬래시{" "}
-              <code>/audit-seeds</code>)입니다.
+              스냅샷입니다. CLI 진입점은 <code>geode-eval audit-seeds</code>입니다.
             </p>
             <table>
               <thead>
@@ -38,15 +37,15 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              <code>geode audit-seeds generate</code>는 picker → cost preview →
+              <code>geode-eval audit-seeds generate</code>는 picker → cost preview →
               pre-flight → confirm → pipeline 순서로 진행하고,{" "}
-              <code>geode audit-seeds resume</code>이 체크포인트에서 이어
+              <code>geode-eval audit-seeds resume</code>이 체크포인트에서 이어
               갑니다.
             </p>
             <figure>
               <img
                 src="/geode/diagrams/seed-pipeline-run.svg"
-                alt="Seed pipeline 런 흐름. geode audit-seeds가 picker, cost preview와 confirm, pre-flight를 지나 9-역할 파이프라인으로 들어가고, frontier-band 생존자 선택을 거쳐 cycle-input 풀과 번들로 나뉘며, meta-review priors가 다음 런의 picker로 되돌아간다"
+                alt="Seed pipeline 런 흐름. geode-eval audit-seeds가 picker, cost preview와 confirm, pre-flight를 지나 9-역할 파이프라인으로 들어가고, frontier-band 생존자 선택을 거쳐 cycle-input 풀과 번들로 나뉘며, meta-review priors가 다음 런의 picker로 되돌아간다"
               />
               <figcaption>
                 한 런의 진행. 좌측 사다리(picker, cost preview, pre-flight)를
@@ -63,7 +62,7 @@ export default function Page() {
               가까운 후보를 고르는 <code>frontier</code>입니다. 너무 쉬운 seed와
               항상 실패하는 불공정 seed를 함께 피하고, pilot 근거가 없으면 Elo로
               결정적으로 폴백합니다
-              (<code>geode_product/seed_generation/tournament.py</code>의{" "}
+              (<code>evals/seed_generation/tournament.py</code>의{" "}
               <code>DEFAULT_SURVIVOR_SELECTION</code>).
             </p>
             <pre>{`norm = (pilot dim_means[target_dim] - 1) / 9
@@ -111,13 +110,12 @@ frontier_reward = 1 - 2 * abs(norm - 0.5)`}</pre>
           <>
             <h2>Shape</h2>
             <p>
-              <code>geode_product/seed_generation/</code> builds a fresh batch of
+              <code>evals/seed_generation/</code> builds a fresh batch of
               Petri seeds for each generation of the self-improving loop. Input
               is the prior generation&apos;s baseline and audit results; output
               is the next generation&apos;s seed files plus a git-tracked
               bundle snapshot. The CLI entry is{" "}
-              <code>geode audit-seeds</code> (slash form{" "}
-              <code>/audit-seeds</code>).
+              <code>geode-eval audit-seeds</code>.
             </p>
             <table>
               <thead>
@@ -135,14 +133,14 @@ frontier_reward = 1 - 2 * abs(norm - 0.5)`}</pre>
               </tbody>
             </table>
             <p>
-              <code>geode audit-seeds generate</code> proceeds picker, cost
+              <code>geode-eval audit-seeds generate</code> proceeds picker, cost
               preview, pre-flight, confirm, then the pipeline;{" "}
-              <code>geode audit-seeds resume</code> continues from checkpoints.
+              <code>geode-eval audit-seeds resume</code> continues from checkpoints.
             </p>
             <figure>
               <img
                 src="/geode/diagrams/seed-pipeline-run.svg"
-                alt="Seed pipeline run flow: geode audit-seeds passes picker, cost preview and confirm, pre-flight, enters the nine-role pipeline, then frontier-band survivor selection splits into the cycle-input pool and the published bundle, with meta-review priors looping back to the picker"
+                alt="Seed pipeline run flow: geode-eval audit-seeds passes picker, cost preview and confirm, pre-flight, enters the nine-role pipeline, then frontier-band survivor selection splits into the cycle-input pool and the published bundle, with meta-review priors looping back to the picker"
               />
               <figcaption>
                 One run, end to end. The left ladder (picker, cost preview,
@@ -161,7 +159,7 @@ frontier_reward = 1 - 2 * abs(norm - 0.5)`}</pre>
               unfair always-failing seeds. It falls back deterministically to
               Elo when pilot evidence is unavailable ({" "}
               <code>DEFAULT_SURVIVOR_SELECTION</code> in{" "}
-              <code>geode_product/seed_generation/tournament.py</code>).
+              <code>evals/seed_generation/tournament.py</code>).
             </p>
             <pre>{`norm = (pilot dim_means[target_dim] - 1) / 9
 frontier_reward = 1 - 2 * abs(norm - 0.5)`}</pre>

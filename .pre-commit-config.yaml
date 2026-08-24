@@ -55,7 +55,7 @@ repos:
       - id: yamllint
         name: yamllint (petri YAML)
         args: [-c, .yamllint.yaml, --strict]
-        files: ^(geode_product/petri_audit/judge_dims/.*\.ya?ml|docs/self-improving/petri-bundle/.*\.ya?ml)$
+        files: ^(evals/petri/judge_dims/.*\.ya?ml|docs/self-improving/petri-bundle/.*\.ya?ml)$
 
   # pymarkdownlnt — markdown render gate for the docs that get published
   # to GitHub Pages or linked from the petri-bundle README. Scope is
@@ -77,14 +77,14 @@ repos:
     hooks:
       - id: mypy
         name: mypy type check
-        entry: uv run --frozen mypy --no-incremental core/ geode_product/ scripts/
+        entry: uv run --frozen mypy --no-incremental core/ evals/ evolve/ scripts/
         language: system
         pass_filenames: false
         types: [python]
 
       - id: bandit
         name: bandit security
-        entry: uv run --frozen bandit -r core/ geode_product/ -c pyproject.toml --quiet
+        entry: uv run --frozen bandit -r core/ evals/ evolve/ -c pyproject.toml --quiet
         language: system
         pass_filenames: false
         types: [python]
@@ -101,4 +101,4 @@ repos:
         entry: uv run --frozen python scripts/check_architecture_exceptions.py --check
         language: system
         pass_filenames: false
-        files: ^(core/|geode_product/|scripts/|pyproject\.toml|docs/architecture/(exception-debt\.(toml|md)|extensibility-roadmap\.md)|\.pre-commit-config\.yaml)$
+        files: ^(core/|evals/|evolve/|scripts/|pyproject\.toml|docs/architecture/(exception-debt\.(toml|md)|extensibility-roadmap\.md)|\.pre-commit-config\.yaml)$

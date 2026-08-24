@@ -125,8 +125,8 @@ def test_capability_graph_context_window() -> None:
 
 def test_plugin_allowlists_include_gpt56() -> None:
     for rel in (
-        "geode_product/seed_generation/seed_generation.plugin.toml",
-        "geode_product/petri_audit/petri.plugin.toml",
+        "evals/seed_generation/seed_generation.plugin.toml",
+        "evals/petri/petri.plugin.toml",
     ):
         text = (REPO_ROOT / rel).read_text(encoding="utf-8")
         assert "gpt-5.6-sol" in text, rel

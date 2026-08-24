@@ -20,10 +20,10 @@ Landing page for the autoresearch surface — the closed-loop self-improvement e
 | Datum | Lifecycle | Read from |
 |---|---|---|
 | `baseline.json` (LATEST) | RUNTIME | `~/.geode/self-improving/baseline.json` (`BASELINE_JSON_PATH`; absent on CI → graceful) |
-| `baseline_archive.jsonl` (promoted history) | TRACKED | `geode_product/self_improving/state/baseline_archive.jsonl` |
-| `mutations.jsonl` | TRACKED | `geode_product/self_improving/state/mutations.jsonl` |
-| `policies/*.json` | TRACKED | `geode_product/self_improving/state/policies/` |
-| `results.{tsv,jsonl}` | TRACKED | `geode_product/self_improving/state/results.{tsv,jsonl}` |
+| `baseline_archive.jsonl` (promoted history) | TRACKED | `evolve/scaffold_search/state/baseline_archive.jsonl` |
+| `mutations.jsonl` | TRACKED | `evolve/scaffold_search/state/mutations.jsonl` |
+| `policies/*.json` | TRACKED | `evolve/scaffold_search/state/policies/` |
+| `results.{tsv,jsonl}` | TRACKED | `evolve/scaffold_search/state/results.{tsv,jsonl}` |
 
 The tracked SoT ships in-repo (naturally git-tracked under `core/`); the runtime baseline is operator-local. No end-of-iteration mirror hook is needed — `scripts/build_self_improving_hub.py` opens the live files.
 
@@ -85,9 +85,9 @@ Sort: newest first. Highlight current baseline row with `.active` styling.
 
 | Scenario | Treatment |
 |---|---|
-| `baseline.json` missing | Status block reads "no baseline yet — run <code>uv run python geode_product/self_improving/train.py --promote</code>" |
+| `baseline.json` missing | Status block reads "no baseline yet — run <code>uv run python evolve/scaffold_search/train.py --promote</code>" |
 | `baseline_archive.jsonl` 0 rows | timeline section empty table |
-| All artifacts missing | landing reads "autoresearch publisher not yet wired — see <code>plugins/autoresearch/bundle_sync.py</code>" |
+| All artifacts missing | landing states that no tracked or runtime artifacts are available; the build reads both lifecycle homes directly |
 
 ## 8. Verification checklist
 

@@ -1,10 +1,10 @@
 """Judge ↔ human agreement — external-anchor validation for the LLM judge.
 
 GEODE's self-improving loop scores every audit transcript with an LLM
-judge (``geode_product/petri_audit`` → inspect_petri's ``audit_judge``, the
+judge (``evals/petri`` → inspect_petri's ``audit_judge``, the
 22-dim rubric in ``judge_dims/geode_judge_subset.yaml``). The judge's
 per-dim scores drive the fitness aggregate in
-``geode_product/self_improving/`` — but nothing outside that loop tells us
+``evolve/scaffold_search/`` — but nothing outside that loop tells us
 whether the judge's numbers track a human's. A judge validated only by
 another judge is a closed loop.
 
@@ -24,7 +24,7 @@ inter-rater statistics designed for ordinal scales:
 
 The module is deliberately split so the math + extraction + persistence
 are pure and unit-testable; the interactive labeling front end lives in
-``geode_product/petri_audit/cli_agreement.py`` and only wires terminal I/O to
+``evals/petri/cli_agreement.py`` and only wires terminal I/O to
 the pure functions here.
 
 Honesty posture: this ships the harness + methodology + the statistics,

@@ -7,7 +7,7 @@ Algorithm (per ``docs/plans/2026-05-23-seed-gen-loop3-bundle-serving.md`` § 6):
 1. Scan ``docs/self-improving/petri-bundle/literature/*.json`` (skip ``listing.json``).
 2. For each snapshot, extract the lightweight row fields (arxiv_id, title,
    retrieved_at, content_hash short, categories, url).
-3. Scan ``geode_product/self_improving/state/mutations.jsonl`` (if present) for evidence
+3. Scan ``evolve/scaffold_search/state/mutations.jsonl`` (if present) for evidence
    rows that cite snapshots (defensive parser — handles both the typed-
    array shape from the petri-autoresearch session AND the flat-shape
    pre-realign).
@@ -36,8 +36,8 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 LITERATURE_DIR = "docs/self-improving/petri-bundle/literature"
-MUTATIONS_LOG = "geode_product/self_improving/state/mutations.jsonl"
-SEED_GLOB = "geode_product/petri_audit/seeds_gen*/**/*.md"
+MUTATIONS_LOG = "evolve/scaffold_search/state/mutations.jsonl"
+SEED_GLOB = "evals/petri/seeds_gen*/**/*.md"
 LISTING_FILENAME = "listing.json"
 
 
@@ -142,7 +142,7 @@ def _scan_seed_frontmatter_citations(repo_root: Path) -> dict[str, list[dict[str
 
     The CSP-3 generator.md spec asks the LLM to populate ``references:``
     in the frontmatter of each seed. We grep for that field across
-    ``geode_product/petri_audit/seeds_gen*/``. Best-effort — the frontmatter
+    ``evals/petri/seeds_gen*/``. Best-effort — the frontmatter
     is YAML but we don't pull yaml in here; a simple line-based scan
     of ``references:`` + ``arxiv_id`` strings is enough.
 

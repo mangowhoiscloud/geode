@@ -275,7 +275,7 @@ fields remain immutable and are normalized only in memory.
 
 Still in the GEODE repository after the 2026-07-13 migration: the live
 `docs/audits/eval-logs/` manifest ledger (`core/audit/manifest.py` appends to
-it on every `geode audit --live`), the code-referenced
+it on every `geode-eval audit --live`), the code-referenced
 `docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.md` and
 `docs/audits/judge-human-agreement.md`, and the three caveat reports the
 published petri-bundle README cross-links

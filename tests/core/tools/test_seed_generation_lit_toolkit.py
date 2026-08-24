@@ -66,12 +66,12 @@ class TestAgentPromptContract:
     literature tool names so the LLM knows they exist. Without the
     mention, the model would have access but not awareness.
 
-    CSP-9 — prompts now live under ``geode_product/seed_generation/agents/``
+    CSP-9 — prompts now live under ``evals/seed_generation/agents/``
     (operator-override copies in ``.claude/agents/`` still win at
     discovery time, but the canonical source is the plugin folder).
     """
 
-    _PLUGIN_AGENTS_DIR = Path("geode_product/seed_generation/agents")
+    _PLUGIN_AGENTS_DIR = Path("evals/seed_generation/agents")
 
     def test_generator_prompt_mentions_lit_tools(self) -> None:
         text = (self._PLUGIN_AGENTS_DIR / "generator.md").read_text(encoding="utf-8")
@@ -114,13 +114,13 @@ class TestPromptsColocationCSP9:
     )
 
     def test_all_prompts_in_plugin_folder(self) -> None:
-        agents_dir = Path("geode_product/seed_generation/agents")
+        agents_dir = Path("evals/seed_generation/agents")
         for role in self._ROLES:
             prompt = agents_dir / f"{role}.md"
             assert prompt.is_file(), f"missing prompt: {prompt}"
 
     def test_product_composition_registers_all_prompts(self) -> None:
-        from geode_product.seed_generation._registry_builder import (
+        from evals.seed_generation._registry_builder import (
             _try_build_agent_registry,
         )
 
