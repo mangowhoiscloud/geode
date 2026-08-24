@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.24] - 2026-08-24
+
+> Package-boundary release: GEODE now separates the runtime, evaluation
+> substrate, and hill-climbing loop under explicit one-way owners and removes
+> the retired compatibility and unsupported distribution surfaces.
+
 ### Architecture
 
 - **Runtime, evaluation, and evolution now have explicit package owners.**

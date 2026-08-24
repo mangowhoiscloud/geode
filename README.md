@@ -30,7 +30,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v1.0.23: Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.24: Autonomous Agent Runtime + Evaluation Substrate
 
 A general-purpose runtime for autonomous tool work. You ask in plain language;
 GEODE plans, calls tools, and reports, for one prompt or a long-running session.
