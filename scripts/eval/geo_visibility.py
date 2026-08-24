@@ -131,6 +131,56 @@ def _not_measured(stage: str, *, phase: str, finding: str) -> dict[str, Any]:
     )
 
 
+def _validate_host_preflight(host: dict[str, Any], *, label: str) -> int:
+    schema_id = str(host.get("schema_id") or "")
+    schemas = {
+        "geode.geo-host-preflight@1": (1, "geo-host-preflight.schema.json"),
+        "geode.geo-host-preflight@2": (2, "geo-host-preflight-v2.schema.json"),
+    }
+    selected = schemas.get(schema_id)
+    if selected is None:
+        raise ValueError(f"{label}: unsupported GEO host preflight schema")
+    version, filename = selected
+    _validate_schema(host, filename, label=label)
+    if version == 1:
+        return version
+
+    pages = host["pages"]
+    page_count = len(pages)
+    page_urls = [str(row["url"]) for row in pages]
+    if len(page_urls) != len(set(page_urls)):
+        raise ValueError(f"{label}: GEO host preflight page URLs must be unique")
+    page_urlset_sha256 = hashlib.sha256(
+        json.dumps(page_urls, ensure_ascii=False, separators=(",", ":")).encode()
+    ).hexdigest()
+    if page_urlset_sha256 != host["urlset_sha256"]:
+        raise ValueError(f"{label}: GEO host URL digest does not match its pages")
+    user_agents = set(host["robots"]["user_agents"])
+    for row in pages:
+        checks = row["checks"]
+        base_checks = {name: passed for name, passed in checks.items() if name != "eligible"}
+        if checks["eligible"] != all(base_checks.values()):
+            raise ValueError(f"{label}: GEO page eligibility is not its check conjunction")
+        if set(row["robots_allowed"]) != user_agents:
+            raise ValueError(f"{label}: GEO page crawler policy does not match the receipt")
+        expected_failures = [
+            name for name, passed in checks.items() if name != "eligible" and not passed
+        ]
+        if row["failures"] != expected_failures:
+            raise ValueError(f"{label}: GEO page failure list does not match its checks")
+    for name, ratio in host["checks"].items():
+        if ratio["denominator"] != page_count or ratio["numerator"] != sum(
+            int(row["checks"][name]) for row in pages
+        ):
+            raise ValueError(f"{label}: GEO host {name} aggregate does not match its pages")
+    complete = host["checks"]["eligible"]["numerator"] == page_count and not any(
+        host["sitemap_difference"].values()
+    )
+    if (host["status"] == "pass") != complete:
+        raise ValueError(f"{label}: GEO host preflight status does not match eligibility")
+    return version
+
+
 def _validate_live_approval(
     *,
     workload_path: Path,
@@ -198,17 +248,16 @@ def _fetch_metric(results_path: Path, context: dict[str, Any] | None) -> dict[st
         if not isinstance(loaded_host, dict):
             raise ValueError("GEO host preflight receipt must be an object")
         host = loaded_host
-        _validate_schema(host, "geo-host-preflight.schema.json", label="host preflight")
+        host_version = _validate_host_preflight(host, label="host preflight")
         if host["urlset_sha256"] != site["urlset_sha256"]:
             raise ValueError("GEO local and public host URL sets do not match")
         if int(host["checks"]["http_2xx"]["denominator"]) != pages:
             raise ValueError("GEO local export and public host page counts do not match")
-        host_passes = min(int(row["numerator"]) for row in host["checks"].values())
-        complete = all(
-            row["numerator"] == row["denominator"] for row in host["checks"].values()
-        ) and not any(host["sitemap_difference"].values())
-        if (host["status"] == "pass") != complete:
-            raise ValueError("GEO host preflight status does not match its checks")
+        host_passes = (
+            int(host["checks"]["eligible"]["numerator"])
+            if host_version == 2
+            else min(int(row["numerator"]) for row in host["checks"].values())
+        )
     metric = _metric(
         "F",
         phase="preflight",

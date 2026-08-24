@@ -129,6 +129,13 @@ functional change.
 
 ### Fixed
 
+- **GEO fetch eligibility is now a per-URL conjunction.** Public-host preflight
+  v2 records redirect identity, HTTP and meta index controls, crawler-specific
+  robots policy, exact deployed-content parity, and every page-level failure.
+  F uses the explicit eligible-page count instead of the minimum of unrelated
+  marginal checks; immutable v1 receipts remain readable as historical
+  evidence.
+
 - **Concurrent first access no longer races SQLite schema setup.** Short-lived
   projection stores serialize their in-process WAL/schema initialization, so
   sibling threads cannot fail with `database is locked` during a first-run

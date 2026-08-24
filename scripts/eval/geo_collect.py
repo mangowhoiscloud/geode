@@ -22,6 +22,7 @@ from scripts.eval.geo_visibility import (
     _WORKLOAD_IDS,
     _relative,
     _sha256,
+    _validate_host_preflight,
     _validate_live_approval,
     _write_exclusive,
 )
@@ -143,21 +144,21 @@ async def collect(
             "sha256": _sha256(path),
         }
 
+    def bound_host(path: Path) -> dict[str, str]:
+        path = path.resolve()
+        _validate_host_preflight(_load_json_object(path), label=str(path))
+        return {
+            "path": _relative(path, output_path.parent, label="host preflight"),
+            "sha256": _sha256(path),
+        }
+
     preflight_context = (
         None
         if site_preflight_path is None or link_audit_path is None
         else {
             "site": bound(site_preflight_path, "geo-preflight.schema.json", "site preflight"),
             "links": bound(link_audit_path, "geo-link-audit.schema.json", "link audit"),
-            "host": (
-                None
-                if host_preflight_path is None
-                else bound(
-                    host_preflight_path,
-                    "geo-host-preflight.schema.json",
-                    "host preflight",
-                )
-            ),
+            "host": (None if host_preflight_path is None else bound_host(host_preflight_path)),
         }
     )
     run_spec = validate_run_spec(run_spec_path)

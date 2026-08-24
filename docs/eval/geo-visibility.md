@@ -16,6 +16,7 @@ eval_contracts:
   - core/observability/schemas/trajectory.schema.json
   - docs/eval/artifact-publish-manifest.template.json
   - docs/eval/schemas/geo-host-preflight.schema.json
+  - docs/eval/schemas/geo-host-preflight-v2.schema.json
   - docs/eval/schemas/geo-link-audit.schema.json
   - docs/eval/schemas/geo-live-approval.schema.json
   - docs/eval/schemas/geo-native-results.schema.json
@@ -156,10 +157,13 @@ with frozen baseline and treatment arms.
 
 1. Run deterministic preflight first. Local export evidence is intentionally
    `partial`; F becomes `measured` only when a separate public-host receipt
-   binds the same URL-set digest and passes HTTP, HTML, self-canonical,
-   noindex, and host-root robots checks. A failed public-host check still writes
-   a `status=fail` receipt and exits non-zero, preserving missing and unexpected
-   sitemap URLs instead of erasing the observation:
+   binds the same URL-set digest. Host receipt v2 derives F from the URL-level
+   conjunction of sitemap membership, HTTP, HTML, redirect identity,
+   self-canonical, HTTP/meta index controls, crawler-specific robots access,
+   and exact deployed-content parity. It never substitutes the minimum of
+   unrelated marginal counts for eligible pages. A failed check still writes a
+   `status=fail` receipt and exits non-zero, preserving page failures plus
+   missing and unexpected sitemap URLs instead of erasing the observation:
 
    ```bash
    cd site
@@ -172,6 +176,8 @@ with frozen baseline and treatment arms.
    uv run python scripts/eval/geo_host_preflight.py \
      --base-url https://mangowhoiscloud.github.io/geode/ \
      --expected-sitemap site/out/sitemap.xml \
+     --expected-root site/out \
+     --crawler OAI-SearchBot \
      --out <run-dir>/host-preflight.json
    ```
 2. For live engines, use every frozen root and paraphrase in fresh sessions at
