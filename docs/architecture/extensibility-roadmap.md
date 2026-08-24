@@ -225,6 +225,7 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
+| R8.5 | BND-009 | `session=codex-root task=r8-5-runtime-eval-evolve-migration` | `feature/r8-5-runtime-eval-evolve-migration` | readiness [#3142](https://github.com/mangowhoiscloud/geode/pull/3142) | `2026-08-24T02:09:39Z` |
 | _none yet_ | — | — | — | — | — |
 
 ## 1. Program objective
@@ -566,7 +567,7 @@ and closure evidence are appended in §10.
 | REL-004 | `ABSENT` | No registered gate prevents the v1.0.23 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.23, and every release inside that interval retained them | R8.3 | REL-003 | `SUPERSEDED` |
 | BND-008 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-004, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.4 | REL-004, STORE-003 | `SUPERSEDED` |
 | CODE-002 | `MISFIT` | Verification state is restored from checkpoint `loop_guards`, but `_persist_verify_state` still mirrors every result into `SessionManager` columns whose accessor has no production reader | Production verify-mirror writes and the unused accessor are removed; legacy databases containing the columns still load, checkpoint recovery remains authoritative, and no new store or schema migration is introduced | R9.2 | CODE-001 | `DONE` |
-| BND-009 | `MISFIT` | `geode_product` combines runtime composition with evaluation and hill-climbing, while `plugins`, `core/self_improving`, Homebrew candidate files, and the unverified computer sandbox preserve duplicate or unsupported ownership surfaces | One documented migration leaves `core` as the GEODE runtime, moves measurement to `evals` and hill-climbing to `evolve`, removes every obsolete package/scaffold without a replacement stub, preserves one-way `evolve -> evals -> core` dependencies and operator behavior, migrates tracked state with byte parity, and proves the final wheel/sdist/install/release contain only the declared roots | R8.5 | BND-006, REL-003 | `READY` |
+| BND-009 | `MISFIT` | `geode_product` combines runtime composition with evaluation and hill-climbing, while `plugins`, `core/self_improving`, Homebrew candidate files, and the unverified computer sandbox preserve duplicate or unsupported ownership surfaces | One documented migration leaves `core` as the GEODE runtime, moves measurement to `evals` and hill-climbing to `evolve`, removes every obsolete package/scaffold without a replacement stub, preserves one-way `evolve -> evals -> core` dependencies and operator behavior, migrates tracked state with byte parity, and proves the final wheel/sdist/install/release contain only the declared roots | R8.5 | BND-006, REL-003 | `IN_PROGRESS` |
 
 ## 6. Dependency and merge sequence
 
@@ -2187,22 +2188,23 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Immediate next unit
 
-R8.5 (`BND-009`) is the sole unclaimed `READY` package after a whole-package
-re-audit against
-`origin/develop@ae585a8e591994d0fb25a1d75a05968209be0524`. Its external
-dependencies, `BND-006` and `REL-003`, are `DONE`. The measured gap remains
-exactly the mixed `geode_product` ownership, duplicate `plugins` and
-`core/self_improving` paths, unsupported Homebrew/sandbox scaffolds, and the
-absence of a committed `core`/`evals`/`evolve` migration record and package
-gate. Readiness authorizes only the registered namespace convergence and
-verified patch release; it does not authorize a compatibility facade, archive,
-new plugin framework, or a second runtime.
+R8.5 (`BND-009`) is `IN_PROGRESS` under the sole active claim owned by
+`session=codex-root task=r8-5-runtime-eval-evolve-migration` for branch
+`feature/r8-5-runtime-eval-evolve-migration`. Readiness PR #3142 merged at
+`b1300113275fc387bb2fe64782ccf4fd77de20fd`; implementation starts only after
+this claim merges and a fresh worktree is allocated from the updated canonical
+`origin/develop` tip.
+
+The claimed scope is exactly one documented `core`/`evals`/`evolve`
+convergence, deletion of `geode_product`, `plugins`, `core/self_improving`,
+Homebrew candidate and unverified computer sandbox surfaces, tracked-state
+parity, distribution/install proof, and a verified patch release. It does not
+authorize a compatibility facade, archive, new plugin framework, second
+runtime, unrelated tool behavior, or a hidden package split.
 
 The master ledger contains 58 GAPs: 48 `DONE`, six `SUPERSEDED`, three
-`IN_DEVELOP`, and one `READY`. There are no active claims and no `OPEN`,
-`IN_PROGRESS`, `BLOCKED`, `REJECTED`, or unexplained rows. A separate claim PR
-must name the implementation owner and branch before a new worktree is
-allocated.
+`IN_DEVELOP`, and one `IN_PROGRESS`. There are no `OPEN`, `READY`, `BLOCKED`,
+`REJECTED`, or unexplained rows.
 
 R7.2 (`CAP-006`, `VER-002`) and R7.3 (`VER-004`) remain `IN_DEVELOP` until
 the final full-program release audit closes their cross-package evidence.
