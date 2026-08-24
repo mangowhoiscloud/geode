@@ -8,6 +8,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
@@ -193,10 +194,16 @@ def _validate_claims(payload: object, *, answer: str) -> dict[str, Any]:
         quote = str(row["answer_quote"])
         start = answer.find(quote)
         if start < 0:
-            raise ValueError(
-                f"GEO claim answer quote does not occur in the native answer: {quote[:200]!r}"
-            )
-        spans.append((start, start + len(quote), quote))
+            match = re.search(re.escape(quote), answer, flags=re.IGNORECASE)
+            if match is None:
+                raise ValueError(
+                    f"GEO claim answer quote does not occur in the native answer: {quote[:200]!r}"
+                )
+            start, end = match.span()
+            quote = answer[start:end]
+        else:
+            end = start + len(quote)
+        spans.append((start, end, quote))
     ordered = sorted(spans)
     if len(ordered) != len(set(ordered)) or any(
         current[0] < previous[1] for previous, current in pairwise(ordered)

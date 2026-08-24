@@ -101,7 +101,8 @@ functional change.
   first occurrence; producer version and extractor/verifier effort are bound
   into their receipts and overlay contexts. Rejected extraction corrections
   identify the observation and bounded offending quote without fuzzy-matching
-  invented text;
+  invented text. Case-only literal drift is rebound to the exact original
+  substring and host-derived offsets;
   exact unique source spans and complete source snapshots are required, and A
   is derived from supported claims rather than accepted from model prose. An
   optional digest-bound blind human sidecar records claim-completeness and

@@ -660,6 +660,21 @@ def test_geo_verifier_v2_identifies_an_invented_answer_quote() -> None:
         )
 
 
+def test_geo_verifier_v2_binds_case_only_quote_drift_to_original_text() -> None:
+    answer = "Candidates are promoted according to measured results."
+
+    claims = _validate_claims(
+        {
+            "claims": [{"answer_quote": "candidates are promoted"}],
+            "rationale": "One claim with case-only drift.",
+        },
+        answer=answer,
+    )["claims"]
+
+    assert claims[0]["answer_quote"] == "Candidates are promoted"
+    assert answer[claims[0]["answer_start"] : claims[0]["answer_end"]] == claims[0]["answer_quote"]
+
+
 def test_geo_verifier_retries_one_connection_transient(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
