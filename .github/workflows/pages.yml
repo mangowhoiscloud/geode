@@ -244,6 +244,7 @@ jobs:
           args: >-
             --root-dir ${{ github.workspace }}/_lc
             --fallback-extensions html
+            --remap '^https://mangowhoiscloud\.github\.io/geode/(.*)/$ file://${{ github.workspace }}/_lc/geode/$1/index.html'
             --cache --max-cache-age 1d
             --max-retries 2 --retry-wait-time 2 --timeout 20
             --accept 200,206,403,429

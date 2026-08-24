@@ -153,7 +153,8 @@ functional change.
   robots policy, exact deployed-content parity, and every page-level failure.
   F uses the explicit eligible-page count instead of the minimum of unrelated
   marginal checks; immutable v1 receipts remain readable as historical
-  evidence.
+  evidence. The Pages link ratchet remaps production canonicals to the staged
+  export so a new route is locally checked before its first deployment.
 
 - **Audit-identified compatibility paths now keep one implementation owner.**
   The slop audit scans `geode_product`, both public web-search names share one
