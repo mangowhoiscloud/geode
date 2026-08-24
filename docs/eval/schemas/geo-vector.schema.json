@@ -102,6 +102,7 @@
             "producer": {"type": "string", "minLength": 1, "maxLength": 128},
             "version": {"type": "string", "minLength": 1, "maxLength": 128},
             "model": {"type": "string", "minLength": 1, "maxLength": 128},
+            "timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
             "rubric": {"$ref": "#/$defs/evidence_ref"}
           },
           "additionalProperties": false
@@ -117,7 +118,8 @@
           "properties": {
             "producer": {"type": "string", "minLength": 1, "maxLength": 128},
             "version": {"type": "string", "minLength": 1, "maxLength": 128},
-            "model": {"type": "string", "minLength": 1, "maxLength": 128}
+            "model": {"type": "string", "minLength": 1, "maxLength": 128},
+            "timeout_seconds": {"type": "number", "exclusiveMinimum": 0}
           },
           "additionalProperties": false
         }

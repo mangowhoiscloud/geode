@@ -675,6 +675,34 @@ def test_geo_verifier_retries_one_connection_transient(
     assert adapter.calls == 2
 
 
+def test_geo_verifier_bounds_stalled_subscription_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class StalledAdapter:
+        calls = 0
+
+        async def acomplete(self, _: Any) -> AdapterCallResult:
+            self.calls += 1
+            await asyncio.Future()
+            raise AssertionError("unreachable")
+
+    async def no_sleep(_: float) -> None:
+        return None
+
+    monkeypatch.setattr("scripts.eval.geo_verify.asyncio.sleep", no_sleep)
+    adapter = StalledAdapter()
+    with pytest.raises(TimeoutError):
+        asyncio.run(
+            _acomplete_with_connection_retry(
+                adapter,
+                AdapterCallRequest(model="test-model", messages=()),
+                timeout_seconds=0.01,
+            )
+        )
+
+    assert adapter.calls == 2
+
+
 def _assert_geo_verifier_resumes_digest_checked_receipts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

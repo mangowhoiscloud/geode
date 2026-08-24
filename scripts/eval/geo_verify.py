@@ -127,13 +127,18 @@ log = logging.getLogger(__name__)
 
 
 async def _acomplete_with_connection_retry(
-    adapter: Any, request: AdapterCallRequest
+    adapter: Any, request: AdapterCallRequest, *, timeout_seconds: float = 300.0
 ) -> AdapterCallResult:
     for attempt in range(_CONNECTION_RETRIES + 1):
         try:
-            return cast(AdapterCallResult, await adapter.acomplete(request))
+            return cast(
+                AdapterCallResult,
+                await asyncio.wait_for(adapter.acomplete(request), timeout=timeout_seconds),
+            )
         except Exception as exc:
-            if attempt == _CONNECTION_RETRIES or not is_connection_transient(exc):
+            if attempt == _CONNECTION_RETRIES or not (
+                isinstance(exc, TimeoutError) or is_connection_transient(exc)
+            ):
                 raise
             delay = 2**attempt
             log.warning(
@@ -296,6 +301,7 @@ async def verify(
     adapter_name: str,
     producer_version: str,
     concurrency: int,
+    timeout_seconds: float = 300.0,
     claim_model: str | None = None,
     claim_adapter_name: str | None = None,
 ) -> dict[str, Any]:
@@ -466,6 +472,7 @@ async def verify(
                         response_schema=_CLAIM_SCHEMA,
                         max_tokens=4096,
                     ),
+                    timeout_seconds=timeout_seconds,
                 )
             try:
                 extracted = _validate_claims(
@@ -602,6 +609,7 @@ async def verify(
                         response_schema=_VERDICT_SCHEMA_V2,
                         max_tokens=4096,
                     ),
+                    timeout_seconds=timeout_seconds,
                 )
             try:
                 verdict = _validate_verdict_v2(
@@ -694,12 +702,14 @@ async def verify(
             "producer": adapter.name,
             "version": producer_version,
             "model": model,
+            "timeout_seconds": timeout_seconds,
             "rubric": rubric_ref,
         },
         "claim_extractor_context": {
             "producer": extractor.name,
             "version": producer_version,
             "model": claim_model,
+            "timeout_seconds": timeout_seconds,
         },
         "unmeasured_observations": unmeasured,
         "observations": rows,
@@ -721,9 +731,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--claim-adapter")
     parser.add_argument("--producer-version", required=True)
     parser.add_argument("--concurrency", type=int, default=2)
+    parser.add_argument("--timeout-seconds", type=float, default=300.0)
     args = parser.parse_args(argv)
     if args.concurrency <= 0:
         parser.error("concurrency must be positive")
+    if args.timeout_seconds <= 0:
+        parser.error("timeout-seconds must be positive")
     asyncio.run(
         verify(
             workload_path=args.workload,
@@ -734,6 +747,7 @@ def main(argv: list[str] | None = None) -> int:
             adapter_name=args.adapter,
             producer_version=args.producer_version,
             concurrency=args.concurrency,
+            timeout_seconds=args.timeout_seconds,
             claim_model=args.claim_model,
             claim_adapter_name=args.claim_adapter,
         )
