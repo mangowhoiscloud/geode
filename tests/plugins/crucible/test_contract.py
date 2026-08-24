@@ -7,6 +7,7 @@ from geode_product.crucible.contract import (
     ContractError,
     ExperimentContract,
     TaskUnit,
+    canonical_json_sha256,
     content_sha256,
     task_pack_sha256,
     tracked_tree_sha256,
@@ -24,6 +25,12 @@ TASKS = (
     TaskUnit("retail-2", "retail-family-2", "2" * 64),
 )
 TASK_PACK_SHA = task_pack_sha256(TASKS, 1)
+
+
+def test_canonical_json_sha256_is_order_stable_and_byte_pinned() -> None:
+    expected = "0855bfc20eb6cfaa4be7d6b510c63dd22997718bddadcb1a4915cec3a16145b9"
+    assert canonical_json_sha256({"b": [2], "a": 1}) == expected
+    assert canonical_json_sha256({"a": 1, "b": [2]}) == expected
 
 
 def _payload() -> dict[str, object]:

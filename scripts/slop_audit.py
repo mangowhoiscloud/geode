@@ -1,4 +1,4 @@
-"""Slop prevention audit — 6-lens scan of core/ + plugins/ + autoresearch/.
+"""Slop prevention audit — 6-lens scan of production packages + scripts.
 
 Surfaces patterns that accumulate during long PR sequences and rot
 codebase health if uncaught:
@@ -41,7 +41,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCAN_ROOTS = ("core/", "plugins/", "autoresearch/", "scripts/")
+SCAN_ROOTS = ("core/", "plugins/", "geode_product/", "scripts/")
 
 
 @dataclass

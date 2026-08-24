@@ -436,12 +436,13 @@ def test_every_web_search_capable_adapter_accepts_model_hint() -> None:
 
 
 def test_web_tools_forward_session_model_to_dispatch() -> None:
-    """Source pin — both web-search tool surfaces must pass the session
-    model from ToolContext into dispatch."""
-    for relative in ("core/tools/web_tools.py", "core/tools/web_search.py"):
-        src = (REPO_ROOT / relative).read_text(encoding="utf-8")
-        assert 'getattr(ctx, "model", "")' in src, relative
-        assert "model=session_model" in src, relative
+    """Both names delegate to the one helper that forwards the session model."""
+    shared_src = (REPO_ROOT / "core/tools/web_tools.py").read_text(encoding="utf-8")
+    compatibility_src = (REPO_ROOT / "core/tools/web_search.py").read_text(encoding="utf-8")
+    assert 'getattr(ctx, "model", "")' in shared_src
+    assert "model=session_model" in shared_src
+    assert "_execute_web_search" in compatibility_src
+    assert "_execute_web_search" in shared_src
 
 
 # ---------------------------------------------------------------------------

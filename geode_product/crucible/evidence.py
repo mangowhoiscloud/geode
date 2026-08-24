@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -11,7 +9,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from .artifacts import load_json_object
-from .contract import ContractError, ExperimentContract
+from .contract import ContractError, ExperimentContract, canonical_json_sha256
 
 EVIDENCE_SCHEMA = "crucible.evidence.v3"
 
@@ -79,16 +77,6 @@ def _non_negative_int(value: object, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ContractError(f"{field} must be an integer greater than or equal to zero")
     return value
-
-
-def _canonical_hash(payload: Mapping[str, Any]) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -339,7 +327,7 @@ class EvidenceEnvelope:
 
     @property
     def evidence_id(self) -> str:
-        return _canonical_hash(self.canonical_payload())
+        return canonical_json_sha256(self.canonical_payload())
 
     def to_dict(self) -> dict[str, Any]:
         return {**self.canonical_payload(), "evidence_id": self.evidence_id}

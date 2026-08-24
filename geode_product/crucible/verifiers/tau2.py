@@ -14,7 +14,12 @@ from geode_product.benchmark_harness.tau2_runtime_contract import (
     GEODE_DUAL_RUNTIME_PROFILE,
     TAU2_NATIVE_USER_PROFILE,
 )
-from geode_product.crucible.contract import ContractError, ExperimentContract, TaskUnit
+from geode_product.crucible.contract import (
+    ContractError,
+    ExperimentContract,
+    TaskUnit,
+    canonical_json_sha256,
+)
 from geode_product.crucible.evidence import EVIDENCE_SCHEMA, EvidenceEnvelope, ResourceUsage
 
 _SNAPSHOT_SCHEMA = "crucible_tau2_trajectory_snapshot.v4"
@@ -339,17 +344,13 @@ def _tau2_family_sha256(value: Mapping[str, Any], field: str) -> str:
     active_criteria = sorted(
         str(name) for name, criterion in criteria.items() if criterion not in (None, [], {}, "")
     )
-    encoded = json.dumps(
+    return canonical_json_sha256(
         {
             "action_names": action_names,
             "active_criteria": active_criteria,
             "user_tool_names": user_tool_names,
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+        }
+    )
 
 
 def tau2_task_unit(value: Mapping[str, Any], field: str = "tau2 task") -> TaskUnit:

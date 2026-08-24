@@ -184,29 +184,56 @@ def test_select_adapter_returns_none_when_no_capable_registered(
 
 
 # ---------------------------------------------------------------------------
-# 3. Source-level pins — web tools forward the preference
+# 3. Both web-search names share one behavioural dispatch path
 # ---------------------------------------------------------------------------
 
 
-def test_general_web_search_forwards_tool_context() -> None:
-    src = (Path(__file__).resolve().parents[3] / "core" / "tools" / "web_tools.py").read_text(
-        encoding="utf-8"
-    )
-    # Tool must read _tool_context from kwargs and pass prefer_provider /
-    # prefer_source to the dispatch helper. A silent drop here defeats the
-    # entire PR-TOOL-EXEC-CONTEXT flow.
-    assert 'kwargs.get("_tool_context")' in src
-    assert "prefer_provider=prefer_provider" in src
-    assert "prefer_source=prefer_source" in src
+@pytest.mark.parametrize("tool_name", ["general_web_search", "web_search"])
+def test_web_search_names_share_routed_dispatch(
+    tool_name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.llm.adapters.base import WebSearchResult
+    from core.tools.base import ToolContext
+    from core.tools.web_search import WebSearchTool
+    from core.tools.web_tools import GeneralWebSearchTool
 
-
-def test_web_search_tool_forwards_tool_context() -> None:
-    src = (Path(__file__).resolve().parents[3] / "core" / "tools" / "web_search.py").read_text(
-        encoding="utf-8"
+    dispatch = AsyncMock(
+        return_value=WebSearchResult(
+            query="current releases",
+            text="result text",
+            adapter_name="anthropic-subscription",
+            adapter_provider="anthropic",
+            adapter_source="subscription",
+            source_urls=("https://example.com",),
+        )
     )
-    assert 'kwargs.get("_tool_context")' in src
-    assert "prefer_provider=prefer_provider" in src
-    assert "prefer_source=prefer_source" in src
+    monkeypatch.setattr("core.llm.adapters.dispatch.web_search_via_adapters", dispatch)
+    tool = GeneralWebSearchTool() if tool_name == "general_web_search" else WebSearchTool()
+    context = ToolContext(
+        provider="anthropic",
+        source="subscription",
+        model="claude-opus-4-7",
+    )
+
+    result = asyncio.run(
+        tool.aexecute(query="current releases", max_results=3, _tool_context=context)
+    )
+
+    dispatch.assert_awaited_once_with(
+        "current releases",
+        max_results=3,
+        prefer_provider="anthropic",
+        prefer_source="subscription",
+        model="claude-opus-4-7",
+    )
+    assert result["result"] == {
+        "query": "current releases",
+        "search_results": "result text",
+        "source": "anthropic-subscription",
+        "source_urls": ["https://example.com"],
+        "adapter_provider": "anthropic",
+        "adapter_source": "subscription",
+    }
 
 
 # ---------------------------------------------------------------------------

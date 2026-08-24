@@ -24,7 +24,6 @@ that wall a statistical confidence bound or a clean-completion guarantee.
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 import random
 import re
@@ -33,7 +32,13 @@ from pathlib import Path
 from typing import Any, Literal
 
 from .artifacts import load_json_object
-from .contract import ContractError, TaskUnit
+from .contract import (
+    ContractError,
+    TaskUnit,
+    _bounded_text,
+    _positive_int,
+    canonical_json_sha256,
+)
 from .runtime_identity import (
     RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     canonical_runtime_hash,
@@ -54,16 +59,6 @@ _SHA256 = re.compile(r"[0-9a-f]{64}")
 _MAX_SIMULATIONS = 200_000
 
 
-def _canonical_hash(value: object) -> str:
-    encoded = json.dumps(
-        value,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
 def _require_fields(value: Mapping[str, Any], field: str, required: set[str]) -> None:
     missing = sorted(required - set(value))
     unknown = sorted(str(key) for key in set(value) - required)
@@ -73,26 +68,11 @@ def _require_fields(value: Mapping[str, Any], field: str, required: set[str]) ->
         raise ContractError(f"{field} has unknown fields: {', '.join(unknown)}")
 
 
-def _text(value: object, field: str, *, max_bytes: int = 2_000) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ContractError(f"{field} must be a non-empty string")
-    result = value.strip()
-    if len(result.encode("utf-8")) > max_bytes:
-        raise ContractError(f"{field} exceeds {max_bytes} UTF-8 bytes")
-    return result
-
-
 def _sha256(value: object, field: str) -> str:
     if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
         raise ContractError(f"{field} must be a SHA-256")
     if value == "0" * 64:
         raise ContractError(f"{field} must not be the zero digest")
-    return value
-
-
-def _positive_int(value: object, field: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ContractError(f"{field} must be a positive integer")
     return value
 
 
@@ -143,7 +123,7 @@ def _resolve_pilot(
     basis_root: Path,
     expected_sha256: str,
 ) -> tuple[Path, dict[str, Any]]:
-    raw = _text(value, "runtime_audit.pilot_file")
+    raw = _bounded_text(value, "runtime_audit.pilot_file")
     path = Path(raw).expanduser()
     resolved = (basis_root / path).resolve() if not path.is_absolute() else path.resolve()
     try:
@@ -194,7 +174,7 @@ def runtime_pilot_block_rates(
             sample_field = f"{field}.samples[{sample_index}]"
             if not isinstance(sample, Mapping):
                 raise ContractError(f"{sample_field} must be an object")
-            outcome = _text(sample.get("outcome"), f"{sample_field}.outcome", max_bytes=50)
+            outcome = _bounded_text(sample.get("outcome"), f"{sample_field}.outcome", max_bytes=50)
             seconds = _positive_number(sample.get("wall_seconds"), f"{sample_field}.wall_seconds")
             if outcome == "infrastructure_failure":
                 _require_fields(sample, sample_field, {"outcome", "wall_seconds"})
@@ -234,7 +214,7 @@ def runtime_pilot_block_rates(
                         raise ContractError(
                             f"{sample_field}.censoring.limit_seconds must equal wall_seconds"
                         )
-                    _text(
+                    _bounded_text(
                         censoring.get("reason"),
                         f"{sample_field}.censoring.reason",
                         max_bytes=100,
@@ -514,13 +494,13 @@ def audit_runtime_budget(
         raise ContractError("runtime audit stage must be 'train' or 'test'")
     evaluator_digest = _sha256(evaluator_sha256, "runtime audit evaluator_sha256")
     harness_digest = _sha256(harness_sha256, "runtime audit harness_sha256")
-    assay_config_sha256 = _canonical_hash(assay_config)
+    assay_config_sha256 = canonical_json_sha256(assay_config)
     bindings = {
         "evaluator_sha256": evaluator_digest,
         "harness_sha256": harness_digest,
         "assay_config_sha256": assay_config_sha256,
-        "agent_route": _text(agent_route, "runtime audit agent_route"),
-        "user_route": _text(user_route, "runtime audit user_route"),
+        "agent_route": _bounded_text(agent_route, "runtime audit agent_route"),
+        "user_route": _bounded_text(user_route, "runtime audit user_route"),
     }
     design = runtime_design_from_parts(
         tasks=tasks,
@@ -567,7 +547,7 @@ def audit_runtime_budget(
             raise ContractError(
                 "operational_deadline requires risk_acceptance='nonzero_clean_timeout'"
             )
-        source = _text(specification.get("source"), "runtime_audit.source")
+        source = _bounded_text(specification.get("source"), "runtime_audit.source")
         campaign_overhead = _nonnegative_number(
             specification.get("campaign_overhead_seconds"),
             "runtime_audit.campaign_overhead_seconds",
@@ -610,7 +590,7 @@ def audit_runtime_budget(
         }
         return {
             **deadline_payload,
-            "runtime_audit_id": _canonical_hash(deadline_payload),
+            "runtime_audit_id": canonical_json_sha256(deadline_payload),
         }
     if mode == "contract_ceiling":
         _require_fields(
@@ -625,7 +605,7 @@ def audit_runtime_budget(
                 "source",
             },
         )
-        source = _text(specification.get("source"), "runtime_audit.source")
+        source = _bounded_text(specification.get("source"), "runtime_audit.source")
         experiment_overhead = _nonnegative_number(
             specification.get("experiment_overhead_seconds"),
             "runtime_audit.experiment_overhead_seconds",
@@ -672,7 +652,7 @@ def audit_runtime_budget(
         }
         return {
             **ceiling_payload,
-            "runtime_audit_id": _canonical_hash(ceiling_payload),
+            "runtime_audit_id": canonical_json_sha256(ceiling_payload),
         }
     if mode != "pilot_bootstrap":
         raise ContractError(
@@ -731,7 +711,7 @@ def audit_runtime_budget(
         specification.get("minimum_usable_blocks"),
         "runtime_audit.minimum_usable_blocks",
     )
-    source = _text(specification.get("source"), "runtime_audit.source")
+    source = _bounded_text(specification.get("source"), "runtime_audit.source")
     pilot_sha256 = _sha256(specification.get("pilot_sha256"), "runtime_audit.pilot_sha256")
     _pilot_path, pilot = _resolve_pilot(
         specification.get("pilot_file"),
@@ -832,7 +812,7 @@ def audit_runtime_budget(
         "admission": admission,
         "passes": passes,
     }
-    return {**payload, "runtime_audit_id": _canonical_hash(payload)}
+    return {**payload, "runtime_audit_id": canonical_json_sha256(payload)}
 
 
 __all__ = [

@@ -35,6 +35,15 @@ def slop_audit() -> ModuleType:
     return _load_slop_audit_module()
 
 
+def test_scan_roots_cover_every_production_package(slop_audit: ModuleType) -> None:
+    assert slop_audit.SCAN_ROOTS == (
+        "core/",
+        "plugins/",
+        "geode_product/",
+        "scripts/",
+    )
+
+
 def test_run_all_lenses_returns_six_results(slop_audit: ModuleType) -> None:
     results = slop_audit.run_all_lenses()
     names = [r.name for r in results]

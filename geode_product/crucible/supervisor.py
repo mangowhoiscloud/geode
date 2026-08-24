@@ -43,6 +43,7 @@ from .contract import (
     ContractError,
     ExperimentContract,
     Mutation,
+    canonical_json_sha256,
     validate_candidate_diff,
     validate_checkout,
     validate_measurement_files,
@@ -111,13 +112,7 @@ class _DuplicateCandidateError(RuntimeError):
 
 
 def _hash(payload: Mapping[str, Any]) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    return canonical_json_sha256(payload)
 
 
 def _text(value: object, field: str) -> str:

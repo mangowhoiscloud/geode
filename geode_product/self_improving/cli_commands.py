@@ -490,12 +490,7 @@ def _build_runner() -> Any | None:
 
 
 def _render_preflight(flags: dict[str, Any]) -> None:
-    """Render the static text pre-flight block.
-
-    PR-OPS-2a (no Rich Panel yet — interactive dashboard lands in
-    PR-OPS-2b). Surfaces the slice of knobs an operator needs to
-    sanity-check before approving a mutation.
-    """
+    """Render the knobs an operator should verify before a mutation."""
     target_kind = flags["target_kind"] or "any"
     mode = "dry-run (no write)" if flags["dry_run"] else "interactive (per-iter confirm)"
     mutator_model: str = "?"
@@ -525,7 +520,7 @@ def _render_preflight(flags: dict[str, Any]) -> None:
     console.print(f"    target_kind  {target_kind}")
     console.print(f"    iterations   {flags['iterations']}")
     console.print(f"    mode         {mode}")
-    console.print("    harness      [muted]no-op (PR-OPS-2b wires autoresearch/petri_raw)[/muted]")
+    console.print("    measurement  [muted]skipped (interactive mutation only)[/muted]")
 
 
 def _render_proposal(proposal: Any, *, index: int, total: int) -> None:

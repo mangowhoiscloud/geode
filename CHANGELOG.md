@@ -96,6 +96,12 @@ functional change.
 
 ### Fixed
 
+- **Audit-identified compatibility paths now keep one implementation owner.**
+  The slop audit scans `geode_product`, both public web-search names share one
+  routed dispatch/error projection, Crucible identities share canonical JSON
+  hashing and exact scalar validators, and the interactive self-improving
+  preflight now states that paid measurement is skipped.
+
 - **Concurrent first access no longer races SQLite schema setup.** Short-lived
   projection stores serialize their in-process WAL/schema initialization, so
   sibling threads cannot fail with `database is locked` during a first-run
