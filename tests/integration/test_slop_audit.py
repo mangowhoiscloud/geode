@@ -161,3 +161,10 @@ def test_stale_reference_lens_reports_candidate_and_honors_keep_marker(
 
     assert result.count == 1
     assert result.samples == ["core/candidate.py:1 :: BudgetGuard"]
+
+
+def test_current_stale_reference_lens_is_clean(slop_audit: ModuleType) -> None:
+    result = slop_audit.lens_stale_references()
+
+    assert result.count == 0
+    assert result.severity == "info"

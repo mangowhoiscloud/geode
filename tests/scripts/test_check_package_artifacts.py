@@ -10,6 +10,16 @@ def test_worker_composition_roots_are_required_in_both_artifacts() -> None:
     assert required <= artifacts.REQUIRED_SDIST_PATHS
 
 
+def test_current_architecture_skills_are_required_in_both_artifacts() -> None:
+    required = {
+        ".geode/skills/geode-context/SKILL.md",
+        ".geode/skills/slop-audit/SKILL.md",
+    }
+
+    assert required <= artifacts.REQUIRED_WHEEL_PATHS
+    assert required <= artifacts.REQUIRED_SDIST_PATHS
+
+
 def test_removed_compatibility_layout_rejects_every_legacy_root() -> None:
     paths = {
         "core/self_improving/loop/mutate/runner.py",

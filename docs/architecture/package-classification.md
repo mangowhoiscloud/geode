@@ -1,6 +1,6 @@
 ---
 title: Package classification during runtime/eval/evolve convergence
-status: transitional
+status: final
 decision: BND-001 / R1.1, superseded for final placement by BND-009 / R8.5
 authority: package-classification
 related:
@@ -11,9 +11,9 @@ related:
 
 # Package classification during runtime/eval/evolve convergence
 
-The architecture roadmap is the authority for status, ordering, and
-implementation permission. Its active BND-009 claim replaces the older
-`core`/`geode_product` final-boundary decision with this target:
+The architecture roadmap is the authority for status and closure evidence.
+BND-009 replaced the older `core`/`geode_product` boundary and shipped this
+final target in v1.0.24:
 
 ```text
 evolve (Crucible and scaffold search)
@@ -21,12 +21,12 @@ evolve (Crucible and scaffold search)
     -> core (GEODE runtime)
 ```
 
-This document classifies the current checkout while that migration remains
-`IN_PROGRESS`; it does not advance the roadmap status.
+This document records the resulting package classification; it does not own or
+advance roadmap status.
 
-## Current ownership during implementation
+## Current ownership
 
-| Surface | Current role | BND-009 target |
+| Surface | Current role | Final placement |
 |---|---|---|
 | `core/` | GEODE runtime | remains `core/` |
 | `evals/` | measurement, Petri, benchmark, seed-generation, and GEO implementations | remains `evals/` |

@@ -56,6 +56,7 @@ from core.paths import (
     GEODE_REPO_URL,
     RUNTIME_ROOT,
 )
+from evolve.scaffold_search.ledger import RESULTS_TSV_HEADER as AUTORESEARCH_RESULTS_TSV_HEADER
 from markdown_it import MarkdownIt
 
 LOG = logging.getLogger("build_self_improving_hub")
@@ -173,23 +174,6 @@ _CAMPAIGN_TS_RE = re.compile(r"^(?P<ts>\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ)")
 _POWER_DEFAULT_TARGET_EFFECT_SIZE = 0.02
 _POWER_DEFAULT_ALPHA = 0.05
 _POWER_DEFAULT_POWER = 0.8
-
-# 12-col header from evolve/scaffold_search/train.py:1284 RESULTS_TSV_HEADER.
-# Verified against actual code (P-Phase-6 baseline 2026-05-26).
-AUTORESEARCH_RESULTS_TSV_HEADER: tuple[str, ...] = (
-    "session_id",
-    "gen_tag",
-    "commit",
-    "fitness",
-    "critical_min",
-    "critical_mean",
-    "auxiliary_mean",
-    "stability_score",
-    "info_mean",
-    "dim_count_engaged",
-    "verdict",
-    "description",
-)
 
 # Baseline schema v2 namespaces rendered as 7 blocks on the baseline page.
 # Per docs/design/self-improving-autoresearch-baseline.md §4.

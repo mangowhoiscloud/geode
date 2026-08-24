@@ -897,17 +897,6 @@ def _append_baseline_registry_row(
     epoch_label, _epoch_is_new = resolve_epoch_label(epoch_hash, label_map=_label_map)
     if _epoch_is_new:
         save_epoch_label_map(_label_map_path, _label_map)
-        # TODO(PR-STATE-SELF-IMPROVING-RENAME, deferred): epoch-boundary snapshot.
-        # When a NEW epoch opens (``_epoch_is_new``), the convention
-        # (evolve/scaffold_search/state/_archive/README.md) is to freeze the PRIOR
-        # epoch's full production surface (policies/ + baseline.json + pool identity)
-        # under ``evolve/scaffold_search/state/_archive/<prior-be-NNN>/``. NOT auto-wired
-        # here:
-        # adding snapshot I/O inside the promote write path risks the promote
-        # itself (a copy failure must not abort a gate-approved promote). Left as
-        # an explicit follow-up — snapshot via a separate, post-promote step
-        # (e.g. the campaign driver or an operator command) so the promote write
-        # stays single-responsibility. See _archive/README.md for the layout.
     # Intrinsic fitness on the same (dim + admire) scale the promote gate's
     # ``current_raw`` uses — bench is OFF (Path C) so it is not threaded here.
     # A historical backfill PRESERVES its measured fitness (it was scored under

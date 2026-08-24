@@ -278,8 +278,9 @@ def lens_stale_references() -> LensResult:
     source only, NOT ``docs/`` or ``CHANGELOG.md``. The CHANGELOG is
     the canonical home for "we removed X" prose.
 
-    The slop_audit.py script itself is excluded — it literally defines
-    ``_STALE_REFS`` so a self-match is a false positive. Historical
+    The audit itself is excluded because it defines the stale-reference list.
+    Independent retirement probes mark only their intentional expectations with
+    ``# slop:keep``. Historical
     references in docstrings ("pre-PR-1 BudgetGuard layer was removed",
     "no FitnessBaseline wrapping") are intentional change-log context;
     they're allowed via the ``# slop:keep`` line marker on the same
@@ -288,8 +289,6 @@ def lens_stale_references() -> LensResult:
     samples: list[str] = []
     count = 0
     for py in _iter_py_files():
-        # The audit script itself defines the list — never count its
-        # own occurrences.
         if py.name == "slop_audit.py":
             continue
         text = py.read_text(encoding="utf-8", errors="ignore")

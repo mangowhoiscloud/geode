@@ -15,10 +15,12 @@ from this skill.
 
 - GEODE is a general-purpose autonomous-agent harness whose runtime is `AgenticLoop(while tool_use)`.
 - The agent loop, sub-agents, plans, and batches are all instances of the same tool-use loop.
-- Core runtime is domain-agnostic. Main packages:
+- The runtime is domain-agnostic. Shipped packages:
   - `core/` — agent loop, tools, MCP, memory, hooks, wiring, CLI, server, gateway.
-  - `geode_product/` — first-party composition and bundled product features.
-  - `site/` — public Next.js docs/site.
+  - `evals/` — Petri audits, benchmarks, seed generation, and GEO measurement.
+  - `evolve/` — scaffold search and Crucible experiment supervision.
+- `site/` is the public Next.js docs/site, not a Python package.
+- Dependency direction is `evolve -> evals -> core`; reverse imports are forbidden.
 
 ## Runtime Boundaries
 
@@ -37,12 +39,14 @@ from this skill.
 ## Release Pipeline
 
 - Functional commits update `CHANGELOG.md`.
-- Quality gates: `ruff check` / `ruff format --check` (core, geode_product, tests, scripts), `mypy core/ geode_product/`, `lint-imports`, `pytest -m "not live"`, `geode version` smoke.
+- Quality gates: `ruff check` / `ruff format --check` (`core`, `evals`, `evolve`, `tests`, `scripts`), `mypy core/ evals/ evolve/`, `lint-imports`, `pytest -m "not live"`, `geode version` smoke.
 - Publishing is manual/approval-gated, not automatic on every main push.
 
 ## Guardrails
 
-- Do not reintroduce `plugins.game_ip` imports into `core/`; Game IP is not the default domain.
+- Do not restore the retired top-level `plugins`, `geode_product`, or
+  `core.self_improving` packages. Evaluation and evolution stay explicit outer
+  consumers of `core`.
 - Do not describe GEODE as a fixed Plan-and-Execute DAG, fixed StateGraph, or confidence-threshold pipeline.
 - Do not cite LangSmith as current observability; GEODE uses its own hooks, audit diagnostics, run logs, and site/docs gates.
 - Do not hard-code deprecated model names. Use the provider registries and token/cost tables.
