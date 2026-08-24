@@ -1923,6 +1923,13 @@ def test_autoresearch_results_sparkline(built_autoresearch_pages: dict[str, str]
     assert ".fitness-sparkline" in css, "hub.css missing .fitness-sparkline rule"
 
 
+def test_autoresearch_results_header_reuses_ledger_authority() -> None:
+    from evolve.scaffold_search.ledger import RESULTS_TSV_HEADER
+    from scripts.build_self_improving_hub import AUTORESEARCH_RESULTS_TSV_HEADER
+
+    assert AUTORESEARCH_RESULTS_TSV_HEADER is RESULTS_TSV_HEADER
+
+
 def test_autoresearch_policies_lists_14_files(
     built_autoresearch_pages: dict[str, str],
 ) -> None:

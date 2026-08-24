@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Post-migration package guidance now matches the shipped roots.** Bundled
+  runtime skills and release scaffolds describe `core`, `evals`, and `evolve`;
+  package gates require those skill contracts, the self-improving hub reuses
+  the ledger's TSV schema, an unused deferred epoch-archive stub is removed,
+  and explicit retirement assertions no longer create slop-audit false
+  positives.
+
 ## [1.0.24] - 2026-08-24
 
 > Package-boundary release: GEODE now separates the runtime, evaluation

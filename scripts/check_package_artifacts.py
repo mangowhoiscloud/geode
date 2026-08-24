@@ -44,7 +44,9 @@ SELF_IMPROVING_STATE_PATHS = {
 REQUIRED_WHEEL_PATHS = (
     {
         ".geode/skills/geo/SKILL.md",
+        ".geode/skills/geode-context/SKILL.md",
         ".geode/skills/grilling/SKILL.md",
+        ".geode/skills/slop-audit/SKILL.md",
         "core/GEODE.md",
         "core/worker.py",
         "core/tools/definitions.json",
@@ -83,7 +85,9 @@ REQUIRED_WHEEL_PATHS = (
 REQUIRED_SDIST_PATHS = (
     {
         ".geode/skills/geo/SKILL.md",
+        ".geode/skills/geode-context/SKILL.md",
         ".geode/skills/grilling/SKILL.md",
+        ".geode/skills/slop-audit/SKILL.md",
         "GEODE.md",
         "pyproject.toml",
         "README.md",
@@ -226,7 +230,9 @@ def _check_removed_compatibility_layout(label: str, paths: set[str]) -> list[str
     removed_paths = {
         path
         for path in paths
-        if path.startswith(("geode_product/", "plugins/", "core/self_improving/"))
+        if path.startswith(
+            ("geode_product/", "plugins/", "core/self_improving/")  # slop:keep
+        )
     }
     problems = [
         f"{label}: removed compatibility path is packaged: {path}" for path in sorted(removed_paths)
