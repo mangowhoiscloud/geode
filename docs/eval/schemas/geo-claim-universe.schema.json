@@ -3,11 +3,12 @@
   "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/schemas/geo-claim-universe.schema.json",
   "title": "GEODE GEO frozen claim universe v1",
   "type": "object",
-  "required": ["schema_id", "observation_id", "producer", "model", "effort", "extracted_at", "native_receipt_sha256", "answer_sha256", "target_urls", "claims", "rationale"],
+  "required": ["schema_id", "observation_id", "producer", "version", "model", "effort", "extracted_at", "native_receipt_sha256", "answer_sha256", "target_urls", "claims", "rationale"],
   "properties": {
     "schema_id": {"const": "geode.geo-claim-universe@1"},
     "observation_id": {"type": "string", "minLength": 3, "maxLength": 256},
     "producer": {"type": "string", "minLength": 1, "maxLength": 128},
+    "version": {"type": "string", "minLength": 1, "maxLength": 128},
     "model": {"type": "string", "minLength": 1, "maxLength": 128},
     "effort": {"type": "string", "minLength": 1, "maxLength": 32},
     "extracted_at": {"type": "string", "format": "date-time"},

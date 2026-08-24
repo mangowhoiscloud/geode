@@ -507,6 +507,7 @@ def _validate_verifier_v2_evidence(
     expected_claim_binding = (
         loaded_claims["observation_id"] == observation_id
         and loaded_claims["producer"] == claim_extractor_context["producer"]
+        and loaded_claims["version"] == claim_extractor_context["version"]
         and loaded_claims["model"] == claim_extractor_context["model"]
         and loaded_claims["effort"] == claim_extractor_context["effort"]
         and loaded_claims["native_receipt_sha256"] == observation["native_receipt"]["sha256"]
@@ -921,6 +922,7 @@ def validate_and_measure(
             if (
                 verifier["observation_id"] != observation_id
                 or verifier["producer"] != verifier_context["producer"]
+                or (verifier_version == 2 and verifier["version"] != verifier_context["version"])
                 or verifier["model"] != verifier_context["model"]
                 or (verifier_version == 2 and verifier["effort"] != verifier_context["effort"])
                 or verifier["rubric_sha256"] != verifier_context["rubric"]["sha256"]

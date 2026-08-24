@@ -170,7 +170,7 @@
       "authority": "suite-profile",
       "path": "docs/eval/geo-visibility.md",
       "summary": "Reproducible GEODE profile for measuring generative discovery, citation selection, answer absorption, and fidelity without collapsing them into one GEO score.",
-      "sha256": "87a28d352dda63e7e30cce3cab247ec53f209456560797326a5215c4c392a7f6",
+      "sha256": "d02fffa37fdaf0d42683c1eb91657167a6a23a0f87798a89bfa024137d3cc1f1",
       "triggers": [
         "AI search visibility",
         "GEO",

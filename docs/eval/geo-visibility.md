@@ -235,14 +235,16 @@ with frozen baseline and treatment arms.
    separate R/C/P/A/Q denominators, the run-spec digest, native adapter,
    provider, credential source, and model,
    verifier/model/rubric identity, preflight/outcome receipt digests, and
-   audited-claim coverage. The extractor selects exact, uniquely occurring
-   answer quotes; the host derives and orders offsets and rejects overlaps.
+   audited-claim coverage. The extractor selects exact answer quotes; when the
+   same semantic text appears more than once, the host
+   canonicalizes it to the first occurrence. It derives and orders offsets and
+   rejects duplicate or overlapping claims.
    Claim receipts retain those exact native-answer spans;
    verifier rows retain exact, uniquely occurring source spans and cannot add,
    remove, or reorder claims. Sources are captured up to 100,000 characters;
    any still-truncated source makes its observations explicitly unmeasured.
    The extractor and verifier adapters and effort levels are independently
-   selectable and receipt-bound. An
+   selectable and receipt-bound together with the producer code version. An
    optional `geode.geo-human-calibration@1` sidecar must attest blind labeling,
    bind the v2 overlay digest, label every sampled frozen claim, and record
    missed exact answer spans before agreement is reported.
