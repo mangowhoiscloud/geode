@@ -18,7 +18,7 @@ def test_geo_handlers_reject_premature_completion_and_record_vector(tmp_path) ->
     set_session_id("s-geo")
     set_current_session_timeline(timeline)
     try:
-        rejected = handlers["update_geo"](action="complete")
+        rejected = handlers["update_geo"](action="complete", completion_kind="diagnostic")
         handlers["update_geo"](
             action="record",
             evidence={
@@ -30,19 +30,6 @@ def test_geo_handlers_reject_premature_completion_and_record_vector(tmp_path) ->
                 "evidence": [],
             },
         )
-        handlers["update_geo"](action="advance", phase="offline_measure")
-        for stage in tuple(GeoStage)[1:-1]:
-            handlers["update_geo"](
-                action="record",
-                evidence={
-                    "stage": stage.value,
-                    "status": "not_measured",
-                    "numerator": None,
-                    "denominator": None,
-                    "finding": "No approved observation exists.",
-                    "evidence": [],
-                },
-            )
         handlers["update_geo"](
             action="configure",
             config={
@@ -55,31 +42,19 @@ def test_geo_handlers_reject_premature_completion_and_record_vector(tmp_path) ->
         )
         store.authorize_live("s-geo", "operator-receipt")
         handlers["update_geo"](action="advance", phase="live_observe")
-        handlers["update_geo"](
-            action="record",
-            evidence={
-                "stage": GeoStage.OUTCOME.value,
-                "status": "not_measured",
-                "numerator": None,
-                "denominator": None,
-                "finding": "No approved observation exists.",
-                "evidence": [],
-            },
-        )
-        store.preregister_experiment("s-geo", "prereg-receipt")
-        handlers["update_geo"](action="advance", phase="experiment")
-        handlers["update_geo"](
-            action="record",
-            evidence={
-                "stage": GeoStage.QUALITY.value,
-                "status": "not_measured",
-                "numerator": None,
-                "denominator": None,
-                "finding": "No approved observation exists.",
-                "evidence": [],
-            },
-        )
-        complete = handlers["update_geo"](action="complete")
+        for stage in tuple(GeoStage)[1:]:
+            handlers["update_geo"](
+                action="record",
+                evidence={
+                    "stage": stage.value,
+                    "status": "not_measured",
+                    "numerator": None,
+                    "denominator": None,
+                    "finding": "No approved observation exists.",
+                    "evidence": [],
+                },
+            )
+        complete = handlers["update_geo"](action="complete", completion_kind="diagnostic")
     finally:
         set_current_session_timeline(None)
         set_session_id("")
@@ -87,7 +62,7 @@ def test_geo_handlers_reject_premature_completion_and_record_vector(tmp_path) ->
     assert "error" in rejected
     assert complete["geo"]["phase"] == "complete"
     events = SessionEventStore(db_path).read("s-geo")
-    assert [event.kind for event in events].count("geo.updated") == 12
+    assert [event.kind for event in events].count("geo.updated") == 9
     assert events[-1].kind == "geo.completed"
 
 

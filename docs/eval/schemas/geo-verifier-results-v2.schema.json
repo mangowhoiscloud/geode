@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/schemas/geo-verifier-results-v2.schema.json",
+  "title": "GEODE GEO verifier overlay v2",
+  "type": "object",
+  "$defs": {
+    "evidence_ref": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "context": {
+      "type": "object",
+      "required": ["producer", "version", "model", "effort", "timeout_seconds"],
+      "properties": {
+        "producer": {"type": "string", "minLength": 1, "maxLength": 128},
+        "version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "model": {"type": "string", "minLength": 1, "maxLength": 128},
+        "effort": {"type": "string", "minLength": 1, "maxLength": 32},
+        "timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "rubric": {"$ref": "#/$defs/evidence_ref"}
+      },
+      "additionalProperties": false
+    },
+    "quality_row": {
+      "type": "object",
+      "required": ["claim_id", "answer_quote", "answer_start", "answer_end", "source_url", "source_quote", "source_start", "source_end", "supported", "reason"],
+      "properties": {
+        "claim_id": {"type": "string", "pattern": "^claim-[0-9]{3}$"},
+        "answer_quote": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "answer_start": {"type": "integer", "minimum": 0},
+        "answer_end": {"type": "integer", "minimum": 1},
+        "source_url": {"type": ["string", "null"], "format": "uri", "maxLength": 2000},
+        "source_quote": {"type": "string", "maxLength": 2000},
+        "source_start": {"type": ["integer", "null"], "minimum": 0},
+        "source_end": {"type": ["integer", "null"], "minimum": 1},
+        "supported": {"type": "boolean"},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 2000}
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["schema_id", "schema_version", "run_id", "native_results_sha256", "verified_at", "verifier_context", "claim_extractor_context", "unmeasured_observations", "observations"],
+  "properties": {
+    "schema_id": {"const": "geode.geo-verifier-results@2"},
+    "schema_version": {"const": 2},
+    "run_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"},
+    "native_results_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "verified_at": {"type": "string", "format": "date-time"},
+    "verifier_context": {
+      "allOf": [
+        {"$ref": "#/$defs/context"},
+        {
+          "type": "object",
+          "required": ["rubric"],
+          "properties": {"rubric": {"$ref": "#/$defs/evidence_ref"}}
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "claim_extractor_context": {"$ref": "#/$defs/context"},
+    "unmeasured_observations": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["observation_id", "reason", "source_urls", "sources"],
+            "properties": {
+              "observation_id": {"type": "string", "minLength": 3, "maxLength": 256},
+              "reason": {"const": "incomplete_source_receipt"},
+              "source_urls": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {"type": "string", "format": "uri", "maxLength": 2000}
+              },
+              "sources": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {"$ref": "#/$defs/evidence_ref"}
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["observation_id", "reason", "claim_failure"],
+            "properties": {
+              "observation_id": {"type": "string", "minLength": 3, "maxLength": 256},
+              "reason": {"const": "invalid_claim_extraction"},
+              "claim_failure": {"$ref": "#/$defs/evidence_ref"}
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["observation_id", "reason", "claim_universe", "verifier_failure"],
+            "properties": {
+              "observation_id": {"type": "string", "minLength": 3, "maxLength": 256},
+              "reason": {"const": "invalid_verifier_output"},
+              "claim_universe": {"$ref": "#/$defs/evidence_ref"},
+              "verifier_failure": {"$ref": "#/$defs/evidence_ref"}
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["observation_id", "absorption", "quality", "quality_claims_expected", "claim_universe", "verifier_receipt"],
+        "properties": {
+          "observation_id": {"type": "string", "minLength": 3, "maxLength": 256},
+          "absorption": {"type": "boolean"},
+          "quality": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/quality_row"}},
+          "quality_claims_expected": {"type": "integer", "minimum": 0, "maximum": 64},
+          "claim_universe": {"$ref": "#/$defs/evidence_ref"},
+          "verifier_receipt": {"$ref": "#/$defs/evidence_ref"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

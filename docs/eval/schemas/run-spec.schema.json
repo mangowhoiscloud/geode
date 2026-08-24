@@ -189,8 +189,10 @@
       ],
       "properties": {
         "native_results": {"type": ["string", "null"], "maxLength": 512},
+        "measurement_results": {"type": ["string", "null"], "maxLength": 512},
         "trajectory": {"type": ["string", "null"], "maxLength": 512},
         "verifier_receipts": {"type": ["string", "null"], "maxLength": 512},
+        "outcome_receipts": {"type": ["string", "null"], "maxLength": 512},
         "attempts": {"type": "string", "minLength": 1, "maxLength": 512},
         "analysis": {"type": "string", "minLength": 1, "maxLength": 512},
         "publication_manifest": {"type": ["string", "null"], "maxLength": 512}

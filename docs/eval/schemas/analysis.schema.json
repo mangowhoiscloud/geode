@@ -59,7 +59,12 @@
                 "type": "object",
                 "required": ["value", "numerator", "denominator"],
                 "properties": {
-                  "value": {"type": "string", "pattern": "^/", "maxLength": 512},
+                  "value": {
+                    "oneOf": [
+                      {"type": "null"},
+                      {"type": "string", "pattern": "^/", "maxLength": 512}
+                    ]
+                  },
                   "numerator": {"type": "string", "pattern": "^/", "maxLength": 512},
                   "denominator": {"type": "string", "pattern": "^/", "maxLength": 512}
                 },
@@ -94,7 +99,7 @@
         "required": ["kind", "path", "sha256"],
         "properties": {
           "kind": {
-            "enum": ["native-result", "trajectory", "verifier-receipt", "error", "other"]
+            "enum": ["native-result", "measurement", "trajectory", "verifier-receipt", "outcome-receipt", "error", "other"]
           },
           "path": {"type": "string", "minLength": 1, "maxLength": 512},
           "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}

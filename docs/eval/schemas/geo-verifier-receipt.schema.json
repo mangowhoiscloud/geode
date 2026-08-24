@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/schemas/geo-verifier-receipt.schema.json",
+  "title": "GEODE GEO source-aware verifier receipt v1",
+  "type": "object",
+  "$defs": {
+    "evidence_ref": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["schema_id", "observation_id", "producer", "model", "verified_at", "rubric_sha256", "sources", "absorption", "quality", "quality_claims_expected", "rationale"],
+  "properties": {
+    "schema_id": {"const": "geode.geo-verifier-receipt@1"},
+    "observation_id": {"type": "string", "minLength": 3, "maxLength": 256},
+    "producer": {"type": "string", "minLength": 1, "maxLength": 128},
+    "model": {"type": "string", "minLength": 1, "maxLength": 128},
+    "verified_at": {"type": "string", "format": "date-time"},
+    "rubric_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/evidence_ref"}
+    },
+    "absorption": {"type": "boolean"},
+    "quality": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["claim_id", "claim_text", "source_url", "source_quote", "supported", "reason"],
+        "properties": {
+          "claim_id": {"type": "string", "minLength": 1, "maxLength": 256},
+          "claim_text": {"type": "string", "minLength": 1, "maxLength": 2000},
+          "source_url": {"type": "string", "format": "uri", "maxLength": 2000},
+          "source_quote": {"type": "string", "maxLength": 1000},
+          "supported": {"type": "boolean"},
+          "reason": {"type": "string", "minLength": 1, "maxLength": 2000}
+        },
+        "additionalProperties": false
+      }
+    },
+    "quality_claims_expected": {"type": "integer", "minimum": 1},
+    "rationale": {"type": "string", "minLength": 1, "maxLength": 4000}
+  },
+  "additionalProperties": false
+}

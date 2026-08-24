@@ -24,7 +24,8 @@ visibility, citations, or the GEO benchmark.
    Model tool calls cannot mint approval or preregistration receipts; exercise
    the operator-owned `/geo approve-live <receipt>` and `/geo preregister
    <receipt>` boundaries in state-machine tests. Require phase-bound evidence
-   before each transition and permit completion only from `experiment`.
+   before each transition. Permit diagnostic completion from `live_observe`;
+   require `experiment` only for a preregistered treatment claim.
 6. Confirm `.geode/skills/geo/SKILL.md` is the runtime source selected by
    `SkillLoader`; use `get_geo`/`update_geo` as the state authority. Record
    primary sources, facts, inferences, unobserved stages, repetitions,

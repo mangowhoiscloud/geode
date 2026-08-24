@@ -44,9 +44,11 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from collections import defaultdict
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 
@@ -322,6 +324,11 @@ def main() -> int:
         action="store_true",
         help="suppress unresolved list (keep broken summary only)",
     )
+    parser.add_argument(
+        "--receipt",
+        type=Path,
+        help="write a machine-readable link-audit receipt without overwriting",
+    )
     args = parser.parse_args()
 
     src = args.base / "src"
@@ -395,6 +402,29 @@ def main() -> int:
                 print(line)
         else:
             print("[OK] all external URLs reachable")
+
+    if args.receipt is not None:
+        failures = len(broken) + len(base_path_violations)
+        audited = len(links) - len(unresolved) - len(external)
+        payload = {
+            "schema": "geode.docs-link-audit.v1",
+            "generated_at": datetime.now(UTC).isoformat(),
+            "status": "pass" if not failures and not ext_broken else "fail",
+            "internal_links": {
+                "numerator": audited - failures,
+                "denominator": audited,
+                "broken": failures,
+            },
+            "external_links": {
+                "audited": len(set(external)) if args.http else 0,
+                "broken": len(ext_broken),
+            },
+            "unresolved": len(unresolved),
+        }
+        args.receipt.parent.mkdir(parents=True, exist_ok=True)
+        with args.receipt.open("x", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
 
     return 1 if broken or ext_broken or base_path_violations else 0
 
