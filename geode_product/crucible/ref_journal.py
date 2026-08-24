@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 import re
 import shutil
@@ -14,7 +12,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .artifacts import load_json_object, write_exclusive_json
-from .contract import ContractError
+from .contract import ContractError, canonical_json_sha256
 
 INTENT_SCHEMA = "crucible.ref-intent.v2"
 RECEIPT_SCHEMA = "crucible.ref-receipt.v2"
@@ -31,13 +29,7 @@ class RefJournalError(ContractError):
 
 
 def _canonical_hash(payload: Mapping[str, Any]) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    return canonical_json_sha256(payload)
 
 
 def _strict_keys(

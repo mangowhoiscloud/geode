@@ -11,7 +11,6 @@ payloads, trajectories, or sealed rows.
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 import random
 import re
@@ -20,7 +19,14 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from .contract import ContractError, PromotionRule, TaskUnit
+from .contract import (
+    ContractError,
+    PromotionRule,
+    TaskUnit,
+    _bounded_text,
+    _positive_int,
+    canonical_json_sha256,
+)
 from .promotion import paired_bootstrap_lower_bound
 
 POWER_SPEC_SCHEMA = "crucible.family-power-spec.v1"
@@ -31,16 +37,6 @@ _SHA256 = re.compile(r"[0-9a-f]{64}")
 _MAX_SIMULATIONS = 200_000
 _MAX_BASIS_BYTES = 64 * 1024 * 1024
 _MONTE_CARLO_Z_95 = 1.959963984540054
-
-
-def _canonical_hash(payload: Mapping[str, Any]) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def _require_fields(
@@ -68,21 +64,6 @@ def _probability(value: object, field: str, *, positive: bool = False) -> float:
     return result
 
 
-def _positive_int(value: object, field: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ContractError(f"{field} must be a positive integer")
-    return value
-
-
-def _text(value: object, field: str, *, max_bytes: int = 2_000) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ContractError(f"{field} must be a non-empty string")
-    result = value.strip()
-    if len(result.encode("utf-8")) > max_bytes:
-        raise ContractError(f"{field} exceeds {max_bytes} UTF-8 bytes")
-    return result
-
-
 def _mean(values: Sequence[float]) -> float:
     return math.fsum(values) / len(values)
 
@@ -98,7 +79,7 @@ def _verify_basis_file(
     expected_sha256: str,
     field: str,
 ) -> None:
-    raw = _text(value, field)
+    raw = _bounded_text(value, field)
     path = Path(raw).expanduser()
     resolved = (basis_root / path).resolve() if not path.is_absolute() else path.resolve()
     try:
@@ -315,11 +296,11 @@ def audit_family_power(
                 "target_improvement_pp",
             },
         )
-        name = _text(raw.get("name"), f"{field}.name", max_bytes=200)
+        name = _bounded_text(raw.get("name"), f"{field}.name", max_bytes=200)
         if name in names:
             raise ContractError(f"power_audit scenario name is duplicated: {name}")
         names.add(name)
-        source = _text(raw.get("source"), f"{field}.source")
+        source = _bounded_text(raw.get("source"), f"{field}.source")
         basis_sha256 = raw.get("basis_sha256")
         if not isinstance(basis_sha256, str) or _SHA256.fullmatch(basis_sha256) is None:
             raise ContractError(f"{field}.basis_sha256 must be a SHA-256")
@@ -386,4 +367,4 @@ def audit_family_power(
         "scenarios": scenarios,
         "passes": all(bool(scenario["passes"]) for scenario in scenarios),
     }
-    return {**payload, "power_audit_id": _canonical_hash(payload)}
+    return {**payload, "power_audit_id": canonical_json_sha256(payload)}

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import math
 import re
 from collections.abc import Mapping
@@ -13,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .artifacts import load_json_object
-from .contract import ContractError, ExperimentContract, Mutation
+from .contract import ContractError, ExperimentContract, Mutation, canonical_json_sha256
 from .evidence import EvidenceEnvelope, ResourceUsage, load_evidence
 from .promotion import PromotionVerdict, decide
 from .ref_journal import RefIntent, RefReceipt, load_intent, verify_ref_update
@@ -77,15 +75,9 @@ _RECORD_OPTIONAL_FIELDS = {
 
 def _canonical_hash(payload: Mapping[str, Any], field: str) -> str:
     try:
-        encoded = json.dumps(
-            payload,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
+        return canonical_json_sha256(payload)
     except (TypeError, ValueError) as exc:
         raise ContractError(f"{field} must contain canonical JSON values") from exc
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def _identifier(value: object, field: str, pattern: re.Pattern[str]) -> str:

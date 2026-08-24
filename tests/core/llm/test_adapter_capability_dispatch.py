@@ -463,7 +463,7 @@ def test_web_search_legacy_tool_delegates_to_dispatch() -> None:
         encoding="utf-8"
     )
     assert "_anthropic_search" not in src, "web_search.py still has legacy direct-SDK chain"
-    assert "web_search_via_adapters" in src
+    assert "_execute_web_search" in src
 
 
 def test_compaction_uses_dispatch_helper() -> None:

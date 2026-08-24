@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import subprocess
@@ -11,7 +10,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .contract import ContractError, ExperimentContract, _run_git_bytes
+from .contract import (
+    ContractError,
+    ExperimentContract,
+    _run_git_bytes,
+    canonical_json_sha256,
+)
 
 CANDIDATE_FINGERPRINT_SCHEMA = "crucible.candidate-fingerprint.v1"
 CANDIDATE_FINGERPRINT_OBSERVATION_SCHEMA = "crucible.candidate-fingerprint-observation.v1"
@@ -19,16 +23,6 @@ CANDIDATE_FINGERPRINT_OBSERVATION_SCHEMA = "crucible.candidate-fingerprint-obser
 _ZERO_SHA = "0" * 40
 _GIT_SHA = re.compile(r"[0-9a-f]{40}")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
-
-
-def _canonical_hash(payload: Mapping[str, Any]) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -83,7 +77,7 @@ class CandidateFingerprintStore:
         fields = patch_id.stdout.decode("ascii", errors="strict").split()
         if patch_id.returncode or len(fields) < 2 or _GIT_SHA.fullmatch(fields[0]) is None:
             raise ContractError("candidate patch has no stable git patch identity")
-        return _canonical_hash(
+        return canonical_json_sha256(
             {
                 "schema": "crucible.candidate-treatment-identity.v1",
                 "baseline_sha": contract.baseline_sha,

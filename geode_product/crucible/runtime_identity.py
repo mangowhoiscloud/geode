@@ -11,8 +11,6 @@ Wilks count while preserving looser point-model transfer.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import math
 from collections import Counter
 from collections.abc import Mapping, Sequence
@@ -22,6 +20,7 @@ from .contract import (
     ContractError,
     ExperimentContract,
     TaskUnit,
+    canonical_json_sha256,
 )
 from .contract import (
     task_pack_sha256 as contract_task_pack_sha256,
@@ -41,13 +40,7 @@ RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS = 5.5
 def canonical_runtime_hash(value: object) -> str:
     """Return the stable SHA-256 used by runtime-only artifacts."""
 
-    encoded = json.dumps(
-        value,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    return canonical_json_sha256(value)
 
 
 def runtime_design_from_parts(
