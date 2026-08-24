@@ -29,7 +29,7 @@ Additional machine-local skills are intentionally not listed.
 | `stanford-test-time-compute` | test-time compute, inference-time scaling, best-of-N, parallel width, sequential repair, measurement replication, verifier/evaluator, promotion authority, Archon | Stanford CS329A Part 2 grounding with GEODE/Eco²/SIL/Crucible decision-plane and authority boundaries |
 | `agent-world-benchmark` | Agent-World, AgentWorld, MCP-Mark, BFCL V4, tau2 comparator, paired runtime, mean_accuracy@8 | Agent-World v1 directional reference plus matched thin-runtime control, replication, comparability, and artifact workflow |
 | `prompt-writing` | prompt, system prompt, model-facing text, identity, You are, Fable | GEODE prompt-writing standard: metadata/behavioral clauses, no direct identity assertions |
-| `geode-distribution` | homebrew, brew, formula, tap, uvx, 배포 | Coordinated GitHub Release + PyPI + Homebrew stable promotion |
+| `geode-distribution` | uvx, PyPI, GitHub Release, 배포 | Coordinated GitHub Release + PyPI stable promotion |
 | `geode-gitflow` | branch, git, pr, merge, commit | Gitflow strategy, PR templates, CI fix loops |
 | `geode-changelog` | changelog, release, version, release | CHANGELOG management, post-1.0 patch-first versioning (minors are operator-declared; mis-stamp correction procedure) |
 | `agent-ops-debugging` | safe default, root cause, contextvar, multi-gap | Agent-ops debugging patterns — Safe Default anti-pattern, multi-gap root cause, ContextVar DI |

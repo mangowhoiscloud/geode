@@ -6157,12 +6157,11 @@ computer_use ←────── compact observation(base64 omitted) ◄┘
 
 ## 활성화
 
-게이트는 `is_computer_use_enabled()`(`core/llm/providers/anthropic.py`) 하나입니다. 설정 `computer_use_enabled`(`core/config/_settings.py`)가 켜져 있고 선택한 실행 경로가 준비되어 있어야 true입니다. sandbox 경로는 host pyautogui가 필요 없고, helper 경로는 설치된 helper를, python 경로는 pyautogui를 요구합니다.
+게이트는 `is_computer_use_enabled()`(`core/llm/providers/anthropic.py`) 하나입니다. 설정 `computer_use_enabled`(`core/config/_settings.py`)가 켜져 있고 선택한 host driver가 준비되어 있어야 true입니다. helper 경로는 설치된 helper를, python 경로는 pyautogui를 요구합니다.
 
 ```
 [computer_use]
 enabled = true
-env = "host"
 driver = "helper"
 # helper_path = "/absolute/path/to/geode-computer-helper"
 ```
@@ -6171,7 +6170,7 @@ driver = "helper"
 
 ## 안전
 
-`computer`는 `core/agent/safety.py`의 `DANGEROUS_TOOLS`에 속합니다. `run_bash`와 같은 등급으로, 대화형 세션에서는 human-in-the-loop 승인을 요구하고 서브에이전트 자동 승인 대상에서 제외됩니다. 승인 UI가 없는 DAEMON 세션은 기본 차단되며 제한된 gateway에서 `[gateway] allow_computer_use = true`를 명시했을 때만 executor가 두 computer-use surface의 실행을 허용합니다. 옵션이 꺼져 있으면 provider-visible schema가 있더라도 dispatch 전에 거부합니다.
+`computer`는 `core/agent/safety.py`의 `DANGEROUS_TOOLS`에 속합니다. `run_bash`와 같은 등급으로, 대화형 세션에서는 human-in-the-loop 승인을 요구하고 서브에이전트 자동 승인 대상에서 제외됩니다. 승인 UI가 없는 DAEMON 세션은 기본 차단되며 제한된 gateway에서 `[gateway] allow_computer_use = true`를 명시했을 때만 executor가 두 computer-use surface의 실행을 허용합니다. 옵션이 꺼져 있으면 provider-visible schema가 있더라도 dispatch 전에 거부합니다. unrestricted Petri audit에는 검증된 격리 경로가 없으므로 두 surface가 항상 비활성화됩니다.
 
 ## 실패 모드
 
@@ -6232,7 +6231,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1530 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1532 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -6392,8 +6391,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 590 |
-| 테스트 Python 파일 | 691 |
+| 프로덕션 Python 파일 | 556 |
+| 테스트 Python 파일 | 688 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 5 |
@@ -6635,12 +6634,6 @@ main 푸시는 CI와 Pages만 돌립니다. 패키지 배포는 `.github/workflo
 
 validate-build 잡이 lint와 hygiene, 타입 체크, 프롬프트 무결성, 공식 문서 생성 게이트, 테스트, 런타임 E2E 스모크, twine check를 모두 통과해야 배포 잡이 시작됩니다. stable promotion은 현재 `origin/main` SHA를 사용하고, 복구 실행에서는 변경되지 않은 기존 annotated tag target만 허용합니다. 그 뒤 annotated tag와 GitHub Release, Trusted Publishing, 공개 PyPI exact-version 설치 검증을 거칩니다. 마지막 읽기 전용 검증기는 tag target, GitHub asset, PyPI 파일, SHA-256이 모두 같은 릴리스인지 확인합니다.
 
-## Homebrew는 core 입성 절차가 따로 있습니다
-
-Homebrew는 stable promotion의 일부가 아닙니다. 기존 custom 배포 저장소는 삭제됐고, namespace가 붙는 설치 명령도 다시 만들지 않습니다. `packaging/homebrew`의 formula template과 renderer는 immutable GitHub Release sdist를 쓰는 `geode-agent` Homebrew/core 후보만 만듭니다.
-
-첫 upstream PR은 Homebrew의 최신 acceptable-formula 정책을 따릅니다. GEODE가 beta 표기를 벗어나고 외부 사용 및 notability 조건을 충족하기 전에는 검증된 후보를 fork에만 보관합니다. Homebrew/core가 수락한 뒤 공식 formula API와 깨끗한 macOS·Linux 환경에서 unqualified install, version, formula test, uninstall 게이트가 모두 통과해야 공개 설치 화면에 Homebrew를 다시 추가할 수 있습니다. 실제 후보 갱신과 검증 명령은 저장소의 `packaging/homebrew/README.md`에만 둡니다.
-
 ## 릴리스 후 rebuild
 
 main 머지 후 로컬 런타임을 새 코드로 올립니다. 두 함정이 있습니다. 데몬 정지는 `pkill -f`를 써야 합니다. `ps aux | grep`은 긴 파이썬 경로가 잘려 데몬을 못 잡고, 살아남은 옛 데몬이 소켓을 두고 새 데몬과 경합합니다. 그리고 `[audit]` extra가 필수입니다. 빠지면 inspect\_ai가 없어 자기개선 루프의 감사가 측정 대신 실패합니다.
@@ -6660,7 +6653,6 @@ geode serve &                            # 데몬 재기동
 -   `scripts/resolve_architecture_roadmap_trust.py`. 충돌 해결형 main → develop sync의 정확한 부모·출처 검증.
 -   `docs/workflow.md`. pre-sync와 GitFlow 운영 정본.
 -   `scripts/verify_public_distribution.py`. GitHub·PyPI 공개 배포 일치 검증.
--   `packaging/homebrew`. Homebrew/core 후보 template과 운영 지침.
 -   `CHANGELOG.md`. Keep a Changelog + SemVer 정본.
 
 ---

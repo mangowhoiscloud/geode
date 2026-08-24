@@ -3,7 +3,7 @@
 The supervisor owns the train plan, disposable candidate checkouts, git refs,
 contract construction, preflight, verdict derivation, campaign budget, and
 ledger. Candidate generation and assay execution are separate commands. The
-loop never imports ``core.self_improving`` and never grants release authority.
+loop never imports ``geode_product.self_improving`` and never grants release authority.
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ EVALUATION_SCHEMA = "crucible.train-evaluation.v4"
 FEEDBACK_SCHEMA = "crucible.failure-feedback.v3"
 SUPERVISOR_FEEDBACK_SCHEMA = "crucible.supervisor-feedback.v3"
 RECORD_SCHEMA = "crucible.loop-record.v2"
-RECORD_COMPONENT = "plugins.crucible.supervisor"
+RECORD_COMPONENT = "geode_product.crucible.supervisor"
 STATE_SCHEMA = "crucible.loop-state.v2"
 SUMMARY_SCHEMA = "crucible.loop-summary.v2"
 ATTEMPT_ERROR_SCHEMA = "crucible.attempt-error.v1"

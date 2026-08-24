@@ -522,48 +522,19 @@
   },
   "packages": {
     "core": {
-      "python_files": 407,
-      "python_loc": 121721
+      "python_files": 402,
+      "python_loc": 121527
     },
     "geode_product": {
       "python_files": 154,
-      "python_loc": 61096
-    },
-    "plugins": {
-      "python_files": 29,
-      "python_loc": 193
+      "python_loc": 61099
     },
     "tests": {
-      "python_files": 691,
-      "python_loc": 185569
+      "python_files": 688,
+      "python_loc": 184979
     }
   },
-  "schema_version": 4,
-  "self_improving_facades": {
-    "count": 5,
-    "items": [
-      {
-        "path": "core/self_improving/__init__.py",
-        "target": "geode_product.self_improving"
-      },
-      {
-        "path": "core/self_improving/campaign.py",
-        "target": "geode_product.self_improving.campaign"
-      },
-      {
-        "path": "core/self_improving/prepare.py",
-        "target": "geode_product.self_improving.prepare"
-      },
-      {
-        "path": "core/self_improving/train.py",
-        "target": "geode_product.self_improving.train"
-      },
-      {
-        "path": "core/self_improving/watch_campaign.py",
-        "target": "geode_product.self_improving.watch_campaign"
-      }
-    ]
-  },
+  "schema_version": 5,
   "tools": {
     "deferred_loading": {
       "always_loaded_count": 20,

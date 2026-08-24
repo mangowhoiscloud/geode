@@ -3,7 +3,7 @@
 #
 # Why this exists: the Pre-PR checklist listed five commands while CI enforced
 # seventeen gates, and three of the five were documented at a NARROWER scope
-# than CI runs them (mypy without scripts/, ruff without plugins/ scripts/).
+# than CI runs them (mypy without scripts/, ruff without scripts/).
 # A branch could pass the documented checklist and still fail CI — measured at
 # 5 of 60 sampled July failures for the scope mismatch alone. Editing a
 # checklist does not fix that; a runnable command does.
@@ -41,9 +41,9 @@ run() {
 }
 
 echo "── lint / type / security ──"
-run "ruff check"    uv run ruff check core/ geode_product/ plugins/ tests/ scripts/
-run "ruff format"   uv run ruff format --check core/ geode_product/ plugins/ tests/ scripts/
-run "mypy"          uv run mypy core/ geode_product/ plugins/ scripts/
+run "ruff check"    uv run ruff check core/ geode_product/ tests/ scripts/
+run "ruff format"   uv run ruff format --check core/ geode_product/ tests/ scripts/
+run "mypy"          uv run mypy core/ geode_product/ scripts/
 run "bandit"        uv run bandit -r core/ geode_product/ -c pyproject.toml
 
 echo "── ratchets / generated artifacts ──"

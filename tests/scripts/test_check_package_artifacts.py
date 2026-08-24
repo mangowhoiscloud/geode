@@ -1,17 +1,17 @@
-"""Package-boundary checks for the self-improving relocation."""
+"""Package-boundary checks for removed compatibility paths."""
 
 from scripts import check_package_artifacts as artifacts
 
 
-def test_self_improving_layout_rejects_deep_facades_and_duplicated_state() -> None:
+def test_removed_compatibility_layout_rejects_every_legacy_root() -> None:
     paths = {
-        *artifacts.SELF_IMPROVING_FACADES,
         "core/self_improving/loop/mutate/runner.py",
-        "geode_product/self_improving/state/results.jsonl",
+        "core/self_improving/state/results.jsonl",
+        "plugins/petri_audit/runner.py",
     }
 
-    assert artifacts._check_self_improving_layout("wheel", paths) == [
-        "wheel: unexpected legacy self-improving module core/self_improving/loop/mutate/runner.py",
-        "wheel: self-improving state duplicated under product package: "
-        "geode_product/self_improving/state/results.jsonl",
+    assert artifacts._check_removed_compatibility_layout("wheel", paths) == [
+        "wheel: removed compatibility path is packaged: core/self_improving/loop/mutate/runner.py",
+        "wheel: removed compatibility path is packaged: core/self_improving/state/results.jsonl",
+        "wheel: removed compatibility path is packaged: plugins/petri_audit/runner.py",
     ]

@@ -142,7 +142,7 @@ straight pass-through (no backmerge needed). All edits below happen on the
    title heading + frontier-comparison row, `README.ko.md` title heading +
    frontier-comparison row
 4. Refresh measured metrics on `CLAUDE.md` line: `Modules: X core + Y
-   plugins = Z` (from `find ... -name "*.py" | wc -l`), `Tests: N (+5 live)`
+   product = Z` (from `find ... -name "*.py" | wc -l`), `Tests: N (+5 live)`
    (from `uv run pytest tests/ --collect-only`)
 5. CHANGELOG header `## [X.Y.Z] — YYYY-MM-DD` carries an optional release
    blurb (`> ...`) summarizing the sprint scope
@@ -157,8 +157,8 @@ git worktree add .claude/worktrees/release-vX.Y.Z \
 # (one commit covering all stamp files)
 
 # 3. Local gates
-uv run ruff check core/ tests/ plugins/ autoresearch/ scripts/
-uv run mypy core/ plugins/
+uv run ruff check core/ geode_product/ tests/ scripts/
+uv run mypy core/ geode_product/
 uv run geode version   # confirms version stamp lands
 
 # 3b. Derived-SoT regeneration (CI blocks on any of these being stale)

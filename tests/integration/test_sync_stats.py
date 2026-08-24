@@ -55,10 +55,10 @@ def _prepare_site_fixture(root: Path) -> Path:
     (data / "architecture-baseline.json").write_text(
         json.dumps(
             {
-                "schema_version": 4,
+                "schema_version": 5,
                 "packages": {
                     "core": {"python_files": 1},
-                    "plugins": {"python_files": 1},
+                    "geode_product": {"python_files": 1},
                     "tests": {"python_files": 1},
                 },
                 "tools": {"definition_count": 2},

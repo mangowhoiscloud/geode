@@ -47,10 +47,10 @@ sibling_pages:
 5. **Port mapping** ([`autoresearch-port-mapping.md`](./autoresearch-port-mapping.md)) — Authoritative for schema namespaces (§6), pinned constants (§7), and the no-publisher decision below (§3 here).
 6. **Real data** — Sole input to the build script:
    - `~/.geode/self-improving/baseline.json` (live) or `~/.geode/self-improving/baseline.json.outdated-YYYYMMDD` (fallback)
-   - `core/self_improving/state/baseline_archive.jsonl`
-   - `core/self_improving/state/mutations.jsonl`
-   - `core/self_improving/state/policies/*.json` (13 files + `few-shot-pool.jsonl` = 14)
-   - `core/self_improving/state/results.tsv` + `core/self_improving/state/results.jsonl`
+   - `geode_product/self_improving/state/baseline_archive.jsonl`
+   - `geode_product/self_improving/state/mutations.jsonl`
+   - `geode_product/self_improving/state/policies/*.json` (13 files + `few-shot-pool.jsonl` = 14)
+   - `geode_product/self_improving/state/results.tsv` + `geode_product/self_improving/state/results.jsonl`
 
 This spec governs 5 pages. Where it diverges from (1)/(2)/(3) the higher-rank doc wins — flag a fix-up PR.
 
@@ -110,7 +110,7 @@ Identical contract to seed-gen visual spec §13:
     Fitness axes: 4 (dim 0.30 / ux 0.25 / admire 0.20 / bench 0.25).
   </p>
   <p class="muted">
-    Source artifacts read directly from <code>core/self_improving/state/</code>
+    Source artifacts read directly from <code>geode_product/self_improving/state/</code>
     (git-tracked SoT) + the runtime <code>baseline.json</code> from
     <code>~/.geode/self-improving/</code>; see §3.
   </p>
@@ -123,7 +123,7 @@ All values build-time substituted by `scripts/build_self_improving_hub.py` from 
 
 ## 3. No-publisher decision
 
-**Decision (2026-05-26)**: The hub builder reads `core/self_improving/state/*` directly. **No publisher mirror module.**
+**Decision (2026-05-26)**: The hub builder reads `geode_product/self_improving/state/*` directly. **No publisher mirror module.**
 
 ### 3.1 Why no publisher
 
@@ -134,12 +134,12 @@ under `core/`); only the LATEST `baseline.json` is RUNTIME (out-of-repo).
 
 | File | Tracked? | Source-of-truth location |
 |---|---|---|
-| `core/self_improving/state/policies/*.json` | **git-tracked** | `core/self_improving/state/policies/` |
-| `core/self_improving/state/policies/few-shot-pool.jsonl` | **git-tracked** | `core/self_improving/state/policies/` |
-| `core/self_improving/state/baseline_archive.jsonl` | **git-tracked** (promoted history) | `core/self_improving/state/` |
-| `core/self_improving/state/baseline_epochs.json` | **git-tracked** | `core/self_improving/state/` |
-| `core/self_improving/state/mutations.jsonl` | **git-tracked** (mutation ledger) | `core/self_improving/state/` |
-| `core/self_improving/state/results.{tsv,jsonl}` | **git-tracked** (rolling history) | `core/self_improving/state/` |
+| `geode_product/self_improving/state/policies/*.json` | **git-tracked** | `geode_product/self_improving/state/policies/` |
+| `geode_product/self_improving/state/policies/few-shot-pool.jsonl` | **git-tracked** | `geode_product/self_improving/state/policies/` |
+| `geode_product/self_improving/state/baseline_archive.jsonl` | **git-tracked** (promoted history) | `geode_product/self_improving/state/` |
+| `geode_product/self_improving/state/baseline_epochs.json` | **git-tracked** | `geode_product/self_improving/state/` |
+| `geode_product/self_improving/state/mutations.jsonl` | **git-tracked** (mutation ledger) | `geode_product/self_improving/state/` |
+| `geode_product/self_improving/state/results.{tsv,jsonl}` | **git-tracked** (rolling history) | `geode_product/self_improving/state/` |
 | `~/.geode/self-improving/baseline.json` | RUNTIME — out-of-repo (never in git), stable absolute path | `core.paths.BASELINE_JSON_PATH` |
 
 The tracked SoT (policies + ledgers + results) is in-repo and accessible at build
@@ -147,7 +147,7 @@ time from the repo root; the runtime `baseline.json` is read from
 `~/.geode/self-improving/` (operator-local; absent on CI → graceful empty). A
 publisher would add:
 
-1. Duplicate write path (`core/self_improving/state/X` → `docs/self-improving/autoresearch/X`)
+1. Duplicate write path (`geode_product/self_improving/state/X` → `docs/self-improving/autoresearch/X`)
 2. New writer hook that must fire on every promote/iteration (per Wiring Verification CANNOT in CLAUDE.md — "Read-Write parity" risk)
 3. A second SoT to keep drift-free (per `[[feedback-latest-vs-promoted-sot.md]]`)
 
@@ -155,7 +155,7 @@ GitHub Pages CI already reads from the repo at build time. The builder simply op
 
 ### 3.2 Where the builder reads from
 
-`scripts/build_self_improving_hub.py:load_autoresearch()` reads the TRACKED state (mutations / policies / results) from `core/self_improving/state/` directly. The LATEST `baseline.json` is RUNTIME — `_load_baseline()` reads it from `BASELINE_JSON_PATH` (`~/.geode/self-improving/`); a state-dir `baseline.json` is only a legacy/test-fixture compatibility check, then it falls back to the most recent `baseline.json.outdated-*`.
+`scripts/build_self_improving_hub.py:load_autoresearch()` reads the TRACKED state (mutations / policies / results) from `geode_product/self_improving/state/` directly. The LATEST `baseline.json` is RUNTIME — `_load_baseline()` reads it from `BASELINE_JSON_PATH` (`~/.geode/self-improving/`); a state-dir `baseline.json` is only a legacy/test-fixture compatibility check, then it falls back to the most recent `baseline.json.outdated-*`.
 
 Phase 6 extends this loader. The Phase 5 stub returns a small struct
 (`AutoresearchState` at [line 238](../../scripts/build_self_improving_hub.py)) used only on the hub landing; Phase 6 adds 4 fuller renderers + helpers (see §10 below).
@@ -177,7 +177,7 @@ When ALL artifacts (baseline + archive + mutations + results + policies) are mis
 **File**: `docs/self-improving/autoresearch/index.html`
 **Sidebar `.active`**: `Autoresearch > Overview`
 **Page title**: `Autoresearch · Closed-Loop Self-Improvement`
-**Page sub**: `Baseline + mutations + results + 14 policies. The self-improving loop reads core/self_improving/state/ directly — no mirror.`
+**Page sub**: `Baseline + mutations + results + 14 policies. The self-improving loop reads geode_product/self_improving/state/ directly — no mirror.`
 
 ### 4.1 Anatomy (top-down)
 
@@ -239,7 +239,7 @@ If any audit block field is missing, render `<span class="muted">schema v1 (no a
 
 ### 4.4 Generation timeline (`<table class="records">`)
 
-Source: `core/self_improving/state/baseline_archive.jsonl` ([`core/paths.py:339`](../../core/paths.py) — `BASELINE_ARCHIVE_PATH`). Each row in that JSONL is one promoted baseline snapshot (append-only, see [`geode_product/self_improving/loop/runner.py:1621-1645`](../../geode_product/self_improving/loop/runner.py)).
+Source: `geode_product/self_improving/state/baseline_archive.jsonl` ([`core/paths.py:339`](../../core/paths.py) — `BASELINE_ARCHIVE_PATH`). Each row in that JSONL is one promoted baseline snapshot (append-only, see [`geode_product/self_improving/loop/runner.py:1621-1645`](../../geode_product/self_improving/loop/runner.py)).
 
 6 columns:
 
@@ -745,7 +745,7 @@ First row (no previous): renders `·` (neutral middle-dot), no colour class. The
 
 ### 7.5 Per-row `<details>` drilldown
 
-Drilldown pulls the full per-dim signal from `core/self_improving/state/results.jsonl` (one JSON object per line). The builder joins `results.tsv` row N to `results.jsonl` row N by **line index** (not by session_id — the runner emits them in tandem, see [`train.py:2341-2356`](../../geode_product/self_improving/train.py)).
+Drilldown pulls the full per-dim signal from `geode_product/self_improving/state/results.jsonl` (one JSON object per line). The builder joins `results.tsv` row N to `results.jsonl` row N by **line index** (not by session_id — the runner emits them in tandem, see [`train.py:2341-2356`](../../geode_product/self_improving/train.py)).
 
 Drilldown markup:
 
@@ -886,7 +886,7 @@ Markup (one logical policy = 2 `<tr>` siblings, mirrors §6.4 mutations page):
 
 That's it. JSON keys and strings are NOT colour-coded; this is intentional — colour-coding requires JS parsing, and the page is readable in mono.
 
-The `few-shot-pool.jsonl` file gets the same treatment except the `<pre>` body is `\n`.join(first 5 lines) plus a `… {N-5} more lines (see core/self_improving/state/policies/few-shot-pool.jsonl)` footer line. No client-side pagination.
+The `few-shot-pool.jsonl` file gets the same treatment except the `<pre>` body is `\n`.join(first 5 lines) plus a `… {N-5} more lines (see geode_product/self_improving/state/policies/few-shot-pool.jsonl)` footer line. No client-side pagination.
 
 ### 8.5 Human-readable size helper
 
@@ -904,7 +904,7 @@ Per the per-page DESIGN.md ([`self-improving-autoresearch-policies.md`](./self-i
 
 ### 8.6 Empty state
 
-If `core/self_improving/state/policies/` is empty (only `.gitkeep`) or absent:
+If `geode_product/self_improving/state/policies/` is empty (only `.gitkeep`) or absent:
 
 ```html
 <tr>
@@ -1032,7 +1032,7 @@ def render_autoresearch_policies(
 
 ```python
 def _load_baseline_archive(state_dir: Path) -> list[dict[str, Any]]:
-    """Read core/self_improving/state/baseline_archive.jsonl.
+    """Read geode_product/self_improving/state/baseline_archive.jsonl.
 
     Returns [] if absent. Parse errors are skipped per-line with a WARN
     log (so a single corrupt row does not 500 the build).
@@ -1040,7 +1040,7 @@ def _load_baseline_archive(state_dir: Path) -> list[dict[str, Any]]:
 
 
 def _load_mutations(state_dir: Path) -> list[dict[str, Any]]:
-    """Read core/self_improving/state/mutations.jsonl.
+    """Read geode_product/self_improving/state/mutations.jsonl.
 
     Sorted newest-first by `ts` (float). Each row is dict[str, Any] — the
     builder does NOT validate against ApplyRecord / AttributionRecord
@@ -1050,7 +1050,7 @@ def _load_mutations(state_dir: Path) -> list[dict[str, Any]]:
 
 
 def _load_results_tsv(results_path: Path) -> list[dict[str, str]]:
-    """Read core/self_improving/state/results.tsv.
+    """Read geode_product/self_improving/state/results.tsv.
 
     Returns list of dicts keyed by RESULTS_TSV_HEADER columns (`train.py:1284`).
     Empty list if file absent. Header row skipped.
@@ -1058,11 +1058,11 @@ def _load_results_tsv(results_path: Path) -> list[dict[str, str]]:
 
 
 def _load_results_jsonl(results_jsonl_path: Path) -> list[dict[str, Any]]:
-    """Read core/self_improving/state/results.jsonl. Returns [] if absent."""
+    """Read geode_product/self_improving/state/results.jsonl. Returns [] if absent."""
 
 
 def _list_policies(policies_dir: Path) -> list[tuple[Path, dict[str, Any] | None]]:
-    """List all policy files under core/self_improving/state/policies/.
+    """List all policy files under geode_product/self_improving/state/policies/.
 
     Sorted alphabetically. Each entry is (path, parsed payload) — payload
     is None on parse error or for `.jsonl` files (handled separately).
@@ -1464,7 +1464,7 @@ def test_autoresearch_results_sparkline_uses_only_block_chars(
     from {▁▂▃▄▅▆▇█·} only — no SVG, no <canvas>, no <script>."""
 
 def test_autoresearch_policies_renders_14_rows(tmp_path: Path) -> None:
-    """With 13 .json + 1 .jsonl file in core/self_improving/state/policies/, the
+    """With 13 .json + 1 .jsonl file in geode_product/self_improving/state/policies/, the
     policies table renders exactly 14 .policy-summary rows (and 14
     sibling .policy-detail drilldown rows)."""
 
@@ -1500,7 +1500,7 @@ def test_autoresearch_design_md_versioning_consistent() -> None:
 
 **14 test names** above (8+ as required, ratchet ensures no autoresearch page silently regresses).
 
-Fixture `built_autoresearch_pages` parallels the existing `built_seedgen_pages` fixture in the test module (L432-454 in the current file) — it invokes `scripts.build_self_improving_hub.main()` against a temporary repo with mocked `core/self_improving/state/` fixtures and returns a dict keyed by `"landing" / "baseline" / "mutations" / "results" / "policies"` → rendered HTML.
+Fixture `built_autoresearch_pages` parallels the existing `built_seedgen_pages` fixture in the test module (L432-454 in the current file) — it invokes `scripts.build_self_improving_hub.main()` against a temporary repo with mocked `geode_product/self_improving/state/` fixtures and returns a dict keyed by `"landing" / "baseline" / "mutations" / "results" / "policies"` → rendered HTML.
 
 ---
 
@@ -1575,9 +1575,9 @@ Three ambiguities were resolved during this spec (recorded here for the frontend
 
 - **`few-shot-pool.jsonl` is JSONL, not JSON**: when rendering the policies page (§8), the 14th file gets a JSONL-specific drilldown (first 5 lines + `… N-5 more` footer). Don't `json.loads()` it as a single object — that will raise. Build the loader to dispatch on file extension.
 
-- **`mutations.jsonl` is git-TRACKED**: post PR-STATE-SOT-RUNTIME-SPLIT it resolves to `core/self_improving/state/mutations.jsonl`, which is in-repo under `core/` and therefore naturally versioned (no gitignore rule). The hub builder reads it from disk at build time; on a fresh clone it MAY be empty — the loader must handle `mutations.jsonl` absent → 0-row table.
+- **`mutations.jsonl` is git-TRACKED**: post PR-STATE-SOT-RUNTIME-SPLIT it resolves to `geode_product/self_improving/state/mutations.jsonl`, which is in-repo under `core/` and therefore naturally versioned (no gitignore rule). The hub builder reads it from disk at build time; on a fresh clone it MAY be empty — the loader must handle `mutations.jsonl` absent → 0-row table.
 
-- **`results.tsv` + `results.jsonl` location**: post PR-STATE-SOT-RUNTIME-SPLIT these are git-tracked SoT at `core/self_improving/state/results.{tsv,jsonl}` (the runner auto-appends on every non-dry-run). The loader reads them from the tracked state dir.
+- **`results.tsv` + `results.jsonl` location**: post PR-STATE-SOT-RUNTIME-SPLIT these are git-tracked SoT at `geode_product/self_improving/state/results.{tsv,jsonl}` (the runner auto-appends on every non-dry-run). The loader reads them from the tracked state dir.
 
 - **`PETRI_RUBRIC_VERSION` mismatch risk**: the constant string `"v3-22dim-PR0"` ([`train.py:1754`](../../geode_product/self_improving/train.py)) names "22-dim" but the operational dim count is 20 (5+12+3). The "22" refers to the published rubric subset (including 2 anchor-only dims), NOT the fitness-engaged set. Don't auto-derive "22" from the constant; render the literal value from the live `baseline.json.raw.rubric_version` field.
 

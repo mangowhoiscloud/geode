@@ -12,7 +12,7 @@ Per ADR-001 §3 Ranking + the panel diversity gate (manifest-time
 picker), the Ranker NEVER judges directly — it only orchestrates the
 voters.
 
-Per-voter sub-agent contract (``plugins/seed_generation/agents/ranker.md`` +
+Per-voter sub-agent contract (``geode_product/seed_generation/agents/ranker.md`` +
 voter-specific judges):
 
 .. code-block:: json
@@ -234,7 +234,7 @@ class Ranker(BaseSeedAgent):
         candidate_ids = [c["id"] for c in state.candidates]
         # Snapshot pilot dim_means per candidate (read-only) so the
         # voter-task builder can surface the empirical signal to each
-        # judge per plugins/seed_generation/agents/ranker.md contract. Absent
+        # judge per geode_product/seed_generation/agents/ranker.md contract. Absent
         # pilot_scores → empty dict (judges fall back to seed bodies).
         # PR-SEEDGEN-ELO-DIFFICULTY-BLEND (2026-06-03) — also snapshot
         # dim_stderr so the ``blend`` survivor selection can confidence-weight
@@ -755,7 +755,7 @@ class Ranker(BaseSeedAgent):
                 SubTask(
                     # PR-CODEX-GPT55-OUTPUT-EMIT fix-up (Codex MCP catch,
                     # 2026-05-26) — the default judge panel in
-                    # ``plugins/seed_generation/seed_generation.plugin.toml``
+                    # ``geode_product/seed_generation/seed_generation.plugin.toml``
                     # may ship duplicate provider/source voters. Pre-fix
                     # the task_id was ``vote-{match_id}-{provider}.{source}``
                     # which collided for both codex voters;
@@ -851,7 +851,7 @@ class Ranker(BaseSeedAgent):
         """Compose the per-voter user message for the sub-agent.
 
         Includes Pilot dim_means alongside the *inlined* seed bodies so
-        the judge (per ``plugins/seed_generation/agents/ranker.md``)
+        the judge (per ``geode_product/seed_generation/agents/ranker.md``)
         can weigh empirical engagement signal against the seed text.
         When pilot_scores is missing for a candidate, the
         corresponding dim_means is empty and the judge falls back to

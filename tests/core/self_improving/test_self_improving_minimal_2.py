@@ -267,7 +267,7 @@ def test_mutation_audit_log_path_canonical_in_core_paths() -> None:
     assert paths.MUTATION_AUDIT_LOG_PATH.name == "mutations.jsonl"
     parts = paths.MUTATION_AUDIT_LOG_PATH.parts
     # PR-STATE-SOT-RUNTIME-SPLIT (2026-06-14) — the tracked SoT moved in-repo
-    # next to its package: ``<repo>/core/self_improving/state/mutations.jsonl``.
+    # next to its package: ``<repo>/geode_product/self_improving/state/mutations.jsonl``.
     assert parts[-3:] == ("self_improving", "state", "mutations.jsonl")
 
 
@@ -288,7 +288,7 @@ def test_runner_reexports_mutation_audit_log_path() -> None:
     canonical = paths.MUTATION_AUDIT_LOG_PATH
     assert canonical.name == "mutations.jsonl"
     # PR-STATE-SOT-RUNTIME-SPLIT (2026-06-14) — the tracked SoT now lives at
-    # ``<repo>/core/self_improving/state/``, so the parent dir is ``state``.
+    # ``<repo>/geode_product/self_improving/state/``, so the parent dir is ``state``.
     assert canonical.parts[-2] == "state"
     # The runner export resolves to the same path. ``is`` would also
     # work in a fresh process; we use value equality so the test

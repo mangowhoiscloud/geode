@@ -19,12 +19,12 @@ into the Codex OAuth path that already lives in
 ChatGPT subscription quota instead of per-token billing.
 
 Registered as ``@modelapi(name="openai-codex")`` from
-``plugins/petri_audit/__init__.py`` (under the same try/except guard
+``geode_product/petri_audit/__init__.py`` (under the same try/except guard
 as the GEODE target).
 
 The provider name is exposed via ``inspect_ai`` model ids of the
 form ``openai-codex/<model>`` — e.g. ``openai-codex/gpt-5.5``,
-``openai-codex/gpt-5.4-mini``. ``plugins/petri_audit/models.py`` is
+``openai-codex/gpt-5.4-mini``. ``geode_product/petri_audit/models.py`` is
 the auto-router: when a Codex OAuth token is available it rewrites
 ``gpt-5.*`` ids to that form; otherwise the legacy
 ``openai/<model>`` (per-token PAYG) path is kept.
@@ -70,7 +70,7 @@ def register() -> None:
     """Register ``OpenAICodexAPI`` with ``inspect_ai`` as ``openai-codex``.
 
     Imports ``inspect_ai`` lazily; raises ``ImportError`` if the
-    ``[audit]`` optional extra is not installed. ``plugins/petri_audit/
+    ``[audit]`` optional extra is not installed. ``geode_product/petri_audit/
     __init__.py`` wraps the call in try/except so the plugin remains
     importable on the default ``uv sync``.
 

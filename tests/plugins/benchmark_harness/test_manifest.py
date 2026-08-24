@@ -1,15 +1,7 @@
-import importlib
 from pathlib import Path
 
 from geode_product.benchmark_harness.env import env_status, missing_required, read_dotenv_status
 from geode_product.benchmark_harness.manifest import BENCHMARK_HARNESSES, get_harness
-
-
-def test_documented_mcpmark_legacy_module_is_the_canonical_module() -> None:
-    legacy = importlib.import_module("plugins.benchmark_harness.mcpmark_geode_agent")
-    canonical = importlib.import_module("geode_product.benchmark_harness.mcpmark_geode_agent")
-
-    assert legacy is canonical
 
 
 def test_manifest_lists_public_harnesses() -> None:

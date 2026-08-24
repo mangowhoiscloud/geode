@@ -120,14 +120,14 @@ jobs:
 
       - name: Lint and hygiene
         run: |
-          uv run ruff check core geode_product plugins tests scripts
-          uv run ruff format --check core geode_product plugins tests scripts
+          uv run ruff check core geode_product tests scripts
+          uv run ruff format --check core geode_product tests scripts
           uv run deptry .
           npm run lint --prefix site
 
       - name: Type check
         run: >
-          uv run mypy core geode_product plugins scripts
+          uv run mypy core geode_product scripts
           tests/integration/test_prepare_hf_release_bundle.py
           tests/integration/test_check_official_docs.py
 

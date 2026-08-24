@@ -24,7 +24,7 @@ a run that looks like it works but measures nothing.
 | Python 3.12+ | `python --version` | Project floor (`pyproject.toml`, `requires-python >= 3.12`). |
 | `uv` | `uv --version` | Package manager + runner for every command here. |
 | Base sync | `uv sync` | Installs GEODE core. Not enough on its own for the loop. |
-| Audit extra | `uv sync --extra audit` | Installs `inspect_ai` + Petri (puts the `inspect` CLI on PATH). WITHOUT it the audit aborts loudly: `plugins/petri_audit/runner.py` checks `shutil.which("inspect")` and returns an aborted report with `` `inspect` CLI not found on PATH — install the [audit] extra: `uv sync --extra audit`. `` (`geode_product.self_improving.train` then returns failure for that cycle). Install it before your first run. |
+| Audit extra | `uv sync --extra audit` | Installs `inspect_ai` + Petri (puts the `inspect` CLI on PATH). WITHOUT it the audit aborts loudly: `geode_product/petri_audit/runner.py` checks `shutil.which("inspect")` and returns an aborted report with `` `inspect` CLI not found on PATH — install the [audit] extra: `uv sync --extra audit`. `` (`geode_product.self_improving.train` then returns failure for that cycle). Install it before your first run. |
 | Auditor + judge model | `ANTHROPIC_API_KEY`. See model accounts below. | The Petri auditor drives each scenario, the judge scores each rollout on the rubric. No judge means no fitness. |
 | Target model | `geode/gpt-5.5` via ChatGPT / Codex OAuth, or override `[self_improving_loop.autoresearch.target] model = ...` in config. | The audit target is GEODE-as-a-system running the mutated scaffold. No target means no audit. |
 
@@ -36,7 +36,7 @@ promote).
 ### Model accounts and the three roles
 
 The audit uses three distinct roles, each with its own model + credential
-source. Manifest defaults come from `plugins/petri_audit/petri.plugin.toml`; you
+source. Manifest defaults come from `geode_product/petri_audit/petri.plugin.toml`; you
 override them per role under `[self_improving_loop.autoresearch.<role>]` in
 `~/.geode/config.toml` (each table takes `model` + `source`):
 
@@ -179,7 +179,7 @@ the full loop completes before scaling up.
 
 | Artifact | Path | What it holds |
 |----------|------|---------------|
-| Mutation ledger | `core/self_improving/state/mutations.jsonl` | One row per mutate / apply / audit / baseline / attribution event (git-tracked). Arms are tagged via `promote_policy` / `promote_policy_seed`, so you can split the stream by arm. |
+| Mutation ledger | `geode_product/self_improving/state/mutations.jsonl` | One row per mutate / apply / audit / baseline / attribution event (git-tracked). Arms are tagged via `promote_policy` / `promote_policy_seed`, so you can split the stream by arm. |
 | Promoted baseline | `~/.geode/self-improving/baseline.json` | The promoted baseline `dim_means` + `dim_stderr`. Advances only on a gate promote; a reject leaves it untouched. |
 | Per-cycle eval | `~/.geode/petri/logs/*.eval` (+ `latest.eval`) | The Petri `.eval` per cycle, the single source for per-dim evidence. |
 | Run logs | `~/.geode/self-improving/run.log` (single audit), `state/campaign/` (campaign progress + runs) | Stdout / progress for inspection. |

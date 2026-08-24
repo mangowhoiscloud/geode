@@ -899,9 +899,9 @@ def _append_baseline_registry_row(
         save_epoch_label_map(_label_map_path, _label_map)
         # TODO(PR-STATE-SELF-IMPROVING-RENAME, deferred): epoch-boundary snapshot.
         # When a NEW epoch opens (``_epoch_is_new``), the convention
-        # (core/self_improving/state/_archive/README.md) is to freeze the PRIOR
+        # (geode_product/self_improving/state/_archive/README.md) is to freeze the PRIOR
         # epoch's full production surface (policies/ + baseline.json + pool identity)
-        # under ``core/self_improving/state/_archive/<prior-be-NNN>/``. NOT auto-wired
+        # under ``geode_product/self_improving/state/_archive/<prior-be-NNN>/``. NOT auto-wired
         # here:
         # adding snapshot I/O inside the promote write path risks the promote
         # itself (a copy failure must not abort a gate-approved promote). Left as
@@ -1027,7 +1027,7 @@ def _append_results_row(tsv_row: str, jsonl_row: str) -> None:
     persisted, so the self-improving hub's results section stayed empty while
     ``mutations.jsonl`` + ``baseline_archive.jsonl`` were written directly.
 
-    Both files live under ``AUTORESEARCH_STATE_DIR`` (``core/self_improving/state/``);
+    Both files live under ``AUTORESEARCH_STATE_DIR`` (``geode_product/self_improving/state/``);
     the ``.tsv`` gets the ``RESULTS_TSV_HEADER`` line on first write only (so it
     stays grep-friendly with stable columns), the ``.jsonl`` is header-less. Both
     are git-tracked (gitignore negations) so the rolling history survives

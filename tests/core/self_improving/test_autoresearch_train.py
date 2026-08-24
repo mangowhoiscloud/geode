@@ -276,7 +276,7 @@ def test_build_audit_command_applies_hyperparam_overrides(
             judge_model=None,
             source="api_key",
             seed_limit=25,  # would be on argv without override
-            seed_select="plugins/petri_audit/seeds_safe10",
+            seed_select="geode_product/petri_audit/seeds_safe10",
             dim_set="legacy",  # would be on argv without override
             max_turns=20,  # would be on argv without override
         ),
@@ -311,7 +311,7 @@ def test_build_audit_command_no_hyperparam_sot_falls_back_to_cfg(
             judge_model=None,
             source="api_key",
             seed_limit=25,
-            seed_select="plugins/petri_audit/seeds_safe10",
+            seed_select="geode_product/petri_audit/seeds_safe10",
             dim_set="legacy",
             max_turns=20,
         ),
@@ -350,7 +350,7 @@ def test_build_audit_command_reads_from_config(
             judge_model="claude-code/sonnet",  # deprecated no-op slot
             source="api_key",
             seed_limit=25,
-            seed_select="plugins/petri_audit/seeds_safe10",
+            seed_select="geode_product/petri_audit/seeds_safe10",
             dim_set="legacy",
             max_turns=20,
         ),
@@ -392,7 +392,7 @@ def test_build_audit_command_omits_target_judge_when_cfg_unpinned(
             judge_model=None,
             source="openai-codex",
             seed_limit=5,
-            seed_select="plugins/petri_audit/seeds",
+            seed_select="geode_product/petri_audit/seeds",
             dim_set="subset",
             max_turns=5,
         ),

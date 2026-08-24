@@ -428,14 +428,6 @@ class Settings(BaseSettings):
             raise ValueError(f"bash_sandbox must be 'off', 'on', or 'strict', got {v!r}")
         return normalized
 
-    @field_validator("computer_use_env")
-    @classmethod
-    def _validate_computer_use_env(cls, v: str) -> str:
-        normalized = str(v or "").strip().lower()
-        if normalized not in {"host", "sandbox"}:
-            raise ValueError(f"computer_use_env must be 'host' or 'sandbox', got {v!r}")
-        return normalized
-
     @field_validator("computer_use_driver")
     @classmethod
     def _validate_computer_use_driver(cls, v: str) -> str:
@@ -455,16 +447,7 @@ class Settings(BaseSettings):
     # Computer Use — desktop automation (requires pyautogui)
     computer_use_enabled: bool = True  # default on; pyautogui import guard handles missing dep
 
-    # Computer-use execution environment (Phase E) — "host" (default) | "sandbox".
-    # "host": pyautogui drives the operator's real desktop (current behaviour).
-    # "sandbox": the harness becomes a thin HTTP client that dispatches each
-    # action to an in-container shim (Docker + Xvfb virtual desktop) and gets a
-    # screenshot back — the host never touches a display. fail-loud: if the
-    # container is unreachable the action errors, NEVER falls back to host.
-    computer_use_env: str = "host"
-    # Container shim endpoint for computer_use_env="sandbox".
-    computer_use_sandbox_url: str = "http://127.0.0.1:8787"
-    # Host-mode desktop driver:
+    # Desktop driver:
     # - auto: prefer signed GEODE helper when installed, else Python pyautogui.
     # - python: legacy in-process pyautogui/pyobjc path.
     # - helper: require the macOS helper executable (fail-loud if unavailable).

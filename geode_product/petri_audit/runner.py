@@ -92,7 +92,7 @@ class TokenAssumptions:
     judge_out_per_sample: int = 2_000
     geode_amplifier: int = 1
     #: 1 in legacy mode (single mega-judge call), 5 in A3 split mode.
-    #: See plugins/petri_audit/judge_dims/geode_judge_subset_split.yaml
+    #: See geode_product/petri_audit/judge_dims/geode_judge_subset_split.yaml
     #: for the 5-group definition; runtime orchestration is staged behind
     #: cli_audit.py --judge-mode split (legacy is default until upstream
     #: inspect-petri supports group-aware audit_judge).
@@ -610,7 +610,7 @@ def run_audit(
 
     ``target=None`` falls back to GEODE's active ``settings.model``
     (drift sync stays active). A pinned target id is sticky for the
-    audit's lifetime — see ``plugins/petri_audit/geode_target.py``
+    audit's lifetime — see ``geode_product/petri_audit/geode_target.py``
     docstring "Model priority" section.
 
     **PR #6 (2026-05-14) — ``use_oauth``** governs whether gpt-5.x

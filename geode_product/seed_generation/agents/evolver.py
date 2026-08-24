@@ -9,7 +9,7 @@ seed is written to ``<run_dir>/candidates_evolved/<uuid>.md`` and a
 manifest entry is added to ``state.evolved_candidates`` for re-piloting
 in the next generation.
 
-Per-survivor sub-agent contract (``plugins/seed_generation/agents/evolver.md``):
+Per-survivor sub-agent contract (``geode_product/seed_generation/agents/evolver.md``):
 
 .. code-block:: json
 
@@ -88,7 +88,7 @@ _VALID_VERDICTS = frozenset({"ok", "evolution_skipped", "failed"})
 # original 0.70 mirrored co-scientist's ``DUPLICATE_SIMILARITY_
 # THRESHOLD`` (``open-coscientist/nodes/evolve.py:14``), but
 # co-scientist's evolver was free to rewrite the entire body.
-# ``plugins/seed_generation/agents/evolver.md`` instead mandates
+# ``geode_product/seed_generation/agents/evolver.md`` instead mandates
 # *single-section* rewrite with ±20% body-token budget — under that
 # contract, two compliant evolutions naturally share 80-90% of their
 # 5-grams. Smoke 14 (archive ``.audit/smoke-archives/
@@ -336,7 +336,7 @@ class Evolver(BaseSeedAgent):
     ) -> str:
         """Compose the per-survivor user message for the sub-agent.
 
-        The system prompt is owned by ``plugins/seed_generation/agents/evolver.md``.
+        The system prompt is owned by ``geode_product/seed_generation/agents/evolver.md``.
         The description fills in the parent candidate path, the section
         the Critic flagged, the per-candidate weaknesses list, the
         Pilot dim_means, AND (G3) the baseline-evidence block for the

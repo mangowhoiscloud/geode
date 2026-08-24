@@ -49,7 +49,7 @@ def _contract_payload(*, stage: str = "train") -> dict[str, object]:
             },
         },
         "mutations": [{"surface": "core/agent/verify.py", "hypothesis": "fewer misses"}],
-        "evaluator_paths": ["plugins/benchmark_harness", "plugins/crucible"],
+        "evaluator_paths": ["geode_product/benchmark_harness", "geode_product/crucible"],
         "promotion": {
             "method": "paired_bootstrap.v2",
             "primary_metric": "reward",

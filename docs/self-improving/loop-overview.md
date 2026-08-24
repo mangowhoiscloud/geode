@@ -2,7 +2,7 @@
 
 The self-improving loop's **DATA** splits by lifecycle
 (PR-STATE-SOT-RUNTIME-SPLIT, 2026-06-14): the git-tracked SoT (ledgers +
-policies + seed pools) is in-repo at `core/self_improving/state/` (the single
+policies + seed pools) is in-repo at `geode_product/self_improving/state/` (the single
 canonical `core.paths.AUTORESEARCH_STATE_DIR`), while the runtime scratch (the
 LATEST `baseline.json`, `run.log`, handoff, per-run dirs) is out-of-repo at
 `~/.geode/self-improving/` (`core.paths.RUNTIME_ROOT`, env-overridable via
@@ -39,7 +39,7 @@ audit invocation per file edit.
 
 | Layer | Owner | Outputs |
 |------|-------|---------|
-| dim universe (20 names + 3 info) | `plugins/petri_audit/judge_dims/geode_judge_subset.yaml` | rubric YAML |
+| dim universe (20 names + 3 info) | `geode_product/petri_audit/judge_dims/geode_judge_subset.yaml` | rubric YAML |
 | per-dim raw measurement (`mean` + `stderr`, 1-10 concerning scale) | `geode audit` subprocess (LLM judge) → `core/audit/dim_extractor` | `dim_means` / `dim_stderr` dicts |
 | per-run baseline (latest "good" snapshot) | autoresearch (`state/baseline.json` after promote) | promoted snapshot |
 | tier classification (critical / auxiliary / info) | autoresearch (`AXIS_TIERS` in `train.py`) | constant tuples |
@@ -129,7 +129,7 @@ geode_product/self_improving/           — loop CODE + program SoT (umbrella pa
 ├── admire_means.py / bench_means.py — positive-pressure / capability axes
 └── loop/          — loop runtime (runner, mutator, policies, …)
 
-core/self_improving/state/     — TRACKED SoT (in-repo, versioned)
+geode_product/self_improving/state/     — TRACKED SoT (in-repo, versioned)
 ├── policies/      — mutation-target SoT JSONs
 ├── mutations.jsonl, baseline_archive.jsonl, baseline_epochs.json
 ├── results.tsv, results.jsonl — rolling per-audit history
@@ -152,7 +152,7 @@ candidates to `<run_dir>/survivors/` (a directory of symlinks) and
 stamps `state.pool_path_out` to that path; a parent driver can pipe
 that into `AUTORESEARCH_SEED_SELECT` so the next audit consumes the
 evolved pool instead of the static tree. Unset / whitespace falls
-back to the hierarchical `plugins/petri_audit/seeds/` default.
+back to the hierarchical `geode_product/petri_audit/seeds/` default.
 
 ## Design choices
 

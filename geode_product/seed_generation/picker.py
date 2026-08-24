@@ -5,7 +5,7 @@ the concrete ``(model, provider, source)`` binding the role will use at
 runtime, factoring in:
 
 1. The role's ``default_model`` from
-   ``plugins/seed_generation/seed_generation.plugin.toml``.
+   ``geode_product/seed_generation/seed_generation.plugin.toml``.
 2. The model's provider, inferred from a prefix table (claude-*
    → anthropic, gpt-* → openai, glm-* → zhipuai).
 3. The Petri source table's ``default`` (typically ``auto``) for that

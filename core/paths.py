@@ -94,7 +94,7 @@ GEODE_HOME = Path(os.environ.get("GEODE_HOME") or (Path.home() / ".geode")).expa
 # split applies only to the persistent DEFAULT (orchestrator / serve / CLI),
 # where the env is unset. Seed pools are the one exception: always repo-pinned
 # (below), so an isolated worker still reads the real git-tracked input pools.
-_IN_REPO_SOT_DIR = _REPO_ROOT / "core" / "self_improving" / "state"
+_IN_REPO_SOT_DIR = _REPO_ROOT / "geode_product" / "self_improving" / "state"
 _ISOLATED_STATE_ROOT = os.environ.get("GEODE_STATE_ROOT")
 if _ISOLATED_STATE_ROOT:
     STATE_ROOT = Path(_ISOLATED_STATE_ROOT).expanduser()
@@ -118,9 +118,7 @@ HELD_OUT_BENCH_POOL = SEED_POOLS_DIR / "held-out"
 
 # TRACKED ledgers + policies (mutations audit, baseline-history registry,
 # baseline_epochs map, mutation-target policy JSONs) — the in-repo SoT. The
-# CODE lives in ``geode_product/self_improving/`` while tracked STATE remains at
-# ``core/self_improving/state/`` (the compatibility data root selected after the
-# interim repo-root ``state/autoresearch/`` layout under CSP-7).
+# Code and tracked state are colocated under ``geode_product/self_improving/``.
 AUTORESEARCH_STATE_DIR = SELF_IMPROVING_SOT_DIR
 
 # Cross-run handoff (latest_pointer.json, sessions.jsonl) — RUNTIME (per-run
@@ -134,7 +132,7 @@ AUTORESEARCH_HANDOFF_DIR = RUNTIME_ROOT / "handoff"
 # worker; this keeps seed-gen runtime under the same root as baseline.json /
 # run.log). Default ``~/.geode/self-improving/seed_generation/``.
 # PR-STATE-AUTORESEARCH-RENAME (2026-06-01) — snake_case ``seed_generation`` to
-# match the plugin package ``plugins/seed_generation/`` (no hyphen/underscore
+# match the plugin package ``geode_product/seed_generation/`` (no hyphen/underscore
 # twin). The Pages-served bundle dir (``docs/self-improving/seed-generation/``)
 # keeps its hyphen URL — only the READ/state path goes snake.
 STATE_SEED_GENERATION_DIR = RUNTIME_ROOT / "seed_generation"
@@ -270,7 +268,7 @@ GLOBAL_ENV_FILE = GEODE_HOME / ".env"
 GLOBAL_DRY_RUN_MARKER = GEODE_HOME / ".dry-run-opt-in"
 
 # Petri audit runtime logs — single SoT (PR-CLEANUP-D2, 2026-06-10).
-# Writer: plugins/petri_audit/cli_audit.py maintains the latest.eval
+# Writer: geode_product/petri_audit/cli_audit.py maintains the latest.eval
 # symlink; readers: train.py evidence extraction, seed_generation
 # baseline_reader, campaign glob, eval_archive, bundle_sync. Six
 # independent literal copies of this path existed before the anchor —
@@ -319,7 +317,7 @@ GLOBAL_AUDIT_AGREEMENT_DIR = GEODE_HOME / "audit" / "agreement"
 # neither — it is the rollback breadcrumb the operator may still hold.
 GLOBAL_AUTORESEARCH_HANDOFF_DIR = GEODE_HOME / "autoresearch" / "handoff"
 # PR-RATCHET-1 (2026-05-21) — the 5 mutation-target files now live in
-# the in-repo ``core/self_improving/state/policies/`` directory rather than
+# the in-repo ``geode_product/self_improving/state/policies/`` directory rather than
 # the operator's ``~/.geode/autoresearch/handoff/``. The rename converges
 # on upstream Karpathy's "branch tip = current best" principle: each
 # policy is git-tracked, so ``git diff`` shows the current mutation
@@ -333,7 +331,7 @@ GLOBAL_AUTORESEARCH_HANDOFF_DIR = GEODE_HOME / "autoresearch" / "handoff"
 # ``~/.geode/autoresearch/handoff/<file>.json`` payload is handled
 # by :mod:`geode_product.self_improving.loop.mutate.policies`.
 # The in-repo policy/ledger state dir is ``AUTORESEARCH_STATE_DIR``
-# (``core/self_improving/state/``, defined at the top of this module).
+# (``geode_product/self_improving/state/``, defined at the top of this module).
 AUTORESEARCH_POLICIES_DIR = AUTORESEARCH_STATE_DIR / "policies"
 LEGACY_SOT_DIR = GLOBAL_AUTORESEARCH_HANDOFF_DIR
 """Pre-RATCHET-1 policy dir under ``~/.geode/autoresearch/handoff/``.
@@ -493,7 +491,7 @@ GLOBAL_ROUTING_TOML = GEODE_HOME / "routing.toml"
 # ``GLOBAL_PETRI_TOML`` because seed-generation owns its own 7-role × judge-
 # panel binding model (see ADR-003 §"override surface").
 # PR-STATE-AUTORESEARCH-RENAME (2026-06-01) — snake_case ``seed_generation.toml``
-# to match the plugin package ``plugins/seed_generation/`` (was the hyphenated
+# to match the plugin package ``geode_product/seed_generation/`` (was the hyphenated
 # ``seed-generation.toml`` twin). The live file is renamed by the operator
 # migration command, not by this constant.
 GLOBAL_SEED_PIPELINE_TOML = GEODE_HOME / "seed_generation.toml"

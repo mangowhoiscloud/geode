@@ -14,7 +14,7 @@ don't match the schema before they reach the parser.
 
 The required-field tuples here mirror the
 ``_REQUIRED_*_FIELDS`` constants in each role's agent module
-(``plugins/seed_generation/agents/<role>.py``) — keeping them in
+(``geode_product/seed_generation/agents/<role>.py``) — keeping them in
 lockstep is a manual invariant for now; a future ratchet PR can
 generate one from the other via a fixture if drift becomes a problem.
 

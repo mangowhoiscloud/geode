@@ -2,7 +2,7 @@
 guard with a hierarchical-tree contract + a flatten-bridge guarantee.
 
 Prior contract (G-A1, 2026-05-12 retraction): seeds had to be FLAT under
-``plugins/petri_audit/seeds/`` because inspect_petri's
+``geode_product/petri_audit/seeds/`` because inspect_petri's
 ``read_seed_directory`` uses non-recursive glob.
 
 Post-PR-0 contract: seeds live at ``seeds/<tier>/<dim>/<NN>_<variant>.md``

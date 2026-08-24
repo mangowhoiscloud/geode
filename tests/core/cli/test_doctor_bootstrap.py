@@ -171,7 +171,6 @@ class TestCheckDesktopComputerUse:
 
         with (
             patch("core.config.settings", fake_settings),
-            patch("core.tools.computer_use.computer_use_env", return_value="host"),
             patch("core.tools.computer_use.computer_use_driver", return_value="python"),
             patch("core.cli.doctor_bootstrap.find_spec", side_effect=fake_find_spec),
         ):
@@ -201,7 +200,6 @@ class TestCheckDesktopComputerUse:
 
         with (
             patch("core.config.settings", fake_settings),
-            patch("core.tools.computer_use.computer_use_env", return_value="host"),
             patch("core.tools.computer_use.computer_use_driver", return_value="python"),
             patch("core.cli.doctor_bootstrap.find_spec", return_value=object()),
             patch("core.cli.doctor_bootstrap.platform.system", return_value="Darwin"),
@@ -220,7 +218,6 @@ class TestCheckDesktopComputerUse:
 
         with (
             patch("core.config.settings", fake_settings),
-            patch("core.tools.computer_use.computer_use_env", return_value="host"),
             patch("core.tools.computer_use.computer_use_driver", return_value="helper"),
             patch("core.tools.computer_use.computer_use_helper_path", return_value=None),
         ):
@@ -235,7 +232,6 @@ class TestCheckDesktopComputerUse:
 
         with (
             patch("core.config.settings", fake_settings),
-            patch("core.tools.computer_use.computer_use_env", return_value="host"),
             patch("core.tools.computer_use.computer_use_driver", return_value="helper"),
             patch(
                 "core.tools.computer_use.computer_use_helper_path",

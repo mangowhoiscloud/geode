@@ -33,7 +33,7 @@ import logging as _logging
 # ``LoggerEvent`` entries from ``geode_product.petri_audit`` for exactly
 # this reason — verified post-fix via file-based fa4 evidence in
 # ``docs/audits/2026-05-11-petri-observability-audit.md`` §9.6.
-_logging.getLogger("plugins.petri_audit").setLevel(_logging.INFO)
+_logging.getLogger("geode_product.petri_audit").setLevel(_logging.INFO)
 _logging.getLogger("geode_product.petri_audit").setLevel(_logging.INFO)
 
 # Audit-extra hookup: invoking ``register()`` triggers the

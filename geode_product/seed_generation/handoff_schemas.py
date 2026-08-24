@@ -1,5 +1,5 @@
 """Per-role INPUT handoff JSON Schemas — symmetric counterpart to
-``plugins/seed_generation/json_schemas.py`` (which declares the OUTPUT
+``geode_product/seed_generation/json_schemas.py`` (which declares the OUTPUT
 shape each role produces).
 
 PR-HANDOFF-SCHEMAS (2026-05-25) — when each role's ``_build_tasks``

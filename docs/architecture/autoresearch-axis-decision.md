@@ -158,8 +158,8 @@ When `baseline_means=None / baseline_stderr=None`: the gate is disabled and a si
   - § "Output format": `^<axis>_score:` → `^<dim>_score:` (12 substantive dims).
   - § "Logging results": 9-col → 10-col schema.
 - `~/.geode/self-improving/baseline.json` schema: the Petri summary JSON as-is (`{dim_means: {...}, dim_stderr: {...}}`).
-- `core/self_improving/state/results.tsv`: update to the 10-col header.
-- `core/self_improving/state/results.jsonl`: new (line-per-gen raw dim aggregates).
+- `geode_product/self_improving/state/results.tsv`: update to the 10-col header.
+- `geode_product/self_improving/state/results.jsonl`: new (line-per-gen raw dim aggregates).
 - `tests/test_autoresearch_train.py`: update 15 tests (weights readjusted to keep the dry-run baseline at 0.535895).
 
 ## References
