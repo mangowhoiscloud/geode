@@ -17,15 +17,20 @@ eval_contracts:
   - docs/eval/artifact-publish-manifest.template.json
   - docs/eval/schemas/geo-host-preflight.schema.json
   - docs/eval/schemas/geo-host-preflight-v2.schema.json
+  - docs/eval/schemas/geo-claim-universe.schema.json
+  - docs/eval/schemas/geo-human-calibration.schema.json
   - docs/eval/schemas/geo-link-audit.schema.json
   - docs/eval/schemas/geo-live-approval.schema.json
   - docs/eval/schemas/geo-native-results.schema.json
   - docs/eval/schemas/geo-outcome.schema.json
   - docs/eval/schemas/geo-preflight.schema.json
   - docs/eval/schemas/geo-source-receipt.schema.json
+  - docs/eval/schemas/geo-source-receipt-v2.schema.json
   - docs/eval/schemas/geo-vector.schema.json
   - docs/eval/schemas/geo-verifier-results.schema.json
+  - docs/eval/schemas/geo-verifier-results-v2.schema.json
   - docs/eval/schemas/geo-verifier-receipt.schema.json
+  - docs/eval/schemas/geo-verifier-receipt-v2.schema.json
   - docs/eval/schemas/geo-workload.schema.json
   - docs/eval/schemas/publication.schema.json
   - docs/eval/schemas/run-spec.schema.json
@@ -124,14 +129,16 @@ as failure.
 | R | Retrieval inclusion/rank | runs whose exposed retrieval list contains a target URL | 24×K runs that expose retrieval |
 | C | Citation selection | runs citing a target URL | all 24×K query runs |
 | P | Visible placement/rank | target-cited runs with `visible_rank ≤ 3` | target-cited runs |
-| A | Answer absorption | runs where a verifier confirms target use | target-cited runs with an A verdict |
-| Q | Claim support submetric | supported target-linked claims | verifier-declared target-linked claims audited in full |
+| A | Answer absorption | runs with at least one supported frozen claim | target-cited runs with complete source receipts and an A/Q v2 verdict |
+| Q | Claim support submetric | supported frozen target-linked claims | independently extracted claims audited in full |
 | O | First-party outcome | observed referrals, engagement, or conversions | eligible first-party impressions, referrals, or sessions |
 
-The executable v1 validator measures only the claim-support component of Q.
-It therefore reports Q as `partial` even when every target-cited response has a
-verifier receipt; completeness, authority, and factuality need their own frozen
-rubrics and receipts.
+The v2 verifier freezes a claim universe from exact answer spans before a
+separate model call sees source content. The evaluator derives A from supported
+claims and accepts Q support only when exact, unique answer and source spans
+survive schema and digest validation. It still reports Q as `partial`: claim
+extraction completeness and support reliability require a blind human
+calibration sidecar, while authority and broader factuality remain separate.
 
 ## How to read empty cells and comparators
 
@@ -144,7 +151,7 @@ of the stage was measured.
 |---|---|---|
 | F · `partial` | All 78 local URLs and 577/577 internal links passed, but the previous runner discarded the deployed 77/78 sitemap failure as an exception. The current runner preserves it as a partial receipt. | Identity check: local export vs public host with the same URL digest. |
 | R/C/P | Pages measured R 0/120, C 4/120, and P 4/4. R is an observed zero, not an empty cell. | Surface diagnostic: Pages vs GitHub repository, which appeared in retrieval in 109/120 observations and citations in 9/120. |
-| A/Q | A was 4/4 and Q was 43/58; an earlier same-model repeat returned 35/54. Q remains `partial` because it covers claim support only. | Verdict calibration: independent verifier vs a human sample over the same frozen claim set. |
+| A/Q | The historical v1 run observed A 4/4 and Q 43/58; an earlier same-model repeat returned 35/54. These are diagnostic v1 receipts, not calibrated v2 results. | Blind calibration: human claim-completeness and support labels over a digest-bound v2 sample. |
 | O · `not_measured` | No completed Search Console, referral, or conversion window exists, so no eligible denominator was created. | Outcome comparison: baseline vs treatment with the same window, queries, and engine. |
 | Promotion · `none` | The run is diagnostic; no comparator or intervention arm was preregistered. | Promotion comparison: frozen baseline vs treatment under the same index, budget, and observation window. |
 
@@ -206,6 +213,8 @@ with frozen baseline and treatment arms.
      --rubric <run-dir>/verifier-rubric.json \
      --adapter <verifier-adapter> \
      --model <verifier-model> \
+     --claim-adapter <claim-extractor-adapter> \
+     --claim-model <claim-extractor-model> \
      --producer-version <version-or-revision> \
      --out <run-dir>/verifier-results.json
 
@@ -214,6 +223,7 @@ with frozen baseline and treatment arms.
      --workload <run-dir>/workload.json \
      --native-results <run-dir>/native-results.json \
      --verifier-results <run-dir>/verifier-results.json \
+     --calibration <run-dir>/human-calibration.json \
      --outcome <run-dir>/outcome.json \
      --out <run-dir>/geo-vector.json
    ```
@@ -222,9 +232,14 @@ with frozen baseline and treatment arms.
    separate R/C/P/A/Q denominators, the run-spec digest, native adapter,
    provider, credential source, and model,
    verifier/model/rubric identity, preflight/outcome receipt digests, and
-   audited-claim coverage. Verifier support rows retain the claim text and an
-   exact quote that must occur in the bound source receipt. The verifier adapter
-   is explicit so a second provider can produce an independent calibration run.
+   audited-claim coverage. Claim receipts retain exact native-answer spans;
+   verifier rows retain exact, uniquely occurring source spans and cannot add,
+   remove, or reorder claims. Sources are captured up to 100,000 characters;
+   any still-truncated source makes its observations explicitly unmeasured.
+   The extractor and verifier adapters are independently selectable. An
+   optional `geode.geo-human-calibration@1` sidecar must attest blind labeling,
+   bind the v2 overlay digest, label every sampled frozen claim, and record
+   missed exact answer spans before agreement is reported.
    Requested result count is an input constraint, not a promise that
    the provider will expose exactly that many sources. The collector retains
    every provider-native source and citation and never parses answer prose into
@@ -232,8 +247,9 @@ with frozen baseline and treatment arms.
    A completed first-party analytics receipt binds its native export and joins
    later through `--outcome`, without rewriting the immutable native result. It
    has no aggregate score field. The emitted vector is validated as
-   `geode.geo-vector@1`; source receipts are independently validated as
-   `geode.geo-source-receipt@1` and require verified TLS.
+   `geode.geo-vector@1`; new source receipts are independently validated as
+   `geode.geo-source-receipt@2`, require verified TLS, and preserve v1 reading
+   only for immutable historical overlays.
 3. For intervention evaluation, preregister live baseline and targeted-repair
    arms. Match workload, route, model, locale, account state, budget, and
    observation window; invalidate the comparison when index state cannot be
@@ -284,12 +300,15 @@ The project can publish `/geode/sitemap.xml`, but this repository cannot own
 the GitHub Pages host-root `/robots.txt`. Record host-root behavior as an
 environment observation instead of claiming this project controls it.
 
-Provider-native citation annotations establish C and P, not A or Q. A requires
-a separate target-use verdict; Q requires a separately digest-bound claim
-universe, cited source content, rubric, and verifier identity. O likewise needs
-a first-party Search Console, referral, or conversion receipt whose observation
-window has ended. Missing receipts remain `not_measured`; they are never filled
-from model prose or a same-run judge.
+Provider-native citation annotations establish C and P, not A or Q. A is
+derived only from supported claims in a separately digest-bound claim
+universe; Q additionally requires complete cited-source content, exact spans,
+a rubric, verifier identity, and blind human calibration for reliability. O
+likewise needs a first-party Search Console, referral, or conversion receipt
+whose observation window has ended. Missing receipts remain `not_measured`;
+they are never filled from model prose or a same-run judge. GEODE does not ship
+a synthetic analytics importer: without a real native export and
+locator-preserving receipt, O stays `not_measured`.
 
 A diagnostic visibility run deliberately retains `promotion_authority=none`.
 Promotion is a different preregistered experiment: it needs a direct named

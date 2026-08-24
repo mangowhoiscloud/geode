@@ -61,6 +61,15 @@
         "unit": {"type": "string", "minLength": 1, "maxLength": 64}
       },
       "additionalProperties": false
+    },
+    "ratio": {
+      "type": "object",
+      "required": ["numerator", "denominator"],
+      "properties": {
+        "numerator": {"type": "integer", "minimum": 0},
+        "denominator": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
     }
   },
   "required": ["schema_id", "schema_version", "run_id", "run_spec_sha256", "workload_sha256", "native_results_sha256", "verifier_results_sha256", "native_producer", "verifier_context", "preflight_context", "outcome_context", "outcome_primary_metric", "observations", "search_activation", "quality_claim_coverage", "vector"],
@@ -94,6 +103,40 @@
             "version": {"type": "string", "minLength": 1, "maxLength": 128},
             "model": {"type": "string", "minLength": 1, "maxLength": 128},
             "rubric": {"$ref": "#/$defs/evidence_ref"}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "claim_extractor_context": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["producer", "version", "model"],
+          "properties": {
+            "producer": {"type": "string", "minLength": 1, "maxLength": 128},
+            "version": {"type": "string", "minLength": 1, "maxLength": 128},
+            "model": {"type": "string", "minLength": 1, "maxLength": 128}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "calibration_context": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["path", "sha256", "reviewer", "blinded_to_verifier_labels", "reviewed_observations", "claim_universe_completeness", "support_agreement"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1, "maxLength": 1000},
+            "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+            "reviewer": {"type": "string", "minLength": 1, "maxLength": 128},
+            "blinded_to_verifier_labels": {"const": true},
+            "reviewed_observations": {"type": "integer", "minimum": 1},
+            "claim_universe_completeness": {"$ref": "#/$defs/ratio"},
+            "support_agreement": {"$ref": "#/$defs/ratio"}
           },
           "additionalProperties": false
         }
@@ -140,7 +183,8 @@
       "properties": {
         "audited_claims": {"type": "integer", "minimum": 0},
         "audited_target_cited_responses": {"type": "integer", "minimum": 0},
-        "target_cited_responses": {"type": "integer", "minimum": 0}
+        "target_cited_responses": {"type": "integer", "minimum": 0},
+        "unmeasured_target_cited_responses": {"type": "integer", "minimum": 0}
       },
       "additionalProperties": false
     },

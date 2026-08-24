@@ -10,7 +10,12 @@ from typing import Any
 import pytest
 from core.llm.adapters.base import AdapterCallResult, UsageSummary, WebSearchResult
 from scripts.eval.geo_collect import collect
-from scripts.eval.geo_verify import _validate_verdict, verify
+from scripts.eval.geo_verify import (
+    _validate_claims,
+    _validate_verdict,
+    _validate_verdict_v2,
+    verify,
+)
 from scripts.eval.geo_visibility import _validate_live_approval, validate_and_measure
 
 
@@ -323,6 +328,7 @@ def test_geo_visibility_emits_vector_without_aggregate_score(tmp_path: Path) -> 
         "audited_claims": 0,
         "audited_target_cited_responses": 0,
         "target_cited_responses": 40,
+        "unmeasured_target_cited_responses": 0,
     }
     assert "aggregate_score" not in payload
     assert {
@@ -572,16 +578,74 @@ def test_geo_verifier_rejects_unbound_support_evidence(source_quote: str, messag
         )
 
 
+def test_geo_verifier_v2_binds_independent_answer_and_source_spans() -> None:
+    answer = "GEODE records trajectories."
+    claims = _validate_claims(
+        {
+            "claims": [
+                {
+                    "answer_quote": answer,
+                    "answer_start": 0,
+                    "answer_end": len(answer),
+                }
+            ],
+            "rationale": "One atomic factual span.",
+        },
+        answer=answer,
+    )["claims"]
+    url = "https://example.com/geode"
+    source = "The runtime records trajectories for later audit."
+
+    verdict = _validate_verdict_v2(
+        {
+            "quality": [
+                {
+                    "claim_id": "claim-001",
+                    "source_url": url,
+                    "source_quote": "records trajectories",
+                    "supported": True,
+                    "reason": "The source states the same capability.",
+                }
+            ],
+            "rationale": "The frozen claim is supported.",
+        },
+        claims=claims,
+        target_urls=(url,),
+        fetched={url: {"content": source}},
+    )
+
+    assert verdict["quality"][0]["answer_quote"] == answer
+    assert verdict["quality"][0]["source_start"] == source.index("records trajectories")
+
+
+def test_geo_verifier_v2_rejects_overlapping_claim_spans() -> None:
+    answer = "GEODE records and audits trajectories."
+
+    with pytest.raises(ValueError, match="non-overlapping"):
+        _validate_claims(
+            {
+                "claims": [
+                    {"answer_quote": answer[:20], "answer_start": 0, "answer_end": 20},
+                    {"answer_quote": answer[10:], "answer_start": 10, "answer_end": len(answer)},
+                ],
+                "rationale": "Overlapping spans.",
+            },
+            answer=answer,
+        )
+
+
 def _assert_geo_verifier_resumes_digest_checked_receipts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _, workload, native_results = _fixture(tmp_path)
+    run_spec, workload, native_results = _fixture(tmp_path)
     native = json.loads(native_results.read_text(encoding="utf-8"))
     for observation in native["observations"][2:]:
         observation["citations"] = []
     native_receipt = tmp_path / "native.json"
     receipt_payload = json.loads(native_receipt.read_text(encoding="utf-8"))
     receipt_payload["answer"] = "GEODE documentation describes the runtime."
+    for observation in native["observations"][2:]:
+        receipt_payload["observations"][observation["observation_id"]]["citations"] = []
     _write_json(native_receipt, receipt_payload)
     for observation in native["observations"]:
         observation["native_receipt"]["sha256"] = _sha256(native_receipt)
@@ -592,56 +656,72 @@ def _assert_geo_verifier_resumes_digest_checked_receipts(
 
     fetch_calls = 0
 
-    async def fake_fetch(*_: Any, **__: Any) -> dict[str, Any]:
+    async def fake_fetch(url: str) -> dict[str, Any]:
         nonlocal fetch_calls
         fetch_calls += 1
+        content = "GEODE documentation describes the runtime."
         return {
-            "result": {
-                "url": "https://mangowhoiscloud.github.io/geode/docs/",
-                "source": "https://mangowhoiscloud.github.io/geode/docs/",
-                "content": "GEODE documentation describes the runtime.",
-                "truncated": False,
-                "content_type": "text/html; charset=utf-8",
-                "status_code": 200,
-                "tls_verified": True,
-            }
+            "schema_id": "geode.geo-source-receipt@2",
+            "fetched_at": "2026-08-23T00:09:00Z",
+            "url": url,
+            "final_url": url,
+            "content": content,
+            "content_sha256": hashlib.sha256(content.encode()).hexdigest(),
+            "content_chars": len(content),
+            "truncated": False,
+            "content_type": "text/html; charset=utf-8",
+            "status_code": 200,
+            "tls_verified": True,
         }
 
     calls = 0
+    verifier_calls = 0
 
     class FakeAdapter:
         name = "test-verifier"
 
-        async def acomplete(self, _: Any) -> AdapterCallResult:
-            nonlocal calls
+        async def acomplete(self, request: Any) -> AdapterCallResult:
+            nonlocal calls, verifier_calls
             calls += 1
-            if calls == 3:
-                raise RuntimeError("connection lost")
+            if request.response_schema["title"] == "geo_claim_universe":
+                answer_quote = "GEODE documentation describes the runtime."
+                payload = {
+                    "claims": [
+                        {
+                            "answer_quote": answer_quote,
+                            "answer_start": 0,
+                            "answer_end": len(answer_quote),
+                        }
+                    ],
+                    "rationale": "One factual answer span was extracted.",
+                }
+            else:
+                verifier_calls += 1
+                if verifier_calls == 3:
+                    raise RuntimeError("connection lost")
+                payload = {
+                    "quality": [
+                        {
+                            "claim_id": "claim-001",
+                            "source_url": "https://mangowhoiscloud.github.io/geode/docs/",
+                            "source_quote": (
+                                "invented source text"
+                                if verifier_calls == 1
+                                else "GEODE documentation"
+                            ),
+                            "supported": True,
+                            "reason": "The fetched source supports the frozen claim.",
+                        }
+                    ],
+                    "rationale": "The frozen claim was audited.",
+                }
             return AdapterCallResult(
-                text=json.dumps(
-                    {
-                        "absorption": True,
-                        "quality": [
-                            {
-                                "claim_id": "claim-1",
-                                "claim_text": "GEODE has documentation.",
-                                "source_url": ("https://mangowhoiscloud.github.io/geode/docs/"),
-                                "source_quote": (
-                                    "invented source text" if calls == 1 else "GEODE documentation"
-                                ),
-                                "supported": True,
-                                "reason": "The fetched source supports the claim.",
-                            }
-                        ],
-                        "quality_claims_expected": 1,
-                        "rationale": "One target-linked claim was audited.",
-                    }
-                ),
+                text=json.dumps(payload),
                 usage=UsageSummary(),
                 stop_reason="end_turn",
             )
 
-    monkeypatch.setattr("scripts.eval.geo_verify.WebFetchTool.aexecute", fake_fetch)
+    monkeypatch.setattr("scripts.eval.geo_verify._fetch_source", fake_fetch)
     monkeypatch.setattr("scripts.eval.geo_verify.bootstrap_builtins", lambda: None)
     monkeypatch.setattr("scripts.eval.geo_verify.get_adapter", lambda _: FakeAdapter())
 
@@ -660,10 +740,12 @@ def _assert_geo_verifier_resumes_digest_checked_receipts(
         )
     evidence_dir = tmp_path / "verifier-results-evidence"
     assert len(list(evidence_dir.glob("source-*.json"))) == 1
+    assert len(list(evidence_dir.glob("claims-*.json"))) == 2
     assert len(list(evidence_dir.glob("verdict-*.json"))) == 1
     assert not output.exists()
 
     calls = 0
+    verifier_calls = 0
     payload = asyncio.run(
         verify(
             workload_path=workload,
@@ -679,6 +761,120 @@ def _assert_geo_verifier_resumes_digest_checked_receipts(
     assert calls == 2
     assert fetch_calls == 1
     assert len(payload["observations"]) == 2
+    assert payload["schema_id"] == "geode.geo-verifier-results@2"
+    calibration = tmp_path / "human-calibration.json"
+    _write_json(
+        calibration,
+        {
+            "schema_id": "geode.geo-human-calibration@1",
+            "schema_version": 1,
+            "run_id": "geo-quality-test",
+            "verifier_results_sha256": _sha256(output),
+            "reviewer": "blind-reviewer",
+            "labeled_at": "2026-08-23T00:20:00Z",
+            "blinded_to_verifier_labels": True,
+            "sampling": {"method": "full", "seed": None},
+            "observations": [
+                {
+                    "observation_id": row["observation_id"],
+                    "claim_universe_complete": True,
+                    "missed_claims": [],
+                    "support_labels": [
+                        {
+                            "claim_id": claim["claim_id"],
+                            "human_supported": True,
+                            "notes": "Exact source support confirmed.",
+                        }
+                        for claim in row["quality"]
+                    ],
+                }
+                for row in payload["observations"]
+            ],
+        },
+    )
+    measured = validate_and_measure(
+        run_spec_path=run_spec,
+        workload_path=workload,
+        native_results_path=native_results,
+        verifier_results_path=output,
+        calibration_path=calibration,
+    )
+    assert measured["vector"]["A"]["numerator"] == 2
+    assert measured["vector"]["A"]["denominator"] == 2
+    assert measured["vector"]["Q"]["numerator"] == 2
+    assert measured["vector"]["Q"]["denominator"] == 2
+    assert measured["claim_extractor_context"]["producer"] == "test-verifier"
+    assert measured["calibration_context"]["claim_universe_completeness"] == {
+        "numerator": 2,
+        "denominator": 2,
+    }
+    assert measured["calibration_context"]["support_agreement"] == {
+        "numerator": 2,
+        "denominator": 2,
+    }
+
+
+def test_geo_verifier_v2_binds_truncated_source_exclusions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, workload, native_results = _fixture(tmp_path)
+    native = json.loads(native_results.read_text(encoding="utf-8"))
+    native_receipt_path = tmp_path / "native.json"
+    native_receipt = json.loads(native_receipt_path.read_text(encoding="utf-8"))
+    native_receipt["answer"] = "GEODE documentation describes the runtime."
+    for observation in native["observations"][1:]:
+        observation["citations"] = []
+        native_receipt["observations"][observation["observation_id"]]["citations"] = []
+    _write_json(native_receipt_path, native_receipt)
+    for observation in native["observations"]:
+        observation["native_receipt"]["sha256"] = _sha256(native_receipt_path)
+    _write_json(native_results, native)
+    rubric = tmp_path / "rubric.json"
+    _write_json(rubric, {"schema_id": "geode.geo-verifier-rubric@1"})
+
+    async def fake_fetch(url: str) -> dict[str, Any]:
+        content = "partial source"
+        return {
+            "schema_id": "geode.geo-source-receipt@2",
+            "fetched_at": "2026-08-23T00:09:00Z",
+            "url": url,
+            "final_url": url,
+            "content": content,
+            "content_sha256": hashlib.sha256(content.encode()).hexdigest(),
+            "content_chars": len(content),
+            "truncated": True,
+            "content_type": "text/html; charset=utf-8",
+            "status_code": 200,
+            "tls_verified": True,
+        }
+
+    class NoCallAdapter:
+        name = "not-called"
+
+        async def acomplete(self, _: Any) -> AdapterCallResult:
+            raise AssertionError("truncated source observations must not reach a model")
+
+    monkeypatch.setattr("scripts.eval.geo_verify._fetch_source", fake_fetch)
+    monkeypatch.setattr("scripts.eval.geo_verify.bootstrap_builtins", lambda: None)
+    monkeypatch.setattr("scripts.eval.geo_verify.get_adapter", lambda _: NoCallAdapter())
+    output = tmp_path / "verifier-results.json"
+    payload = asyncio.run(
+        verify(
+            workload_path=workload,
+            native_results_path=native_results,
+            rubric_path=rubric,
+            output_path=output,
+            model="test-model",
+            adapter_name="test-verifier",
+            producer_version="test-v2",
+            concurrency=1,
+        )
+    )
+
+    assert payload["observations"] == []
+    exclusion = payload["unmeasured_observations"][0]
+    assert exclusion["reason"] == "incomplete_source_receipt"
+    assert len(exclusion["sources"]) == 1
 
 
 def test_geo_visibility_rejects_observation_matrix_drift(tmp_path: Path) -> None:

@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/schemas/geo-human-calibration.schema.json",
+  "title": "GEODE GEO blind human calibration sidecar v1",
+  "type": "object",
+  "required": ["schema_id", "schema_version", "run_id", "verifier_results_sha256", "reviewer", "labeled_at", "blinded_to_verifier_labels", "sampling", "observations"],
+  "properties": {
+    "schema_id": {"const": "geode.geo-human-calibration@1"},
+    "schema_version": {"const": 1},
+    "run_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"},
+    "verifier_results_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "reviewer": {"type": "string", "minLength": 1, "maxLength": 128},
+    "labeled_at": {"type": "string", "format": "date-time"},
+    "blinded_to_verifier_labels": {"const": true},
+    "sampling": {
+      "type": "object",
+      "required": ["method", "seed"],
+      "properties": {
+        "method": {"enum": ["simple-random", "stratified-workload", "full"]},
+        "seed": {"type": ["integer", "null"], "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "observations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["observation_id", "claim_universe_complete", "missed_claims", "support_labels"],
+        "properties": {
+          "observation_id": {"type": "string", "minLength": 3, "maxLength": 256},
+          "claim_universe_complete": {"type": "boolean"},
+          "missed_claims": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "required": ["answer_quote", "answer_start", "answer_end"],
+              "properties": {
+                "answer_quote": {"type": "string", "minLength": 1, "maxLength": 2000},
+                "answer_start": {"type": "integer", "minimum": 0},
+                "answer_end": {"type": "integer", "minimum": 1}
+              },
+              "additionalProperties": false
+            }
+          },
+          "support_labels": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "required": ["claim_id", "human_supported", "notes"],
+              "properties": {
+                "claim_id": {"type": "string", "pattern": "^claim-[0-9]{3}$"},
+                "human_supported": {"type": "boolean"},
+                "notes": {"type": "string", "maxLength": 2000}
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"claim_universe_complete": {"const": true}}},
+            "then": {"properties": {"missed_claims": {"maxItems": 0}}},
+            "else": {"properties": {"missed_claims": {"minItems": 1}}}
+          }
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -74,6 +74,12 @@ def _load_bound_receipt(
     return _strict_json_loads(path.read_text(encoding="utf-8"), label=str(path))
 
 
+def _object_receipt(value: object, *, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be an object")
+    return value
+
+
 def _assert_ranked_urls(rows: list[dict[str, Any]], *, label: str, rank_key: str = "rank") -> None:
     urls = [str(row["url"]) for row in rows]
     ranks = [int(row[rank_key]) for row in rows]
@@ -370,14 +376,30 @@ def _load_verifier_overlay(
     *,
     native_results_path: Path,
     verifier_results_path: Path | None,
-) -> tuple[dict[str, Any] | None, dict[str, dict[str, Any]], str | None]:
+) -> tuple[
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+    dict[str, dict[str, Any]],
+    set[str],
+    str | None,
+    int,
+]:
     if verifier_results_path is None:
-        return None, {}, None
+        return None, None, {}, set(), None, 0
     verifier_results_path = verifier_results_path.resolve()
     overlay = _load_json_object(verifier_results_path)
+    schema_id = str(overlay.get("schema_id") or "")
+    schemas = {
+        "geode.geo-verifier-results@1": (1, "geo-verifier-results.schema.json"),
+        "geode.geo-verifier-results@2": (2, "geo-verifier-results-v2.schema.json"),
+    }
+    selected = schemas.get(schema_id)
+    if selected is None:
+        raise ValueError("unsupported GEO verifier overlay")
+    version, schema = selected
     _validate_schema(
         overlay,
-        "geo-verifier-results.schema.json",
+        schema,
         label=str(verifier_results_path),
     )
     if overlay["run_id"] != results["run_id"] or overlay["native_results_sha256"] != _sha256(
@@ -397,13 +419,274 @@ def _load_verifier_overlay(
     native_ids = {str(row["observation_id"]) for row in results["observations"]}
     by_id: dict[str, dict[str, Any]] = {}
     seen: set[str] = set()
-    for verdict in overlay["observations"]:
-        observation_id = str(verdict["observation_id"])
+    for row in overlay["observations"]:
+        observation_id = str(row["observation_id"])
         if observation_id in seen or observation_id not in native_ids:
             raise ValueError("GEO verifier overlay contains duplicate or unknown observations")
         seen.add(observation_id)
-        by_id[observation_id] = verdict
-    return overlay["verifier_context"], by_id, _sha256(verifier_results_path)
+        by_id[observation_id] = row
+    unmeasured = {str(row["observation_id"]) for row in overlay.get("unmeasured_observations", [])}
+    if len(unmeasured) != len(overlay.get("unmeasured_observations", [])):
+        raise ValueError("GEO verifier overlay contains duplicate unmeasured observations")
+    if unmeasured - native_ids or unmeasured & seen:
+        raise ValueError("GEO verifier overlay contains unknown or contradictory exclusions")
+    native_by_id = {str(row["observation_id"]): row for row in results["observations"]}
+    for row in overlay.get("unmeasured_observations", []):
+        source_urls: list[str] = []
+        for source_ref in row["sources"]:
+            source = _object_receipt(
+                _load_bound_receipt(
+                    verifier_results_path,
+                    source_ref,
+                    kind="unmeasured-verifier-source",
+                ),
+                label="GEO unmeasured source receipt",
+            )
+            _validate_schema(
+                source,
+                "geo-source-receipt-v2.schema.json",
+                label="GEO unmeasured source receipt",
+            )
+            if source["truncated"] is not True:
+                raise ValueError("GEO incomplete-source exclusion binds a complete source")
+            source_urls.append(str(source["url"]))
+        observation = native_by_id[str(row["observation_id"])]
+        citation_urls = {str(item["url"]) for item in observation["citations"]}
+        if source_urls != row["source_urls"] or any(
+            url not in citation_urls for url in source_urls
+        ):
+            raise ValueError("GEO incomplete-source exclusion does not match native citations")
+    return (
+        overlay["verifier_context"],
+        overlay.get("claim_extractor_context"),
+        by_id,
+        unmeasured,
+        _sha256(verifier_results_path),
+        version,
+    )
+
+
+def _validate_verifier_v2_evidence(
+    *,
+    observation_id: str,
+    observation: dict[str, Any],
+    citations: list[dict[str, Any]],
+    native: dict[str, Any],
+    verdict: dict[str, Any],
+    verifier: dict[str, Any],
+    verifier_results_path: Path,
+    claim_extractor_context: dict[str, Any] | None,
+    prefixes: tuple[str, ...],
+    absorption: bool,
+    quality: list[dict[str, Any]],
+    quality_expected: int | None,
+) -> None:
+    if claim_extractor_context is None:
+        raise ValueError("GEO verifier v2 requires a claim extractor context")
+    if quality_expected is None:
+        raise ValueError("GEO verifier v2 has no frozen claim count")
+    claim_ref = verdict["claim_universe"]
+    loaded_claims = _load_bound_receipt(
+        verifier_results_path,
+        claim_ref,
+        kind="claim-universe",
+    )
+    if not isinstance(loaded_claims, dict):
+        raise ValueError("GEO claim universe receipt must be an object")
+    _validate_schema(
+        loaded_claims,
+        "geo-claim-universe.schema.json",
+        label=f"GEO claim universe {observation_id}",
+    )
+    native_answer = native.get("answer")
+    if not isinstance(native_answer, str):
+        raise ValueError("GEO native receipt has no answer for claim binding")
+    target_urls = list(
+        dict.fromkeys(str(row["url"]) for row in citations if _is_target(str(row["url"]), prefixes))
+    )
+    expected_claim_binding = (
+        loaded_claims["observation_id"] == observation_id
+        and loaded_claims["producer"] == claim_extractor_context["producer"]
+        and loaded_claims["model"] == claim_extractor_context["model"]
+        and loaded_claims["native_receipt_sha256"] == observation["native_receipt"]["sha256"]
+        and loaded_claims["answer_sha256"] == hashlib.sha256(native_answer.encode()).hexdigest()
+        and loaded_claims["target_urls"] == target_urls
+        and verifier["claim_universe_sha256"] == claim_ref["sha256"]
+    )
+    if not expected_claim_binding:
+        raise ValueError("GEO claim universe does not match its frozen observation")
+    frozen = {str(row["claim_id"]): row for row in loaded_claims["claims"]}
+    for claim in loaded_claims["claims"]:
+        start, end = int(claim["answer_start"]), int(claim["answer_end"])
+        if native_answer[start:end] != claim["answer_quote"]:
+            raise ValueError("GEO claim answer span does not match the native answer")
+
+    source_content: dict[str, str] = {}
+    for source_ref in verifier["sources"]:
+        source_receipt = _load_bound_receipt(
+            verifier_results_path,
+            source_ref,
+            kind="verifier-source",
+        )
+        if not isinstance(source_receipt, dict):
+            raise ValueError("GEO verifier source receipt is malformed")
+        _validate_schema(
+            source_receipt,
+            "geo-source-receipt-v2.schema.json",
+            label=f"GEO verifier source receipt {observation_id}",
+        )
+        complete = (
+            not source_receipt["truncated"]
+            and source_receipt["content_chars"] == len(source_receipt["content"])
+            and source_receipt["content_sha256"]
+            == hashlib.sha256(str(source_receipt["content"]).encode()).hexdigest()
+        )
+        if not complete:
+            raise ValueError("GEO verifier v2 requires a complete source receipt")
+        source_content[str(source_receipt["url"])] = str(source_receipt["content"])
+
+    for claim in quality:
+        frozen_claim = frozen.get(str(claim["claim_id"]))
+        if frozen_claim is None or any(
+            claim[field] != frozen_claim[field]
+            for field in ("answer_quote", "answer_start", "answer_end")
+        ):
+            raise ValueError("GEO verdict does not match the frozen claim universe")
+        if claim["supported"]:
+            source = source_content.get(str(claim["source_url"]))
+            quote = str(claim["source_quote"])
+            start, end = claim["source_start"], claim["source_end"]
+            bound = (
+                source is not None
+                and bool(quote)
+                and start is not None
+                and end is not None
+                and source[int(start) : int(end)] == quote
+                and source.count(quote) == 1
+            )
+            if not bound:
+                raise ValueError("GEO supported claim lacks exact unique source evidence")
+        elif any(
+            value not in {None, ""}
+            for value in (
+                claim["source_url"],
+                claim["source_quote"],
+                claim["source_start"],
+                claim["source_end"],
+            )
+        ):
+            raise ValueError("GEO unsupported claim carries source evidence")
+    if absorption != any(bool(row["supported"]) for row in quality):
+        raise ValueError("GEO absorption must be derived from supported frozen claims")
+    if [str(row["claim_id"]) for row in quality] != list(frozen) or quality_expected != len(frozen):
+        raise ValueError("GEO verdict does not cover the frozen claim universe")
+
+
+def _validate_verifier_v1_sources(
+    *,
+    observation_id: str,
+    verifier: dict[str, Any],
+    verifier_results_path: Path,
+    quality: list[dict[str, Any]],
+) -> None:
+    source_content: dict[str, str] = {}
+    for source_ref in verifier["sources"]:
+        source_receipt = _load_bound_receipt(
+            verifier_results_path,
+            source_ref,
+            kind="verifier-source",
+        )
+        if not isinstance(source_receipt, dict):
+            raise ValueError("GEO verifier source receipt is malformed")
+        _validate_schema(
+            source_receipt,
+            "geo-source-receipt.schema.json",
+            label=f"GEO verifier source receipt {observation_id}",
+        )
+        source_content[str(source_receipt["url"])] = str(source_receipt["content"])
+    for claim in quality:
+        quote = str(claim["source_quote"])
+        source = source_content.get(str(claim["source_url"]))
+        if source is None or (quote and not _quote_in_source(quote, source)):
+            raise ValueError("GEO verifier claim is not bound to its source receipt")
+        if claim["supported"] and not quote:
+            raise ValueError("supported GEO claims require an exact source quote")
+
+
+def _load_human_calibration(
+    *,
+    calibration_path: Path | None,
+    run_id: str,
+    run_dir: Path,
+    native_results_path: Path,
+    verifier_results_path: Path | None,
+    verifier_results_sha256: str | None,
+    verifier_by_id: dict[str, dict[str, Any]],
+    native_results: dict[str, Any],
+    verifier_version: int,
+) -> dict[str, Any] | None:
+    if calibration_path is None:
+        return None
+    if verifier_results_path is None or verifier_results_sha256 is None or verifier_version != 2:
+        raise ValueError("GEO human calibration requires a verifier v2 overlay")
+    calibration_path = calibration_path.resolve()
+    payload = _load_json_object(calibration_path)
+    _validate_schema(
+        payload,
+        "geo-human-calibration.schema.json",
+        label=str(calibration_path),
+    )
+    if payload["run_id"] != run_id or payload["verifier_results_sha256"] != (
+        verifier_results_sha256
+    ):
+        raise ValueError("GEO human calibration does not bind the verifier overlay")
+    native_by_id = {str(row["observation_id"]): row for row in native_results["observations"]}
+    reviewed: set[str] = set()
+    complete = agreement = labels = 0
+    for review in payload["observations"]:
+        observation_id = str(review["observation_id"])
+        if observation_id in reviewed or observation_id not in verifier_by_id:
+            raise ValueError("GEO human calibration contains duplicate or unknown observations")
+        reviewed.add(observation_id)
+        verdict = verifier_by_id[observation_id]
+        expected_labels = {
+            str(row["claim_id"]): bool(row["supported"]) for row in verdict["quality"]
+        }
+        human_labels = {
+            str(row["claim_id"]): bool(row["human_supported"]) for row in review["support_labels"]
+        }
+        if list(human_labels) != list(expected_labels):
+            raise ValueError("GEO human calibration must label every frozen claim in order")
+        labels += len(human_labels)
+        agreement += sum(
+            int(human_labels[claim_id] == expected_labels[claim_id]) for claim_id in expected_labels
+        )
+        complete += int(review["claim_universe_complete"])
+        native_row = native_by_id[observation_id]
+        native_receipt = _object_receipt(
+            _load_bound_receipt(
+                native_results_path,
+                native_row["native_receipt"],
+                kind="native-result",
+            ),
+            label="GEO native receipt",
+        )
+        answer = native_receipt.get("answer")
+        if not isinstance(answer, str):
+            raise ValueError("GEO human calibration has no native answer")
+        for missed in review["missed_claims"]:
+            start, end = int(missed["answer_start"]), int(missed["answer_end"])
+            if end <= start or answer[start:end] != missed["answer_quote"]:
+                raise ValueError("GEO human calibration missed-claim span is not exact")
+    return {
+        "path": _relative(calibration_path, run_dir, label="GEO human calibration"),
+        "sha256": _sha256(calibration_path),
+        "reviewer": payload["reviewer"],
+        "blinded_to_verifier_labels": True,
+        "reviewed_observations": len(reviewed),
+        "claim_universe_completeness": {"numerator": complete, "denominator": len(reviewed)},
+        "support_agreement": {"numerator": agreement, "denominator": labels},
+    }
 
 
 def validate_and_measure(
@@ -412,6 +695,7 @@ def validate_and_measure(
     workload_path: Path,
     native_results_path: Path,
     verifier_results_path: Path | None = None,
+    calibration_path: Path | None = None,
     outcome_path: Path | None = None,
 ) -> dict[str, Any]:
     run_spec_path = run_spec_path.resolve()
@@ -428,7 +712,14 @@ def validate_and_measure(
         "geo-native-results.schema.json",
         label=str(native_results_path),
     )
-    verifier_context, verifier_by_id, verifier_results_sha256 = _load_verifier_overlay(
+    (
+        verifier_context,
+        claim_extractor_context,
+        verifier_by_id,
+        verifier_unmeasured,
+        verifier_results_sha256,
+        verifier_version,
+    ) = _load_verifier_overlay(
         results,
         native_results_path=native_results_path,
         verifier_results_path=verifier_results_path,
@@ -437,6 +728,17 @@ def validate_and_measure(
     run_id = str(run_spec["run_id"])
     if workload["run_id"] != run_id or results["run_id"] != run_id:
         raise ValueError("run spec, workload, and native results must share one run_id")
+    calibration_context = _load_human_calibration(
+        calibration_path=calibration_path,
+        run_id=run_id,
+        run_dir=run_dir,
+        native_results_path=native_results_path,
+        verifier_results_path=verifier_results_path,
+        verifier_results_sha256=verifier_results_sha256,
+        verifier_by_id=verifier_by_id,
+        native_results=results,
+        verifier_version=verifier_version,
+    )
 
     workload_rel = _relative(workload_path, run_dir, label="GEO workload")
     results_rel = _relative(native_results_path, run_dir, label="GEO native results")
@@ -531,6 +833,7 @@ def validate_and_measure(
     }
     seen_cells: set[tuple[str, int]] = set()
     observation_ids: set[str] = set()
+    target_cited_ids: set[str] = set()
     search_hits = retrieval_hits = retrieval_denominator = citation_hits = 0
     placement_hits = absorption_hits = absorption_denominator = 0
     quality_supported = quality_expected_total = quality_responses_audited = 0
@@ -563,10 +866,13 @@ def validate_and_measure(
         if not observation["search_activated"] and (retrieval or citations):
             raise ValueError("inactive search observations cannot contain retrieval or citations")
 
-        native = _load_bound_receipt(
-            native_results_path,
-            observation["native_receipt"],
-            kind="native-result",
+        native = _object_receipt(
+            _load_bound_receipt(
+                native_results_path,
+                observation["native_receipt"],
+                kind="native-result",
+            ),
+            label="GEO native receipt",
         )
         for field in (
             "query",
@@ -604,7 +910,11 @@ def validate_and_measure(
                 raise ValueError("GEO verifier receipt must be an object")
             _validate_schema(
                 verifier,
-                "geo-verifier-receipt.schema.json",
+                (
+                    "geo-verifier-receipt-v2.schema.json"
+                    if verifier_version == 2
+                    else "geo-verifier-receipt.schema.json"
+                ),
                 label=f"GEO verifier receipt {observation_id}",
             )
             if (
@@ -628,34 +938,38 @@ def validate_and_measure(
                 )
                 if observed != value:
                     raise ValueError(f"{observation_id} {field} does not match its verifier")
-            source_content: dict[str, str] = {}
-            for source_ref in verifier["sources"]:
-                source_receipt = _load_bound_receipt(
-                    verifier_results_path,
-                    source_ref,
-                    kind="verifier-source",
+            if verifier_version == 2:
+                _validate_verifier_v2_evidence(
+                    observation_id=observation_id,
+                    observation=observation,
+                    citations=citations,
+                    native=native,
+                    verdict=verdict,
+                    verifier=verifier,
+                    verifier_results_path=verifier_results_path,
+                    claim_extractor_context=claim_extractor_context,
+                    prefixes=prefixes,
+                    absorption=bool(absorption),
+                    quality=quality,
+                    quality_expected=quality_expected,
                 )
-                if not isinstance(source_receipt, dict):
-                    raise ValueError("GEO verifier source receipt is malformed")
-                _validate_schema(
-                    source_receipt,
-                    "geo-source-receipt.schema.json",
-                    label=f"GEO verifier source receipt {observation_id}",
+            else:
+                _validate_verifier_v1_sources(
+                    observation_id=observation_id,
+                    verifier=verifier,
+                    verifier_results_path=verifier_results_path,
+                    quality=quality,
                 )
-                source_content[str(source_receipt["url"])] = str(source_receipt["content"])
-            for claim in quality:
-                source = source_content.get(str(claim["source_url"]))
-                quote = str(claim["source_quote"])
-                if source is None or (quote and not _quote_in_source(quote, source)):
-                    raise ValueError("GEO verifier claim is not bound to its source receipt")
-                if claim["supported"] and not quote:
-                    raise ValueError("supported GEO claims require an exact source quote")
 
         target_retrieved = retrieval is not None and any(
             _is_target(str(row["url"]), prefixes) for row in retrieval
         )
         target_citations = [row for row in citations if _is_target(str(row["url"]), prefixes)]
         target_cited = bool(target_citations)
+        if target_cited:
+            target_cited_ids.add(observation_id)
+        if observation_id in verifier_unmeasured and not target_cited:
+            raise ValueError("GEO verifier excluded an observation without a target citation")
         if (absorption is not None or quality) and not target_cited:
             raise ValueError("target absorption and quality require a target citation")
         if quality_expected is not None and not target_cited:
@@ -667,7 +981,9 @@ def validate_and_measure(
         claim_ids = [str(row["claim_id"]) for row in quality]
         if len(claim_ids) != len(set(claim_ids)):
             raise ValueError(f"{observation_id} quality claim IDs must be unique")
-        if any(not _is_target(str(row["source_url"]), prefixes) for row in quality):
+        if any(
+            row["supported"] and not _is_target(str(row["source_url"]), prefixes) for row in quality
+        ):
             raise ValueError("GEO quality claims must reference a target URL")
 
         search_hits += int(observation["search_activated"])
@@ -689,6 +1005,8 @@ def validate_and_measure(
         missing = sorted(expected_cells - seen_cells)[:8]
         extra = sorted(seen_cells - expected_cells)[:8]
         raise ValueError(f"GEO observation matrix drift: missing={missing} extra={extra}")
+    if verifier_version == 2 and set(verifier_by_id) | verifier_unmeasured != target_cited_ids:
+        raise ValueError("GEO verifier v2 does not account for every target-cited observation")
     total = len(expected_cells)
     phase = "live_observe"
     evidence = f"{results_rel}#/observations"
@@ -762,6 +1080,8 @@ def validate_and_measure(
         "verifier_results_sha256": verifier_results_sha256,
         "native_producer": results["producer"],
         "verifier_context": verifier_context,
+        "claim_extractor_context": claim_extractor_context,
+        "calibration_context": calibration_context,
         "preflight_context": preflight_context,
         "outcome_context": outcome_context,
         "outcome_primary_metric": (
@@ -776,6 +1096,7 @@ def validate_and_measure(
             "audited_claims": quality_expected_total,
             "audited_target_cited_responses": quality_responses_audited,
             "target_cited_responses": citation_hits,
+            "unmeasured_target_cited_responses": len(verifier_unmeasured),
         },
         "vector": vector,
     }
@@ -803,6 +1124,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workload", type=Path, required=True)
     parser.add_argument("--native-results", type=Path, required=True)
     parser.add_argument("--verifier-results", type=Path)
+    parser.add_argument("--calibration", type=Path)
     parser.add_argument("--outcome", type=Path)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
@@ -811,6 +1133,7 @@ def main(argv: list[str] | None = None) -> int:
         workload_path=args.workload,
         native_results_path=args.native_results,
         verifier_results_path=args.verifier_results,
+        calibration_path=args.calibration,
         outcome_path=args.outcome,
     )
     if args.out is None:
