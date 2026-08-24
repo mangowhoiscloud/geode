@@ -411,7 +411,7 @@ async def verify(
 
     async def extract_claims(
         observation: dict[str, Any], target_urls: tuple[str, ...]
-    ) -> tuple[dict[str, Any], dict[str, str]]:
+    ) -> tuple[dict[str, Any] | None, dict[str, str]]:
         observation_id = str(observation["observation_id"])
         receipt_path = claim_paths[observation_id]
         native_receipt = _load_bound_receipt(
@@ -427,10 +427,20 @@ async def verify(
         answer_sha256 = hashlib.sha256(answer.encode()).hexdigest()
         if receipt_path.exists():
             receipt = _load_json_object(receipt_path)
+            schema = str(receipt.get("schema_id"))
+            if schema not in {
+                "geode.geo-claim-universe@1",
+                "geode.geo-claim-failure@1",
+            }:
+                raise ValueError(f"unsupported GEO claim checkpoint: {receipt_path}")
             _validate_schema(
                 receipt,
-                "geo-claim-universe.schema.json",
-                label=f"GEO claim universe {observation_id}",
+                (
+                    "geo-claim-universe.schema.json"
+                    if schema == "geode.geo-claim-universe@1"
+                    else "geo-claim-failure.schema.json"
+                ),
+                label=f"GEO claim checkpoint {observation_id}",
             )
             expected = {
                 "observation_id": observation_id,
@@ -446,6 +456,12 @@ async def verify(
                 raise ValueError(
                     f"GEO cached claim universe drifted from the frozen run: {receipt_path}"
                 )
+            receipt_ref = {
+                "path": f"{evidence_dir.name}/{receipt_path.name}",
+                "sha256": _sha256(receipt_path),
+            }
+            if schema == "geode.geo-claim-failure@1":
+                return None, receipt_ref
             validated = _validate_claims(
                 {
                     "claims": [{"answer_quote": row["answer_quote"]} for row in receipt["claims"]],
@@ -455,13 +471,11 @@ async def verify(
             )
             if validated["claims"] != receipt["claims"]:
                 raise ValueError(f"GEO cached claim universe is not canonical: {receipt_path}")
-            return receipt, {
-                "path": f"{evidence_dir.name}/{receipt_path.name}",
-                "sha256": _sha256(receipt_path),
-            }
+            return receipt, receipt_ref
 
         prompt = json.dumps({"answer": answer, "target_urls": target_urls}, ensure_ascii=False)
         messages = [Message(role="user", content=prompt)]
+        rejected: list[dict[str, Any]] = []
         for attempt in range(2):
             async with semaphore:
                 response = await _acomplete_with_connection_retry(
@@ -491,8 +505,38 @@ async def verify(
                 )
                 break
             except ValueError as exc:
+                rejected.append(
+                    {
+                        "attempt": attempt + 1,
+                        "response_sha256": hashlib.sha256(response.text.encode()).hexdigest(),
+                        "error": str(exc)[:500],
+                    }
+                )
                 if attempt == 1:
-                    raise ValueError(f"{observation_id}: {exc}") from exc
+                    failure = {
+                        "schema_id": "geode.geo-claim-failure@1",
+                        "observation_id": observation_id,
+                        "producer": extractor.name,
+                        "version": producer_version,
+                        "model": claim_model,
+                        "effort": claim_effort,
+                        "failed_at": datetime.now(UTC).isoformat(),
+                        "native_receipt_sha256": observation["native_receipt"]["sha256"],
+                        "answer_sha256": answer_sha256,
+                        "target_urls": list(target_urls),
+                        "reason": "invalid_model_output",
+                        "attempts": rejected,
+                    }
+                    _validate_schema(
+                        failure,
+                        "geo-claim-failure.schema.json",
+                        label=f"GEO claim failure {observation_id}",
+                    )
+                    _write_exclusive(receipt_path, failure)
+                    return None, {
+                        "path": f"{evidence_dir.name}/{receipt_path.name}",
+                        "sha256": _sha256(receipt_path),
+                    }
                 messages.extend(
                     (
                         Message(role="assistant", content=response.text),
@@ -685,7 +729,7 @@ async def verify(
     eligible = [
         item for item in selected if not any(bool(fetched[url]["truncated"]) for url in item[1])
     ]
-    unmeasured = [
+    unmeasured: list[dict[str, Any]] = [
         {
             "observation_id": str(observation["observation_id"]),
             "reason": "incomplete_source_receipt",
@@ -702,7 +746,17 @@ async def verify(
             for (observation, target_urls), (claim_receipt, claim_ref) in zip(
                 eligible, claim_rows, strict=True
             )
+            if claim_receipt is not None
         )
+    )
+    unmeasured.extend(
+        {
+            "observation_id": str(observation["observation_id"]),
+            "reason": "invalid_claim_extraction",
+            "claim_failure": claim_ref,
+        }
+        for (observation, _), (claim_receipt, claim_ref) in zip(eligible, claim_rows, strict=True)
+        if claim_receipt is None
     )
 
     rubric_ref = {

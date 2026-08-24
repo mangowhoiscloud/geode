@@ -376,6 +376,7 @@ def _load_verifier_overlay(
     *,
     native_results_path: Path,
     verifier_results_path: Path | None,
+    prefixes: tuple[str, ...],
 ) -> tuple[
     dict[str, Any] | None,
     dict[str, Any] | None,
@@ -432,6 +433,54 @@ def _load_verifier_overlay(
         raise ValueError("GEO verifier overlay contains unknown or contradictory exclusions")
     native_by_id = {str(row["observation_id"]): row for row in results["observations"]}
     for row in overlay.get("unmeasured_observations", []):
+        observation_id = str(row["observation_id"])
+        observation = native_by_id[observation_id]
+        if row["reason"] == "invalid_claim_extraction":
+            if version != 2 or overlay.get("claim_extractor_context") is None:
+                raise ValueError("GEO claim failure requires a v2 extractor context")
+            failure = _object_receipt(
+                _load_bound_receipt(
+                    verifier_results_path,
+                    row["claim_failure"],
+                    kind="claim-failure",
+                ),
+                label="GEO claim failure receipt",
+            )
+            _validate_schema(
+                failure,
+                "geo-claim-failure.schema.json",
+                label=f"GEO claim failure {observation_id}",
+            )
+            context = overlay["claim_extractor_context"]
+            native = _object_receipt(
+                _load_bound_receipt(
+                    native_results_path,
+                    observation["native_receipt"],
+                    kind="native-result",
+                ),
+                label="GEO native receipt",
+            )
+            answer = native.get("answer")
+            target_urls = list(
+                dict.fromkeys(
+                    str(item["url"])
+                    for item in observation["citations"]
+                    if _is_target(str(item["url"]), prefixes)
+                )
+            )
+            if (
+                not isinstance(answer, str)
+                or failure["observation_id"] != observation_id
+                or failure["producer"] != context["producer"]
+                or failure["version"] != context["version"]
+                or failure["model"] != context["model"]
+                or failure["effort"] != context["effort"]
+                or failure["native_receipt_sha256"] != observation["native_receipt"]["sha256"]
+                or failure["answer_sha256"] != hashlib.sha256(answer.encode()).hexdigest()
+                or failure["target_urls"] != target_urls
+            ):
+                raise ValueError("GEO claim failure does not match its frozen observation")
+            continue
         source_urls: list[str] = []
         for source_ref in row["sources"]:
             source = _object_receipt(
@@ -450,7 +499,6 @@ def _load_verifier_overlay(
             if source["truncated"] is not True:
                 raise ValueError("GEO incomplete-source exclusion binds a complete source")
             source_urls.append(str(source["url"]))
-        observation = native_by_id[str(row["observation_id"])]
         citation_urls = {str(item["url"]) for item in observation["citations"]}
         if source_urls != row["source_urls"] or any(
             url not in citation_urls for url in source_urls
@@ -714,6 +762,7 @@ def validate_and_measure(
         "geo-native-results.schema.json",
         label=str(native_results_path),
     )
+    prefixes = tuple(str(value) for value in workload["target_prefixes"])
     (
         verifier_context,
         claim_extractor_context,
@@ -725,6 +774,7 @@ def validate_and_measure(
         results,
         native_results_path=native_results_path,
         verifier_results_path=verifier_results_path,
+        prefixes=prefixes,
     )
 
     run_id = str(run_spec["run_id"])
@@ -820,7 +870,6 @@ def validate_and_measure(
             raise ValueError(f"GEO workload item metadata does not match {item_id}")
     query_by_id = dict(zip(item_ids, queries, strict=True))
 
-    prefixes = tuple(str(value) for value in workload["target_prefixes"])
     prefix_parts = tuple(urlsplit(value) for value in prefixes)
     if any(
         value.scheme not in {"http", "https"} or not value.netloc or value.query or value.fragment

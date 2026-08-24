@@ -239,6 +239,7 @@ export default function GeoBenchmarkPage() {
               <li>Every cell in the 24×K matrix resolves to one native receipt; JSON Pointers for search activation, retrieval, and citations must match the source bytes.</li>
               <li>Absorption and quality remain unmeasured without a separate verifier receipt, producer/version/model, and digest-bound rubric.</li>
               <li>Q is computed only when the verifier-declared target-linked claim universe matches the audited rows.</li>
+              <li>Two invalid claim extractions produce a digest-bound failure receipt and leave only that observation&apos;s A/Q unmeasured; transport failure still stops the run.</li>
               <li>Each Q support verdict retains the claim text and an exact quote present in the source receipt.</li>
               <li>Failed public-host checks persist as partial receipts; O is a late analytics overlay that never rewrites native results.</li>
               <li>v1 measures only claim support within Q, so the broader Q stage remains <code>partial</code> even with complete receipts.</li>

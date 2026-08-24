@@ -102,7 +102,9 @@ functional change.
   into their receipts and overlay contexts. Rejected extraction corrections
   identify the observation and bounded offending quote without fuzzy-matching
   invented text. Case-only literal drift is rebound to the exact original
-  substring and host-derived offsets;
+  substring and host-derived offsets. Two invalid structured claim responses
+  now produce a digest-bound failure receipt and keep only that observation's
+  A/Q cells unmeasured; transport failures still stop the run;
   exact unique source spans and complete source snapshots are required, and A
   is derived from supported claims rather than accepted from model prose. An
   optional digest-bound blind human sidecar records claim-completeness and

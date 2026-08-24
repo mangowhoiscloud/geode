@@ -252,6 +252,11 @@ with frozen baseline and treatment arms.
    connection-class transport failure retries once on the same adapter; a
    terminal retry still fails closed, and rerunning resumes only
    digest-matched source, claim, and verdict receipts.
+   Two structurally invalid claim responses do not fabricate A/Q or discard
+   other cells: the runner stores both response digests and validation errors
+   in a producer-bound `geode.geo-claim-failure@1` receipt and marks that
+   target-cited observation unmeasured. Transport failures still terminate the
+   run because they do not establish an observation-level model verdict.
    Requested result count is an input constraint, not a promise that
    the provider will expose exactly that many sources. The collector retains
    every provider-native source and citation and never parses answer prose into

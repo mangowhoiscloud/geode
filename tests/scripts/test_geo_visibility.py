@@ -975,6 +975,93 @@ def test_geo_verifier_v2_binds_truncated_source_exclusions(
     assert len(exclusion["sources"]) == 1
 
 
+def test_geo_verifier_v2_preserves_invalid_claims_as_unmeasured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_spec, workload, native_results = _fixture(tmp_path)
+    native = json.loads(native_results.read_text(encoding="utf-8"))
+    native_receipt_path = tmp_path / "native.json"
+    native_receipt = json.loads(native_receipt_path.read_text(encoding="utf-8"))
+    native_receipt["answer"] = "GEODE documentation describes the runtime."
+    for observation in native["observations"][1:]:
+        observation["citations"] = []
+        native_receipt["observations"][observation["observation_id"]]["citations"] = []
+    _write_json(native_receipt_path, native_receipt)
+    for observation in native["observations"]:
+        observation["native_receipt"]["sha256"] = _sha256(native_receipt_path)
+    _write_json(native_results, native)
+    rubric = tmp_path / "rubric.json"
+    _write_json(rubric, {"schema_id": "geode.geo-verifier-rubric@1"})
+
+    async def fake_fetch(url: str) -> dict[str, Any]:
+        content = "GEODE documentation describes the runtime."
+        return {
+            "schema_id": "geode.geo-source-receipt@2",
+            "fetched_at": "2026-08-23T00:09:00Z",
+            "url": url,
+            "final_url": url,
+            "content": content,
+            "content_sha256": hashlib.sha256(content.encode()).hexdigest(),
+            "content_chars": len(content),
+            "truncated": False,
+            "content_type": "text/html; charset=utf-8",
+            "status_code": 200,
+            "tls_verified": True,
+        }
+
+    class InvalidClaimAdapter:
+        name = "test-verifier"
+        calls = 0
+
+        async def acomplete(self, request: Any) -> AdapterCallResult:
+            self.calls += 1
+            assert request.response_schema["title"] == "geo_claim_universe"
+            return AdapterCallResult(
+                text=json.dumps(
+                    {
+                        "claims": [{"answer_quote": "invented claim"}],
+                        "rationale": "Invalid extraction.",
+                    }
+                ),
+                usage=UsageSummary(),
+                stop_reason="end_turn",
+            )
+
+    adapter = InvalidClaimAdapter()
+    monkeypatch.setattr("scripts.eval.geo_verify._fetch_source", fake_fetch)
+    monkeypatch.setattr("scripts.eval.geo_verify.bootstrap_builtins", lambda: None)
+    monkeypatch.setattr("scripts.eval.geo_verify.get_adapter", lambda _: adapter)
+    output = tmp_path / "verifier-results.json"
+    payload = asyncio.run(
+        verify(
+            workload_path=workload,
+            native_results_path=native_results,
+            rubric_path=rubric,
+            output_path=output,
+            model="test-model",
+            adapter_name="test-verifier",
+            producer_version="test-v2",
+            concurrency=1,
+        )
+    )
+
+    assert adapter.calls == 2
+    assert payload["observations"] == []
+    exclusion = payload["unmeasured_observations"][0]
+    assert exclusion["reason"] == "invalid_claim_extraction"
+    failure = json.loads((tmp_path / exclusion["claim_failure"]["path"]).read_text())
+    assert [row["attempt"] for row in failure["attempts"]] == [1, 2]
+    measured = validate_and_measure(
+        run_spec_path=run_spec,
+        workload_path=workload,
+        native_results_path=native_results,
+        verifier_results_path=output,
+    )
+    assert measured["vector"]["A"]["status"] == "not_measured"
+    assert measured["vector"]["A"]["denominator"] is None
+    assert measured["quality_claim_coverage"]["unmeasured_target_cited_responses"] == 1
+
+
 def test_geo_visibility_rejects_observation_matrix_drift(tmp_path: Path) -> None:
     run_spec, workload, results = _fixture(tmp_path)
     payload = json.loads(results.read_text(encoding="utf-8"))
