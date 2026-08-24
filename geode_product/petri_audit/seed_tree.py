@@ -2,7 +2,7 @@
 inspect-petri's flat ``directory.glob("*.md")`` loader.
 
 PR 0 (2026-05-18) introduced the hierarchical
-``plugins/petri_audit/seeds/<tier>/<dim>/<NN>_<variant>.md`` layout so
+``geode_product/petri_audit/seeds/<tier>/<dim>/<NN>_<variant>.md`` layout so
 seeds organize by Petri rubric dim. inspect-petri's
 ``_seeds/_markdown.py:_load_markdown_seeds`` does a flat ``glob`` only
 — no recursion — so a direct pass of the tree root would find zero

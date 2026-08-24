@@ -1,6 +1,6 @@
 """Regression — Generator must pair results to tasks by task_id, not position.
 
-Pre-S2-fix `zip(tasks, results, strict=False)` (`plugins/seed_generation/agents/
+Pre-S2-fix `zip(tasks, results, strict=False)` (`geode_product/seed_generation/agents/
 generator.py:151`) silently mismatched candidate metadata with whichever
 sub-agent completed first, because `SubAgentManager.delegate` returns
 SubResult in *completion order*, not submission order.
@@ -51,7 +51,7 @@ def _make_state(tmp_path: Path, n: int) -> PipelineState:
         target_dim="broken_tool_use",
         gen_tag="gen2",
         candidates_requested=n,
-        pool_path_in=Path("plugins/petri_audit/seeds"),
+        pool_path_in=Path("geode_product/petri_audit/seeds"),
         run_dir=tmp_path,
     )
 

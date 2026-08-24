@@ -713,7 +713,7 @@ def test_ranker_voter_task_ids_unique_across_duplicate_bindings() -> None:
 
     PR-CODEX-GPT55-OUTPUT-EMIT fix-up (Codex MCP catch, 2026-05-26).
     The default panel in
-    ``plugins/seed_generation/seed_generation.plugin.toml`` ships TWO
+    ``geode_product/seed_generation/seed_generation.plugin.toml`` ships TWO
     ``openai.openai-codex`` voters (cost-balance: 2x codex + 1x
     claude-cli). Pre-fix the task_id shape
     ``vote-{match_id}-{provider}.{source}`` collided across the two

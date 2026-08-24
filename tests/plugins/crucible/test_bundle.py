@@ -107,7 +107,7 @@ def _contract(baseline_sha: str, candidate_sha: str) -> ExperimentContract:
                 },
             },
             "mutations": [mutation.to_dict()],
-            "evaluator_paths": ["plugins/benchmark_harness", "plugins/crucible"],
+            "evaluator_paths": ["geode_product/benchmark_harness", "geode_product/crucible"],
             "promotion": {
                 "method": "paired_bootstrap.v2",
                 "primary_metric": "reward",
@@ -215,7 +215,7 @@ def _record(
     payload: dict[str, Any] = {
         "schema": RECORD_SCHEMA,
         "timestamp": "2026-07-10T00:00:00+00:00",
-        "component": "plugins.crucible.supervisor",
+        "component": "geode_product.crucible.supervisor",
         "kind": "train_attempt",
         "campaign_id": CAMPAIGN_ID,
         "attempt_id": ATTEMPT_ID,

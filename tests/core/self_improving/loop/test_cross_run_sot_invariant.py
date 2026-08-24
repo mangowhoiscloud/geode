@@ -170,7 +170,7 @@ def test_latest_pointer_relative_path_under_state_root(tmp_path: Path) -> None:
 
 def test_sessions_jsonl_run_id_key_naming() -> None:
     """sessions.jsonl 의 row 가 ``run_id`` 또는 ``session_id`` key 로
-    latest_pointer.json 과 join 가능해야 함. plugins/seed_generation/
+    latest_pointer.json 과 join 가능해야 함. geode_product/seed_generation/
     orchestrator.py 의 append 로직과 schema 일치 확인."""
     import inspect
 

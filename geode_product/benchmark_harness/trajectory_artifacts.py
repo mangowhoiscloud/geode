@@ -19,7 +19,7 @@ from collections.abc import Awaitable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-_ADAPTER_ID = "plugins.benchmark_harness.trajectory_artifacts"
+_ADAPTER_ID = "geode_product.benchmark_harness.trajectory_artifacts"
 
 
 async def _await_close(outcome: Awaitable[Any]) -> None:

@@ -30,7 +30,7 @@ output feeds the optimiser's gradient signal (predictive ± robustness
 - `rationale` ≤ 2000 chars, KR / EN free.
 - Family constraint: auditor model MUST NOT share `provider_of()` with the
   target's base LLM (M1 mitigation against self-preference / in-context
-  reward hacking — see `plugins.petri_audit.optimize`).
+  reward hacking — see `geode_product.petri_audit.optimize`).
 
 ## Constraints
 
@@ -44,6 +44,6 @@ output feeds the optimiser's gradient signal (predictive ± robustness
 
 ## References
 
-- `plugins.petri_audit.judge_schema` — output JSON schema.
-- `plugins.petri_audit.optimize` — gradient signal consumption.
+- `geode_product.petri_audit.judge_schema` — output JSON schema.
+- `geode_product.petri_audit.optimize` — gradient signal consumption.
 - Manifest binding: `[petri.role.auditor]` in `petri.plugin.toml`.

@@ -142,7 +142,7 @@ def create_agent(tools, domain_policy, **kwargs) -> HalfDuplexAgent: ...
 ### Phase 0 — Smoke (≤30분, cost <$1)
 
 ```bash
-python scripts/eval/tau2_geode_agent.py --domain mock --num-tasks 1 --num-trials 1
+uv run python -m geode_product.benchmark_harness.tau2_geode_agent --domain mock --num-tasks 1 --num-trials 1
 ```
 
 `mock` 도메인은 LLM cost 거의 없이 `core/agent/loop.py::AgenticLoop` 와이어업만 검증.
@@ -152,7 +152,7 @@ python scripts/eval/tau2_geode_agent.py --domain mock --num-tasks 1 --num-trials
 ### Phase 1 — GEODE runner adapter
 
 Repository script:
-- `scripts/eval/tau2_geode_agent.py`
+- `geode_product/benchmark_harness/tau2_geode_agent.py`
 
 매핑:
 - `generate_next_message(message, state)` → 한 번의 `AgenticLoop.arun()`
@@ -166,7 +166,7 @@ Repository script:
 GEODE smoke command:
 
 ```bash
-python scripts/eval/tau2_geode_agent.py \
+uv run python -m geode_product.benchmark_harness.tau2_geode_agent \
   --harness-dir artifacts/eval/harnesses/tau2-bench \
   --domain mock \
   --num-tasks 1 \
@@ -226,7 +226,7 @@ python scripts/eval/tau2_geode_agent.py \
 Command:
 
 ```bash
-uv run python scripts/eval/tau2_geode_agent.py \
+uv run python -m geode_product.benchmark_harness.tau2_geode_agent \
   --harness-dir artifacts/eval/harnesses/tau2-bench \
   --domain mock \
   --num-tasks 1 \
@@ -312,7 +312,7 @@ Adapter notes:
 GPT-5.2 PAYG telecom retry command:
 
 ```bash
-uv run python scripts/eval/tau2_geode_agent.py \
+uv run python -m geode_product.benchmark_harness.tau2_geode_agent \
   --harness-dir artifacts/eval/harnesses/tau2-bench \
   --domain telecom \
   --task-ids '[mobile_data_issue]airplane_mode_on|user_abroad_roaming_enabled_off[PERSONA:None]' \
@@ -359,7 +359,7 @@ The measured Telecom command must use the official split name rather than the
 `telecom_small` task-set alias:
 
 ```bash
-python scripts/eval/tau2_geode_agent.py \
+uv run python -m geode_product.benchmark_harness.tau2_geode_agent \
   --harness-dir artifacts/eval/harnesses/tau2-bench \
   --domain telecom \
   --task-split-name small \

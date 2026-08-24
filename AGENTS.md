@@ -14,11 +14,9 @@
 
 - **What**: a self-hosting autonomous-agent harness whose runtime is an AgenticLoop (`while tool_use`).
 - **Language**: Python 3.12+, type-hinted, uv-managed.
-- **Layout**: three top-level packages with one implementation direction.
+- **Layout**: two top-level packages with one implementation direction.
   - `core/` — domain-agnostic runtime.
   - `geode_product/` — bundled first-party features and outer composition.
-  - `plugins/` — curated compatibility facades only; no implementation or
-    third-party extension ABI.
 - **Quality bar**: ruff, mypy, pytest plus a prompt-hash ratchet. CI breaks on red.
 - **Public site**: `site/` (Next.js 16 static export, deployed to GitHub Pages).
 
@@ -30,8 +28,8 @@ owns only the package version and sync date.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 590 production Python files,
-693 test Python files,
+The current snapshot records 556 production Python files,
+690 test Python files,
 86 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->
@@ -348,9 +346,9 @@ mirrors that scaffold.
 Use the repo's current CI-equivalent commands when scope requires full checks:
 
 ```bash
-uv run ruff check core/ geode_product/ plugins/ tests/ scripts/
-uv run ruff format --check core/ geode_product/ plugins/ tests/ scripts/
-uv run mypy core/ geode_product/ plugins/
+uv run ruff check core/ geode_product/ tests/ scripts/
+uv run ruff format --check core/ geode_product/ tests/ scripts/
+uv run mypy core/ geode_product/
 uv run lint-imports
 uv run pytest tests/ -m "not live"
 uv run geode version

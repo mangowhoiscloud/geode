@@ -168,7 +168,7 @@ def _build_httpx_limits() -> httpx.Limits:
 # generic ``Callable``; the banner module owns the import direction.
 #
 # Banner SoT: only this quota writer (and the trip_abort call in
-# ``geode_product.petri_audit.credential_source``, which is in plugins/ and
+# ``geode_product.petri_audit.credential_source``, which is in the product ring and
 # may import core.cli) feeds the banner. Per the 2026-05-19
 # observability audit §4, the banner was previously installed but never
 # fed in production code — the operator never saw a quota signal.
@@ -683,32 +683,22 @@ _COMPUTER_USE_TOOL: dict[str, Any] = {
 def is_computer_use_enabled() -> bool:
     """Check if computer-use is enabled for the selected execution driver.
 
-    Audit safety (Phase E): a Petri audit runs unattended, so it must NEVER be
-    able to drive the operator's real desktop. When audit mode is active
-    (``GEODE_AUDIT_UNRESTRICTED=1``) computer-use is force-disabled UNLESS it is
-    routed to the sandbox (``computer_use_env=sandbox`` → a virtual desktop, not
-    the host). Without this an audit scenario that emitted a computer tool_use
-    would control the live screen.
+    A Petri audit runs unattended, so audit mode always disables computer-use.
+    Without that fail-closed guard an audit scenario that emitted a computer
+    tool_use could control the operator's live screen.
     """
     from core.config import settings
     from core.runtime_audit import runtime_audit_active
     from core.tools.computer_use import (
         computer_use_driver,
-        computer_use_env,
         computer_use_helper_path,
     )
 
     if not getattr(settings, "computer_use_enabled", False):
         return False
-    env = computer_use_env()
-    if runtime_audit_active() and env != "sandbox":
-        log.debug("computer-use disabled under audit (env != sandbox; no real-desktop control)")
+    if runtime_audit_active():
+        log.debug("computer-use disabled under unattended audit")
         return False
-    if env == "sandbox":
-        # Sandbox mode: the host is only an HTTP client; pyautogui lives inside
-        # the container, so the host does NOT need it. (fail-loud if the
-        # container is unreachable — handled at dispatch.)
-        return True
     driver = computer_use_driver()
     if driver == "helper":
         available = computer_use_helper_path() is not None

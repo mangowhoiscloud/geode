@@ -2,7 +2,7 @@
 
 PR-OPS-1 (2026-05-21) — smallest operator-facing surface for the
 self-improving loop. Today only the ``status`` sub-action is wired:
-it reads ``core/self_improving/state/mutations.jsonl`` (the git-tracked
+it reads ``geode_product/self_improving/state/mutations.jsonl`` (the git-tracked
 mutation audit) and the most recent ``baseline.json`` to print a
 two-block summary — current baseline fitness + the last N mutations.
 
@@ -211,7 +211,7 @@ def _cmd_status() -> None:
       1. Baseline — ``~/.geode/self-improving/baseline.json`` (if exists)
          · ``fitness`` scalar, ``promote_reason``, ``timestamp``
       2. Recent mutations — last N rows from
-         ``core/self_improving/state/mutations.jsonl``
+         ``geode_product/self_improving/state/mutations.jsonl``
          · per-row ``ts`` / ``mutation_id`` / ``target_kind`` /
            ``target_section`` / ``kind`` (applied | rejected | rolled_back)
 
@@ -490,12 +490,7 @@ def _build_runner() -> Any | None:
 
 
 def _render_preflight(flags: dict[str, Any]) -> None:
-    """Render the static text pre-flight block.
-
-    PR-OPS-2a (no Rich Panel yet — interactive dashboard lands in
-    PR-OPS-2b). Surfaces the slice of knobs an operator needs to
-    sanity-check before approving a mutation.
-    """
+    """Render the knobs an operator should verify before a mutation."""
     target_kind = flags["target_kind"] or "any"
     mode = "dry-run (no write)" if flags["dry_run"] else "interactive (per-iter confirm)"
     mutator_model: str = "?"
@@ -525,7 +520,7 @@ def _render_preflight(flags: dict[str, Any]) -> None:
     console.print(f"    target_kind  {target_kind}")
     console.print(f"    iterations   {flags['iterations']}")
     console.print(f"    mode         {mode}")
-    console.print("    harness      [muted]no-op (PR-OPS-2b wires autoresearch/petri_raw)[/muted]")
+    console.print("    measurement  [muted]skipped (interactive mutation only)[/muted]")
 
 
 def _render_proposal(proposal: Any, *, index: int, total: int) -> None:
@@ -659,8 +654,8 @@ def _clip(s: str, n: int) -> str:
 #
 # These two actions intentionally delegate to git rather than
 # re-implement what git already does on top of the in-repo mutation
-# ledger (``core/self_improving/state/mutations.jsonl``) + the 5 policy SoT
-# JSONs at ``core/self_improving/state/policies/`` (both git-tracked since
+# ledger (``geode_product/self_improving/state/mutations.jsonl``) + the 5 policy SoT
+# JSONs at ``geode_product/self_improving/state/policies/`` (both git-tracked since
 # PR-RATCHET-1, 2026-05-21). Re-implementing the JSONL tail walker +
 # a custom rollback verb would duplicate `git log` + `git revert`
 # while losing standard git ergonomics (refs / SHAs / signed
@@ -671,8 +666,8 @@ def _clip(s: str, n: int) -> str:
 def _cmd_history() -> None:
     """Show the operator how to read the mutation history via git.
 
-    The mutation ledger (``core/self_improving/state/mutations.jsonl``) +
-    the 5 policy SoT JSONs (``core/self_improving/state/policies/``) are
+    The mutation ledger (``geode_product/self_improving/state/mutations.jsonl``) +
+    the 5 policy SoT JSONs (``geode_product/self_improving/state/policies/``) are
     git-trackable (``.gitignore`` negation lets them be added);
     after the first applied mutation lands a commit, ``git log``
     over either path is the canonical history view. Codex MCP
@@ -688,20 +683,22 @@ def _cmd_history() -> None:
         "  [muted]Mutation ledger (one row per mutation, with ts / id / "
         "target_kind / target_section / rationale):[/muted]"
     )
-    console.print("    [bold]git log -p core/self_improving/state/mutations.jsonl[/bold]")
+    console.print("    [bold]git log -p geode_product/self_improving/state/mutations.jsonl[/bold]")
     console.print(
         "    [muted]→ empty when no mutation has been applied yet "
         "(first /self-improving run apply seeds the ledger).[/muted]"
     )
     console.print()
     console.print("  [muted]Compact form (commit message + 1-line ledger row):[/muted]")
-    console.print("    [bold]git log --oneline core/self_improving/state/mutations.jsonl[/bold]")
+    console.print(
+        "    [bold]git log --oneline geode_product/self_improving/state/mutations.jsonl[/bold]"
+    )
     console.print()
     console.print(
         "  [muted]Current policy state (5 SoT files, see ``git diff`` for "
         "the current vs last-promoted snapshot):[/muted]"
     )
-    console.print("    [bold]git log --stat core/self_improving/state/policies/[/bold]")
+    console.print("    [bold]git log --stat geode_product/self_improving/state/policies/[/bold]")
     console.print()
     console.print(
         "  [muted]Quick recent summary (last N applied/rejected/rolled_back rows):[/muted]"
@@ -726,7 +723,7 @@ def _cmd_rollback(opts: list[str]) -> None:
         console.print(f"  [muted]Find the commit that applied mutation_id={target!r}:[/muted]")
         console.print(
             f"    [bold]git log --all --grep={target!r} -- "
-            "core/self_improving/state/mutations.jsonl[/bold]"
+            "geode_product/self_improving/state/mutations.jsonl[/bold]"
         )
         console.print()
         console.print("  [muted]Revert that commit:[/muted]")
@@ -734,7 +731,8 @@ def _cmd_rollback(opts: list[str]) -> None:
     else:
         console.print("  [muted]Find the SHA of the mutation you want to undo:[/muted]")
         console.print(
-            "    [bold]git log --oneline -p core/self_improving/state/mutations.jsonl[/bold]"
+            "    [bold]git log --oneline -p "
+            "geode_product/self_improving/state/mutations.jsonl[/bold]"
         )
         console.print()
         console.print("  [muted]Revert it:[/muted]")
@@ -754,7 +752,7 @@ def _cmd_rollback(opts: list[str]) -> None:
 #
 # PR-RATCHET-1 introduced a *lazy* migration helper that copies
 # pre-PR ``~/.geode/autoresearch/handoff/<file>.json`` payloads to
-# the new in-repo ``core/self_improving/state/policies/`` location on the
+# the new in-repo ``geode_product/self_improving/state/policies/`` location on the
 # first ``load_policy`` / ``write_policy`` call. The lazy path is
 # operator-invisible — they don't see a "migration in progress"
 # signal, so they can't confirm the move happened. PR-MINIMAL-2's
@@ -766,7 +764,7 @@ def _cmd_rollback(opts: list[str]) -> None:
 
 def _cmd_migrate() -> None:
     """Explicit one-shot migration from ``~/.geode/autoresearch/handoff/``
-    to the in-repo ``core/self_improving/state/policies/`` directory.
+    to the in-repo ``geode_product/self_improving/state/policies/`` directory.
 
     Iterates every ``TARGET_KINDS`` entry, calls
     ``_maybe_migrate_legacy_sot`` for each, and renders a per-kind

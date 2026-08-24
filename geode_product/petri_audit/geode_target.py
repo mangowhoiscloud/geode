@@ -29,7 +29,7 @@ Cold-start protection: the module-level surface (``_to_geode_messages``,
 ``_default_geode_runner``, ``GeodeRunner``) has no ``inspect_ai``
 dependency, so this file is importable on a default ``uv sync``. The
 ``inspect_ai`` import lives inside ``register()``, which is invoked from
-``plugins/petri_audit/__init__.py`` under a try/except — present-extra
+``geode_product/petri_audit/__init__.py`` under a try/except — present-extra
 installs trigger registration, absent-extra installs silently skip.
 """
 
@@ -39,7 +39,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-log = logging.getLogger("plugins.petri_audit.geode_target")
+log = logging.getLogger("geode_product.petri_audit.geode_target")
 
 _PETRI_SOURCE_ALIASES = {
     "openai-codex": "codex-oauth",
@@ -402,7 +402,7 @@ def register() -> None:
     """Register ``GeodeModelAPI`` with ``inspect_ai``.
 
     Imports ``inspect_ai`` lazily; raises ``ImportError`` if the
-    ``[audit]`` optional extra is not installed. ``plugins/petri_audit/
+    ``[audit]`` optional extra is not installed. ``geode_product/petri_audit/
     __init__.py`` wraps the call in try/except so the plugin remains
     importable on the default ``uv sync``.
 

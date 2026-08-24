@@ -34,6 +34,23 @@ class ContractError(ValueError):
     """Raised when an experiment cannot provide reproducible evidence."""
 
 
+def canonical_json_bytes(value: object) -> bytes:
+    """Encode one Crucible identity with the package's canonical JSON form."""
+
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+
+
+def canonical_json_sha256(value: object) -> str:
+    """Hash one Crucible identity without duplicating serialization rules."""
+
+    return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
+
+
 def _require_mapping(value: object, field: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise ContractError(f"{field} must be an object")
@@ -60,6 +77,13 @@ def _non_empty_string(value: object, field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ContractError(f"{field} must be a non-empty string")
     return value.strip()
+
+
+def _bounded_text(value: object, field: str, *, max_bytes: int = 2_000) -> str:
+    text = _non_empty_string(value, field)
+    if len(text.encode("utf-8")) > max_bytes:
+        raise ContractError(f"{field} exceeds {max_bytes} UTF-8 bytes")
+    return text
 
 
 def _full_git_sha(value: object, field: str) -> str:
@@ -216,16 +240,12 @@ def task_pack_sha256(tasks: Sequence[TaskUnit], trials_per_task: int = 1) -> str
     for index, task in enumerate(tasks):
         if not isinstance(task, TaskUnit):
             raise ContractError(f"tasks[{index}] must be a TaskUnit")
-    encoded = json.dumps(
+    return canonical_json_sha256(
         {
             "tasks": [task.to_dict() for task in tasks],
             "trials_per_task": trials_per_task,
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+        }
+    )
 
 
 def _hash_entry(digest: Any, *, mode: str, relative: str, payload: bytes) -> None:
@@ -713,13 +733,7 @@ class ExperimentContract:
 
     @property
     def contract_id(self) -> str:
-        encoded = json.dumps(
-            self.canonical_payload(),
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
-        return hashlib.sha256(encoded).hexdigest()
+        return canonical_json_sha256(self.canonical_payload())
 
     def to_dict(self) -> dict[str, Any]:
         return {**self.canonical_payload(), "contract_id": self.contract_id}

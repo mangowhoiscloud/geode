@@ -155,6 +155,12 @@ functional change.
   marginal checks; immutable v1 receipts remain readable as historical
   evidence.
 
+- **Audit-identified compatibility paths now keep one implementation owner.**
+  The slop audit scans `geode_product`, both public web-search names share one
+  routed dispatch/error projection, Crucible identities share canonical JSON
+  hashing and exact scalar validators, and the interactive self-improving
+  preflight now states that paid measurement is skipped.
+
 - **Concurrent first access no longer races SQLite schema setup.** Short-lived
   projection stores serialize their in-process WAL/schema initialization, so
   sibling threads cannot fail with `database is locked` during a first-run
@@ -222,6 +228,28 @@ functional change.
   schema or execution authority.
 
 ### Removed
+
+- **Removed dormant distribution and desktop-isolation scaffolds.** The
+  unreleased Homebrew/core candidate template, renderer, tests, and current
+  operating guidance are gone; GitHub Release and PyPI/uv remain the supported
+  distribution channels. The unverified Docker/Xvfb computer-use sandbox,
+  HTTP dispatch, settings/API, diagnostics, and sandbox-only tests are also
+  removed. Interactive host computer-use remains available, while unrestricted
+  Petri audits now disable it unconditionally because no verified isolated
+  execution path exists.
+
+- **Removed duplicate product compatibility packages.** The forwarding-only
+  `plugins.*` package and five `core.self_improving` Python launchers are gone;
+  callers, package data, CLIs, docs, and tests use the existing
+  `geode_product.*` implementations directly. Ten tracked self-improving state
+  files move through a byte-preserving `git mv` to
+  `geode_product/self_improving/state/`; the eight data/marker files retain
+  their bytes and the two README files name the new path. Package/install gates
+  reject any remaining `core/self_improving` path. The wrapper-only Tau2 script
+  was also removed in favor of the canonical module entrypoint. Development
+  scaffolds, Claude aliases, runtime skills, external evaluator entrypoints,
+  durable runtime homes, and historical release evidence remain in their
+  distinct roles.
 
 - **Verification recovery now has one persistence authority.** Removed the
   write-only `SessionManager` verify-state mirror; checkpoint loop guards remain

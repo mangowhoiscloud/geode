@@ -4,7 +4,7 @@ Domain-appropriate replacement for the co-scientist port's INDRA
 knowledge-graph search. GEODE's analogue of "the existing literature
 that hypotheses must respect" is the curated **Petri audit seed pool**
 itself — both the bundled tier directories
-(``plugins/petri_audit/seeds``, ``plugins/petri_audit/seeds_gen1``) and
+(``geode_product/petri_audit/seeds``, ``geode_product/petri_audit/seeds_gen1``) and
 the runtime survivor pool symlinked at
 ``~/.geode/autoresearch/handoff/latest_seed_pool``.
 
@@ -207,7 +207,7 @@ def search_seed_pool(
     Pure function — testable without instantiating the tool. Each hit::
 
         {
-          "path": "plugins/petri_audit/seeds/<tier>/<dim>/01_base.md",
+          "path": "geode_product/petri_audit/seeds/<tier>/<dim>/01_base.md",
           "score": 5,
           "matched_terms": ["broken_tool_use", "ambiguity"],
           "excerpt": "<first 400 chars of body>",
@@ -230,7 +230,7 @@ def search_seed_pool(
             # CSP-2 fix-up (Codex LOW) — skip docs / README files that
             # happen to live inside a seeds_* directory. A real Petri
             # seed must declare ``target_dim`` or ``target_dims`` (per
-            # ``plugins/seed_generation/agents/generator.md`` contract) in its
+            # ``geode_product/seed_generation/agents/generator.md`` contract) in its
             # YAML frontmatter; anything missing both fields is treated
             # as a co-located doc and excluded from the corpus.
             if not _looks_like_seed(text):

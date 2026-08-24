@@ -95,9 +95,9 @@ function readArchitectureBaseline() {
     );
   }
   if (
-    baseline?.schema_version !== 4 ||
+    baseline?.schema_version !== 5 ||
     !Number.isInteger(baseline?.packages?.core?.python_files) ||
-    !Number.isInteger(baseline?.packages?.plugins?.python_files) ||
+    !Number.isInteger(baseline?.packages?.geode_product?.python_files) ||
     !Number.isInteger(baseline?.packages?.tests?.python_files) ||
     !Number.isInteger(baseline?.tools?.definition_count) ||
     !Number.isInteger(baseline?.hook_events?.count)

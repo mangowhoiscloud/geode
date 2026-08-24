@@ -168,7 +168,7 @@ Per master DESIGN.md §10 + `[[feedback-anti-deception-checklist]]` — the buil
 
 ## 4. Index page · Phases legend (`<dl class="phases-legend">`)
 
-Static block. The eight phases are pinned at v0.99.65 from `plugins/seed_generation/orchestrator.py:_PHASE_ORDER`. If that constant changes, this spec's `last_updated` + `geode_version` must re-stamp.
+Static block. The eight phases are pinned at v0.99.65 from `geode_product/seed_generation/orchestrator.py:_PHASE_ORDER`. If that constant changes, this spec's `last_updated` + `geode_version` must re-stamp.
 
 ### 4.1 Canonical markup
 
@@ -486,7 +486,7 @@ table.pilot-scores tbody td.pilot-na {
 
 Rows = candidates (long axis), columns = dims (22). This orientation scales gracefully as N candidates grows past 10 — adding columns is what overflows; rows scroll naturally. Header is a sticky row of short dim labels rotated to fit.
 
-Dim columns are the 22-name subset published in `state.json.candidates[].dim_means` keys, in the order yielded by `dict.keys()` (Python ≥3.7 preserves insertion order; the build script asserts the order matches `plugins/petri_audit/judge_dims/geode_judge_subset.yaml`). When count differs from 22, build script logs `WARNING seedgen: pilot dim count = {n}, expected 22` and renders whatever count is present without dropping data. This decouples the visual spec from upstream dim-set evolution.
+Dim columns are the 22-name subset published in `state.json.candidates[].dim_means` keys, in the order yielded by `dict.keys()` (Python ≥3.7 preserves insertion order; the build script asserts the order matches `geode_product/petri_audit/judge_dims/geode_judge_subset.yaml`). When count differs from 22, build script logs `WARNING seedgen: pilot dim count = {n}, expected 22` and renders whatever count is present without dropping data. This decouples the visual spec from upstream dim-set evolution.
 
 ```html
 <h2 class="section"><span>Pilot scores · {N_CANDS} candidates × {N_DIMS} dims</span></h2>
@@ -1173,7 +1173,7 @@ Per CLAUDE.md "Wiring Verification":
 
 | Item | Rule applied here |
 |---|---|
-| Read-Write parity | Every JSON key the renderer reads (e.g. `state.candidates[].duration_ms`) must exist somewhere in `geode_product/self_improving/loop/` or `plugins/seed_generation/` write path. Build script logs `WARNING seedgen: unread state key {k}` for any top-level state.json key the renderer ignored (forward-compat detection). |
+| Read-Write parity | Every JSON key the renderer reads (e.g. `state.candidates[].duration_ms`) must exist somewhere in `geode_product/self_improving/loop/` or `geode_product/seed_generation/` write path. Build script logs `WARNING seedgen: unread state key {k}` for any top-level state.json key the renderer ignored (forward-compat detection). |
 | Conditional read parity | The mutator banner must render whether the run came from `audit-seeds generate --mutator …` or default — both branches feed the same `mutator_banner` template slot. |
 | Writer destination tracked | `git check-ignore docs/self-improving/seed-generation/index.html` MUST return non-zero (tracked). Pin via `tests/test_ratchet_policies_in_repo.py::test_seedgen_outputs_not_gitignored`. |
 
@@ -1181,8 +1181,8 @@ Per CLAUDE.md "Wiring Verification":
 
 | Test | Asserts |
 |---|---|
-| `test_phases_legend_matches_orchestrator` | The 8 phase names in §4 equal `plugins.seed_generation.orchestrator._PHASE_ORDER`. |
-| `test_pilot_heatmap_dim_count` | The build script's `_abbr_dim` lookup table size equals `len(plugins.petri_audit.judge_dims.geode_judge_subset)` (22 as of v0.99.65). |
+| `test_phases_legend_matches_orchestrator` | The 8 phase names in §4 equal `geode_product.seed_generation.orchestrator._PHASE_ORDER`. |
+| `test_pilot_heatmap_dim_count` | The build script's `_abbr_dim` lookup table size equals `len(geode_product.petri_audit.judge_dims.geode_judge_subset)` (22 as of v0.99.65). |
 | `test_seedgen_outputs_not_gitignored` | `index.html` + at least one `<run_id>/index.html` under `docs/self-improving/seed-generation/` are `git check-ignore`-clean. |
 | `test_seedgen_template_slots_filled` | After build, no `{{ key }}` markers remain in any seed-generation output HTML. |
 | `test_score_to_bucket_boundaries` | `_score_to_bucket(1.0)=='safe'`, `_score_to_bucket(2.0)=='cool'`, `_score_to_bucket(4.0)=='mid'`, `_score_to_bucket(6.0)=='warn'`, `_score_to_bucket(8.0)=='hot'`, `_score_to_bucket(10.0)=='hot'`. |

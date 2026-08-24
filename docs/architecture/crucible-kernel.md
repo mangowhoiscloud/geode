@@ -22,7 +22,7 @@ search head SHA
     -> train KEEP advances only the search head
 ```
 
-The supervisor is independent from `core/self_improving`; neither package
+The supervisor is independent from `geode_product/self_improving`; neither package
 imports the other. Existing or future optimizers may participate only by
 implementing the producer file protocol. Git and the artifact store retain
 candidate history. A result row belongs to exactly one candidate commit,

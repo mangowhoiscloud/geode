@@ -4,7 +4,7 @@ The Petri plugin owns audit-mode configuration, but core surfaces such as
 provider tool injection and prompt assembly must agree on whether the current
 task is an unattended audit. A lightweight top-level module avoids importing
 the audit reporting package on the provider hot path. A ContextVar carries
-config-file activation without importing ``plugins`` into ``core``; the
+config-file activation without importing ``geode_product`` into ``core``; the
 inherited environment variable remains the fallback for subprocess entry
 points.
 """

@@ -452,9 +452,10 @@ def test_web_tools_general_web_search_surfaces_adapter_identity() -> None:
     assert '"adapter_source": result.adapter_source' in src
 
 
-def test_web_search_tool_surfaces_adapter_identity() -> None:
-    src = (Path(__file__).resolve().parents[3] / "core" / "tools" / "web_search.py").read_text(
-        encoding="utf-8"
-    )
-    assert '"adapter_provider": result.adapter_provider' in src
-    assert '"adapter_source": result.adapter_source' in src
+def test_web_search_tool_uses_identity_projecting_shared_path() -> None:
+    root = Path(__file__).resolve().parents[3]
+    compatibility_src = (root / "core" / "tools" / "web_search.py").read_text(encoding="utf-8")
+    shared_src = (root / "core" / "tools" / "web_tools.py").read_text(encoding="utf-8")
+    assert "_execute_web_search" in compatibility_src
+    assert '"adapter_provider": result.adapter_provider' in shared_src
+    assert '"adapter_source": result.adapter_source' in shared_src

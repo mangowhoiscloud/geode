@@ -11,10 +11,10 @@ while the two ledgers are the in-repo tracked SoT:
 
 * ``~/.geode/self-improving/campaign-progress.log`` — the per-cycle progress
   lines the driver tees (last N); runtime, not versioned.
-* ``core/self_improving/state/mutations.jsonl`` — the mutator-driven
+* ``geode_product/self_improving/state/mutations.jsonl`` — the mutator-driven
   ``kind="attribution"`` rows (``source="mutator"``), grouped by
   ``promote_policy`` arm.
-* ``core/self_improving/state/baseline_archive.jsonl`` — the ``kind="baseline"``
+* ``geode_product/self_improving/state/baseline_archive.jsonl`` — the ``kind="baseline"``
   rows, grouped by baseline epoch (``epoch_label`` / ``be-NNN``).
 
 This is read-only; it never spawns an audit or mutates state. Run it any time

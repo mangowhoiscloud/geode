@@ -7,7 +7,7 @@ description: 6-lens diagnostic slop audit — unused imports, dead private fns, 
 
 # Slop Prevention Audit
 
-Recurring 6-lens scan of `core/` / `plugins/` / `scripts/` to catch the patterns that accumulate during long PR
+Recurring 6-lens scan of `core/` / `geode_product/` / `scripts/` to catch the patterns that accumulate during long PR
 sequences and rot codebase health when nobody is grepping for them.
 
 ## When to run

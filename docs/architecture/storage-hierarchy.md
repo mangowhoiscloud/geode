@@ -31,7 +31,7 @@ flowchart TB
 
     subgraph repo["Repo-tracked source"]
         geode_md["GEODE.md / AGENTS.md\nagent + contributor constraints"]
-        sot["core/self_improving/state/\ntracked autoresearch SoT"]
+        sot["geode_product/self_improving/state/\ntracked autoresearch SoT"]
     end
 
     shell --> settings["Settings / Context assembly"]

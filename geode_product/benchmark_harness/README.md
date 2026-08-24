@@ -18,12 +18,12 @@ keep only placeholder variable names in `.env.example` / `.mcp_env.example`.
 Common commands:
 
 ```bash
-python -m plugins.benchmark_harness.cli list
-python -m plugins.benchmark_harness.cli ensure mcpmark
-python -m plugins.benchmark_harness.cli install mcpmark
-python -m plugins.benchmark_harness.cli preflight mcpmark --env-file .mcp_env
-python -m plugins.benchmark_harness.cli ensure tau2-bench
-python -m plugins.benchmark_harness.cli healthcheck tau2-bench
+python -m geode_product.benchmark_harness.cli list
+python -m geode_product.benchmark_harness.cli ensure mcpmark
+python -m geode_product.benchmark_harness.cli install mcpmark
+python -m geode_product.benchmark_harness.cli preflight mcpmark --env-file .mcp_env
+python -m geode_product.benchmark_harness.cli ensure tau2-bench
+python -m geode_product.benchmark_harness.cli healthcheck tau2-bench
 ```
 
 `ensure`, `install`, and `healthcheck` print the reproducible shell commands
@@ -42,7 +42,7 @@ For MCPMark, register both comparison agents inside an upstream checkout before
 running `pipeline.py`:
 
 ```python
-from plugins.benchmark_harness.mcpmark_geode_agent import register_mcpmark_agent
+from geode_product.benchmark_harness.mcpmark_geode_agent import register_mcpmark_agent
 from src.agents import AGENT_REGISTRY
 
 register_mcpmark_agent(AGENT_REGISTRY)
@@ -59,11 +59,11 @@ scope until this paired diagnostic shows a real need.
 For the fail-closed Filesystem-30 pair, freeze and validate a run spec first,
 then point the public serial runner at a **new** output path:
 
-Run `python -m plugins.benchmark_harness.cli install mcpmark` and execute its
+Run `python -m geode_product.benchmark_harness.cli install mcpmark` and execute its
 printed setup commands first; the commands prepare both isolated environments.
 
 ```bash
-<geode-checkout>/.venv/bin/python -m plugins.benchmark_harness.run_mcpmark_pair \
+<geode-checkout>/.venv/bin/python -m geode_product.benchmark_harness.run_mcpmark_pair \
   --run-spec <run-spec.json> --mcpmark-root <pinned-mcpmark> \
   --output-dir <fresh-attempt-root> \
   --python <geode-checkout>/.venv/bin/python
@@ -79,7 +79,7 @@ Gate 0C starts with one paired task under the same runner and evidence
 contract:
 
 ```bash
-<geode-checkout>/.venv/bin/python -m plugins.benchmark_harness.run_mcpmark_pair \
+<geode-checkout>/.venv/bin/python -m geode_product.benchmark_harness.run_mcpmark_pair \
   --profile filesystem1-geode-codex-smoke --task <filesystem-standard-task> \
   --run-spec <smoke-run-spec.json> --mcpmark-root <pinned-mcpmark> \
   --output-dir <fresh-smoke-attempt-root> \
@@ -99,7 +99,7 @@ Gate 0B reuses the same runner for the frozen five-task, two-cap, three-repeat
 diagnostic (30 independent GEODE processes):
 
 ```bash
-<geode-checkout>/.venv/bin/python -m plugins.benchmark_harness.run_mcpmark_pair \
+<geode-checkout>/.venv/bin/python -m geode_product.benchmark_harness.run_mcpmark_pair \
   --profile max-tool-result-tokens \
   --run-spec <gate-0b-run-spec.json> --mcpmark-root <pinned-mcpmark> \
   --output-dir <fresh-attempt-root> \

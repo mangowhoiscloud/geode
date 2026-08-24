@@ -10,7 +10,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from .contract import ContractError, ExperimentContract
+from .contract import ContractError, ExperimentContract, canonical_json_sha256
 from .evidence import (
     EvidenceEnvelope,
     ResourceUsage,
@@ -21,16 +21,6 @@ from .evidence import (
 VERDICT_SCHEMA = "crucible.verdict.v3"
 _COMPUTED_VETOES = frozenset({"budget", "infra_clean", "task_coverage"})
 SCREENING_FAILURE = "promotion_unreachable_from_baseline"
-
-
-def _canonical_hash(payload: dict[str, Any]) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def _mean(values: list[float]) -> float:
@@ -240,7 +230,7 @@ class PromotionVerdict:
 
     @property
     def verdict_id(self) -> str:
-        return _canonical_hash(self.canonical_payload())
+        return canonical_json_sha256(self.canonical_payload())
 
     def to_dict(self) -> dict[str, Any]:
         return {**self.canonical_payload(), "verdict_id": self.verdict_id}

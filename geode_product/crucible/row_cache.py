@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from .artifacts import load_json_object, write_exclusive_json
-from .contract import ContractError, ExperimentContract
+from .contract import ContractError, ExperimentContract, canonical_json_sha256
 from .evidence import expected_pairs
 from .verifiers.tau2 import (
     SNAPSHOT_SCHEMA,
@@ -47,8 +47,7 @@ _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
 
 
 def _canonical_sha256(payload: Any) -> str:
-    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    return canonical_json_sha256(payload)
 
 
 def _identity(contract: ExperimentContract, revision_sha: str) -> dict[str, str]:

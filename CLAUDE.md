@@ -42,10 +42,9 @@ uv run geode
 
 ## Project Structure
 
-Production code uses three top-level Python packages with one dependency direction:
+Production code currently uses two top-level Python packages with one dependency direction:
 - `core/` — general-purpose autonomous agent runtime. 5-layer stack (layer diagram → `GEODE.md` → Architecture).
 - `geode_product/` — bundled first-party features and outer composition over `core`.
-- `plugins/` — curated compatibility facades only; it is not an implementation root or third-party extension ABI.
 
 Check the generated inventory in `site/src/data/geode/architecture-baseline.json`.
 Key entry points: `core/agent/loop/`(AgenticLoop), `core/runtime.py`(bootstrap).
@@ -56,11 +55,11 @@ Key entry points: `core/agent/loop/`(AgenticLoop), `core/runtime.py`(bootstrap).
 # Test
 uv run python -m pytest tests/ -q
 
-# Lint (core + plugins both gated)
-uv run ruff check core/ geode_product/ plugins/ tests/
+# Lint (runtime + bundled product both gated)
+uv run ruff check core/ geode_product/ tests/
 
-# Type check (core + plugins both gated)
-uv run mypy core/ geode_product/ plugins/
+# Type check (runtime + bundled product both gated)
+uv run mypy core/ geode_product/
 ```
 
 ### Expected Test Results
@@ -294,9 +293,9 @@ Update project tracking from main. Backlog → In Progress → Done.
 
 | Gate | Command | Criteria |
 |------|---------|----------|
-| Lint | `uv run ruff check core/ geode_product/ plugins/ tests/ scripts/` | 0 errors — `scripts/` 포함 (CI와 동일 범위) |
-| Format | `uv run ruff format --check core/ geode_product/ plugins/ tests/ scripts/` | 0 reformats |
-| Type | `uv run mypy core/ geode_product/ plugins/` | 0 errors |
+| Lint | `uv run ruff check core/ geode_product/ tests/ scripts/` | 0 errors — `scripts/` 포함 (CI와 동일 범위) |
+| Format | `uv run ruff format --check core/ geode_product/ tests/ scripts/` | 0 reformats |
+| Type | `uv run mypy core/ geode_product/` | 0 errors |
 | Imports | `uv run lint-imports` | contracts kept |
 | Test | `uv run pytest tests/ -m "not live"` | 9200+ pass |
 | CLI smoke | `uv run geode version` | version prints |

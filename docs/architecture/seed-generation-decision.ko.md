@@ -3,7 +3,7 @@
 > [English](seed-generation-decision.md) | **한국어**
 
 > **Status**: Accepted (2026-05-18)
-> **Scope**: GEODE seed 재생성 pipeline. co-scientist(arXiv:2502.18864)의 6-agent generate-debate-evolve loop를 GEODE sub-agent 인프라 위에 port합니다. Petri × autoresearch의 frozen seed pool(`plugins/petri_audit/seeds_safe10/`)의 quality + size를 확장합니다.
+> **Scope**: GEODE seed 재생성 pipeline. co-scientist(arXiv:2502.18864)의 6-agent generate-debate-evolve loop를 GEODE sub-agent 인프라 위에 port합니다. Petri × autoresearch의 frozen seed pool(`geode_product/petri_audit/seeds_safe10/`)의 quality + size를 확장합니다.
 
 ## 컨텍스트
 
@@ -15,7 +15,7 @@ AI co-scientist 논문의 6-agent topology(Generation / Reflection / Ranking / E
 
 **Port(자체 구현)하며, vendor하지 않습니다**. GEODE의 `SubAgentManager` + `IsolatedRunner` + `AgentRegistry` + `HookSystem` + `TaskGraph` 인프라 위에 **7-role topology**를 자체 구현합니다 (논문의 6-agent + Pilot. 논문의 scientist-in-the-loop 자리를 automated Petri audit으로 치환). LangGraph / litellm / LangSmith 의존성 추가는 없습니다.
 
-**위치**: `plugins/seed_generation/` (`plugins/petri_audit/`의 sibling, nested 아님). 명시적 `depends = ["petri-audit"]`으로 sibling 의존을 표명합니다.
+**위치**: `geode_product/seed_generation/` (`geode_product/petri_audit/`의 sibling, nested 아님). 명시적 `depends = ["petri-audit"]`으로 sibling 의존을 표명합니다.
 
 **Full-fidelity**: 7 role 모두 실제로 구현합니다 (Meta-review stub 금지). Elo tournament + 3-judge panel + provider diversity 강제. CLAUDE.md의 Socratic Q4 simplicity 제약은 본 sprint에 한해 해제합니다 (별도 fidelity amendment doc 참조).
 
@@ -34,7 +34,7 @@ AI co-scientist 논문의 6-agent topology(Generation / Reflection / Ranking / E
 - **No external dep**: GEODE 본체에 LangGraph가 없습니다. seed-generation만 LangGraph를 추가하면 본체 분리가 어색해집니다. self-host SubAgentManager가 이미 6-phase의 90%를 지원합니다.
 - **Frozen ground-truth contract**: seed pool은 self-improving-loop agent가 mutate할 수 없습니다. pipeline은 user-trigger 전용이며, autoresearch loop 외부의 별도 phase입니다.
 - **Co-evolution risk 완화**: Generator + Pilot judge가 서로 다른 family입니다. 3-judge panel의 provider diversity를 강제합니다 (최소 2 family).
-- **Karpathy 단일 file 패턴 호환**: pipeline 결과는 `plugins/petri_audit/seeds_gen<N>/` 새 디렉토리입니다. autoresearch의 `program.md` Setup §3는 seed pool path만 갱신합니다.
+- **Karpathy 단일 file 패턴 호환**: pipeline 결과는 `geode_product/petri_audit/seeds_gen<N>/` 새 디렉토리입니다. autoresearch의 `program.md` Setup §3는 seed pool path만 갱신합니다.
 
 ## 토폴로지
 
@@ -55,7 +55,7 @@ AI co-scientist 논문의 6-agent topology(Generation / Reflection / Ranking / E
        ↓
 [Phase G] Meta-review (batch coverage + dim gap + 다음 gen prior)
        ↓
-[Human gate] user가 top-N 명시 승인 → `plugins/petri_audit/seeds_gen<N>/` 저장
+[Human gate] user가 top-N 명시 승인 → `geode_product/petri_audit/seeds_gen<N>/` 저장
 ```
 
 Parent `AgenticLoop`이 central orchestrator입니다. `depth=1` 한계 내에서 phase별로 `delegate(tasks=[…])`를 호출합니다. depth=2는 불필요합니다 (LangGraph supervisor 패턴과 동일).
@@ -64,7 +64,7 @@ Parent `AgenticLoop`이 central orchestrator입니다. `depth=1` 한계 내에�
 
 1. **Port + GEODE-native** (✓ Accepted): 자체 구현, 0 dep, sibling plugin.
 2. Vendor `open-coscientist`: ~150 LOC bridge, langgraph+litellm+langsmith 4 dep. License는 Commons Clause 제약. Rejected. GEODE 본체에 LangGraph 도입 부담 + license 회색지대.
-3. `petri_audit` 아래 nested: `plugins/petri_audit/seed_generation/`. Rejected. manifest 비대화, 향후 분리 가능성 차단.
+3. `petri_audit` 아래 nested: `geode_product/petri_audit/seed_generation/`. Rejected. manifest 비대화, 향후 분리 가능성 차단.
 4. MVP (Generation + Pilot만): Rejected. co-scientist의 generate-debate-evolve가 분리 작동해야 효과가 있습니다. partial port = stub disguise.
 
 ## 결과
@@ -88,9 +88,9 @@ Parent `AgenticLoop`이 central orchestrator입니다. `depth=1` 한계 내에�
 
 ## 구현 포인터
 
-- 디렉토리 layout: `plugins/seed_generation/{manifest.py, cli.py, orchestrator.py, agents/, fitness.py, tournament.py, cost_preview.py, picker.py, pre_flight.py}`
-- AgentDefinition: `plugins/seed_generation/agents/{generator,critic,proximity,pilot,ranker,evolver,meta_reviewer,supervisor}.md` YAML 8 file (CSP-9, 2026-05-22)
-- Pool storage: `plugins/petri_audit/seeds_gen<N>/` (frozen, monotonic gen-suffix). `seeds_safe10`은 보존합니다.
+- 디렉토리 layout: `geode_product/seed_generation/{manifest.py, cli.py, orchestrator.py, agents/, fitness.py, tournament.py, cost_preview.py, picker.py, pre_flight.py}`
+- AgentDefinition: `geode_product/seed_generation/agents/{generator,critic,proximity,pilot,ranker,evolver,meta_reviewer,supervisor}.md` YAML 8 file (CSP-9, 2026-05-22)
+- Pool storage: `geode_product/petri_audit/seeds_gen<N>/` (frozen, monotonic gen-suffix). `seeds_safe10`은 보존합니다.
 - Runtime artifacts: `~/.geode/seed-generation/<run_id>/` (gitignored).
 - Audit trail: `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/seed-generation-runs/<YYYY-MM-DD>/` (committed).
 
@@ -100,7 +100,7 @@ Parent `AgenticLoop`이 central orchestrator입니다. `depth=1` 한계 내에�
 - open-coscientist v0.2.0 -- https://github.com/jataware/open-coscientist (reference only, not vendored)
 - AlphaEval 5-axis (parity 폐기, ADR-002 참조) -- arXiv:2508.13174
 - GEODE SubAgentManager -- `core/agent/sub_agent.py:1-114`
-- Petri inner-loop -- `plugins/petri_audit/` (P1-A~G manifest 패턴)
+- Petri inner-loop -- `geode_product/petri_audit/` (P1-A~G manifest 패턴)
 - Outer-loop SOT -- `geode_product/self_improving/program.md`
 - Petri × autoresearch closed-loop -- `[[project_autoresearch_self_improving_loop]]`
 - Plan A revised 누적 회의록 -- 직전 4개 보고서 (Plan A vs B, 인프라 평가, UI/UX 통합, 폴더 layout)

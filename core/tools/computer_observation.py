@@ -16,8 +16,6 @@ from typing import Any, Literal, TypedDict
 
 ErrorKind = Literal[
     "unknown_action",
-    "sandbox_config",
-    "sandbox_unreachable",
     "no_display",
     "permission",
     "execution_error",
@@ -155,10 +153,6 @@ def classify_computer_error(error: str) -> ErrorKind:
     lower = error.lower()
     if "unknown computer-use action" in lower:
         return "unknown_action"
-    if "sandbox_url is empty" in lower or "sandbox url is empty" in lower:
-        return "sandbox_config"
-    if "sandbox unreachable" in lower:
-        return "sandbox_unreachable"
     if "no display" in lower or "cannot connect to display" in lower:
         return "no_display"
     if "accessibility permission" in lower or "input monitoring permission" in lower:
@@ -174,7 +168,7 @@ def recovery_hint(error_kind: ErrorKind) -> dict[str, Any]:
             "retryable": False,
             "reason": "provider emitted an action outside the harness vocabulary",
         }
-    if error_kind in {"sandbox_config", "sandbox_unreachable", "no_display", "permission"}:
+    if error_kind in {"no_display", "permission"}:
         return {
             "policy": "escalate",
             "retryable": False,

@@ -44,8 +44,8 @@
 | **Stability axis** | `_stability_score = 1 / (1 + mean(dim_stderr))` | judge-LLM noise floor needs to enter fitness; rewards confident measurements |
 | **`baseline.json` snapshot** | `~/.geode/self-improving/baseline.json` written on every promote | enables cross-run baseline regression detection |
 | **Cross-run priors** | `meta_review.json` + `latest_meta_review.json` symlink (PR-G4) | "what did the last meta-reviewer flag" feedback that Karpathy original doesn't model |
-| **seed-generation pipeline** | `plugins/seed_generation/` (S0-S11; 7 specialist agents — generator / proximity / critic / pilot / ranker / evolver / meta_reviewer) | Karpathy original treats seeds as fixed; GEODE evolves them via a Co-Scientist-style sub-loop |
-| **Petri-side measurement layer** | `plugins/petri_audit/` + `core/audit/dim_extractor` | Karpathy original folds measurement into `train.py`; GEODE separates measurement (Petri) from selection (autoresearch) for SoT clarity |
+| **seed-generation pipeline** | `geode_product/seed_generation/` (S0-S11; 7 specialist agents — generator / proximity / critic / pilot / ranker / evolver / meta_reviewer) | Karpathy original treats seeds as fixed; GEODE evolves them via a Co-Scientist-style sub-loop |
+| **Petri-side measurement layer** | `geode_product/petri_audit/` + `core/audit/dim_extractor` | Karpathy original folds measurement into `train.py`; GEODE separates measurement (Petri) from selection (autoresearch) for SoT clarity |
 | **SessionJournal observability** | `~/.geode/self-improving-loop/<session>/journal.jsonl` | Karpathy original logs only via stdout + `results.tsv`; GEODE adds structured events (config_snapshot, audit_started, baseline_decision, cost_divergence …) |
 | **Cost / quota tracking** | `usd_spent` rollup + cost-divergence journal events (PR-P2) | irrelevant for local-GPU training; mandatory for LLM-API budgets |
 | **Cross-loop handoff** | `latest_seed_pool` symlink (PR-G1) | seed-generation → autoresearch evolved-pool ingestion; Karpathy original has no equivalent |

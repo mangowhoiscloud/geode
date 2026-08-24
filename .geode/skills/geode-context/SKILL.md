@@ -17,7 +17,7 @@ from this skill.
 - The agent loop, sub-agents, plans, and batches are all instances of the same tool-use loop.
 - Core runtime is domain-agnostic. Main packages:
   - `core/` — agent loop, tools, MCP, memory, hooks, wiring, CLI, server, gateway.
-  - `plugins/` — first-party auxiliary plugins (`petri_audit`, `seed_generation`, `benchmark_harness`).
+  - `geode_product/` — first-party composition and bundled product features.
   - `site/` — public Next.js docs/site.
 
 ## Runtime Boundaries
@@ -37,7 +37,7 @@ from this skill.
 ## Release Pipeline
 
 - Functional commits update `CHANGELOG.md`.
-- Quality gates: `ruff check` / `ruff format --check` (core, tests, plugins, scripts), `mypy core/ plugins/`, `lint-imports`, `pytest -m "not live"`, `geode version` smoke.
+- Quality gates: `ruff check` / `ruff format --check` (core, geode_product, tests, scripts), `mypy core/ geode_product/`, `lint-imports`, `pytest -m "not live"`, `geode version` smoke.
 - Publishing is manual/approval-gated, not automatic on every main push.
 
 ## Guardrails

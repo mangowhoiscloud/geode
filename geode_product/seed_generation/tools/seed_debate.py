@@ -9,7 +9,7 @@ open-coscientist (`nodes/generation/debate.py:71-147`) runs an
 synthesizes the final hypothesis. Each turn is a separate LLM call
 that sees the cumulative transcript.
 
-GEODE's port (`plugins/seed_generation/agents/generator.py`) had no
+GEODE's port (`geode_product/seed_generation/agents/generator.py`) had no
 analogue — each candidate was a single-shot LLM call. PR-CSP-13
 adds this debate cycle via **sub-agent internal multi-turn**: each
 candidate sub-agent runs an N-turn debate inside its AgenticLoop's

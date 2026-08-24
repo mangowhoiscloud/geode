@@ -25,11 +25,13 @@ from pathlib import Path
 from typing import Any
 
 from .artifacts import DEFAULT_JSON_LIMIT_BYTES
-from .contract import ContractError, ExperimentContract
+from .contract import ContractError, ExperimentContract, _positive_int, canonical_json_sha256
 from .runtime_budget import (
     LEGACY_RUNTIME_PILOT_SCHEMA,
     RUNTIME_ACCOUNTING_METHOD,
     RUNTIME_PILOT_SCHEMA,
+    _nonnegative_number,
+    _probability,
     runtime_pilot_block_rates,
     validate_runtime_cycle_observation,
 )
@@ -73,40 +75,6 @@ _BINDING_FIELDS = (
     "harness_sha256",
     "user_route",
 )
-
-
-def _canonical_hash(value: object) -> str:
-    encoded = json.dumps(
-        value,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def _positive_int(value: object, field: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ContractError(f"{field} must be a positive integer")
-    return value
-
-
-def _nonnegative_number(value: object, field: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ContractError(f"{field} must be a non-negative finite number")
-    result = float(value)
-    if result < 0.0 or not math.isfinite(result):
-        raise ContractError(f"{field} must be a non-negative finite number")
-    return result
-
-
-def _probability(value: object, field: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ContractError(f"{field} must be a probability in (0, 1)")
-    result = float(value)
-    if not math.isfinite(result) or result <= 0.0 or result >= 1.0:
-        raise ContractError(f"{field} must be a probability in (0, 1)")
-    return result
 
 
 def _nearest_rank(values: Sequence[float], probability: float) -> float:
@@ -662,7 +630,7 @@ def forecast_runtime(
             "calendar diversity and provider-capacity waits are outside active wall time",
         ],
     }
-    return {**payload, "runtime_forecast_id": _canonical_hash(payload)}
+    return {**payload, "runtime_forecast_id": canonical_json_sha256(payload)}
 
 
 __all__ = [

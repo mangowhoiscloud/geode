@@ -2,7 +2,7 @@
 
 ADR-012 S2 의 **체감 품질** 양의 압력 축 (S1 ``ux_means`` 행동 축은
 PR-MARGIN-FITNESS-SCALE 2026-05-30 에 제거됨).
-``plugins/seed_generation/agents/ranker.py`` 의 ELO + 3-voter
+``geode_product/seed_generation/agents/ranker.py`` 의 ELO + 3-voter
 cross-provider panel 인프라를 정책 mutation 평가 채널로 확장 — mutation
 의 before/after 응답을 동일 panel 이 pairwise 평가, win-rate 를 fitness
 신호로 변환.

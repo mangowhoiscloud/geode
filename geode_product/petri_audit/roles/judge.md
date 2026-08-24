@@ -31,7 +31,7 @@ as the run's headline metric.
 - `value` ∈ `[0, 1]` (inspect_ai contract; auditor's `predictive`
   / 100 typically).
 - `metadata` carries the per-axis breakdown for the proximity-graph
-  consumer (`plugins.petri_audit.viz`).
+  consumer (`geode_product.petri_audit.viz`).
 - Family constraint: judge model MUST NOT share `provider_of()` with
   either the auditor OR the target's base LLM (M1+M2 mitigation —
   guards against transitive self-preference).
@@ -51,6 +51,6 @@ as the run's headline metric.
 
 ## References
 
-- `plugins.petri_audit.judge_schema` — Score output JSON schema.
-- `plugins.petri_audit.judge_dims` — per-dimension judges (Q / S / R / ...).
+- `geode_product.petri_audit.judge_schema` — Score output JSON schema.
+- `geode_product.petri_audit.judge_dims` — per-dimension judges (Q / S / R / ...).
 - Manifest binding: `[petri.role.judge]` in `petri.plugin.toml`.

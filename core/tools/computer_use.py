@@ -71,39 +71,6 @@ _BLOCKED_TYPE_PATTERNS: tuple[re.Pattern[str], ...] = (
 )
 
 
-def computer_use_env() -> str:
-    """Resolve the execution environment: "host" (default) | "sandbox".
-
-    Function-local settings read so a mid-session config reload is honoured
-    (mirrors the routing-constant accessors).
-
-    Fail-safe on a misconfig: host execution drives the operator's REAL desktop,
-    so it requires an EXACT "host" (or unset = documented default). A non-empty
-    invalid value (for example, direct legacy runtime mutation) must NOT
-    silently fall through to host — it routes to "sandbox" (which fails loud if
-    no container) so a typo can never re-expose the real desktop.
-    """
-    from core.config import settings
-
-    env = str(getattr(settings, "computer_use_env", "") or "").strip().lower()
-    if env in {"host", "sandbox"}:
-        return env
-    if not env:
-        return "host"  # documented default
-    log.warning(
-        "computer_use_env=%r is invalid — routing to 'sandbox' (fail-loud) so a "
-        "typo cannot silently drive the real desktop. Set 'host' or 'sandbox'.",
-        env,
-    )
-    return "sandbox"
-
-
-def _sandbox_url() -> str:
-    from core.config import settings
-
-    return str(getattr(settings, "computer_use_sandbox_url", "") or "").rstrip("/")
-
-
 def computer_use_driver() -> str:
     """Resolve host computer-use driver: auto | python | helper."""
     from core.config import settings
@@ -525,14 +492,14 @@ class ComputerUseHarness:
         *,
         action: str,
         params: dict[str, Any] | None = None,
-        env: str | None = None,
+        env: str = "host",
     ) -> dict[str, Any]:
         return enrich_computer_result(
             result,
             action=action,
             target_size=self._target_size(),
             screen_size=self._screen_size(),
-            env=env or computer_use_env(),
+            env=env,
             cursor=self._cursor_for_action(action, params or {}),
         )
 
@@ -612,15 +579,7 @@ class ComputerUseHarness:
             )
 
     async def aexecute(self, action: str, **params: Any) -> dict[str, Any]:
-        """Dispatch one action — host (local OS) or sandbox (in-container shim).
-
-        Phase E: when ``computer_use_env() == "sandbox"`` the action is POSTed to
-        the container shim instead of running local pyautogui, so the host never
-        touches a display. fail-loud: a sandbox error is surfaced as an error
-        result and NEVER falls back to host execution.
-        """
-        if computer_use_env() == "sandbox":
-            return await asyncio.to_thread(self._sandbox_execute_sync, action, params)
+        """Dispatch one action through the configured host desktop driver."""
         driver = computer_use_driver()
         if driver == "helper" or (driver == "auto" and computer_use_helper_path() is not None):
             return await asyncio.to_thread(self._helper_execute_sync, action, params)
@@ -646,59 +605,6 @@ class ComputerUseHarness:
             self._screen_width = width
             self._screen_height = height
         return self._enrich_result(result, action=action, params=params, env="host-helper")
-
-    def _sandbox_execute_sync(self, action: str, params: dict[str, Any]) -> dict[str, Any]:
-        """POST one action to the in-container shim and return its result.
-
-        The shim (Docker + Xvfb virtual desktop, see ``docker/computer-use-
-        sandbox/``) runs the SAME action vocabulary against its own pyautogui +
-        Xvfb display and returns ``{"result"/"error", "action", "screenshot"}``
-        — identical shape to :meth:`_execute_sync`. On any transport failure we
-        return an error result; we do NOT run the action on the host (that would
-        be a fail-open hole: the operator opted into isolation).
-
-        # container isolation unverified — live test required (CANNOT §4d):
-        # no Docker host available to exercise the round-trip.
-        """
-        import httpx
-
-        base = _sandbox_url()
-        if not base:
-            return self._enrich_result(
-                {
-                    "error": "computer_use_env=sandbox but computer_use_sandbox_url is empty",
-                    "action": action,
-                },
-                action=action,
-                params=params,
-                env="sandbox",
-            )
-        try:
-            resp = httpx.post(f"{base}/cmd", json={"action": action, "params": params}, timeout=30)
-            resp.raise_for_status()
-            result = resp.json()
-            if not isinstance(result, dict):
-                return self._enrich_result(
-                    {
-                        "error": f"sandbox returned non-object: {str(result)[:120]}",
-                        "action": action,
-                    },
-                    action=action,
-                    params=params,
-                    env="sandbox",
-                )
-            return self._enrich_result(result, action=action, params=params, env="sandbox")
-        except (httpx.HTTPError, ValueError, OSError) as exc:
-            # fail-loud: surface the error, never touch the host desktop.
-            return self._enrich_result(
-                {
-                    "error": f"computer-use sandbox unreachable ({base}/cmd): {exc}",
-                    "action": action,
-                },
-                action=action,
-                params=params,
-                env="sandbox",
-            )
 
     def _get_cursor_position(self) -> str:
         """Get current cursor position (in target space) + screenshot."""
@@ -777,7 +683,7 @@ async def execute_emulated_computer_use(
                     **(shot if isinstance(shot, dict) else {}),
                     "error": "Unable to capture screenshot for visual grounding",
                     "error_type": "dependency",
-                    "hint": "Check computer-use permissions or use sandbox mode.",
+                    "hint": "Check computer-use permissions and desktop driver readiness.",
                 }
             )
         try:

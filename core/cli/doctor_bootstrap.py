@@ -444,22 +444,11 @@ def _check_audit_extra() -> CheckResult:
 
 
 def _check_bash_sandbox() -> CheckResult:
-    """Report the run_bash command sandbox (Phase F) — OS-native, no Docker.
-
-    The bash sandbox shells out to the platform's OS sandbox binary
-    (macOS ``sandbox-exec`` / Linux ``bwrap``); it does NOT use Docker. So this
-    check reports the OS-binary availability + the ``GEODE_BASH_SANDBOX`` mode,
-    and notes Docker only as optional info (relevant to the future GUI sandbox,
-    never to this one). It FAILS only when the operator turned the sandbox
-    on/strict but the OS binary is missing — a real misconfiguration.
-    """
+    """Report the OS-native run_bash sandbox and configured mode."""
     from core.tools.bash_sandbox import bash_sandbox_mode, sandbox_binary_status
 
     mode = bash_sandbox_mode()
     binname, binpath = sandbox_binary_status()
-    docker_present = "present" if shutil.which("docker") else "absent"
-    docker_note = f"Docker {docker_present} — not required (GUI sandbox only)"
-
     if binpath is None:
         if mode in {"on", "strict"}:
             if binname == "sandbox-exec":
@@ -472,18 +461,18 @@ def _check_bash_sandbox() -> CheckResult:
                 name="run_bash sandbox",
                 ok=False,
                 detail=f"mode={mode} but {binname} not found",
-                fix=f"{install}, or set GEODE_BASH_SANDBOX=off. {docker_note}.",
+                fix=f"{install}, or set GEODE_BASH_SANDBOX=off.",
             )
         return CheckResult(
             name="run_bash sandbox",
             ok=True,
-            detail=f"mode=off; {binname} unavailable on this host. {docker_note}.",
+            detail=f"mode=off; {binname} unavailable on this host.",
         )
 
     if mode == "off":
-        detail = f"available ({binname}), off — GEODE_BASH_SANDBOX=on to enable. {docker_note}."
+        detail = f"available ({binname}), off — GEODE_BASH_SANDBOX=on to enable."
     else:
-        detail = f"mode={mode} via {binpath}. {docker_note}."
+        detail = f"mode={mode} via {binpath}."
     return CheckResult(name="run_bash sandbox", ok=True, detail=detail)
 
 
@@ -493,7 +482,6 @@ def _check_desktop_computer_use() -> CheckResult:
         from core.config import settings
         from core.tools.computer_use import (
             computer_use_driver,
-            computer_use_env,
             computer_use_helper_path,
             computer_use_helper_status,
         )
@@ -510,14 +498,6 @@ def _check_desktop_computer_use() -> CheckResult:
             name="computer-use desktop",
             ok=True,
             detail="disabled by config",
-        )
-
-    env = computer_use_env()
-    if env == "sandbox":
-        return CheckResult(
-            name="computer-use desktop",
-            ok=True,
-            detail="computer_use_env=sandbox; host desktop dependencies are not required",
         )
 
     driver = computer_use_driver()

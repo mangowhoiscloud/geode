@@ -17,14 +17,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-SELF_IMPROVING_FACADES = {
-    "core/self_improving/__init__.py",
-    "core/self_improving/campaign.py",
-    "core/self_improving/prepare.py",
-    "core/self_improving/train.py",
-    "core/self_improving/watch_campaign.py",
-}
-
 SELF_IMPROVING_RUNTIME_PATHS = {
     "geode_product/self_improving/__init__.py",
     "geode_product/self_improving/campaign.py",
@@ -40,13 +32,13 @@ SELF_IMPROVING_RUNTIME_PATHS = {
 }
 
 SELF_IMPROVING_STATE_PATHS = {
-    "core/self_improving/state/README.md",
-    "core/self_improving/state/baseline_archive.jsonl",
-    "core/self_improving/state/baseline_epochs.json",
-    "core/self_improving/state/mutations.jsonl",
-    "core/self_improving/state/policies/hyperparam.json",
-    "core/self_improving/state/results.jsonl",
-    "core/self_improving/state/results.tsv",
+    "geode_product/self_improving/state/README.md",
+    "geode_product/self_improving/state/baseline_archive.jsonl",
+    "geode_product/self_improving/state/baseline_epochs.json",
+    "geode_product/self_improving/state/mutations.jsonl",
+    "geode_product/self_improving/state/policies/hyperparam.json",
+    "geode_product/self_improving/state/results.jsonl",
+    "geode_product/self_improving/state/results.tsv",
 }
 
 REQUIRED_WHEEL_PATHS = (
@@ -77,10 +69,7 @@ REQUIRED_WHEEL_PATHS = (
         "geode_product/seed_generation/agents/meta_reviewer.md",
         "geode_product/seed_generation/agents/supervisor.md",
         "geode_product/seed_generation/agents/literature_review.md",
-        "plugins/petri_audit/__init__.py",
-        "plugins/benchmark_harness/mcpmark_geode_agent.py",
     }
-    | SELF_IMPROVING_FACADES
     | SELF_IMPROVING_RUNTIME_PATHS
     | SELF_IMPROVING_STATE_PATHS
 )
@@ -98,10 +87,7 @@ REQUIRED_SDIST_PATHS = (
         "NOTICE",
         "core/__init__.py",
         "geode_product/__init__.py",
-        "plugins/__init__.py",
-        "plugins/petri_audit/__init__.py",
     }
-    | SELF_IMPROVING_FACADES
     | SELF_IMPROVING_RUNTIME_PATHS
     | SELF_IMPROVING_STATE_PATHS
 )
@@ -227,23 +213,15 @@ def _check_banned(label: str, paths: set[str], prefixes: tuple[str, ...]) -> lis
     return problems
 
 
-def _check_self_improving_layout(label: str, paths: set[str]) -> list[str]:
-    legacy_python = {
+def _check_removed_compatibility_layout(label: str, paths: set[str]) -> list[str]:
+    removed_paths = {
         path
         for path in paths
-        if path.startswith("core/self_improving/")
-        and path.endswith(".py")
-        and not path.startswith("core/self_improving/state/")
+        if path.startswith("plugins/") or path.startswith("core/self_improving/")
     }
     problems = [
-        f"{label}: unexpected legacy self-improving module {path}"
-        for path in sorted(legacy_python - SELF_IMPROVING_FACADES)
+        f"{label}: removed compatibility path is packaged: {path}" for path in sorted(removed_paths)
     ]
-    problems.extend(
-        f"{label}: self-improving state duplicated under product package: {path}"
-        for path in sorted(paths)
-        if path.startswith("geode_product/self_improving/state/")
-    )
     return problems
 
 
@@ -257,8 +235,8 @@ def validate(dist_dir: Path) -> None:
     problems.extend(_check_required("sdist", sdist_paths, REQUIRED_SDIST_PATHS))
     problems.extend(_check_banned("wheel", wheel_paths, BANNED_WHEEL_PREFIXES))
     problems.extend(_check_banned("sdist", sdist_paths, BANNED_SDIST_PREFIXES))
-    problems.extend(_check_self_improving_layout("wheel", wheel_paths))
-    problems.extend(_check_self_improving_layout("sdist", sdist_paths))
+    problems.extend(_check_removed_compatibility_layout("wheel", wheel_paths))
+    problems.extend(_check_removed_compatibility_layout("sdist", sdist_paths))
     problems.extend(f"wheel: symlink is not allowed: {path}" for path in wheel_symlinks)
     problems.extend(f"sdist: symlink is not allowed: {path}" for path in sdist_symlinks)
 

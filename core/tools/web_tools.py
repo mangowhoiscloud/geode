@@ -209,6 +209,77 @@ class WebFetchTool:
                 return re.sub(r"\s+", " ", text).strip()
 
 
+async def _execute_web_search(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Run the shared adapter dispatch for both public web-search names."""
+
+    query: str = kwargs["query"]
+    max_results: int = kwargs.get("max_results", 5)
+    ctx = kwargs.get("_tool_context")
+    prefer_provider = getattr(ctx, "provider", "") or None
+    prefer_source = getattr(ctx, "source", "") or None
+    session_model = getattr(ctx, "model", "") or ""
+    from core.llm.adapters.dispatch import (
+        AdapterDispatchError,
+        AdapterUnavailableError,
+        web_search_via_adapters,
+    )
+    from core.llm.errors import BillingError
+    from core.tools.base import tool_error
+
+    try:
+        result = await web_search_via_adapters(
+            query,
+            max_results=max_results,
+            prefer_provider=prefer_provider,
+            prefer_source=prefer_source,
+            model=session_model,
+        )
+    except BillingError as exc:
+        return tool_error(
+            str(exc),
+            error_type="permission",
+            recoverable=False,
+            hint=(
+                "Top up the exhausted credential, or switch source via "
+                "/login source <subscription|payg|cli>. No automatic fallback."
+            ),
+            context={"query": query, "provider": exc.provider},
+        )
+    except AdapterUnavailableError as exc:
+        return tool_error(
+            str(exc),
+            error_type="dependency",
+            recoverable=False,
+            hint=(
+                "Your current source has no web_search-capable adapter. "
+                "Run /adapters to list available sources and /login source "
+                "<subscription|payg|cli> to switch explicitly."
+            ),
+            context={"query": query},
+        )
+    except AdapterDispatchError as exc:
+        return tool_error(
+            str(exc),
+            error_type="connection",
+            recoverable=True,
+            hint=(
+                "Retry, rephrase the query, or check adapter availability via "
+                "/adapters. No automatic fallback — this is the single attempt result."
+            ),
+            context={"query": query},
+        )
+    return {
+        "result": {
+            "query": result.query,
+            "search_results": result.text,
+            "source": result.adapter_name,
+            "source_urls": list(result.source_urls),
+            "adapter_provider": result.adapter_provider,
+            "adapter_source": result.adapter_source,
+        }
+    }
+
+
 class GeneralWebSearchTool:
     """Search the web via the adapter registry's WebSearchCapable chain.
 
@@ -236,86 +307,7 @@ class GeneralWebSearchTool:
         )
 
     async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
-        query: str = kwargs["query"]
-        max_results: int = kwargs.get("max_results", 5)
-        # PR-TOOL-EXEC-CONTEXT (2026-05-28) — see WebSearchTool.aexecute
-        # for the same rationale: prefer the loop's resolved (provider,
-        # source) so the same ``/login`` choice that switches the main LLM
-        # path also switches the web_search adapter selection.
-        ctx = kwargs.get("_tool_context")
-        prefer_provider = getattr(ctx, "provider", "") or None
-        prefer_source = getattr(ctx, "source", "") or None
-        # PR-WEB-SEARCH-MODEL-HINT (2026-06-12) — forward the session's
-        # resolved model so a capable session model runs its own search
-        # instead of always escalating to the provider primary.
-        session_model = getattr(ctx, "model", "") or ""
-        from core.llm.adapters.dispatch import (
-            AdapterDispatchError,
-            AdapterUnavailableError,
-            web_search_via_adapters,
-        )
-        from core.llm.errors import BillingError
-        from core.tools.base import tool_error
-
-        try:
-            result = await web_search_via_adapters(
-                query,
-                max_results=max_results,
-                prefer_provider=prefer_provider,
-                prefer_source=prefer_source,
-                model=session_model,
-            )
-        except BillingError as exc:
-            # PR-NO-FALLBACK (2026-05-28) — surface the dispatch error
-            # verbatim; it already names the exact (adapter, source) that
-            # exhausted and the explicit ``/login source`` switch hint.
-            return tool_error(
-                str(exc),
-                error_type="permission",
-                recoverable=False,
-                hint=(
-                    "Top up the exhausted credential, or switch source via "
-                    "/login source <subscription|payg|cli>. No automatic fallback."
-                ),
-                context={"query": query, "provider": exc.provider},
-            )
-        except AdapterUnavailableError as exc:
-            return tool_error(
-                str(exc),
-                error_type="dependency",
-                recoverable=False,
-                hint=(
-                    "Your current source has no web_search-capable adapter. "
-                    "Run /adapters to list available sources and /login source "
-                    "<subscription|payg|cli> to switch explicitly."
-                ),
-                context={"query": query},
-            )
-        except AdapterDispatchError as exc:
-            return tool_error(
-                str(exc),
-                error_type="connection",
-                recoverable=True,
-                hint=(
-                    "Retry, rephrase the query, or check adapter availability via "
-                    "/adapters. No automatic fallback — this is the single attempt result."
-                ),
-                context={"query": query},
-            )
-        return {
-            "result": {
-                "query": result.query,
-                "search_results": result.text,
-                "source": result.adapter_name,
-                "source_urls": list(result.source_urls),
-                # PR-DISPATCH-OBS-EXT (2026-05-28) — inline adapter
-                # provider + source so ``tool_exec_end`` metadata answers
-                # "which adapter handled this" without operators having to
-                # cross-correlate by timestamp with ADAPTER_DISPATCH_ATTEMPT.
-                "adapter_provider": result.adapter_provider,
-                "adapter_source": result.adapter_source,
-            }
-        }
+        return await _execute_web_search(kwargs)
 
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         from core.async_runtime import run_process_coroutine

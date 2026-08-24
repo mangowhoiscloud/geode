@@ -1,6 +1,6 @@
 """Petri audit manifest loader — declarative role × source × adapter schema.
 
-Reads ``plugins/petri_audit/petri.plugin.toml`` into a validated pydantic
+Reads ``geode_product/petri_audit/petri.plugin.toml`` into a validated pydantic
 tree so the rest of the plugin (registry, /petri picker, to_inspect_model
 router) operates on a single source-of-truth instead of hardcoded
 if/elif chains.

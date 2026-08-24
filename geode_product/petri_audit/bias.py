@@ -68,7 +68,7 @@ DEFAULT_DISADVANTAGE: Final[float] = 0.16
 #: classified here). ``"harm"`` = higher score is worse (Petri
 #: convention for failure modes). ``"favorable"`` = higher is better
 #: (calibration anchors). Names match
-#: ``plugins/petri_audit/judge_dims/geode_judge_subset.yaml``.
+#: ``geode_product/petri_audit/judge_dims/geode_judge_subset.yaml``.
 #:
 #: ``eval_awareness`` + ``unprompted_sycophancy`` added 2026-05-15 as
 #: AlphaEval (arXiv:2508.13174) Domain-consistency + Diversity-inverse

@@ -110,7 +110,7 @@ resume 시:
 
 PR-β1이 막은 cross-source PAYG 전환과는 별개의 차원입니다: **같은 `family.source` 안의 다중 계정**(예: 운영자가 둘 다 저장해 둔 Claude Code OAuth 계정 2개). 2026-05-19 사용자 지시 "paperclip, crumb 의 사례처럼 로컬에 기록된 계정 기록으로 롤아웃"이 가리키는 경우가 이것입니다. paperclip / crumb(`https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-18-i2-paperclip-review.md`, 외부 repo `~/workspace/crumb/` 참고)는 `claude -p` subprocess가 `~/.claude/credentials`를 자동으로 읽게 하고, 계정 선택은 symlink 교체 또는 env var로 처리합니다. 패턴은 **non-interactive subprocess + 로컬에 기록된 credential**입니다.
 
-GEODE에는 이미 더 풍부한 in-process 등가물이 있습니다: `core/auth/profiles.py`(AuthProfile / ProfileStore / EligibilityResult), `core/auth/rotation.py`(`ProfileRotator.resolve(provider)`가 best-eligible 반환, `mark_failure` → cooldown, managed-token은 만료 120초 전 이내 자동 refresh), `core/auth/credential_breadcrumb.py`(ProfileRejectReason별 LLM-readable hint, Claude Code `createModelSwitchBreadcrumbs` parity). outer-loop는 현재 이 중 아무것도 쓰지 않습니다. `plugins/petri_audit/credential_source.py`는 process-local `suppress_credential_source(family, source)`만 수행합니다(profile 차원 없음).
+GEODE에는 이미 더 풍부한 in-process 등가물이 있습니다: `core/auth/profiles.py`(AuthProfile / ProfileStore / EligibilityResult), `core/auth/rotation.py`(`ProfileRotator.resolve(provider)`가 best-eligible 반환, `mark_failure` → cooldown, managed-token은 만료 120초 전 이내 자동 refresh), `core/auth/credential_breadcrumb.py`(ProfileRejectReason별 LLM-readable hint, Claude Code `createModelSwitchBreadcrumbs` parity). outer-loop는 현재 이 중 아무것도 쓰지 않습니다. `geode_product/petri_audit/credential_source.py`는 process-local `suppress_credential_source(family, source)`만 수행합니다(profile 차원 없음).
 
 **결정** (Phase ζ 확장):
 
@@ -186,11 +186,11 @@ GEODE에는 이미 더 풍부한 in-process 등가물이 있습니다: `core/aut
 `docs/plans/2026-05-19-self-improving-loop-config-consolidation.md`의 Phase ζ로 관리합니다. **PR 8개**(~2100 LOC + backfill 1). 2026-05-19 paperclip/crumb 지시 이후 6개에서 확장:
 
 - **PR-ζ1**: self-improving-loop 필드(active_sources, completed_units, next_unit, fallback_to_payg, active_profile)를 위한 `SessionCheckpoint` schema 확장. round-trip 테스트.
-- **PR-ζ2**: `plugins/seed_generation/orchestrator.py:PipelineState`의 `_load_state()` 짝 구현. CLI flag `geode audit-seeds resume <run_id>`.
+- **PR-ζ2**: `geode_product/seed_generation/orchestrator.py:PipelineState`의 `_load_state()` 짝 구현. CLI flag `geode audit-seeds resume <run_id>`.
 - **PR-ζ3**: autoresearch `_load_pending_audit()` + `geode_product/self_improving/train.py`의 `--resume <session_id>` flag.
 - **PR-ζ4**: LLM call metadata에 idempotency-key 삽입 + 로컬 response cache 조회(`~/.geode/self-improving-loop/<session>/idempotency.db`).
 - **PR-ζ5**: credential-rollover 감지. resume 시 active source를 checkpoint와 비교하고 journal에 `credential_rolled_over_at` event를 방출.
-- **PR-ζ5.5** (신규): `ProfileRotator`를 self-improving-loop credential 경로에 배선. `resolve_self_improving_loop_binding(family) → (source, profile)`이 profile 차원을 추가. `plugins/petri_audit/credential_source.py`는 실패를 in-process suppress set 대신 `ProfileRotator.mark_failure(profile)`로 라우팅. autoresearch + seed-generation은 LLM call metadata에 `profile.name`을 전달해 cooldown이 계정별로 추적되게 함.
+- **PR-ζ5.5** (신규): `ProfileRotator`를 self-improving-loop credential 경로에 배선. `resolve_self_improving_loop_binding(family) → (source, profile)`이 profile 차원을 추가. `geode_product/petri_audit/credential_source.py`는 실패를 in-process suppress set 대신 `ProfileRotator.mark_failure(profile)`로 라우팅. autoresearch + seed-generation은 LLM call metadata에 `profile.name`을 전달해 cooldown이 계정별로 추적되게 함.
 - **PR-ζ5.6** (신규): 2축 계정 picker(provider ←→ × profile ↑↓), `core/cli/effort_picker.py` 미러. 진입점 2개: (a) `/login picker` slash command + red 배너 abort dialog 자동 트리거(PR-γ1 트리거 조건), (b) agent loop의 자연어 문구 인식기가 picker를 programmatic하게 호출. action row: Enter(교체+재개) / n(provider-owned login 경로; Claude는 `claude auth login --claudeai`) / w(reset 대기) / p(이 실행에 한해 PAYG opt-in) / Esc(중단 유지).
 - **PR-ζ6**: 문서 + resume run-book 샘플(`https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-19-resume-rollout-runbook.md`) + CHANGELOG.
 

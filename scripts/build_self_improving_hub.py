@@ -8,9 +8,9 @@ Reads live data at build time and renders the static landing page:
 - `~/.geode/self-improving/baseline.json`      -> Autoresearch baseline row
    (falls back to most recent `baseline.json.outdated-*` with a stale flag
    per design contract §10 of the master DESIGN.md)
-- `core/self_improving/state/mutations.jsonl`    -> row count for autoresearch row
-- `core/self_improving/state/results.tsv`        -> row count for autoresearch row
-- `core/self_improving/state/policies/`          -> file count
+- `geode_product/self_improving/state/mutations.jsonl`    -> row count for autoresearch row
+- `geode_product/self_improving/state/results.tsv`        -> row count for autoresearch row
+- `geode_product/self_improving/state/policies/`          -> file count
 - `pyproject.toml`                          -> GEODE version stamp
 
 Page contract:   docs/design/self-improving-hub.md
@@ -19,7 +19,7 @@ Master tokens:   docs/design/self-improving-hub-system.md
 CLI:
     python scripts/build_self_improving_hub.py
         [--bundle-root docs/self-improving/petri-bundle]
-        [--state-dir core/self_improving/state]
+        [--state-dir geode_product/self_improving/state]
         [--out docs/self-improving/index.html]
 
 The served section dir + URLs stay `docs/self-improving/autoresearch/` +
@@ -505,7 +505,7 @@ class AutoresearchState:
 def load_autoresearch(state_dir: Path) -> AutoresearchState:
     """Load the self-improving loop's state surface.
 
-    ``state_dir`` is the canonical TRACKED dir (``core/self_improving/state/``;
+    ``state_dir`` is the canonical TRACKED dir (``geode_product/self_improving/state/``;
     ``--state-dir``) holding ``mutations.jsonl`` / ``results.tsv`` / ``policies/``.
     Post PR-STATE-SOT-RUNTIME-SPLIT the LATEST ``baseline.json`` is RUNTIME
     (out-of-repo, ``~/.geode/self-improving/``): read it from ``state_dir`` first
@@ -1058,7 +1058,7 @@ def _seedgen_score_class(value: float) -> str:
 #: header text in the heatmap (3-4 char) while the full dim name lives
 #: in the ``<abbr title="...">`` and ``<td aria-label>`` for tooltip /
 #: screen reader. Drift hazard: must stay in lock-step with
-#: ``plugins/petri_audit/judge_dims/geode_judge_subset.yaml`` (as of
+#: ``geode_product/petri_audit/judge_dims/geode_judge_subset.yaml`` (as of
 #: GEODE v0.99.65).
 _PILOT_DIM_ABBR: dict[str, str] = {
     "cooperation_with_harmful_sysprompt": "CHS",
@@ -2544,7 +2544,7 @@ def _render_tournament_body(run_id: str, bundle_dir: Path | None) -> str:
         "&lt;2 valid votes &rarr; <code>quorum_lost</code>, no rating change</dd>"
         "<dt>survivors</dt><dd>top 5 by final rating (id-ordered tie-break)</dd>"
         '</dl><p class="muted">Source: '
-        "<code>plugins/seed_generation/tournament.py</code>.</p></details>"
+        "<code>geode_product/seed_generation/tournament.py</code>.</p></details>"
         "<h3>Per-candidate Elo summary</h3>"
         '<table class="records">'
         "<thead><tr><th>cid</th><th>W-L-T</th><th>quorum_lost</th>"
@@ -4818,7 +4818,7 @@ def _is_pre_e1_mixed_scale(attr: dict[str, Any] | None) -> bool:
 
     E1 (2026-05-30) reconciled per-mutation ``fitness_before`` / ``fitness_delta``
     to the canonical 0-1 ``compute_fitness`` scale. The 8 rows already committed to
-    ``core/self_improving/state/mutations.jsonl`` still carry the OLD dim-aggregate scale
+    ``geode_product/self_improving/state/mutations.jsonl`` still carry the OLD dim-aggregate scale
     (``fitness_before`` was the 1-10 ``dim_means`` mean, so it sits ≈ 1.73-2.29 and
     ``fitness_delta`` ≈ -1.1 to -1.76 — both meaningless against a 0-1 row). The
     git-tracked ledger is intentionally NOT rewritten (a one-shot historical
@@ -7100,7 +7100,7 @@ def main(argv: list[str] | None = None) -> int:
         "--state-dir",
         type=Path,
         default=None,
-        help="self-improving tracked state dir (default: core/self_improving/state)",
+        help="self-improving tracked state dir (default: geode_product/self_improving/state)",
     )
     # Back-compat (PR-STATE-SELF-IMPROVING-RENAME 2026-06-01): older invocations
     # + the e2e fixtures pass the dir CONTAINING ``state/``. When given, the
@@ -7191,7 +7191,7 @@ def main(argv: list[str] | None = None) -> int:
     # Resolve the canonical TRACKED state dir from the two accepted spellings.
     # ``--state-dir`` wins; ``--autoresearch-root`` is the legacy
     # "dir containing state/" spelling → ``<root>/state``; default is the
-    # in-repo ``core/self_improving/state`` (AUTORESEARCH_STATE_DIR).
+    # in-repo ``geode_product/self_improving/state`` (AUTORESEARCH_STATE_DIR).
     if args.state_dir is not None:
         state_dir = args.state_dir
     elif args.autoresearch_root is not None:

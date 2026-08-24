@@ -3,7 +3,7 @@
 from existing ``~/.geode/petri/logs/*.eval`` archives.
 
 The runner appends a manifest line after every new ``geode audit --live``
-(see ``plugins/petri_audit/runner.py:_append_manifest_line``), but
+(see ``geode_product/petri_audit/runner.py:_append_manifest_line``), but
 archives that predate the bookkeeping path stay invisible without this
 script. Idempotent — ``has_archive(sha)`` skips already-indexed evals,
 so re-running after a future schema bump just fills in the gaps.
@@ -36,7 +36,7 @@ DEFAULT_SUMMARY_DIR = Path("docs/audits/eval-logs")
 def _summary_for(eval_path: Path, summary_dir: Path) -> Path | None:
     """Return the matching summary yaml or None.
 
-    Mirrors ``plugins/petri_audit/eval_archive.py:_summary_filename`` —
+    Mirrors ``geode_product/petri_audit/eval_archive.py:_summary_filename`` —
     ``<YYYY-MM-DD>-<sha1(basename)[:8]>.summary.yaml``.
     """
     name = eval_path.name

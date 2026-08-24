@@ -1,9 +1,9 @@
 ---
 status: active
 authority: architecture-extensibility-execution-sot
-baseline_commit: 34257503767e24f0531f6b2c2df7e53288eabd22
+baseline_commit: 2e238a828e0b170080fcb70fe71d7451f615acf2
 baseline_branch: origin/develop
-last_audited: 2026-07-17
+last_audited: 2026-08-24
 owners: GEODE maintainers
 ---
 
@@ -225,16 +225,16 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
-| R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
+| R8.5 | BND-009 | `session=codex-root task=r8-5-runtime-eval-evolve-migration` | `feature/r8-5-runtime-eval-evolve-migration` | readiness [#3142](https://github.com/mangowhoiscloud/geode/pull/3142) | `2026-08-24T02:09:39Z` |
+| _none yet_ | — | — | — | — | — |
 
 ## 1. Program objective
 
-GEODE already has strong extension seams—Skills, MCP, hooks, `Tool`, LLM
-adapters, and narrow Calendar/Notification/Session ports—but its product
-composition is not uniformly extensible. The current verdict is **B+,
-conditionally approved**: the runtime is extensible at its edges, while the
-agent loop, product/plugin boundary, tool registration path, and service
-ownership still concentrate architectural knowledge.
+The initial audit verdict was **B+, conditionally approved**. At the
+2026-08-24 full-ledger audit, the primary architecture work is released and
+closed: 48 of 58 GAPs are `DONE` and six are `SUPERSEDED`. Final program
+closure still waits on the replacement R8 namespace-convergence package and the
+R7.4 closure of R7.2/R7.3; §14 owns the exact remaining order.
 
 The program is complete when GEODE has:
 
@@ -282,12 +282,11 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `geode_product/` + `plugins/`) | 590 |
-| Test Python files | 693 |
-| `core/` Python LOC | 121,876 |
-| `geode_product/` Python LOC | 61,277 |
-| `plugins/` Python LOC | 193 |
-| Test Python LOC | 187,086 |
+| Production Python files (`core/` + `geode_product/`) | 556 |
+| Test Python files | 690 |
+| `core/` Python LOC | 121,599 |
+| `geode_product/` Python LOC | 61,157 |
+| Test Python LOC | 186,688 |
 | Tool definitions / model executions / valid schemas / policies | 86 / 86 / 86 / 86 (exact) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 5 |
@@ -514,59 +513,60 @@ and closure evidence are appended in §10.
 | GOV-002 | `PARTIAL` | Hand-audited counts disagree with `AGENTS.md` (78 tools/56 hooks vs 67/65 prose) | One generated architecture baseline and a drift check own the counts | R0.2 | GOV-001 | `DONE` |
 | GOV-003 | `MISFIT` | Old plans describe removed paths and implemented work as current gaps | Overlapping docs carry a historical-status banner and point here | R0.1 | GOV-001 | `DONE` |
 | GOV-004 | `PARTIAL` | 24 import ignores and very high global Ruff ceilings lack uniform owner/expiry metadata | Every exception is removed or recorded per symbol/edge with owner, rationale, expiry, and ratchet | R0.3 | GOV-002 | `DONE` |
-| BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `IN_DEVELOP` |
-| BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `IN_DEVELOP` |
-| BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002, BND-006 | `IN_DEVELOP` |
-| BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `IN_DEVELOP` |
-| CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `IN_DEVELOP` |
-| CAP-002 | `ABSENT` | `ToolRegistry` owns tool objects while other registries/lists own execution and safety | Immutable `ToolRegistration` and `ToolPlan` derive every tool consumer | R2.1 | CAP-001 | `IN_DEVELOP` |
-| CAP-003 | `MISFIT` | Native Google handlers are bound in `core/cli/tool_handlers/delegated.py` | Runtime/composition binds handlers; CLI only renders/forwards user interaction | R2.3 | CAP-002, BND-002 | `IN_DEVELOP` |
-| CAP-004 | `MISFIT` | Google names repeat in safety, approval, policy, personal-data, and CLI modules | Effect/data/auth/resource metadata derives gates; no independent tool-name allowlists | R2.2 | CAP-002 | `IN_DEVELOP` |
-| CAP-005 | `PARTIAL` | `definitions.json`, tool objects, provider schemas, and defer sets can drift | Anthropic/OpenAI/deferred schemas and execution map share one plan hash and parity tests | R2.3 | CAP-002 | `IN_DEVELOP` |
+| BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `DONE` |
+| BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `DONE` |
+| BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002, BND-006 | `DONE` |
+| BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `DONE` |
+| CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `DONE` |
+| CAP-002 | `ABSENT` | `ToolRegistry` owns tool objects while other registries/lists own execution and safety | Immutable `ToolRegistration` and `ToolPlan` derive every tool consumer | R2.1 | CAP-001 | `DONE` |
+| CAP-003 | `MISFIT` | Native Google handlers are bound in `core/cli/tool_handlers/delegated.py` | Runtime/composition binds handlers; CLI only renders/forwards user interaction | R2.3 | CAP-002, BND-002 | `DONE` |
+| CAP-004 | `MISFIT` | Google names repeat in safety, approval, policy, personal-data, and CLI modules | Effect/data/auth/resource metadata derives gates; no independent tool-name allowlists | R2.2 | CAP-002 | `DONE` |
+| CAP-005 | `PARTIAL` | `definitions.json`, tool objects, provider schemas, and defer sets can drift | Anthropic/OpenAI/deferred schemas and execution map share one plan hash and parity tests | R2.3 | CAP-002 | `DONE` |
 | CAP-006 | `ABSENT` | Adding a native/Google tool requires edits across several policy files | Change-surface fixture proves the bounded file/registration budget in §8 | R7.2 | CAP-003, CAP-004, CAP-005 | `IN_DEVELOP` |
-| LOOP-001 | `ABSENT` | No immutable object freezes one step's route, policy, tool plan, and trace identity | `StepSnapshot` is created once per step and used by model/tool/telemetry paths | R3.1 | CAP-002 | `IN_DEVELOP` |
-| LOOP-002 | `PARTIAL` | Mutable state is distributed across loop fields, contexts, checkpoints, and helpers | `TurnState` and explicit session/turn/step ownership replace ambiguous lifetimes | R3.1 | LOOP-001 | `IN_DEVELOP` |
-| LOOP-003 | `MISFIT` | `AgenticLoop` owns orchestration plus many independently changing policies | Visible loop delegates to bounded input/model/tool/observe/termination phases | R3.2 | LOOP-001, LOOP-002 | `IN_DEVELOP` |
-| LOOP-004 | `ABSENT` | Loop has 2,714 LOC, 67 methods, and 27 constructor args with no local ratchet | Closure budgets in §7.3 are executable and cannot regress | R3.3 | LOOP-003 | `IN_DEVELOP` |
-| LOOP-005 | `MISFIT` | `SubAgentManager` combines request codec, role resolution, execution, validation, and announcements | Separate collaborators own those responsibilities; manager remains an orchestrator | R3.4 | LOOP-002 | `IN_DEVELOP` |
-| DI-001 | `PARTIAL` | 26 module-level `ContextVar` declarations have no lifecycle classification | Generated inventory classifies request identity, diagnostics, mutable request state, request-local cache, and forbidden service lookup | R4.1 | LOOP-002 | `IN_DEVELOP` |
-| DI-002 | `PARTIAL` | `GeodeRuntime` groups config, but `RuntimeCoreConfig` still has 17 fields | Cohesive lifecycle groups contain at most seven fields and have explicit owners/teardown | R4.2 | DI-001 | `IN_DEVELOP` |
-| DI-003 | `MISFIT` | Downstream modules obtain injectable services through globals and CLI modules | Constructor/factory injection owns services; allowed ambient context is documented and tested | R4.2 | DI-001, DI-002 | `IN_DEVELOP` |
-| DI-004 | `MISFIT` | `MCPServerManager` combines config, discovery, connection, call, trace/persistence, and lifecycle | Separate config catalog, connection pool, invoker, and persistence collaborators preserve public behavior | R4.3 | DI-002 | `IN_DEVELOP` |
-| LLM-001 | `MISFIT` | `LLMAdapter` documentation calls the contract minimal but requires streaming and introspection methods | Minimal completion protocol plus optional capability protocols; no empty stubs required | R5.1 | DI-002 | `IN_DEVELOP` |
-| LLM-002 | `PARTIAL` | Eight built-ins use a mutable registry with broad bootstrap lifetime | Built-in plus entry-point discovery yields immutable session snapshots with generation and collision policy | R5.2 | LLM-001, BND-001 | `IN_DEVELOP` |
-| LLM-003 | `PARTIAL` | Provider identity, credential source, transport, and adapter selection overlap | Provider profile, credential route, and transport are separate composable records | R5.3 | LLM-001, LLM-002 | `IN_DEVELOP` |
-| LLM-004 | `PARTIAL` | Interactive and autonomous LLM paths share taxonomy but retain multiple retry/failover implementations | Explicit `RetryPolicy` preserves intentional differences on one classification/telemetry substrate | R5.4 | LLM-003 | `IN_DEVELOP` |
-| PROTO-001 | `MISFIT` | Internal `HookEvent` taxonomy can leak into persistence/IPC expectations | Public activity/event projections are separate from internal dispatch events | R6.1 | LOOP-002, DI-002 | `IN_DEVELOP` |
-| PROTO-002 | `PARTIAL` | IPC has typed behavior but no single versioned external compatibility contract | Versioned envelopes, capability negotiation, unknown-field behavior, and golden compatibility tests | R6.1 | PROTO-001 | `IN_DEVELOP` |
+| LOOP-001 | `ABSENT` | No immutable object freezes one step's route, policy, tool plan, and trace identity | `StepSnapshot` is created once per step and used by model/tool/telemetry paths | R3.1 | CAP-002 | `DONE` |
+| LOOP-002 | `PARTIAL` | Mutable state is distributed across loop fields, contexts, checkpoints, and helpers | `TurnState` and explicit session/turn/step ownership replace ambiguous lifetimes | R3.1 | LOOP-001 | `DONE` |
+| LOOP-003 | `MISFIT` | `AgenticLoop` owns orchestration plus many independently changing policies | Visible loop delegates to bounded input/model/tool/observe/termination phases | R3.2 | LOOP-001, LOOP-002 | `DONE` |
+| LOOP-004 | `ABSENT` | Loop has 2,714 LOC, 67 methods, and 27 constructor args with no local ratchet | Closure budgets in §7.3 are executable and cannot regress | R3.3 | LOOP-003 | `DONE` |
+| LOOP-005 | `MISFIT` | `SubAgentManager` combines request codec, role resolution, execution, validation, and announcements | Separate collaborators own those responsibilities; manager remains an orchestrator | R3.4 | LOOP-002 | `DONE` |
+| DI-001 | `PARTIAL` | 26 module-level `ContextVar` declarations have no lifecycle classification | Generated inventory classifies request identity, diagnostics, mutable request state, request-local cache, and forbidden service lookup | R4.1 | LOOP-002 | `DONE` |
+| DI-002 | `PARTIAL` | `GeodeRuntime` groups config, but `RuntimeCoreConfig` still has 17 fields | Cohesive lifecycle groups contain at most seven fields and have explicit owners/teardown | R4.2 | DI-001 | `DONE` |
+| DI-003 | `MISFIT` | Downstream modules obtain injectable services through globals and CLI modules | Constructor/factory injection owns services; allowed ambient context is documented and tested | R4.2 | DI-001, DI-002 | `DONE` |
+| DI-004 | `MISFIT` | `MCPServerManager` combines config, discovery, connection, call, trace/persistence, and lifecycle | Separate config catalog, connection pool, invoker, and persistence collaborators preserve public behavior | R4.3 | DI-002 | `DONE` |
+| LLM-001 | `MISFIT` | `LLMAdapter` documentation calls the contract minimal but requires streaming and introspection methods | Minimal completion protocol plus optional capability protocols; no empty stubs required | R5.1 | DI-002 | `DONE` |
+| LLM-002 | `PARTIAL` | Eight built-ins use a mutable registry with broad bootstrap lifetime | Built-in plus entry-point discovery yields immutable session snapshots with generation and collision policy | R5.2 | LLM-001, BND-001 | `DONE` |
+| LLM-003 | `PARTIAL` | Provider identity, credential source, transport, and adapter selection overlap | Provider profile, credential route, and transport are separate composable records | R5.3 | LLM-001, LLM-002 | `DONE` |
+| LLM-004 | `PARTIAL` | Interactive and autonomous LLM paths share taxonomy but retain multiple retry/failover implementations | Explicit `RetryPolicy` preserves intentional differences on one classification/telemetry substrate | R5.4 | LLM-003 | `DONE` |
+| PROTO-001 | `MISFIT` | Internal `HookEvent` taxonomy can leak into persistence/IPC expectations | Public activity/event projections are separate from internal dispatch events | R6.1 | LOOP-002, DI-002 | `DONE` |
+| PROTO-002 | `PARTIAL` | IPC has typed behavior but no single versioned external compatibility contract | Versioned envelopes, capability negotiation, unknown-field behavior, and golden compatibility tests | R6.1 | PROTO-001 | `DONE` |
 | STORE-001 | `PARTIAL` | `SessionStorePort`, `SessionManager`, checkpoints, transcripts, and event store have overlapping ownership | Ports and writers conform to the existing sessions.db/JSONL destination matrix; projections are rebuildable | R6.2 | — | `DONE` |
 | STORE-002 | `PARTIAL` | Logging/transcript/resume/replay plan still contains staged/open parity work | Each subsystem has one declared writer, resume contract, replay doctrine, retention, and redaction test | R6.2 | STORE-001 | `DONE` |
-| TRUST-001 | `ABSENT` | Registration/enabled status does not uniformly distinguish trusted authority | Installed, enabled, trusted, and granted-capability states are separate and observable; executable code is never imported before trust approval | R6.3 | BND-004 | `IN_DEVELOP` |
-| TRUST-002 | `PARTIAL` | Extension seams can receive broader runtime objects than required, and arbitrary in-process Python cannot be capability-confined | Trusted in-process code receives narrow ports for API discipline; untrusted executable code runs out of process behind a brokered capability boundary | R6.3 | DI-002, TRUST-001, TRUST-003 | `IN_DEVELOP` |
-| TRUST-003 | `ABSENT` | Mutation serialization is not derived from explicit tool resource metadata | `resource_keys(args)` drives per-resource serialization; no argument-name heuristic | R2.4 | CAP-004 | `IN_DEVELOP` |
-| VER-001 | `PARTIAL` | Quality gates pass but lack core-only, reverse-import, exception-budget, and tool-plan drift tests | All architecture gates in §9 run in CI and locally | R7.1 | BND-003, BND-004, CAP-005, LOOP-004, DI-003, LLM-002, PROTO-002, GOV-004, VER-003 | `IN_DEVELOP` |
+| TRUST-001 | `ABSENT` | Registration/enabled status does not uniformly distinguish trusted authority | Installed, enabled, trusted, and granted-capability states are separate and observable; executable code is never imported before trust approval | R6.3 | BND-004 | `DONE` |
+| TRUST-002 | `PARTIAL` | Extension seams can receive broader runtime objects than required, and arbitrary in-process Python cannot be capability-confined | Trusted in-process code receives narrow ports for API discipline; untrusted executable code runs out of process behind a brokered capability boundary | R6.3 | DI-002, TRUST-001, TRUST-003 | `DONE` |
+| TRUST-003 | `ABSENT` | Mutation serialization is not derived from explicit tool resource metadata | `resource_keys(args)` drives per-resource serialization; no argument-name heuristic | R2.4 | CAP-004 | `DONE` |
+| VER-001 | `PARTIAL` | Quality gates pass but lack core-only, reverse-import, exception-budget, and tool-plan drift tests | All architecture gates in §9 run in CI and locally | R7.1 | BND-003, BND-004, CAP-005, LOOP-004, DI-003, LLM-002, PROTO-002, GOV-004, VER-003 | `DONE` |
 | VER-002 | `ABSENT` | No contract suite measures how many central edits each extension type requires | Six extension scenarios in §8 pass without forbidden edits | R7.2 | CAP-006, LLM-002, BND-004 | `IN_DEVELOP` |
 | VER-003 | `PARTIAL` | Public/internal metric prose drifts from executable counts | `sync-stats` or one shared generator updates site, AGENTS facts, and roadmap baseline; check mode is green | R0.2 | GOV-001 | `DONE` |
 | VER-004 | `PARTIAL` | Cold-start and runtime metrics exist, but refactors lack one architecture regression baseline | Startup, first-turn, tool-plan build, memory, and event-write budgets are pinned and non-regressing | R7.3 | CAP-005, LOOP-003, DI-004, LLM-004, PROTO-002, STORE-002 | `IN_DEVELOP` |
-| BND-005 | `MISFIT` | Generic agent/provider/observability consumers import self-improving transcript, SoT-resolution, and prompt-injection helpers | Neutral policy snapshot/source, context-contribution, run identity, and activity-sink contracts replace every classified-kernel import of a self-improving helper without changing runtime behavior | R1.4 | BND-001 | `IN_DEVELOP` |
-| BND-006 | `MISFIT` | `core/self_improving` contains 39 Python files and 16,159 LOC of opt-in campaign, Petri/seed orchestration, mutation, gate, CLI/MCP, scheduler, and state policy | One cohesive first-party bundled feature owns the control plane outside the kernel; outer composition wires it, classified kernel modules import it zero times outside the exact forwarding-facade allowlist, a retirement GAP is registered before implementation, and v1.0 commands/imports/config/state behavior pass compatibility and installed-wheel tests | R1.5 | BND-002, BND-005 | `IN_DEVELOP` |
+| BND-005 | `MISFIT` | Generic agent/provider/observability consumers import self-improving transcript, SoT-resolution, and prompt-injection helpers | Neutral policy snapshot/source, context-contribution, run identity, and activity-sink contracts replace every classified-kernel import of a self-improving helper without changing runtime behavior | R1.4 | BND-001 | `DONE` |
+| BND-006 | `MISFIT` | `core/self_improving` contains 39 Python files and 16,159 LOC of opt-in campaign, Petri/seed orchestration, mutation, gate, CLI/MCP, scheduler, and state policy | One cohesive first-party bundled feature owns the control plane outside the kernel; outer composition wires it, classified kernel modules import it zero times outside the exact forwarding-facade allowlist, a retirement GAP is registered before implementation, and v1.0 commands/imports/config/state behavior pass compatibility and installed-wheel tests | R1.5 | BND-002, BND-005 | `DONE` |
 | REL-001 | `MISFIT` | PyPI and GitHub Releases still publish v1.0.0, while repository metadata and the changelog declare an untagged, unpublished v1.1.0; the operator selected v1.0.1 as the next public release | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.1 with artifact-hash parity and no rewritten v1.0.0 evidence | R1.6 | BND-003, BND-006, GOV-004 | `SUPERSEDED` |
 | REL-002 | `ABSENT` | No registered gate prevents the v1.0.1 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.1, and every release inside that interval retained them | R8.0 | REL-001 | `SUPERSEDED` |
 | BND-007 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-002, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.1 | REL-002, STORE-003 | `SUPERSEDED` |
-| STORE-003 | `MISFIT` | Self-improving datasets span tracked `core/self_improving/state`, runtime `~/.geode/self-improving`, actively written `~/.geode/autoresearch/handoff`, and isolated `GEODE_STATE_ROOT/autoresearch` roots without one dataset-level ownership manifest | A feature-owned manifest declares every dataset's lifecycle, schema/version, root, writer/readers, concurrency, retention/redaction, migration, rollback, and rebuild contract; tracked SoT leaves `core` with hash/history parity, while runtime/override/worker roots remain compatible or migrate additively with one writer | R8.2 | REL-004, STORE-001 | `OPEN` |
+| STORE-003 | `MISFIT` | Self-improving datasets span tracked `core/self_improving/state`, runtime `~/.geode/self-improving`, actively written `~/.geode/autoresearch/handoff`, and isolated `GEODE_STATE_ROOT/autoresearch` roots without one dataset-level ownership manifest | A feature-owned manifest declares every dataset's lifecycle, schema/version, root, writer/readers, concurrency, retention/redaction, migration, rollback, and rebuild contract; tracked SoT leaves `core` with hash/history parity, while runtime/override/worker roots remain compatible or migrate additively with one writer | R8.2 | REL-004, STORE-001 | `SUPERSEDED` |
 | HOOK-001 | `MISFIT` | The 56-member internal `HookEvent` enum is exported at the package root, one registry mixes observer, result-transform, and control-interceptor authority without a stable public allowlist, and verification is emitted only inside terminal finalization | Exactly 13 versioned `HookName` contracts expose the Codex 11-event lifecycle plus `PreVerify`/`PostVerify`; typed authority, redaction, correlation, unknown-name rejection, and compatibility tests prevent internal RuntimeEvent growth from expanding the ABI, while one monotone bounded `PreVerify` → verifier → `PostVerify` → `Stop` state machine supports executable external continuation without erasing built-in failure or replaying side effects | R6.4 | — | `DONE` |
 | HOOK-002 | `PARTIAL` | Tool request interception is mixed with `TOOL_EXEC_STARTED`; no typed sequential tool/LLM request transform or async `next_call` chain wraps the accepted executor and provider call across every runtime path | `tool_request`, `tool_execution`, `llm_request`, and `llm_execution` are four typed join points with N→N+1 request composition, original/effective trace, single-use async `next_call`, exception identity, policy-before-execution ordering, and all-path parity tests | R6.4 | HOOK-001 | `DONE` |
-| COLLAB-001 | `MISFIT` | `delegate_task` tells callers that long-running work should not block, but awaits the complete fan-out and returns no stable handle for later control | Opt-in background delegation returns before completion and supports parent-scoped list, bounded wait, and interrupt while preserving the existing depth, session-cap, and Lane limits | R6.5 | HOOK-001 | `IN_DEVELOP` |
-| COLLAB-002 | `MISFIT` | Subagent completion announcements live only in a five-minute process-memory queue, so parent inactivity or daemon restart can discard collaboration delivery | A bounded, redacted mailbox in the existing session database preserves ordered parent/child messages and completion delivery with transactional at-most-once consumption | R6.5 | COLLAB-001, STORE-002 | `IN_DEVELOP` |
-| COLLAB-003 | `PARTIAL` | Child checkpoints and session history are durable, but every isolated worker invocation creates a fresh conversation and never restores the child checkpoint | Follow-up and resume reopen the same child session as a new generation, restore its checkpoint, accept queued mailbox input at a loop boundary, and preserve one independent rollout without replaying successful side effects | R6.5 | COLLAB-001, COLLAB-002 | `IN_DEVELOP` |
+| COLLAB-001 | `MISFIT` | `delegate_task` tells callers that long-running work should not block, but awaits the complete fan-out and returns no stable handle for later control | Opt-in background delegation returns before completion and supports parent-scoped list, bounded wait, and interrupt while preserving the existing depth, session-cap, and Lane limits | R6.5 | HOOK-001 | `DONE` |
+| COLLAB-002 | `MISFIT` | Subagent completion announcements live only in a five-minute process-memory queue, so parent inactivity or daemon restart can discard collaboration delivery | A bounded, redacted mailbox in the existing session database preserves ordered parent/child messages and completion delivery with transactional at-most-once consumption | R6.5 | COLLAB-001, STORE-002 | `DONE` |
+| COLLAB-003 | `PARTIAL` | Child checkpoints and session history are durable, but every isolated worker invocation creates a fresh conversation and never restores the child checkpoint | Follow-up and resume reopen the same child session as a new generation, restore its checkpoint, accept queued mailbox input at a loop boundary, and preserve one independent rollout without replaying successful side effects | R6.5 | COLLAB-001, COLLAB-002 | `DONE` |
 | HOOK-003 | `PARTIAL` | All 13 public hooks are wired, but no production `PostVerify` policy is registered; an empty decision set can deliver a retryable verifier failure, continuation authority is encoded as a user-role pseudo-system message, and durable verification records aggregate handler decisions without a stable candidate target | A deterministic fallback maps pass/retryable failure/non-retryable failure to accept/revise/escalate; revision enters the bounded dynamic system context, reaches the existing verify-fail replan path, and records candidate-digest-bound per-handler decisions without replaying completed side effects or adding a new hook plane | R6.6 | HOOK-001, STORE-002 | `DONE` |
 | MEM-001 | `MISFIT` | One live system-prompt branch creates a default user profile outside the wired project scope, `TURN_COMPLETED` promotes a low-information turn/tool trace into active project memory, and caller-free session-checkpoint plus journal write/aggregate APIs imply competing authorities | The wired profile is the sole prompt profile source; automatic turn traces remain in canonical session records; dead `SessionStorePort` checkpoint and `ProjectJournal` write/aggregate APIs are removed while historical files remain untouched; executable tests and docs identify the live read/write authority without adding a store or framework | R6.7 | HOOK-001, STORE-002 | `DONE` |
 | GOAL-001 | `PARTIAL` | Explicit Goal state, contextual continuation, accounting, and trajectory events persist, but automatic continuation is owned only by one `AgenticLoop.arun()` call; no process owner discovers an active Goal after return or daemon restart, restores its checkpoint, or prevents duplicate idle launches | The existing serve process owns a bounded idle Goal continuation host that restores the same checkpoint as a new session generation, admits at most one continuation per session, uses the internal contextual-Goal path rather than a synthetic user turn, preserves Lane, PostVerify/replan, accounting, and trajectory contracts, and does not hot-loop an unchanged active Goal | R6.8 | HOOK-003, STORE-002 | `DONE` |
-| CODE-001 | `PARTIAL` | Coding work spans session/checkpoint/timeline, task preflight/TaskGraph, Goal, collaboration, worktree workflow, file/bash tools, and reviewer/verification paths, but no canonical contract maps their current writers, recovery authority, or residual coding-runtime boundaries | One reviewed coding-runtime authority contract maps every proposed record and operation to an existing or residual owner, fixes recovery/history/projection and drift/rollback invariants, and proves that no duplicate runtime store, task ledger, policy plane, or implementation API was introduced | R9.1 | STORE-002, HOOK-003, MEM-001, COLLAB-003, GOAL-001 | `IN_DEVELOP` |
+| CODE-001 | `PARTIAL` | Coding work spans session/checkpoint/timeline, task preflight/TaskGraph, Goal, collaboration, worktree workflow, file/bash tools, and reviewer/verification paths, but no canonical contract maps their current writers, recovery authority, or residual coding-runtime boundaries | One reviewed coding-runtime authority contract maps every proposed record and operation to an existing or residual owner, fixes recovery/history/projection and drift/rollback invariants, and proves that no duplicate runtime store, task ledger, policy plane, or implementation API was introduced | R9.1 | STORE-002, HOOK-003, MEM-001, COLLAB-003, GOAL-001 | `DONE` |
 | REL-003 | `MISFIT` | PyPI, GitHub Releases, repository metadata, and the changelog report v1.0.22, which predates the delivered boundary refactor | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.23 with artifact-hash parity and no rewritten earlier-release evidence | R1.7 | BND-003, BND-006, GOV-004 | `DONE` |
-| REL-004 | `ABSENT` | No registered gate prevents the v1.0.23 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.23, and every release inside that interval retained them | R8.3 | REL-003 | `IN_PROGRESS` |
-| BND-008 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-004, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.4 | REL-004, STORE-003 | `OPEN` |
-| CODE-002 | `MISFIT` | Verification state is restored from checkpoint `loop_guards`, but `_persist_verify_state` still mirrors every result into `SessionManager` columns whose accessor has no production reader | Production verify-mirror writes and the unused accessor are removed; legacy databases containing the columns still load, checkpoint recovery remains authoritative, and no new store or schema migration is introduced | R9.2 | CODE-001 | `IN_DEVELOP` |
+| REL-004 | `ABSENT` | No registered gate prevents the v1.0.23 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.23, and every release inside that interval retained them | R8.3 | REL-003 | `SUPERSEDED` |
+| BND-008 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-004, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.4 | REL-004, STORE-003 | `SUPERSEDED` |
+| CODE-002 | `MISFIT` | Verification state is restored from checkpoint `loop_guards`, but `_persist_verify_state` still mirrors every result into `SessionManager` columns whose accessor has no production reader | Production verify-mirror writes and the unused accessor are removed; legacy databases containing the columns still load, checkpoint recovery remains authoritative, and no new store or schema migration is introduced | R9.2 | CODE-001 | `DONE` |
+| BND-009 | `MISFIT` | `geode_product` combines runtime composition with evaluation and hill-climbing, while `plugins`, `core/self_improving`, Homebrew candidate files, and the unverified computer sandbox preserve duplicate or unsupported ownership surfaces | One documented migration leaves `core` as the GEODE runtime, moves measurement to `evals` and hill-climbing to `evolve`, removes every obsolete package/scaffold without a replacement stub, preserves one-way `evolve -> evals -> core` dependencies and operator behavior, migrates tracked state with byte parity, and proves the final wheel/sdist/install/release contain only the declared roots | R8.5 | BND-006, REL-003 | `IN_PROGRESS` |
 
 ## 6. Dependency and merge sequence
 
@@ -1600,11 +1600,11 @@ does not weaken the final full-program closure below.
 
 ### R8 — Post-checkpoint compatibility lifecycle
 
-Active R8 packages describe the v1.0.23 compatibility lifecycle; they do not
-imply a dependency on every R7 package. Readiness comes only from the explicit
-§5 edges, so this lifecycle can progress alongside unrelated R2-R7 work. R8.2
-precedes R8.4 because tracked state must leave the facade directory in its own
-transaction before the forwarding package can disappear cleanly.
+R8 records both the superseded v1.0.23 compatibility lifecycle and its
+operator-directed replacement. The original packages remain immutable decision
+history. R8.5 owns the replacement namespace, state, facade, and unsupported-
+scaffold migration as one explicit breaking transaction rather than hiding it
+inside any earlier package.
 
 #### R8.0 Publication grace evidence
 
@@ -1773,6 +1773,50 @@ Acceptance:
   canonical CLI, MCP, scheduler, prompt/provider, config, and state behavior;
 - canonical object identity, writer ownership, and R8.2 state locations remain
   unchanged; this package performs no state migration.
+
+#### R8.5 Runtime, evaluation, and evolution namespace convergence
+
+GAP: BND-009.
+
+The operator explicitly replaced the remaining publication-window sequence
+with one immediate migration and release. This package does not create another
+runtime or compatibility layer. It separates the current implementation by
+role and deletes the obsolete names:
+
+- `core` remains the GEODE runtime and owns the public `geode`/`geode-mcp`
+  composition, AgenticLoop, native tools, server, worker, and runtime state;
+- `evals` owns Petri, benchmark harnesses, seed generation, GEO measurement,
+  and shared baseline/seed-pool evidence;
+- `evolve` owns Crucible and scaffold-search/hill-climbing control;
+- the dependency graph is `evolve -> evals -> core` plus `evolve -> core`, with
+  no `core -> evals/evolve` or `evals -> evolve` edge;
+- `geode_product`, `plugins`, `core/self_improving`,
+  `packaging/homebrew`, and `docker/computer-use-sandbox` leave source and
+  distribution artifacts without an archive, experimental copy, dynamic
+  import alias, or compatibility stub.
+
+Acceptance:
+
+- a committed migration record contains the final folder tree, exhaustive
+  old-to-new module/entry-point/state map, responsibility matrix, deliberate
+  removals, rollback source, and scope exclusions;
+- native runtime entry points resolve from `core`; evaluation entry points
+  resolve from `evals`; hill-climbing entry points resolve from `evolve`; all
+  active imports follow the declared one-way graph and an import-linter/AST gate
+  prevents the old rings from returning;
+- tracked self-improving state moves with byte/hash and Git-history parity to
+  its `evolve` owner, while existing user/runtime roots and configuration keys
+  retain their semantics and exactly one writer;
+- current CLI, MCP, daemon, scheduler, tool, provider, Petri, benchmark, seed,
+  Crucible, and scaffold-search behavior passes characterization tests, while
+  old Python imports and source launchers are deliberately absent with explicit
+  migration guidance;
+- the Homebrew candidate and unverified HTTP/Xvfb computer sandbox are removed
+  without a dummy successor; host computer-use remains, and unrestricted audit
+  execution disables computer-use fail closed;
+- full non-live, architecture, docs, package-content, clean-wheel, kernel-only,
+  installed-unit, and public-distribution gates pass for the release; no second
+  wheel, plugin SDK, umbrella registry, or empty forwarding package is added.
 
 ### R9 — Coding-agent runtime authority
 
@@ -1993,6 +2037,41 @@ count.
 | MEM-001 | [#2903](https://github.com/mangowhoiscloud/geode/pull/2903) / `a7a59b69f18589bec82eb515b482355924ac9467` | [#2906](https://github.com/mangowhoiscloud/geode/pull/2906) / `c28d06910f8044beb96eadea241fcc31b88fc936` (v1.0.16) | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; feature, release, and main CI Gates, 10,407 non-live local tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, public wheel/sdist digest parity, GPT-5.6-Luna max review, 13-of-13 public-hook subscription E2E, and immutable eval-artifact read-back passed | No durable schema changed; historical profiles, session records, and journal files remain untouched, while only caller-free checkpoint and journal write/aggregate APIs and the implicit turn-memory writer were removed | `docs/architecture/context-lifecycle.md`, its Korean twin, `docs/plans/2026-08-07-runtime-memory-trajectory-convergence.md`, the public context and memory guides, and `docs/eval/external-artifact-repository.md` identify the canonical profile, session-record, and evaluation-artifact boundaries |
 | GOAL-001 | [#2931](https://github.com/mangowhoiscloud/geode/pull/2931) / `543994952dddd068695d5717e02263322aaafd38` | [#2935](https://github.com/mangowhoiscloud/geode/pull/2935) / `a2615fb25814277c8abd96b0f70f26f8eec6b1fb` (v1.0.19) | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; feature, release, and main CI Gates, 10,377 non-live local tests, duplicate main-promotion CI test passes, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, deterministic hosted-restart/Lane/terminal-race coverage, GPT-5.6-sol review, and immutable eval-artifact read-back passed | Goal tables and session events are additive; sessions without a Goal keep prior turn behavior, continuation restores the existing checkpoint as a new generation, and the bounded host neither synthesizes a user turn nor replays completed side effects | `docs/architecture/event-persistence.md`, `docs/architecture/session-state-machine.md`, `docs/plans/2026-08-10-stanford-part5-plan-deep-research.md`, and the public runtime research guide document Goal ownership, continuation, advisory-plan boundaries, and trajectory evidence |
 | REL-003 | [#3033](https://github.com/mangowhoiscloud/geode/pull/3033) / `70a1f1bcd0520b33e50436cc340265b6534bc133` | [#3036](https://github.com/mangowhoiscloud/geode/pull/3036) / `b1949883764914ae45bdcacbe61064137a1db870` (v1.0.23) | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request`; `python3 scripts/verify_public_distribution.py --version 1.0.23 --repository mangowhoiscloud/geode --source-sha b1949883764914ae45bdcacbe61064137a1db870`; `uvx --no-cache --from geode-agent==1.0.23 geode version` — RESULT: PASS; feature, develop reconciliation, main-sync, promotion, main-push, Pages, install-smoke, and release workflow [run 32340621793](https://github.com/mangowhoiscloud/geode/actions/runs/32340621793) passed; public GitHub assets and both PyPI files have matching SHA-256 digests, the annotated tag resolves to the main commit, and the exact-version public smoke reports v1.0.23 | The exact five self-improving facades, four legacy launchers, and preserved `core/self_improving/state` roots remain in the published wheel; no persisted schema or earlier release evidence was rewritten, and the core-only projection still imports 393 installed kernel modules and runs 42 installed-kernel tests without product features | `CHANGELOG.md`, `README.md`, `README.ko.md`, `CLAUDE.md`, generated site SOT, `llms.txt`, and `llms-full.txt` consistently identify v1.0.23 and the released kernel/product boundary |
+| COLLAB-001 | [#2886](https://github.com/mangowhoiscloud/geode/pull/2886) / `4bf93d6415504495e54628ee5efaa88c9b828b3e` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | The additive session-mailbox and child-generation records preserve depth-one, session-cap, Lane, cancellation, checkpoint, and independent-rollout behavior; no second transcript or destructive migration was introduced | `docs/architecture/event-persistence.md`, the durable-collaboration plan, and the public agentic-loop/orchestration guides document mailbox, checkpoint, and follow-up ownership |
+| COLLAB-002 | [#2886](https://github.com/mangowhoiscloud/geode/pull/2886) / `4bf93d6415504495e54628ee5efaa88c9b828b3e` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | The additive session-mailbox and child-generation records preserve depth-one, session-cap, Lane, cancellation, checkpoint, and independent-rollout behavior; no second transcript or destructive migration was introduced | `docs/architecture/event-persistence.md`, the durable-collaboration plan, and the public agentic-loop/orchestration guides document mailbox, checkpoint, and follow-up ownership |
+| COLLAB-003 | [#2886](https://github.com/mangowhoiscloud/geode/pull/2886) / `4bf93d6415504495e54628ee5efaa88c9b828b3e` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | The additive session-mailbox and child-generation records preserve depth-one, session-cap, Lane, cancellation, checkpoint, and independent-rollout behavior; no second transcript or destructive migration was introduced | `docs/architecture/event-persistence.md`, the durable-collaboration plan, and the public agentic-loop/orchestration guides document mailbox, checkpoint, and follow-up ownership |
+| BND-001 | [#3001](https://github.com/mangowhoiscloud/geode/pull/3001) / `1e62473d5a391a750068fbb8de20e303c168ce60` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Documentation-only package classification changed no runtime API, persisted state, configuration, or installed command behavior | `docs/architecture/package-classification.md`, `docs/architecture/naming-conventions.md`, `AGENTS.md`, `CLAUDE.md`, and the public architecture guide document the package taxonomy |
+| BND-005 | [#3004](https://github.com/mangowhoiscloud/geode/pull/3004) / `e20584650809d8b4f2480d45fe01359aa95a28f2` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Neutral host seams preserve the thin self-improving compatibility facades and existing policy, activity, and timeline owners; no durable state moved | `CHANGELOG.md`, the exception ledger, generated architecture baseline, and §14 record the neutral seams and retained compatibility surface |
+| BND-002 | [#3022](https://github.com/mangowhoiscloud/geode/pull/3022) / `200a11efd421cf84efdbb0c107a2caa79e8378bf` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | The product boundary preserves curated compatibility facades and installed command behavior while the checked import graph keeps classified kernel modules independent of product composition | `docs/architecture/package-classification.md`, `docs/architecture/crucible-kernel.md`, contributor entry points, README twins, and public architecture pages document the kernel/product split |
+| BND-006 | [#3025](https://github.com/mangowhoiscloud/geode/pull/3025) / `34bce3677dee545b057d9c60a6cde56bd914cd14` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | The exact five facades, four legacy launchers, configuration behavior, and `core/self_improving/state` roots remain available until the separately gated R8 retirement flow | ADR-012, package classification, self-improving operator/design docs, canonical product-path public guides, and generated docs record the relocation and compatibility map |
+| BND-003 | [#3028](https://github.com/mangowhoiscloud/geode/pull/3028) / `6f1581c9bc64ff22e3e3cf7f05ea45c01179ebba` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | The kernel projection is a test-only artifact, not a second public distribution; the product wheel, entry point, facades, and persisted state remain unchanged | `AGENTS.md`, §7 R1.3, §10.1, generated architecture baseline, and installed-package scripts document the ephemeral kernel-projection gate |
+| CAP-001 | [#3043](https://github.com/mangowhoiscloud/geode/pull/3043) / `ba7eea3288bd443a52181151de13032f5280d263` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Existing tool schemas and execution behavior remain compatible while immutable registration identity is now shared by the live R2.3 consumer roots; no persisted schema changed | `docs/plans/2026-08-20-r2-1-capability-tool-plan.md`, §7/§14, CHANGELOG, and the generated baseline document immutable plan ownership |
+| CAP-002 | [#3043](https://github.com/mangowhoiscloud/geode/pull/3043) / `ba7eea3288bd443a52181151de13032f5280d263` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Existing tool schemas and execution behavior remain compatible while immutable registration identity is now shared by the live R2.3 consumer roots; no persisted schema changed | `docs/plans/2026-08-20-r2-1-capability-tool-plan.md`, §7/§14, CHANGELOG, and the generated baseline document immutable plan ownership |
+| CAP-004 | [#3047](https://github.com/mangowhoiscloud/geode/pull/3047) / `9038d635d0ed3989b11569de5dbfd6cb7a47db43` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Google login, multi-account/keyring storage, granted scopes, per-call consent, bounded results, and Google/MCP/Apple Calendar alternatives remain compatible | `docs/plans/2026-08-20-r2-2-google-descriptor-pilot.md`, §7/§14, CHANGELOG, and generated docs document descriptor-driven Google policy |
+| CAP-003 | [#3053](https://github.com/mangowhoiscloud/geode/pull/3053) / `ffeb41e13d4bd9c59bc1ba286300c352800f6a03` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Compatibility CLI forwarders, transient MCP/hosted-tool overlays, public tool order, and provider wire shapes remain supported; no durable state migrated | `docs/plans/2026-08-21-r2-3-tool-plan-convergence.md`, custom-tool and computer-use guides, §7/§14, and CHANGELOG document the live plan boundary |
+| CAP-005 | [#3053](https://github.com/mangowhoiscloud/geode/pull/3053) / `ffeb41e13d4bd9c59bc1ba286300c352800f6a03` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Compatibility CLI forwarders, transient MCP/hosted-tool overlays, public tool order, and provider wire shapes remain supported; no durable state migrated | `docs/plans/2026-08-21-r2-3-tool-plan-convergence.md`, custom-tool and computer-use guides, §7/§14, and CHANGELOG document the live plan boundary |
+| TRUST-003 | [#3060](https://github.com/mangowhoiscloud/geode/pull/3060) / `709ccb0d0eb31080ed3b17896d4056f784db0281` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Plan-owned policy is monotone and fail-closed while legacy approvals, personal-data redaction, headless/sub-agent restrictions, and unrelated-resource concurrency remain behavior-compatible | §7 R2.4, §10.1, §14, CHANGELOG, generated architecture baseline, and policy/resource poison tests document the minimum safety and locking contract |
+| LOOP-001 | [#3067](https://github.com/mangowhoiscloud/geode/pull/3067) with follow-up [#3068](https://github.com/mangowhoiscloud/geode/pull/3068) / `e6ccaf73e1ff6027e510bfc5e4e16b8679f369e4` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Event schema v5 is additive, earlier stored rows and public-hook v1 queries remain readable, and in-flight steps retain their captured snapshot | `docs/architecture/hook-system.md` and its Korean twin, the public hooks guide, §7/§14, and CHANGELOG document step identity and event compatibility |
+| LOOP-002 | [#3067](https://github.com/mangowhoiscloud/geode/pull/3067) with follow-up [#3068](https://github.com/mangowhoiscloud/geode/pull/3068) / `e6ccaf73e1ff6027e510bfc5e4e16b8679f369e4` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Event schema v5 is additive, earlier stored rows and public-hook v1 queries remain readable, and in-flight steps retain their captured snapshot | `docs/architecture/hook-system.md` and its Korean twin, the public hooks guide, §7/§14, and CHANGELOG document step identity and event compatibility |
+| LOOP-003 | [#3071](https://github.com/mangowhoiscloud/geode/pull/3071) / `a130ceb75364e128cf0e273edbff65302273bb3e` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | The public `AgenticLoop.arun` surface, termination semantics, retry order, tool execution, compaction, and result assembly remain compatible | The public agentic-loop and architecture-system guides, `AGENTS.md`, §7/§14, and CHANGELOG document the six phase collaborators |
+| LOOP-004 | [#3074](https://github.com/mangowhoiscloud/geode/pull/3074) / `8469092baddff2d0b453b03230c46ec2b7e79bac` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Legacy policy constructor keywords continue to map through `AgenticLoopConfig`; the package adds executable ceilings without a data or API migration | `AGENTS.md`, the exception ledger, generated baseline, §7/§14, and CHANGELOG document the executable loop budgets |
+| LOOP-005 | [#3079](https://github.com/mangowhoiscloud/geode/pull/3079) / `8a73c6be74f31d7611730d44321b9cdceabdaad5` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Depth-one delegation, session and Lane caps, worker protocol, cancellation, collaboration persistence, and candidate judging remain compatible | `AGENTS.md`, generated baseline, §7/§14, and CHANGELOG document the bounded `SubAgentManager` collaborators and budgets |
+| DI-001 | [#3088](https://github.com/mangowhoiscloud/geode/pull/3088) / `90e039ceab5b510f26a7a38df1aceebad1fd35f7` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | The generated lifecycle inventory and CI gate classify ambient context without changing request semantics, persistence, or public APIs | `docs/architecture/context-var-lifecycles.json`, session-state-machine twins, the public system index, §7/§14, and CHANGELOG document allowed ambient lifetimes |
+| DI-002 | [#3091](https://github.com/mangowhoiscloud/geode/pull/3091) / `d7f566e12ce96adabd74e6c268d53336ec12fc81` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Composition-root injection removes ambient service lookup while preserving lifecycle shutdown, durable schemas, provider behavior, tool behavior, and user configuration | `docs/architecture/context-var-lifecycles.json`, session-state-machine/setup twins, the public lifecycle guide, contributor entry points, and §14 document injected ownership |
+| DI-003 | [#3091](https://github.com/mangowhoiscloud/geode/pull/3091) / `d7f566e12ce96adabd74e6c268d53336ec12fc81` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Composition-root injection removes ambient service lookup while preserving lifecycle shutdown, durable schemas, provider behavior, tool behavior, and user configuration | `docs/architecture/context-var-lifecycles.json`, session-state-machine/setup twins, the public lifecycle guide, contributor entry points, and §14 document injected ownership |
+| DI-004 | [#3094](https://github.com/mangowhoiscloud/geode/pull/3094) / `4c2c68a7535b1c1bf5705fc898d052c9d6a16105` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | The public `MCPServerManager` facade and config, call, tracing, result-limit, reconnect, and shutdown behavior remain compatible | `docs/plans/2026-08-23-r4-3-mcp-manager-split.md`, the public MCP/system-index guides, §7/§14, and CHANGELOG document collaborator ownership |
+| LLM-001 | [#3097](https://github.com/mangowhoiscloud/geode/pull/3097) / `7e95c9f42abd77d17bca79b8398105a9c6cf0c99` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Existing adapters keep route identity and async completion; streaming and operator introspection remain optional structural capabilities with no empty compatibility stubs | The public LLM-adapter guide, §7/§14, CHANGELOG, and generated baseline document required versus optional adapter capabilities |
+| LLM-002 | [#3100](https://github.com/mangowhoiscloud/geode/pull/3100) / `3be2c070551591f5bee34b52bdb811a87066cd68` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | The compatibility registry view is read-only; existing sessions retain captured generations and reload affects only new sessions, preserving built-in/external selection behavior | README twins, the LLM-adapter/provider guides, context lifecycle inventory, §7/§14, and CHANGELOG document scoped discovery and generation semantics |
+| LLM-003 | [#3103](https://github.com/mangowhoiscloud/geode/pull/3103) / `773dacdc588415f7bec471e1a577357b185a1447` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Existing adapter names remain compatible while provider identity, credentials, transport, and capabilities are explicit; retry, quota, billing, and fallback behavior did not migrate | `docs/plans/2026-08-23-r5-3-provider-profile-transport.md`, provider and adapter guides, §7/§14, and CHANGELOG document profile/credential/transport ownership |
+| LLM-004 | [#3106](https://github.com/mangowhoiscloud/geode/pull/3106) / `20307e437a87a3ba18fce38c6e92d01c3e3785c8` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Interactive, auxiliary, and provider paths preserve intentional call counts, terminal outcomes, fallback boundaries, OAuth refresh, billing precedence, context recovery, hook order, and stream replay guards | `docs/plans/2026-08-23-r5-4-call-stack-convergence.md`, §7/§14, `AGENTS.md`, and CHANGELOG document the shared retry substrate and preserved differences |
+| PROTO-001 | [#3109](https://github.com/mangowhoiscloud/geode/pull/3109) / `d6381dc34f5614d5a726e4aae1da45b3db2ab2ca` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Legacy IPC v0 remains accepted beside negotiated `geode.ipc.v1`; internal event enums stay private and existing gateway/client request correlation remains compatible | Public-protocol architecture twins, CLI/serve/how-it-runs guides, `AGENTS.md`, §7/§14, and CHANGELOG document v0/v1 compatibility and private event taxonomies |
+| PROTO-002 | [#3109](https://github.com/mangowhoiscloud/geode/pull/3109) / `d6381dc34f5614d5a726e4aae1da45b3db2ab2ca` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Legacy IPC v0 remains accepted beside negotiated `geode.ipc.v1`; internal event enums stay private and existing gateway/client request correlation remains compatible | Public-protocol architecture twins, CLI/serve/how-it-runs guides, `AGENTS.md`, §7/§14, and CHANGELOG document v0/v1 compatibility and private event taxonomies |
+| BND-004 | [#3112](https://github.com/mangowhoiscloud/geode/pull/3112) / `3c79e23cd9a7d758d6aa06c72a1f50efa5a98348` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Trusted in-process extensions retain narrow granted ports and untrusted executable MCP remains deny-default brokered; rejected, disabled, granted, degraded, and teardown behavior stays observable | `docs/plans/2026-08-23-r6-3-extension-trust-lifecycle.md`, hook/Skill/MCP/adapter guides, §7/§14, and CHANGELOG document trust-before-load and teardown |
+| TRUST-001 | [#3112](https://github.com/mangowhoiscloud/geode/pull/3112) / `3c79e23cd9a7d758d6aa06c72a1f50efa5a98348` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Trusted in-process extensions retain narrow granted ports and untrusted executable MCP remains deny-default brokered; rejected, disabled, granted, degraded, and teardown behavior stays observable | `docs/plans/2026-08-23-r6-3-extension-trust-lifecycle.md`, hook/Skill/MCP/adapter guides, §7/§14, and CHANGELOG document trust-before-load and teardown |
+| TRUST-002 | [#3112](https://github.com/mangowhoiscloud/geode/pull/3112) / `3c79e23cd9a7d758d6aa06c72a1f50efa5a98348` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Trusted in-process extensions retain narrow granted ports and untrusted executable MCP remains deny-default brokered; rejected, disabled, granted, degraded, and teardown behavior stays observable | `docs/plans/2026-08-23-r6-3-extension-trust-lifecycle.md`, hook/Skill/MCP/adapter guides, §7/§14, and CHANGELOG document trust-before-load and teardown |
+| VER-001 | [#3115](https://github.com/mangowhoiscloud/geode/pull/3115) / `edac60747d82d941be23517a5c7081fe442d49c5` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | This is a CI-only enforcement package; runtime APIs, persisted state, user configuration, and supported extension behavior are unchanged | The exception ledger, ContextVar inventory, public system index, generated baseline, §7/§14, and CI workflow name every executable architecture gate |
+| CODE-001 | [#3126](https://github.com/mangowhoiscloud/geode/pull/3126) / `d81e76b00ea3c7d0fb9b03bb4605f9ba18f3e771` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | The authority contract is documentation-only and adds no runtime API, task ledger, policy plane, persisted store, review hook, or migration | `docs/architecture/coding-runtime-authority.md` and `AGENTS.md` are the reviewed canonical writer/reader/lifetime/recovery contract |
+| CODE-002 | [#3131](https://github.com/mangowhoiscloud/geode/pull/3131) / `bd7d79c3d004508eadf379e9403a0a2fb3c2a30a` | [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) / `281c9a6bbfbb0b32b9317a76dfa59991dfda8c9e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request` — RESULT: PASS; [#3134](https://github.com/mangowhoiscloud/geode/pull/3134) CI [run 32666892834](https://github.com/mangowhoiscloud/geode/actions/runs/32666892834) passed the final Gate, 10m47s test-with-coverage and package artifacts, lint/format, the successful type-check rerun, security, Pages, and install smoke | Checkpoint `loop_guards` remain the sole recovery authority; legacy databases with the seven removed mirror columns reopen with inert extra schema and require no destructive migration | CHANGELOG, §7/§10.1/§14, generated architecture baseline, and fresh/legacy schema compatibility tests document the mirror removal |
 
 ### 10.3 Non-closure decision evidence
 
@@ -2017,6 +2096,9 @@ supersets cannot authorize a later or unrelated edit.
 | BND-007 | SUPERSEDED | BND-008 | BND-007's immutable exit condition names the superseded REL-002 gate; BND-008 preserves the removal-only scope behind REL-004 without rewriting the historical contract | `4ff91e55a21660108991b678db1a8ed8c5ab05a9` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
 | STORE-003 | DEPENDENCY_REMOVED | REL-002 | REL-002 was superseded because its release target predates the preserved state-root contract | `4ff91e55a21660108991b678db1a8ed8c5ab05a9` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
 | STORE-003 | DEPENDENCY_ADDED | REL-004 | REL-004 is the replacement publication window that must close before durable state relocation | `4ff91e55a21660108991b678db1a8ed8c5ab05a9` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
+| REL-004 | SUPERSEDED | BND-009 | The operator withdrew the remaining publication-window requirement and requested immediate namespace migration, legacy-surface removal, and a verified patch release as one explicit breaking transaction | `6f665ad951854a4e4e429a9c73f2ea6afa290a77` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
+| STORE-003 | SUPERSEDED | BND-009 | State ownership still requires byte parity and one writer, but it now moves with the declared `evolve` owner inside the operator-selected namespace convergence instead of a separate compatibility-window transaction | `6f665ad951854a4e4e429a9c73f2ea6afa290a77` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
+| BND-008 | SUPERSEDED | BND-009 | A removal-only facade transaction cannot express the selected deletion of `geode_product`, `plugins`, state placement, and unsupported scaffolds; BND-009 replaces it with one measurable final-package migration | `6f665ad951854a4e4e429a9c73f2ea6afa290a77` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
 
 ### 10.4 Blocker evidence
 
@@ -2105,233 +2187,23 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Immediate next unit
 
-R1.7 (`REL-003`) is `DONE` after the v1.0.23 promotion, tracking-only main
-closure [#3037](https://github.com/mangowhoiscloud/geode/pull/3037), and
-CI-gated main-to-develop sync
-[#3038](https://github.com/mangowhoiscloud/geode/pull/3038).
+R8.5 (`BND-009`) is `IN_PROGRESS` under the sole active claim owned by
+`session=codex-root task=r8-5-runtime-eval-evolve-migration` for branch
+`feature/r8-5-runtime-eval-evolve-migration`. Readiness PR #3142 merged at
+`b1300113275fc387bb2fe64782ccf4fd77de20fd`; implementation starts only after
+this claim merges and a fresh worktree is allocated from the updated canonical
+`origin/develop` tip.
 
-R8.3 (`REL-004`) is `IN_PROGRESS` under the active claim for
-`feature/r8-3-publication-grace-evidence`. Its candidate interval starts at
-PyPI file availability at `2026-08-20T06:53:01.550033Z`; no closure is eligible
-before `2026-09-19T06:53:01.550033Z`, and any intervening incompatible release
-restarts the interval. This evidence-only package reuses the public
-distribution verifier and does not authorize runtime or schema changes.
+The claimed scope is exactly one documented `core`/`evals`/`evolve`
+convergence, deletion of `geode_product`, `plugins`, `core/self_improving`,
+Homebrew candidate and unverified computer sandbox surfaces, tracked-state
+parity, distribution/install proof, and a verified patch release. It does not
+authorize a compatibility facade, archive, new plugin framework, second
+runtime, unrelated tool behavior, or a hidden package split.
 
-R2.1 (`CAP-001`, `CAP-002`) is `IN_DEVELOP` after feature
-[#3043](https://github.com/mangowhoiscloud/geode/pull/3043) merged as
-`ba7eea3288bd443a52181151de13032f5280d263`. The delivered boundary retains
-one immutable, generation/hash-bound native `ToolPlan` beside the compatibility
-handler map and validates ordered schema, execution, safety, and capability
-parity before product daemon sessions. R2.3 now supplies the immutable CAP-002
-“every tool consumer” evidence for live `AgenticLoop`/`ToolExecutor`,
-provider/deferred, and worker/MCP roots; R2.1 remains `IN_DEVELOP` until the
-corresponding main closure records complete package evidence.
+The master ledger contains 58 GAPs: 48 `DONE`, six `SUPERSEDED`, three
+`IN_DEVELOP`, and one `IN_PROGRESS`. There are no `OPEN`, `READY`, `BLOCKED`,
+`REJECTED`, or unexplained rows.
 
-R2.2 (`CAP-004`) is `IN_DEVELOP` after feature
-[#3047](https://github.com/mangowhoiscloud/geode/pull/3047) merged as
-`9038d635d0ed3989b11569de5dbfd6cb7a47db43`. One frozen association now maps
-all 14 Google and Calendar tool names to service alternatives and derives the
-migrated safety, approval, profile-policy, personal-data, delegated-handler,
-and direct-Google scope projections. Native Workspace registrations record
-declarative OAuth capabilities while Calendar remains enabled for its Google,
-MCP, and Apple alternatives. R2.3 now closes the remaining independent
-`definitions.json` schema, handler-ownership, and provider/deferred projection
-surfaces. Deterministic resource-key and data-policy derivation remains R2.4;
-R2.2 remains `IN_DEVELOP` until main closure. The active R8.3 claim and
-publication clock remain independent and unchanged.
-
-R2.3 (`CAP-003`, `CAP-005`) is `IN_DEVELOP` after feature
-[#3053](https://github.com/mangowhoiscloud/geode/pull/3053) merged as
-`ffeb41e13d4bd9c59bc1ba286300c352800f6a03`. One immutable,
-generation/hash-bound plan now owns handler construction,
-`AgenticLoop`/`ToolExecutor`, worker/MCP, provider, and deferred projections
-with exact schema/execution parity, explicit transient overlays, and bounded
-diagnostics. Public product worker and daemon roots inject composition; the
-direct kernel worker and uncomposed `SharedServices` construction fail closed.
-R2.4 (`TRUST-003`) is `IN_DEVELOP` after feature
-[#3060](https://github.com/mangowhoiscloud/geode/pull/3060) merged as
-`709ccb0d0eb31080ed3b17896d4056f784db0281`. One hash-bound native plan now
-owns minimum effect, data handling, approval lifetime, profile restrictions,
-and deterministic resource strategies. Effective middleware and hook rewrites
-cannot weaken that minimum; durable personal-data projections are redacted;
-and one process-owned lock pool serializes conflicting daemon-session and MCP
-mutations while preserving unrelated concurrency and sync-handler lease
-lifetime through timeout or cancellation.
-
-R3.1 (`LOOP-001`, `LOOP-002`) is `IN_DEVELOP` after feature
-[#3067](https://github.com/mangowhoiscloud/geode/pull/3067) merged as
-`c3e309f01e939e69bd22876df7f79b41731ac733` and corrective follow-up
-[#3068](https://github.com/mangowhoiscloud/geode/pull/3068) merged as
-`e6ccaf73e1ff6027e510bfc5e4e16b8679f369e4`. One immutable `StepSnapshot`
-now carries the authoritative model, tool, policy, middleware, trace, and
-usage identity for each step, while `TurnState` owns mutable turn
-accumulation. Additive event schema v5 persists `step_id`; public-hook v1
-queries and prior stored rows remain compatible.
-
-R3.2 (`LOOP-003`) is `IN_DEVELOP` after feature
-[#3071](https://github.com/mangowhoiscloud/geode/pull/3071) merged as
-`a130ceb75364e128cf0e273edbff65302273bb3e`. The physical turn now calls six
-ordered input, model-call, provider/retry, tool, observation/compaction, and
-termination/result collaborators while preserving the existing public
-`AgenticLoop.arun`, `StepSnapshot`, and `TurnState` behavior.
-
-R3.3 (`LOOP-004`) is `IN_DEVELOP` after feature
-[#3074](https://github.com/mangowhoiscloud/geode/pull/3074) merged as
-`8469092baddff2d0b453b03230c46ec2b7e79bac`. Executable ratchets now hold
-`agent_loop.py` at 1,113 LOC, 38 `AgenticLoop` methods, 12 direct constructor
-arguments, complexity at most 30, branches at most 35, and statements at most
-120; the obsolete constructor exception is removed and legacy policy keywords
-still map to `AgenticLoopConfig`.
-
-R3.4 (`LOOP-005`) is `IN_DEVELOP` after feature
-[#3079](https://github.com/mangowhoiscloud/geode/pull/3079) merged as
-`8a73c6be74f31d7611730d44321b9cdceabdaad5`. `SubagentProtocol` now owns
-request construction, role resolution, and result validation, while
-`SubagentAnnouncements` owns runtime/public hook and timeline projection.
-`SubAgentManager` remains the depth-one orchestration, session-cap, durable
-collaboration, and cancellation owner at 811 LOC, 17 methods, and 18
-constructor arguments; the existing `IsolatedRunner`, role registry, and
-candidate-sampling judge remain the single worker-launch, policy, and best-of
-implementations.
-
-R4.1 (`DI-001`) is `IN_DEVELOP` after feature
-[#3088](https://github.com/mangowhoiscloud/geode/pull/3088) merged as
-`90e039ceab5b510f26a7a38df1aceebad1fd35f7`. Its generated manifest first
-classified 35 module/class-scoped `ContextVar`-backed bindings, including the
-eleven service-locator removal inputs. R4.2 has now removed those inputs; the
-current inventory contains 24 bindings limited to seven request identities,
-nine request-local mutable states, seven diagnostic scopes, and one cache. CI
-continues to own declaration, lifecycle, propagation, reset, teardown, and
-literal dynamic-import drift checks, and rejects any new service locator.
-
-R4.2 (`DI-002`, `DI-003`) is `IN_DEVELOP` after feature
-[#3091](https://github.com/mangowhoiscloud/geode/pull/3091) merged as
-`d7f566e12ce96adabd74e6c268d53336ec12fc81`. Six lifecycle-owned execution,
-persistence, lifecycle, integration, authentication, and identity groups now
-contain at most seven cohesive fields; runtime, daemon, worker, MCP one-shot,
-tool, scheduler, hook, and adapter paths receive their owned services through
-composition-root, constructor, or `ToolContext` injection. The eleven ambient
-service locators are removed, lifecycle shutdown remains runtime-owned, and no
-durable schema or provider/tool contract migrated.
-
-R4.3 (`DI-004`) is `IN_DEVELOP` after feature
-[#3094](https://github.com/mangowhoiscloud/geode/pull/3094) merged as
-`4c2c68a7535b1c1bf5705fc898d052c9d6a16105`. `MCPServerManager` now delegates
-configuration, pooled connection ownership, invocation/result guarding,
-trace persistence, and lifecycle cleanup to focused collaborators while its
-public facade and behavior remain compatible. No other manager, R5 adapter,
-or R6 protocol responsibility moved.
-
-R5.1 (`LLM-001`) is `IN_DEVELOP` after feature
-[#3097](https://github.com/mangowhoiscloud/geode/pull/3097) merged as
-`7e95c9f42abd77d17bca79b8398105a9c6cf0c99`. `LLMAdapter` now requires only
-route identity plus `acomplete`; streaming and operator introspection are
-independent structural capabilities, unsupported quota stubs are gone, and
-provider wire behavior is unchanged.
-
-R5.2 (`LLM-002`) is `IN_DEVELOP` after feature
-[#3100](https://github.com/mangowhoiscloud/geode/pull/3100) merged as
-`3be2c070551591f5bee34b52bdb811a87066cd68`. Explicit built-in and supported
-entry-point discovery now publishes immutable generation-bound registry
-snapshots, deterministic validation reports, and fail-loud collision evidence.
-An existing session keeps its captured snapshot across model switches and
-goal continuation, while reload affects only new sessions. The compatibility
-registry view remains read-only and no R5.3 provider-profile/transport or R5.4
-retry/failover responsibility moved.
-
-R5.3 (`LLM-003`) is `IN_DEVELOP` after feature
-[#3103](https://github.com/mangowhoiscloud/geode/pull/3103) merged as
-`773dacdc588415f7bec471e1a577357b185a1447`. One immutable provider registry
-now composes provider/model profiles, credential routes, transport/API shapes,
-native capabilities, and adapter selection while preserving external-provider
-registration and existing adapter-name compatibility. Retry, quota, billing,
-fallback, and hook ordering remain unchanged.
-
-R5.4 (`LLM-004`) is `IN_DEVELOP` after feature
-[#3106](https://github.com/mangowhoiscloud/geode/pull/3106) merged as
-`20307e437a87a3ba18fce38c6e92d01c3e3785c8`. Interactive turns, auxiliary
-model chains, and provider compatibility wrappers now derive retry actions,
-classification, delay, and bounded telemetry from one immutable policy
-substrate. Their intentional call counts, terminal outcomes, model-fallback
-boundaries, OAuth refresh, billing-fatal precedence, context recovery, hook
-order, and visible-stream replay guard remain distinct and verified. No R6
-protocol or extension-trust responsibility moved.
-
-R6.1 (`PROTO-001`, `PROTO-002`) is `IN_DEVELOP` after feature
-[#3109](https://github.com/mangowhoiscloud/geode/pull/3109) merged as
-`d6381dc34f5614d5a726e4aae1da45b3db2ab2ca`. Public clients now negotiate the
-bounded, typed `geode.ipc.v1` envelope with legacy v0 compatibility; request
-correlation, stable public event projections, gateway message identities, and
-explicit unknown-field/event behavior are covered by v0, v1, and future-version
-golden and poison tests. Internal `RuntimeEvent` and `HookEvent` taxonomies
-remain private and can evolve without becoming external protocol contracts.
-
-R6.3 (`BND-004`, `TRUST-001`, `TRUST-002`) is `IN_DEVELOP` after feature
-[#3112](https://github.com/mangowhoiscloud/geode/pull/3112) merged as
-`3c79e23cd9a7d758d6aa06c72a1f50efa5a98348`. Existing Hook, LLM-adapter,
-Skill, and MCP metadata now reaches one immutable trust decision before load or
-spawn. Trusted in-process factories receive narrow granted ports; brokered MCP
-requires an available deny-default OS sandbox, exact environment, isolated
-scratch space, and declared mutation resource keys. Bounded health preserves
-rejected, disabled, granted, and degraded states, and stateful owners retain
-deterministic cleanup. Ordinary Python remains explicitly trusted rather than
-being mislabeled as capability-confined.
-
-R7.1 (`VER-001`) is `IN_DEVELOP` after feature
-[#3115](https://github.com/mangowhoiscloud/geode/pull/3115) merged as
-`edac60747d82d941be23517a5c7081fe442d49c5`. The delivered architecture CI
-inventory rejects generated-baseline drift, kernel reverse imports,
-import-contract exceptions, service-locator `ContextVar` bindings, and
-tool-plan parity loss before a snapshot can bless them. Named CI steps also
-exercise installed kernel isolation, registry generation/collisions,
-structural budgets, public protocol compatibility, roadmap legality, and
-official-documentation drift. R7.2 scenario fixtures and R7.3 performance
-baselines remain outside this package.
-
-R7.2 (`CAP-006`, `VER-002`) is `IN_DEVELOP` after feature
-[#3118](https://github.com/mangowhoiscloud/geode/pull/3118) merged as
-`dc1dfafda209e2c0f89ce990cab45e106e39c346`. Its named CI contract exercises
-all six §8 extension paths through their real seams: project Skill,
-filesystem hook, MCP server, third-party adapter, native tool, and Google
-Workspace service. Each scenario discovers, composes, invokes, and tears down
-the extension without patching forbidden central files or adding another
-runtime registry. R7.2 remains ineligible for `DONE` until the final R7.4
-closure audit verifies the cross-package change-surface budget on `main`.
-
-R7.3 (`VER-004`) is `IN_DEVELOP` after feature
-[#3122](https://github.com/mangowhoiscloud/geode/pull/3122) merged as
-`3e6f025e498e74241209910e95ba3a29792323e7`. One provider-network-free CI
-baseline now measures 13 independent import, lifecycle, first-turn, tool-plan,
-dispatch, MCP, persistence, and memory/descriptor budgets in isolated
-processes. The recorded `ubuntu-latest` calibration and separate cold-build
-and steady-state heap probes prevent averaging or instrumentation overhead from
-hiding a regression, while the named behavior matrix pins architecture
-semantics. R7.3 remains `IN_DEVELOP` until full-program main closure.
-
-R9.1 (`CODE-001`) is `IN_DEVELOP` after documentation feature
-[#3126](https://github.com/mangowhoiscloud/geode/pull/3126) merged as
-`d81e76b00ea3c7d0fb9b03bb4605f9ba18f3e771`. The canonical coding-runtime
-authority contract maps current writers, readers, lifetime, persistence,
-recovery, compatibility, redaction, failure, and rollback across coding task,
-session/turn, workspace, process, mutation/diff, review,
-instructions/context, and cross-domain lookup. It keeps messages/checkpoints
-as recovery authority, SessionTimeline as append-only history, and Goal,
-scheduler, collaboration, and evaluation/promotion as their domain sources of
-truth. Prospective CodingTask, workspace/instruction snapshot, process,
-ChangeSet, review, and lookup work still requires its own measured GAP
-transaction; R9.1 added no runtime API, persisted store, task ledger, policy
-plane, review hook, or migration.
-
-R9.2 (`CODE-002`) is `IN_DEVELOP` after feature
-[#3131](https://github.com/mangowhoiscloud/geode/pull/3131) merged as
-`bd7d79c3d004508eadf379e9403a0a2fb3c2a30a`. Checkpoint `loop_guards` remain
-the sole verify/replan recovery authority; the write-only lifecycle mirror,
-unused `SessionManager` writer/accessor, and fresh/legacy schema addition of
-their seven columns are removed. Databases already carrying those columns
-remain load-compatible as inert extra schema, while current metrics, runtime
-events, and checkpoint restore behavior are unchanged. No replacement store,
-schema migration, event, hook, or runtime abstraction was added.
-
-The active R8.3 claim and publication clock remain unchanged. R8.2
-(`STORE-003`) remains `OPEN` behind REL-004 and STORE-001; R8.4 (`BND-008`)
-additionally waits for STORE-003.
+R7.2 (`CAP-006`, `VER-002`) and R7.3 (`VER-004`) remain `IN_DEVELOP` until
+the final full-program release audit closes their cross-package evidence.
