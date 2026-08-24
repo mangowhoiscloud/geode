@@ -313,6 +313,7 @@ async def verify(
     claim_model: str | None = None,
     claim_adapter_name: str | None = None,
     claim_effort: str = "low",
+    claim_producer_version: str | None = None,
 ) -> dict[str, Any]:
     workload_path = workload_path.resolve()
     native_results_path = native_results_path.resolve()
@@ -407,6 +408,7 @@ async def verify(
     adapter = get_adapter(adapter_name)
     extractor = get_adapter(claim_adapter_name or adapter_name)
     claim_model = claim_model or model
+    claim_producer_version = claim_producer_version or producer_version
     semaphore = asyncio.Semaphore(concurrency)
 
     async def extract_claims(
@@ -445,7 +447,7 @@ async def verify(
             expected = {
                 "observation_id": observation_id,
                 "producer": extractor.name,
-                "version": producer_version,
+                "version": claim_producer_version,
                 "model": claim_model,
                 "effort": claim_effort,
                 "native_receipt_sha256": observation["native_receipt"]["sha256"],
@@ -517,7 +519,7 @@ async def verify(
                         "schema_id": "geode.geo-claim-failure@1",
                         "observation_id": observation_id,
                         "producer": extractor.name,
-                        "version": producer_version,
+                        "version": claim_producer_version,
                         "model": claim_model,
                         "effort": claim_effort,
                         "failed_at": datetime.now(UTC).isoformat(),
@@ -553,7 +555,7 @@ async def verify(
             "schema_id": "geode.geo-claim-universe@1",
             "observation_id": observation_id,
             "producer": extractor.name,
-            "version": producer_version,
+            "version": claim_producer_version,
             "model": claim_model,
             "effort": claim_effort,
             "extracted_at": datetime.now(UTC).isoformat(),
@@ -578,17 +580,27 @@ async def verify(
         target_urls: tuple[str, ...],
         claim_receipt: dict[str, Any],
         claim_ref: dict[str, str],
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
         observation_id = str(observation["observation_id"])
         receipt_path = verdict_paths[observation_id]
         expected_sources = [source_refs[url] for url in target_urls]
         claims = claim_receipt["claims"]
         if receipt_path.exists():
             receipt = _load_json_object(receipt_path)
+            schema = str(receipt.get("schema_id"))
+            if schema not in {
+                "geode.geo-verifier-receipt@2",
+                "geode.geo-verifier-failure@1",
+            }:
+                raise ValueError(f"unsupported GEO verifier checkpoint: {receipt_path}")
             _validate_schema(
                 receipt,
-                "geo-verifier-receipt-v2.schema.json",
-                label=f"GEO verifier receipt {observation_id}",
+                (
+                    "geo-verifier-receipt-v2.schema.json"
+                    if schema == "geode.geo-verifier-receipt@2"
+                    else "geo-verifier-failure.schema.json"
+                ),
+                label=f"GEO verifier checkpoint {observation_id}",
             )
             expected = {
                 "observation_id": observation_id,
@@ -604,6 +616,17 @@ async def verify(
                 raise ValueError(
                     f"GEO cached verifier receipt drifted from the frozen run: {receipt_path}"
                 )
+            receipt_ref = {
+                "path": f"{evidence_dir.name}/{receipt_path.name}",
+                "sha256": _sha256(receipt_path),
+            }
+            if schema == "geode.geo-verifier-failure@1":
+                return None, {
+                    "observation_id": observation_id,
+                    "reason": "invalid_verifier_output",
+                    "claim_universe": claim_ref,
+                    "verifier_failure": receipt_ref,
+                }
             verdict = _validate_verdict_v2(
                 {
                     "quality": [
@@ -627,18 +650,18 @@ async def verify(
             )
             if verdict["quality"] != receipt["quality"]:
                 raise ValueError(f"GEO cached verifier receipt is not canonical: {receipt_path}")
-            return {
-                "observation_id": observation_id,
-                **{
-                    key: receipt[key]
-                    for key in ("absorption", "quality", "quality_claims_expected")
+            return (
+                {
+                    "observation_id": observation_id,
+                    **{
+                        key: receipt[key]
+                        for key in ("absorption", "quality", "quality_claims_expected")
+                    },
+                    "claim_universe": claim_ref,
+                    "verifier_receipt": receipt_ref,
                 },
-                "claim_universe": claim_ref,
-                "verifier_receipt": {
-                    "path": f"{evidence_dir.name}/{receipt_path.name}",
-                    "sha256": _sha256(receipt_path),
-                },
-            }
+                None,
+            )
         sources = [{"url": url, "content": str(fetched[url]["content"])} for url in target_urls]
         prompt = json.dumps(
             {
@@ -649,6 +672,7 @@ async def verify(
             ensure_ascii=False,
         )
         messages = [Message(role="user", content=prompt)]
+        rejected: list[dict[str, Any]] = []
         for attempt in range(2):
             async with semaphore:
                 response = await _acomplete_with_connection_retry(
@@ -679,8 +703,43 @@ async def verify(
                 )
                 break
             except ValueError as exc:
+                rejected.append(
+                    {
+                        "attempt": attempt + 1,
+                        "response_sha256": hashlib.sha256(response.text.encode()).hexdigest(),
+                        "error": str(exc)[:500],
+                    }
+                )
                 if attempt == 1:
-                    raise
+                    failure = {
+                        "schema_id": "geode.geo-verifier-failure@1",
+                        "observation_id": observation_id,
+                        "producer": adapter.name,
+                        "version": producer_version,
+                        "model": model,
+                        "effort": effort,
+                        "failed_at": datetime.now(UTC).isoformat(),
+                        "rubric_sha256": _sha256(rubric_path),
+                        "claim_universe_sha256": claim_ref["sha256"],
+                        "sources": expected_sources,
+                        "reason": "invalid_model_output",
+                        "attempts": rejected,
+                    }
+                    _validate_schema(
+                        failure,
+                        "geo-verifier-failure.schema.json",
+                        label=f"GEO verifier failure {observation_id}",
+                    )
+                    _write_exclusive(receipt_path, failure)
+                    return None, {
+                        "observation_id": observation_id,
+                        "reason": "invalid_verifier_output",
+                        "claim_universe": claim_ref,
+                        "verifier_failure": {
+                            "path": f"{evidence_dir.name}/{receipt_path.name}",
+                            "sha256": _sha256(receipt_path),
+                        },
+                    }
                 messages.extend(
                     (
                         Message(role="assistant", content=response.text),
@@ -716,15 +775,21 @@ async def verify(
             label=f"GEO verifier receipt {observation_id}",
         )
         _write_exclusive(receipt_path, receipt)
-        return {
-            "observation_id": observation_id,
-            **{key: receipt[key] for key in ("absorption", "quality", "quality_claims_expected")},
-            "claim_universe": claim_ref,
-            "verifier_receipt": {
-                "path": f"{evidence_dir.name}/{receipt_path.name}",
-                "sha256": _sha256(receipt_path),
+        return (
+            {
+                "observation_id": observation_id,
+                **{
+                    key: receipt[key]
+                    for key in ("absorption", "quality", "quality_claims_expected")
+                },
+                "claim_universe": claim_ref,
+                "verifier_receipt": {
+                    "path": f"{evidence_dir.name}/{receipt_path.name}",
+                    "sha256": _sha256(receipt_path),
+                },
             },
-        }
+            None,
+        )
 
     eligible = [
         item for item in selected if not any(bool(fetched[url]["truncated"]) for url in item[1])
@@ -740,7 +805,7 @@ async def verify(
         if any(bool(fetched[url]["truncated"]) for url in target_urls)
     ]
     claim_rows = await asyncio.gather(*(extract_claims(*item) for item in eligible))
-    rows = await asyncio.gather(
+    judged = await asyncio.gather(
         *(
             judge(observation, target_urls, claim_receipt, claim_ref)
             for (observation, target_urls), (claim_receipt, claim_ref) in zip(
@@ -749,6 +814,7 @@ async def verify(
             if claim_receipt is not None
         )
     )
+    rows = [row for row, _ in judged if row is not None]
     unmeasured.extend(
         {
             "observation_id": str(observation["observation_id"]),
@@ -758,6 +824,7 @@ async def verify(
         for (observation, _), (claim_receipt, claim_ref) in zip(eligible, claim_rows, strict=True)
         if claim_receipt is None
     )
+    unmeasured.extend(failure for _, failure in judged if failure is not None)
 
     rubric_ref = {
         "path": _relative(rubric_path, output_path.parent, label="GEO verifier rubric"),
@@ -779,7 +846,7 @@ async def verify(
         },
         "claim_extractor_context": {
             "producer": extractor.name,
-            "version": producer_version,
+            "version": claim_producer_version,
             "model": claim_model,
             "effort": claim_effort,
             "timeout_seconds": timeout_seconds,
@@ -804,6 +871,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--claim-adapter")
     parser.add_argument("--effort", default="medium")
     parser.add_argument("--claim-effort", default="low")
+    parser.add_argument("--claim-producer-version")
     parser.add_argument("--producer-version", required=True)
     parser.add_argument("--concurrency", type=int, default=2)
     parser.add_argument("--timeout-seconds", type=float, default=300.0)
@@ -829,6 +897,7 @@ def main(argv: list[str] | None = None) -> int:
             claim_model=args.claim_model,
             claim_adapter_name=args.claim_adapter,
             claim_effort=args.claim_effort,
+            claim_producer_version=args.claim_producer_version,
         )
     )
     print(args.out)

@@ -217,6 +217,7 @@ with frozen baseline and treatment arms.
      --claim-adapter <claim-extractor-adapter> \
      --claim-model <claim-extractor-model> \
      --claim-effort low \
+     --claim-producer-version <claim-extractor-revision> \
      --producer-version <version-or-revision> \
      --timeout-seconds <frozen-cell-timeout> \
      --out <run-dir>/verifier-results.json
@@ -257,6 +258,10 @@ with frozen baseline and treatment arms.
    in a producer-bound `geode.geo-claim-failure@1` receipt and marks that
    target-cited observation unmeasured. Transport failures still terminate the
    run because they do not establish an observation-level model verdict.
+   The source verifier uses the same bounded failure-receipt rule. Extractor
+   and verifier producer versions are separate; reuse
+   `--claim-producer-version` only when the claim-stage code and configuration
+   are byte-for-byte unchanged while verifier code advances.
    Requested result count is an input constraint, not a promise that
    the provider will expose exactly that many sources. The collector retains
    every provider-native source and citation and never parses answer prose into

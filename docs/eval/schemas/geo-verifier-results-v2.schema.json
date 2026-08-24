@@ -97,6 +97,17 @@
               "claim_failure": {"$ref": "#/$defs/evidence_ref"}
             },
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["observation_id", "reason", "claim_universe", "verifier_failure"],
+            "properties": {
+              "observation_id": {"type": "string", "minLength": 3, "maxLength": 256},
+              "reason": {"const": "invalid_verifier_output"},
+              "claim_universe": {"$ref": "#/$defs/evidence_ref"},
+              "verifier_failure": {"$ref": "#/$defs/evidence_ref"}
+            },
+            "additionalProperties": false
           }
         ]
       }

@@ -104,7 +104,10 @@ functional change.
   invented text. Case-only literal drift is rebound to the exact original
   substring and host-derived offsets. Two invalid structured claim responses
   now produce a digest-bound failure receipt and keep only that observation's
-  A/Q cells unmeasured; transport failures still stop the run;
+  A/Q cells unmeasured; source-verifier validation failures follow the same
+  receipt-bound exclusion path, while transport failures still stop the run.
+  Extractor and verifier producer versions are independently frozen so an
+  unchanged claim stage can resume without relabeling it as newer code;
   exact unique source spans and complete source snapshots are required, and A
   is derived from supported claims rather than accepted from model prose. An
   optional digest-bound blind human sidecar records claim-completeness and

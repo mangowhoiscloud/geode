@@ -975,8 +975,9 @@ def test_geo_verifier_v2_binds_truncated_source_exclusions(
     assert len(exclusion["sources"]) == 1
 
 
-def test_geo_verifier_v2_preserves_invalid_claims_as_unmeasured(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("invalid_stage", ["claim", "verifier"])
+def test_geo_verifier_v2_preserves_invalid_model_cells_as_unmeasured(
+    invalid_stage: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     run_spec, workload, native_results = _fixture(tmp_path)
     native = json.loads(native_results.read_text(encoding="utf-8"))
@@ -1009,25 +1010,47 @@ def test_geo_verifier_v2_preserves_invalid_claims_as_unmeasured(
             "tls_verified": True,
         }
 
-    class InvalidClaimAdapter:
+    class InvalidModelAdapter:
         name = "test-verifier"
         calls = 0
 
         async def acomplete(self, request: Any) -> AdapterCallResult:
             self.calls += 1
-            assert request.response_schema["title"] == "geo_claim_universe"
+            is_claim = request.response_schema["title"] == "geo_claim_universe"
+            if is_claim:
+                payload = {
+                    "claims": [
+                        {
+                            "answer_quote": (
+                                "invented claim"
+                                if invalid_stage == "claim"
+                                else "GEODE documentation describes the runtime."
+                            )
+                        }
+                    ],
+                    "rationale": "Claim extraction.",
+                }
+            else:
+                assert invalid_stage == "verifier"
+                payload = {
+                    "quality": [
+                        {
+                            "claim_id": "claim-001",
+                            "source_url": "https://mangowhoiscloud.github.io/geode/docs/",
+                            "source_quote": "invented source quote",
+                            "supported": True,
+                            "reason": "Invalid source evidence.",
+                        }
+                    ],
+                    "rationale": "Invalid verification.",
+                }
             return AdapterCallResult(
-                text=json.dumps(
-                    {
-                        "claims": [{"answer_quote": "invented claim"}],
-                        "rationale": "Invalid extraction.",
-                    }
-                ),
+                text=json.dumps(payload),
                 usage=UsageSummary(),
                 stop_reason="end_turn",
             )
 
-    adapter = InvalidClaimAdapter()
+    adapter = InvalidModelAdapter()
     monkeypatch.setattr("scripts.eval.geo_verify._fetch_source", fake_fetch)
     monkeypatch.setattr("scripts.eval.geo_verify.bootstrap_builtins", lambda: None)
     monkeypatch.setattr("scripts.eval.geo_verify.get_adapter", lambda _: adapter)
@@ -1041,15 +1064,21 @@ def test_geo_verifier_v2_preserves_invalid_claims_as_unmeasured(
             model="test-model",
             adapter_name="test-verifier",
             producer_version="test-v2",
+            claim_producer_version="claim-v1",
             concurrency=1,
         )
     )
 
-    assert adapter.calls == 2
+    assert adapter.calls == (2 if invalid_stage == "claim" else 3)
     assert payload["observations"] == []
     exclusion = payload["unmeasured_observations"][0]
-    assert exclusion["reason"] == "invalid_claim_extraction"
-    failure = json.loads((tmp_path / exclusion["claim_failure"]["path"]).read_text())
+    expected_reason = (
+        "invalid_claim_extraction" if invalid_stage == "claim" else "invalid_verifier_output"
+    )
+    assert exclusion["reason"] == expected_reason
+    assert payload["claim_extractor_context"]["version"] == "claim-v1"
+    failure_key = "claim_failure" if invalid_stage == "claim" else "verifier_failure"
+    failure = json.loads((tmp_path / exclusion[failure_key]["path"]).read_text())
     assert [row["attempt"] for row in failure["attempts"]] == [1, 2]
     measured = validate_and_measure(
         run_spec_path=run_spec,

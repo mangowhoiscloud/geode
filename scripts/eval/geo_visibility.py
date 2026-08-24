@@ -481,6 +481,90 @@ def _load_verifier_overlay(
             ):
                 raise ValueError("GEO claim failure does not match its frozen observation")
             continue
+        if row["reason"] == "invalid_verifier_output":
+            if version != 2 or overlay.get("claim_extractor_context") is None:
+                raise ValueError("GEO verifier failure requires v2 verifier contexts")
+            failure = _object_receipt(
+                _load_bound_receipt(
+                    verifier_results_path,
+                    row["verifier_failure"],
+                    kind="verifier-failure",
+                ),
+                label="GEO verifier failure receipt",
+            )
+            _validate_schema(
+                failure,
+                "geo-verifier-failure.schema.json",
+                label=f"GEO verifier failure {observation_id}",
+            )
+            claims = _object_receipt(
+                _load_bound_receipt(
+                    verifier_results_path,
+                    row["claim_universe"],
+                    kind="claim-universe",
+                ),
+                label="GEO claim universe receipt",
+            )
+            _validate_schema(
+                claims,
+                "geo-claim-universe.schema.json",
+                label=f"GEO claim universe {observation_id}",
+            )
+            native = _object_receipt(
+                _load_bound_receipt(
+                    native_results_path,
+                    observation["native_receipt"],
+                    kind="native-result",
+                ),
+                label="GEO native receipt",
+            )
+            answer = native.get("answer")
+            target_urls = list(
+                dict.fromkeys(
+                    str(item["url"])
+                    for item in observation["citations"]
+                    if _is_target(str(item["url"]), prefixes)
+                )
+            )
+            failure_source_urls = []
+            for source_ref in failure["sources"]:
+                source = _object_receipt(
+                    _load_bound_receipt(
+                        verifier_results_path,
+                        source_ref,
+                        kind="verifier-failure-source",
+                    ),
+                    label="GEO verifier failure source",
+                )
+                _validate_schema(
+                    source,
+                    "geo-source-receipt-v2.schema.json",
+                    label="GEO verifier failure source",
+                )
+                failure_source_urls.append(str(source["url"]))
+            verifier_context = overlay["verifier_context"]
+            claim_context = overlay["claim_extractor_context"]
+            if (
+                not isinstance(answer, str)
+                or failure["observation_id"] != observation_id
+                or failure["producer"] != verifier_context["producer"]
+                or failure["version"] != verifier_context["version"]
+                or failure["model"] != verifier_context["model"]
+                or failure["effort"] != verifier_context["effort"]
+                or failure["rubric_sha256"] != verifier_context["rubric"]["sha256"]
+                or failure["claim_universe_sha256"] != row["claim_universe"]["sha256"]
+                or claims["observation_id"] != observation_id
+                or claims["producer"] != claim_context["producer"]
+                or claims["version"] != claim_context["version"]
+                or claims["model"] != claim_context["model"]
+                or claims["effort"] != claim_context["effort"]
+                or claims["native_receipt_sha256"] != observation["native_receipt"]["sha256"]
+                or claims["answer_sha256"] != hashlib.sha256(answer.encode()).hexdigest()
+                or claims["target_urls"] != target_urls
+                or failure_source_urls != target_urls
+            ):
+                raise ValueError("GEO verifier failure does not match its frozen observation")
+            continue
         source_urls: list[str] = []
         for source_ref in row["sources"]:
             source = _object_receipt(
