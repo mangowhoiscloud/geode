@@ -213,8 +213,10 @@ with frozen baseline and treatment arms.
      --rubric <run-dir>/verifier-rubric.json \
      --adapter <verifier-adapter> \
      --model <verifier-model> \
+     --effort medium \
      --claim-adapter <claim-extractor-adapter> \
      --claim-model <claim-extractor-model> \
+     --claim-effort low \
      --producer-version <version-or-revision> \
      --timeout-seconds <frozen-cell-timeout> \
      --out <run-dir>/verifier-results.json
@@ -233,11 +235,14 @@ with frozen baseline and treatment arms.
    separate R/C/P/A/Q denominators, the run-spec digest, native adapter,
    provider, credential source, and model,
    verifier/model/rubric identity, preflight/outcome receipt digests, and
-   audited-claim coverage. Claim receipts retain exact native-answer spans;
+   audited-claim coverage. The extractor selects exact, uniquely occurring
+   answer quotes; the host derives and orders offsets and rejects overlaps.
+   Claim receipts retain those exact native-answer spans;
    verifier rows retain exact, uniquely occurring source spans and cannot add,
    remove, or reorder claims. Sources are captured up to 100,000 characters;
    any still-truncated source makes its observations explicitly unmeasured.
-   The extractor and verifier adapters are independently selectable. An
+   The extractor and verifier adapters and effort levels are independently
+   selectable and receipt-bound. An
    optional `geode.geo-human-calibration@1` sidecar must attest blind labeling,
    bind the v2 overlay digest, label every sampled frozen claim, and record
    missed exact answer spans before agreement is reported.

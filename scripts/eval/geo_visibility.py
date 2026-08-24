@@ -508,6 +508,7 @@ def _validate_verifier_v2_evidence(
         loaded_claims["observation_id"] == observation_id
         and loaded_claims["producer"] == claim_extractor_context["producer"]
         and loaded_claims["model"] == claim_extractor_context["model"]
+        and loaded_claims["effort"] == claim_extractor_context["effort"]
         and loaded_claims["native_receipt_sha256"] == observation["native_receipt"]["sha256"]
         and loaded_claims["answer_sha256"] == hashlib.sha256(native_answer.encode()).hexdigest()
         and loaded_claims["target_urls"] == target_urls
@@ -921,6 +922,7 @@ def validate_and_measure(
                 verifier["observation_id"] != observation_id
                 or verifier["producer"] != verifier_context["producer"]
                 or verifier["model"] != verifier_context["model"]
+                or (verifier_version == 2 and verifier["effort"] != verifier_context["effort"])
                 or verifier["rubric_sha256"] != verifier_context["rubric"]["sha256"]
             ):
                 raise ValueError("GEO verifier receipt does not match its overlay context")

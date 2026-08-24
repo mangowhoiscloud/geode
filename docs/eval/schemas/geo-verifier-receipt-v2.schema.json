@@ -31,12 +31,13 @@
       "additionalProperties": false
     }
   },
-  "required": ["schema_id", "observation_id", "producer", "model", "verified_at", "rubric_sha256", "claim_universe_sha256", "sources", "absorption", "quality", "quality_claims_expected", "rationale"],
+  "required": ["schema_id", "observation_id", "producer", "model", "effort", "verified_at", "rubric_sha256", "claim_universe_sha256", "sources", "absorption", "quality", "quality_claims_expected", "rationale"],
   "properties": {
     "schema_id": {"const": "geode.geo-verifier-receipt@2"},
     "observation_id": {"type": "string", "minLength": 3, "maxLength": 256},
     "producer": {"type": "string", "minLength": 1, "maxLength": 128},
     "model": {"type": "string", "minLength": 1, "maxLength": 128},
+    "effort": {"type": "string", "minLength": 1, "maxLength": 32},
     "verified_at": {"type": "string", "format": "date-time"},
     "rubric_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "claim_universe_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},

@@ -95,7 +95,10 @@ functional change.
   invalid response still fails closed. Each call records and enforces a timeout;
   a timeout or connection-class transport failure is retried once on the same
   adapter without changing route or model. New A/Q receipts freeze an
-  independently extracted claim universe with exact answer spans before source verification;
+  independently extracted claim universe before source verification. The model
+  selects exact answer quotes while the host derives, orders, and rejects
+  duplicate or overlapping spans; extractor and verifier effort are bound into
+  their receipts and overlay contexts;
   exact unique source spans and complete source snapshots are required, and A
   is derived from supported claims rather than accepted from model prose. An
   optional digest-bound blind human sidecar records claim-completeness and

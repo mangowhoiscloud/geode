@@ -588,13 +588,7 @@ def test_geo_verifier_v2_binds_independent_answer_and_source_spans() -> None:
     answer = "GEODE records trajectories."
     claims = _validate_claims(
         {
-            "claims": [
-                {
-                    "answer_quote": answer,
-                    "answer_start": 0,
-                    "answer_end": len(answer),
-                }
-            ],
+            "claims": [{"answer_quote": answer}],
             "rationale": "One atomic factual span.",
         },
         answer=answer,
@@ -631,8 +625,8 @@ def test_geo_verifier_v2_rejects_overlapping_claim_spans() -> None:
         _validate_claims(
             {
                 "claims": [
-                    {"answer_quote": answer[:20], "answer_start": 0, "answer_end": 20},
-                    {"answer_quote": answer[10:], "answer_start": 10, "answer_end": len(answer)},
+                    {"answer_quote": "GEODE records and audits"},
+                    {"answer_quote": "records and audits trajectories."},
                 ],
                 "rationale": "Overlapping spans.",
             },
@@ -755,13 +749,7 @@ def _assert_geo_verifier_resumes_digest_checked_receipts(
             if request.response_schema["title"] == "geo_claim_universe":
                 answer_quote = "GEODE documentation describes the runtime."
                 payload = {
-                    "claims": [
-                        {
-                            "answer_quote": answer_quote,
-                            "answer_start": 0,
-                            "answer_end": len(answer_quote),
-                        }
-                    ],
+                    "claims": [{"answer_quote": answer_quote}],
                     "rationale": "One factual answer span was extracted.",
                 }
             else:

@@ -16,6 +16,10 @@ const verifyCommand = `uv run python scripts/eval/geo_verify.py \\
   --rubric <run-dir>/verifier-rubric.json \\
   --adapter <verifier-adapter> \\
   --model <verifier-model> \\
+  --effort medium \\
+  --claim-adapter <claim-extractor-adapter> \\
+  --claim-model <claim-extractor-model> \\
+  --claim-effort low \\
   --producer-version <version-or-revision> \\
   --out <run-dir>/verifier-results.json`;
 
