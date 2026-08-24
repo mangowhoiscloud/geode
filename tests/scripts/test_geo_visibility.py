@@ -615,7 +615,7 @@ def _assert_geo_verifier_resumes_digest_checked_receipts(
         async def acomplete(self, _: Any) -> AdapterCallResult:
             nonlocal calls
             calls += 1
-            if calls == 2:
+            if calls == 3:
                 raise RuntimeError("connection lost")
             return AdapterCallResult(
                 text=json.dumps(
@@ -626,7 +626,9 @@ def _assert_geo_verifier_resumes_digest_checked_receipts(
                                 "claim_id": "claim-1",
                                 "claim_text": "GEODE has documentation.",
                                 "source_url": ("https://mangowhoiscloud.github.io/geode/docs/"),
-                                "source_quote": "GEODE documentation",
+                                "source_quote": (
+                                    "invented source text" if calls == 1 else "GEODE documentation"
+                                ),
                                 "supported": True,
                                 "reason": "The fetched source supports the claim.",
                             }
@@ -674,7 +676,7 @@ def _assert_geo_verifier_resumes_digest_checked_receipts(
             concurrency=1,
         )
     )
-    assert calls == 1
+    assert calls == 2
     assert fetch_calls == 1
     assert len(payload["observations"]) == 2
 

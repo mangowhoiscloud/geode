@@ -251,7 +251,9 @@ produced the run, and no aggregate GEO score is introduced.
     rejects unexpected or drifted checkpoint bytes.
 12. A failed A/Q call likewise preserves validated source and verifier
     receipts, emits no final overlay, and resumes only missing observations
-    after rejecting source, rubric, model, or producer drift.
+    after rejecting source, rubric, model, or producer drift. A shape, claim,
+    or exact-quote validation failure permits one correction request and then
+    fails closed without weakening the validator.
 
 ## Non-goals
 

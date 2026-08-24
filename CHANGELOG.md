@@ -90,7 +90,9 @@ functional change.
   authorities without copying their payloads. Native collection and A/Q
   verification persist digest-checked per-observation checkpoints, so a
   transient subscription failure resumes the frozen run without discarding or
-  repeating completed model calls.
+  repeating completed model calls. A verifier response rejected by the typed
+  source/claim validator receives one bounded correction request; the second
+  invalid response still fails closed.
   The unreleased offline-shaped branch is removed: diagnostics now move from
   deterministic preflight directly to an operator-approved live observation,
   bind the exact adapter/provider/credential source/model, and reserve the
