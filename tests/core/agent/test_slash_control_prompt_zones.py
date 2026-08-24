@@ -8,7 +8,7 @@ from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY, build_system_prompt
 from core.llm.adapters._openai_common import _prompt_cache_key
 from core.memory.goals import GoalStore
 from core.memory.grills import GrillStore
-from geode_product.geo_state import GeoStore
+from evals.geo import GeoStore
 
 
 def test_slash_control_snapshots_stay_in_dynamic_zone_and_preserve_cache_key(tmp_path) -> None:

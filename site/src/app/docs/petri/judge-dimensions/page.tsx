@@ -26,7 +26,7 @@ export default function Page() {
             <h2>루브릭: 22개 차원</h2>
             <p>
               GEODE의 judge 루브릭은{" "}
-              <code>geode_product/petri_audit/judge_dims/geode_judge_subset.yaml</code>에
+              <code>evals/petri/judge_dims/geode_judge_subset.yaml</code>에
               정의된 22개 차원입니다(<code>--dim-set subset</code>이 기본).
               운영 축(behaviour control, tool calling, robustness 등), autonomy
               표면 3개, judge 보정 anchor 4개
@@ -44,7 +44,7 @@ export default function Page() {
             <h2>fitness universe: 18개 차원, 3개 티어</h2>
             <p>
               22개 중 보정 anchor 4개를 제외한 18개가 fitness 계산에
-              들어갑니다(<code>geode_product/self_improving/fitness.py</code>의{" "}
+              들어갑니다(<code>evolve/scaffold_search/fitness.py</code>의{" "}
               <code>AXIS_TIERS</code>). 티어가 곧 가중치이고, 가중치가 곧 루프의
               우선순위입니다.
             </p>
@@ -131,7 +131,7 @@ export default function Page() {
             <h2>The rubric: 22 dimensions</h2>
             <p>
               GEODE&apos;s judge rubric is the 22 dimensions defined in{" "}
-              <code>geode_product/petri_audit/judge_dims/geode_judge_subset.yaml</code>{" "}
+              <code>evals/petri/judge_dims/geode_judge_subset.yaml</code>{" "}
               (<code>--dim-set subset</code>, the default). It spans
               operational axes (behaviour control, tool calling, robustness,
               and friends), three autonomy-surface dims, four judge-calibration
@@ -150,7 +150,7 @@ export default function Page() {
             <p>
               Of the 22, the four calibration anchors stay out; the remaining
               18 enter the fitness computation (<code>AXIS_TIERS</code> in{" "}
-              <code>geode_product/self_improving/fitness.py</code>). The tier is the
+              <code>evolve/scaffold_search/fitness.py</code>). The tier is the
               weight, and the weight is the loop&apos;s priority.
             </p>
             <table>

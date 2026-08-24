@@ -129,9 +129,9 @@ export default function Page() {
               자기개선 루프의 매 런은 토큰, 비용, 재시도, 검증 카운터를 행
               하나로 남깁니다. <code>core/observability/session_metrics.py</code>의{" "}
               <code>SessionMetrics.to_session_row()</code>가 행을 만들고,{" "}
-              <code>geode_product/self_improving/train.py</code>가 런 단위로 메트릭을
+              <code>evolve/scaffold_search/train.py</code>가 런 단위로 메트릭을
               시드해 세션 인덱스에 합칩니다. 파일 위치는{" "}
-              <code>geode_product/self_improving/ledger.py</code>의{" "}
+              <code>evolve/scaffold_search/ledger.py</code>의{" "}
               <code>SESSIONS_INDEX_PATH</code>가 SoT입니다.
             </p>
 
@@ -287,10 +287,10 @@ export default function Page() {
               retry, and verification counters.{" "}
               <code>SessionMetrics.to_session_row()</code> in{" "}
               <code>core/observability/session_metrics.py</code> builds the row,
-              and <code>geode_product/self_improving/train.py</code> seeds run-scoped
+              and <code>evolve/scaffold_search/train.py</code> seeds run-scoped
               metrics and spreads them into the session index. The file location
               is pinned by <code>SESSIONS_INDEX_PATH</code> in{" "}
-              <code>geode_product/self_improving/ledger.py</code>.
+              <code>evolve/scaffold_search/ledger.py</code>.
             </p>
 
             <h2>Failure modes</h2>

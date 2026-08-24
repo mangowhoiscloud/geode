@@ -3,7 +3,7 @@
 Loads ``core/config/routing.toml`` (shipped default) merged with
 ``~/.geode/routing.toml`` (user override) into a validated pydantic
 :class:`RoutingManifest`. Mirrors the Petri plugin's
-:mod:`geode_product.petri_audit.manifest` design — same 4-layer manifest
+:mod:`evals.petri.manifest` design — same 4-layer manifest
 pattern (data → cross-layer consistency → cached load → typed
 accessors).
 

@@ -22,9 +22,9 @@ The landing page for the entire Self-Improving Hub. Visitor lands here from `htt
 | `docs/self-improving/petri-bundle/logs/listing.json` | Petri audit table — filter `task=inspect_petri/audit` |
 | `docs/self-improving/petri-bundle/seeds/listing.json` | Seed-gen runs section (count + run list) |
 | `~/.geode/self-improving/baseline.json` | Autoresearch baseline status (live or stale flag) |
-| `geode_product/self_improving/state/baseline_archive.jsonl` | Generation index, last promote, fitness deltas |
-| `geode_product/self_improving/state/mutations.jsonl` | Recent mutation rows |
-| `geode_product/self_improving/state/results.tsv` (if present) | Row count |
+| `evolve/scaffold_search/state/baseline_archive.jsonl` | Generation index, last promote, fitness deltas |
+| `evolve/scaffold_search/state/mutations.jsonl` | Recent mutation rows |
+| `evolve/scaffold_search/state/results.tsv` (if present) | Row count |
 | `~/.geode/diagnostics/<YYYY-MM>.log` | Optional last activity timestamp (skip if absent) |
 
 Build-time render — static HTML produced by `scripts/build_self_improving_hub.py` (new, Phase 4). No client-side fetch.
@@ -89,7 +89,7 @@ Static 5-row table:
 |---|---|
 | Petri Overview | Petri framework + GEODE wrapper, 3 model roles |
 | Petri Scenarios | 22 GEODE-specific seeds across critical / auxiliary / info |
-| Run an Audit | `geode audit` primary path + `inspect eval` raw |
+| Run an Audit | `geode-eval audit` primary path + `inspect eval` raw |
 | Judge Dimensions | 22 dim subset + 38 dim full set |
 | Seed Dashboard | per-run survivors + cost + meta-review (Next.js page) |
 
@@ -133,9 +133,9 @@ GEODE
 
 ## 7. Empty states
 
-- Petri table 0 rows → `<tr><td colspan="6"><em>No audits published yet. Run <code>geode audit --live</code>.</em></td></tr>`
+- Petri table 0 rows → `<tr><td colspan="6"><em>No audits published yet. Run <code>geode-eval audit --live</code>.</em></td></tr>`
 - Seed-gen 0 rows → `<tr><td colspan="7"><em>No seed-generation runs published yet.</em></td></tr>`
-- Autoresearch `baseline.json` absent → row reads "no baseline written yet — run <code>uv run python geode_product/self_improving/train.py --promote</code>"
+- Autoresearch `baseline.json` absent → row reads "no baseline written yet — run <code>uv run python evolve/scaffold_search/train.py --promote</code>"
 
 ## 8. Error states
 

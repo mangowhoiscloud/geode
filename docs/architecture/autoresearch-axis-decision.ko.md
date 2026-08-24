@@ -3,11 +3,11 @@
 > [English](autoresearch-axis-decision.md) | **한국어**
 
 > **Status**: Accepted (2026-05-18)
-> **Scope**: `geode_product/self_improving/train.py` fitness function의 axis 표현과 baseline IO 단순화. Petri 쪽 `core/audit/dim_extractor.py`의 emit schema와의 책임 분리.
+> **Scope**: `evolve/scaffold_search/train.py` fitness function의 axis 표현과 baseline IO 단순화. Petri 쪽 `core/audit/dim_extractor.py`의 emit schema와의 책임 분리.
 
 ## 배경
 
-현재 `geode_product/self_improving/train.py`의 fitness는 19-dim Petri rubric을 5-axis(`predictive / robustness / logic / diversity / stability`)로 bucket 평균한다. `AXIS_DIMS` dict가 dim→axis 매핑을 보유한다. 그러나:
+현재 `evolve/scaffold_search/train.py`의 fitness는 19-dim Petri rubric을 5-axis(`predictive / robustness / logic / diversity / stability`)로 bucket 평균한다. `AXIS_DIMS` dict가 dim→axis 매핑을 보유한다. 그러나:
 
 1. **실효 정보 손실**: 12개 fitness-active dim 중 fitness 입력은 5개 dim뿐이다(`AXIS_DIMS`의 평균 대상이 axis당 1-2개 dim). 나머지 10개 dim의 신호는 폐기된다.
 2. **통계 효과 미약**: bucket 평균의 √k stderr 감소는 k=1인 axis가 다수라 작동하지 않는다.
@@ -147,26 +147,26 @@ commit / fitness / critical_min / auxiliary_mean / stability / gate_verdict
 
 ## 구현 포인터 (S9 + S10)
 
-- `geode_product/self_improving/train.py`:
+- `evolve/scaffold_search/train.py`:
   - `AXIS_DIMS` 제거 → `AXIS_TIERS` + `DIM_WEIGHTS` + `STABILITY_WEIGHT` 신설.
   - `_axis_score` 제거.
   - `compute_axis_scores` → `compute_dim_aggregates(dim_means)` (dict pass-through).
   - `compute_fitness(dim_means, dim_stderr, baseline_means=None, baseline_stderr=None, critical_margin=0.0, aux_lambda=0.5)`: raw dict 인자.
   - `FitnessBaseline` + `baseline_from_summary` + `_load_baseline` 삭제 → `_load_baseline_dict()` 단일 함수.
-- `geode_product/self_improving/program.md`:
+- `evolve/scaffold_search/program.md`:
   - § "Cross-axis gate": critical 2 → critical 4, dim 이름 명시.
   - § "Output format": `^<axis>_score:` → `^<dim>_score:` (12 substantive dim).
   - § "Logging results": 9 col → 10 col 스키마.
 - `~/.geode/self-improving/baseline.json` schema: Petri summary JSON 그대로(`{dim_means: {...}, dim_stderr: {...}}`).
-- `geode_product/self_improving/state/results.tsv`: 10 col header로 갱신.
-- `geode_product/self_improving/state/results.jsonl`: 신규(line-per-gen raw dim aggregate).
+- `evolve/scaffold_search/state/results.tsv`: 10 col header로 갱신.
+- `evolve/scaffold_search/state/results.jsonl`: 신규(line-per-gen raw dim aggregate).
 - `tests/test_autoresearch_train.py`: 15개 test 갱신(dry-run baseline 0.535895 유지를 위해 weight 재조정).
 
 ## 참고 자료
 
 - ADR-001 (Seed Generation): seed N 확장의 정당화
-- `geode_product/self_improving/train.py:240-540`: 변경 대상 영역
-- `geode_product/self_improving/program.md`: self-improving-loop SOT
+- `evolve/scaffold_search/train.py:240-540`: 변경 대상 영역
+- `evolve/scaffold_search/program.md`: self-improving-loop SOT
 - `core/audit/dim_extractor.py`: raw 신호 emit (변경 없음)
 - AlphaEval (parity 폐기): arXiv:2508.13174
 - `[[project_autoresearch_self_improving_loop]]`: closed-loop 직전 상태

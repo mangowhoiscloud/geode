@@ -190,9 +190,22 @@ class TestWorkerResult:
 class TestWorkerSubprocess:
     """Test the worker as an actual subprocess (stdin/stdout JSON protocol)."""
 
+    def test_protocol_module_rejects_direct_execution(self) -> None:
+        proc = subprocess.run(  # noqa: S603
+            [sys.executable, "-m", "core.agent.worker"],
+            input="{}\n",
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+
+        assert proc.returncode != 0
+        assert proc.stdout == ""
+        assert "protocol-only" in proc.stderr
+
     def test_empty_stdin_returns_error(self, tmp_path: Path) -> None:
         proc = subprocess.run(  # noqa: S603
-            [sys.executable, "-m", "geode_product.worker"],
+            [sys.executable, "-m", "core.worker"],
             input="\n",
             capture_output=True,
             text=True,
@@ -205,7 +218,7 @@ class TestWorkerSubprocess:
 
     def test_invalid_json_returns_error(self, tmp_path: Path) -> None:
         proc = subprocess.run(  # noqa: S603
-            [sys.executable, "-m", "geode_product.worker"],
+            [sys.executable, "-m", "core.worker"],
             input="not-json\n",
             capture_output=True,
             text=True,
@@ -218,7 +231,7 @@ class TestWorkerSubprocess:
 
     def test_missing_task_id_returns_error(self, tmp_path: Path) -> None:
         proc = subprocess.run(  # noqa: S603
-            [sys.executable, "-m", "geode_product.worker"],
+            [sys.executable, "-m", "core.worker"],
             input=json.dumps({"description": "hello"}) + "\n",
             capture_output=True,
             text=True,

@@ -52,7 +52,7 @@ BANNED_TERMS: list[tuple[str, re.Pattern[str]]] = [
     (
         "retired-product-path",
         re.compile(
-            r"core/mcp_server\.py|plugins/(?:petri_audit|seed_generation|benchmark_harness|crucible)"
+            r"geode_product/|plugins/(?:petri_audit|seed_generation|benchmark_harness|crucible)"
         ),
     ),
     (

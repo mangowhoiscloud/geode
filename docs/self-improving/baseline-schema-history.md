@@ -79,7 +79,7 @@ also dead (group/Pareto sampling was dropped from develop, 2026-05-29).
   # per-role {model, source, lane} for auditor/target/judge/mutator. The
   # credential LANE (PAYG | Subscription | CLI) is load-bearing — the same model
   # id behaves differently per lane — so model + source + lane are all recorded.
-  # Shared SoT (core.self_improving_loop.role_provenance) with mutations.jsonl,
+  # Shared SoT (evolve.scaffold_search_loop.role_provenance) with mutations.jsonl,
   # so the two git-tracked ledgers never drift. Display id: GEODE/{model}/{lane}.
   "role_provenance": { "auditor": {"model": str, "source": str, "lane": str},
                        "target":  {...}, "judge": {...}, "mutator": {...} },

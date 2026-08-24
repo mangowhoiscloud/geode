@@ -170,8 +170,8 @@ def test_sot_fallback_non_string_values_uses_default(
 
 def test_sot_path_parity_with_autoresearch() -> None:
     """The product bundle supplies the same wrapper path its writer owns."""
-    from geode_product.self_improving import train as auto_train
-    from geode_product.self_improving.policy_sources import build_policy_source_bundle
+    from core.config.runtime_policy_sources import build_policy_source_bundle
+    from evolve.scaffold_search import train as auto_train
 
     assert (
         build_policy_source_bundle()["wrapper_sections"].packaged_default

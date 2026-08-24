@@ -45,9 +45,9 @@ from unittest.mock import MagicMock
 
 from core.agent.sub_agent import SubAgentManager, SubTask
 from core.orchestration.isolated_execution import IsolatedRunner
-from geode_product.seed_generation.agents.ranker import Ranker
-from geode_product.seed_generation.picker import VoterBinding
-from geode_product.seed_generation.tournament import MatchPlan
+from evals.seed_generation.agents.ranker import Ranker
+from evals.seed_generation.picker import VoterBinding
+from evals.seed_generation.tournament import MatchPlan
 
 
 def test_subtask_has_effort_field_empty_default() -> None:
@@ -182,7 +182,7 @@ def test_ranker_voter_subtasks_still_pin_response_schema() -> None:
     auto-detected (VOTE_SCHEMA satisfies the OpenAI Structured
     Outputs subset since PR-STRICT-COMPATIBLE-SCHEMAS).
     """
-    from geode_product.seed_generation.json_schemas import VOTE_SCHEMA
+    from evals.seed_generation.json_schemas import VOTE_SCHEMA
 
     voters = [
         VoterBinding(

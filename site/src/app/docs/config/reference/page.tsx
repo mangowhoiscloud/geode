@@ -326,7 +326,7 @@ export default function Page() {
               <code>max_tokens</code>(1024)를 받습니다. 레거시
               <code>[self_improving_loop.petri.*]</code>와
               <code>[self_improving_loop.mutator]</code>는 DeprecationWarning과
-              함께 자동 이전됩니다. <code>geode audit</code>의 역할 해석
+              함께 자동 이전됩니다. <code>geode-eval audit</code>의 역할 해석
               순서는 argv, 역할 서브섹션, 매니페스트 기본값 순입니다.
             </p>
             <p>
@@ -687,7 +687,7 @@ export default function Page() {
               (<code>auto</code>), and <code>max_tokens</code> (1024). Legacy
               <code>[self_improving_loop.petri.*]</code> and
               <code>[self_improving_loop.mutator]</code> auto-migrate with a
-              DeprecationWarning. Role resolution in <code>geode audit</code>:
+              DeprecationWarning. Role resolution in <code>geode-eval audit</code>:
               argv, then the role sub-section, then the manifest default.
             </p>
             <p>

@@ -227,7 +227,7 @@ def test_format_block_two_entry_order_preserved():
 def test_min_invocations_constant_matches_tool_hints():
     """MVP convergence — both readers gate at 3 calls. If one diverges,
     the docstring claim about a shared window/floor pair breaks."""
-    from geode_product.self_improving.loop.inject.tool_hints import (
+    from core.agent.policy_injection.tool_hints import (
         MIN_INVOCATIONS as HINTS_MIN_INVOCATIONS,
     )
 

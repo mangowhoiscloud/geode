@@ -24,7 +24,7 @@ class _Client:
 
 def test_geo_slash_input_uses_streaming_command_path() -> None:
     from core.cli.routing import compose_command_registry
-    from geode_product.slash_commands import PRODUCT_COMMAND_SPECS
+    from evals.slash_commands import EVAL_COMMAND_SPECS
 
     calls: list[tuple[str, str]] = []
 
@@ -37,7 +37,7 @@ def test_geo_slash_input_uses_streaming_command_path() -> None:
 
     app = FullscreenThinCli(
         Client(),
-        command_registry=compose_command_registry(PRODUCT_COMMAND_SPECS),
+        command_registry=compose_command_registry(EVAL_COMMAND_SPECS),
     )
     app._run_text("/geo audit the public docs")
 

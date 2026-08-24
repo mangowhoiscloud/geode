@@ -61,7 +61,7 @@ export default function Page() {
             <ol>
               <li>
                 <strong>변이(mutate)</strong>. 스캐폴드의 한 섹션을 한 번에 한
-                군데만 바꿉니다 (<code>geode_product/self_improving/loop/mutate</code>).
+                군데만 바꿉니다 (<code>evolve/scaffold_search/loop/mutate</code>).
               </li>
               <li>
                 <strong>감사(audit)</strong>. 변이된 스캐폴드를 입은 GEODE를
@@ -69,11 +69,11 @@ export default function Page() {
               </li>
               <li>
                 <strong>fitness</strong>. 차원 점수를 스칼라 하나로 접습니다
-                (<code>geode_product/self_improving/fitness.py</code>).
+                (<code>evolve/scaffold_search/fitness.py</code>).
               </li>
               <li>
                 <strong>margin 게이트</strong>. 측정 불확실성을 넘는 개선만
-                통과시킵니다 (<code>geode_product/self_improving/gate.py</code>).
+                통과시킵니다 (<code>evolve/scaffold_search/gate.py</code>).
               </li>
               <li>
                 <strong>승격 또는 되돌림</strong>. 통과하면 새 champion으로
@@ -82,7 +82,7 @@ export default function Page() {
               </li>
             </ol>
             <p>
-              루프 드라이버는 <code>geode_product/self_improving/train.py</code>입니다.
+              루프 드라이버는 <code>evolve/scaffold_search/train.py</code>입니다.
               파일명은 Karpathy autoresearch의 3-파일 관습을 빌린 것으로, 실제
               training은 일어나지 않습니다. 전체 그림은{" "}
               <a href="/geode/docs/capabilities/autoresearch">자기개선 루프</a>에서,
@@ -162,7 +162,7 @@ export default function Page() {
             <ol>
               <li>
                 <strong>Mutate</strong>. Change one section of the scaffold, one
-                place at a time (<code>geode_product/self_improving/loop/mutate</code>).
+                place at a time (<code>evolve/scaffold_search/loop/mutate</code>).
               </li>
               <li>
                 <strong>Audit</strong>. A Petri adversarial safety audit scores
@@ -170,12 +170,12 @@ export default function Page() {
               </li>
               <li>
                 <strong>Fitness</strong>. Fold the dimension scores into one
-                scalar (<code>geode_product/self_improving/fitness.py</code>).
+                scalar (<code>evolve/scaffold_search/fitness.py</code>).
               </li>
               <li>
                 <strong>Margin gate</strong>. Only improvements that clear the
                 measurement uncertainty pass
-                (<code>geode_product/self_improving/gate.py</code>).
+                (<code>evolve/scaffold_search/gate.py</code>).
               </li>
               <li>
                 <strong>Promote or revert</strong>. A pass promotes the candidate
@@ -184,7 +184,7 @@ export default function Page() {
               </li>
             </ol>
             <p>
-              The loop driver is <code>geode_product/self_improving/train.py</code>. The
+              The loop driver is <code>evolve/scaffold_search/train.py</code>. The
               filename borrows Karpathy autoresearch&apos;s three-file convention;
               no training ever happens. For the whole flow end to end, see{" "}
               <a href="/geode/docs/capabilities/autoresearch">The self-improving loop</a>.

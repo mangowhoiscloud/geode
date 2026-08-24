@@ -6,7 +6,7 @@ from core.observability.session_timeline import (
     SessionTimeline,
     set_current_session_timeline,
 )
-from geode_product.geo_state import GeoStage, GeoStore, build_geo_handlers
+from evals.geo import GeoStage, GeoStore, build_geo_handlers
 
 
 def test_geo_handlers_reject_premature_completion_and_record_vector(tmp_path) -> None:

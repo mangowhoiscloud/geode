@@ -171,8 +171,9 @@ single-threaded event-dispatch path, so it needs no lock.
 
 ## Plumbing reality — what exists
 
-Sub-agents execute through the product-composed `geode_product.worker` module
-launched by `IsolatedRunner`; the kernel runner has no implicit worker default.
+Sub-agents execute through the composition-owned `core.worker` or `evals.worker`
+module launched by `IsolatedRunner`; the neutral `core.agent.worker` protocol has
+no implicit tool-plan default.
 The child's `AgenticLoop` still runs with `quiet=True` ("parent
 handles UI") — it emits no `tool_start`/`tool_end` IPC to the parent's renderer. The
 Stage 1.5 activity side-channel is deliberately NOT `quiet=False`: it is a dedicated,

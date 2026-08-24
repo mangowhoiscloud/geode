@@ -64,7 +64,7 @@ The implementation removes active behavior, not immutable evidence.
 
 | Surface | Remove or disconnect | Preserve |
 |---|---|---|
-| `geode_product/geo_state.py` | `GeoPhase.OFFLINE_MEASURE`, transition guards, tool-visible phase | migration-only recognition of legacy rows and their session-event history |
+| `evals/geo.py` | `GeoPhase.OFFLINE_MEASURE`, transition guards, tool-visible phase | migration-only recognition of legacy rows and their session-event history |
 | `.geode/skills/geo/SKILL.md` | offline phase instructions and compulsory traversal | F/R/C/P/A/Q/O denominators, approval, evidence frontier, no scalar score |
 | `.agents/skills/geo/SKILL.md` | scaffold wording that asks for offline measurement | runtime loader checks, subscription approval, trajectory/publication rules |
 | `geo-workload` | canonical `observation_mode` switch | frozen queries, model, locale, account state, K, result limit, approval digest |

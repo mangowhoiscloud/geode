@@ -15,7 +15,7 @@ Designed against four frontier references:
    ``_SESSION_ID: ContextVar`` family isolates session-scoped data
    across concurrent gateway sessions. ``SessionMetrics`` mirrors that
    pattern, sitting alongside ``RunTimeline``'s existing
-   ``_current_journal`` ContextVar (``geode_product/self_improving/loop/observe/run_timeline.py``).
+   ``_current_journal`` ContextVar (``evals/run_timeline.py``).
 
 3. **Hermes ``sessions`` SQLite table** (``hermes_state.py:190``) — the
    ``input_tokens / output_tokens / cache_*_tokens / reasoning_tokens
@@ -39,7 +39,7 @@ Many GEODE subsystems already manage their own session-scoped state:
   accumulate. ``SessionMetrics`` is the *aggregator*; TokenTracker
   remains for per-provider cost-table lookups and we delegate via a
   thin shim instead of duplicating cost math.
-- ``RunTimeline`` (``geode_product/self_improving/loop/observe/run_timeline.py``) —
+- ``RunTimeline`` (``evals/run_timeline.py``) —
   event stream. ``SessionMetrics`` is the *roll-up* counterpart;
   journal events still carry the event-scoped context.
 - ``UsageStore`` (``core/llm/usage_store.py``) — *daily* rolling
@@ -517,7 +517,7 @@ def session_metrics_scope(
     the ``with`` block. Restores the prior value on exit even if an
     exception propagates.
 
-    Mirrors ``run_timeline_scope`` (``geode_product/self_improving/loop/observe/run_timeline.py``)
+    Mirrors ``run_timeline_scope`` (``evals/run_timeline.py``)
     so callers can wrap both inside a single ``ExitStack`` when starting an
     audit / mutation cycle.
     """

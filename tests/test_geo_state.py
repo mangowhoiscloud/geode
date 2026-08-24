@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 from core.observability.session_timeline import SessionEventStore, SessionTimeline
-from geode_product.geo_state import GeoPhase, GeoStage, GeoStore
-from geode_product.slash_commands import build_geo_prompt
+from evals.geo import GeoPhase, GeoStage, GeoStore
+from evals.slash_commands import build_geo_prompt
 
 
 def _evidence(stage: GeoStage, *, status: str = "measured") -> dict[str, object]:

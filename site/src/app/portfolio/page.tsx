@@ -1065,7 +1065,7 @@ function FeaturesGrid() {
           style={{ color: PAPER_55 }}
         >
           <span>the fixed point · plates i-ix</span>
-          <span>evidence: core/ · plugins/</span>
+          <span>evidence: core/ · evals/ · evolve/</span>
         </div>
       </div>
     </section>

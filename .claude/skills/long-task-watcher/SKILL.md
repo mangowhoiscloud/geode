@@ -87,5 +87,5 @@ stdbuf -oL tail -F file 2>/dev/null | stdbuf -oL grep -E "..." | head -200
 
 ## Reference
 - 사례: `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-11-petri-2b-7-n7-prime-n8-n4.md` § N7' Monitor 타임아웃
-- 자동 archive: `geode_product/petri_audit/runner.py` `_extract_eval_log_path` / `_maybe_auto_archive`
+- 자동 archive: `evals/petri/runner.py` `_extract_eval_log_path` / `_maybe_auto_archive`
 - inspect_ai eval log 형식: `logs/<ISO-timestamp>_audit_<id>.eval` 끝에 `Log: <path>` line emit

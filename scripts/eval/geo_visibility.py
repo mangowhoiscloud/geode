@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from geode_product.geo_state import GeoEvidence
+from evals.geo import GeoEvidence
 from scripts.eval.contract import (
     _load_json_object,
     _parse_datetime,

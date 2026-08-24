@@ -15,7 +15,7 @@
 |---|---|---|
 | Three-file shape | `prepare.py` / `train.py` / `program.md` | identical names + roles |
 | Single-file mutation scope | agent edits `train.py` only | agent edits `train.py` only |
-| Fixed 5-min wall-clock budget per run | "Training runs for a fixed 5-minute time budget … regardless of the details of your compute." | `BUDGET_MINUTES = 5` in `geode_product/self_improving/train.py` |
+| Fixed 5-min wall-clock budget per run | "Training runs for a fixed 5-minute time budget … regardless of the details of your compute." | `BUDGET_MINUTES = 5` in `evolve/scaffold_search/train.py` |
 | Git-as-optimiser idiom | branch tip = best run; `git reset` = discard | identical — see `program.md` "The experiment loop" |
 | One-shot per invocation | `uv run python train.py` runs one experiment | identical entry point |
 | Read-only harness | `prepare.py` immutable | `prepare.py` immutable, only verifies harness (no fineweb / BPE) |
@@ -28,7 +28,7 @@
 |---|---|---|---|
 | **Domain** | GPT pre-training | LLM alignment auditing | GEODE's stated research goal is improving its own agent harness, not training a GPT |
 | **Mutation target** | model architecture / hyperparams / optimizer (Muon + AdamW) inside `train.py` | 7 behaviour scaffold kinds (`TARGET_KINDS`): prompt / tool_policy / decomposition / reflection / skill_catalog / agent_contract / tool_descriptions | the scaffold surfaces are the only thing that can change agent behaviour without re-training the LLM |
-| **Workload** | one full GPT training run on a single GPU | one `geode audit` subprocess invocation (~5 min wall-clock) consuming ChatGPT subscription / Anthropic quota | matches GEODE's deployment reality |
+| **Workload** | one full GPT training run on a single GPU | one `geode-eval audit` subprocess invocation (~5 min wall-clock) consuming ChatGPT subscription / Anthropic quota | matches GEODE's deployment reality |
 | **Metric** | `val_bpb` (validation bits-per-byte, lower better, vocab-size-independent) | AlphaEval fitness scalar — 18-dim taxonomy (5 critical / 10 auxiliary / 3 info), 15 weighted + stability axis, higher better | val_bpb is irrelevant for an agent harness; AlphaEval rubric is the agent-safety SoT |
 | **Optimiser** | Muon + AdamW gradient descent | none — it's a discrete prompt-mutation loop, not differentiable | the scaffold surfaces are text, not weights |
 | **Promote signal** | val_bpb decreased | `_should_promote` rule: `fitness_gain > max(_MARGIN_GAIN_SIGMA·√(σp² + σc²), 0.005)` (targeted-σ for targeted runs) + every critical dim within `baseline_stderr + critical_margin` | statistical significance threshold under judge-LLM noise |
@@ -38,14 +38,14 @@
 
 | Addition | Where | Why it's new (no Karpathy original counterpart) |
 |---|---|---|
-| **Multi-objective tiered scoring** | `AXIS_TIERS` (5 critical / 10 auxiliary / 3 info — 18-dim taxonomy, 15 weighted) in `geode_product/self_improving/train.py` | val_bpb is scalar; alignment audit needs differentiated risk policy across dims |
+| **Multi-objective tiered scoring** | `AXIS_TIERS` (5 critical / 10 auxiliary / 3 info — 18-dim taxonomy, 15 weighted) in `evolve/scaffold_search/train.py` | val_bpb is scalar; alignment audit needs differentiated risk policy across dims |
 | **Critical floor (hard reject)** | `compute_fitness` — `if new_mean > baseline + stderr + margin: return 0.0` | safety dims must not be traded for efficiency gains |
 | **Auxiliary squared penalty** | `compute_fitness` — `λ × (Δ / 10)²` summed across the 10 aux dims | soft regularization on non-safety axes |
 | **Stability axis** | `_stability_score = 1 / (1 + mean(dim_stderr))` | judge-LLM noise floor needs to enter fitness; rewards confident measurements |
 | **`baseline.json` snapshot** | `~/.geode/self-improving/baseline.json` written on every promote | enables cross-run baseline regression detection |
 | **Cross-run priors** | `meta_review.json` + `latest_meta_review.json` symlink (PR-G4) | "what did the last meta-reviewer flag" feedback that Karpathy original doesn't model |
-| **seed-generation pipeline** | `geode_product/seed_generation/` (S0-S11; 7 specialist agents — generator / proximity / critic / pilot / ranker / evolver / meta_reviewer) | Karpathy original treats seeds as fixed; GEODE evolves them via a Co-Scientist-style sub-loop |
-| **Petri-side measurement layer** | `geode_product/petri_audit/` + `core/audit/dim_extractor` | Karpathy original folds measurement into `train.py`; GEODE separates measurement (Petri) from selection (autoresearch) for SoT clarity |
+| **seed-generation pipeline** | `evals/seed_generation/` (S0-S11; 7 specialist agents — generator / proximity / critic / pilot / ranker / evolver / meta_reviewer) | Karpathy original treats seeds as fixed; GEODE evolves them via a Co-Scientist-style sub-loop |
+| **Petri-side measurement layer** | `evals/petri/` + `core/audit/dim_extractor` | Karpathy original folds measurement into `train.py`; GEODE separates measurement (Petri) from selection (autoresearch) for SoT clarity |
 | **SessionJournal observability** | `~/.geode/self-improving-loop/<session>/journal.jsonl` | Karpathy original logs only via stdout + `results.tsv`; GEODE adds structured events (config_snapshot, audit_started, baseline_decision, cost_divergence …) |
 | **Cost / quota tracking** | `usd_spent` rollup + cost-divergence journal events (PR-P2) | irrelevant for local-GPU training; mandatory for LLM-API budgets |
 | **Cross-loop handoff** | `latest_seed_pool` symlink (PR-G1) | seed-generation → autoresearch evolved-pool ingestion; Karpathy original has no equivalent |
@@ -105,7 +105,7 @@ rule, honest Resolution) is GEODE-specific.
 
 ## 6. Files & line references
 
-* GEODE autoresearch: `geode_product/self_improving/train.py`
+* GEODE autoresearch: `evolve/scaffold_search/train.py`
   - `_dim_score` (line 1911)
   - `_stability_score` (line 1953)
   - `compute_fitness` (line 2019)
@@ -113,7 +113,7 @@ rule, honest Resolution) is GEODE-specific.
   - `DIM_WEIGHTS` / `STABILITY_WEIGHT` (lines 606 / 669)
   - `AXIS_TIERS` 5+10+3 listing (line 582)
   - promote margin `_MARGIN_GAIN_SIGMA` / `_FITNESS_MARGIN_FLOOR_DEFAULT` (lines 3527 / 3513)
-  - `TARGET_KINDS` (7 scaffold kinds) — `geode_product/self_improving/loop/policies.py`
+  - `TARGET_KINDS` (7 scaffold kinds) — `evolve/scaffold_search/loop/policies.py`
 * Karpathy autoresearch: https://github.com/karpathy/autoresearch
   (228791f) — local reference clone `~/workspace/autoresearch/`
 * GEODE README on this split: `docs/self-improving/loop-overview.md`

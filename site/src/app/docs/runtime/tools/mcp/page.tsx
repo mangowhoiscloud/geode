@@ -18,7 +18,7 @@ export default function Page() {
               GEODE는 MCP의 양쪽에 다 섭니다. 클라이언트로서 외부 MCP 서버의
               도구를 에이전트 도구 목록에 합치고(<code>core/mcp/</code>),
               서버로서 자신의 능력을 다른 MCP 호스트에 노출합니다
-              (<code>geode-mcp</code>, <code>geode_product/mcp_server.py</code>).
+              (<code>geode-mcp</code>, <code>core/mcp_server.py</code>).
             </p>
 
             <h2>클라이언트: 서버 설정과 우선순위</h2>
@@ -224,7 +224,7 @@ LOG_LEVEL = "warning"`}</pre>
               external MCP servers&apos; tools into the agent&apos;s tool list
               (<code>core/mcp/</code>); as a server it exposes its own
               capabilities to other MCP hosts (<code>geode-mcp</code>,
-              <code>geode_product/mcp_server.py</code>).
+              <code>core/mcp_server.py</code>).
             </p>
 
             <h2>Client: server config and priority</h2>

@@ -95,9 +95,10 @@ function readArchitectureBaseline() {
     );
   }
   if (
-    baseline?.schema_version !== 5 ||
+    baseline?.schema_version !== 6 ||
     !Number.isInteger(baseline?.packages?.core?.python_files) ||
-    !Number.isInteger(baseline?.packages?.geode_product?.python_files) ||
+    !Number.isInteger(baseline?.packages?.evals?.python_files) ||
+    !Number.isInteger(baseline?.packages?.evolve?.python_files) ||
     !Number.isInteger(baseline?.packages?.tests?.python_files) ||
     !Number.isInteger(baseline?.tools?.definition_count) ||
     !Number.isInteger(baseline?.hook_events?.count)

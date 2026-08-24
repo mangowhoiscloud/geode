@@ -21,7 +21,7 @@ import pytest
 pytest.importorskip("mcp")
 
 from core.mcp_server import create_mcp_server
-from geode_product.self_improving.mcp import _status_payload, register_mcp_tools
+from evolve.scaffold_search.mcp import _status_payload, register_mcp_tools
 
 CORE_TOOLS = {
     "run_agent",
@@ -82,7 +82,7 @@ def test_tool_descriptions_sourced_from_json() -> None:
     """Kernel and product tools keep descriptions with their owners."""
     core_described = set(json.loads(Path("core/tools/mcp_tools.json").read_text(encoding="utf-8")))
     product_described = set(
-        json.loads(Path("geode_product/self_improving/mcp_tools.json").read_text(encoding="utf-8"))
+        json.loads(Path("evolve/scaffold_search/mcp_tools.json").read_text(encoding="utf-8"))
     )
     assert core_described >= CORE_TOOLS
     assert product_described == PRODUCT_TOOLS

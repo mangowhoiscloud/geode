@@ -1,6 +1,6 @@
 """Aggregate per-dim judge scores from a petri ``.eval`` archive.
 
-The ``autoresearch`` self-improving-loop (``geode_product/self_improving/train.py``) needs the
+The ``autoresearch`` self-improving-loop (``evolve/scaffold_search/train.py``) needs the
 audit's per-dim mean + stderr to compute a fitness aggregate.
 inspect_ai's stdout from ``inspect eval`` does not include this — only
 human-readable rows and a ``Log: …`` trailer pointing at the archive.
@@ -244,7 +244,7 @@ def extract_dim_aggregates(eval_path: Path | str) -> dict[str, Any]:
         # bootstrap the fitness-aggregate stderr by resampling whole sample
         # rows (captures inter-dim correlation a per-dim-independent estimate
         # misses). dim_extractor stays measurement-only; the fitness math
-        # lives in geode_product/self_improving/train.py.
+        # lives in evolve/scaffold_search/train.py.
         "per_sample": per_sample_rows,
     }
 

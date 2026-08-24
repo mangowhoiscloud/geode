@@ -8,7 +8,8 @@ const number = new Intl.NumberFormat("en-US");
 function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
   const productionFiles =
     architectureBaseline.packages.core.python_files +
-    architectureBaseline.packages.geode_product.python_files;
+    architectureBaseline.packages.evals.python_files +
+    architectureBaseline.packages.evolve.python_files;
   const rows =
     locale === "ko"
       ? [
@@ -25,8 +26,8 @@ function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
           ["기본 LLM 어댑터", number.format(architectureBaseline.built_in_adapters.count)],
           ["프로덕션 ContextVar", number.format(architectureBaseline.context_vars.count)],
           [
-            "core → product import 지점 / 파일",
-            `${architectureBaseline.core_to_product_imports.site_count} / ${architectureBaseline.core_to_product_imports.file_count}`,
+            "core → outer import 지점 / 파일",
+            `${architectureBaseline.core_to_outer_imports.site_count} / ${architectureBaseline.core_to_outer_imports.file_count}`,
           ],
           [
             "import-linter 예외 edge",
@@ -47,8 +48,8 @@ function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
           ["Built-in LLM adapters", number.format(architectureBaseline.built_in_adapters.count)],
           ["Production ContextVars", number.format(architectureBaseline.context_vars.count)],
           [
-            "core → product import sites / files",
-            `${architectureBaseline.core_to_product_imports.site_count} / ${architectureBaseline.core_to_product_imports.file_count}`,
+            "core → outer import sites / files",
+            `${architectureBaseline.core_to_outer_imports.site_count} / ${architectureBaseline.core_to_outer_imports.file_count}`,
           ],
           [
             "import-linter ignored edges",
@@ -113,7 +114,7 @@ export default function Page() {
               <tbody>
                 <tr><td><code>core/runtime.py</code></td><td><code>GeodeRuntime</code> 부트스트랩</td></tr>
                 <tr><td><code>core/paths.py</code></td><td>모든 디렉터리 경로의 단일 해석 지점</td></tr>
-                <tr><td><code>geode_product/mcp_server.py</code></td><td><code>geode-mcp</code> 진입점 (stdio MCP 서버)</td></tr>
+                <tr><td><code>core/mcp_server.py</code></td><td><code>geode-mcp</code> 진입점 (stdio MCP 서버)</td></tr>
                 <tr><td><code>core/async_runtime.py</code></td><td>async 이벤트 루프 헬퍼</td></tr>
               </tbody>
             </table>
@@ -122,9 +123,9 @@ export default function Page() {
             <table>
               <thead><tr><th>서브시스템</th><th>루트</th><th>핵심 모듈</th></tr></thead>
               <tbody>
-                <tr><td>루프 드라이버</td><td><code>geode_product/self_improving/</code></td><td><code>train.py</code>, <code>campaign.py</code>, <code>prepare.py</code>, <code>program.md</code>, <code>watch_campaign.py</code></td></tr>
-                <tr><td>측정 장비</td><td><code>geode_product/self_improving/</code></td><td><code>measure.py</code>, <code>fitness.py</code>, <code>gate.py</code>, <code>ledger.py</code></td></tr>
-                <tr><td>변이 런타임</td><td><code>geode_product/self_improving/loop/</code></td><td><code>mutate/runner.py</code>, <code>mutate/policies.py</code>, <code>observe/baseline_epoch.py</code>, <code>inject/in_context_wiring.py</code>, <code>auto_trigger.py</code></td></tr>
+                <tr><td>루프 드라이버</td><td><code>evolve/scaffold_search/</code></td><td><code>train.py</code>, <code>campaign.py</code>, <code>prepare.py</code>, <code>program.md</code>, <code>watch_campaign.py</code></td></tr>
+                <tr><td>측정 장비</td><td><code>evolve/scaffold_search/</code></td><td><code>measure.py</code>, <code>fitness.py</code>, <code>gate.py</code>, <code>ledger.py</code></td></tr>
+                <tr><td>변이 런타임</td><td><code>evolve/scaffold_search/loop/</code></td><td><code>mutate/runner.py</code>, <code>mutate/policies.py</code>, <code>observe/baseline_epoch.py</code>, <code>inject/in_context_wiring.py</code>, <code>auto_trigger.py</code></td></tr>
               </tbody>
             </table>
 
@@ -185,8 +186,8 @@ export default function Page() {
             <table>
               <thead><tr><th>기능</th><th>루트</th><th>핵심 모듈</th></tr></thead>
               <tbody>
-                <tr><td>petri_audit</td><td><code>geode_product/petri_audit/</code></td><td><code>cli_audit.py</code>, <code>runner.py</code>, <code>audit_mode.py</code>, <code>judge_dims/</code>, <code>seeds/</code></td></tr>
-                <tr><td>seed_generation</td><td><code>geode_product/seed_generation/</code></td><td><code>cli.py</code>, <code>orchestrator.py</code>, <code>tournament.py</code>, <code>agents/</code></td></tr>
+                <tr><td>petri_audit</td><td><code>evals/petri/</code></td><td><code>cli_audit.py</code>, <code>runner.py</code>, <code>audit_mode.py</code>, <code>judge_dims/</code>, <code>seeds/</code></td></tr>
+                <tr><td>seed_generation</td><td><code>evals/seed_generation/</code></td><td><code>cli.py</code>, <code>orchestrator.py</code>, <code>tournament.py</code>, <code>agents/</code></td></tr>
               </tbody>
             </table>
           </>
@@ -208,7 +209,7 @@ export default function Page() {
               <tbody>
                 <tr><td><code>core/runtime.py</code></td><td><code>GeodeRuntime</code> bootstrap</td></tr>
                 <tr><td><code>core/paths.py</code></td><td>Single resolution point for every directory path</td></tr>
-                <tr><td><code>geode_product/mcp_server.py</code></td><td><code>geode-mcp</code> entry point (stdio MCP server)</td></tr>
+                <tr><td><code>core/mcp_server.py</code></td><td><code>geode-mcp</code> entry point (stdio MCP server)</td></tr>
                 <tr><td><code>core/async_runtime.py</code></td><td>Async event-loop helpers</td></tr>
               </tbody>
             </table>
@@ -217,9 +218,9 @@ export default function Page() {
             <table>
               <thead><tr><th>Subsystem</th><th>Root</th><th>Key modules</th></tr></thead>
               <tbody>
-                <tr><td>Loop driver</td><td><code>geode_product/self_improving/</code></td><td><code>train.py</code>, <code>campaign.py</code>, <code>prepare.py</code>, <code>program.md</code>, <code>watch_campaign.py</code></td></tr>
-                <tr><td>Measurement gear</td><td><code>geode_product/self_improving/</code></td><td><code>measure.py</code>, <code>fitness.py</code>, <code>gate.py</code>, <code>ledger.py</code></td></tr>
-                <tr><td>Mutation runtime</td><td><code>geode_product/self_improving/loop/</code></td><td><code>mutate/runner.py</code>, <code>mutate/policies.py</code>, <code>observe/baseline_epoch.py</code>, <code>inject/in_context_wiring.py</code>, <code>auto_trigger.py</code></td></tr>
+                <tr><td>Loop driver</td><td><code>evolve/scaffold_search/</code></td><td><code>train.py</code>, <code>campaign.py</code>, <code>prepare.py</code>, <code>program.md</code>, <code>watch_campaign.py</code></td></tr>
+                <tr><td>Measurement gear</td><td><code>evolve/scaffold_search/</code></td><td><code>measure.py</code>, <code>fitness.py</code>, <code>gate.py</code>, <code>ledger.py</code></td></tr>
+                <tr><td>Mutation runtime</td><td><code>evolve/scaffold_search/loop/</code></td><td><code>mutate/runner.py</code>, <code>mutate/policies.py</code>, <code>observe/baseline_epoch.py</code>, <code>inject/in_context_wiring.py</code>, <code>auto_trigger.py</code></td></tr>
               </tbody>
             </table>
 
@@ -280,8 +281,8 @@ export default function Page() {
             <table>
               <thead><tr><th>Feature</th><th>Root</th><th>Key modules</th></tr></thead>
               <tbody>
-                <tr><td>petri_audit</td><td><code>geode_product/petri_audit/</code></td><td><code>cli_audit.py</code>, <code>runner.py</code>, <code>audit_mode.py</code>, <code>judge_dims/</code>, <code>seeds/</code></td></tr>
-                <tr><td>seed_generation</td><td><code>geode_product/seed_generation/</code></td><td><code>cli.py</code>, <code>orchestrator.py</code>, <code>tournament.py</code>, <code>agents/</code></td></tr>
+                <tr><td>petri_audit</td><td><code>evals/petri/</code></td><td><code>cli_audit.py</code>, <code>runner.py</code>, <code>audit_mode.py</code>, <code>judge_dims/</code>, <code>seeds/</code></td></tr>
+                <tr><td>seed_generation</td><td><code>evals/seed_generation/</code></td><td><code>cli.py</code>, <code>orchestrator.py</code>, <code>tournament.py</code>, <code>agents/</code></td></tr>
               </tbody>
             </table>
           </>

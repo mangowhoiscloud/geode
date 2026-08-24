@@ -134,7 +134,7 @@ def test_replaced_fire_hook_sites_delegate_to_dispatch() -> None:
     from core.agent.tool_executor.processor import ToolCallProcessor
     from core.mcp import manager as mcp_manager
     from core.orchestration.isolated_execution import IsolatedRunner
-    from geode_product.seed_generation import orchestrator as seed_orchestrator
+    from evals.seed_generation import orchestrator as seed_orchestrator
 
     delegating_sources = [
         inspect.getsource(ApprovalWorkflow._fire_hook),
@@ -163,7 +163,7 @@ def test_thin_wrappers_delegate_to_dispatch() -> None:
     """The already-thin module wrappers keep routing through dispatch."""
     import core.cli as cli_module
     from core.llm.router import _hooks as router_hooks
-    from geode_product.self_improving.loop import _hooks as sil_hooks
+    from evolve.scaffold_search.loop import _hooks as sil_hooks
 
     for module, func_name in [
         (router_hooks, "_fire_hook"),
@@ -263,7 +263,7 @@ def test_fixed_seed_orchestrator_payload_does_not_warn(
 ) -> None:
     """The repaired seed-generation ``_emit_hook`` payload satisfies the
     SUBAGENT_STARTED/COMPLETED contracts."""
-    from geode_product.seed_generation.orchestrator import Pipeline
+    from evals.seed_generation.orchestrator import Pipeline
 
     hooks = HookSystem()
     seen: list[tuple[HookEvent, dict[str, Any]]] = []
@@ -301,7 +301,7 @@ def test_rule_changed_cli_handler_emits_action() -> None:
 
     (The tool-side sibling is pinned in test_hooks.py
     ``test_rule_create_fires_hook``; the auto-trigger ``stage`` sibling in
-    tests/core/self_improving/test_ol_a15_telemetry.py.)
+    tests/evolve/scaffold_search/test_ol_a15_telemetry.py.)
     """
     from unittest.mock import MagicMock, patch
 
@@ -355,7 +355,7 @@ def test_auto_trigger_failure_stages_persist_as_failures():
 
 
 def test_auto_trigger_emit_carries_error_key_on_failure_stages(monkeypatch):
-    from geode_product.self_improving.loop import auto_trigger as at
+    from evolve.scaffold_search.loop import auto_trigger as at
 
     captured: list[dict] = []
     monkeypatch.setattr(

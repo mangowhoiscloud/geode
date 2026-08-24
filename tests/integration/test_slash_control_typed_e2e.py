@@ -21,15 +21,15 @@ from core.memory.grills import GrillStore
 from core.observability.session_timeline import SessionEventStore
 from core.server.ipc_server.poller import CLIPoller
 from core.skills.skills import SkillLoader, SkillRegistry
-from geode_product.geo_state import GeoStage, GeoStore, build_geo_handlers
-from geode_product.slash_commands import PRODUCT_COMMAND_SPECS
+from evals.geo import GeoStage, GeoStore, build_geo_handlers
+from evals.slash_commands import EVAL_COMMAND_SPECS
 
 
 class _Services:
     def __init__(self, loop: AgenticLoop, registry: SkillRegistry) -> None:
         self.loop = loop
         self.skill_registry = registry
-        self.command_registry = compose_command_registry(PRODUCT_COMMAND_SPECS)
+        self.command_registry = compose_command_registry(EVAL_COMMAND_SPECS)
         self.lane_queue = None
         self.mcp_manager = None
 

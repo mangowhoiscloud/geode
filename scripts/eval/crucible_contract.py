@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from geode_product.crucible.contract import (
+from evolve.crucible.contract import (
     ContractError,
     load_contract,
     validate_candidate_diff,

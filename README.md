@@ -54,7 +54,7 @@ sustained self-improvement.
 
 GEODE keeps benchmark numbers tied to the exact runtime and model route that
 produced them. The 2026-07-03/04 Tau2 run below used **GEODE v0.99.269** with
-the public `geode_product/benchmark_harness` tau2 adapter, `sierra-research/tau2-bench@1901a30`
+the public `evals/benchmarks` tau2 adapter, `sierra-research/tau2-bench@1901a30`
 (`tau2==1.0.0`), `gpt-5.2` through OpenAI **PAYG**, agent reasoning effort
 `high`, `max_steps=200`, and tau2's native `user_simulator` using
 `gpt-4.1-2025-04-14` with effort `medium`.
@@ -94,7 +94,7 @@ canonical events and ten exact tool pairs are pinned to
 
 The 2026-07-04 MCPMark run used **GEODE v0.99.269-era code** on branch
 `feature/mcpmark-agentworld-run`, `eval-sys/mcpmark@cd45b7f`, GEODE's public
-`geode_product/benchmark_harness` MCPMark adapter, `gpt-5.5` through the OpenAI
+`evals/benchmarks` MCPMark adapter, `gpt-5.5` through the OpenAI
 **Codex subscription** route, and reasoning effort `xhigh`.
 
 This is not a full MCPMark Verified leaderboard score. It covers the standard
@@ -613,7 +613,7 @@ A qualitative read on where GEODE sits next to the frontier harnesses (Claude Co
 | **Swappable pipeline DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider, not a DAG abstraction) | ⚠️ external package responsibility; GEODE core no longer ships a pipeline port |
 | Trace / replay / Run Log | ✅ `tengu_*` telemetry + `/insights` HTML | ⚠️ `/status` + `/debug-config` only | ✅ ACP session lineage + Task Registry | ✅ Native RunLog + Petri eval integration |
 | Safety-gated scaffold optimization | ❌ | ❌ | ❌ | ⚠️ experimental outer loop: scaffold mutation + adversarial safety audit + (1+1) promote/revert contract; zero public core promotions |
-| Cross-provider review | ❌ | ❌ | ❌ | ⚠️ multi-voter cross-provider ranking panel (≥2 providers, `geode_product/seed_generation/agents/ranker.py`) in the self-improving loop; agreement calibration is WIP |
+| Cross-provider review | ❌ | ❌ | ❌ | ⚠️ multi-voter cross-provider ranking panel (≥2 providers, `evals/seed_generation/agents/ranker.py`) in the self-improving loop; agreement calibration is WIP |
 
 </details>
 

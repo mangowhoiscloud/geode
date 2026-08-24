@@ -1,9 +1,9 @@
 """Subprocess worker for isolated sub-agent execution.
 
-The product composition root injects its bound tool-plan builder and is spawned
+The outer composition root injects its bound tool-plan builder and is spawned
 by ``IsolatedRunner._execute_subprocess()`` as::
 
-    python -m geode_product.worker
+    python -m core.worker
 
 This module owns the neutral request/result protocol and execution runtime; it
 does not reconstruct a product handler catalog.
@@ -138,7 +138,7 @@ class WorkerRequest:
     # structured-output forcing on the spawned LLM call. Threads through
     # ``AgenticLoop.response_schema`` → ``AdapterCallRequest.response_schema``.
     # ``None`` preserves free-form output. Per-role schemas live in
-    # ``geode_product/seed_generation/json_schemas.py`` and are wired in
+    # ``evals/seed_generation/json_schemas.py`` and are wired in
     # each role's ``_build_tasks``.
     response_schema: dict[str, Any] | None = None
     # Fleet view Stage 1.5 (docs/plans/2026-07-03-fleet-view.md) — when True the
@@ -1049,6 +1049,4 @@ def main(
 
 
 if __name__ == "__main__":
-    raise SystemExit(
-        "core.agent.worker has no product composition; run an injected product worker module"
-    )
+    raise SystemExit("core.agent.worker is protocol-only; run python -m core.worker")

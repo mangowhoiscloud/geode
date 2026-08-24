@@ -256,7 +256,7 @@ Current interpretation:
 ## Local Harness Inventory
 
 GEODE-owned benchmark glue now lives in the public-safe
-`geode_product/benchmark_harness/` plugin. The plugin records upstream repo
+`evals/benchmarks/` plugin. The plugin records upstream repo
 coordinates, pinned commits, preflight env names, and GEODE adapters. The
 third-party benchmark repositories themselves are still fetched under ignored
 local artifacts so GEODE does not vendor external harness code.
@@ -648,7 +648,7 @@ Root causes and fixes:
 | `github` State Duplication Error 6 tasks | `GITHUB_EVAL_ORG` unset in `.mcp_env`; upstream default `mcpleague-eval` is not writable by the local token | Persisted `GITHUB_EVAL_ORG=mangowhoiscloud` (the value the successful 07-04 retry used); token re-validated |
 | `notion` Stage 1 stall (all runs aborted) | Expired browser session in `notion_state.json`; duplication `page.goto` to `app.notion.com` timed out at 120s per retry | Re-login and saved a fresh session. Google OAuth rejects automation browsers, so login used a real-Chrome channel persistent context with `--disable-blink-features=AutomationControlled`; the session cookie (`token_v2`) lives on `.app.notion.com`, not the `notion.so`/`notion.com` marketing hosts |
 | `postgres` container down | Host restart; `mcpmark-postgres` Exited(255) | Restarted; WAL auto-recovery clean; all 5 sample DBs and default credentials verified |
-| `--agent geode` not registered | 07-04 runs relied on an unsaved local patch to `src/agents/__init__.py` | Committed launcher `geode_product/benchmark_harness/run_mcpmark.py` registers the agent before `pipeline.main()`; upstream stays unpatched |
+| `--agent geode` not registered | 07-04 runs relied on an unsaved local patch to `src/agents/__init__.py` | Committed launcher `evals/benchmarks/run_mcpmark.py` registers the agent before `pipeline.main()`; upstream stays unpatched |
 | `playwright` never run | Assumed to need WebArena | The 4 standard tasks are live-web; `@playwright/mcp@0.0.68` launch verified, browsers installed. No fixture needed |
 | `playwright_webarena` never run | WebArena Docker images (~100GB for shopping / shopping_admin / reddit) exceed the 13GB free local disk | Still blocked locally; needs an external volume or a VM |
 

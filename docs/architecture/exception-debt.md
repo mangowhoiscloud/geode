@@ -49,7 +49,7 @@ The checker fails when:
 
 Ruff is probed one point below each configured ceiling with inline suppressions
 disabled. The probe runs in isolated mode over an explicit list of every Python
-file under `core/`, `plugins/`, and `scripts/`, so project excludes,
+file under `core/`, `evals/`, `evolve/`, and `scripts/`, so project excludes,
 force-excludes, and per-file ignores cannot hide a measurement. This exposes
 only ceiling witnesses and overrides, so the ledger does not duplicate metrics
 for thousands of ordinary functions.

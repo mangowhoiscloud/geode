@@ -150,7 +150,7 @@ SAFE_TOOLS = frozenset({
               스키마와 핸들러 양쪽이 실제로 연결됐는지 확인합니다.
             </p>
             <pre>{`uv run python -c "
-from geode_product.tool_handlers import compose_tool_plan
+from core.tools.composition import compose_tool_plan
 bound, _transient = compose_tool_plan()
 print('weather_lookup' in bound.schema_map)
 print('weather_lookup' in bound.handlers)
@@ -308,7 +308,7 @@ SAFE_TOOLS = frozenset({
             <h2>Verify</h2>
             <p>Confirm both ends, the schema and the handler, are wired.</p>
             <pre>{`uv run python -c "
-from geode_product.tool_handlers import compose_tool_plan
+from core.tools.composition import compose_tool_plan
 bound, _transient = compose_tool_plan()
 print('weather_lookup' in bound.schema_map)
 print('weather_lookup' in bound.handlers)
