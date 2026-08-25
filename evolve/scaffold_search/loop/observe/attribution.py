@@ -40,6 +40,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from core.paths import require_evolve_workspace
 from evals.seed_generation.baseline_reader import BaselineSnapshot
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -396,6 +397,7 @@ def append_attribution_log(
     Returns the path so the caller can ``git add`` it (the file is
     git-tracked — same constraint as the apply rows).
     """
+    require_evolve_workspace()
     target = log_path if log_path is not None else MUTATION_AUDIT_LOG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
     # W4 (2026-05-25) — Pydantic schema validation. drift fail-fast.

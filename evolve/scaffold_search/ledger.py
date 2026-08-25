@@ -36,6 +36,7 @@ from core.paths import (
     BASELINE_JSON_PATH,
     RESULTS_JSONL_PATH,
     RESULTS_TSV_PATH,
+    require_evolve_workspace,
 )
 from core.paths import GLOBAL_AUTORESEARCH_HANDOFF_DIR as _SELF_IMPROVING_LOOP_HOME
 
@@ -830,6 +831,7 @@ def _append_baseline_registry_row(
     in distinct epochs — gate ≠ random ≠ never production logic, correctly not
     averaged). ``gate`` (default) reproduces today's selection-arm row + epoch.
     """
+    require_evolve_workspace()
     if margin_rule not in _VALID_MARGIN_RULES:
         raise ValueError(
             f"margin_rule {margin_rule!r} not in {sorted(_VALID_MARGIN_RULES)} — "
@@ -1023,6 +1025,7 @@ def _append_results_row(tsv_row: str, jsonl_row: str) -> None:
     ``git clean`` — same writer-destination-tracked invariant as the ledgers
     (PR-G5b #1350 precedent). Append-only; one row per audit (promoted or not).
     """
+    require_evolve_workspace()
     tsv_path, jsonl_path = _results_paths()
     tsv_path.parent.mkdir(parents=True, exist_ok=True)
     write_header = not tsv_path.exists()
@@ -1121,6 +1124,7 @@ def _write_baseline(
     manual override) and supplies the new provenance args from
     ``run_audit``'s return tuple.
     """
+    require_evolve_workspace()
     from datetime import UTC, datetime
 
     BASELINE_PATH.parent.mkdir(parents=True, exist_ok=True)

@@ -508,10 +508,7 @@ def _check_desktop_computer_use() -> CheckResult:
                 name="computer-use desktop",
                 ok=False,
                 detail="computer_use_driver=helper but GEODE Computer Use Helper is not installed",
-                fix=(
-                    "Build it with `scripts/macos/build_computer_helper.sh`, "
-                    "then retry `geode doctor`."
-                ),
+                fix=("Build it with `geode setup`, then retry `geode doctor`."),
             )
         status = computer_use_helper_status()
         if status.get("error"):
@@ -519,10 +516,7 @@ def _check_desktop_computer_use() -> CheckResult:
                 name="computer-use desktop",
                 ok=False,
                 detail=f"helper probe failed: {status.get('error')}",
-                fix=(
-                    "Rebuild with `scripts/macos/build_computer_helper.sh`, "
-                    "then retry `geode doctor`."
-                ),
+                fix=("Rebuild with `geode setup`, then retry `geode doctor`."),
             )
         ax_trusted = bool(status.get("ax_trusted"))
         screenshot_ok = bool(status.get("screenshot_ok"))

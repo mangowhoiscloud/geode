@@ -6,7 +6,7 @@ Pins:
 - ``LEGACY_SOT_DIR`` still references ``~/.geode/autoresearch/handoff/``
   for the lazy migration path.
 - ``_maybe_migrate_legacy_sot`` copies the legacy file to the new
-  location on first read/write, is idempotent, preserves the legacy
+  location before the first write, is idempotent, preserves the legacy
   source (operator can roll back manually), silently no-ops when the
   new path already exists or the legacy file is missing, and treats
   ANY copy-time exception (incl. ``UnicodeDecodeError``) as
@@ -228,14 +228,14 @@ def test_legacy_filename_map_matches_target_kinds(kind: str, expected_filename: 
 
 
 # ---------------------------------------------------------------------------
-# load_policy / write_policy — migration fires before the I/O
+# load_policy / write_policy — reads stay immutable, writers migrate explicitly
 # ---------------------------------------------------------------------------
 
 
-def test_load_policy_triggers_migration(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """``load_policy`` must invoke ``_maybe_migrate_legacy_sot``
-    BEFORE attempting to read, so a freshly-upgraded operator gets
-    their last mutation state visible on the first call."""
+def test_load_policy_does_not_mutate_the_distribution(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A read never copies legacy state into the packaged policy tree."""
     from evolve.scaffold_search.loop.mutate import policies as policies_mod
 
     legacy_dir = tmp_path / "legacy"
@@ -248,9 +248,8 @@ def test_load_policy_triggers_migration(monkeypatch: pytest.MonkeyPatch, tmp_pat
     monkeypatch.setattr(policies_mod, "_KIND_TO_PATH", {"tool_policy": new_path})
 
     result = policies_mod.load_policy("tool_policy")
-    assert result == {"delegate_task.priority": "8"}
-    # Migration also created the in-repo file as a side effect
-    assert new_path.is_file()
+    assert result == {}
+    assert not new_path.exists()
 
 
 def test_train_module_fallback_path_points_in_repo() -> None:
@@ -281,15 +280,19 @@ def test_write_policy_triggers_migration_before_write(
     legacy_dir = tmp_path / "legacy"
     legacy_dir.mkdir()
     legacy_file = legacy_dir / "tool-policy.json"
-    legacy_file.write_text(json.dumps({"legacy_section": "v1"}))
+    legacy_file.write_text(json.dumps({"legacy_section": "v1", "untouched": "keep"}))
 
     new_path = tmp_path / "new" / "tool-policy.json"
     monkeypatch.setattr(policies_mod, "LEGACY_SOT_DIR", legacy_dir)
     monkeypatch.setattr(policies_mod, "_KIND_TO_PATH", {"tool_policy": new_path})
 
-    # write happens AFTER the migration so the legacy state is
-    # preserved as "previous value" rather than dropped on the floor.
-    policies_mod.write_policy("tool_policy", {"legacy_section": "v2"})
-    assert json.loads(new_path.read_text()) == {"legacy_section": "v2"}
+    sections = policies_mod.load_policy_for_mutation("tool_policy")
+    assert sections == {"legacy_section": "v1", "untouched": "keep"}
+    sections["legacy_section"] = "v2"
+    policies_mod.write_policy("tool_policy", sections)
+    assert json.loads(new_path.read_text()) == {
+        "legacy_section": "v2",
+        "untouched": "keep",
+    }
     # Legacy still preserved
     assert legacy_file.is_file()

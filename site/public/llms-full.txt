@@ -1542,6 +1542,8 @@ argument-hint: "[issue-number]"
 
 wheel과 함께 출하되는 builtin 스킬은 1급 코드로 승인됩니다. project와 personal 스킬은 계층 우선순위로 승자를 고른 다음[확장 신뢰 정책](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)의`skill:<name>` 항목을 확인합니다. 승인되지 않은 상위 계층 스킬을 발견했다고 하위 계층의 같은 이름으로 몰래 fallback하지 않습니다.
 
+wheel은 `arxiv-digest`, `deep-researcher`,`frontier-ui-ux-catalog`, `geo`,`geode-context`, `grilling`,`long-task-watcher`, `pdf`만 번들합니다. 저장소·개인 전용 스킬은 project/personal 계층에 남습니다.
+
 ```
 "skill:my-skill": {
   "enabled": true,
@@ -1650,6 +1652,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch
 결과 행의 `verdict`는 게이트 결과에서 파생됩니다.`promote` / `reject`, dry-run에서는`dry-run`입니다. `AUTORESEARCH_VERDICT`env는 명시적 override 훅으로만 남아 있습니다.
 
 ## 실행
+
+실제 변이·승격은 writable GEODE Git checkout에서만 실행됩니다. 다른 위치에서 시작할 때는 `GEODE_EVOLVE_WORKSPACE`를 그 checkout의 절대 경로로 지정하세요. wheel은 read-only 기본값과 dry-run만 제공하며 rolling ledger를 설치 디렉터리에 쓰지 않습니다.
 
 ```
 # 단일 사이클 (변이 1회 + 감사 1회 + 게이트)
@@ -6035,7 +6039,7 @@ HITL 승인 프롬프트(`core/cli/ipc_client.py`의 `_handle_approval_request`)
 | `geode hub` | `build` | 자기개선 허브 정적 페이지 빌드. repo 체크아웃 전용 래퍼 | `core/cli/commands/seed_pool.py` |
 | `geode-eval audit-seeds` | `generate` / `resume` / `config` | 타깃 dim 하나에 대한 시드 생성 파이프라인. 페이즈별 체크포인트에서 재개 가능 | `evals/seed_generation/cli.py` |
 
-데몬 정지, 상태, 청소는 `core/cli/commands/lifecycle.py`의 `stop_serve` / `show_status` / `do_clean`이 구현하지만, Typer 서브커맨드로는 노출되지 않습니다. `geode update`가 stop과 재시작을 수행하고, `/status`가 데몬과 디스크 사용량 블록을 포함합니다. 수동 정지는 `pkill -f "geode serve"`입니다.
+데몬 정지, 상태, 청소는 `core/cli/commands/lifecycle.py`의 `stop_serve` / `show_status` / `do_clean`이 구현하지만, Typer 서브커맨드로는 노출되지 않습니다. `geode update`는 설치 교체 전에 stop하고, 실패 시 중지 상태를 유지하며, 성공 시 CLI/IPC 버전 일치를 확인합니다. `/status`가 데몬과 디스크 사용량 블록을 포함합니다. 수동 정지는 `pkill -f "geode serve"`입니다.
 
 ## 슬래시 명령
 
@@ -6283,6 +6287,8 @@ driver = "helper"
 # helper_path = "/absolute/path/to/geode-computer-helper"
 ```
 
+macOS에서는 `geode setup`이 helper를`~/.geode/helpers/computer-use/` 아래에 빌드합니다. wheel 안의 Swift/build source는 읽기 전용이며 생성물은 설치 디렉터리에 기록하지 않습니다.
+
 프로바이더가 native computer surface를 지원하면 그 경로를 쓰고, ChatGPT subscription처럼 native surface를 받지 않는 backend에는 같은 하네스를 normal function tool `computer_use`로 노출합니다. 이 경로는 다른 provider로 몰래 fallback하지 않습니다. OpenAI subscription source에 visual grounding을 별도로 구성하지 않았다면 `capture`는 가능하지만 `locate`는 dependency error로 중단되며, browser DOM·playwriter· `ui_probe` 같은 source-safe 구조 경로를 선택해야 합니다.
 
 ## 안전
@@ -6348,7 +6354,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1537 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1538 KB — fetch the Markdown twin above for the complete page)
 
 ---
 

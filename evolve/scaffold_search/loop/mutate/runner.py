@@ -49,7 +49,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from core.paths import GLOBAL_AUTORESEARCH_HANDOFF_DIR
+from core.paths import GLOBAL_AUTORESEARCH_HANDOFF_DIR, require_evolve_workspace
 from core.paths import (
     MUTATION_AUDIT_LOG_PATH as MUTATION_AUDIT_LOG_PATH,
 )
@@ -353,7 +353,10 @@ def build_runner_context() -> RunnerContext:
     from evolve.scaffold_search.loop.mutate.mutator_feedback import (
         format_mutator_feedback_block,
     )
-    from evolve.scaffold_search.loop.mutate.policies import TARGET_KINDS, load_policy
+    from evolve.scaffold_search.loop.mutate.policies import (
+        TARGET_KINDS,
+        load_policy_for_mutation,
+    )
     from evolve.scaffold_search.loop.observe.mutations_reader import (
         read_recent_applies,
         read_recent_attributions,
@@ -368,7 +371,7 @@ def build_runner_context() -> RunnerContext:
         if kind == "prompt":
             current_policies[kind] = dict(current_sections)
         else:
-            current_policies[kind] = load_policy(kind)
+            current_policies[kind] = load_policy_for_mutation(kind)
     target_dim = ""
     if baseline_snapshot is not None:
         target_dim = pick_regression_target_dim(baseline_snapshot) or ""
@@ -1005,7 +1008,10 @@ def apply_mutation(
     :func:`evolve.scaffold_search.loop.mutate.policies.write_policy` which is
     a generic ``dict[str, str]`` writer with atomic temp-file rewrite.
     """
-    from evolve.scaffold_search.loop.mutate.policies import load_policy, write_policy
+    from evolve.scaffold_search.loop.mutate.policies import (
+        load_policy_for_mutation,
+        write_policy,
+    )
     from evolve.scaffold_search.train import (
         load_wrapper_prompt_sections,
         write_wrapper_prompt_sections,
@@ -1038,7 +1044,7 @@ def apply_mutation(
     sections = (
         dict(current_sections)
         if current_sections is not None
-        else load_policy(mutation.target_kind)
+        else load_policy_for_mutation(mutation.target_kind)
     )
     _validate_decomposition_target(mutation.target_kind, mutation.target_section, sections)
     previous_value = sections.get(mutation.target_section, "")
@@ -1074,6 +1080,7 @@ def append_audit_log(
     downstream of this apply-time write, so the live row carries it only once a
     caller threads the post-audit result back through.
     """
+    require_evolve_workspace()
     target = log_path if log_path is not None else MUTATION_AUDIT_LOG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
     row = mutation.to_audit_row(
@@ -1147,7 +1154,6 @@ def _git_commit_audit_log(
     log_path: Path,
     *,
     mutation: Mutation,
-    runner: subprocess.CompletedProcess[str] | None = None,
 ) -> bool:
     """Stage + commit the audit log row.
 
@@ -1156,17 +1162,9 @@ def _git_commit_audit_log(
     non-blocking: the SoT is already updated in-place, so the loop's
     correctness boundary is the file write, not the git commit.
 
-    ``runner`` is exposed so tests can inject a mock that records the
-    argv without running real git.
     """
     try:
-        # parents[3] = repo root. ``log_path`` is
-        # ``<repo>/evolve/scaffold_search/state/mutations.jsonl`` (PR-STATE-SOT-
-        # RUNTIME-SPLIT moved it in-repo, one level deeper than the old
-        # ``state/autoresearch/`` — parents went 2 → 3). parents[2] would
-        # resolve to ``<repo>/core`` and silently run git in a non-root cwd.
-        # Guarded by test_runner_repo_root_invariant.
-        repo_root = log_path.resolve().parents[3]
+        repo_root = require_evolve_workspace()
         subprocess.run(  # noqa: S603  # nosec B603 — argv = audit-log path
             ["git", "add", str(log_path)],  # noqa: S607  # nosec B607 — git in PATH
             cwd=str(repo_root),
@@ -1397,12 +1395,12 @@ class SelfImprovingLoopRunner:
         # based on the parsed mutation's kind so the dispatcher writes
         # the right destination. ``original_sections`` is captured AFTER
         # the kind-aware load so rollback restores the matching SoT.
-        from evolve.scaffold_search.loop.mutate.policies import load_policy
+        from evolve.scaffold_search.loop.mutate.policies import load_policy_for_mutation
 
         if mutation.target_kind == "prompt":
             target_sections = dict(ctx.current_sections)
         else:
-            target_sections = load_policy(mutation.target_kind)
+            target_sections = load_policy_for_mutation(mutation.target_kind)
         original_sections = dict(target_sections)
         baseline_fitness: float | None = None
         snapshot = ctx.baseline_snapshot
@@ -1463,6 +1461,7 @@ class SelfImprovingLoopRunner:
         rerun_enabled 일 때만 (rerun_disabled 면 audit 가 안 일어나
         attribution row 도 없으니 audit_run_id 무의미).
         """
+        repo_root = require_evolve_workspace()
         audit_run_id = _mint_audit_run_id() if self.rerun_enabled else ""
         _new_sections, previous_value = apply_mutation(
             proposal.mutation, current_sections=proposal.target_sections
@@ -1486,12 +1485,6 @@ class SelfImprovingLoopRunner:
         if self.commit_enabled:
             _git_commit_audit_log(log_path, mutation=proposal.mutation)
         if self.rerun_enabled:
-            # MUTATION_AUDIT_LOG_PATH lives at
-            # <repo>/evolve/scaffold_search/state/mutations.jsonl, so parents[3] is
-            # the repo root (PR-STATE-SOT-RUNTIME-SPLIT moved it in-repo, depth
-            # 2 → 3). parents[2] would point at <repo>/core and spawn
-            # `uv run python -m evolve.scaffold_search.train` with the wrong cwd.
-            repo_root = log_path.resolve().parents[3]
             # PR-SOT-REVERT-ON-AUDIT-FAIL (2026-05-26) — forward
             # ``proposal.original_sections`` so _invoke_autoresearch can
             # rollback the canonical SoT if the audit subprocess crashes

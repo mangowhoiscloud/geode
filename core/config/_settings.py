@@ -453,8 +453,8 @@ class Settings(BaseSettings):
     # - helper: require the macOS helper executable (fail-loud if unavailable).
     computer_use_driver: str = "auto"
     # Optional explicit helper executable path. When empty, GEODE looks for the
-    # project-local helper bundle built by scripts/macos/build_computer_helper.sh
-    # and then PATH's geode-computer-helper.
+    # operator-owned helper bundle built by ``geode setup`` and then PATH's
+    # geode-computer-helper.
     computer_use_helper_path: str = ""
 
     # run_bash command sandbox (Phase F) — "off" (default, compat) | "on" | "strict".

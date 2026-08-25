@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-APP_DIR="${1:-"$ROOT/.geode/ComputerUseHelper/GEODE Computer Use Helper.app"}"
+GEODE_HOME="${GEODE_HOME:-"$HOME/.geode"}"
+APP_DIR="${1:-"$GEODE_HOME/helpers/computer-use/GEODE Computer Use Helper.app"}"
 CONTENTS="$APP_DIR/Contents"
 MACOS="$CONTENTS/MacOS"
 BIN="$MACOS/geode-computer-helper"

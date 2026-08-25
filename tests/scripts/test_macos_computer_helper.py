@@ -11,10 +11,17 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "scripts" / "macos" / "geode_computer_helper.swift"
+BUILD_SCRIPT = ROOT / "scripts" / "macos" / "build_computer_helper.sh"
 
 
 def _source() -> str:
     return SOURCE.read_text(encoding="utf-8")
+
+
+def test_build_output_defaults_to_operator_home() -> None:
+    source = BUILD_SCRIPT.read_text(encoding="utf-8")
+    assert "$GEODE_HOME/helpers/computer-use/GEODE Computer Use Helper.app" in source
+    assert "$ROOT/.geode/ComputerUseHelper" not in source
 
 
 def test_keyboard_events_use_the_login_session_source() -> None:

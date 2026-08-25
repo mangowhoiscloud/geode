@@ -31,6 +31,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from core.paths import COMPUTER_USE_HELPER_APP_DIR
 from core.tools.computer_observation import enrich_computer_result
 
 log = logging.getLogger(__name__)
@@ -83,16 +84,7 @@ def computer_use_driver() -> str:
 
 
 def _default_helper_path() -> Path:
-    repo_root = Path(__file__).resolve().parents[2]
-    return (
-        repo_root
-        / ".geode"
-        / "ComputerUseHelper"
-        / "GEODE Computer Use Helper.app"
-        / "Contents"
-        / "MacOS"
-        / "geode-computer-helper"
-    )
+    return COMPUTER_USE_HELPER_APP_DIR / "Contents" / "MacOS" / "geode-computer-helper"
 
 
 def computer_use_helper_path() -> Path | None:
@@ -130,7 +122,7 @@ def _helper_request_sync(
             "error": "computer-use helper is not installed",
             "error_type": "dependency",
             "driver": "macos_helper",
-            "hint": "Build it with: scripts/macos/build_computer_helper.sh",
+            "hint": "Build it with: geode setup",
         }
     payload = {
         "action": action,
