@@ -2,7 +2,7 @@
 
 > GEODE is an autonomous agent runtime and evaluation substrate: an inner agentic loop runs tasks (research, analysis, automation, scheduling), while an experimental safety-gated outer loop mutates and evaluates scaffold candidates.
 
-Version v1.0.25. Last sync 2026-08-24. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
+Version v1.0.26. Last sync 2026-08-25. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
 
 ## Overview . 개요
 
