@@ -24,7 +24,7 @@ from core.agent.tool_executor.processor import ToolCallProcessor
 from core.agent.tool_executor.result_token_guard import guard_tool_result, project_mcp_result
 from core.observability.trajectory import verify_trajectory_integrity
 
-from evals.benchmarks.manifest import REPO_ROOT, get_harness
+from evals.benchmarks.manifest import REPO_ROOT, get_benchmark
 from evals.benchmarks.mcpmark_geode_agent import _tool_schema_sha256
 
 EXPECTED_FS30_SHA256 = "50483308573ce407abaf0700885d56c6df0453557669dddce9edcece83710433"
@@ -375,14 +375,14 @@ def _fixture_receipt(root: Path, ids: tuple[str, ...]) -> dict[str, Any]:
 
 
 def _validate_checkout(root: Path) -> None:
-    spec = get_harness("mcpmark")
+    spec = get_benchmark("mcpmark")
     patch = Path(__file__).with_name("patches") / (
         "mcpmark-cd45b7f-filesystem-standard-verifier-missing-output.patch"
     )
     if _sha256(patch) != PATCH_SHA256:
         raise PairRunError("checked-in MCPMark verifier patch digest mismatch")
     if _git(root, "rev-parse", "HEAD") != spec.commit:
-        raise PairRunError("MCPMark revision does not match the public harness manifest")
+        raise PairRunError("MCPMark revision does not match the public benchmark manifest")
     visible = _git(root, "status", "--porcelain=v1", "--untracked-files=all", "--")
     visible_paths = {line[3:] for line in visible.splitlines() if line}
     if visible_paths != set(PATCHED_VERIFIERS):
@@ -408,8 +408,8 @@ def _validate_spec(
     reproduction = spec["reproduction"]
     execution = reproduction["execution"]
     model = reproduction["model"]
-    harness = get_harness("mcpmark")
-    expected_harness = f"{harness.commit}+patch-sha256:{PATCH_SHA256}"
+    benchmark = get_benchmark("mcpmark")
+    expected_revision = f"{benchmark.commit}+patch-sha256:{PATCH_SHA256}"
     expected_state = f"fixture-semantic-sha256:{fixture_semantic_sha256}"
     if spec["preregistration"]["live_test_approved"] is not True:
         raise PairRunError("run spec does not approve live model calls")
@@ -421,7 +421,7 @@ def _validate_spec(
         raise PairRunError(
             f"paired runner requires repetitions={repetitions} and max_concurrency=1"
         )
-    if reproduction["harness"]["revision"] != expected_harness:
+    if reproduction["harness"]["revision"] != expected_revision:
         raise PairRunError("run spec harness revision does not bind the verifier patch")
     if reproduction["environment"]["initial_state_ref"] != expected_state:
         raise PairRunError("run spec initial_state_ref does not match the semantic fixture tree")

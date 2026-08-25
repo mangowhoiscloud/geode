@@ -412,6 +412,11 @@ verify whether the new shape still echoes its source.
   Policy Chain, plugin discovery.
 - Karpathy autoresearch (2026-03). Fixed wall-budget, frozen scoreboard, git
   monotone ratchet, token-economic loop, simplicity criterion.
+- Prime Agent (2026-08). RLM-native programmable context, continual harness
+  state, persistent subagents, and native-harness evaluation discipline.
+- Original/upstream implementations. Pin the native task, prompt, workspace,
+  verifier, and result authority before adding a benchmark integration or
+  platform adapter; do not claim equivalence without parity evidence.
 - Hermes Agent (NousResearch). llms.txt / llms-full.txt dual index pattern.
 - Diátaxis. Documentation 4-quadrant model.
 

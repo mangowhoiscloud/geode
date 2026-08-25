@@ -616,8 +616,8 @@ def test_spec_rejects_a_digest_outside_the_selected_profile(
     monkeypatch.setattr(pair, "validate_run_spec", lambda _path: spec)
     monkeypatch.setattr(
         pair,
-        "get_harness",
-        lambda _name: type("Harness", (), {"commit": "harness"})(),
+        "get_benchmark",
+        lambda _name: type("Benchmark", (), {"commit": "harness"})(),
     )
     monkeypatch.setattr(
         pair,
