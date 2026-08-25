@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/schemas/rollout.schema.json",
+  "title": "GEODE evaluation rollout v1",
+  "type": "object",
+  "required": ["schema_id", "schema_version", "run_id", "rollout_id", "example_id", "rollout_index", "seed", "policy", "rollout_attempt_ids", "selected_attempt_id", "trajectory", "native_result", "timing", "validity", "termination_reason", "selected_for_reward"],
+  "properties": {
+    "schema_id": {"const": "geode.eval-rollout@1"},
+    "schema_version": {"const": 1},
+    "run_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"},
+    "rollout_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,255}$"},
+    "example_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,255}$"},
+    "rollout_index": {"type": "integer", "minimum": 0},
+    "seed": {"type": ["integer", "string"]},
+    "policy": {
+      "type": "object",
+      "required": ["model", "provider", "source", "effort", "geode_revision"],
+      "properties": {
+        "model": {"type": "string", "minLength": 1, "maxLength": 128},
+        "provider": {"type": "string", "minLength": 1, "maxLength": 80},
+        "source": {"type": "string", "minLength": 1, "maxLength": 80},
+        "effort": {"type": "string", "minLength": 1, "maxLength": 80},
+        "geode_revision": {"type": "string", "pattern": "^[a-f0-9]{40}$"}
+      },
+      "additionalProperties": false
+    },
+    "rollout_attempt_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 256}
+    },
+    "selected_attempt_id": {"type": ["string", "null"], "maxLength": 256},
+    "trajectory": {"$ref": "#/$defs/artifactReference"},
+    "native_result": {"$ref": "#/$defs/artifactReferenceWithLocator"},
+    "timing": {
+      "type": "object",
+      "required": ["started_at", "finished_at", "wall_seconds"],
+      "properties": {
+        "started_at": {"type": ["string", "null"], "format": "date-time"},
+        "finished_at": {"type": ["string", "null"], "format": "date-time"},
+        "wall_seconds": {"type": ["number", "null"], "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "validity": {"enum": ["valid", "invalid", "aborted"]},
+    "termination_reason": {"type": "string", "minLength": 1, "maxLength": 160},
+    "selected_for_reward": {"type": "boolean"}
+  },
+  "$defs": {
+    "artifactReference": {
+      "type": "object",
+      "required": ["path", "sha256", "trajectory_id", "session_ids"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 512},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "trajectory_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "session_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      },
+      "additionalProperties": false
+    },
+    "artifactReferenceWithLocator": {
+      "type": "object",
+      "required": ["path", "sha256", "source_locator"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 512},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "source_locator": {"type": "string", "pattern": "^/"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"validity": {"const": "valid"}}},
+      "then": {"properties": {"selected_attempt_id": {"type": "string", "minLength": 1}}}
+    },
+    {
+      "if": {"properties": {"validity": {"enum": ["invalid", "aborted"]}}},
+      "then": {"properties": {"selected_for_reward": {"const": false}}}
+    }
+  ],
+  "additionalProperties": false
+}

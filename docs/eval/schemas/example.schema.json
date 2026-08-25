@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/schemas/example.schema.json",
+  "title": "GEODE evaluation example v1",
+  "type": "object",
+  "required": ["schema_id", "schema_version", "example_id", "suite", "dataset", "source_task_id", "stratum_id", "input_sha256"],
+  "properties": {
+    "schema_id": {"const": "geode.eval-example@1"},
+    "schema_version": {"const": 1},
+    "example_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,255}$"},
+    "suite": {"type": "string", "minLength": 1, "maxLength": 128},
+    "dataset": {
+      "type": "object",
+      "required": ["name", "revision"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 256},
+        "revision": {"type": "string", "minLength": 1, "maxLength": 256}
+      },
+      "additionalProperties": false
+    },
+    "source_task_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "stratum_id": {"type": ["string", "null"], "maxLength": 128},
+    "input_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  },
+  "additionalProperties": false
+}

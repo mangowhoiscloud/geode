@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Evaluation learning-view contract v2.** GEODE now validates digest-bound
+  `example → rollout → trajectory → reward` datasets while preserving native
+  receipts and the immutable `geode.trajectory@1` schema.
+- **Harbor terminal benchmark adapter.** The current GEODE AgenticLoop can run
+  as a Harbor external agent while preserving native verifier output and a
+  normalized GEODE trajectory sidecar.
+
 ## [1.0.26] - 2026-08-25
 
 > Immutable distribution release: installed package bytes remain read-only,
