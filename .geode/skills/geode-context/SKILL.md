@@ -7,9 +7,9 @@ description: GEODE runtime architecture and repo-shape context. Use for architec
 
 # GEODE Context
 
-Version-agnostic runtime context. For current version and metrics always read
-`CLAUDE.md` or `site/src/data/geode/sot.ts` — never trust numbers remembered
-from this skill.
+Version-agnostic runtime context. Use `geode version` / `geode about` for the
+installed version and runtime facts; never trust numbers remembered from this
+skill.
 
 ## Current Shape
 

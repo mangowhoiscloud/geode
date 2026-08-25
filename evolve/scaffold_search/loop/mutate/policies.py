@@ -57,6 +57,7 @@ from core.paths import (
     AUTORESEARCH_WRAPPER_SECTIONS_PATH,
     LEGACY_SOT_DIR,
     OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH,
+    require_evolve_workspace,
 )
 
 log = logging.getLogger(__name__)
@@ -64,8 +65,8 @@ log = logging.getLogger(__name__)
 # PR-RATCHET-1 (2026-05-21) — when the in-repo SoT path doesn't
 # exist yet, fall back to the pre-RATCHET-1 ``~/.geode/autoresearch/handoff/``
 # location. Operators upgrading an existing install have their last
-# mutation state there; copying it forward on first read keeps the
-# loop continuous across the migration without a manual step. The
+# mutation state there; copying it forward before the first write keeps
+# the loop continuous across the migration without a manual step. The
 # legacy file is preserved (not deleted) so an operator can roll back
 # manually if needed.
 _LEGACY_FILE_NAMES: dict[str, str] = {
@@ -130,6 +131,7 @@ def _maybe_migrate_legacy_sot(kind: str, new_path: Path) -> None:
     legacy_path = LEGACY_SOT_DIR / legacy_name
     if not legacy_path.is_file():
         return
+    require_evolve_workspace()
     try:
         new_path.parent.mkdir(parents=True, exist_ok=True)
         new_path.write_text(legacy_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -339,10 +341,6 @@ def load_policy(kind: str) -> dict[str, str]:
     raises; the readers downstream (PR-5 attribution) must remain
     robust to incomplete state.
 
-    PR-RATCHET-1 (2026-05-21) — lazy migration from the pre-PR
-    ``~/.geode/autoresearch/handoff/`` location to the in-repo
-    ``evolve/scaffold_search/state/policies/`` location runs before the read.
-
     M1 (2026-05-21) — ``skill_catalog`` kind 는 disk 상 nested
     ``{skill_name: {description, user_invocable}}`` 이지만 mutation
     row 의 contract 가 flat string-keyed 이므로 ``_flatten_nested``
@@ -356,7 +354,6 @@ def load_policy(kind: str) -> dict[str, str]:
     reads. Both READ and WRITE land on the same file.
     """
     path = policy_path(kind)
-    _maybe_migrate_legacy_sot(kind, path)
     try:
         raw = path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -383,6 +380,14 @@ def load_policy(kind: str) -> dict[str, str]:
     # Coerce values to strings — same schema as wrapper-sections so
     # the contract is "string-keyed dict of string sections".
     return {k: str(v) for k, v in payload.items() if isinstance(k, str)}
+
+
+def load_policy_for_mutation(kind: str) -> dict[str, str]:
+    """Load a policy after migrating legacy state into the writable checkout."""
+    require_evolve_workspace()
+    path = policy_path(kind)
+    _maybe_migrate_legacy_sot(kind, path)
+    return load_policy(kind)
 
 
 def _serialize_policy_payload(kind: str, sections: dict[str, str]) -> str:
@@ -420,6 +425,7 @@ def write_policy(kind: str, sections: dict[str, str]) -> Path:
     저장. ``user_invocable`` field 는 ``"true"``/``"false"`` 문자열을
     bool 로 coerce — T2 reader 의 schema 요구 충족.
     """
+    require_evolve_workspace()
     path = policy_path(kind)
     _maybe_migrate_legacy_sot(kind, path)
     path.parent.mkdir(parents=True, exist_ok=True)

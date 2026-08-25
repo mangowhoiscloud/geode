@@ -706,6 +706,54 @@ def _run_update_step(
     return False
 
 
+def _stop_serve_before_update(*, running: bool, dry_run: bool) -> bool:
+    if not running:
+        return True
+    if dry_run:
+        console.print("  [muted]Would stop serve before replacing the install.[/muted]")
+        return True
+    console.print("  Stopping serve before replacing the install...")
+    if stop_serve(force=True, timeout=10):
+        return True
+    console.print("  [error]Existing serve could not be stopped; update aborted.[/error]")
+    return False
+
+
+def _serve_is_present() -> bool:
+    from core.cli.ipc_client import is_serve_running
+
+    return is_serve_running() or _find_serve_pid() is not None
+
+
+def _serve_matches_cli(executable: str) -> bool:
+    """Verify the restarted daemon reports the installed CLI version."""
+    try:
+        result = subprocess.run(  # noqa: S603
+            [executable, "version"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        console.print(f"  [error]Could not verify restarted CLI version: {exc}[/error]")
+        return False
+    _, marker, cli_version = result.stdout.strip().rpartition("GEODE v")
+    if result.returncode != 0 or not marker or not cli_version:
+        console.print("  [error]Restarted CLI did not report a parseable version.[/error]")
+        return False
+
+    from core.cli.ipc_client import query_serve_version
+
+    daemon_version = query_serve_version()
+    if daemon_version == cli_version:
+        return True
+    console.print(
+        f"  [error]Restarted daemon/CLI version mismatch: daemon={daemon_version!r}, "
+        f"CLI={cli_version!r}.[/error]"
+    )
+    return False
+
+
 def _start_serve_background(
     *,
     dry_run: bool = False,
@@ -733,8 +781,11 @@ def _start_serve_background(
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if is_serve_running():
-            console.print("  [success]Serve restarted and is ready.[/success]")
-            return True
+            if _serve_matches_cli(executable):
+                console.print("  [success]Serve restarted and is ready.[/success]")
+                return True
+            stop_serve(force=True, timeout=10)
+            return False
         time.sleep(0.1)
 
     with contextlib.suppress(OSError):
@@ -778,9 +829,7 @@ def _do_source_update(
         reason = "dry-run was requested" if dry_run else "--force was passed"
         console.print(f"  [warning]Checkout is dirty; continuing because {reason}.[/warning]")
 
-    from core.cli.ipc_client import is_serve_running
-
-    serve_was_running = is_serve_running()
+    serve_was_running = _serve_is_present()
     tool_env = None
     geode_executable = "geode"
     if uv_tool_dir is not None and uv_tool_bin_dir is not None:
@@ -791,6 +840,8 @@ def _do_source_update(
         geode_executable = str(uv_tool_bin_dir / "geode")
     elif uv_tool_dir is not None or uv_tool_bin_dir is not None:
         console.print("  [error]The uv tool receipt has incomplete directory metadata.[/error]")
+        return False
+    if not _stop_serve_before_update(running=serve_was_running, dry_run=dry_run):
         return False
 
     steps = [
@@ -817,14 +868,6 @@ def _do_source_update(
 
     if restart and serve_was_running:
         console.print("  Restarting serve...")
-        if dry_run:
-            console.print("  [muted]Would stop the verified existing serve.[/muted]")
-        elif not stop_serve(force=True, timeout=10):
-            console.print(
-                "  [error]Updated CLI, but existing serve could not be stopped; "
-                "no replacement daemon was started.[/error]"
-            )
-            return False
         if not _start_serve_background(
             dry_run=dry_run,
             executable=geode_executable,
@@ -832,7 +875,7 @@ def _do_source_update(
             return False
     elif serve_was_running:
         console.print(
-            "  [warning]Serve was running; restart it manually to load new code.[/warning]"
+            "  [warning]Serve was stopped; restart it manually to load new code.[/warning]"
         )
 
     return True
@@ -848,7 +891,6 @@ def _do_uv_tool_update(
 ) -> bool:
     """Replace a uv tool's constraint and upgrade within the requested scope."""
     from core import __version__
-    from core.cli.ipc_client import is_serve_running
 
     try:
         requirement = "geode-agent@latest" if latest else patch_requirement(__version__)
@@ -876,8 +918,9 @@ def _do_uv_tool_update(
             "UV_TOOL_BIN_DIR": str(uv_tool_bin_dir),
         }
         geode_executable = str(uv_tool_bin_dir / "geode")
-        serve_was_running = is_serve_running()
-        restart_needed = restart and serve_was_running
+        serve_was_running = _serve_is_present()
+        if not _stop_serve_before_update(running=serve_was_running, dry_run=dry_run):
+            return False
 
         steps = [
             (
@@ -907,23 +950,10 @@ def _do_uv_tool_update(
             ):
                 continue
             if serve_was_running:
-                console.print(
-                    "  [warning]Update failed; the existing serve process was not "
-                    "stopped.[/warning]"
-                )
+                console.print("  [warning]Update failed; serve remains stopped.[/warning]")
             return False
 
-        if restart_needed:
-            if dry_run:
-                console.print("  [muted]Would stop serve after verifying the uv update.[/muted]")
-            else:
-                console.print("  Stopping serve after verifying the uv update...")
-                if not stop_serve(force=True, timeout=10):
-                    console.print(
-                        "  [error]Updated CLI, but existing serve could not be stopped; "
-                        "no replacement daemon was started.[/error]"
-                    )
-                    return False
+        if restart and serve_was_running:
             if not _start_serve_background(
                 dry_run=dry_run,
                 executable=geode_executable,
@@ -931,7 +961,7 @@ def _do_uv_tool_update(
                 return False
         elif serve_was_running:
             console.print(
-                "  [warning]Serve was running; restart it manually to load the "
+                "  [warning]Serve was stopped; restart it manually to load the "
                 "updated package.[/warning]"
             )
         return True

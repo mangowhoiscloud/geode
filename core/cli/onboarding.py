@@ -27,6 +27,7 @@ from typing import Any
 from core.config.env_io import mask_key as _mask_key
 from core.config.env_io import upsert_env as _upsert_env
 from core.config.toml_edit import persist_toml_section
+from core.paths import COMPUTER_USE_HELPER_APP_DIR
 from core.ui.console import console
 from core.wiring.startup import ReadinessReport, _has_any_llm_key, detect_subscription_oauth
 
@@ -334,7 +335,7 @@ def configure_computer_use_helper() -> None:
 
     try:
         proc = subprocess.run(  # noqa: S603
-            [str(build_script)],
+            [str(build_script), str(COMPUTER_USE_HELPER_APP_DIR)],
             capture_output=True,
             text=True,
             timeout=120,

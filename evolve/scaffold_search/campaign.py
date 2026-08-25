@@ -102,6 +102,7 @@ from core.paths import (
     CAMPAIGN_PROGRESS_LOG_PATH,
     MUTATION_AUDIT_LOG_PATH,
     RUNTIME_ROOT,
+    require_evolve_workspace,
 )
 from core.paths import CYCLE_INPUT_POOL as _CYCLE_INPUT_POOL  # PR-CLEANUP-D2
 from core.paths import HELD_OUT_BENCH_POOL as _HELD_OUT_BENCH_POOL  # PR-CLEANUP-D2
@@ -394,6 +395,7 @@ def restore_sot(snapshot_dir: Path) -> list[Path]:
     list of restored live paths. ``FileNotFoundError`` if the snapshot dir is
     absent (a matched reset must be exact).
     """
+    require_evolve_workspace()
     if not snapshot_dir.exists():
         raise FileNotFoundError(
             f"gen-0 snapshot dir {snapshot_dir} missing — cannot do a matched arm reset"
@@ -2255,6 +2257,8 @@ def run_campaign(
     unit-testable with NO live audit.
     """
     _validate_arms(arms)
+    if not dry_run:
+        require_evolve_workspace()
     with ProgressLog(progress_path) as progress:
         progress.emit(
             f"campaign start: n={n} k={k} arms={list(arms)} dry_run={dry_run} "

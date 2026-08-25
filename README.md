@@ -335,7 +335,8 @@ For an editable source checkout, `geode update` instead runs `git pull
 It resolves the actual GEODE checkout from install metadata rather than using
 an unrelated current repository; missing metadata is an error, never a cwd
 fallback. If `geode serve` was running, GEODE verifies the update before
-stopping it, then confirms the replacement daemon is ready. Preview either path
+replacing the live install, leaves it stopped on any update failure, then
+confirms the restarted daemon and installed CLI report the same version. Preview either path
 without changing files:
 
 ```bash

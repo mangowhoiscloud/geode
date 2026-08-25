@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging as _logging
 import os
+import tomllib
 from functools import lru_cache
 from pathlib import Path
 
@@ -68,6 +69,42 @@ def _resolve_repo_root() -> Path:
 
 
 _REPO_ROOT = _resolve_repo_root()
+
+
+def is_geode_source_root(path: Path) -> bool:
+    """Return whether ``path`` is a writable GEODE Git checkout."""
+    root = path.expanduser().resolve()
+    pyproject = root / "pyproject.toml"
+    if not pyproject.is_file() or not (root / ".git").exists() or not os.access(root, os.W_OK):
+        return False
+    try:
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return False
+    project = data.get("project")
+    return isinstance(project, dict) and project.get("name") == "geode-agent"
+
+
+_EXPLICIT_EVOLVE_WORKSPACE = os.environ.get("GEODE_EVOLVE_WORKSPACE")
+if _EXPLICIT_EVOLVE_WORKSPACE:
+    EVOLVE_WORKSPACE_ROOT: Path | None = Path(_EXPLICIT_EVOLVE_WORKSPACE).expanduser().resolve()
+elif is_geode_source_root(_REPO_ROOT):
+    EVOLVE_WORKSPACE_ROOT = _REPO_ROOT
+else:
+    EVOLVE_WORKSPACE_ROOT = None
+
+
+def require_evolve_workspace() -> Path:
+    """Return the writable evolution checkout or fail before a package write."""
+    root = EVOLVE_WORKSPACE_ROOT
+    if root is None or not is_geode_source_root(root):
+        raise RuntimeError(
+            "scaffold mutation and promotion require a writable GEODE Git checkout; "
+            "run from an editable checkout or set GEODE_EVOLVE_WORKSPACE to one"
+        )
+    return root
+
+
 # ``GEODE_HOME`` is defined here (moved up from the Global section below) so the
 # state roots can derive the runtime home from it. See the Global section for
 # the full frontier ``{APP}_HOME`` convention note.
@@ -94,7 +131,12 @@ GEODE_HOME = Path(os.environ.get("GEODE_HOME") or (Path.home() / ".geode")).expa
 # split applies only to the persistent DEFAULT (orchestrator / serve / CLI),
 # where the env is unset. Seed pools are the one exception: always repo-pinned
 # (below), so an isolated worker still reads the real git-tracked input pools.
-_IN_REPO_SOT_DIR = _REPO_ROOT / "evolve" / "scaffold_search" / "state"
+_BUNDLED_SOT_DIR = _REPO_ROOT / "evolve" / "scaffold_search" / "state"
+_WORKSPACE_SOT_DIR = (
+    EVOLVE_WORKSPACE_ROOT / "evolve" / "scaffold_search" / "state"
+    if EVOLVE_WORKSPACE_ROOT is not None
+    else None
+)
 _ISOLATED_STATE_ROOT = os.environ.get("GEODE_STATE_ROOT")
 if _ISOLATED_STATE_ROOT:
     STATE_ROOT = Path(_ISOLATED_STATE_ROOT).expanduser()
@@ -103,7 +145,9 @@ if _ISOLATED_STATE_ROOT:
     SELF_IMPROVING_SOT_DIR = STATE_ROOT / "autoresearch"
     RUNTIME_ROOT = STATE_ROOT / "autoresearch"
 else:
-    SELF_IMPROVING_SOT_DIR = _IN_REPO_SOT_DIR
+    # A wheel may read immutable reference policies from its package tree, but
+    # every writer must first pass :func:`require_evolve_workspace`.
+    SELF_IMPROVING_SOT_DIR = _WORKSPACE_SOT_DIR or _BUNDLED_SOT_DIR
     RUNTIME_ROOT = GEODE_HOME / "self-improving"
     # Back-compat name — ``STATE_ROOT`` means the RUNTIME root in the default home.
     STATE_ROOT = RUNTIME_ROOT
@@ -112,7 +156,7 @@ else:
 # held-out bench). REPO-pinned SoT (operator decision D-3, 2026-06-10): ALWAYS
 # in-repo, never under ``GEODE_STATE_ROOT``, so an isolated worker reads the same
 # tracked pools the assemble writer + campaign reader share (PR-CLEANUP-D2).
-SEED_POOLS_DIR = _IN_REPO_SOT_DIR / "seed_pools"
+SEED_POOLS_DIR = (_WORKSPACE_SOT_DIR or _BUNDLED_SOT_DIR) / "seed_pools"
 CYCLE_INPUT_POOL = SEED_POOLS_DIR / "cycle-input"
 HELD_OUT_BENCH_POOL = SEED_POOLS_DIR / "held-out"
 
@@ -287,6 +331,9 @@ GLOBAL_USER_PREFERENCES = GLOBAL_USER_PROFILE_DIR / "preferences.toml"
 # Non-project-scoped data
 GLOBAL_VAULT_DIR = GEODE_HOME / "vault"
 GLOBAL_MODELS_DIR = GEODE_HOME / "models"
+COMPUTER_USE_HELPER_APP_DIR = (
+    GEODE_HOME / "helpers" / "computer-use" / "GEODE Computer Use Helper.app"
+)
 GLOBAL_RUNS_DIR = GEODE_HOME / "runs"
 GLOBAL_USAGE_DIR = GEODE_HOME / "usage"
 GLOBAL_MCP_DIR = GEODE_HOME / "mcp"

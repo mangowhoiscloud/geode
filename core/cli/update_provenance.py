@@ -26,6 +26,8 @@ from typing import Any
 from urllib.parse import urlsplit
 from urllib.request import url2pathname
 
+from core.paths import is_geode_source_root
+
 PACKAGE_NAME = "geode-agent"
 _NORMALIZED_PACKAGE_NAME = "geode-agent"
 _FINAL_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
@@ -85,22 +87,6 @@ def _file_url_path(url: str) -> Path | None:
     if parsed.scheme != "file" or parsed.netloc not in ("", "localhost"):
         return None
     return Path(url2pathname(parsed.path)).expanduser().resolve()
-
-
-def _is_geode_source_root(path: Path) -> bool:
-    """Require both GEODE package metadata and a real git checkout."""
-    pyproject = path / "pyproject.toml"
-    if not pyproject.is_file() or not (path / ".git").exists():
-        return False
-    try:
-        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError):
-        return False
-    project = data.get("project")
-    if not isinstance(project, dict):
-        return False
-    name = str(project.get("name", ""))
-    return _normalize_distribution_name(name) == _NORMALIZED_PACKAGE_NAME
 
 
 def _unsupported_uv_receipt(reason: str) -> UpdateTarget:
@@ -256,7 +242,7 @@ def detect_update_target(*, prefix: Path | None = None) -> UpdateTarget:
         source = _file_url_path(str(direct_url.get("url", "")))
         dir_info = direct_url.get("dir_info")
         is_editable = isinstance(dir_info, dict) and dir_info.get("editable") is True
-        if source is not None and is_editable and _is_geode_source_root(source):
+        if source is not None and is_editable and is_geode_source_root(source):
             editable_source = source
 
     active_prefix = (prefix or Path(sys.prefix)).expanduser().resolve()

@@ -141,7 +141,8 @@ export default function Page() {
               데몬 정지, 상태, 청소는 <code>core/cli/commands/lifecycle.py</code>의{" "}
               <code>stop_serve</code> / <code>show_status</code> /{" "}
               <code>do_clean</code>이 구현하지만, Typer 서브커맨드로는 노출되지
-              않습니다. <code>geode update</code>가 stop과 재시작을 수행하고,{" "}
+              않습니다. <code>geode update</code>는 설치 교체 전에 stop하고,
+              실패 시 중지 상태를 유지하며, 성공 시 CLI/IPC 버전 일치를 확인합니다.{" "}
               <code>/status</code>가 데몬과 디스크 사용량 블록을 포함합니다.
               수동 정지는 <code>pkill -f &quot;geode serve&quot;</code>입니다.
             </p>
@@ -388,7 +389,8 @@ export default function Page() {
               Daemon stop, status, and cleanup live in{" "}
               <code>core/cli/commands/lifecycle.py</code> (<code>stop_serve</code>,{" "}
               <code>show_status</code>, <code>do_clean</code>) but are not Typer
-              subcommands. <code>geode update</code> performs stop plus restart,
+              subcommands. <code>geode update</code> stops serve before replacing
+              the install, stays stopped on failure, and verifies CLI/IPC version parity,
               and <code>/status</code> includes the daemon and disk-usage block.
               Manual stop is <code>pkill -f &quot;geode serve&quot;</code>.
             </p>

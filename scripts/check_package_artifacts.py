@@ -1,8 +1,8 @@
-"""Validate GEODE packaging artifact contents.
+"""Validate the immutable GEODE product distribution contents.
 
-The wheel should contain only runtime code and runtime package data. The sdist
-should contain source plus a small release-facing documentation set, not the
-full docs/site/archive tree.
+The wheel contains product code and read-only package data. The sdist contains
+source plus a small release-facing documentation set, not mutable experiment
+state or the full docs/site/archive tree.
 """
 
 from __future__ import annotations
@@ -31,22 +31,44 @@ SELF_IMPROVING_RUNTIME_PATHS = {
     "evolve/scaffold_search/train.py",
 }
 
-SELF_IMPROVING_STATE_PATHS = {
+SELF_IMPROVING_STATIC_PATHS = {
     "evolve/scaffold_search/state/README.md",
+    "evolve/scaffold_search/state/policies/hyperparam.json",
+}
+
+MUTABLE_STATE_PATHS = {
     "evolve/scaffold_search/state/baseline_archive.jsonl",
     "evolve/scaffold_search/state/baseline_epochs.json",
     "evolve/scaffold_search/state/mutations.jsonl",
-    "evolve/scaffold_search/state/policies/hyperparam.json",
     "evolve/scaffold_search/state/results.jsonl",
     "evolve/scaffold_search/state/results.tsv",
 }
 
+BUNDLED_SKILL_PATHS = {
+    ".geode/skills/arxiv-digest/SKILL.md",
+    ".geode/skills/deep-researcher/SKILL.md",
+    ".geode/skills/frontier-ui-ux-catalog/SKILL.md",
+    ".geode/skills/frontier-ui-ux-catalog/reference.md",
+    ".geode/skills/geo/SKILL.md",
+    ".geode/skills/geode-context/SKILL.md",
+    ".geode/skills/grilling/SKILL.md",
+    ".geode/skills/long-task-watcher/SKILL.md",
+    ".geode/skills/pdf/LICENSE.txt",
+    ".geode/skills/pdf/SKILL.md",
+    ".geode/skills/pdf/forms.md",
+    ".geode/skills/pdf/reference.md",
+    ".geode/skills/pdf/scripts/check_bounding_boxes.py",
+    ".geode/skills/pdf/scripts/check_bounding_boxes_test.py",
+    ".geode/skills/pdf/scripts/check_fillable_fields.py",
+    ".geode/skills/pdf/scripts/convert_pdf_to_images.py",
+    ".geode/skills/pdf/scripts/create_validation_image.py",
+    ".geode/skills/pdf/scripts/extract_form_field_info.py",
+    ".geode/skills/pdf/scripts/fill_fillable_fields.py",
+    ".geode/skills/pdf/scripts/fill_pdf_form_with_annotations.py",
+}
+
 REQUIRED_WHEEL_PATHS = (
     {
-        ".geode/skills/geo/SKILL.md",
-        ".geode/skills/geode-context/SKILL.md",
-        ".geode/skills/grilling/SKILL.md",
-        ".geode/skills/slop-audit/SKILL.md",
         "core/GEODE.md",
         "core/worker.py",
         "core/tools/definitions.json",
@@ -79,15 +101,12 @@ REQUIRED_WHEEL_PATHS = (
         "evolve/cli.py",
     }
     | SELF_IMPROVING_RUNTIME_PATHS
-    | SELF_IMPROVING_STATE_PATHS
+    | SELF_IMPROVING_STATIC_PATHS
+    | BUNDLED_SKILL_PATHS
 )
 
 REQUIRED_SDIST_PATHS = (
     {
-        ".geode/skills/geo/SKILL.md",
-        ".geode/skills/geode-context/SKILL.md",
-        ".geode/skills/grilling/SKILL.md",
-        ".geode/skills/slop-audit/SKILL.md",
         "GEODE.md",
         "pyproject.toml",
         "README.md",
@@ -102,7 +121,8 @@ REQUIRED_SDIST_PATHS = (
         "evolve/__init__.py",
     }
     | SELF_IMPROVING_RUNTIME_PATHS
-    | SELF_IMPROVING_STATE_PATHS
+    | SELF_IMPROVING_STATIC_PATHS
+    | BUNDLED_SKILL_PATHS
 )
 
 BANNED_COMMON_PARTS = {
@@ -137,15 +157,6 @@ BANNED_SDIST_PREFIXES = (
     "experimental/",
     "autoresearch/",
     "scripts/",
-    "docs/audits/",
-    "docs/blog/",
-    "docs/diagrams/",
-    "docs/e2e/",
-    "docs/eval/",
-    "docs/self-improving/petri-bundle/",
-    "docs/plans/",
-    "docs/research/",
-    "docs/superpowers/",
 )
 
 
@@ -209,10 +220,17 @@ def _check_required(label: str, paths: set[str], required: set[str]) -> list[str
     return [f"{label}: missing required path {path}" for path in sorted(required - paths)]
 
 
+def _check_mutable_state(label: str, paths: set[str]) -> list[str]:
+    return [
+        f"{label}: mutable experiment state is packaged: {path}"
+        for path in sorted(paths & MUTABLE_STATE_PATHS)
+    ]
+
+
 # ``scripts/macos/`` ships on purpose (computer-use helper source + build
 # script; consumed at runtime by core/cli/onboarding.py and doctor), so the
 # blanket ``scripts/`` ban carves it out.
-ALLOWED_PREFIXES = ("scripts/macos/", ".geode/skills/")
+ALLOWED_PREFIXES = ("scripts/macos/",)
 
 
 def _check_banned(label: str, paths: set[str], prefixes: tuple[str, ...]) -> list[str]:
@@ -221,7 +239,11 @@ def _check_banned(label: str, paths: set[str], prefixes: tuple[str, ...]) -> lis
         if _has_banned_common(path):
             problems.append(f"{label}: banned cache/generated path {path}")
             continue
-        if path.startswith(prefixes) and not path.startswith(ALLOWED_PREFIXES):
+        if (
+            path.startswith(prefixes)
+            and not path.startswith(ALLOWED_PREFIXES)
+            and path not in BUNDLED_SKILL_PATHS
+        ):
             problems.append(f"{label}: banned path {path}")
     return problems
 
@@ -248,6 +270,8 @@ def validate(dist_dir: Path) -> None:
     problems: list[str] = []
     problems.extend(_check_required("wheel", wheel_paths, REQUIRED_WHEEL_PATHS))
     problems.extend(_check_required("sdist", sdist_paths, REQUIRED_SDIST_PATHS))
+    problems.extend(_check_mutable_state("wheel", wheel_paths))
+    problems.extend(_check_mutable_state("sdist", sdist_paths))
     problems.extend(_check_banned("wheel", wheel_paths, BANNED_WHEEL_PREFIXES))
     problems.extend(_check_banned("sdist", sdist_paths, BANNED_SDIST_PREFIXES))
     problems.extend(_check_removed_compatibility_layout("wheel", wheel_paths))

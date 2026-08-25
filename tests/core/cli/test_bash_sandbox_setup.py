@@ -181,15 +181,17 @@ class TestComputerUseHelperSetup:
         monkeypatch.setattr("core.tools.computer_use.computer_use_helper_path", lambda: None)
         monkeypatch.setattr(ob, "_computer_helper_build_script", lambda: build_script)
         monkeypatch.setattr(ob.console, "input", lambda *a, **k: "y")
-        monkeypatch.setattr(
-            ob.subprocess,
-            "run",
-            lambda *a, **k: SimpleNamespace(
+        calls: list[list[str]] = []
+
+        def run(command, **kwargs):
+            calls.append(command)
+            return SimpleNamespace(
                 returncode=0,
                 stdout=f"{helper_bin}\n",
                 stderr="",
-            ),
-        )
+            )
+
+        monkeypatch.setattr(ob.subprocess, "run", run)
 
         ob.configure_computer_use_helper()
 
@@ -197,3 +199,4 @@ class TestComputerUseHelperSetup:
         assert "[computer_use]" in text
         assert 'driver = "helper"' in text
         assert f'helper_path = "{helper_bin!s}"' in text
+        assert calls == [[str(build_script), str(ob.COMPUTER_USE_HELPER_APP_DIR)]]

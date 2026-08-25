@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
 import os
 import subprocess
@@ -12,6 +13,27 @@ from importlib import metadata, resources
 from importlib.util import find_spec
 from pathlib import Path, PurePosixPath
 from unittest.mock import Mock
+
+BUNDLED_SKILL_NAMES = {
+    "arxiv-digest",
+    "deep-researcher",
+    "frontier-ui-ux-catalog",
+    "geo",
+    "geode-context",
+    "grilling",
+    "long-task-watcher",
+    "pdf",
+}
+
+
+def _distribution_digest(distribution: metadata.Distribution) -> str:
+    digest = hashlib.sha256()
+    for file in sorted(distribution.files or (), key=str):
+        path = Path(str(distribution.locate_file(file)))
+        if path.is_file():
+            digest.update(file.as_posix().encode())
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
 
 
 def _help_output(target: str | Path) -> str:
@@ -64,7 +86,11 @@ def _check_full_package() -> None:
 
     assert resources.files("evals.petri").joinpath("petri.plugin.toml").is_file()
     assert resources.files("evolve.scaffold_search").joinpath("program.md").is_file()
-    assert resources.files("evolve.scaffold_search").joinpath("state/results.tsv").is_file()
+    assert (
+        resources.files("evolve.scaffold_search")
+        .joinpath("state/policies/hyperparam.json")
+        .is_file()
+    )
     distribution = metadata.distribution("geode-agent")
     bundled_skills = Path(str(distribution.locate_file(".geode/skills")))
     from core.skills.skills import SkillLoader, SkillRegistry
@@ -73,11 +99,24 @@ def _check_full_package() -> None:
     registry = SkillRegistry()
     loader.load_all(registry=registry)
     assert SkillLoader().skills_dir.resolve() == bundled_skills.resolve()
-    for skill_name in ("geo", "geode-context", "grilling", "slop-audit"):
+    assert set(registry.list_all()) == BUNDLED_SKILL_NAMES
+    for skill_name in BUNDLED_SKILL_NAMES:
         skill = registry.get(skill_name)
         assert skill is not None and skill.body
         assert skill.source_path is not None
         assert skill.source_path.resolve().is_relative_to(bundled_skills.resolve())
+
+    from evolve.scaffold_search.loop.mutate.policies import load_policy, write_policy
+
+    assert load_policy("hyperparam")
+    before = _distribution_digest(distribution)
+    try:
+        write_policy("hyperparam", {"max_steps": "1"})
+    except RuntimeError as exc:
+        assert "writable GEODE Git checkout" in str(exc)
+    else:
+        raise AssertionError("installed distribution accepted a scaffold mutation")
+    assert _distribution_digest(distribution) == before
 
     print("installed package OK")
 

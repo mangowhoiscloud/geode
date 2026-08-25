@@ -587,8 +587,11 @@ def _record_rejection(runner: Any, proposal: Any) -> None:
     import logging
     import time
 
+    from core.paths import require_evolve_workspace
+
     from evolve.scaffold_search.loop.mutate.runner import MUTATION_AUDIT_LOG_PATH
 
+    require_evolve_workspace()
     log = logging.getLogger(__name__)
 
     # PR-AUDIT-AB (2026-06-10) — operator decline is a mutation rejection

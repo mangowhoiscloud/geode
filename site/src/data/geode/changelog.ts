@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Fixed\n\n- **Installed distributions are immutable across evolution, helper setup, and updates.**\n  Scaffold mutation and promotion now require an explicit writable GEODE Git\n  checkout, rolling experiment ledgers no longer ship as wheel data, macOS\n  helper builds land under `GEODE_HOME`, and `geode update` stops a live daemon\n  before replacing its installation and verifies CLI/IPC version parity after\n  restart.\n\n### Infrastructure\n\n- **Bundled skills use an exact self-contained allowlist.** The wheel ships only\n  the eight first-party runtime skills whose companion files are present;\n  repository and operator-specific skills stay in their external tiers, and\n  installed-package smoke tests hash every distribution file before and after a\n  rejected mutation attempt."
   },
   {
     "version": "1.0.25",

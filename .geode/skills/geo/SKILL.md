@@ -41,9 +41,9 @@ The model-visible tool cannot set approval or preregistration receipts. The
 operator must issue `/geo approve-live <receipt>` before live observation and
 `/geo preregister <receipt>` before experiment admission. Workload, engine,
 model, locale, and repetitions freeze when live observation starts.
-Typed slash evidence is an advisory workflow projection. Only the digest-bound
-benchmark contracts in `docs/eval/geo-visibility.md` may establish measurement
-or promotion authority.
+Typed slash evidence is an advisory workflow projection. Only a digest-bound,
+preregistered benchmark contract may establish measurement or promotion
+authority.
 
 ## Evidence frontier
 
@@ -114,7 +114,8 @@ For broad or explicitly long-running work:
 - Do not treat longer runtime, more branches, or more citations as quality
   evidence. Report coverage, contradiction resolution, unsupported-claim rate,
   duplicate work, tokens, tool calls, wall time, and propagated branch errors.
-- Follow `docs/eval/geo-visibility.md` for scored or comparative runs.
+- Run scored or comparative work from a GEODE checkout with its canonical GEO
+  benchmark contract; the installed skill alone is not promotion authority.
 
 ## Evaluation artifacts
 
