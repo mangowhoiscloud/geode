@@ -34,8 +34,8 @@ export default function Page() {
               <li><code>/llms.txt</code>가 없으면(404 또는 HTML 응답) 해당 사이트로 범위를 좁힌 <code>general_web_search</code>로 폴백합니다.</li>
             </ol>
             <p>
-              이 휴리스틱은 코드 분기가 아니라 instruction 레벨로 구현되어
-              있습니다. 시스템 프롬프트(<code>core/llm/prompts/router.md</code>의
+              이 휴리스틱은 instruction 레벨로 구현되어 있습니다. 시스템
+              프롬프트(<code>core/llm/prompts/router.md</code>의
               &quot;Documentation-site research (llms.txt-first)&quot; 절)와
               <code>web_fetch</code> 도구 설명(<code>core/tools/definitions.json</code>)
               두 표면이 같은 지시를 싣습니다. frontier 하네스들이 수렴한
@@ -45,11 +45,11 @@ export default function Page() {
             <h2>딥리서치: 독립 축 병렬 수집</h2>
             <p>
               프로젝트의 <code>deep-researcher</code> 스킬은 질문·research gap·
-              검증할 claim을 먼저 정하고, 서로 독립인 조사 축만 한 번의
+              검증할 claim을 먼저 정하고, 서로 독립인 조사 축만 한 번의{" "}
               <code>delegate_task</code> batch로 보냅니다. 부모는 선행조건,
               원문 확인, 모순 판정과 최종 종합을 계속 소유합니다. 자식 실패도
-              결과에서 제거하지 않으며, 출처 수 대신 citation entailment,
-              최신성, 권위와 상충 근거를 검사합니다.
+              결과에서 제거하지 않으며, citation entailment, 최신성, 권위와
+              상충 근거를 검사합니다.
             </p>
             <p>
               <code>update_plan</code>은 관측된 진행을 표시하는 advisory checklist일
@@ -72,20 +72,21 @@ export default function Page() {
 
             <h2>지속 Goal과의 결합</h2>
             <p>
-              사용자가 여러 turn에 걸친 지속 목표를 명시한 경우에만
-              <code>create_goal</code>을 사용합니다. Goal은 자동 DAG가 아니라
-              objective·token budget·누적 사용량·상태를
-              <code>sessions.db</code>에 보존하는 제어 봉투입니다. 성공한 turn 뒤
+              사용자가 여러 turn에 걸친 지속 목표를 명시한 경우에만{" "}
+              <code>create_goal</code>을 사용합니다. Goal은 objective·token
+              budget·누적 사용량·상태를 <code>sessions.db</code>에 보존하는
+              persistence·termination 제어 봉투입니다. 행동 선택과 실행은
+              AgenticLoop가 계속 소유합니다. 성공한 turn 뒤
               상태가 active이면 다음 turn을 열고, complete·blocked·budget-limited
               또는 오류에서 멈춥니다. 일반 리서치 요청은 Goal로 자동 승격하지
               않습니다.
             </p>
             <p>
-              continuation은 system prompt나 인간 transcript가 아니라 현재 요청에만
-              붙는 contextual-user 입력입니다. 같은 text-only 응답이 반복되거나 한
+              continuation은 현재 요청에만 붙는 contextual-user 입력이며 system
+              prompt와 human transcript를 바꾸지 않습니다. 같은 text-only 응답이 반복되거나 한
               public call에서 안전 상한에 닿으면 자동 진행만 멈추고 Goal은 active로
-              보존합니다. token budget도 provider 호출을 중간 취소하는 hard cap이
-              아니라 완료된 turn을 정산해 다음 continuation을 막는 경계이므로 마지막
+              보존합니다. provider 호출은 완료까지 진행되고 token budget은 turn
+              종료 후 정산되어 다음 continuation admission을 닫습니다. 따라서 마지막
               turn만큼 초과할 수 있고, 초과분은 사용량에 그대로 기록됩니다.
             </p>
             <p>
@@ -120,10 +121,10 @@ export default function Page() {
             <p>
               일반 웹 탐색은 <code>general_web_search</code>와
               <code>web_fetch</code>가 담당합니다. GEODE의 instruction-level 정책은
-              한 턴에 이 도구들을 3회 이상 직접 호출하지 않고,
+              한 턴에 이 도구들을 3회 이상 직접 호출하지 않고,{" "}
               <code>delegate_task</code>로 서브에이전트에 위임합니다(GEODE.md
-              RUNTIME CANNOT). 이는 하드 런타임 차단이 아니라 검색 결과가 부모
-              컨텍스트를 폭발시키는 것을 막는 행동 계약입니다. 서브에이전트는
+              RUNTIME CANNOT). 이 행동 계약은 검색 결과로 인한 부모 컨텍스트
+              폭증을 막습니다. 서브에이전트는{" "}
               <code>web_research</code> 툴킷
               (<code>core/tools/toolkits.toml</code>)으로 격리된 컨텍스트에서
               조사를 끝낸 뒤 요약만 돌려줍니다.
@@ -207,8 +208,8 @@ export default function Page() {
               <li>If <code>/llms.txt</code> is absent (404 or an HTML page comes back), fall back to <code>general_web_search</code> scoped to the site.</li>
             </ol>
             <p>
-              The heuristic is instruction-level, not a code branch: the system
-              prompt (the &quot;Documentation-site research (llms.txt-first)&quot;
+              The heuristic lives at the instruction level. The system prompt
+              (the &quot;Documentation-site research (llms.txt-first)&quot;
               section of <code>core/llm/prompts/router.md</code>) and the
               <code>web_fetch</code> tool description
               (<code>core/tools/definitions.json</code>) carry the same guidance.
@@ -222,13 +223,12 @@ export default function Page() {
               axes in one <code>delegate_task</code> batch. The parent retains
               prerequisites, primary-source inspection, contradiction decisions,
               and final synthesis. Child failures stay visible, and evidence is
-              checked for citation entailment, freshness, authority, and conflicts
-              instead of source count alone.
+              checked for citation entailment, freshness, authority, and conflicts.
             </p>
             <p>
               <code>update_plan</code> is an advisory checklist for observed progress,
               not an executor. When the runtime supplies a <code>&lt;plan&gt;</code>, the
-              skill mirrors those steps instead of creating a second checklist. It
+              skill mirrors those steps and avoids a second checklist. It
               also does not save the result to files or memory automatically.
             </p>
             <p>
@@ -248,25 +248,26 @@ export default function Page() {
             <h2>Combining research with a persisted Goal</h2>
             <p>
               The skill uses <code>create_goal</code> only when the user explicitly
-              asks for a persistent multi-turn objective. A Goal is not an automatic
-              DAG: it is a control envelope that stores the objective, optional token
-              budget, accumulated usage, and status in <code>sessions.db</code>. An
+              asks for a persistent multi-turn objective. A Goal is a persistence
+              and termination envelope that stores the objective, optional token
+              budget, accumulated usage, and status in <code>sessions.db</code>;
+              AgenticLoop retains action-selection and execution authority. An
               active Goal opens another turn after a successful terminal and stops on
               completion, blocking, budget limit, or error. Ordinary research is never
               promoted to a Goal implicitly.
             </p>
             <p>
-              Continuation steering is a request-local contextual-user input, not a
-              system-prompt clause or a fake human transcript. Repeated identical
+              Continuation steering is a request-local contextual-user input. The
+              system prompt and human transcript remain unchanged. Repeated identical
               text-only output or the per-call safety ceiling stops only automatic
-              progress and leaves the Goal active. The token budget is also a
-              completed-turn accounting boundary, not a provider hard cap: the last
-              turn can overshoot, and the full overage remains visible in usage.
+              progress and leaves the Goal active. Provider calls run to completion;
+              completed-turn accounting then closes the next continuation admission.
+              The last turn can overshoot, and the full overage remains visible in usage.
             </p>
             <p>
               Goal transitions join canonical session events and the optional JSONL
-              projection, but repeat only an objective digest rather than the raw
-              text. While <code>geode serve</code> is running and foreground lanes
+              projection, but repeat only an objective digest. While{" "}
+              <code>geode serve</code> is running and foreground lanes
               are idle, it can restore the active Goal&apos;s checkpoint as a new
               generation and start an internal continuation. Paused, terminal,
               missing, or corrupt checkpoints do not launch, and the same Goal
@@ -280,7 +281,7 @@ export default function Page() {
               and trajectory writers. It is neither an OS-level scheduler nor an
               automatic Plan-and-Execute engine, and it does not promise exactly-once
               external side effects across multiple serve processes. Results stay in
-              the same checkpoint and session record instead of a second inbox; the
+              the same checkpoint and session record, with no second inbox; the
               next gateway turn resumes that durable history. IPC resume reloads
               inside the same machine Lane, and daemon shutdown gives an active
               hosted turn a bounded 30-second drain.

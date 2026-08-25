@@ -58,8 +58,8 @@ export default function Page() {
 
             <h2>생존자 선택: frontier-band가 기본</h2>
             <p>
-              기본 선택은 pilot 실측 난이도가 양 끝이 아닌 약 50% 판별 대역에
-              가까운 후보를 고르는 <code>frontier</code>입니다. 너무 쉬운 seed와
+              기본 선택은 pilot 실측 난이도가 약 50% 판별 대역에 가까운 후보를
+              고르는 <code>frontier</code>입니다. 너무 쉬운 seed와
               항상 실패하는 불공정 seed를 함께 피하고, pilot 근거가 없으면 Elo로
               결정적으로 폴백합니다
               (<code>evals/seed_generation/tournament.py</code>의{" "}

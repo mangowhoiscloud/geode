@@ -17,7 +17,7 @@ export default function Page() {
             <p>
               긴 실행의 위험은 셋입니다. 끝나지 않는 루프, 넘치는 컨텍스트,
               불어나는 비용. AgenticLoop는 매 라운드 진입 시점에 가드를 검사하고,
-              걸리면 조용히 죽는 대신 이유가 적힌{" "}
+              걸리면 이유가 적힌{" "}
               <code>termination_reason</code>으로 끝납니다
               (<code>core/agent/loop/agent_loop.py</code>).
             </p>
@@ -50,7 +50,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>overthinking 감지</td>
-                  <td>도구 호출 없이 고출력 텍스트 라운드가 연속되면 조용한 다운그레이드 대신 멈추고 사용자에게 묻습니다.</td>
+                  <td>도구 호출 없이 고출력 텍스트 라운드가 연속되면 멈추고 사용자에게 묻습니다.</td>
                   <td><code>user_clarification_needed</code></td>
                 </tr>
               </tbody>
@@ -128,8 +128,8 @@ OpenAI/GLM  80%   클라이언트 LLM 기반 compaction
               A long run has three risks: a loop that never ends, a context
               that overflows, and a bill that keeps growing. The AgenticLoop
               checks its guards at every round entry, and when one trips, the
-              run ends with a named <code>termination_reason</code> instead of
-              dying silently (<code>core/agent/loop/agent_loop.py</code>).
+              run ends with a named <code>termination_reason</code>{" "}
+              (<code>core/agent/loop/agent_loop.py</code>).
             </p>
 
             <h2>Round-entry guards</h2>
@@ -160,7 +160,7 @@ OpenAI/GLM  80%   클라이언트 LLM 기반 compaction
                 </tr>
                 <tr>
                   <td>Overthinking detection</td>
-                  <td>Consecutive high-output text-only rounds stop the loop and ask the user, instead of silently downgrading.</td>
+                  <td>Consecutive high-output text-only rounds stop the loop and ask the user.</td>
                   <td><code>user_clarification_needed</code></td>
                 </tr>
               </tbody>

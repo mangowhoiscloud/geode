@@ -17,8 +17,7 @@ export default function Page() {
             <p>
               핵심 프롬프트 템플릿은 해시로 핀됩니다. 템플릿이 한 글자라도
               바뀌면 계산된 해시가 핀과 어긋나고 CI가 깨집니다. 프롬프트
-              변경을 막으려는 것이 아니라, 변경이 항상 의도된 diff로
-              드러나게 하려는 래칫입니다.
+              모든 프롬프트 변경을 의도된 diff로 드러내는 래칫입니다.
             </p>
 
             <h2>네 개의 핀</h2>
@@ -89,7 +88,7 @@ export default function Page() {
                 <tr>
                   <td>CI에서 &quot;Prompt drift&quot; 실패</td>
                   <td>템플릿 변경이 핀 갱신 없이 들어옴</td>
-                  <td>변경이 의도라면 re-pin 절차를 따릅니다. 아니라면 diff를 되돌립니다.</td>
+                  <td>의도된 변경은 re-pin 절차를 따르고, 우발적 변경은 diff를 되돌립니다.</td>
                 </tr>
                 <tr>
                   <td>핀만 바뀌고 템플릿은 그대로인 PR</td>
@@ -111,8 +110,7 @@ export default function Page() {
             <p>
               The core prompt templates are pinned by hash. Change a single
               character and the computed hash diverges from the pin; CI
-              breaks. The point is not to forbid prompt changes but to make
-              every change show up as a deliberate diff. A ratchet.
+              breaks. Every change must show up as a deliberate diff. A ratchet.
             </p>
 
             <h2>The four pins</h2>

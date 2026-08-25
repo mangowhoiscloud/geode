@@ -22,8 +22,8 @@ export default function Page() {
             </p>
             <p>
               안쪽 루프는 매 요청마다 돕니다. 바깥쪽 루프는 가끔, 운영자가 돌릴
-              때 돕니다. 둘은 코드를 공유하지 않습니다. 대신 두 가지를
-              주고받습니다. 안쪽 루프가 입는 스캐폴드, 그리고 안쪽 루프가 남기는
+              때 돕니다. 둘은 코드를 공유하지 않으며 두 가지를 주고받습니다.
+              안쪽 루프가 입는 스캐폴드, 그리고 안쪽 루프가 남기는
               기록입니다.
             </p>
 
@@ -51,8 +51,8 @@ export default function Page() {
 
             <h2>바깥쪽: 자기개선 루프</h2>
             <p>
-              바깥쪽 루프가 다루는 대상은 작업이 아니라 시스템 자체입니다.
-              정확히는 모델을 감싼 <strong>스캐폴드</strong>, 곧 시스템 프롬프트
+              바깥쪽 루프는 시스템 자체를 다룹니다. 정확히는 모델을 감싼
+              <strong>스캐폴드</strong>, 곧 시스템 프롬프트
               섹션(<code>WRAPPER_PROMPT_SECTIONS</code>)과 behaviour kinds입니다.
               모델 가중치와 파라미터는 일절 건드리지 않습니다. 메커니즘은
               선택입니다. 후보를 만들고, 측정하고, 더 나은 쪽만
@@ -102,7 +102,7 @@ export default function Page() {
                 src="/geode/diagrams/two-loops.svg"
                 alt="바깥쪽 선택 루프(변이, Petri 감사, fitness, margin 게이트, champion chain)와 안쪽 agentic 루프(LLM 호출, 도구 실행, 관찰)가 나란히 있고, 스캐폴드는 안쪽으로 흐르며 트랜스크립트는 바깥쪽 감사로 돌아간다"
               />
-              <figcaption>두 루프는 호출이 아니라 데이터로 맞물립니다. 스캐폴드는 안쪽으로, 트랜스크립트는 바깥쪽 감사로 흐릅니다.</figcaption>
+              <figcaption>두 루프는 데이터로 맞물립니다. 스캐폴드는 안쪽으로, 트랜스크립트는 바깥쪽 감사로 흐릅니다.</figcaption>
             </figure>
             <p>
               그래서 스캐폴드를 바꾸면 코드를 바꾸지 않아도 안쪽 루프의 행동이
@@ -151,8 +151,8 @@ export default function Page() {
 
             <h2>Outer: the self-improving loop</h2>
             <p>
-              The outer loop operates not on a task but on the system itself.
-              Precisely: the <strong>scaffold</strong> wrapped around the model,
+              The outer loop operates on the system itself, specifically the
+              <strong>scaffold</strong> wrapped around the model,
               meaning the system-prompt sections
               (<code>WRAPPER_PROMPT_SECTIONS</code>) and the behaviour kinds.
               Model weights and parameters are never touched. The mechanism is
@@ -205,7 +205,7 @@ export default function Page() {
                 src="/geode/diagrams/two-loops.svg"
                 alt="The outer selection loop (mutate, Petri audit, fitness, margin gate, champion chain) beside the inner agentic loop (call LLM, run tools, observe); the scaffold flows into the inner loop and transcripts flow back to the audit"
               />
-              <figcaption>The loops interlock through data, not calls: the scaffold flows inward, transcripts flow back to the audit.</figcaption>
+              <figcaption>The loops interlock through data: the scaffold flows inward, transcripts flow back to the audit.</figcaption>
             </figure>
             <p>
               That is why changing the scaffold changes the inner loop&apos;s

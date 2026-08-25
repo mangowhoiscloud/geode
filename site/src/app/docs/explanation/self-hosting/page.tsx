@@ -49,17 +49,16 @@ export default function Page() {
             <h2>왜 중요한가</h2>
             <p>
               같은 규율이 두 스코프에서 동일하게 작동한다는 사실은 GEODE의
-              설계가 비유가 아니라 운영 가능한 패턴임을 보여 줍니다. 런타임에서
+              설계가 운영 가능한 패턴임을 보여 줍니다. 런타임에서
               검증된 패턴은 빌드 라인으로, 빌드 라인에서 깨진 패턴은 런타임
               수정으로 되먹임됩니다. 위 표가 그 자기일치의 전부입니다.
             </p>
 
             <h2>한계</h2>
             <p>
-              self-hosting은 GEODE가 사람 없이 자신을 빌드한다는 뜻이 아닙니다.
-              빌드 라인의 PR 머지와 릴리스는 운영자 게이트를 지나고, 자기개선
-              루프가 변이하는 것은 코드가 아니라 스캐폴드(시스템 프롬프트 섹션과
-              behaviour kinds)입니다. 주장의 범위는 기본 단위의 공유까지입니다.
+              빌드 라인의 PR 머지와 릴리스 권한은 운영자 게이트에 남습니다.
+              자기개선 루프의 변이 표면은 스캐폴드(시스템 프롬프트 섹션과
+              behaviour kinds)로 제한됩니다. 주장의 범위는 기본 단위의 공유까지입니다.
             </p>
 
             <h2>다음</h2>
@@ -107,7 +106,7 @@ export default function Page() {
             <h2>Why it matters</h2>
             <p>
               The same discipline operating identically at two scopes shows the
-              design is a workable pattern, not a metaphor. Patterns proven in
+              design is a workable operational pattern. Patterns proven in
               the runtime feed the build line; patterns that break in the build
               line feed fixes back into the runtime. The table above is the
               entirety of that self-consistency.
@@ -115,10 +114,9 @@ export default function Page() {
 
             <h2>Limits</h2>
             <p>
-              Self-hosting does not mean GEODE builds itself unattended. PR
-              merges and releases on the build line pass an operator gate, and
-              what the self-improving loop mutates is the scaffold (system
-              prompt sections and behaviour kinds), not the code. The claim
+              Operator gates retain authority over PR merges and releases. The
+              self-improving loop&apos;s mutation surface is confined to the scaffold
+              (system prompt sections and behaviour kinds). The claim
               extends exactly as far as shared primitives.
             </p>
 

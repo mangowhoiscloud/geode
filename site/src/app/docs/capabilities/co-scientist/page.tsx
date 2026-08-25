@@ -64,16 +64,16 @@ export default function Page() {
             </table>
             <p>
               반복 사이클에서는 evolved 후보를 후보 목록(candidates)으로 승격한 뒤 critic,
-              pilot, ranker, evolver, meta_reviewer만 다시 돕니다. 새 초안이
-              아니라 진화된 후보를 다듬는 단계이기 때문입니다.
+              pilot, ranker, evolver, meta_reviewer만 다시 돕니다. 진화된 후보를
+              다듬는 단계입니다.
             </p>
 
             <h2>pilot은 실측입니다</h2>
             <p>
               pilot은 후보마다 실제 petri_audit 측정을 1회 돌립니다.{" "}
               <code>inspect_ai</code>가 필요하므로 <code>[audit]</code> extra가
-              설치돼 있어야 하고, 없으면 0점으로 조용히 채우는 대신 크게
-              실패합니다. 측정값(<code>dim_means</code>)이 곧 그 후보의 난이도
+              설치돼 있어야 하고, 없으면 크게 실패합니다. 측정값
+              (<code>dim_means</code>)이 곧 그 후보의 난이도
               신호가 되어 생존자 선택에 들어갑니다.
             </p>
 
@@ -166,16 +166,14 @@ geode-eval audit-seeds config`}</pre>
             <p>
               On repeat iterations the evolved candidates are promoted into the
               candidate set and only critic, pilot, ranker, evolver, and
-              meta_reviewer re-run. Each cycle refines evolved candidates
-              rather than drafting a fresh batch.
+              meta_reviewer re-run. Each cycle refines the evolved candidates.
             </p>
 
             <h2>The pilot is a real measurement</h2>
             <p>
               The pilot runs one real petri_audit measurement per candidate. It
               needs <code>inspect_ai</code>, so the <code>[audit]</code> extra
-              must be installed; when it is missing the pilot fails loudly
-              instead of zero-filling scores. The measured{" "}
+              must be installed; when it is missing the pilot fails loudly. The measured{" "}
               <code>dim_means</code> become that candidate&apos;s difficulty
               signal and feed survivor selection.
             </p>

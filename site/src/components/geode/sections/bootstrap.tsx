@@ -10,7 +10,7 @@ const steps = [
   { id: 2, name: "Session", detailKo: "InMemory / Hybrid SessionStore", detailEn: "InMemory / Hybrid SessionStore", subKo: "SessionMode(REPL/IPC/DAEMON)에 따라 스토어 분기", subEn: "Store branches by SessionMode (REPL/IPC/DAEMON)", color: "#60A5FA" },
   { id: 3, name: "Memory", detailKo: "ProjectMemory + MonoLake + UserProfile + Journal", detailEn: "ProjectMemory + MonoLake + UserProfile + Journal", subKo: "5-Tier 메모리 계층 마운트. Session 스토어에 의존", subEn: "Mount 5-tier memory hierarchy. Depends on session store", color: "#F4B8C8" },
   { id: 4, name: "Config", detailKo: ".env hot-reload + constraint validation", detailEn: ".env hot-reload + constraint validation", subKo: "ConfigWatcher 시작. Hook으로 CONFIG_RELOADED 발화", subEn: "Start ConfigWatcher. Fires CONFIG_RELOADED via Hook", color: "#F5C542" },
-  { id: 5, name: "TaskGraph", detailKo: "build_task_graph() + Runtime attachment", detailEn: "build_task_graph() + Runtime attachment", subKo: "L4 Task 추적 상태를 구성합니다. AgenticLoop 실행 DAG는 아닙니다", subEn: "Build L4 task-tracking state. It is not an AgenticLoop execution DAG", color: "#818CF8" },
+  { id: 5, name: "TaskGraph", detailKo: "build_task_graph() + Runtime attachment", detailEn: "build_task_graph() + Runtime attachment", subKo: "L4 Task 추적 상태를 구성하며 AgenticLoop에는 자동 배선되지 않습니다", subEn: "Build L4 task-tracking state without automatic AgenticLoop wiring", color: "#818CF8" },
   { id: 6, name: "Tools", detailKo: "MCP + SkillRegistry + ToolRegistry", detailEn: "MCP + SkillRegistry + ToolRegistry", subKo: "도구·스킬·readiness를 로드하고 provider adapter 5개를 등록합니다", subEn: "Load tools, skills, readiness, and the five provider adapters", color: "#C084FC" },
   { id: 7, name: "Runtime", detailKo: "GeodeRuntime assembly", detailEn: "GeodeRuntime assembly", subKo: "메모리·스케줄링·도구를 조립합니다. 그래프 컴파일 단계는 없습니다", subEn: "Assemble memory, scheduling, and tools. No graph compilation step exists", color: "#34D399" },
 ];
@@ -48,7 +48,7 @@ export function BootstrapSection() {
           <p className="text-sm sm:text-base text-[var(--ink-2)] max-w-2xl mb-8 leading-relaxed">
             {t(locale,
               "GEODE는 7단계를 순차적으로 거쳐 부팅합니다. 각 단계는 다음 단계가 필요로 하는 결과물을 생성합니다. 어느 한 단계에서 실패가 발생하면 전체 부팅이 중단되지 않고 부분 부팅으로 전환됩니다. 사용 가능한 표면만 활성화하고 나머지는 비활성화하며, geode doctor 명령으로 실패 지점을 확인할 수 있습니다.",
-              "GEODE boots through 7 sequential stages. Each stage produces output that the next stage requires. If any stage fails, the boot transitions to partial boot mode rather than halting entirely — usable surfaces remain active while the rest are disabled, and the failed stage can be inspected via the geode doctor command."
+              "GEODE boots through 7 sequential stages. Each stage produces output that the next stage requires. A failed stage triggers partial boot mode: usable surfaces remain active, the rest stay disabled, and geode doctor identifies the failure."
             )}
           </p>
         </ScrollReveal>

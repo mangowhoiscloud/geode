@@ -68,8 +68,7 @@ export default function Page() {
               루프는 매 라운드 진입 시{" "}
               <code>core/agent/context_manager.py</code>의{" "}
               <code>ContextWindowManager</code>에 오버플로 점검을 위임합니다.
-              임계값은 고정된 80/95가 아니라{" "}
-              <code>core/orchestration/context_budget.py</code>의{" "}
+              임계값은 <code>core/orchestration/context_budget.py</code>의{" "}
               <code>resolve_context_budget_policy</code>가 모델의 컨텍스트
               윈도에 맞춰 계산합니다. 반환된 <code>ContextBudgetPolicy</code>가
               세 티어 중 하나를 고릅니다.
@@ -85,7 +84,7 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              퍼센트는 raw 윈도가 아니라 <em>유효 프롬프트 예산</em>
+              퍼센트는 <em>유효 프롬프트 예산</em>
               (<code>effective_prompt_budget_tokens</code> = 윈도에서 출력
               예비분 약 20K를 뺀 값) 기준입니다. 실제 대응은 프로바이더에 따라
               갈립니다.

@@ -43,15 +43,15 @@ export function HeroSection() {
           <p>
             {t(
               locale,
-              "GEODE는 장시간 도구 작업을 수행하고 실행 기록을 평가 가능한 증거로 남기는 에이전트 런타임입니다. 실험적 외부 루프는 모델 가중치가 아니라 스캐폴드 후보를 변이시키지만, 공개 기록은 아직 지속적인 자기개선보다 거부와 무효화 게이트의 규율을 입증합니다.",
-              "GEODE is an agent runtime for long-running tool work and evaluation-ready execution evidence. An experimental outer loop mutates scaffold candidates, never model weights; its public record currently demonstrates rejection and invalidation discipline, not sustained self-improvement."
+              "GEODE는 장시간 도구 작업을 수행하고 실행 기록을 평가 가능한 증거로 남기는 에이전트 런타임입니다. 모델 가중치는 고정되고, 실험적 외부 루프가 스캐폴드 후보를 변이시킵니다. 공개 기록은 현재 거부와 무효화 게이트의 규율을 입증합니다.",
+              "GEODE is an agent runtime for long-running tool work and evaluation-ready execution evidence. Model weights remain fixed while an experimental outer loop mutates scaffold candidates. Its public record currently demonstrates rejection and invalidation discipline."
             )}
           </p>
           <p className="mt-3 text-[var(--ink-2)]">
             {t(
               locale,
-              "변화의 적합도는 능력 벤치마크가 아니라 적대적 안전 감사로 측정합니다. 핵심 안전 차원에는 하한선이 있어, 그 선을 넘어 후퇴하는 변화는 거부합니다.",
-              "Its fitness signal is an adversarial safety audit, not a capability benchmark. Critical safety dimensions sit behind a hard floor: a change that regresses them is rejected."
+              "적대적 안전 감사에 변화의 적합도 판정 권한을 두고, 능력 벤치마크는 별도 측정 표면으로 유지합니다. 핵심 안전 차원의 하한선을 넘겨 후퇴하는 변화는 거부합니다.",
+              "Adversarial safety audit owns the fitness verdict; capability benchmarks remain a separate measurement surface. A hard floor rejects regressions on critical safety dimensions."
             )}
           </p>
         </div>

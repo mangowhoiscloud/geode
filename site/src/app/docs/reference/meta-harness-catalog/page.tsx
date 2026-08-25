@@ -751,8 +751,8 @@ export default function Page() {
                 <strong>Reflection (cognitive)</strong>. 도구 라운드마다{" "}
                 <code>record_reflection</code> 구조화 호출 1회가
                 CognitiveState를 갱신합니다. hypotheses 5개 이하, confidence
-                0..1, next_action_hint가 subgoals로 들어갑니다. 전체 대화가
-                아니라 상태 스냅숏과 도구 요약만 봅니다(clean-context 규율).
+                0..1, next_action_hint가 subgoals로 들어갑니다. clean-context
+                규율에 따라 상태 스냅숏과 도구 요약만 봅니다.
               </li>
               <li>
                 <strong>verify 후 replan</strong>. replan은 관측된 두 트리거로
@@ -804,9 +804,8 @@ export default function Page() {
                 <strong>Reflection (cognitive)</strong>. One structured{" "}
                 <code>record_reflection</code> call per tool round updates the
                 CognitiveState: up to five hypotheses, confidence in 0..1, and
-                a next_action_hint pushed into subgoals. It sees only the state
-                snapshot and a tool summary, not the full conversation
-                (clean-context discipline).
+                a next_action_hint pushed into subgoals. Clean-context discipline
+                limits input to the state snapshot and a tool summary.
               </li>
               <li>
                 <strong>verify then replan</strong>. Replan fires on two observed

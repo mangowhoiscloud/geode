@@ -5,8 +5,14 @@ const EVAL_ARTIFACTS_REPO = "https://github.com/mangowhoiscloud/geode-eval-artif
 function MeasurementDetails({ run }: { run: BenchmarkMeasurement }) {
   return (
     <details id={run.id}>
-      <summary>
-        <strong>{run.title}</strong> · {run.measuredAt} · {run.model} · {run.source} · {run.effort}
+      <summary className="py-2">
+        <strong className="block pr-6">{run.title}</strong>
+        <span className="mt-2 grid gap-x-4 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-[var(--ink-3)] sm:grid-cols-4">
+          <span>{run.measuredAt}</span>
+          <span>{run.model}</span>
+          <span>{run.source}</span>
+          <span>{run.effort}</span>
+        </span>
       </summary>
       <table>
         <tbody>

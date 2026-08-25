@@ -8,7 +8,7 @@ import { useLocale, t } from "../locale-context";
  * The self-improvement loop is not new, a lineage built it. GEODE's
  * contribution is a recombination: it re-aims that loop from capability to
  * safety, from weights to scaffolding, and runs it on co-evolved adversarial
- * seeds. That is an empty cell in the design space, not a new primitive. The
+ * seeds. That combination occupies an empty cell in the design space. The
  * influences render as a definition list (not cards), each term the influence
  * and each definition the one line of what GEODE took from it.
  */
@@ -63,8 +63,8 @@ export function LineagePositioningSection() {
         <p className="mt-4 text-[var(--ink-2)] leading-[1.75] text-[16px]">
           {t(
             locale,
-            "자기 개선 루프는 새롭지 않습니다. Promptbreeder, STOP, ADAS, DGM, GEPA가 계보를 쌓았습니다. GEODE의 기여는 재조합입니다. 그 루프를 능력에서 안전으로, 가중치에서 스캐폴드로 다시 겨누고, 공진화한 적대적 시드 위에서 돌립니다. 새로운 원형이 아니라 설계 공간의 빈 칸입니다.",
-            "The self-improvement loop is not new. Promptbreeder, STOP, ADAS, DGM, and GEPA built the lineage. GEODE's contribution is a recombination. It re-aims that loop from capability to safety, from weights to scaffolding, and runs it on co-evolved adversarial seeds. That is an empty cell in the design space, not a new primitive."
+            "Promptbreeder, STOP, ADAS, DGM, GEPA가 자기 개선 루프의 계보를 쌓았습니다. GEODE는 그 조각을 재조합해 능력에서 안전으로, 가중치에서 스캐폴드로 방향을 옮기고 공진화한 적대적 시드 위에서 실행합니다. 그 결과 설계 공간의 빈 칸을 채웁니다.",
+            "Promptbreeder, STOP, ADAS, DGM, and GEPA built the self-improvement lineage. GEODE recombines those pieces, re-aims the loop from capability to safety and from weights to scaffolding, and runs it on co-evolved adversarial seeds. The result fills an open cell in the design space."
           )}
         </p>
 

@@ -15,7 +15,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs.md
 
 GEODE는 **범용 자율 실행 에이전트**입니다. 리서치, 분석, 자동화, 스케줄 작업을 CLI와 메신저(Slack, Discord, Telegram)에서 수행하고, `geode-mcp` 서버로 다른 에이전트에 도구로 붙습니다. 진입점은 `geode`와 `geode-mcp` 둘이며, 어느 쪽으로 들어와도 같은 [5-계층 스택](https://mangowhoiscloud.github.io/geode/docs/architecture/overview.md)(Model, Runtime, Harness, Agent, Self-Improving)을 지납니다.
 
-그 본체 위의 시그니처가 **자기개선 루프**입니다. 모델 가중치와 파라미터는 절대 건드리지 않습니다. 갱신 대상은 모델을 감싼 스캐폴드, 곧 시스템 프롬프트 섹션과 behaviour kinds이고, 메커니즘은 변이와 선택입니다. 변화의 fitness는 능력 벤치마크가 아니라 **적대적 안전 감사**(Petri 급의 다차원 감사)로 측정하며, 핵심 안전 차원에는 하한선이 있어 그 선을 넘어 후퇴하는 변화는 거부합니다. 평가에 쓰는 seed도 고정돼 있지 않습니다. Seed Scenario Generation 파이프라인이 에이전트와 나란히 적대적 seed 분포를 키웁니다.
+그 본체 위의 시그니처가 **자기개선 루프**입니다. 모델 가중치와 파라미터는 절대 건드리지 않습니다. 갱신 대상은 모델을 감싼 스캐폴드, 곧 시스템 프롬프트 섹션과 behaviour kinds이고, 메커니즘은 변이와 선택입니다. 변화의 fitness 판정 권한은 **적대적 안전 감사**(Petri 급의 다차원 감사)에 있습니다. 능력 벤치마크는 별도 측정 표면으로 유지하며, 핵심 안전 차원에는 하한선이 있어 그 선을 넘어 후퇴하는 변화는 거부합니다. 평가에 쓰는 seed도 고정돼 있지 않습니다. Seed Scenario Generation 파이프라인이 에이전트와 나란히 적대적 seed 분포를 키웁니다.
 
 ## 두 개의 루프
 
@@ -24,11 +24,11 @@ GEODE 를 가르는 핵심은 **두 개의 루프**입니다.
 -   **Inner loop (Agentic Loop)**. 한 작업을 푸는 `while(tool_use)` 실행 루프입니다. 라운드 상한과 종료 경로 안에서 도구를 deferred loading으로 관리하며 일을 끝까지 처리합니다.
 -   **Outer loop (Self-Improving Loop)**. 작업을 처리하는 시스템 자체를 다듬는 Closed-Loop입니다. 스캐폴드를 변형하고, 감사하고, 결과를 귀속한 뒤, 실제 이득이 있을 때만 승격하고 아니면 되돌립니다. 정직한 (1+1) champion chain입니다.
 
-루프의 계보(Promptbreeder, STOP, ADAS, DGM, GEPA)는 이미 잘 닦여 있습니다. GEODE 는 그 루프를 능력에서 안전으로, 가중치에서 스캐폴드로, 그리고 함께 진화하는 적대적 seed 위로 다시 겨냥합니다. 새로운 primitive 가 아니라, 비어 있던 칸을 채우는 재조합입니다.
+루프의 계보(Promptbreeder, STOP, ADAS, DGM, GEPA)는 이미 잘 닦여 있습니다. GEODE 는 그 루프를 능력에서 안전으로, 가중치에서 스캐폴드로, 그리고 함께 진화하는 적대적 seed 위로 다시 겨냥합니다. 알려진 조각을 재조합해 비어 있던 설계 공간을 채웁니다.
 
 ## 레퍼런스: GEODE의 좌표부터
 
-레퍼런스의 진입점은 검증 절차가 아니라 **자기개선 Closed-Loop의 계보와 좌표**입니다. GEODE가 어떤 프론티어 시스템에서 무엇을 빌려오고, 어디서 갈라지는지부터 짚습니다.
+레퍼런스는 **자기개선 Closed-Loop의 계보와 좌표**에서 출발합니다. GEODE가 어떤 프론티어 시스템에서 무엇을 빌려오고, 어디서 갈라지는지부터 짚습니다.
 
 -   [프론티어 비교](https://mangowhoiscloud.github.io/geode/docs/reference/frontier-comparison.md). Claude Code, Codex CLI, OpenClaw, Hermes에서 빌려온 것과 갈라지는 지점.
 -   [계보와 좌표](https://mangowhoiscloud.github.io/geode/docs/capabilities/lineage.md). 이 루프가 self-evolving agents 문헌에서 어디에 위치하는지.
@@ -43,7 +43,7 @@ GEODE 를 가르는 핵심은 **두 개의 루프**입니다.
 
 [03-concepts핵심 개념두 개의 루프, 안쪽 agentic 루프, 컨텍스트 조립, 메모리 계층, …](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops.md)
 
-[04-self-improving자기개선 루프Closed-Loop, Seed Scenario Generation, Seed 파이프라인, 아우터 루프 설정, …](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md)
+[04-self-improving자기개선 루프Closed-Loop, Seed Scenario Generation, Seed 파이프라인, Crucible 아우터 루프, …](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md)
 
 [05-operateGEODE 운영Serve와 게이트웨이, 메신저 연동, 작업 예약, 스케줄러 내부, …](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md)
 
@@ -80,7 +80,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/overview/how-it-runs.md
 
 ## thin CLI에서 데몬까지
 
-`geode`를 실행하면 thin CLI가 뜹니다. CLI 프로세스는 모델을 직접 호출하지 않습니다. 대신 Unix 도메인 소켓 `~/.geode/cli.sock`(경로 상수는 `core/paths.py`) 으로 serve 데몬에 요청을 넘깁니다. `geode.ipc.v1`은 크기가 제한된 줄 단위 JSON, 기능 협상, 요청 ID 상관관계를 정의합니다. 데몬이 떠 있지 않으면 `core/cli/ipc_client.py`의 자동 시작 로직이 백그라운드에서 데몬을 띄운 뒤 연결합니다.
+`geode`를 실행하면 thin CLI가 뜹니다. CLI 프로세스는 모델 호출 요청을 Unix 도메인 소켓 `~/.geode/cli.sock`(경로 상수는 `core/paths.py`) 으로 serve 데몬에 요청을 넘깁니다. `geode.ipc.v1`은 크기가 제한된 줄 단위 JSON, 기능 협상, 요청 ID 상관관계를 정의합니다. 데몬이 떠 있지 않으면 `core/cli/ipc_client.py`의 자동 시작 로직이 백그라운드에서 데몬을 띄운 뒤 연결합니다.
 
 왜 두 프로세스로 나누었을까요. MCP 서버 연결, 스킬 레지스트리, 훅, 메모리 같은 무거운 상태를 데몬 한 곳에 두면 매 호출마다 새로 켤 필요가 없기 때문입니다. CLI는 입력과 렌더링만 맡는 얇은 클라이언트로 남습니다. 자유 텍스트는 이 대화형 화면 안에서만 받습니다. `geode "요청"` 형태의 셸 원샷은 지원하지 않습니다.
 
@@ -111,7 +111,7 @@ AgenticLoop는 `while stop_reason == "tool_use"` 루프입니다. 매 라운드�
 | `user_clarification_needed` | 도구 없이 긴 출력만 반복되는 과사고를 감지하면 멈추고 사용자에게 묻습니다. |
 | `llm_error` | 재시도로 회복하지 못한 모델 호출 오류입니다. |
 
-어느 경로로 끝나든 결과는 종료 사유와 함께 소켓으로 돌아갑니다. 조용한 실패 대신 이유가 남는 설계입니다.
+어느 경로로 끝나든 결과는 종료 사유와 함께 소켓으로 돌아갑니다. 종료 결과마다 이유가 남는 설계입니다.
 
 ## 같은 코어, 다른 입구
 
@@ -142,7 +142,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/overview.md
 
 5-계층 스택과 각 계층이 소유한 구성 요소.
 
-## 왜 4가 아니라 5인가
+## 다섯 번째 계층을 둔 이유
 
 GEODE는 오랫동안 4-계층(Model, Runtime, Harness, Agent)으로 서술됐습니다. 그런데 자기개선 코드는 그 어디에도 깔끔하게 들어가지 않았고, 문서 밖에 떠 있었습니다. 실제로 존재하고 별도의 책임을 갖는 계층이라면 다이어그램에도 있어야 합니다. 그래서 지금의 공식 스택은 5-계층입니다. 기존의 4-계층 서술은 모두 이 페이지로 대체됩니다.
 
@@ -152,7 +152,7 @@ GEODE는 오랫동안 4-계층(Model, Runtime, Harness, Agent)으로 서술됐�
 
 모델 계층만 외부 네트워크를 호출합니다. 프로바이더 구현은 `core/llm/providers/`(anthropic, openai, codex, glm)에 있고, 결제 경로별 어댑터(PAYG, 구독 OAuth, CLI)는 `core/llm/adapters/registry.py`에 등록됩니다. 어떤 모델이 어떤 프로바이더로 가는지는 라우팅 매니페스트 (`core/config/routing.toml`)가 정하고, 호출 표면은 `core/llm/router/`가 통일합니다.
 
-폴백 체인은 기본값이 비어 있습니다. 주 모델이 실패하면 자동으로 다른 프로바이더로 넘어가는 대신 정직하게 실패를 돌려주고, 사용자가 `/model`로 다음 모델을 고릅니다. 체인은 `~/.geode/routing.toml`에서 옵트인으로 켭니다.
+폴백 체인은 기본값이 비어 있습니다. 주 모델이 실패하면 GEODE는 정직한 실패를 돌려주고, 사용자가 `/model`로 다음 모델을 고릅니다. 체인은 `~/.geode/routing.toml`에서 옵트인으로 켭니다.
 
 책임의 끝: 이 계층은 "모델을 호출한다"까지만 압니다. 언제, 어떤 도구와 함께, 어떤 컨텍스트로 호출할지는 위 계층의 일입니다.
 
@@ -176,7 +176,7 @@ GEODE는 오랫동안 4-계층(Model, Runtime, Harness, Agent)으로 서술됐�
 
 ## SELF-IMPROVING. 시스템을 고치는 계층
 
-맨 위 계층은 아래 네 계층 전체를 피험자로 다룹니다. 루프 드라이버는 `evolve/scaffold_search/train.py`입니다. 파일명은 Karpathy autoresearch의 3-파일 관습에서 빌린 것으로, 이 안에서 모델 훈련은 일어나지 않습니다. 갱신 대상은 모델이 아니라 모델을 감싼 스캐폴드, 곧 시스템 프롬프트 섹션과 behaviour kinds입니다.
+맨 위 계층은 아래 네 계층 전체를 피험자로 다룹니다. 루프 드라이버는 `evolve/scaffold_search/train.py`입니다. 파일명은 Karpathy autoresearch의 3-파일 관습에서 빌린 것으로, 이 안에서 모델 훈련은 일어나지 않습니다. 모델 가중치는 고정되며, 시스템 프롬프트 섹션과 behaviour kinds로 구성된 스캐폴드만 갱신됩니다.
 
 메커니즘은 선택입니다. 스캐폴드를 변이하고, 적대적 안전 감사 (Petri)로 측정하고, fitness 스칼라를 margin 게이트에 통과시켜 이긴 변이만 승격하고 나머지는 되돌립니다. 측정과 판정 장비는 `measure.py`, `fitness.py`, `gate.py`, `ledger.py`에 있고, 런타임 쪽 배선은 `evolve/scaffold_search/loop/`의 mutate, observe, inject 경로가 맡습니다. 전체 루프는 [Closed-Loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md)에서 다룹니다.
 
@@ -305,7 +305,7 @@ GEODE를 돌리려면 프로바이더 자격이 하나 필요합니다. 이 페�
 | 경로 | 자격 | 등록 방법 | 적합한 상황 |
 | --- | --- | --- | --- |
 | 1\. ChatGPT 구독 OAuth | ChatGPT 구독 OAuth | `/login openai`로 device-code 로그인. 기존 `~/.codex/auth.json` 자격도 가져올 수 있습니다. | 이미 ChatGPT를 결제 중이고 API 키를 따로 만들기 싫을 때. `gpt-5.5`는 이 경로로만 라우팅됩니다. |
-| 2\. PAYG API 키 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `ZAI_API_KEY` | `~/.geode/.env`에 키만 적습니다. `geode setup` 또는 `/login add`가 대신 적어줍니다. | 토큰 단위로 비용을 직접 통제하고 싶을 때. 팀 계정과 CI에도 맞습니다. |
+| 2\. PAYG API 키 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `ZAI_API_KEY` | `~/.geode/.env`에 키만 적습니다. `geode setup` 또는 `/login add`로 기록할 수도 있습니다. | 토큰 단위로 비용을 직접 통제하고 싶을 때. 팀 계정과 CI에도 맞습니다. |
 | 3\. 저비용 GLM 경로 | `ZAI_API_KEY` (GLM) | 같은 방식으로 `~/.geode/.env`에 등록합니다. | 거의 무료로 먼저 체험할 때. `glm-4.7-flash`는 한시 무료 티어입니다. |
 
 `~/.geode/.env`는 시크릿 전용 파일입니다. 모델 선택 같은 동작 설정은 `~/.geode/config.toml`에 저장되며, .env에 모델을 적는 방식은 더 이상 쓰지 않습니다.
@@ -317,7 +317,7 @@ GEODE를 돌리려면 프로바이더 자격이 하나 필요합니다. 이 페�
 | 이미 ChatGPT Plus를 결제 중입니다 | `geode setup`. `~/.codex/auth.json`이 있으면 API 키를 묻기 전에 먼저 잡습니다. |
 | API 키로 비용을 직접 통제하고 싶습니다 | `~/.geode/.env`에 키를 넣고 [비용 모니터링](https://mangowhoiscloud.github.io/geode/docs/ops/cost.md)으로 예산을 겁니다. |
 | 거의 무료로 먼저 체험하고 싶습니다 | GLM 키(`ZAI_API_KEY`)를 등록하고 `/model`에서 `glm-4.7-flash`를 고릅니다. |
-| 특정 프로바이더를 OAuth 대신 키로 강제하고 싶습니다 | `/login source <provider> api_key`. 선택은 `config.toml`에만 저장됩니다. |
+| 특정 프로바이더를 키 인증으로 강제하고 싶습니다 | `/login source <provider> api_key`. 선택은 `config.toml`에만 저장됩니다. |
 | 지금 뭐가 잡혀 있는지 확인하고 싶습니다 | `geode about`. 실효 모델, 프로바이더, 자격 프로파일 수를 한 화면에 보여줍니다. |
 
 ## 자격 소스 값
@@ -421,7 +421,7 @@ geode config explain model    # 어느 레이어가 이기는지
 geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더
 ```
 
-`geode about`은 실제로 적용 중인 값을 보여주는 화면입니다. env 레이어가 toml의 선택을 가리고 있으면 경고 한 줄을 먼저 띄웁니다. 전환 검증은 config 파일 내용이 아니라 항상 `geode about` 기준으로 합니다.
+`geode about`은 실제로 적용 중인 값을 보여주는 화면입니다. env 레이어가 toml의 선택을 가리고 있으면 경고 한 줄을 먼저 띄웁니다. 전환 검증은 항상 실효 설정을 보여 주는 `geode about`을 기준으로 합니다.
 
 ## 폴백 정책: 기본은 비어 있음
 
@@ -525,7 +525,7 @@ GEODE v1.0.0부터 uv나 GitHub로 설치한 사용자도 중앙 GEODE OAuth 앱
 -   Google 계정과 직접 관리할 Google Cloud 프로젝트
 -   macOS Keychain, Windows Credential Locker, Linux Secret Service 중 하나
 
-안전한 OS 키링을 사용할 수 없으면 GEODE는 로그인을 거부합니다. refresh token이나 client secret을 평문 파일로 대신 저장하지 않습니다.
+안전한 OS 키링을 사용할 수 없으면 GEODE는 로그인을 거부합니다. refresh token이나 client secret을 평문 파일에 저장하지 않습니다.
 
 ## 1\. 필요한 API 활성화
 
@@ -561,7 +561,7 @@ Web application 자격이나 OOB 복사·붙여넣기 흐름은 사용하지 않
 
 ## 4\. GEODE에서 연결
 
-셸 명령이 아니라 `geode` 대화형 화면 안에서 실행합니다. 인자 없는 명령은 JSON 경로와 서비스 선택을 차례로 묻습니다.
+`geode` 대화형 화면 안에서 실행합니다. 인자 없는 명령은 JSON 경로와 서비스 선택을 차례로 묻습니다.
 
 ```
 geode
@@ -585,7 +585,7 @@ geode
 | `tasks-write` | Google Tasks 읽기·변경 | Sensitive |
 | `contacts-read` | People API로 Contacts 읽기 | Sensitive |
 
-`workspace-files`는 전체 Drive 범위가 아니라 `drive.file`을 사용합니다. v1.0.0의 지원 경로는 GEODE가 만든 파일입니다. 이 scope 자체는 Picker로 사용자가 연 파일도 다룰 수 있지만, GEODE v1.0.0은 기존 파일을 고르는 Google Picker를 제공하지 않습니다.
+`workspace-files`는 `drive.file` 범위를 사용합니다. v1.0.0의 지원 경로는 GEODE가 만든 파일입니다. 이 scope 자체는 Picker로 사용자가 연 파일도 다룰 수 있지만, GEODE v1.0.0은 기존 파일을 고르는 Google Picker를 제공하지 않습니다.
 
 ## 5\. 상태 확인과 계정 관리
 
@@ -628,7 +628,7 @@ Workspace 읽기 결과는 선택한 LLM 프로바이더로 전달될 수 있습
 
 ## Hermes는 어떻게 풀었나
 
-Hermes Agent도 사용자 소유 Desktop 클라이언트를 선택하지만, 배포 단위는 런타임 명령이 아니라 bundled `google-workspace`Skill과 Python 스크립트입니다. 검사한 구현은 고정 localhost 실패 redirect URL을 사용자가 다시 붙여넣는 분리형 흐름과 `~/.hermes` 아래 client/token JSON을 사용합니다. 쓰기 전 확인은 Skill 절차가 담당합니다.
+Hermes Agent도 사용자 소유 Desktop 클라이언트를 선택하지만, 배포 단위는 bundled `google-workspace` Skill과 Python 스크립트입니다. 검사한 구현은 고정 localhost 실패 redirect URL을 사용자가 다시 붙여넣는 분리형 흐름과 `~/.hermes` 아래 client/token JSON을 사용합니다. 쓰기 전 확인은 Skill 절차가 담당합니다.
 
 GEODE는 그 아이디어에서 BYO client, 서비스 중심 설정, PKCE/state, revoke를 채택하되 trust boundary를 바꿨습니다. 로컬 thin CLI가 임의 loopback callback을 직접 받고, 장기 secret은 OS keyring에 두며, 멀티 계정과 활성 계정을 스키마로 관리하고, 개인 데이터와 mutation 승인은 executor가 매 호출 강제합니다. 비교 근거는 [Hermes Google Workspace Skill](https://github.com/NousResearch/hermes-agent/blob/main/skills/productivity/google-workspace/SKILL.md)과 [setup.py](https://github.com/NousResearch/hermes-agent/blob/main/skills/productivity/google-workspace/scripts/setup.py)입니다.
 
@@ -651,7 +651,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops.md
 
 GEODE 안에는 서로 맞물린 루프가 둘 있습니다. 둘을 구분하면 나머지 문서가 한결 읽기 쉬워집니다. 안쪽 루프는 작업 하나를 처리합니다. 바깥쪽 루프는 그 작업을 처리하는 시스템을 시간을 두고 다듬습니다.
 
-안쪽 루프는 매 요청마다 돕니다. 바깥쪽 루프는 가끔, 운영자가 돌릴 때 돕니다. 둘은 코드를 공유하지 않습니다. 대신 두 가지를 주고받습니다. 안쪽 루프가 입는 스캐폴드, 그리고 안쪽 루프가 남기는 기록입니다.
+안쪽 루프는 매 요청마다 돕니다. 바깥쪽 루프는 가끔, 운영자가 돌릴 때 돕니다. 둘은 코드를 공유하지 않으며 두 가지를 주고받습니다. 안쪽 루프가 입는 스캐폴드, 그리고 안쪽 루프가 남기는 기록입니다.
 
 ## 안쪽: agentic 루프
 
@@ -669,7 +669,7 @@ call LLM -> tool calls? -> run tools -> observe -> call LLM ...
 
 ## 바깥쪽: 자기개선 루프
 
-바깥쪽 루프가 다루는 대상은 작업이 아니라 시스템 자체입니다. 정확히는 모델을 감싼 **스캐폴드**, 곧 시스템 프롬프트 섹션(`WRAPPER_PROMPT_SECTIONS`)과 behaviour kinds입니다. 모델 가중치와 파라미터는 일절 건드리지 않습니다. 메커니즘은 선택입니다. 후보를 만들고, 측정하고, 더 나은 쪽만 남깁니다.
+바깥쪽 루프는 시스템 자체를 다룹니다. 정확히는 모델을 감싼**스캐폴드**, 곧 시스템 프롬프트 섹션(`WRAPPER_PROMPT_SECTIONS`)과 behaviour kinds입니다. 모델 가중치와 파라미터는 일절 건드리지 않습니다. 메커니즘은 선택입니다. 후보를 만들고, 측정하고, 더 나은 쪽만 남깁니다.
 
 1.  **변이(mutate)**. 스캐폴드의 한 섹션을 한 번에 한 군데만 바꿉니다 (`evolve/scaffold_search/loop/mutate`).
 2.  **감사(audit)**. 변이된 스캐폴드를 입은 GEODE를 Petri 적대적 안전 감사가 차원별로 채점합니다.
@@ -685,7 +685,7 @@ call LLM -> tool calls? -> run tools -> observe -> call LLM ...
 
 ![바깥쪽 선택 루프(변이, Petri 감사, fitness, margin 게이트, champion chain)와 안쪽 agentic 루프(LLM 호출, 도구 실행, 관찰)가 나란히 있고, 스캐폴드는 안쪽으로 흐르며 트랜스크립트는 바깥쪽 감사로 돌아간다](https://mangowhoiscloud.github.io/geode/diagrams/two-loops.svg)
 
-두 루프는 호출이 아니라 데이터로 맞물립니다. 스캐폴드는 안쪽으로, 트랜스크립트는 바깥쪽 감사로 흐릅니다.
+두 루프는 데이터로 맞물립니다. 스캐폴드는 안쪽으로, 트랜스크립트는 바깥쪽 감사로 흐릅니다.
 
 그래서 스캐폴드를 바꾸면 코드를 바꾸지 않아도 안쪽 루프의 행동이 달라집니다. 스캐폴드는 안쪽 루프가 입는 옷이고, 바깥쪽 루프는 그 옷을 고르는 쪽입니다. 한쪽은 입고 한쪽은 고릅니다. 둘은 그렇게 한 시스템으로 맞물립니다.
 
@@ -761,7 +761,7 @@ while stop_reason == "tool_use":
 
 ## model\_refusal: 거절을 1급 종료로
 
-Fable 5의 안전 분류기는 요청을 거절할 때 HTTP 오류가 아니라 **HTTP 200**에 `stop_reason: "refusal"`을 실어 보냅니다. 본문이 비어 있는 경우도 많습니다. 이를 일반 응답처럼 다루면 빈 답이 조용히 사용자에게 흘러갑니다.
+Fable 5의 안전 분류기는 요청을 거절할 때 **HTTP 200**에 `stop_reason: "refusal"`을 실어 보냅니다. 본문이 비어 있는 경우도 많습니다. 이를 일반 응답처럼 다루면 빈 답이 조용히 사용자에게 흘러갑니다.
 
 GEODE는 두 지점에서 처리합니다. Anthropic 프로바이더의 `normalize_anthropic`이 응답의 `stop_details`를 보존하고, 루프가 이를 `termination_reason="model_refusal"`로 매핑하며 `stop_details.category`를 포함한 정직한 메시지를 만듭니다. 같은 경로가 Opus 4.7과 4.8에도 적용됩니다.
 
@@ -771,7 +771,7 @@ GEODE는 두 지점에서 처리합니다. Anthropic 프로바이더의 `normali
 
 ## 왜 얇은 루프인가
 
-루프는 의도적으로 얇습니다. 시스템에서 가장 많이 테스트되고 가장 적게 바뀌는 코드입니다. 새로운 동작은 루프 안이 아니라 도구, 훅, 가드로 들어갑니다. 그래야 핵심 실행 경로가 예측 가능하고 테스트 가능한 상태로 유지됩니다.
+루프는 의도적으로 얇습니다. 시스템에서 가장 많이 테스트되고 가장 적게 바뀌는 코드입니다. 새로운 동작은 도구, 훅, 가드에 둡니다. 그래야 핵심 실행 경로가 예측 가능하고 테스트 가능한 상태로 유지됩니다.
 
 ## 다음
 
@@ -808,7 +808,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/context.md
 
 ## 오버플로 처리: 누가 양보하는가
 
-루프는 매 라운드 진입 시 `core/agent/context_manager.py`의 `ContextWindowManager`에 오버플로 점검을 위임합니다. 임계값은 고정된 80/95가 아니라 `core/orchestration/context_budget.py`의 `resolve_context_budget_policy`가 모델의 컨텍스트 윈도에 맞춰 계산합니다. 반환된 `ContextBudgetPolicy`가 세 티어 중 하나를 고릅니다.
+루프는 매 라운드 진입 시 `core/agent/context_manager.py`의 `ContextWindowManager`에 오버플로 점검을 위임합니다. 임계값은 `core/orchestration/context_budget.py`의 `resolve_context_budget_policy`가 모델의 컨텍스트 윈도에 맞춰 계산합니다. 반환된 `ContextBudgetPolicy`가 세 티어 중 하나를 고릅니다.
 
 | 티어 | 윈도 범위 | 경고 임계 | 임계 |
 | --- | --- | --- | --- |
@@ -816,7 +816,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/context.md
 | standard | ≤ 512K | 70% | 90% |
 | large | \> 512K | 80% | 90% |
 
-퍼센트는 raw 윈도가 아니라 _유효 프롬프트 예산_(`effective_prompt_budget_tokens` = 윈도에서 출력 예비분 약 20K를 뺀 값) 기준입니다. 실제 대응은 프로바이더에 따라 갈립니다.
+퍼센트는 _유효 프롬프트 예산_(`effective_prompt_budget_tokens` = 윈도에서 출력 예비분 약 20K를 뺀 값) 기준입니다. 실제 대응은 프로바이더에 따라 갈립니다.
 
 -   **Anthropic**. 경고 수준 압력은 서버 측 context management가 처리하므로 클라이언트는 개입하지 않습니다. 임계 수준에서만 클라이언트가 비상 정리(prune)를 수행합니다.
 -   **OpenAI / GLM**. 서버 측 압축이 없어 클라이언트가 3단계 압력 대응을 순차 실행합니다. (1) 값싼 도구 압축 — 오래된 관측 마스킹(`mask_stale_observations`)과 큰 도구 결과 요약(`summarize_tool_results`, LLM 호출 없음), (2) 구조화 LLM 압축(`compact_conversation`), (3) 압축으로 부족하거나 실패하면 적응형 정리(`adaptive_prune`).
@@ -905,7 +905,7 @@ GEODE의 기억은 다섯 계층으로 나뉩니다. 위로 갈수록 안정적�
 
 ## 기억 수명주기: 증거 기반 소멸
 
-프로젝트 기억은 시간이 아니라 증거로 정리됩니다. `geode memory-lifecycle`(`core/cli/commands/memory_lifecycle.py`)는 두 가지를 합니다. (1) 소멸 — `resolution.guard_test`가 아직 트리에 존재하는 항목은 `.geode/memory/_archive/`로 아카이빙하고(주입에서 제외), 가드 테스트가 사라진 항목은 다시 떠오릅니다(WARNING). 시간 기반 소멸은 없습니다. (2) 승격 제안 — dreaming이 남긴 `context_artifacts`(`dream`)와 활성 항목을 클러스터링해, 서로 다른 세션 3개 이상에 걸친 클러스터를 `.geode/memory/_proposals/` 아래 HITL 제안 파일로 씁니다. 규칙은 블라스트 반경이 크므로 절대 자동 기록하지 않습니다. 기본은 dry-run이고, `--apply`가 파일을 옮기고 제안을 쓰며 `MEMORY_PROMOTION_PROPOSED` 훅을 발화합니다.
+프로젝트 기억은 증거를 기준으로 정리됩니다. `geode memory-lifecycle`(`core/cli/commands/memory_lifecycle.py`)는 두 가지를 합니다. (1) 소멸 — `resolution.guard_test`가 아직 트리에 존재하는 항목은 `.geode/memory/_archive/`로 아카이빙하고(주입에서 제외), 가드 테스트가 사라진 항목은 다시 떠오릅니다(WARNING). 시간 기반 소멸은 없습니다. (2) 승격 제안 — dreaming이 남긴 `context_artifacts`(`dream`)와 활성 항목을 클러스터링해, 서로 다른 세션 3개 이상에 걸친 클러스터를 `.geode/memory/_proposals/` 아래 HITL 제안 파일로 씁니다. 규칙은 블라스트 반경이 크므로 절대 자동 기록하지 않습니다. 기본은 dry-run이고, `--apply`가 파일을 옮기고 제안을 쓰며 `MEMORY_PROMOTION_PROPOSED` 훅을 발화합니다.
 
 ## sessions.jsonl: 런 메트릭
 
@@ -972,7 +972,7 @@ import 시점에 각 상수의 sha256\[:12\] 해시를 계산해 `PROMPT_VERSION
 
 ## program.md: 훅 제어 폴백
 
-자기개선 루프의 변이 러너 (`evolve/scaffold_search/loop/mutate/runner.py`)는 `program.md`를 읽지 못하면 코드에 박힌 리터럴 미러로 조용히 대체하지 않습니다. 대신 `RuntimeEvent.PROGRAM_MD_UNREADABLE`을 발화합니다. 핸들러가 대체 내용을 돌려줄 수 있고, 핸들러가 없으면 러너는 시끄럽게 실패합니다. 폴백을 데이터 미러가 아니라 코드의 제어 지점으로 두는 설계입니다. 디스크와 리터럴의 이중 SoT는 반드시 드리프트합니다.
+자기개선 루프의 변이 러너 (`evolve/scaffold_search/loop/mutate/runner.py`)는 `program.md`를 읽지 못하면 `RuntimeEvent.PROGRAM_MD_UNREADABLE`을 발화합니다. 핸들러가 대체 내용을 돌려줄 수 있고, 핸들러가 없으면 러너는 시끄럽게 실패합니다. 폴백은 코드의 제어 지점에 둡니다. 디스크와 리터럴의 이중 SoT는 반드시 드리프트합니다.
 
 ## 실패 모드
 
@@ -1012,11 +1012,11 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/tools/protocol.md
 
 즉시 로드 core set은 `TOOL_SEARCH_ALWAYS_LOADED`입니다. 기억, 노트, 파일 읽기, 웹 탐색, 상태 확인처럼 검색 왕복을 치르면 손해인 고빈도 도구가 여기에 남고, 나머지는 에이전트가 `tool_search`로 찾아 그때 가져옵니다.
 
-따라서 도구가 deferred loading 뒤로 밀렸다는 말은 모든 도구가 보이지 않는다는 뜻이 아닙니다. `read_document`, `grep_files`처럼 핵심 읽기 도구는 항상 적재됩니다. 이런 도구가 반복 호출된다면 보통 도구 수 제한 때문이 아니라 모델이 더 많은 근거 파일을 읽겠다고 판단한 결과입니다.
+따라서 도구가 deferred loading 뒤로 밀렸다는 말은 모든 도구가 보이지 않는다는 뜻이 아닙니다. `read_document`, `grep_files`처럼 핵심 읽기 도구는 항상 적재됩니다. 이런 도구가 반복 호출된다면 모델이 더 많은 근거 파일을 읽겠다고 판단했을 가능성이 큽니다.
 
 ## 툴킷: 서브에이전트 도구 번들
 
-서브에이전트는 도구 전체가 아니라 선언된 번들만 받습니다. 매니페스트는 `core/tools/toolkits.toml`, 해석기는 `core/tools/toolkit_registry.py`입니다.
+서브에이전트는 선언된 도구 번들만 받습니다. 매니페스트는 `core/tools/toolkits.toml`, 해석기는 `core/tools/toolkit_registry.py`입니다.
 
 1.  에이전트 frontmatter의 `toolkit:` 이름이 있으면 그 툴킷을 사용합니다. `includes:`는 재귀적으로 펼쳐집니다.
 2.  레거시 `tools:` 목록이 있으면 그대로 사용합니다.
@@ -1039,7 +1039,7 @@ MCP 결과는 evidence용 원본과 model-facing 표현을 분리합니다. time
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
 | 모델이 분명히 있는 도구를 못 찾음 | deferred loading으로 스키마가 아직 적재되지 않음 | 정상 경로입니다. 모델이 `tool_search`로 찾으면 로드됩니다 |
-| `read_document`나 `grep_files`가 반복 호출됨 | 핵심 읽기 도구는 항상 적재됨. tool cap에 숨은 것이 아니라 모델의 탐색 판단일 가능성이 큼 | dialogue transcript에서 직전 `grep_files` 호출과 읽은 경로를 보고, 필요한 경우 질문에 파일 범위나 금지 경로를 명시합니다 |
+| `read_document`나 `grep_files`가 반복 호출됨 | 핵심 읽기 도구는 항상 적재됨. 반복은 모델의 탐색 판단일 가능성이 큼 | dialogue transcript에서 직전 `grep_files` 호출과 읽은 경로를 보고, 필요한 경우 질문에 파일 범위나 금지 경로를 명시합니다 |
 | 서브에이전트가 도구 없이 동작 | frontmatter의 toolkit 이름 오타 | 스폰 로그의 경고를 확인하고 `toolkits.toml`의 이름과 맞춥니다 |
 | 도구 결과가 잘려 보임 | 15,000 토큰 초과로 오프로드됨 | `recall_tool_result(ref_id)`로 원본을 조회합니다 |
 
@@ -1056,7 +1056,7 @@ MCP 결과는 evidence용 원본과 model-facing 표현을 분리합니다. time
 URL: https://mangowhoiscloud.github.io/geode/docs/harness/hooks
 Markdown: https://mangowhoiscloud.github.io/geode/docs/harness/hooks.md
 
-GEODE의 확장 표면은 하나의 거대한 이벤트 목록이 아닙니다. 외부 통합이 의존할 수 있는 `HookName`, 실행을 감싸는 신뢰 표면 `MiddlewareRegistry`, 운영 관측을 위한 `RuntimeEvent`로 역할과 권한을 분리합니다.
+GEODE는 확장 표면을 권한별로 나눕니다. 외부 통합이 의존할 수 있는 `HookName`, 실행을 감싸는 신뢰 표면 `MiddlewareRegistry`, 운영 관측을 위한 `RuntimeEvent`로 역할과 권한을 분리합니다.
 
 ## 세 표면
 
@@ -1111,9 +1111,9 @@ print(schema["properties"]["decision"])
 
 ## PostVerify와 외부 루프
 
-`PostVerify`는 이미 실행된 부수 효과를 재생하지 않고, 완성된 후보와 내장 검증 결과를 외부 평가기·CI 정책·오케스트레이터가 판정하게 합니다. revise는 구체적인 후속 지시가 있어야 하며 최대 2회 연속 시도로 제한됩니다. 최종 결과에는 모든 시도의 rounds, tool calls, usage가 합산된 뒤 증거와 체크포인트가 저장됩니다. escalate는 단순 telemetry가 아니라 delivery gate입니다. 세션을 pause하고 후보를 외부 소유자에게만 pending\_text로 반환하며 terminal`session.ended`를 만들지 않습니다.
+`PostVerify`는 이미 실행된 부수 효과를 재생하지 않고, 완성된 후보와 내장 검증 결과를 외부 평가기·CI 정책·오케스트레이터가 판정하게 합니다. revise는 구체적인 후속 지시가 있어야 하며 최대 2회 연속 시도로 제한됩니다. 최종 결과에는 모든 시도의 rounds, tool calls, usage가 합산된 뒤 증거와 체크포인트가 저장됩니다. escalate는 delivery gate로 동작합니다. 세션을 pause하고 후보를 외부 소유자에게만 pending\_text로 반환하며 terminal `session.ended`를 만들지 않습니다.
 
-외부 handler 결정이 없으면 pass는 accept, 재시도 가능한 실패는 revise, 그 밖의 실패는 escalate하는 기본 정책이 동작합니다. revision 지시는 user message가 아니라 dynamic system context에 한 번 주입되고,`verification.decided`는 후보 본문 대신 SHA-256 digest와 handler별 결정을 session timeline에 남깁니다.
+외부 handler 결정이 없으면 pass는 accept, 재시도 가능한 실패는 revise, 그 밖의 실패는 escalate하는 기본 정책이 동작합니다. revision 지시는 human transcript를 보존한 채 dynamic system context에 한 번 주입됩니다. `verification.decided`는 후보 본문을 생략하고 SHA-256 digest와 handler별 결정을 session timeline에 남깁니다.
 
 ## 신뢰 미들웨어 4개 결합점
 
@@ -1195,7 +1195,7 @@ CLI 인자
 
 ## 재시도와 fast-fail
 
-재시도는 `core/llm/fallback.py`의 `retry_with_backoff_generic`이 담당합니다. 상태를 가진 CircuitBreaker 클래스는 없습니다. 대신 `core/llm/errors.py`의 두 판정 함수가 재시도를 단락(short-circuit)시킵니다.
+재시도는 `core/llm/fallback.py`의 `retry_with_backoff_generic`이 담당합니다. 상태를 가진 CircuitBreaker 클래스는 없습니다. `core/llm/errors.py`의 두 판정 함수가 재시도를 단락(short-circuit)시킵니다.
 
 | 판정 | 대상 | 효과 |
 | --- | --- | --- |
@@ -1230,7 +1230,7 @@ CLI 인자
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/tool-calling
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/tool-calling.md
 
-GEODE의 도구 호출은 특정 프로바이더 payload가 아니라 `AgenticLoop`의 공통 계약에서 시작합니다. 도구 정의를 adapter-neutral `ToolSpec`으로 만들고, 선택한 adapter가 wire 형식으로 변환합니다. 모델이 반환한 호출은 다시 하나의 `ToolUseBlock`으로 정규화되므로 실행기와 다음 턴은 프로바이더 문법을 알 필요가 없습니다.
+GEODE의 도구 호출은 `AgenticLoop`의 공통 계약에서 시작합니다. 도구 정의를 adapter-neutral `ToolSpec`으로 만들고, 선택한 adapter가 wire 형식으로 변환합니다. 모델이 반환한 호출은 다시 하나의 `ToolUseBlock`으로 정규화되므로 실행기와 다음 턴은 프로바이더 문법을 알 필요가 없습니다.
 
 ## 한 라운드의 계약
 
@@ -1289,7 +1289,7 @@ definitions.json / MCP discovery
 ## 결과 직렬화와 다음 턴
 
 -   일반 결과는 JSON으로 직렬화하고 원래 call id를 유지합니다.
--   computer-use screenshot은 텍스트 base64가 아니라 image content block으로 되돌립니다.
+-   computer-use screenshot은 image content block으로 되돌립니다.
 -   큰 결과는 token guard를 거친 뒤 필요하면 파일로 offload하고 요약과 `ref_id`만 context에 남깁니다.
 -   assistant의 호출 message와 user 쪽 tool result를 연달아 history에 추가해야 다음 턴의 id pairing이 유지됩니다.
 
@@ -1336,7 +1336,7 @@ GEODE의 구조화 출력 표면은 `response_schema` 하나입니다. caller가
 | 문서화된 worker 결과 | top-level JSON object. worker validator가 object와 `required` key를 검사 |
 | 별도 constraint 종류 | choice, regex, grammar를 위한 first-class GEODE 필드는 없음 |
 
-도구의 `input_schema`는 tool call 인자를 정의하고, `response_schema`는 모델의 최종 응답을 정의합니다. 둘은 독립적인 계약이며 하나가 다른 하나를 대신하지 않습니다.
+도구의 `input_schema`는 tool call 인자를 정의하고, `response_schema`는 모델의 최종 응답을 정의합니다. 둘은 독립적인 계약이며 각자 별도의 권한을 가집니다.
 
 ## 전달 경로
 
@@ -1412,7 +1412,7 @@ retry는 첫 실행 시간이 task timeout의 50% 미만일 때만 허용합니�
 | --- | --- | --- |
 | Provider/CLI constraint | 선택된 backend에 schema를 전달하거나 강제 | 미지원 adapter를 자동으로 다른 경로로 교체하지 않음 |
 | Worker retry | 빈 출력, parse 실패, required key 누락을 한 번 복구 | JSON Schema 전체 검증은 하지 않음 |
-| Downstream parser | 도메인별 type, enum, semantic constraint를 최종 판정 | adapter의 wire 지원을 대신 만들지 않음 |
+| Downstream parser | 도메인별 type, enum, semantic constraint를 최종 판정 | adapter wire 지원 범위는 그대로 유지 |
 
 ## 구현 기준점
 
@@ -1445,7 +1445,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/orchestration.md
 | `send_message` | 새 세대를 시작하지 않고 실행 중인 자식에게 컨텍스트를 큐잉 |
 | `followup_task` | 실행 중이면 다음 루프 경계에 전달하고, 종료 상태면 같은 자식 세션을 재개 |
 
-최신 상태와 메일박스 전달은 프로젝트 `sessions.db`의 `collaboration_runs`와 `collaboration_mailbox`에 저장합니다. 이 둘은 두 번째 transcript가 아니라 제어 투영입니다. 자식의 대화, 도구 호출, 훅, trajectory는 `messages`와 append-only `session_events`에 독립 롤아웃으로 남습니다. mailbox는 자식 checkpoint 저장 뒤 승인됩니다. 재개는 완료된 도구 호출을 런타임이 자동 재생하지 않지만 모델이 같은 부작용을 다시 요청할 수 있으므로 exactly-once 계약은 아닙니다.
+최신 상태와 메일박스 전달은 프로젝트 `sessions.db`의 `collaboration_runs`와 `collaboration_mailbox`에 저장합니다. 이 둘은 제어 상태를 투영하며 별도 transcript를 만들지 않습니다. 자식의 대화, 도구 호출, 훅, trajectory는 `messages`와 append-only `session_events`에 독립 롤아웃으로 남습니다. mailbox는 자식 checkpoint 저장 뒤 승인됩니다. 재개는 완료된 도구 호출을 런타임이 자동 재생하지 않지만 모델이 같은 부작용을 다시 요청할 수 있으므로 exactly-once 계약은 아닙니다.
 
 ## 한도
 
@@ -1474,7 +1474,7 @@ SessionLane은 세션 키 256개까지 유지하고 유휴 키를 정리합니�
 
 격리는 프로세스와 산출물 수준에서 일어납니다. 서브에이전트는 별도 워커 프로세스로 돌고, 산출물은 `<run_dir>/sub_agents/<task_id>/` 아래에 쌓이며, 부모는 반환된 요약만 받습니다 (`core/orchestration/isolated_execution.py`).
 
-메모리 쓰기 격리는 별도 버퍼가 아니라 툴킷 구성으로 통제합니다. 기본 `_default` 툴킷은 읽기 전용이라 서브에이전트는 공유 메모리에 쓸 수 없습니다. 단, `memory_save`가 포함된 툴킷(예: `general_purpose`)을 명시하면 공유 `ProjectMemory`에 직접 기록됩니다. 동시 쓰기를 피하려면 쓰기 도구가 없는 툴킷을 주는 것이 통제 수단입니다.
+메모리 쓰기 격리는 툴킷 구성으로 통제합니다. 기본 `_default` 툴킷은 읽기 전용이라 서브에이전트는 공유 메모리에 쓸 수 없습니다. 단, `memory_save`가 포함된 툴킷(예: `general_purpose`)을 명시하면 공유 `ProjectMemory`에 직접 기록됩니다. 동시 쓰기를 피하려면 쓰기 도구가 없는 툴킷을 주는 것이 통제 수단입니다.
 
 ## 도구와 능력의 상속
 
@@ -1599,7 +1599,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch
 
 ## 모듈 구성: 루프 드라이버와 장비의 분리
 
-왜 한 파일이 아닌가. 측정 장비를 루프가 스스로 고칠 수 있으면 측정 자체를 신뢰할 수 없기 때문입니다. S-5 원형 복원에서 측정 코드는 `train.py`에서 동작 0-diff로 추출되어 4개의 형제 모듈이 되었고, `program.md`는 자기개선 에이전트가 이 4개 모듈을 수정하는 것을 금지합니다. 장비를 바꾸면 측정 대상이 아니라 측정 기준이 바뀝니다.
+측정 장비를 분리한 이유는 루프가 장비까지 고칠 때 측정 자체를 신뢰할 수 없기 때문입니다. S-5 원형 복원에서 측정 코드는 `train.py`에서 동작 0-diff로 추출되어 4개의 형제 모듈이 되었고, `program.md`는 자기개선 에이전트가 이 4개 모듈을 수정하는 것을 금지합니다. 장비를 바꾸면 측정 기준이 바뀝니다.
 
 | 모듈 | 역할 |
 | --- | --- |
@@ -1628,7 +1628,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch
 
 ## 측정: Petri 감사
 
-`measure.py`가 `geode-eval audit` 서브프로세스를 띄우면서 후보 스캐폴드를 `GEODE_WRAPPER_OVERRIDE` env로 주입합니다. 감사 대상이 정확히 그 후보인지가 측정의 전부이므로 이 경로는 strict입니다. 파일이 없거나 파싱에 실패하면 조용히 기본 스캐폴드로 떨어지는 대신 즉시 실패합니다. 역할 분리도 엄격합니다. 무엇을 측정하는가(루브릭, judge, dim 추출)는 Petri가 소유하고, 측정이 어떻게 선택 신호로 쌓이는가(티어, 가중치, 게이트)는 train과 fitness가 소유합니다. 자세한 측정 계층은 [Petri × GEODE](https://mangowhoiscloud.github.io/geode/docs/petri/overview.md)를 보세요.
+`measure.py`가 `geode-eval audit` 서브프로세스를 띄우면서 후보 스캐폴드를 `GEODE_WRAPPER_OVERRIDE` env로 주입합니다. 감사 대상이 정확히 그 후보인지가 측정의 전부이므로 이 경로는 strict입니다. 파일이 없거나 파싱에 실패하면 즉시 실패합니다. 역할 분리도 엄격합니다. 무엇을 측정하는가(루브릭, judge, dim 추출)는 Petri가 소유하고, 측정이 어떻게 선택 신호로 쌓이는가(티어, 가중치, 게이트)는 train과 fitness가 소유합니다. 자세한 측정 계층은 [Petri × GEODE](https://mangowhoiscloud.github.io/geode/docs/petri/overview.md)를 보세요.
 
 ## 게이트: margin 규칙
 
@@ -1705,11 +1705,11 @@ Seed Scenario Generation은 후보를 만들고 평가한 뒤 생존자를 seed 
 | `evolver` | `evolve-` | 생존 후보 변이. 다음 세대 후보 생성 |
 | `meta_reviewer` | `meta-` | coverage와 gap 분석. 다음 세대 prior 산출 |
 
-반복 사이클에서는 evolved 후보를 후보 목록(candidates)으로 승격한 뒤 critic, pilot, ranker, evolver, meta\_reviewer만 다시 돕니다. 새 초안이 아니라 진화된 후보를 다듬는 단계이기 때문입니다.
+반복 사이클에서는 evolved 후보를 후보 목록(candidates)으로 승격한 뒤 critic, pilot, ranker, evolver, meta\_reviewer만 다시 돕니다. 진화된 후보를 다듬는 단계입니다.
 
 ## pilot은 실측입니다
 
-pilot은 후보마다 실제 petri\_audit 측정을 1회 돌립니다. `inspect_ai`가 필요하므로 `[audit]` extra가 설치돼 있어야 하고, 없으면 0점으로 조용히 채우는 대신 크게 실패합니다. 측정값(`dim_means`)이 곧 그 후보의 난이도 신호가 되어 생존자 선택에 들어갑니다.
+pilot은 후보마다 실제 petri\_audit 측정을 1회 돌립니다. `inspect_ai`가 필요하므로 `[audit]` extra가 설치돼 있어야 하고, 없으면 크게 실패합니다. 측정값 (`dim_means`)이 곧 그 후보의 난이도 신호가 되어 생존자 선택에 들어갑니다.
 
 ## 토너먼트와 생존자 선택
 
@@ -1766,7 +1766,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipelin
 
 ## 생존자 선택: frontier-band가 기본
 
-기본 선택은 pilot 실측 난이도가 양 끝이 아닌 약 50% 판별 대역에 가까운 후보를 고르는 `frontier`입니다. 너무 쉬운 seed와 항상 실패하는 불공정 seed를 함께 피하고, pilot 근거가 없으면 Elo로 결정적으로 폴백합니다 (`evals/seed_generation/tournament.py`의 `DEFAULT_SURVIVOR_SELECTION`).
+기본 선택은 pilot 실측 난이도가 약 50% 판별 대역에 가까운 후보를 고르는 `frontier`입니다. 너무 쉬운 seed와 항상 실패하는 불공정 seed를 함께 피하고, pilot 근거가 없으면 Elo로 결정적으로 폴백합니다 (`evals/seed_generation/tournament.py`의 `DEFAULT_SURVIVOR_SELECTION`).
 
 ```
 norm = (pilot dim_means[target_dim] - 1) / 9
@@ -1791,10 +1791,68 @@ frontier_reward = 1 - 2 * abs(norm - 0.5)
 
 ---
 
-### Outer-loop configuration (아우터 루프 설정)
+### Crucible outer loop (Crucible 아우터 루프)
 
 URL: https://mangowhoiscloud.github.io/geode/docs/capabilities/outer-loop
 Markdown: https://mangowhoiscloud.github.io/geode/docs/capabilities/outer-loop.md
+
+## Crucible bounded search
+
+Crucible은 후보 생성, 신뢰된 paired 평가, 판정, private ref 갱신을 하나의 제한된 반복으로 묶습니다. 실행 전에 측정 정체성과 자원을 동결하고, 각 반복의 KEEP·REJECT·INVALID와 비용을 원장에 남깁니다.
+
+Crucible bounded search loop
+
+**prepare\_campaign()**task pack · evaluator identity · promotion rule · power · quota · runtime budget 동결
+
+01**Private search head**refs/crucible/search/<campaign>
+
+→
+
+02**Candidate producer**disposable · no remote
+
+→
+
+03**Import + preflight**fresh measurement checkout
+
+→
+
+04**Evaluator**baseline first · candidate if reachable
+
+→
+
+05**Pure decide()**reachability · bootstrap · veto
+
+**baseline evidence**
+
+→
+
+**KEEP 도달 가능성**
+
+→
+
+reachable → candidate 평가unreachable → zero-call REJECT
+
+**KEEP**
+
+CAS로 private search ref 전진
+
+**REJECT / INVALID**
+
+search head 유지
+
+**record · ledger · feedback**
+
+모든 판정과 비용을 append-only 기록
+
+→
+
+**limits: attempts · wall · cost**
+
+여유가 있으면 다음 candidate, 소진되면 summary.json
+
+적응 루프 밖의 권한 경계
+
+train KEEP은 loop-local head만 갱신합니다. disjoint one-shot sealed test가 ELIGIBLE 여부를 기록하고, production release는 별도 승인 경로에 남습니다. `promotion_authority=none`
 
 ## 왜 아우터 루프 설정이 한 곳에 있나
 
@@ -1858,7 +1916,7 @@ min_interval_minutes = 60
 URL: https://mangowhoiscloud.github.io/geode/docs/petri/overview
 Markdown: https://mangowhoiscloud.github.io/geode/docs/petri/overview.md
 
-자기개선 루프에서 Petri는 측정 계층입니다. 스캐폴드 변이가 실제로 더 안전한 에이전트를 만드는지는 주장이 아니라 적대적 감사로 판정해야 하므로, GEODE는 Petri를 wrapped agent로 통합했습니다. Petri(Parallel Exploration Tool for Risky Interactions)는 Anthropic Alignment Science가 만든 alignment audit 프레임워크로, [inspect\_ai](https://inspect.aisi.org.uk/)(UK AISI) 위에 구현되며 [Meridian Labs](https://meridianlabs.ai)가 `inspect_petri`(MIT)로 유지합니다.
+자기개선 루프에서 Petri는 측정 계층입니다. 스캐폴드 변이가 실제 안전성은 적대적 감사로 판정해야 하므로, GEODE는 Petri를 wrapped agent로 통합했습니다. Petri(Parallel Exploration Tool for Risky Interactions)는 Anthropic Alignment Science가 만든 alignment audit 프레임워크로, [inspect\_ai](https://inspect.aisi.org.uk/)(UK AISI) 위에 구현되며 [Meridian Labs](https://meridianlabs.ai)가 `inspect_petri`(MIT)로 유지합니다.
 
 ## 세 가지 모델 역할
 
@@ -1872,14 +1930,14 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/petri/overview.md
 
 `geode-eval audit`는`evals/petri/cli_audit.py`로 들어와 `evals/petri/runner.py`의 `run_audit`이 inspect-petri 서브프로세스를 돌립니다. 끝난 `.eval` 아카이브는 워크트리 밖 `~/.geode/petri/logs/`에 보존되고, 커밋 가능한 요약 YAML이 `docs/audits/eval-logs/`에 남습니다.
 
-루프가 소비하는 출력은 stdout의 마지막 비어 있지 않은 줄 하나입니다. `core/audit/dim_extractor.py`의 `extract_dim_aggregates`가 `.eval` 아카이브에서 차원별 judge 점수를 집계해 `{"dim_means": {...}, "dim_stderr": {...}}` JSON으로 내보내고, 루프의 `measure.py`가 그 줄을 파싱합니다. stderr는 평균의 표준오차입니다. 표본이 1개면 0이 되는데, 이 0은 "완벽한 안정성"이 아니라 "안정성 신호 없음"으로 읽어야 합니다.
+루프가 소비하는 출력은 stdout의 마지막 비어 있지 않은 줄 하나입니다. `core/audit/dim_extractor.py`의 `extract_dim_aggregates`가 `.eval` 아카이브에서 차원별 judge 점수를 집계해 `{"dim_means": {...}, "dim_stderr": {...}}` JSON으로 내보내고, 루프의 `measure.py`가 그 줄을 파싱합니다. stderr는 평균의 표준오차입니다. 표본이 1개면 0이 되는데, 이 0은 "안정성 신호 없음"으로 읽어야 합니다.
 
 ## audit-mode: 스캐폴드만 측정하기
 
 측정이 운영자의 로컬 맥락에 오염되면 비교가 성립하지 않습니다. 두 장치가 이를 막습니다.
 
 -   **가드레일 전환**(`evals/petri/audit_mode.py`). 한 번의 런에 한해 HITL 승인을 끄고 dry-run을 강제하는 등 영구 정책을 건드리지 않고 감사용 상태로 전환합니다. 활성화는 `geode-eval audit --unrestricted`, `GEODE_AUDIT_UNRESTRICTED=1`, 또는 `.geode/audit-mode.toml`입니다.
--   **시스템 프롬프트 strip**(`core/agent/system_prompt.py`의 `_audit_mode_active`). audit-mode에서는 메모리 계층 같은 GEODE 고유 로컬 컨텍스트를 시스템 프롬프트에서 제거해, Petri가 운영자의 환경이 아니라 측정 대상 스캐폴드를 재게 합니다.
+-   **시스템 프롬프트 strip**(`core/agent/system_prompt.py`의 `_audit_mode_active`). audit-mode에서는 메모리 계층 같은 GEODE 고유 로컬 컨텍스트를 시스템 프롬프트에서 제거해, Petri가 측정 대상 스캐폴드를 직접 재게 합니다.
 
 비교 하네스는 같은 seed를 두 번 돌립니다. `target=geode/<model>`(audit-mode 적용 wrapped agent)과 `target=anthropic/<model>`(GEODE wrapper 없는 vanilla)입니다. 둘의 차이가 스캐폴드의 기여분입니다.
 
@@ -1928,7 +1986,7 @@ seed 하나는 `.md` 파일 하나입니다. frontmatter(tags)와 branch별 압�
 
 ## 코퍼스는 어떻게 자라나
 
-정적 카탈로그가 아닙니다. seed-generation 파이프라인 ([Seed Scenario Generation](https://mangowhoiscloud.github.io/geode/docs/capabilities/co-scientist.md))이 target dimension별로 새 seed를 만들고, 생존자가 `geode seeds assemble`을 거쳐 사이클 입력 풀(`state/seed-pools/cycle-input`)로 조립됩니다. 버전 고정 held-out 벤치마크(`state/seed-pools/held-out`)는 비교 기준자로 따로 둡니다.
+seed-generation 파이프라인 ([Seed Scenario Generation](https://mangowhoiscloud.github.io/geode/docs/capabilities/co-scientist.md))이 target dimension별로 새 seed를 만들고, 생존자가 `geode seeds assemble`을 거쳐 사이클 입력 풀(`state/seed-pools/cycle-input`)로 조립됩니다. 버전 고정 held-out 벤치마크(`state/seed-pools/held-out`)는 비교 기준자로 따로 둡니다.
 
 ## upstream Petri 기본 seed
 
@@ -2029,11 +2087,11 @@ inspect eval inspect_petri/audit \
 URL: https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions
 Markdown: https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions.md
 
-judge는 transcript마다 차원별 점수를 매깁니다. 스케일은 1~10이고 값이 클수록 우려스러운 행동입니다. 즉 dim 점수는 lower-is-better입니다. 루프의 fitness는 반대로 higher-is-better인 0~1 스칼라이므로, 방향이 헷갈릴 때는 dim에 대해 "내려갔다(drop)" 대신 "퇴행했다(regress)"라고 말하는 것이 안전합니다.
+judge는 transcript마다 차원별 점수를 매깁니다. 스케일은 1~10이고 값이 클수록 우려스러운 행동입니다. 즉 dim 점수는 lower-is-better입니다. 루프의 fitness는 반대로 higher-is-better인 0~1 스칼라이므로, 방향이 헷갈릴 때는 dim에 대해 "퇴행했다(regress)"라고 말하는 것이 안전합니다.
 
 ## 루브릭: 22개 차원
 
-GEODE의 judge 루브릭은 `evals/petri/judge_dims/geode_judge_subset.yaml`에 정의된 22개 차원입니다(`--dim-set subset`이 기본). 운영 축(behaviour control, tool calling, robustness 등), autonomy 표면 3개, judge 보정 anchor 4개 (`admirable`, `disappointing`, `needs_attention`, `scenario_realism`), context 관리 3개로 구성됩니다. 모든 차원은 LLM judge가 채점합니다. 점수의 집계는 `core/audit/dim_extractor.py`가 맡아 차원별 평균과 평균의 표준오차(`dim_means` / `dim_stderr`)를 냅니다. 표본 1개의 stderr 0은 "완벽한 안정성"이 아니라 "안정성 신호 없음"입니다.
+GEODE의 judge 루브릭은 `evals/petri/judge_dims/geode_judge_subset.yaml`에 정의된 22개 차원입니다(`--dim-set subset`이 기본). 운영 축(behaviour control, tool calling, robustness 등), autonomy 표면 3개, judge 보정 anchor 4개 (`admirable`, `disappointing`, `needs_attention`, `scenario_realism`), context 관리 3개로 구성됩니다. 모든 차원은 LLM judge가 채점합니다. 점수의 집계는 `core/audit/dim_extractor.py`가 맡아 차원별 평균과 평균의 표준오차(`dim_means` / `dim_stderr`)를 냅니다. 표본 1개의 stderr 0은 "안정성 신호 없음"입니다.
 
 ## fitness universe: 18개 차원, 3개 티어
 
@@ -2369,7 +2427,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/capabilities/lineage.md
 
 ## 한 문장 주장
 
-GEODE의 자기개선 루프는 새로운 알고리즘이 아닙니다. self-evolving agents라는 잘 정립된 계보 위에 있고, GEODE의 기여는 그 계보를 다른 목표로 다시 겨눈 것, 그리고 알려진 조각들을 새로 조합한 것입니다. 이 페이지는 그 계보를 정직하게 짚고, GEODE가 어디서 갈라져 나왔는지 밝힙니다.
+GEODE의 자기개선 루프는 self-evolving agents라는 잘 정립된 계보 위에 있습니다. GEODE의 기여는 그 계보를 다른 목표로 다시 겨눈 것, 그리고 알려진 조각들을 새로 조합한 것입니다. 이 페이지는 그 계보를 정직하게 짚고, GEODE가 어디서 갈라져 나왔는지 밝힙니다.
 
 두 루프의 구조 자체가 처음이라면 [두 개의 루프](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops.md)를 먼저 읽으세요. 바깥쪽 루프의 전체 흐름은 [Closed-Loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md)에 있습니다.
 
@@ -2409,8 +2467,8 @@ scaffolding   DGM, ADAS, STOP,        <- 거의 비어 있음
 
 GEODE를 한 줄로 쓰면 이렇습니다. DGM의 루프를 가져오되 세 군데를 바꿨습니다.
 
-1.  **능력 벤치마크 fitness → 적대적 안전 감사 fitness**. SWE-bench 점수 대신 Petri 등급의 다차원 안전 감사로 평가합니다.
-2.  **open-ended 아카이브 → 정직한 (1+1) champion chain**. 다양한 frontier를 유지하는 대신, critical dimension에 거부권을 둔 단일 champion 계보를 이어갑니다.
+1.  **능력 벤치마크 fitness → 적대적 안전 감사 fitness**. Petri 등급의 다차원 안전 감사로 평가합니다.
+2.  **open-ended 아카이브 → 정직한 (1+1) champion chain**. critical dimension에 거부권을 둔 단일 champion 계보를 이어갑니다.
 3.  **고정 벤치마크 → 공진화하는 적대적 seed**. Seed Scenario Generation 파이프라인이 에이전트와 나란히 테스트 분포를 키웁니다.
 
 그리고 한 가지 더. GEODE는 non-parametric입니다. scaffolding만 바꿉니다. 변이 표면은 7개 behaviour kinds, 곧 프롬프트 섹션, 도구 정책, 분해 방식, reflection, skill 카탈로그, 에이전트 contract, 도구 설명이며, 가중치는 절대 건드리지 않습니다.
@@ -2431,7 +2489,7 @@ GEODE를 한 줄로 쓰면 이렇습니다. DGM의 루프를 가져오되 세 �
 
 > **비어 있는 칸은 증거의 부재이지 부재의 증거가 아닙니다.** 2026년 5월 문헌 검색 범위에서 보이지 않았다는 뜻이지, 존재하지 않는다고 증명된 것은 아닙니다.
 >
-> **GEODE는 frontier의 수렴 방향에서 일부러 벗어났습니다.** GEPA, DGM, SICA, ADAS는 Pareto frontier나 open-ended 아카이브로 수렴합니다. 이들이 다양한 frontier를 유지하는 이유는 비용 때문입니다. 값싼 task 지표 위에서, 노이즈가 섞인 단일 평가 신호를 견디려고 frontier를 넓게 둡니다. GEODE는 값비싸고 노이즈가 큰 안전 감사 위에서 돌기 때문에 frugal한 (1+1)을 택했습니다. 공짜로 얻는 이득이 아니라 실제 trade-off입니다. 아카이브 유지는 앞으로 열어 둘 설계 방향입니다.
+> **GEODE는 frontier의 수렴 방향에서 일부러 벗어났습니다.** GEPA, DGM, SICA, ADAS는 Pareto frontier나 open-ended 아카이브로 수렴합니다. 이들이 다양한 frontier를 유지하는 이유는 비용 때문입니다. 값싼 task 지표 위에서, 노이즈가 섞인 단일 평가 신호를 견디려고 frontier를 넓게 둡니다. GEODE는 값비싸고 노이즈가 큰 안전 감사 위에서 돌기 때문에 frugal한 (1+1)을 택했습니다. 공짜로 얻는 선택에는 실제 trade-off가 있습니다. 아카이브 유지는 앞으로 열어 둘 설계 방향입니다.
 >
 > **GEODE는 알려진 조각들의 재조합입니다.** scaffolding 자기수정은 STOP과 DGM에서, reflective single-mutation은 GEPA와 TextGrad에서, 공진화 seed는 Rainbow Teaming에서, 감사는 Petri에서, 안전 목표는 Constitutional AI에서 가져왔습니다. 어느 한 재료의 신규성을 주장하는 것은 부정확합니다.
 
@@ -2485,7 +2543,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/petri/bundle.md
 URL: https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway
 Markdown: https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md
 
-게이트웨이는 serve 데몬 안에서 메신저 메시지를 받아 GEODE 실행으로 넘기는 라우터입니다. Slack Socket Mode와 플랫폼 poller가 메시지를 받고, binding이 어느 채널을 받을지 결정하며, lane queue가 동시성을 제한합니다. 라우팅에는 LLM 대신 정적 규칙만 씁니다.
+게이트웨이는 serve 데몬 안에서 메신저 메시지를 받아 GEODE 실행으로 넘기는 라우터입니다. Slack Socket Mode와 플랫폼 poller가 메시지를 받고, binding이 어느 채널을 받을지 결정하며, lane queue가 동시성을 제한합니다. 라우팅은 정적 규칙만 씁니다.
 
 ## 동작 구조
 
@@ -2845,7 +2903,7 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유
 
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
-| 업데이트했는데 옛 동작이 계속됨 | 오래된 데몬이 살아남아 소켓을 점유 | `pkill -f "geode serve"` 후 재진입합니다. `geode update`는 이 재시작을 대신 해줍니다. |
+| 업데이트했는데 옛 동작이 계속됨 | 오래된 데몬이 살아남아 소켓을 점유 | `pkill -f "geode serve"` 후 재진입합니다. `geode update`로 재시작할 수도 있습니다. |
 | 외부 채널이 동작하지 않음 | `gateway_enabled` 꺼짐 | CLI IPC는 계속 동작합니다. 외부 채널이 필요할 때만 `GEODE_GATEWAY_ENABLED=true`를 켭니다. |
 | 기능이 조용히 동작하지 않음 | 핸들러 미등록 또는 서비스 구성 누락 | bootstrap 등록과 composition root의 명시적 서비스 주입을 확인합니다. `core/wiring/bootstrap.py`의 `get_plugin_status()`가 플러그인별 등록 상태를 보고합니다. |
 
@@ -2862,7 +2920,7 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유
 URL: https://mangowhoiscloud.github.io/geode/docs/ops/long-running
 Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/long-running.md
 
-긴 실행의 위험은 셋입니다. 끝나지 않는 루프, 넘치는 컨텍스트, 불어나는 비용. AgenticLoop는 매 라운드 진입 시점에 가드를 검사하고, 걸리면 조용히 죽는 대신 이유가 적힌 `termination_reason`으로 끝납니다 (`core/agent/loop/agent_loop.py`).
+긴 실행의 위험은 셋입니다. 끝나지 않는 루프, 넘치는 컨텍스트, 불어나는 비용. AgenticLoop는 매 라운드 진입 시점에 가드를 검사하고, 걸리면 이유가 적힌 `termination_reason`으로 끝납니다 (`core/agent/loop/agent_loop.py`).
 
 ## 라운드 진입 가드
 
@@ -2872,7 +2930,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/long-running.md
 | 실행 time budget | `time_budget_s > 0`일 때 wall-clock 검사. 게이트웨이 120초, 스케줄러 300초가 모드 기본값입니다. | `time_budget_expired` |
 | 세션 budget | 세션 전체 기본 2시간 (`core/agent/budget.py`). 임계 도달 전 `HANDOFF_TRIGGERED` 훅이 한 번 발화해 인수인계 기회를 줍니다. | `session_time_budget_expired` |
 | 비용 budget | `cost_budget > 0`이면 80%에서 1회 경고, 도달 시 종료. 세션 비용은 token tracker 누적치입니다. | `cost_budget_exceeded` |
-| overthinking 감지 | 도구 호출 없이 고출력 텍스트 라운드가 연속되면 조용한 다운그레이드 대신 멈추고 사용자에게 묻습니다. | `user_clarification_needed` |
+| overthinking 감지 | 도구 호출 없이 고출력 텍스트 라운드가 연속되면 멈추고 사용자에게 묻습니다. | `user_clarification_needed` |
 
 마무리 단계(`force_text`)에서는 적응형 컴퓨트가 걸립니다. max\_tokens를 컨텍스트 윈도의 0.5%(하한 4096)로 줄이고 thinking을 끄고 effort를 낮춰, 마지막 응답이 예산을 더 태우지 않게 합니다.
 
@@ -3112,7 +3170,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/run/troubleshooting.md
 5. geode setup -r             # 그래도 안 되면 설정을 처음부터
 ```
 
-`geode config explain`은 한 설정 키에 대해 os.environ, 프로젝트 .env, 전역 .env, 프로젝트 config.toml, 전역 config.toml, 코드 기본값 순서로 후보를 표로 보여주고 어느 레이어가 이기는지 표시합니다 (`core/config/explain.py`). 검증은 항상 실효값 기준입니다. config.toml의 내용이 아니라 `geode about`이 답입니다.
+`geode config explain`은 한 설정 키에 대해 os.environ, 프로젝트 .env, 전역 .env, 프로젝트 config.toml, 전역 config.toml, 코드 기본값 순서로 후보를 표로 보여주고 어느 레이어가 이기는지 표시합니다 (`core/config/explain.py`). 검증은 항상 실효값 기준이며 `geode about`에서 확인합니다.
 
 ## 증상, 원인, 해법
 
@@ -3158,7 +3216,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/benchmarks/geo.md
 
 ## 무엇을 검증하는가
 
-GEO는 문장을 다시 쓰는 최적화 점수가 아니라 증거 상태머신입니다.`preflight → live_observe`로 진단하며, 변경 효과를 주장할 때만 사전 등록된 `experiment`로 진행합니다. 앞 단계가 뒤 단계를 대신하지 못하며, 측정하지 못한 값은 0이 아니라`not_measured`로 남습니다.
+GEO는 단계별 증거를 관리하는 상태머신입니다. `preflight → live_observe`로 진단하며, 변경 효과를 주장할 때만 사전 등록된 `experiment`로 진행합니다. 앞 단계가 뒤 단계를 증명할 수 없습니다. 측정 영수증이 없는 값은 `not_measured`로 남습니다.
 
 질의 실행 1회가 관측치 1개입니다. live profile은 6개 root × (원문 1개 + paraphrase 3개) × K=5, 즉 120개 관측치를 만듭니다. C는 이 120개 전체를 분모로 쓰지만, R·P·A·Q는 해당 증거가 실제로 존재하는 관측치나 claim만 각자의 분모로 사용합니다.
 
@@ -3174,12 +3232,12 @@ GEO는 문장을 다시 쓰는 최적화 점수가 아니라 증거 상태머신
 
 ## 빈 칸과 비교군
 
-아래 값은 2026-08-24 로컬 diagnostic receipt를 읽은 결과이며 공개 성능 주장이나 승격 근거가 아닙니다. `0`은 관측 결과,`not_measured`는 적격 분모·영수증 부재, `partial`은 해당 단계의 일부 하위 지표만 측정했다는 뜻입니다.
+아래 값은 2026-08-24 로컬 diagnostic receipt에 한정됩니다. `0`은 관측 결과,`not_measured`는 적격 분모·영수증 부재, `partial`은 해당 단계의 일부 하위 지표만 측정했다는 뜻입니다.
 
 | 상태 | 빈칸이 뜻하는 것 | 필요한 비교군 |
 | --- | --- | --- |
 | `F · partial` | 로컬 78/78 URL과 내부 링크 577/577은 통과했지만, 당시 runner는 공개 sitemap 77/78 실패를 예외로 버려 영수증을 결합하지 못했습니다. 현재 runner는 이를 partial receipt로 보존합니다. | 동일성 비교: 같은 URL digest의 로컬 export ↔ 공개 호스트 |
-| `R/C/P` | Pages는 R 0/120, C 4/120, P 4/4로 측정됐습니다. R은 빈칸이 아니라 관측된 0입니다. | 표면 진단: Pages ↔ GitHub 저장소(R 109/120, C 9/120) |
+| `R/C/P` | Pages는 R 0/120, C 4/120, P 4/4로 측정됐습니다. R의 0은 120회에서 관측된 결과입니다. | 표면 진단: Pages ↔ GitHub 저장소(R 109/120, C 9/120) |
 | `A/Q` | A 4/4, Q 43/58이지만 같은 모델의 앞선 반복은 35/54였습니다. Q는 claim support만 포함해 partial입니다. | 판정 보정: 고정 claim 집합의 독립 verifier ↔ 사람 표본 판정 |
 | `O · not_measured` | 종료된 Search Console·referral·conversion 관측 기간이 없어 분모 자체를 만들지 않았습니다. | 성과 비교: 같은 기간·질의·엔진의 baseline ↔ treatment |
 | `Promotion · none` | 이번 실행은 진단 계약이며 비교 대상과 변경 arm을 사전 등록하지 않았습니다. | 승격 비교: 동결된 baseline ↔ treatment, 동일 index·budget·window |
@@ -3245,7 +3303,7 @@ vector 안에 trajectory나 원본 receipt를 복제하지 않습니다.`attempt
 | `outcome_receipts` | `outcome-receipt` | 종료된 1차 analytics |
 | `trajectory` | `trajectory` | geode.trajectory@1 / release manifest |
 
-trajectory는 행동 증거이며 점수 정본이 아닙니다. publication manifest는 선언된 모든 파일을 public 또는 withheld로 분류하고, bundle gate는 schema, digest, run ID, trajectory release scope를 한 번에 확인합니다.
+trajectory는 행동 증거입니다. 점수 권한은 native result에 남습니다. publication manifest는 선언된 모든 파일을 public 또는 withheld로 분류하고, bundle gate는 schema, digest, run ID, trajectory release scope를 한 번에 확인합니다.
 
 ```
 uv run python scripts/eval/contract.py validate-run-bundle \
@@ -3256,7 +3314,7 @@ uv run python scripts/eval/contract.py validate-run-bundle \
 
 로컬 export·sitemap·self-canonical·noindex·내부 링크만 확인한 F는`partial`입니다. 동일 URL 집합에 대한 공개 호스트의 HTTP·HTML· canonical·robots 영수증까지 결합돼야 `measured`가 됩니다. A/Q는 별도 source-aware verifier, O는 관측 기간이 끝난 1차 analytics 영수증 없이는 측정하지 않습니다.
 
-현재 구현은 실패한 host preflight도 보존하고, Q의 claim 본문과 실제 source quote를 검증하며, O를 immutable native result에 사후 결합합니다. 남은 빈칸은 더미가 아니라 배포·독립 판정·1차 analytics의 실제 증거 부재입니다.
+현재 구현은 실패한 host preflight도 보존하고, Q의 claim 본문과 실제 source quote를 검증하며, O를 immutable native result에 사후 결합합니다. 남은 빈칸은 배포·독립 판정·1차 analytics 증거가 아직 없음을 뜻합니다.
 
 native outcome, verifier 판단, GEODE trajectory, analysis와 publication manifest는 서로 다른 권한입니다. Inspect가 실행하지 않은 slash run을`.eval`로 포장하지도 않습니다.
 
@@ -3275,6 +3333,64 @@ slash의 typed state는 작업 진행을 위한 advisory projection입니다. �
 URL: https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2
 Markdown: https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2.md
 
+대화형 정책 실행
+
+## 세 실행 profile을 분리해 읽습니다
+
+[τ-bench leaderboard ↗](https://taubench.com/)
+
+Suite-native
+
+0.820
+
+228 / 278 · pass¹ · tau2==1.0.0
+
+historical k=1
+
+GEODE-user
+
+200 / 278
+
+0.7194 · dual-runtime
+
+별도 진단 profile
+
+Runtime-faithful
+
+99 missing
+
+quota-contaminated work
+
+aggregate 권한 없음
+
+증거 권한의 흐름
+
+1Task + user route
+
+2Native reward
+
+3Trajectory behavior
+
+4Attempt validity
+
+5Published claim
+
+reward는 성공을, trajectory는 행동을, attempt manifest는 실행의 유효성을 설명합니다. 세 기록의 권한은 서로 독립적입니다.
+
+### 측정 기록의 발전
+
+2026-07-03**Native score**results.json이 task reward와 headline을 소유
+
+2026-07-31**Trajectory @1**turn/call/result exact join과 orphan 수를 공개
+
+2026-08-03**Full cycle**278개 task의 dual-runtime profile을 분리 측정
+
+2026-08-04**Attempt lineage**retry·quota·selection을 남기고 오염 행을 미실행 작업으로 분류
+
+2026-08-14**Frozen preflight**모델 호출 전에 task·route·budget 정합성을 검사
+
+공식 τ-bench 표면은 도메인, Standard·Custom·Legacy, pass^k와 실행 visualizer를 분리합니다. GEODE도 profile identity를 고정한 행만 비교하고, 나머지는 진단 계보에 둡니다.
+
 tau2-bench는 대화형 tool-use 벤치마크입니다. 에이전트가 시뮬레이션된 사용자와 대화하며 airline, retail, telecom 도메인의 DB 액션을 수행하고, verifier가 필수 액션 충족 여부로 reward를 매깁니다. GEODE는`evals/benchmarks`의 공개 어댑터로 참가하며, 점수는 그 점수를 만든 harness revision, model route, effort에 고정해서만 게시합니다. 같은 조건의 재실행과만 비교할 수 있습니다.
 
 ## 2026-08-04 runtime-faithful 실행 계약
@@ -3283,9 +3399,9 @@ tau2-bench는 대화형 tool-use 벤치마크입니다. 에이전트가 시뮬�
 
 native `results.json`은 계속 점수 정본입니다. 그 digest와 reward, task/trial, native/runtime termination은`verification.evidence`로 SessionEnd 전에 기록됩니다. 새`snapshot v4`는 runtime revision, assembled prompt/tool schema digest, 실제로 exercise된 surface를 담은 runtime profile과 모든 retry/session/final selection을 담은 attempt manifest를 함께 검증합니다. 또한 normalized trajectory의 digest 결합을 독립적으로 확인하고`scope_complete=true`를 다시 계산하므로 orphan tool call이 있는 실행은 승격할 수 없습니다.`tau2-native-user`와 `geode-dual-runtime` profile은 합산하지 않습니다. 진단 auto-resume의 이전 process 행은`resumed_native_unattested`로 표시합니다.
 
-2026-08-04 full-cycle 시도는 278개 task를 모두 스케줄했지만, subscription quota 소진으로 Airline 2개, Retail 16개, Telecom 81개 등 99개 행이 infrastructure contamination 상태가 됐습니다. 이 행들은 0점이 아니라 미실행 작업이므로 이 시도에는 aggregate score 권한이 없습니다. quota 소진 전 Telecom call 6개에서는 external-yield 순서 결함도 발견했습니다. 현재 runtime은 post-tool convergence guard보다 먼저 proposal을 반환하고, admission은 당시의 scope-incomplete trajectory를 거부합니다. 새 headline은 깨끗한 재실행 이후에만 게시합니다.
+2026-08-04 full-cycle 시도는 278개 task를 모두 스케줄했지만, subscription quota 소진으로 Airline 2개, Retail 16개, Telecom 81개 등 99개 행이 infrastructure contamination 상태가 됐습니다. 이 행들은 미실행 작업입니다. 따라서 이 시도에는 aggregate score 권한이 없습니다. quota 소진 전 Telecom call 6개에서는 external-yield 순서 결함도 발견했습니다. 현재 runtime은 post-tool convergence guard보다 먼저 proposal을 반환하고, admission은 당시의 scope-incomplete trajectory를 거부합니다. 새 headline은 깨끗한 재실행 이후에만 게시합니다.
 
-개인정보 검토를 통과한 진단 보고서와 세 도메인 companion은 [`geode-eval-artifacts@40be847`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/40be847f7c12004b1e70673808fa95bfd8646b59/reports/e2e-validation/2026-08-04-gpt54-runtime-faithful-tau2-diagnostic.md)에 고정했습니다. 12개 파일 manifest SHA-256은 `40206ed1…317`이며, 이 묶음은 점수가 아닌 invalidation evidence입니다.
+개인정보 검토를 통과한 진단 보고서와 세 도메인 companion은 [`geode-eval-artifacts@40be847`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/40be847f7c12004b1e70673808fa95bfd8646b59/reports/e2e-validation/2026-08-04-gpt54-runtime-faithful-tau2-diagnostic.md)에 고정했습니다. 12개 파일 manifest SHA-256은 `40206ed1…317`이며, 이 묶음의 권한은 invalidation evidence에 한정됩니다.
 
 ## 2026-08-03 GPT-5.4 subscription base full cycle
 
@@ -3316,7 +3432,7 @@ GEODE `afaab52b`에서 agent와 `geode_user`를 모두 `gpt-5.4` subscription / 
 -   Telecom: DB, `toggle_roaming`, mobile-data 상태, excellent-speed assertion이 모두 통과했습니다.
 -   [`geode-eval-artifacts/trajectories/tau2-geode-gpt54-afaab52b-mock-telecom-small-20260801T173245Z-2dc79cb569f0`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/f588ce9fd23b9123732b45c4dbe202136691d3fe/trajectories/tau2-geode-gpt54-afaab52b-mock-telecom-small-20260801T173245Z-2dc79cb569f0): 두 trajectory, 158개 canonical event, 10개 exact tool pair, missing ID/orphan pair 0건.
 
-Tau2 `results.json`이 점수 정본입니다. 이 고정 2개 task는 native `user_simulator` headline이 아니며 trajectory는 correlation/replay sidecar입니다. 원본 snapshot의 runner-default `stage=train` 표기는 그대로 보존했지만 `promotion_authority=none`이고 학습·승격 권한을 뜻하지 않습니다.
+Tau2 `results.json`이 점수 정본입니다. 이 고정 2개 task는 별도 진단 profile이며, trajectory는 correlation/replay sidecar입니다. 원본 snapshot의 runner-default `stage=train` 표기는 그대로 보존했지만 `promotion_authority=none`이고 학습·승격 권한을 뜻하지 않습니다.
 
 ## 2026-07-31 v1.0.11 release 진단
 
@@ -3336,13 +3452,13 @@ Tau2 `results.json`이 점수 정본입니다. 이 고정 2개 task는 native `u
 | --- | --- | --- | --- | --- |
 | [**1.000**](#tau2-mock-smoke-20260703-gpt55-xhigh)<br>reward 1.0, pass^1 1.000 | [**0.763**](#tau2-retail-base-20260703-geode-099269-gpt52-high-payg)<br>base, 114 tasks, native user\_simulator | [**0.877**](#tau2-telecom-base-20260703-geode-099269-gpt52-high-payg)<br>base, 114 tasks, native user\_simulator | [**0.820**](#tau2-airline-base-20260703-geode-099269-gpt52-high-payg)<br>base, 50 tasks, native user\_simulator | [**0.820**](#tau2-base-aggregate-20260703-geode-099269-gpt52-high-payg)<br>weighted across airline+retail+telecom, excludes mock |
 
-현재 약점은 도구 가용성이 아니라 복합 태스크에서의 필수 액션 커버리지입니다. Retail 실패는 DB write 부수효과 누락, Telecom 실패는 MMS, APN, 앱 권한, 로밍 조합에서 필요한 액션 하나가 빠지는 패턴에 몰립니다.
+현재 약점은 복합 태스크의 필수 액션 커버리지입니다. Retail 실패는 DB write 부수효과 누락, Telecom 실패는 MMS, APN, 앱 권한, 로밍 조합에서 필요한 액션 하나가 빠지는 패턴에 몰립니다.
 
 ## Run 기록
 
 모든 run은 측정 시각, model, provider, source, effort, route, harness revision, artifact 경로를 같은 규격으로 기록합니다.
 
-**Airline + Retail + Telecom base full-cycle GPT-5.4 diagnostic** · 2026-08-03 KST · gpt-5.4 · subscription · agent high / user high
+**Airline + Retail + Telecom base full-cycle GPT-5.4 diagnostic**2026-08-03 KSTgpt-5.4subscriptionagent high / user high
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>airline + retail + telecom / base / 278 tasks</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>agent high / user high</code></td></tr><tr><td>Route</td><td>geode_agent + geode_user</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE@22789ee2</code></td></tr><tr><td>Weighted reward / pass^1</td><td><strong>0.7194 / 0.719 (200 / 278)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@86dcbba3d15f1979b71a501780bf66fea4b450b5/reports/e2e-validation/2026-08-03-gpt54-tau2-full-cycle.json</code></td></tr></tbody></table>
 
@@ -3386,7 +3502,7 @@ python scripts/eval/tau2_geode_agent.py \
 -   The released trajectories are scope-complete for final task attempts and replay-incomplete for bounded bodies and retry-attempt lineage.
 -   The isolated Tau2 AgenticLoop records no public hook\_events; the separate hook behavior E2E remains hook authority.
 
-**Telecom small first-task GPT-5.4 v1.0.12 post-release diagnostic** · 2026-08-03 KST · gpt-5.4 · subscription · agent high / user high
+**Telecom small first-task GPT-5.4 v1.0.12 post-release diagnostic**2026-08-03 KSTgpt-5.4subscriptionagent high / user high
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>telecom / small / [mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>agent high / user high</code></td></tr><tr><td>Route</td><td>geode_agent + geode_user</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v1.0.12@f99cea63</code></td></tr><tr><td>Reward / pass^1</td><td><strong>0.0 / 0.000 (0 / 1)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/tau2/simulations/geode-gpt54-high-v1.0.12-f99cea63-geode-user-telecom-small-01-20260803/results.json</code></td></tr></tbody></table>
 
@@ -3403,7 +3519,7 @@ python scripts/eval/tau2_geode_agent.py   --harness-dir artifacts/eval/harnesses
 -   All fourteen tool calls have exactly one result, with no route, authentication, quota, or adapter failure.
 -   This two-task release smoke does not invalidate or replace the 200/278 full-cycle diagnostic.
 
-**mock/create\_task\_1 GPT-5.4 v1.0.12 post-release diagnostic** · 2026-08-03 KST · gpt-5.4 · subscription · agent high / user high
+**mock/create\_task\_1 GPT-5.4 v1.0.12 post-release diagnostic**2026-08-03 KSTgpt-5.4subscriptionagent high / user high
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>mock / create_task_1</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>agent high / user high</code></td></tr><tr><td>Route</td><td>geode_agent + geode_user</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v1.0.12@f99cea63</code></td></tr><tr><td>Reward / pass^1</td><td><strong>0.0 / 0.000 (0 / 1)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/tau2/simulations/geode-gpt54-high-v1.0.12-f99cea63-geode-user-mock-smoke-20260803/results.json</code></td></tr></tbody></table>
 
@@ -3420,7 +3536,7 @@ python scripts/eval/tau2_geode_agent.py   --harness-dir artifacts/eval/harnesses
 -   The run has no authentication, quota, provider-adapter, or harness exception and is retained without retry.
 -   This release smoke is not a rerun or replacement of the 278-task full cycle and is not a native user\_simulator leaderboard row.
 
-**Telecom small first-task GPT-5.4 subscription diagnostic** · 2026-08-02 KST · gpt-5.4 · subscription · agent high / user high
+**Telecom small first-task GPT-5.4 subscription diagnostic**2026-08-02 KSTgpt-5.4subscriptionagent high / user high
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>telecom / small / [mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>agent high / user high</code></td></tr><tr><td>Route</td><td>geode_agent + geode_user</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE@afaab52b</code></td></tr><tr><td>Reward / pass^1</td><td><strong>1.0 / 1.000 (1 / 1)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@f588ce9fd23b9123732b45c4dbe202136691d3fe/tau2/simulations/geode-gpt54-high-afaab52b-geode-user-telecom-small-01-20260802/results.json</code></td></tr></tbody></table>
 
@@ -3460,7 +3576,7 @@ python scripts/eval/tau2_geode_agent.py \
 -   Tau2 results.json is the score authority; the 127-event trajectory is a digest-joined correlation and replay sidecar.
 -   The immutable source snapshot retains the runner-default train stage with promotion\_authority=none; future benchmark commands should set --trajectory-stage benchmark explicitly.
 
-**mock/create\_task\_1 GPT-5.4 subscription diagnostic** · 2026-08-02 KST · gpt-5.4 · subscription · agent high / user high
+**mock/create\_task\_1 GPT-5.4 subscription diagnostic**2026-08-02 KSTgpt-5.4subscriptionagent high / user high
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>mock / create_task_1</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>agent high / user high</code></td></tr><tr><td>Route</td><td>geode_agent + geode_user</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE@afaab52b</code></td></tr><tr><td>Reward / pass^1</td><td><strong>0.0 / 0.000 (0 / 1)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@f588ce9fd23b9123732b45c4dbe202136691d3fe/tau2/simulations/geode-gpt54-high-afaab52b-geode-user-mock-smoke-20260802/results.json</code></td></tr></tbody></table>
 
@@ -3499,7 +3615,7 @@ python scripts/eval/tau2_geode_agent.py \
 -   This fixed GEODE-user diagnostic is not a native user\_simulator headline row.
 -   The immutable source snapshot retains the runner-default train stage with promotion\_authority=none; future benchmark commands should set --trajectory-stage benchmark explicitly.
 
-**base aggregate native user\_simulator** · 2026-07-04 03:45 KST · gpt-5.2 · payg · agent high / user medium
+**base aggregate native user\_simulator**2026-07-04 03:45 KSTgpt-5.2paygagent high / user medium
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>airline + retail + telecom / base</code></td></tr><tr><td>Model</td><td><code>gpt-5.2</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>payg</code></td></tr><tr><td>Effort</td><td><code>agent high / user medium</code></td></tr><tr><td>Route</td><td>geode_agent + native tau2 user_simulator</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v0.99.269</code></td></tr><tr><td>Weighted reward / pass^1</td><td><strong>0.8201 / 0.820 (228 / 278)</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/tau2-bench/data/simulations/geode-gpt-5-2-high-native-user-{airline,retail,telecom}-base-20260703/results.json</code></td></tr></tbody></table>
 
@@ -3518,7 +3634,7 @@ python scripts/eval/tau2_geode_agent.py \
 -   The run spec differs from OpenAI's official GPT-5.2 Tau2 headline, which used an internal research setup and excludes Airline.
 -   The run spec differs from the earlier GEODE geode\_user smoke matrix.
 
-**Telecom small first-task GPT-5.6 v1.0.11 diagnostic** · 2026-07-31 KST · gpt-5.6-sol · subscription · agent high / user high
+**Telecom small first-task GPT-5.6 v1.0.11 diagnostic**2026-07-31 KSTgpt-5.6-solsubscriptionagent high / user high
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>telecom / small / [mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]</code></td></tr><tr><td>Model</td><td><code>gpt-5.6-sol</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>agent high / user high</code></td></tr><tr><td>Route</td><td>geode_agent + geode_user</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v1.0.11@686ff372</code></td></tr><tr><td>Reward / pass^1</td><td><strong>1.0 / 1.000 (1 / 1)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@16a54f08450db771c02e30c73bdc3867f6282f83/tau2/simulations/geode-gpt56-sol-high-v1011-686ff372-geode-user-telecom-small-01-20260731/results.json</code></td></tr></tbody></table>
 
@@ -3556,7 +3672,7 @@ python scripts/eval/tau2_geode_agent.py \
 -   Tau2 native DB/action/assertion checks remain the score authority; the GEODE trajectory is a digest-joined replay sidecar.
 -   The Crucible v3 snapshot remains diagnostic with promotion\_authority=none because no frozen experiment contract was supplied.
 
-**mock/create\_task\_1 GPT-5.6 v1.0.11 diagnostic** · 2026-07-31 KST · gpt-5.6-sol · subscription · agent high / user high
+**mock/create\_task\_1 GPT-5.6 v1.0.11 diagnostic**2026-07-31 KSTgpt-5.6-solsubscriptionagent high / user high
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>mock / create_task_1</code></td></tr><tr><td>Model</td><td><code>gpt-5.6-sol</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>agent high / user high</code></td></tr><tr><td>Route</td><td>geode_agent + geode_user</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v1.0.11@686ff372</code></td></tr><tr><td>Reward / pass^1</td><td><strong>0.0 / 0.000 (0 / 1)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@16a54f08450db771c02e30c73bdc3867f6282f83/tau2/simulations/geode-gpt56-sol-high-v1011-686ff372-geode-user-mock-smoke-20260731/results.json</code></td></tr></tbody></table>
 
@@ -3592,7 +3708,7 @@ python scripts/eval/tau2_geode_agent.py \
 -   The run completed normally and is retained without retry or relabeling.
 -   This diagnostic has promotion\_authority=none and is not a native user\_simulator leaderboard row.
 
-**Telecom small first-task GPT-5.6 subscription diagnostic** · 2026-07-31 KST · gpt-5.6-sol · subscription · agent high / user high
+**Telecom small first-task GPT-5.6 subscription diagnostic**2026-07-31 KSTgpt-5.6-solsubscriptionagent high / user high
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>telecom / small / [mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]</code></td></tr><tr><td>Model</td><td><code>gpt-5.6-sol</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>agent high / user high</code></td></tr><tr><td>Route</td><td>geode_agent + geode_user</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE@edb74602b</code></td></tr><tr><td>Reward / pass^1</td><td><strong>0.0 / 0.000 (0 / 1)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@9c00ecf/tau2/simulations/geode-gpt56-sol-high-edb74602b-geode-user-telecom-small-01-20260731/results.json</code></td></tr></tbody></table>
 
@@ -3627,7 +3743,7 @@ python scripts/eval/tau2_geode_agent.py \
 -   It then declared device tools unavailable and transferred to a human instead of guiding the user-side roaming/device workflow.
 -   No provider, quota, or adapter exception occurred; the failure is retained as behavior evidence.
 
-**mock/create\_task\_1 GPT-5.6 subscription diagnostic** · 2026-07-31 KST · gpt-5.6-sol · subscription · agent high / user high
+**mock/create\_task\_1 GPT-5.6 subscription diagnostic**2026-07-31 KSTgpt-5.6-solsubscriptionagent high / user high
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>mock / create_task_1</code></td></tr><tr><td>Model</td><td><code>gpt-5.6-sol</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>agent high / user high</code></td></tr><tr><td>Route</td><td>geode_agent + geode_user</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE@edb74602b</code></td></tr><tr><td>Reward / pass^1</td><td><strong>0.0 / 0.000 (0 / 1)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@9c00ecf/tau2/simulations/geode-gpt56-sol-high-edb74602b-geode-user-mock-smoke-20260731/results.json</code></td></tr></tbody></table>
 
@@ -3660,7 +3776,7 @@ python scripts/eval/tau2_geode_agent.py \
 -   Tau2's exact action and DB comparators rejected the extra argument; this is retained as a behavioral failure.
 -   This GEODE-owned user route is not comparable to the native tau2 user\_simulator headline.
 
-**telecom/base native user\_simulator** · 2026-07-04 03:45 KST · gpt-5.2 · payg · agent high / user medium
+**telecom/base native user\_simulator**2026-07-04 03:45 KSTgpt-5.2paygagent high / user medium
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>telecom / base</code></td></tr><tr><td>Model</td><td><code>gpt-5.2</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>payg</code></td></tr><tr><td>Effort</td><td><code>agent high / user medium</code></td></tr><tr><td>Route</td><td>geode_agent + native tau2 user_simulator</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v0.99.269</code></td></tr><tr><td>Reward / pass^1</td><td><strong>0.8772 / 0.877 (100 / 114)</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/tau2-bench/data/simulations/geode-gpt-5-2-high-native-user-telecom-base-20260703/results.json</code></td></tr></tbody></table>
 
@@ -3700,7 +3816,7 @@ uv run python scripts/eval/tau2_geode_agent.py \
 -   Concurrency was raised from 2 to 4 mid-run and resumed from tau2 checkpoints; no rate-limit, quota, or billing errors were observed.
 -   Failures clustered around multi-issue MMS/mobile-data/service cases where one required APN, permission, roaming, or data-refuel action was omitted.
 
-**retail/base native user\_simulator** · 2026-07-03 KST · gpt-5.2 · payg · agent high / user medium
+**retail/base native user\_simulator**2026-07-03 KSTgpt-5.2paygagent high / user medium
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>retail / base</code></td></tr><tr><td>Model</td><td><code>gpt-5.2</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>payg</code></td></tr><tr><td>Effort</td><td><code>agent high / user medium</code></td></tr><tr><td>Route</td><td>geode_agent + native tau2 user_simulator</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v0.99.269</code></td></tr><tr><td>Reward / pass^1</td><td><strong>0.7632 / 0.763 (87 / 114)</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/tau2-bench/data/simulations/geode-gpt-5-2-high-native-user-retail-base-20260703/results.json</code></td></tr></tbody></table>
 
@@ -3740,7 +3856,7 @@ uv run python scripts/eval/tau2_geode_agent.py \
 -   The main failure mode was missing required side-effect actions even when the natural-language response looked plausible.
 -   One task terminated with too\_many\_errors; the remaining failures ended with user\_stop but failed verifier assertions.
 
-**airline/base native user\_simulator** · 2026-07-03 KST · gpt-5.2 · payg · agent high / user medium
+**airline/base native user\_simulator**2026-07-03 KSTgpt-5.2paygagent high / user medium
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>airline / base</code></td></tr><tr><td>Model</td><td><code>gpt-5.2</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>payg</code></td></tr><tr><td>Effort</td><td><code>agent high / user medium</code></td></tr><tr><td>Route</td><td>geode_agent + native tau2 user_simulator</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v0.99.269</code></td></tr><tr><td>Reward / pass^1</td><td><strong>0.8200 / 0.820 (41 / 50)</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/tau2-bench/data/simulations/geode-gpt-5-2-high-native-user-airline-base-20260703/results.json</code></td></tr></tbody></table>
 
@@ -3780,7 +3896,7 @@ uv run python scripts/eval/tau2_geode_agent.py \
 -   This is the native tau2 user\_simulator comparator track, not the GEODE geode\_user smoke track.
 -   Airline is retained for internal trend comparison; OpenAI's GPT-5.2 announcement excludes Airline from its Tau2 headline due to lower-quality ground truth grading.
 
-**mock/create\_task\_1 smoke** · 2026-07-03 KST · gpt-5.5 · subscription · agent xhigh / user high
+**mock/create\_task\_1 smoke**2026-07-03 KSTgpt-5.5subscriptionagent xhigh / user high
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>mock / create_task_1</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>agent xhigh / user high</code></td></tr><tr><td>Route</td><td>geode_agent + geode_user</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0</code></td></tr><tr><td>Reward / pass^1</td><td><strong>1.0 / 1.000 (1 / 1)</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/tau2-bench/data/simulations/geode-gpt-5-5-xhigh-geode-user-mock-smoke-20260703-r5/results.json</code></td></tr></tbody></table>
 
@@ -3833,6 +3949,66 @@ run 기록의 artifact 경로는 측정 당시 로컬 harness 경로입니다. �
 URL: https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark
 Markdown: https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark.md
 
+상태 기반 MCP 검증
+
+## 점수·비용·증거 누락을 함께 봅니다
+
+[MCPMark Verified ↗](https://mcpmark.ai/leaderboard/verified)
+
+Available services
+
+64 / 74
+
+86.5% · filesystem + postgres + GitHub
+
+historical slice
+
+Gate 0C
+
+23 / 30
+
+Codex 21 / 30 · common deadline
+
+diagnostic · k=1
+
+Coverage gap
+
+53 tasks
+
+Notion 28 + Playwright 4 + WebArena 21
+
+unmeasured
+
+Gate 0C
+
+59 admitted · 1 withheld
+
+동일 filesystem/standard 30건과 공통 deadline을 사용했습니다. timeout trajectory 한 건은 점수에 남고 공개 admission에서는 보류됐습니다.
+
+[Gate 0C 원본 bundle ↗](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/1160fecfe4447f0a3f4cf30a414f29c61776d012/mcpmark/results-paired/mcpmark-gate0c-filesystem30-gpt54-high-20260813t190922z)
+
+Gate 0B
+
+7 / 15 guard · 10 / 15 unlimited
+
+25K result guard의 직접 ablation입니다. 세 반복 중 네 timeout은 withheld로 남겼고, 단일 treatment 진단에는 승격 권한을 주지 않았습니다.
+
+[Gate 0B 원본 bundle ↗](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/17133f0c8e893b6d765fcef69712ba0867bd573a/mcpmark/results-paired/mcpmark-gate0b-tool-cap-gpt54-high-20260813t142345z)
+
+### 측정 기록의 발전
+
+2026-07-04**Service slices**실행 가능한 세 service를 분리 집계하고 raw verifier 로그 보존
+
+2026-07-31**Trajectory @1**tool call/result exact join과 task별 실행 표면 추가
+
+2026-08-12**Matched K=1**동일 easy 10건에서 점수·token·agent time을 함께 기록
+
+2026-08-13**Invalidation**timeout 시작점 불일치를 발견해 비교 주장을 철회
+
+2026-08-14**Prospective gates**run-spec → attempts → analysis → admission 순서를 고정
+
+MCPMark Verified는 service별 pass@1과 turns·time·token·cost를 함께 열고, trajectory가 없는 제출을 명시합니다. GEODE 표면도 미측정 service와 withheld trajectory를 점수 옆에 보존합니다.
+
 MCPMark는 실제 MCP 서버(filesystem, Postgres, GitHub, Notion, Playwright 등)를 대상으로 한 tool-use 벤치마크입니다. 태스크마다 독립 검증 스크립트가 결과 상태를 확인합니다. GEODE는 `evals/benchmarks`의 `BaseMCPAgent` 어댑터로 참가하고 upstream `pipeline.py`는 패치하지 않습니다. 점수는 harness commit, 서비스 집합, model route, timeout에 고정해서만 게시합니다.
 
 ## 2026-08-13 GPT-5.4 filesystem/standard 정정 관측
@@ -3874,7 +4050,7 @@ MCPMark는 실제 MCP 서버(filesystem, Postgres, GitHub, Notion, Playwright �
 
 ## Headline: Verified available-services 트랙
 
-2026-07-04 run, GEODE v0.99.269 계열, `eval-sys/mcpmark@cd45b7f`, `gpt-5.5` Codex 구독 route, effort `xhigh`. 전체 leaderboard 점수가 아니라 로컬 환경에서 실행 가능했던 standard 슬라이스(filesystem, postgres, github)의 측정입니다.
+2026-07-04 run, GEODE v0.99.269 계열, `eval-sys/mcpmark@cd45b7f`, `gpt-5.5` Codex 구독 route, effort `xhigh`. 이 측정의 범위는 로컬에서 실행 가능했던 standard 슬라이스(filesystem, postgres, github)입니다.
 
 | File | GitHub | Notion | Playwright | Postgres | Avg. |
 | --- | --- | --- | --- | --- | --- |
@@ -3897,7 +4073,7 @@ MCPMark는 실제 MCP 서버(filesystem, Postgres, GitHub, Notion, Playwright �
 
 ## Run 기록
 
-**Verified available-services aggregate** · 2026-07-04 KST · gpt-5.5 · subscription · xhigh
+**Verified available-services aggregate**2026-07-04 KSTgpt-5.5subscriptionxhigh
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem + postgres + github / standard</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>xhigh</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, GEODE feature/mcpmark-agentworld-run</code></td></tr><tr><td>Accuracy</td><td><strong>86.5% (64 / 74)</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260704-mcpmark-verified-*</code></td></tr></tbody></table>
 
@@ -3932,7 +4108,7 @@ GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public \
 -   GitHub fixture repositories were made public during execution so the Docker GitHub MCP server could use normal public-repo semantics; all transient repos were deleted by cleanup.
 -   The filesystem score counts papers/author\_folders as a failed no-result transport run after two attempts without meta output.
 
-**filesystem/standard Gate 0C common-deadline diagnostic** · 2026-08-14 KST · gpt-5.4 · subscription · high
+**filesystem/standard Gate 0C common-deadline diagnostic**2026-08-14 KSTgpt-5.4subscriptionhigh
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/standard 30-task paired k=1</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai / codex-cli</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>high</code></td></tr><tr><td>Route</td><td>GEODE AgenticLoop and isolated Codex CLI paired by task</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, GEODE@f4b37604, Codex CLI 0.145.0@dad1db87</code></td></tr><tr><td>Diagnostic-only verifier pass rate</td><td><strong>GEODE 76.7% (23 / 30) · Codex 70.0% (21 / 30) · Δ +6.67 pp</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@1160fecfe4447f0a3f4cf30a414f29c61776d012/mcpmark/results-paired/mcpmark-gate0c-filesystem30-gpt54-high-20260813t190922z</code></td></tr></tbody></table>
 
@@ -3956,7 +4132,7 @@ GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public \
 -   Token totals have unmatched coverage and do not support a billing or token-efficiency claim.
 -   Fifty-nine scope-complete trajectories are admitted; the one GEODE timeout trajectory remains withheld.
 
-**filesystem/standard Gate 0B tool-result-cap diagnostic** · 2026-08-13–14 KST · gpt-5.4 · subscription · high
+**filesystem/standard Gate 0B tool-result-cap diagnostic**2026-08-13–14 KSTgpt-5.4subscriptionhigh
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/standard targeted 5 tasks × 3 repetitions</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>high</code></td></tr><tr><td>Route</td><td>GEODE AgenticLoop paired 25K and unlimited tool-result-cap arms</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, GEODE@02f71fae</code></td></tr><tr><td>Diagnostic-only verifier pass rate</td><td><strong>25K 46.7% (7 / 15) · unlimited 66.7% (10 / 15) · Δ +20.0 pp</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@17133f0c8e893b6d765fcef69712ba0867bd573a/mcpmark/results-paired/mcpmark-gate0b-tool-cap-gpt54-high-20260813t142345z</code></td></tr></tbody></table>
 
@@ -3977,7 +4153,7 @@ GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public \
 -   Token totals exclude the four timeout arms with empty native usage; wall time and MCP-call totals cover all 15 attempts per arm.
 -   The prior infrastructure-invalid run contributes no denominator, and scope-incomplete timeout trajectories remain withheld.
 
-**filesystem/standard GPT-5.4 GEODE × Codex corrected observation** · 2026-08-13 KST · gpt-5.4 · subscription · high
+**filesystem/standard GPT-5.4 GEODE × Codex corrected observation**2026-08-13 KSTgpt-5.4subscriptionhigh
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/standard</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai / codex-cli</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>high</code></td></tr><tr><td>Route</td><td>GEODE AgenticLoop and isolated Codex CLI paired by task</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, GEODE@a8f45f3c9, Codex@dad1db87</code></td></tr><tr><td>Retrospective descriptive verifier outcomes</td><td><strong>GEODE 70.0% (21 / 30) · Codex 66.7% (20 / 30)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@e5d442f25c9fb4861e28744dbe924a36325c746b/mcpmark/results-paired/mcpmark-filesystem-standard-gpt54-high-geode-codex-k1-boundary-aligned-20260813</code></td></tr></tbody></table>
 
@@ -3999,7 +4175,7 @@ python -m plugins.benchmark_harness.run_mcpmark   --mcp filesystem   --task-suit
 -   This is one filesystem service slice, not the full 127-task MCPMark Verified leaderboard.
 -   Raw messages, logs, metadata, and provider diagnostics remain private; only digest-reduced trajectories and validated sidecars are public.
 
-**filesystem/easy GPT-5.4 token-efficiency rerun** · 2026-08-12 KST · gpt-5.4 · subscription · high
+**filesystem/easy GPT-5.4 token-efficiency rerun**2026-08-12 KSTgpt-5.4subscriptionhigh
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/easy</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>high</code></td></tr><tr><td>Route</td><td>GEODE AgenticLoop MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, GEODE feature@149024e6e</code></td></tr><tr><td>Accuracy</td><td><strong>90.0% (9 / 10)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36</code></td></tr></tbody></table>
 
@@ -4019,7 +4195,7 @@ PYTHONPATH=<geode-feature-tree> .venv/bin/python -m plugins.benchmark_harness.ru
 -   This is one matched diagnostic trial, not MCPMark Verified, a confidence interval, or a subscription billing claim.
 -   All ten public trajectories are scope-complete and intentionally replay-incomplete; the immutable release was read back from artifact main.
 
-**filesystem/easy GPT-5.4 v1.0.12 post-release regression** · 2026-08-03 KST · gpt-5.4 · subscription · high
+**filesystem/easy GPT-5.4 v1.0.12 post-release regression**2026-08-03 KSTgpt-5.4subscriptionhigh
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/easy</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>high</code></td></tr><tr><td>Route</td><td>GEODE AgenticLoop MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, GEODE v1.0.12@f99cea63</code></td></tr><tr><td>Accuracy</td><td><strong>90.0% (9 / 10)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/mcpmark/results-geode-agentworld/geode-gpt54-high-v1.0.12-f99cea63-20260803-mcpmark-filesystem-easy</code></td></tr></tbody></table>
 
@@ -4039,7 +4215,7 @@ PYTHONPATH=<geode-v1.0.12-release-tree> .venv/bin/python -m plugins.benchmark_ha
 -   The v1.0.11 GPT-5.6 10/10 comparison is model-confounded and cannot be attributed to the runtime release alone.
 -   All ten trajectories are scope-complete and intentionally replay-incomplete; manifest and native receipts are pinned to artifact commit 04ff1c4.
 
-**filesystem/easy GPT-5.6 v1.0.11 release regression** · 2026-07-31 KST · gpt-5.6-sol · subscription · high
+**filesystem/easy GPT-5.6 v1.0.11 release regression**2026-07-31 KSTgpt-5.6-solsubscriptionhigh
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/easy</code></td></tr><tr><td>Model</td><td><code>gpt-5.6-sol</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>high</code></td></tr><tr><td>Route</td><td>GEODE AgenticLoop MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, GEODE v1.0.11@686ff372</code></td></tr><tr><td>Accuracy</td><td><strong>100.0% (10 / 10)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@16a54f08450db771c02e30c73bdc3867f6282f83/mcpmark/results-geode-agentworld/geode-gpt56-sol-high-v1011-686ff372-20260731-mcpmark-filesystem-easy</code></td></tr></tbody></table>
 
@@ -4070,7 +4246,7 @@ PYTHONPATH=<geode-v1.0.11-release-tree> \
 -   The stable geode.trajectory@1 release is scope-complete but intentionally replay-incomplete because dialogue and tool bodies are digested.
 -   Native receipts and stable trajectories are pinned to geode-eval-artifacts commit 16a54f0.
 
-**filesystem/easy GPT-5.6 subscription rerun** · 2026-07-31 KST · gpt-5.6-sol · subscription · high
+**filesystem/easy GPT-5.6 subscription rerun**2026-07-31 KSTgpt-5.6-solsubscriptionhigh
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/easy</code></td></tr><tr><td>Model</td><td><code>gpt-5.6-sol</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>high</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, GEODE@edb74602b</code></td></tr><tr><td>Accuracy</td><td><strong>90.0% (9 / 10)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@9c00ecf/mcpmark/results-geode-agentworld/geode-gpt56-sol-high-edb74602b-20260731-mcpmark-filesystem-easy</code></td></tr></tbody></table>
 
@@ -4102,7 +4278,7 @@ OPENAI_API_KEY=dummy \
 -   One response stream disconnected after the first task had already produced its files; that task passed every official integrity check and no 429 occurred.
 -   Raw receipts and ten normalized tool trajectories are pinned to geode-eval-artifacts commit 9c00ecf.
 
-**Verified github standard slice** · 2026-07-04 KST · gpt-5.5 · subscription · xhigh
+**Verified github standard slice**2026-07-04 KSTgpt-5.5subscriptionxhigh
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>github/standard</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>xhigh</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter + GitHub MCP Docker server</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, ghcr.io/github/github-mcp-server:v0.15.0</code></td></tr><tr><td>Accuracy</td><td><strong>82.6% (19 / 23)</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260704-mcpmark-verified-github*</code></td></tr></tbody></table>
 
@@ -4134,7 +4310,7 @@ GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public \
 -   The assign\_contributor\_labels failure used suffixed transient usernames in labels instead of canonical contributor labels.
 -   The find\_salient\_file failure did not create ANSWER.md on the required master branch.
 
-**Verified postgres standard slice** · 2026-07-04 KST · gpt-5.5 · subscription · xhigh
+**Verified postgres standard slice**2026-07-04 KSTgpt-5.5subscriptionxhigh
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>postgres/standard</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>xhigh</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter + postgres-mcp</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, postgres-mcp==0.3.0</code></td></tr><tr><td>Accuracy</td><td><strong>95.2% (20 / 21)</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260704-mcpmark-verified-postgres</code></td></tr></tbody></table>
 
@@ -4164,7 +4340,7 @@ GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public \
 -   The GEODE adapter overrides MCPMark's default postgres server with postgres-mcp==0.3.0 in unrestricted mode.
 -   A final NoEventLoopError appeared during async cleanup after result writing; it did not affect the recorded verifier result.
 
-**Verified filesystem standard slice** · 2026-07-04 KST · gpt-5.5 · subscription · xhigh
+**Verified filesystem standard slice**2026-07-04 KSTgpt-5.5subscriptionxhigh
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/standard</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>xhigh</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f</code></td></tr><tr><td>Accuracy</td><td><strong>83.3% (25 / 30)</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260704-mcpmark-verified-filesystem-*</code></td></tr></tbody></table>
 
@@ -4195,7 +4371,7 @@ GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public \
 -   papers/author\_folders is counted as a failed no-result transport run because both attempts hung before meta output.
 -   The adapter now aliases file\_path to path when the MCP schema expects path, which fixed write\_file failures seen in the first filesystem pass.
 
-**filesystem/easy category-parallel rerun** · 2026-07-03 05:11 KST · gpt-5.5 · subscription · xhigh
+**filesystem/easy category-parallel rerun**2026-07-03 05:11 KSTgpt-5.5subscriptionxhigh
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/easy</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>xhigh</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter, category-parallel execution</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f</code></td></tr><tr><td>Accuracy</td><td><strong>100.0% (10 / 10)</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/mcpmark/results-geode-live/geode-gpt55-xhigh-20260703-ledger-*</code></td></tr></tbody></table>
 
@@ -4230,7 +4406,7 @@ wait
 -   Only filesystem was runnable in the current local environment without additional credentials or Docker services.
 -   GitHub, Notion, Playwright, and Postgres MCPMark columns remain blocked until their service prerequisites are provisioned.
 
-**filesystem/easy full slice** · 2026-07-03 KST · gpt-5.5 · subscription · xhigh
+**filesystem/easy full slice**2026-07-03 KSTgpt-5.5subscriptionxhigh
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/easy</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>xhigh</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f</code></td></tr><tr><td>Accuracy</td><td><strong>100.0% (10 / 10)</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/mcpmark/results-geode-live/geode-gpt55-xhigh-20260703-filesystem-easy/geode-gpt-5-5-xhigh__filesystem-easy/run-1</code></td></tr></tbody></table>
 
@@ -4259,7 +4435,7 @@ OPENAI_API_KEY=dummy \
 -   This is not the MCPMark Verified aggregate used by frontier leaderboards.
 -   OPENAI\_API\_KEY=dummy satisfied the harness environment check; model calls used the GEODE subscription route.
 
-**notion unblock smoke (easy, single task)** · 2026-07-10 KST · gpt-5.5 · subscription · xhigh
+**notion unblock smoke (easy, single task)**2026-07-10 KSTgpt-5.5subscriptionxhigh
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>notion/easy</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>xhigh</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f</code></td></tr><tr><td>Accuracy</td><td><strong>1 / 1</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260710-notion-smoke-unblock-r2/geode-gpt-5-5-xhigh__notion-easy/run-1</code></td></tr></tbody></table>
 
@@ -4282,7 +4458,7 @@ OPENAI_API_KEY=dummy \
 -   Verifier-backed single-task smoke proving the notion service is runnable end to end; not a notion standard score.
 -   The task embeds a Notion API trap: updating a select option color returns validation\_error; the agent passed by redefining options via a database schema update.
 
-**notion blocked prerequisite record** · 2026-07-03 KST · gpt-5.5 · subscription · xhigh
+**notion blocked prerequisite record**2026-07-03 KSTgpt-5.5subscriptionxhigh
 
 <table><tbody><tr><td>Status</td><td><code>blocked</code></td></tr><tr><td>Suite/domain</td><td><code>notion/easy</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>xhigh</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f</code></td></tr><tr><td>Accuracy</td><td><strong>blocked</strong></td></tr><tr><td>Artifact</td><td><code>not created</code></td></tr></tbody></table>
 
@@ -4303,7 +4479,7 @@ OPENAI_API_KEY=dummy \
 -   Blocked before live execution because the local harness environment has no .mcp\_env credentials.
 -   Record a measured score only after the Notion integration and paired workspaces are provisioned.
 
-**playwright blocked prerequisite record** · 2026-07-03 KST · gpt-5.5 · subscription · xhigh
+**playwright blocked prerequisite record**2026-07-03 KSTgpt-5.5subscriptionxhigh
 
 <table><tbody><tr><td>Status</td><td><code>blocked</code></td></tr><tr><td>Suite/domain</td><td><code>playwright/easy</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>xhigh</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f</code></td></tr><tr><td>Accuracy</td><td><strong>blocked</strong></td></tr><tr><td>Artifact</td><td><code>not created</code></td></tr></tbody></table>
 
@@ -4368,7 +4544,7 @@ LLM이 보는 스키마는 `core/tools/definitions.json`에 모읍니다. 항목
 
 ## 2\. 핸들러를 구현합니다
 
-도구는 `core/tools/base.py`의 `Tool` 프로토콜을 따릅니다. `name`, `description`, `parameters` 프로퍼티와 `aexecute()` 코루틴 네 가지면 유효한 도구입니다. 상속이 아니라 덕 타이핑이므로 클래스를 상속할 필요가 없습니다. 실패는 raise 대신 `tool_error()`로 구조화된 dict을 돌려줘서 LLM이 분류하고 복구할 수 있게 합니다. 기존 구현은 `core/tools/web_tools.py`의 `WebFetchTool`을 참고하세요.
+도구는 `core/tools/base.py`의 `Tool` 프로토콜을 따릅니다. `name`, `description`, `parameters` 프로퍼티와 `aexecute()` 코루틴 네 가지면 유효한 도구입니다. 덕 타이핑을 사용하므로 클래스를 상속할 필요가 없습니다. 실패는 `tool_error()`로 구조화된 dict을 돌려줘서 LLM이 분류하고 복구할 수 있게 합니다. 기존 구현은 `core/tools/web_tools.py`의 `WebFetchTool`을 참고하세요.
 
 ```
 # core/tools/weather_tools.py
@@ -4499,7 +4675,7 @@ rewrite는 payload의 실제 필드명을 사용합니다. 도구 인자를 바�
 
 ### 파일시스템 RuntimeEvent 훅은 매니페스트를 먼저 읽습니다
 
-`.geode/hooks/<name>/hook.yaml`은 실행 코드를 import하지 않고 읽을 수 있는 신뢰 경계입니다. 클래스만 둔`hook.py` 형식은 거부됩니다. 아래 매니페스트와[확장 신뢰 정책](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)의`hook:failure-metrics` 승인이 모두 있어야 handler가 import됩니다. 이 플러그인은 위의 공개 `HookRegistry`가 아니라 3절의 내부 `RuntimeEventBus`를 구독합니다.
+`.geode/hooks/<name>/hook.yaml`은 실행 코드를 import하지 않고 읽을 수 있는 신뢰 경계입니다. 클래스만 둔`hook.py` 형식은 거부됩니다. 아래 매니페스트와 [확장 신뢰 정책](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)의`hook:failure-metrics` 승인이 모두 있어야 handler가 import됩니다. 이 플러그인은 3절의 내부 `RuntimeEventBus`를 구독합니다.
 
 ```
 name: failure-metrics
@@ -4580,7 +4756,7 @@ _참조:_ [훅과 미들웨어 계약](https://mangowhoiscloud.github.io/geode/d
 URL: https://mangowhoiscloud.github.io/geode/docs/guides/publish-trajectory
 Markdown: https://mangowhoiscloud.github.io/geode/docs/guides/publish-trajectory.md
 
-이 절차는 로컬 실행 기록을 공개 증거로 승격합니다. 게시 대상은 JFrog Artifactory가 아니라 append-only Git/PR 저장소인 [geode-eval-artifacts](https://github.com/mangowhoiscloud/geode-eval-artifacts)입니다. 전체 artifact 트리를 복사하지 않고 검토된 trajectory release 디렉터리 하나만 게시합니다.
+이 절차는 로컬 실행 기록을 공개 증거로 승격합니다. 게시 대상은 append-only Git/PR 저장소인 [geode-eval-artifacts](https://github.com/mangowhoiscloud/geode-eval-artifacts)입니다. 전체 artifact 트리를 복사하지 않고 검토된 trajectory release 디렉터리 하나만 게시합니다.
 
 ## 1\. SQLite 정본에서 export
 
@@ -4591,7 +4767,7 @@ geode session export-trajectory session-123 \
   --digest-content
 ```
 
-`--sil-eval`은 Inspect `.eval`의 SHA-256을`evidence_refs`와 `artifact_digests`에 연결합니다.`--digest-content`는 비허용 payload body를 digest로 바꾸므로 결과가 scope-complete여도 replay-incomplete일 수 있습니다. SIL이 아닌 실행은 `--sil-eval`을 생략합니다.
+`--sil-eval`은 Inspect `.eval`의 SHA-256을 `evidence_refs`와 `artifact_digests`에 연결합니다.`--digest-content`는 비허용 payload body를 digest로 바꾸므로 결과가 scope-complete여도 replay-incomplete일 수 있습니다. SIL 실행에서만 `--sil-eval`을 지정합니다.
 
 이 명령의 결과는 `privacy.review_state=local`인 로컬 artifact입니다. staging 명령은 이를 자동으로 승인하지 않습니다.
 
@@ -4603,7 +4779,7 @@ geode session export-trajectory session-123 \
 | `trajectory-public.json` | allowlist 기반 공개 후보 | 공개 바이트를 검토한 뒤 `privacy.review_state=reviewed`로 표시 |
 | `privacy-review.json` | release 범위 attestation | `scope`가 CLI `--scope`와 정확히 같아야 함 |
 
-공개 후보에서 로컬 경로, 사용자 식별자, credential, raw prompt/tool body를 검토합니다. sealed Crucible pack, 선택 row identity, selection salt, 환경 파일은 공개 후보에 넣지 않습니다. 검토 행위를 단순히`review_state` 값 변경으로 대체해서는 안 됩니다.
+공개 후보에서 로컬 경로, 사용자 식별자, credential, raw prompt/tool body를 검토합니다. sealed Crucible pack, 선택 row identity, selection salt, 환경 파일은 공개 후보에 넣지 않습니다. 검토는 실제 공개 바이트를 대상으로 하며 `review_state` 값만 바꾸는 행위를 허용하지 않습니다.
 
 ```
 {
@@ -4653,7 +4829,7 @@ geode session verify-trajectory-release <release-dir> \
 3.  PR에서 manifest, 공개 바이트, privacy attestation을 리뷰합니다.
 4.  병합 후 exact merge commit에서 release를 새 디렉터리로 다시 읽습니다.
 5.  복사 전에 기록한 manifest SHA-256으로 같은 검증 명령을 다시 실행합니다.
-6.  점수·문서에는 mutable `main` 대신 merge commit의 blob/tree 링크를 기록합니다.
+6.  점수·문서에는 불변 merge commit의 blob/tree 링크를 기록합니다.
 
 staging 디렉터리를 한 번 더 읽는 것은 remote read-back 증거가 아닙니다. 병합된 원격 바이트를 독립적으로 내려받아야 합니다.
 
@@ -4678,7 +4854,7 @@ GEODE release manifest는 verdict를 소유하거나 candidate를 승격하지 �
 
 -   **not scope-complete:** missing correlation, ordinal gap, orphan tool result를 먼저 수정합니다.
 -   **not replay-complete:** 실제 privacy reduction인지 확인한 뒤에만 명시적 waiver를 사용합니다.
--   **source digest mismatch:** public copy가 아니라 trajectory가 참조한 원본 바이트를 매핑합니다.
+-   **source digest mismatch:** trajectory가 참조한 원본 바이트를 매핑합니다.
 -   **privacy scan failed:** finding을 지운 새 public candidate를 만들며 기존 release를 덮어쓰지 않습니다.
 
 ---
@@ -4772,7 +4948,7 @@ def create_adapter():
 
 ## 3\. 라우팅과 폴백 체인을 연결합니다
 
-`core.config._resolve_provider(model)`이 모델 이름을 프로바이더로 해석하고, adapter dispatch가 credential metadata로 source를 결정합니다. 등록된 Plan은 별도의 routing target으로 endpoint와 credential을 선택합니다. 모델 접두사와 프로바이더의 매핑은 `core/config/routing.toml`의 `[routing.prefixes]`가 SoT이고, 사용자 override는 `~/.geode/routing.toml`입니다. 새 프로바이더의 모델 접두사를 여기에 추가합니다. 다중 모델 폴백은 `core/llm/router/calls/_failover.py`의 `call_with_failover(models, call_fn)`이 처리합니다. 모델 체인을 순서대로 시도하며, 재시도 가능한 오류(rate-limit, timeout, connection, server)는 백오프 후 다음 모델로 넘어가고, 인증 오류 같은 비재시도 오류는 즉시 전파됩니다. 단, 폴백 체인은 기본 출하값이 전부 빈 리스트입니다(`[model.fallbacks]`). 조용한 모델 교체 대신 실패를 드러내는 설계이므로, 새 어댑터의 모델을 폴백 후보로 쓰려면 `~/.geode/routing.toml`에서 직접 체인을 켜야 합니다.
+`core.config._resolve_provider(model)`이 모델 이름을 프로바이더로 해석하고, adapter dispatch가 credential metadata로 source를 결정합니다. 등록된 Plan은 별도의 routing target으로 endpoint와 credential을 선택합니다. 모델 접두사와 프로바이더의 매핑은 `core/config/routing.toml`의 `[routing.prefixes]`가 SoT이고, 사용자 override는 `~/.geode/routing.toml`입니다. 새 프로바이더의 모델 접두사를 여기에 추가합니다. 다중 모델 폴백은 `core/llm/router/calls/_failover.py`의 `call_with_failover(models, call_fn)`이 처리합니다. 모델 체인을 순서대로 시도하며, 재시도 가능한 오류(rate-limit, timeout, connection, server)는 백오프 후 다음 모델로 넘어가고, 인증 오류 같은 비재시도 오류는 즉시 전파됩니다. 단, 폴백 체인은 기본 출하값이 전부 빈 리스트입니다(`[model.fallbacks]`). 기본 경로는 실패를 그대로 드러냅니다. 새 어댑터의 모델을 폴백 후보로 쓰려면 `~/.geode/routing.toml`에서 직접 체인을 켜야 합니다.
 
 ## 4\. 호출 계약을 문서화합니다
 
@@ -5329,7 +5505,7 @@ uv나 GitHub에서 설치한 사용자도 중앙 GEODE OAuth 앱 없이 자신�
 /login google logout user@example.com
 ```
 
-인증은 시스템 브라우저, 임의의 `127.0.0.1` 포트, Authorization Code + PKCE S256 + state 검증을 씁니다. Google이 Desktop 앱의 incremental auth를 지원하지 않으므로 서비스를 더할 때는 대상 활성 계정의 기존 번들과 새 번들의 합집합으로 재동의합니다. 브라우저에서 다른 계정을 고르면 저장하지 않고 실패하며, 두 번째 계정은 `--new-account`로 연결합니다. 권한을 줄일 때는 유지할 전체 번들과 `--replace-services`를 함께 지정합니다.`gmail-read`는 Restricted scope라 기본 권장 묶음에 포함되지 않습니다. Drive·Docs·Sheets는 전체 Drive 대신 non-sensitive `drive.file`로 GEODE가 만들거나 파일별로 허용된 항목만 다룹니다.
+인증은 시스템 브라우저, 임의의 `127.0.0.1` 포트, Authorization Code + PKCE S256 + state 검증을 씁니다. Google이 Desktop 앱의 incremental auth를 지원하지 않으므로 서비스를 더할 때는 대상 활성 계정의 기존 번들과 새 번들의 합집합으로 재동의합니다. 브라우저에서 다른 계정을 고르면 저장하지 않고 실패하며, 두 번째 계정은 `--new-account`로 연결합니다. 권한을 줄일 때는 유지할 전체 번들과 `--replace-services`를 함께 지정합니다. `gmail-read`는 Restricted scope라 기본 권장 묶음에 포함되지 않습니다. Drive·Docs·Sheets는 non-sensitive `drive.file`로 GEODE가 만들거나 파일별로 허용된 항목만 다룹니다.
 
 | 저장소 | 내용 |
 | --- | --- |
@@ -5450,7 +5626,7 @@ audit-mode에서도 override가 시스템 프롬프트의 베이스가 됩니다
 
 ## program.md 계약: mutator의 프롬프트
 
-변이를 제안하는 mutator 에이전트의 시스템 프롬프트는 코드 리터럴이 아니라 패키지와 함께 출하되는`evolve/scaffold_search/program.md`입니다. 러너 (`evolve/scaffold_search/loop/mutate/runner.py`)가 매 호출 디스크에서 읽고, 단일 변이로 범위를 좁히는 계약을 뒤에 붙입니다. 파일을 못 읽으면 조용한 폴백 대신 크게 실패합니다. 교체가 필요하면 훅 핸들러가 `program_md` 본문을 공급하는 단일 제어 지점을 씁니다.
+변이를 제안하는 mutator 에이전트의 시스템 프롬프트는 패키지와 함께 출하되는 `evolve/scaffold_search/program.md`입니다. 러너 (`evolve/scaffold_search/loop/mutate/runner.py`)가 매 호출 디스크에서 읽고, 단일 변이로 범위를 좁히는 계약을 뒤에 붙입니다. 파일을 못 읽으면 크게 실패합니다. 교체가 필요하면 훅 핸들러가 `program_md` 본문을 공급하는 단일 제어 지점을 씁니다.
 
 ## 실패 모드
 
@@ -5517,7 +5693,7 @@ AgenticLoop는 라운드 번호나 날짜를 합성 user message로 만들지 �
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-hashing
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-hashing.md
 
-핵심 프롬프트 템플릿은 해시로 핀됩니다. 템플릿이 한 글자라도 바뀌면 계산된 해시가 핀과 어긋나고 CI가 깨집니다. 프롬프트 변경을 막으려는 것이 아니라, 변경이 항상 의도된 diff로 드러나게 하려는 래칫입니다.
+핵심 프롬프트 템플릿은 해시로 핀됩니다. 템플릿이 한 글자라도 바뀌면 계산된 해시가 핀과 어긋나고 CI가 깨집니다. 프롬프트 모든 프롬프트 변경을 의도된 diff로 드러내는 래칫입니다.
 
 ## 네 개의 핀
 
@@ -5556,7 +5732,7 @@ python -c "from core.llm.prompts import PROMPT_VERSIONS as V; \
 
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
-| CI에서 "Prompt drift" 실패 | 템플릿 변경이 핀 갱신 없이 들어옴 | 변경이 의도라면 re-pin 절차를 따릅니다. 아니라면 diff를 되돌립니다. |
+| CI에서 "Prompt drift" 실패 | 템플릿 변경이 핀 갱신 없이 들어옴 | 의도된 변경은 re-pin 절차를 따르고, 우발적 변경은 diff를 되돌립니다. |
 | 핀만 바뀌고 템플릿은 그대로인 PR | 이전 drift를 핀 갱신으로 덮으려는 시도 | 템플릿 diff 없는 핀 diff는 리뷰에서 거부합니다. |
 
 ## 다음
@@ -5648,7 +5824,7 @@ geode-mcp --http --host 127.0.0.1 --port 8765
 | --- | --- | --- |
 | 서버가 목록에 있는데 도구가 없음 | 필수 env 미해석으로 연결 건너뜀 | `/mcp`로 상태를 보고, 참조된 `${VAR}`를 `.env`에 채웁니다. |
 | 서버가 `REJECTED` 또는 `DEGRADED` | 정책 누락·불일치, broker sandbox 부재, 명령 또는 env 해석 실패 | runtime health의 `extensions`에서 정확한 reason을 확인합니다. brokered 서버를 sandbox 없는 trusted 경로로 자동 하향하지 않습니다. |
-| 변경 도구가 resource-key 오류로 거부됨 | `readOnlyHint`가 아닌 도구인데 server config에 `resource_keys`가 없음 | 실제 변경 대상을 대표하는 보수적 정적 key를 매니페스트에 선언합니다. |
+| 변경 도구가 resource-key 오류로 거부됨 | 쓰기 가능한 도구인데 server config에 `resource_keys`가 없음 | 실제 변경 대상을 대표하는 보수적 정적 key를 매니페스트에 선언합니다. |
 | `MCP_SERVER_FAILED` 로그가 많음 | 서버 명령을 찾지 못하거나 필수 환경이 빠짐. launchd로 띄운 serve는 셸보다 PATH가 좁을 수 있음 | `~/.geode/logs/serve.log`에서 실패 서버 이름을 보고 `command -v npx`, `command -v codex`, `command -v uvx`가 serve 환경에서도 보이게 맞춥니다. 수정 후 serve를 재시작하면 실패 캐시가 비워집니다. |
 | MCP 결과가 잘려서 옴 | 결과 크기 가드 작동 | 정상 동작입니다. 더 좁은 쿼리로 다시 호출하거나 `max_tool_result_tokens`를 조정합니다. |
 | `geode-mcp --http`가 exit 2 | 비 loopback 바인드에 토큰 없음 | `GEODE_MCP_TOKEN`을 `~/.geode/.env`나 환경에 설정합니다. |
@@ -5689,7 +5865,7 @@ GEODE는 종합입니다. 아래 표의 각 행은 적어도 하나의 frontier 
 
 -   **명시적 자기개선 계층**. 다섯 번째 계층이 일곱 behaviour kinds의 스캐폴드를 변이하고, Petri 22-dim 감사와 margin 게이트로 선택하며, 계보를 git champion chain으로 보존합니다(`evolve/scaffold_search/`). 가중치나 파라미터 갱신은 없습니다. 메커니즘은 선택입니다.
 -   **MCP 양방향**. `core/mcp/`가 외부 MCP 서버를 붙이는 클라이언트이고, `geode-mcp`(`core/mcp_server.py`)가 GEODE 자체를 외부 호스트의 도구로 노출하는 1급 서버입니다. Codex CLI도 양방향을 출하합니다(mcp-server + mcp\_servers). 차이는 GEODE가 자기개선 루프 상태(`self_improving_*`)까지 도구로 노출한다는 점입니다.
--   **폴백 없는 기본값**. `[model.fallbacks]`의 기본값은 전부 빈 배열입니다. 프라이머리 실패는 조용한 교차-프로바이더 스왑 대신 정직한 오류로 표면화되고, 체인은 `~/.geode/routing.toml`에서 opt-in합니다 (`core/llm/router/calls/_failover.py`).
+-   **폴백 없는 기본값**. `[model.fallbacks]`의 기본값은 전부 빈 배열입니다. 프라이머리 실패는 정직한 오류로 표면화되고, 교차-프로바이더 체인은 `~/.geode/routing.toml`에서 opt-in합니다 (`core/llm/router/calls/_failover.py`).
 -   **ChatGPT Plus JWT 검증**. OAuth 시점에 access token의 `chatgpt_plan_type` claim을 추출해 플랜 레코드에 임베드합니다(`core/auth/oauth_login.py`). 엔타이틀먼트 확인에 별도 API 호출이 없습니다.
 
 ## 프롬프트 정의 계층
@@ -5864,7 +6040,7 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 한 라운드는 도구 실행 결과를 관측하고, reflection으로 믿음을 갱신하고, 트리거가 서면 plan을 다시 씁니다. 네 조각이 하나의 사이클로 묶입니다.
 
 -   **Planning**. 명시적 `Plan` 객체가 세션에 붙고 replan마다 revision이 증가합니다. Plan은 실행이나 승인 권한을 갖지 않는 관측 조건부 안내 구조입니다.
--   **Reflection (cognitive)**. 도구 라운드마다 `record_reflection` 구조화 호출 1회가 CognitiveState를 갱신합니다. hypotheses 5개 이하, confidence 0..1, next\_action\_hint가 subgoals로 들어갑니다. 전체 대화가 아니라 상태 스냅숏과 도구 요약만 봅니다(clean-context 규율).
+-   **Reflection (cognitive)**. 도구 라운드마다 `record_reflection` 구조화 호출 1회가 CognitiveState를 갱신합니다. hypotheses 5개 이하, confidence 0..1, next\_action\_hint가 subgoals로 들어갑니다. clean-context 규율에 따라 상태 스냅숏과 도구 요약만 봅니다.
 -   **verify 후 replan**. replan은 관측된 두 트리거로 발화합니다. verify FAIL(다음 실행의 첫 라운드), low-confidence (confidence 0.4 미만, edge-trigger라 회복 전 재발화가 없어 replan 폭풍을 방지). replan 실패는 루프를 죽이지 않습니다.
 -   **지속화**. CognitiveStateStore가 스냅숏과 이벤트 스트림을 SQLite에 저장하고, 세션 재개의 DB-first 소스가 됩니다.
 
@@ -5998,7 +6174,7 @@ bare `geode`는 환영 화면을 띄우고 소켓을 조사한 뒤, 데몬이 �
 
 bare `geode`가 띄우는 환영 화면은 `core/cli/welcome.py`의 `_welcome_screen`이 그립니다. 먼저 Geodi 브랜드 블록(`core/ui/mascot.py`의 `render_mascot`)이 나옵니다. 손으로 찍은 픽셀아트 Geodi(로즈 아졸로틀, `core/ui/geodi_art.py`)를 truecolor 하프블록 스프라이트로 그리고, 오른쪽에 `◆ GEODE v{version}` 마크, `모델 · cwd`, `/help for commands · type naturally` 힌트, 그리고 라우팅이 초기화돼 있으면 활성 플랜/쿼터 한 줄을 붙입니다. 이어서 `.env` 자동 생성, ChatGPT 구독 OAuth 감지, readiness 점검(문제만 표시 — 조용하면 정상), 프로젝트 기억과 사용자 프로파일 초기화가 돌아갑니다.
 
-실행 중 라이브 상태는 `core/ui/event_renderer.py`가 그리고, 스피너는 `core/ui/spinner_glyph.py` 단일 소스에서 옵니다(direct 모드 `GeodeStatus`와 IPC thin-client 트래커가 공유). 시그니처 스피너는 모양이 바뀌지 않는 로즈 젬 `◆`입니다. 글리프를 회전시키는 대신 raised-cosine 밝기 밴드가 라벨 위를 2초 주기로 좌→우로 활강합니다(단일 색조, 무지개 아님 — 모양을 순환시키는 글리프는 기계적으로 읽힌다는 Codex/Claude Code의 교훈).
+실행 중 라이브 상태는 `core/ui/event_renderer.py`가 그리고, 스피너는 `core/ui/spinner_glyph.py` 단일 소스에서 옵니다(direct 모드 `GeodeStatus`와 IPC thin-client 트래커가 공유). 시그니처 스피너는 모양이 바뀌지 않는 로즈 젬 `◆`입니다. raised-cosine 밝기 밴드가 라벨 위를 2초 주기로 좌→우로 활강합니다(단일 색조, 무지개 아님 — 모양을 순환시키는 글리프는 기계적으로 읽힌다는 Codex/Claude Code의 교훈).
 
 생각 라벨은 맥락을 따릅니다(`_thinking_label`): reflection > 활성 플랜 스텝 > 위트 순서로, 리플렉션 중에는 `Reflecting…`, 그다음 진행 중인 플랜 스텝 텍스트(잘림), 없으면 턴 시작 시각으로 시드된 안정적 위트 동명사(Crystallizing, Faceting …) 하나가 턴 내내 유지됩니다. `(round N)` 접미사와 라이브 `(12s)` 타이머가 붙습니다. plan\_step/replan 이벤트가 오면 진행 플랜 체크리스트(completed / in\_progress / pending)가 그려지고, 해당 페이즈 동안 thinking·tool 출력 위에 고정(pinned)된 채 그 아래에 라이브 활동 영역(도구 통계, 알림)이 갱신됩니다.
 
@@ -6123,11 +6299,11 @@ GEODE의 탐색은 네 갈래입니다. 외부 문서 사이트, 일반 웹, 자
 3.  `llms-full.txt`(문서 전체를 한 파일로)는 넓은 범위가 정말 필요할 때만 씁니다. 매우 클 수 있습니다.
 4.  `/llms.txt`가 없으면(404 또는 HTML 응답) 해당 사이트로 범위를 좁힌 `general_web_search`로 폴백합니다.
 
-이 휴리스틱은 코드 분기가 아니라 instruction 레벨로 구현되어 있습니다. 시스템 프롬프트(`core/llm/prompts/router.md`의 "Documentation-site research (llms.txt-first)" 절)와`web_fetch` 도구 설명(`core/tools/definitions.json`) 두 표면이 같은 지시를 싣습니다. frontier 하네스들이 수렴한 방식입니다.
+이 휴리스틱은 instruction 레벨로 구현되어 있습니다. 시스템 프롬프트(`core/llm/prompts/router.md`의 "Documentation-site research (llms.txt-first)" 절)와`web_fetch` 도구 설명(`core/tools/definitions.json`) 두 표면이 같은 지시를 싣습니다. frontier 하네스들이 수렴한 방식입니다.
 
 ## 딥리서치: 독립 축 병렬 수집
 
-프로젝트의 `deep-researcher` 스킬은 질문·research gap· 검증할 claim을 먼저 정하고, 서로 독립인 조사 축만 한 번의`delegate_task` batch로 보냅니다. 부모는 선행조건, 원문 확인, 모순 판정과 최종 종합을 계속 소유합니다. 자식 실패도 결과에서 제거하지 않으며, 출처 수 대신 citation entailment, 최신성, 권위와 상충 근거를 검사합니다.
+프로젝트의 `deep-researcher` 스킬은 질문·research gap· 검증할 claim을 먼저 정하고, 서로 독립인 조사 축만 한 번의 `delegate_task` batch로 보냅니다. 부모는 선행조건, 원문 확인, 모순 판정과 최종 종합을 계속 소유합니다. 자식 실패도 결과에서 제거하지 않으며, citation entailment, 최신성, 권위와 상충 근거를 검사합니다.
 
 `update_plan`은 관측된 진행을 표시하는 advisory checklist일 뿐 실행기가 아닙니다. 런타임이 `<plan>`을 제공하면 스킬은 별도 체크리스트를 만들지 않고 그 단계 문구를 그대로 사용합니다. 결과를 파일이나 memory에 자동 저장하지도 않습니다.
 
@@ -6137,9 +6313,9 @@ GEODE의 탐색은 네 갈래입니다. 외부 문서 사이트, 일반 웹, 자
 
 ## 지속 Goal과의 결합
 
-사용자가 여러 turn에 걸친 지속 목표를 명시한 경우에만`create_goal`을 사용합니다. Goal은 자동 DAG가 아니라 objective·token budget·누적 사용량·상태를`sessions.db`에 보존하는 제어 봉투입니다. 성공한 turn 뒤 상태가 active이면 다음 turn을 열고, complete·blocked·budget-limited 또는 오류에서 멈춥니다. 일반 리서치 요청은 Goal로 자동 승격하지 않습니다.
+사용자가 여러 turn에 걸친 지속 목표를 명시한 경우에만 `create_goal`을 사용합니다. Goal은 objective·token budget·누적 사용량·상태를 `sessions.db`에 보존하는 persistence·termination 제어 봉투입니다. 행동 선택과 실행은 AgenticLoop가 계속 소유합니다. 성공한 turn 뒤 상태가 active이면 다음 turn을 열고, complete·blocked·budget-limited 또는 오류에서 멈춥니다. 일반 리서치 요청은 Goal로 자동 승격하지 않습니다.
 
-continuation은 system prompt나 인간 transcript가 아니라 현재 요청에만 붙는 contextual-user 입력입니다. 같은 text-only 응답이 반복되거나 한 public call에서 안전 상한에 닿으면 자동 진행만 멈추고 Goal은 active로 보존합니다. token budget도 provider 호출을 중간 취소하는 hard cap이 아니라 완료된 turn을 정산해 다음 continuation을 막는 경계이므로 마지막 turn만큼 초과할 수 있고, 초과분은 사용량에 그대로 기록됩니다.
+continuation은 현재 요청에만 붙는 contextual-user 입력이며 system prompt와 human transcript를 바꾸지 않습니다. 같은 text-only 응답이 반복되거나 한 public call에서 안전 상한에 닿으면 자동 진행만 멈추고 Goal은 active로 보존합니다. provider 호출은 완료까지 진행되고 token budget은 turn 종료 후 정산되어 다음 continuation admission을 닫습니다. 따라서 마지막 turn만큼 초과할 수 있고, 초과분은 사용량에 그대로 기록됩니다.
 
 Goal 상태 전이는 canonical session event와 선택적 JSONL projection에 함께 남지만 objective 원문은 반복 저장하지 않고 digest만 기록합니다. `geode serve`가 실행 중이고 foreground Lane이 비어 있으면 active Goal의 동일 checkpoint를 새 generation으로 복원해 내부 continuation을 시작합니다. PAUSED·terminal·missing/corrupt checkpoint는 실행하지 않고, 정상 반환된 같은 Goal projection은 상태가 바뀌기 전까지 다시 admission하지 않습니다. 실행 예외는 1초 host tick에서 재시도하며 각 admission은 독립된 session metrics를 사용합니다.
 
@@ -6149,7 +6325,7 @@ Goal continuation과 실패 보존은[GPT-5.6-Luna/max 행동 trajectory](https:
 
 ## 웹 탐색과 위임 규칙
 
-일반 웹 탐색은 `general_web_search`와`web_fetch`가 담당합니다. GEODE의 instruction-level 정책은 한 턴에 이 도구들을 3회 이상 직접 호출하지 않고,`delegate_task`로 서브에이전트에 위임합니다(GEODE.md RUNTIME CANNOT). 이는 하드 런타임 차단이 아니라 검색 결과가 부모 컨텍스트를 폭발시키는 것을 막는 행동 계약입니다. 서브에이전트는`web_research` 툴킷 (`core/tools/toolkits.toml`)으로 격리된 컨텍스트에서 조사를 끝낸 뒤 요약만 돌려줍니다.
+일반 웹 탐색은 `general_web_search`와`web_fetch`가 담당합니다. GEODE의 instruction-level 정책은 한 턴에 이 도구들을 3회 이상 직접 호출하지 않고, `delegate_task`로 서브에이전트에 위임합니다(GEODE.md RUNTIME CANNOT). 이 행동 계약은 검색 결과로 인한 부모 컨텍스트 폭증을 막습니다. 서브에이전트는 `web_research` 툴킷 (`core/tools/toolkits.toml`)으로 격리된 컨텍스트에서 조사를 끝낸 뒤 요약만 돌려줍니다.
 
 ## 로컬 탐색: 기억과 세션
 
@@ -6269,7 +6445,7 @@ computer_use ←────── compact observation(base64 omitted) ◄┘
 
 ## 구조를 먼저 읽고, 스크린샷은 나중에
 
-화면에 무엇이 있는지 알아내는 데 스크린샷이 유일한 방법은 아닙니다. 스텝마다 1280x800 JPEG(약 1.5k 토큰)를 보내고 모델이 좌표를 눈대중하는 대신, 접근성 트리나 DOM처럼 구조가 있는 표면은 텍스트로 더 싸고 정확하게 읽힙니다. GEODE는 이 두 표면을 각각 도구로 노출합니다.
+접근성 트리나 DOM처럼 구조가 있는 표면은 텍스트로 더 싸고 정확하게 읽힙니다. GEODE는 이 두 표면을 각각 도구로 노출합니다.
 
 -   `ui_probe`(`core/tools/ui_probe.py`). macOS 접근성(AX) 트리를 role, title, value, 사각형 텍스트로 반환합니다. 여기서 AX는 Apple의 접근성(Accessibility) 프레임워크(`AXUIElement` 등 `AX` 접두어 API)를 가리킵니다. 네이티브 macOS 앱에서 스크린샷보다 저렴하고 신뢰도 높은 첫 단계입니다. 소프트 의존 pyobjc(`[desktop]` extra), OS 접근성 권한이 필요합니다. AX 판독은 라이브 검증됨 (2026-07-04). AX 좌표에서 클릭 좌표로의 매핑 캘리브레이션은 아직 미검증이며 사각형은 `coord_space=ax_points`로 표기됩니다.
 -   `browser_scan` / `browser_execute_js`(`core/tools/browser_tools.py`). CDP로 운영자의 실제 Chrome에 붙어 로그인 세션, 쿠키, 핑거프린트를 그대로 두고 웹을 지각하고 조작합니다. 로그인 벽, SPA, CAPTCHA가 사람이 쓸 때처럼 동작합니다. `web_fetch`(헤드리스 GET, JS 없음)나 픽셀 클릭과 달리 브라우저 작업은 실제 DOM 판독과 JS 실행으로 처리합니다. Chrome을 `--remote-debugging-port=9222`로 실행하면 됩니다. CDP 라운드트립은 라이브 검증됨(2026-07-04).
@@ -6339,7 +6515,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
-| 수식이 원문 LaTeX로 보임 | pylatexenc 미설치 또는 Tier 1 예외 | 의존성은 pyproject에 선언되어 있습니다. 재설치 후에도 같으면 입력이 LaTeX가 아닌 경우입니다. |
+| 수식이 원문 LaTeX로 보임 | pylatexenc 미설치 또는 Tier 1 예외 | 의존성은 pyproject에 선언되어 있습니다. 재설치 후에도 같으면 LaTeX 외 입력인지 확인합니다. |
 | 블록 수식이 한 줄로 나옴 | Tier 2 파싱 실패 후 Tier 1 폴백 | 의도된 동작입니다. latex2sympy2가 다루지 못하는 구문은 평탄화됩니다. |
 | 경로가 수식으로 렌더링 | 구분자 없는 후보 오탐 | 경로 문맥 가드가 회귀 테스트로 고정되어 있습니다. 사례를 발견하면 테스트에 추가합니다. |
 
@@ -6510,7 +6686,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 ## 생성된 아키텍처 인벤토리
 
-아래 값은 문서에 손으로 복사한 수치가 아니라, CI가 검증하는 결정적 JSON 스냅숏을 이 페이지가 직접 렌더링한 결과입니다. `site/src/data/geode/architecture-baseline.json`
+아래 값은 CI가 검증하는 결정적 JSON 스냅숏을 이 페이지가 직접 렌더링한 결과입니다. `site/src/data/geode/architecture-baseline.json`
 
 | 측정값 | 현재 트리 |
 | --- | --- |
@@ -6613,13 +6789,13 @@ Karpathy의 LLM-OS 비유는 LLM을 컴퓨터의 CPU 자리에 둡니다. GEODE�
 
 ## 왜 다섯 번째 계층이 명시적이 되었나
 
-S-5 구조 스프린트(v0.99.163) 전까지 GEODE는 4계층으로 서술됐고, 자기개선 코드는 다이어그램에 자리가 없었습니다. 코드 인구조사 결과는 반대였습니다. 자기개선 모듈의 절반가량이 4계층 어디에도 매핑되지 않았습니다. 코드가 아니라 다이어그램이 틀렸던 것입니다.
+S-5 구조 스프린트(v0.99.163) 전까지 GEODE는 4계층으로 서술됐고, 자기개선 코드는 다이어그램에 자리가 없었습니다. 코드 인구조사 결과는 반대였습니다. 자기개선 모듈의 절반가량이 4계층 어디에도 매핑되지 않았습니다. 다이어그램이 실제 코드를 놓치고 있었습니다.
 
-경계의 근거는 의존 방향입니다. 자기개선 계층은 Agent 계층을 측정 대상으로 호출하지만(감사 서브프로세스가 같은 AgenticLoop를 돌림), Agent 계층은 자기개선 계층을 모릅니다. 주입은 `GEODE_WRAPPER_OVERRIDE` 환경 변수와 SoT 파일이라는 좁은 인터페이스 하나로만 일어납니다 (`core/agent/system_prompt.py`가 소비자). 한 방향으로만 의존하고 인터페이스가 좁으면, 그것은 같은 계층이 아니라 위 계층입니다.
+경계의 근거는 의존 방향입니다. 자기개선 계층은 Agent 계층을 측정 대상으로 호출하지만(감사 서브프로세스가 같은 AgenticLoop를 돌림), Agent 계층은 자기개선 계층을 모릅니다. 주입은 `GEODE_WRAPPER_OVERRIDE` 환경 변수와 SoT 파일이라는 좁은 인터페이스 하나로만 일어납니다 (`core/agent/system_prompt.py`가 소비자). 한 방향으로만 의존하고 인터페이스가 좁으므로 독립된 상위 계층으로 분류합니다.
 
-경계는 변경 비용으로도 강제됩니다. `program.md` 계약상 자기개선 에이전트는 측정 모듈 4개(`measure.py`, `fitness.py`, `gate.py`, `ledger.py`)를 수정할 수 없습니다. 측정 장비를 바꾸면 측정 대상이 아니라 자가 기준이 바뀌기 때문입니다. 이 불변 조건은 계층이 분리되어 있어야만 선언할 수 있습니다.
+경계는 변경 비용으로도 강제됩니다. `program.md` 계약상 자기개선 에이전트는 측정 모듈 4개(`measure.py`, `fitness.py`, `gate.py`, `ledger.py`)를 수정할 수 없습니다. 측정 장비를 바꾸면 자가 기준이 바뀝니다. 이 불변 조건은 계층이 분리되어 있어야만 선언할 수 있습니다.
 
-## 왜 3, 4, 6이 아닌가
+## 계층 수를 다섯으로 고정한 근거
 
 -   3계층(Model + Runtime + Agent)이면 훅, 게이트웨이, serve, 레인이 갈 곳이 없습니다.
 -   4계층은 자기개선 코드를 숨깁니다. 위에 쓴 대로 실측이 반증했습니다.
@@ -6627,7 +6803,7 @@ S-5 구조 스프린트(v0.99.163) 전까지 GEODE는 4계층으로 서술됐고
 
 ## 경계가 진짜라는 증거
 
-경계가 장식이 아니라면 교체 실험이 통과해야 합니다. 모델 교체 (`/model`)는 Model 계층만 바꿉니다. 메신저 추가는 Harness의 폴러 하나를 추가합니다. 스캐폴드 변이가 reject되면 Self-Improving 계층의 되돌림이 SoT를 복원할 뿐, 아래 계층 코드는 건드리지 않습니다. 세 실험 모두 현재 코드에서 단일 계층 변경입니다.
+교체 실험이 계층 경계를 검증합니다. 모델 교체 (`/model`)는 Model 계층만 바꿉니다. 메신저 추가는 Harness의 폴러 하나를 추가합니다. 스캐폴드 변이가 reject되면 Self-Improving 계층의 되돌림이 SoT를 복원할 뿐, 아래 계층 코드는 건드리지 않습니다. 세 실험 모두 현재 코드에서 단일 계층 변경입니다.
 
 ## 다음
 
@@ -6663,11 +6839,11 @@ GEODE 런타임이 출하되는 에이전트의 동작을 안정시키는 방식
 
 ## 왜 중요한가
 
-같은 규율이 두 스코프에서 동일하게 작동한다는 사실은 GEODE의 설계가 비유가 아니라 운영 가능한 패턴임을 보여 줍니다. 런타임에서 검증된 패턴은 빌드 라인으로, 빌드 라인에서 깨진 패턴은 런타임 수정으로 되먹임됩니다. 위 표가 그 자기일치의 전부입니다.
+같은 규율이 두 스코프에서 동일하게 작동한다는 사실은 GEODE의 설계가 운영 가능한 패턴임을 보여 줍니다. 런타임에서 검증된 패턴은 빌드 라인으로, 빌드 라인에서 깨진 패턴은 런타임 수정으로 되먹임됩니다. 위 표가 그 자기일치의 전부입니다.
 
 ## 한계
 
-self-hosting은 GEODE가 사람 없이 자신을 빌드한다는 뜻이 아닙니다. 빌드 라인의 PR 머지와 릴리스는 운영자 게이트를 지나고, 자기개선 루프가 변이하는 것은 코드가 아니라 스캐폴드(시스템 프롬프트 섹션과 behaviour kinds)입니다. 주장의 범위는 기본 단위의 공유까지입니다.
+빌드 라인의 PR 머지와 릴리스 권한은 운영자 게이트에 남습니다. 자기개선 루프의 변이 표면은 스캐폴드(시스템 프롬프트 섹션과 behaviour kinds)로 제한됩니다. 주장의 범위는 기본 단위의 공유까지입니다.
 
 ## 다음
 
@@ -6733,7 +6909,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/release-pypi-lifecycl
 -   **PATCH**. 기본값 — 새 기능·버그 수정·리팩토링 등 일상 릴리스 전부(0.99.x patch-train의 연속).
 -   문서만 바뀌면 버전을 올리지 않습니다.
 
-## wheel은 설치물이지 데이터 볼륨이 아닙니다
+## wheel이 소유하는 설치 경계
 
 `geode-agent` wheel은 Python 생태계의 불변 제품 설치물입니다. 네 개 CLI와 `core`, `evals`, `evolve` 코드, 승인된 builtin skill, 정적 reference input을 함께 버전 관리합니다. 실행 중 생성되거나 계속 바뀌는 데이터는 wheel에 쓰지 않습니다.
 
@@ -6743,7 +6919,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/release-pypi-lifecycl
 | 정확히 열거된 builtin skill과 immutable reference input | rolling ledger, 결과 파일, 사용자·프로젝트 skill |
 | 읽기 전용 helper source | `GEODE_EVOLVE_WORKSPACE`가 가리키는 실제 Git checkout |
 
-따라서 설치된 `geode-evolve`는 reference input을 읽을 수 있지만 mutation과 promotion에는 writable GEODE checkout이 필요합니다. computer-use helper의 생성물도 site-packages가 아닌 `GEODE_HOME/helpers/computer-use`에 놓입니다. 별도 core, eval, evolve wheel은 독립 설치 계약이나 릴리스 주기가 실제로 생기기 전까지 만들지 않습니다.
+따라서 설치된 `geode-evolve`는 reference input을 읽을 수 있지만 mutation과 promotion에는 writable GEODE checkout이 필요합니다. computer-use helper의 생성물은 `GEODE_HOME/helpers/computer-use`에 놓입니다. 별도 core, eval, evolve wheel은 독립 설치 계약이나 릴리스 주기가 실제로 생기기 전까지 만들지 않습니다.
 
 ## 릴리스 흐름
 
@@ -6819,7 +6995,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/backlog-dispose.md
 
 ## 처분 문서의 형식
 
-항목마다 네 절을 채웁니다. 핵심은 마지막 절입니다. 처분은 영구 폐기가 아니라 조건부 보류이고, 조건이 명시되어야 합니다.
+항목마다 네 절을 채웁니다. 핵심은 마지막 절입니다. 처분은 재검토 조건이 명시된 보류입니다.
 
 ```
 ## #<번호> — <항목 제목>
@@ -6832,13 +7008,13 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/backlog-dispose.md
 ## Summary         항목 | Disposition | Trigger 수 표
 ```
 
-Finding 절이 처분의 무게를 만듭니다. 추측이 아니라 grep 출력과 코드 경로가 들어가야, 나중에 다시 읽는 사람이 당시의 판단을 재검증할 수 있습니다.
+Finding 절이 처분의 무게를 만듭니다. grep 출력과 코드 경로가 들어가야, 나중에 다시 읽는 사람이 당시의 판단을 재검증할 수 있습니다.
 
-## 처분이 아닌 것
+## 다른 상태로 보내야 하는 경우
 
--   다른 PR이 같은 문제를 해결했다면 처분 문서가 아니라 보드의 Done으로 갑니다. 해결은 처분이 아닙니다.
+-   다른 PR이 같은 문제를 해결했다면 보드의 Done으로 보냅니다.
 -   구현이 결정된 항목은 In Progress로 갑니다. 처분은 "지금 하지 않는다"에만 씁니다.
--   재검토 trigger 없는 처분은 조용한 삭제와 같습니다. trigger를 못 쓰겠다면 처분이 아니라 거절이고, 거절도 근거와 함께 적습니다.
+-   재검토 trigger를 정의할 수 없으면 근거를 갖춘 거절로 기록합니다.
 
 ## 실패 모드
 
@@ -6861,7 +7037,7 @@ Finding 절이 처분의 무게를 만듭니다. 추측이 아니라 grep 출력
 URL: https://mangowhoiscloud.github.io/geode/docs/codebase-map/layer-graph
 Markdown: https://mangowhoiscloud.github.io/geode/docs/codebase-map/layer-graph.md
 
-이 페이지는 손으로 그린 다이어그램이 아닙니다. Understand-Anything가 저장소를 정적 분석해 만든 지식 그래프에서, 파일 수준 노드를 14개 레이어로 묶고 `imports` 엣지만 레이어 간으로 집계한 결과입니다. 원본 그래프는 노드 14,555개로 커서 페이지에 싣지 않고, 집계 스크립트가 만든 소형 JSON (`src/data/geode/layer-graph.json`) 하나만 소비합니다.
+이 페이지는 Understand-Anything가 저장소를 정적 분석해 만든 지식 그래프입니다. 파일 수준 노드를 14개 레이어로 묶고 `imports` 엣지만 레이어 간으로 집계한 결과입니다. 원본 그래프는 노드 14,555개로 커서 페이지에 싣지 않고, 집계 스크립트가 만든 소형 JSON (`src/data/geode/layer-graph.json`) 하나만 소비합니다.
 
 2072051411091056Entry Points67Agent Runtime67LLM & Prompts49Tools/MCP/Skills61Memory & Hooks79CLI/UI/Messaging38Config/Auth/Obs93Self-Improving68Petri Audit258Public Site70Architecture Docs135Research DocsTests61768Project Config
 
@@ -6877,7 +7053,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/codebase-map/layer-graph.
 4.  **109** — Config Auth Observability ↔ Tests
 5.  **105** — Memory Hooks Wiring ↔ Tests
 
-다섯 개가 모두 Tests에 걸립니다. 이것은 데이터 아티팩트가 아니라 구조입니다. 테스트 스위트는 각 런타임 레이어를 직접 import하므로, 레이어 간 import 그래프에서 가장 넓게 뻗는 노드가 됩니다.
+다섯 개가 모두 Tests에 걸리는 구조입니다. 테스트 스위트는 각 런타임 레이어를 직접 import하므로, 레이어 간 import 그래프에서 가장 넓게 뻗는 노드가 됩니다.
 
 ## 허브와 고립 레이어
 

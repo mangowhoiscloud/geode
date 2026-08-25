@@ -48,7 +48,7 @@ export default function Page() {
             <p>
               최신 상태와 메일박스 전달은 프로젝트 <code>sessions.db</code>의{" "}
               <code>collaboration_runs</code>와 <code>collaboration_mailbox</code>에
-              저장합니다. 이 둘은 두 번째 transcript가 아니라 제어 투영입니다.
+              저장합니다. 이 둘은 제어 상태를 투영하며 별도 transcript를 만들지 않습니다.
               자식의 대화, 도구 호출, 훅, trajectory는 <code>messages</code>와
               append-only <code>session_events</code>에 독립 롤아웃으로 남습니다.
               mailbox는 자식 checkpoint 저장 뒤 승인됩니다. 재개는 완료된 도구
@@ -120,7 +120,7 @@ export default function Page() {
               (<code>core/orchestration/isolated_execution.py</code>).
             </p>
             <p>
-              메모리 쓰기 격리는 별도 버퍼가 아니라 툴킷 구성으로 통제합니다.
+              메모리 쓰기 격리는 툴킷 구성으로 통제합니다.
               기본 <code>_default</code> 툴킷은 읽기 전용이라 서브에이전트는
               공유 메모리에 쓸 수 없습니다. 단, <code>memory_save</code>가
               포함된 툴킷(예: <code>general_purpose</code>)을 명시하면 공유{" "}

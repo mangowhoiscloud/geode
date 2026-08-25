@@ -158,14 +158,14 @@ export default function Page() {
       slug="codebase-map/layer-graph"
       title="Layer architecture graph"
       titleKo="레이어 아키텍처 그래프"
-      summary="A generation-date snapshot of the repository, extracted by Understand-Anything: 14 analyzed layers sized by file count, drawn over their cross-layer import edges, with a seven-step reading tour. Every count is a snapshot label, not a claim."
-      summaryKo="Understand-Anything가 추출한 저장소의 특정 시점 스냅숏입니다. 분석된 14개 레이어를 파일 수 크기로, 레이어를 가로지르는 import 의존을 엣지로 그리고, 7단계 읽기 투어를 붙였습니다. 모든 수치는 주장이 아니라 스냅숏 라벨입니다."
+      summary="A generation-date snapshot of the repository, extracted by Understand-Anything: 14 analyzed layers sized by file count, drawn over their cross-layer import edges, with a seven-step reading tour. Every count is scoped to that snapshot."
+      summaryKo="Understand-Anything가 추출한 저장소의 특정 시점 스냅숏입니다. 분석된 14개 레이어를 파일 수 크기로, 레이어를 가로지르는 import 의존을 엣지로 그리고, 7단계 읽기 투어를 붙였습니다. 모든 수치는 해당 스냅숏에 한정됩니다."
     >
       <Bi
         ko={
           <p>
-            이 페이지는 손으로 그린 다이어그램이 아닙니다. Understand-Anything가
-            저장소를 정적 분석해 만든 지식 그래프에서, 파일 수준 노드를 14개
+            이 페이지는 Understand-Anything가 저장소를 정적 분석해 만든 지식
+            그래프입니다. 파일 수준 노드를 14개
             레이어로 묶고 <code>imports</code> 엣지만 레이어 간으로 집계한
             결과입니다. 원본 그래프는 노드 {meta.graph.nodes.toLocaleString()}
             개로 커서 페이지에 싣지 않고, 집계 스크립트가 만든 소형 JSON
@@ -174,8 +174,8 @@ export default function Page() {
         }
         en={
           <p>
-            This page is not hand-drawn. It reads a knowledge graph that
-            Understand-Anything built by statically analyzing the repository:
+            This page reads a knowledge graph built by Understand-Anything
+            through static repository analysis:
             file-level nodes grouped into 14 layers, with only the{" "}
             <code>imports</code> edges aggregated across layer boundaries. The
             raw graph is too large to ship ({meta.graph.nodes.toLocaleString()}{" "}
@@ -220,15 +220,15 @@ export default function Page() {
       <Bi
         ko={
           <p>
-            다섯 개가 모두 Tests에 걸립니다. 이것은 데이터 아티팩트가 아니라
-            구조입니다. 테스트 스위트는 각 런타임 레이어를 직접 import하므로,
+            다섯 개가 모두 Tests에 걸리는 구조입니다. 테스트 스위트는 각 런타임
+            레이어를 직접 import하므로,
             레이어 간 import 그래프에서 가장 넓게 뻗는 노드가 됩니다.
           </p>
         }
         en={
           <p>
-            All five touch Tests. That is structure, not a data artifact: the
-            test suite imports each runtime layer directly, which makes it the
+            All five touch Tests because the suite imports each runtime layer
+            directly, which makes it the
             widest-reaching node in the cross-layer import graph.
           </p>
         }

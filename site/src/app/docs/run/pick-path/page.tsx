@@ -35,7 +35,7 @@ export default function Page() {
                 <tr>
                   <td>2. PAYG API 키</td>
                   <td><code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>ZAI_API_KEY</code></td>
-                  <td><code>~/.geode/.env</code>에 키만 적습니다. <code>geode setup</code> 또는 <code>/login add</code>가 대신 적어줍니다.</td>
+                  <td><code>~/.geode/.env</code>에 키만 적습니다. <code>geode setup</code> 또는 <code>/login add</code>로 기록할 수도 있습니다.</td>
                   <td>토큰 단위로 비용을 직접 통제하고 싶을 때. 팀 계정과 CI에도 맞습니다.</td>
                 </tr>
                 <tr>
@@ -71,7 +71,7 @@ export default function Page() {
                   <td>GLM 키(<code>ZAI_API_KEY</code>)를 등록하고 <code>/model</code>에서 <code>glm-4.7-flash</code>를 고릅니다.</td>
                 </tr>
                 <tr>
-                  <td>특정 프로바이더를 OAuth 대신 키로 강제하고 싶습니다</td>
+                  <td>특정 프로바이더를 키 인증으로 강제하고 싶습니다</td>
                   <td><code>/login source &lt;provider&gt; api_key</code>. 선택은 <code>config.toml</code>에만 저장됩니다.</td>
                 </tr>
                 <tr>
@@ -206,7 +206,7 @@ geode about              # 실효 모델 + 자격 상태 확인`}</pre>
                   <td>Register a GLM key (<code>ZAI_API_KEY</code>) and pick <code>glm-4.7-flash</code> in <code>/model</code>.</td>
                 </tr>
                 <tr>
-                  <td>I want to force a provider onto keys instead of OAuth</td>
+                  <td>I want to force a provider onto key authentication</td>
                   <td><code>/login source &lt;provider&gt; api_key</code>. The choice persists in <code>config.toml</code> only.</td>
                 </tr>
                 <tr>

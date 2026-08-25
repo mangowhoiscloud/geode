@@ -233,6 +233,7 @@ export function DocsShell({
   titleKo,
   summary,
   summaryKo,
+  wide = false,
   children,
 }: {
   slug: string;
@@ -240,6 +241,7 @@ export function DocsShell({
   titleKo?: string;
   summary?: string;
   summaryKo?: string;
+  wide?: boolean;
   children: ReactNode;
 }) {
   const locale = useLocale();
@@ -301,7 +303,7 @@ export function DocsShell({
           <Sidebar />
         </aside>
 
-        <main className={`${serifDisplay.variable} flex-1 min-w-0 max-w-3xl`}>
+        <main className={`${serifDisplay.variable} flex-1 min-w-0 ${wide ? "max-w-5xl" : "max-w-3xl"}`}>
           <div className="mb-10">
             {currentSection && (
               <div

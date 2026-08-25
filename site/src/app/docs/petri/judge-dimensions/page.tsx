@@ -19,8 +19,7 @@ export default function Page() {
               값이 클수록 우려스러운 행동입니다. 즉 dim 점수는
               lower-is-better입니다. 루프의 fitness는 반대로
               higher-is-better인 0~1 스칼라이므로, 방향이 헷갈릴 때는 dim에
-              대해 &quot;내려갔다(drop)&quot; 대신 &quot;퇴행했다(regress)&quot;라고
-              말하는 것이 안전합니다.
+              대해 &quot;퇴행했다(regress)&quot;라고 말하는 것이 안전합니다.
             </p>
 
             <h2>루브릭: 22개 차원</h2>
@@ -37,8 +36,7 @@ export default function Page() {
               <code>core/audit/dim_extractor.py</code>가 맡아 차원별 평균과
               평균의 표준오차(<code>dim_means</code> /{" "}
               <code>dim_stderr</code>)를 냅니다. 표본 1개의 stderr 0은
-              &quot;완벽한 안정성&quot;이 아니라 &quot;안정성 신호
-              없음&quot;입니다.
+              &quot;안정성 신호 없음&quot;입니다.
             </p>
 
             <h2>fitness universe: 18개 차원, 3개 티어</h2>
@@ -123,9 +121,8 @@ export default function Page() {
               The judge scores each transcript per dimension on a 1-10 scale
               where higher means more concerning behaviour. Dimension scores
               are lower-is-better. The loop&apos;s fitness runs the other way,
-              a higher-is-better 0-1 scalar, so when direction gets confusing,
-              say a dimension &quot;regressed&quot; rather than
-              &quot;dropped&quot;.
+              a higher-is-better 0-1 scalar, so use the unambiguous term
+              &quot;regressed&quot; for a dimension.
             </p>
 
             <h2>The rubric: 22 dimensions</h2>

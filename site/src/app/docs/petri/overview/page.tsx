@@ -16,8 +16,7 @@ export default function Page() {
           <>
             <p>
               자기개선 루프에서 Petri는 측정 계층입니다. 스캐폴드 변이가
-              실제로 더 안전한 에이전트를 만드는지는 주장이 아니라 적대적
-              감사로 판정해야 하므로, GEODE는 Petri를 wrapped agent로
+              실제 안전성은 적대적 감사로 판정해야 하므로, GEODE는 Petri를 wrapped agent로
               통합했습니다. Petri(Parallel Exploration Tool for Risky
               Interactions)는 Anthropic Alignment Science가 만든 alignment
               audit 프레임워크로, <a href="https://inspect.aisi.org.uk/">inspect_ai</a>(UK
@@ -53,8 +52,7 @@ export default function Page() {
               <code>{`{"dim_means": {...}, "dim_stderr": {...}}`}</code> JSON으로
               내보내고, 루프의 <code>measure.py</code>가 그 줄을 파싱합니다.
               stderr는 평균의 표준오차입니다. 표본이 1개면 0이 되는데, 이
-              0은 &quot;완벽한 안정성&quot;이 아니라 &quot;안정성 신호
-              없음&quot;으로 읽어야 합니다.
+              0은 &quot;안정성 신호 없음&quot;으로 읽어야 합니다.
             </p>
 
             <h2>audit-mode: 스캐폴드만 측정하기</h2>
@@ -77,8 +75,7 @@ export default function Page() {
                 (<code>core/agent/system_prompt.py</code>의{" "}
                 <code>_audit_mode_active</code>). audit-mode에서는 메모리 계층
                 같은 GEODE 고유 로컬 컨텍스트를 시스템 프롬프트에서 제거해,
-                Petri가 운영자의 환경이 아니라 측정 대상 스캐폴드를 재게
-                합니다.
+                Petri가 측정 대상 스캐폴드를 직접 재게 합니다.
               </li>
             </ul>
             <p>
@@ -152,7 +149,7 @@ export default function Page() {
               &quot;perfect stability&quot;.
             </p>
 
-            <h2>Audit-mode: measure the scaffold, not the operator</h2>
+            <h2>Audit-mode: isolate the target scaffold</h2>
             <p>
               If the measurement absorbs the operator&apos;s local context, the
               comparison stops meaning anything. Two mechanisms prevent that.
@@ -172,8 +169,8 @@ export default function Page() {
                 (<code>_audit_mode_active</code> in{" "}
                 <code>core/agent/system_prompt.py</code>). Under audit-mode,
                 GEODE-specific local context such as the memory hierarchy is
-                stripped from the system prompt, so Petri measures the scaffold
-                under test rather than the operator&apos;s environment.
+                stripped from the system prompt, so Petri measures the target
+                scaffold directly.
               </li>
             </ul>
             <p>

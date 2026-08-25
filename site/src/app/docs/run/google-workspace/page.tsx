@@ -174,7 +174,7 @@ export default function Page() {
             </ul>
             <p>
               안전한 OS 키링을 사용할 수 없으면 GEODE는 로그인을 거부합니다.
-              refresh token이나 client secret을 평문 파일로 대신 저장하지 않습니다.
+              refresh token이나 client secret을 평문 파일에 저장하지 않습니다.
             </p>
 
             <h2>1. 필요한 API 활성화</h2>
@@ -233,7 +233,7 @@ export default function Page() {
 
             <h2>4. GEODE에서 연결</h2>
             <p>
-              셸 명령이 아니라 <code>geode</code> 대화형 화면 안에서 실행합니다.
+              <code>geode</code> 대화형 화면 안에서 실행합니다.
               인자 없는 명령은 JSON 경로와 서비스 선택을 차례로 묻습니다.
             </p>
             <pre>{`geode
@@ -249,8 +249,8 @@ export default function Page() {
             </p>
             <BundleTable />
             <p>
-              <code>workspace-files</code>는 전체 Drive 범위가 아니라{" "}
-              <code>drive.file</code>을 사용합니다. v1.0.0의 지원 경로는 GEODE가
+              <code>workspace-files</code>는 <code>drive.file</code> 범위를
+              사용합니다. v1.0.0의 지원 경로는 GEODE가
               만든 파일입니다. 이 scope 자체는 Picker로 사용자가 연 파일도 다룰
               수 있지만, GEODE v1.0.0은 기존 파일을 고르는 Google Picker를
               제공하지 않습니다.
@@ -303,8 +303,8 @@ export default function Page() {
             <h2>Hermes는 어떻게 풀었나</h2>
             <p>
               Hermes Agent도 사용자 소유 Desktop 클라이언트를 선택하지만, 배포
-              단위는 런타임 명령이 아니라 bundled <code>google-workspace</code>
-              Skill과 Python 스크립트입니다. 검사한 구현은 고정 localhost 실패
+              단위는 bundled <code>google-workspace</code> Skill과 Python
+              스크립트입니다. 검사한 구현은 고정 localhost 실패
               redirect URL을 사용자가 다시 붙여넣는 분리형 흐름과{" "}
               <code>~/.hermes</code> 아래 client/token JSON을 사용합니다. 쓰기 전
               확인은 Skill 절차가 담당합니다.
@@ -482,7 +482,7 @@ export default function Page() {
             <p>
               Hermes Agent also chooses a user-owned Desktop client, but ships
               the integration as a bundled <code>google-workspace</code> Skill
-              and Python scripts rather than a first-class runtime command. In
+              and Python scripts, with no first-class runtime command. In
               the inspected implementation, a split flow asks the user to paste
               back a failed fixed-localhost redirect URL, credentials live in
               client/token JSON under <code>~/.hermes</code>, and the Skill

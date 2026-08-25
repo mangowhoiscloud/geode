@@ -56,14 +56,14 @@ function GapTable({ ko }: { ko: boolean }) {
   const rows = ko
     ? [
         ["F · partial", "로컬 78/78 URL과 내부 링크 577/577은 통과했지만, 당시 runner는 공개 sitemap 77/78 실패를 예외로 버려 영수증을 결합하지 못했습니다. 현재 runner는 이를 partial receipt로 보존합니다.", "동일성 비교: 같은 URL digest의 로컬 export ↔ 공개 호스트"],
-        ["R/C/P", "Pages는 R 0/120, C 4/120, P 4/4로 측정됐습니다. R은 빈칸이 아니라 관측된 0입니다.", "표면 진단: Pages ↔ GitHub 저장소(R 109/120, C 9/120)"],
+        ["R/C/P", "Pages는 R 0/120, C 4/120, P 4/4로 측정됐습니다. R의 0은 120회에서 관측된 결과입니다.", "표면 진단: Pages ↔ GitHub 저장소(R 109/120, C 9/120)"],
         ["A/Q", "A 4/4, Q 43/58이지만 같은 모델의 앞선 반복은 35/54였습니다. Q는 claim support만 포함해 partial입니다.", "판정 보정: 고정 claim 집합의 독립 verifier ↔ 사람 표본 판정"],
         ["O · not_measured", "종료된 Search Console·referral·conversion 관측 기간이 없어 분모 자체를 만들지 않았습니다.", "성과 비교: 같은 기간·질의·엔진의 baseline ↔ treatment"],
         ["Promotion · none", "이번 실행은 진단 계약이며 비교 대상과 변경 arm을 사전 등록하지 않았습니다.", "승격 비교: 동결된 baseline ↔ treatment, 동일 index·budget·window"],
       ]
     : [
         ["F · partial", "All 78 local URLs and 577/577 internal links passed, but the previous runner discarded the deployed 77/78 sitemap failure as an exception. The current runner preserves it as a partial receipt.", "Identity check: local export ↔ public host with the same URL digest"],
-        ["R/C/P", "Pages measured R 0/120, C 4/120, and P 4/4. R is an observed zero, not an empty cell.", "Surface diagnostic: Pages ↔ GitHub repository (R 109/120, C 9/120)"],
+        ["R/C/P", "Pages measured R 0/120, C 4/120, and P 4/4. R records zero retrievals across 120 observations.", "Surface diagnostic: Pages ↔ GitHub repository (R 109/120, C 9/120)"],
         ["A/Q", "A was 4/4 and Q was 43/58; an earlier same-model repeat returned 35/54. Q remains partial because it covers claim support only.", "Verdict calibration: independent verifier ↔ human sample over a frozen claim set"],
         ["O · not_measured", "No completed Search Console, referral, or conversion window exists, so no eligible denominator was created.", "Outcome comparison: baseline ↔ treatment with the same window, queries, and engine"],
         ["Promotion · none", "This run is diagnostic; no comparator or intervention arm was preregistered.", "Promotion comparison: frozen baseline ↔ treatment under the same index, budget, and window"],
@@ -106,10 +106,10 @@ export default function GeoBenchmarkPage() {
           <>
             <h2>무엇을 검증하는가</h2>
             <p>
-              GEO는 문장을 다시 쓰는 최적화 점수가 아니라 증거 상태머신입니다.
+              GEO는 단계별 증거를 관리하는 상태머신입니다.{" "}
               <code>preflight → live_observe</code>로 진단하며, 변경 효과를 주장할 때만
               사전 등록된 <code>experiment</code>로 진행합니다. 앞 단계가 뒤 단계를
-              대신하지 못하며, 측정하지 못한 값은 0이 아니라
+              증명할 수 없습니다. 측정 영수증이 없는 값은{" "}
               <code>not_measured</code>로 남습니다.
             </p>
             <p>
@@ -122,8 +122,8 @@ export default function GeoBenchmarkPage() {
 
             <h2>빈 칸과 비교군</h2>
             <p>
-              아래 값은 2026-08-24 로컬 diagnostic receipt를 읽은 결과이며
-              공개 성능 주장이나 승격 근거가 아닙니다. <code>0</code>은 관측 결과,
+              아래 값은 2026-08-24 로컬 diagnostic receipt에 한정됩니다.{" "}
+              <code>0</code>은 관측 결과,
               <code>not_measured</code>는 적격 분모·영수증 부재, <code>partial</code>은
               해당 단계의 일부 하위 지표만 측정했다는 뜻입니다.
             </p>
@@ -159,7 +159,8 @@ export default function GeoBenchmarkPage() {
             </p>
             <ArtifactJoinTable ko />
             <p>
-              trajectory는 행동 증거이며 점수 정본이 아닙니다. publication manifest는
+              trajectory는 행동 증거입니다. 점수 권한은 native result에 남습니다.
+              publication manifest는
               선언된 모든 파일을 public 또는 withheld로 분류하고, bundle gate는 schema,
               digest, run ID, trajectory release scope를 한 번에 확인합니다.
             </p>
@@ -176,7 +177,7 @@ export default function GeoBenchmarkPage() {
             <p>
               현재 구현은 실패한 host preflight도 보존하고, Q의 claim 본문과 실제
               source quote를 검증하며, O를 immutable native result에 사후 결합합니다.
-              남은 빈칸은 더미가 아니라 배포·독립 판정·1차 analytics의 실제 증거 부재입니다.
+              남은 빈칸은 배포·독립 판정·1차 analytics 증거가 아직 없음을 뜻합니다.
             </p>
             <p>
               native outcome, verifier 판단, GEODE trajectory, analysis와 publication
@@ -201,7 +202,7 @@ export default function GeoBenchmarkPage() {
           <>
             <h2>What it verifies</h2>
             <p>
-              GEO is an evidence state machine, not a rewrite-optimization score.
+              GEO is a stage-aware evidence state machine.
               A diagnostic moves through <code>preflight → live_observe</code>;
               only a preregistered treatment claim continues to <code>experiment</code>.
               An earlier phase cannot prove a later one. An absent measurement remains
@@ -218,8 +219,8 @@ export default function GeoBenchmarkPage() {
             <h2>Empty cells and comparators</h2>
             <p>
               These values describe a local diagnostic receipt from 2026-08-24;
-              they are not a public performance or promotion claim. <code>0</code>
-              is an observed result, <code>not_measured</code> means no eligible
+              they carry diagnostic authority only. <code>0</code>
+              is an observed result; <code>not_measured</code> means no eligible
               denominator or receipt exists, and <code>partial</code> means only a
               submetric of that stage was measured.
             </p>
@@ -275,17 +276,18 @@ export default function GeoBenchmarkPage() {
               The current implementation preserves failed host preflights, verifies
               each Q claim against an exact source quote, and joins O after the
               immutable native result. Remaining gaps now represent missing deployment,
-              independent-judgement, or first-party analytics evidence rather than fillers.
+              independent-judgement, or first-party analytics evidence.
             </p>
             <p>
               Native outcome, verifier judgement, GEODE trajectory, analysis, and
-              publication manifest retain separate authority. A slash run is not
-              repackaged as <code>.eval</code> unless Inspect produced it.
+              publication manifest retain separate authority. Slash runs keep their
+              native format; Inspect-produced records retain <code>.eval</code> ownership.
             </p>
             <p>
               Slash typed state is an advisory workflow projection. Model-authored
-              numerators and locators are not benchmark authority; only the schema-
-              and digest-validated native/vector/verifier/outcome bundle is evidence.
+              numerators and locators carry workflow authority only. Benchmark
+              authority begins with a schema- and digest-validated native/vector/
+              verifier/outcome bundle.
             </p>
 
             <h2>Evidence basis</h2>
