@@ -36,9 +36,10 @@ export default function DocsIndex() {
               그 본체 위의 시그니처가 <strong>자기개선 루프</strong>입니다. 모델
               가중치와 파라미터는 절대 건드리지 않습니다. 갱신 대상은 모델을
               감싼 스캐폴드, 곧 시스템 프롬프트 섹션과 behaviour kinds이고,
-              메커니즘은 변이와 선택입니다. 변화의 fitness는
-              <strong>적대적 안전 감사</strong>(Petri 급의 다차원
-              감사)로 측정하며, 핵심 안전 차원에는 하한선이 있어 그 선을 넘어
+              메커니즘은 변이와 선택입니다. 변화의 fitness 판정 권한은{" "}
+              <strong>적대적 안전 감사</strong>(Petri 급의 다차원 감사)에
+              있습니다. 능력 벤치마크는 별도 측정 표면으로 유지하며, 핵심 안전
+              차원에는 하한선이 있어 그 선을 넘어
               후퇴하는 변화는 거부합니다. 평가에 쓰는 seed도 고정돼 있지
               않습니다. Seed Scenario Generation 파이프라인이 에이전트와 나란히 적대적 seed
               분포를 키웁니다.
@@ -90,7 +91,8 @@ export default function DocsIndex() {
               model, the system-prompt sections and behaviour kinds, and the
               mechanism is mutation and selection. Its fitness signal is an{" "}
               <strong>adversarial safety audit</strong> (Petri-grade,
-              multi-dimensional). Critical safety dimensions sit behind a hard
+              multi-dimensional). Capability benchmarks remain a separate
+              measurement surface. Critical safety dimensions sit behind a hard
               floor: a change that
               regresses them is rejected. The evaluation seeds are not fixed
               either. A Seed Scenario Generation pipeline grows an adversarial seed

@@ -38,8 +38,8 @@ export default function Page() {
         ko={
           <>
             <p>
-              GEODE의 확장 표면은 하나의 거대한 이벤트 목록이 아닙니다. 외부
-              통합이 의존할 수 있는 <code>HookName</code>, 실행을 감싸는 신뢰
+              GEODE는 확장 표면을 권한별로 나눕니다. 외부 통합이 의존할 수 있는{" "}
+              <code>HookName</code>, 실행을 감싸는 신뢰
               표면 <code>MiddlewareRegistry</code>, 운영 관측을 위한{" "}
               <code>RuntimeEvent</code>로 역할과 권한을 분리합니다.
             </p>
@@ -105,15 +105,15 @@ export default function Page() {
               연속 시도로 제한됩니다. 최종 결과에는 모든 시도의 rounds, tool calls,
               usage가 합산된 뒤 증거와 체크포인트가 저장됩니다. escalate는
               delivery gate로 동작합니다. 세션을 pause하고 후보를
-              외부 소유자에게만 pending_text로 반환하며 terminal
+              외부 소유자에게만 pending_text로 반환하며 terminal{" "}
               <code>session.ended</code>를 만들지 않습니다.
             </p>
             <p>
               외부 handler 결정이 없으면 pass는 accept, 재시도 가능한 실패는
               revise, 그 밖의 실패는 escalate하는 기본 정책이 동작합니다. revision
-              지시는 dynamic system context에 한 번 주입되고,
-              <code>verification.decided</code>는 SHA-256 digest와
-              handler별 결정을 session timeline에 남깁니다.
+              지시는 human transcript를 보존한 채 dynamic system context에 한 번
+              주입됩니다. <code>verification.decided</code>는 후보 본문을 생략하고
+              SHA-256 digest와 handler별 결정을 session timeline에 남깁니다.
             </p>
 
             <h2>신뢰 미들웨어 4개 결합점</h2>
@@ -245,10 +245,10 @@ export default function Page() {
             <p>
               Without an external handler decision, the default policy accepts a
               pass, revises a retryable failure, and escalates any other failure.
-              Revision control enters the dynamic system context once, while
-              <code>verification.decided</code> stores the
-              candidate SHA-256 digest and attributed handler decisions in the
-              session timeline.
+              Revision control enters the dynamic system context once and leaves
+              human history unchanged. <code>verification.decided</code> omits the
+              candidate body and stores its SHA-256 digest with attributed handler
+              decisions in the session timeline.
             </p>
 
             <h2>Four trusted middleware join points</h2>

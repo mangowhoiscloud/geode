@@ -53,7 +53,7 @@ export default function Page() {
               자기개선 에이전트는 측정 모듈 4개(<code>measure.py</code>,{" "}
               <code>fitness.py</code>, <code>gate.py</code>,{" "}
               <code>ledger.py</code>)를 수정할 수 없습니다. 측정 장비를 바꾸면
-              측정 장비를 바꾸면 자가 기준이 바뀝니다. 이 불변 조건은
+              자가 기준이 바뀝니다. 이 불변 조건은
               계층이 분리되어 있어야만 선언할 수 있습니다.
             </p>
 

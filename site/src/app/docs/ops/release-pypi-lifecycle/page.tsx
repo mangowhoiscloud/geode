@@ -52,7 +52,7 @@ export default function Page() {
             <p>
               따라서 설치된 <code>geode-evolve</code>는 reference input을 읽을
               수 있지만 mutation과 promotion에는 writable GEODE checkout이
-              필요합니다. computer-use helper의 생성물은
+              필요합니다. computer-use helper의 생성물은{" "}
               <code>GEODE_HOME/helpers/computer-use</code>에 놓입니다. 별도 core,
               eval, evolve wheel은 독립 설치 계약이나 릴리스 주기가 실제로
               생기기 전까지 만들지 않습니다.

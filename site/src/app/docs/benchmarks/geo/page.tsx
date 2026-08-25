@@ -106,10 +106,10 @@ export default function GeoBenchmarkPage() {
           <>
             <h2>무엇을 검증하는가</h2>
             <p>
-              GEO는 단계별 증거를 관리하는 상태머신입니다.
+              GEO는 단계별 증거를 관리하는 상태머신입니다.{" "}
               <code>preflight → live_observe</code>로 진단하며, 변경 효과를 주장할 때만
               사전 등록된 <code>experiment</code>로 진행합니다. 앞 단계가 뒤 단계를
-              증명할 수 없습니다. 측정 영수증이 없는 값은
+              증명할 수 없습니다. 측정 영수증이 없는 값은{" "}
               <code>not_measured</code>로 남습니다.
             </p>
             <p>
@@ -122,7 +122,7 @@ export default function GeoBenchmarkPage() {
 
             <h2>빈 칸과 비교군</h2>
             <p>
-              아래 값은 2026-08-24 로컬 diagnostic receipt에 한정됩니다.
+              아래 값은 2026-08-24 로컬 diagnostic receipt에 한정됩니다.{" "}
               <code>0</code>은 관측 결과,
               <code>not_measured</code>는 적격 분모·영수증 부재, <code>partial</code>은
               해당 단계의 일부 하위 지표만 측정했다는 뜻입니다.
@@ -280,13 +280,14 @@ export default function GeoBenchmarkPage() {
             </p>
             <p>
               Native outcome, verifier judgement, GEODE trajectory, analysis, and
-              publication manifest retain separate authority. A slash run is not
-              repackaged as <code>.eval</code> unless Inspect produced it.
+              publication manifest retain separate authority. Slash runs keep their
+              native format; Inspect-produced records retain <code>.eval</code> ownership.
             </p>
             <p>
               Slash typed state is an advisory workflow projection. Model-authored
-              numerators and locators are not benchmark authority; only the schema-
-              and digest-validated native/vector/verifier/outcome bundle is evidence.
+              numerators and locators carry workflow authority only. Benchmark
+              authority begins with a schema- and digest-validated native/vector/
+              verifier/outcome bundle.
             </p>
 
             <h2>Evidence basis</h2>

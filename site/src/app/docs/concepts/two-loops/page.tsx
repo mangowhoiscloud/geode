@@ -205,7 +205,7 @@ export default function Page() {
                 src="/geode/diagrams/two-loops.svg"
                 alt="The outer selection loop (mutate, Petri audit, fitness, margin gate, champion chain) beside the inner agentic loop (call LLM, run tools, observe); the scaffold flows into the inner loop and transcripts flow back to the audit"
               />
-              <figcaption>The loops interlock through data, not calls: the scaffold flows inward, transcripts flow back to the audit.</figcaption>
+              <figcaption>The loops interlock through data: the scaffold flows inward, transcripts flow back to the audit.</figcaption>
             </figure>
             <p>
               That is why changing the scaffold changes the inner loop&apos;s

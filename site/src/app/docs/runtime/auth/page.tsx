@@ -104,9 +104,9 @@ export default function Page() {
               Desktop 앱의 incremental auth를 지원하지 않으므로 서비스를 더할
               때는 대상 활성 계정의 기존 번들과 새 번들의 합집합으로 재동의합니다.
               브라우저에서 다른 계정을 고르면 저장하지 않고 실패하며, 두 번째
-              계정은 <code>--new-account</code>로 연결합니다.
+              계정은 <code>--new-account</code>로 연결합니다.{" "}
               권한을 줄일 때는 유지할 전체 번들과 <code>--replace-services</code>를
-              함께 지정합니다.
+              함께 지정합니다.{" "}
               <code>gmail-read</code>는 Restricted scope라 기본 권장 묶음에
               포함되지 않습니다. Drive·Docs·Sheets는 non-sensitive{" "}
               <code>drive.file</code>로 GEODE가 만들거나 파일별로

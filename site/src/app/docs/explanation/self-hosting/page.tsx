@@ -56,9 +56,9 @@ export default function Page() {
 
             <h2>한계</h2>
             <p>
-              빌드 라인의 PR 머지와 릴리스는 운영자 게이트를 지나고, 자기개선
-              루프는 스캐폴드(시스템 프롬프트 섹션과 behaviour kinds)를
-              변이합니다. 주장의 범위는 기본 단위의 공유까지입니다.
+              빌드 라인의 PR 머지와 릴리스 권한은 운영자 게이트에 남습니다.
+              자기개선 루프의 변이 표면은 스캐폴드(시스템 프롬프트 섹션과
+              behaviour kinds)로 제한됩니다. 주장의 범위는 기본 단위의 공유까지입니다.
             </p>
 
             <h2>다음</h2>
@@ -114,9 +114,9 @@ export default function Page() {
 
             <h2>Limits</h2>
             <p>
-              PR merges and releases on the build line pass an operator gate.
-              The self-improving loop mutates the scaffold (system prompt
-              sections and behaviour kinds). The claim
+              Operator gates retain authority over PR merges and releases. The
+              self-improving loop&apos;s mutation surface is confined to the scaffold
+              (system prompt sections and behaviour kinds). The claim
               extends exactly as far as shared primitives.
             </p>
 

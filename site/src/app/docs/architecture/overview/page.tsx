@@ -119,8 +119,8 @@ export default function Page() {
               맨 위 계층은 아래 네 계층 전체를 피험자로 다룹니다. 루프 드라이버는{" "}
               <code>evolve/scaffold_search/train.py</code>입니다. 파일명은 Karpathy
               autoresearch의 3-파일 관습에서 빌린 것으로, 이 안에서 모델 훈련은
-              일어나지 않습니다. 모델을 감싼 스캐폴드, 곧 시스템 프롬프트
-              섹션과 behaviour kinds가 갱신됩니다.
+              일어나지 않습니다. 모델 가중치는 고정되며, 시스템 프롬프트
+              섹션과 behaviour kinds로 구성된 스캐폴드만 갱신됩니다.
             </p>
             <p>
               메커니즘은 선택입니다. 스캐폴드를 변이하고, 적대적 안전 감사
@@ -279,8 +279,8 @@ export default function Page() {
               The top layer treats the four layers below as its test subject.
               The loop driver is <code>evolve/scaffold_search/train.py</code>. The
               file name borrows Karpathy autoresearch&apos;s three-file
-              convention, and no model training happens inside it. What gets
-              updated is the scaffold around the model: the system-prompt
+              convention, and no model training happens inside it. Model weights
+              remain fixed. Updates are confined to the scaffold: the system-prompt
               sections and the behaviour kinds.
             </p>
             <p>

@@ -26,7 +26,7 @@ export default function Page() {
             <h2>thin CLI에서 데몬까지</h2>
             <p>
               <code>geode</code>를 실행하면 thin CLI가 뜹니다. CLI 프로세스는
-              모델 호출은 Unix 도메인 소켓{" "}
+              모델 호출 요청을 Unix 도메인 소켓{" "}
               <code>~/.geode/cli.sock</code>(경로 상수는 <code>core/paths.py</code>)
               으로 serve 데몬에 요청을 넘깁니다. <code>geode.ipc.v1</code>은
               크기가 제한된 줄 단위 JSON, 기능 협상, 요청 ID 상관관계를
@@ -104,7 +104,7 @@ export default function Page() {
             </table>
             <p>
               어느 경로로 끝나든 결과는 종료 사유와 함께 소켓으로 돌아갑니다.
-              모든 실패에 이유가 남는 설계입니다.
+              종료 결과마다 이유가 남는 설계입니다.
             </p>
 
             <h2>같은 코어, 다른 입구</h2>

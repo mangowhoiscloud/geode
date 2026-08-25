@@ -51,7 +51,7 @@ export default function Page() {
             <h2>1. SQLite 정본에서 export</h2>
             <pre>{exportCommand}</pre>
             <p>
-              <code>--sil-eval</code>은 Inspect <code>.eval</code>의 SHA-256을
+              <code>--sil-eval</code>은 Inspect <code>.eval</code>의 SHA-256을{" "}
               <code>evidence_refs</code>와 <code>artifact_digests</code>에 연결합니다.
               <code>--digest-content</code>는 비허용 payload body를 digest로 바꾸므로
               결과가 scope-complete여도 replay-incomplete일 수 있습니다. SIL
@@ -115,7 +115,7 @@ export default function Page() {
               <li>PR에서 manifest, 공개 바이트, privacy attestation을 리뷰합니다.</li>
               <li>병합 후 exact merge commit에서 release를 새 디렉터리로 다시 읽습니다.</li>
               <li>복사 전에 기록한 manifest SHA-256으로 같은 검증 명령을 다시 실행합니다.</li>
-              <li>점수·문서에는 merge commit의 blob/tree 링크를 기록합니다.</li>
+              <li>점수·문서에는 불변 merge commit의 blob/tree 링크를 기록합니다.</li>
             </ol>
             <p>
               staging 디렉터리를 한 번 더 읽는 것은 remote read-back 증거가 아닙니다.
@@ -162,8 +162,7 @@ export default function Page() {
           <>
             <p>
               This workflow promotes a local execution record into public
-              evidence. The destination is not JFrog Artifactory; it is the
-              append-only Git/PR repository{" "}
+              evidence through the append-only Git/PR repository{" "}
               <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts">
                 geode-eval-artifacts
               </a>
@@ -240,7 +239,7 @@ export default function Page() {
               <li>Review the manifest, public bytes, and privacy attestation in a PR.</li>
               <li>After merge, read the release back from the exact merge commit into a fresh directory.</li>
               <li>Run the same verification with the manifest SHA-256 recorded before copying.</li>
-              <li>Pin merge-commit blob/tree links in scores and docs.</li>
+              <li>Pin immutable merge-commit blob/tree links in scores and docs.</li>
             </ol>
             <p>
               Re-reading the staging directory is not remote read-back evidence.

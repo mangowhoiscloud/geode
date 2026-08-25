@@ -55,7 +55,7 @@ hook_registry.register(
             <p>
               <code>.geode/hooks/&lt;name&gt;/hook.yaml</code>은 실행 코드를
               import하지 않고 읽을 수 있는 신뢰 경계입니다. 클래스만 둔
-              <code>hook.py</code> 형식은 거부됩니다. 아래 매니페스트와
+              <code>hook.py</code> 형식은 거부됩니다. 아래 매니페스트와{" "}
               <a href="/geode/docs/config/basics">확장 신뢰 정책</a>의
               <code>hook:failure-metrics</code> 승인이 모두 있어야 handler가
               import됩니다. 이 플러그인은 3절의 내부 <code>RuntimeEventBus</code>를
