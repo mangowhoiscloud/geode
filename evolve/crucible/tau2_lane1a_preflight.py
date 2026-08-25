@@ -17,7 +17,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from evals.benchmarks.manifest import get_harness
+from evals.benchmarks.manifest import get_benchmark
 from evals.benchmarks.tau2_turn_supervisor import _agent_system_prompt
 
 from evolve.crucible.artifacts import write_exclusive_json
@@ -31,8 +31,8 @@ from evolve.crucible.contract import (
 from evolve.crucible.verifiers.tau2 import tau2_task_unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-
-TAU2_LANE1A_HARNESS_REVISION = get_harness("tau2-bench").commit
+TAU2_LANE1A_BENCHMARK_REVISION = get_benchmark("tau2-bench").commit
+TAU2_LANE1A_HARNESS_REVISION = TAU2_LANE1A_BENCHMARK_REVISION  # v1.0.x compatibility
 TAU2_LANE1A_PACKAGE_VERSION = "1.0.1"
 TAU2_LANE1A_DOMAINS = ("airline", "retail", "telecom")
 TAU2_LANE1A_TASK_COUNTS = {"airline": 50, "retail": 114, "telecom": 114}
@@ -448,10 +448,10 @@ def _tau2_lane1a_preflight_receipt(harness_dir: Path) -> dict[str, Any]:
 
     harness_dir = harness_dir.resolve()
     revision = _git_output(harness_dir, "rev-parse", "HEAD")
-    if revision != TAU2_LANE1A_HARNESS_REVISION:
+    if revision != TAU2_LANE1A_BENCHMARK_REVISION:
         raise ContractError(
             "tau2 Lane 1A requires upstream revision "
-            f"{TAU2_LANE1A_HARNESS_REVISION}, got {revision}"
+            f"{TAU2_LANE1A_BENCHMARK_REVISION}, got {revision}"
         )
     if _git_output(harness_dir, "status", "--porcelain"):
         raise ContractError("tau2 Lane 1A requires a clean upstream checkout")

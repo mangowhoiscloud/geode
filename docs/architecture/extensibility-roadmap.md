@@ -1,9 +1,9 @@
 ---
 status: active
 authority: architecture-extensibility-execution-sot
-baseline_commit: 1a0f65f93160bbf74f077be2ed1088f7e38a6d08
+baseline_commit: bfb6aedd28c47a6d796945c5ce5b39be24e4b8d8
 baseline_branch: origin/develop
-last_audited: 2026-08-24
+last_audited: 2026-08-25
 owners: GEODE maintainers
 ---
 
@@ -228,10 +228,10 @@ normal review and CI; implementations start only after the claim merges.
 
 ## 1. Program objective
 
-The initial audit verdict was **B+, conditionally approved**. The 2026-08-24
+The initial audit verdict was **B+, conditionally approved**. The 2026-08-25
 full-ledger audit against
-`origin/develop@1a0f65f93160bbf74f077be2ed1088f7e38a6d08` confirms that all
-58 GAPs are terminal: 52 are `DONE` and six are `SUPERSEDED`. There is no
+`origin/develop@bfb6aedd28c47a6d796945c5ce5b39be24e4b8d8` confirms that all
+62 GAPs are terminal: 56 are `DONE` and six are `SUPERSEDED`. There is no
 remaining execution unit or active claim; §14 records the final release and
 GitFlow evidence.
 
@@ -281,12 +281,12 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `evals/` + `evolve/`) | 559 |
-| Test Python files | 691 |
+| Production Python files (`core/` + `evals/` + `evolve/`) | 560 |
+| Test Python files | 693 |
 | `core/` Python LOC | 123,591 |
-| `evals/` Python LOC | 27,297 |
+| `evals/` Python LOC | 27,526 |
 | `evolve/` Python LOC | 31,923 |
-| Test Python LOC | 186,741 |
+| Test Python LOC | 186,994 |
 | Tool definitions / model executions / valid schemas / policies | 86 / 86 / 86 / 86 (exact) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 5 |
@@ -567,10 +567,10 @@ and closure evidence are appended in §10.
 | BND-008 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-004, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.4 | REL-004, STORE-003 | `SUPERSEDED` |
 | CODE-002 | `MISFIT` | Verification state is restored from checkpoint `loop_guards`, but `_persist_verify_state` still mirrors every result into `SessionManager` columns whose accessor has no production reader | Production verify-mirror writes and the unused accessor are removed; legacy databases containing the columns still load, checkpoint recovery remains authoritative, and no new store or schema migration is introduced | R9.2 | CODE-001 | `DONE` |
 | BND-009 | `MISFIT` | `geode_product` combines runtime composition with evaluation and hill-climbing, while `plugins`, `core/self_improving`, Homebrew candidate files, and the unverified computer sandbox preserve duplicate or unsupported ownership surfaces | One documented migration leaves `core` as the GEODE runtime, moves measurement to `evals` and hill-climbing to `evolve`, removes every obsolete package/scaffold without a replacement stub, preserves one-way `evolve -> evals -> core` dependencies and operator behavior, migrates tracked state with byte parity, and proves the final wheel/sdist/install/release contain only the declared roots | R8.5 | BND-006, REL-003 | `DONE` |
-| DIST-001 | `MISFIT` | A clean `geode-agent` wheel resolves the default scaffold-search SoT to `site-packages/evolve/scaffold_search/state`, where mutation, result, epoch, and policy writers append or replace files and then attempt Git commits from a non-repository install root | Installed distributions are immutable: read-only packaged snapshots remain readable, every mutation/promotion writer requires an explicit writable GEODE Git workspace before its first side effect, worker overrides remain isolated, upgrades cannot erase run history, and an installed-wheel poison test proves no distribution file or `RECORD` digest changes | R10.1 | BND-009 | `IN_DEVELOP` |
-| DIST-002 | `MISFIT` | The packaged macOS helper build script defaults its generated app bundle to `<distribution>/.geode/ComputerUseHelper`, which may be read-only and is replaced by package upgrades | Packaged helper sources are read-only inputs, generated helper bytes live under one existing operator-owned GEODE home resolver, source and wheel installs share that resolver, and setup/status tests prove the distribution tree stays unchanged | R10.1 | BND-009 | `IN_DEVELOP` |
-| DIST-003 | `PARTIAL` | The wheel force-includes every `.geode/skills` directory even when a skill references repository-only scripts/docs or a personal absolute workspace, while installed smoke proves only that selected skill bodies load | One exact self-contained builtin-skill allowlist is packaged; repository and personal skills remain in their existing external tiers; every bundled local command/asset reference resolves in a clean wheel; and installed smoke rejects repo-only, personal-path, or dangling bundled skills | R10.1 | BND-003, BND-004 | `IN_DEVELOP` |
-| DIST-004 | `MISFIT` | `geode update` replaces the live uv-tool environment and verifies the new CLI before stopping the old daemon, allowing a running process to observe a mixed old-process/new-files installation | A running daemon is drained and stopped before live tool replacement, failed updates remain fail-closed without starting a second daemon, successful restart proves CLI/IPC daemon version parity, and ordering tests cover running, stopped, failed-stop, failed-install, and no-restart paths | R10.1 | BND-003, REL-003 | `IN_DEVELOP` |
+| DIST-001 | `MISFIT` | A clean `geode-agent` wheel resolves the default scaffold-search SoT to `site-packages/evolve/scaffold_search/state`, where mutation, result, epoch, and policy writers append or replace files and then attempt Git commits from a non-repository install root | Installed distributions are immutable: read-only packaged snapshots remain readable, every mutation/promotion writer requires an explicit writable GEODE Git workspace before its first side effect, worker overrides remain isolated, upgrades cannot erase run history, and an installed-wheel poison test proves no distribution file or `RECORD` digest changes | R10.1 | BND-009 | `DONE` |
+| DIST-002 | `MISFIT` | The packaged macOS helper build script defaults its generated app bundle to `<distribution>/.geode/ComputerUseHelper`, which may be read-only and is replaced by package upgrades | Packaged helper sources are read-only inputs, generated helper bytes live under one existing operator-owned GEODE home resolver, source and wheel installs share that resolver, and setup/status tests prove the distribution tree stays unchanged | R10.1 | BND-009 | `DONE` |
+| DIST-003 | `PARTIAL` | The wheel force-includes every `.geode/skills` directory even when a skill references repository-only scripts/docs or a personal absolute workspace, while installed smoke proves only that selected skill bodies load | One exact self-contained builtin-skill allowlist is packaged; repository and personal skills remain in their existing external tiers; every bundled local command/asset reference resolves in a clean wheel; and installed smoke rejects repo-only, personal-path, or dangling bundled skills | R10.1 | BND-003, BND-004 | `DONE` |
+| DIST-004 | `MISFIT` | `geode update` replaces the live uv-tool environment and verifies the new CLI before stopping the old daemon, allowing a running process to observe a mixed old-process/new-files installation | A running daemon is drained and stopped before live tool replacement, failed updates remain fail-closed without starting a second daemon, successful restart proves CLI/IPC daemon version parity, and ordering tests cover running, stopped, failed-stop, failed-install, and no-restart paths | R10.1 | BND-003, REL-003 | `DONE` |
 
 ## 6. Dependency and merge sequence
 
@@ -2115,6 +2115,10 @@ count.
 | VER-002 | [#3118](https://github.com/mangowhoiscloud/geode/pull/3118) / `dc1dfafda209e2c0f89ce990cab45e106e39c346` | [#3152](https://github.com/mangowhoiscloud/geode/pull/3152) / `fba838cc54382f90599b9e51e4518531a2de27b6` ([v1.0.24](https://github.com/mangowhoiscloud/geode/releases/tag/v1.0.24)) | `uv run pytest tests/integration/test_extension_change_surfaces.py -q`; `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request`; `uv run python scripts/verify_public_distribution.py --version 1.0.24 --repository mangowhoiscloud/geode --source-sha fba838cc54382f90599b9e51e4518531a2de27b6`; `uvx --no-cache --from geode-agent==1.0.24 geode version` — RESULT: PASS; [release run 32703721477](https://github.com/mangowhoiscloud/geode/actions/runs/32703721477) passed the full non-live, architecture, package, clean-install, kernel-only, GitHub, PyPI, and public-command gates | The executable contract measures project Skill, filesystem hook, MCP server, third-party adapter, native-tool, and Google-Workspace additions without adding a second registry or changing runtime state | §7/§8, the generated architecture baseline, CHANGELOG, and the checked scenario fixture document all six forbidden-edit budgets |
 | VER-004 | [#3122](https://github.com/mangowhoiscloud/geode/pull/3122) / `3e6f025e498e74241209910e95ba3a29792323e7` | [#3152](https://github.com/mangowhoiscloud/geode/pull/3152) / `fba838cc54382f90599b9e51e4518531a2de27b6` ([v1.0.24](https://github.com/mangowhoiscloud/geode/releases/tag/v1.0.24)) | `uv run python scripts/check_architecture_performance.py --check`; `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request`; `uv run python scripts/verify_public_distribution.py --version 1.0.24 --repository mangowhoiscloud/geode --source-sha fba838cc54382f90599b9e51e4518531a2de27b6`; `uvx --no-cache --from geode-agent==1.0.24 geode version` — RESULT: PASS; all 13 provider-network-free budgets passed locally and [release run 32703721477](https://github.com/mangowhoiscloud/geode/actions/runs/32703721477) passed the final full non-live and public-distribution gates | The benchmark and ratchet are measurement-only; runtime behavior, persisted schemas, provider calls, user configuration, and supported APIs remain unchanged | `docs/architecture/performance-baseline.json`, §7, the generated architecture baseline, CHANGELOG, and the executable checker document every budget and calibration boundary |
 | BND-009 | [#3148](https://github.com/mangowhoiscloud/geode/pull/3148) / `24a6992a9e3ab9610c749dc1a875e0179342bd6f` | [#3152](https://github.com/mangowhoiscloud/geode/pull/3152) / `fba838cc54382f90599b9e51e4518531a2de27b6` ([v1.0.24](https://github.com/mangowhoiscloud/geode/releases/tag/v1.0.24)) | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request`; `uv run python scripts/verify_public_distribution.py --version 1.0.24 --repository mangowhoiscloud/geode --source-sha fba838cc54382f90599b9e51e4518531a2de27b6`; `uvx --no-cache --from geode-agent==1.0.24 geode version` — RESULT: PASS; [release run 32703721477](https://github.com/mangowhoiscloud/geode/actions/runs/32703721477) passed lint/hygiene, type check, official docs, full non-live tests, runtime smoke, wheel/sdist content, clean full/kernel installs, annotated-tag publication, PyPI publication, and public cross-channel verification; GitHub and PyPI agree on wheel SHA-256 `ad5d46f297b37dc237e0dfed4042e1ff2705d7e9b6a2a38b5ef27fbda129b6c7` and sdist SHA-256 `9bf9a340d6608b3343a8db37a8d23eaf33dbc525d81ac06a22e07c93e4f587c5` | The old package/import/launcher surfaces are deliberately absent; eight tracked state payloads retain byte parity and one writer, existing user/runtime roots and configuration keys keep their semantics, and immutable v1.0.23 remains the rollback source | `docs/architecture/runtime-evals-evolve-migration.md`, package/naming architecture docs, README twins, CHANGELOG, release notes, generated site SOT, and installed migration guidance document the final `core`/`evals`/`evolve` tree and removals |
+| DIST-001 | [#3165](https://github.com/mangowhoiscloud/geode/pull/3165) / `a71d95ee392e16f6254f648f3802100db861b71f` | [#3168](https://github.com/mangowhoiscloud/geode/pull/3168) / `f1b2866fe2729522c5408b84a15e470fb42b0ec2` ([v1.0.26](https://github.com/mangowhoiscloud/geode/releases/tag/v1.0.26)) | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request`; `python3 scripts/verify_public_distribution.py --version 1.0.26 --repository mangowhoiscloud/geode --source-sha f1b2866fe2729522c5408b84a15e470fb42b0ec2`; `uvx --no-cache --from geode-agent==1.0.26 geode version` — RESULT: PASS; [release run 32805035084](https://github.com/mangowhoiscloud/geode/actions/runs/32805035084) passed full non-live, architecture, official-doc, package, clean-wheel, installed-daemon, kernel-only, GitHub, PyPI, and public-command gates; GitHub and PyPI agree on wheel SHA-256 `5ad66207b76eedc33b983b632939551e5aafe32847c1816aaa6a0de875bd5405` and sdist SHA-256 `f4b937cdb29b80d36d2a14930e0f276a212bd19191ff797e8473b800b404f938` | Packaged snapshots remain readable, but mutation and promotion require an explicit writable GEODE checkout before side effects; worker overrides remain isolated and upgrades cannot erase operator state | `docs/architecture/immutable-distribution-lifecycle.md`, CHANGELOG, v1.0.26 release notes, and the public release/update lifecycle guide document immutable package data and explicit writable workspaces |
+| DIST-002 | [#3165](https://github.com/mangowhoiscloud/geode/pull/3165) / `a71d95ee392e16f6254f648f3802100db861b71f` | [#3168](https://github.com/mangowhoiscloud/geode/pull/3168) / `f1b2866fe2729522c5408b84a15e470fb42b0ec2` ([v1.0.26](https://github.com/mangowhoiscloud/geode/releases/tag/v1.0.26)) | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request`; `python3 scripts/verify_public_distribution.py --version 1.0.26 --repository mangowhoiscloud/geode --source-sha f1b2866fe2729522c5408b84a15e470fb42b0ec2`; `uvx --no-cache --from geode-agent==1.0.26 geode version` — RESULT: PASS; [release run 32805035084](https://github.com/mangowhoiscloud/geode/actions/runs/32805035084) passed clean source and installed-wheel helper setup/status checks without changing distribution digests | Packaged helper sources stay read-only while generated helper output uses the existing GEODE-home resolver for both source and wheel installs; setup/status behavior remains compatible | `docs/architecture/immutable-distribution-lifecycle.md`, CHANGELOG, v1.0.26 release notes, and the public release/update lifecycle guide document the helper source/output boundary |
+| DIST-003 | [#3165](https://github.com/mangowhoiscloud/geode/pull/3165) / `a71d95ee392e16f6254f648f3802100db861b71f` | [#3168](https://github.com/mangowhoiscloud/geode/pull/3168) / `f1b2866fe2729522c5408b84a15e470fb42b0ec2` ([v1.0.26](https://github.com/mangowhoiscloud/geode/releases/tag/v1.0.26)) | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request`; `python3 scripts/verify_public_distribution.py --version 1.0.26 --repository mangowhoiscloud/geode --source-sha f1b2866fe2729522c5408b84a15e470fb42b0ec2`; `uvx --no-cache --from geode-agent==1.0.26 geode version` — RESULT: PASS; [release run 32805035084](https://github.com/mangowhoiscloud/geode/actions/runs/32805035084) passed the exact builtin-skill allowlist and clean installed-resource gates | The wheel packages exactly eight self-contained builtin skills; existing global-user and project override tiers remain external and preserve their precedence without repo-only or personal paths | `docs/architecture/immutable-distribution-lifecycle.md`, `.claude/skills/geode-distribution/SKILL.md`, CHANGELOG, and v1.0.26 release notes document the exact supported skill payload |
+| DIST-004 | [#3165](https://github.com/mangowhoiscloud/geode/pull/3165) / `a71d95ee392e16f6254f648f3802100db861b71f` | [#3168](https://github.com/mangowhoiscloud/geode/pull/3168) / `f1b2866fe2729522c5408b84a15e470fb42b0ec2` ([v1.0.26](https://github.com/mangowhoiscloud/geode/releases/tag/v1.0.26)) | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/main --target-branch main --event-mode pull_request`; `python3 scripts/verify_public_distribution.py --version 1.0.26 --repository mangowhoiscloud/geode --source-sha f1b2866fe2729522c5408b84a15e470fb42b0ec2`; `uvx --no-cache --from geode-agent==1.0.26 geode version` — RESULT: PASS; [release run 32805035084](https://github.com/mangowhoiscloud/geode/actions/runs/32805035084) passed running, stopped, stop-refusal, installer-abort, no-restart, installed-daemon IPC, and exact public version checks | `geode update` retains its provenance-aware patch/latest contract, stops a live daemon before replacement, leaves failures fail-closed, and restarts only after CLI/IPC version parity | `.claude/skills/geode-distribution/SKILL.md`, [#3169](https://github.com/mangowhoiscloud/geode/pull/3169), CHANGELOG, v1.0.26 release notes, and the public release/update lifecycle guide document stop-before-replace ordering and failure semantics |
 
 ### 10.3 Non-closure decision evidence
 
@@ -2230,28 +2234,31 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Program closure
 
-The final implementation bytes reached `main` through
-[#3152](https://github.com/mangowhoiscloud/geode/pull/3152) at
-`fba838cc54382f90599b9e51e4518531a2de27b6`. Release workflow
-[run 32703721477](https://github.com/mangowhoiscloud/geode/actions/runs/32703721477)
+The final R10.1 implementation bytes reached `main` through
+[#3168](https://github.com/mangowhoiscloud/geode/pull/3168) at
+`f1b2866fe2729522c5408b84a15e470fb42b0ec2`. Release workflow
+[run 32805035084](https://github.com/mangowhoiscloud/geode/actions/runs/32805035084)
 published the annotated
-[`v1.0.24`](https://github.com/mangowhoiscloud/geode/releases/tag/v1.0.24)
+[`v1.0.26`](https://github.com/mangowhoiscloud/geode/releases/tag/v1.0.26)
 tag and passed the full non-live, architecture, package, clean-install,
 kernel-only, GitHub, PyPI, and public-command gates. GitHub and PyPI expose the
 same wheel SHA-256
-`ad5d46f297b37dc237e0dfed4042e1ff2705d7e9b6a2a38b5ef27fbda129b6c7`
+`5ad66207b76eedc33b983b632939551e5aafe32847c1816aaa6a0de875bd5405`
 and sdist SHA-256
-`9bf9a340d6608b3343a8db37a8d23eaf33dbc525d81ac06a22e07c93e4f587c5`;
-`uvx --no-cache --from geode-agent==1.0.24 geode version` reports
-`GEODE v1.0.24`.
+`f4b937cdb29b80d36d2a14930e0f276a212bd19191ff797e8473b800b404f938`;
+`uvx --no-cache --from geode-agent==1.0.26 geode version` reports
+`GEODE v1.0.26`. Public documentation PR
+[#3169](https://github.com/mangowhoiscloud/geode/pull/3169) records the
+immutable installed-artifact boundary and the patch-bound, stop-before-replace
+update lifecycle shipped in that release.
 
 Tracking-only closure
-[#3153](https://github.com/mangowhoiscloud/geode/pull/3153) merged to `main`
-as `2dbbeed3e8411551a7a6d8f73b5ae87d4c975942`, and the required canonical
+[#3170](https://github.com/mangowhoiscloud/geode/pull/3170) merged to `main`
+as `bd88f44998e78e8ac7220120d29960845be4f81d`, and the required canonical
 `main` → `develop` sync
-[#3154](https://github.com/mangowhoiscloud/geode/pull/3154) merged as
-`1a0f65f93160bbf74f077be2ed1088f7e38a6d08`. The master ledger now contains
-58 terminal GAPs: 52 `DONE` and six `SUPERSEDED`, with no active claims and no
+[#3171](https://github.com/mangowhoiscloud/geode/pull/3171) merged as
+`bfb6aedd28c47a6d796945c5ce5b39be24e4b8d8`. The master ledger now contains
+62 terminal GAPs: 56 `DONE` and six `SUPERSEDED`, with no active claims and no
 `OPEN`, `READY`, `IN_PROGRESS`, `IN_DEVELOP`, `BLOCKED`, `REJECTED`, or
 unexplained rows.
 
@@ -2259,14 +2266,3 @@ The architecture and extensibility completion program has no remaining
 executable unit. Future architecture work must begin with a new GAP and closure
 package through the serialized registration protocol in §0.3; it must not
 reopen or rewrite this evidence.
-
-R10.1 (DIST-001 through DIST-004) is `IN_DEVELOP` after feature PR
-[#3165](https://github.com/mangowhoiscloud/geode/pull/3165) merged as
-`a71d95ee392e16f6254f648f3802100db861b71f`. The delivered boundary keeps one
-public wheel immutable, requires explicit writable workspaces for evolution,
-places generated helper output under GEODE home, packages only the exact
-self-contained builtin-skill allowlist, and stops a live daemon before
-replacement. The active claim is removed; `DONE` still requires the canonical
-main promotion and public release verification. R10.1 authorizes no public
-kernel wheel, package split, workspace manager, plugin SDK, or change to the
-prior 58-GAP closure evidence.

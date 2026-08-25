@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Architecture
+
+- **Benchmark integrations and platform adapters now have distinct roles.**
+  MCPMark and tau2 remain pinned benchmark sources, while Harbor remains a
+  platform adapter outside the benchmark registry; research guidance now
+  requires Prime Agent and original/upstream parity checks when relevant.
+  Existing v1.0.x harness-named identifiers remain compatible but legacy.
+
+### Added
+
+- **Transparent cross-host skill inventory and security contracts.** All
+  repository development/meta skills now have one reviewed `.agents` source
+  with relative Claude Code aliases, bundled runtime skills are inventoried
+  separately, benchmark hashes are explicitly non-secret artifact identities,
+  and anti-deception secret checks no longer echo matched values into logs.
+- **Evaluation learning-view contract v2.** GEODE now validates digest-bound
+  `example → rollout → trajectory → reward` datasets while preserving native
+  receipts and the immutable `geode.trajectory@1` schema.
+- **Harbor terminal platform adapter.** The current GEODE AgenticLoop can run
+  as a Harbor external agent while preserving native verifier output and a
+  normalized GEODE trajectory sidecar.
+- **Native evaluation projector.** Harbor and tau2 result bundles can be
+  projected into the validated v2 learning view without rewriting native
+  receipts or collapsing infrastructure-invalid retries into reward rows.
+
 ## [1.0.26] - 2026-08-25
 
 > Immutable distribution release: installed package bytes remain read-only,

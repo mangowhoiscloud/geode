@@ -1,9 +1,6 @@
-"""Public GEODE benchmark harness plugin.
+# Public benchmark integrations and external-platform adapters.
+from .manifest import BENCHMARKS, BenchmarkSpec, get_benchmark
 
-The plugin owns GEODE-specific adapters and runners. Third-party benchmark
-repositories stay as ignored local checkouts under ``artifacts/eval/harnesses``.
-"""
-
-from .manifest import BENCHMARK_HARNESSES, HarnessSpec, get_harness
-
-__all__ = ["BENCHMARK_HARNESSES", "HarnessSpec", "get_harness"]
+HarnessSpec = BenchmarkSpec  # v1.0.x compatibility
+BENCHMARK_HARNESSES = BENCHMARKS
+get_harness = get_benchmark

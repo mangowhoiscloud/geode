@@ -33,6 +33,31 @@ export default function Page() {
               <li>문서만 바뀌면 버전을 올리지 않습니다.</li>
             </ul>
 
+            <h2>wheel은 설치물이지 데이터 볼륨이 아닙니다</h2>
+            <p>
+              <code>geode-agent</code> wheel은 Python 생태계의 불변 제품
+              설치물입니다. 네 개 CLI와 <code>core</code>, <code>evals</code>,{" "}
+              <code>evolve</code> 코드, 승인된 builtin skill, 정적 reference
+              input을 함께 버전 관리합니다. 실행 중 생성되거나 계속 바뀌는
+              데이터는 wheel에 쓰지 않습니다.
+            </p>
+            <table>
+              <thead><tr><th>wheel 안</th><th>wheel 밖</th></tr></thead>
+              <tbody>
+                <tr><td>런타임·평가·evolve 코드와 console entry point</td><td><code>GEODE_HOME</code>의 상태·로그·생성 helper</td></tr>
+                <tr><td>정확히 열거된 builtin skill과 immutable reference input</td><td>rolling ledger, 결과 파일, 사용자·프로젝트 skill</td></tr>
+                <tr><td>읽기 전용 helper source</td><td><code>GEODE_EVOLVE_WORKSPACE</code>가 가리키는 실제 Git checkout</td></tr>
+              </tbody>
+            </table>
+            <p>
+              따라서 설치된 <code>geode-evolve</code>는 reference input을 읽을
+              수 있지만 mutation과 promotion에는 writable GEODE checkout이
+              필요합니다. computer-use helper의 생성물도 site-packages가 아닌{" "}
+              <code>GEODE_HOME/helpers/computer-use</code>에 놓입니다. 별도 core,
+              eval, evolve wheel은 독립 설치 계약이나 릴리스 주기가 실제로
+              생기기 전까지 만들지 않습니다.
+            </p>
+
             <h2>릴리스 흐름</h2>
             <p>
               평소에는 feature가 develop으로 머지됩니다. 릴리스는{" "}
@@ -114,6 +139,7 @@ geode serve &`}</pre>
               <li><code>scripts/resolve_architecture_roadmap_trust.py</code>. 충돌 해결형 main → develop sync의 정확한 부모·출처 검증.</li>
               <li><code>docs/workflow.md</code>. pre-sync와 GitFlow 운영 정본.</li>
               <li><code>scripts/verify_public_distribution.py</code>. GitHub·PyPI 공개 배포 일치 검증.</li>
+              <li><code>docs/architecture/immutable-distribution-lifecycle.md</code>. wheel·state·workspace 경계와 frontier 비교 근거.</li>
               <li><code>CHANGELOG.md</code>. Keep a Changelog + SemVer 정본.</li>
             </ul>
           </>
@@ -137,6 +163,33 @@ geode serve &`}</pre>
               <li><strong>PATCH</strong>. The default — every routine release including features, fixes, and refactors (the 0.99.x patch-train, continued).</li>
               <li>Docs-only changes do not bump the version.</li>
             </ul>
+
+            <h2>A wheel is an install artifact, not a data volume</h2>
+            <p>
+              The <code>geode-agent</code> wheel is GEODE&apos;s immutable product
+              artifact for the Python ecosystem. It versions the four CLIs,
+              the <code>core</code>, <code>evals</code>, and <code>evolve</code>{" "}
+              packages, approved built-in skills, and static reference inputs.
+              Data created or continuously updated at runtime is never written
+              into the wheel.
+            </p>
+            <table>
+              <thead><tr><th>Inside the wheel</th><th>Outside the wheel</th></tr></thead>
+              <tbody>
+                <tr><td>Runtime, evaluation, and evolve code plus console entry points</td><td>State, logs, and generated helpers under <code>GEODE_HOME</code></td></tr>
+                <tr><td>Exactly enumerated built-in skills and immutable reference inputs</td><td>Rolling ledgers, results, and user or project skills</td></tr>
+                <tr><td>Read-only helper source</td><td>The real Git checkout selected by <code>GEODE_EVOLVE_WORKSPACE</code></td></tr>
+              </tbody>
+            </table>
+            <p>
+              An installed <code>geode-evolve</code> may read packaged reference
+              inputs, but mutation and promotion require a writable GEODE
+              checkout. Computer-use helper output also belongs under{" "}
+              <code>GEODE_HOME/helpers/computer-use</code>, never in
+              site-packages. Separate core, eval, or evolve wheels remain
+              unnecessary until an independent install contract or release
+              cadence is measured.
+            </p>
 
             <h2>Release flow</h2>
             <p>
@@ -227,6 +280,7 @@ geode serve &`}</pre>
               <li><code>scripts/resolve_architecture_roadmap_trust.py</code>. Exact-parent and source validation for conflict-resolved main → develop syncs.</li>
               <li><code>docs/workflow.md</code>. Canonical pre-sync and GitFlow procedure.</li>
               <li><code>scripts/verify_public_distribution.py</code>. Public GitHub/PyPI parity verification.</li>
+              <li><code>docs/architecture/immutable-distribution-lifecycle.md</code>. Frontier evidence and the wheel/state/workspace boundary.</li>
               <li><code>CHANGELOG.md</code>. Keep a Changelog + SemVer source of truth.</li>
             </ul>
           </>

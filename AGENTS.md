@@ -29,8 +29,8 @@ owns only the package version and sync date.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 559 production Python files,
-691 test Python files,
+The current snapshot records 560 production Python files,
+693 test Python files,
 86 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->
@@ -412,6 +412,11 @@ verify whether the new shape still echoes its source.
   Policy Chain, plugin discovery.
 - Karpathy autoresearch (2026-03). Fixed wall-budget, frozen scoreboard, git
   monotone ratchet, token-economic loop, simplicity criterion.
+- Prime Agent (2026-08). RLM-native programmable context, continual harness
+  state, persistent subagents, and native-harness evaluation discipline.
+- Original/upstream implementations. Pin the native task, prompt, workspace,
+  verifier, and result authority before adding a benchmark integration or
+  platform adapter; do not claim equivalence without parity evidence.
 - Hermes Agent (NousResearch). llms.txt / llms-full.txt dual index pattern.
 - Diátaxis. Documentation 4-quadrant model.
 
