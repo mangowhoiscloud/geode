@@ -1,9 +1,9 @@
 ---
 status: active
 authority: architecture-extensibility-execution-sot
-baseline_commit: 1a0f65f93160bbf74f077be2ed1088f7e38a6d08
+baseline_commit: bfb6aedd28c47a6d796945c5ce5b39be24e4b8d8
 baseline_branch: origin/develop
-last_audited: 2026-08-24
+last_audited: 2026-08-25
 owners: GEODE maintainers
 ---
 
@@ -228,10 +228,10 @@ normal review and CI; implementations start only after the claim merges.
 
 ## 1. Program objective
 
-The initial audit verdict was **B+, conditionally approved**. The 2026-08-24
+The initial audit verdict was **B+, conditionally approved**. The 2026-08-25
 full-ledger audit against
-`origin/develop@1a0f65f93160bbf74f077be2ed1088f7e38a6d08` confirms that all
-58 GAPs are terminal: 52 are `DONE` and six are `SUPERSEDED`. There is no
+`origin/develop@bfb6aedd28c47a6d796945c5ce5b39be24e4b8d8` confirms that all
+62 GAPs are terminal: 56 are `DONE` and six are `SUPERSEDED`. There is no
 remaining execution unit or active claim; §14 records the final release and
 GitFlow evidence.
 
@@ -2234,28 +2234,31 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Program closure
 
-The final implementation bytes reached `main` through
-[#3152](https://github.com/mangowhoiscloud/geode/pull/3152) at
-`fba838cc54382f90599b9e51e4518531a2de27b6`. Release workflow
-[run 32703721477](https://github.com/mangowhoiscloud/geode/actions/runs/32703721477)
+The final R10.1 implementation bytes reached `main` through
+[#3168](https://github.com/mangowhoiscloud/geode/pull/3168) at
+`f1b2866fe2729522c5408b84a15e470fb42b0ec2`. Release workflow
+[run 32805035084](https://github.com/mangowhoiscloud/geode/actions/runs/32805035084)
 published the annotated
-[`v1.0.24`](https://github.com/mangowhoiscloud/geode/releases/tag/v1.0.24)
+[`v1.0.26`](https://github.com/mangowhoiscloud/geode/releases/tag/v1.0.26)
 tag and passed the full non-live, architecture, package, clean-install,
 kernel-only, GitHub, PyPI, and public-command gates. GitHub and PyPI expose the
 same wheel SHA-256
-`ad5d46f297b37dc237e0dfed4042e1ff2705d7e9b6a2a38b5ef27fbda129b6c7`
+`5ad66207b76eedc33b983b632939551e5aafe32847c1816aaa6a0de875bd5405`
 and sdist SHA-256
-`9bf9a340d6608b3343a8db37a8d23eaf33dbc525d81ac06a22e07c93e4f587c5`;
-`uvx --no-cache --from geode-agent==1.0.24 geode version` reports
-`GEODE v1.0.24`.
+`f4b937cdb29b80d36d2a14930e0f276a212bd19191ff797e8473b800b404f938`;
+`uvx --no-cache --from geode-agent==1.0.26 geode version` reports
+`GEODE v1.0.26`. Public documentation PR
+[#3169](https://github.com/mangowhoiscloud/geode/pull/3169) records the
+immutable installed-artifact boundary and the patch-bound, stop-before-replace
+update lifecycle shipped in that release.
 
 Tracking-only closure
-[#3153](https://github.com/mangowhoiscloud/geode/pull/3153) merged to `main`
-as `2dbbeed3e8411551a7a6d8f73b5ae87d4c975942`, and the required canonical
+[#3170](https://github.com/mangowhoiscloud/geode/pull/3170) merged to `main`
+as `bd88f44998e78e8ac7220120d29960845be4f81d`, and the required canonical
 `main` → `develop` sync
-[#3154](https://github.com/mangowhoiscloud/geode/pull/3154) merged as
-`1a0f65f93160bbf74f077be2ed1088f7e38a6d08`. The master ledger now contains
-58 terminal GAPs: 52 `DONE` and six `SUPERSEDED`, with no active claims and no
+[#3171](https://github.com/mangowhoiscloud/geode/pull/3171) merged as
+`bfb6aedd28c47a6d796945c5ce5b39be24e4b8d8`. The master ledger now contains
+62 terminal GAPs: 56 `DONE` and six `SUPERSEDED`, with no active claims and no
 `OPEN`, `READY`, `IN_PROGRESS`, `IN_DEVELOP`, `BLOCKED`, `REJECTED`, or
 unexplained rows.
 
@@ -2263,14 +2266,3 @@ The architecture and extensibility completion program has no remaining
 executable unit. Future architecture work must begin with a new GAP and closure
 package through the serialized registration protocol in §0.3; it must not
 reopen or rewrite this evidence.
-
-R10.1 (DIST-001 through DIST-004) is `IN_DEVELOP` after feature PR
-[#3165](https://github.com/mangowhoiscloud/geode/pull/3165) merged as
-`a71d95ee392e16f6254f648f3802100db861b71f`. The delivered boundary keeps one
-public wheel immutable, requires explicit writable workspaces for evolution,
-places generated helper output under GEODE home, packages only the exact
-self-contained builtin-skill allowlist, and stops a live daemon before
-replacement. The active claim is removed; `DONE` still requires the canonical
-main promotion and public release verification. R10.1 authorizes no public
-kernel wheel, package split, workspace manager, plugin SDK, or change to the
-prior 58-GAP closure evidence.
