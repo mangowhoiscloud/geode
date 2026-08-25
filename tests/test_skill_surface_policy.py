@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import yaml
@@ -89,3 +90,47 @@ def test_runtime_architecture_skills_name_current_package_roots() -> None:
         assert root in slop_audit
     assert "`geode_product/` — first-party composition" not in context
     assert "scan of `core/` / `geode_product/`" not in slop_audit
+
+
+def test_code_conventions_skill_routes_the_sot_progressively() -> None:
+    skill_dir = AGENT_SKILLS / "geode-code-conventions"
+    skill = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    sot = (ROOT / "docs/architecture/naming-conventions.md").read_text(encoding="utf-8")
+
+    sot_path = "../../../docs/architecture/naming-conventions.md"
+    required_routes = {
+        f"{sot_path}#geode-code-conventions": "# GEODE code conventions",
+        f"{sot_path}#evidence-snapshot": "## Evidence snapshot",
+        f"{sot_path}#1-architecture-and-dependency-direction": (
+            "## 1. Architecture and dependency direction"
+        ),
+        f"{sot_path}#2-packages-files-and-symbols": "## 2. Packages, files, and symbols",
+        f"{sot_path}#3-python-typing-and-class-design": "## 3. Python typing and class design",
+        f"{sot_path}#4-data-schemas-and-persistence": "## 4. Data, schemas, and persistence",
+        f"{sot_path}#5-errors-logging-and-trust-boundaries": (
+            "## 5. Errors, logging, and trust boundaries"
+        ),
+        f"{sot_path}#6-imports-and-dependencies": "## 6. Imports and dependencies",
+        f"{sot_path}#7-tests-and-verification": "## 7. Tests and verification",
+        f"{sot_path}#8-site-conventions": "## 8. Site conventions",
+        f"{sot_path}#9-versioning-and-compatibility": "## 9. Versioning and compatibility",
+        f"{sot_path}#10-review-checklist": "## 10. Review checklist",
+    }
+    linked_targets = set(re.findall(r"\[[^]]+\]\(([^)]+)\)", skill))
+    assert "## Progressive disclosure" in skill
+    assert "Then read only the sections that match the change:" in skill
+    assert skill.count("Read the whole SOT only") == 1
+    for target, heading in required_routes.items():
+        assert target in linked_targets
+        assert heading in sot
+
+    workflow = (AGENT_SKILLS / "geode-workflow/SKILL.md").read_text(encoding="utf-8")
+    assert "$geode-code-conventions" in workflow
+    assert "docs/architecture/naming-conventions.md" not in workflow
+
+    interface = yaml.safe_load((skill_dir / "agents/openai.yaml").read_text(encoding="utf-8"))[
+        "interface"
+    ]
+    assert interface["display_name"] == "GEODE Code Conventions"
+    assert 25 <= len(interface["short_description"]) <= 64
+    assert "$geode-code-conventions" in interface["default_prompt"]

@@ -10,8 +10,29 @@ not against a generic Python style guide.
 
 ## Canonical reference
 
-Read `docs/architecture/naming-conventions.md` completely before changing code.
-It is the detailed convention SOT. Do not copy its tables into this skill.
+`docs/architecture/naming-conventions.md` is the detailed convention SOT. Do
+not copy its tables into this skill.
+
+## Progressive disclosure
+
+Always read the SOT [introduction](../../../docs/architecture/naming-conventions.md#geode-code-conventions),
+[evidence snapshot](../../../docs/architecture/naming-conventions.md#evidence-snapshot),
+and [review checklist](../../../docs/architecture/naming-conventions.md#10-review-checklist).
+Then read only the sections that match the change:
+
+| Decision | Read |
+|---|---|
+| ownership, layers, or abstraction level | [§1 Architecture](../../../docs/architecture/naming-conventions.md#1-architecture-and-dependency-direction) and [§6 Imports](../../../docs/architecture/naming-conventions.md#6-imports-and-dependencies) |
+| package, file, function, class, tool, event, or React naming | [§2 Packages, files, and symbols](../../../docs/architecture/naming-conventions.md#2-packages-files-and-symbols) |
+| Python data form, typing, construction, or lifecycle | [§3 Python typing and class design](../../../docs/architecture/naming-conventions.md#3-python-typing-and-class-design) |
+| persisted data, schema identity, or writer/reader compatibility | [§4 Data, schemas, and persistence](../../../docs/architecture/naming-conventions.md#4-data-schemas-and-persistence) |
+| errors, logging, redaction, or trust boundaries | [§5 Errors, logging, and trust boundaries](../../../docs/architecture/naming-conventions.md#5-errors-logging-and-trust-boundaries) |
+| test placement or verification design | [§7 Tests and verification](../../../docs/architecture/naming-conventions.md#7-tests-and-verification) |
+| Next.js or public-site code | [§8 Site conventions](../../../docs/architecture/naming-conventions.md#8-site-conventions) |
+| package version, compatibility, or promotion | [§9 Versioning and compatibility](../../../docs/architecture/naming-conventions.md#9-versioning-and-compatibility) |
+
+Follow every applicable row for a cross-cutting change. Read the whole SOT only
+when auditing or changing the convention system itself.
 
 Executable configuration remains authoritative:
 
