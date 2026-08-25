@@ -50,6 +50,38 @@ loop는 scaffold 후보를 변이시키고 증거 기반 안전성 게이트로 
 
 ---
 
+## 하나의 배포판, 세 가지 경계
+
+`geode-agent` wheel은 네 개 명령을 함께 배포하지만, 설치된 패키지를 쓰기
+가능한 작업공간으로 사용하지 않습니다.
+
+| 경계 | 책임 | 명령 |
+|---|---|---|
+| `core` | 런타임, 운영자 CLI, 데몬, MCP 서버 | `geode`, `geode-mcp` |
+| `evals` | audit, 벤치마크 어댑터, 증거 생성 | `geode-eval` |
+| `evolve` | 실험적 scaffold 탐색과 Crucible | `geode-evolve` |
+
+설치된 코드와 번들 asset은 불변입니다. 런타임·실험 산출물은 `~/.geode/`
+(또는 명시적 state override)에 두며, 변이와 승격에는 쓰기 가능한 GEODE Git
+checkout이 필요합니다. 자세한 내용은
+[배포 lifecycle](docs/architecture/immutable-distribution-lifecycle.md)을 참고하세요.
+
+## 평가 증거
+
+GEODE는 조건이 다른 run을 하나의 제품 점수로 합치지 않습니다. 공개 결과는
+harness revision, task set, model route, effort, timeout, attempt lineage에
+각각 고정됩니다.
+
+| 트랙 | 공개 증거 경계 |
+|---|---|
+| [Tau2](https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2) | native-user와 GEODE-user 트랙을 분리하며, 미완료·quota 오염 run은 aggregate score 권한 없이 보존합니다. |
+| [MCPMark](https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark) | 서비스 coverage, 과거 available-services 결과, 정정된 paired 관측, full-Verified 한계를 구분합니다. |
+
+원본 receipt와 개인정보 검토를 통과한 trajectory는
+[평가 artifact 저장소](https://github.com/mangowhoiscloud/geode-eval-artifacts)에 보존합니다.
+
+---
+
 ## 실험적 scaffold 최적화 loop
 
 GEODE에는 실험적인 **non-parametric scaffold 최적화 loop**가 있습니다.
@@ -138,7 +170,8 @@ geode setup
 
 Wizard 가 세 가지 경로를 제시합니다: ChatGPT 구독, API 키 (붙여넣기), dry-run 으로 일단 둘러보기. 기존 `~/.codex/auth.json` 자격도 가져올 수 있지만, 추론을 위해 Codex CLI를 실행하지는 않습니다.
 
-GEODE 설치 전에 이미 `codex auth login` 을 해뒀다면 다음 `geode` 실행에서 토큰을 감지할 수 있습니다. 그 외에는 Codex CLI 설치가 필요 없습니다.
+Codex CLI가 이미 ChatGPT 로그인을 마쳤다면 다음 `geode` 실행에서 그 토큰을
+감지할 수 있습니다. 그 외에는 Codex CLI 설치가 필요 없습니다.
 
 ### 3단계 — 경로별 수동 안내 (참고용)
 
@@ -155,9 +188,11 @@ geode                                 # GEODE 시작
 # 세션 안에서: /login openai         # ChatGPT device-code 로그인
 ```
 
-**지원 플랜** ([Codex CLI 공식 문서](https://developers.openai.com/codex/cli/) 기준): Plus, Pro, Business, Edu, Enterprise.
+**지원 플랜** ([Codex 공식 가격 문서](https://developers.openai.com/codex/pricing/) 기준): Plus, Pro, Business, Edu, Enterprise.
 
-**할당량** (OpenAI 공시 기준, 5시간 윈도): Plus 는 약 15–80 메시지, Pro 20x 는 최대 1,600 메시지. Edu / Enterprise 는 고정 한도 없이 워크스페이스 크레딧으로 정산됩니다. 이 두 플랜은 워크스페이스 관리자가 "Allow members to use Codex Local" 을 켜야 사인인이 작동합니다.
+**할당량** (OpenAI 공시 기준, 5시간 윈도): Plus는 약 15–80 메시지,
+Pro 20x는 최대 1,600 메시지입니다. Enterprise와 Edu 한도는 workspace가
+flexible credit 또는 legacy per-seat 방식 중 무엇을 쓰는지에 따라 달라집니다.
 
 **참고할 점**:
 - **gpt-5.5 는 구독 전용입니다.** GPT-5.6 Sol/Terra/Luna와 GPT-5.4는 듀얼 레인입니다. 구독 프로필이 활성화되면 ChatGPT OAuth, API 키 프로필을 선택하면 Platform API를 사용합니다. 5.5가 필요하면 ChatGPT 구독이 필요합니다.
@@ -193,7 +228,8 @@ chmod 600 ~/.geode/.env
 
 OpenAI 또는 ZhipuAI GLM 도 쓰고 싶다면 같은 파일에 `OPENAI_API_KEY=sk-proj-...` 또는 `ZAI_API_KEY=...` 추가. GEODE 는 사용 가능한 키를 자동으로 선택합니다.
 
-**실제 비용 감각.** 단일 프롬프트는 약 3,000 토큰, $0.01 정도. 도구 호출 10개 들어간 긴 리서치 세션은 보통 $0.05–$0.30. 무료 $5 크레딧이면 약 500번 프롬프트 가능합니다. 한도를 명시적으로 잠그고 싶으면 `~/.geode/config.toml` 에 설정하세요.
+**비용 제어.** 가격은 model과 workload에 따라 달라집니다. provider의 최신
+가격을 확인한 뒤 `~/.geode/config.toml`에 hard cap을 설정하세요.
 
 ```toml
 [cost]
@@ -349,7 +385,11 @@ geode config migrate-petri-toml --yes    # [self_improving_loop.petri.*] 를 con
 
 ## 설정
 
-시크릿은 `.env`에, 동작은 `config.toml`에 둡니다. `.env`는 시크릿 전용, `config.toml`은 동작 전용이라 두 층은 충돌하지 않고 각각 우선순위 규칙이 하나씩 있습니다.
+시크릿은 `.env`에, 동작은 `config.toml`에 둡니다. `.env`는 시크릿 전용,
+`config.toml`은 동작 전용이라 두 층은 충돌하지 않고 각각 우선순위 규칙이
+하나씩 있습니다. 상세 경로 설계는
+[storage hierarchy](docs/architecture/storage-hierarchy.md), 독립 다이어그램은
+[context/config paths](docs/diagrams/geode-context-config-paths.html)를 참고하세요.
 
 - 전역 `~/.geode/.env`가 권위를 갖는 시크릿 저장소입니다. 프로젝트 `./.env`는 전역에 없는 키만 채우고 전역 키를 덮지 못합니다. `~/.geode/.env`의 `OPENAI_API_KEY`는 프로젝트 `./.env`가 비어 있어도 이깁니다.
 - 프로젝트 `./.geode/config.toml`이 전역 `~/.geode/config.toml`을 덮습니다. 동작은 프로젝트마다 조정합니다.
@@ -408,7 +448,7 @@ PyPI 설치라면 `uv tool install geode-agent` 실행. 소스 체크아웃이�
 <details>
 <summary><strong>"401 Unauthorized" 또는 "Invalid API key"</strong> — 잘못된 키, 만료된 키, 또는 잘못된 파일 위치.</summary>
 
-`cat ~/.geode/.env` 로 확인 — 키는 `sk-ant-` (Anthropic), `sk-proj-` (OpenAI), `id.secret` (ZhipuAI GLM) 으로 시작해야 함. 공백이나 따옴표 추가되지 않았는지 체크. ChatGPT 구독 경로(Path A)면 `codex auth login` 재실행해서 OAuth 토큰 갱신.
+`cat ~/.geode/.env` 로 확인 — 키는 `sk-ant-` (Anthropic), `sk-proj-` (OpenAI), `id.secret` (ZhipuAI GLM) 으로 시작해야 함. 공백이나 따옴표 추가되지 않았는지 체크. ChatGPT 구독 경로(Path A)면 GEODE 안에서 `/login openai`를 다시 실행.
 </details>
 
 <details>
