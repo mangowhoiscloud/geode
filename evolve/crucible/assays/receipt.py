@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from evolve.crucible.admission.runtime_identity import (
+from evolve.crucible.admission.regime import (
     RUNTIME_ARM_WALL_POLICY,
     RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     canonical_runtime_hash,

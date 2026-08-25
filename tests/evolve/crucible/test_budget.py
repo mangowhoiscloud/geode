@@ -4,16 +4,16 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
-from evolve.crucible.admission.runtime_budget import audit_runtime_budget, runtime_pilot_block_rates
-from evolve.crucible.admission.runtime_identity import (
+from evolve.crucible.admission.budget import audit_runtime_budget, runtime_pilot_block_rates
+from evolve.crucible.admission.pilot import build_runtime_pilot
+from evolve.crucible.admission.regime import (
     RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     canonical_runtime_hash,
     runtime_design_from_parts,
     runtime_regime_from_parts,
     runtime_regime_id,
 )
-from evolve.crucible.admission.runtime_pilot import build_runtime_pilot
-from evolve.crucible.assays.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
+from evolve.crucible.assays.receipt import SharedRuntimeDeadline, runtime_artifact_bindings
 from evolve.crucible.cli import main as crucible_main
 from evolve.crucible.contract import (
     ContractError,

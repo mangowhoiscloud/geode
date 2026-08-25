@@ -54,10 +54,10 @@ from evolve.crucible.contract import (
 )
 from evolve.crucible.search.supervisor import LoopLimits, SupervisorConfig, SupervisorError
 
+from .budget import audit_runtime_budget
 from .curation import curate_tau2_pack
 from .power import audit_family_power
 from .preflight import campaign_token_cap, completed_campaign_tokens, decide
-from .runtime_budget import audit_runtime_budget
 
 SPEC_SCHEMA = "crucible.campaign-spec.v1"
 PREPARE_PROVENANCE_SCHEMA = "crucible.prepare-provenance.v1"

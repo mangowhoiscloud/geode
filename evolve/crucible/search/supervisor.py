@@ -33,7 +33,7 @@ from evolve.crucible.artifacts import (
     load_json_object,
     write_exclusive_json,
 )
-from evolve.crucible.assays.runtime_receipt import load_runtime_receipt, runtime_artifact_bindings
+from evolve.crucible.assays.receipt import load_runtime_receipt, runtime_artifact_bindings
 from evolve.crucible.contract import (
     EXPERIMENT_SCHEMA,
     ContractError,
