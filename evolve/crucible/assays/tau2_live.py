@@ -43,7 +43,7 @@ from evolve.crucible.promotion import (
 )
 from evolve.crucible.search.supervisor import CandidateProposal, FailureFeedback, _file_sha256
 
-from .runtime_receipt import (
+from .receipt import (
     MeasurementSource,
     SharedRuntimeDeadline,
     runtime_artifact_bindings,

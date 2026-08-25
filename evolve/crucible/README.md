@@ -26,7 +26,7 @@ The runtime admission path is a directed evidence loop rather than a shared
 utility layer:
 
 ```text
-runtime_identity ─┬─> runtime_budget ─> runtime_forecast
-                  └─> assays/runtime_receipt
-evidence + receipt + budget ─> runtime_pilot ─> next admission
+regime ─┬─> budget ─> forecast
+        └─> assays/receipt
+evidence + receipt + budget ─> pilot ─> next admission
 ```

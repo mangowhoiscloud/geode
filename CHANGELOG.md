@@ -49,6 +49,10 @@ functional change.
 
 ### Architecture
 
+- **Crucible runtime modules now rely on package context instead of repeated
+  filename prefixes.** Admission uses `regime`, `budget`, `forecast`, and
+  `pilot`, while assay execution owns `receipt`; runtime artifact and schema
+  names remain unchanged.
 - **Evaluation and Crucible package trees now expose runtime ownership.**
   MCPMark and tau2 integrations are vertical benchmark packages, Harbor lives
   under external platforms, and Crucible separates admission, search, trusted

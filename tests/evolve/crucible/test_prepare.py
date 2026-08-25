@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from evolve.crucible.admission.prepare import prepare_campaign
-from evolve.crucible.admission.runtime_identity import (
+from evolve.crucible.admission.regime import (
     RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     canonical_runtime_hash,
     runtime_design_from_parts,

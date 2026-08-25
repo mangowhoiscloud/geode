@@ -32,7 +32,7 @@ from evolve.crucible.contract import (
     canonical_json_sha256,
 )
 
-from .runtime_budget import (
+from .budget import (
     LEGACY_RUNTIME_PILOT_SCHEMA,
     RUNTIME_ACCOUNTING_METHOD,
     RUNTIME_PILOT_SCHEMA,
@@ -41,7 +41,7 @@ from .runtime_budget import (
     runtime_pilot_block_rates,
     validate_runtime_cycle_observation,
 )
-from .runtime_identity import (
+from .regime import (
     RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     canonical_runtime_hash,
     runtime_bindings,
