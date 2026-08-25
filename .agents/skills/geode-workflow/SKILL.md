@@ -25,7 +25,9 @@ then report honestly.
 5. **Design contract**: define schema, log, event, state, trajectory, provider
    split, and rollback behaviour before code.
 6. **Implement**: use existing registries, adapters, redaction helpers,
-   transcript helpers, and atomic-write utilities.
+   transcript helpers, and atomic-write utilities. For abstraction, naming,
+   type/class, persisted-schema, test-placement, site, or version decisions,
+   use `$geode-code-conventions`.
 7. **Observe**: make runtime behaviour inspectable with bounded structured
    records.
 8. **Verify**: run targeted checks first, then broaden when risk justifies
@@ -41,6 +43,7 @@ Read only the reference needed for the current task:
 | Need | Read |
 |---|---|
 | Phase-by-phase checklist for ordinary code work | `references/phase-checklist.md` |
+| Abstraction, naming, type/class, schema, test, site, and version conventions | `$geode-code-conventions` + `docs/architecture/naming-conventions.md` |
 | Provider/model/API capability claims | `references/provider-grounding.md` |
 | Schema/log/event/state/trajectory consistency | `references/observability-contract.md` |
 | Same-task Codex–GEODE production and comparison | `references/codex-geode-paired-coding.md` |

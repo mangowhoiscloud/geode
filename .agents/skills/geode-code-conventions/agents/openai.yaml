@@ -1,0 +1,4 @@
+interface:
+  display_name: "GEODE Code Conventions"
+  short_description: "Apply measured GEODE code and naming conventions"
+  default_prompt: "Use $geode-code-conventions to choose GEODE module, type, class, schema, test, and versioning conventions for this change."

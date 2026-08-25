@@ -32,6 +32,7 @@ uv run geode
 |----------|------|---------|
 | Agent Identity | `GEODE.md` | Identity, Voice & Conduct, runtime architecture, LLM models |
 | Operational Workflow | `docs/workflow.md` + `.claude/skills/geode-workflow/` | Evidence-first execution scaffold shared by Claude Code, Codex, and contributors |
+| Code Conventions | `docs/architecture/naming-conventions.md` + `.agents/skills/geode-code-conventions/` | Measured abstraction, naming, type/class, schema, test, site, and versioning decisions |
 | Evaluation Workflow | `docs/eval/index.json` + `.agents/skills/geode-eval/` | Generated eval routing, frozen research/reproduction contract, append-only attempt lineage, analysis, and artifact publication |
 | Test-Time Compute Grounding | `.claude/skills/stanford-test-time-compute/` | Stanford CS329A Part 2 evidence and GEODE/Eco²/SIL/Crucible application boundaries |
 | Agent-World Benchmark | `docs/eval/agent-world-comparison-contract.md` + `.claude/skills/agent-world-benchmark/` | Three-suite comparison profile, paired runtime control, replication, and artifact contract |
