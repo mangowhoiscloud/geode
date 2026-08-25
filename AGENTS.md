@@ -49,6 +49,11 @@ Use `docs/workflow.md` as the canonical workflow summary and
 scaffold. It is shared with Claude Code and supersedes the older issue-first
 workflow.
 
+For abstraction level, module/file naming, Python type and class selection,
+persisted schema identity, test placement, site code, or versioning decisions,
+read `docs/architecture/naming-conventions.md` and use
+`.agents/skills/geode-code-conventions/`.
+
 For benchmark execution, evaluation artifact audits, research-question
 framing, attempt lineage, or trajectory publication, start at the generated
 `docs/eval/index.json` and use `.agents/skills/geode-eval/`. Claude Code sees
@@ -387,6 +392,7 @@ Add a GAP Audit table when the PR was driven by a plan, audit, or cleanup.
 | What does a tool do? | `core/tools/definitions.json` and the category module |
 | What models can I use? | `core/llm/providers/<provider>.py` |
 | Why a layer? | `core/agent/loop/agent_loop.py` plus `docs/architecture/` |
+| Which code convention applies? | `docs/architecture/naming-conventions.md` plus `.agents/skills/geode-code-conventions/` |
 | How are hooks wired? | `core/hooks/system.py` plus `core/wiring/bootstrap.py` |
 | How is cost tracked? | `~/.geode/usage/*.jsonl` plus `core/audit/diagnostics.py` |
 | Petri audit run? | `evals/petri/cli_audit.py` |

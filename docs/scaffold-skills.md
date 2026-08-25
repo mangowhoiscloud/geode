@@ -37,6 +37,7 @@ The security review and handling contracts are recorded in
 | `geode-distribution` | uvx, PyPI, GitHub Release, 배포 | Coordinated GitHub Release + PyPI stable promotion |
 | `geode-gitflow` | branch, git, pr, merge, commit | Gitflow strategy, PR templates, CI fix loops |
 | `geode-changelog` | changelog, release, version, release | CHANGELOG management, post-1.0 patch-first versioning (minors are operator-declared; mis-stamp correction procedure) |
+| `geode-code-conventions` | abstraction, naming, module, class, type, schema, test placement, versioning | Measured GEODE convention workflow backed by the canonical architecture, naming, data, site, and compatibility guide |
 | `agent-ops-debugging` | safe default, root cause, contextvar, multi-gap | Agent-ops debugging patterns — Safe Default anti-pattern, multi-gap root cause, ContextVar DI |
 | `architecture-patterns` | architecture, layering, pattern, design | Cross-harness architecture patterns reference |
 | `karpathy-patterns` | autoresearch, agenthub, ratchet, context budget | 10 autonomous agent design principles (P1-P10) |
