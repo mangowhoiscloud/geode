@@ -1211,8 +1211,8 @@ function SeedgenDiagram() {
         <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(328 244)" />
         <line x1="376" y1="244" x2="388" y2="236" stroke={ROSE_INK} />
         <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(392 234) rotate(-34)" />
-        <line x1="376" y1="244" x2="388" y2="288" stroke={ROSE_INK} />
-        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(392 290) rotate(74)" />
+        <path d="M352 268 V290 H388" fill="none" stroke={ROSE_INK} />
+        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(392 290)" />
         <path d="M452 252 V320 H304" fill="none" stroke={ROSE_INK_70} />
         <path d="M452 308 V320" fill="none" stroke={ROSE_INK_70} />
         <polygon points="4,-3.5 -4,0 4,3.5" fill={ROSE_INK_70} transform="translate(300 320)" />
@@ -3245,9 +3245,7 @@ const features: {
 function PlateCard({ feature }: { feature: (typeof features)[number] }) {
   const locale = useLocale();
   return (
-    <div
-      className={`flex min-w-0 flex-col bg-[#FFF0F8] p-4 pb-6 ${feature.id === "direct" ? "aspect-[100/210] md:aspect-[100/96]" : "aspect-[100/148]"}`}
-    >
+    <div className="flex aspect-[100/148] min-w-0 flex-col bg-[#FFF0F8] p-4 pb-6">
       <div className="flex items-start justify-between gap-3">
         <div
           className="flex items-center gap-2 pt-1 font-mono text-[10.5px] uppercase tracking-[0.22em]"
@@ -3271,15 +3269,13 @@ function PlateCard({ feature }: { feature: (typeof features)[number] }) {
         </div>
       </div>
       <div
-        className={`mt-3 min-h-0 min-w-0 flex-1 bg-cover bg-center ${feature.id === "direct" ? "overflow-x-auto" : "overflow-hidden"}`}
+        className="mt-3 min-h-0 min-w-0 flex-1 overflow-hidden bg-cover bg-center"
         style={{
           backgroundImage: `linear-gradient(rgba(255,240,248,0.8), rgba(255,240,248,0.8)), url(/geode/images/plate-bg-${feature.plate}.png)`,
           imageRendering: "pixelated",
         }}
       >
-        <div
-          className={`flex h-full w-full min-w-0 items-center justify-center px-2 py-3 ${feature.id === "direct" ? "min-w-[520px]" : ""}`}
-        >
+        <div className="flex h-full w-full min-w-0 items-center justify-center px-2 py-3">
           {feature.banner}
         </div>
       </div>
@@ -3290,7 +3286,7 @@ function PlateCard({ feature }: { feature: (typeof features)[number] }) {
         {locale === "en" ? feature.headEn : feature.headKo}
       </h2>
       <p
-        className={`mt-2 text-[12.5px] leading-[1.65] ${feature.id === "direct" ? "max-w-3xl" : "max-w-[494px]"}`}
+        className="mt-2 max-w-[494px] text-[12.5px] leading-[1.65]"
         style={{ color: ROSE_INK_70 }}
       >
         {t(locale, feature.ko, feature.en)}
@@ -3311,11 +3307,11 @@ function FeaturesGrid() {
         >
           {t(locale, "도판 i-ix", "plates i-ix")}
         </p>
-        <div className="mt-12 grid gap-10 md:grid-cols-2">
+        <div className="mt-12 grid gap-10 md:grid-cols-2 xl:grid-cols-3">
           {features.map((feature, i) => (
             <motion.div
               key={feature.id}
-              className={`min-w-0 ${feature.id === "direct" ? "md:col-span-2" : ""}`}
+              className="min-w-0"
               initial={{ opacity: 0, y: reduceMotion ? 0 : 46 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-140px" }}
