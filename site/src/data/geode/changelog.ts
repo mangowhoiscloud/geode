@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-08-24
+ * Last sync: 2026-08-25
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -19,7 +19,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": "### Fixed\n\n- **Installed distributions are immutable across evolution, helper setup, and updates.**\n  Scaffold mutation and promotion now require an explicit writable GEODE Git\n  checkout, rolling experiment ledgers no longer ship as wheel data, macOS\n  helper builds land under `GEODE_HOME`, and `geode update` stops a live daemon\n  before replacing its installation and verifies CLI/IPC version parity after\n  restart.\n\n### Infrastructure\n\n- **Bundled skills use an exact self-contained allowlist.** The wheel ships only\n  the eight first-party runtime skills whose companion files are present;\n  repository and operator-specific skills stay in their external tiers, and\n  installed-package smoke tests hash every distribution file before and after a\n  rejected mutation attempt."
+    "body": ""
+  },
+  {
+    "version": "1.0.26",
+    "date": "2026-08-25",
+    "body": "> Immutable distribution release: installed package bytes remain read-only,\n> evolution uses an explicit Git workspace, generated helpers live under\n> GEODE home, bundled skills are exact, and updates stop the daemon before\n> replacing its environment.\n\n### Fixed\n\n- **Installed distributions are immutable across evolution, helper setup, and updates.**\n  Scaffold mutation and promotion now require an explicit writable GEODE Git\n  checkout, rolling experiment ledgers no longer ship as wheel data, macOS\n  helper builds land under `GEODE_HOME`, and `geode update` stops a live daemon\n  before replacing its installation and verifies CLI/IPC version parity after\n  restart.\n\n### Infrastructure\n\n- **Bundled skills use an exact self-contained allowlist.** The wheel ships only\n  the eight first-party runtime skills whose companion files are present;\n  repository and operator-specific skills stay in their external tiers, and\n  installed-package smoke tests hash every distribution file before and after a\n  rejected mutation attempt."
   },
   {
     "version": "1.0.25",
@@ -2523,4 +2528,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-08-24";
+export const CHANGELOG_SYNCED_AT = "2026-08-25";

@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.26] - 2026-08-25
+
+> Immutable distribution release: installed package bytes remain read-only,
+> evolution uses an explicit Git workspace, generated helpers live under
+> GEODE home, bundled skills are exact, and updates stop the daemon before
+> replacing its environment.
+
 ### Fixed
 
 - **Installed distributions are immutable across evolution, helper setup, and updates.**
