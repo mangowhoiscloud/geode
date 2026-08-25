@@ -71,6 +71,13 @@ argument-hint: "[issue-number]"
               상위 계층 스킬을 발견했다고 하위 계층의 같은 이름으로 몰래
               fallback하지 않습니다.
             </p>
+            <p>
+              wheel은 <code>arxiv-digest</code>, <code>deep-researcher</code>,
+              <code>frontier-ui-ux-catalog</code>, <code>geo</code>,
+              <code>geode-context</code>, <code>grilling</code>,
+              <code>long-task-watcher</code>, <code>pdf</code>만 번들합니다.
+              저장소·개인 전용 스킬은 project/personal 계층에 남습니다.
+            </p>
             <pre>{`"skill:my-skill": {
   "enabled": true,
   "trusted": true,
@@ -217,6 +224,13 @@ and !\`cmd\` is replaced with shell output at invocation time.`}</pre>
               <a href="/geode/docs/config/basics">extension trust policy</a>.
               A rejected higher-precedence skill does not silently fall back to
               a same-named skill from a lower tier.
+            </p>
+            <p>
+              The wheel bundles only <code>arxiv-digest</code>,
+              <code>deep-researcher</code>, <code>frontier-ui-ux-catalog</code>,
+              <code>geo</code>, <code>geode-context</code>, <code>grilling</code>,
+              <code>long-task-watcher</code>, and <code>pdf</code>. Repository- and
+              operator-specific skills stay in the project or personal tier.
             </p>
             <pre>{`"skill:my-skill": {
   "enabled": true,

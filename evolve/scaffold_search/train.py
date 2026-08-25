@@ -111,7 +111,7 @@ if TYPE_CHECKING:
 # S-5 (2026-06-11) — measurement gear extracted to sibling modules; train.py
 # is restored to the autoresearch-원형: mutation surface + tunables + the
 # fixed-budget loop. These imports are exactly what the loop below calls.
-from core.paths import AUTORESEARCH_FEW_SHOT_POOL_PATH
+from core.paths import AUTORESEARCH_FEW_SHOT_POOL_PATH, require_evolve_workspace
 from evals.seed_generation.baseline_reader import BaselineSnapshot
 
 from evolve.scaffold_search import fitness as fitness_spec
@@ -411,6 +411,7 @@ def write_wrapper_prompt_sections(sections: dict[str, str]) -> None:
     BEFORE writing a bad SoT that would make every consumer fall back
     to the bootstrap default.
     """
+    require_evolve_workspace()
     if not isinstance(sections, dict) or not sections:
         raise ValueError("wrapper sections must be a non-empty dict[str, str]")
     for key, value in sections.items():
@@ -572,9 +573,10 @@ def main() -> int:
         "AUTORESEARCH_TARGET_EFFECT_SIZE / config target_effect_size override.",
     )
     args = parser.parse_args()
+    if not args.dry_run:
+        require_evolve_workspace()
 
-    session_id = ledger._resolve_session_id()
-    started_at = time.time()
+    session_id, started_at = ledger._resolve_session_id(), time.time()
     # P0b — compute gen_tag up-front so journal events emitted during
     # measure.run_audit (subprocess lifecycle) can carry the same session_id +
     # gen_tag pair as the eventual sessions.jsonl row.
@@ -651,8 +653,7 @@ def main() -> int:
     # PR-11 P3.1 — anchor_confidence_mode is an env-gate (set by runner.py); read
     # it up-front so the per-replicate raw-fitness (E4 within-mutation decomposition)
     # is computed under the SAME fitness-formula path as the gate's ``current_raw``.
-    _anchor_mode_env = os.environ.get("GEODE_SIL_ANCHOR_CONFIDENCE_MODE", "").strip()
-    _anchor_confidence_mode = _anchor_mode_env == "1"
+    _anchor_confidence_mode = os.environ.get("GEODE_SIL_ANCHOR_CONFIDENCE_MODE", "").strip() == "1"
     # E4 (2026-05-30) — per-mutation REPLICATE loop. Run the audit ``M`` times
     # (M=1 default → exactly ONE call, no loop overhead / cost change — the
     # representative tuple below is that single call's result, byte-identical to

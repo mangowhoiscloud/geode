@@ -225,7 +225,6 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
-| _none yet_ | — | — | — | — | — |
 
 ## 1. Program objective
 
@@ -284,10 +283,10 @@ machine-readable artifact is
 |---|---:|
 | Production Python files (`core/` + `evals/` + `evolve/`) | 559 |
 | Test Python files | 691 |
-| `core/` Python LOC | 123,541 |
+| `core/` Python LOC | 123,591 |
 | `evals/` Python LOC | 27,297 |
-| `evolve/` Python LOC | 31,910 |
-| Test Python LOC | 186,696 |
+| `evolve/` Python LOC | 31,923 |
+| Test Python LOC | 186,741 |
 | Tool definitions / model executions / valid schemas / policies | 86 / 86 / 86 / 86 (exact) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 5 |
@@ -568,6 +567,10 @@ and closure evidence are appended in §10.
 | BND-008 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-004, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.4 | REL-004, STORE-003 | `SUPERSEDED` |
 | CODE-002 | `MISFIT` | Verification state is restored from checkpoint `loop_guards`, but `_persist_verify_state` still mirrors every result into `SessionManager` columns whose accessor has no production reader | Production verify-mirror writes and the unused accessor are removed; legacy databases containing the columns still load, checkpoint recovery remains authoritative, and no new store or schema migration is introduced | R9.2 | CODE-001 | `DONE` |
 | BND-009 | `MISFIT` | `geode_product` combines runtime composition with evaluation and hill-climbing, while `plugins`, `core/self_improving`, Homebrew candidate files, and the unverified computer sandbox preserve duplicate or unsupported ownership surfaces | One documented migration leaves `core` as the GEODE runtime, moves measurement to `evals` and hill-climbing to `evolve`, removes every obsolete package/scaffold without a replacement stub, preserves one-way `evolve -> evals -> core` dependencies and operator behavior, migrates tracked state with byte parity, and proves the final wheel/sdist/install/release contain only the declared roots | R8.5 | BND-006, REL-003 | `DONE` |
+| DIST-001 | `MISFIT` | A clean `geode-agent` wheel resolves the default scaffold-search SoT to `site-packages/evolve/scaffold_search/state`, where mutation, result, epoch, and policy writers append or replace files and then attempt Git commits from a non-repository install root | Installed distributions are immutable: read-only packaged snapshots remain readable, every mutation/promotion writer requires an explicit writable GEODE Git workspace before its first side effect, worker overrides remain isolated, upgrades cannot erase run history, and an installed-wheel poison test proves no distribution file or `RECORD` digest changes | R10.1 | BND-009 | `IN_DEVELOP` |
+| DIST-002 | `MISFIT` | The packaged macOS helper build script defaults its generated app bundle to `<distribution>/.geode/ComputerUseHelper`, which may be read-only and is replaced by package upgrades | Packaged helper sources are read-only inputs, generated helper bytes live under one existing operator-owned GEODE home resolver, source and wheel installs share that resolver, and setup/status tests prove the distribution tree stays unchanged | R10.1 | BND-009 | `IN_DEVELOP` |
+| DIST-003 | `PARTIAL` | The wheel force-includes every `.geode/skills` directory even when a skill references repository-only scripts/docs or a personal absolute workspace, while installed smoke proves only that selected skill bodies load | One exact self-contained builtin-skill allowlist is packaged; repository and personal skills remain in their existing external tiers; every bundled local command/asset reference resolves in a clean wheel; and installed smoke rejects repo-only, personal-path, or dangling bundled skills | R10.1 | BND-003, BND-004 | `IN_DEVELOP` |
+| DIST-004 | `MISFIT` | `geode update` replaces the live uv-tool environment and verifies the new CLI before stopping the old daemon, allowing a running process to observe a mixed old-process/new-files installation | A running daemon is drained and stopped before live tool replacement, failed updates remain fail-closed without starting a second daemon, successful restart proves CLI/IPC daemon version parity, and ordering tests cover running, stopped, failed-stop, failed-install, and no-restart paths | R10.1 | BND-003, REL-003 | `IN_DEVELOP` |
 
 ## 6. Dependency and merge sequence
 
@@ -1876,6 +1879,39 @@ Acceptance:
 - focused verification/recovery tests and architecture gates pass without a
   new store, schema migration, event, hook, or runtime abstraction.
 
+### R10 — Installed distribution lifecycle
+
+#### R10.1 Immutable package, explicit workspace, and safe update
+
+GAPs: DIST-001, DIST-002, DIST-003, DIST-004.
+
+Keep one public `geode-agent` wheel containing `core`, `evals`, and `evolve`.
+The wheel owns immutable Python code and self-contained static runtime assets;
+it does not own a writable Git workspace, rolling experiment state, generated
+native helpers, repository development skills, or personal workflows.
+
+Acceptance:
+
+- scaffold mutation, promotion, and tracked-ledger writes require an explicit
+  writable GEODE Git workspace and fail before any side effect when launched
+  from only an installed distribution; read-only packaged reference data and
+  existing `GEODE_STATE_ROOT` worker isolation remain compatible;
+- the macOS helper build reads packaged source but writes the app bundle only
+  below the existing operator-owned GEODE home, with source/wheel path parity
+  and no package-root fallback;
+- the wheel contains an exact allowlist of self-contained builtin skills;
+  repository-only skills remain under repository scope and personal skills
+  under user scope, while clean-install validation resolves every bundled
+  local command and asset reference;
+- an updater with a running daemon drains and stops it before replacing the
+  uv-tool environment, then restarts through the installed entry point and
+  proves CLI/IPC daemon version parity; stop or install failure never starts a
+  second daemon;
+- wheel/sdist content gates, clean full/kernel installs, installed unit tests,
+  daemon smoke, updater ordering tests, and a distribution-tree digest poison
+  test pass without publishing a second wheel or adding a workspace manager,
+  package registry, plugin SDK, or compatibility stub.
+
 ## 8. Change-surface acceptance scenarios
 
 These black-box scenarios define extensibility more usefully than class count.
@@ -2015,6 +2051,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R9.1 | CODE-001 | [#3126](https://github.com/mangowhoiscloud/geode/pull/3126) | `d81e76b00ea3c7d0fb9b03bb4605f9ba18f3e771` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate and full test-with-coverage job, 480 targeted authority tests, lint/format, type check, security, official-doc parity, 238-page static build, 74 Markdown twins, macOS/Ubuntu install smoke, exact two-file documentation scope, and anti-deception checks all passed) |
 | R9.2 | CODE-002 | [#3131](https://github.com/mangowhoiscloud/geode/pull/3131) | `bd7d79c3d004508eadf379e9403a0a2fb3c2a30a` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,412 local non-live tests and the full CI test-with-coverage job, lint/format, type check, security, six import contracts, official-doc parity and 238-page Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 402 isolated kernel modules and 59 kernel tests, fresh-schema and legacy-column compatibility coverage, and anti-deception checks all passed) |
 | R8.5 | BND-009 | [#3148](https://github.com/mangowhoiscloud/geode/pull/3148) | `24a6992a9e3ab9610c749dc1a875e0179342bd6f` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS ([CI run 32697757798](https://github.com/mangowhoiscloud/geode/actions/runs/32697757798) passed the final Gate, 9m09s test-with-coverage job, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, 659-file wheel and 661-file sdist inspection, clean full/kernel installed-package checks with 412 isolated kernel modules and 59 kernel tests, exact eight-payload state parity, zero retired import roots, seven import contracts, and the committed-diff review with all findings resolved; paid/live provider tests were not run) |
+| R10.1 | DIST-001, DIST-002, DIST-003, DIST-004 | [#3165](https://github.com/mangowhoiscloud/geode/pull/3165) | `a71d95ee392e16f6254f648f3802100db861b71f` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,379 non-live tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install and update smoke, 649-file wheel and 651-file sdist inspection, clean installed-wheel mutation rejection with unchanged distribution digests, and 412 isolated kernel imports plus 59 kernel tests all passed; paid/live provider tests were not run) |
 
 ### 10.2 Main closure evidence
 
@@ -2222,3 +2259,14 @@ The architecture and extensibility completion program has no remaining
 executable unit. Future architecture work must begin with a new GAP and closure
 package through the serialized registration protocol in §0.3; it must not
 reopen or rewrite this evidence.
+
+R10.1 (DIST-001 through DIST-004) is `IN_DEVELOP` after feature PR
+[#3165](https://github.com/mangowhoiscloud/geode/pull/3165) merged as
+`a71d95ee392e16f6254f648f3802100db861b71f`. The delivered boundary keeps one
+public wheel immutable, requires explicit writable workspaces for evolution,
+places generated helper output under GEODE home, packages only the exact
+self-contained builtin-skill allowlist, and stops a live daemon before
+replacement. The active claim is removed; `DONE` still requires the canonical
+main promotion and public release verification. R10.1 authorizes no public
+kernel wheel, package split, workspace manager, plugin SDK, or change to the
+prior 58-GAP closure evidence.

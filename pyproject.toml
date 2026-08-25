@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "1.0.25"
+version = "1.0.26"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -185,11 +185,25 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["core", "evals", "evolve"]
+exclude = [
+    "/evolve/scaffold_search/state/baseline_archive.jsonl",
+    "/evolve/scaffold_search/state/baseline_epochs.json",
+    "/evolve/scaffold_search/state/mutations.jsonl",
+    "/evolve/scaffold_search/state/results.jsonl",
+    "/evolve/scaffold_search/state/results.tsv",
+]
 
 [tool.hatch.build.targets.wheel.force-include]
 "scripts/macos" = "scripts/macos"
 "GEODE.md" = "core/GEODE.md"
-".geode/skills" = ".geode/skills"
+".geode/skills/arxiv-digest" = ".geode/skills/arxiv-digest"
+".geode/skills/deep-researcher" = ".geode/skills/deep-researcher"
+".geode/skills/frontier-ui-ux-catalog" = ".geode/skills/frontier-ui-ux-catalog"
+".geode/skills/geo" = ".geode/skills/geo"
+".geode/skills/geode-context" = ".geode/skills/geode-context"
+".geode/skills/grilling" = ".geode/skills/grilling"
+".geode/skills/long-task-watcher" = ".geode/skills/long-task-watcher"
+".geode/skills/pdf" = ".geode/skills/pdf"
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -204,7 +218,21 @@ include = [
     "/evals",
     "/evolve",
     "/scripts/macos",
-    "/.geode/skills",
+    "/.geode/skills/arxiv-digest",
+    "/.geode/skills/deep-researcher",
+    "/.geode/skills/frontier-ui-ux-catalog",
+    "/.geode/skills/geo",
+    "/.geode/skills/geode-context",
+    "/.geode/skills/grilling",
+    "/.geode/skills/long-task-watcher",
+    "/.geode/skills/pdf",
+]
+exclude = [
+    "/evolve/scaffold_search/state/baseline_archive.jsonl",
+    "/evolve/scaffold_search/state/baseline_epochs.json",
+    "/evolve/scaffold_search/state/mutations.jsonl",
+    "/evolve/scaffold_search/state/results.jsonl",
+    "/evolve/scaffold_search/state/results.tsv",
 ]
 
 [tool.pytest.ini_options]

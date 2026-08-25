@@ -30,7 +30,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v1.0.25 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.26 — Autonomous Agent Runtime + Evaluation Substrate
 
 자율적인 도구 작업을 수행하는 범용 에이전트 런타임입니다. 자연어로
 요청하면 GEODE가 계획을 세우고 도구를 호출한 뒤 결과를 보고합니다. 짧은
@@ -263,7 +263,8 @@ editable 소스 체크아웃에서는 `geode update`가 `git pull --ff-only`, `u
 디렉터리의 다른 Git 저장소가 아니라 설치 메타데이터가 가리키는 GEODE
 checkout을 사용하며, 메타데이터가 없으면 현재 디렉터리로 추측하지 않고
 중단합니다. `geode serve` 데몬이 떠 있었다면 업데이트 검증이 끝날 때까지
-유지한 뒤, 기존 socket 종료와 새 daemon 준비 상태를 확인하며 재시작합니다.
+기존 데몬을 먼저 종료한 뒤 설치를 교체합니다. 업데이트가 실패하면 중지 상태를
+유지하고, 성공 시 새 daemon과 설치된 CLI의 버전 일치까지 확인합니다.
 변경 없이 어느 경로가 선택되는지만 확인하려면:
 
 ```bash

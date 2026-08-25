@@ -160,6 +160,12 @@ export default function Page() {
             </p>
 
             <h2>실행</h2>
+            <p>
+              실제 변이·승격은 writable GEODE Git checkout에서만 실행됩니다.
+              다른 위치에서 시작할 때는 <code>GEODE_EVOLVE_WORKSPACE</code>를 그
+              checkout의 절대 경로로 지정하세요. wheel은 read-only 기본값과
+              dry-run만 제공하며 rolling ledger를 설치 디렉터리에 쓰지 않습니다.
+            </p>
             <pre>{`# 단일 사이클 (변이 1회 + 감사 1회 + 게이트)
 uv run python -m evolve.scaffold_search.train
 
@@ -341,6 +347,12 @@ geode-evolve campaign --n 10 --k 5 --dry-run
             </p>
 
             <h2>Running it</h2>
+            <p>
+              Real mutation and promotion require a writable GEODE Git checkout.
+              When launching elsewhere, set <code>GEODE_EVOLVE_WORKSPACE</code> to
+              that checkout&apos;s absolute path. A wheel provides read-only defaults
+              and dry runs; it never writes rolling ledgers into the install.
+            </p>
             <pre>{`# one cycle (one mutation + one audit + the gate)
 uv run python -m evolve.scaffold_search.train
 

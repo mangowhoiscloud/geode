@@ -23,7 +23,7 @@ import pytest
 from core import paths
 
 # Path env vars these tests patch — snapshotted/restored by the fixture.
-_PATCHED_ENV = ("GEODE_HOME", "GEODE_STATE_ROOT")
+_PATCHED_ENV = ("GEODE_HOME", "GEODE_STATE_ROOT", "GEODE_EVOLVE_WORKSPACE")
 
 
 @pytest.fixture
@@ -163,3 +163,29 @@ def test_seed_pools_always_repo_pinned_even_under_state_root(
         "seed_pools",
     )
     assert not paths.SEED_POOLS_DIR.is_relative_to(tmp_path)
+
+
+def test_explicit_evolve_workspace_must_be_a_writable_geode_checkout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, reload_paths: None
+) -> None:
+    invalid = tmp_path / "not-geode"
+    invalid.mkdir()
+    monkeypatch.setenv("GEODE_EVOLVE_WORKSPACE", str(invalid))
+    importlib.reload(paths)
+
+    with pytest.raises(RuntimeError, match="writable GEODE Git checkout"):
+        paths.require_evolve_workspace()
+
+
+def test_explicit_evolve_workspace_owns_tracked_state(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, reload_paths: None
+) -> None:
+    checkout = tmp_path / "geode"
+    checkout.mkdir()
+    (checkout / ".git").mkdir()
+    (checkout / "pyproject.toml").write_text('[project]\nname = "geode-agent"\n')
+    monkeypatch.setenv("GEODE_EVOLVE_WORKSPACE", str(checkout))
+    importlib.reload(paths)
+
+    assert paths.require_evolve_workspace() == checkout.resolve()
+    assert checkout / "evolve" / "scaffold_search" / "state" == paths.AUTORESEARCH_STATE_DIR

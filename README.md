@@ -30,7 +30,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v1.0.25: Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.26: Autonomous Agent Runtime + Evaluation Substrate
 
 A general-purpose runtime for autonomous tool work. You ask in plain language;
 GEODE plans, calls tools, and reports, for one prompt or a long-running session.
@@ -335,7 +335,8 @@ For an editable source checkout, `geode update` instead runs `git pull
 It resolves the actual GEODE checkout from install metadata rather than using
 an unrelated current repository; missing metadata is an error, never a cwd
 fallback. If `geode serve` was running, GEODE verifies the update before
-stopping it, then confirms the replacement daemon is ready. Preview either path
+replacing the live install, leaves it stopped on any update failure, then
+confirms the restarted daemon and installed CLI report the same version. Preview either path
 without changing files:
 
 ```bash

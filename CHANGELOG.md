@@ -47,6 +47,30 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.26] - 2026-08-25
+
+> Immutable distribution release: installed package bytes remain read-only,
+> evolution uses an explicit Git workspace, generated helpers live under
+> GEODE home, bundled skills are exact, and updates stop the daemon before
+> replacing its environment.
+
+### Fixed
+
+- **Installed distributions are immutable across evolution, helper setup, and updates.**
+  Scaffold mutation and promotion now require an explicit writable GEODE Git
+  checkout, rolling experiment ledgers no longer ship as wheel data, macOS
+  helper builds land under `GEODE_HOME`, and `geode update` stops a live daemon
+  before replacing its installation and verifies CLI/IPC version parity after
+  restart.
+
+### Infrastructure
+
+- **Bundled skills use an exact self-contained allowlist.** The wheel ships only
+  the eight first-party runtime skills whose companion files are present;
+  repository and operator-specific skills stay in their external tiers, and
+  installed-package smoke tests hash every distribution file before and after a
+  rejected mutation attempt.
+
 ## [1.0.25] - 2026-08-24
 
 > Post-migration integrity release: packaged guidance, release checks, and

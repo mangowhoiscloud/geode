@@ -110,7 +110,8 @@ GEODE source checkout. Custom uv receipts stop rather than discarding their
 installation settings and report the receipt path. Missing metadata never falls
 back to the current Git checkout. Registry resolution is isolated from the
 current project's uv configuration. A running daemon is stopped only after the
-update verifies, and the replacement must become ready. No network update runs
+update preflight and before the live install is replaced. A failed update stays
+stopped; a successful restart must report the same CLI and IPC version. No network update runs
 implicitly at CLI startup.
 
 ---

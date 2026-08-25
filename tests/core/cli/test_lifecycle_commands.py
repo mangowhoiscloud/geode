@@ -17,6 +17,7 @@ from core.cli.commands.lifecycle import (
     _is_socket_orphan,
     _scan_directory,
     _scan_file,
+    _serve_matches_cli,
     _start_serve_background,
     do_clean,
     do_uninstall,
@@ -185,6 +186,7 @@ class TestStartServe:
         with (
             patch("core.cli.commands.lifecycle.subprocess.Popen") as popen,
             patch("core.cli.ipc_client.is_serve_running", return_value=True),
+            patch("core.cli.commands.lifecycle._serve_matches_cli", return_value=True),
         ):
             assert _start_serve_background(executable=executable)
 
@@ -198,6 +200,7 @@ class TestStartServe:
                 "core.cli.ipc_client.is_serve_running",
                 side_effect=[False, True],
             ) as running,
+            patch("core.cli.commands.lifecycle._serve_matches_cli", return_value=True),
             patch("core.cli.commands.lifecycle.time.sleep"),
         ):
             assert _start_serve_background(executable=executable)
@@ -237,6 +240,34 @@ class TestStartServe:
             assert not _start_serve_background(executable=executable, timeout=0.0)
 
         assert "could not be reaped" in capfd.readouterr().out
+
+    def test_restart_version_must_match_ipc_greeting(self) -> None:
+        completed = subprocess.CompletedProcess(
+            ["geode", "version"],
+            returncode=0,
+            stdout="GEODE v1.2.3\n",
+        )
+        with (
+            patch("core.cli.commands.lifecycle.subprocess.run", return_value=completed),
+            patch("core.cli.ipc_client.query_serve_version", return_value="1.2.3"),
+        ):
+            assert _serve_matches_cli("geode")
+        with (
+            patch("core.cli.commands.lifecycle.subprocess.run", return_value=completed),
+            patch("core.cli.ipc_client.query_serve_version", return_value="1.2.2"),
+        ):
+            assert not _serve_matches_cli("geode")
+
+    def test_mismatched_restart_is_stopped(self) -> None:
+        with (
+            patch("core.cli.commands.lifecycle.subprocess.Popen"),
+            patch("core.cli.ipc_client.is_serve_running", return_value=True),
+            patch("core.cli.commands.lifecycle._serve_matches_cli", return_value=False),
+            patch("core.cli.commands.lifecycle.stop_serve", return_value=True) as stop,
+        ):
+            assert not _start_serve_background()
+
+        stop.assert_called_once_with(force=True, timeout=10)
 
 
 class TestCleanStaleArtifacts:
@@ -347,6 +378,7 @@ class TestUpdate:
     @patch("core.cli.commands.lifecycle._start_serve_background")
     @patch("core.cli.commands.lifecycle.stop_serve", return_value=True)
     @patch("core.cli.commands.lifecycle._run_update_step", return_value=True)
+    @patch("core.cli.commands.lifecycle._find_serve_pid", return_value=None)
     @patch("core.cli.ipc_client.is_serve_running", return_value=False)
     @patch("core.cli.commands.lifecycle._has_dirty_worktree", return_value=False)
     @patch("core.cli.commands.lifecycle.detect_update_target")
@@ -355,6 +387,7 @@ class TestUpdate:
         mock_target: MagicMock,
         mock_dirty: MagicMock,
         mock_running: MagicMock,
+        mock_pid: MagicMock,
         mock_step: MagicMock,
         mock_stop: MagicMock,
         mock_start: MagicMock,
@@ -437,6 +470,7 @@ class TestUpdate:
                 ),
             ),
             patch("core.cli.ipc_client.is_serve_running", return_value=False),
+            patch("core.cli.commands.lifecycle._find_serve_pid", return_value=None),
             patch("core.cli.commands.lifecycle._run_update_step", return_value=True) as step,
         ):
             assert do_update()
@@ -477,6 +511,7 @@ class TestUpdate:
                 ),
             ),
             patch("core.cli.ipc_client.is_serve_running", return_value=False),
+            patch("core.cli.commands.lifecycle._find_serve_pid", return_value=None),
             patch("core.cli.commands.lifecycle._run_update_step", return_value=True) as step,
         ):
             assert do_update(latest=True)
@@ -491,7 +526,7 @@ class TestUpdate:
             "geode-agent@latest",
         ]
 
-    def test_uv_tool_leaves_existing_serve_running_when_update_fails(
+    def test_uv_tool_leaves_serve_stopped_when_update_fails(
         self,
         tmp_path: Path,
     ) -> None:
@@ -506,7 +541,7 @@ class TestUpdate:
                 ),
             ),
             patch("core.cli.ipc_client.is_serve_running", return_value=True),
-            patch("core.cli.commands.lifecycle.stop_serve") as stop,
+            patch("core.cli.commands.lifecycle.stop_serve", return_value=True) as stop,
             patch("core.cli.commands.lifecycle._run_update_step", return_value=False),
             patch(
                 "core.cli.commands.lifecycle._start_serve_background",
@@ -515,7 +550,7 @@ class TestUpdate:
         ):
             assert not do_update()
 
-        stop.assert_not_called()
+        stop.assert_called_once_with(force=True, timeout=10)
         start.assert_not_called()
 
     def test_uv_tool_restarts_with_receipt_entrypoint(self, tmp_path: Path) -> None:
@@ -546,7 +581,7 @@ class TestUpdate:
         )
         stop.assert_called_once_with(force=True, timeout=10)
 
-    def test_uv_tool_stops_only_after_install_and_verification(self, tmp_path: Path) -> None:
+    def test_uv_tool_stops_before_install_and_verification(self, tmp_path: Path) -> None:
         events: list[str] = []
 
         def record_step(label: str, *_args: object, **_kwargs: object) -> bool:
@@ -582,11 +617,36 @@ class TestUpdate:
             assert do_update()
 
         assert events == [
+            "stop",
             "Resolve and install GEODE update",
             "Verify CLI version",
-            "stop",
             "start",
         ]
+
+    def test_uv_tool_stops_live_pid_when_socket_is_unresponsive(self, tmp_path: Path) -> None:
+        with (
+            patch("core.__version__", "0.99.333"),
+            patch(
+                "core.cli.commands.lifecycle.detect_update_target",
+                return_value=UpdateTarget(
+                    UpdateKind.UV_TOOL,
+                    uv_tool_dir=tmp_path / "tools",
+                    uv_tool_bin_dir=tmp_path / "bin",
+                ),
+            ),
+            patch("core.cli.ipc_client.is_serve_running", return_value=False),
+            patch("core.cli.commands.lifecycle._find_serve_pid", return_value=12345),
+            patch("core.cli.commands.lifecycle.stop_serve", return_value=True) as stop,
+            patch("core.cli.commands.lifecycle._run_update_step", return_value=True),
+            patch(
+                "core.cli.commands.lifecycle._start_serve_background",
+                return_value=True,
+            ) as start,
+        ):
+            assert do_update()
+
+        stop.assert_called_once_with(force=True, timeout=10)
+        start.assert_called_once()
 
     def test_uv_tool_does_not_start_second_daemon_when_stop_fails(
         self,
@@ -604,10 +664,32 @@ class TestUpdate:
             ),
             patch("core.cli.ipc_client.is_serve_running", return_value=True),
             patch("core.cli.commands.lifecycle.stop_serve", return_value=False) as stop,
-            patch("core.cli.commands.lifecycle._run_update_step", return_value=True),
+            patch("core.cli.commands.lifecycle._run_update_step") as step,
             patch("core.cli.commands.lifecycle._start_serve_background") as start,
         ):
             assert not do_update()
+
+        stop.assert_called_once_with(force=True, timeout=10)
+        step.assert_not_called()
+        start.assert_not_called()
+
+    def test_uv_tool_no_restart_still_stops_before_replacement(self, tmp_path: Path) -> None:
+        with (
+            patch("core.__version__", "0.99.333"),
+            patch(
+                "core.cli.commands.lifecycle.detect_update_target",
+                return_value=UpdateTarget(
+                    UpdateKind.UV_TOOL,
+                    uv_tool_dir=tmp_path / "tools",
+                    uv_tool_bin_dir=tmp_path / "bin",
+                ),
+            ),
+            patch("core.cli.ipc_client.is_serve_running", return_value=True),
+            patch("core.cli.commands.lifecycle.stop_serve", return_value=True) as stop,
+            patch("core.cli.commands.lifecycle._run_update_step", return_value=True),
+            patch("core.cli.commands.lifecycle._start_serve_background") as start,
+        ):
+            assert do_update(restart=False)
 
         stop.assert_called_once_with(force=True, timeout=10)
         start.assert_not_called()

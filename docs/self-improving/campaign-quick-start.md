@@ -23,6 +23,7 @@ a run that looks like it works but measures nothing.
 |-------------|----------------|----------------|
 | Python 3.12+ | `python --version` | Project floor (`pyproject.toml`, `requires-python >= 3.12`). |
 | `uv` | `uv --version` | Package manager + runner for every command here. |
+| Writable GEODE checkout | Run inside the checkout, or set `GEODE_EVOLVE_WORKSPACE=/absolute/path/to/geode`. | The wheel contains read-only reference inputs. Mutation, promotion, and rolling ledgers require a Git workspace and fail before writing otherwise. |
 | Base sync | `uv sync` | Installs GEODE core. Not enough on its own for the loop. |
 | Audit extra | `uv sync --extra audit` | Installs `inspect_ai` + Petri (puts the `inspect` CLI on PATH). WITHOUT it the audit aborts loudly: `evals/petri/runner.py` checks `shutil.which("inspect")` and returns an aborted report with `` `inspect` CLI not found on PATH — install the [audit] extra: `uv sync --extra audit`. `` (`evolve.scaffold_search.train` then returns failure for that cycle). Install it before your first run. |
 | Auditor + judge model | `ANTHROPIC_API_KEY`. See model accounts below. | The Petri auditor drives each scenario, the judge scores each rollout on the rubric. No judge means no fitness. |
@@ -95,6 +96,9 @@ git worktree add .claude/worktrees/my-campaign -b feature/my-campaign develop
 ```
 
 All subsequent commands run from inside that worktree checkout.
+`GEODE_EVOLVE_WORKSPACE` is only needed when the command itself starts outside
+that checkout; point it at this same writable GEODE worktree. An installed wheel
+can run `--dry-run` and read bundled defaults, but it cannot own mutation history.
 
 ### Step b: set the loop config
 

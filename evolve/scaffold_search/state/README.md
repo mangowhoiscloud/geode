@@ -1,9 +1,10 @@
 # `evolve/scaffold_search/state/` — tracked self-improving SoT (PR-STATE-SOT-RUNTIME-SPLIT, 2026-06-14)
 
-This directory is the **git-tracked Source of Truth** for the self-improving
-(autoresearch) loop: the versioned INPUTS + ledgers a reviewer must see and the
-loop reads across runs. It is data-in-package, colocated with its code
-(`evolve/scaffold_search/`), exactly like `core/llm/model_pricing.toml`.
+In a GEODE checkout, this directory is the **git-tracked Source of Truth** for
+the self-improving (autoresearch) loop: the versioned inputs and ledgers a
+reviewer must see across runs. A wheel contains only read-only reference policy
+inputs; rolling ledgers are not package data, and mutation/promotion requires a
+writable checkout selected by `GEODE_EVOLVE_WORKSPACE`.
 
 The companion **RUNTIME scratch** (per-run execution traces, the LATEST baseline,
 handoff pointers, logs) lives OUT of the repo under `~/.geode/self-improving/`
@@ -47,7 +48,7 @@ evolve/scaffold_search/state/
 
 | Constant | Lifecycle | Default |
 |----------|-----------|---------|
-| `SELF_IMPROVING_SOT_DIR` / `AUTORESEARCH_STATE_DIR` | TRACKED | `evolve/scaffold_search/state/` (this dir) |
+| `SELF_IMPROVING_SOT_DIR` / `AUTORESEARCH_STATE_DIR` | TRACKED/read-only in a wheel | `$GEODE_EVOLVE_WORKSPACE/evolve/scaffold_search/state/`, or bundled reference inputs for reads only |
 | `SEED_POOLS_DIR` | TRACKED (always repo-pinned) | `evolve/scaffold_search/state/seed_pools/` |
 | `RUNTIME_ROOT` | RUNTIME | `~/.geode/self-improving/` |
 | `BASELINE_JSON_PATH` | RUNTIME | `~/.geode/self-improving/baseline.json` |

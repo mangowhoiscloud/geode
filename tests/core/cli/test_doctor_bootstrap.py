@@ -224,7 +224,7 @@ class TestCheckDesktopComputerUse:
             result = _check_desktop_computer_use()
         assert result.ok is False
         assert "Helper is not installed" in result.detail
-        assert "build_computer_helper.sh" in result.fix
+        assert "geode setup" in result.fix
 
     def test_helper_untrusted_reports_helper_app_permission(self, tmp_path):
         fake_settings = type("Settings", (), {"computer_use_enabled": True})()

@@ -69,10 +69,13 @@ receipt is a plain editable request for that same checkout. Never infer a source
 checkout from the caller's current Git directory when installation metadata is
 absent.
 
-When a daemon is already running, resolve, install, and verify the uv update
-before stopping it. Stop must satisfy the socket-closed postcondition; only then
-start the receipt-derived executable and wait for its socket to become ready.
-If installation or verification fails, leave the existing daemon process alone.
+When a daemon is already running, resolve its installation and prospective
+version, then stop it before replacing any package file. Stop must satisfy the
+socket-closed postcondition; a stop failure must leave the installation
+untouched. Install and verify the update only after that boundary. If install or
+verification fails, leave the daemon stopped. On success, start the
+receipt-derived executable and require both CLI output and the IPC greeting to
+report the installed version.
 
 Do not add a hidden startup-time network check or background self-update. The
 automatic part is installation detection, constraint selection, daemon
