@@ -87,6 +87,12 @@ functional change.
   projected into the validated v2 learning view without rewriting native
   receipts or collapsing infrastructure-invalid retries into reward rows.
 
+### Infrastructure
+
+- **Property-based persistence coverage.** Hypothesis is now a development
+  dependency and exercises `UsageRecord` JSONL writer/reader round trips across
+  falsy and extension-field combinations.
+
 ## [1.0.26] - 2026-08-25
 
 > Immutable distribution release: installed package bytes remain read-only,

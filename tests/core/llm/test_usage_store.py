@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 from core.llm.usage_store import UsageRecord, UsageStore, get_usage_store, reset_usage_store
+from hypothesis import given
+from hypothesis import strategies as st
 
 
 class TestUsageRecord:
@@ -67,6 +69,27 @@ class TestUsageRecord:
         assert restored.cost_usd == original.cost_usd
         assert restored.session == original.session
         assert restored.subject_id == original.subject_id
+
+    @given(
+        st.builds(
+            UsageRecord,
+            ts=st.floats(min_value=0, max_value=4_102_444_800, allow_nan=False),
+            model=st.text(max_size=64),
+            input_tokens=st.integers(min_value=0, max_value=2**63 - 1),
+            output_tokens=st.integers(min_value=0, max_value=2**63 - 1),
+            cost_usd=st.floats(min_value=0, max_value=1_000_000, allow_nan=False),
+            session=st.text(max_size=64),
+            subject_id=st.text(max_size=64),
+            cache_creation_tokens=st.integers(min_value=0, max_value=2**63 - 1),
+            cache_read_tokens=st.integers(min_value=0, max_value=2**63 - 1),
+            thinking_tokens=st.integers(min_value=0, max_value=2**63 - 1),
+            role=st.text(max_size=32),
+            source=st.text(max_size=32),
+            eval_id=st.text(max_size=128),
+        )
+    )
+    def test_json_roundtrip_preserves_every_field(self, original: UsageRecord) -> None:
+        assert UsageRecord.from_json(original.to_json()) == original
 
     def test_from_json_missing_optional_fields(self):
         data = '{"ts":1710000000,"model":"test","in":100,"out":50,"cost":0.01}'
