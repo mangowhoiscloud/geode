@@ -271,6 +271,7 @@ dev = [
     # Python 3.14+ has native zstd in zipfile and this becomes a no-op shim.
     "zipfile-zstd>=0.0.4",
     "Pillow>=10.0.0",
+    "hypothesis>=6.165.10",
 ]
 # Hero visualization scripts — opt-in only via ``uv sync --group viz``.
 # manim transitively requires system pangocairo which is not available
