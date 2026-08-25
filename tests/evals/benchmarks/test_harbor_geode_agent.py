@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-from evals.benchmarks.harbor_geode_agent import HarborExecTool
+from evals.platforms.harbor import HarborExecTool
 
 
 class _Environment:

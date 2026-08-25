@@ -1,6 +1,6 @@
 """Launch-gate a Crucible campaign against the current quota window.
 
-Thin CLI over :mod:`evolve.crucible.preflight`, which owns the decision
+Thin CLI over :mod:`evolve.crucible.admission.preflight`, which owns the decision
 model (tiers, history scan, Codex usage probe) so ``prepare_campaign`` and
 this launcher share one implementation. Exit codes: 0 ``cap_fit`` ·
 1 ``history_fit`` · 3 ``defer``.
@@ -23,13 +23,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from evolve.crucible.contract import ContractError
-from evolve.crucible.preflight import (
+from evolve.crucible.admission.preflight import (
     campaign_token_cap,
     completed_campaign_tokens,
     decide,
     remaining_from_codex,
 )
+from evolve.crucible.contract import ContractError
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -4,9 +4,9 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
+from evolve.crucible.admission.power import audit_family_power
 from evolve.crucible.cli import main as crucible_main
 from evolve.crucible.contract import ContractError, PromotionRule, TaskUnit, task_pack_sha256
-from evolve.crucible.power import audit_family_power
 
 
 def _tasks(count: int = 9) -> tuple[TaskUnit, ...]:

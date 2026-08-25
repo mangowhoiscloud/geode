@@ -1,9 +1,9 @@
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-AGENT_RUNNER = REPO_ROOT / "evolve/crucible/tau2_geode_agent.py"
-TURN_SUPERVISOR = REPO_ROOT / "evals/benchmarks/tau2_turn_supervisor.py"
-WORKFLOW_ORDER = REPO_ROOT / "evals/benchmarks/tau2_workflow_order.py"
+AGENT_RUNNER = REPO_ROOT / "evolve/crucible/assays/tau2_geode_agent.py"
+TURN_SUPERVISOR = REPO_ROOT / "evals/benchmarks/tau2/turn_supervisor.py"
+WORKFLOW_ORDER = REPO_ROOT / "evals/benchmarks/tau2/workflow_order.py"
 
 
 def test_tau2_harness_does_not_embed_experiment_history() -> None:

@@ -9,15 +9,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from .artifacts import load_json_object, write_exclusive_json
-from .contract import ContractError, ExperimentContract
-from .evidence import EvidenceEnvelope
-from .runtime_identity import (
+from evolve.crucible.admission.runtime_identity import (
     RUNTIME_ARM_WALL_POLICY,
     RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     canonical_runtime_hash,
     runtime_regime_id,
 )
+from evolve.crucible.artifacts import load_json_object, write_exclusive_json
+from evolve.crucible.contract import ContractError, ExperimentContract
+from evolve.crucible.evidence import EvidenceEnvelope
 
 RUNTIME_RECEIPT_SCHEMA = "crucible.runtime-receipt.v2"
 

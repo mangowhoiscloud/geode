@@ -7,20 +7,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from evals.benchmarks.tau2_turn_supervisor import (
+from evals.benchmarks.tau2.turn_supervisor import (
     _pre_execution_retry_telemetry,
 )
-from evolve.crucible.contract import (
-    ContractError,
-    ExperimentContract,
-    TaskUnit,
-    task_pack_sha256,
-)
-from evolve.crucible.evidence import EvidenceEnvelope, ResourceUsage
-from evolve.crucible.promotion import SCREENING_FAILURE, decide, promotion_reachability
-from evolve.crucible.row_cache import harvest_arm_rows
-from evolve.crucible.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
-from evolve.crucible.tau2_live import (
+from evolve.crucible.assays.row_cache import harvest_arm_rows
+from evolve.crucible.assays.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
+from evolve.crucible.assays.tau2_live import (
     Tau2InfrastructureError,
     _evaluation_wall_seconds,
     _index_simulations,
@@ -37,7 +29,15 @@ from evolve.crucible.tau2_live import (
     tau2_failure_feedback,
     tau2_trace_checks,
 )
-from evolve.crucible.verifiers.tau2 import TAU2_ADAPTER, _verify_snapshot
+from evolve.crucible.assays.verifiers.tau2 import TAU2_ADAPTER, _verify_snapshot
+from evolve.crucible.contract import (
+    ContractError,
+    ExperimentContract,
+    TaskUnit,
+    task_pack_sha256,
+)
+from evolve.crucible.evidence import EvidenceEnvelope, ResourceUsage
+from evolve.crucible.promotion import SCREENING_FAILURE, decide, promotion_reachability
 
 TASKS = (
     TaskUnit("task-1", "1" * 64, "a" * 64),
@@ -94,8 +94,10 @@ def test_run_tau2_command_stops_on_finalized_infrastructure_row(
         _process.returncode = -15
         return -15
 
-    monkeypatch.setattr("evolve.crucible.tau2_live.subprocess.Popen", lambda *a, **kw: process)
-    monkeypatch.setattr("evolve.crucible.tau2_live._terminate_process_group", stop)
+    monkeypatch.setattr(
+        "evolve.crucible.assays.tau2_live.subprocess.Popen", lambda *a, **kw: process
+    )
+    monkeypatch.setattr("evolve.crucible.assays.tau2_live._terminate_process_group", stop)
 
     completed, contaminated = _run_tau2_command(
         ["tau2-fixture"],
@@ -115,7 +117,7 @@ def test_run_tau2_command_refuses_to_launch_after_absolute_deadline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "evolve.crucible.tau2_live.subprocess.Popen",
+        "evolve.crucible.assays.tau2_live.subprocess.Popen",
         lambda *args, **kwargs: pytest.fail("expired work must not launch"),
     )
 
@@ -158,7 +160,7 @@ def test_signal_exit_finalizes_the_active_arm_for_receipt(
     contract = _contract()
     deadline = SharedRuntimeDeadline(contract, 100.0)
     monkeypatch.setattr(
-        "evolve.crucible.tau2_live._run_arm",
+        "evolve.crucible.assays.tau2_live._run_arm",
         lambda *args, **kwargs: (_ for _ in ()).throw(SystemExit(143)),
     )
 
@@ -189,7 +191,7 @@ def test_timeout_receipt_write_failure_is_not_masked_by_a_second_arm_finish(
         assert callable(on_timeout)
         on_timeout()
 
-    monkeypatch.setattr("evolve.crucible.tau2_live._run_arm", timeout)
+    monkeypatch.setattr("evolve.crucible.assays.tau2_live._run_arm", timeout)
 
     with pytest.raises(OSError, match="receipt write failed"):
         _run_arm_with_deadline(
@@ -250,7 +252,7 @@ def test_timeout_receipt_is_written_before_arm_returns(
     writer = _RuntimeReceiptWriter(deadline, receipt_path, lambda: None)
     monkeypatch.setenv("CRUCIBLE_ROW_CACHE_ROOT", str(tmp_path / "cache"))
     monkeypatch.setattr(
-        "evolve.crucible.tau2_live._run_tau2_command",
+        "evolve.crucible.assays.tau2_live._run_tau2_command",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             subprocess.TimeoutExpired(cmd=["tau2-fixture"], timeout=1.0)
         ),
@@ -494,7 +496,7 @@ def _contract() -> ExperimentContract:
             "assay_config": assay,
             "mutations": [
                 {
-                    "surface": "evals/benchmarks/tau2_agent_policy.md",
+                    "surface": "evals/benchmarks/tau2/agent_policy.md",
                     "hypothesis": "compress tool workflows",
                 }
             ],
@@ -620,19 +622,19 @@ def _prepared_arm(
         raw_hash=hashlib.sha256(raw.read_bytes()).hexdigest(),
     )
     monkeypatch.setattr(
-        "evolve.crucible.tau2_live._run_tau2_command",
+        "evolve.crucible.assays.tau2_live._run_tau2_command",
         lambda *args, **kwargs: (
             subprocess.CompletedProcess(args=[], returncode=1),
             False,
         ),
     )
     monkeypatch.setattr(
-        "evolve.crucible.tau2_live.tau2_resource_usage_floor",
+        "evolve.crucible.assays.tau2_live.tau2_resource_usage_floor",
         lambda raw: ResourceUsage(1.0, 1, 10, 0.0),
     )
-    monkeypatch.setattr("evolve.crucible.tau2_live.tau2_trace_checks", lambda raw: {})
+    monkeypatch.setattr("evolve.crucible.assays.tau2_live.tau2_trace_checks", lambda raw: {})
     monkeypatch.setattr(
-        "evolve.crucible.tau2_live.normalize_tau2_results",
+        "evolve.crucible.assays.tau2_live.normalize_tau2_results",
         lambda *args, **kwargs: evidence,
     )
     return contract, checkout, harness, output
@@ -675,7 +677,7 @@ def test_run_arm_emits_invalid_evidence_after_infrastructure_fail_fast(
         invalid=True,
     )
     monkeypatch.setattr(
-        "evolve.crucible.tau2_live._run_tau2_command",
+        "evolve.crucible.assays.tau2_live._run_tau2_command",
         lambda *args, **kwargs: (
             subprocess.CompletedProcess(args=[], returncode=-15),
             True,
@@ -736,11 +738,11 @@ def test_run_arm_accounts_for_actual_subprocess_elapsed_time(
         return subprocess.CompletedProcess(args=command, returncode=1), False
 
     monkeypatch.setattr(
-        "evolve.crucible.tau2_live.time",
+        "evolve.crucible.assays.tau2_live.time",
         SimpleNamespace(monotonic=lambda: clock["now"]),
     )
-    monkeypatch.setattr("evolve.crucible.tau2_live._run_tau2_command", run)
-    monkeypatch.setattr("evolve.crucible.tau2_live.normalize_tau2_results", normalize)
+    monkeypatch.setattr("evolve.crucible.assays.tau2_live._run_tau2_command", run)
+    monkeypatch.setattr("evolve.crucible.assays.tau2_live.normalize_tau2_results", normalize)
 
     _run_arm(
         contract,
@@ -851,14 +853,14 @@ def test_run_arm_disables_legacy_partial_cache_without_v4_companions(
         raw_hash="a" * 64,
     )
     monkeypatch.setenv("CRUCIBLE_ROW_CACHE_ROOT", str(cache))
-    monkeypatch.setattr("evolve.crucible.tau2_live._run_tau2_command", run)
+    monkeypatch.setattr("evolve.crucible.assays.tau2_live._run_tau2_command", run)
     monkeypatch.setattr(
-        "evolve.crucible.tau2_live.tau2_resource_usage_floor",
+        "evolve.crucible.assays.tau2_live.tau2_resource_usage_floor",
         lambda raw: ResourceUsage(0.0, 0, 0, 0.0),
     )
-    monkeypatch.setattr("evolve.crucible.tau2_live.tau2_trace_checks", lambda raw: {})
+    monkeypatch.setattr("evolve.crucible.assays.tau2_live.tau2_trace_checks", lambda raw: {})
     monkeypatch.setattr(
-        "evolve.crucible.tau2_live.normalize_tau2_results",
+        "evolve.crucible.assays.tau2_live.normalize_tau2_results",
         lambda *args, **kwargs: evidence,
     )
 
@@ -943,14 +945,14 @@ def test_run_arm_disables_legacy_full_cache_and_executes_fresh(
         (snapshot_dir / f"{run_id}.snapshot.json").write_text("{}\n", encoding="utf-8")
         return subprocess.CompletedProcess(args=command, returncode=0), False
 
-    monkeypatch.setattr("evolve.crucible.tau2_live._run_tau2_command", run)
+    monkeypatch.setattr("evolve.crucible.assays.tau2_live._run_tau2_command", run)
     monkeypatch.setattr(
-        "evolve.crucible.tau2_live.tau2_resource_usage_floor",
+        "evolve.crucible.assays.tau2_live.tau2_resource_usage_floor",
         lambda _raw: ResourceUsage(0.0, 0, 0, 0.0),
     )
-    monkeypatch.setattr("evolve.crucible.tau2_live.tau2_trace_checks", lambda _raw: {})
+    monkeypatch.setattr("evolve.crucible.assays.tau2_live.tau2_trace_checks", lambda _raw: {})
     monkeypatch.setattr(
-        "evolve.crucible.tau2_live.normalize_tau2_results",
+        "evolve.crucible.assays.tau2_live.normalize_tau2_results",
         lambda *args, **kwargs: evidence,
     )
 
@@ -1042,14 +1044,14 @@ def test_run_arm_ignores_row_cache_outside_train_stage(
         raw_hash="a" * 64,
     )
     monkeypatch.setenv("CRUCIBLE_ROW_CACHE_ROOT", str(cache))
-    monkeypatch.setattr("evolve.crucible.tau2_live._run_tau2_command", run)
+    monkeypatch.setattr("evolve.crucible.assays.tau2_live._run_tau2_command", run)
     monkeypatch.setattr(
-        "evolve.crucible.tau2_live.tau2_resource_usage_floor",
+        "evolve.crucible.assays.tau2_live.tau2_resource_usage_floor",
         lambda raw: ResourceUsage(0.0, 0, 0, 0.0),
     )
-    monkeypatch.setattr("evolve.crucible.tau2_live.tau2_trace_checks", lambda raw: {})
+    monkeypatch.setattr("evolve.crucible.assays.tau2_live.tau2_trace_checks", lambda raw: {})
     monkeypatch.setattr(
-        "evolve.crucible.tau2_live.normalize_tau2_results",
+        "evolve.crucible.assays.tau2_live.normalize_tau2_results",
         lambda *args, **kwargs: evidence,
     )
 

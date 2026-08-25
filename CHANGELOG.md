@@ -49,6 +49,11 @@ functional change.
 
 ### Architecture
 
+- **Evaluation and Crucible package trees now expose runtime ownership.**
+  MCPMark and tau2 integrations are vertical benchmark packages, Harbor lives
+  under external platforms, and Crucible separates admission, search, trusted
+  assays, and attestation while retaining v1.0.x adapter and persisted
+  provenance facades.
 - **Benchmark integrations and platform adapters now have distinct roles.**
   MCPMark and tau2 remain pinned benchmark sources, while Harbor remains a
   platform adapter outside the benchmark registry; research guidance now

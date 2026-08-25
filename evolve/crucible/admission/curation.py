@@ -11,9 +11,9 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from .artifacts import load_json_object, write_exclusive_json
-from .contract import ContractError, TaskUnit, task_pack_sha256
-from .verifiers.tau2 import tau2_task_unit
+from evolve.crucible.artifacts import load_json_object, write_exclusive_json
+from evolve.crucible.assays.verifiers.tau2 import tau2_task_unit
+from evolve.crucible.contract import ContractError, TaskUnit, task_pack_sha256
 
 SELECTION_SCHEMA = "crucible.tau2-selection.v1"
 CURATION_SUMMARY_SCHEMA = "crucible.tau2-curation-summary.v1"

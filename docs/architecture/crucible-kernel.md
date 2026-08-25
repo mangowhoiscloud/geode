@@ -29,6 +29,21 @@ candidate history. A result row belongs to exactly one candidate commit,
 evaluator hash, harness hash, and content-bound task-pack hash. Sealed test and
 repository promotion remain outside the adaptive train loop.
 
+The physical package tree follows that flow:
+
+```text
+evolve/crucible/
+├── admission/       # campaign construction and fit checks
+├── search/          # candidate loop, private refs, producer protocol
+├── assays/          # trusted tau2 execution and verifier adapters
+├── attestation/     # promotion-chain rebuild and sealed boundary
+├── contract.py / evidence.py / promotion.py
+└── cli.py            # composition root
+```
+
+The root compatibility facades preserve the v1.0.x adapter and persisted
+component paths; canonical implementation imports use the grouped packages.
+
 ## Lineage and technical foundations
 
 Crucible is not another benchmark. It is the promotion layer above executable
@@ -276,7 +291,7 @@ documented pack scales. A train-stage `KEEP` only advances a campaign search
 head and has `promotion_authority=none`. Test-stage
 verdicts cannot be produced through the reusable `score` CLI.
 
-`evolve.crucible.bundle` rebuilds the complete train chain from one
+`evolve.crucible.attestation.bundle` rebuilds the complete train chain from one
 supervisor-owned attempt directory: request, candidate proposal, contract,
 both evidence envelopes, train KEEP verdict, canonical supervisor record, and
 the persisted intent and receipt for the search-ref CAS. The CAS atomically
@@ -286,7 +301,7 @@ verifies both that witness and the current search ref. A verdict that the
 supervisor downgraded for campaign budget cannot enter a bundle. The serialized
 bundle is a transport summary, not a bearer credential; sealed execution
 rebuilds the chain from the attempt directory itself.
-`evolve.crucible.sealed` then owns the non-adaptive test boundary. It validates
+`evolve.crucible.attestation.sealed` then owns the non-adaptive test boundary. It validates
 the rebuilt bundle and disjoint parent, then records the pack claim, sole
 attempt, attested evidence, and terminal decision below Git's common directory.
 The evaluator is invoked only after that global attempt burn. Once raw hashes
@@ -299,7 +314,7 @@ advance only `refs/crucible/eligible/*` through the recoverable ref journal; the
 resulting decision still says `release_authority=none` and cannot move a branch,
 tag, release, `main`, or `develop`.
 
-`evolve.crucible.supervisor` is the separate outer loop. It owns one frozen
+`evolve.crucible.search.supervisor` is the separate outer loop. It owns one frozen
 train plan and creates a disposable, no-remote Git checkout from its private
 search ref. The producer can commit inside that checkout but cannot see the
 authority repository's refs. The supervisor imports the resulting commit only
@@ -325,14 +340,14 @@ buy another stochastic train-gate ticket; it receives a zero-evaluator-call
 changed measurement or decision identity remains eligible for explicit replay.
 
 The shipped live path keeps the treatment smaller than the evaluator. The only
-candidate-owned file is `evals/benchmarks/tau2_agent_policy.md`.
+candidate-owned file is `evals/benchmarks/tau2/agent_policy.md`.
 That file is the mutable treatment—the analogue of autoresearch's `train.py`—
 not the search program. Candidate generation is supplied explicitly through
 the frozen `producer_command`; the retired built-in Codex CLI producer is not
 part of the runtime. Executable validators remain authoritative, and external
 producers cannot read raw tasks, trajectories, evaluator artifacts, or sealed
 state.
-`scripts/eval/crucible_tau2_evaluator.py` and `evolve.crucible.tau2_live` own
+`scripts/eval/crucible_tau2_evaluator.py` and `evolve.crucible.assays.tau2_live` own
 the paired baseline/candidate execution. They derive the complete argv from the
 contract, isolate per-arm state, retain raw evidence, and compute trace checks
 separately from reward. The `crucible_user` registry identity uses the same
@@ -434,7 +449,7 @@ The independent train loop is started from one JSON configuration:
   "repository": ".",
   "harness_root": "../frozen-harness",
   "state_dir": "../crucible-runs/verify-claims-01",
-  "allowed_surfaces": ["evals/benchmarks/tau2_agent_policy.md"],
+  "allowed_surfaces": ["evals/benchmarks/tau2/agent_policy.md"],
   "producer_command": ["/absolute/path/to/candidate-producer"],
   "evaluator_entrypoint": "scripts/eval/crucible_tau2_evaluator.py",
   "producer_environment": ["CODEX_HOME"],

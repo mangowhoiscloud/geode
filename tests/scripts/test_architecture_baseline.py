@@ -277,8 +277,8 @@ def test_context_var_inventory_propagates_and_resets(tmp_path: Path) -> None:
             return _context_value(label, variable, surface)
 
         before = _context_value(label, variable, surface)
-        if label == "evals/benchmarks/tau2_runtime_contract.py:_CURRENT_ATTEMPT":
-            module = importlib.import_module("evals.benchmarks.tau2_runtime_contract")
+        if label == "evals/benchmarks/tau2/runtime_contract.py:_CURRENT_ATTEMPT":
+            module = importlib.import_module("evals.benchmarks.tau2.runtime_contract")
 
             async def read_attempt() -> tuple[str, str, int, int, int]:
                 await asyncio.sleep(0)

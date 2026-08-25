@@ -68,7 +68,7 @@ Play 칼럼이 `playwright`(4)만인지 `playwright_webarena`(21) 포함인지 �
 ```bash
 cd artifacts/eval/harnesses/mcpmark
 set -a; source .mcp_env; set +a
-OPENAI_API_KEY=dummy .venv/bin/python -m evals.benchmarks.run_mcpmark \
+OPENAI_API_KEY=dummy .venv/bin/python -m evals.benchmarks.mcpmark.runner \
   --mcp <filesystem|notion|github|postgres|playwright|playwright_webarena> \
   --task-suite standard \
   --tasks <category/task | all> \

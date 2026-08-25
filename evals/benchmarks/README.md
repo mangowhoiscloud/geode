@@ -10,27 +10,33 @@ It covers:
 
 - `mcpmark`: upstream `eval-sys/mcpmark` pinned by commit, with GEODE and
   filesystem-only Codex CLI `BaseMCPAgent` adapters in
-  `mcpmark_geode_agent.py`.
+  `mcpmark/agent.py`.
 - `tau2-bench`: upstream `sierra-research/tau2-bench` pinned by commit, with
   provider-neutral contracts here and the Crucible participant adapter in
-  `evolve/crucible/tau2_geode_agent.py`.
+  `evolve/crucible/assays/tau2_geode_agent.py`.
 
 Harbor is an external platform, not a benchmark. Its GEODE adapter is
-`harbor_geode_agent.py`; Harbor's upstream dataset adapters and native
+`evals/platforms/harbor.py`; Harbor's upstream dataset adapters and native
 verifiers remain the authority for each benchmark. GEODE does not create a
 `platform/benchmark` or `benchmark/platform` directory cross-product.
 
-Benchmark families remain flat until one of them needs multiple packages. The
-current ownership is therefore:
+Benchmark families are vertical slices; shared catalog and evidence contracts
+remain at the package root:
 
 ```text
-evals/benchmarks/
-├── harbor_geode_agent.py     # Harbor platform adapter, not in BENCHMARKS
-├── mcpmark_*.py              # MCPMark integration
-├── tau2_*.py                 # provider-neutral tau2 contracts
-├── manifest.py               # pinned upstream benchmark sources
-└── trajectory_artifacts.py   # shared evaluation evidence
+evals/
+├── benchmarks/
+│   ├── mcpmark/              # agent, runners, pinned verifier patch
+│   ├── tau2/                 # policy, runtime contract, tool/turn boundary
+│   ├── manifest.py           # pinned upstream benchmark sources
+│   ├── cli.py / env.py       # shared setup and preflight
+│   └── trajectory_artifacts.py
+└── platforms/
+    └── harbor.py             # execution-platform adapter
 ```
+
+The former flat adapter and runner modules remain importable as v1.0.x
+compatibility facades; new code uses the grouped paths above.
 
 `HarnessSpec`, `BENCHMARK_HARNESSES`, `get_harness()`, and the former
 `benchmark_harness.harness` TOML table remain v1.0.x compatibility aliases;
@@ -69,7 +75,7 @@ For MCPMark, register both comparison agents inside an upstream checkout before
 running `pipeline.py`:
 
 ```python
-from evals.benchmarks.mcpmark_geode_agent import register_mcpmark_agent
+from evals.benchmarks.mcpmark.agent import register_mcpmark_agent
 from src.agents import AGENT_REGISTRY
 
 register_mcpmark_agent(AGENT_REGISTRY)
@@ -90,7 +96,7 @@ Run `python -m evals.benchmarks.cli install mcpmark` and execute its
 printed setup commands first; the commands prepare both isolated environments.
 
 ```bash
-<geode-checkout>/.venv/bin/python -m evals.benchmarks.run_mcpmark_pair \
+<geode-checkout>/.venv/bin/python -m evals.benchmarks.mcpmark.pair_runner \
   --run-spec <run-spec.json> --mcpmark-root <pinned-mcpmark> \
   --output-dir <fresh-attempt-root> \
   --python <geode-checkout>/.venv/bin/python
@@ -106,7 +112,7 @@ Gate 0C starts with one paired task under the same runner and evidence
 contract:
 
 ```bash
-<geode-checkout>/.venv/bin/python -m evals.benchmarks.run_mcpmark_pair \
+<geode-checkout>/.venv/bin/python -m evals.benchmarks.mcpmark.pair_runner \
   --profile filesystem1-geode-codex-smoke --task <filesystem-standard-task> \
   --run-spec <smoke-run-spec.json> --mcpmark-root <pinned-mcpmark> \
   --output-dir <fresh-smoke-attempt-root> \
@@ -126,7 +132,7 @@ Gate 0B reuses the same runner for the frozen five-task, two-cap, three-repeat
 diagnostic (30 independent GEODE processes):
 
 ```bash
-<geode-checkout>/.venv/bin/python -m evals.benchmarks.run_mcpmark_pair \
+<geode-checkout>/.venv/bin/python -m evals.benchmarks.mcpmark.pair_runner \
   --profile max-tool-result-tokens \
   --run-spec <gate-0b-run-spec.json> --mcpmark-root <pinned-mcpmark> \
   --output-dir <fresh-attempt-root> \

@@ -4,8 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from evolve.crucible.contract import ContractError
-from evolve.crucible.row_cache import (
+from evolve.crucible.assays.row_cache import (
     cached_context,
     cached_rows,
     harvest_arm_rows,
@@ -14,6 +13,7 @@ from evolve.crucible.row_cache import (
     selected_expected_rows,
     synthesized_snapshot,
 )
+from evolve.crucible.contract import ContractError
 
 
 @dataclass(frozen=True)
@@ -290,7 +290,7 @@ def test_legacy_cached_row_snapshot_is_not_admitted_without_v4_companions() -> N
     contract = _contract()
     raw_sha = "a" * 64
     snapshot = synthesized_snapshot(contract, arm="candidate", raw_sha256=raw_sha)
-    from evolve.crucible.verifiers.tau2 import _verify_snapshot
+    from evolve.crucible.assays.verifiers.tau2 import _verify_snapshot
 
     with pytest.raises(ContractError, match="companion artifact context"):
         _verify_snapshot(

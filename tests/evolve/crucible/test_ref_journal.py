@@ -6,9 +6,9 @@ import subprocess
 from copy import deepcopy
 from pathlib import Path
 
-import evolve.crucible.ref_journal as journal_module
+import evolve.crucible.search.ref_journal as journal_module
 import pytest
-from evolve.crucible.ref_journal import (
+from evolve.crucible.search.ref_journal import (
     RefIntent,
     RefJournalError,
     RefReceipt,

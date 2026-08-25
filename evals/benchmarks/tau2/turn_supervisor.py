@@ -82,7 +82,7 @@ def _tool_mutates_state(tool: Any) -> bool:
     return marker if isinstance(marker, bool) else True
 
 
-_AGENT_POLICY_PATH = Path(__file__).with_name("tau2_agent_policy.md")
+_AGENT_POLICY_PATH = Path(__file__).with_name("agent_policy.md")
 
 
 def _agent_policy() -> str:

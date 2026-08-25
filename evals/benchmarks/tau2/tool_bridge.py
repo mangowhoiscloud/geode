@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from evals.benchmarks.tau2_turn_supervisor import _tool_mutates_state
+from evals.benchmarks.tau2.turn_supervisor import _tool_mutates_state
 
 
 def _tool_description(tool: Any) -> str:

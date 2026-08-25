@@ -8,8 +8,18 @@ from evals.benchmarks.manifest import BENCHMARKS, get_benchmark
 
 def test_manifest_lists_pinned_benchmarks() -> None:
     assert set(BENCHMARKS) == {"mcpmark", "tau2-bench"}
-    assert get_benchmark("mcpmark").public_adapter == "evals.benchmarks.mcpmark_geode_agent"
-    assert get_benchmark("tau2-bench").public_adapter == "evolve.crucible.tau2_geode_agent"
+    assert get_benchmark("mcpmark").public_adapter == "evals.benchmarks.mcpmark.agent"
+    assert get_benchmark("tau2-bench").public_adapter == "evolve.crucible.assays.tau2_geode_agent"
+
+
+def test_v1_adapter_facades_preserve_public_imports() -> None:
+    from evals.benchmarks.harbor_geode_agent import HarborExecTool as LegacyHarborExecTool
+    from evals.benchmarks.mcpmark.agent import GeodeMCPMarkAgent
+    from evals.benchmarks.mcpmark_geode_agent import GeodeMCPMarkAgent as LegacyGeodeMCPMarkAgent
+    from evals.platforms.harbor import HarborExecTool
+
+    assert LegacyHarborExecTool is HarborExecTool
+    assert LegacyGeodeMCPMarkAgent is GeodeMCPMarkAgent
 
 
 def test_legacy_harness_names_alias_benchmark_coordinates(tmp_path: Path) -> None:

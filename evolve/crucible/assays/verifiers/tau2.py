@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from evals.benchmarks.tau2_runtime_contract import (
+from evals.benchmarks.tau2.runtime_contract import (
     GEODE_DUAL_RUNTIME_PROFILE,
     TAU2_NATIVE_USER_PROFILE,
 )
@@ -35,8 +35,8 @@ class Tau2AssayAdapter:
 
     schema: str = "crucible.tau2-assay.v1"
     required_evaluator_paths: tuple[str, ...] = (
-        "evolve/crucible/tau2_geode_agent.py",
-        "evals/benchmarks/tau2_runtime_contract.py",
+        "evolve/crucible/assays/tau2_geode_agent.py",
+        "evals/benchmarks/tau2/runtime_contract.py",
         "evals/benchmarks/trajectory_artifacts.py",
         "evolve/crucible",
     )

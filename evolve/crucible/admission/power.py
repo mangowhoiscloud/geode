@@ -19,7 +19,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from .contract import (
+from evolve.crucible.contract import (
     ContractError,
     PromotionRule,
     TaskUnit,
@@ -27,7 +27,7 @@ from .contract import (
     _positive_int,
     canonical_json_sha256,
 )
-from .promotion import paired_bootstrap_lower_bound
+from evolve.crucible.promotion import paired_bootstrap_lower_bound
 
 POWER_SPEC_SCHEMA = "crucible.family-power-spec.v1"
 POWER_REPORT_SCHEMA = "crucible.family-power-report.v1"
