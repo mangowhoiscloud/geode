@@ -1011,13 +1011,13 @@ function SeedgenDiagram() {
   const locale = useLocale();
   return (
     <svg
-      viewBox="0 0 520 180"
-      className="w-full"
+      viewBox="0 0 520 388"
+      className="block h-auto w-full min-w-0 max-w-full"
       role="img"
       aria-label={t(
         locale,
-        "시드 생성 파이프라인 도식",
-        "seed-generation pipeline schematic",
+        "시드 생성과 Crucible 제한형 탐색 루프 도식",
+        "seed-generation and Crucible bounded-search schematic",
       )}
     >
       <g fontFamily="var(--font-fira-code), monospace">
@@ -1193,6 +1193,88 @@ function SeedgenDiagram() {
             "human gate가 승인한 top-N만 동결된 다음 세대로 들어갑니다",
             "Only human-approved top-N enters the next frozen generation",
           )}
+        </text>
+
+        <text x="8" y="204" fill={ROSE_INK} fontSize="12" fontWeight="700">
+          CRUCIBLE
+        </text>
+        <text x="512" y="204" textAnchor="end" fill={ROSE_INK_70} fontSize="8">
+          frozen contract · bounded search
+        </text>
+        <line x1="8" y1="216" x2="512" y2="216" stroke={ROSE_INK_70} />
+
+        <line x1="88" y1="244" x2="104" y2="244" stroke={ROSE_INK} />
+        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(104 244)" />
+        <line x1="192" y1="244" x2="208" y2="244" stroke={ROSE_INK} />
+        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(208 244)" />
+        <line x1="312" y1="244" x2="328" y2="244" stroke={ROSE_INK} />
+        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(328 244)" />
+        <line x1="376" y1="244" x2="388" y2="236" stroke={ROSE_INK} />
+        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(392 234) rotate(-34)" />
+        <line x1="376" y1="244" x2="388" y2="288" stroke={ROSE_INK} />
+        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(392 290) rotate(74)" />
+        <path d="M452 252 V320 H304" fill="none" stroke={ROSE_INK_70} />
+        <path d="M452 308 V320" fill="none" stroke={ROSE_INK_70} />
+        <polygon points="4,-3.5 -4,0 4,3.5" fill={ROSE_INK_70} transform="translate(300 320)" />
+        <path d="M252 320 H148 V268" fill="none" stroke={ROSE_INK_70} strokeDasharray="4 4" />
+        <polygon points="-3,4 0,-4 3,4" fill={ROSE_INK_70} transform="translate(148 264)" />
+        <rect x="176" y="312" width="64" height="16" fill={PAPER} />
+        <text x="208" y="323" textAnchor="middle" fill={ROSE_INK_70} fontSize="7">
+          CONTINUE
+        </text>
+        <line x1="276" y1="344" x2="276" y2="356" stroke={ROSE_INK_70} />
+        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK_70} transform="translate(276 360) rotate(90)" />
+
+        <rect x="8" y="224" width="80" height="40" fill={PAPER} stroke={ROSE_INK} />
+        <text x="48" y="240" textAnchor="middle" fill={ROSE_INK} fontSize="9" fontWeight="700">
+          prepare
+        </text>
+        <text x="48" y="254" textAnchor="middle" fill={ROSE_INK_70} fontSize="7">
+          frozen config
+        </text>
+        <rect x="104" y="224" width="88" height="40" fill={PAPER} stroke={ROSE_INK} />
+        <text x="148" y="240" textAnchor="middle" fill={ROSE_INK} fontSize="9" fontWeight="700">
+          candidate
+        </text>
+        <text x="148" y="254" textAnchor="middle" fill={ROSE_INK_70} fontSize="7">
+          private head
+        </text>
+        <rect x="208" y="224" width="104" height="40" fill={PAPER} stroke={ROSE_INK} />
+        <text x="260" y="240" textAnchor="middle" fill={ROSE_INK} fontSize="9" fontWeight="700">
+          paired assay
+        </text>
+        <text x="260" y="254" textAnchor="middle" fill={ROSE_INK_70} fontSize="7">
+          base + candidate
+        </text>
+        <polygon points="352,220 376,244 352,268 328,244" fill={PAPER} stroke={ROSE_INK} />
+        <text x="352" y="247" textAnchor="middle" fill={ROSE_INK} fontSize="8">
+          decide
+        </text>
+        <rect x="392" y="216" width="120" height="36" fill={ROSE_INK} stroke={ROSE_INK} />
+        <text x="452" y="232" textAnchor="middle" fill={PAPER} fontSize="9" fontWeight="700">
+          KEEP
+        </text>
+        <text x="452" y="244" textAnchor="middle" fill={PAPER} fontSize="7">
+          CAS advance
+        </text>
+        <rect x="392" y="272" width="120" height="36" fill={PAPER} stroke={ROSE_INK} />
+        <text x="452" y="288" textAnchor="middle" fill={ROSE_INK} fontSize="9" fontWeight="700">
+          REJECT / INVALID
+        </text>
+        <text x="452" y="300" textAnchor="middle" fill={ROSE_INK_70} fontSize="7">
+          head unchanged
+        </text>
+        <polygon points="276,296 300,320 276,344 252,320" fill={PAPER} stroke={ROSE_INK} />
+        <text x="276" y="323" textAnchor="middle" fill={ROSE_INK} fontSize="7">
+          limits?
+        </text>
+
+        <line x1="8" y1="360" x2="512" y2="360" stroke={ROSE_INK_70} strokeDasharray="2 4" />
+        <text x="8" y="376" fill={ROSE_INK} fontSize="8" fontWeight="700">
+          STOP → SEALED TEST · RELEASE
+        </text>
+        <text x="512" y="376" textAnchor="end" fill={ROSE_INK_70} fontSize="7">
+          promotion_authority=none
         </text>
       </g>
     </svg>
@@ -3141,10 +3223,10 @@ const features: {
     id: "breed",
     plate: 4,
     index: "#8 breed",
-    headKo: "시험은 점점 어려워집니다",
-    headEn: "THE EXAM EVOLVES TOO",
-    ko: "Seed generation은 시험이 시스템보다 앞서도록 만듭니다. 후보 시나리오는 비판, pilot, ranking을 거쳐 유효한 headroom을 남깁니다. 점수는 변이되지 않는 held-out benchmark만 부여합니다.",
-    en: "Seed generation keeps the exam ahead of the system it probes. Candidate scenarios are criticized, piloted, and ranked for useful headroom. Only a frozen held-out benchmark supplies the score.",
+    headKo: "시험을 키우고 탐색에 경계를 둡니다",
+    headEn: "GROWS THE EXAM, BOUNDS THE SEARCH",
+    ko: "Seed generation은 시험의 범위를 넓히고 Crucible은 후보를 동결된 계약 아래 반복 비교합니다. KEEP은 private search head를 전진시킵니다. 한계에 닿은 실행은 별도의 sealed test와 release 경계로 넘어갑니다.",
+    en: "Seed generation expands the exam while Crucible compares candidates under a frozen contract. KEEP advances the private search head. A bounded run hands off to separate sealed-test and release authorities.",
     banner: <SeedgenDiagram />,
   },
   {
@@ -3164,7 +3246,7 @@ function PlateCard({ feature }: { feature: (typeof features)[number] }) {
   const locale = useLocale();
   return (
     <div
-      className={`flex flex-col bg-[#FFF0F8] p-4 pb-6 ${feature.id === "direct" ? "aspect-[100/210] md:aspect-[100/96]" : "aspect-[100/148]"}`}
+      className={`flex min-w-0 flex-col bg-[#FFF0F8] p-4 pb-6 ${feature.id === "direct" ? "aspect-[100/210] md:aspect-[100/96]" : "aspect-[100/148]"}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div
@@ -3189,14 +3271,14 @@ function PlateCard({ feature }: { feature: (typeof features)[number] }) {
         </div>
       </div>
       <div
-        className={`mt-3 min-h-0 flex-1 bg-cover bg-center ${feature.id === "direct" ? "overflow-x-auto" : "overflow-hidden"}`}
+        className={`mt-3 min-h-0 min-w-0 flex-1 bg-cover bg-center ${feature.id === "direct" ? "overflow-x-auto" : "overflow-hidden"}`}
         style={{
           backgroundImage: `linear-gradient(rgba(255,240,248,0.8), rgba(255,240,248,0.8)), url(/geode/images/plate-bg-${feature.plate}.png)`,
           imageRendering: "pixelated",
         }}
       >
         <div
-          className={`flex h-full w-full items-center justify-center px-2 py-3 ${feature.id === "direct" ? "min-w-[520px]" : ""}`}
+          className={`flex h-full w-full min-w-0 items-center justify-center px-2 py-3 ${feature.id === "direct" ? "min-w-[520px]" : ""}`}
         >
           {feature.banner}
         </div>
@@ -3233,7 +3315,7 @@ function FeaturesGrid() {
           {features.map((feature, i) => (
             <motion.div
               key={feature.id}
-              className={feature.id === "direct" ? "md:col-span-2" : ""}
+              className={`min-w-0 ${feature.id === "direct" ? "md:col-span-2" : ""}`}
               initial={{ opacity: 0, y: reduceMotion ? 0 : 46 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-140px" }}
