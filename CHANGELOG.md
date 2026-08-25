@@ -66,6 +66,12 @@ functional change.
 
 ### Added
 
+- **Measured code-convention SOT and cross-host application skill.** GEODE now
+  documents package ownership, abstraction choice, module and class naming,
+  Python data forms, schema/version axes, test placement, and the TypeScript
+  site overlay from a full v1.0.26 tree scan; the focused development skill
+  applies that guide without duplicating the broader workflow and review
+  skills.
 - **Transparent cross-host skill inventory and security contracts.** All
   repository development/meta skills now have one reviewed `.agents` source
   with relative Claude Code aliases, bundled runtime skills are inventoried

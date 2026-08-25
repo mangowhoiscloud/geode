@@ -54,6 +54,7 @@ does not claim the package or authorize expanding the implementation diff.
 | Need | Skill reference |
 |---|---|
 | Ordinary code-work checklist | `.claude/skills/geode-workflow/references/phase-checklist.md` |
+| Abstraction, naming, type/class, schema, test, site, and version conventions | `.agents/skills/geode-code-conventions/SKILL.md` + `docs/architecture/naming-conventions.md` |
 | Provider/model/API capability claims | `.claude/skills/geode-workflow/references/provider-grounding.md` |
 | Schema/log/event/state/trajectory consistency | `.claude/skills/geode-workflow/references/observability-contract.md` |
 | Same-task Codex–GEODE production and comparison | `.claude/skills/geode-workflow/references/codex-geode-paired-coding.md` |
