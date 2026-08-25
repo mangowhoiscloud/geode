@@ -56,7 +56,7 @@ export default function Page() {
 
             <h2>코퍼스는 어떻게 자라나</h2>
             <p>
-              정적 카탈로그가 아닙니다. seed-generation 파이프라인
+              seed-generation 파이프라인
               (<a href="/geode/docs/capabilities/co-scientist">Seed Scenario
               Generation</a>)이 target dimension별로 새 seed를 만들고, 생존자가{" "}
               <code>geode seeds assemble</code>을 거쳐 사이클 입력
@@ -136,7 +136,7 @@ export default function Page() {
 
             <h2>How the corpus grows</h2>
             <p>
-              This is not a static catalog. The seed-generation pipeline
+              The seed-generation pipeline
               (<a href="/geode/docs/capabilities/co-scientist">Seed Scenario
               Generation</a>) drafts new seeds per target dimension, and
               survivors are assembled by <code>geode seeds assemble</code> into

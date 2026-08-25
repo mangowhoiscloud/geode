@@ -8,8 +8,8 @@ export default function Page() {
       slug="ops/backlog-dispose"
       title="Backlog disposal"
       titleKo="백로그 처분"
-      summary="Retiring an idea with a paper trail instead of a silent delete: the progress board, the dated disposition audit, and the re-review trigger."
-      summaryKo="조용한 삭제 대신 흔적을 남기며 아이디어를 정리합니다. 진행 보드, 날짜 박힌 처분 감사 문서, 재검토 트리거를 다룹니다."
+      summary="Retiring an idea with a paper trail: the progress board, the dated disposition audit, and the re-review trigger."
+      summaryKo="흔적을 남기며 아이디어를 정리합니다. 진행 보드, 날짜 박힌 처분 감사 문서, 재검토 트리거를 다룹니다."
     >
       <Bi
         ko={
@@ -34,8 +34,8 @@ export default function Page() {
 
             <h2>처분 문서의 형식</h2>
             <p>
-              항목마다 네 절을 채웁니다. 핵심은 마지막 절입니다. 처분은 영구
-              폐기가 아니라 조건부 보류이고, 조건이 명시되어야 합니다.
+              항목마다 네 절을 채웁니다. 핵심은 마지막 절입니다. 처분은 재검토
+              조건이 명시된 보류입니다.
             </p>
             <pre>{`## #<번호> — <항목 제목>
 
@@ -46,16 +46,16 @@ export default function Page() {
 
 ## Summary         항목 | Disposition | Trigger 수 표`}</pre>
             <p>
-              Finding 절이 처분의 무게를 만듭니다. 추측이 아니라 grep 출력과
-              코드 경로가 들어가야, 나중에 다시 읽는 사람이 당시의 판단을
+              Finding 절이 처분의 무게를 만듭니다. grep 출력과 코드 경로가
+              들어가야, 나중에 다시 읽는 사람이 당시의 판단을
               재검증할 수 있습니다.
             </p>
 
-            <h2>처분이 아닌 것</h2>
+            <h2>다른 상태로 보내야 하는 경우</h2>
             <ul>
-              <li>다른 PR이 같은 문제를 해결했다면 처분 문서가 아니라 보드의 Done으로 갑니다. 해결은 처분이 아닙니다.</li>
+              <li>다른 PR이 같은 문제를 해결했다면 보드의 Done으로 보냅니다.</li>
               <li>구현이 결정된 항목은 In Progress로 갑니다. 처분은 &quot;지금 하지 않는다&quot;에만 씁니다.</li>
-              <li>재검토 trigger 없는 처분은 조용한 삭제와 같습니다. trigger를 못 쓰겠다면 처분이 아니라 거절이고, 거절도 근거와 함께 적습니다.</li>
+              <li>재검토 trigger를 정의할 수 없으면 근거를 갖춘 거절로 기록합니다.</li>
             </ul>
 
             <h2>실패 모드</h2>
@@ -97,8 +97,8 @@ export default function Page() {
             <h2>The disposition format</h2>
             <p>
               Each item fills four sections. The last one is the point: a
-              disposition is a conditional shelf, not a permanent discard, and
-              the condition must be written down.
+              disposition is a conditional shelf with a written re-review
+              condition.
             </p>
             <pre>{`## #<id> — <item title>
 

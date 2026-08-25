@@ -11,6 +11,107 @@ export const metadata = { title: "MCPMark — GEODE Docs" };
 
 const group = BENCHMARK_GROUPS.find((g) => g.id === "mcpmark")!;
 
+function MCPMarkReport({ ko }: { ko: boolean }) {
+  const snapshots = ko
+    ? [
+        ["Available services", "64 / 74", "86.5% · filesystem + postgres + GitHub", "historical slice"],
+        ["Gate 0C", "23 / 30", "Codex 21 / 30 · common deadline", "diagnostic · k=1"],
+        ["Coverage gap", "53 tasks", "Notion 28 + Playwright 4 + WebArena 21", "unmeasured"],
+      ]
+    : [
+        ["Available services", "64 / 74", "86.5% · filesystem + postgres + GitHub", "Historical slice"],
+        ["Gate 0C", "23 / 30", "Codex 21 / 30 · common deadline", "Diagnostic · k=1"],
+        ["Coverage gap", "53 tasks", "Notion 28 + Playwright 4 + WebArena 21", "Unmeasured"],
+      ];
+  const lineage = ko
+    ? [
+        ["2026-07-04", "Service slices", "실행 가능한 세 service를 분리 집계하고 raw verifier 로그 보존"],
+        ["2026-07-31", "Trajectory @1", "tool call/result exact join과 task별 실행 표면 추가"],
+        ["2026-08-12", "Matched K=1", "동일 easy 10건에서 점수·token·agent time을 함께 기록"],
+        ["2026-08-13", "Invalidation", "timeout 시작점 불일치를 발견해 비교 주장을 철회"],
+        ["2026-08-14", "Prospective gates", "run-spec → attempts → analysis → admission 순서를 고정"],
+      ]
+    : [
+        ["2026-07-04", "Service slices", "Separated three runnable services and retained raw verifier logs"],
+        ["2026-07-31", "Trajectory @1", "Added exact tool call/result joins and per-task behavior"],
+        ["2026-08-12", "Matched K=1", "Recorded score, tokens, and agent time on the same ten easy tasks"],
+        ["2026-08-13", "Invalidation", "Found unequal timeout start points and withdrew the comparison claim"],
+        ["2026-08-14", "Prospective gates", "Fixed run-spec → attempts → analysis → admission order"],
+      ];
+
+  return (
+    <section aria-labelledby="mcpmark-report" className="mb-14">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--rule)] pb-3">
+        <div>
+          <p className="!m-0 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--ink-3)]">
+            {ko ? "상태 기반 MCP 검증" : "State-based MCP verification"}
+          </p>
+          <h2 id="mcpmark-report" className="!mb-0 !mt-1">
+            {ko ? "점수·비용·증거 누락을 함께 봅니다" : "Score, cost, and evidence gaps share one view"}
+          </h2>
+        </div>
+        <a href="https://mcpmark.ai/leaderboard/verified" className="text-xs">MCPMark Verified ↗</a>
+      </div>
+
+      <div className="grid gap-x-8 gap-y-6 py-6 md:grid-cols-3">
+        {snapshots.map(([label, value, scope, status], index) => (
+          <div key={label} className={`border-t border-[var(--rule-soft)] pt-4 ${index > 0 ? "md:border-l md:pl-6" : ""}`}>
+            <p className="!m-0 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-3)]">{label}</p>
+            <p className="!my-2 font-serif-docs text-3xl font-black text-[var(--ink)]">{value}</p>
+            <p className="!m-0 text-sm text-[var(--ink-2)]">{scope}</p>
+            <p className="!mt-2 font-mono text-[10px] uppercase tracking-wider text-[var(--section-accent)]">{status}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-6 border-y border-[var(--rule-soft)] py-5 md:grid-cols-[1fr_1.35fr]">
+        <div>
+          <p className="!m-0 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">Gate 0C</p>
+          <p className="!my-2 text-lg font-bold">59 admitted · 1 withheld</p>
+          <p className="!m-0 text-sm text-[var(--ink-2)]">
+            {ko
+              ? "동일 filesystem/standard 30건과 공통 deadline을 사용했습니다. timeout trajectory 한 건은 점수에 남고 공개 admission에서는 보류됐습니다."
+              : "The paired run used the same 30 filesystem/standard tasks and one common deadline. One timeout kept its score while its trajectory remained withheld from publication."}
+          </p>
+          <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/1160fecfe4447f0a3f4cf30a414f29c61776d012/mcpmark/results-paired/mcpmark-gate0c-filesystem30-gpt54-high-20260813t190922z" className="mt-3 inline-block text-xs">
+            {ko ? "Gate 0C 원본 bundle ↗" : "Gate 0C source bundle ↗"}
+          </a>
+        </div>
+        <div>
+          <p className="!m-0 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">Gate 0B</p>
+          <p className="!my-2 text-lg font-bold">7 / 15 guard · 10 / 15 unlimited</p>
+          <p className="!m-0 text-sm text-[var(--ink-2)]">
+            {ko
+              ? "25K result guard의 직접 ablation입니다. 세 반복 중 네 timeout은 withheld로 남겼고, 단일 treatment 진단에는 승격 권한을 주지 않았습니다."
+              : "This direct ablation isolates the 25K result guard. Four timeouts across three repetitions remain withheld, and the single-treatment diagnostic has no promotion authority."}
+          </p>
+          <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/17133f0c8e893b6d765fcef69712ba0867bd573a/mcpmark/results-paired/mcpmark-gate0b-tool-cap-gpt54-high-20260813t142345z" className="mt-3 inline-block text-xs">
+            {ko ? "Gate 0B 원본 bundle ↗" : "Gate 0B source bundle ↗"}
+          </a>
+        </div>
+      </div>
+
+      <div className="mt-8">
+        <h3>{ko ? "측정 기록의 발전" : "Measurement record evolution"}</h3>
+        <div role="list">
+          {lineage.map(([date, stage, detail]) => (
+            <div role="listitem" key={date} className="grid gap-1 border-b border-[var(--rule-soft)] py-4 md:grid-cols-[7rem_10rem_1fr] md:gap-4">
+              <time className="font-mono text-xs text-[var(--ink-3)]">{date}</time>
+              <strong className="text-sm">{stage}</strong>
+              <span className="text-sm text-[var(--ink-2)]">{detail}</span>
+            </div>
+          ))}
+        </div>
+        <p className="!mb-0 !mt-4 text-sm text-[var(--ink-2)]">
+          {ko
+            ? "MCPMark Verified는 service별 pass@1과 turns·time·token·cost를 함께 열고, trajectory가 없는 제출을 명시합니다. GEODE 표면도 미측정 service와 withheld trajectory를 점수 옆에 보존합니다."
+            : "MCPMark Verified expands pass@1 into service-level turns, time, tokens, and cost, and labels submissions without trajectories. GEODE preserves unmeasured services and withheld trajectories beside the score."}
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function ServiceCoverageKo() {
   return (
     <table>
@@ -66,6 +167,7 @@ function ServiceCoverageEn() {
 export default function Page() {
   return (
     <DocsShell
+      wide
       slug="benchmarks/mcpmark"
       title="MCPMark"
       titleKo="MCPMark"
@@ -75,6 +177,7 @@ export default function Page() {
       <Bi
         ko={
           <>
+            <MCPMarkReport ko />
             <p>
               MCPMark는 실제 MCP 서버(filesystem, Postgres, GitHub, Notion,
               Playwright 등)를 대상으로 한 tool-use 벤치마크입니다. 태스크마다
@@ -229,9 +332,9 @@ export default function Page() {
             <h2>Headline: Verified available-services 트랙</h2>
             <p>
               2026-07-04 run, GEODE v0.99.269 계열, <code>eval-sys/mcpmark@cd45b7f</code>,{" "}
-              <code>gpt-5.5</code> Codex 구독 route, effort <code>xhigh</code>. 전체
-              leaderboard 점수가 아니라 로컬 환경에서 실행 가능했던 standard
-              슬라이스(filesystem, postgres, github)의 측정입니다.
+              <code>gpt-5.5</code> Codex 구독 route, effort <code>xhigh</code>. 이
+              측정의 범위는 로컬에서 실행 가능했던 standard 슬라이스(filesystem,
+              postgres, github)입니다.
             </p>
             <BenchmarkMatrix group={group} />
 
@@ -274,6 +377,7 @@ export default function Page() {
         }
         en={
           <>
+            <MCPMarkReport ko={false} />
             <p>
               MCPMark is a tool-use benchmark against real MCP servers
               (filesystem, Postgres, GitHub, Notion, Playwright, and more), with
@@ -302,8 +406,8 @@ export default function Page() {
               invalidated, and the scores remain retrospective descriptions only.
               GEODE reports a lower native-input total, but its cache-excluded
               input is 4.20M versus 1.44M, so the run does not support a token-
-              efficiency claim. The exact runner is withheld, so the public
-              bundle is not independently executable.
+              efficiency claim. The exact runner is withheld, which leaves the
+              public bundle without independent execution support.
             </p>
             <ul>
               <li>
@@ -343,8 +447,9 @@ export default function Page() {
               Eight of ten tasks used fewer input tokens, including a 12.5%
               reduction across the four tasks with identical round counts. The
               188 canonical events retain 54/54 exact tool pairs with zero
-              orphans. This is one matched trial, not MCPMark Verified, a
-              confidence interval, or a subscription billing claim.
+              orphans. Its authority is limited to one matched trial; MCPMark
+              Verified, confidence intervals, and subscription billing remain
+              outside this claim.
             </p>
             <ul>
               <li>
@@ -379,8 +484,8 @@ export default function Page() {
               events and 56 exact tool pairs with{" "}
               <code>scope_complete=true</code> and{" "}
               <code>replay_complete=false</code>. The v1.0.11 GPT-5.6 score was
-              10/10, but the model changed too, so this is not attributed to the
-              release alone.
+              10/10, while the simultaneous model change prevents attribution
+              to the release alone.
             </p>
             <ul>
               <li>
@@ -437,9 +542,9 @@ export default function Page() {
             <p>
               2026-07-04 run, GEODE v0.99.269-era code,{" "}
               <code>eval-sys/mcpmark@cd45b7f</code>, <code>gpt-5.5</code> through
-              the Codex subscription route at effort <code>xhigh</code>. This is
-              not a full leaderboard score: it covers the standard service slices
-              runnable in the local environment (filesystem, postgres, github).
+              the Codex subscription route at effort <code>xhigh</code>. Its scope
+              is the standard service slices runnable in the local environment
+              (filesystem, postgres, github).
             </p>
             <BenchmarkMatrix group={group} />
 

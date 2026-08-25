@@ -165,8 +165,8 @@ def create_adapter():
               timeout, connection, server)는 백오프 후 다음 모델로 넘어가고,
               인증 오류 같은 비재시도 오류는 즉시 전파됩니다. 단, 폴백 체인은
               기본 출하값이 전부 빈 리스트입니다(<code>[model.fallbacks]</code>).
-              조용한 모델 교체 대신 실패를 드러내는 설계이므로, 새 어댑터의
-              모델을 폴백 후보로 쓰려면 <code>~/.geode/routing.toml</code>에서
+              기본 경로는 실패를 그대로 드러냅니다. 새 어댑터의 모델을 폴백
+              후보로 쓰려면 <code>~/.geode/routing.toml</code>에서
               직접 체인을 켜야 합니다.
             </p>
 
@@ -383,8 +383,8 @@ def create_adapter():
               server) back off and move to the next model, while non-retryable
               errors like authentication propagate immediately. Note that
               fallback chains ship empty (<code>[model.fallbacks]</code>): the
-              design surfaces failure instead of silently swapping models, so to
-              use your adapter&apos;s model as a fallback candidate you opt in
+              design surfaces failure directly. To use your adapter&apos;s model as
+              a fallback candidate, opt in
               by editing the chain in <code>~/.geode/routing.toml</code>.
             </p>
 

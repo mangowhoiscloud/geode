@@ -148,8 +148,8 @@ export default function Page() {
               </li>
               <li>
                 <strong>폴백 없는 기본값</strong>. <code>[model.fallbacks]</code>의
-                기본값은 전부 빈 배열입니다. 프라이머리 실패는 조용한
-                교차-프로바이더 스왑 대신 정직한 오류로 표면화되고, 체인은{" "}
+                기본값은 전부 빈 배열입니다. 프라이머리 실패는 정직한 오류로
+                표면화되고, 교차-프로바이더 체인은{" "}
                 <code>~/.geode/routing.toml</code>에서 opt-in합니다
                 (<code>core/llm/router/calls/_failover.py</code>).
               </li>
@@ -431,8 +431,7 @@ export default function Page() {
               <li>
                 <strong>No-fallback default</strong>.{" "}
                 <code>[model.fallbacks]</code> ships empty: a primary failure
-                surfaces as an honest error instead of a silent cross-provider
-                swap, and chains are opt-in via{" "}
+                surfaces as an honest error, and cross-provider chains are opt-in via{" "}
                 <code>~/.geode/routing.toml</code>{" "}
                 (<code>core/llm/router/calls/_failover.py</code>).
               </li>

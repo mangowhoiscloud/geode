@@ -37,7 +37,7 @@ export default function Page() {
               S-5 구조 스프린트(v0.99.163) 전까지 GEODE는 4계층으로 서술됐고,
               자기개선 코드는 다이어그램에 자리가 없었습니다. 코드 인구조사
               결과는 반대였습니다. 자기개선 모듈의 절반가량이 4계층 어디에도
-              매핑되지 않았습니다. 코드가 아니라 다이어그램이 틀렸던 것입니다.
+              매핑되지 않았습니다. 다이어그램이 실제 코드를 놓치고 있었습니다.
             </p>
             <p>
               경계의 근거는 의존 방향입니다. 자기개선 계층은 Agent 계층을 측정
@@ -46,19 +46,18 @@ export default function Page() {
               <code>GEODE_WRAPPER_OVERRIDE</code> 환경 변수와 SoT 파일이라는
               좁은 인터페이스 하나로만 일어납니다
               (<code>core/agent/system_prompt.py</code>가 소비자). 한 방향으로만
-              의존하고 인터페이스가 좁으면, 그것은 같은 계층이 아니라 위
-              계층입니다.
+              의존하고 인터페이스가 좁으므로 독립된 상위 계층으로 분류합니다.
             </p>
             <p>
               경계는 변경 비용으로도 강제됩니다. <code>program.md</code> 계약상
               자기개선 에이전트는 측정 모듈 4개(<code>measure.py</code>,{" "}
               <code>fitness.py</code>, <code>gate.py</code>,{" "}
               <code>ledger.py</code>)를 수정할 수 없습니다. 측정 장비를 바꾸면
-              측정 대상이 아니라 자가 기준이 바뀌기 때문입니다. 이 불변 조건은
+              자가 기준이 바뀝니다. 이 불변 조건은
               계층이 분리되어 있어야만 선언할 수 있습니다.
             </p>
 
-            <h2>왜 3, 4, 6이 아닌가</h2>
+            <h2>계층 수를 다섯으로 고정한 근거</h2>
             <ul>
               <li>3계층(Model + Runtime + Agent)이면 훅, 게이트웨이, serve, 레인이 갈 곳이 없습니다.</li>
               <li>4계층은 자기개선 코드를 숨깁니다. 위에 쓴 대로 실측이 반증했습니다.</li>
@@ -67,7 +66,7 @@ export default function Page() {
 
             <h2>경계가 진짜라는 증거</h2>
             <p>
-              경계가 장식이 아니라면 교체 실험이 통과해야 합니다. 모델 교체
+              교체 실험이 계층 경계를 검증합니다. 모델 교체
               (<code>/model</code>)는 Model 계층만 바꿉니다. 메신저 추가는
               Harness의 폴러 하나를 추가합니다. 스캐폴드 변이가 reject되면
               Self-Improving 계층의 되돌림이 SoT를 복원할 뿐, 아래 계층 코드는
@@ -109,7 +108,7 @@ export default function Page() {
               as four layers, and the self-improving code had no place in the
               diagram. A code census said otherwise: roughly half of the
               self-improving modules mapped to none of the four layers. The
-              diagram was wrong, not the code.
+              diagram had fallen out of sync with the code.
             </p>
             <p>
               The boundary&apos;s justification is dependency direction. The
@@ -119,8 +118,8 @@ export default function Page() {
               Injection happens through exactly one narrow interface: the{" "}
               <code>GEODE_WRAPPER_OVERRIDE</code> environment variable and an
               SoT file, consumed by <code>core/agent/system_prompt.py</code>.
-              One-way dependency plus a narrow interface means a layer above,
-              not a sibling.
+              One-way dependency plus a narrow interface identifies a distinct
+              upper layer.
             </p>
             <p>
               The boundary is also enforced by change cost. By the{" "}
@@ -128,12 +127,12 @@ export default function Page() {
               not modify the four measurement modules
               (<code>measure.py</code>, <code>fitness.py</code>,{" "}
               <code>gate.py</code>, <code>ledger.py</code>): changing the
-              measurement gear changes the yardstick, not the system under
+              measurement gear changes the yardstick used on the system under
               test. That invariant is only declarable because the layer is
               separate.
             </p>
 
-            <h2>Why not 3, 4, or 6</h2>
+            <h2>Why the count settles at five</h2>
             <ul>
               <li>Three layers (Model + Runtime + Agent) leave no room for hooks, gateway, serve, or lanes.</li>
               <li>Four layers hide the self-improving code; the census above falsified that shape.</li>

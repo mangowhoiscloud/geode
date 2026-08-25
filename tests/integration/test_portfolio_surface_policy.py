@@ -24,10 +24,9 @@ def test_portfolio_install_surface_and_static_hero() -> None:
     portfolio = PORTFOLIO_PATH.read_text(encoding="utf-8")
 
     assert "anthropic / claude-fable-5 · ~/workspace" in portfolio
-    assert (
-        'const supportedProviders = ["Anthropic", "OpenAI / Codex", "ZhipuAI GLM"] as const;'
-        in portfolio
-    )
+    assert "const supportedProviders = [" in portfolio
+    for provider in ("Anthropic", "OpenAI / Codex", "ZhipuAI GLM"):
+        assert f'"{provider}"' in portfolio
     assert "supported providers" in portfolio
     assert 'aria-label="Supported providers"' in portfolio
     assert 'noteEn: "Latest stable release in an isolated tool environment."' in portfolio
@@ -39,7 +38,8 @@ def test_portfolio_install_surface_and_static_hero() -> None:
     assert "geode-sky.png" in hero
     assert 'className="pointer-events-none absolute inset-y-0 right-0 hidden w-[44%]' in hero
     assert "lg:w-[74%] xl:w-[62%]" in hero
-    assert 'WebkitTextStroke: "1.25px #7F1747"' in hero
+    assert "WebkitTextStroke" not in hero
+    assert "0 3px 0 rgba(127, 23, 71, 0.32)" in hero
     assert "HeroPixelField" not in hero
 
     assert 'const ROSE_FIELD_INK = "#7F1747";' in portfolio

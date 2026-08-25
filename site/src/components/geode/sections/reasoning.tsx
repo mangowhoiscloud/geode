@@ -130,8 +130,8 @@ export function ReasoningSection() {
               </div>
               <p className="text-sm text-[#8B9CC0] leading-relaxed">
                 {t(locale,
-                  "Plan은 실행 그래프가 아니라 현재 의도입니다. AgenticLoop가 관측에 따라 다음 행동을 고르고, update_plan은 이미 관측된 완료만 기록합니다. Cognitive Loop의 verify 실패와 low-confidence edge만 replan을 발화합니다.",
-                  "A Plan is current intent, not an execution graph. AgenticLoop chooses the next action from observations, while update_plan records only observed completion. Cognitive Loop verify failure and low-confidence edges are the only replan triggers."
+                  "Plan은 현재 의도를 담습니다. AgenticLoop가 관측에 따라 다음 행동을 고르고, update_plan은 이미 관측된 완료만 기록합니다. Cognitive Loop의 verify 실패와 low-confidence edge만 replan을 발화합니다.",
+                  "A Plan stores current intent. AgenticLoop chooses the next action from observations, while update_plan records only observed completion. Cognitive Loop verify failure and low-confidence edges are the only replan triggers."
                 )}
               </p>
             </div>

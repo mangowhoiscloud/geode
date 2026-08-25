@@ -109,7 +109,7 @@ export default function Page() {
 
             <h2>기억 수명주기: 증거 기반 소멸</h2>
             <p>
-              프로젝트 기억은 시간이 아니라 증거로 정리됩니다.{" "}
+              프로젝트 기억은 증거를 기준으로 정리됩니다.{" "}
               <code>geode memory-lifecycle</code>
               (<code>core/cli/commands/memory_lifecycle.py</code>)는 두 가지를
               합니다. (1) 소멸 — <code>resolution.guard_test</code>가 아직 트리에

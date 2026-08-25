@@ -11,9 +11,104 @@ export const metadata = { title: "Tau2 — GEODE Docs" };
 
 const group = BENCHMARK_GROUPS.find((g) => g.id === "tau2")!;
 
+function Tau2Report({ ko }: { ko: boolean }) {
+  const profiles = ko
+    ? [
+        ["Suite-native", "0.820", "228 / 278 · pass¹ · tau2==1.0.0", "historical k=1"],
+        ["GEODE-user", "200 / 278", "0.7194 · dual-runtime", "별도 진단 profile"],
+        ["Runtime-faithful", "99 missing", "quota-contaminated work", "aggregate 권한 없음"],
+      ]
+    : [
+        ["Suite-native", "0.820", "228 / 278 · pass¹ · tau2==1.0.0", "Historical k=1"],
+        ["GEODE-user", "200 / 278", "0.7194 · dual-runtime", "Separate diagnostic profile"],
+        ["Runtime-faithful", "99 missing", "quota-contaminated work", "No aggregate authority"],
+      ];
+  const lineage = ko
+    ? [
+        ["2026-07-03", "Native score", "results.json이 task reward와 headline을 소유"],
+        ["2026-07-31", "Trajectory @1", "turn/call/result exact join과 orphan 수를 공개"],
+        ["2026-08-03", "Full cycle", "278개 task의 dual-runtime profile을 분리 측정"],
+        ["2026-08-04", "Attempt lineage", "retry·quota·selection을 남기고 오염 행을 미실행 작업으로 분류"],
+        ["2026-08-14", "Frozen preflight", "모델 호출 전에 task·route·budget 정합성을 검사"],
+      ]
+    : [
+        ["2026-07-03", "Native score", "results.json owns task rewards and the headline"],
+        ["2026-07-31", "Trajectory @1", "Published exact turn/call/result joins and orphan counts"],
+        ["2026-08-03", "Full cycle", "Measured all 278 tasks under a distinct dual-runtime profile"],
+        ["2026-08-04", "Attempt lineage", "Recorded retry, quota, and selection; classified contaminated rows as missing work"],
+        ["2026-08-14", "Frozen preflight", "Checked task, route, and budget identity before model calls"],
+      ];
+  const authority = ["Task + user route", "Native reward", "Trajectory behavior", "Attempt validity", "Published claim"];
+
+  return (
+    <section aria-labelledby="tau2-report" className="mb-14">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--rule)] pb-3">
+        <div>
+          <p className="!m-0 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--ink-3)]">
+            {ko ? "대화형 정책 실행" : "Conversational policy execution"}
+          </p>
+          <h2 id="tau2-report" className="!mb-0 !mt-1">
+            {ko ? "세 실행 profile을 분리해 읽습니다" : "Read three execution profiles separately"}
+          </h2>
+        </div>
+        <a href="https://taubench.com/" className="text-xs">τ-bench leaderboard ↗</a>
+      </div>
+
+      <div className="grid gap-x-8 gap-y-6 py-6 md:grid-cols-3">
+        {profiles.map(([label, value, scope, authorityLabel], index) => (
+          <div key={label} className={`border-t border-[var(--rule-soft)] pt-4 ${index > 0 ? "md:border-l md:pl-6" : ""}`}>
+            <p className="!m-0 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-3)]">{label}</p>
+            <p className="!my-2 font-serif-docs text-3xl font-black text-[var(--ink)]">{value}</p>
+            <p className="!m-0 text-sm text-[var(--ink-2)]">{scope}</p>
+            <p className="!mt-2 font-mono text-[10px] uppercase tracking-wider text-[var(--section-accent)]">{authorityLabel}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="border-y border-[var(--rule-soft)] py-5">
+        <p className="!mb-3 !mt-0 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
+          {ko ? "증거 권한의 흐름" : "Evidence authority path"}
+        </p>
+        <div role="list" className="grid gap-2 sm:grid-cols-5">
+          {authority.map((label, index) => (
+            <div role="listitem" key={label} className="relative bg-[var(--paper-2)] px-3 py-3 text-sm">
+              <span className="mr-2 font-mono text-[10px] text-[var(--ink-3)]">{index + 1}</span>
+              {label}
+            </div>
+          ))}
+        </div>
+        <p className="!mb-0 !mt-3 text-sm text-[var(--ink-2)]">
+          {ko
+            ? "reward는 성공을, trajectory는 행동을, attempt manifest는 실행의 유효성을 설명합니다. 세 기록의 권한은 서로 독립적입니다."
+            : "Reward explains success, trajectory explains behavior, and the attempt manifest explains run validity. Each record keeps its own authority."}
+        </p>
+      </div>
+
+      <div className="mt-8">
+        <h3>{ko ? "측정 기록의 발전" : "Measurement record evolution"}</h3>
+        <div role="list">
+          {lineage.map(([date, stage, detail]) => (
+            <div role="listitem" key={date} className="grid gap-1 border-b border-[var(--rule-soft)] py-4 md:grid-cols-[7rem_10rem_1fr] md:gap-4">
+              <time className="font-mono text-xs text-[var(--ink-3)]">{date}</time>
+              <strong className="text-sm">{stage}</strong>
+              <span className="text-sm text-[var(--ink-2)]">{detail}</span>
+            </div>
+          ))}
+        </div>
+        <p className="!mb-0 !mt-4 text-sm text-[var(--ink-2)]">
+          {ko
+            ? "공식 τ-bench 표면은 도메인, Standard·Custom·Legacy, pass^k와 실행 visualizer를 분리합니다. GEODE도 profile identity를 고정한 행만 비교하고, 나머지는 진단 계보에 둡니다."
+            : "The official τ-bench surface separates domains, Standard·Custom·Legacy, pass^k, and a run visualizer. GEODE likewise compares only rows with matching profile identity and keeps the rest in diagnostic lineage."}
+        </p>
+      </div>
+    </section>
+  );
+}
+
 export default function Page() {
   return (
     <DocsShell
+      wide
       slug="benchmarks/tau2"
       title="Tau2"
       titleKo="Tau2"
@@ -23,6 +118,7 @@ export default function Page() {
       <Bi
         ko={
           <>
+            <Tau2Report ko />
             <p>
               tau2-bench는 대화형 tool-use 벤치마크입니다. 에이전트가 시뮬레이션된
               사용자와 대화하며 airline, retail, telecom 도메인의 DB 액션을
@@ -60,8 +156,8 @@ export default function Page() {
               2026-08-04 full-cycle 시도는 278개 task를 모두 스케줄했지만,
               subscription quota 소진으로 Airline 2개, Retail 16개, Telecom
               81개 등 99개 행이 infrastructure contamination 상태가 됐습니다.
-              이 행들은 0점이 아니라 미실행 작업이므로 이 시도에는 aggregate
-              score 권한이 없습니다. quota 소진 전 Telecom call 6개에서는
+              이 행들은 미실행 작업입니다. 따라서 이 시도에는 aggregate score
+              권한이 없습니다. quota 소진 전 Telecom call 6개에서는
               external-yield 순서 결함도 발견했습니다. 현재 runtime은 post-tool
               convergence guard보다 먼저 proposal을 반환하고, admission은 당시의
               scope-incomplete trajectory를 거부합니다. 새 headline은 깨끗한
@@ -73,8 +169,8 @@ export default function Page() {
                 <code>geode-eval-artifacts@40be847</code>
               </a>
               에 고정했습니다. 12개 파일 manifest SHA-256은{" "}
-              <code>40206ed1…317</code>이며, 이 묶음은 점수가 아닌 invalidation
-              evidence입니다.
+              <code>40206ed1…317</code>이며, 이 묶음의 권한은 invalidation
+              evidence에 한정됩니다.
             </p>
 
             <h2>2026-08-03 GPT-5.4 subscription base full cycle</h2>
@@ -180,8 +276,8 @@ export default function Page() {
             </ul>
             <p>
               Tau2 <code>results.json</code>이 점수 정본입니다. 이 고정 2개 task는
-              native <code>user_simulator</code> headline이 아니며 trajectory는
-              correlation/replay sidecar입니다. 원본 snapshot의 runner-default{" "}
+              별도 진단 profile이며, trajectory는 correlation/replay sidecar입니다.
+              원본 snapshot의 runner-default{" "}
               <code>stage=train</code> 표기는 그대로 보존했지만{" "}
               <code>promotion_authority=none</code>이고 학습·승격 권한을 뜻하지
               않습니다.
@@ -233,8 +329,8 @@ export default function Page() {
             </p>
             <BenchmarkMatrix group={group} />
             <p>
-              현재 약점은 도구 가용성이 아니라 복합 태스크에서의 필수 액션
-              커버리지입니다. Retail 실패는 DB write 부수효과 누락, Telecom 실패는
+              현재 약점은 복합 태스크의 필수 액션 커버리지입니다. Retail 실패는
+              DB write 부수효과 누락, Telecom 실패는
               MMS, APN, 앱 권한, 로밍 조합에서 필요한 액션 하나가 빠지는 패턴에
               몰립니다.
             </p>
@@ -267,6 +363,7 @@ export default function Page() {
         }
         en={
           <>
+            <Tau2Report ko={false} />
             <p>
               tau2-bench is a conversational tool-use benchmark: the agent talks to
               a simulated user while performing DB actions across the airline,
@@ -306,8 +403,8 @@ export default function Page() {
             <p>
               The 2026-08-04 full-cycle attempt reached all 278 scheduled tasks,
               but subscription quota exhaustion contaminated 99 rows: 2 Airline,
-              16 Retail, and 81 Telecom. They are missing work, not zero rewards,
-              so this attempt has no aggregate score authority. Six pre-quota
+              16 Retail, and 81 Telecom. They are missing work, so this attempt
+              has no aggregate score authority. Six pre-quota
               Telecom calls also exposed an external-yield ordering defect; the
               runtime now returns those proposals before post-tool convergence
               guards, and admission rejects the captured scope-incomplete
@@ -321,7 +418,7 @@ export default function Page() {
                 <code>geode-eval-artifacts@40be847</code>
               </a>
               . The 12-file manifest SHA-256 is <code>40206ed1…317</code>; this
-              bundle is invalidation evidence, not a score release.
+              bundle carries invalidation-evidence authority only.
             </p>
 
             <h2>2026-08-03 GPT-5.4 Subscription Base Full Cycle</h2>
@@ -357,8 +454,8 @@ export default function Page() {
               </li>
             </ul>
             <p>
-              This row is not the native <code>user_simulator</code> headline.
-              Tau2 <code>results.json</code> remains score authority; the
+              This row belongs to a separate dual-runtime profile. Tau2{" "}
+              <code>results.json</code> remains score authority; the
               trajectory is an external-loop diagnostic sidecar. Seven
               transport retries created 14 additional SQLite sessions outside
               the final trajectory parents, so the public release explicitly
@@ -397,11 +494,11 @@ export default function Page() {
               </li>
             </ul>
             <p>
-              These are post-release route smokes, not a rerun or replacement
-              of the 278-task full cycle. There was no route, authentication, or
+              These post-release route smokes leave the 278-task full cycle
+              unchanged. There was no route, authentication, or
               provider-adapter failure. The retained failures are direct
-              <code>PostVerify</code> evidence that a normal stop or complete
-              trajectory is not the same as task success.
+              <code>PostVerify</code> evidence that task success still requires
+              the native verifier.
             </p>
 
             <h2>2026-08-02 GPT-5.4 Subscription Cycle</h2>
@@ -435,8 +532,8 @@ export default function Page() {
             </ul>
             <p>
               Tau2 <code>results.json</code> is the score authority. These two
-              fixed tasks are not a native <code>user_simulator</code> headline;
-              the trajectories are correlation/replay sidecars. The immutable
+              fixed tasks belong to a diagnostic profile; the trajectories are
+              correlation/replay sidecars. The immutable
               snapshots preserve the runner-default <code>stage=train</code>
               label, but <code>promotion_authority=none</code> grants no training
               or promotion authority.
@@ -489,8 +586,8 @@ export default function Page() {
             </p>
             <BenchmarkMatrix group={group} />
             <p>
-              The current weak spot is not gross tool availability but required
-              action coverage under compound tasks: Retail failures often miss
+              The current weak spot is required-action coverage under compound
+              tasks: Retail failures often miss
               DB/write side effects, while Telecom failures cluster around
               MMS/APN/app-permission/roaming combinations where one necessary
               action is omitted.

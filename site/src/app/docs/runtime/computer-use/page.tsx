@@ -56,10 +56,8 @@ computer_use ←────── compact observation(base64 omitted) ◄┘`}<
 
             <h2>구조를 먼저 읽고, 스크린샷은 나중에</h2>
             <p>
-              화면에 무엇이 있는지 알아내는 데 스크린샷이 유일한 방법은
-              아닙니다. 스텝마다 1280x800 JPEG(약 1.5k 토큰)를 보내고 모델이
-              좌표를 눈대중하는 대신, 접근성 트리나 DOM처럼 구조가 있는 표면은
-              텍스트로 더 싸고 정확하게 읽힙니다. GEODE는 이 두 표면을 각각
+              접근성 트리나 DOM처럼 구조가 있는 표면은 텍스트로 더
+              싸고 정확하게 읽힙니다. GEODE는 이 두 표면을 각각
               도구로 노출합니다.
             </p>
             <ul>
@@ -207,10 +205,8 @@ computer_use ←────── compact observation(base64 omitted) ◄┘`}<
 
             <h2>Read structure first, screenshot later</h2>
             <p>
-              A screenshot is not the only way to learn what is on screen.
-              Instead of shipping a 1280x800 JPEG (about 1.5k tokens) each step
-              and having the model eyeball coordinates, structured surfaces like
-              the accessibility tree or the DOM read more cheaply and precisely
+              Structured surfaces like the accessibility tree or the DOM read
+              more cheaply and precisely
               as text. GEODE exposes each of those surfaces as a tool.
             </p>
             <ul>

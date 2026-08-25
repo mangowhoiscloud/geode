@@ -39,8 +39,8 @@ export default function Page() {
         ko={
           <>
             <p>
-              이 절차는 로컬 실행 기록을 공개 증거로 승격합니다. 게시 대상은 JFrog
-              Artifactory가 아니라 append-only Git/PR 저장소인{" "}
+              이 절차는 로컬 실행 기록을 공개 증거로 승격합니다. 게시 대상은
+              append-only Git/PR 저장소인{" "}
               <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts">
                 geode-eval-artifacts
               </a>
@@ -51,11 +51,11 @@ export default function Page() {
             <h2>1. SQLite 정본에서 export</h2>
             <pre>{exportCommand}</pre>
             <p>
-              <code>--sil-eval</code>은 Inspect <code>.eval</code>의 SHA-256을
+              <code>--sil-eval</code>은 Inspect <code>.eval</code>의 SHA-256을{" "}
               <code>evidence_refs</code>와 <code>artifact_digests</code>에 연결합니다.
               <code>--digest-content</code>는 비허용 payload body를 digest로 바꾸므로
-              결과가 scope-complete여도 replay-incomplete일 수 있습니다. SIL이 아닌
-              실행은 <code>--sil-eval</code>을 생략합니다.
+              결과가 scope-complete여도 replay-incomplete일 수 있습니다. SIL
+              실행에서만 <code>--sil-eval</code>을 지정합니다.
             </p>
             <p>
               이 명령의 결과는 <code>privacy.review_state=local</code>인 로컬
@@ -74,8 +74,9 @@ export default function Page() {
             <p>
               공개 후보에서 로컬 경로, 사용자 식별자, credential, raw prompt/tool
               body를 검토합니다. sealed Crucible pack, 선택 row identity, selection
-              salt, 환경 파일은 공개 후보에 넣지 않습니다. 검토 행위를 단순히
-              <code>review_state</code> 값 변경으로 대체해서는 안 됩니다.
+              salt, 환경 파일은 공개 후보에 넣지 않습니다. 검토는 실제 공개
+              바이트를 대상으로 하며 <code>review_state</code> 값만 바꾸는 행위를
+              허용하지 않습니다.
             </p>
             <pre>{reviewRecord}</pre>
             <p>
@@ -114,7 +115,7 @@ export default function Page() {
               <li>PR에서 manifest, 공개 바이트, privacy attestation을 리뷰합니다.</li>
               <li>병합 후 exact merge commit에서 release를 새 디렉터리로 다시 읽습니다.</li>
               <li>복사 전에 기록한 manifest SHA-256으로 같은 검증 명령을 다시 실행합니다.</li>
-              <li>점수·문서에는 mutable <code>main</code> 대신 merge commit의 blob/tree 링크를 기록합니다.</li>
+              <li>점수·문서에는 불변 merge commit의 blob/tree 링크를 기록합니다.</li>
             </ol>
             <p>
               staging 디렉터리를 한 번 더 읽는 것은 remote read-back 증거가 아닙니다.
@@ -152,7 +153,7 @@ export default function Page() {
             <ul>
               <li><strong>not scope-complete:</strong> missing correlation, ordinal gap, orphan tool result를 먼저 수정합니다.</li>
               <li><strong>not replay-complete:</strong> 실제 privacy reduction인지 확인한 뒤에만 명시적 waiver를 사용합니다.</li>
-              <li><strong>source digest mismatch:</strong> public copy가 아니라 trajectory가 참조한 원본 바이트를 매핑합니다.</li>
+              <li><strong>source digest mismatch:</strong> trajectory가 참조한 원본 바이트를 매핑합니다.</li>
               <li><strong>privacy scan failed:</strong> finding을 지운 새 public candidate를 만들며 기존 release를 덮어쓰지 않습니다.</li>
             </ul>
           </>
@@ -161,8 +162,7 @@ export default function Page() {
           <>
             <p>
               This workflow promotes a local execution record into public
-              evidence. The destination is not JFrog Artifactory; it is the
-              append-only Git/PR repository{" "}
+              evidence through the append-only Git/PR repository{" "}
               <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts">
                 geode-eval-artifacts
               </a>
@@ -239,7 +239,7 @@ export default function Page() {
               <li>Review the manifest, public bytes, and privacy attestation in a PR.</li>
               <li>After merge, read the release back from the exact merge commit into a fresh directory.</li>
               <li>Run the same verification with the manifest SHA-256 recorded before copying.</li>
-              <li>Pin merge-commit blob/tree links in scores and docs instead of mutable <code>main</code> links.</li>
+              <li>Pin immutable merge-commit blob/tree links in scores and docs.</li>
             </ol>
             <p>
               Re-reading the staging directory is not remote read-back evidence.

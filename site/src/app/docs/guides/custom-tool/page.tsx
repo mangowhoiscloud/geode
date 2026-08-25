@@ -54,9 +54,9 @@ export default function Page() {
               도구는 <code>core/tools/base.py</code>의 <code>Tool</code> 프로토콜을
               따릅니다. <code>name</code>, <code>description</code>,{" "}
               <code>parameters</code> 프로퍼티와 <code>aexecute()</code> 코루틴
-              네 가지면 유효한 도구입니다. 상속이 아니라 덕 타이핑이므로 클래스를
-              상속할 필요가 없습니다. 실패는 raise 대신{" "}
-              <code>tool_error()</code>로 구조화된 dict을 돌려줘서 LLM이 분류하고
+              네 가지면 유효한 도구입니다. 덕 타이핑을 사용하므로 클래스를
+              상속할 필요가 없습니다. 실패는 <code>tool_error()</code>로
+              구조화된 dict을 돌려줘서 LLM이 분류하고
               복구할 수 있게 합니다. 기존 구현은{" "}
               <code>core/tools/web_tools.py</code>의 <code>WebFetchTool</code>을
               참고하세요.
@@ -173,8 +173,8 @@ print('weather_lookup' in bound.handlers)
         en={
           <>
             <p>
-              A tool is a function the LLM can call. Adding a capability as a tool
-              instead of inlining it in the loop keeps the loop thin and lets the
+              A tool is a function the LLM can call. Keeping capabilities in tools
+              keeps the loop thin and lets the
               permission gates and hooks apply to your tool too. Adding one tool is
               four steps: define, implement, register, classify.
             </p>
@@ -217,7 +217,7 @@ print('weather_lookup' in bound.handlers)
               <code>parameters</code> properties plus the <code>aexecute()</code>{" "}
               coroutine. The protocol is duck-typed, so you do not subclass
               anything. Return a structured dict via <code>tool_error()</code>{" "}
-              instead of raising, so the LLM can classify and recover. Model it on{" "}
+              so the LLM can classify and recover. Model it on{" "}
               <code>WebFetchTool</code> in <code>core/tools/web_tools.py</code>.
             </p>
             <pre>{`# core/tools/weather_tools.py

@@ -53,7 +53,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
                 <tr><th>증상</th><th>원인</th><th>해법</th></tr>
               </thead>
               <tbody>
-                <tr><td>수식이 원문 LaTeX로 보임</td><td>pylatexenc 미설치 또는 Tier 1 예외</td><td>의존성은 pyproject에 선언되어 있습니다. 재설치 후에도 같으면 입력이 LaTeX가 아닌 경우입니다.</td></tr>
+                <tr><td>수식이 원문 LaTeX로 보임</td><td>pylatexenc 미설치 또는 Tier 1 예외</td><td>의존성은 pyproject에 선언되어 있습니다. 재설치 후에도 같으면 LaTeX 외 입력인지 확인합니다.</td></tr>
                 <tr><td>블록 수식이 한 줄로 나옴</td><td>Tier 2 파싱 실패 후 Tier 1 폴백</td><td>의도된 동작입니다. latex2sympy2가 다루지 못하는 구문은 평탄화됩니다.</td></tr>
                 <tr><td>경로가 수식으로 렌더링</td><td>구분자 없는 후보 오탐</td><td>경로 문맥 가드가 회귀 테스트로 고정되어 있습니다. 사례를 발견하면 테스트에 추가합니다.</td></tr>
               </tbody>

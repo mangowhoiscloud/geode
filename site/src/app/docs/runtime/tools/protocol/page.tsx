@@ -63,13 +63,13 @@ export default function Page() {
               따라서 도구가 deferred loading 뒤로 밀렸다는 말은 모든 도구가 보이지
               않는다는 뜻이 아닙니다. <code>read_document</code>,{" "}
               <code>grep_files</code>처럼 핵심 읽기 도구는 항상 적재됩니다.
-              이런 도구가 반복 호출된다면 보통 도구 수 제한 때문이 아니라
-              모델이 더 많은 근거 파일을 읽겠다고 판단한 결과입니다.
+              이런 도구가 반복 호출된다면 모델이 더 많은 근거 파일을 읽겠다고
+              판단했을 가능성이 큽니다.
             </p>
 
             <h2>툴킷: 서브에이전트 도구 번들</h2>
             <p>
-              서브에이전트는 도구 전체가 아니라 선언된 번들만 받습니다. 매니페스트는{" "}
+              서브에이전트는 선언된 도구 번들만 받습니다. 매니페스트는{" "}
               <code>core/tools/toolkits.toml</code>, 해석기는{" "}
               <code>core/tools/toolkit_registry.py</code>입니다.
             </p>
@@ -131,7 +131,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td><code>read_document</code>나 <code>grep_files</code>가 반복 호출됨</td>
-                  <td>핵심 읽기 도구는 항상 적재됨. tool cap에 숨은 것이 아니라 모델의 탐색 판단일 가능성이 큼</td>
+                  <td>핵심 읽기 도구는 항상 적재됨. 반복은 모델의 탐색 판단일 가능성이 큼</td>
                   <td>dialogue transcript에서 직전 <code>grep_files</code> 호출과 읽은 경로를 보고, 필요한 경우 질문에 파일 범위나 금지 경로를 명시합니다</td>
                 </tr>
                 <tr>

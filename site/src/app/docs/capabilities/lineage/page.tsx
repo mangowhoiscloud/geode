@@ -27,7 +27,7 @@ export default function Page() {
             "https://mangowhoiscloud.github.io/geode/docs/capabilities/lineage/#article",
           headline: "Lineage and positioning",
           description:
-            "Where this loop sits in the self-evolving agents literature. An honest recombination of known parts, not a new primitive.",
+            "Where this loop sits in the self-evolving agents literature. An honest recombination of known parts.",
           url: "https://mangowhoiscloud.github.io/geode/docs/capabilities/lineage/",
           inLanguage: ["ko", "en"],
           author: {
@@ -45,16 +45,16 @@ export default function Page() {
         slug="capabilities/lineage"
         title="Lineage and positioning"
         titleKo="계보와 좌표"
-        summary="Where this loop sits in the self-evolving agents literature. An honest recombination of known parts, not a new primitive."
-        summaryKo="이 루프가 self-evolving agents 문헌에서 어디에 위치하는지 짚습니다. 새로운 primitive가 아니라, 알려진 조각들을 정직하게 재조합한 결과입니다."
+        summary="Where this loop sits in the self-evolving agents literature. An honest recombination of known parts."
+        summaryKo="이 루프가 self-evolving agents 문헌에서 어디에 위치하는지 짚습니다. 알려진 조각들을 정직하게 재조합한 결과입니다."
       >
       <Bi
         ko={
           <>
             <h2>한 문장 주장</h2>
             <p>
-              GEODE의 자기개선 루프는 새로운 알고리즘이 아닙니다. self-evolving
-              agents라는 잘 정립된 계보 위에 있고, GEODE의 기여는 그 계보를 다른
+              GEODE의 자기개선 루프는 self-evolving agents라는 잘 정립된 계보
+              위에 있습니다. GEODE의 기여는 그 계보를 다른
               목표로 다시 겨눈 것, 그리고 알려진 조각들을 새로 조합한 것입니다.
               이 페이지는 그 계보를 정직하게 짚고, GEODE가 어디서 갈라져 나왔는지
               밝힙니다.
@@ -165,12 +165,12 @@ scaffolding   DGM, ADAS, STOP,        <- 거의 비어 있음
             <ol>
               <li>
                 <strong>능력 벤치마크 fitness → 적대적 안전 감사 fitness</strong>.
-                SWE-bench 점수 대신 Petri 등급의 다차원 안전 감사로 평가합니다.
+                Petri 등급의 다차원 안전 감사로 평가합니다.
               </li>
               <li>
                 <strong>open-ended 아카이브 → 정직한 (1+1) champion chain</strong>.
-                다양한 frontier를 유지하는 대신, critical dimension에 거부권을
-                둔 단일 champion 계보를 이어갑니다.
+                critical dimension에 거부권을 둔 단일 champion 계보를
+                이어갑니다.
               </li>
               <li>
                 <strong>고정 벤치마크 → 공진화하는 적대적 seed</strong>.
@@ -238,7 +238,7 @@ scaffolding   DGM, ADAS, STOP,        <- 거의 비어 있음
                 값싼 task 지표 위에서, 노이즈가 섞인 단일 평가 신호를 견디려고
                 frontier를 넓게 둡니다. GEODE는 값비싸고 노이즈가 큰 안전 감사
                 위에서 돌기 때문에 frugal한 (1+1)을 택했습니다. 공짜로 얻는
-                이득이 아니라 실제 trade-off입니다. 아카이브 유지는 앞으로 열어
+                선택에는 실제 trade-off가 있습니다. 아카이브 유지는 앞으로 열어
                 둘 설계 방향입니다.
               </p>
               <p>
@@ -258,8 +258,8 @@ scaffolding   DGM, ADAS, STOP,        <- 거의 비어 있음
           <>
             <h2>The one-sentence claim</h2>
             <p>
-              GEODE&apos;s self-improving loop is not a new algorithm. It sits on
-              a well-established lineage called self-evolving agents, and
+              GEODE&apos;s self-improving loop sits on a well-established lineage
+              called self-evolving agents, and
               GEODE&apos;s contribution is re-aiming that lineage at a different
               objective and recombining known parts. This page traces the lineage
               honestly and says where GEODE branched from it.
@@ -369,13 +369,12 @@ weight update  (RLHF family)             Constitutional AI, MART, Self-MOA`}</pr
             <ol>
               <li>
                 <strong>capability benchmark fitness to adversarial safety-audit
-                fitness</strong>. Instead of a SWE-bench score, it scores with a
-                Petri-grade, multi-dimensional safety audit.
+                fitness</strong>. It scores with a Petri-grade,
+                multi-dimensional safety audit.
               </li>
               <li>
                 <strong>open-ended archive to an honest (1+1) champion chain</strong>.
-                Rather than keeping a diverse frontier, it carries a single
-                champion lineage with a critical-dimension veto.
+                It carries a single champion lineage with a critical-dimension veto.
               </li>
               <li>
                 <strong>fixed benchmark to co-evolved adversarial seeds</strong>.
@@ -444,8 +443,8 @@ weight update  (RLHF family)             Constitutional AI, MART, Self-MOA`}</pr
                 open-ended archives. They keep a diverse frontier for a reason: to
                 stay robust to noisy single-eval signals, on cheap task metrics.
                 GEODE runs on an expensive, noisy safety audit, so it chose a
-                frugal (1+1). This is a real trade-off, not a free win.
-                Archive-keep is a future design avenue.
+                frugal (1+1), accepting a real trade-off. Archive-keep is a
+                future design avenue.
               </p>
               <p>
                 <strong>GEODE is a recombination of known parts.</strong>{" "}

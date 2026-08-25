@@ -284,7 +284,7 @@ export function ScaffoldSection() {
             Scaffold
           </p>
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white/90 mb-4">
-            {t(locale, "코드가 아닌 제어 계층", "Control Layer, Not Code")}
+            {t(locale, "스캐폴드 제어 계층", "Scaffold Control Layer")}
           </h2>
           <p className="text-sm sm:text-base text-[#8B9CC0] max-w-xl mb-10 leading-relaxed">
             {t(locale,

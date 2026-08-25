@@ -182,7 +182,7 @@ function RunDetailBlock({ detail, locale }: { detail: RunDetail; locale: "ko" | 
         <span className="ml-3 text-[var(--ink-3)] text-sm">{headerKo}</span>
         {/* GitHub Pages does not serve directory listings, so we link a
             concrete served file (state.json) inside the per-run directory
-            instead of `<run_id>/`. PR-SEEDS-PER-RUN-LINK (2026-05-25). */}
+            while avoiding a forced `<run_id>/`. PR-SEEDS-PER-RUN-LINK (2026-05-25). */}
         <a
           href={`${RAW_BUNDLE_URL}${run.run_id}/state.json`}
           className="ml-3 text-[var(--ink-3)] text-xs hover:text-[var(--acc-artifact)]"
@@ -214,7 +214,7 @@ function RunDetailBlock({ detail, locale }: { detail: RunDetail; locale: "ko" | 
                   const filename = candidatePath.split("/").pop() ?? "";
                   // survivors.json stores a bundle-relative path
                   // (candidates/ or candidates_evolved/). Use it verbatim so
-                  // evolved survivors resolve instead of 404-ing on a forced
+                  // evolved survivors resolve without 404-ing on a forced
                   // candidates/ prefix.
                   const fileHref = candidatePath
                     ? `${RAW_BUNDLE_URL}${run.run_id}/${candidatePath}`

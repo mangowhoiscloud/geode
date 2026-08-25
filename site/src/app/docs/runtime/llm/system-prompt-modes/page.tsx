@@ -83,12 +83,11 @@ export default function Page() {
 
             <h2>program.md 계약: mutator의 프롬프트</h2>
             <p>
-              변이를 제안하는 mutator 에이전트의 시스템 프롬프트는 코드
-              리터럴이 아니라 패키지와 함께 출하되는
-              <code>evolve/scaffold_search/program.md</code>입니다. 러너
+              변이를 제안하는 mutator 에이전트의 시스템 프롬프트는 패키지와
+              함께 출하되는 <code>evolve/scaffold_search/program.md</code>입니다. 러너
               (<code>evolve/scaffold_search/loop/mutate/runner.py</code>)가 매
               호출 디스크에서 읽고, 단일 변이로 범위를 좁히는 계약을 뒤에
-              붙입니다. 파일을 못 읽으면 조용한 폴백 대신 크게 실패합니다.
+              붙입니다. 파일을 못 읽으면 크게 실패합니다.
               교체가 필요하면 훅 핸들러가 <code>program_md</code> 본문을
               공급하는 단일 제어 지점을 씁니다.
             </p>
@@ -200,14 +199,14 @@ export default function Page() {
 
             <h2>The program.md contract: the mutator&apos;s prompt</h2>
             <p>
-              The mutation-proposing agent&apos;s system prompt is not a code
-              literal but <code>evolve/scaffold_search/program.md</code>, shipped
-              with the package. The runner
+              The mutation-proposing agent&apos;s system prompt is{" "}
+              <code>evolve/scaffold_search/program.md</code>, shipped with the
+              package. The runner
               (<code>evolve/scaffold_search/loop/mutate/runner.py</code>) reads
               it from disk on every invocation and appends a contract that
               scopes it to a single mutation. If the file is unreadable the
-              runner fails loud rather than silently falling back; the single
-              programmatic control point is a hook handler supplying a
+              runner fails loud. The single programmatic control point is a
+              hook handler supplying a
               replacement <code>program_md</code> body.
             </p>
 

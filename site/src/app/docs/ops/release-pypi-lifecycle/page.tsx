@@ -33,7 +33,7 @@ export default function Page() {
               <li>문서만 바뀌면 버전을 올리지 않습니다.</li>
             </ul>
 
-            <h2>wheel은 설치물이지 데이터 볼륨이 아닙니다</h2>
+            <h2>wheel이 소유하는 설치 경계</h2>
             <p>
               <code>geode-agent</code> wheel은 Python 생태계의 불변 제품
               설치물입니다. 네 개 CLI와 <code>core</code>, <code>evals</code>,{" "}
@@ -52,7 +52,7 @@ export default function Page() {
             <p>
               따라서 설치된 <code>geode-evolve</code>는 reference input을 읽을
               수 있지만 mutation과 promotion에는 writable GEODE checkout이
-              필요합니다. computer-use helper의 생성물도 site-packages가 아닌{" "}
+              필요합니다. computer-use helper의 생성물은{" "}
               <code>GEODE_HOME/helpers/computer-use</code>에 놓입니다. 별도 core,
               eval, evolve wheel은 독립 설치 계약이나 릴리스 주기가 실제로
               생기기 전까지 만들지 않습니다.
@@ -164,7 +164,7 @@ geode serve &`}</pre>
               <li>Docs-only changes do not bump the version.</li>
             </ul>
 
-            <h2>A wheel is an install artifact, not a data volume</h2>
+            <h2>The wheel&apos;s installation boundary</h2>
             <p>
               The <code>geode-agent</code> wheel is GEODE&apos;s immutable product
               artifact for the Python ecosystem. It versions the four CLIs,
