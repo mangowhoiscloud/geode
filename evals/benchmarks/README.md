@@ -1,8 +1,10 @@
-# GEODE Benchmark Harness Plugin
+# GEODE Benchmark Integrations
 
-This plugin keeps GEODE-owned benchmark adapters public while third-party
+This package owns benchmark-specific GEODE integration while third-party
 benchmark repositories remain ignored local checkouts under
-`artifacts/eval/harnesses/`.
+`artifacts/eval/harnesses/`. A benchmark integration owns the task, scorer,
+dataset, and native-protocol mapping. A platform adapter connects the GEODE
+runtime to an external execution platform. They are separate roles here.
 
 It covers:
 
@@ -10,7 +12,32 @@ It covers:
   filesystem-only Codex CLI `BaseMCPAgent` adapters in
   `mcpmark_geode_agent.py`.
 - `tau2-bench`: upstream `sierra-research/tau2-bench` pinned by commit, with
-  the GEODE participant adapter in `tau2_geode_agent.py`.
+  provider-neutral contracts here and the Crucible participant adapter in
+  `evolve/crucible/tau2_geode_agent.py`.
+
+Harbor is an external platform, not a benchmark. Its GEODE adapter is
+`harbor_geode_agent.py`; Harbor's upstream dataset adapters and native
+verifiers remain the authority for each benchmark. GEODE does not create a
+`platform/benchmark` or `benchmark/platform` directory cross-product.
+
+Benchmark families remain flat until one of them needs multiple packages. The
+current ownership is therefore:
+
+```text
+evals/benchmarks/
+├── harbor_geode_agent.py     # Harbor platform adapter, not in BENCHMARKS
+├── mcpmark_*.py              # MCPMark integration
+├── tau2_*.py                 # provider-neutral tau2 contracts
+├── manifest.py               # pinned upstream benchmark sources
+└── trajectory_artifacts.py   # shared evaluation evidence
+```
+
+`HarnessSpec`, `BENCHMARK_HARNESSES`, `get_harness()`, and the former
+`benchmark_harness.harness` TOML table remain v1.0.x compatibility aliases;
+new code should use their benchmark-named equivalents. The manifest filename,
+TOML root, and `artifacts/eval/harnesses/` checkout path are also legacy
+compatibility and reproduction identifiers. Existing artifact-schema fields
+follow the same rule; none of these names should be extended into new APIs.
 
 Secrets are never stored here. Put real tokens in ignored `.mcp_env` files and
 keep only placeholder variable names in `.env.example` / `.mcp_env.example`.
