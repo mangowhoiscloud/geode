@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Added\n\n- **Evaluation learning-view contract v2.** GEODE now validates digest-bound\n  `example → rollout → trajectory → reward` datasets while preserving native\n  receipts and the immutable `geode.trajectory@1` schema.\n- **Harbor terminal benchmark adapter.** The current GEODE AgenticLoop can run\n  as a Harbor external agent while preserving native verifier output and a\n  normalized GEODE trajectory sidecar.\n- **Native evaluation projector.** Harbor and tau2 result bundles can be\n  projected into the validated v2 learning view without rewriting native\n  receipts or collapsing infrastructure-invalid retries into reward rows."
   },
   {
     "version": "1.0.26",
