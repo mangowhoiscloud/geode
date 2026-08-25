@@ -76,22 +76,36 @@ export default function Page() {
               tag와 GitHub Release, Trusted Publishing, 공개 PyPI exact-version
               설치 검증을 거칩니다. 마지막 읽기 전용 검증기는 tag target,
               GitHub asset, PyPI 파일, SHA-256이 모두 같은 릴리스인지 확인합니다.
+              clean-wheel gate는 설치된 distribution 파일 전체의 digest가 거부된
+              evolution mutation 뒤에도 같은지, mutable experiment state가 빠졌는지,
+              정확한 builtin-skill allowlist와 설치된 daemon IPC 버전이 맞는지도
+              함께 검증합니다.
             </p>
 
-            <h2>릴리스 후 rebuild</h2>
+            <h2>릴리스 후 설치 갱신</h2>
             <p>
-              main 머지 후 로컬 런타임을 새 코드로 올립니다. 두 함정이
-              있습니다. 데몬 정지는 <code>pkill -f</code>를 써야 합니다.{" "}
-              <code>ps aux | grep</code>은 긴 파이썬 경로가 잘려 데몬을 못 잡고,
-              살아남은 옛 데몬이 소켓을 두고 새 데몬과 경합합니다. 그리고{" "}
-              <code>[audit]</code> extra가 필수입니다. 빠지면 inspect_ai가 없어
-              자기개선 루프의 감사가 측정 대신 실패합니다.
+              PyPI/uv stable 설치는 <code>geode update</code>로 갱신합니다. 기본
+              명령은 현재 major/minor의 최신 patch만 허용하고, minor/major는{" "}
+              <code>--latest</code>를 명시해야 합니다. updater는 설치 metadata와
+              prospective version을 먼저 검증하고, 실행 중 daemon을 package 교체
+              전에 중지합니다. stop 실패면 설치를 건드리지 않고, install 실패면
+              중지 상태를 유지하며, 성공한 재시작은 CLI와 IPC가 같은 버전일 때만
+              완료됩니다.
             </p>
-            <pre>{`pkill -f "geode serve" || true          # 확인: pgrep -f "geode serve"
-uv tool install -e ".[audit]" --force   # [audit] extra 필수 (inspect_ai)
+            <pre>{`geode update                  # 최신 호환 patch
+geode update --latest         # minor/major를 명시적으로 허용
+geode version                 # 공개 버전 확인`}</pre>
+            <p>
+              저장소에서 작업하는 editable <code>[audit]</code> 개발 설치는 stable
+              wheel과 별개입니다. 이 경우에만 daemon을 직접 중지하고 checkout을
+              재설치합니다. <code>[audit]</code> extra가 빠지면 inspect_ai 기반
+              평가를 실행할 수 없습니다.
+            </p>
+            <pre>{`pkill -f "geode serve" || true
+uv tool install -e ".[audit]" --force --python 3.12
 uv sync --extra audit
-geode version                            # 버전 일치 확인
-geode serve &                            # 데몬 재기동`}</pre>
+geode version
+geode serve &`}</pre>
 
             <h2>관련 파일</h2>
             <ul>
@@ -173,23 +187,38 @@ geode serve &                            # 데몬 재기동`}</pre>
               exact-version install from the public index. A final read-only
               verifier requires the tag target, GitHub assets, PyPI files, and
               SHA-256 digests to describe the same release.
+              The clean-wheel gate also proves that every installed
+              distribution digest survives a rejected evolution mutation,
+              mutable experiment state is absent, the exact builtin-skill
+              allowlist is complete, and the installed daemon reports the
+              expected IPC version.
             </p>
 
-            <h2>Rebuild after a release</h2>
+            <h2>Update an installation after a release</h2>
             <p>
-              After the main merge, bring the local runtime up to the new code.
-              Two traps. Stop the daemon with <code>pkill -f</code>:{" "}
-              <code>ps aux | grep</code> truncates the long Python path, misses
-              the daemon, and the stale survivor then fights the new daemon over
-              the socket. And the <code>[audit]</code> extra is required;
-              without it inspect_ai is missing and the self-improving
-              loop&apos;s audits fail instead of measuring.
+              Update a stable PyPI/uv installation with <code>geode update</code>.
+              The default accepts only the latest patch in the current
+              major/minor series; <code>--latest</code> explicitly permits a minor
+              or major upgrade. The updater validates installation metadata and
+              the prospective version first, stops a running daemon before
+              replacing package files, leaves the installation untouched when
+              stop fails, and leaves the daemon stopped when install fails. A
+              successful restart must report the same CLI and IPC version.
             </p>
-            <pre>{`pkill -f "geode serve" || true          # verify: pgrep -f "geode serve"
-uv tool install -e ".[audit]" --force   # the [audit] extra is REQUIRED (inspect_ai)
+            <pre>{`geode update                  # latest compatible patch
+geode update --latest         # explicitly permit minor/major
+geode version                 # verify the public version`}</pre>
+            <p>
+              An editable <code>[audit]</code> developer install from a repository
+              is separate from the stable wheel. Only that path uses a manual
+              stop and checkout reinstall. Keep the <code>[audit]</code> extra;
+              without it inspect_ai-backed evaluations are unavailable.
+            </p>
+            <pre>{`pkill -f "geode serve" || true
+uv tool install -e ".[audit]" --force --python 3.12
 uv sync --extra audit
-geode version                            # confirm the version matches
-geode serve &                            # restart the daemon`}</pre>
+geode version
+geode serve &`}</pre>
 
             <h2>Related files</h2>
             <ul>
