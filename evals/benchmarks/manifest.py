@@ -1,6 +1,4 @@
-"""Manifest loader for public benchmark harness coordinates."""
-
-from __future__ import annotations
+"""Manifest loader for pinned upstream benchmark coordinates."""
 
 import tomllib
 from dataclasses import dataclass
@@ -12,7 +10,7 @@ MANIFEST_PATH = Path(__file__).with_name("benchmark_harness.plugin.toml")
 
 
 @dataclass(frozen=True)
-class HarnessSpec:
+class BenchmarkSpec:
     name: str
     repo: str
     commit: str
@@ -37,18 +35,18 @@ def _string_tuple(raw: Any) -> tuple[str, ...]:
     return tuple(raw)
 
 
-def load_manifest(path: Path = MANIFEST_PATH) -> dict[str, HarnessSpec]:
+def load_manifest(path: Path = MANIFEST_PATH) -> dict[str, BenchmarkSpec]:
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     root = data.get("benchmark_harness", {})
-    raw_harnesses = root.get("harness", {})
-    if not isinstance(raw_harnesses, dict):
-        raise ValueError("benchmark_harness.harness must be a table")
+    raw_benchmarks = root.get("benchmark", root.get("harness", {}))
+    if not isinstance(raw_benchmarks, dict):
+        raise ValueError("benchmark_harness.benchmark must be a table")
 
-    specs: dict[str, HarnessSpec] = {}
-    for name, raw_spec in raw_harnesses.items():
+    specs: dict[str, BenchmarkSpec] = {}
+    for name, raw_spec in raw_benchmarks.items():
         if not isinstance(raw_spec, dict):
-            raise ValueError(f"harness {name!r} must be a table")
-        specs[name] = HarnessSpec(
+            raise ValueError(f"benchmark {name!r} must be a table")
+        specs[name] = BenchmarkSpec(
             name=name,
             repo=str(raw_spec["repo"]),
             commit=str(raw_spec["commit"]),
@@ -63,12 +61,17 @@ def load_manifest(path: Path = MANIFEST_PATH) -> dict[str, HarnessSpec]:
     return specs
 
 
-BENCHMARK_HARNESSES = load_manifest()
+BENCHMARKS = load_manifest()
 
 
-def get_harness(name: str) -> HarnessSpec:
+def get_benchmark(name: str) -> BenchmarkSpec:
     try:
-        return BENCHMARK_HARNESSES[name]
+        return BENCHMARKS[name]
     except KeyError as exc:
-        known = ", ".join(sorted(BENCHMARK_HARNESSES))
-        raise KeyError(f"unknown benchmark harness {name!r}; known: {known}") from exc
+        known = ", ".join(sorted(BENCHMARKS))
+        raise KeyError(f"unknown benchmark {name!r}; known: {known}") from exc
+
+
+HarnessSpec = BenchmarkSpec  # v1.0.x compatibility
+BENCHMARK_HARNESSES = BENCHMARKS
+get_harness = get_benchmark
