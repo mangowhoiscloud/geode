@@ -1,0 +1,8 @@
+{
+  "name": "scandinavian-design-verify",
+  "private": true,
+  "description": "Verification tools for the scandinavian-design skill. Point them at any URL, usually a route on your dev server.",
+  "dependencies": {
+    "playwright-core": "^1.62.1"
+  }
+}

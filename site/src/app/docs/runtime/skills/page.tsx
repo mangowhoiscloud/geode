@@ -38,9 +38,11 @@ export default function Page() {
             <p>
               로더(<code>core/skills/skills.py</code>)는 번들 → 개인 → 프로젝트
               순서로 디렉터리를 걷고, 같은 이름이 충돌하면 나중 스코프가
-              이깁니다. 프로젝트 스킬이 최우선입니다. GEODE를 개발할 때 Claude
-              Code가 쓰는 scaffold 스킬(<code>.claude/skills/</code>)은 이
-              런타임 레지스트리와 완전히 별개입니다.
+              이깁니다. 프로젝트 스킬이 최우선입니다. GEODE 개발 중 Claude
+              Code와 Codex가 쓰는 scaffold 스킬은 이 런타임
+              레지스트리와 별개입니다. 저장소는 <code>.agents/skills/</code>를
+              단일 정본으로 공개하고, <code>.claude/skills/</code>는 같은
+              바이트를 가리키는 상대 symlink만 둡니다.
             </p>
 
             <h2>SKILL.md 형식</h2>
@@ -76,7 +78,11 @@ argument-hint: "[issue-number]"
               <code>frontier-ui-ux-catalog</code>, <code>geo</code>,
               <code>geode-context</code>, <code>grilling</code>,
               <code>long-task-watcher</code>, <code>pdf</code>만 번들합니다.
-              저장소·개인 전용 스킬은 project/personal 계층에 남습니다.
+              저장소에 함께 공개된 <code>pr-reviewer</code>,
+              <code>slop-audit</code>, <code>wiki-sync</code>는 project-only라
+              wheel에는 들어가지 않습니다. 전체 메타·런타임 인벤토리는
+              <a href="https://github.com/mangowhoiscloud/geode/blob/main/docs/scaffold-skills.md">저장소 문서</a>에서
+              확인할 수 있습니다.
             </p>
             <pre>{`"skill:my-skill": {
   "enabled": true,
@@ -189,10 +195,11 @@ argument-hint: "[issue-number]"
             <p>
               The loader (<code>core/skills/skills.py</code>) walks bundled, then
               personal, then project directories; on a name conflict the later
-              scope wins, so a project skill takes precedence. The scaffold
-              skills Claude Code uses while building GEODE
-              (<code>.claude/skills/</code>) are entirely separate from this
-              runtime registry.
+              scope wins, so a project skill takes precedence. Development
+              scaffold skills are separate from this runtime registry: the
+              repository publishes one canonical <code>.agents/skills/</code>
+              tree, while <code>.claude/skills/</code> contains only relative
+              aliases to the same reviewed bytes.
             </p>
 
             <h2>The SKILL.md format</h2>
@@ -230,7 +237,10 @@ and !\`cmd\` is replaced with shell output at invocation time.`}</pre>
               <code>deep-researcher</code>, <code>frontier-ui-ux-catalog</code>,
               <code>geo</code>, <code>geode-context</code>, <code>grilling</code>,
               <code>long-task-watcher</code>, and <code>pdf</code>. Repository- and
-              operator-specific skills stay in the project or personal tier.
+              operator-specific <code>pr-reviewer</code>, <code>slop-audit</code>,
+              and <code>wiki-sync</code> contracts are public in the repository
+              but remain project-only and are rejected from the wheel. See the
+              <a href="https://github.com/mangowhoiscloud/geode/blob/main/docs/scaffold-skills.md">complete meta/runtime inventory</a>.
             </p>
             <pre>{`"skill:my-skill": {
   "enabled": true,
