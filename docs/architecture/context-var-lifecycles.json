@@ -183,9 +183,9 @@
     "lifetime": "one IPC streaming prompt",
     "teardown": "the poller finally removes the console; task or thread exit discards fallback state"
   },
-  "evals/benchmarks/tau2_runtime_contract.py:_CURRENT_ATTEMPT": {
+  "evals/benchmarks/tau2/runtime_contract.py:_CURRENT_ATTEMPT": {
     "classification": "diagnostic_scope",
-    "owner": "evals.benchmarks.tau2_runtime_contract.Tau2AttemptTracker",
+    "owner": "evals.benchmarks.tau2.runtime_contract.Tau2AttemptTracker",
     "setter": "Tau2AttemptTracker.wrap sets a token around one upstream run attempt",
     "resetter": "Tau2AttemptTracker.wrap finally resets the token",
     "lifetime": "one tau2 run attempt",

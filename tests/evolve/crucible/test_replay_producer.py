@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from evolve.crucible.contract import content_sha256
-from evolve.crucible.producers.replay import (
+from evolve.crucible.search.producers.replay import (
     ProducerError,
     _attested_object,
     replay_candidate,
@@ -51,7 +51,7 @@ def _init(repository: Path) -> None:
 
 
 def _write_policy(repository: Path, content: str) -> Path:
-    path = repository / "evals/benchmarks/tau2_agent_policy.md"
+    path = repository / "evals/benchmarks/tau2/agent_policy.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return path
@@ -120,7 +120,7 @@ def _request(path: Path, parent_sha: str) -> None:
                 "request_id": "request-id",
                 "iteration": 1,
                 "parent_sha": parent_sha,
-                "allowed_surfaces": ["evals/benchmarks/tau2_agent_policy.md"],
+                "allowed_surfaces": ["evals/benchmarks/tau2/agent_policy.md"],
             }
         ),
         encoding="utf-8",
@@ -149,7 +149,7 @@ def _source_attempt(
             "candidate_sha": candidate_sha,
             "evaluator_sha256": content_sha256(source_repository, ("runtime.py",)),
             "evaluator_paths": ["runtime.py"],
-            "mutations": [{"surface": "evals/benchmarks/tau2_agent_policy.md"}],
+            "mutations": [{"surface": "evals/benchmarks/tau2/agent_policy.md"}],
         }
         contract_id = hashlib.sha256(
             json.dumps(
@@ -175,7 +175,7 @@ def _source_attempt(
             "candidate_sha": candidate_sha,
             "proposal_id": proposal_id,
             "mutation": {
-                "surface": "evals/benchmarks/tau2_agent_policy.md",
+                "surface": "evals/benchmarks/tau2/agent_policy.md",
                 "hypothesis": "Batch causally ready tool calls.",
             },
             "usage": {"wall_seconds": 1.0, "calls": 1, "tokens": 10, "cost_usd": 0.0},
@@ -269,9 +269,9 @@ def test_replay_candidate_reapplies_only_the_preregistered_surface(
         parent,
     ]
     assert _git(target, "diff", "--name-only", f"{parent}..HEAD") == (
-        "evals/benchmarks/tau2_agent_policy.md"
+        "evals/benchmarks/tau2/agent_policy.md"
     )
-    assert (target / "evals/benchmarks/tau2_agent_policy.md").read_text(
+    assert (target / "evals/benchmarks/tau2/agent_policy.md").read_text(
         encoding="utf-8"
     ) == IMPROVED_POLICY
 
@@ -396,7 +396,7 @@ def test_replay_candidate_allows_reject_only_after_evaluator_digest_changes(
 
     proposal = json.loads(output.read_text(encoding="utf-8"))
     assert proposal["usage"]["calls"] == 0
-    assert (target / "evals/benchmarks/tau2_agent_policy.md").read_text(
+    assert (target / "evals/benchmarks/tau2/agent_policy.md").read_text(
         encoding="utf-8"
     ) == IMPROVED_POLICY
 

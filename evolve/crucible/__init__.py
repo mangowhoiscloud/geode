@@ -9,7 +9,17 @@ contract cannot silently re-fragment:
   prepared config as ``prepared_by`` provenance.
 """
 
-from .bundle import PromotionBundle
+from .assays.tau2_live import Tau2SealedEvaluator
+from .attestation.bundle import PromotionBundle
+from .attestation.sealed import (
+    CorePromotionDecision,
+    SealedError,
+    SealedEvaluationArtifacts,
+    SealedEvaluator,
+    SealedInfrastructureError,
+    SealedPlan,
+    SealedSupervisor,
+)
 from .contract import (
     Budget,
     ContractError,
@@ -35,7 +45,7 @@ from .evidence import (
     validate_evidence_identity,
 )
 from .promotion import PromotionReachability, PromotionVerdict, decide, promotion_reachability
-from .ref_journal import (
+from .search.ref_journal import (
     RefIntent,
     RefJournalError,
     RefReceipt,
@@ -43,16 +53,7 @@ from .ref_journal import (
     reconcile_ref_update,
     verify_ref_update,
 )
-from .sealed import (
-    CorePromotionDecision,
-    SealedError,
-    SealedEvaluationArtifacts,
-    SealedEvaluator,
-    SealedInfrastructureError,
-    SealedPlan,
-    SealedSupervisor,
-)
-from .supervisor import (
+from .search.supervisor import (
     CandidateProducer,
     CandidateProposal,
     EvaluationArtifacts,
@@ -66,10 +67,9 @@ from .supervisor import (
     TrustedEvaluator,
     run_supervisor,
 )
-from .tau2_live import Tau2SealedEvaluator
 
 TRIAD_PREPARE = "evolve.crucible.prepare"
-TRIAD_TRAIN_SURFACE = "evals/benchmarks/tau2_agent_policy.md"
+TRIAD_TRAIN_SURFACE = "evals/benchmarks/tau2/agent_policy.md"
 
 __all__ = [
     "TRIAD_PREPARE",

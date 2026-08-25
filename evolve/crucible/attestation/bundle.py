@@ -10,11 +10,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .artifacts import load_json_object
-from .contract import ContractError, ExperimentContract, Mutation, canonical_json_sha256
-from .evidence import EvidenceEnvelope, ResourceUsage, load_evidence
-from .promotion import PromotionVerdict, decide
-from .ref_journal import RefIntent, RefReceipt, load_intent, verify_ref_update
+from evolve.crucible.artifacts import load_json_object
+from evolve.crucible.contract import (
+    ContractError,
+    ExperimentContract,
+    Mutation,
+    canonical_json_sha256,
+)
+from evolve.crucible.evidence import EvidenceEnvelope, ResourceUsage, load_evidence
+from evolve.crucible.promotion import PromotionVerdict, decide
+from evolve.crucible.search.ref_journal import RefIntent, RefReceipt, load_intent, verify_ref_update
 
 BUNDLE_SCHEMA = "crucible.promotion-bundle.v1"
 
@@ -120,7 +125,7 @@ def _task_pack_sha256(contract: ExperimentContract) -> str:
 
 
 def _canonical_record_id(record: Mapping[str, Any]) -> str:
-    from .supervisor import RECORD_SCHEMA
+    from evolve.crucible.search.supervisor import RECORD_SCHEMA
 
     missing = sorted(_RECORD_FIELDS - set(record))
     unknown = sorted(str(key) for key in set(record) - _RECORD_FIELDS - _RECORD_OPTIONAL_FIELDS)
@@ -144,7 +149,7 @@ def _validate_record(
     contract: ExperimentContract,
     verdict: PromotionVerdict,
 ) -> tuple[str, str, ResourceUsage]:
-    from .supervisor import RECORD_COMPONENT
+    from evolve.crucible.search.supervisor import RECORD_COMPONENT
 
     if not isinstance(record, Mapping):
         raise ContractError("supervisor record must be a JSON object")
@@ -232,7 +237,7 @@ def _validate_proposal_lineage(
     record: Mapping[str, Any],
     contract: ExperimentContract,
 ) -> ResourceUsage:
-    from .supervisor import PROPOSAL_SCHEMA, REQUEST_SCHEMA
+    from evolve.crucible.search.supervisor import PROPOSAL_SCHEMA, REQUEST_SCHEMA
 
     unknown_request_fields = set(request) - _REQUEST_FIELDS - _REQUEST_OPTIONAL_FIELDS
     if not _REQUEST_FIELDS.issubset(request) or unknown_request_fields:

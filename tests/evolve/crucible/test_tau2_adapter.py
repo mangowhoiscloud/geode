@@ -11,12 +11,12 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import pytest
-from evals.benchmarks.tau2_runtime_contract import (
+from evals.benchmarks.tau2.runtime_contract import (
     Tau2AttemptTracker,
     Tau2RuntimeContract,
 )
-from evals.benchmarks.tau2_tool_bridge import Tau2GeodeTool
-from evals.benchmarks.tau2_turn_supervisor import (
+from evals.benchmarks.tau2.tool_bridge import Tau2GeodeTool
+from evals.benchmarks.tau2.turn_supervisor import (
     GeodeTau2State,
     _agent_system_prompt,
     _message_to_prompt,
@@ -33,8 +33,7 @@ from evals.benchmarks.trajectory_artifacts import (
     geode_trajectory_snapshot_path,
     tau2_session_ids,
 )
-from evolve.crucible.contract import ContractError, TaskUnit
-from evolve.crucible.tau2_geode_agent import (
+from evolve.crucible.assays.tau2_geode_agent import (
     REPO_ROOT,
     _assert_tau2_route_ready,
     _build_loop,
@@ -52,7 +51,7 @@ from evolve.crucible.tau2_geode_agent import (
     _validate_tau2_task_order,
     _write_trajectory_snapshot,
 )
-from evolve.crucible.tau2_lane1a_preflight import (
+from evolve.crucible.assays.tau2_lane1a_preflight import (
     _attest_tau2_resets,
     _model_visible_tau2_tool_schemas,
     _tau2_import_origins,
@@ -61,7 +60,8 @@ from evolve.crucible.tau2_lane1a_preflight import (
     _tau2_runtime_identity,
     _write_tau2_lane1a_preflight_receipt,
 )
-from evolve.crucible.verifiers.tau2 import TAU2_ADAPTER, tau2_task_unit
+from evolve.crucible.assays.verifiers.tau2 import TAU2_ADAPTER, tau2_task_unit
+from evolve.crucible.contract import ContractError, TaskUnit
 
 
 def test_tau2_agent_prompt_blocks_inferred_optional_tool_args() -> None:
@@ -737,7 +737,7 @@ def test_tau2_preflight_rejects_mismatched_frozen_runtime_package(
     (harness_dir / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
     (harness_dir / "uv.lock").write_text("version = 1\n", encoding="utf-8")
     monkeypatch.setattr(
-        "evolve.crucible.tau2_lane1a_preflight.TAU2_LANE1A_RUNTIME_DISTRIBUTIONS",
+        "evolve.crucible.assays.tau2_lane1a_preflight.TAU2_LANE1A_RUNTIME_DISTRIBUTIONS",
         {},
     )
 
@@ -779,7 +779,7 @@ def test_tau2_preflight_rejects_dirty_producer_and_repo_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "evolve.crucible.tau2_lane1a_preflight._git_output",
+        "evolve.crucible.assays.tau2_lane1a_preflight._git_output",
         lambda _root, *args: " M source.py" if args == ("status", "--porcelain") else "head",
     )
     with pytest.raises(ContractError, match="clean GEODE producer"):

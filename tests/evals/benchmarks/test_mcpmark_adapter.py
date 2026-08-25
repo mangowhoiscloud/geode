@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from evals.benchmarks.mcpmark_geode_agent import (
+from evals.benchmarks.mcpmark.agent import (
     _CODEX_DISABLED_FEATURES,
     CodexMCPMarkAgent,
     GeodeMCPMarkAgent,
@@ -121,7 +121,7 @@ def _geode_agent_for_execute(monkeypatch, loop, *, mcp_server=None):
 
     agent._create_mcp_server = create_server
     monkeypatch.setattr(
-        "evals.benchmarks.mcpmark_geode_agent._build_loop",
+        "evals.benchmarks.mcpmark.agent._build_loop",
         lambda **_kwargs: loop,
     )
     return agent
@@ -220,7 +220,7 @@ def test_geode_mcpmark_deadline_includes_mcp_startup(monkeypatch, tmp_path) -> N
 
 
 def test_geode_mcpmark_receipt_binds_the_raw_tool_schema(monkeypatch, tmp_path) -> None:
-    from evals.benchmarks.mcpmark_geode_agent import _tool_schema_sha256
+    from evals.benchmarks.mcpmark.agent import _tool_schema_sha256
 
     schemas = [{"name": "read", "inputSchema": {"type": "object"}}]
 
@@ -279,7 +279,7 @@ def test_geode_mcpmark_finalization_grace_is_infrastructure_invalid(monkeypatch)
     server = MCPServer()
     agent = _geode_agent_for_execute(monkeypatch, Loop(), mcp_server=server)
     monkeypatch.setattr(
-        "evals.benchmarks.mcpmark_geode_agent._MCPMARK_CLEANUP_GRACE_SECONDS",
+        "evals.benchmarks.mcpmark.agent._MCPMARK_CLEANUP_GRACE_SECONDS",
         0.01,
     )
 
@@ -525,7 +525,7 @@ def test_codex_mcpmark_reap_grace_is_infrastructure_invalid(monkeypatch, tmp_pat
     agent = _codex_agent_for_execute(timeout=0.01)
     monkeypatch.setattr(asyncio, "create_subprocess_exec", create_process)
     monkeypatch.setattr(
-        "evals.benchmarks.mcpmark_geode_agent._MCPMARK_CLEANUP_GRACE_SECONDS",
+        "evals.benchmarks.mcpmark.agent._MCPMARK_CLEANUP_GRACE_SECONDS",
         0.01,
     )
 
@@ -941,7 +941,7 @@ def test_mcpmark_adapter_bootstraps_llm_adapters() -> None:
 
 def test_mcpmark_adapter_keeps_service_specific_server_overrides() -> None:
     source = (
-        Path(__file__).resolve().parents[3] / "evals" / "benchmarks" / "mcpmark_geode_agent.py"
+        Path(__file__).resolve().parents[3] / "evals" / "benchmarks" / "mcpmark" / "agent.py"
     ).read_text(encoding="utf-8")
 
     assert "ghcr.io/github/github-mcp-server:v0.15.0" in source
@@ -951,7 +951,7 @@ def test_mcpmark_adapter_keeps_service_specific_server_overrides() -> None:
 
 def test_mcpmark_adapter_supports_public_github_fixture_opt_in() -> None:
     source = (
-        Path(__file__).resolve().parents[3] / "evals" / "benchmarks" / "mcpmark_geode_agent.py"
+        Path(__file__).resolve().parents[3] / "evals" / "benchmarks" / "mcpmark" / "agent.py"
     ).read_text(encoding="utf-8")
 
     assert "GEODE_MCPMARK_GITHUB_REPO_VISIBILITY" in source

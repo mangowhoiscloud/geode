@@ -18,9 +18,10 @@ from pathlib import Path
 from typing import Any
 
 from evals.benchmarks.manifest import get_benchmark
-from evals.benchmarks.tau2_turn_supervisor import _agent_system_prompt
+from evals.benchmarks.tau2.turn_supervisor import _agent_system_prompt
 
 from evolve.crucible.artifacts import write_exclusive_json
+from evolve.crucible.assays.verifiers.tau2 import tau2_task_unit
 from evolve.crucible.contract import (
     ContractError,
     TaskUnit,
@@ -28,9 +29,8 @@ from evolve.crucible.contract import (
     task_pack_sha256,
     tracked_tree_sha256,
 )
-from evolve.crucible.verifiers.tau2 import tau2_task_unit
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 TAU2_LANE1A_BENCHMARK_REVISION = get_benchmark("tau2-bench").commit
 TAU2_LANE1A_HARNESS_REVISION = TAU2_LANE1A_BENCHMARK_REVISION  # v1.0.x compatibility
 TAU2_LANE1A_PACKAGE_VERSION = "1.0.1"
@@ -72,7 +72,7 @@ def _model_visible_tau2_tool_schemas(tools: list[Any] | None) -> list[dict[str, 
     from core.llm.adapters import build_openai_responses_kwargs
     from core.llm.adapters.translation import build_adapter_request
     from core.wiring.runtime import build_policy_sources
-    from evals.benchmarks.tau2_tool_bridge import _tau2_tool_registry
+    from evals.benchmarks.tau2.tool_bridge import _tau2_tool_registry
 
     registry, handlers = _tau2_tool_registry(tools)
     allowed = set(handlers)
@@ -317,17 +317,17 @@ def _tau2_producer_identity() -> dict[str, Any]:
         "branch": _git_output(REPO_ROOT, "branch", "--show-current"),
         "dirty": False,
         "sources": {
-            "evolve/crucible/tau2_geode_agent.py": _file_sha256(
-                REPO_ROOT / "evolve/crucible/tau2_geode_agent.py"
+            "evolve/crucible/assays/tau2_geode_agent.py": _file_sha256(
+                REPO_ROOT / "evolve/crucible/assays/tau2_geode_agent.py"
             ),
-            "evolve/crucible/tau2_lane1a_preflight.py": _file_sha256(
-                REPO_ROOT / "evolve/crucible/tau2_lane1a_preflight.py"
+            "evolve/crucible/assays/tau2_lane1a_preflight.py": _file_sha256(
+                REPO_ROOT / "evolve/crucible/assays/tau2_lane1a_preflight.py"
             ),
-            "evals/benchmarks/tau2_tool_bridge.py": _file_sha256(
-                REPO_ROOT / "evals/benchmarks/tau2_tool_bridge.py"
+            "evals/benchmarks/tau2/tool_bridge.py": _file_sha256(
+                REPO_ROOT / "evals/benchmarks/tau2/tool_bridge.py"
             ),
-            "evals/benchmarks/tau2_agent_policy.md": _file_sha256(
-                REPO_ROOT / "evals/benchmarks/tau2_agent_policy.md"
+            "evals/benchmarks/tau2/agent_policy.md": _file_sha256(
+                REPO_ROOT / "evals/benchmarks/tau2/agent_policy.md"
             ),
         },
     }
@@ -444,7 +444,7 @@ def _tau2_runtime_identity(harness_dir: Path) -> dict[str, Any]:
 
 def _tau2_lane1a_preflight_receipt(harness_dir: Path) -> dict[str, Any]:
     """Freeze Tau2 base identity and reset evidence without model/account calls."""
-    from evolve.crucible.tau2_geode_agent import _tau2_data_root
+    from evolve.crucible.assays.tau2_geode_agent import _tau2_data_root
 
     harness_dir = harness_dir.resolve()
     revision = _git_output(harness_dir, "rev-parse", "HEAD")
@@ -744,8 +744,8 @@ def _tau2_lane1a_preflight_receipt(harness_dir: Path) -> dict[str, Any]:
         },
         "prompt_sources": {path: _file_sha256(harness_dir / path) for path in prompt_paths}
         | {
-            "evals/benchmarks/tau2_agent_policy.md": _file_sha256(
-                REPO_ROOT / "evals/benchmarks/tau2_agent_policy.md"
+            "evals/benchmarks/tau2/agent_policy.md": _file_sha256(
+                REPO_ROOT / "evals/benchmarks/tau2/agent_policy.md"
             )
         },
         "score_authority": {

@@ -32,31 +32,33 @@ repository heads recorded below.
 | Gap | Evidence | Resolution |
 |---|---|---|
 | Benchmark sources are named harnesses | `HarnessSpec`, `BENCHMARK_HARNESSES`, and the CLI argument | Rename the public evaluation helpers to benchmark terminology. |
-| Harbor could be mistaken for a benchmark | `evals/benchmarks/harbor_geode_agent.py` sits beside benchmark modules | Keep it out of `BENCHMARKS` and label it as the platform adapter. |
+| Harbor could be mistaken for a benchmark | Its adapter sat beside benchmark modules | Move it to `evals/platforms/harbor.py` and keep it out of `BENCHMARKS`. |
 | Legacy identifiers preserve the overloaded term | Manifest filename, TOML root, checkout path, artifact-schema fields, and v1.0.x Python aliases | Keep them only for compatibility and reproduction; do not extend them in new APIs. |
 | Research omits Prime Agent and native parity | `.claude/skills/frontier-harness-research/SKILL.md` lists four systems | Add both as explicit research sources and checklist items. |
 
 ## Decision
 
-Use **benchmark-first ownership with one flat external-platform adapter**, not
-either directory cross-product:
+Use **benchmark-first vertical slices with a separate external-platform
+package**, not either directory cross-product:
 
 ```text
-evals/benchmarks/
-├── harbor_geode_agent.py     # Harbor platform adapter, not in BENCHMARKS
-├── mcpmark_*.py              # benchmark-specific integration
-├── tau2_*.py                 # provider-neutral benchmark contracts
-├── manifest.py               # pinned upstream benchmark sources
-└── trajectory_artifacts.py   # shared evaluation evidence
+evals/
+├── benchmarks/
+│   ├── mcpmark/              # agent, runners, pinned patch
+│   ├── tau2/                 # policy and provider-neutral contracts
+│   ├── manifest.py
+│   └── trajectory_artifacts.py
+└── platforms/
+    └── harbor.py
 ```
 
-All modules remain flat until a benchmark family needs multiple packages or
-multiple platform adapters create a real grouping need. Moving them now would
-only churn imports. GEODE does not vendor Harbor dataset adapters or create
+MCPMark and tau2 already have multiple cohesive modules, so each now forms one
+vertical slice. GEODE does not vendor Harbor dataset adapters or create
 `harbor/<benchmark>` copies; the upstream benchmark remains the authority for
-tasks and scoring. The former harness-named Python symbols, manifest filename,
-TOML root, checkout path, and artifact-schema fields remain compatibility or
-reproduction identifiers rather than becoming a second authority.
+tasks and scoring. Former flat public entrypoints, harness-named Python
+symbols, manifest filename, TOML root, checkout path, and artifact-schema
+fields remain compatibility or reproduction identifiers rather than becoming
+a second authority.
 
 ## Verification
 

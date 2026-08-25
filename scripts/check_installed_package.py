@@ -74,9 +74,11 @@ def _check_full_package() -> None:
         assert _help_output(canonical) == _help_output(canonical_path)
 
     for canonical in (
+        "evals.benchmarks.mcpmark.agent",
         "evals.benchmarks.mcpmark_geode_agent",
         "evals.petri.runner",
         "evals.seed_generation.tools.seed_pool_search",
+        "evolve.crucible.assays.tau2_geode_agent",
         "evolve.crucible.tau2_geode_agent",
     ):
         importlib.import_module(canonical)

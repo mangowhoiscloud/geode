@@ -173,7 +173,7 @@
       "authority": "dated-evidence-ledger",
       "path": "docs/eval/frontier-agentic-tool-use-benchmark-cases.md",
       "summary": "Dated evidence ledger for public MCPMark, BFCL V4, and tau2 tool-use cases and GEODE comparisons.",
-      "sha256": "8fe16e857760fc06ac0b6feb2926b200c9cc8f6e65800a86e66109707b4f50d2",
+      "sha256": "576f89520db449211854d3517face318787604b873224aeecb2e303df59140c9",
       "triggers": [
         "BFCL cases",
         "MCPMark cases",
@@ -255,7 +255,7 @@
       "authority": "historical-environment-record",
       "path": "docs/eval/mcpmark-agentworld-comparison-runbook.md",
       "summary": "Historical MCPMark environment recovery and comparison runbook; current comparability authority lives in the Agent-World contract.",
-      "sha256": "1663cd6f950bd7a2cfd3afcb69dcbe9313f5b7190550e823ce076b595ce45f41",
+      "sha256": "10d963d114b4f506206688406cb036cde2d9e974683f3618c117fb899b927e46",
       "triggers": [
         "Agent-World MCPMark",
         "MCPMark credentials",
@@ -419,7 +419,7 @@
       "authority": "suite-profile",
       "path": "docs/eval/tau2-bench.md",
       "summary": "GEODE evaluation profile, evidence ledger, and rollout plan for the tau2 conversational tool-use benchmark.",
-      "sha256": "a04e8f289fc6a3c034b302991650ccd192643bdb0851e07a56d4b802a48804ce",
+      "sha256": "aa648d05c8010c9200acab50024c02a3dbae346613ff2167b4d6ecffed279c26",
       "triggers": [
         "conversational tool use",
         "tau-bench",

@@ -4,14 +4,7 @@ from pathlib import Path
 
 import pytest
 from core.observability.trajectory import build_trajectory
-from evolve.crucible.cli import main as crucible_main
-from evolve.crucible.contract import (
-    ContractError,
-    ExperimentContract,
-    task_pack_sha256,
-)
-from evolve.crucible.evidence import ResourceUsage
-from evolve.crucible.verifiers.tau2 import (
+from evolve.crucible.assays.verifiers.tau2 import (
     TAU2_ADAPTER,
     _canonical_task_sha256,
     _verify_attempt_manifest,
@@ -20,6 +13,13 @@ from evolve.crucible.verifiers.tau2 import (
     tau2_resource_usage_floor,
     tau2_task_unit,
 )
+from evolve.crucible.cli import main as crucible_main
+from evolve.crucible.contract import (
+    ContractError,
+    ExperimentContract,
+    task_pack_sha256,
+)
+from evolve.crucible.evidence import ResourceUsage
 
 
 def _raw_tasks() -> list[dict[str, object]]:

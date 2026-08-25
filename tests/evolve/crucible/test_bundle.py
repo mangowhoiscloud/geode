@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from evolve.crucible.bundle import PromotionBundle
+from evolve.crucible.attestation.bundle import PromotionBundle
 from evolve.crucible.cli import main as crucible_main
 from evolve.crucible.contract import (
     EXPERIMENT_SCHEMA,
@@ -23,13 +23,13 @@ from evolve.crucible.contract import (
 )
 from evolve.crucible.evidence import EVIDENCE_SCHEMA, EvidenceEnvelope, ResourceUsage
 from evolve.crucible.promotion import PromotionVerdict, decide
-from evolve.crucible.ref_journal import (
+from evolve.crucible.search.ref_journal import (
     RefIntent,
     RefReceipt,
     commit_ref_update,
     persist_intent,
 )
-from evolve.crucible.supervisor import RECORD_SCHEMA, CandidateProposal
+from evolve.crucible.search.supervisor import RECORD_SCHEMA, CandidateProposal
 
 CAMPAIGN_ID = "bundle-test"
 ATTEMPT_ID = "0001-test"

@@ -458,7 +458,7 @@ DEP001 = [
     # benchmark_harness plugin when live tau2 measurement is requested.
     "tau2",
     # MCPMark harness modules resolve via MCPMARK_ROOT sys.path insertion in
-    # evals/benchmarks/run_mcpmark.py; opt-in checkout, absent by default.
+    # evals/benchmarks/mcpmark/runner.py; opt-in checkout, absent by default.
     "src",
     "pipeline",
 ]
@@ -620,7 +620,7 @@ module = [
     # CI default sync does not install tau2 or its untyped in-tree modules.
     "tau2.*",
     # MCPMark harness modules resolve via MCPMARK_ROOT sys.path insertion in
-    # evals/benchmarks/run_mcpmark.py; opt-in checkout, absent in CI.
+    # evals/benchmarks/mcpmark/runner.py; opt-in checkout, absent in CI.
     "src.agents",
     "pipeline",
     # PR-BROWSER-CDP-BRIDGE — websockets ships no py.typed; used only by the
@@ -637,7 +637,7 @@ ignore_missing_imports = true
 # tau2's runtime base classes are imported from the external harness checkout
 # and do not ship stubs in GEODE's default CI environment. Keep the relaxation
 # scoped to the canonical opt-in runner.
-module = ["evolve.crucible.tau2_geode_agent"]
+module = ["evolve.crucible.assays.tau2_geode_agent"]
 disallow_subclassing_any = false
 
 [[tool.mypy.overrides]]
@@ -651,8 +651,8 @@ disallow_untyped_decorators = false
 # Public benchmark adapters subclass base classes supplied by opt-in external
 # harness checkouts. The checkout is installed only for live benchmark runs.
 module = [
-    "evals.benchmarks.mcpmark_geode_agent",
-    "evolve.crucible.tau2_geode_agent",
+    "evals.benchmarks.mcpmark.agent",
+    "evolve.crucible.assays.tau2_geode_agent",
 ]
 disallow_subclassing_any = false
 

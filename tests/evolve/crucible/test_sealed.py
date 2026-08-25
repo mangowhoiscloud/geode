@@ -10,10 +10,18 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
-import evolve.crucible.sealed as sealed_module
+import evolve.crucible.attestation.sealed as sealed_module
 import pytest
 from evolve.crucible.artifacts import write_exclusive_json
-from evolve.crucible.bundle import PromotionBundle
+from evolve.crucible.assays.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
+from evolve.crucible.attestation.bundle import PromotionBundle
+from evolve.crucible.attestation.sealed import (
+    CorePromotionDecision,
+    SealedError,
+    SealedInfrastructureError,
+    SealedPlan,
+    SealedSupervisor,
+)
 from evolve.crucible.contract import (
     EXPERIMENT_SCHEMA,
     ContractError,
@@ -23,22 +31,14 @@ from evolve.crucible.contract import (
 )
 from evolve.crucible.evidence import EVIDENCE_SCHEMA, EvidenceEnvelope, ResourceUsage
 from evolve.crucible.promotion import decide
-from evolve.crucible.ref_journal import (
+from evolve.crucible.search.ref_journal import (
     RefIntent,
     RefReceipt,
     commit_ref_update,
     persist_intent,
 )
-from evolve.crucible.ref_journal import commit_ref_update as real_commit_ref_update
-from evolve.crucible.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
-from evolve.crucible.sealed import (
-    CorePromotionDecision,
-    SealedError,
-    SealedInfrastructureError,
-    SealedPlan,
-    SealedSupervisor,
-)
-from evolve.crucible.supervisor import PROPOSAL_SCHEMA, RECORD_SCHEMA, REQUEST_SCHEMA
+from evolve.crucible.search.ref_journal import commit_ref_update as real_commit_ref_update
+from evolve.crucible.search.supervisor import PROPOSAL_SCHEMA, RECORD_SCHEMA, REQUEST_SCHEMA
 
 _GIT = shutil.which("git")
 if _GIT is None:  # pragma: no cover - test environment precondition

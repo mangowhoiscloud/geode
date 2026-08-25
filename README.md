@@ -30,7 +30,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v1.0.26: Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.26 — Autonomous Agent Runtime + Evaluation Substrate
 
 A general-purpose runtime for autonomous tool work. You ask in plain language;
 GEODE plans, calls tools, and reports, for one prompt or a long-running session.
@@ -50,74 +50,35 @@ sustained self-improvement.
 
 ---
 
-## Benchmark snapshot: Tau2 native user-simulator track
+## One distribution, three boundaries
 
-GEODE keeps benchmark numbers tied to the exact runtime and model route that
-produced them. The 2026-07-03/04 Tau2 run below used **GEODE v0.99.269** with
-the public `evals/benchmarks` tau2 adapter, `sierra-research/tau2-bench@1901a30`
-(`tau2==1.0.0`), `gpt-5.2` through OpenAI **PAYG**, agent reasoning effort
-`high`, `max_steps=200`, and tau2's native `user_simulator` using
-`gpt-4.1-2025-04-14` with effort `medium`.
+The `geode-agent` wheel ships four commands without turning the installed
+package into a writable workspace:
 
-| Domain | Tasks | Reward / pass^1 | Notable action checks | Duration |
-|---|---:|---:|---|---:|
-| Airline base | 50 | **0.8200** (41 / 50) | read 81/91, write 33/49 | avg 284.10s / max 979.65s |
-| Retail base | 114 | **0.7632** (87 / 114) | read 320/354, write 140/174 | avg 206.52s / max 873.92s |
-| Telecom base | 114 | **0.8772** (100 / 114) | write 471/496, generic 20/20 | avg 252.87s / max 818.58s |
-| **Weighted total** | **278** | **0.8201** (228 / 278) | domain action schemas differ | - |
+| Boundary | Responsibility | Commands |
+|---|---|---|
+| `core` | Runtime, operator CLI, daemon, MCP server | `geode`, `geode-mcp` |
+| `evals` | Audits, benchmark adapters, evidence production | `geode-eval` |
+| `evolve` | Experimental scaffold search and Crucible | `geode-evolve` |
 
-Raw run logs are preserved in
-[`geode-eval-artifacts/tau2/simulations/`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/main/tau2/simulations)
-(`geode-gpt-5-2-high-native-user-*-base-20260703/results.json` — per-task
-rewards, action checks, and full simulation transcripts).
-These numbers are directly comparable to GEODE reruns with the same harness,
-split, user simulator, model route, and max-step settings. They should not be
-mixed with the earlier `geode_user` smoke rows. Compared with frontier Tau2
-headlines, this is an independently run GEODE adapter measurement, not the
-providers' internal research setup.
+Installed code and bundled assets are immutable. Runtime and experiment output
+lives under `~/.geode/` (or an explicit state override), while mutation and
+promotion require a writable GEODE Git checkout. See the
+[distribution lifecycle](docs/architecture/immutable-distribution-lifecycle.md).
 
-The current weak spot is not gross tool availability. It is **required action
-coverage under compound tasks**: Retail failures often miss DB/write side
-effects, while Telecom failures cluster around MMS/APN/app-permission/roaming
-combinations where one necessary user or agent action is omitted.
+## Evaluation evidence
 
-The latest subscription-route regression (2026-08-02) used `gpt-5.4` at
-effort `high` for both GEODE agent and GEODE user. The exact
-`mock/create_task_1` diagnostic remained **0/1** because the model supplied an
-unrequested optional `description=""`; the first Telecom-small roaming task
-passed **1/1** with every required DB, user-action, mobile-status, and speed
-check. These two diagnostic rows are not the native-user headline. Their 158
-canonical events and ten exact tool pairs are pinned to
-[`geode-eval-artifacts@f588ce9`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/f588ce9fd23b9123732b45c4dbe202136691d3fe/trajectories/tau2-geode-gpt54-afaab52b-mock-telecom-small-20260801T173245Z-2dc79cb569f0).
+GEODE does not collapse unlike runs into one product score. Every published
+result stays bound to its harness revision, task set, model route, effort,
+timeout, and attempt lineage.
 
-## Benchmark snapshot: MCPMark Verified available-services track
+| Track | Public evidence boundary |
+|---|---|
+| [Tau2](https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2) | Native-user and GEODE-user tracks remain separate; incomplete or quota-contaminated runs are retained without receiving aggregate-score authority. |
+| [MCPMark](https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark) | Service coverage, historical available-services results, corrected paired observations, and full-Verified limitations remain explicit. |
 
-The 2026-07-04 MCPMark run used **GEODE v0.99.269-era code** on branch
-`feature/mcpmark-agentworld-run`, `eval-sys/mcpmark@cd45b7f`, GEODE's public
-`evals/benchmarks` MCPMark adapter, `gpt-5.5` through the OpenAI
-**Codex subscription** route, and reasoning effort `xhigh`.
-
-This is not a full MCPMark Verified leaderboard score. It covers the standard
-service slices that were runnable in the local environment; Notion was blocked
-by missing `notion_state.json`, and Playwright/WebArena was blocked by missing
-Docker images/browser service stack.
-
-| MCPMark service | Tasks | Passed | Accuracy | Notes |
-|---|---:|---:|---:|---|
-| Filesystem standard | 30 | 25 | **83.3%** | `papers/author_folders` counted as a failed no-result transport run after two attempts |
-| Postgres standard | 21 | 20 | **95.2%** | Uses `postgres-mcp==0.3.0` in unrestricted mode |
-| GitHub standard | 23 | 19 | **82.6%** | Uses `ghcr.io/github/github-mcp-server:v0.15.0`; transient repos cleaned up |
-| **Measured total** | **74** | **64** | **86.5%** | filesystem + postgres + github only |
-
-Raw run logs are preserved in
-[`geode-eval-artifacts/mcpmark/results-geode-agentworld/`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/main/mcpmark/results-geode-agentworld)
-(`geode-gpt55-xhigh-20260704-mcpmark-verified-*` — per-task `meta.json`
-verifier results, `messages.json` final answers or empty placeholders, and
-`execution.log` ordered MCP action/result records where produced). The public
-MCPMark snapshot does not retain full model dialogue; see its
-[trajectory contract](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/TRAJECTORIES.md).
-These rows are directly comparable only to the same MCPMark commit, service
-set, GEODE adapter, model route, and timeout settings.
+Raw receipts and privacy-reviewed trajectories live in the
+[evaluation artifact repository](https://github.com/mangowhoiscloud/geode-eval-artifacts).
 
 ---
 
@@ -210,7 +171,8 @@ geode setup
 
 The wizard offers three paths: ChatGPT subscription, API key (paste and go), or skip into dry-run mode for now. It can also import an existing `~/.codex/auth.json` credential, but GEODE does not execute Codex CLI for inference.
 
-If you already ran `codex auth login`, the next `geode` invocation can detect that token. Codex CLI is otherwise optional.
+If Codex CLI has already signed in with ChatGPT, the next `geode` invocation
+can detect that token. Codex CLI is otherwise optional.
 
 ### Step 3: Pick a path (manual reference)
 
@@ -227,9 +189,11 @@ geode                                 # start GEODE
 # inside the session: /login openai   # ChatGPT device-code login
 ```
 
-**Plans that work** (per the [official Codex CLI docs](https://developers.openai.com/codex/cli/)): Plus, Pro, Business, Edu, Enterprise.
+**Plans that work** (per the [official Codex pricing page](https://developers.openai.com/codex/pricing/)): Plus, Pro, Business, Edu, Enterprise.
 
-**Quotas** (OpenAI-published, per 5-hour window): roughly 15–80 messages on Plus, up to 1,600 on Pro 20x. Edu and Enterprise have no fixed cap; usage scales with your workspace credits. Your admin needs to flip "Allow members to use Codex Local" before sign-in works on those tiers.
+**Quotas** (OpenAI-published, per 5-hour window): roughly 15–80 messages on
+Plus and up to 1,600 on Pro 20x. Enterprise and Edu limits depend on whether
+the workspace uses flexible credits or legacy per-seat limits.
 
 **Tier notes**:
 - **gpt-5.5 is subscription-only.** GPT-5.6 Sol/Terra/Luna and GPT-5.4 are dual-lane: GEODE uses ChatGPT OAuth when a subscription profile is active and the Platform API when an API-key profile is selected. If you want 5.5, you need ChatGPT.
@@ -265,7 +229,8 @@ chmod 600 ~/.geode/.env
 
 Want OpenAI or ZhipuAI GLM instead? Add `OPENAI_API_KEY=sk-proj-...` or `ZAI_API_KEY=...` to the same file. GEODE picks whichever is available.
 
-**What it costs in practice.** A single prompt runs around 3,000 tokens, about $0.01. A research session with ten tool calls usually lands between $0.05 and $0.30. Your $5 free credit lasts roughly 500 prompts. Set a hard cap in `~/.geode/config.toml`:
+**Cost control.** Provider prices vary by model and workload. Check the
+provider's current pricing, then set a hard cap in `~/.geode/config.toml`:
 
 ```toml
 [cost]
@@ -481,7 +446,7 @@ For a PyPI install, run `uv tool install geode-agent`. For a source checkout, ru
 <details>
 <summary><strong>"401 Unauthorized" or "Invalid API key"</strong>, wrong key, expired key, or wrong file location.</summary>
 
-Check `cat ~/.geode/.env` and confirm the key starts with `sk-ant-` (Anthropic), `sk-proj-` (OpenAI), or `id.secret` (ZhipuAI GLM). Make sure there are no extra spaces or quote characters. If you used the ChatGPT subscription path (Path A), re-run `codex auth login` to refresh the OAuth token.
+Check `cat ~/.geode/.env` and confirm the key starts with `sk-ant-` (Anthropic), `sk-proj-` (OpenAI), or `id.secret` (ZhipuAI GLM). Make sure there are no extra spaces or quote characters. If you used the ChatGPT subscription path (Path A), run `/login openai` again inside GEODE.
 </details>
 
 <details>

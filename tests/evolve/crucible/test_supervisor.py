@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
-from evolve.crucible.bundle import PromotionBundle
+from evolve.crucible.assays.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
+from evolve.crucible.attestation.bundle import PromotionBundle
 from evolve.crucible.cli import main as crucible_main
 from evolve.crucible.contract import (
     ExperimentContract,
@@ -24,9 +25,8 @@ from evolve.crucible.contract import (
     tracked_tree_sha256,
 )
 from evolve.crucible.evidence import EvidenceEnvelope, ResourceUsage
-from evolve.crucible.ref_journal import load_receipt
-from evolve.crucible.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
-from evolve.crucible.supervisor import (
+from evolve.crucible.search.ref_journal import load_receipt
+from evolve.crucible.search.supervisor import (
     CandidateProposal,
     FailureFeedback,
     GitWorkspace,
@@ -75,9 +75,11 @@ def test_role_process_sigterm_reaps_its_session(
         if signum == signal.SIGTERM:
             process.stopped = True
 
-    monkeypatch.setattr("evolve.crucible.supervisor.subprocess.Popen", lambda *a, **kw: process)
-    monkeypatch.setattr("evolve.crucible.supervisor.signal.signal", install)
-    monkeypatch.setattr("evolve.crucible.supervisor.os.killpg", kill_group)
+    monkeypatch.setattr(
+        "evolve.crucible.search.supervisor.subprocess.Popen", lambda *a, **kw: process
+    )
+    monkeypatch.setattr("evolve.crucible.search.supervisor.signal.signal", install)
+    monkeypatch.setattr("evolve.crucible.search.supervisor.os.killpg", kill_group)
 
     with pytest.raises(SystemExit, match=str(128 + signal.SIGTERM)):
         _run_process(
@@ -1086,7 +1088,7 @@ def test_failed_keep_cas_leaves_a_record_but_no_receipt_or_ledger(
         assert receipt_path.name == "search-ref.receipt.json"
         raise SupervisorError("fixture CAS conflict")
 
-    monkeypatch.setattr("evolve.crucible.supervisor.reconcile_ref_update", fail_reconcile)
+    monkeypatch.setattr("evolve.crucible.search.supervisor.reconcile_ref_update", fail_reconcile)
     with pytest.raises(SupervisorError, match="CAS conflict"):
         PromotionSupervisor(
             config,
