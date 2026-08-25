@@ -6,12 +6,12 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from evolve.crucible.admission.runtime_forecast import (
+from evolve.crucible.admission.forecast import (
     _exact_cycle_distribution,
     forecast_runtime,
     load_runtime_pilot,
 )
-from evolve.crucible.admission.runtime_identity import runtime_regime, runtime_regime_id
+from evolve.crucible.admission.regime import runtime_regime, runtime_regime_id
 from evolve.crucible.cli import main as crucible_main
 from evolve.crucible.contract import (
     ContractError,

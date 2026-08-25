@@ -40,7 +40,7 @@ from evolve.crucible.contract import (
     canonical_json_sha256,
 )
 
-from .runtime_identity import (
+from .regime import (
     RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     canonical_runtime_hash,
     runtime_design_from_parts,

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
-from evolve.crucible.assays.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
+from evolve.crucible.assays.receipt import SharedRuntimeDeadline, runtime_artifact_bindings
 from evolve.crucible.attestation.bundle import PromotionBundle
 from evolve.crucible.cli import main as crucible_main
 from evolve.crucible.contract import (

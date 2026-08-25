@@ -10,8 +10,8 @@ import pytest
 from evals.benchmarks.tau2.turn_supervisor import (
     _pre_execution_retry_telemetry,
 )
+from evolve.crucible.assays.receipt import SharedRuntimeDeadline, runtime_artifact_bindings
 from evolve.crucible.assays.row_cache import harvest_arm_rows
-from evolve.crucible.assays.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
 from evolve.crucible.assays.tau2_live import (
     Tau2InfrastructureError,
     _evaluation_wall_seconds,

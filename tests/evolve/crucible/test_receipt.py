@@ -2,8 +2,8 @@ import json
 from pathlib import Path
 
 import pytest
-from evolve.crucible.admission.runtime_identity import canonical_runtime_hash, runtime_regime_id
-from evolve.crucible.assays.runtime_receipt import SharedRuntimeDeadline, load_runtime_receipt
+from evolve.crucible.admission.regime import canonical_runtime_hash, runtime_regime_id
+from evolve.crucible.assays.receipt import SharedRuntimeDeadline, load_runtime_receipt
 from evolve.crucible.contract import ContractError
 from tests.evolve.crucible.test_promotion import _contract
 

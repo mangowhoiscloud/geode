@@ -17,7 +17,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Literal, Protocol, cast
 
 from evolve.crucible.artifacts import contained_path, load_json_object, write_exclusive_json
-from evolve.crucible.assays.runtime_receipt import load_runtime_receipt, runtime_artifact_bindings
+from evolve.crucible.assays.receipt import load_runtime_receipt, runtime_artifact_bindings
 from evolve.crucible.contract import (
     ContractError,
     ExperimentContract,
