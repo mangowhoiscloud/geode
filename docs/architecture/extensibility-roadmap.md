@@ -568,6 +568,10 @@ and closure evidence are appended in §10.
 | BND-008 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-004, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.4 | REL-004, STORE-003 | `SUPERSEDED` |
 | CODE-002 | `MISFIT` | Verification state is restored from checkpoint `loop_guards`, but `_persist_verify_state` still mirrors every result into `SessionManager` columns whose accessor has no production reader | Production verify-mirror writes and the unused accessor are removed; legacy databases containing the columns still load, checkpoint recovery remains authoritative, and no new store or schema migration is introduced | R9.2 | CODE-001 | `DONE` |
 | BND-009 | `MISFIT` | `geode_product` combines runtime composition with evaluation and hill-climbing, while `plugins`, `core/self_improving`, Homebrew candidate files, and the unverified computer sandbox preserve duplicate or unsupported ownership surfaces | One documented migration leaves `core` as the GEODE runtime, moves measurement to `evals` and hill-climbing to `evolve`, removes every obsolete package/scaffold without a replacement stub, preserves one-way `evolve -> evals -> core` dependencies and operator behavior, migrates tracked state with byte parity, and proves the final wheel/sdist/install/release contain only the declared roots | R8.5 | BND-006, REL-003 | `DONE` |
+| DIST-001 | `MISFIT` | A clean `geode-agent` wheel resolves the default scaffold-search SoT to `site-packages/evolve/scaffold_search/state`, where mutation, result, epoch, and policy writers append or replace files and then attempt Git commits from a non-repository install root | Installed distributions are immutable: read-only packaged snapshots remain readable, every mutation/promotion writer requires an explicit writable GEODE Git workspace before its first side effect, worker overrides remain isolated, upgrades cannot erase run history, and an installed-wheel poison test proves no distribution file or `RECORD` digest changes | R10.1 | BND-009 | `OPEN` |
+| DIST-002 | `MISFIT` | The packaged macOS helper build script defaults its generated app bundle to `<distribution>/.geode/ComputerUseHelper`, which may be read-only and is replaced by package upgrades | Packaged helper sources are read-only inputs, generated helper bytes live under one existing operator-owned GEODE home resolver, source and wheel installs share that resolver, and setup/status tests prove the distribution tree stays unchanged | R10.1 | BND-009 | `OPEN` |
+| DIST-003 | `PARTIAL` | The wheel force-includes every `.geode/skills` directory even when a skill references repository-only scripts/docs or a personal absolute workspace, while installed smoke proves only that selected skill bodies load | One exact self-contained builtin-skill allowlist is packaged; repository and personal skills remain in their existing external tiers; every bundled local command/asset reference resolves in a clean wheel; and installed smoke rejects repo-only, personal-path, or dangling bundled skills | R10.1 | BND-003, BND-004 | `OPEN` |
+| DIST-004 | `MISFIT` | `geode update` replaces the live uv-tool environment and verifies the new CLI before stopping the old daemon, allowing a running process to observe a mixed old-process/new-files installation | A running daemon is drained and stopped before live tool replacement, failed updates remain fail-closed without starting a second daemon, successful restart proves CLI/IPC daemon version parity, and ordering tests cover running, stopped, failed-stop, failed-install, and no-restart paths | R10.1 | BND-003, REL-003 | `OPEN` |
 
 ## 6. Dependency and merge sequence
 
@@ -1876,6 +1880,39 @@ Acceptance:
 - focused verification/recovery tests and architecture gates pass without a
   new store, schema migration, event, hook, or runtime abstraction.
 
+### R10 — Installed distribution lifecycle
+
+#### R10.1 Immutable package, explicit workspace, and safe update
+
+GAPs: DIST-001, DIST-002, DIST-003, DIST-004.
+
+Keep one public `geode-agent` wheel containing `core`, `evals`, and `evolve`.
+The wheel owns immutable Python code and self-contained static runtime assets;
+it does not own a writable Git workspace, rolling experiment state, generated
+native helpers, repository development skills, or personal workflows.
+
+Acceptance:
+
+- scaffold mutation, promotion, and tracked-ledger writes require an explicit
+  writable GEODE Git workspace and fail before any side effect when launched
+  from only an installed distribution; read-only packaged reference data and
+  existing `GEODE_STATE_ROOT` worker isolation remain compatible;
+- the macOS helper build reads packaged source but writes the app bundle only
+  below the existing operator-owned GEODE home, with source/wheel path parity
+  and no package-root fallback;
+- the wheel contains an exact allowlist of self-contained builtin skills;
+  repository-only skills remain under repository scope and personal skills
+  under user scope, while clean-install validation resolves every bundled
+  local command and asset reference;
+- an updater with a running daemon drains and stops it before replacing the
+  uv-tool environment, then restarts through the installed entry point and
+  proves CLI/IPC daemon version parity; stop or install failure never starts a
+  second daemon;
+- wheel/sdist content gates, clean full/kernel installs, installed unit tests,
+  daemon smoke, updater ordering tests, and a distribution-tree digest poison
+  test pass without publishing a second wheel or adding a workspace manager,
+  package registry, plugin SDK, or compatibility stub.
+
 ## 8. Change-surface acceptance scenarios
 
 These black-box scenarios define extensibility more usefully than class count.
@@ -2222,3 +2259,9 @@ The architecture and extensibility completion program has no remaining
 executable unit. Future architecture work must begin with a new GAP and closure
 package through the serialized registration protocol in §0.3; it must not
 reopen or rewrite this evidence.
+
+A 2026-08-25 G-of-4 distribution audit against
+`origin/develop@50be9bce9043b549cbe95e8320f4496223509a71` registered R10.1 as
+the next execution unit without rewriting the prior closure. DIST-001 through
+DIST-004 are `OPEN`, there is no active claim, and implementation remains
+forbidden until separate readiness and claim transactions merge.
