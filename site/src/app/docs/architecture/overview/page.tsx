@@ -21,7 +21,7 @@ export default function Page() {
               />
               <figcaption>5-계층 스택과 각 계층이 소유한 구성 요소.</figcaption>
             </figure>
-            <h2>왜 4가 아니라 5인가</h2>
+            <h2>다섯 번째 계층을 둔 이유</h2>
             <p>
               GEODE는 오랫동안 4-계층(Model, Runtime, Harness, Agent)으로
               서술됐습니다. 그런데 자기개선 코드는 그 어디에도 깔끔하게 들어가지
@@ -50,8 +50,8 @@ export default function Page() {
               <code>core/llm/router/</code>가 통일합니다.
             </p>
             <p>
-              폴백 체인은 기본값이 비어 있습니다. 주 모델이 실패하면 자동으로
-              다른 프로바이더로 넘어가는 대신 정직하게 실패를 돌려주고, 사용자가{" "}
+              폴백 체인은 기본값이 비어 있습니다. 주 모델이 실패하면 GEODE는
+              정직한 실패를 돌려주고, 사용자가{" "}
               <code>/model</code>로 다음 모델을 고릅니다. 체인은{" "}
               <code>~/.geode/routing.toml</code>에서 옵트인으로 켭니다.
             </p>
@@ -119,8 +119,8 @@ export default function Page() {
               맨 위 계층은 아래 네 계층 전체를 피험자로 다룹니다. 루프 드라이버는{" "}
               <code>evolve/scaffold_search/train.py</code>입니다. 파일명은 Karpathy
               autoresearch의 3-파일 관습에서 빌린 것으로, 이 안에서 모델 훈련은
-              일어나지 않습니다. 갱신 대상은 모델이 아니라 모델을 감싼 스캐폴드,
-              곧 시스템 프롬프트 섹션과 behaviour kinds입니다.
+              일어나지 않습니다. 모델을 감싼 스캐폴드, 곧 시스템 프롬프트
+              섹션과 behaviour kinds가 갱신됩니다.
             </p>
             <p>
               메커니즘은 선택입니다. 스캐폴드를 변이하고, 적대적 안전 감사
@@ -173,7 +173,7 @@ export default function Page() {
               />
               <figcaption>The 5-layer stack and the components each layer owns.</figcaption>
             </figure>
-            <h2>Why five, not four</h2>
+            <h2>Why the stack has a fifth layer</h2>
             <p>
               GEODE was described as a 4-layer stack (Model, Runtime, Harness,
               Agent) for a long time. But the self-improving code never fit
@@ -204,8 +204,8 @@ export default function Page() {
             </p>
             <p>
               Fallback chains ship empty by default. When the primary model
-              fails, GEODE returns an honest failure instead of silently
-              hopping providers, and the user picks the next model with{" "}
+              fails, GEODE returns an honest failure. The user picks the next
+              model with{" "}
               <code>/model</code>. Chains are opt-in via{" "}
               <code>~/.geode/routing.toml</code>.
             </p>
@@ -280,8 +280,8 @@ export default function Page() {
               The loop driver is <code>evolve/scaffold_search/train.py</code>. The
               file name borrows Karpathy autoresearch&apos;s three-file
               convention, and no model training happens inside it. What gets
-              updated is never the model but the scaffold around it: the
-              system-prompt sections and the behaviour kinds.
+              updated is the scaffold around the model: the system-prompt
+              sections and the behaviour kinds.
             </p>
             <p>
               The mechanism is selection. Mutate the scaffold, measure with an

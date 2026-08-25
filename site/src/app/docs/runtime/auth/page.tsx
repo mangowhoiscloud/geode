@@ -108,8 +108,8 @@ export default function Page() {
               권한을 줄일 때는 유지할 전체 번들과 <code>--replace-services</code>를
               함께 지정합니다.
               <code>gmail-read</code>는 Restricted scope라 기본 권장 묶음에
-              포함되지 않습니다. Drive·Docs·Sheets는 전체 Drive 대신
-              non-sensitive <code>drive.file</code>로 GEODE가 만들거나 파일별로
+              포함되지 않습니다. Drive·Docs·Sheets는 non-sensitive{" "}
+              <code>drive.file</code>로 GEODE가 만들거나 파일별로
               허용된 항목만 다룹니다.
             </p>
             <table>
@@ -293,8 +293,8 @@ ZAI_API_KEY={id}.{secret}`}</pre>
               <code>--replace-services</code>.
               <code>gmail-read</code> is a Restricted scope and
               is excluded from the recommended set. Drive, Docs, and Sheets use
-              the non-sensitive <code>drive.file</code> scope instead of whole-
-              Drive access, limiting GEODE to files it creates or that are
+              the non-sensitive <code>drive.file</code> scope, limiting GEODE to
+              files it creates or that are
               individually granted to the app.
             </p>
             <table>

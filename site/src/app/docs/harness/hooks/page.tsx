@@ -103,16 +103,16 @@ export default function Page() {
               완성된 후보와 내장 검증 결과를 외부 평가기·CI 정책·오케스트레이터가
               판정하게 합니다. revise는 구체적인 후속 지시가 있어야 하며 최대 2회
               연속 시도로 제한됩니다. 최종 결과에는 모든 시도의 rounds, tool calls,
-              usage가 합산된 뒤 증거와 체크포인트가 저장됩니다. escalate는 단순
-              telemetry가 아니라 delivery gate입니다. 세션을 pause하고 후보를
+              usage가 합산된 뒤 증거와 체크포인트가 저장됩니다. escalate는
+              delivery gate로 동작합니다. 세션을 pause하고 후보를
               외부 소유자에게만 pending_text로 반환하며 terminal
               <code>session.ended</code>를 만들지 않습니다.
             </p>
             <p>
               외부 handler 결정이 없으면 pass는 accept, 재시도 가능한 실패는
               revise, 그 밖의 실패는 escalate하는 기본 정책이 동작합니다. revision
-              지시는 user message가 아니라 dynamic system context에 한 번 주입되고,
-              <code>verification.decided</code>는 후보 본문 대신 SHA-256 digest와
+              지시는 dynamic system context에 한 번 주입되고,
+              <code>verification.decided</code>는 SHA-256 digest와
               handler별 결정을 session timeline에 남깁니다.
             </p>
 
@@ -245,8 +245,8 @@ export default function Page() {
             <p>
               Without an external handler decision, the default policy accepts a
               pass, revises a retryable failure, and escalates any other failure.
-              Revision control enters the dynamic system context once rather than
-              user history, while <code>verification.decided</code> stores the
+              Revision control enters the dynamic system context once, while
+              <code>verification.decided</code> stores the
               candidate SHA-256 digest and attributed handler decisions in the
               session timeline.
             </p>

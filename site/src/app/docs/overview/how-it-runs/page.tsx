@@ -26,7 +26,7 @@ export default function Page() {
             <h2>thin CLI에서 데몬까지</h2>
             <p>
               <code>geode</code>를 실행하면 thin CLI가 뜹니다. CLI 프로세스는
-              모델을 직접 호출하지 않습니다. 대신 Unix 도메인 소켓{" "}
+              모델 호출은 Unix 도메인 소켓{" "}
               <code>~/.geode/cli.sock</code>(경로 상수는 <code>core/paths.py</code>)
               으로 serve 데몬에 요청을 넘깁니다. <code>geode.ipc.v1</code>은
               크기가 제한된 줄 단위 JSON, 기능 협상, 요청 ID 상관관계를
@@ -104,7 +104,7 @@ export default function Page() {
             </table>
             <p>
               어느 경로로 끝나든 결과는 종료 사유와 함께 소켓으로 돌아갑니다.
-              조용한 실패 대신 이유가 남는 설계입니다.
+              모든 실패에 이유가 남는 설계입니다.
             </p>
 
             <h2>같은 코어, 다른 입구</h2>
@@ -237,14 +237,13 @@ export default function Page() {
                 <tr><td><code>cost_budget_exceeded</code></td><td>Session cost reached the budget. A single warning fires at 80%.</td></tr>
                 <tr><td><code>context_exhausted</code></td><td>The context stayed critical even after compaction and pruning.</td></tr>
                 <tr><td><code>model_refusal</code></td><td>The model&apos;s safety classifiers declined. The loop captures <code>stop_reason: &quot;refusal&quot;</code> arriving as HTTP 200 and ends with an honest message that includes the refusal category.</td></tr>
-                <tr><td><code>user_clarification_needed</code></td><td>Overthinking detection: repeated long text-only rounds stop the loop and ask the user instead of spinning.</td></tr>
+                <tr><td><code>user_clarification_needed</code></td><td>Overthinking detection: repeated long text-only rounds stop the loop and ask the user.</td></tr>
                 <tr><td><code>llm_error</code></td><td>A model-call error that retries could not recover.</td></tr>
               </tbody>
             </table>
             <p>
               Whichever path ends the run, the result returns over the socket
-              with its reason attached. A reason on record, instead of a silent
-              failure.
+              with its reason attached, leaving every failure on record.
             </p>
 
             <h2>Same core, other entrances</h2>

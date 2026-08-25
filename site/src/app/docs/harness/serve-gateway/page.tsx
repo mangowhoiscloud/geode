@@ -18,7 +18,7 @@ export default function Page() {
               게이트웨이는 serve 데몬 안에서 메신저 메시지를 받아 GEODE 실행으로
               넘기는 라우터입니다. Slack Socket Mode와 플랫폼 poller가 메시지를
               받고, binding이 어느 채널을 받을지 결정하며, lane queue가 동시성을
-              제한합니다. 라우팅에는 LLM 대신 정적 규칙만 씁니다.
+              제한합니다. 라우팅은 정적 규칙만 씁니다.
             </p>
 
             <h2>동작 구조</h2>

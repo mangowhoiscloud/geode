@@ -100,7 +100,7 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유`}</pre>
                 <tr>
                   <td>업데이트했는데 옛 동작이 계속됨</td>
                   <td>오래된 데몬이 살아남아 소켓을 점유</td>
-                  <td><code>pkill -f &quot;geode serve&quot;</code> 후 재진입합니다. <code>geode update</code>는 이 재시작을 대신 해줍니다.</td>
+                  <td><code>pkill -f &quot;geode serve&quot;</code> 후 재진입합니다. <code>geode update</code>로 재시작할 수도 있습니다.</td>
                 </tr>
                 <tr>
                   <td>외부 채널이 동작하지 않음</td>

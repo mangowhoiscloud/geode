@@ -58,8 +58,8 @@ hook_registry.register(
               <code>hook.py</code> 형식은 거부됩니다. 아래 매니페스트와
               <a href="/geode/docs/config/basics">확장 신뢰 정책</a>의
               <code>hook:failure-metrics</code> 승인이 모두 있어야 handler가
-              import됩니다. 이 플러그인은 위의 공개 <code>HookRegistry</code>가
-              아니라 3절의 내부 <code>RuntimeEventBus</code>를 구독합니다.
+              import됩니다. 이 플러그인은 3절의 내부 <code>RuntimeEventBus</code>를
+              구독합니다.
             </p>
             <pre>{`name: failure-metrics
 events: [tool_exec_failed]

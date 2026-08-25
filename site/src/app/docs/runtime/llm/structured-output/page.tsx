@@ -38,7 +38,7 @@ export default function Page() {
             <p>
               도구의 <code>input_schema</code>는 tool call 인자를 정의하고,{" "}
               <code>response_schema</code>는 모델의 최종 응답을 정의합니다. 둘은
-              독립적인 계약이며 하나가 다른 하나를 대신하지 않습니다.
+              독립적인 계약이며 각자 별도의 권한을 가집니다.
             </p>
 
             <h2>전달 경로</h2>
@@ -160,7 +160,7 @@ task = SubTask(..., response_schema=DECISION_SCHEMA)`}</pre>
               <tbody>
                 <tr><td>Provider/CLI constraint</td><td>선택된 backend에 schema를 전달하거나 강제</td><td>미지원 adapter를 자동으로 다른 경로로 교체하지 않음</td></tr>
                 <tr><td>Worker retry</td><td>빈 출력, parse 실패, required key 누락을 한 번 복구</td><td>JSON Schema 전체 검증은 하지 않음</td></tr>
-                <tr><td>Downstream parser</td><td>도메인별 type, enum, semantic constraint를 최종 판정</td><td>adapter의 wire 지원을 대신 만들지 않음</td></tr>
+                <tr><td>Downstream parser</td><td>도메인별 type, enum, semantic constraint를 최종 판정</td><td>adapter wire 지원 범위는 그대로 유지</td></tr>
               </tbody>
             </table>
 

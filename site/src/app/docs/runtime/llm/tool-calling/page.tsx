@@ -15,8 +15,8 @@ export default function Page() {
         ko={
           <>
             <p>
-              GEODE의 도구 호출은 특정 프로바이더 payload가 아니라{" "}
-              <code>AgenticLoop</code>의 공통 계약에서 시작합니다. 도구 정의를
+              GEODE의 도구 호출은 <code>AgenticLoop</code>의 공통 계약에서
+              시작합니다. 도구 정의를
               adapter-neutral <code>ToolSpec</code>으로 만들고, 선택한 adapter가
               wire 형식으로 변환합니다. 모델이 반환한 호출은 다시 하나의{" "}
               <code>ToolUseBlock</code>으로 정규화되므로 실행기와 다음 턴은
@@ -125,7 +125,7 @@ export default function Page() {
             <h2>결과 직렬화와 다음 턴</h2>
             <ul>
               <li>일반 결과는 JSON으로 직렬화하고 원래 call id를 유지합니다.</li>
-              <li>computer-use screenshot은 텍스트 base64가 아니라 image content block으로 되돌립니다.</li>
+              <li>computer-use screenshot은 image content block으로 되돌립니다.</li>
               <li>큰 결과는 token guard를 거친 뒤 필요하면 파일로 offload하고 요약과 <code>ref_id</code>만 context에 남깁니다.</li>
               <li>assistant의 호출 message와 user 쪽 tool result를 연달아 history에 추가해야 다음 턴의 id pairing이 유지됩니다.</li>
             </ul>

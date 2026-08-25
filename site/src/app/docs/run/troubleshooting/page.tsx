@@ -33,8 +33,7 @@ export default function Page() {
               프로젝트 .env, 전역 .env, 프로젝트 config.toml, 전역 config.toml,
               코드 기본값 순서로 후보를 표로 보여주고 어느 레이어가 이기는지
               표시합니다 (<code>core/config/explain.py</code>). 검증은 항상
-              실효값 기준입니다. config.toml의 내용이 아니라{" "}
-              <code>geode about</code>이 답입니다.
+              실효값 기준이며 <code>geode about</code>에서 확인합니다.
             </p>
 
             <h2>증상, 원인, 해법</h2>

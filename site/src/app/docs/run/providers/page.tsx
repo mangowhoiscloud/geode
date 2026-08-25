@@ -123,8 +123,8 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
             <p>
               <code>geode about</code>은 실제로 적용 중인 값을 보여주는
               화면입니다. env 레이어가 toml의 선택을 가리고 있으면 경고
-              한 줄을 먼저 띄웁니다. 전환 검증은 config 파일 내용이 아니라
-              항상 <code>geode about</code> 기준으로 합니다.
+              한 줄을 먼저 띄웁니다. 전환 검증은 항상 실효 설정을 보여 주는
+              <code>geode about</code>을 기준으로 합니다.
             </p>
 
             <h2>폴백 정책: 기본은 비어 있음</h2>

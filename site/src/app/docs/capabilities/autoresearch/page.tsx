@@ -32,12 +32,12 @@ export default function Page() {
 
             <h2>모듈 구성: 루프 드라이버와 장비의 분리</h2>
             <p>
-              왜 한 파일이 아닌가. 측정 장비를 루프가 스스로 고칠 수 있으면
-              측정 자체를 신뢰할 수 없기 때문입니다. S-5 원형 복원에서 측정
+              측정 장비를 분리한 이유는 루프가 장비까지 고칠 때 측정 자체를
+              신뢰할 수 없기 때문입니다. S-5 원형 복원에서 측정
               코드는 <code>train.py</code>에서 동작 0-diff로 추출되어 4개의
               형제 모듈이 되었고, <code>program.md</code>는 자기개선 에이전트가
               이 4개 모듈을 수정하는 것을 금지합니다. 장비를 바꾸면 측정
-              대상이 아니라 측정 기준이 바뀝니다.
+              기준이 바뀝니다.
             </p>
             <table>
               <thead>
@@ -102,8 +102,8 @@ export default function Page() {
               <code>measure.py</code>가 <code>geode-eval audit</code> 서브프로세스를
               띄우면서 후보 스캐폴드를 <code>GEODE_WRAPPER_OVERRIDE</code> env로
               주입합니다. 감사 대상이 정확히 그 후보인지가 측정의 전부이므로 이
-              경로는 strict입니다. 파일이 없거나 파싱에 실패하면 조용히 기본
-              스캐폴드로 떨어지는 대신 즉시 실패합니다. 역할 분리도
+              경로는 strict입니다. 파일이 없거나 파싱에 실패하면 즉시
+              실패합니다. 역할 분리도
               엄격합니다. 무엇을 측정하는가(루브릭, judge, dim 추출)는 Petri가
               소유하고, 측정이 어떻게 선택 신호로 쌓이는가(티어, 가중치,
               게이트)는 train과 fitness가 소유합니다. 자세한 측정 계층은{" "}
@@ -286,7 +286,7 @@ geode-evolve campaign --n 10 --k 5 --dry-run
               <code>GEODE_WRAPPER_OVERRIDE</code> env. The whole point of the
               measurement is that the audited thing is exactly that candidate,
               so this path is strict: a missing or unparsable file fails
-              loudly instead of silently auditing the default scaffold. The
+              loudly. The
               role split is equally strict. Petri owns what gets measured (the
               rubric, the judge, the dim extraction); train and fitness own how
               measurement accrues into a selection signal (tiers, weights, the
@@ -314,7 +314,7 @@ geode-evolve campaign --n 10 --k 5 --dry-run
               Promote policy runs as three control arms: <code>gate</code>{" "}
               (default, selection), <code>random</code> (seeded coin-flip), and{" "}
               <code>never</code> (no-mutation floor), so that gains attribute to
-              selection rather than judge noise or drift. The env knob is{" "}
+              selection while controlling judge noise and drift. The env knob is{" "}
               <code>GEODE_PROMOTE_POLICY</code>.
             </p>
 

@@ -70,8 +70,8 @@ export default function Page() {
               그리고, 스피너는 <code>core/ui/spinner_glyph.py</code> 단일
               소스에서 옵니다(direct 모드 <code>GeodeStatus</code>와 IPC
               thin-client 트래커가 공유). 시그니처 스피너는 모양이 바뀌지 않는
-              로즈 젬 <code>◆</code>입니다. 글리프를 회전시키는 대신 raised-cosine
-              밝기 밴드가 라벨 위를 2초 주기로 좌→우로 활강합니다(단일 색조,
+              로즈 젬 <code>◆</code>입니다. raised-cosine 밝기 밴드가 라벨 위를
+              2초 주기로 좌→우로 활강합니다(단일 색조,
               무지개 아님 — 모양을 순환시키는 글리프는 기계적으로 읽힌다는
               Codex/Claude Code의 교훈).
             </p>
@@ -316,8 +316,8 @@ export default function Page() {
               the single source <code>core/ui/spinner_glyph.py</code> (shared by
               the direct-mode <code>GeodeStatus</code> and the IPC thin-client
               tracker). The signature spinner is a rose gem <code>◆</code> whose
-              shape never changes: instead of spinning a glyph, a raised-cosine
-              brightness band shimmers left→right across the label on a 2s
+              shape never changes. A raised-cosine brightness band shimmers
+              left→right across the label on a 2s
               period (one hue, no rainbow — the Codex/Claude Code lesson that a
               shape-cycling glyph reads as mechanical).
             </p>

@@ -188,7 +188,7 @@ LOG_LEVEL = "warning"`}</pre>
                 </tr>
                 <tr>
                   <td>변경 도구가 resource-key 오류로 거부됨</td>
-                  <td><code>readOnlyHint</code>가 아닌 도구인데 server config에 <code>resource_keys</code>가 없음</td>
+                  <td>쓰기 가능한 도구인데 server config에 <code>resource_keys</code>가 없음</td>
                   <td>실제 변경 대상을 대표하는 보수적 정적 key를 매니페스트에 선언합니다.</td>
                 </tr>
                 <tr>

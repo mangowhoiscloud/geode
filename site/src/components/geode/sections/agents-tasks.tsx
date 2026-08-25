@@ -239,8 +239,8 @@ export function AgentsTasksSection() {
                 />
                 <p className="text-sm text-[#A0B4D4] leading-relaxed mt-2">
                   {t(locale,
-                    "TaskGraph는 ready batch를 계산하고 명시적으로 요청된 실패 전파에서 하류 Task를 SKIP합니다. AgenticLoop와 자동 배선된 실행 DAG는 아닙니다.",
-                    "TaskGraph computes ready batches and skips downstream tasks only when failure propagation is explicitly invoked. It is not an execution DAG automatically wired to AgenticLoop."
+                    "TaskGraph는 ready batch를 계산하고 명시적으로 요청된 실패 전파에서 하류 Task를 SKIP합니다. AgenticLoop에는 자동 배선되지 않습니다.",
+                    "TaskGraph computes ready batches and skips downstream tasks only when failure propagation is explicitly invoked. AgenticLoop does not wire it automatically."
                   )}
                 </p>
               </div>
@@ -377,8 +377,8 @@ export function AgentsTasksSection() {
 
               <p className="text-sm text-[#A0B4D4] leading-relaxed">
                 {t(locale,
-                  "Advisory Plan은 실행 그래프나 승인 상태기계가 아닙니다. AgenticLoop가 최신 관측에서 행동을 선택하고 update_plan은 관측된 진척만 기록합니다. Cognitive verify/replan은 유지됩니다.",
-                  "Advisory Plan is neither an execution graph nor an approval state machine. AgenticLoop selects actions from current observations, update_plan records observed progress, and Cognitive verify/replan remains active."
+                  "Advisory Plan은 현재 의도와 진척을 담습니다. AgenticLoop가 최신 관측에서 행동을 선택하고 update_plan은 관측된 진척만 기록합니다. Cognitive verify/replan은 유지됩니다.",
+                  "Advisory Plan stores current intent and progress. AgenticLoop selects actions from current observations, update_plan records observed progress, and Cognitive verify/replan remains active."
                 )}
               </p>
             </div>

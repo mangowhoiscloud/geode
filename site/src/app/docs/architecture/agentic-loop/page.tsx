@@ -126,8 +126,8 @@ export default function Page() {
 
             <h2>model_refusal: 거절을 1급 종료로</h2>
             <p>
-              Fable 5의 안전 분류기는 요청을 거절할 때 HTTP 오류가 아니라{" "}
-              <strong>HTTP 200</strong>에 <code>stop_reason: &quot;refusal&quot;</code>을
+              Fable 5의 안전 분류기는 요청을 거절할 때 <strong>HTTP 200</strong>에{" "}
+              <code>stop_reason: &quot;refusal&quot;</code>을
               실어 보냅니다. 본문이 비어 있는 경우도 많습니다. 이를 일반 응답처럼
               다루면 빈 답이 조용히 사용자에게 흘러갑니다.
             </p>
@@ -158,8 +158,8 @@ export default function Page() {
             <h2>왜 얇은 루프인가</h2>
             <p>
               루프는 의도적으로 얇습니다. 시스템에서 가장 많이 테스트되고 가장
-              적게 바뀌는 코드입니다. 새로운 동작은 루프 안이 아니라 도구, 훅,
-              가드로 들어갑니다. 그래야 핵심 실행 경로가 예측 가능하고 테스트
+              적게 바뀌는 코드입니다. 새로운 동작은 도구, 훅, 가드에 둡니다.
+              그래야 핵심 실행 경로가 예측 가능하고 테스트
               가능한 상태로 유지됩니다.
             </p>
 

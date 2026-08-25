@@ -8,7 +8,7 @@ export default function Page() {
       slug="runtime/llm/providers"
       title="LLM routing"
       titleKo="LLM 라우팅"
-      summary="Provider selection and model resolution. Fallback chains ship empty by default; fatal errors fast-fail instead of retrying."
+      summary="Provider selection and model resolution. Fallback chains ship empty by default; fatal errors fast-fail."
       summaryKo="프로바이더 선택과 모델 해석입니다. 폴백 체인은 기본 비활성으로 출하되고, 치명 오류는 재시도 없이 빠르게 실패합니다."
     >
       <Bi
@@ -76,8 +76,8 @@ export default function Page() {
             <p>
               재시도는 <code>core/llm/fallback.py</code>의{" "}
               <code>retry_with_backoff_generic</code>이 담당합니다. 상태를 가진
-              CircuitBreaker 클래스는 없습니다. 대신{" "}
-              <code>core/llm/errors.py</code>의 두 판정 함수가 재시도를
+              CircuitBreaker 클래스는 없습니다. <code>core/llm/errors.py</code>의
+              두 판정 함수가 재시도를
               단락(short-circuit)시킵니다.
             </p>
             <table>

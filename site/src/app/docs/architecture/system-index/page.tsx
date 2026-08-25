@@ -62,8 +62,8 @@ function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
       <h2>{locale === "ko" ? "생성된 아키텍처 인벤토리" : "Generated architecture inventory"}</h2>
       <p>
         {locale === "ko"
-          ? "아래 값은 문서에 손으로 복사한 수치가 아니라, CI가 검증하는 결정적 JSON 스냅숏을 이 페이지가 직접 렌더링한 결과입니다."
-          : "These values are rendered directly from the deterministic JSON snapshot checked by CI, rather than copied into this page by hand."}{" "}
+          ? "아래 값은 CI가 검증하는 결정적 JSON 스냅숏을 이 페이지가 직접 렌더링한 결과입니다."
+          : "These values are rendered directly from the deterministic JSON snapshot checked by CI."}{" "}
         <code>site/src/data/geode/architecture-baseline.json</code>
       </p>
       <table>

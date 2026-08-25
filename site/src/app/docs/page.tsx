@@ -36,8 +36,8 @@ export default function DocsIndex() {
               그 본체 위의 시그니처가 <strong>자기개선 루프</strong>입니다. 모델
               가중치와 파라미터는 절대 건드리지 않습니다. 갱신 대상은 모델을
               감싼 스캐폴드, 곧 시스템 프롬프트 섹션과 behaviour kinds이고,
-              메커니즘은 변이와 선택입니다. 변화의 fitness는 능력 벤치마크가
-              아니라 <strong>적대적 안전 감사</strong>(Petri 급의 다차원
+              메커니즘은 변이와 선택입니다. 변화의 fitness는
+              <strong>적대적 안전 감사</strong>(Petri 급의 다차원
               감사)로 측정하며, 핵심 안전 차원에는 하한선이 있어 그 선을 넘어
               후퇴하는 변화는 거부합니다. 평가에 쓰는 seed도 고정돼 있지
               않습니다. Seed Scenario Generation 파이프라인이 에이전트와 나란히 적대적 seed
@@ -65,7 +65,7 @@ export default function DocsIndex() {
               루프의 계보(Promptbreeder, STOP, ADAS, DGM, GEPA)는 이미 잘 닦여
               있습니다. GEODE 는 그 루프를 능력에서 안전으로, 가중치에서
               스캐폴드로, 그리고 함께 진화하는 적대적 seed 위로 다시 겨냥합니다.
-              새로운 primitive 가 아니라, 비어 있던 칸을 채우는 재조합입니다.
+              알려진 조각을 재조합해 비어 있던 설계 공간을 채웁니다.
             </p>
           </>
         }
@@ -90,8 +90,8 @@ export default function DocsIndex() {
               model, the system-prompt sections and behaviour kinds, and the
               mechanism is mutation and selection. Its fitness signal is an{" "}
               <strong>adversarial safety audit</strong> (Petri-grade,
-              multi-dimensional), not a capability benchmark, and critical
-              safety dimensions sit behind a hard floor: a change that
+              multi-dimensional). Critical safety dimensions sit behind a hard
+              floor: a change that
               regresses them is rejected. The evaluation seeds are not fixed
               either. A Seed Scenario Generation pipeline grows an adversarial seed
               distribution alongside the agent.
@@ -115,8 +115,8 @@ export default function DocsIndex() {
             <p>
               The loop lineage (Promptbreeder, STOP, ADAS, DGM, GEPA) is
               well-established. GEODE re-aims it from capability to safety, from
-              weights to scaffolding, on co-evolved adversarial seeds. A
-              recombination occupying an empty cell, not a new primitive.
+              weights to scaffolding, on co-evolved adversarial seeds. The result
+              recombines established pieces to occupy an empty design cell.
             </p>
           </>
         }
@@ -127,8 +127,8 @@ export default function DocsIndex() {
           <>
             <h2>레퍼런스: GEODE의 좌표부터</h2>
             <p>
-              레퍼런스의 진입점은 검증 절차가 아니라{" "}
-              <strong>자기개선 Closed-Loop의 계보와 좌표</strong>입니다. GEODE가 어떤
+              레퍼런스는 <strong>자기개선 Closed-Loop의 계보와 좌표</strong>에서
+              출발합니다. GEODE가 어떤
               프론티어 시스템에서 무엇을 빌려오고, 어디서 갈라지는지부터 짚습니다.
             </p>
             <ul>
@@ -156,8 +156,8 @@ export default function DocsIndex() {
             <h2>Reference: GEODE&apos;s position first</h2>
             <p>
               The reference entry point leads with the{" "}
-              <strong>self-improving loop&apos;s lineage and position</strong>, not the
-              validation machinery. Start with what GEODE borrows from frontier
+              <strong>self-improving loop&apos;s lineage and position</strong>. Start
+              with what GEODE borrows from frontier
               systems and where it differs.
             </p>
             <ul>
