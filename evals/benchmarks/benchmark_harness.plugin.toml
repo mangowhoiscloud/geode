@@ -18,7 +18,7 @@ install = [
   ".venv/bin/pip install -e .",
   "uv sync --project ../../../.. --extra audit",
 ]
-public_adapter = "evals.benchmarks.mcpmark_geode_agent"
+public_adapter = "evals.benchmarks.mcpmark.agent"
 required_env = []
 optional_env = [
   "OPENAI_API_KEY",
@@ -44,6 +44,6 @@ local_dir = "tau2-bench"
 python = "python3.12"
 install = ["uv sync --frozen"]
 healthcheck = ["LITELLM_LOCAL_MODEL_COST_MAP=true .venv/bin/tau2 check-data"]
-public_adapter = "evolve.crucible.tau2_geode_agent"
+public_adapter = "evolve.crucible.assays.tau2_geode_agent"
 required_env = []
 optional_env = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ZHIPUAI_API_KEY"]

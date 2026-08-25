@@ -23,17 +23,31 @@ from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any, Literal
 
-from .artifacts import load_json_object, write_exclusive_json
-from .contract import ContractError, ExperimentContract, load_contract, validate_test_parent
-from .evidence import EvidenceEnvelope, ResourceUsage, expected_pairs
-from .promotion import SCREENING_FAILURE, PromotionReachability, promotion_reachability
+from evolve.crucible.artifacts import load_json_object, write_exclusive_json
+from evolve.crucible.attestation.sealed import (
+    SEALED_RESPONSE_SCHEMA,
+    SealedInfrastructureError,
+    SealedPlan,
+)
+from evolve.crucible.contract import (
+    ContractError,
+    ExperimentContract,
+    load_contract,
+    validate_test_parent,
+)
+from evolve.crucible.evidence import EvidenceEnvelope, ResourceUsage, expected_pairs
+from evolve.crucible.promotion import (
+    SCREENING_FAILURE,
+    PromotionReachability,
+    promotion_reachability,
+)
+from evolve.crucible.search.supervisor import CandidateProposal, FailureFeedback, _file_sha256
+
 from .runtime_receipt import (
     MeasurementSource,
     SharedRuntimeDeadline,
     runtime_artifact_bindings,
 )
-from .sealed import SEALED_RESPONSE_SCHEMA, SealedInfrastructureError, SealedPlan
-from .supervisor import CandidateProposal, FailureFeedback, _file_sha256
 from .verifiers.tau2 import (
     SNAPSHOT_SCHEMA,
     TAU2_ADAPTER,
@@ -210,7 +224,7 @@ def tau2_command(
     retrieval = _mapping(config.get("retrieval"), "assay_config.retrieval")
     if user.get("implementation") != "crucible_user":
         raise ContractError("live subscription contracts require evaluator-owned crucible_user")
-    runner = checkout / "evolve/crucible/tau2_geode_agent.py"
+    runner = checkout / "evolve/crucible/assays/tau2_geode_agent.py"
     command = [
         sys.executable,
         str(runner),
@@ -1278,7 +1292,7 @@ def run_command_evaluator() -> int:
 def _request_for_candidate(row: Mapping[str, Any]) -> Any:
     """Reconstruct only the request identity needed by CandidateProposal.load."""
 
-    from .supervisor import ProposalRequest
+    from evolve.crucible.search.supervisor import ProposalRequest
 
     return ProposalRequest(
         campaign_id=str(row["campaign_id"]),
@@ -1299,7 +1313,7 @@ def _request_for_candidate(row: Mapping[str, Any]) -> Any:
 def evaluator_sha256(checkout: Path, paths: Sequence[str]) -> str:
     """Small public helper for campaign configuration scripts."""
 
-    from .contract import content_sha256
+    from evolve.crucible.contract import content_sha256
 
     return content_sha256(checkout, paths)
 

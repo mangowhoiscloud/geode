@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .artifacts import load_json_object, write_exclusive_json
-from .contract import ContractError, canonical_json_sha256
+from evolve.crucible.artifacts import load_json_object, write_exclusive_json
+from evolve.crucible.contract import ContractError, canonical_json_sha256
 
 INTENT_SCHEMA = "crucible.ref-intent.v2"
 RECEIPT_SCHEMA = "crucible.ref-receipt.v2"

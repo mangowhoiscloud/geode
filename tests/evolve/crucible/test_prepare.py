@@ -3,16 +3,16 @@ import json
 from pathlib import Path
 
 import pytest
-from evolve.crucible.cli import main as crucible_main
-from evolve.crucible.contract import ContractError, TaskUnit, task_pack_sha256
-from evolve.crucible.prepare import prepare_campaign
-from evolve.crucible.runtime_identity import (
+from evolve.crucible.admission.prepare import prepare_campaign
+from evolve.crucible.admission.runtime_identity import (
     RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     canonical_runtime_hash,
     runtime_design_from_parts,
     runtime_regime_from_parts,
 )
-from evolve.crucible.supervisor import SupervisorConfig
+from evolve.crucible.cli import main as crucible_main
+from evolve.crucible.contract import ContractError, TaskUnit, task_pack_sha256
+from evolve.crucible.search.supervisor import SupervisorConfig
 from tests.evolve.crucible.test_supervisor import _config, _git
 
 
@@ -468,7 +468,7 @@ def test_prepare_curates_pack_when_spec_carries_curation(
         pack_output.write_text(reference_pack.read_text(encoding="utf-8"), encoding="utf-8")
         return {"pack_sha256": "unused"}
 
-    monkeypatch.setattr("evolve.crucible.prepare.curate_tau2_pack", fake_curate)
+    monkeypatch.setattr("evolve.crucible.admission.prepare.curate_tau2_pack", fake_curate)
     curation = {
         "tasks_file": str(tmp_path / "tasks.json"),
         "split_file": str(tmp_path / "split.json"),

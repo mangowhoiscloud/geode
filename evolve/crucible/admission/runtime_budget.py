@@ -31,14 +31,15 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal
 
-from .artifacts import load_json_object
-from .contract import (
+from evolve.crucible.artifacts import load_json_object
+from evolve.crucible.contract import (
     ContractError,
     TaskUnit,
     _bounded_text,
     _positive_int,
     canonical_json_sha256,
 )
+
 from .runtime_identity import (
     RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     canonical_runtime_hash,

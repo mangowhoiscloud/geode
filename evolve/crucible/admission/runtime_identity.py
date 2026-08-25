@@ -16,15 +16,13 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
-from .contract import (
+from evolve.crucible.contract import (
     ContractError,
     ExperimentContract,
     TaskUnit,
     canonical_json_sha256,
 )
-from .contract import (
-    task_pack_sha256 as contract_task_pack_sha256,
-)
+from evolve.crucible.contract import task_pack_sha256 as contract_task_pack_sha256
 
 RUNTIME_REGIME_SCHEMA = "crucible.runtime-regime.v1"
 RUNTIME_ARM_ORDER = "baseline_then_candidate"

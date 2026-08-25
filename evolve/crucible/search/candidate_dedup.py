@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .contract import (
+from evolve.crucible.contract import (
     ContractError,
     ExperimentContract,
     _run_git_bytes,

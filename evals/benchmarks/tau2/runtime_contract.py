@@ -577,7 +577,7 @@ class Tau2RuntimeContract:
                 bound_sessions.add(session_id)
                 pending = getattr(loop, "_tau2_pending_tool_calls", {})
                 if pending:
-                    from evals.benchmarks.tau2_turn_supervisor import (
+                    from evals.benchmarks.tau2.turn_supervisor import (
                         GeodeTau2State,
                         _reconcile_tau2_terminal_results,
                     )

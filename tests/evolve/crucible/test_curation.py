@@ -3,10 +3,10 @@ import json
 from pathlib import Path
 
 import pytest
+from evolve.crucible.admission.curation import curate_tau2_pack
 from evolve.crucible.artifacts import write_exclusive_json
+from evolve.crucible.assays.verifiers.tau2 import tau2_task_unit
 from evolve.crucible.contract import ContractError, task_pack_sha256
-from evolve.crucible.curation import curate_tau2_pack
-from evolve.crucible.verifiers.tau2 import tau2_task_unit
 
 
 def _task(index: int, *, intent: str, persona: str, faults: int = 3) -> dict[str, object]:

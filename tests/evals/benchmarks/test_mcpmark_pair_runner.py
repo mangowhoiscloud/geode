@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 from core.observability.trajectory import build_trajectory
-from evals.benchmarks import run_mcpmark_pair as pair
+from evals.benchmarks.mcpmark import pair_runner as pair
 
 _MCPMARK_VERIFIER_PREIMAGES = {
     "tasks/filesystem/standard/desktop/project_management/verify.py": (

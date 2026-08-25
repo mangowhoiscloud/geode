@@ -31,9 +31,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal
 
-from .artifacts import load_json_object, write_exclusive_json
-from .contract import ContractError, ExperimentContract, canonical_json_sha256
-from .evidence import expected_pairs
+from evolve.crucible.artifacts import load_json_object, write_exclusive_json
+from evolve.crucible.contract import ContractError, ExperimentContract, canonical_json_sha256
+from evolve.crucible.evidence import expected_pairs
+
 from .verifiers.tau2 import (
     SNAPSHOT_SCHEMA,
     TAU2_ADAPTER,

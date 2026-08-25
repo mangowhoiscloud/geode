@@ -29,7 +29,7 @@ search head SHA
   -> append-only supervisor ledger
 ```
 
-The adaptive loop lives in `evolve.crucible.supervisor` and has no import
+The adaptive loop lives in `evolve.crucible.search.supervisor` and has no import
 connection to `evolve/scaffold_search`. Train `KEEP` advances only the loop-local
 search head. Core promotion authority remains closed.
 
