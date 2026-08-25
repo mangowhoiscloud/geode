@@ -57,6 +57,11 @@ functional change.
 
 ### Added
 
+- **Transparent cross-host skill inventory and security contracts.** All
+  repository development/meta skills now have one reviewed `.agents` source
+  with relative Claude Code aliases, bundled runtime skills are inventoried
+  separately, benchmark hashes are explicitly non-secret artifact identities,
+  and anti-deception secret checks no longer echo matched values into logs.
 - **Evaluation learning-view contract v2.** GEODE now validates digest-bound
   `example → rollout → trajectory → reward` datasets while preserving native
   receipts and the immutable `geode.trajectory@1` schema.

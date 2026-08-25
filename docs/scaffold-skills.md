@@ -1,6 +1,8 @@
-# Custom Skills (Scaffold)
+# Skill Inventory And Ownership
 
-Skills used by Scaffold during GEODE development (`.agents/skills/` and `.claude/skills/`). Separate from GEODE runtime's `core/skills/` SkillRegistry.
+GEODE publishes both its development scaffold and the skills loaded by the
+runtime. Machine-local skills outside this repository are not part of this
+inventory.
 
 Three paths have three owners:
 
@@ -11,13 +13,16 @@ Three paths have three owners:
   discovers this path directly. When a same-named runtime skill exists, the
   scaffold stays thin and links to `.geode/skills/<name>/SKILL.md` rather than
   copying its behavior contract.
-- `.claude/skills/` is Claude Code's project discovery surface. Every shared
-  `.agents` skill is exposed through a relative per-skill symlink so both hosts
-  read identical bytes. Claude-only skills may remain real directories here.
+- `.claude/skills/` is Claude Code's project discovery surface. Every tracked
+  development skill is a relative per-skill symlink to `.agents/skills/`, so
+  both hosts read identical reviewed bytes.
 
-This follows the [Codex skill locations and symlink contract](https://developers.openai.com/codex/skills/#where-codex-loads-local-skills)
+This follows the open [Agent Skills discovery and `.agents/skills` guidance](https://agentskills.io/client-implementation/adding-skills-support)
 and [Claude Code project skill and symlink contract](https://code.claude.com/docs/en/slash-commands#where-skills-live).
-Additional machine-local skills are intentionally not listed.
+The security review and handling contracts are recorded in
+[`docs/audits/2026-08-25-skill-transparency-security.md`](audits/2026-08-25-skill-transparency-security.md).
+
+## Development And Meta Skills
 
 | Skill | Triggers | Content |
 |-------|----------|---------|
@@ -36,7 +41,7 @@ Additional machine-local skills are intentionally not listed.
 | `architecture-patterns` | architecture, layering, pattern, design | Cross-harness architecture patterns reference |
 | `karpathy-patterns` | autoresearch, agenthub, ratchet, context budget | 10 autonomous agent design principles (P1-P10) |
 | `openclaw-patterns` | gateway, session, binding, lane, plugin | Agent system design patterns (OpenClaw) |
-| `frontier-harness-research` | research, gap, frontier, harness, case study | Frontier harness 4-system comparative research process |
+| `frontier-harness-research` | research, gap, frontier, harness, case study | Comparative research across Claude Code, Codex, OpenClaw, autoresearch, Prime Agent, and the pinned upstream authority |
 | `verification-team` | verification, review, verify, inspect | 5-persona verification (Beck/Karpathy/Steinberger/Cherny + Anti-Deception) |
 | `tech-blog-writer` | blog, posting, tech blog | Technical blog writing guide |
 | `explore-reason-act` | explore, reason, root cause, read before write | 3-phase explore-reason-act before code modification |
@@ -46,8 +51,37 @@ Additional machine-local skills are intentionally not listed.
 | `kent-beck-review` | kent beck, simple design, simplify, god object, SRP | Simple Design 4-rule code review |
 | `codebase-audit` | audit, dead code, refactor, god object, duplication | Code audit + refactoring workflow (v0.24.0 proven) |
 | `geode-serve` | serve, gateway, slack, binding, poller, config.toml | Slack Gateway operations + debugging guide |
-| `long-task-watcher` | monitor, tail -F, progress, background, live audit, stdbuf, buffering | Long-running task watching patterns. Covers the Petri × GEODE N7' Monitor timeout case and stable watch patterns (cat-and-grep / stdbuf streaming / polling). |
+| `long-task-watcher` | monitor, wait, progress, background task | Thin development router to the runtime long-task monitoring contract |
 | `manim-scene-craft` | manim, scene, 영상, 비디오, 1080p60, EN/KO 렌더, GEODE_HERO_LANG | Manim Community Scene 작성 표준 — EN/KO 다국어 lang, Helvetica Neue + Pretendard 폰트 페어링, Anthropic-style 팔레트, layout ratchet + CI 가드. 4 검증 scene (`geode_hero` / `autoresearch_filewalk` / `autoresearch_compare` / `critical_floor`) 의 공통 패턴. |
 | `viz-frame-audit` | 노이즈, slop, 프레임 검수, 영상 audit, 글자 깨짐, 패딩 침범, frame extract, naive arrow | 영상 노이즈/slop 검수 워크플로우 — ffmpeg 프레임 추출 + Read 시각 확인 + 4 카테고리 결함 식별 (naive 화살표 / 패딩 침범 / 글자 깨짐 / 프레임 순서). 12+ 사례 카탈로그 (filewalk 7 + hero 7). |
 | `docs-link-audit` | broken link, 404, docs link, hyperlink, 링크 점검, 링크 깨짐, audit links, link checker | Docs-site (`site/` Next.js) body / JSX / markdown link audit. `scripts/check_docs_links.py` validates 4 categories (internal /docs / internal /other / anchor / external), build-time copy awareness, and exit-code-based CI guard wiring. Includes PR #1157/#1161 case studies. |
 | `baseline-epoch-partition` | baseline epoch, baseline 아카이빙, epoch partition, spec hash, content-addressed, margin_rule namespace, production logic 구분, baseline 하위 서빙 | Content-addressed baseline-archive epoch 분할 — baseline 산출+측정 명세(margin_rule + logic version tag + 4-role model/source + rubric/dim-set + bench + seed-pool identity)를 canonical 해시 → epoch 구분자. spec vs instance 분리, version-tag(소스해시 아님), write-time frozen hash + spec_schema_version, hash+label 병기. hub baseline-하위 epoch 적재(gen-* 미러). |
+| `codex-mcp-verify` | Codex MCP, second opinion, cross-check | Read-only second-opinion protocol with local reproduction and no credential access |
+| `model-onboarding` | model, provider, capability, pricing, context | Primary-source and call-site checklist without a duplicated, fast-staling model catalog |
+| `scandinavian-design` | Scandinavian, Nordic, monochrome, restrained UI | Evidence-led Scandinavian interface design and visual verification toolkit |
+| `smoke-green-loop` | smoke, phase failure, empty artifact, iterative repair | Preserve-diagnose-fix-merge-rebuild loop with live-call approval and anti-selection rules |
+
+The table above is executable inventory: `tests/test_skill_surface_policy.py`
+fails when a tracked `.agents` skill is missing from it or lacks its relative
+Claude Code alias.
+
+## Runtime Skills
+
+These contracts are loadable by `core/skills/`. Eight are immutable wheel
+payload; three operator/repository workflows remain project-only. All remain
+reviewable real directories under `.geode/skills/`; same-named development
+skills are thin routing scaffolds, not copies.
+
+| Runtime skill | Distribution | Purpose |
+|---|---|---|
+| `arxiv-digest` | wheel | Bounded arXiv discovery and digest production |
+| `deep-researcher` | wheel | Evidence-first bounded or explicitly persistent research |
+| `frontier-ui-ux-catalog` | wheel | Frontier UI/UX reference catalog |
+| `geo` | wheel | Generative-engine optimization workflow and frozen measurement |
+| `geode-context` | wheel | Current repository architecture and package-root context |
+| `grilling` | wheel | Dependency-aware interview and decision clarification |
+| `long-task-watcher` | wheel | Safe progress monitoring for long-running work |
+| `pdf` | wheel | PDF reading, extraction, and production guidance |
+| `pr-reviewer` | project-only | Repository-grounded PR review contract |
+| `slop-audit` | project-only | Runtime-accessible codebase slop and duplication audit |
+| `wiki-sync` | project-only | Explicit wiki synchronization workflow |
