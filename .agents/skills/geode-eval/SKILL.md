@@ -9,6 +9,28 @@ Preserve the question, evidence, and judgement as separate authorities. Reuse
 the existing native result, trajectory, verifier receipt, and release formats;
 do not create a second copy of raw evidence.
 
+## Preserve v1 and derive learning views
+
+Read the packaged schemas before proposing new storage. `geode.trajectory@1`
+is an immutable normalized view over existing execution evidence; it already
+carries event, session, turn, and call identity, recomputed scope and replay
+integrity, and digest references to external evidence.
+
+Do not create a unified raw-log store or retrofit new fields into v1. When a
+downstream episode, attempt, or decision join needs identity or replay
+preconditions that v1 cannot express, add a new schema version with an
+explicit migration and admission rule.
+
+The v1 `outcome` object is permissive, so preserve any reward or outcome
+summary already present in an immutable artifact without treating it as label
+authority. For new learning views, keep reward, preference, process, and
+verifier labels out of the raw trajectory. Store them as digest-bound derived
+label or analysis artifacts with target identity, evaluator identity and
+revision, scope, provenance, and write authority. Call the result a
+post-training candidate, not a training dataset, until policy and environment
+identity, join closure, transition and replay semantics, privacy,
+deduplication, lineage-safe splits, and label quality pass.
+
 ## Start With The Catalog
 
 1. Read `docs/eval/index.json`.

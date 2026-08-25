@@ -11,7 +11,7 @@
     "trajectory": "core/observability/schemas/trajectory.schema.json",
     "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
   },
-  "document_count": 18,
+  "document_count": 19,
   "documents": [
     {
       "id": "agent-world-comparison",
@@ -83,6 +83,29 @@
         "docs/eval/schemas/analysis.schema.json",
         "docs/eval/schemas/attempt.schema.json",
         "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
+      "id": "eval-data-model",
+      "family": "eval-data-model",
+      "title": "Evaluation data model",
+      "kind": "contract",
+      "status": "canonical",
+      "authority": "derived-view-contract",
+      "path": "docs/eval/data-model.md",
+      "summary": "Versioned joins for examples, rollouts, immutable trajectories, and evaluator-owned rewards.",
+      "sha256": "03907ade36cd4420139226039a2adcfb935cd351a8b6849882be684e2edc462d",
+      "triggers": [
+        "evaluation data model",
+        "example rollout trajectory reward",
+        "learning data"
+      ],
+      "contracts": [
+        "core/observability/schemas/trajectory.schema.json",
+        "docs/eval/schemas/example.schema.json",
+        "docs/eval/schemas/learning-view-manifest.schema.json",
+        "docs/eval/schemas/reward.schema.json",
+        "docs/eval/schemas/rollout.schema.json"
       ]
     },
     {

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/schemas/learning-view-manifest.schema.json",
+  "title": "GEODE evaluation learning view manifest v2",
+  "type": "object",
+  "required": ["schema_id", "schema_version", "run_id", "created_at", "record_order", "files"],
+  "properties": {
+    "schema_id": {"const": "geode.eval-learning-view@2"},
+    "schema_version": {"const": 2},
+    "run_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "record_order": {"const": ["example", "rollout", "trajectory", "reward"]},
+    "files": {
+      "type": "object",
+      "required": ["examples", "rollouts", "rewards"],
+      "properties": {
+        "examples": {"$ref": "#/$defs/jsonlFile"},
+        "rollouts": {"$ref": "#/$defs/jsonlFile"},
+        "rewards": {"$ref": "#/$defs/jsonlFile"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "jsonlFile": {
+      "type": "object",
+      "required": ["path", "sha256", "rows", "record_schema"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 512},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "rows": {"type": "integer", "minimum": 0},
+        "record_schema": {"type": "string", "minLength": 1, "maxLength": 128}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
