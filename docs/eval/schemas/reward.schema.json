@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/schemas/reward.schema.json",
+  "title": "GEODE evaluation reward v1",
+  "type": "object",
+  "required": ["schema_id", "schema_version", "reward_id", "rollout_id", "example_id", "evaluator", "measurement_status", "value", "components", "source", "created_at"],
+  "properties": {
+    "schema_id": {"const": "geode.eval-reward@1"},
+    "schema_version": {"const": 1},
+    "reward_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,255}$"},
+    "rollout_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,255}$"},
+    "example_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,255}$"},
+    "evaluator": {
+      "type": "object",
+      "required": ["name", "revision", "authority"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "revision": {"type": "string", "minLength": 1, "maxLength": 256},
+        "authority": {"enum": ["suite-native", "deterministic", "llm-judge", "human"]}
+      },
+      "additionalProperties": false
+    },
+    "measurement_status": {"enum": ["measured", "missing"]},
+    "value": {"type": ["number", "null"]},
+    "components": {"type": "object", "additionalProperties": {"type": ["number", "boolean", "null"]}},
+    "source": {
+      "type": "object",
+      "required": ["path", "sha256", "source_locator"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 512},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "source_locator": {"type": "string", "pattern": "^/"}
+      },
+      "additionalProperties": false
+    },
+    "created_at": {"type": "string", "format": "date-time"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"measurement_status": {"const": "measured"}}},
+      "then": {"properties": {"value": {"type": "number"}}}
+    },
+    {
+      "if": {"properties": {"measurement_status": {"const": "missing"}}},
+      "then": {"properties": {"value": {"type": "null"}}}
+    }
+  ],
+  "additionalProperties": false
+}
