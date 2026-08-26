@@ -31,8 +31,8 @@ import { serifDisplay } from "@/fonts/serif";
  *
  * Palette (operator-directed 2026-07-10): the whole page is one rose field
  * (`--acc-artifact`) written in warm white `#FFF0F8` — two colors only. The
- * terminal mock keeps its dark product-screenshot colors by standing
- * exception. White appears as ink, as paper plates carrying rose line-art
+ * terminal mock uses one brand-derived plum inset by standing exception.
+ * White appears as ink, as paper plates carrying rose line-art
  * schematics, and as the stage of the final specimen reveal. Scroll is
  * choreography: distillation rain converges through named thresholds, fills
  * the full-bleed wordmark, and further scroll reveals the laboratory.
@@ -43,9 +43,6 @@ const PAPER = "#FFF0F8";
 // white plates (~4.5:1 vs #FFF0F8; the signature itself is ~1.8:1 as ink).
 const ROSE_INK = "#C2447F";
 const ROSE_INK_70 = "color-mix(in srgb, #C2447F 72%, transparent)";
-// Small text written directly on the signature field needs a deeper value
-// than plate ink (4.88:1 against #F49BC4).
-const ROSE_FIELD_INK = "#7F1747";
 const FIELD_META_STYLE = {
   color: PAPER,
   textShadow:
@@ -308,7 +305,7 @@ function InstallTerminal({ lines }: { lines: InstallLine[] }) {
   };
 
   return (
-    <div className="overflow-hidden rounded-lg border border-[color-mix(in_srgb,#FFF0F8_35%,transparent)] bg-[var(--paper-deep)] text-left">
+    <div className="install-terminal overflow-hidden rounded-lg border border-[color-mix(in_srgb,#FFF0F8_35%,transparent)] bg-[var(--paper-deep)] text-left">
       <div className="flex items-center gap-2 border-b border-[var(--rule-soft)] px-4 py-2.5">
         <span className="flex gap-1.5">
           {["#FF5F57", "#FEBC2E", "#28C840"].map((light) => (
@@ -389,10 +386,12 @@ function InstallChannels() {
                 }}
                 className="touch-manipulation px-4 py-2 font-mono text-[12.5px] transition-colors"
                 style={{
-                  color: ROSE_FIELD_INK,
-                  borderBottom: `2px solid ${activeChannel === entry.id ? ROSE_FIELD_INK : "transparent"}`,
+                  color:
+                    activeChannel === entry.id
+                      ? PAPER
+                      : "color-mix(in srgb, #FFF0F8 86%, transparent)",
+                  borderBottom: `2px solid ${activeChannel === entry.id ? PAPER : "transparent"}`,
                   marginBottom: "-1px",
-                  opacity: activeChannel === entry.id ? 1 : 0.72,
                 }}
               >
                 {locale === "en" ? entry.labelEn : entry.labelKo}
@@ -405,13 +404,13 @@ function InstallChannels() {
           <div className="mt-4 flex flex-nowrap items-center justify-between gap-x-4">
             <p
               className="min-w-0 flex-1 font-mono text-[12px]"
-              style={{ color: ROSE_FIELD_INK }}
+              style={{ color: PAPER }}
             >
               {t(locale, channel.noteKo, channel.noteEn)}
             </p>
             <button
               onClick={handleCopy}
-              className="shrink-0 touch-manipulation rounded border border-[color-mix(in_srgb,#7F1747_55%,transparent)] px-3 py-1 font-mono text-[11px] text-[#7F1747] transition-colors hover:bg-[#FFF0F8]"
+              className="shrink-0 touch-manipulation rounded border border-[color-mix(in_srgb,#FFF0F8_55%,transparent)] px-3 py-1 font-mono text-[11px] text-[#FFF0F8] transition-colors hover:bg-[color-mix(in_srgb,#FFF0F8_12%,transparent)]"
             >
               {copied
                 ? t(locale, "복사됨", "copied")
@@ -420,14 +419,14 @@ function InstallChannels() {
           </div>
           <p
             className="mt-2 select-all break-all font-mono text-[11.5px]"
-            style={{ color: ROSE_FIELD_INK }}
+            style={{ color: PAPER }}
           >
             {channel.copy}
           </p>
           <div className="mt-5 flex flex-col gap-2 border-t border-[color-mix(in_srgb,#FFF0F8_25%,transparent)] pt-3.5 sm:flex-row sm:items-center sm:justify-between">
             <p
               className="shrink-0 font-mono text-[9px] uppercase tracking-[0.22em]"
-              style={FIELD_META_STYLE}
+              style={{ color: PAPER }}
             >
               supported providers
             </p>
@@ -439,9 +438,12 @@ function InstallChannels() {
                 <li key={provider} className="inline-flex items-center gap-1.5">
                   <span
                     aria-hidden="true"
-                    className="h-[3px] w-[3px] rotate-45 bg-[#7F1747]"
+                    className="h-[3px] w-[3px] rotate-45 bg-[#FFF0F8]"
                   />
-                  <span className="font-mono text-[10.5px] text-[#7F1747]">
+                  <span
+                    className="font-mono text-[10.5px]"
+                    style={{ color: PAPER }}
+                  >
                     {provider}
                   </span>
                 </li>

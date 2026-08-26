@@ -42,6 +42,6 @@ def test_portfolio_install_surface_and_static_hero() -> None:
     assert "0 3px 0 rgba(127, 23, 71, 0.32)" in hero
     assert "HeroPixelField" not in hero
 
-    assert 'const ROSE_FIELD_INK = "#7F1747";' in portfolio
-    assert "style={{ color: ROSE_FIELD_INK }}" in portfolio
-    assert "text-[#7F1747]" in portfolio
+    assert '<section id="install" className="bg-[var(--acc-artifact)]">' in portfolio
+    assert 'className="install-terminal ' in portfolio and "ROSE_FIELD_INK" not in portfolio
+    assert "--paper-deep: #55263a;" in PORTFOLIO_PATH.with_name("astryx-geode.css").read_text()

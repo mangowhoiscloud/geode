@@ -70,6 +70,14 @@
   --color-accent: var(--acc-artifact);
 }
 
+.install-terminal {
+  --paper-deep: #55263a;
+  --ink-1: rgb(255 240 248 / 92%);
+  --ink-2: rgb(255 240 248 / 68%);
+  --ink-3: rgb(255 240 248 / 56%);
+  --rule-soft: rgb(255 240 248 / 14%);
+}
+
 /* ---- Geodi sprite blink (portfolio hero budget only) ------------------- */
 
 @keyframes geodi-blink {
