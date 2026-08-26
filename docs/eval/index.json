@@ -11,7 +11,7 @@
     "trajectory": "core/observability/schemas/trajectory.schema.json",
     "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
   },
-  "document_count": 22,
+  "document_count": 23,
   "documents": [
     {
       "id": "agent-world-comparison",
@@ -117,7 +117,7 @@
       "authority": "routing",
       "path": "docs/eval/README.md",
       "summary": "Machine and human entrypoint for GEODE evaluation contracts, benchmark ledgers, evidence, and publication.",
-      "sha256": "6b0aca853c735cc35529418dfd1baad222db5a6dd73e5d3ccf8b70bd06f1b3ad",
+      "sha256": "63d0bedbcd339c6e47a940432b43d1c7b4135e42872fdd29ec40ccbf7e5fee20",
       "triggers": [
         "artifact",
         "benchmark",
@@ -135,7 +135,7 @@
         "docs/eval/schemas/publication.schema.json",
         "docs/eval/schemas/run-spec.schema.json"
       ],
-      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/fa352cb5f54e9f0ad6198c03dd180e27be388b5b/skill-attribution/results-paired/skill-attribution-sol-max-paired-20260826t113400z/trajectory-release/skill-attribution-skill-attribution-sol-max-paired-20260826t113400z-20260826T115134Z-feb50408b2a4"
+      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/1efee3d0f4bfda3464b23b298a36f9a97f5fa691/skill-attribution/results-paired/skill-attribution-sol-max-paired-r3-20260826t130119z/trajectory-release/skill-attribution-skill-attribution-sol-max-paired-r3-20260826t130119z-20260826T133729Z-f6ee84d7139a"
     },
     {
       "id": "external-artifact-repository",
@@ -414,6 +414,31 @@
       ]
     },
     {
+      "id": "skill-attribution-sol-max-paired-r3-20260826t130119z",
+      "family": "skill-context-evaluation",
+      "title": "Runtime skill attribution — Sol/max repeated paired diagnostic",
+      "kind": "ledger",
+      "status": "historical",
+      "authority": "paired-skill-diagnostic",
+      "path": "docs/eval/2026-08-26-skill-attribution-sol-max-paired-r3.md",
+      "summary": "Prospective three-repetition diagnostic after SA-GAP-01 through SA-GAP-03 closure; all 72 arms were valid, repetition deltas were +4, -3, and -1, and the aggregate signed native-verifier delta was 0/36.",
+      "sha256": "8ee7f2853f8c76aa75da2fe0c0acce8c7b3335efc438eef400a2d0f2df756a7f",
+      "triggers": [
+        "ACES",
+        "gpt-5.6-sol",
+        "paired runtime skill",
+        "repeated diagnostic",
+        "skill attribution"
+      ],
+      "contracts": [
+        "core/observability/schemas/trajectory.schema.json",
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/publication.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
       "id": "skill-context-evaluation",
       "family": "skill-context-evaluation",
       "title": "Skill Attribution and Context Recoverability",
@@ -422,7 +447,7 @@
       "authority": "measurement-contract",
       "path": "docs/eval/skill-context-evaluation.md",
       "summary": "Paired runtime-skill attribution and deterministic context-recoverability profiles over existing GEODE evidence authorities.",
-      "sha256": "86a496798c55679d5d80bf3969fef4901f52e7ec6e757b6ea991aa6ef2315308",
+      "sha256": "dcb7128da98270b6202204cfcfd95aba5c70b1bcbcdb78989a2ce57febf70ffa",
       "triggers": [
         "ACES",
         "Scroll",

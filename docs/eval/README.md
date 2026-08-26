@@ -20,7 +20,7 @@ eval_contracts:
   - docs/eval/schemas/attempt.schema.json
   - docs/eval/schemas/publication.schema.json
   - docs/eval/schemas/run-spec.schema.json
-eval_latest_valid_release: https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/fa352cb5f54e9f0ad6198c03dd180e27be388b5b/skill-attribution/results-paired/skill-attribution-sol-max-paired-20260826t113400z/trajectory-release/skill-attribution-skill-attribution-sol-max-paired-20260826t113400z-20260826T115134Z-feb50408b2a4
+eval_latest_valid_release: https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/1efee3d0f4bfda3464b23b298a36f9a97f5fa691/skill-attribution/results-paired/skill-attribution-sol-max-paired-r3-20260826t130119z/trajectory-release/skill-attribution-skill-attribution-sol-max-paired-r3-20260826t130119z-20260826T133729Z-f6ee84d7139a
 ---
 
 # GEODE Evaluation Index and Roadmap
@@ -77,16 +77,16 @@ those claims. See [External Evaluation Artifact Repository](external-artifact-re
 for path mappings, disclosure rules, and the publication manifest scaffold.
 
 The latest prospective paired-skill diagnostic is pinned to artifact commit
-[`fa352cb`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/fa352cb5f54e9f0ad6198c03dd180e27be388b5b):
-on the frozen 12-case synthetic matrix with GPT-5.6 Sol/max, making one target
-runtime skill available produced 6/12 native-verifier passes versus 2/12
-without the skill, for a signed delta of **+4/12 = +0.3333**. All 24 arms were
-valid with no retry or safety violation. Explicit prompts remained 0/3 in the
-with-skill arm, `deep-researcher` positive cases remained 0/3, and one
-negative-control skill activation was observed. This is a one-repetition
-diagnostic with `promotion_authority=none`, not a runtime or package release
-claim. See the
-[run record](2026-08-26-skill-attribution-sol-max-paired.md).
+[`1efee3d`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/1efee3d0f4bfda3464b23b298a36f9a97f5fa691):
+after closing SA-GAP-01 through SA-GAP-03, the frozen 12-case synthetic matrix
+was repeated three times with GPT-5.6 Sol/max. All 72 arms were valid, but the
+repetition deltas were +4/12, -3/12, and -1/12. With-skill and without-skill
+each passed 18/36, for an aggregate signed delta of **0/36 = 0.0**; the
+preregistered positive-lift hypothesis is not supported. All 18 negative-
+control arms had zero activation and zero tool calls. This remains a synthetic,
+limited-tool diagnostic with `promotion_authority=none`, not a runtime or
+package release claim. See the
+[run record](2026-08-26-skill-attribution-sol-max-paired-r3.md).
 
 The latest prospective paired-runtime diagnostic is pinned to artifact commit
 [`1160fec`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/1160fecfe4447f0a3f4cf30a414f29c61776d012):
