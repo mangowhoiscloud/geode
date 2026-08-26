@@ -21,8 +21,8 @@ eval_contracts:
 
 # Skill Attribution and Context Recoverability
 
-Status: executable offline and subscription-runner contract; one score-bearing
-diagnostic has been reported, without runtime promotion authority.
+Status: executable offline and subscription-runner contract; two score-bearing
+diagnostics have been reported, neither with runtime promotion authority.
 
 This profile turns two frontier observations into separate GEODE measurements:
 
@@ -116,11 +116,11 @@ but never enters the score denominator.
 
 #### Observed score-bearing diagnostic
 
-The new frozen run
+The first valid frozen run
 [`skill-attribution-sol-max-paired-20260826t113400z`](2026-08-26-skill-attribution-sol-max-paired.md)
 met that acceptance boundary: 24/24 arms were valid, with-skill passed 6/12,
 without-skill passed 2/12, and the signed native-verifier delta was +4/12.
-The preregistered diagnostic hypothesis is supported. The same run also found
+Its preregistered diagnostic hypothesis was supported. The same run also found
 zero lift for `deep-researcher`, 0/3 with-skill passes for explicit prompts,
 and one negative-control skill activation. Those secondary results block
 runtime promotion and package-release claims.
@@ -131,6 +131,23 @@ matching for structured grilling questions (SA-GAP-02), and a seeded,
 trigger-bearing grilling negative control (SA-GAP-03). The evaluator now fails
 closed on hidden IDs, scores question prose, and keeps negative controls free of
 grill state. Only a new prospective run may measure the corrected contract.
+
+That prospective repeated run is
+[`skill-attribution-sol-max-paired-r3-20260826t130119z`](2026-08-26-skill-attribution-sol-max-paired-r3.md).
+All 72 arms were valid, but repetition deltas were +4/12, -3/12, and -1/12.
+The aggregate with-skill and without-skill pass counts were both 18/36, so the
+frozen positive-lift hypothesis is not supported. All 18 negative-control arms
+had zero activation and zero tool calls, closing SA-GAP-03 empirically; the run
+also confirms that the one-repetition +4/12 result was not directionally
+stable. SA-GAP-01 and SA-GAP-02 remain closed by the frozen loader and verifier
+contracts rather than by score reinterpretation.
+
+The current surface still exposes only `use_skill`, `get_grill`, and
+`update_grill` over synthetic context. It therefore measures instruction and
+registry availability, not the full native capability of research, repository,
+or delegation skills. A broader suite requires a separately preregistered tool
+surface and task-specific structured-output contract; this verifier must not be
+changed post hoc to turn the zero result positive.
 
 ### Metrics
 
