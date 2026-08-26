@@ -8,9 +8,9 @@ runtime to an external execution platform. They are separate roles here.
 
 It covers:
 
-- `skill_attribution`: a run-spec-bound paired runner whose only treatment
-  difference is target-skill availability, with native verifier lift kept
-  separate from process metrics.
+- `skill_attribution`: a run-spec-bound paired contract whose only treatment
+  difference is target-skill availability, plus a fresh-process subscription
+  runner that emits the native evidence bundle and validated v2 learning view.
 - `context_recoverability`: deterministic exact / summary-only / unavailable /
   corrupt classification over existing session-event and tool-offload evidence.
 - `mcpmark`: upstream `eval-sys/mcpmark` pinned by commit, with GEODE and

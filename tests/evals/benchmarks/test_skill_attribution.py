@@ -8,11 +8,13 @@ from pathlib import Path
 import pytest
 from evals.benchmarks.skill_attribution import (
     PILOT_CASES,
+    SKILL_RESPONSE_SCHEMA,
     PromptClass,
     SkillArm,
     SkillArmRequest,
     SkillArmResult,
     SkillCase,
+    build_skill_prompt,
     load_skill_fixtures,
     run_skill_suite,
     validate_skill_case_matrix,
@@ -209,6 +211,20 @@ def test_native_fixture_covers_the_frozen_case_matrix() -> None:
     assert tuple(fixture.case_id for fixture in fixtures) == tuple(
         case.case_id for case in PILOT_CASES
     )
+
+
+def test_skill_prompt_is_arm_independent_and_uses_the_strict_response_shape() -> None:
+    fixture = load_skill_fixtures(Path("evals/benchmarks/fixtures/skill-attribution-pilot.json"))[0]
+    prompt = build_skill_prompt(PILOT_CASES[0], fixture)
+
+    assert PILOT_CASES[0].prompt in prompt
+    assert fixture.context in prompt
+    assert "with-skill" not in prompt
+    assert "without-skill" not in prompt
+    assert SKILL_RESPONSE_SCHEMA["additionalProperties"] is False
+
+    with pytest.raises(ValueError, match="identities differ"):
+        build_skill_prompt(PILOT_CASES[1], fixture)
 
 
 def test_native_verifier_requires_exact_evidence_findings_and_question_shape() -> None:
