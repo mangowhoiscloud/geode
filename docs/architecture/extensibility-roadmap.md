@@ -225,6 +225,7 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
+| R11.1 | EVAL-001, EVAL-002 | `session=codex-root task=r11-skill-context-evaluation` | `feature/r11-skill-context-evaluation` | readiness [#3212](https://github.com/mangowhoiscloud/geode/pull/3212) | `2026-08-26T05:31:56Z` |
 
 ## 1. Program objective
 
@@ -232,8 +233,10 @@ The initial audit verdict was **B+, conditionally approved**. The 2026-08-25
 full-ledger audit against
 `origin/develop@bfb6aedd28c47a6d796945c5ce5b39be24e4b8d8` confirms that all
 62 GAPs are terminal: 56 are `DONE` and six are `SUPERSEDED`. There is no
-remaining execution unit or active claim; §14 records the final release and
-GitFlow evidence.
+remaining unit from that audit; §14 records its final release and GitFlow
+evidence. The 2026-08-26 ACES/Scroll audit subsequently registered two new
+`OPEN` evaluation GAPs under R11.1. They do not alter the 62 terminal rows, and
+there is no active claim.
 
 The program is complete when GEODE has:
 
@@ -281,12 +284,12 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `evals/` + `evolve/`) | 574 |
-| Test Python files | 693 |
+| Production Python files (`core/` + `evals/` + `evolve/`) | 577 |
+| Test Python files | 696 |
 | `core/` Python LOC | 123,591 |
-| `evals/` Python LOC | 27,567 |
+| `evals/` Python LOC | 29,606 |
 | `evolve/` Python LOC | 32,014 |
-| Test Python LOC | 187,084 |
+| Test Python LOC | 188,154 |
 | Tool definitions / model executions / valid schemas / policies | 86 / 86 / 86 / 86 (exact) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 5 |
@@ -571,6 +574,8 @@ and closure evidence are appended in §10.
 | DIST-002 | `MISFIT` | The packaged macOS helper build script defaults its generated app bundle to `<distribution>/.geode/ComputerUseHelper`, which may be read-only and is replaced by package upgrades | Packaged helper sources are read-only inputs, generated helper bytes live under one existing operator-owned GEODE home resolver, source and wheel installs share that resolver, and setup/status tests prove the distribution tree stays unchanged | R10.1 | BND-009 | `DONE` |
 | DIST-003 | `PARTIAL` | The wheel force-includes every `.geode/skills` directory even when a skill references repository-only scripts/docs or a personal absolute workspace, while installed smoke proves only that selected skill bodies load | One exact self-contained builtin-skill allowlist is packaged; repository and personal skills remain in their existing external tiers; every bundled local command/asset reference resolves in a clean wheel; and installed smoke rejects repo-only, personal-path, or dangling bundled skills | R10.1 | BND-003, BND-004 | `DONE` |
 | DIST-004 | `MISFIT` | `geode update` replaces the live uv-tool environment and verifies the new CLI before stopping the old daemon, allowing a running process to observe a mixed old-process/new-files installation | A running daemon is drained and stopped before live tool replacement, failed updates remain fail-closed without starting a second daemon, successful restart proves CLI/IPC daemon version parity, and ordering tests cover running, stopped, failed-stop, failed-install, and no-restart paths | R10.1 | BND-003, REL-003 | `DONE` |
+| EVAL-001 | `ABSENT` | Runtime Skills have loader, package, and policy checks but no paired evaluation that changes only target-skill availability | A native paired benchmark freezes model, task, workspace, tools, scorer, seed, and repetitions; reports verifier-first with-skill lift, activation, cost, and negative controls; and binds results to existing run-spec, attempt, trajectory, reward, and analysis authorities | R11.1 | BND-004, VER-001 | `IN_PROGRESS` |
+| EVAL-002 | `PARTIAL` | Session events, FTS recall, compaction, and tool offload exist, but no deterministic benchmark classifies exact recovery after compaction, restart, expiry, or corruption | An offline recoverability benchmark uses current session and offload authorities, stable event or digest references, and an immutable receipt to distinguish exact, summary-only, unavailable, and corrupt evidence without a second transcript, unbounded retention, or live model call | R11.1 | STORE-002, VER-001 | `IN_PROGRESS` |
 
 ## 6. Dependency and merge sequence
 
@@ -663,6 +668,12 @@ Public release truth is re-audited against the official
 [GitHub Releases](https://github.com/mangowhoiscloud/geode/releases) surfaces
 immediately before the cut. As audited on 2026-08-20, both identify v1.0.22 as
 the latest public release, matching repository metadata and the changelog.
+
+R11.1 is a post-closure measurement package over delivered Skill and session
+authorities. It must establish causal skill attribution and deterministic
+context-recoverability evidence before any later package may add a new context
+store, retention class, eviction index, or executable namespace. Any such
+runtime change requires its own measured GAP and serialized package.
 
 ## 7. Phase work packages
 
@@ -1912,6 +1923,37 @@ Acceptance:
   test pass without publishing a second wheel or adding a workspace manager,
   package registry, plugin SDK, or compatibility stub.
 
+### R11 — Causal evaluation and context recoverability
+
+#### R11.1 Skill attribution and recoverability gates
+
+GAPs: EVAL-001, EVAL-002.
+
+This package measures the current runtime before changing it. Evaluation code
+lives under `evals`, reuses the existing run-spec, attempt, trajectory, reward,
+and analysis contracts, and treats native runtime evidence as referenced input
+rather than copying it into another raw store.
+
+Acceptance:
+
+- a deterministic paired runner rejects any arm drift beyond target-skill
+  availability and preserves ordered workload, seed, repetition, model,
+  workspace, tool, scorer, and budget identity;
+- an initial runtime-Skill suite covers explicit, implicit, contextual, and
+  negative-control prompts, reports native-verifier lift separately from
+  activation, irrelevant behavior, tokens, time, and safety, and does not use
+  an equal-weight composite as promotion authority;
+- a deterministic context fixture spans exact historical values, conflicting
+  updates, far-apart evidence, and large tool output across compaction,
+  restart, expiry, and corruption, with immutable receipts classifying
+  `exact`, `summary-only`, `unavailable`, or `corrupt` evidence;
+- the suite consumes `sessions.db:session_events`, current FTS/session APIs, and
+  tool-offload references without creating a second transcript, raw-evidence
+  database, persistent Python kernel, eviction index, or unbounded retention;
+- live model execution remains outside this package until a frozen run spec
+  names the model route, seeds, repetitions, cost budget, privacy boundary, and
+  explicit approval.
+
 ## 8. Change-surface acceptance scenarios
 
 These black-box scenarios define extensibility more usefully than class count.
@@ -2257,12 +2299,14 @@ Tracking-only closure
 as `bd88f44998e78e8ac7220120d29960845be4f81d`, and the required canonical
 `main` → `develop` sync
 [#3171](https://github.com/mangowhoiscloud/geode/pull/3171) merged as
-`bfb6aedd28c47a6d796945c5ce5b39be24e4b8d8`. The master ledger now contains
-62 terminal GAPs: 56 `DONE` and six `SUPERSEDED`, with no active claims and no
-`OPEN`, `READY`, `IN_PROGRESS`, `IN_DEVELOP`, `BLOCKED`, `REJECTED`, or
-unexplained rows.
+`bfb6aedd28c47a6d796945c5ce5b39be24e4b8d8`. That audit closed 62 GAPs: 56
+`DONE` and six `SUPERSEDED`, with no active claims or unexplained rows at the
+time.
 
-The architecture and extensibility completion program has no remaining
-executable unit. Future architecture work must begin with a new GAP and closure
-package through the serialized registration protocol in §0.3; it must not
-reopen or rewrite this evidence.
+R11.1 (`EVAL-001`, `EVAL-002`) is `IN_PROGRESS` under the sole active claim
+owned by `session=codex-root task=r11-skill-context-evaluation`, targeting
+`feature/r11-skill-context-evaluation` after readiness [#3212](https://github.com/mangowhoiscloud/geode/pull/3212).
+Implementation may begin only after this claim merges and a fresh worktree is
+allocated from updated `origin/develop`. The package measures delivered
+behavior first and does not authorize a new context store, persistent
+interpreter, retention expansion, or live model call.

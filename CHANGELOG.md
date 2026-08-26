@@ -66,6 +66,25 @@ functional change.
 
 ### Added
 
+- **Harbor ATIF export for Terminal-Bench.** The GEODE external agent now
+  validates and writes ATIF 1.7 from the canonical session timeline, and it
+  leaves timeout enforcement to Harbor's task-owned limits instead of adding a
+  fixed 1,200-second cap.
+- **Skill attribution and context-recoverability evaluation gates.** A
+  run-spec-bound paired runner isolates target-skill availability and reports
+  deterministic native-fixture verifier lift separately from process metrics.
+  Its subscription runner now executes every arm in a fresh state-root process,
+  binds native receipts, digest trajectories, rewards, attempts, analysis, and
+  the v2 learning view. Its model-facing schema stays within the OpenAI
+  Responses subset while the deterministic verifier retains duplicate-ID
+  enforcement. An offline gate separately classifies existing session-event
+  and tool-offload evidence as exact, summary-only, unavailable, or corrupt
+  without adding a second state store.
+- **Skill-attribution fixtures now fail closed on hidden verifier IDs.** Every
+  required evidence, finding, and question ID must occur in the model-visible
+  context; question terms are scored across the question body, options, and
+  recommendation, and negative grilling controls no longer receive seeded
+  interview state.
 - **Measured code-convention SOT and cross-host application skill.** GEODE now
   documents package ownership, abstraction choice, module and class naming,
   Python data forms, schema/version axes, test placement, and the TypeScript
@@ -86,6 +105,14 @@ functional change.
 - **Native evaluation projector.** Harbor and tau2 result bundles can be
   projected into the validated v2 learning view without rewriting native
   receipts or collapsing infrastructure-invalid retries into reward rows.
+
+### Fixed
+
+- **Skill-attribution measurement leakage.** Future paired runs reject
+  model-visible positive-case answer terms, use opaque finding/question IDs and
+  target-specific response/tool schemas, and label subscription repetitions as
+  explicitly unseeded instead of implying decoder RNG control. Historical run
+  artifacts and scores remain immutable.
 
 ### Infrastructure
 

@@ -11,7 +11,7 @@
     "trajectory": "core/observability/schemas/trajectory.schema.json",
     "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
   },
-  "document_count": 19,
+  "document_count": 23,
   "documents": [
     {
       "id": "agent-world-comparison",
@@ -94,7 +94,7 @@
       "authority": "derived-view-contract",
       "path": "docs/eval/data-model.md",
       "summary": "Versioned joins for examples, rollouts, immutable trajectories, and evaluator-owned rewards.",
-      "sha256": "03907ade36cd4420139226039a2adcfb935cd351a8b6849882be684e2edc462d",
+      "sha256": "54b20b4ba25b15326a4b0f9cc6375b973aeb6cba5ffc683636a96f9c9181929a",
       "triggers": [
         "evaluation data model",
         "example rollout trajectory reward",
@@ -117,7 +117,7 @@
       "authority": "routing",
       "path": "docs/eval/README.md",
       "summary": "Machine and human entrypoint for GEODE evaluation contracts, benchmark ledgers, evidence, and publication.",
-      "sha256": "0d0d4a3ba5a1ee83d70d9e83ea09b4a7acc4c2d73b4c4876890a8134448ef95c",
+      "sha256": "63d0bedbcd339c6e47a940432b43d1c7b4135e42872fdd29ec40ccbf7e5fee20",
       "triggers": [
         "artifact",
         "benchmark",
@@ -135,7 +135,7 @@
         "docs/eval/schemas/publication.schema.json",
         "docs/eval/schemas/run-spec.schema.json"
       ],
-      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/1160fecfe4447f0a3f4cf30a414f29c61776d012/trajectories/mcpmark-gate0c-gpt54-high-mcpmark-gate0c-filesystem30-gpt54-high-20260813t190922z-geode-20260813T230525Z-9d6773caad04"
+      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/1efee3d0f4bfda3464b23b298a36f9a97f5fa691/skill-attribution/results-paired/skill-attribution-sol-max-paired-r3-20260826t130119z/trajectory-release/skill-attribution-skill-attribution-sol-max-paired-r3-20260826t130119z-20260826T133729Z-f6ee84d7139a"
     },
     {
       "id": "external-artifact-repository",
@@ -389,6 +389,81 @@
       ]
     },
     {
+      "id": "skill-attribution-sol-max-paired-20260826t113400z",
+      "family": "skill-context-evaluation",
+      "title": "Runtime skill attribution — Sol/max paired diagnostic",
+      "kind": "ledger",
+      "status": "historical",
+      "authority": "paired-skill-diagnostic",
+      "path": "docs/eval/2026-08-26-skill-attribution-sol-max-paired.md",
+      "summary": "Prospective 12-case paired diagnostic of three GEODE runtime skills with gpt-5.6-sol/max; all 24 arms were valid and the signed native-verifier delta was +4/12.",
+      "sha256": "f2588a1c346f44c15097373c31ab7f0da6f23016b9ca4e2576053228297e1564",
+      "triggers": [
+        "ACES",
+        "context recoverability",
+        "gpt-5.6-sol",
+        "paired runtime skill",
+        "skill attribution"
+      ],
+      "contracts": [
+        "core/observability/schemas/trajectory.schema.json",
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/publication.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
+      "id": "skill-attribution-sol-max-paired-r3-20260826t130119z",
+      "family": "skill-context-evaluation",
+      "title": "Runtime skill attribution — Sol/max repeated paired diagnostic",
+      "kind": "ledger",
+      "status": "historical",
+      "authority": "paired-skill-diagnostic",
+      "path": "docs/eval/2026-08-26-skill-attribution-sol-max-paired-r3.md",
+      "summary": "Prospective three-repetition diagnostic after SA-GAP-01 through SA-GAP-03 closure; all 72 arms were valid, repetition deltas were +4, -3, and -1, and the aggregate signed native-verifier delta was 0/36.",
+      "sha256": "8ee7f2853f8c76aa75da2fe0c0acce8c7b3335efc438eef400a2d0f2df756a7f",
+      "triggers": [
+        "ACES",
+        "gpt-5.6-sol",
+        "paired runtime skill",
+        "repeated diagnostic",
+        "skill attribution"
+      ],
+      "contracts": [
+        "core/observability/schemas/trajectory.schema.json",
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/publication.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
+      "id": "skill-context-evaluation",
+      "family": "skill-context-evaluation",
+      "title": "Skill Attribution and Context Recoverability",
+      "kind": "benchmark",
+      "status": "canonical",
+      "authority": "measurement-contract",
+      "path": "docs/eval/skill-context-evaluation.md",
+      "summary": "Paired runtime-skill attribution and deterministic context-recoverability profiles over existing GEODE evidence authorities.",
+      "sha256": "34349ed3443f9046d86a094e002fc3bac82174018981fbf66b197b81335217e1",
+      "triggers": [
+        "ACES",
+        "Scroll",
+        "compaction",
+        "context recoverability",
+        "skill lift",
+        "tool offload"
+      ],
+      "contracts": [
+        "core/observability/schemas/trajectory.schema.json",
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
       "id": "slack-gateway-live-e2e-20260817",
       "family": "slack-gateway-live-e2e",
       "title": "Slack gateway live conversation and computer-use diagnostic",
@@ -433,19 +508,49 @@
     {
       "id": "terminal-bench-2",
       "family": "terminal-bench-2",
-      "title": "Terminal-Bench 2.0 (Stanford + Laude Institute)",
+      "title": "Terminal-Bench 2.1 — GEODE execution profile",
       "kind": "benchmark",
       "status": "canonical",
       "authority": "suite-profile",
       "path": "docs/eval/terminal-bench-2.md",
-      "summary": "GEODE adoption profile and execution plan for verifier-backed Terminal-Bench 2.0 tasks.",
-      "sha256": "e158c18fb0b68f47572b86cc9db8d88e18c446971b281a57023fe5f8654fd9bc",
+      "summary": "GEODE adoption profile for canonical Terminal-Bench 2.1 execution through Harbor, including official-submission and diagnostic comparability boundaries.",
+      "sha256": "63e5732ab156d78f3abc9d68a4d5e2294b0c0cb5f402162cc283973f6ce78307",
       "triggers": [
+        "Harbor",
         "Terminal-Bench 2",
+        "Terminal-Bench 2.1",
         "container verifier",
         "shell benchmark"
       ],
       "contracts": [
+        "core/observability/schemas/trajectory.schema.json",
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
+      "id": "terminalbench21-sol-max-paired-main-20260826t092455z",
+      "family": "terminal-bench-2",
+      "title": "Terminal-Bench 2.1 — Sol/max GEODE vs native Codex diagnostic",
+      "kind": "ledger",
+      "status": "historical",
+      "authority": "paired-runtime-diagnostic",
+      "path": "docs/eval/2026-08-26-terminalbench-2-1-sol-max-paired.md",
+      "summary": "Prospective three-task Terminal-Bench 2.1 comparison of GEODE and native Codex with gpt-5.6-sol/max on the OpenAI subscription route; both arms passed 3/3, with no invalid attempts.",
+      "sha256": "7e40f265deb3dcb7e9f71755777101b8159ddf032472e7e15088b6a8e5b918b7",
+      "triggers": [
+        "GEODE Codex comparison",
+        "Harbor",
+        "Terminal-Bench 2.1",
+        "gpt-5.6-sol",
+        "paired runtime diagnostic"
+      ],
+      "contracts": [
+        "core/observability/schemas/trajectory.schema.json",
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/publication.schema.json",
         "docs/eval/schemas/run-spec.schema.json"
       ]
     },

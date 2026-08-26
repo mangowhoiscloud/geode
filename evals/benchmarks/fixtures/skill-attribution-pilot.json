@@ -1,0 +1,113 @@
+{
+  "schema": "geode.skill-attribution-fixtures.v1",
+  "cases": [
+    {
+      "case_id": "slop-explicit",
+      "context": "Audit these excerpts. alpha.py:1 defines `def normalize(value): return value.strip()`. beta.py:1 defines the same function and body. gamma.py:1 defines `def parse(data): pass`. delta.py:1 contains `# TODO: clean this later`. Use finding ID f1 for the alpha/beta pair, f2 for gamma, and f3 for delta.",
+      "required_evidence_ids": ["alpha.py:1", "beta.py:1", "gamma.py:1", "delta.py:1"],
+      "required_finding_ids": ["f1", "f2", "f3"],
+      "required_answer_terms": ["repeated implementation", "empty implementation", "deferred cleanup"],
+      "required_question_ids": [],
+      "max_questions": 0
+    },
+    {
+      "case_id": "slop-implicit",
+      "context": "Review these excerpts for repository cleanup evidence. adapter_a.py:4 and adapter_b.py:9 both define `def legacy_bridge(value): return value`. worker.py:12 defines `def _unfinished(): return None`; the reference index contains no calls to it. notes.py:3 contains `# FIXME: revisit`. Use finding ID f1 for the adapter pair, f2 for worker.py, and f3 for notes.py.",
+      "required_evidence_ids": ["adapter_a.py:4", "adapter_b.py:9", "worker.py:12", "notes.py:3"],
+      "required_finding_ids": ["f1", "f2", "f3"],
+      "required_answer_terms": ["duplicated behavior", "dead code", "deferred fix"],
+      "required_question_ids": [],
+      "max_questions": 0
+    },
+    {
+      "case_id": "slop-contextual",
+      "context": "A facade-removal patch left these references: core/runtime.py:8 imports `geode_product.loop`; tests/test_runtime.py:5 imports `core.self_improving.state`; docs/history.md mentions both names only as historical prose. Use finding ID f1 for core/runtime.py and f2 for tests/test_runtime.py. Historical docs are excluded from findings.",
+      "required_evidence_ids": ["core/runtime.py:8", "tests/test_runtime.py:5"],
+      "required_finding_ids": ["f1", "f2"],
+      "required_answer_terms": ["dangling import", "runtime loop boundary", "legacy state boundary"],
+      "required_question_ids": [],
+      "max_questions": 0
+    },
+    {
+      "case_id": "slop-negative",
+      "context": "Explain the Python packaging term wheel to a new contributor. No repository inspection is needed.",
+      "required_evidence_ids": [],
+      "required_finding_ids": [],
+      "required_answer_terms": ["distribution", "archive", "install"],
+      "required_question_ids": [],
+      "max_questions": 0
+    },
+    {
+      "case_id": "research-explicit",
+      "context": "Compare two supplied primary-source excerpts. source-a reports two runs that share the model, prompt, tools, workspace, and grader while changing only package availability. source-b says detail can leave the active context while a stored locator continues to resolve the original bytes. Explain what each experiment establishes, cite both source IDs, and use finding ID f1 for source-a and f2 for source-b.",
+      "required_evidence_ids": ["source-a", "source-b"],
+      "required_finding_ids": ["f1", "f2"],
+      "required_answer_terms": ["causal attribution", "recoverability", "different questions"],
+      "required_question_ids": [],
+      "max_questions": 0
+    },
+    {
+      "case_id": "research-implicit",
+      "context": "Reconcile these context-design claims. source-a describes append-only records indexed by immutable event addresses. source-b describes keeping a live Python interpreter across steps. source-c supplies no head-to-head outcome between those designs. Cite all sources used, use finding ID f1 for the missing comparison and f2 for the next empirical action, then recommend that action.",
+      "required_evidence_ids": ["source-a", "source-b", "source-c"],
+      "required_finding_ids": ["f1", "f2"],
+      "required_answer_terms": ["measurement", "kernel", "evidence"],
+      "required_question_ids": [],
+      "max_questions": 0
+    },
+    {
+      "case_id": "research-contextual",
+      "context": "Two benchmark reports conflict. source-a reports higher aggregate task success after adding a package but also changes the task instruction and tool set. source-b reports no gain when the instruction, tools, workspace, and grader remain the same. source-c documents only invocation frequency. Use finding ID f1 for source-a's limitation and f2 for the strongest comparative result, then state which claim is supported and cite the relevant source IDs.",
+      "required_evidence_ids": ["source-a", "source-b", "source-c"],
+      "required_finding_ids": ["f1", "f2"],
+      "required_answer_terms": ["confounded", "controlled", "causal"],
+      "required_question_ids": [],
+      "max_questions": 0
+    },
+    {
+      "case_id": "research-negative",
+      "context": "Rename the local variable `xs` in `def total(xs): return sum(xs)` to `values`. Return the corrected one-line function.",
+      "required_evidence_ids": [],
+      "required_finding_ids": [],
+      "required_answer_terms": ["def total(values)", "sum(values)"],
+      "required_question_ids": [],
+      "max_questions": 0
+    },
+    {
+      "case_id": "grill-explicit",
+      "context": "Stress-test this plan: remove the facade before relocating persisted records, defer the state move, and keep the old API indefinitely. Ask exactly three decision questions: q1 about who owns persisted records, q2 about the rollback unit, and q3 about the end date for compatibility. Each question needs at least two mutually exclusive options and one recommendation.",
+      "required_evidence_ids": [],
+      "required_finding_ids": [],
+      "required_answer_terms": ["ordering", "reversibility"],
+      "required_question_ids": ["q1", "q2", "q3"],
+      "max_questions": 3
+    },
+    {
+      "case_id": "grill-implicit",
+      "context": "A proposed evaluator executes cases and also judges its own output. Failed attempts may repeat indefinitely. Ask q1 about separating execution from judgment and q2 about stopping repeated attempts. Each question needs at least two mutually exclusive options and one recommendation.",
+      "required_evidence_ids": [],
+      "required_finding_ids": [],
+      "required_answer_terms": ["independent judge", "bounded retries"],
+      "required_question_ids": ["q1", "q2"],
+      "max_questions": 2
+    },
+    {
+      "case_id": "grill-contextual",
+      "context": "The owner is choosing between keeping evaluation artifacts beside mutable runtime state or under a separate evaluation authority. The settled constraints are append-only evidence and one canonical raw log. Ask one decision question with ID q1, two mutually exclusive options, and a recommendation grounded in those constraints.",
+      "required_evidence_ids": [],
+      "required_finding_ids": [],
+      "required_answer_terms": ["evidence ownership", "single raw authority"],
+      "required_question_ids": ["q1"],
+      "max_questions": 1
+    },
+    {
+      "case_id": "grill-negative",
+      "context": "Summarize these approved release notes: release-1 removes dormant packaging placeholders; release-2 renames the external hill-climbing loop to evolve. No questions are needed.",
+      "required_evidence_ids": ["release-1", "release-2"],
+      "required_finding_ids": [],
+      "required_answer_terms": ["packaging", "evolve"],
+      "required_question_ids": [],
+      "max_questions": 0
+    }
+  ]
+}

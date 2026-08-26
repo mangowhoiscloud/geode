@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import importlib
 import importlib.metadata
+import json
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -85,6 +87,164 @@ def _usage(result: Any) -> dict[str, int | float]:
     return raw if isinstance(raw, dict) else {}
 
 
+def _agent_time_budget(value: float | None) -> float:
+    budget = float(value or 0.0)
+    if budget < 0:
+        raise ValueError("agent_timeout_sec must be non-negative")
+    return budget
+
+
+def _atif_trajectory_from_geode(
+    trajectory: Mapping[str, Any],
+    *,
+    model: str,
+    provider: str,
+    source: str,
+    effort: str,
+    version: str,
+    metrics: Mapping[str, int | float],
+) -> dict[str, Any]:
+    integrity = trajectory.get("integrity")
+    if not isinstance(integrity, Mapping) or not integrity.get("scope_complete"):
+        raise ValueError("ATIF export requires a scope-complete canonical GEODE trajectory")
+
+    raw_events = trajectory.get("events")
+    if not isinstance(raw_events, list):
+        raise ValueError("ATIF export requires canonical GEODE events")
+    events = [event for event in raw_events if isinstance(event, Mapping)]
+    results = {
+        (
+            str(event.get("session_id") or ""),
+            str(event.get("turn_id") or ""),
+            str(event.get("call_id") or ""),
+        ): event
+        for event in events
+        if event.get("kind") == "tool.completed"
+    }
+
+    steps: list[dict[str, Any]] = []
+    for event in events:
+        kind = str(event.get("kind") or "")
+        payload = event.get("payload")
+        payload = payload if isinstance(payload, Mapping) else {}
+        base = {
+            "step_id": len(steps) + 1,
+            "timestamp": str(event.get("occurred_at") or ""),
+            "message": str(payload.get("content") or ""),
+        }
+        if kind == "message.user":
+            steps.append({**base, "source": "user"})
+        elif kind == "message.assistant":
+            steps.append(
+                {
+                    **base,
+                    "source": "agent",
+                    "model_name": model,
+                    "reasoning_effort": effort,
+                }
+            )
+        elif kind == "tool.called":
+            call_id = str(event.get("call_id") or "")
+            key = (
+                str(event.get("session_id") or ""),
+                str(event.get("turn_id") or ""),
+                call_id,
+            )
+            result_event = results.get(key)
+            arguments = payload.get("arguments")
+            tool = str(payload.get("tool") or "")
+            if (
+                not call_id
+                or not tool
+                or not isinstance(arguments, Mapping)
+                or result_event is None
+            ):
+                raise ValueError("ATIF export requires paired, identified canonical tool events")
+            result_payload = result_event.get("payload")
+            result_payload = result_payload if isinstance(result_payload, Mapping) else {}
+            content = result_payload.get("result")
+            if not isinstance(content, str):
+                content = json.dumps(
+                    content if content is not None else result_payload.get("summary", ""),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    default=str,
+                )
+            steps.append(
+                {
+                    **base,
+                    "source": "agent",
+                    "model_name": model,
+                    "reasoning_effort": effort,
+                    "tool_calls": [
+                        {
+                            "tool_call_id": call_id,
+                            "function_name": tool,
+                            "arguments": dict(arguments),
+                        }
+                    ],
+                    "observation": {
+                        "results": [
+                            {
+                                "source_call_id": call_id,
+                                "content": content,
+                                "extra": {
+                                    "status": str(result_payload.get("status") or ""),
+                                },
+                            }
+                        ]
+                    },
+                }
+            )
+
+    if not steps:
+        raise ValueError("ATIF export requires at least one dialogue or tool step")
+    return {
+        "schema_version": "ATIF-v1.7",
+        "session_id": str(trajectory.get("source", {}).get("session") or ""),
+        "trajectory_id": str(trajectory.get("trajectory_id") or ""),
+        "agent": {
+            "name": "geode",
+            "version": version,
+            "model_name": model,
+            "tool_definitions": [
+                {
+                    "name": "terminal_exec",
+                    "description": "Run one shell command in the isolated benchmark environment.",
+                    "parameters": HarborExecTool(None).parameters,
+                }
+            ],
+            "extra": {"provider": provider, "source": source, "reasoning_effort": effort},
+        },
+        "steps": steps,
+        "notes": (
+            "Projected from GEODE's canonical session timeline. Tool calls are emitted as "
+            "one-call steps because exact LLM response grouping is not retained; "
+            "llm_call_count is therefore unknown."
+        ),
+        "final_metrics": {
+            "total_prompt_tokens": int(metrics.get("input_tokens") or 0),
+            "total_completion_tokens": int(metrics.get("output_tokens") or 0),
+            "total_cached_tokens": int(metrics.get("cache_read_input_tokens") or 0),
+            "total_cost_usd": float(metrics.get("cost_usd") or 0.0),
+            "total_steps": len(steps),
+        },
+        "extra": {
+            "source_schema": str(trajectory.get("schema_id") or ""),
+            "source_trajectory_id": str(trajectory.get("trajectory_id") or ""),
+            "source_replay_complete": bool(integrity.get("replay_complete")),
+        },
+    }
+
+
+def _write_atif_trajectory(path: Path, payload: Mapping[str, Any]) -> None:
+    from core.memory.atomic_write import atomic_write_json
+
+    trajectory_model = importlib.import_module("harbor.models.trajectories").Trajectory
+    validated = trajectory_model.model_validate(payload)
+    atomic_write_json(path, validated.to_json_dict(), indent=2)
+
+
 def _build_loop(
     environment: Any,
     *,
@@ -143,6 +303,8 @@ def _build_loop(
 class GeodeHarborAgent(HarborBaseAgent):
     """Run the current GEODE AgenticLoop against Harbor's external environment."""
 
+    SUPPORTS_ATIF = True
+
     @staticmethod
     def name() -> str:
         return "geode"
@@ -162,7 +324,7 @@ class GeodeHarborAgent(HarborBaseAgent):
         self.provider = provider
         self.source = source
         self.effort = effort
-        self.agent_timeout_sec = float(agent_timeout_sec or 1200)
+        self.agent_timeout_sec = _agent_time_budget(agent_timeout_sec)
 
     def version(self) -> str:
         return importlib.metadata.version("geode-agent")
@@ -209,14 +371,15 @@ class GeodeHarborAgent(HarborBaseAgent):
             "termination_reason": str(getattr(result, "termination_reason", "unknown")),
             "rounds": int(getattr(result, "rounds", 0) or 0),
         }
+        source_identity = {
+            "harness": "harbor",
+            "session": loop._session_id,
+            "task": hashlib.sha256(instruction.encode()).hexdigest(),
+        }
         trajectory = trajectory_from_sessions(
             [loop._session_id],
             trajectory_id=f"harbor-{loop._session_id}",
-            source={
-                "harness": "harbor",
-                "session": loop._session_id,
-                "task": hashlib.sha256(instruction.encode()).hexdigest(),
-            },
+            source=source_identity,
             outcome=context.metadata,
             provenance={"adapter": "evals.platforms.harbor"},
             privacy={"review_state": "local", "native_results_embedded": False},
@@ -224,6 +387,28 @@ class GeodeHarborAgent(HarborBaseAgent):
             content_policy="digest",
         )
         export_trajectory(self.logs_dir / "geode-trajectory.json", trajectory)
+        full_trajectory = trajectory_from_sessions(
+            [loop._session_id],
+            trajectory_id=f"harbor-{loop._session_id}",
+            source=source_identity,
+            outcome=context.metadata,
+            provenance={"adapter": "evals.platforms.harbor"},
+            privacy={"review_state": "local", "native_results_embedded": False},
+            trajectory_class=("benchmark", "terminal", "tool", "lifecycle"),
+            content_policy="full",
+        )
+        _write_atif_trajectory(
+            self.logs_dir / "trajectory.json",
+            _atif_trajectory_from_geode(
+                full_trajectory,
+                model=model,
+                provider=self.provider,
+                source=self.source,
+                effort=self.effort,
+                version=self.version(),
+                metrics=usage,
+            ),
+        )
 
 
 __all__ = ["GeodeHarborAgent", "HarborExecTool"]

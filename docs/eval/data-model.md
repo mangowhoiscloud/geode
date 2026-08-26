@@ -23,8 +23,11 @@ The canonical join is `example → rollout → trajectory → reward`.
 
 - An **example** is a versioned benchmark input. Native task IDs remain source
   identity; `example_id` is the cross-suite join key.
-- A **rollout** is one policy interacting with one example under one seed.
-  Infrastructure retries are rollout attempts and never increase rollout count.
+- A **rollout** is one policy interacting with one example under one seed or an
+  explicit unseeded repetition label. A label such as
+  `unseeded-repetition-1` identifies a paired repetition but does not claim RNG
+  control. Infrastructure retries are rollout attempts and never increase
+  rollout count.
 - A **trajectory** remains `geode.trajectory@1`. A rollout selects its own
   session scope by digest and session IDs instead of copying or editing that
   immutable record.
@@ -48,4 +51,5 @@ session records remain their respective authorities.
 
 The v2 view is a post-training candidate only. Training admission additionally
 requires privacy review, deduplication, lineage-safe splits, replay semantics,
-and label-quality checks.
+and label-quality checks. All arms, repetitions, and retries derived from one
+source `example_id` stay in the same split.
