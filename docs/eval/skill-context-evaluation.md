@@ -21,8 +21,8 @@ eval_contracts:
 
 # Skill Attribution and Context Recoverability
 
-Status: executable offline and subscription-runner contract; no score-bearing
-result has been reported.
+Status: executable offline and subscription-runner contract; one score-bearing
+diagnostic has been reported, without runtime promotion authority.
 
 This profile turns two frontier observations into separate GEODE measurements:
 
@@ -113,6 +113,17 @@ Acceptance requires a new run ID and output root, the same 12-case workload,
 an exact post-fix GEODE revision, 24 non-infrastructure-invalid arms, and the
 unchanged native verifier. The invalid run remains part of the attempt history
 but never enters the score denominator.
+
+#### Observed score-bearing diagnostic
+
+The new frozen run
+[`skill-attribution-sol-max-paired-20260826t113400z`](2026-08-26-skill-attribution-sol-max-paired.md)
+met that acceptance boundary: 24/24 arms were valid, with-skill passed 6/12,
+without-skill passed 2/12, and the signed native-verifier delta was +4/12.
+The preregistered diagnostic hypothesis is supported. The same run also found
+zero lift for `deep-researcher`, 0/3 with-skill passes for explicit prompts,
+and one negative-control skill activation. Those secondary results block
+runtime promotion and package-release claims.
 
 ### Metrics
 
