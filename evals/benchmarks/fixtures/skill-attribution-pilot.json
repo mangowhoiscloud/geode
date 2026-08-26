@@ -3,28 +3,28 @@
   "cases": [
     {
       "case_id": "slop-explicit",
-      "context": "Audit these excerpts. alpha.py:1 defines `def normalize(value): return value.strip()`. beta.py:1 defines the same function and body. gamma.py:1 defines `def parse(data): pass`. delta.py:1 contains `# TODO: clean this later`. Candidate finding IDs are duplicate-normalize, stub-parse, and abandoned-todo.",
+      "context": "Audit these excerpts. alpha.py:1 defines `def normalize(value): return value.strip()`. beta.py:1 defines the same function and body. gamma.py:1 defines `def parse(data): pass`. delta.py:1 contains `# TODO: clean this later`. Use finding ID f1 for the alpha/beta pair, f2 for gamma, and f3 for delta.",
       "required_evidence_ids": ["alpha.py:1", "beta.py:1", "gamma.py:1", "delta.py:1"],
-      "required_finding_ids": ["duplicate-normalize", "stub-parse", "abandoned-todo"],
-      "required_answer_terms": ["duplicate", "stub", "todo"],
+      "required_finding_ids": ["f1", "f2", "f3"],
+      "required_answer_terms": ["repeated implementation", "empty implementation", "deferred cleanup"],
       "required_question_ids": [],
       "max_questions": 0
     },
     {
       "case_id": "slop-implicit",
-      "context": "Review these excerpts for repository cleanup evidence. adapter_a.py:4 and adapter_b.py:9 both define `def legacy_bridge(value): return value`. worker.py:12 defines `def _unfinished(): return None` and has no caller. notes.py:3 contains `# FIXME: revisit`. Candidate finding IDs are duplicate-bridge, dead-unfinished, and abandoned-fixme.",
+      "context": "Review these excerpts for repository cleanup evidence. adapter_a.py:4 and adapter_b.py:9 both define `def legacy_bridge(value): return value`. worker.py:12 defines `def _unfinished(): return None`; the reference index contains no calls to it. notes.py:3 contains `# FIXME: revisit`. Use finding ID f1 for the adapter pair, f2 for worker.py, and f3 for notes.py.",
       "required_evidence_ids": ["adapter_a.py:4", "adapter_b.py:9", "worker.py:12", "notes.py:3"],
-      "required_finding_ids": ["duplicate-bridge", "dead-unfinished", "abandoned-fixme"],
-      "required_answer_terms": ["duplicate", "unfinished", "fixme"],
+      "required_finding_ids": ["f1", "f2", "f3"],
+      "required_answer_terms": ["duplicated behavior", "dead code", "deferred fix"],
       "required_question_ids": [],
       "max_questions": 0
     },
     {
       "case_id": "slop-contextual",
-      "context": "A facade-removal patch left these references: core/runtime.py:8 imports `geode_product.loop`; tests/test_runtime.py:5 imports `core.self_improving.state`; docs/history.md mentions both names only as historical prose. Candidate finding IDs are stale-geode-product and stale-self-improving. Historical docs are explicitly excluded from findings.",
+      "context": "A facade-removal patch left these references: core/runtime.py:8 imports `geode_product.loop`; tests/test_runtime.py:5 imports `core.self_improving.state`; docs/history.md mentions both names only as historical prose. Use finding ID f1 for core/runtime.py and f2 for tests/test_runtime.py. Historical docs are excluded from findings.",
       "required_evidence_ids": ["core/runtime.py:8", "tests/test_runtime.py:5"],
-      "required_finding_ids": ["stale-geode-product", "stale-self-improving"],
-      "required_answer_terms": ["stale", "geode_product", "self_improving"],
+      "required_finding_ids": ["f1", "f2"],
+      "required_answer_terms": ["dangling import", "runtime loop boundary", "legacy state boundary"],
       "required_question_ids": [],
       "max_questions": 0
     },
@@ -39,28 +39,28 @@
     },
     {
       "case_id": "research-explicit",
-      "context": "Compare two supplied primary-source excerpts. source-a states that paired with/without trials isolate a skill's causal contribution when all other inputs are frozen. source-b states that long-horizon context should preserve stable references to evicted detail. Explain the distinct measurement questions, using candidate finding IDs causal-skill-lift and context-recoverability, and cite both source IDs.",
+      "context": "Compare two supplied primary-source excerpts. source-a reports two runs that share the model, prompt, tools, workspace, and grader while changing only package availability. source-b says detail can leave the active context while a stored locator continues to resolve the original bytes. Explain what each experiment establishes, cite both source IDs, and use finding ID f1 for source-a and f2 for source-b.",
       "required_evidence_ids": ["source-a", "source-b"],
-      "required_finding_ids": ["causal-skill-lift", "context-recoverability"],
-      "required_answer_terms": ["paired", "stable", "distinct"],
+      "required_finding_ids": ["f1", "f2"],
+      "required_answer_terms": ["causal attribution", "recoverability", "different questions"],
       "required_question_ids": [],
       "max_questions": 0
     },
     {
       "case_id": "research-implicit",
-      "context": "Reconcile these context-design claims. source-a says an append-only event log with stable addresses can recover evicted evidence. source-b says a persistent Python kernel can make context programmable. source-c provides no comparison showing that a kernel improves recovery over the existing event log. Use candidate finding IDs evidence-gap and measure-before-kernel, recommend the next evidence-producing step, and cite all sources used.",
+      "context": "Reconcile these context-design claims. source-a describes append-only records indexed by immutable event addresses. source-b describes keeping a live Python interpreter across steps. source-c supplies no head-to-head outcome between those designs. Cite all sources used, use finding ID f1 for the missing comparison and f2 for the next empirical action, then recommend that action.",
       "required_evidence_ids": ["source-a", "source-b", "source-c"],
-      "required_finding_ids": ["evidence-gap", "measure-before-kernel"],
-      "required_answer_terms": ["measure", "kernel", "evidence"],
+      "required_finding_ids": ["f1", "f2"],
+      "required_answer_terms": ["measurement", "kernel", "evidence"],
       "required_question_ids": [],
       "max_questions": 0
     },
     {
       "case_id": "research-contextual",
-      "context": "Two benchmark reports conflict. source-a reports higher aggregate task success after adding a skill package but changes the prompt and tool set at the same time. source-b reports no gain in a paired trial that freezes prompt, tools, workspace, and verifier. source-c documents only activation rate. Use candidate finding IDs confounded-aggregate and paired-causal-evidence, then state which claim is causally supported and why, citing the relevant source IDs.",
+      "context": "Two benchmark reports conflict. source-a reports higher aggregate task success after adding a package but also changes the task instruction and tool set. source-b reports no gain when the instruction, tools, workspace, and grader remain the same. source-c documents only invocation frequency. Use finding ID f1 for source-a's limitation and f2 for the strongest comparative result, then state which claim is supported and cite the relevant source IDs.",
       "required_evidence_ids": ["source-a", "source-b", "source-c"],
-      "required_finding_ids": ["confounded-aggregate", "paired-causal-evidence"],
-      "required_answer_terms": ["confound", "paired", "causal"],
+      "required_finding_ids": ["f1", "f2"],
+      "required_answer_terms": ["confounded", "controlled", "causal"],
       "required_question_ids": [],
       "max_questions": 0
     },
@@ -75,29 +75,29 @@
     },
     {
       "case_id": "grill-explicit",
-      "context": "Stress-test this migration plan: delete the facade first, move persisted state later, and promise compatibility without a time limit. Ask decision questions for the unresolved IDs state-owner, rollback-boundary, and compatibility-window. Each question needs at least two mutually exclusive options and one recommendation.",
+      "context": "Stress-test this plan: remove the facade before relocating persisted records, defer the state move, and keep the old API indefinitely. Ask exactly three decision questions: q1 about who owns persisted records, q2 about the rollback unit, and q3 about the end date for compatibility. Each question needs at least two mutually exclusive options and one recommendation.",
       "required_evidence_ids": [],
       "required_finding_ids": [],
-      "required_answer_terms": ["dependency", "migration"],
-      "required_question_ids": ["state-owner", "rollback-boundary", "compatibility-window"],
+      "required_answer_terms": ["ordering", "reversibility"],
+      "required_question_ids": ["q1", "q2", "q3"],
       "max_questions": 3
     },
     {
       "case_id": "grill-implicit",
-      "context": "A proposed evaluator both executes tasks and decides whether its own output passes. The plan also permits retries without a cap. Ask decision questions for authority-separation and retry-budget. Each question needs at least two mutually exclusive options and one recommendation.",
+      "context": "A proposed evaluator executes cases and also judges its own output. Failed attempts may repeat indefinitely. Ask q1 about separating execution from judgment and q2 about stopping repeated attempts. Each question needs at least two mutually exclusive options and one recommendation.",
       "required_evidence_ids": [],
       "required_finding_ids": [],
-      "required_answer_terms": ["authority", "retry"],
-      "required_question_ids": ["authority-separation", "retry-budget"],
+      "required_answer_terms": ["independent judge", "bounded retries"],
+      "required_question_ids": ["q1", "q2"],
       "max_questions": 2
     },
     {
       "case_id": "grill-contextual",
-      "context": "The owner is choosing between keeping evaluation artifacts beside runtime state or under a separate evaluation authority. The settled constraints are append-only evidence and no duplicate raw log. Ask one decision question with ID artifact-authority, two mutually exclusive options, and a recommendation grounded in those constraints.",
+      "context": "The owner is choosing between keeping evaluation artifacts beside mutable runtime state or under a separate evaluation authority. The settled constraints are append-only evidence and one canonical raw log. Ask one decision question with ID q1, two mutually exclusive options, and a recommendation grounded in those constraints.",
       "required_evidence_ids": [],
       "required_finding_ids": [],
-      "required_answer_terms": ["append-only", "duplicate"],
-      "required_question_ids": ["artifact-authority"],
+      "required_answer_terms": ["evidence ownership", "single raw authority"],
+      "required_question_ids": ["q1"],
       "max_questions": 1
     },
     {

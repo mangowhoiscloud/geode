@@ -35,18 +35,21 @@ def _request(*, arm: SkillArm = SkillArm.WITH_SKILL) -> SkillArmRequest:
         case=case,
         arm=arm,
         available_skills=(case.target_skill,) if arm is SkillArm.WITH_SKILL else (),
-        seed="seed-1",
+        seed="unseeded-repetition-1",
         repetition=1,
         initial_state_ref="fixture-sha256:" + "b" * 64,
     )
 
 
 def test_model_visible_tool_schema_is_identical_between_skill_arms() -> None:
-    baseline = skill_tool_schema_sha256(())
+    digests: dict[str, str] = {}
+    for target in ("slop-audit", "deep-researcher", "grilling"):
+        baseline = skill_tool_schema_sha256((), target_skill=target)
+        assert baseline == skill_tool_schema_sha256((target,), target_skill=target)
+        digests[target] = baseline
 
-    assert baseline == skill_tool_schema_sha256(("slop-audit",))
-    assert baseline == skill_tool_schema_sha256(("deep-researcher",))
-    assert baseline == skill_tool_schema_sha256(("grilling",))
+    assert digests["slop-audit"] == digests["deep-researcher"]
+    assert digests["slop-audit"] != digests["grilling"]
 
 
 def test_system_prompt_diff_is_only_the_available_skill_block(
@@ -106,7 +109,7 @@ def test_live_spec_rejects_model_or_fixture_drift() -> None:
             "harness": {
                 "name": "skill-attribution",
                 "source": "mangowhoiscloud/geode",
-                "revision": "geode-skill-attribution-live-v1",
+                "revision": "geode-skill-attribution-live-v2",
             },
             "model": {
                 "provider": "openai",
@@ -115,7 +118,10 @@ def test_live_spec_rejects_model_or_fixture_drift() -> None:
                 "reasoning": "max",
             },
             "environment": {"initial_state_ref": f"fixture-sha256:{fixture_sha}"},
-            "execution": {"max_concurrency": 1},
+            "execution": {
+                "max_concurrency": 1,
+                "seed_schedule": ["unseeded-repetition-1"],
+            },
         },
         "artifacts": {
             "native_results": "artifacts/native-results.json",
@@ -133,6 +139,18 @@ def test_live_spec_rejects_model_or_fixture_drift() -> None:
 
     spec["reproduction"]["model"]["label"] = "gpt-5.6-terra"
     with pytest.raises(ValueError, match=r"gpt-5\.6-sol"):
+        _validate_live_spec(spec, fixture_sha256=fixture_sha)
+
+    spec["reproduction"]["model"]["label"] = "gpt-5.6-sol"
+    spec["reproduction"]["execution"]["seed_schedule"] = ["seed-1"]
+    with pytest.raises(ValueError, match="unseeded repetition labels"):
+        _validate_live_spec(spec, fixture_sha256=fixture_sha)
+
+    spec["reproduction"]["execution"]["seed_schedule"] = [
+        "unseeded-repetition-1",
+        "unseeded-repetition-1",
+    ]
+    with pytest.raises(ValueError, match="unique explicit unseeded repetition labels"):
         _validate_live_spec(spec, fixture_sha256=fixture_sha)
 
 
@@ -183,7 +201,7 @@ def test_aggregate_bundle_closes_attempt_trajectory_and_reward_joins(tmp_path: P
             "harness": {
                 "name": "skill-attribution",
                 "source": "mangowhoiscloud/geode",
-                "revision": "geode-skill-attribution-live-v1",
+                "revision": "geode-skill-attribution-live-v2",
             },
             "model": {
                 "provider": "openai",
@@ -204,7 +222,7 @@ def test_aggregate_bundle_closes_attempt_trajectory_and_reward_joins(tmp_path: P
                     json.dumps(workload, separators=(",", ":")).encode()
                 ).hexdigest(),
                 "repetitions": 1,
-                "seed_schedule": ["seed-1"],
+                "seed_schedule": ["unseeded-repetition-1"],
                 "max_concurrency": 1,
                 "timeout_seconds": 60,
                 "budget": {"kind": "subscription", "limit": None, "unit": "quota"},
@@ -324,7 +342,7 @@ def test_aggregate_bundle_closes_attempt_trajectory_and_reward_joins(tmp_path: P
                 "target_skill": case.target_skill,
                 "prompt_class": case.prompt_class,
                 "arm": arm,
-                "seed": "seed-1",
+                "seed": "unseeded-repetition-1",
                 "repetition": 1,
                 "available_skills": list(request.available_skills),
                 "verifier_passed": passed,

@@ -46,6 +46,11 @@ workspace, initial-state reference, scorer, timeout, budget, seed schedule, and
 repetition count are shared by both arms. The only treatment difference is
 whether the target skill appears in `available_skills`.
 
+The OpenAI subscription adapter does not claim decoder RNG control. Its
+`seed_schedule` entries must therefore use explicit
+`unseeded-repetition-<n>` labels. Those labels bind paired repetition identity;
+they are not reproducible sampling seeds.
+
 The runner alternates arm order and rejects result or initial-state drift.
 `live_test_approved` must be true before its callback can execute. Creating or
 validating this profile does not authorize a model call.
@@ -65,19 +70,23 @@ The 12 case IDs are the ordered workload IDs in the run spec. The tracked
 [`skill-attribution-pilot.json`](../../evals/benchmarks/fixtures/skill-attribution-pilot.json)
 fixture binds every case to exact evidence, finding, answer-term, and decision-
 question expectations. `load_skill_fixtures()` rejects missing, additional,
-duplicate, or reordered case identity, and `verify_skill_output()` fails closed
-on malformed output before applying those deterministic expectations. Prompt
+duplicate, or reordered case identity. Positive cases also reject verifier
+answer terms exposed in the prompt or context, while finding and question IDs
+must be opaque `f<n>` / `q<n>` labels. `verify_skill_output()` fails closed on
+malformed output before applying evaluator-only answer expectations. Prompt
 prose alone is not a score.
 
 The fixture and verifier are offline measurement authorities.
 [`skill_attribution_live.py`](../../evals/benchmarks/skill_attribution_live.py)
 is the concrete subscription execution adapter. It accepts only a separately
 frozen, explicitly approved run spec pinned to `openai` / `subscription` /
-`gpt-5.6-sol` / `max`, requires a clean matching GEODE revision, confirms that
-both arms expose the same three tool schemas, and launches every arm in a fresh
-child process with a unique `GEODE_STATE_ROOT`. The model-visible tool set is
-limited to `use_skill`, `get_grill`, and `update_grill`; only the target skill's
-registry availability differs between matched arms.
+`gpt-5.6-sol` / `max` and harness revision
+`geode-skill-attribution-live-v2`, requires a clean matching GEODE revision, confirms that
+both arms expose the same target-specific tool schema, and launches every arm
+in a fresh child process with a unique `GEODE_STATE_ROOT`. Slop and research
+cases expose only `use_skill`; grilling cases additionally expose `get_grill`
+and `update_grill`. Only the target skill's registry availability differs
+between matched arms.
 
 ```bash
 uv run python -m evals.benchmarks.skill_attribution_live run \
@@ -149,6 +158,49 @@ or delegation skills. A broader suite requires a separately preregistered tool
 surface and task-specific structured-output contract; this verifier must not be
 changed post hoc to turn the zero result positive.
 
+#### Post-run leakage audit and contract corrections
+
+The repeated run remains immutable. A later audit compared its model-visible
+inputs, tool events, and verifier failures against ACES,
+[Terminal Agents](https://arxiv.org/abs/2608.20485), and
+[Stanford CS329A Part 5](https://www.youtube.com/watch?v=Ml_fp9XkB8Y). The
+original fixture correctly exposed all 40 output identifiers, but its finding
+and question IDs encoded answer semantics, and 25/31 required answer terms were
+also present literally. The universal response schema additionally leaked
+grilling's question ontology into research cases, while recorded seed labels
+were not passed to the subscription decoder. The corrections below apply only
+to future frozen runs.
+
+| Gap | Correction | Current status |
+|---|---|---|
+| SA-GAP-06 — task-specific structured-output ambiguity | Finding/research cases require `answer`, `evidence_ids`, and `finding_ids`; grilling cases require `answer`, `evidence_ids`, and `questions`. | Closed in source and regression tests; no historical result changed. |
+| SA-GAP-07 — verifier-target leakage | Positive fixtures reject model-visible required answer terms and require opaque `f<n>` / `q<n>` evaluator IDs. | Closed in source; current positive fixture exposes 0/24 required answer terms. |
+| SA-GAP-08 — uncontrolled seed semantics | Subscription specs require `unseeded-repetition-<n>` labels and the analysis discloses that they are not decoder seeds. | Closed as an honest measurement boundary, not as deterministic sampling. |
+| SA-GAP-09 — cross-skill tool noise | Slop/research remove grilling-only tools while matched arms retain identical schemas. | Closed in source and no-model schema-digest tests. |
+| SA-GAP-04 — narrow native capability | Synthetic tasks still omit native web, file, and delegation work. | Open; requires a separate preregistered native-capability suite. |
+| SA-GAP-05 — unstable treatment direction | The immutable repetitions remain `+4`, `-3`, and `-1`. | Open; more repetitions cannot repair the intervention design. |
+
+The corrected runner emits `geode.skill-attribution-runner-result@2` and
+`geode.skill-attribution-verifier@2` because tool-schema identity is now
+reported per target skill and verification uses target-specific response
+contracts. The fixture's JSON shape remains
+`geode.skill-attribution-fixtures.v1`; its content digest changes and a new run
+must freeze that new digest.
+
+#### Rollout-learning boundary
+
+The three repetitions are measurement replication, not best-of-N candidate
+width: no selector chooses a delivered candidate. The 72 historical rollouts
+also represent 12 source examples, not 72 independent examples. Every arm and
+repetition of one `example_id` must remain in the same lineage-safe data split.
+
+These short trajectories contain no cloned-state path search, verifier feedback
+loop, rollback, or step-wise reward. They are therefore diagnostic and
+post-training candidates, not LATS or SWiRL training data. A later learning run
+must preregister separate selection and final-evaluation authorities and collect
+native `inspect → act → verify → recover` transitions without copying post-hoc
+verifier labels into the raw trajectory.
+
 ### Metrics
 
 The primary result is the signed native verifier delta for each pair:
@@ -196,6 +248,7 @@ claim that GEODE matches Scroll's LongMemEval, BEAM, or LOCA scores.
 | Source pattern | Decision | GEODE boundary |
 |---|---|---|
 | ACES paired with/without trials | Adopt | Freeze all non-skill fields and report native verifier lift. |
+| ACES isolation and group modes | Defer to a new run | The current pair is isolation-like; fixed-decoy group lift and routing premium need a separately frozen intervention. |
 | ACES multi-metric composite | Do not use for promotion | Keep process and safety deltas separate from verifier outcomes. |
 | Scroll append-only event log and exact addresses | Adapt | Reuse session-event ordinal/event IDs plus offload references. |
 | Scroll persistent Python kernel and eviction index | Defer | Add only after this benchmark demonstrates unrecoverable cases that current stores cannot address. |
