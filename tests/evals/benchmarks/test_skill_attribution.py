@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 from evals.benchmarks.skill_attribution import (
     PILOT_CASES,
-    SKILL_RESPONSE_SCHEMA,
     PromptClass,
     SkillArm,
     SkillArmRequest,
@@ -17,6 +16,7 @@ from evals.benchmarks.skill_attribution import (
     build_skill_prompt,
     load_skill_fixtures,
     run_skill_suite,
+    skill_response_schema,
     validate_skill_case_matrix,
     verify_skill_output,
 )
@@ -216,26 +216,63 @@ def test_native_fixture_covers_the_frozen_case_matrix() -> None:
 def test_native_fixture_rejects_required_ids_hidden_from_context(tmp_path: Path) -> None:
     source = Path("evals/benchmarks/fixtures/skill-attribution-pilot.json")
     payload = json.loads(source.read_text(encoding="utf-8"))
-    payload["cases"][4]["context"] = payload["cases"][4]["context"].replace(
-        "causal-skill-lift", "hidden-finding"
-    )
+    payload["cases"][4]["context"] = payload["cases"][4]["context"].replace("f1", "hidden")
     fixture_path = tmp_path / "fixtures.json"
     fixture_path.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(ValueError, match=r"hides required IDs.*causal-skill-lift"):
+    with pytest.raises(ValueError, match=r"hides required IDs.*f1"):
         load_skill_fixtures(fixture_path)
+
+
+def test_native_fixture_rejects_model_visible_answer_terms_and_semantic_ids(
+    tmp_path: Path,
+) -> None:
+    source = Path("evals/benchmarks/fixtures/skill-attribution-pilot.json")
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    payload["cases"][0]["context"] += " This is a repeated implementation."
+    leaked_path = tmp_path / "leaked.json"
+    leaked_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"leaks required answer terms.*repeated implementation"):
+        load_skill_fixtures(leaked_path)
+
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    payload["cases"][0]["required_finding_ids"][0] = "duplicate-normalize"
+    payload["cases"][0]["context"] = payload["cases"][0]["context"].replace(
+        "f1", "duplicate-normalize"
+    )
+    semantic_path = tmp_path / "semantic.json"
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"finding IDs must be opaque"):
+        load_skill_fixtures(semantic_path)
+
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    payload["cases"][8]["required_question_ids"][0] = "state-owner"
+    payload["cases"][8]["context"] = payload["cases"][8]["context"].replace("q1", "state-owner")
+    question_path = tmp_path / "semantic-question.json"
+    question_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"question IDs must be opaque"):
+        load_skill_fixtures(question_path)
 
 
 def test_skill_prompt_is_arm_independent_and_uses_the_strict_response_shape() -> None:
     fixture = load_skill_fixtures(Path("evals/benchmarks/fixtures/skill-attribution-pilot.json"))[0]
     prompt = build_skill_prompt(PILOT_CASES[0], fixture)
+    finding_schema = skill_response_schema(PILOT_CASES[0])
+    decision_schema = skill_response_schema(PILOT_CASES[8])
 
     assert PILOT_CASES[0].prompt in prompt
     assert fixture.context in prompt
     assert "with-skill" not in prompt
     assert "without-skill" not in prompt
-    assert SKILL_RESPONSE_SCHEMA["additionalProperties"] is False
-    assert "uniqueItems" not in json.dumps(SKILL_RESPONSE_SCHEMA)
+    assert set(finding_schema["required"]) == {"answer", "evidence_ids", "finding_ids"}
+    assert set(decision_schema["required"]) == {"answer", "evidence_ids", "questions"}
+    assert "questions" not in finding_schema["properties"]
+    assert "finding_ids" not in decision_schema["properties"]
+    assert finding_schema["additionalProperties"] is False
+    assert "uniqueItems" not in json.dumps((finding_schema, decision_schema))
 
     with pytest.raises(ValueError, match="identities differ"):
         build_skill_prompt(PILOT_CASES[1], fixture)
@@ -250,12 +287,14 @@ def test_native_verifier_requires_exact_evidence_findings_and_question_shape() -
     slop_result = verify_skill_output(
         json.dumps(
             {
-                "answer": "duplicate implementation, stub, and TODO found",
+                "answer": (
+                    "Repeated implementation, empty implementation, and deferred cleanup found"
+                ),
                 "evidence_ids": ["alpha.py:1", "beta.py:1", "gamma.py:1", "delta.py:1"],
-                "finding_ids": ["duplicate-normalize", "stub-parse", "abandoned-todo"],
-                "questions": [],
+                "finding_ids": ["f1", "f2", "f3"],
             }
         ),
+        PILOT_CASES[0],
         slop,
     )
     assert slop_result.passed is True
@@ -263,23 +302,23 @@ def test_native_verifier_requires_exact_evidence_findings_and_question_shape() -
     grill_result = verify_skill_output(
         json.dumps(
             {
-                "answer": "three boundaries remain unresolved",
+                "answer": "The ordering and reversibility boundaries remain unresolved",
                 "evidence_ids": [],
-                "finding_ids": [],
                 "questions": [
                     {
                         "id": question_id,
                         "options": ["A", "B"],
-                        "recommendation": "Resolve the dependency before migration; choose A",
+                        "recommendation": "Choose A after resolving the boundary",
                     }
                     for question_id in (
-                        "state-owner",
-                        "rollback-boundary",
-                        "compatibility-window",
+                        "q1",
+                        "q2",
+                        "q3",
                     )
                 ],
             }
         ),
+        PILOT_CASES[8],
         grill,
     )
     assert grill_result.passed is True
@@ -287,28 +326,28 @@ def test_native_verifier_requires_exact_evidence_findings_and_question_shape() -
     malformed_grill = verify_skill_output(
         json.dumps(
             {
-                "answer": "dependency migration",
+                "answer": "ordering reversibility",
                 "evidence_ids": [],
-                "finding_ids": [],
                 "questions": [
-                    {"id": "state-owner", "options": ["A", 2], "recommendation": "A"},
+                    {"id": "q1", "options": ["A", 2], "recommendation": "A"},
                     {
-                        "id": "rollback-boundary",
+                        "id": "q2",
                         "options": ["A", "B"],
                         "recommendation": "A",
                     },
                     {
-                        "id": "compatibility-window",
+                        "id": "q3",
                         "options": ["A", "B"],
                         "recommendation": "A",
                     },
                 ],
             }
         ),
+        PILOT_CASES[8],
         grill,
     )
     assert malformed_grill.passed is False
-    assert malformed_grill.malformed_question_ids == ("state-owner",)
+    assert malformed_grill.malformed_question_ids == ("q1",)
 
     extra_finding = verify_skill_output(
         json.dumps(
@@ -316,9 +355,9 @@ def test_native_verifier_requires_exact_evidence_findings_and_question_shape() -
                 "answer": "distribution archive install",
                 "evidence_ids": [],
                 "finding_ids": ["invented"],
-                "questions": [],
             }
         ),
+        PILOT_CASES[3],
         fixtures["slop-negative"],
     )
     assert extra_finding.passed is False
@@ -327,12 +366,14 @@ def test_native_verifier_requires_exact_evidence_findings_and_question_shape() -
     duplicate_evidence = verify_skill_output(
         json.dumps(
             {
-                "answer": "duplicate implementation, stub, and TODO found",
+                "answer": (
+                    "Repeated implementation, empty implementation, and deferred cleanup found"
+                ),
                 "evidence_ids": ["alpha.py:1", "alpha.py:1"],
-                "finding_ids": ["duplicate-normalize", "stub-parse", "abandoned-todo"],
-                "questions": [],
+                "finding_ids": ["f1", "f2", "f3"],
             }
         ),
+        PILOT_CASES[0],
         slop,
     )
     assert duplicate_evidence.passed is False

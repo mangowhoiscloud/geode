@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 SKILL_FIXTURE_SCHEMA = "geode.skill-attribution-fixtures.v1"
-SKILL_RESPONSE_SCHEMA: dict[str, Any] = {
+SKILL_FINDING_RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "answer": {"type": "string", "minLength": 1},
@@ -21,6 +21,18 @@ SKILL_RESPONSE_SCHEMA: dict[str, Any] = {
             "items": {"type": "string", "minLength": 1},
         },
         "finding_ids": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+        },
+    },
+    "required": ["answer", "evidence_ids", "finding_ids"],
+    "additionalProperties": False,
+}
+SKILL_DECISION_RESPONSE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "answer": {"type": "string", "minLength": 1},
+        "evidence_ids": {
             "type": "array",
             "items": {"type": "string", "minLength": 1},
         },
@@ -42,7 +54,7 @@ SKILL_RESPONSE_SCHEMA: dict[str, Any] = {
             },
         },
     },
-    "required": ["answer", "evidence_ids", "finding_ids", "questions"],
+    "required": ["answer", "evidence_ids", "questions"],
     "additionalProperties": False,
 }
 
@@ -65,6 +77,15 @@ class SkillCase:
     target_skill: str
     prompt_class: PromptClass
     prompt: str
+
+
+def skill_response_schema(case: SkillCase) -> dict[str, Any]:
+    """Return the target-specific model response contract."""
+    if case.target_skill == "grilling":
+        return SKILL_DECISION_RESPONSE_SCHEMA
+    if case.target_skill in {"deep-researcher", "slop-audit"}:
+        return SKILL_FINDING_RESPONSE_SCHEMA
+    raise ValueError(f"unsupported skill response contract: {case.target_skill}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,6 +244,7 @@ def load_skill_fixtures(
     if not isinstance(raw_rows, list):
         raise ValueError("skill fixture cases must be a list")
 
+    case_rows = validate_skill_case_matrix(cases)
     rows: dict[str, SkillFixture] = {}
     for index, raw in enumerate(raw_rows):
         if not isinstance(raw, Mapping):
@@ -254,7 +276,7 @@ def load_skill_fixtures(
             )
         rows[case_id] = fixture
 
-    case_ids = tuple(case.case_id for case in validate_skill_case_matrix(cases))
+    case_ids = tuple(case.case_id for case in case_rows)
     if set(rows) != set(case_ids):
         missing = sorted(set(case_ids) - set(rows))
         unexpected = sorted(set(rows) - set(case_ids))
@@ -262,17 +284,68 @@ def load_skill_fixtures(
             f"skill fixture case IDs differ from the frozen matrix: "
             f"missing={missing}, unexpected={unexpected}"
         )
-    return tuple(rows[case_id] for case_id in case_ids)
+    fixtures = tuple(rows[case_id] for case_id in case_ids)
+    for case, fixture in zip(case_rows, fixtures, strict=True):
+        skill_response_schema(case)
+        if case.target_skill == "grilling":
+            if fixture.required_finding_ids:
+                raise ValueError(f"skill fixture case {case.case_id} cannot require finding IDs")
+        elif fixture.required_question_ids or fixture.max_questions:
+            raise ValueError(f"skill fixture case {case.case_id} cannot require questions")
+
+        semantic_findings = tuple(
+            item
+            for item in fixture.required_finding_ids
+            if not (item.startswith("f") and item[1:].isdigit())
+        )
+        if semantic_findings:
+            raise ValueError(
+                f"skill fixture case {case.case_id} finding IDs must be opaque: "
+                f"{list(semantic_findings)}"
+            )
+        semantic_questions = tuple(
+            item
+            for item in fixture.required_question_ids
+            if not (item.startswith("q") and item[1:].isdigit())
+        )
+        if semantic_questions:
+            raise ValueError(
+                f"skill fixture case {case.case_id} question IDs must be opaque: "
+                f"{list(semantic_questions)}"
+            )
+        if case.prompt_class is not PromptClass.NEGATIVE_CONTROL:
+            visible = f"{case.prompt}\n{fixture.context}".casefold()
+            leaked_terms = tuple(
+                term for term in fixture.required_answer_terms if term.casefold() in visible
+            )
+            if leaked_terms:
+                raise ValueError(
+                    f"skill fixture case {case.case_id} leaks required answer terms: "
+                    f"{list(leaked_terms)}"
+                )
+    return fixtures
 
 
-def verify_skill_output(text: str, fixture: SkillFixture) -> SkillVerification:
+def verify_skill_output(text: str, case: SkillCase, fixture: SkillFixture) -> SkillVerification:
     """Deterministically verify one model response against its native fixture."""
     try:
+        if case.case_id != fixture.case_id:
+            raise ValueError("skill case and fixture identities differ")
         payload = _response_object(text)
+        required_fields = set(skill_response_schema(case)["required"])
+        if set(payload) != required_fields:
+            raise ValueError(
+                "response fields differ from the target-specific contract: "
+                f"expected={sorted(required_fields)}, observed={sorted(payload)}"
+            )
         answer = _required_string(payload, "answer")
         evidence_ids = set(_string_tuple(payload, "evidence_ids"))
-        finding_ids = set(_string_tuple(payload, "finding_ids"))
-        questions = payload.get("questions")
+        finding_ids = (
+            set(_string_tuple(payload, "finding_ids"))
+            if "finding_ids" in required_fields
+            else set()
+        )
+        questions = payload.get("questions", [])
         if not isinstance(questions, list):
             raise ValueError("response questions must be a list")
         question_ids: set[str] = set()
@@ -346,15 +419,22 @@ def build_skill_prompt(case: SkillCase, fixture: SkillFixture) -> str:
     """Render the arm-identical synthetic task without leaking verifier answers."""
     if case.case_id != fixture.case_id:
         raise ValueError("skill case and fixture identities differ")
+    if case.target_skill == "grilling":
+        output_contract = (
+            "Return one JSON object with exactly these fields: answer (string), "
+            "evidence_ids (string array), and questions (array of objects with id, "
+            "at least two non-empty options, and one non-empty recommendation)."
+        )
+    else:
+        output_contract = (
+            "Return one JSON object with exactly these fields: answer (string), "
+            "evidence_ids (string array), and finding_ids (string array)."
+        )
     return (
         f"Task:\n{case.prompt}\n\n"
         f"Synthetic fixture context:\n{fixture.context}\n\n"
-        "Output contract:\n"
-        "Return one JSON object with exactly these fields: answer (string), "
-        "evidence_ids (string array), finding_ids (string array), and questions "
-        "(array of objects with id, at least two non-empty options, and one "
-        "non-empty recommendation). Use only identifiers present in the supplied "
-        "context. Use empty arrays when no evidence, finding, or question applies."
+        f"Output contract:\n{output_contract} Use only identifiers present in the "
+        "supplied context. Use empty arrays when no evidence, finding, or question applies."
     )
 
 

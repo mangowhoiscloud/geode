@@ -19,7 +19,7 @@ from typing import Any
 
 from evals.benchmarks.skill_attribution import (
     PILOT_CASES,
-    SKILL_RESPONSE_SCHEMA,
+    SKILL_FIXTURE_SCHEMA,
     PromptClass,
     SkillArm,
     SkillArmRequest,
@@ -30,11 +30,15 @@ from evals.benchmarks.skill_attribution import (
     build_skill_prompt,
     load_skill_fixtures,
     run_skill_suite,
+    skill_response_schema,
     verify_skill_output,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ALLOWED_TOOLS = frozenset({"get_grill", "update_grill", "use_skill"})
+LIVE_HARNESS_REVISION = "geode-skill-attribution-live-v2"
+VERIFIER_REVISION = "v2"
+_GRILL_TOOLS = frozenset({"get_grill", "update_grill", "use_skill"})
+_SKILL_ONLY_TOOLS = frozenset({"use_skill"})
 SYSTEM_PROMPT = (
     "Agent: GEODE skill-attribution evaluation. "
     "Runtime: frozen synthetic fixture with evaluator-owned scoring. "
@@ -174,12 +178,23 @@ def _skill_registry(available_skills: Sequence[str]) -> Any:
     return registry
 
 
-def _skill_tool_plan(available_skills: Sequence[str]) -> tuple[Any, dict[str, Any], Any, Any]:
+def _allowed_tools(target_skill: str) -> frozenset[str]:
+    if target_skill == "grilling":
+        return _GRILL_TOOLS
+    if target_skill in {"deep-researcher", "slop-audit"}:
+        return _SKILL_ONLY_TOOLS
+    raise ValueError(f"unsupported skill tool surface: {target_skill}")
+
+
+def _skill_tool_plan(
+    available_skills: Sequence[str], *, target_skill: str
+) -> tuple[Any, dict[str, Any], Any, Any]:
     from core.agent.loop._tool_factory import project_bound_tool_plan
     from core.tools.composition import compose_tool_plan
     from core.wiring.runtime import build_middleware_registry, build_policy_sources
 
     registry = _skill_registry(available_skills)
+    allowed_tools = _allowed_tools(target_skill)
     policy_sources = build_policy_sources()
     bound, transient = compose_tool_plan(skill_registry=registry)
     bound = project_bound_tool_plan(
@@ -187,19 +202,21 @@ def _skill_tool_plan(available_skills: Sequence[str]) -> tuple[Any, dict[str, An
         provider="openai",
         source="subscription",
         policy_sources=policy_sources,
-        force_include=ALLOWED_TOOLS,
-    ).filtered(allowed_tool_names=ALLOWED_TOOLS)
-    transient = {name: handler for name, handler in transient.items() if name in ALLOWED_TOOLS}
+        force_include=allowed_tools,
+    ).filtered(allowed_tool_names=allowed_tools)
+    transient = {name: handler for name, handler in transient.items() if name in allowed_tools}
     visible = frozenset((*bound.tool_names, *transient))
-    if visible != ALLOWED_TOOLS:
+    if visible != allowed_tools:
         raise ValueError(f"skill evaluation tool surface drifted: {sorted(visible)}")
     middleware = build_middleware_registry(policy_sources=policy_sources)
     return bound, transient, registry, (policy_sources, middleware)
 
 
-def skill_tool_schema_sha256(available_skills: Sequence[str]) -> str:
+def skill_tool_schema_sha256(available_skills: Sequence[str], *, target_skill: str) -> str:
     """Return the model-visible schema digest for a no-model arm preflight."""
-    bound, _transient, _registry, _services = _skill_tool_plan(available_skills)
+    bound, _transient, _registry, _services = _skill_tool_plan(
+        available_skills, target_skill=target_skill
+    )
     from core.tools.plan import thaw_tool_schema
 
     schemas = [
@@ -219,14 +236,17 @@ def _build_loop(*, request: SkillArmRequest, spec: Mapping[str, Any], session_id
     from core.agent.tool_executor import ToolExecutor
     from core.llm.adapters.registry import bootstrap_builtins
 
-    bound, transient, registry, services = _skill_tool_plan(request.available_skills)
+    allowed_tools = _allowed_tools(request.case.target_skill)
+    bound, transient, registry, services = _skill_tool_plan(
+        request.available_skills, target_skill=request.case.target_skill
+    )
     policy_sources, middleware = services
     bootstrap_builtins(policy_sources=policy_sources)
     executor = ToolExecutor(
         bound_tool_plan=bound,
         transient_handlers=transient,
         auto_approve=True,
-        allowed_tools=ALLOWED_TOOLS,
+        allowed_tools=allowed_tools,
         middleware_registry=middleware,
     )
     model = spec["reproduction"]["model"]
@@ -240,11 +260,11 @@ def _build_loop(*, request: SkillArmRequest, spec: Mapping[str, Any], session_id
             max_tokens=8192,
             max_rounds=0,
             time_budget_s=float(execution["timeout_seconds"]),
-            allowed_tool_names=set(ALLOWED_TOOLS),
+            allowed_tool_names=set(allowed_tools),
             force_include_allowed_tools=True,
             system_prompt_override=SYSTEM_PROMPT,
             session_id=session_id,
-            response_schema=SKILL_RESPONSE_SCHEMA,
+            response_schema=skill_response_schema(request.case),
             disable_settings_drift=True,
         ),
         model=str(model["label"]),
@@ -270,7 +290,7 @@ def _tool_metrics(
             and requested_skill == request.case.target_skill
         )
         correct += int(is_correct)
-        unexpected += int(tool not in ALLOWED_TOOLS)
+        unexpected += int(tool not in _allowed_tools(request.case.target_skill))
     if request.case.prompt_class is PromptClass.NEGATIVE_CONTROL:
         irrelevant = len(calls)
     else:
@@ -315,7 +335,7 @@ async def _execute_arm(
     output_tokens = int(usage.get("output_tokens") or 0)
     calls = [dict(call) for call in result.tool_calls]
     activated, irrelevant, safety_violations = _tool_metrics(calls, request)
-    verification = verify_skill_output(result.text or "", fixture)
+    verification = verify_skill_output(result.text or "", request.case, fixture)
     termination = str(result.termination_reason)
     valid = not result.error and is_successful_task_termination(result.termination_reason)
     passed = bool(valid and verification.passed)
@@ -344,11 +364,11 @@ async def _execute_arm(
 
     verifier_path = output_dir / "verifier-receipt.json"
     verifier = {
-        "schema_id": "geode.skill-attribution-verifier@1",
-        "schema_version": 1,
+        "schema_id": "geode.skill-attribution-verifier@2",
+        "schema_version": 2,
         "attempt_id": attempt_id,
         "case_id": request.case.case_id,
-        "fixture_schema": "geode.skill-attribution-fixtures.v1",
+        "fixture_schema": SKILL_FIXTURE_SCHEMA,
         "passed": passed,
         "score": float(passed) if valid else None,
         "valid_runtime_result": bool(valid),
@@ -373,7 +393,7 @@ async def _execute_arm(
             "termination_reason": termination,
         },
         provenance={
-            "adapter": "geode-skill-attribution-live-v1",
+            "adapter": LIVE_HARNESS_REVISION,
             "store": "sessions.db:session_events",
             "run_spec_sha256": request.run_spec_sha256,
         },
@@ -400,7 +420,7 @@ async def _execute_arm(
         "example_id": f"skill-attribution.{request.case.case_id}",
         "evaluator": {
             "name": "skill-attribution-native-verifier",
-            "revision": "v1",
+            "revision": VERIFIER_REVISION,
             "authority": "deterministic",
         },
         "measurement_status": "measured" if valid else "missing",
@@ -480,7 +500,7 @@ def _validate_live_spec(spec: Mapping[str, Any], *, fixture_sha256: str) -> None
     if reproduction["harness"] != {
         "name": "skill-attribution",
         "source": "mangowhoiscloud/geode",
-        "revision": "geode-skill-attribution-live-v1",
+        "revision": LIVE_HARNESS_REVISION,
     }:
         raise ValueError("live skill run requires the pinned native harness identity")
     if model != {
@@ -492,6 +512,19 @@ def _validate_live_spec(spec: Mapping[str, Any], *, fixture_sha256: str) -> None
         raise ValueError("live skill run requires gpt-5.6-sol subscription at max effort")
     if int(execution["max_concurrency"]) != 1:
         raise ValueError("live skill run must be serial")
+    seed_schedule = execution.get("seed_schedule")
+    if (
+        not isinstance(seed_schedule, list)
+        or any(
+            not isinstance(label, str) or not label.startswith("unseeded-repetition-")
+            for label in seed_schedule
+        )
+        or len(seed_schedule) != len(set(seed_schedule))
+    ):
+        raise ValueError(
+            "live skill run requires unique explicit unseeded repetition labels; "
+            "the subscription route does not claim decoder-seed control"
+        )
     if spec["artifacts"] != _EXPECTED_ARTIFACTS:
         raise ValueError("live skill run artifact paths differ from the native bundle")
     expected_state = f"fixture-sha256:{fixture_sha256}"
@@ -616,7 +649,7 @@ def _aggregate_trajectory(
             "arm_count": len(records),
         },
         provenance={
-            "adapter": "geode-skill-attribution-live-v1",
+            "adapter": LIVE_HARNESS_REVISION,
             "store": "per-arm sessions.db:session_events",
         },
         privacy={
@@ -670,8 +703,8 @@ def _write_aggregates(
     _write_json(
         verifier_path,
         {
-            "schema_id": "geode.skill-attribution-verifier-results@1",
-            "schema_version": 1,
+            "schema_id": "geode.skill-attribution-verifier-results@2",
+            "schema_version": 2,
             "run_id": spec["run_id"],
             "receipts": [
                 {
@@ -818,6 +851,8 @@ def _write_aggregates(
             "repository performance.",
             "Subscription service behavior can vary even when the frozen route and "
             "effort are unchanged.",
+            "Values in seed_schedule are explicit unseeded repetition labels, not "
+            "decoder RNG controls.",
         ],
         "evidence_refs": common_evidence,
     }
@@ -956,13 +991,13 @@ def run_live_skill_suite(
     fixture_sha256 = _sha256(fixture_path)
     _validate_live_spec(spec, fixture_sha256=fixture_sha256)
     _validate_repository(spec)
-    digests = {
-        skill: skill_tool_schema_sha256((skill,))
-        for skill in sorted({case.target_skill for case in PILOT_CASES})
-    }
-    without_digest = skill_tool_schema_sha256(())
-    if set(digests.values()) != {without_digest}:
-        raise ValueError("model-visible tool schemas differ between skill arms")
+    tool_digests: dict[str, str] = {}
+    for skill in sorted({case.target_skill for case in PILOT_CASES}):
+        with_digest = skill_tool_schema_sha256((skill,), target_skill=skill)
+        without_digest = skill_tool_schema_sha256((), target_skill=skill)
+        if with_digest != without_digest:
+            raise ValueError(f"model-visible tool schemas differ between {skill} arms")
+        tool_digests[skill] = without_digest
     output_dir.mkdir(parents=True)
     frozen_spec = output_dir / "run-spec.json"
     with frozen_spec.open("xb") as handle:
@@ -1011,12 +1046,12 @@ def run_live_skill_suite(
     run_bundle = validate_run_bundle(frozen_spec)
     learning_view = validate_learning_view(output_dir / "artifacts" / "learning-view.json")
     result = {
-        "schema_id": "geode.skill-attribution-runner-result@1",
-        "schema_version": 1,
+        "schema_id": "geode.skill-attribution-runner-result@2",
+        "schema_version": 2,
         "run_id": spec["run_id"],
         "run_spec_sha256": _sha256(frozen_spec),
         "fixture_sha256": fixture_sha256,
-        "tool_schema_sha256": without_digest,
+        "tool_schema_sha256_by_target": tool_digests,
         "arms": len(records),
         "pairs": len(lifts),
         "run_bundle": run_bundle,

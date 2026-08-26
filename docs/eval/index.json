@@ -94,7 +94,7 @@
       "authority": "derived-view-contract",
       "path": "docs/eval/data-model.md",
       "summary": "Versioned joins for examples, rollouts, immutable trajectories, and evaluator-owned rewards.",
-      "sha256": "03907ade36cd4420139226039a2adcfb935cd351a8b6849882be684e2edc462d",
+      "sha256": "54b20b4ba25b15326a4b0f9cc6375b973aeb6cba5ffc683636a96f9c9181929a",
       "triggers": [
         "evaluation data model",
         "example rollout trajectory reward",
@@ -447,7 +447,7 @@
       "authority": "measurement-contract",
       "path": "docs/eval/skill-context-evaluation.md",
       "summary": "Paired runtime-skill attribution and deterministic context-recoverability profiles over existing GEODE evidence authorities.",
-      "sha256": "dcb7128da98270b6202204cfcfd95aba5c70b1bcbcdb78989a2ce57febf70ffa",
+      "sha256": "34349ed3443f9046d86a094e002fc3bac82174018981fbf66b197b81335217e1",
       "triggers": [
         "ACES",
         "Scroll",

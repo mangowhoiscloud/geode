@@ -106,6 +106,14 @@ functional change.
   projected into the validated v2 learning view without rewriting native
   receipts or collapsing infrastructure-invalid retries into reward rows.
 
+### Fixed
+
+- **Skill-attribution measurement leakage.** Future paired runs reject
+  model-visible positive-case answer terms, use opaque finding/question IDs and
+  target-specific response/tool schemas, and label subscription repetitions as
+  explicitly unseeded instead of implying decoder RNG control. Historical run
+  artifacts and scores remain immutable.
+
 ### Infrastructure
 
 - **Property-based persistence coverage.** Hypothesis is now a development
