@@ -278,6 +278,13 @@ def _tool_metrics(
     return correct > 0, max(0, irrelevant), unexpected
 
 
+def _requires_grill_state(request: SkillArmRequest) -> bool:
+    return (
+        request.case.target_skill == "grilling"
+        and request.case.prompt_class is not PromptClass.NEGATIVE_CONTROL
+    )
+
+
 async def _execute_arm(
     *,
     request: SkillArmRequest,
@@ -295,7 +302,7 @@ async def _execute_arm(
     timeline = getattr(loop, "_timeline", None)
     if timeline is None:
         raise RuntimeError("skill evaluation requires the canonical session timeline")
-    if request.case.target_skill == "grilling":
+    if _requires_grill_state(request):
         GrillStore(timeline.db_path).start(session_id, request.case.prompt)
 
     started_at = _utc_now()

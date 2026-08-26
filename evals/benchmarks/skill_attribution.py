@@ -206,7 +206,7 @@ PILOT_CASES = (
         "grill-negative",
         "grilling",
         PromptClass.NEGATIVE_CONTROL,
-        "Task: summarize the already-approved release notes without reopening decisions.",
+        "Task: summarize the already-approved release notes. No questions are needed.",
     ),
 )
 
@@ -241,6 +241,17 @@ def load_skill_fixtures(
         )
         if fixture.max_questions < len(fixture.required_question_ids):
             raise ValueError(f"skill fixture case {case_id} max_questions is too small")
+        required_ids = (
+            fixture.required_evidence_ids
+            + fixture.required_finding_ids
+            + fixture.required_question_ids
+        )
+        missing_context_ids = tuple(item for item in required_ids if item not in fixture.context)
+        if missing_context_ids:
+            raise ValueError(
+                f"skill fixture case {case_id} hides required IDs from context: "
+                f"{list(missing_context_ids)}"
+            )
         rows[case_id] = fixture
 
     case_ids = tuple(case.case_id for case in validate_skill_case_matrix(cases))
@@ -266,6 +277,7 @@ def verify_skill_output(text: str, fixture: SkillFixture) -> SkillVerification:
             raise ValueError("response questions must be a list")
         question_ids: set[str] = set()
         malformed_questions: list[str] = []
+        response_prose = [answer]
         for index, question in enumerate(questions):
             if not isinstance(question, Mapping):
                 raise ValueError(f"response question {index} must be an object")
@@ -275,6 +287,10 @@ def verify_skill_output(text: str, fixture: SkillFixture) -> SkillVerification:
             question_ids.add(question_id)
             options = question.get("options")
             recommendation = question.get("recommendation")
+            if isinstance(options, list):
+                response_prose.extend(option for option in options if isinstance(option, str))
+            if isinstance(recommendation, str):
+                response_prose.append(recommendation)
             if (
                 not isinstance(options, list)
                 or len(options) < 2
@@ -302,13 +318,13 @@ def verify_skill_output(text: str, fixture: SkillFixture) -> SkillVerification:
     required_evidence = set(fixture.required_evidence_ids)
     required_findings = set(fixture.required_finding_ids)
     required_questions = set(fixture.required_question_ids)
-    answer_lower = answer.lower()
+    response_text = "\n".join(response_prose).lower()
     issues = (
         tuple(sorted(required_evidence - evidence_ids)),
         tuple(sorted(evidence_ids - required_evidence)),
         tuple(sorted(required_findings - finding_ids)),
         tuple(sorted(finding_ids - required_findings)),
-        tuple(term for term in fixture.required_answer_terms if term.lower() not in answer_lower),
+        tuple(term for term in fixture.required_answer_terms if term.lower() not in response_text),
         tuple(sorted(required_questions - question_ids)),
         tuple(sorted(question_ids - required_questions)),
         tuple(malformed_questions),

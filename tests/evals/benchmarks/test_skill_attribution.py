@@ -213,6 +213,19 @@ def test_native_fixture_covers_the_frozen_case_matrix() -> None:
     )
 
 
+def test_native_fixture_rejects_required_ids_hidden_from_context(tmp_path: Path) -> None:
+    source = Path("evals/benchmarks/fixtures/skill-attribution-pilot.json")
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    payload["cases"][4]["context"] = payload["cases"][4]["context"].replace(
+        "causal-skill-lift", "hidden-finding"
+    )
+    fixture_path = tmp_path / "fixtures.json"
+    fixture_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"hides required IDs.*causal-skill-lift"):
+        load_skill_fixtures(fixture_path)
+
+
 def test_skill_prompt_is_arm_independent_and_uses_the_strict_response_shape() -> None:
     fixture = load_skill_fixtures(Path("evals/benchmarks/fixtures/skill-attribution-pilot.json"))[0]
     prompt = build_skill_prompt(PILOT_CASES[0], fixture)
@@ -250,14 +263,14 @@ def test_native_verifier_requires_exact_evidence_findings_and_question_shape() -
     grill_result = verify_skill_output(
         json.dumps(
             {
-                "answer": "dependency and migration boundaries remain unresolved",
+                "answer": "three boundaries remain unresolved",
                 "evidence_ids": [],
                 "finding_ids": [],
                 "questions": [
                     {
                         "id": question_id,
                         "options": ["A", "B"],
-                        "recommendation": "A",
+                        "recommendation": "Resolve the dependency before migration; choose A",
                     }
                     for question_id in (
                         "state-owner",
@@ -270,6 +283,32 @@ def test_native_verifier_requires_exact_evidence_findings_and_question_shape() -
         grill,
     )
     assert grill_result.passed is True
+
+    malformed_grill = verify_skill_output(
+        json.dumps(
+            {
+                "answer": "dependency migration",
+                "evidence_ids": [],
+                "finding_ids": [],
+                "questions": [
+                    {"id": "state-owner", "options": ["A", 2], "recommendation": "A"},
+                    {
+                        "id": "rollback-boundary",
+                        "options": ["A", "B"],
+                        "recommendation": "A",
+                    },
+                    {
+                        "id": "compatibility-window",
+                        "options": ["A", "B"],
+                        "recommendation": "A",
+                    },
+                ],
+            }
+        ),
+        grill,
+    )
+    assert malformed_grill.passed is False
+    assert malformed_grill.malformed_question_ids == ("state-owner",)
 
     extra_finding = verify_skill_output(
         json.dumps(

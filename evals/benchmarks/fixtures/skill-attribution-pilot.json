@@ -39,7 +39,7 @@
     },
     {
       "case_id": "research-explicit",
-      "context": "Compare two supplied primary-source excerpts. source-a states that paired with/without trials isolate a skill's causal contribution when all other inputs are frozen. source-b states that long-horizon context should preserve stable references to evicted detail. Explain the distinct measurement questions and cite both source IDs.",
+      "context": "Compare two supplied primary-source excerpts. source-a states that paired with/without trials isolate a skill's causal contribution when all other inputs are frozen. source-b states that long-horizon context should preserve stable references to evicted detail. Explain the distinct measurement questions, using candidate finding IDs causal-skill-lift and context-recoverability, and cite both source IDs.",
       "required_evidence_ids": ["source-a", "source-b"],
       "required_finding_ids": ["causal-skill-lift", "context-recoverability"],
       "required_answer_terms": ["paired", "stable", "distinct"],
@@ -48,7 +48,7 @@
     },
     {
       "case_id": "research-implicit",
-      "context": "Reconcile these context-design claims. source-a says an append-only event log with stable addresses can recover evicted evidence. source-b says a persistent Python kernel can make context programmable. source-c provides no comparison showing that a kernel improves recovery over the existing event log. Recommend the next evidence-producing step and cite all sources used.",
+      "context": "Reconcile these context-design claims. source-a says an append-only event log with stable addresses can recover evicted evidence. source-b says a persistent Python kernel can make context programmable. source-c provides no comparison showing that a kernel improves recovery over the existing event log. Use candidate finding IDs evidence-gap and measure-before-kernel, recommend the next evidence-producing step, and cite all sources used.",
       "required_evidence_ids": ["source-a", "source-b", "source-c"],
       "required_finding_ids": ["evidence-gap", "measure-before-kernel"],
       "required_answer_terms": ["measure", "kernel", "evidence"],
@@ -57,7 +57,7 @@
     },
     {
       "case_id": "research-contextual",
-      "context": "Two benchmark reports conflict. source-a reports higher aggregate task success after adding a skill package but changes the prompt and tool set at the same time. source-b reports no gain in a paired trial that freezes prompt, tools, workspace, and verifier. source-c documents only activation rate. State which claim is causally supported and why, citing the relevant source IDs.",
+      "context": "Two benchmark reports conflict. source-a reports higher aggregate task success after adding a skill package but changes the prompt and tool set at the same time. source-b reports no gain in a paired trial that freezes prompt, tools, workspace, and verifier. source-c documents only activation rate. Use candidate finding IDs confounded-aggregate and paired-causal-evidence, then state which claim is causally supported and why, citing the relevant source IDs.",
       "required_evidence_ids": ["source-a", "source-b", "source-c"],
       "required_finding_ids": ["confounded-aggregate", "paired-causal-evidence"],
       "required_answer_terms": ["confound", "paired", "causal"],
@@ -102,7 +102,7 @@
     },
     {
       "case_id": "grill-negative",
-      "context": "Summarize these already-approved release notes without reopening decisions: release-1 removes dormant packaging placeholders; release-2 renames the external hill-climbing loop to evolve. Do not ask questions.",
+      "context": "Summarize these approved release notes: release-1 removes dormant packaging placeholders; release-2 renames the external hill-climbing loop to evolve. No questions are needed.",
       "required_evidence_ids": ["release-1", "release-2"],
       "required_finding_ids": [],
       "required_answer_terms": ["packaging", "evolve"],

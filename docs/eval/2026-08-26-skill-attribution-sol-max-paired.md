@@ -111,14 +111,17 @@ implicit, and contextual positive cases all failed the frozen verifier.
 
 | Gap | Evidence | Required next evidence |
 |---|---|---|
-| Explicit request underperformance | with-skill explicit 0/3; `slop-explicit` regressed by one pass | inspect skill-to-answer contract, then preregister an independent repeated run |
-| Research skill output mismatch | three positive `deep-researcher` cases missed frozen finding IDs or answer terms | decide whether the skill contract or fixture expectation owns the mismatch before editing either |
-| Negative-control activation | `grill-negative` activated the skill; both arms recorded four irrelevant actions | add a promotion guard for negative activation/irrelevant action without changing the frozen primary score |
+| SA-GAP-01 — hidden verifier IDs | all three positive `deep-researcher` fixtures required finding IDs absent from model-visible context while the output contract prohibited invented IDs | fixed after this immutable run by rejecting such fixtures and exposing candidate IDs; requires a new run ID |
+| SA-GAP-02 — answer-only grilling terms | `grill-explicit` and `grill-contextual` expressed required concepts in questions or recommendations but the verifier searched only `answer` | fixed after this immutable run by scoring all response prose; requires a new run ID |
+| SA-GAP-03 — biased negative control | `grill-negative` contained a decision trigger and received seeded interview state; both arms recorded four irrelevant actions | fixed after this immutable run by removing both stimuli; requires a new run ID |
+| Explicit request underperformance | with-skill explicit 0/3; the three cases include SA-GAP-01, SA-GAP-02, and an independent `slop-explicit` regression | preregister an independent repeated run after the contract fixes |
 | Variance unknown | one repetition on one synthetic matrix | repeat with a new run ID and frozen seed/order policy before estimating population lift |
 | Replay intentionally incomplete | digest trajectory omits system/session/model content | keep content private; use the reviewed scope-complete release for audit, not replay claims |
 
-These gaps do not invalidate the observed primary metric. They block broader
-claims and runtime promotion.
+The frozen primary metric remains a truthful result of the original contract;
+it is not recomputed after the audit. SA-GAP-01 through SA-GAP-03 make that
+contract unsuitable for runtime attribution claims, so broader claims and
+runtime promotion remain blocked until a new prospective run closes them.
 
 ## Attempt lineage
 
