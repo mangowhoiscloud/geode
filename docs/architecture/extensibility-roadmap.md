@@ -573,8 +573,8 @@ and closure evidence are appended in §10.
 | DIST-002 | `MISFIT` | The packaged macOS helper build script defaults its generated app bundle to `<distribution>/.geode/ComputerUseHelper`, which may be read-only and is replaced by package upgrades | Packaged helper sources are read-only inputs, generated helper bytes live under one existing operator-owned GEODE home resolver, source and wheel installs share that resolver, and setup/status tests prove the distribution tree stays unchanged | R10.1 | BND-009 | `DONE` |
 | DIST-003 | `PARTIAL` | The wheel force-includes every `.geode/skills` directory even when a skill references repository-only scripts/docs or a personal absolute workspace, while installed smoke proves only that selected skill bodies load | One exact self-contained builtin-skill allowlist is packaged; repository and personal skills remain in their existing external tiers; every bundled local command/asset reference resolves in a clean wheel; and installed smoke rejects repo-only, personal-path, or dangling bundled skills | R10.1 | BND-003, BND-004 | `DONE` |
 | DIST-004 | `MISFIT` | `geode update` replaces the live uv-tool environment and verifies the new CLI before stopping the old daemon, allowing a running process to observe a mixed old-process/new-files installation | A running daemon is drained and stopped before live tool replacement, failed updates remain fail-closed without starting a second daemon, successful restart proves CLI/IPC daemon version parity, and ordering tests cover running, stopped, failed-stop, failed-install, and no-restart paths | R10.1 | BND-003, REL-003 | `DONE` |
-| EVAL-001 | `ABSENT` | Runtime Skills have loader, package, and policy checks but no paired evaluation that changes only target-skill availability | A native paired benchmark freezes model, task, workspace, tools, scorer, seed, and repetitions; reports verifier-first with-skill lift, activation, cost, and negative controls; and binds results to existing run-spec, attempt, trajectory, reward, and analysis authorities | R11.1 | BND-004, VER-001 | `OPEN` |
-| EVAL-002 | `PARTIAL` | Session events, FTS recall, compaction, and tool offload exist, but no deterministic benchmark classifies exact recovery after compaction, restart, expiry, or corruption | An offline recoverability benchmark uses current session and offload authorities, stable event or digest references, and an immutable receipt to distinguish exact, summary-only, unavailable, and corrupt evidence without a second transcript, unbounded retention, or live model call | R11.1 | STORE-002, VER-001 | `OPEN` |
+| EVAL-001 | `ABSENT` | Runtime Skills have loader, package, and policy checks but no paired evaluation that changes only target-skill availability | A native paired benchmark freezes model, task, workspace, tools, scorer, seed, and repetitions; reports verifier-first with-skill lift, activation, cost, and negative controls; and binds results to existing run-spec, attempt, trajectory, reward, and analysis authorities | R11.1 | BND-004, VER-001 | `READY` |
+| EVAL-002 | `PARTIAL` | Session events, FTS recall, compaction, and tool offload exist, but no deterministic benchmark classifies exact recovery after compaction, restart, expiry, or corruption | An offline recoverability benchmark uses current session and offload authorities, stable event or digest references, and an immutable receipt to distinguish exact, summary-only, unavailable, and corrupt evidence without a second transcript, unbounded retention, or live model call | R11.1 | STORE-002, VER-001 | `READY` |
 
 ## 6. Dependency and merge sequence
 
@@ -2302,9 +2302,11 @@ as `bd88f44998e78e8ac7220120d29960845be4f81d`, and the required canonical
 `DONE` and six `SUPERSEDED`, with no active claims or unexplained rows at the
 time.
 
-The 2026-08-26 ACES/Scroll audit preserves that evidence and registers R11.1
-with `EVAL-001` and `EVAL-002` as `OPEN`. No implementation or claim is
-authorized by registration alone; R11.1 must pass the serialized readiness and
-claim protocol in §0.3. The package measures delivered behavior first and does
-not authorize a new context store, persistent interpreter, or retention
-expansion.
+The 2026-08-26 whole-package re-audit against
+`origin/develop@db4972aa08b81d8a62c7ebf1e3f77ea26b9383e0` confirms that R11.1
+(`EVAL-001`, `EVAL-002`) is the sole unclaimed `READY` package. Its external
+dependencies BND-004, VER-001, and STORE-002 are `DONE`; §7 fixes measurable
+paired-attribution and deterministic-recoverability acceptance. The package
+measures delivered behavior first and does not authorize a new context store,
+persistent interpreter, retention expansion, or live model call. A separate
+claim must merge before implementation work begins.
