@@ -94,6 +94,20 @@ tool calls are projected as transparent one-call agent steps and
 `llm_call_count` is left null as ATIF 1.7 permits. Missing/orphan tool pairs or
 an incomplete canonical session fail closed.
 
+## P2 timeout GAP
+
+The first P2 pilot exposed an infrastructure-invalid timeout path and was
+stopped with every attempt retained. A task-owned 900-second Harbor limit
+produced two 1,800-second agent phases, and one trial was accepted with reward
+`1` after a 1,578-second agent phase. The shared execution-middleware recovery
+path converted `CancelledError` to a completed downstream result when
+cancellation arrived after `next_call` returned.
+
+Acceptance requires both tool and LLM execution middleware to preserve
+`CancelledError` after a completed downstream call, a focused regression test,
+and a clean P2 restart from the merged correction revision. The stopped pilot
+is evidence only and is excluded from score-bearing P2/P3 results.
+
 ## Recording and publication
 
 P3 writes an append-only, timestamped operator log before rendering. The
