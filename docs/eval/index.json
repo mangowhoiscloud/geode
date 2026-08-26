@@ -11,7 +11,7 @@
     "trajectory": "core/observability/schemas/trajectory.schema.json",
     "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
   },
-  "document_count": 21,
+  "document_count": 22,
   "documents": [
     {
       "id": "agent-world-comparison",
@@ -117,7 +117,7 @@
       "authority": "routing",
       "path": "docs/eval/README.md",
       "summary": "Machine and human entrypoint for GEODE evaluation contracts, benchmark ledgers, evidence, and publication.",
-      "sha256": "0d0d4a3ba5a1ee83d70d9e83ea09b4a7acc4c2d73b4c4876890a8134448ef95c",
+      "sha256": "6b0aca853c735cc35529418dfd1baad222db5a6dd73e5d3ccf8b70bd06f1b3ad",
       "triggers": [
         "artifact",
         "benchmark",
@@ -135,7 +135,7 @@
         "docs/eval/schemas/publication.schema.json",
         "docs/eval/schemas/run-spec.schema.json"
       ],
-      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/1160fecfe4447f0a3f4cf30a414f29c61776d012/trajectories/mcpmark-gate0c-gpt54-high-mcpmark-gate0c-filesystem30-gpt54-high-20260813t190922z-geode-20260813T230525Z-9d6773caad04"
+      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/fa352cb5f54e9f0ad6198c03dd180e27be388b5b/skill-attribution/results-paired/skill-attribution-sol-max-paired-20260826t113400z/trajectory-release/skill-attribution-skill-attribution-sol-max-paired-20260826t113400z-20260826T115134Z-feb50408b2a4"
     },
     {
       "id": "external-artifact-repository",
@@ -389,6 +389,31 @@
       ]
     },
     {
+      "id": "skill-attribution-sol-max-paired-20260826t113400z",
+      "family": "skill-context-evaluation",
+      "title": "Runtime skill attribution — Sol/max paired diagnostic",
+      "kind": "ledger",
+      "status": "historical",
+      "authority": "paired-skill-diagnostic",
+      "path": "docs/eval/2026-08-26-skill-attribution-sol-max-paired.md",
+      "summary": "Prospective 12-case paired diagnostic of three GEODE runtime skills with gpt-5.6-sol/max; all 24 arms were valid and the signed native-verifier delta was +4/12.",
+      "sha256": "959a1fa304180558250fe7f97292daf57c320c4dfb88fd7dcb912255c1a80f76",
+      "triggers": [
+        "ACES",
+        "context recoverability",
+        "gpt-5.6-sol",
+        "paired runtime skill",
+        "skill attribution"
+      ],
+      "contracts": [
+        "core/observability/schemas/trajectory.schema.json",
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/publication.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
       "id": "skill-context-evaluation",
       "family": "skill-context-evaluation",
       "title": "Skill Attribution and Context Recoverability",
@@ -397,7 +422,7 @@
       "authority": "measurement-contract",
       "path": "docs/eval/skill-context-evaluation.md",
       "summary": "Paired runtime-skill attribution and deterministic context-recoverability profiles over existing GEODE evidence authorities.",
-      "sha256": "b1a3bf045b192616741ab4f857016bb1a725627abaa88c393d3c6290cf6c7f77",
+      "sha256": "8e2a6a26a8e09c61e2d750f19d65a3d4701f8de656f1c7ce859d8aa83e96c6c0",
       "triggers": [
         "ACES",
         "Scroll",

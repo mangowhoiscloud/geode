@@ -20,14 +20,14 @@ eval_contracts:
   - docs/eval/schemas/attempt.schema.json
   - docs/eval/schemas/publication.schema.json
   - docs/eval/schemas/run-spec.schema.json
-eval_latest_valid_release: https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/1160fecfe4447f0a3f4cf30a414f29c61776d012/trajectories/mcpmark-gate0c-gpt54-high-mcpmark-gate0c-filesystem30-gpt54-high-20260813t190922z-geode-20260813T230525Z-9d6773caad04
+eval_latest_valid_release: https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/fa352cb5f54e9f0ad6198c03dd180e27be388b5b/skill-attribution/results-paired/skill-attribution-sol-max-paired-20260826t113400z/trajectory-release/skill-attribution-skill-attribution-sol-max-paired-20260826t113400z-20260826T115134Z-feb50408b2a4
 ---
 
 # GEODE Evaluation Index and Roadmap
 
 > Action/tool-execution 4종 벤치마크. GEODE의 quality ratchet(P4)에 통합 예정.
 > 각 문서는 **사례 + 필요 인프라 + 4-Phase 진행 시나리오**를 담음.
-> 마지막 갱신: 2026-08-14
+> 마지막 갱신: 2026-08-26
 
 ## LLM entry contract
 
@@ -75,6 +75,18 @@ repository. GEODE keeps interpretation, comparison boundaries, and digest
 pointers under `docs/eval/`; the artifact repository keeps the bytes behind
 those claims. See [External Evaluation Artifact Repository](external-artifact-repository.md)
 for path mappings, disclosure rules, and the publication manifest scaffold.
+
+The latest prospective paired-skill diagnostic is pinned to artifact commit
+[`fa352cb`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/fa352cb5f54e9f0ad6198c03dd180e27be388b5b):
+on the frozen 12-case synthetic matrix with GPT-5.6 Sol/max, making one target
+runtime skill available produced 6/12 native-verifier passes versus 2/12
+without the skill, for a signed delta of **+4/12 = +0.3333**. All 24 arms were
+valid with no retry or safety violation. Explicit prompts remained 0/3 in the
+with-skill arm, `deep-researcher` positive cases remained 0/3, and one
+negative-control skill activation was observed. This is a one-repetition
+diagnostic with `promotion_authority=none`, not a runtime or package release
+claim. See the
+[run record](2026-08-26-skill-attribution-sol-max-paired.md).
 
 The latest prospective paired-runtime diagnostic is pinned to artifact commit
 [`1160fec`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/1160fecfe4447f0a3f4cf30a414f29c61776d012):
@@ -254,6 +266,7 @@ Verified 다음에 τ²-bench를 둔다.
 
 | 일자 | 변경 |
 |---|---|
+| 2026-08-26 | GPT-5.6 Sol/max runtime-skill attribution 12-case paired diagnostic 게시: 24/24 valid, with-skill 6/12 vs without-skill 2/12, frozen delta +4/12 supported. Explicit with-skill 0/3, `deep-researcher` positive 0/3, negative-control activation을 승격 blocker로 보존하고 111 public files / 502,060 bytes와 reviewed digest trajectory를 artifact commit `fa352cb`에서 원격 재검증 |
 | 2026-08-14 | Tau2 Lane 1A 278-ID/pin/user/budget no-model freeze 완료·게시. 모델/계정 호출과 score는 0이며 exact receipt bytes를 artifact merge `dbfd948b`에서 원격 재검증; Gate 1B는 Gate 0C k=3, PAYG 승인, quota headroom 대기 |
 | 2026-08-14 | GPT-5.4/high MCPMark Gate 0C common-deadline FS30 k=1 게시: GEODE 23/30, Codex 21/30, frozen delta +2/30=+6.67%p supported diagnostic-only. 60/60 valid arms, paired buckets 17/3/6/4, one GEODE score-bearing timeout, exact token coverage 29/30 vs 30/30, 59 admitted trajectories/one withheld를 artifact commit `1160fec`에서 원격 재검증. `promotion_authority=none`; fresh k=3 live는 WHAM=80%에서 차단 |
 | 2026-08-14 | GPT-5.4/high MCPMark Gate 0B k=3 direct diagnostic 게시: `guard-25000` 7/15, `unlimited-0` 10/15, frozen delta +3/15=+0.20 supported. 30/30 valid arms와 six reviewed releases/26 admitted trajectories를 artifact commit `17133f0`에서 원격 재검증; 제품 기본값 변경 권한은 없음 |
