@@ -66,6 +66,12 @@ functional change.
 
 ### Added
 
+- **Skill attribution and context-recoverability evaluation gates.** A
+  run-spec-bound paired runner isolates target-skill availability and reports
+  deterministic native-fixture verifier lift separately from process metrics,
+  while an offline gate classifies existing session-event and tool-offload
+  evidence as exact, summary-only, unavailable, or corrupt without adding a
+  second state store.
 - **Measured code-convention SOT and cross-host application skill.** GEODE now
   documents package ownership, abstraction choice, module and class naming,
   Python data forms, schema/version axes, test placement, and the TypeScript
