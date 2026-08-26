@@ -13,8 +13,10 @@ from evals.benchmarks.skill_attribution import (
     SkillArmRequest,
     SkillArmResult,
     SkillCase,
+    load_skill_fixtures,
     run_skill_suite,
     validate_skill_case_matrix,
+    verify_skill_output,
 )
 
 
@@ -198,3 +200,70 @@ def test_case_matrix_rejects_missing_prompt_class() -> None:
     cases = tuple(case for case in PILOT_CASES[:4] if case.prompt_class is not PromptClass.EXPLICIT)
     with pytest.raises(ValueError, match="all four prompt classes"):
         validate_skill_case_matrix(cases)
+
+
+def test_native_fixture_covers_the_frozen_case_matrix() -> None:
+    fixture_path = Path("evals/benchmarks/fixtures/skill-attribution-pilot.json")
+    fixtures = load_skill_fixtures(fixture_path)
+
+    assert tuple(fixture.case_id for fixture in fixtures) == tuple(
+        case.case_id for case in PILOT_CASES
+    )
+
+
+def test_native_verifier_requires_exact_evidence_findings_and_question_shape() -> None:
+    fixture_path = Path("evals/benchmarks/fixtures/skill-attribution-pilot.json")
+    fixtures = {row.case_id: row for row in load_skill_fixtures(fixture_path)}
+    slop = fixtures["slop-explicit"]
+    grill = fixtures["grill-explicit"]
+
+    slop_result = verify_skill_output(
+        json.dumps(
+            {
+                "answer": "duplicate implementation, stub, and TODO found",
+                "evidence_ids": ["alpha.py:1", "beta.py:1", "gamma.py:1", "delta.py:1"],
+                "finding_ids": ["duplicate-normalize", "stub-parse", "abandoned-todo"],
+                "questions": [],
+            }
+        ),
+        slop,
+    )
+    assert slop_result.passed is True
+
+    grill_result = verify_skill_output(
+        json.dumps(
+            {
+                "answer": "dependency and migration boundaries remain unresolved",
+                "evidence_ids": [],
+                "finding_ids": [],
+                "questions": [
+                    {
+                        "id": question_id,
+                        "options": ["A", "B"],
+                        "recommendation": "A",
+                    }
+                    for question_id in (
+                        "state-owner",
+                        "rollback-boundary",
+                        "compatibility-window",
+                    )
+                ],
+            }
+        ),
+        grill,
+    )
+    assert grill_result.passed is True
+
+    extra_finding = verify_skill_output(
+        json.dumps(
+            {
+                "answer": "distribution archive install",
+                "evidence_ids": [],
+                "finding_ids": ["invented"],
+                "questions": [],
+            }
+        ),
+        fixtures["slop-negative"],
+    )
+    assert extra_finding.passed is False
+    assert extra_finding.unexpected_finding_ids == ("invented",)

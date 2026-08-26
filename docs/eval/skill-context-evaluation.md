@@ -60,9 +60,18 @@ activation instead of rewarding activation by itself.
 | `deep-researcher` | bundled runtime | 1 | 1 | 1 | 1 |
 | `grilling` | bundled runtime | 1 | 1 | 1 | 1 |
 
-The 12 case IDs are the ordered workload IDs in the run spec. A production run
-must bind a native task fixture and verifier for every ID; prompt prose alone
-is not a score.
+The 12 case IDs are the ordered workload IDs in the run spec. The tracked
+[`skill-attribution-pilot.json`](../../evals/benchmarks/fixtures/skill-attribution-pilot.json)
+fixture binds every case to exact evidence, finding, answer-term, and decision-
+question expectations. `load_skill_fixtures()` rejects missing, additional,
+duplicate, or reordered case identity, and `verify_skill_output()` fails closed
+on malformed output before applying those deterministic expectations. Prompt
+prose alone is not a score.
+
+The fixture and verifier are offline measurement authorities. A live run still
+requires a separately frozen run spec and an execution callback that records
+each native result, verifier receipt, trajectory, reward, and attempt before the
+paired aggregate is accepted.
 
 ### Metrics
 

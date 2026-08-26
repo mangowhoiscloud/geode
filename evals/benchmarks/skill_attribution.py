@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
+
+SKILL_FIXTURE_SCHEMA = "geode.skill-attribution-fixtures.v1"
 
 
 class PromptClass(StrEnum):
@@ -70,6 +74,31 @@ class SkillLiftResult:
     token_delta: int
     elapsed_seconds_delta: float
     safety_violation_delta: int
+
+
+@dataclass(frozen=True, slots=True)
+class SkillFixture:
+    case_id: str
+    context: str
+    required_evidence_ids: tuple[str, ...]
+    required_finding_ids: tuple[str, ...]
+    required_answer_terms: tuple[str, ...]
+    required_question_ids: tuple[str, ...]
+    max_questions: int
+
+
+@dataclass(frozen=True, slots=True)
+class SkillVerification:
+    passed: bool
+    missing_evidence_ids: tuple[str, ...]
+    unexpected_evidence_ids: tuple[str, ...]
+    missing_finding_ids: tuple[str, ...]
+    unexpected_finding_ids: tuple[str, ...]
+    missing_answer_terms: tuple[str, ...]
+    missing_question_ids: tuple[str, ...]
+    unexpected_question_ids: tuple[str, ...]
+    malformed_question_ids: tuple[str, ...]
+    parse_error: str | None = None
 
 
 PILOT_CASES = (
@@ -147,6 +176,169 @@ PILOT_CASES = (
         "Task: summarize the already-approved release notes without reopening decisions.",
     ),
 )
+
+
+def load_skill_fixtures(
+    path: Path,
+    cases: Iterable[SkillCase] = PILOT_CASES,
+) -> tuple[SkillFixture, ...]:
+    """Load the evaluator-owned fixture and bind it to the frozen case order."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or payload.get("schema") != SKILL_FIXTURE_SCHEMA:
+        raise ValueError(f"skill fixture schema must be {SKILL_FIXTURE_SCHEMA}")
+    raw_rows = payload.get("cases")
+    if not isinstance(raw_rows, list):
+        raise ValueError("skill fixture cases must be a list")
+
+    rows: dict[str, SkillFixture] = {}
+    for index, raw in enumerate(raw_rows):
+        if not isinstance(raw, Mapping):
+            raise ValueError(f"skill fixture case {index} must be an object")
+        case_id = _required_string(raw, "case_id", case_index=index)
+        if case_id in rows:
+            raise ValueError(f"duplicate skill fixture case: {case_id}")
+        fixture = SkillFixture(
+            case_id=case_id,
+            context=_required_string(raw, "context", case_index=index),
+            required_evidence_ids=_string_tuple(raw, "required_evidence_ids", index),
+            required_finding_ids=_string_tuple(raw, "required_finding_ids", index),
+            required_answer_terms=_string_tuple(raw, "required_answer_terms", index),
+            required_question_ids=_string_tuple(raw, "required_question_ids", index),
+            max_questions=_non_negative_int(raw, "max_questions", index),
+        )
+        if fixture.max_questions < len(fixture.required_question_ids):
+            raise ValueError(f"skill fixture case {case_id} max_questions is too small")
+        rows[case_id] = fixture
+
+    case_ids = tuple(case.case_id for case in validate_skill_case_matrix(cases))
+    if set(rows) != set(case_ids):
+        missing = sorted(set(case_ids) - set(rows))
+        unexpected = sorted(set(rows) - set(case_ids))
+        raise ValueError(
+            f"skill fixture case IDs differ from the frozen matrix: "
+            f"missing={missing}, unexpected={unexpected}"
+        )
+    return tuple(rows[case_id] for case_id in case_ids)
+
+
+def verify_skill_output(text: str, fixture: SkillFixture) -> SkillVerification:
+    """Deterministically verify one model response against its native fixture."""
+    try:
+        payload = _response_object(text)
+        answer = _required_string(payload, "answer")
+        evidence_ids = set(_string_tuple(payload, "evidence_ids"))
+        finding_ids = set(_string_tuple(payload, "finding_ids"))
+        questions = payload.get("questions")
+        if not isinstance(questions, list):
+            raise ValueError("response questions must be a list")
+        question_ids: set[str] = set()
+        malformed_questions: list[str] = []
+        for index, question in enumerate(questions):
+            if not isinstance(question, Mapping):
+                raise ValueError(f"response question {index} must be an object")
+            question_id = _required_string(question, "id", case_index=index)
+            if question_id in question_ids:
+                raise ValueError(f"duplicate response question ID: {question_id}")
+            question_ids.add(question_id)
+            options = question.get("options")
+            recommendation = question.get("recommendation")
+            if (
+                not isinstance(options, list)
+                or len(options) < 2
+                or any(not isinstance(option, str) or not option.strip() for option in options)
+                or not isinstance(recommendation, str)
+                or not recommendation.strip()
+            ):
+                malformed_questions.append(question_id)
+        if len(questions) > fixture.max_questions:
+            malformed_questions.append("<question-count>")
+    except (json.JSONDecodeError, ValueError) as exc:
+        return SkillVerification(
+            passed=False,
+            missing_evidence_ids=fixture.required_evidence_ids,
+            unexpected_evidence_ids=(),
+            missing_finding_ids=fixture.required_finding_ids,
+            unexpected_finding_ids=(),
+            missing_answer_terms=fixture.required_answer_terms,
+            missing_question_ids=fixture.required_question_ids,
+            unexpected_question_ids=(),
+            malformed_question_ids=(),
+            parse_error=str(exc),
+        )
+
+    required_evidence = set(fixture.required_evidence_ids)
+    required_findings = set(fixture.required_finding_ids)
+    required_questions = set(fixture.required_question_ids)
+    answer_lower = answer.lower()
+    issues = (
+        tuple(sorted(required_evidence - evidence_ids)),
+        tuple(sorted(evidence_ids - required_evidence)),
+        tuple(sorted(required_findings - finding_ids)),
+        tuple(sorted(finding_ids - required_findings)),
+        tuple(term for term in fixture.required_answer_terms if term.lower() not in answer_lower),
+        tuple(sorted(required_questions - question_ids)),
+        tuple(sorted(question_ids - required_questions)),
+        tuple(malformed_questions),
+    )
+    return SkillVerification(
+        passed=not any(issues),
+        missing_evidence_ids=issues[0],
+        unexpected_evidence_ids=issues[1],
+        missing_finding_ids=issues[2],
+        unexpected_finding_ids=issues[3],
+        missing_answer_terms=issues[4],
+        missing_question_ids=issues[5],
+        unexpected_question_ids=issues[6],
+        malformed_question_ids=issues[7],
+    )
+
+
+def _response_object(text: str) -> dict[str, Any]:
+    from core.agent.subagent_protocol import _last_balanced_json_object
+
+    candidate = _last_balanced_json_object(text)
+    if candidate is None:
+        raise ValueError("response does not contain a JSON object")
+    payload = json.loads(candidate)
+    if not isinstance(payload, dict):
+        raise ValueError("response JSON must be an object")
+    return payload
+
+
+def _required_string(
+    payload: Mapping[str, Any],
+    field: str,
+    *,
+    case_index: int | None = None,
+) -> str:
+    value = payload.get(field)
+    if not isinstance(value, str) or not value.strip():
+        prefix = f"skill fixture case {case_index}" if case_index is not None else "response"
+        raise ValueError(f"{prefix} {field} must be a non-empty string")
+    return value.strip()
+
+
+def _string_tuple(
+    payload: Mapping[str, Any],
+    field: str,
+    case_index: int | None = None,
+) -> tuple[str, ...]:
+    value = payload.get(field)
+    prefix = f"skill fixture case {case_index}" if case_index is not None else "response"
+    if (
+        not isinstance(value, list)
+        or any(not isinstance(item, str) or not item.strip() for item in value)
+        or len(value) != len(set(value))
+    ):
+        raise ValueError(f"{prefix} {field} must contain unique non-empty strings")
+    return tuple(item.strip() for item in value)
+
+
+def _non_negative_int(payload: Mapping[str, Any], field: str, case_index: int) -> int:
+    value = payload.get(field)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"skill fixture case {case_index} {field} must be non-negative")
+    return value
 
 
 def validate_skill_case_matrix(cases: Iterable[SkillCase]) -> tuple[SkillCase, ...]:
