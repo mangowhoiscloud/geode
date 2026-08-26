@@ -75,8 +75,8 @@
     "trajectory": null,
     "verifier_receipts": null,
     "outcome_receipts": null,
-    "attempts": "<run-directory>/attempts.jsonl",
-    "analysis": "<run-directory>/analysis.json",
+    "attempts": "attempts.jsonl",
+    "analysis": "analysis.json",
     "publication_manifest": null
   },
   "privacy": {
