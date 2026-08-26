@@ -1387,7 +1387,7 @@ function RunRow() {
                 id="run-arrow"
                 markerWidth="8"
                 markerHeight="8"
-                refX="7"
+                refX="8"
                 refY="4"
                 orient="auto"
               >
@@ -1433,43 +1433,43 @@ function RunRow() {
               </text>
 
               <path
-                d="M204 80 H280"
+                d="M204 80 H276"
                 fill="none"
                 stroke={ROSE_INK}
                 markerEnd="url(#run-arrow)"
               />
               <path
-                d="M204 168 H248 V140 H280"
+                d="M204 168 H248 V140 H276"
                 fill="none"
                 stroke={ROSE_INK}
                 markerEnd="url(#run-arrow)"
               />
               <path
-                d="M204 272 H280"
+                d="M204 272 H276"
                 fill="none"
                 stroke={ROSE_INK}
                 markerEnd="url(#run-arrow)"
               />
               <path
-                d="M464 112 H528"
+                d="M464 112 H524"
                 fill="none"
                 stroke={ROSE_INK}
                 markerEnd="url(#run-arrow)"
               />
               <path
-                d="M464 272 H528"
+                d="M464 272 H524"
                 fill="none"
                 stroke={ROSE_INK}
                 markerEnd="url(#run-arrow)"
               />
               <path
-                d="M720 112 H752 V160 H780"
+                d="M720 112 H752 V160 H776"
                 fill="none"
                 stroke={ROSE_INK}
                 markerEnd="url(#run-arrow)"
               />
               <path
-                d="M720 272 H752 V208 H780"
+                d="M720 272 H752 V208 H776"
                 fill="none"
                 stroke={ROSE_INK}
                 markerEnd="url(#run-arrow)"
@@ -1495,15 +1495,15 @@ function RunRow() {
               >
                 JOB
               </text>
-              <rect x="220" y="256" width="56" height="16" fill={PAPER} />
+              <rect x="208" y="256" width="64" height="16" fill={PAPER} />
               <text
-                x="248"
+                x="240"
                 y="268"
                 textAnchor="middle"
                 fill={ROSE_INK_70}
-                fontSize="8"
+                fontSize="7.5"
               >
-                STDIO
+                STDIO / HTTP
               </text>
               <rect x="732" y="132" width="64" height="16" fill={PAPER} />
               <text
@@ -1638,17 +1638,20 @@ function RunRow() {
                 fill={PAPER}
                 stroke={ROSE_INK}
               />
-              <text x="296" y="264" fill={ROSE_INK_70} fontSize="8">
+              <text x="296" y="260" fill={ROSE_INK_70} fontSize="8">
                 TOOL HOST
               </text>
               <text
                 x="296"
-                y="284"
+                y="280"
                 fill={ROSE_INK}
                 fontSize="13"
                 fontWeight="700"
               >
                 geode-mcp
+              </text>
+              <text x="296" y="294" fill={ROSE_INK_70} fontSize="7">
+                _run_agent bridge
               </text>
 
               <rect
