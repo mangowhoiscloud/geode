@@ -71,7 +71,9 @@ functional change.
   deterministic native-fixture verifier lift separately from process metrics.
   Its subscription runner now executes every arm in a fresh state-root process,
   binds native receipts, digest trajectories, rewards, attempts, analysis, and
-  the v2 learning view, while an offline gate classifies existing session-event
+  the v2 learning view. Its model-facing schema stays within the OpenAI
+  Responses subset while the deterministic verifier retains duplicate-ID
+  enforcement. An offline gate separately classifies existing session-event
   and tool-offload evidence as exact, summary-only, unavailable, or corrupt
   without adding a second state store.
 - **Measured code-convention SOT and cross-host application skill.** GEODE now

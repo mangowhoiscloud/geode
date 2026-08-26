@@ -222,6 +222,7 @@ def test_skill_prompt_is_arm_independent_and_uses_the_strict_response_shape() ->
     assert "with-skill" not in prompt
     assert "without-skill" not in prompt
     assert SKILL_RESPONSE_SCHEMA["additionalProperties"] is False
+    assert "uniqueItems" not in json.dumps(SKILL_RESPONSE_SCHEMA)
 
     with pytest.raises(ValueError, match="identities differ"):
         build_skill_prompt(PILOT_CASES[1], fixture)
@@ -283,3 +284,19 @@ def test_native_verifier_requires_exact_evidence_findings_and_question_shape() -
     )
     assert extra_finding.passed is False
     assert extra_finding.unexpected_finding_ids == ("invented",)
+
+    duplicate_evidence = verify_skill_output(
+        json.dumps(
+            {
+                "answer": "duplicate implementation, stub, and TODO found",
+                "evidence_ids": ["alpha.py:1", "alpha.py:1"],
+                "finding_ids": ["duplicate-normalize", "stub-parse", "abandoned-todo"],
+                "questions": [],
+            }
+        ),
+        slop,
+    )
+    assert duplicate_evidence.passed is False
+    assert duplicate_evidence.parse_error == (
+        "response evidence_ids must contain unique non-empty strings"
+    )

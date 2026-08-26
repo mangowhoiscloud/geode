@@ -19,12 +19,10 @@ SKILL_RESPONSE_SCHEMA: dict[str, Any] = {
         "evidence_ids": {
             "type": "array",
             "items": {"type": "string", "minLength": 1},
-            "uniqueItems": True,
         },
         "finding_ids": {
             "type": "array",
             "items": {"type": "string", "minLength": 1},
-            "uniqueItems": True,
         },
         "questions": {
             "type": "array",

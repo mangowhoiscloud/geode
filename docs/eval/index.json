@@ -397,7 +397,7 @@
       "authority": "measurement-contract",
       "path": "docs/eval/skill-context-evaluation.md",
       "summary": "Paired runtime-skill attribution and deterministic context-recoverability profiles over existing GEODE evidence authorities.",
-      "sha256": "1209c09e17c42ed0dabf1a383e74f5d3eee6b1047bb504663fecff1174ec368e",
+      "sha256": "b1a3bf045b192616741ab4f857016bb1a725627abaa88c393d3c6290cf6c7f77",
       "triggers": [
         "ACES",
         "Scroll",

@@ -93,6 +93,27 @@ learning view. Private child-process state and logs remain outside the artifact
 bundle. The runner supplies execution and evidence closure; it does not itself
 authorize publication, promotion, release, or a second model call.
 
+#### Observed GAP: OpenAI response-schema subset
+
+The first frozen execution
+`skill-attribution-sol-max-paired-20260826t110744z` is retained as an invalid
+run. All 24 arms stopped before generation with `model_action_required` and
+zero input/output tokens because the OpenAI Responses backend rejected
+`uniqueItems` in the model-facing `evidence_ids` array schema. The aggregate is
+therefore `not-measurable`; none of those arms may be relabelled or replaced.
+
+The duplicate constraint belongs to `verify_skill_output()`, which already
+fails closed on repeated identifiers. The response schema now keeps only the
+provider-supported array/item shape instead of duplicating that verifier rule.
+This is a source-schema correction, not adapter-side silent rewriting: the
+other `uniqueItems` occurrences in this repository are persisted artifact
+schemas and do not enter the OpenAI response-format path.
+
+Acceptance requires a new run ID and output root, the same 12-case workload,
+an exact post-fix GEODE revision, 24 non-infrastructure-invalid arms, and the
+unchanged native verifier. The invalid run remains part of the attempt history
+but never enters the score denominator.
+
 ### Metrics
 
 The primary result is the signed native verifier delta for each pair:
