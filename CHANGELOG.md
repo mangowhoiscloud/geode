@@ -66,6 +66,10 @@ functional change.
 
 ### Added
 
+- **Harbor ATIF export for Terminal-Bench.** The GEODE external agent now
+  validates and writes ATIF 1.7 from the canonical session timeline, and it
+  leaves timeout enforcement to Harbor's task-owned limits instead of adding a
+  fixed 1,200-second cap.
 - **Skill attribution and context-recoverability evaluation gates.** A
   run-spec-bound paired runner isolates target-skill availability and reports
   deterministic native-fixture verifier lift separately from process metrics.

@@ -71,14 +71,19 @@ It:
 
 - gives AgenticLoop one terminal_exec tool backed by Harbor's isolated
   environment.exec;
-- uses the frozen provider, route, effort, model, and agent time budget;
+- uses the frozen provider, route, effort, and model while leaving the agent
+  timeout at zero so Harbor's canonical task limit remains authoritative;
 - leaves task/container/verifier ownership with Harbor;
-- exports a digest-oriented geode.trajectory@1 record per trial.
+- exports a digest-oriented geode.trajectory@1 sidecar and an ATIF 1.7
+  `trajectory.json` projected from the same canonical session timeline.
 
-The GEODE trajectory is not Harbor ATIF and the adapter does not declare
-SUPPORTS_ATIF=true. GEODE runs are therefore valid internal measurements but
-not official-submission artifacts until a separately reviewed ATIF boundary is
-implemented.
+The adapter declares `SUPPORTS_ATIF=true` only after validating the projection
+with Harbor's own ATIF model. Scope-incomplete session history or unmatched
+tool events fail closed. GEODE's event contract does not retain exact LLM-call
+grouping, so the projection emits one tool call per agent step and leaves
+ATIF's `llm_call_count` unknown; this limitation is recorded in every root
+trajectory. Official submission authority still requires the canonical full
+suite, Hub upload, static analysis, and maintainer reward-hacking review.
 
 ## Required execution ladder
 
