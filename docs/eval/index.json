@@ -11,7 +11,7 @@
     "trajectory": "core/observability/schemas/trajectory.schema.json",
     "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
   },
-  "document_count": 19,
+  "document_count": 20,
   "documents": [
     {
       "id": "agent-world-comparison",
@@ -383,6 +383,31 @@
       ],
       "contracts": [
         "docs/eval/agent-world-comparison-contract.md",
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
+      "id": "skill-context-evaluation",
+      "family": "skill-context-evaluation",
+      "title": "Skill Attribution and Context Recoverability",
+      "kind": "benchmark",
+      "status": "canonical",
+      "authority": "measurement-contract",
+      "path": "docs/eval/skill-context-evaluation.md",
+      "summary": "Paired runtime-skill attribution and deterministic context-recoverability profiles over existing GEODE evidence authorities.",
+      "sha256": "71470e9ac9e8258dec69007ec93c1b58f5947b5458116acf87ec2b19cbf14ace",
+      "triggers": [
+        "ACES",
+        "Scroll",
+        "compaction",
+        "context recoverability",
+        "skill lift",
+        "tool offload"
+      ],
+      "contracts": [
+        "core/observability/schemas/trajectory.schema.json",
         "docs/eval/schemas/analysis.schema.json",
         "docs/eval/schemas/attempt.schema.json",
         "docs/eval/schemas/run-spec.schema.json"

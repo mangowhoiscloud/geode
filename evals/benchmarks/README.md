@@ -8,6 +8,11 @@ runtime to an external execution platform. They are separate roles here.
 
 It covers:
 
+- `skill_attribution`: a run-spec-bound paired runner whose only treatment
+  difference is target-skill availability, with native verifier lift kept
+  separate from process metrics.
+- `context_recoverability`: deterministic exact / summary-only / unavailable /
+  corrupt classification over existing session-event and tool-offload evidence.
 - `mcpmark`: upstream `eval-sys/mcpmark` pinned by commit, with GEODE and
   filesystem-only Codex CLI `BaseMCPAgent` adapters in
   `mcpmark/agent.py`.
