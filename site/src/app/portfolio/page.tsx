@@ -577,13 +577,15 @@ function HeroField() {
         </motion.div>
       </motion.div>
       <div
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-4 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] sm:px-8 sm:text-[11px]"
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-10"
         style={FIELD_META_STYLE}
       >
-        <span className="bg-[#F49BC4] px-2 py-1">
-          geode v{GEODE_SOT.version}
-        </span>
-        <span className="bg-[#F49BC4] px-2 py-1">apache-2.0 · 2026</span>
+        <div className="mx-auto flex max-w-7xl px-5 pb-4 sm:px-8">
+          <div className="flex max-w-[700px] flex-wrap items-center gap-x-6 gap-y-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] sm:text-[11px]">
+            <span>geode v{GEODE_SOT.version}</span>
+            <span>apache-2.0 · 2026</span>
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -1203,78 +1205,109 @@ function SeedgenDiagram() {
         </text>
         <line x1="8" y1="216" x2="512" y2="216" stroke={ROSE_INK_70} />
 
-        <line x1="88" y1="244" x2="104" y2="244" stroke={ROSE_INK} />
-        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(104 244)" />
-        <line x1="192" y1="244" x2="208" y2="244" stroke={ROSE_INK} />
-        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(208 244)" />
-        <line x1="312" y1="244" x2="328" y2="244" stroke={ROSE_INK} />
-        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(328 244)" />
-        <line x1="376" y1="244" x2="388" y2="236" stroke={ROSE_INK} />
-        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(392 234) rotate(-34)" />
-        <path d="M352 268 V290 H388" fill="none" stroke={ROSE_INK} />
-        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(392 290)" />
-        <path d="M452 252 V320 H304" fill="none" stroke={ROSE_INK_70} />
-        <path d="M452 308 V320" fill="none" stroke={ROSE_INK_70} />
-        <polygon points="4,-3.5 -4,0 4,3.5" fill={ROSE_INK_70} transform="translate(300 320)" />
-        <path d="M252 320 H148 V268" fill="none" stroke={ROSE_INK_70} strokeDasharray="4 4" />
-        <polygon points="-3,4 0,-4 3,4" fill={ROSE_INK_70} transform="translate(148 264)" />
-        <rect x="176" y="312" width="64" height="16" fill={PAPER} />
-        <text x="208" y="323" textAnchor="middle" fill={ROSE_INK_70} fontSize="7">
-          CONTINUE
+        <line x1="80" y1="244" x2="96" y2="244" stroke={ROSE_INK} />
+        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(96 244)" />
+        <line x1="176" y1="244" x2="192" y2="244" stroke={ROSE_INK} />
+        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(192 244)" />
+        <line x1="288" y1="244" x2="292" y2="244" stroke={ROSE_INK} />
+        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(292 244)" />
+        <line x1="340" y1="244" x2="352" y2="244" stroke={ROSE_INK} />
+        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(352 244)" />
+        <line x1="408" y1="244" x2="440" y2="244" stroke={ROSE_INK} />
+        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(440 244)" />
+        <path d="M316 268 V280" fill="none" stroke={ROSE_INK} />
+        <polygon
+          points="-3,-3.5 4,0 -3,3.5"
+          fill={ROSE_INK}
+          transform="translate(316 280) rotate(90)"
+        />
+        <path d="M388 296 H424 V244" fill="none" stroke={ROSE_INK_70} />
+        <circle cx="424" cy="244" r="3" fill={ROSE_INK} />
+        <path d="M464 268 V296" fill="none" stroke={ROSE_INK} />
+        <polygon
+          points="-3,-3.5 4,0 -3,3.5"
+          fill={ROSE_INK}
+          transform="translate(464 296) rotate(90)"
+        />
+        <text x="476" y="284" fill={ROSE_INK} fontSize="7" fontWeight="700">
+          YES
         </text>
-        <line x1="276" y1="344" x2="276" y2="356" stroke={ROSE_INK_70} />
-        <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK_70} transform="translate(276 360) rotate(90)" />
+        <path
+          d="M488 244 H508 V344 H136 V264"
+          fill="none"
+          stroke={ROSE_INK_70}
+          strokeDasharray="4 4"
+        />
+        <polygon
+          points="-3,4 0,-4 3,4"
+          fill={ROSE_INK_70}
+          transform="translate(136 264)"
+        />
+        <rect x="232" y="332" width="136" height="16" fill={PAPER} />
+        <text x="300" y="343" textAnchor="middle" fill={ROSE_INK_70} fontSize="7">
+          NO · NEXT CANDIDATE
+        </text>
 
-        <rect x="8" y="224" width="80" height="40" fill={PAPER} stroke={ROSE_INK} />
-        <text x="48" y="240" textAnchor="middle" fill={ROSE_INK} fontSize="9" fontWeight="700">
+        <rect x="8" y="224" width="72" height="40" fill={PAPER} stroke={ROSE_INK} />
+        <text x="44" y="240" textAnchor="middle" fill={ROSE_INK} fontSize="9" fontWeight="700">
           prepare
         </text>
-        <text x="48" y="254" textAnchor="middle" fill={ROSE_INK_70} fontSize="7">
+        <text x="44" y="254" textAnchor="middle" fill={ROSE_INK_70} fontSize="7">
           frozen config
         </text>
-        <rect x="104" y="224" width="88" height="40" fill={PAPER} stroke={ROSE_INK} />
-        <text x="148" y="240" textAnchor="middle" fill={ROSE_INK} fontSize="9" fontWeight="700">
+        <rect x="96" y="224" width="80" height="40" fill={PAPER} stroke={ROSE_INK} />
+        <text x="136" y="240" textAnchor="middle" fill={ROSE_INK} fontSize="9" fontWeight="700">
           candidate
         </text>
-        <text x="148" y="254" textAnchor="middle" fill={ROSE_INK_70} fontSize="7">
+        <text x="136" y="254" textAnchor="middle" fill={ROSE_INK_70} fontSize="7">
           private head
         </text>
-        <rect x="208" y="224" width="104" height="40" fill={PAPER} stroke={ROSE_INK} />
-        <text x="260" y="240" textAnchor="middle" fill={ROSE_INK} fontSize="9" fontWeight="700">
+        <rect x="192" y="224" width="96" height="40" fill={PAPER} stroke={ROSE_INK} />
+        <text x="240" y="240" textAnchor="middle" fill={ROSE_INK} fontSize="9" fontWeight="700">
           paired assay
         </text>
-        <text x="260" y="254" textAnchor="middle" fill={ROSE_INK_70} fontSize="7">
+        <text x="240" y="254" textAnchor="middle" fill={ROSE_INK_70} fontSize="7">
           base + candidate
         </text>
-        <polygon points="352,220 376,244 352,268 328,244" fill={PAPER} stroke={ROSE_INK} />
-        <text x="352" y="247" textAnchor="middle" fill={ROSE_INK} fontSize="8">
+        <polygon points="316,220 340,244 316,268 292,244" fill={PAPER} stroke={ROSE_INK} />
+        <text x="316" y="247" textAnchor="middle" fill={ROSE_INK} fontSize="8">
           decide
         </text>
-        <rect x="392" y="216" width="120" height="36" fill={ROSE_INK} stroke={ROSE_INK} />
-        <text x="452" y="232" textAnchor="middle" fill={PAPER} fontSize="9" fontWeight="700">
+        <rect x="352" y="224" width="56" height="40" fill={ROSE_INK} stroke={ROSE_INK} />
+        <text x="380" y="240" textAnchor="middle" fill={PAPER} fontSize="9" fontWeight="700">
           KEEP
         </text>
-        <text x="452" y="244" textAnchor="middle" fill={PAPER} fontSize="7">
-          CAS advance
+        <text x="380" y="254" textAnchor="middle" fill={PAPER} fontSize="7">
+          CAS +1
         </text>
-        <rect x="392" y="272" width="120" height="36" fill={PAPER} stroke={ROSE_INK} />
-        <text x="452" y="288" textAnchor="middle" fill={ROSE_INK} fontSize="9" fontWeight="700">
+        <rect x="276" y="280" width="112" height="32" fill={PAPER} stroke={ROSE_INK} />
+        <text x="332" y="294" textAnchor="middle" fill={ROSE_INK} fontSize="8" fontWeight="700">
           REJECT / INVALID
         </text>
-        <text x="452" y="300" textAnchor="middle" fill={ROSE_INK_70} fontSize="7">
+        <text x="332" y="306" textAnchor="middle" fill={ROSE_INK_70} fontSize="7">
           head unchanged
         </text>
-        <polygon points="276,296 300,320 276,344 252,320" fill={PAPER} stroke={ROSE_INK} />
-        <text x="276" y="323" textAnchor="middle" fill={ROSE_INK} fontSize="7">
-          limits?
+        <polygon points="464,220 488,244 464,268 440,244" fill={PAPER} stroke={ROSE_INK} />
+        <text x="464" y="240" textAnchor="middle" fill={ROSE_INK} fontSize="7">
+          limits
+        </text>
+        <text x="464" y="250" textAnchor="middle" fill={ROSE_INK} fontSize="7">
+          reached?
+        </text>
+        <rect x="412" y="296" width="104" height="32" fill={PAPER} stroke={ROSE_INK} />
+        <text x="464" y="310" textAnchor="middle" fill={ROSE_INK} fontSize="8" fontWeight="700">
+          summary.json
+        </text>
+        <text x="464" y="322" textAnchor="middle" fill={ROSE_INK_70} fontSize="7">
+          run closed
         </text>
 
         <line x1="8" y1="360" x2="512" y2="360" stroke={ROSE_INK_70} strokeDasharray="2 4" />
         <text x="8" y="376" fill={ROSE_INK} fontSize="8" fontWeight="700">
-          STOP → SEALED TEST · RELEASE
+          ELIGIBLE KEEP → SEALED TEST
         </text>
         <text x="512" y="376" textAnchor="end" fill={ROSE_INK_70} fontSize="7">
-          promotion_authority=none
+          release stays separate
         </text>
       </g>
     </svg>
@@ -2844,10 +2877,10 @@ function DataLineageBanner() {
       className="h-full w-full"
     >
       <g fontFamily="var(--font-fira-code), monospace">
-        <text x="8" y="16" fill={ROSE_INK} fontSize="12" fontWeight="700">
+        <text x="8" y="16" fill={ROSE_INK} fontSize="14" fontWeight="700">
           EVAL DATA EVOLUTION
         </text>
-        <text x="512" y="16" textAnchor="end" fill={ROSE_INK_70} fontSize="8">
+        <text x="512" y="16" textAnchor="end" fill={ROSE_INK_70} fontSize="10">
           schema_id = geode.*
         </text>
         <line x1="8" y1="28" x2="512" y2="28" stroke={ROSE_INK_70} />
@@ -2902,7 +2935,7 @@ function DataLineageBanner() {
               x="8"
               y={row.y + 16}
               fill={row.label === "CURRENT" ? ROSE_INK : ROSE_INK_70}
-              fontSize="8"
+              fontSize="9"
               fontWeight="700"
             >
               {row.label}
@@ -2923,7 +2956,7 @@ function DataLineageBanner() {
                   y={row.y + 16}
                   textAnchor="middle"
                   fill={node.focal ? PAPER : ROSE_INK}
-                  fontSize="8"
+                  fontSize="9.5"
                   fontWeight="700"
                 >
                   {node.title}
@@ -2933,7 +2966,7 @@ function DataLineageBanner() {
                   y={row.y + 32}
                   textAnchor="middle"
                   fill={node.focal ? PAPER : ROSE_INK_70}
-                  fontSize="8"
+                  fontSize="9"
                 >
                   {node.sub}
                 </text>
@@ -2955,7 +2988,7 @@ function DataLineageBanner() {
           y="248"
           textAnchor="middle"
           fill={ROSE_INK_70}
-          fontSize="8"
+          fontSize="9.5"
         >
           {t(
             locale,
@@ -2984,15 +3017,15 @@ function DelegateDiagram() {
       )}
     >
       <g fontFamily="var(--font-fira-code), monospace">
-        <text x="8" y="16" fill={ROSE_INK} fontSize="12" fontWeight="700">
+        <text x="8" y="16" fill={ROSE_INK} fontSize="14" fontWeight="700">
           DELEGATE
         </text>
-        <text x="512" y="16" textAnchor="end" fill={ROSE_INK_70} fontSize="8">
+        <text x="512" y="16" textAnchor="end" fill={ROSE_INK_70} fontSize="10">
           depth 1 / session cap 15
         </text>
         <line x1="8" y1="28" x2="512" y2="28" stroke={ROSE_INK_70} />
 
-        <text x="8" y="50" fill={ROSE_INK_70} fontSize="8" fontWeight="700">
+        <text x="8" y="50" fill={ROSE_INK_70} fontSize="10" fontWeight="700">
           CONTRACT
         </text>
         <rect
@@ -3008,13 +3041,13 @@ function DelegateDiagram() {
           y="52"
           textAnchor="middle"
           fill={PAPER}
-          fontSize="8.5"
+          fontSize="10"
           fontWeight="700"
         >
           task / model / tool policy
         </text>
 
-        <text x="8" y="84" fill={ROSE_INK_70} fontSize="8" fontWeight="700">
+        <text x="8" y="84" fill={ROSE_INK_70} fontSize="10" fontWeight="700">
           GATE
         </text>
         <line
@@ -3038,13 +3071,13 @@ function DelegateDiagram() {
           y="79"
           textAnchor="middle"
           fill={ROSE_INK}
-          fontSize="7.5"
+          fontSize="9"
           fontWeight="700"
         >
           deny auth / personal / delegate
         </text>
 
-        <text x="8" y="119" fill={ROSE_INK_70} fontSize="8" fontWeight="700">
+        <text x="8" y="119" fill={ROSE_INK_70} fontSize="10" fontWeight="700">
           RUN
         </text>
         <line x1="306" y1="85" x2="306" y2="96" stroke={ROSE_INK} />
@@ -3070,7 +3103,7 @@ function DelegateDiagram() {
               y="119"
               textAnchor="middle"
               fill={ROSE_INK}
-              fontSize="8.5"
+              fontSize="10"
               fontWeight="700"
             >
               child session {String.fromCharCode(65 + index)}
@@ -3080,14 +3113,14 @@ function DelegateDiagram() {
               y="131"
               textAnchor="middle"
               fill={ROSE_INK_70}
-              fontSize="7"
+              fontSize="8.5"
             >
               isolated context
             </text>
           </g>
         ))}
 
-        <text x="8" y="166" fill={ROSE_INK_70} fontSize="8" fontWeight="700">
+        <text x="8" y="166" fill={ROSE_INK_70} fontSize="10" fontWeight="700">
           JOIN
         </text>
         {children.map((x) => (
@@ -3113,7 +3146,7 @@ function DelegateDiagram() {
           y="168"
           textAnchor="middle"
           fill={PAPER}
-          fontSize="8.5"
+          fontSize="10"
           fontWeight="700"
         >
           SubResult &#123; task_id / status / output &#125;
@@ -3123,7 +3156,7 @@ function DelegateDiagram() {
           y="193"
           textAnchor="middle"
           fill={ROSE_INK_70}
-          fontSize="7.5"
+          fontSize="9.5"
         >
           {t(
             locale,
@@ -3174,8 +3207,8 @@ const features: {
     index: "#3 direct",
     headKo: "관측할 때마다 다음 탐색 범위를 줄입니다",
     headEn: "NARROWS THE SEARCH AFTER EACH OBSERVATION",
-    ko: "GEODE는 긴 작업을 부분 관측 아래의 탐색으로 다룹니다. /goal이 지속 목표를 보존하는 동안 /plan은 경로를 고치고 /grill은 탐색을 가르는 결정을 해소합니다. typed state는 모델에 lifecycle 권한을 넘기지 않고 같은 탐색의 지속, 일시정지, 종료를 결정합니다.",
-    en: "GEODE treats long-running work as search under partial observation. /goal preserves the durable objective while /plan revises the route and /grill resolves decisions that constrain it. Typed state decides whether the same search continues, pauses, or settles without granting the model lifecycle authority.",
+    ko: "GEODE는 관측할 때마다 긴 작업의 다음 탐색 범위를 줄입니다. /goal은 목표를 보존하고, /plan과 /grill은 typed state 안에서 경로와 결정을 갱신합니다.",
+    en: "GEODE narrows long tasks after each observation. /goal preserves the objective while /plan and /grill update the route and its blocking decisions under typed state.",
     banner: <SearchDirectionBanner />,
   },
   {
@@ -3242,10 +3275,40 @@ const features: {
 ];
 
 /** One plate as a postcard: index, perforated Geodi stamp, art, caption. */
-function PlateCard({ feature }: { feature: (typeof features)[number] }) {
+function PlateCard({
+  feature,
+  onOpen,
+}: {
+  feature: (typeof features)[number];
+  onOpen?: () => void;
+}) {
   const locale = useLocale();
+  const needsDiagramRoom = ["direct", "eval-lineage", "delegate"].includes(
+    feature.id,
+  );
   return (
-    <div className="flex aspect-[100/148] min-w-0 flex-col bg-[#FFF0F8] p-4 pb-6">
+    <div
+      role={onOpen ? "button" : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      aria-haspopup={onOpen ? "dialog" : undefined}
+      aria-label={
+        onOpen
+          ? t(locale, `${feature.headKo} 크게 보기`, `Open ${feature.headEn}`)
+          : undefined
+      }
+      onClick={onOpen}
+      onKeyDown={
+        onOpen
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onOpen();
+              }
+            }
+          : undefined
+      }
+      className={`flex h-full min-w-0 flex-col bg-[#FFF0F8] p-4 pb-6 ${onOpen ? "cursor-zoom-in focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#FFF0F8]" : ""}`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div
           className="flex items-center gap-2 pt-1 font-mono text-[10.5px] uppercase tracking-[0.22em]"
@@ -3275,7 +3338,9 @@ function PlateCard({ feature }: { feature: (typeof features)[number] }) {
           imageRendering: "pixelated",
         }}
       >
-        <div className="flex h-full w-full min-w-0 items-center justify-center px-2 py-3">
+        <div
+          className={`flex h-full w-full min-w-0 items-center justify-center py-3 ${needsDiagramRoom ? "px-0" : "px-2"}`}
+        >
           {feature.banner}
         </div>
       </div>
@@ -3298,20 +3363,32 @@ function PlateCard({ feature }: { feature: (typeof features)[number] }) {
 function FeaturesGrid() {
   const locale = useLocale();
   const reduceMotion = useReducedMotion();
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [selectedFeature, setSelectedFeature] = useState<
+    (typeof features)[number] | null
+  >(null);
+  const [isDialogClosing, setIsDialogClosing] = useState(false);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (selectedFeature && dialog && !dialog.open) dialog.showModal();
+  }, [selectedFeature]);
+
+  const closeDialog = () => {
+    const dialog = dialogRef.current;
+    if (!dialog?.open) return;
+    if (reduceMotion) dialog.close();
+    else setIsDialogClosing(true);
+  };
+
   return (
     <section id="features" className="bg-[var(--acc-artifact)]">
       <div className="mx-auto max-w-7xl px-6 py-16 sm:py-24">
-        <p
-          className="text-center font-mono text-[10.5px] font-semibold uppercase tracking-[0.3em]"
-          style={FIELD_META_STYLE}
-        >
-          {t(locale, "도판 i-ix", "plates i-ix")}
-        </p>
-        <div className="mt-12 grid gap-10 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-10 md:grid-cols-2 xl:grid-cols-3">
           {features.map((feature, i) => (
             <motion.div
               key={feature.id}
-              className="min-w-0"
+              className="aspect-[100/148] min-w-0"
               initial={{ opacity: 0, y: reduceMotion ? 0 : 46 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-140px" }}
@@ -3321,15 +3398,103 @@ function FeaturesGrid() {
                 ease: [0.22, 1, 0.36, 1],
               }}
             >
-              <PlateCard feature={feature} />
+              <PlateCard
+                feature={feature}
+                onOpen={() => {
+                  setIsDialogClosing(false);
+                  setSelectedFeature(feature);
+                }}
+              />
             </motion.div>
           ))}
         </div>
+        <dialog
+          ref={dialogRef}
+          aria-label={
+            selectedFeature
+              ? t(
+                  locale,
+                  `${selectedFeature.headKo} 상세 엽서`,
+                  `${selectedFeature.headEn} postcard detail`,
+                )
+              : undefined
+          }
+          data-closing={isDialogClosing ? "true" : undefined}
+          onCancel={(event) => {
+            event.preventDefault();
+            closeDialog();
+          }}
+          onClose={() => {
+            setIsDialogClosing(false);
+            setSelectedFeature(null);
+          }}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) closeDialog();
+          }}
+          className="postcard-dialog m-auto max-h-[94dvh] max-w-none overflow-visible bg-transparent p-0"
+        >
+          {selectedFeature ? (
+            <motion.div
+              initial={reduceMotion ? false : { opacity: 0 }}
+              animate={{ opacity: isDialogClosing ? 0 : 1 }}
+              transition={{
+                duration: isDialogClosing ? 0.18 : 0.32,
+                ease: isDialogClosing
+                  ? [0.22, 1, 0.36, 1]
+                  : [0.25, 0.1, 0.25, 1],
+              }}
+              onAnimationComplete={() => {
+                if (isDialogClosing) dialogRef.current?.close();
+              }}
+              className="relative flex min-h-[90dvh] min-w-[92vw] items-center justify-center overflow-hidden p-5 sm:p-8"
+              style={{
+                backgroundColor: "#8D4C67",
+                backgroundImage:
+                  "linear-gradient(110deg, rgba(255,240,248,0.09), transparent 38%), repeating-linear-gradient(2deg, rgba(78,20,45,0.16) 0 1px, transparent 1px 18px)",
+                boxShadow: "0 32px 90px rgba(74, 25, 49, 0.48)",
+              }}
+            >
+              <button
+                type="button"
+                aria-label={t(locale, "상세 엽서 닫기", "Close postcard detail")}
+                onClick={closeDialog}
+                className="absolute right-3 top-3 z-[1] flex h-9 w-9 items-center justify-center rounded-md text-[#FFF0F8]/70 transition-[background-color,color,transform] hover:bg-[#FFF0F8]/10 hover:text-[#FFF0F8] focus-visible:bg-[#FFF0F8]/10 focus-visible:text-[#FFF0F8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FFF0F8] active:scale-95 active:bg-[#FFF0F8]/15 sm:right-5 sm:top-5"
+              >
+                <svg aria-hidden="true" viewBox="0 0 20 20" className="h-5 w-5" fill="none">
+                  <path
+                    d="M5 5L15 15M15 5L5 15"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+              <motion.div
+                initial={
+                  reduceMotion ? false : { opacity: 0, scale: 0.9, y: 30 }
+                }
+                animate={
+                  isDialogClosing
+                    ? { opacity: 0, scale: 0.97, y: 10 }
+                    : { opacity: 1, scale: 1, y: 0 }
+                }
+                transition={
+                  isDialogClosing
+                    ? { duration: 0.18, ease: [0.22, 1, 0.36, 1] }
+                    : { type: "spring", stiffness: 170, damping: 22, mass: 0.8 }
+                }
+                className="aspect-[100/148] shadow-[0_28px_72px_rgba(72,18,43,0.42)]"
+                style={{ width: "min(86vw, 56dvh, 720px)" }}
+              >
+                <PlateCard feature={selectedFeature} />
+              </motion.div>
+            </motion.div>
+          ) : null}
+        </dialog>
         <div
-          className="mt-16 flex items-end justify-between font-mono text-[10px] uppercase tracking-[0.18em]"
+          className="mt-16 flex items-end justify-end font-mono text-[10px] uppercase tracking-[0.18em]"
           style={FIELD_META_STYLE}
         >
-          <span>the fixed point · plates i-ix</span>
           <span>evidence: core/ · evals/ · evolve/</span>
         </div>
       </div>
