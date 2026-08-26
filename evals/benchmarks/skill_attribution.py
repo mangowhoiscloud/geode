@@ -12,6 +12,41 @@ from pathlib import Path
 from typing import Any
 
 SKILL_FIXTURE_SCHEMA = "geode.skill-attribution-fixtures.v1"
+SKILL_RESPONSE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "answer": {"type": "string", "minLength": 1},
+        "evidence_ids": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": True,
+        },
+        "finding_ids": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": True,
+        },
+        "questions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string", "minLength": 1},
+                    "options": {
+                        "type": "array",
+                        "items": {"type": "string", "minLength": 1},
+                        "minItems": 2,
+                    },
+                    "recommendation": {"type": "string", "minLength": 1},
+                },
+                "required": ["id", "options", "recommendation"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["answer", "evidence_ids", "finding_ids", "questions"],
+    "additionalProperties": False,
+}
 
 
 class PromptClass(StrEnum):
@@ -290,6 +325,22 @@ def verify_skill_output(text: str, fixture: SkillFixture) -> SkillVerification:
         missing_question_ids=issues[5],
         unexpected_question_ids=issues[6],
         malformed_question_ids=issues[7],
+    )
+
+
+def build_skill_prompt(case: SkillCase, fixture: SkillFixture) -> str:
+    """Render the arm-identical synthetic task without leaking verifier answers."""
+    if case.case_id != fixture.case_id:
+        raise ValueError("skill case and fixture identities differ")
+    return (
+        f"Task:\n{case.prompt}\n\n"
+        f"Synthetic fixture context:\n{fixture.context}\n\n"
+        "Output contract:\n"
+        "Return one JSON object with exactly these fields: answer (string), "
+        "evidence_ids (string array), finding_ids (string array), and questions "
+        "(array of objects with id, at least two non-empty options, and one "
+        "non-empty recommendation). Use only identifiers present in the supplied "
+        "context. Use empty arrays when no evidence, finding, or question applies."
     )
 
 

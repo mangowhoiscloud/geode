@@ -21,7 +21,8 @@ eval_contracts:
 
 # Skill Attribution and Context Recoverability
 
-Status: executable offline contract; no score-bearing live run has been approved or reported.
+Status: executable offline and subscription-runner contract; no score-bearing
+result has been reported.
 
 This profile turns two frontier observations into separate GEODE measurements:
 
@@ -68,10 +69,29 @@ duplicate, or reordered case identity, and `verify_skill_output()` fails closed
 on malformed output before applying those deterministic expectations. Prompt
 prose alone is not a score.
 
-The fixture and verifier are offline measurement authorities. A live run still
-requires a separately frozen run spec and an execution callback that records
-each native result, verifier receipt, trajectory, reward, and attempt before the
-paired aggregate is accepted.
+The fixture and verifier are offline measurement authorities.
+[`skill_attribution_live.py`](../../evals/benchmarks/skill_attribution_live.py)
+is the concrete subscription execution adapter. It accepts only a separately
+frozen, explicitly approved run spec pinned to `openai` / `subscription` /
+`gpt-5.6-sol` / `max`, requires a clean matching GEODE revision, confirms that
+both arms expose the same three tool schemas, and launches every arm in a fresh
+child process with a unique `GEODE_STATE_ROOT`. The model-visible tool set is
+limited to `use_skill`, `get_grill`, and `update_grill`; only the target skill's
+registry availability differs between matched arms.
+
+```bash
+uv run python -m evals.benchmarks.skill_attribution_live run \
+  --run-spec <frozen-run-spec.json> \
+  --fixture evals/benchmarks/fixtures/skill-attribution-pilot.json \
+  --output-dir <new-run-directory>
+```
+
+The output directory must not exist. A retry uses a fresh root. Each accepted
+run binds native results, deterministic verifier receipts, per-arm digest
+trajectories, evaluator rewards, attempts, analysis, and the validated v2
+learning view. Private child-process state and logs remain outside the artifact
+bundle. The runner supplies execution and evidence closure; it does not itself
+authorize publication, promotion, release, or a second model call.
 
 ### Metrics
 
