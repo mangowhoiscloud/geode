@@ -125,6 +125,13 @@ zero lift for `deep-researcher`, 0/3 with-skill passes for explicit prompts,
 and one negative-control skill activation. Those secondary results block
 runtime promotion and package-release claims.
 
+A post-run contract audit identified three measurement gaps without changing
+the frozen score: hidden required finding IDs (SA-GAP-01), answer-only term
+matching for structured grilling questions (SA-GAP-02), and a seeded,
+trigger-bearing grilling negative control (SA-GAP-03). The evaluator now fails
+closed on hidden IDs, scores question prose, and keeps negative controls free of
+grill state. Only a new prospective run may measure the corrected contract.
+
 ### Metrics
 
 The primary result is the signed native verifier delta for each pair:

@@ -17,6 +17,7 @@ from evals.benchmarks.skill_attribution import (
 )
 from evals.benchmarks.skill_attribution_live import (
     _build_loop,
+    _requires_grill_state,
     _tool_metrics,
     _validate_live_spec,
     _write_aggregates,
@@ -88,6 +89,13 @@ def test_tool_metrics_separate_activation_irrelevance_and_safety() -> None:
         0,
     )
     assert _tool_metrics([{"tool": "shell", "input": {}}], request) == (False, 1, 1)
+
+
+def test_negative_control_does_not_receive_grill_state() -> None:
+    request = _request()
+
+    assert _requires_grill_state(replace(request, case=PILOT_CASES[8])) is True
+    assert _requires_grill_state(replace(request, case=PILOT_CASES[11])) is False
 
 
 def test_live_spec_rejects_model_or_fixture_drift() -> None:

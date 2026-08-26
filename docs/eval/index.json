@@ -397,7 +397,7 @@
       "authority": "paired-skill-diagnostic",
       "path": "docs/eval/2026-08-26-skill-attribution-sol-max-paired.md",
       "summary": "Prospective 12-case paired diagnostic of three GEODE runtime skills with gpt-5.6-sol/max; all 24 arms were valid and the signed native-verifier delta was +4/12.",
-      "sha256": "959a1fa304180558250fe7f97292daf57c320c4dfb88fd7dcb912255c1a80f76",
+      "sha256": "f2588a1c346f44c15097373c31ab7f0da6f23016b9ca4e2576053228297e1564",
       "triggers": [
         "ACES",
         "context recoverability",
@@ -422,7 +422,7 @@
       "authority": "measurement-contract",
       "path": "docs/eval/skill-context-evaluation.md",
       "summary": "Paired runtime-skill attribution and deterministic context-recoverability profiles over existing GEODE evidence authorities.",
-      "sha256": "8e2a6a26a8e09c61e2d750f19d65a3d4701f8de656f1c7ce859d8aa83e96c6c0",
+      "sha256": "86a496798c55679d5d80bf3969fef4901f52e7ec6e757b6ea991aa6ef2315308",
       "triggers": [
         "ACES",
         "Scroll",

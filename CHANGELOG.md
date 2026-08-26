@@ -80,6 +80,11 @@ functional change.
   enforcement. An offline gate separately classifies existing session-event
   and tool-offload evidence as exact, summary-only, unavailable, or corrupt
   without adding a second state store.
+- **Skill-attribution fixtures now fail closed on hidden verifier IDs.** Every
+  required evidence, finding, and question ID must occur in the model-visible
+  context; question terms are scored across the question body, options, and
+  recommendation, and negative grilling controls no longer receive seeded
+  interview state.
 - **Measured code-convention SOT and cross-host application skill.** GEODE now
   documents package ownership, abstraction choice, module and class naming,
   Python data forms, schema/version axes, test placement, and the TypeScript
