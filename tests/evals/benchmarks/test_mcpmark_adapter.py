@@ -945,7 +945,7 @@ def test_mcpmark_adapter_keeps_service_specific_server_overrides() -> None:
     ).read_text(encoding="utf-8")
 
     assert "ghcr.io/github/github-mcp-server:v0.15.0" in source
-    assert '"--python"' in source
+    assert '"--python"' in source and '"--with=mcp<2"' in source
     assert "sys.executable" in source
 
 
