@@ -558,6 +558,23 @@ function HeroField() {
           >
             {t(locale, "문서 읽기", "Read the docs")}
           </Link>
+          <a
+            href="/geode/report.pdf"
+            aria-label={t(
+              locale,
+              "GEODE 90쪽 포트폴리오 PDF 열기",
+              "Open the 90-page GEODE portfolio PDF",
+            )}
+            className="group inline-flex touch-manipulation items-center gap-2 rounded border border-[color-mix(in_srgb,#7F1747_42%,transparent)] px-3 py-2 font-mono text-[13px] text-[#7F1747] transition-colors hover:border-[#7F1747] hover:bg-[color-mix(in_srgb,#FFF0F8_18%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7F1747]"
+          >
+            <span
+              aria-hidden="true"
+              className="grid h-7 min-w-7 place-items-center border border-current px-1 text-[8px] font-bold leading-none tracking-[0.08em]"
+            >
+              PDF
+            </span>
+            <span>{t(locale, "90쪽 보고서", "90P report")}</span>
+          </a>
           <Link
             href="https://github.com/mangowhoiscloud/geode"
             target="_blank"
