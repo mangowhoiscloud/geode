@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+- **MCPMark Postgres dependency bound** — constrain the isolated
+  `postgres-mcp==0.3.0` launcher to `mcp<2`; the server still imports the MCP
+  1.x `FastMCP` path and otherwise exits during startup after resolving MCP 2.x.
+
 ### Architecture
 
 - **Crucible runtime modules now rely on package context instead of repeated

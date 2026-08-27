@@ -541,11 +541,11 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
             database_url = f"postgresql://{username}:{password}@{host}:{port}/{database}"
             mcp_module = importlib.import_module("src.agents.mcp")
             return mcp_module.MCPStdioServer(
-                command="pipx",
+                command="uvx",
                 args=[
-                    "run",
                     "--python",
                     sys.executable,
+                    "--with=mcp<2",
                     "postgres-mcp==0.3.0",
                     "--access-mode=unrestricted",
                 ],
