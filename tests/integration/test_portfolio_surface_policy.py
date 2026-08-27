@@ -8,15 +8,18 @@ LOCALE_CONTEXT_PATH = REPO_ROOT / "site/src/components/geode/locale-context.tsx"
 NAV_PATH = REPO_ROOT / "site/src/components/geode/sections/nav.tsx"
 
 
-def test_portfolio_is_fixed_to_english() -> None:
+def test_portfolio_language_and_report_follow_the_query_locale() -> None:
     portfolio = PORTFOLIO_PATH.read_text(encoding="utf-8")
     locale_context = LOCALE_CONTEXT_PATH.read_text(encoding="utf-8")
     nav = NAV_PATH.read_text(encoding="utf-8")
 
-    assert '<LocaleProvider defaultLocale="en" allowQueryOverride={false}>' in portfolio
-    assert '<main\n        lang="en"' in portfolio
+    assert '<LocaleProvider defaultLocale="en">' in portfolio
+    assert "allowQueryOverride={false}" not in portfolio
     assert "<GeodeNav items={navItems} light showLocaleToggle={false} />" in portfolio
-    assert "if (!allowQueryOverride) return;" in locale_context
+    assert 'const lang = params.get("lang");' in locale_context
+    assert 'href={locale === "en" ? "/geode/report-en.pdf" : "/geode/report.pdf"}' in portfolio
+    assert (REPO_ROOT / "site/public/report.pdf").is_file()
+    assert (REPO_ROOT / "site/public/report-en.pdf").is_file()
     assert "{showLocaleToggle ? <LocaleToggle /> : null}" in nav
 
 

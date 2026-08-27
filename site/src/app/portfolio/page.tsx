@@ -559,7 +559,7 @@ function HeroField() {
             {t(locale, "문서 읽기", "Read the docs")}
           </Link>
           <a
-            href="/geode/report.pdf"
+            href={locale === "en" ? "/geode/report-en.pdf" : "/geode/report.pdf"}
             aria-label={t(
               locale,
               "GEODE 90쪽 포트폴리오 PDF 열기",
@@ -3874,9 +3874,8 @@ function DistillationAct() {
 
 export default function GeodePortfolioPage() {
   return (
-    <LocaleProvider defaultLocale="en" allowQueryOverride={false}>
+    <LocaleProvider defaultLocale="en">
       <main
-        lang="en"
         data-astryx-theme="neutral"
         className={`${galmuri.variable} ${serifDisplay.variable} min-h-screen overflow-x-clip bg-[var(--acc-artifact)] text-[#FFF0F8]`}
       >
