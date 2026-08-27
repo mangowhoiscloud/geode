@@ -108,6 +108,9 @@ functional change.
 
 ### Fixed
 
+- **Execution middleware cancellation propagation.** Tool and LLM execution
+  middleware no longer converts a caller cancellation into a completed result
+  after the downstream call returns, preserving harness-owned hard timeouts.
 - **Skill-attribution measurement leakage.** Future paired runs reject
   model-visible positive-case answer terms, use opaque finding/question IDs and
   target-specific response/tool schemas, and label subscription repetitions as

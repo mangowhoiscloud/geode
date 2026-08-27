@@ -526,7 +526,10 @@ class MiddlewareRegistry:
             if (
                 used
                 and downstream_result is not None
-                and not isinstance(exc, NextCallAlreadyUsedError)
+                and not isinstance(
+                    exc,
+                    (asyncio.CancelledError, NextCallAlreadyUsedError),
+                )
             ):
                 log.warning(
                     "Tool execution middleware %s failed after next_call; "
@@ -616,7 +619,10 @@ class MiddlewareRegistry:
             if (
                 used
                 and downstream_result is not None
-                and not isinstance(exc, NextCallAlreadyUsedError)
+                and not isinstance(
+                    exc,
+                    (asyncio.CancelledError, NextCallAlreadyUsedError),
+                )
             ):
                 log.warning(
                     "LLM execution middleware %s failed after next_call; "

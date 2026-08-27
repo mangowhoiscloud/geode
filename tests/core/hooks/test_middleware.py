@@ -112,6 +112,26 @@ class _LlmExecutionTransform:
         return await next_call(request.with_request(replace(request.request, model="changed")))
 
 
+class _CancelAfterNext:
+    def __init__(self, entered: asyncio.Event) -> None:
+        self.entered = entered
+
+    async def _wait(self, result: Any) -> Any:
+        self.entered.set()
+        await asyncio.sleep(3600)
+        return result
+
+    async def tool_execution(self, request: ToolCallRequest, next_call: Any) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._wait(await next_call(request)))
+
+    async def llm_execution(
+        self,
+        request: LlmCallRequest,
+        next_call: Any,
+    ) -> AdapterCallResult:
+        return cast(AdapterCallResult, await self._wait(await next_call(request)))
+
+
 class _Adapter:
     name = "fake"
     provider = "fake"
@@ -364,6 +384,39 @@ async def test_cancellation_identity_is_preserved() -> None:
         await registry.tool_execution(ToolCallRequest(tool_name="demo"), terminal)
 
     assert caught.value is expected
+
+
+@_async_test
+async def test_cancellation_after_next_call_is_not_converted_to_success() -> None:
+    async def assert_cancelled(awaitable: Awaitable[Any], entered: asyncio.Event) -> None:
+        task = asyncio.create_task(awaitable)
+        await entered.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert task.cancelled()
+
+    tool_entered = asyncio.Event()
+    tool_registry = MiddlewareRegistry()
+    tool_registry.register_tool_execution(_CancelAfterNext(tool_entered))
+    await assert_cancelled(
+        tool_registry.tool_execution(
+            ToolCallRequest(tool_name="demo"),
+            lambda _request: asyncio.sleep(0, result={"ok": True}),
+        ),
+        tool_entered,
+    )
+
+    llm_entered = asyncio.Event()
+    llm_registry = MiddlewareRegistry()
+    llm_registry.register_llm_execution(_CancelAfterNext(llm_entered))
+    await assert_cancelled(
+        llm_registry.call_llm(
+            cast(LLMAdapter, _Adapter()),
+            AdapterCallRequest(model="model", messages=()),
+        ),
+        llm_entered,
+    )
 
 
 @_async_test
