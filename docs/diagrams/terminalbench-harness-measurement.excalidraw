@@ -1,0 +1,271 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "type": "text", "id": "freeze_stage", "x": 40, "y": 20, "width": 330, "height": 28,
+      "text": "1 · FREEZE", "originalText": "1 · FREEZE", "fontSize": 22, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "strokeColor": "#E21500", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "seed": 100101, "version": 1, "versionNonce": 100102, "isDeleted": false,
+      "groupIds": [], "boundElements": null, "link": null, "locked": false, "containerId": null, "lineHeight": 1.25
+    },
+    {
+      "type": "text", "id": "run_stage", "x": 420, "y": 20, "width": 330, "height": 28,
+      "text": "2 · RUN TWO HARNESSES", "originalText": "2 · RUN TWO HARNESSES", "fontSize": 22, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "strokeColor": "#F2F2F2", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "seed": 100201, "version": 1, "versionNonce": 100202, "isDeleted": false,
+      "groupIds": [], "boundElements": null, "link": null, "locked": false, "containerId": null, "lineHeight": 1.25
+    },
+    {
+      "type": "text", "id": "select_stage", "x": 800, "y": 20, "width": 330, "height": 28,
+      "text": "3 · SELECT CANONICAL", "originalText": "3 · SELECT CANONICAL", "fontSize": 22, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "strokeColor": "#F2F2F2", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "seed": 100301, "version": 1, "versionNonce": 100302, "isDeleted": false,
+      "groupIds": [], "boundElements": null, "link": null, "locked": false, "containerId": null, "lineHeight": 1.25
+    },
+    {
+      "type": "text", "id": "publish_stage", "x": 1180, "y": 20, "width": 360, "height": 28,
+      "text": "4 · RECORD / PUBLISH", "originalText": "4 · RECORD / PUBLISH", "fontSize": 22, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "strokeColor": "#F2F2F2", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "seed": 100401, "version": 1, "versionNonce": 100402, "isDeleted": false,
+      "groupIds": [], "boundElements": null, "link": null, "locked": false, "containerId": null, "lineHeight": 1.25
+    },
+    {
+      "type": "line", "id": "stage_rule", "x": 40, "y": 58, "width": 1500, "height": 0,
+      "strokeColor": "#2A2A2A", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2,
+      "strokeStyle": "solid", "roughness": 0, "opacity": 100, "angle": 0, "seed": 100501,
+      "version": 1, "versionNonce": 100502, "isDeleted": false, "groupIds": [], "boundElements": null,
+      "link": null, "locked": false, "points": [[0, 0], [1500, 0]]
+    },
+    {
+      "type": "rectangle", "id": "freeze_rect", "x": 40, "y": 80, "width": 330, "height": 170,
+      "strokeColor": "#E21500", "backgroundColor": "#111111", "fillStyle": "solid", "strokeWidth": 2,
+      "strokeStyle": "solid", "roughness": 0, "opacity": 100, "angle": 0, "seed": 100601,
+      "version": 1, "versionNonce": 100602, "isDeleted": false, "groupIds": [], "boundElements": null,
+      "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text", "id": "freeze_evidence", "x": 60, "y": 98, "width": 292, "height": 138,
+      "text": "Terminal-Bench 2.1 · Harbor 0.22.0\ngpt-5.6-sol / max · subscription\n12-task × 5 paired gate\n→ 89-task × 5 × 2 full-suite\n\nrun id  terminalbench21-sol-max-…\nmanifest  74e6f802…34d2dc\nrun spec  256aa8a8…d5b00\nattempts  f9ba5d85…bfc78",
+      "originalText": "Terminal-Bench 2.1 · Harbor 0.22.0\ngpt-5.6-sol / max · subscription\n12-task × 5 paired gate\n→ 89-task × 5 × 2 full-suite\n\nrun id  terminalbench21-sol-max-…\nmanifest  74e6f802…34d2dc\nrun spec  256aa8a8…d5b00\nattempts  f9ba5d85…bfc78",
+      "fontSize": 14, "fontFamily": 3, "textAlign": "left", "verticalAlign": "top", "strokeColor": "#F2F2F2",
+      "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0, "seed": 100701, "version": 1, "versionNonce": 100702,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "containerId": null, "lineHeight": 1.15
+    },
+    {
+      "type": "rectangle", "id": "geode_harness_rect", "x": 420, "y": 80, "width": 330, "height": 76,
+      "strokeColor": "#E21500", "backgroundColor": "#111111", "fillStyle": "solid", "strokeWidth": 2,
+      "strokeStyle": "solid", "roughness": 0, "opacity": 100, "angle": 0, "seed": 200101,
+      "version": 1, "versionNonce": 200102, "isDeleted": false, "groupIds": [], "boundElements": null,
+      "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text", "id": "geode_harness_text", "x": 440, "y": 94, "width": 290, "height": 50,
+      "text": "GEODE HARNESS\nAgenticLoop\nHarbor external agent", "originalText": "GEODE HARNESS\nAgenticLoop\nHarbor external agent",
+      "fontSize": 15, "fontFamily": 3, "textAlign": "left", "verticalAlign": "top", "strokeColor": "#F2F2F2",
+      "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0, "seed": 200201, "version": 1, "versionNonce": 200202,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "containerId": null, "lineHeight": 1.25
+    },
+    {
+      "type": "rectangle", "id": "native_harness_rect", "x": 420, "y": 174, "width": 330, "height": 76,
+      "strokeColor": "#6E6E6E", "backgroundColor": "#111111", "fillStyle": "solid", "strokeWidth": 2,
+      "strokeStyle": "solid", "roughness": 0, "opacity": 100, "angle": 0, "seed": 200301,
+      "version": 1, "versionNonce": 200302, "isDeleted": false, "groupIds": [], "boundElements": null,
+      "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text", "id": "native_harness_text", "x": 440, "y": 188, "width": 290, "height": 50,
+      "text": "NATIVE CODEX HARNESS\nCodex CLI 0.145.0\nsame model / effort", "originalText": "NATIVE CODEX HARNESS\nCodex CLI 0.145.0\nsame model / effort",
+      "fontSize": 15, "fontFamily": 3, "textAlign": "left", "verticalAlign": "top", "strokeColor": "#F2F2F2",
+      "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0, "seed": 200401, "version": 1, "versionNonce": 200402,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "containerId": null, "lineHeight": 1.25
+    },
+    {
+      "type": "rectangle", "id": "selection_rect", "x": 800, "y": 80, "width": 330, "height": 170,
+      "strokeColor": "#6E6E6E", "backgroundColor": "#111111", "fillStyle": "solid", "strokeWidth": 2,
+      "strokeStyle": "solid", "roughness": 0, "opacity": 100, "angle": 0, "seed": 200501,
+      "version": 1, "versionNonce": 200502, "isDeleted": false, "groupIds": [], "boundElements": null,
+      "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text", "id": "selection_text", "x": 820, "y": 96, "width": 292, "height": 142,
+      "text": "task-owned timeout / resource\nconcurrency 1 · no auto retry\n\nsemantic failure → selected 0\ncanonical timeout → selected 0\ninfrastructure-invalid\n→ preregistered supplement only\n\nraw Harbor result ≠ canonical selected",
+      "originalText": "task-owned timeout / resource\nconcurrency 1 · no auto retry\n\nsemantic failure → selected 0\ncanonical timeout → selected 0\ninfrastructure-invalid\n→ preregistered supplement only\n\nraw Harbor result ≠ canonical selected",
+      "fontSize": 14, "fontFamily": 3, "textAlign": "left", "verticalAlign": "top", "strokeColor": "#F2F2F2",
+      "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0, "seed": 200601, "version": 1, "versionNonce": 200602,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "containerId": null, "lineHeight": 1.25
+    },
+    {
+      "type": "rectangle", "id": "publication_rect", "x": 1180, "y": 80, "width": 360, "height": 170,
+      "strokeColor": "#6E6E6E", "backgroundColor": "#111111", "fillStyle": "solid", "strokeWidth": 2,
+      "strokeStyle": "dashed", "roughness": 0, "opacity": 100, "angle": 0, "seed": 200701,
+      "version": 1, "versionNonce": 200702, "isDeleted": false, "groupIds": [], "boundElements": null,
+      "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text", "id": "publication_text", "x": 1200, "y": 96, "width": 322, "height": 142,
+      "text": "attempt lineage + native result\nGEODE / ATIF trajectories\nverifier receipts\n\nrecord full terminal run\nsanitize credentials · tokens\nreasoning · PII · local paths\n\nallowlisted publication\nSHA-256 remote read-back\nSTATUS · NOT YET PUBLISHED",
+      "originalText": "attempt lineage + native result\nGEODE / ATIF trajectories\nverifier receipts\n\nrecord full terminal run\nsanitize credentials · tokens\nreasoning · PII · local paths\n\nallowlisted publication\nSHA-256 remote read-back\nSTATUS · NOT YET PUBLISHED",
+      "fontSize": 14, "fontFamily": 3, "textAlign": "left", "verticalAlign": "top", "strokeColor": "#F2F2F2",
+      "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0, "seed": 200801, "version": 1, "versionNonce": 200802,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "containerId": null, "lineHeight": 1.15
+    },
+    {
+      "type": "arrow", "id": "freeze_to_geode", "x": 370, "y": 118, "width": 50, "height": 0,
+      "strokeColor": "#E21500", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2,
+      "strokeStyle": "solid", "roughness": 0, "opacity": 100, "angle": 0, "seed": 200901,
+      "version": 1, "versionNonce": 200902, "isDeleted": false, "groupIds": [], "boundElements": null,
+      "link": null, "locked": false, "points": [[0, 0], [50, 0]], "startBinding": null, "endBinding": null,
+      "startArrowhead": null, "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "id": "freeze_to_native", "x": 390, "y": 165, "width": 30, "height": 47,
+      "strokeColor": "#6E6E6E", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2,
+      "strokeStyle": "solid", "roughness": 0, "opacity": 100, "angle": 0, "seed": 201001,
+      "version": 1, "versionNonce": 201002, "isDeleted": false, "groupIds": [], "boundElements": null,
+      "link": null, "locked": false, "points": [[0, 0], [30, 47]], "startBinding": null, "endBinding": null,
+      "startArrowhead": null, "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "id": "geode_to_selection", "x": 750, "y": 118, "width": 50, "height": 0,
+      "strokeColor": "#E21500", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2,
+      "strokeStyle": "solid", "roughness": 0, "opacity": 100, "angle": 0, "seed": 201101,
+      "version": 1, "versionNonce": 201102, "isDeleted": false, "groupIds": [], "boundElements": null,
+      "link": null, "locked": false, "points": [[0, 0], [50, 0]], "startBinding": null, "endBinding": null,
+      "startArrowhead": null, "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "id": "native_to_selection", "x": 750, "y": 212, "width": 50, "height": 0,
+      "strokeColor": "#6E6E6E", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2,
+      "strokeStyle": "solid", "roughness": 0, "opacity": 100, "angle": 0, "seed": 201201,
+      "version": 1, "versionNonce": 201202, "isDeleted": false, "groupIds": [], "boundElements": null,
+      "link": null, "locked": false, "points": [[0, 0], [50, 0]], "startBinding": null, "endBinding": null,
+      "startArrowhead": null, "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "id": "selection_to_publication", "x": 1130, "y": 165, "width": 50, "height": 0,
+      "strokeColor": "#6E6E6E", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2,
+      "strokeStyle": "dashed", "roughness": 0, "opacity": 100, "angle": 0, "seed": 201301,
+      "version": 1, "versionNonce": 201302, "isDeleted": false, "groupIds": [], "boundElements": null,
+      "link": null, "locked": false, "points": [[0, 0], [50, 0]], "startBinding": null, "endBinding": null,
+      "startArrowhead": null, "endArrowhead": "arrow"
+    },
+    {
+      "type": "text", "id": "snapshot_label", "x": 40, "y": 282, "width": 700, "height": 28,
+      "text": "CURRENT OBSERVATION · 2026-08-27 17:35 KST · RUN IN PROGRESS", "originalText": "CURRENT OBSERVATION · 2026-08-27 17:35 KST · RUN IN PROGRESS",
+      "fontSize": 20, "fontFamily": 3, "textAlign": "left", "verticalAlign": "top", "strokeColor": "#E21500",
+      "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0, "seed": 300101, "version": 1, "versionNonce": 300102,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "containerId": null, "lineHeight": 1.25
+    },
+    {
+      "type": "line", "id": "snapshot_rule", "x": 40, "y": 316, "width": 1500, "height": 0,
+      "strokeColor": "#2A2A2A", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2,
+      "strokeStyle": "solid", "roughness": 0, "opacity": 100, "angle": 0, "seed": 300201,
+      "version": 1, "versionNonce": 300202, "isDeleted": false, "groupIds": [], "boundElements": null,
+      "link": null, "locked": false, "points": [[0, 0], [1500, 0]]
+    },
+    {
+      "type": "rectangle", "id": "geode_status_rect", "x": 40, "y": 338, "width": 420, "height": 250,
+      "strokeColor": "#E21500", "backgroundColor": "#111111", "fillStyle": "solid", "strokeWidth": 2,
+      "strokeStyle": "solid", "roughness": 0, "opacity": 100, "angle": 0, "seed": 300301,
+      "version": 1, "versionNonce": 300302, "isDeleted": false, "groupIds": [], "boundElements": null,
+      "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text", "id": "geode_status_text", "x": 62, "y": 356, "width": 376, "height": 214,
+      "text": "GEODE ARM · 60 / 60 COMPLETE\n\nHarbor raw        48 / 60 = 80.00%\ncanonical selected 47 / 60 = 78.33%\n\ncanonical timeout        8\nmodel-action-required    5\ninfrastructure-invalid   0\n\nraw result  d8cfdbba…2445c\n60 append-only attempt rows",
+      "originalText": "GEODE ARM · 60 / 60 COMPLETE\n\nHarbor raw        48 / 60 = 80.00%\ncanonical selected 47 / 60 = 78.33%\n\ncanonical timeout        8\nmodel-action-required    5\ninfrastructure-invalid   0\n\nraw result  d8cfdbba…2445c\n60 append-only attempt rows",
+      "fontSize": 18, "fontFamily": 3, "textAlign": "left", "verticalAlign": "top", "strokeColor": "#F2F2F2",
+      "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0, "seed": 300401, "version": 1, "versionNonce": 300402,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "containerId": null, "lineHeight": 1.25
+    },
+    {
+      "type": "rectangle", "id": "task_matrix_rect", "x": 500, "y": 338, "width": 660, "height": 250,
+      "strokeColor": "#6E6E6E", "backgroundColor": "#111111", "fillStyle": "solid", "strokeWidth": 2,
+      "strokeStyle": "solid", "roughness": 0, "opacity": 100, "angle": 0, "seed": 300501,
+      "version": 1, "versionNonce": 300502, "isDeleted": false, "groupIds": [], "boundElements": null,
+      "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text", "id": "task_matrix_header", "x": 522, "y": 354, "width": 610, "height": 25,
+      "text": "GEODE CANONICAL SELECTED · TASK / 5", "originalText": "GEODE CANONICAL SELECTED · TASK / 5",
+      "fontSize": 18, "fontFamily": 3, "textAlign": "left", "verticalAlign": "top", "strokeColor": "#E21500",
+      "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0, "seed": 300601, "version": 1, "versionNonce": 300602,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "containerId": null, "lineHeight": 1.25
+    },
+    {
+      "type": "text", "id": "task_matrix_left", "x": 522, "y": 392, "width": 300, "height": 168,
+      "text": "build-pmars                    5/5\ncircuit-fibsqrt                5/5\ncustom-memory-heap-crash       5/5\ngit-multibranch                5/5\nmodernize-scientific-stack     5/5\npath-tracing                   5/5",
+      "originalText": "build-pmars                    5/5\ncircuit-fibsqrt                5/5\ncustom-memory-heap-crash       5/5\ngit-multibranch                5/5\nmodernize-scientific-stack     5/5\npath-tracing                   5/5",
+      "fontSize": 16, "fontFamily": 3, "textAlign": "left", "verticalAlign": "top", "strokeColor": "#F2F2F2",
+      "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0, "seed": 300701, "version": 1, "versionNonce": 300702,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "containerId": null, "lineHeight": 1.42
+    },
+    {
+      "type": "text", "id": "task_matrix_right", "x": 840, "y": 392, "width": 292, "height": 168,
+      "text": "portfolio-optimization        5/5\nsqlite-db-truncate             5/5\nqemu-startup                   4/5\nquery-optimize                 2/5\nextract-moves-from-video       1/5\nvulnerable-secret              0/5",
+      "originalText": "portfolio-optimization        5/5\nsqlite-db-truncate             5/5\nqemu-startup                   4/5\nquery-optimize                 2/5\nextract-moves-from-video       1/5\nvulnerable-secret              0/5",
+      "fontSize": 16, "fontFamily": 3, "textAlign": "left", "verticalAlign": "top", "strokeColor": "#F2F2F2",
+      "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0, "seed": 300801, "version": 1, "versionNonce": 300802,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "containerId": null, "lineHeight": 1.42
+    },
+    {
+      "type": "rectangle", "id": "native_status_rect", "x": 1200, "y": 338, "width": 340, "height": 250,
+      "strokeColor": "#6E6E6E", "backgroundColor": "#111111", "fillStyle": "solid", "strokeWidth": 2,
+      "strokeStyle": "dashed", "roughness": 0, "opacity": 100, "angle": 0, "seed": 300901,
+      "version": 1, "versionNonce": 300902, "isDeleted": false, "groupIds": [], "boundElements": null,
+      "link": null, "locked": false, "roundness": {"type": 3}
+    },
+    {
+      "type": "text", "id": "native_status_text", "x": 1222, "y": 356, "width": 296, "height": 208,
+      "text": "NATIVE CODEX · CURRENTLY RUNNING\n\ncompleted   13 / 60\nHarbor raw  12 / 13\nselected    11 / 13\n\ntimeout + verifier=1 → selected 0\nsafety refusal → selected 0\n\nNO paired conclusion\nNO 89-task full-suite result\nNO current artifact publication",
+      "originalText": "NATIVE CODEX · CURRENTLY RUNNING\n\ncompleted   13 / 60\nHarbor raw  12 / 13\nselected    11 / 13\n\ntimeout + verifier=1 → selected 0\nsafety refusal → selected 0\n\nNO paired conclusion\nNO 89-task full-suite result\nNO current artifact publication",
+      "fontSize": 15, "fontFamily": 3, "textAlign": "left", "verticalAlign": "top", "strokeColor": "#F2F2F2",
+      "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0, "seed": 301001, "version": 1, "versionNonce": 301002,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "containerId": null, "lineHeight": 1.25
+    },
+    {
+      "type": "text", "id": "comparison_boundary", "x": 40, "y": 610, "width": 1500, "height": 24,
+      "text": "BOUNDARY · live execution snapshot only · paired gate closes only after both 60-cell arms · then preregister the 89-task × 5 × 2 full-suite",
+      "originalText": "BOUNDARY · live execution snapshot only · paired gate closes only after both 60-cell arms · then preregister the 89-task × 5 × 2 full-suite",
+      "fontSize": 18, "fontFamily": 3, "textAlign": "left", "verticalAlign": "top", "strokeColor": "#9C9C9C",
+      "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 0, "opacity": 100, "angle": 0, "seed": 301101, "version": 1, "versionNonce": 301102,
+      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
+      "containerId": null, "lineHeight": 1.25
+    }
+  ],
+  "appState": {
+    "viewBackgroundColor": "#0A0A0A",
+    "gridSize": 20,
+    "exportBackground": true
+  },
+  "files": {}
+}
