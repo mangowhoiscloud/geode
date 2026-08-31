@@ -135,7 +135,7 @@ tool_request transforms
   -> PermissionRequest / approval
   -> tool_execution onion
   -> TOOL_EXEC_STARTED
-  -> executor exactly once
+  -> one terminal executor invocation
   -> TOOL_EXEC_ENDED
   -> PostToolUse
 ```
@@ -209,7 +209,7 @@ and the public `SessionEnd` edge inside one awaited boundary.
 
 The 2026-07-31 subscription-backed behavior E2E exercised all 13 public hooks
 and all four middleware join points through their owning runtime paths. The
-probe made three LLM calls and one exactly-once tool call, persisted one real
+probe made three LLM calls and one admitted single-invocation tool call, persisted one real
 compaction, and produced 22 matching `EXTENSION_INVOKED` rows in both SQLite
 and the active JSONL projection. Tool start/end rows retained the same
 session/turn correlation in both stores.

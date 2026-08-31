@@ -165,13 +165,44 @@ for admission, whereas explicit resume-by-id keeps the deliberate reopen edge.
 Shutdown stops new admissions and gives the active hosted task the same
 30-second bounded drain before cancellation.
 
+## External-effect boundary
+
+Effectful tool requests classified as `MUTATE`, `COMMUNICATE`, or
+`ADMINISTRATIVE` use a logical operation ID and a bounded receipt in the
+project `sessions.db`. The assistant tool-call envelope strictly checkpoints a
+provider-call-to-operation-ID mapping and sampling step before admission or
+dispatch; a SQLite message-SoT failure stops the batch. The provider call ID
+only pairs a tool use with its result and is never the restart recovery key. A
+committed duplicate replays its PostToolUse-final bounded result without another
+sink call; a conflicting request is rejected; an unfinished receipt returns
+`effect_outcome_uncertain` and is never automatically replayed. Restart closes
+the anchored assistant call with the committed, uncertain, or interrupted
+result before another model request. The balanced call/result history is then
+strictly checkpointed before auxiliary reflection or the next main request.
+
+Prepared receipts from an older sampling step block new effects in that session
+while allowing siblings from the already admitted step. Operators inspect only
+redacted metadata with `geode session effects` and, after checking the external
+sink, run `geode session resolve-effect OPERATION_ID --outcome applied` or
+`--outcome not-applied`; both outcomes remain durable terminal evidence.
+Personal argument values are neither stored nor content-hashed, so direct
+same-ID re-admission is rejected rather than treated as an equal request.
+Checkpoint-anchored restart recovery remains available without comparing the
+redacted arguments.
+
+This is duplicate suppression for one logical operation, not deterministic
+trajectory replay or generic sink-level exactly-once. A provider must enforce
+the same idempotency key, or support reconciliation, before a domain adapter
+can make a stronger external guarantee. `READ` remains retryable, while
+arbitrary `EXECUTE` retains its approval and sandbox boundary.
+
 ## Known gaps
 
-- SessionLane serialization is process-local. Two independently started
-  `geode serve` processes still have no cross-process Goal lease, so the
-  runtime does not promise exactly-once external side effects. Deploy one
-  serve owner per project until measured multi-process demand justifies a
-  durable lease.
+- SessionLane serialization is process-local. Durable effect admission rejects
+  or quarantines reuse of one operation ID across processes, but two
+  independently issued operation IDs can still express the same real-world
+  action. Deploy one serve owner per project until measured multi-process
+  demand justifies a durable Goal lease and domain reconciliation.
 
 - Gateway multi-turn instances stay ACTIVE between turns by design (the
   gateway cannot know whether another message follows). Terminal edges it

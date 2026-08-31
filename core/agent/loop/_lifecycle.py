@@ -173,7 +173,13 @@ def restore_loop_state(loop: AgenticLoop, state: Any) -> None:
     apply_guard_state(loop, getattr(state, "loop_guards", {}) or {})
 
 
-def save_checkpoint(loop: AgenticLoop, user_input: str, round_idx: int = 0) -> bool:
+def save_checkpoint(
+    loop: AgenticLoop,
+    user_input: str,
+    round_idx: int = 0,
+    *,
+    strict_messages: bool = False,
+) -> bool:
     """Persist session checkpoint for resume (per-turn, Claude Code pattern)."""
     if loop._checkpoint is None or not loop._session_id:
         return False
@@ -193,7 +199,10 @@ def save_checkpoint(loop: AgenticLoop, user_input: str, round_idx: int = 0) -> b
             loop_guards=collect_guard_state(loop),
             pending_verification=dict(getattr(loop, "_pending_verification", {}) or {}),
         )
-        loop._checkpoint.save(state)
+        if strict_messages:
+            loop._checkpoint.save(state, strict_messages=True)
+        else:
+            loop._checkpoint.save(state)
 
         from core.ui.agentic_ui import emit_checkpoint_saved
 
