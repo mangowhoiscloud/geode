@@ -117,6 +117,7 @@ class ToolContext:
     session_generation: int = 0
     verify_attempt: int = 0
     tool_call_id: str = ""
+    operation_id: str = ""
     cwd: Path = field(default_factory=Path.cwd)
     permission_mode: str = ""
     is_subagent: bool = False

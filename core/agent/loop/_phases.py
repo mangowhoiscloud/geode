@@ -558,7 +558,18 @@ async def process_tool_calls(
         response,
         round_idx,
         step_snapshot=step_snapshot,
+        defer_reflection=True,
     )
+    checkpoint_messages = [
+        *turn.messages,
+        _guards._tool_round_assistant_message(loop, response),
+        {"role": "user", "content": tool_results},
+    ]
+    _context.sync_messages_to_context(loop, checkpoint_messages)
+    checkpointed = loop._save_checkpoint(turn.user_input, round_idx=round_idx + 1)
+    if loop._checkpoint is not None and bool(loop._session_id) and not checkpointed:
+        raise RuntimeError("completed tool batch could not be checkpointed")
+    await loop._finish_cognitive_tool_round(response, tool_results, round_idx)
     if loop._yield_after_tool_round:
         turn.messages.append(_guards._tool_round_assistant_message(loop, response))
         turn.messages.append({"role": "user", "content": tool_results})
@@ -651,6 +662,8 @@ async def observe_and_compact(
     turn.messages.append(_guards._tool_round_assistant_message(loop, response))
     turn.messages.append({"role": "user", "content": tool_results})
     turn.turn_state.round_index += 1
+    _context.sync_messages_to_context(loop, turn.messages)
+    loop._save_checkpoint(turn.user_input, round_idx=turn.turn_state.round_index)
     return None
 
 

@@ -155,8 +155,14 @@ export default function Page() {
             <h2>도구 경계 순서</h2>
             <pre>{`tool_request → schema validation → PreToolUse → revalidation
 → hard deny / policy → PermissionRequest
-→ tool_execution → TOOL_EXEC_STARTED → executor exactly once
+→ tool_execution → TOOL_EXEC_STARTED → terminal executor 1회 호출
 → TOOL_EXEC_ENDED or TOOL_EXEC_FAILED → PostToolUse`}</pre>
+            <p>
+              여기서 1회는 승인된 한 요청의 프로세스 내부 호출 횟수입니다.
+              외부 효과의 exactly-once를 뜻하지 않습니다. 변경·통신·관리 도구는
+              별도의 durable admission receipt로 같은 logical operation의 중복을
+              억제하고, 완료 여부가 불명확하면 자동 재실행하지 않습니다.
+            </p>
 
             <h2>다음</h2>
             <ul>
@@ -290,8 +296,15 @@ export default function Page() {
             <h2>Tool boundary order</h2>
             <pre>{`tool_request → schema validation → PreToolUse → revalidation
 → hard deny / policy → PermissionRequest
-→ tool_execution → TOOL_EXEC_STARTED → executor exactly once
+→ tool_execution → TOOL_EXEC_STARTED → one terminal executor invocation
 → TOOL_EXEC_ENDED or TOOL_EXEC_FAILED → PostToolUse`}</pre>
+            <p>
+              One invocation describes in-process control flow for an admitted
+              request, not external exactly-once. Mutation, communication, and
+              administrative tools use a separate durable admission receipt to
+              suppress the same logical operation; an uncertain outcome is not
+              automatically replayed.
+            </p>
 
             <h2>Next</h2>
             <ul>

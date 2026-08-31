@@ -165,13 +165,31 @@ for admission, whereas explicit resume-by-id keeps the deliberate reopen edge.
 Shutdown stops new admissions and gives the active hosted task the same
 30-second bounded drain before cancellation.
 
+## External-effect boundary
+
+Effectful tool requests classified as `MUTATE`, `COMMUNICATE`, or
+`ADMINISTRATIVE` use a logical operation ID and a bounded receipt in the
+project `sessions.db`. Admission commits before terminal dispatch. A committed
+duplicate replays its bounded result without another sink call; a conflicting
+request is rejected; an unfinished receipt returns `effect_outcome_uncertain`
+and is never automatically replayed. Every completed ordinary tool batch then
+commits its balanced call/result history before auxiliary reflection or the
+next main model request. Effect dispatch is refused when the session checkpoint
+authority is unavailable, and a failed post-tool checkpoint halts the loop.
+
+This is duplicate suppression for one logical operation, not deterministic
+trajectory replay or generic sink-level exactly-once. A provider must enforce
+the same idempotency key, or support reconciliation, before a domain adapter
+can make a stronger external guarantee. `READ` remains retryable, while
+arbitrary `EXECUTE` retains its approval and sandbox boundary.
+
 ## Known gaps
 
-- SessionLane serialization is process-local. Two independently started
-  `geode serve` processes still have no cross-process Goal lease, so the
-  runtime does not promise exactly-once external side effects. Deploy one
-  serve owner per project until measured multi-process demand justifies a
-  durable lease.
+- SessionLane serialization is process-local. Durable effect admission rejects
+  or quarantines reuse of one operation ID across processes, but two
+  independently issued operation IDs can still express the same real-world
+  action. Deploy one serve owner per project until measured multi-process
+  demand justifies a durable Goal lease and domain reconciliation.
 
 - Gateway multi-turn instances stay ACTIVE between turns by design (the
   gateway cannot know whether another message follows). Terminal edges it

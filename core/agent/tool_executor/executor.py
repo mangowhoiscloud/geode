@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from core.agent.approval_fsm import ApprovalRecord
     from core.agent.sub_agent import SubAgentManager
     from core.hooks import HookRegistry, HookSystem, MiddlewareRegistry
+    from core.memory.effect_receipts import EffectReceiptStore
     from core.tools.base import ToolContext
     from core.tools.plan import BoundToolPlan, ToolRegistration
 
@@ -233,6 +234,7 @@ class ToolExecutor:
         interactive_approval: bool = True,
         resource_lock_pool: ResourceLockPool | None = None,
         offload_store: Any = None,
+        effect_receipts: EffectReceiptStore | None = None,
     ) -> None:
         if action_handlers is not None and bound_tool_plan is not None:
             raise ValueError("action_handlers and bound_tool_plan are mutually exclusive")
@@ -302,6 +304,7 @@ class ToolExecutor:
         self._interactive_approval = interactive_approval
         self._resource_lock_pool = resource_lock_pool or ResourceLockPool()
         self._offload_store = offload_store
+        self._effect_receipts = effect_receipts
 
         # HITL approval workflow (extracted — SRP)
         from core.agent.approval import ApprovalWorkflow
@@ -1011,6 +1014,15 @@ class ToolExecutor:
                     resource_keys = resolved_mcp_keys
             leases = await self._resource_lock_pool.acquire(resource_keys)
             release_deferred = False
+            receipt_store = None
+            operation_id = context.operation_id if context is not None else ""
+            safety = self._safety_minimum_for(tool_name, bound_tool_plan=bound_tool_plan)
+            durable_effect = bool(
+                operation_id
+                and safety is not None
+                and safety.effect
+                in {ToolEffect.MUTATE, ToolEffect.COMMUNICATE, ToolEffect.ADMINISTRATIVE}
+            )
 
             def defer_release(future: asyncio.Future[Any]) -> None:
                 nonlocal release_deferred
@@ -1023,11 +1035,63 @@ class ToolExecutor:
 
                 future.add_done_callback(release_when_done)
 
-            terminal_started = True
             from core.hooks.dispatch import fire_hook_async
             from core.hooks.system import RuntimeEvent
 
             try:
+                if durable_effect:
+                    from core.memory.effect_receipts import (
+                        EffectAdmissionKind,
+                        EffectReceiptStore,
+                    )
+
+                    assert context is not None and safety is not None
+                    checkpoint_owner = context.agent_loop
+                    if (
+                        checkpoint_owner is not None
+                        and getattr(checkpoint_owner, "_checkpoint", None) is None
+                    ):
+                        return {
+                            "error": (
+                                "Effect was not dispatched because checkpointing is unavailable."
+                            ),
+                            "error_type": "effect_checkpoint_unavailable",
+                            "recoverable": False,
+                        }
+                    receipt_store = self._effect_receipts or EffectReceiptStore()
+                    try:
+                        admission = receipt_store.admit(
+                            operation_id=operation_id,
+                            session_id=context.session_id,
+                            tool_call_id=context.tool_call_id,
+                            tool_name=tool_name,
+                            effect=safety.effect.value,
+                            arguments=tool_input,
+                            personal_data=contains_personal_data,
+                        )
+                    except Exception:
+                        log.exception("Effect receipt admission failed for %s", tool_name)
+                        return {
+                            "error": "Effect was not dispatched because durable admission failed.",
+                            "error_type": "effect_receipt_unavailable",
+                            "recoverable": False,
+                        }
+                    if admission.kind is EffectAdmissionKind.REPLAY:
+                        return dict(admission.result or {})
+                    if admission.kind is EffectAdmissionKind.CONFLICT:
+                        return {
+                            "error": "Operation ID was reused with different effect arguments.",
+                            "error_type": "effect_operation_conflict",
+                            "recoverable": False,
+                        }
+                    if admission.kind is EffectAdmissionKind.UNCERTAIN:
+                        return {
+                            "error": "Effect outcome is uncertain; reconcile it before retrying.",
+                            "error_type": "effect_outcome_uncertain",
+                            "outcome_uncertain": True,
+                            "recoverable": False,
+                        }
+                terminal_started = True
                 if on_execution_started is not None:
                     try:
                         on_execution_started(tool_name, event_tool_input)
@@ -1042,7 +1106,7 @@ class ToolExecutor:
                         "tool_input": event_tool_input,
                     },
                 )
-                return await self._dispatch_async(
+                result = await self._dispatch_async(
                     tool_name,
                     tool_input,
                     context=context,
@@ -1050,6 +1114,28 @@ class ToolExecutor:
                     on_sync_abandoned=defer_release,
                     bound_tool_plan=bound_tool_plan,
                 )
+                if receipt_store is not None:
+                    if release_deferred or result.get("error"):
+                        return {
+                            "error": "Effect outcome is uncertain; reconcile it before retrying.",
+                            "error_type": "effect_outcome_uncertain",
+                            "outcome_uncertain": True,
+                            "recoverable": False,
+                        }
+                    durable_result = (
+                        personal_data_omitted(tool_name) if contains_personal_data else result
+                    )
+                    try:
+                        receipt_store.commit(operation_id, durable_result)
+                    except Exception:
+                        log.exception("Effect receipt commit failed for %s", tool_name)
+                        return {
+                            "error": "Effect completed but its durable outcome is uncertain.",
+                            "error_type": "effect_outcome_uncertain",
+                            "outcome_uncertain": True,
+                            "recoverable": False,
+                        }
+                return result
             finally:
                 if not release_deferred:
                     self._resource_lock_pool.release(leases)

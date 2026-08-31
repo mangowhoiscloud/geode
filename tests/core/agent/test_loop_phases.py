@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from core.agent.loop import _guards, _phases
 from core.agent.loop.agent_loop import AgenticLoop
 from core.agent.loop.models import AgenticResult, TerminationReason, TurnState
-from core.llm.agentic_response import AgenticResponse
+from core.llm.agentic_response import AgenticResponse, ToolUseBlock
 from core.ui.status import TextSpinner
 
 
@@ -96,3 +97,63 @@ def test_arun_once_returns_the_observation_terminal(monkeypatch: pytest.MonkeyPa
 
     assert result is terminal
     assert calls == ["input", "model", "provider", "tools", "observe"]
+
+
+def test_observe_checkpoints_balanced_tool_history_before_next_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_guards, "_guard_convergence", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(_guards, "_guard_repeated_success", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        _guards,
+        "_tool_round_assistant_message",
+        lambda *_args: {"role": "assistant", "content": [{"type": "tool_use"}]},
+    )
+    checkpoints: list[tuple[str, int]] = []
+    context = SimpleNamespace(messages=[])
+    loop = SimpleNamespace(
+        context=context,
+        _convergence=SimpleNamespace(total_consecutive_tool_errors=0),
+        _consecutive_tool_tracker=[],
+        _update_tool_error_tracking=lambda _results: None,
+        _save_checkpoint=lambda user_input, round_idx=0: checkpoints.append(
+            (user_input, round_idx)
+        ),
+    )
+    turn = _phases.PreparedTurn(
+        user_input="task",
+        messages=[],
+        turn_state=TurnState(turn_id="turn"),
+        system_prompt="system",
+        reflection_hint="",
+        verification_hint="",
+        verification_continuation=False,
+    )
+    response = AgenticResponse(
+        content=[ToolUseBlock(id="call-1", name="read_file", input={"path": "a"})]
+    )
+
+    result = asyncio.run(
+        _phases.observe_and_compact(
+            loop,
+            turn,
+            response,
+            [{"type": "tool_result", "tool_use_id": "call-1", "content": "ok"}],
+            0,
+        )
+    )
+
+    assert result is None
+    assert turn.turn_state.round_index == 1
+    assert context.messages == turn.messages
+    assert [message["role"] for message in context.messages] == ["assistant", "user"]
+    assert checkpoints == [("task", 1)]
+
+
+def test_tool_batch_checkpoint_precedes_auxiliary_reflection() -> None:
+    source = inspect.getsource(_phases.process_tool_calls)
+
+    checkpoint = source.index("loop._save_checkpoint(")
+    reflection = source.index("loop._finish_cognitive_tool_round(")
+    assert checkpoint < reflection
+    assert "completed tool batch could not be checkpointed" in source

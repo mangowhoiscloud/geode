@@ -401,10 +401,9 @@ class AgenticLoop:
         round_idx: int,
         *,
         step_snapshot: StepSnapshot | None = None,
+        defer_reflection: bool = False,
     ) -> list[dict[str, Any]]:
-        """Emit ACT before the tool batch, run the batch, emit OBSERVE
-        after, update :attr:`cognitive_state` round-end fields, emit
-        REFLECT + UPDATE_MEMORY.
+        """Run ACT/OBSERVE and optionally defer reflection until checkpointed.
 
         Preserves the cognitive-cycle event ordering (PERCEIVE -> PLAN ->
         ACT -> OBSERVE -> REFLECT -> UPDATE_MEMORY).
@@ -436,6 +435,22 @@ class AgenticLoop:
             action=("tools: " + ", ".join(tool_names)) if tool_names else "text-only",
             observation=f"{len(tool_results)} tool result(s)",
         )
+        if not defer_reflection:
+            await AgenticLoop._finish_cognitive_tool_round(self, response, tool_results, round_idx)
+        return tool_results
+
+    async def _finish_cognitive_tool_round(
+        self,
+        response: Any,
+        tool_results: list[dict[str, Any]],
+        round_idx: int,
+    ) -> None:
+        """Reflect only after the owning phase checkpoints tool results."""
+        tool_names = [
+            getattr(block, "name", "unknown")
+            for block in getattr(response, "content", None) or []
+            if getattr(block, "type", None) == "tool_use"
+        ]
 
         # Raw personal Workspace results stay in the active model turn only.
         # Reflection can use a separately configured provider and persists its
@@ -464,8 +479,6 @@ class AgenticLoop:
 
         await self._emit_cognitive(HookEvent.COGNITIVE_REFLECT, round=round_idx + 1)
         await self._emit_cognitive(HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1)
-
-        return tool_results
 
     async def _maybe_reflect(self, tool_results: list[dict[str, Any]]) -> None:
         """Call the reflection node if enabled.

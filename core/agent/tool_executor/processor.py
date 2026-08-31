@@ -142,16 +142,19 @@ class ToolCallProcessor:
             get_parent_session_key,
             get_session_id,
         )
+        from core.memory.effect_receipts import effect_operation_id
         from core.tools.base import ToolContext
 
         step = self._step_snapshot
+        session_id = step.correlation.session_id if step is not None else get_session_id()
         return ToolContext(
-            session_id=(step.correlation.session_id if step is not None else get_session_id()),
+            session_id=session_id,
             turn_id=(step.correlation.turn_id if step is not None else ""),
             step_id=(step.step_id if step is not None else ""),
             session_generation=(step.correlation.session_generation if step is not None else 0),
             verify_attempt=(step.correlation.verify_attempt if step is not None else 0),
             tool_call_id=tool_call_id,
+            operation_id=effect_operation_id(session_id, tool_call_id),
             is_subagent=bool(get_parent_session_id() or get_parent_session_key()),
             cancellation=(step.cancellation if step is not None else None),
             provider=(step.provider if step is not None else self._provider),

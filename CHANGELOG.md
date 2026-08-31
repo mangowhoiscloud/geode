@@ -112,6 +112,14 @@ functional change.
 
 ### Fixed
 
+- **Effectful tool replay after crash windows.** Mutation, communication, and
+  administrative calls now commit a bounded receipt before terminal dispatch,
+  replay committed results for the same logical operation, reject argument
+  conflicts, and fail closed on uncertain outcomes. Completed tool batches are
+  checkpointed before auxiliary reflection or the next main model request;
+  effect dispatch is refused when that checkpoint authority is unavailable.
+  Read-only retry and arbitrary execution approval/sandbox behavior remain
+  unchanged.
 - **Execution middleware cancellation propagation.** Tool and LLM execution
   middleware no longer converts a caller cancellation into a completed result
   after the downstream call returns, preserving harness-owned hard timeouts.

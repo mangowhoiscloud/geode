@@ -705,7 +705,7 @@ while stop_reason == "tool_use":
     round-entry guards          # round / time / session / cost budget
     context-overflow check      # compact or prune if needed
     response = call_llm(messages, tools)
-    run tool calls -> append assistant msg + tool_results
+    run tool calls -> append results -> checkpoint
 ```
 
 루프 클래스 본체 옆에 책임별 모듈이 같은 패키지에 나뉘어 있습니다. 물리적 턴의 순서는 `agent_loop.py`에 그대로 보이고, 입력 준비, 모델 호출 준비, 제공자 호출/재시도, 도구 처리, 관찰/히스토리 정리, 종료 조립은 `_phases.py`의 여섯 함수가 담당합니다. 시스템 프롬프트와 컨텍스트 위임은 `_context.py`, 결과 모델과 컨텍스트 고갈 처리는 `models.py`, 모델 전환은 `_model_switching.py`, 서브에이전트 알림은 `_collaboration_mailbox.py`입니다. 예전 단일 파일 `core/agent/loop.py`는 더 이상 존재하지 않습니다.
@@ -718,9 +718,11 @@ while stop_reason == "tool_use":
 2.  컨텍스트 오버플로 점검. 임계값을 넘으면 압축하거나 정리합니다. 자세한 동작은 [컨텍스트 조립](https://mangowhoiscloud.github.io/geode/docs/runtime/context.md)을 참고합니다.
 3.  LLM 호출.
 4.  모델이 요청한 도구 실행.
-5.  assistant 메시지와 tool\_result를 히스토리에 붙이고 다음 라운드로 진입합니다.
+5.  assistant 메시지와 tool\_result를 히스토리에 붙여 checkpoint한 뒤 다음 라운드로 진입합니다.
 
 각 LLM 샘플링 직전에는 불변 `StepSnapshot`이 모델 경로, 도구 계획 세대, 예산, 취소 핸들, 추적 상관관계를 고정합니다. 그 응답의 도구 배치는 같은 스냅샷을 사용합니다. 한 물리적 턴의 메시지, 완료 라운드, 재시도, 계획 힌트, 종료 사유는 가변 `TurnState`가 소유합니다. 따라서 같은 라운드 번호로 재시도해도 샘플링 step ID는 단조 증가합니다.
+
+변경·통신·관리 도구는 terminal dispatch 전에 프로젝트 `sessions.db`에 logical operation receipt를 기록합니다. 완료 receipt는 같은 operation의 결과를 재생하고, 미완료 receipt는 effect\_outcome\_uncertain으로 중단합니다. 이는 중복 억제 경계이며 외부 시스템의 exactly-once 보장은 아닙니다. checkpoint authority가 없으면 효과 실행을 거부하고, 저장 실패 시 다음 모델 호출 전에 루프를 중단합니다.
 
 ![AgenticLoop turn cycle: round-entry guards, context-overflow check, LLM call, tool execution, and the early-termination paths](https://mangowhoiscloud.github.io/geode/diagrams/agentic-loop.svg)
 
@@ -1142,9 +1144,11 @@ print(schema["properties"]["decision"])
 ```
 tool_request → schema validation → PreToolUse → revalidation
 → hard deny / policy → PermissionRequest
-→ tool_execution → TOOL_EXEC_STARTED → executor exactly once
+→ tool_execution → TOOL_EXEC_STARTED → terminal executor 1회 호출
 → TOOL_EXEC_ENDED or TOOL_EXEC_FAILED → PostToolUse
 ```
+
+여기서 1회는 승인된 한 요청의 프로세스 내부 호출 횟수입니다. 외부 효과의 exactly-once를 뜻하지 않습니다. 변경·통신·관리 도구는 별도의 durable admission receipt로 같은 logical operation의 중복을 억제하고, 완료 여부가 불명확하면 자동 재실행하지 않습니다.
 
 ## 다음
 
@@ -6690,8 +6694,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 577 |
-| 테스트 Python 파일 | 696 |
+| 프로덕션 Python 파일 | 578 |
+| 테스트 Python 파일 | 697 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 5 |
