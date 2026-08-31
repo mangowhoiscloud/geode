@@ -169,13 +169,26 @@ Shutdown stops new admissions and gives the active hosted task the same
 
 Effectful tool requests classified as `MUTATE`, `COMMUNICATE`, or
 `ADMINISTRATIVE` use a logical operation ID and a bounded receipt in the
-project `sessions.db`. Admission commits before terminal dispatch. A committed
-duplicate replays its bounded result without another sink call; a conflicting
-request is rejected; an unfinished receipt returns `effect_outcome_uncertain`
-and is never automatically replayed. Every completed ordinary tool batch then
-commits its balanced call/result history before auxiliary reflection or the
-next main model request. Effect dispatch is refused when the session checkpoint
-authority is unavailable, and a failed post-tool checkpoint halts the loop.
+project `sessions.db`. The assistant tool-call envelope strictly checkpoints a
+provider-call-to-operation-ID mapping and sampling step before admission or
+dispatch; a SQLite message-SoT failure stops the batch. The provider call ID
+only pairs a tool use with its result and is never the restart recovery key. A
+committed duplicate replays its PostToolUse-final bounded result without another
+sink call; a conflicting request is rejected; an unfinished receipt returns
+`effect_outcome_uncertain` and is never automatically replayed. Restart closes
+the anchored assistant call with the committed, uncertain, or interrupted
+result before another model request. The balanced call/result history is then
+strictly checkpointed before auxiliary reflection or the next main request.
+
+Prepared receipts from an older sampling step block new effects in that session
+while allowing siblings from the already admitted step. Operators inspect only
+redacted metadata with `geode session effects` and, after checking the external
+sink, run `geode session resolve-effect OPERATION_ID --outcome applied` or
+`--outcome not-applied`; both outcomes remain durable terminal evidence.
+Personal argument values are neither stored nor content-hashed, so direct
+same-ID re-admission is rejected rather than treated as an equal request.
+Checkpoint-anchored restart recovery remains available without comparing the
+redacted arguments.
 
 This is duplicate suppression for one logical operation, not deterministic
 trajectory replay or generic sink-level exactly-once. A provider must enforce

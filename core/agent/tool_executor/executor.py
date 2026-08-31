@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import inspect
 import logging
 import threading
@@ -980,8 +981,14 @@ class ToolExecutor:
             personal_data_omitted(tool_name) if contains_personal_data else tool_input
         )
         event_correlation = dict(request.correlation)
+        receipt_store: Any | None = None
+        receipt_operation_id = ""
+        receipt_needs_commit = False
+        receipt_replay_result: dict[str, Any] | None = None
 
         async def dispatch(current: ToolCallRequest) -> dict[str, Any]:
+            nonlocal receipt_needs_commit, receipt_operation_id
+            nonlocal receipt_replay_result, receipt_store
             nonlocal terminal_started
             if current.tool_name != tool_name or dict(current.arguments) != tool_input:
                 raise InvalidMiddlewareResultError(
@@ -1014,7 +1021,6 @@ class ToolExecutor:
                     resource_keys = resolved_mcp_keys
             leases = await self._resource_lock_pool.acquire(resource_keys)
             release_deferred = False
-            receipt_store = None
             operation_id = context.operation_id if context is not None else ""
             safety = self._safety_minimum_for(tool_name, bound_tool_plan=bound_tool_plan)
             durable_effect = bool(
@@ -1063,6 +1069,7 @@ class ToolExecutor:
                         admission = receipt_store.admit(
                             operation_id=operation_id,
                             session_id=context.session_id,
+                            step_id=context.step_id,
                             tool_call_id=context.tool_call_id,
                             tool_name=tool_name,
                             effect=safety.effect.value,
@@ -1077,10 +1084,11 @@ class ToolExecutor:
                             "recoverable": False,
                         }
                     if admission.kind is EffectAdmissionKind.REPLAY:
-                        return dict(admission.result or {})
+                        receipt_replay_result = dict(admission.result or {})
+                        return copy.deepcopy(receipt_replay_result)
                     if admission.kind is EffectAdmissionKind.CONFLICT:
                         return {
-                            "error": "Operation ID was reused with different effect arguments.",
+                            "error": "Operation ID cannot be safely re-admitted.",
                             "error_type": "effect_operation_conflict",
                             "recoverable": False,
                         }
@@ -1122,19 +1130,8 @@ class ToolExecutor:
                             "outcome_uncertain": True,
                             "recoverable": False,
                         }
-                    durable_result = (
-                        personal_data_omitted(tool_name) if contains_personal_data else result
-                    )
-                    try:
-                        receipt_store.commit(operation_id, durable_result)
-                    except Exception:
-                        log.exception("Effect receipt commit failed for %s", tool_name)
-                        return {
-                            "error": "Effect completed but its durable outcome is uncertain.",
-                            "error_type": "effect_outcome_uncertain",
-                            "outcome_uncertain": True,
-                            "recoverable": False,
-                        }
+                    receipt_operation_id = operation_id
+                    receipt_needs_commit = True
                 return result
             finally:
                 if not release_deferred:
@@ -1168,6 +1165,9 @@ class ToolExecutor:
             )
             raise
 
+        if receipt_replay_result is not None:
+            result = receipt_replay_result
+
         if record is not None:
             has_error = isinstance(result, dict) and bool(result.get("error"))
             self._approval.record_transition(
@@ -1177,6 +1177,9 @@ class ToolExecutor:
                 if terminal_started
                 else "middleware-short-circuit",
             )
+
+        if receipt_replay_result is not None:
+            return result
 
         from core.hooks.dispatch import fire_hook_async
         from core.hooks.system import RuntimeEvent
@@ -1233,12 +1236,24 @@ class ToolExecutor:
                     f"{previous}\n{decision.instruction}" if previous else decision.instruction
                 )
         if post_use.blocked:
-            return {
+            result = {
                 "error": "Tool result withheld by PostToolUse hook",
                 "error_type": "hook_blocked",
                 "blocked_by_hook": True,
                 "recoverable": False,
             }
+        if receipt_needs_commit and receipt_store is not None:
+            durable_result = personal_data_omitted(tool_name) if contains_personal_data else result
+            try:
+                receipt_store.commit(receipt_operation_id, durable_result)
+            except Exception:
+                log.exception("Effect receipt commit failed for %s", tool_name)
+                return {
+                    "error": "Effect completed but its durable outcome is uncertain.",
+                    "error_type": "effect_outcome_uncertain",
+                    "outcome_uncertain": True,
+                    "recoverable": False,
+                }
         return result
 
     def _session_scope_denial(

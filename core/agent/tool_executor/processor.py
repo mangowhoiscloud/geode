@@ -113,6 +113,7 @@ class ToolCallProcessor:
         self._clarification_count: int = 0
         self._last_batch_requires_redaction = False
         self._step_snapshot: StepSnapshot | None = None
+        self._operation_ids: dict[str, str] = {}
 
     def reset(self) -> None:
         """Reset per-run tracking state. Call at the start of each agentic run."""
@@ -122,6 +123,7 @@ class ToolCallProcessor:
         self._clarification_count = 0
         self._last_batch_requires_redaction = False
         self._step_snapshot = None
+        self._operation_ids.clear()
 
     def bind_step(self, snapshot: StepSnapshot) -> None:
         """Bind the sampling snapshot that produced the next tool batch."""
@@ -130,6 +132,21 @@ class ToolCallProcessor:
     def _step_bound_plan(self) -> BoundToolPlan | None:
         step = self._step_snapshot
         return step.bound_tool_plan if step is not None else None
+
+    def operation_id_for(self, tool_call_id: str) -> str:
+        """Return the logical operation ID bound to this physical call."""
+        from core.agent.cognitive_state_ctx import get_session_id
+        from core.memory.effect_receipts import effect_operation_id
+
+        step = self._step_snapshot
+        session_id = step.correlation.session_id if step is not None else get_session_id()
+        if not session_id:
+            return ""
+        step_id = step.step_id if step is not None else ""
+        return self._operation_ids.setdefault(
+            f"{step_id}\0{tool_call_id}",
+            effect_operation_id(),
+        )
 
     def _new_tool_context(
         self,
@@ -142,11 +159,11 @@ class ToolCallProcessor:
             get_parent_session_key,
             get_session_id,
         )
-        from core.memory.effect_receipts import effect_operation_id
         from core.tools.base import ToolContext
 
         step = self._step_snapshot
         session_id = step.correlation.session_id if step is not None else get_session_id()
+        operation_id = self.operation_id_for(tool_call_id) if session_id else ""
         return ToolContext(
             session_id=session_id,
             turn_id=(step.correlation.turn_id if step is not None else ""),
@@ -154,7 +171,7 @@ class ToolCallProcessor:
             session_generation=(step.correlation.session_generation if step is not None else 0),
             verify_attempt=(step.correlation.verify_attempt if step is not None else 0),
             tool_call_id=tool_call_id,
-            operation_id=effect_operation_id(session_id, tool_call_id),
+            operation_id=operation_id,
             is_subagent=bool(get_parent_session_id() or get_parent_session_key()),
             cancellation=(step.cancellation if step is not None else None),
             provider=(step.provider if step is not None else self._provider),

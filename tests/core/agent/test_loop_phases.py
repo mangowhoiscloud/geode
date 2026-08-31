@@ -157,3 +157,70 @@ def test_tool_batch_checkpoint_precedes_auxiliary_reflection() -> None:
     reflection = source.index("loop._finish_cognitive_tool_round(")
     assert checkpoint < reflection
     assert "completed tool batch could not be checkpointed" in source
+
+
+def test_pending_tool_batch_checkpoint_failure_prevents_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_guards, "_guard_cost_budget", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(_guards, "_guard_overthinking", _async_none)
+    monkeypatch.setattr(_guards, "_guard_model_refusal", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        _guards,
+        "_tool_round_assistant_message",
+        lambda *_args: {
+            "role": "assistant",
+            "content": [{"type": "tool_use", "id": "call-1", "name": "action"}],
+        },
+    )
+    dispatched = False
+
+    async def track_usage(_response: AgenticResponse) -> None:
+        return None
+
+    async def dispatch(*_args: Any, **_kwargs: Any) -> list[dict[str, Any]]:
+        nonlocal dispatched
+        dispatched = True
+        return []
+
+    context = SimpleNamespace(messages=[])
+    loop = SimpleNamespace(
+        context=context,
+        _checkpoint=object(),
+        _session_id="s-test",
+        _set_llm_retry_count=lambda _count: None,
+        _track_usage_async=track_usage,
+        _save_checkpoint=lambda *_args, **_kwargs: False,
+        _run_cognitive_act_observe_cycle=dispatch,
+    )
+    turn = _phases.PreparedTurn(
+        user_input="task",
+        messages=[],
+        turn_state=TurnState(turn_id="turn"),
+        system_prompt="system",
+        reflection_hint="",
+        verification_hint="",
+        verification_continuation=False,
+    )
+    response = AgenticResponse(
+        content=[ToolUseBlock(id="call-1", name="action", input={})],
+        stop_reason="tool_use",
+    )
+
+    with pytest.raises(RuntimeError, match="pending tool batch"):
+        asyncio.run(
+            _phases.process_tool_calls(
+                loop,
+                turn,
+                response,
+                0,
+                is_last_round=False,
+                step_snapshot=None,
+            )
+        )
+
+    assert dispatched is False
+
+
+async def _async_none(*_args: Any, **_kwargs: Any) -> None:
+    return None

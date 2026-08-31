@@ -58,6 +58,87 @@ class PreparedModelCall:
     step_snapshot: StepSnapshot | None = None
 
 
+def _repair_incomplete_tool_round(loop: AgenticLoop, user_input: str) -> None:
+    """Close a checkpointed assistant tool batch before any new model call."""
+    messages = loop.context.get_messages()
+    if not messages or messages[-1].get("role") != "assistant":
+        return
+    content = messages[-1].get("content")
+    if not isinstance(content, list):
+        return
+    calls = [
+        block
+        for block in content
+        if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("id")
+    ]
+    if not calls:
+        return
+
+    metadata = messages[-1].get("metadata")
+    operations = metadata.get("effect_operations") if isinstance(metadata, dict) else None
+
+    from core.memory.effect_receipts import EffectAdmissionKind, EffectReceiptStore
+
+    executor = getattr(getattr(loop, "_tool_processor", None), "_executor", None)
+    store = getattr(executor, "_effect_receipts", None)
+    if store is None:
+        session_dir = getattr(getattr(loop, "_checkpoint", None), "session_dir", None)
+        store = EffectReceiptStore(session_dir / "sessions.db" if session_dir else None)
+    results: list[dict[str, Any]] = []
+    for call in calls:
+        tool_call_id = str(call["id"])
+        anchor = operations.get(tool_call_id) if isinstance(operations, dict) else None
+        recovered = (
+            store.recover(
+                operation_id=str(anchor.get("operation_id", "")),
+                session_id=loop._session_id,
+                step_id=str(anchor.get("step_id", "")),
+                tool_call_id=tool_call_id,
+                tool_name=str(call.get("name", "")),
+                arguments=(
+                    dict(call.get("input", {})) if isinstance(call.get("input"), dict) else {}
+                ),
+            )
+            if isinstance(anchor, dict) and anchor.get("operation_id")
+            else None
+        )
+        if recovered is not None and recovered.kind is EffectAdmissionKind.REPLAY:
+            payload = dict(recovered.result or {})
+        elif recovered is not None and recovered.kind is EffectAdmissionKind.UNCERTAIN:
+            payload = {
+                "error": "Effect outcome is uncertain; reconcile it before retrying.",
+                "error_type": "effect_outcome_uncertain",
+                "outcome_uncertain": True,
+                "recoverable": False,
+            }
+        elif recovered is not None:
+            payload = {
+                "error": "Checkpointed operation identity conflicts with its effect receipt.",
+                "error_type": "effect_operation_conflict",
+                "outcome_uncertain": True,
+                "recoverable": False,
+            }
+        else:
+            payload = {
+                "error": "Tool execution was interrupted before a durable outcome was recorded.",
+                "error_type": "tool_execution_interrupted",
+                "outcome_uncertain": True,
+                "recoverable": False,
+            }
+        results.append(
+            {
+                "type": "tool_result",
+                "tool_use_id": tool_call_id,
+                "content": json.dumps(payload, ensure_ascii=False, default=str),
+            }
+        )
+    messages.append({"role": "user", "content": results})
+    _context.sync_messages_to_context(loop, messages)
+    checkpointed = loop._save_checkpoint(user_input, strict_messages=True)
+    if loop._checkpoint is not None and bool(loop._session_id) and not checkpointed:
+        raise RuntimeError("recovered tool batch could not be checkpointed")
+
+
 def tool_args_signature(tool_input: Any) -> str:
     """Return a short stable signature for diversity detection."""
     try:
@@ -84,6 +165,8 @@ async def prepare_input(
     )
     if blocked is not None:
         return await _guards._finalize_blocked_turn(loop, blocked)
+
+    _repair_incomplete_tool_round(loop, user_input)
 
     from .agent_loop import _set_conversation_context
 
@@ -554,6 +637,19 @@ async def process_tool_calls(
             round_idx=round_idx + 1,
         )
 
+    pending_messages = [
+        *turn.messages,
+        _guards._tool_round_assistant_message(loop, response),
+    ]
+    _context.sync_messages_to_context(loop, pending_messages)
+    checkpointed = loop._save_checkpoint(
+        turn.user_input,
+        round_idx=round_idx,
+        strict_messages=True,
+    )
+    if loop._checkpoint is not None and bool(loop._session_id) and not checkpointed:
+        raise RuntimeError("pending tool batch could not be checkpointed")
+
     tool_results = await loop._run_cognitive_act_observe_cycle(
         response,
         round_idx,
@@ -566,7 +662,11 @@ async def process_tool_calls(
         {"role": "user", "content": tool_results},
     ]
     _context.sync_messages_to_context(loop, checkpoint_messages)
-    checkpointed = loop._save_checkpoint(turn.user_input, round_idx=round_idx + 1)
+    checkpointed = loop._save_checkpoint(
+        turn.user_input,
+        round_idx=round_idx + 1,
+        strict_messages=True,
+    )
     if loop._checkpoint is not None and bool(loop._session_id) and not checkpointed:
         raise RuntimeError("completed tool batch could not be checkpointed")
     await loop._finish_cognitive_tool_round(response, tool_results, round_idx)

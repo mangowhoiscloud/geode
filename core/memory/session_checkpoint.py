@@ -133,7 +133,7 @@ class SessionCheckpoint:
         """Directory backing this checkpoint store."""
         return self._dir
 
-    def save(self, state: SessionState) -> None:
+    def save(self, state: SessionState, *, strict_messages: bool = False) -> None:
         """Save session checkpoint. Overwrites previous checkpoint for same ID.
 
         Phase 1b (Hermes absorption) flips the SoT to the SQLite
@@ -208,7 +208,7 @@ class SessionCheckpoint:
 
             # Phase 1b: SoT lives in SQLite ``messages`` table. Mirror the
             # full message list before publishing the metadata commit point.
-            self._sync_messages_to_db(persisted_state)
+            self._sync_messages_to_db(persisted_state, strict=strict_messages)
 
             # JSON message/tool files are compatibility caches, not the SoT.
             msg_file = session_path / "messages.json"
@@ -583,13 +583,13 @@ class SessionCheckpoint:
         except Exception:
             log.debug("Failed to sync session to SQLite index", exc_info=True)
 
-    def _sync_messages_to_db(self, state: SessionState) -> None:
+    def _sync_messages_to_db(self, state: SessionState, *, strict: bool = False) -> None:
         """Phase 1a: mirror ``state.messages`` into the messages table.
 
         Independent of ``_sync_to_index`` — uses a separate transaction so
-        a failure here does not roll back metadata. JSON above remains
-        authoritative; a WARN log surfaces DB-side problems without
-        disturbing the resume path.
+        a failure here does not roll back metadata. Ordinary compatibility
+        saves retain the JSON fallback; effect boundaries pass ``strict`` so
+        the SQLite message SoT cannot silently remain stale.
         """
         try:
             from core.memory.session_manager import SessionManager
@@ -609,6 +609,8 @@ class SessionCheckpoint:
                 state.session_id,
                 exc_info=True,
             )
+            if strict:
+                raise
 
     def _sync_cognitive_state_to_db(self, state: SessionState) -> None:
         """Mirror ``state.cognitive_state`` into the central cognitive store."""

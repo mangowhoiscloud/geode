@@ -316,9 +316,20 @@ class AgenticLoop:
 
         return tuple(self._pre_execution_retry_errors)
 
-    def _save_checkpoint(self, user_input: str, round_idx: int = 0) -> bool:
+    def _save_checkpoint(
+        self,
+        user_input: str,
+        round_idx: int = 0,
+        *,
+        strict_messages: bool = False,
+    ) -> bool:
         """Delegates to :func:`_lifecycle.save_checkpoint`."""
-        return _lifecycle.save_checkpoint(self, user_input, round_idx)
+        return _lifecycle.save_checkpoint(
+            self,
+            user_input,
+            round_idx,
+            strict_messages=strict_messages,
+        )
 
     def mark_session_paused(self) -> None:
         """Delegates to :func:`_lifecycle.mark_session_paused`."""

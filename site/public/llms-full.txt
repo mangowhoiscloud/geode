@@ -722,7 +722,7 @@ while stop_reason == "tool_use":
 
 각 LLM 샘플링 직전에는 불변 `StepSnapshot`이 모델 경로, 도구 계획 세대, 예산, 취소 핸들, 추적 상관관계를 고정합니다. 그 응답의 도구 배치는 같은 스냅샷을 사용합니다. 한 물리적 턴의 메시지, 완료 라운드, 재시도, 계획 힌트, 종료 사유는 가변 `TurnState`가 소유합니다. 따라서 같은 라운드 번호로 재시도해도 샘플링 step ID는 단조 증가합니다.
 
-변경·통신·관리 도구는 terminal dispatch 전에 프로젝트 `sessions.db`에 logical operation receipt를 기록합니다. 완료 receipt는 같은 operation의 결과를 재생하고, 미완료 receipt는 effect\_outcome\_uncertain으로 중단합니다. 이는 중복 억제 경계이며 외부 시스템의 exactly-once 보장은 아닙니다. checkpoint authority가 없으면 효과 실행을 거부하고, 저장 실패 시 다음 모델 호출 전에 루프를 중단합니다.
+변경·통신·관리 도구는 assistant tool call을 먼저 strict checkpoint한 뒤 provider call ID와 별개인 logical operation ID와 sampling step을 고정하고, 프로젝트 `sessions.db`에 receipt를 기록합니다. 재시작은 이 anchor로만 복구하며 provider call ID는 tool use/result 짝맞춤에만 씁니다. 완료 receipt는 PostToolUse까지 끝난 결과를 재생하고, 미완료 receipt는 effect\_outcome\_uncertain으로 중단합니다. 재시작은 이 call을 receipt 상태로 닫은 뒤에만 모델을 다시 호출합니다. 이는 중복 억제 경계이며 외부 시스템의 exactly-once 보장은 아닙니다. 미해결 이전 step은 `geode session effects`와 `resolve-effect`로 외부 sink 확인 후 해소하며 applied와 not-applied 모두 증거로 남습니다. 개인 인수는 해시하지 않으므로, checkpoint anchor 없는 동일 ID 재진입은 거부합니다.
 
 ![AgenticLoop turn cycle: round-entry guards, context-overflow check, LLM call, tool execution, and the early-termination paths](https://mangowhoiscloud.github.io/geode/diagrams/agentic-loop.svg)
 
@@ -1144,11 +1144,11 @@ print(schema["properties"]["decision"])
 ```
 tool_request → schema validation → PreToolUse → revalidation
 → hard deny / policy → PermissionRequest
-→ tool_execution → TOOL_EXEC_STARTED → terminal executor 1회 호출
-→ TOOL_EXEC_ENDED or TOOL_EXEC_FAILED → PostToolUse
+→ pending-call checkpoint → effect admission → terminal executor 1회 호출
+→ TOOL_EXEC_ENDED or TOOL_EXEC_FAILED → PostToolUse → receipt commit
 ```
 
-여기서 1회는 승인된 한 요청의 프로세스 내부 호출 횟수입니다. 외부 효과의 exactly-once를 뜻하지 않습니다. 변경·통신·관리 도구는 별도의 durable admission receipt로 같은 logical operation의 중복을 억제하고, 완료 여부가 불명확하면 자동 재실행하지 않습니다.
+여기서 1회는 승인된 한 요청의 프로세스 내부 호출 횟수입니다. 외부 효과의 exactly-once를 뜻하지 않습니다. 변경·통신·관리 도구는 별도의 durable admission receipt로 같은 logical operation의 중복을 억제합니다. receipt에는 PostToolUse까지 끝난 결과를 저장하며, 완료 여부가 불명확하면 자동 재실행하지 않습니다.
 
 ## 다음
 

@@ -61,28 +61,36 @@ Sources: [RIFL](https://web.stanford.edu/~ouster/cgi-bin/papers/rifl.pdf),
 
 ```text
 model/tool caller
-  -> logical operation_id + separate argument fingerprint
+  -> checkpoint {provider call ID -> independent logical operation_id, step_id}
   -> SQLite admission before terminal dispatch
        new       -> dispatch once
-       committed -> replay bounded stored result
+       committed -> replay bounded PostToolUse-final result
        conflict  -> reject before dispatch
        prepared  -> outcome_uncertain; never auto-replay
-  -> append balanced tool call/result
-  -> checkpoint before auxiliary reflection or the next main model request
+  -> commit final receipt -> append balanced tool call/result
+  -> strict checkpoint before auxiliary reflection or the next model request
 ```
 
 - The rail applies to `MUTATE`, `COMMUNICATE`, and `ADMINISTRATIVE`.
 - Agent-loop effect dispatch requires the existing session checkpoint
-  authority. An unavailable authority blocks dispatch; a failed post-tool
-  checkpoint stops the loop before any further model request.
+  authority. The assistant call strictly checkpoints the logical operation and
+  sampling-step IDs before admission. Restart recovers only through that anchor;
+  the provider call ID merely pairs tool use with tool result. Failed pending or
+  balanced SQLite message writes stop the loop.
 - `READ` remains retryable. Arbitrary `EXECUTE` keeps approval/sandbox
   controls and receives no exactly-once promise.
-- Arguments are not stored in receipts. A SHA-256 fingerprint exists only for
-  same-ID conflict detection; it is not encryption or a redacted publication
-  artifact. Personal results are replaced by the existing omission marker.
+- Arguments are not stored in receipts. Non-personal calls retain a SHA-256
+  fingerprint only for same-ID conflict detection. Personal calls store no
+  content digest, so direct same-ID re-admission cannot prove equality and is
+  rejected. Checkpoint-anchored restart recovery still uses the operation ID,
+  step, call, and tool identity; results use the existing omission marker.
 - Committed receipts are retained for 30 days and capped at 2,000 rows.
   Unresolved receipts are never silently dropped; admission fails closed at
   500 unresolved rows until an operator reconciles them.
+- An unresolved older step blocks new effects in that session. Operators use
+  `geode session effects` and `geode session resolve-effect` only after checking
+  the external system. Both `applied` and `not-applied` become durable terminal
+  reconciliation results; no automatic compensation or resend is inferred.
 - A committed receipt suppresses only reuse of the same logical operation ID.
   The same real-world action issued under a new ID is a new intent unless a
   domain adapter supplies provider idempotency or reconciliation.

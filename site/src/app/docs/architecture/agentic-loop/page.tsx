@@ -55,13 +55,18 @@ export default function Page() {
               단조 증가합니다.
             </p>
             <p>
-              변경·통신·관리 도구는 terminal dispatch 전에 프로젝트{" "}
-              <code>sessions.db</code>에 logical operation receipt를 기록합니다.
-              완료 receipt는 같은 operation의 결과를 재생하고, 미완료 receipt는
-              effect_outcome_uncertain으로 중단합니다. 이는 중복 억제
-              경계이며 외부 시스템의 exactly-once 보장은 아닙니다. checkpoint
-              authority가 없으면 효과 실행을 거부하고, 저장 실패 시 다음 모델
-              호출 전에 루프를 중단합니다.
+              변경·통신·관리 도구는 assistant tool call을 먼저 strict checkpoint한
+              뒤 provider call ID와 별개인 logical operation ID와 sampling step을
+              고정하고, 프로젝트 <code>sessions.db</code>에 receipt를 기록합니다.
+              재시작은 이 anchor로만 복구하며 provider call ID는 tool use/result
+              짝맞춤에만 씁니다. 완료 receipt는 PostToolUse까지 끝난 결과를 재생하고,
+              미완료 receipt는 effect_outcome_uncertain으로 중단합니다. 재시작은
+              이 call을 receipt 상태로 닫은 뒤에만 모델을 다시 호출합니다. 이는
+              중복 억제 경계이며 외부 시스템의 exactly-once 보장은 아닙니다.
+              미해결 이전 step은 <code>geode session effects</code>와{" "}
+              <code>resolve-effect</code>로 외부 sink 확인 후 해소하며 applied와
+              not-applied 모두 증거로 남습니다. 개인 인수는 해시하지 않으므로,
+              checkpoint anchor 없는 동일 ID 재진입은 거부합니다.
             </p>
             <figure>
               <img
@@ -227,14 +232,20 @@ export default function Page() {
               monotone sampling-step IDs.
             </p>
             <p>
-              Mutation, communication, and administrative tools record a logical
-              operation receipt in the project <code>sessions.db</code> before
-              terminal dispatch. A committed receipt replays the same operation&apos;s
-              result; an unfinished receipt stops with effect_outcome_uncertain.
-              This is a duplicate-suppression
-              boundary, not an external exactly-once guarantee. Effect dispatch is
-              refused without checkpoint authority, and a save failure stops the
-              loop before another model request.
+              Mutation, communication, and administrative tools first strictly
+              checkpoint an independent logical operation ID and sampling step
+              with the assistant tool call, then record its receipt in the project{" "}
+              <code>sessions.db</code>. Restart recovers only through that anchor;
+              the provider call ID merely pairs tool use with tool result. A committed receipt
+              replays the PostToolUse-final result; an unfinished receipt stops with
+              effect_outcome_uncertain. Restart closes that anchored call from the
+              receipt before another model request. This is duplicate suppression,
+              not an external exactly-once guarantee. After checking the external
+              sink, operators resolve older uncertain steps through{" "}
+              <code>geode session effects</code> and <code>resolve-effect</code>;
+              both applied and not-applied remain as evidence. Personal arguments
+              are not hashed, so same-ID re-admission without the checkpoint anchor
+              is rejected.
             </p>
             <figure>
               <img
