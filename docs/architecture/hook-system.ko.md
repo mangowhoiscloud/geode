@@ -125,7 +125,7 @@ tool_request transform
   -> PermissionRequest / approval
   -> tool_execution onion
   -> TOOL_EXEC_STARTED
-  -> executor exactly once
+  -> terminal executor 1회 호출
   -> TOOL_EXEC_ENDED
   -> PostToolUse
 ```
@@ -197,7 +197,7 @@ owner는 `amark_session_completed/error`로 닫아 durable state와 public
 
 2026-07-31 subscription 기반 행동 E2E는 13개 공개 hook과 네 middleware
 join point를 각각의 실제 소유 runtime 경로로 모두 통과했다. LLM 호출 3회,
-exactly-once tool 호출 1회, 실제 compaction 영속화 1회를 수행했고,
+admission을 통과한 single-invocation tool 호출 1회와 실제 compaction 영속화 1회를 수행했고,
 SQLite와 active JSONL projection 양쪽에 동일한 `EXTENSION_INVOKED` 22행을
 남겼다. tool start/end 행의 session/turn correlation도 두 저장소에서
 일치했다.

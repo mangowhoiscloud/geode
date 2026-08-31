@@ -413,3 +413,39 @@ def test_session_group_registered_on_main_app(runner: CliRunner) -> None:
     assert result.exit_code == 0, result.output
     assert "list" in result.output
     assert "export" in result.output
+
+
+def test_effect_reconciliation_cli_lists_and_resolves_without_payloads(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    from core.memory.effect_receipts import EffectReceiptStore
+
+    store = EffectReceiptStore(tmp_path / "sessions.db")
+    store.admit(
+        operation_id="op-test",
+        session_id="s-test",
+        step_id="step-1",
+        tool_call_id="call-1",
+        tool_name="send_message",
+        effect="communicate",
+        arguments={"body": "private body"},
+        personal_data=True,
+    )
+
+    listed = runner.invoke(session_app, ["effects", "--sessions-dir", str(tmp_path)])
+    resolved = runner.invoke(
+        session_app,
+        [
+            "resolve-effect",
+            "op-test",
+            "--outcome",
+            "not-applied",
+            "--sessions-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert listed.exit_code == resolved.exit_code == 0
+    assert "op-test" in listed.output
+    assert "private body" not in listed.output
+    assert store.list_uncertain() == []

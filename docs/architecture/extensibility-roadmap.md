@@ -284,19 +284,19 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `evals/` + `evolve/`) | 577 |
-| Test Python files | 696 |
-| `core/` Python LOC | 123,597 |
+| Production Python files (`core/` + `evals/` + `evolve/`) | 578 |
+| Test Python files | 697 |
+| `core/` Python LOC | 124,265 |
 | `evals/` Python LOC | 29,606 |
 | `evolve/` Python LOC | 32,014 |
-| Test Python LOC | 188,210 |
+| Test Python LOC | 188,912 |
 | Tool definitions / model executions / valid schemas / policies | 86 / 86 / 86 / 86 (exact) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 5 |
 | Module/class-scoped `ContextVar`-backed bindings in production packages | 25 |
 | `core` → outer import sites | 0 across 0 files |
 | Import-linter contracts / ignored edges | 7 / 0 |
-| `AgenticLoop` file LOC / methods / constructor args | 1,121 / 38 / 12 |
+| `AgenticLoop` file LOC / methods / constructor args | 1,145 / 39 / 12 |
 | `SubAgentManager` file LOC / methods / constructor args | 811 / 17 / 18 |
 | `RuntimeCoreConfig` fields | 6 |
 | Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 207 |
@@ -576,6 +576,9 @@ and closure evidence are appended in §10.
 | DIST-004 | `MISFIT` | `geode update` replaces the live uv-tool environment and verifies the new CLI before stopping the old daemon, allowing a running process to observe a mixed old-process/new-files installation | A running daemon is drained and stopped before live tool replacement, failed updates remain fail-closed without starting a second daemon, successful restart proves CLI/IPC daemon version parity, and ordering tests cover running, stopped, failed-stop, failed-install, and no-restart paths | R10.1 | BND-003, REL-003 | `DONE` |
 | EVAL-001 | `ABSENT` | Runtime Skills have loader, package, and policy checks but no paired evaluation that changes only target-skill availability | A native paired benchmark freezes model, task, workspace, tools, scorer, seed, and repetitions; reports verifier-first with-skill lift, activation, cost, and negative controls; and binds results to existing run-spec, attempt, trajectory, reward, and analysis authorities | R11.1 | BND-004, VER-001 | `IN_PROGRESS` |
 | EVAL-002 | `PARTIAL` | Session events, FTS recall, compaction, and tool offload exist, but no deterministic benchmark classifies exact recovery after compaction, restart, expiry, or corruption | An offline recoverability benchmark uses current session and offload authorities, stable event or digest references, and an immutable receipt to distinguish exact, summary-only, unavailable, and corrupt evidence without a second transcript, unbounded retention, or live model call | R11.1 | STORE-002, VER-001 | `IN_PROGRESS` |
+| EFFECT-001 | `ABSENT` | `ToolContext` carries physical call correlation and the common executor classifies effect policy, but no durable record is committed before an accepted effectful dispatch or replays a completed result without calling the sink again | The existing `sessions.db` owns a bounded, redacted effect receipt keyed by a caller-issued logical operation ID; one atomic admission distinguishes new, completed, conflicting, and uncertain operations, replays committed results, and never auto-reruns an uncertain effect | R12.1 | CAP-002, STORE-002 | `IN_DEVELOP` |
+| EFFECT-002 | `PARTIAL` | Checkpoints persist turn start, finalization, and model failures, while an ordinary successful tool batch appends its assistant call and result without an immediate checkpoint before the next model request | Every completed ordinary tool batch synchronizes the balanced call/result history and commits a checkpoint before the next model request; restart fixtures prove committed results remain model-visible and unfinished effect receipts surface an explicit uncertain outcome without automatic replay | R12.1 | EFFECT-001 | `IN_DEVELOP` |
+| EFFECT-003 | `MISFIT` | Middleware architecture prose calls the terminal boundary an `exactly-once executor`, although it proves one accepted in-process terminal invocation rather than exactly-once external effects; only MCP mid-call recovery currently states the read-only/idempotent retry boundary precisely | Runtime docs and executable retry/crash fixtures name single terminal invocation, durable effect admission, duplicate suppression, and uncertain outcome separately; automatic recovery remains limited to read-only or explicitly idempotent operations and no generic sink-level exactly-once claim remains | R12.1 | EFFECT-001, EFFECT-002 | `IN_DEVELOP` |
 
 ## 6. Dependency and merge sequence
 
@@ -674,6 +677,13 @@ authorities. It must establish causal skill attribution and deterministic
 context-recoverability evidence before any later package may add a new context
 store, retention class, eviction index, or executable namespace. Any such
 runtime change requires its own measured GAP and serialized package.
+
+R12.1 is a runtime safety package over the delivered tool-plan, middleware,
+and session-store authorities. It localizes durability at the accepted
+effectful dispatch boundary while leaving model reasoning, search, planning,
+and read-only exploration non-deterministic. It does not add a workflow engine,
+global argument-hash dedupe, generic compensation API, second state database,
+or a claim of exactly-once behavior across third-party sinks.
 
 ## 7. Phase work packages
 
@@ -1333,7 +1343,7 @@ extension kinds:
 
 - `tool_request`: immutable N→N+1 transformation before validation, policy,
   and approval;
-- `tool_execution`: async onion around the accepted exactly-once executor only;
+- `tool_execution`: async onion around one accepted terminal executor call;
 - `llm_request`: immutable N→N+1 transformation of the assembled adapter
   request while preserving prompt-cache invariants;
 - `llm_execution`: async onion around the actual provider call.
@@ -1954,6 +1964,43 @@ Acceptance:
   names the model route, seeds, repetitions, cost budget, privacy boundary, and
   explicit approval.
 
+### R12 — Durable external-effect boundary
+
+#### R12.1 Effect admission, checkpoint, and retry semantics
+
+GAPs: EFFECT-001, EFFECT-002, EFFECT-003.
+
+This package preserves an agentic, observation-driven trajectory while making
+the accepted mutation boundary crash-explicit. It reuses `ToolEffect`,
+`ToolContext`, the common `ToolExecutor`, the current session database, and the
+existing checkpoint writer instead of adding a general workflow or transaction
+framework.
+
+Acceptance:
+
+- only `MUTATE`, `COMMUNICATE`, and `ADMINISTRATIVE` registrations enter the
+  durable admission rail; `READ` stays freely retryable and arbitrary
+  `EXECUTE` operations keep their existing approval/sandbox contract rather
+  than receiving an unsupported exactly-once promise;
+- a caller-issued logical operation ID is distinct from argument fingerprints
+  and physical provider call correlation, while reusing an ID with different
+  effective arguments fails before dispatch;
+- admission is durable before dispatch, committed bounded results replay
+  without a second sink call, and a process boundary turns an unfinished
+  admission into an explicit uncertain outcome that is never automatically
+  replayed;
+- personal-data persistence rules redact receipt arguments/results, retention
+  is bounded, schema changes are additive and idempotent, and current session
+  databases remain readable without a second writer or migration command;
+- completed tool-call/result history is checkpointed before the next model
+  request, with crash fixtures covering pre-admission, pre-dispatch,
+  post-effect/pre-commit, and post-commit/pre-checkpoint boundaries;
+- internal and public architecture prose distinguishes trajectory
+  non-determinism, checkpoint recoverability, single terminal invocation,
+  duplicate suppression, provider idempotency, and sink-level exactly-once;
+  focused tests, the full non-live suite, architecture gates, docs build, and
+  installed-package checks pass without a live provider call.
+
 ## 8. Change-surface acceptance scenarios
 
 These black-box scenarios define extensibility more usefully than class count.
@@ -2094,6 +2141,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R9.2 | CODE-002 | [#3131](https://github.com/mangowhoiscloud/geode/pull/3131) | `bd7d79c3d004508eadf379e9403a0a2fb3c2a30a` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,412 local non-live tests and the full CI test-with-coverage job, lint/format, type check, security, six import contracts, official-doc parity and 238-page Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 402 isolated kernel modules and 59 kernel tests, fresh-schema and legacy-column compatibility coverage, and anti-deception checks all passed) |
 | R8.5 | BND-009 | [#3148](https://github.com/mangowhoiscloud/geode/pull/3148) | `24a6992a9e3ab9610c749dc1a875e0179342bd6f` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS ([CI run 32697757798](https://github.com/mangowhoiscloud/geode/actions/runs/32697757798) passed the final Gate, 9m09s test-with-coverage job, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, 659-file wheel and 661-file sdist inspection, clean full/kernel installed-package checks with 412 isolated kernel modules and 59 kernel tests, exact eight-payload state parity, zero retired import roots, seven import contracts, and the committed-diff review with all findings resolved; paid/live provider tests were not run) |
 | R10.1 | DIST-001, DIST-002, DIST-003, DIST-004 | [#3165](https://github.com/mangowhoiscloud/geode/pull/3165) | `a71d95ee392e16f6254f648f3802100db861b71f` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,379 non-live tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install and update smoke, 649-file wheel and 651-file sdist inspection, clean installed-wheel mutation rejection with unchanged distribution digests, and 412 isolated kernel imports plus 59 kernel tests all passed; paid/live provider tests were not run) |
+| R12.1 | EFFECT-001, EFFECT-002, EFFECT-003 | [#3246](https://github.com/mangowhoiscloud/geode/pull/3246) | `493e81df875f99cca935b52a24c80b83270e707d` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,432 local non-live tests, 9m48s CI test-with-coverage and package-artifact job, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, wheel/sdist inspection, checkpoint-anchored crash/restart and reconciliation coverage, and committed-diff review with all findings resolved all passed; paid/live provider tests were not run) |
 
 ### 10.2 Main closure evidence
 

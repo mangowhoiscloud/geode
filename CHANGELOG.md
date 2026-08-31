@@ -112,6 +112,18 @@ functional change.
 
 ### Fixed
 
+- **Effectful tool replay after crash windows.** Mutation, communication, and
+  administrative calls now checkpoint the provider call before dispatch, admit
+  a bounded receipt, and commit the PostToolUse-final result. Restart repairs
+  that call only through its checkpointed logical operation ID and sampling
+  step—not a reusable provider call ID—without another sink call. Replay returns
+  the stored PostToolUse-final result even when execution middleware transforms
+  fresh results. Unresolved prior-step effects block new effects until an
+  operator records a durable applied/not-applied outcome with `geode session`.
+  Both pending and balanced message checkpoints fail closed on SQLite SoT write
+  errors. Personal arguments are not stored or content-hashed; direct same-ID
+  re-admission therefore fails closed while anchored restart remains recoverable.
+  Read-only retry and arbitrary execution approval/sandbox behavior are unchanged.
 - **Execution middleware cancellation propagation.** Tool and LLM execution
   middleware no longer converts a caller cancellation into a completed result
   after the downstream call returns, preserving harness-owned hard timeouts.

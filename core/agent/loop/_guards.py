@@ -7,7 +7,7 @@ from typing import Any, cast
 
 from core.hooks import HookAction, HookCorrelation, HookEvent, HookName
 from core.llm.adapters.base import EmptyModelOutputError
-from core.llm.agentic_response import AgenticResponse
+from core.llm.agentic_response import AgenticResponse, ToolUseBlock
 from core.tools.personal_data import set_bound_tool_data_policies
 
 from . import _context, _lifecycle, _model_switching
@@ -1043,4 +1043,20 @@ def _tool_round_assistant_message(loop: Any, response: AgenticResponse) -> dict[
         message["codex_output_items"] = output_items
     if phase:
         message["phase"] = phase
+    processor = getattr(loop, "_tool_processor", None)
+    operation_id_for = getattr(processor, "operation_id_for", None)
+    step = getattr(processor, "_step_snapshot", None)
+    if callable(operation_id_for):
+        operations: dict[str, dict[str, str]] = {}
+        for block in response.content:
+            if not isinstance(block, ToolUseBlock) or not block.id:
+                continue
+            operation_id = operation_id_for(block.id)
+            if operation_id:
+                operations[block.id] = {
+                    "operation_id": operation_id,
+                    "step_id": getattr(step, "step_id", ""),
+                }
+        if operations:
+            message["metadata"] = {"effect_operations": operations}
     return message

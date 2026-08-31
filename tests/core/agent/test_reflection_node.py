@@ -266,20 +266,20 @@ def test_agentic_loop_has_maybe_reflect() -> None:
     assert "reflect_async" in src
 
 
-def test_run_cognitive_act_observe_cycle_calls_maybe_reflect() -> None:
+def test_finished_cognitive_tool_round_calls_maybe_reflect() -> None:
     """The reflection node must fire between ``record_round`` and
     the REFLECT hook event — otherwise downstream listeners see the
     deterministic snapshot, not the LLM-derived belief update."""
     from core.agent.loop.agent_loop import AgenticLoop
 
-    src = inspect.getsource(AgenticLoop._run_cognitive_act_observe_cycle)
-    # ordering: record_round → _maybe_reflect → COGNITIVE_REFLECT
-    record_pos = src.index("self.cognitive_state.record_round(")
-    reflect_call_pos = src.index("self._maybe_reflect(")
-    reflect_event_pos = src.index("HookEvent.COGNITIVE_REFLECT")
-    assert record_pos < reflect_call_pos < reflect_event_pos, (
-        "Cognitive cycle ordering broken: record_round must precede "
-        "_maybe_reflect must precede COGNITIVE_REFLECT event emission."
+    act_source = inspect.getsource(AgenticLoop._run_cognitive_act_observe_cycle)
+    finish_source = inspect.getsource(AgenticLoop._finish_cognitive_tool_round)
+    assert "self.cognitive_state.record_round(" in act_source
+    assert act_source.index("self.cognitive_state.record_round(") < act_source.index(
+        "AgenticLoop._finish_cognitive_tool_round("
+    )
+    assert finish_source.index("self._maybe_reflect(") < finish_source.index(
+        "HookEvent.COGNITIVE_REFLECT"
     )
 
 

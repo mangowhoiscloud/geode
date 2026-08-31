@@ -24,7 +24,7 @@ export default function Page() {
     round-entry guards          # round / time / session / cost budget
     context-overflow check      # compact or prune if needed
     response = call_llm(messages, tools)
-    run tool calls -> append assistant msg + tool_results`}</pre>
+    run tool calls -> append results -> checkpoint`}</pre>
             <p>
               루프 클래스 본체 옆에 책임별 모듈이 같은 패키지에 나뉘어 있습니다.
               물리적 턴의 순서는 <code>agent_loop.py</code>에 그대로 보이고,
@@ -44,7 +44,7 @@ export default function Page() {
               <li>컨텍스트 오버플로 점검. 임계값을 넘으면 압축하거나 정리합니다. 자세한 동작은 <a href="/geode/docs/runtime/context">컨텍스트 조립</a>을 참고합니다.</li>
               <li>LLM 호출.</li>
               <li>모델이 요청한 도구 실행.</li>
-              <li>assistant 메시지와 tool_result를 히스토리에 붙이고 다음 라운드로 진입합니다.</li>
+              <li>assistant 메시지와 tool_result를 히스토리에 붙여 checkpoint한 뒤 다음 라운드로 진입합니다.</li>
             </ol>
             <p>
               각 LLM 샘플링 직전에는 불변 <code>StepSnapshot</code>이 모델 경로,
@@ -53,6 +53,20 @@ export default function Page() {
               완료 라운드, 재시도, 계획 힌트, 종료 사유는 가변 <code>TurnState</code>가
               소유합니다. 따라서 같은 라운드 번호로 재시도해도 샘플링 step ID는
               단조 증가합니다.
+            </p>
+            <p>
+              변경·통신·관리 도구는 assistant tool call을 먼저 strict checkpoint한
+              뒤 provider call ID와 별개인 logical operation ID와 sampling step을
+              고정하고, 프로젝트 <code>sessions.db</code>에 receipt를 기록합니다.
+              재시작은 이 anchor로만 복구하며 provider call ID는 tool use/result
+              짝맞춤에만 씁니다. 완료 receipt는 PostToolUse까지 끝난 결과를 재생하고,
+              미완료 receipt는 effect_outcome_uncertain으로 중단합니다. 재시작은
+              이 call을 receipt 상태로 닫은 뒤에만 모델을 다시 호출합니다. 이는
+              중복 억제 경계이며 외부 시스템의 exactly-once 보장은 아닙니다.
+              미해결 이전 step은 <code>geode session effects</code>와{" "}
+              <code>resolve-effect</code>로 외부 sink 확인 후 해소하며 applied와
+              not-applied 모두 증거로 남습니다. 개인 인수는 해시하지 않으므로,
+              checkpoint anchor 없는 동일 ID 재진입은 거부합니다.
             </p>
             <figure>
               <img
@@ -184,7 +198,7 @@ export default function Page() {
     round-entry guards          # round / time / session / cost budget
     context-overflow check      # compact or prune if needed
     response = call_llm(messages, tools)
-    run tool calls -> append assistant msg + tool_results`}</pre>
+    run tool calls -> append results -> checkpoint`}</pre>
             <p>
               Responsibilities are split into sibling modules in the same package:
               the physical-turn order remains visible in <code>agent_loop.py</code>,
@@ -206,7 +220,7 @@ export default function Page() {
               <li>Context-overflow check: compact or prune when thresholds are crossed. Details in <a href="/geode/docs/runtime/context">Context assembly</a>.</li>
               <li>Call the LLM.</li>
               <li>Execute the tools the model requested.</li>
-              <li>Append the assistant message and tool_results to history, enter the next round.</li>
+              <li>Append the assistant message and tool_results, checkpoint them, then enter the next round.</li>
             </ol>
             <p>
               Immediately before each LLM sample, an immutable{" "}
@@ -216,6 +230,22 @@ export default function Page() {
               owns one physical turn&apos;s messages, completed rounds, retries, plan
               hint, and terminal reason, so retries at the same round still receive
               monotone sampling-step IDs.
+            </p>
+            <p>
+              Mutation, communication, and administrative tools first strictly
+              checkpoint an independent logical operation ID and sampling step
+              with the assistant tool call, then record its receipt in the project{" "}
+              <code>sessions.db</code>. Restart recovers only through that anchor;
+              the provider call ID merely pairs tool use with tool result. A committed receipt
+              replays the PostToolUse-final result; an unfinished receipt stops with
+              effect_outcome_uncertain. Restart closes that anchored call from the
+              receipt before another model request. This is duplicate suppression,
+              not an external exactly-once guarantee. After checking the external
+              sink, operators resolve older uncertain steps through{" "}
+              <code>geode session effects</code> and <code>resolve-effect</code>;
+              both applied and not-applied remain as evidence. Personal arguments
+              are not hashed, so same-ID re-admission without the checkpoint anchor
+              is rejected.
             </p>
             <figure>
               <img

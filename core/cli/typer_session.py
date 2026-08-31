@@ -580,6 +580,72 @@ def session_migrate_records(
     )
 
 
+@session_app.command("effects")
+def session_effects(
+    session_id: str = typer.Option("", "--session-id", help="Filter by session id."),
+    sessions_dir: str = typer.Option(
+        "",
+        "--sessions-dir",
+        help="Override the sessions directory containing sessions.db.",
+    ),
+) -> None:
+    """List unresolved effect receipts without arguments or result bodies."""
+    from core.memory.effect_receipts import EffectReceiptStore
+
+    rows = EffectReceiptStore(_resolve_base_dir(sessions_dir) / "sessions.db").list_uncertain(
+        session_id=session_id
+    )
+    if not rows:
+        typer.echo("No unresolved effects.")
+        return
+    typer.echo("OPERATION\tSESSION\tTOOL\tEFFECT\tUPDATED")
+    for row in rows:
+        typer.echo(
+            "\t".join(
+                (
+                    str(row["operation_id"]),
+                    str(row["session_id"]),
+                    str(row["tool_name"]),
+                    str(row["effect"]),
+                    _iso_local(float(row["updated_at"])),
+                )
+            )
+        )
+
+
+@session_app.command("resolve-effect")
+def session_resolve_effect(
+    operation_id: str = typer.Argument(..., help="Operation id shown by session effects."),
+    outcome: str = typer.Option(
+        ...,
+        "--outcome",
+        help="External verification result: applied or not-applied.",
+    ),
+    sessions_dir: str = typer.Option(
+        "",
+        "--sessions-dir",
+        help="Override the sessions directory containing sessions.db.",
+    ),
+) -> None:
+    """Resolve an uncertain effect after checking its external sink."""
+    normalized = outcome.strip().lower()
+    if normalized not in {"applied", "not-applied"}:
+        raise typer.BadParameter(
+            "expected applied or not-applied",
+            param_hint="--outcome",
+        )
+    from core.memory.effect_receipts import EffectReceiptStore
+
+    resolved = EffectReceiptStore(_resolve_base_dir(sessions_dir) / "sessions.db").resolve(
+        operation_id,
+        applied=normalized == "applied",
+    )
+    if not resolved:
+        typer.echo(f"Prepared effect {operation_id!r} was not found.")
+        raise typer.Exit(code=1)
+    typer.echo(f"Resolved {operation_id} as {normalized}.")
+
+
 @session_app.command("export-trajectory")
 def session_export_trajectory(
     session_id: str = typer.Argument(..., help="Canonical session id."),
