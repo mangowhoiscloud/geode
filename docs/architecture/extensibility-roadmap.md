@@ -237,8 +237,8 @@ evidence. The 2026-08-26 ACES/Scroll audit subsequently registered R11.1. Its
 paired Skill and context-recoverability contracts, execution path, and
 immutable diagnostics are delivered without altering the 62 terminal rows.
 The later native-capability and intervention-validity findings are isolated
-under R11.2, whose implementation is now merged to `develop` with no active
-claim.
+under R11.2, which is `DONE` on `main` with no active claim or score-bearing
+live execution.
 
 The program is complete when GEODE has:
 
@@ -2412,6 +2412,12 @@ implemented and hardened through [#3214](https://github.com/mangowhoiscloud/geod
 null/adverse evidence rather than a promotion claim. R11.2's separately
 registered native-capability and intervention-validity contract merged through
 [#3258](https://github.com/mangowhoiscloud/geode/pull/3258) as
-`d3f4bd1a5f95c12366e77ce531b9f69d5f48a3ae`; EVAL-003/004 are now
-`IN_DEVELOP`, the active claim is removed, and no live-call or runtime-promotion
-authority was granted.
+`d3f4bd1a5f95c12366e77ce531b9f69d5f48a3ae`, reached `main` through
+[#3262](https://github.com/mangowhoiscloud/geode/pull/3262) at
+`f7f2e39bb7bbb40e4c9e59e180839343988daafd`, and closed through tracking PR
+[#3263](https://github.com/mangowhoiscloud/geode/pull/3263) at
+`3576f789ceec05c7302e692c945cfc01d9323cc8`. The canonical sync
+[#3264](https://github.com/mangowhoiscloud/geode/pull/3264) returned that
+closure to `develop` at `64b30d8bd333e7d35695b641fbeb3d5214ebba09`.
+EVAL-003/004 are `DONE`, the active claim is removed, and no live-call or
+runtime-promotion authority was granted.
