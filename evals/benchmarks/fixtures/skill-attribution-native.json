@@ -1,0 +1,366 @@
+{
+  "schema_id": "geode.skill-attribution-native-suite@1",
+  "schema_version": 1,
+  "causal_design": {
+    "estimand": "family-conditioned source-example ITT of target Skill availability on deterministic verifier pass",
+    "grouping": "example_id; repetitions and both arms stay in one split",
+    "uncertainty": "95% deterministic percentile cluster bootstrap over example means",
+    "negative_controls": "excluded from primary ITT and reported as false-use rates",
+    "null_rule": "report null or adverse estimates without changing tasks or verifiers",
+    "promotion_authority": "none",
+    "design_repetitions": 1,
+    "evaluation_repetitions": 3
+  },
+  "cases": [
+    {
+      "case_id": "web-design-codex-skill-loading",
+      "example_id": "web-design-codex-skill-loading",
+      "split": "design",
+      "family": "web",
+      "prompt_class": "explicit",
+      "negative_control": false,
+      "prompt": "Use the available primary-source web document to explain the two documented Codex skill invocation paths and their operational difference.",
+      "model_fixture": {
+        "sources": [{
+          "id": "codex-app-server",
+          "url": "https://raw.githubusercontent.com/openai/codex/2b7c279735d0d096cf7b34fe98938f46792f4d4f/codex-rs/app-server/README.md",
+          "sha256": "e863a2ea8c54903017e0f2c0b1cd7f74cd0498c41e880c18b55d5bc70a058913"
+        }]
+      },
+      "verifier": {
+        "required_ids": ["codex-app-server"],
+        "required_answer_terms": ["full skill instructions", "add latency"],
+        "required_tool_names": ["web_fetch"],
+        "forbidden_tool_names": []
+      }
+    },
+    {
+      "case_id": "web-design-control",
+      "example_id": "web-design-control",
+      "split": "design",
+      "family": "web",
+      "prompt_class": "negative-control",
+      "negative_control": true,
+      "prompt": "Rewrite the sentence 'The run finished.' in the passive voice. Do not browse or load a Skill.",
+      "model_fixture": {},
+      "verifier": {
+        "required_ids": [],
+        "required_answer_terms": ["was finished"],
+        "required_tool_names": [],
+        "forbidden_tool_names": ["use_skill", "general_web_search", "web_fetch"]
+      }
+    },
+    {
+      "case_id": "web-eval-openclaw-skill-authority",
+      "example_id": "web-eval-openclaw-skill-authority",
+      "split": "evaluation",
+      "family": "web",
+      "prompt_class": "implicit",
+      "negative_control": false,
+      "prompt": "Consult the pinned OpenClaw Skills documentation and state the boundary between skill eligibility and execution authority, plus the security posture for third-party skills.",
+      "model_fixture": {
+        "sources": [{
+          "id": "openclaw-skills",
+          "url": "https://raw.githubusercontent.com/openclaw/openclaw/d9031e4648a492c1a093ed10c5ed3dbca08cd5b5/docs/tools/skills.md",
+          "sha256": "f12bd1e007ffb772d68b773d6722142db7034c5cc0a1c3e63d61e743ac87db24"
+        }]
+      },
+      "verifier": {
+        "required_ids": ["openclaw-skills"],
+        "required_answer_terms": ["does not grant tool access", "untrusted code"],
+        "required_tool_names": ["web_fetch"],
+        "forbidden_tool_names": []
+      }
+    },
+    {
+      "case_id": "web-eval-prime-verifier-boundary",
+      "example_id": "web-eval-prime-verifier-boundary",
+      "split": "evaluation",
+      "family": "web",
+      "prompt_class": "contextual",
+      "negative_control": false,
+      "prompt": "Use the pinned Prime Verifiers overview to identify the current environment primitives and the status of the earlier stack.",
+      "model_fixture": {
+        "sources": [{
+          "id": "prime-verifiers-overview",
+          "url": "https://raw.githubusercontent.com/PrimeIntellect-ai/verifiers/71690b03861719026185e3db746bf4c371d05a90/docs/overview.md",
+          "sha256": "4dea43b7ee5f7fa552830190ea22b334237f805a7e3b9a2c4d624b5411fdb690"
+        }]
+      },
+      "verifier": {
+        "required_ids": ["prime-verifiers-overview"],
+        "required_answer_terms": ["tasksets, harnesses, and traces", "legacy v0 stack"],
+        "required_tool_names": ["web_fetch"],
+        "forbidden_tool_names": []
+      }
+    },
+    {
+      "case_id": "web-eval-inspect-epochs",
+      "example_id": "web-eval-inspect-epochs",
+      "split": "evaluation",
+      "family": "web",
+      "prompt_class": "explicit",
+      "negative_control": false,
+      "prompt": "Read the pinned Inspect source and explain what task epochs repeat and how scores are reduced when no reducer is supplied.",
+      "model_fixture": {
+        "sources": [{
+          "id": "inspect-epochs",
+          "url": "https://raw.githubusercontent.com/UKGovernmentBEIS/inspect_ai/253d38f255256a5d010836a921fdf9ac0917b86e/src/inspect_ai/_eval/task/epochs.py",
+          "sha256": "d8d9016a7e840822c0610b3a3b3c43f079f5fb1a6593b50b3b775e24ab1d8194"
+        }]
+      },
+      "verifier": {
+        "required_ids": ["inspect-epochs"],
+        "required_answer_terms": ["repeat samples", "mean"],
+        "required_tool_names": ["web_fetch"],
+        "forbidden_tool_names": []
+      }
+    },
+    {
+      "case_id": "web-eval-control",
+      "example_id": "web-eval-control",
+      "split": "evaluation",
+      "family": "web",
+      "prompt_class": "negative-control",
+      "negative_control": true,
+      "prompt": "Return the plural of 'trajectory' and do not use web or Skill tools.",
+      "model_fixture": {},
+      "verifier": {
+        "required_ids": [],
+        "required_answer_terms": ["trajectories"],
+        "required_tool_names": [],
+        "forbidden_tool_names": ["use_skill", "general_web_search", "web_fetch"]
+      }
+    },
+    {
+      "case_id": "repository-design-duplicate-helper",
+      "example_id": "repository-design-duplicate-helper",
+      "split": "design",
+      "family": "repository",
+      "prompt_class": "explicit",
+      "negative_control": false,
+      "prompt": "Audit the isolated repository fixture for one evidence-backed cleanup finding.",
+      "model_fixture": {
+        "files": {
+          "src/normalize.py": "def normalize(value: str) -> str:\n    return value.strip().lower()\n\ndef normalize_name(value: str) -> str:\n    return value.strip().lower()\n"
+        }
+      },
+      "verifier": {
+        "required_ids": ["src/normalize.py:4"],
+        "required_answer_terms": ["duplicate"],
+        "required_tool_names": ["read_document"],
+        "forbidden_tool_names": []
+      }
+    },
+    {
+      "case_id": "repository-design-control",
+      "example_id": "repository-design-control",
+      "split": "design",
+      "family": "repository",
+      "prompt_class": "negative-control",
+      "negative_control": true,
+      "prompt": "Define a Python wheel in one sentence without inspecting files or loading a Skill.",
+      "model_fixture": {},
+      "verifier": {
+        "required_ids": [],
+        "required_answer_terms": ["distribution"],
+        "required_tool_names": [],
+        "forbidden_tool_names": ["use_skill", "glob_files", "grep_files", "read_document"]
+      }
+    },
+    {
+      "case_id": "repository-eval-placeholder-body",
+      "example_id": "repository-eval-placeholder-body",
+      "split": "evaluation",
+      "family": "repository",
+      "prompt_class": "implicit",
+      "negative_control": false,
+      "prompt": "Inspect the isolated repository and report the single implementation gap that prevents the export path from doing useful work.",
+      "model_fixture": {
+        "files": {
+          "src/export.py": "def export_report(payload: dict[str, object]) -> None:\n    pass\n"
+        }
+      },
+      "verifier": {
+        "required_ids": ["src/export.py:2"],
+        "required_answer_terms": ["placeholder"],
+        "required_tool_names": ["read_document"],
+        "forbidden_tool_names": []
+      }
+    },
+    {
+      "case_id": "repository-eval-cross-file-duplicate",
+      "example_id": "repository-eval-cross-file-duplicate",
+      "split": "evaluation",
+      "family": "repository",
+      "prompt_class": "contextual",
+      "negative_control": false,
+      "prompt": "Find the one cross-file duplication in the isolated repository fixture and cite its second definition.",
+      "model_fixture": {
+        "files": {
+          "src/user_id.py": "def parse_id(value: str) -> int:\n    return int(value)\n",
+          "src/task_id.py": "def parse_id(value: str) -> int:\n    return int(value)\n"
+        }
+      },
+      "verifier": {
+        "required_ids": ["src/task_id.py:1"],
+        "required_answer_terms": ["duplicate"],
+        "required_tool_names": ["read_document"],
+        "forbidden_tool_names": []
+      }
+    },
+    {
+      "case_id": "repository-eval-redundant-facade",
+      "example_id": "repository-eval-redundant-facade",
+      "split": "evaluation",
+      "family": "repository",
+      "prompt_class": "explicit",
+      "negative_control": false,
+      "prompt": "Audit the fixture after a package move and identify the remaining compatibility file that adds no behavior.",
+      "model_fixture": {
+        "files": {
+          "core/state.py": "class RunState:\n    pass\n",
+          "legacy/state.py": "from core.state import RunState\n\n__all__ = [\"RunState\"]\n"
+        }
+      },
+      "verifier": {
+        "required_ids": ["legacy/state.py:1"],
+        "required_answer_terms": ["redundant facade"],
+        "required_tool_names": ["read_document"],
+        "forbidden_tool_names": []
+      }
+    },
+    {
+      "case_id": "repository-eval-control",
+      "example_id": "repository-eval-control",
+      "split": "evaluation",
+      "family": "repository",
+      "prompt_class": "negative-control",
+      "negative_control": true,
+      "prompt": "State whether JSON objects are ordered mappings in modern Python. Do not inspect files or load a Skill.",
+      "model_fixture": {},
+      "verifier": {
+        "required_ids": [],
+        "required_answer_terms": ["preserve insertion order"],
+        "required_tool_names": [],
+        "forbidden_tool_names": ["use_skill", "glob_files", "grep_files", "read_document"]
+      }
+    },
+    {
+      "case_id": "delegation-design-two-perspectives",
+      "example_id": "delegation-design-two-perspectives",
+      "split": "design",
+      "family": "delegation",
+      "prompt_class": "explicit",
+      "negative_control": false,
+      "prompt": "Delegate the two independent briefs, then reconcile their conclusions without merging their evidence identities.",
+      "model_fixture": {
+        "subtasks": [
+          {"id": "delegation-design-a", "brief": "Which durable service owns session evidence in the described runtime?"},
+          {"id": "delegation-design-b", "brief": "Which persisted boundary lets the runtime resume after interruption?"}
+        ]
+      },
+      "verifier": {
+        "required_ids": ["delegation-design-a", "delegation-design-b"],
+        "required_answer_terms": ["session store", "checkpoint"],
+        "required_tool_names": ["delegate_task"],
+        "forbidden_tool_names": []
+      }
+    },
+    {
+      "case_id": "delegation-design-control",
+      "example_id": "delegation-design-control",
+      "split": "design",
+      "family": "delegation",
+      "prompt_class": "negative-control",
+      "negative_control": true,
+      "prompt": "Compute 7 multiplied by 8 without delegation or Skill tools.",
+      "model_fixture": {},
+      "verifier": {
+        "required_ids": [],
+        "required_answer_terms": ["56"],
+        "required_tool_names": [],
+        "forbidden_tool_names": ["use_skill", "delegate_task"]
+      }
+    },
+    {
+      "case_id": "delegation-eval-state-and-rollback",
+      "example_id": "delegation-eval-state-and-rollback",
+      "split": "evaluation",
+      "family": "delegation",
+      "prompt_class": "implicit",
+      "negative_control": false,
+      "prompt": "Use independent delegated briefs to identify the authority boundary and the safe rollback rule, then synthesize them.",
+      "model_fixture": {
+        "subtasks": [
+          {"id": "delegation-state", "brief": "Identify the canonical database that owns session event state."},
+          {"id": "delegation-rollback", "brief": "State the restart rule for an external effect whose completion cannot be proven."}
+        ]
+      },
+      "verifier": {
+        "required_ids": ["delegation-state", "delegation-rollback"],
+        "required_answer_terms": ["sessions.db", "never replay uncertain effects"],
+        "required_tool_names": ["delegate_task"],
+        "forbidden_tool_names": []
+      }
+    },
+    {
+      "case_id": "delegation-eval-source-comparison",
+      "example_id": "delegation-eval-source-comparison",
+      "split": "evaluation",
+      "family": "delegation",
+      "prompt_class": "contextual",
+      "negative_control": false,
+      "prompt": "Delegate the two source summaries independently and report the common evaluation discipline they imply.",
+      "model_fixture": {
+        "subtasks": [
+          {"id": "delegation-anthropic", "brief": "What state should an agent evaluation grade beyond the final message?"},
+          {"id": "delegation-prime", "brief": "Which two execution identities must remain fixed for a comparable rollout?"}
+        ]
+      },
+      "verifier": {
+        "required_ids": ["delegation-anthropic", "delegation-prime"],
+        "required_answer_terms": ["environment state", "pinned task and harness"],
+        "required_tool_names": ["delegate_task"],
+        "forbidden_tool_names": []
+      }
+    },
+    {
+      "case_id": "delegation-eval-risk-owners",
+      "example_id": "delegation-eval-risk-owners",
+      "split": "evaluation",
+      "family": "delegation",
+      "prompt_class": "explicit",
+      "negative_control": false,
+      "prompt": "Delegate the two risk reviews and preserve which owner supplied each conclusion in the final answer.",
+      "model_fixture": {
+        "subtasks": [
+          {"id": "delegation-privacy", "brief": "Where should hidden grading evidence remain during a trial?"},
+          {"id": "delegation-budget", "brief": "What authority is required before a score-bearing provider run?"}
+        ]
+      },
+      "verifier": {
+        "required_ids": ["delegation-privacy", "delegation-budget"],
+        "required_answer_terms": ["evaluator-only receipts", "explicit live approval"],
+        "required_tool_names": ["delegate_task"],
+        "forbidden_tool_names": []
+      }
+    },
+    {
+      "case_id": "delegation-eval-control",
+      "example_id": "delegation-eval-control",
+      "split": "evaluation",
+      "family": "delegation",
+      "prompt_class": "negative-control",
+      "negative_control": true,
+      "prompt": "Return the next integer after 41 without delegation or Skill tools.",
+      "model_fixture": {},
+      "verifier": {
+        "required_ids": [],
+        "required_answer_terms": ["42"],
+        "required_tool_names": [],
+        "forbidden_tool_names": ["use_skill", "delegate_task"]
+      }
+    }
+  ]
+}

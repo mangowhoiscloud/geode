@@ -97,6 +97,21 @@ argument-hint: "[issue-number]"
               GEODE 프로세스 권한으로 실행하도록 명시적으로 승인하는 것입니다.
             </p>
 
+            <h2>스킬 평가 경계</h2>
+            <p>
+              GEODE의 prospective native suite는 web, repository, delegation
+              과제를 target Skill이 보이는 arm과 보이지 않는 arm으로 짝짓습니다.
+              두 arm은 같은 도구 schema와 격리 workspace를 사용하며, availability,
+              selection, activation, verifier outcome, 비용·안전 지표를 따로
+              보고합니다. 반복은 새 example로 세지 않고 source example 안에서
+              묶습니다. 이 계약은 diagnostic-only이며 live 실행에는 별도 승인된
+              run spec이 필요합니다. 전체 계약은{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/skill-context-evaluation.md">
+                Skill attribution evaluation 문서
+              </a>
+              를 따릅니다.
+            </p>
+
             <h2>호출</h2>
             <table>
               <thead>
@@ -253,6 +268,20 @@ and !\`cmd\` is replaced with shell output at invocation time.`}</pre>
               the body contains <code>!`cmd`</code> dynamic context. It is not a
               sandbox: it explicitly trusts that skill to run the command with
               the GEODE process&apos;s authority at invocation time.
+            </p>
+
+            <h2>Skill evaluation boundary</h2>
+            <p>
+              GEODE&apos;s prospective native suite pairs web, repository, and
+              delegation tasks with and without target-Skill availability. Both
+              arms retain the same tool schema and isolated workspace, while
+              availability, selection, activation, verifier outcome, cost, and
+              safety remain separate metrics. Repetitions stay grouped inside
+              their source example. The contract is diagnostic-only; a live run
+              requires a separately approved run spec. See the{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/skill-context-evaluation.md">
+                Skill attribution evaluation contract
+              </a>.
             </p>
 
             <h2>Invocation</h2>

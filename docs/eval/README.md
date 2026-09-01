@@ -27,7 +27,7 @@ eval_latest_valid_release: https://github.com/mangowhoiscloud/geode-eval-artifac
 
 > Action/tool-execution 4종 벤치마크. GEODE의 quality ratchet(P4)에 통합 예정.
 > 각 문서는 **사례 + 필요 인프라 + 4-Phase 진행 시나리오**를 담음.
-> 마지막 갱신: 2026-08-26
+> 마지막 갱신: 2026-09-01
 
 ## LLM entry contract
 
@@ -266,6 +266,7 @@ Verified 다음에 τ²-bench를 둔다.
 
 | 일자 | 변경 |
 |---|---|
+| 2026-09-01 | R11.2 prospective native Skill contract 동결: web/repository/delegation 18 source examples를 design 6/final 12로 분리하고 family별 production tool schema, deterministic verifier, pair drift, source-example ITT·cluster uncertainty를 고정. live model call과 새 score는 0이며 기존 72-arm 진단은 변경하지 않음 |
 | 2026-08-26 | GPT-5.6 Sol/max runtime-skill attribution 12-case paired diagnostic 게시: 24/24 valid, with-skill 6/12 vs without-skill 2/12, frozen delta +4/12 supported. Explicit with-skill 0/3, `deep-researcher` positive 0/3, negative-control activation을 승격 blocker로 보존하고 111 public files / 502,060 bytes와 reviewed digest trajectory를 artifact commit `fa352cb`에서 원격 재검증 |
 | 2026-08-14 | Tau2 Lane 1A 278-ID/pin/user/budget no-model freeze 완료·게시. 모델/계정 호출과 score는 0이며 exact receipt bytes를 artifact merge `dbfd948b`에서 원격 재검증; Gate 1B는 Gate 0C k=3, PAYG 승인, quota headroom 대기 |
 | 2026-08-14 | GPT-5.4/high MCPMark Gate 0C common-deadline FS30 k=1 게시: GEODE 23/30, Codex 21/30, frozen delta +2/30=+6.67%p supported diagnostic-only. 60/60 valid arms, paired buckets 17/3/6/4, one GEODE score-bearing timeout, exact token coverage 29/30 vs 30/30, 59 admitted trajectories/one withheld를 artifact commit `1160fec`에서 원격 재검증. `promotion_authority=none`; fresh k=3 live는 WHAM=80%에서 차단 |
