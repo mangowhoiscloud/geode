@@ -117,7 +117,7 @@
       "authority": "routing",
       "path": "docs/eval/README.md",
       "summary": "Machine and human entrypoint for GEODE evaluation contracts, benchmark ledgers, evidence, and publication.",
-      "sha256": "63d0bedbcd339c6e47a940432b43d1c7b4135e42872fdd29ec40ccbf7e5fee20",
+      "sha256": "879cfabc006e52113829504bcbff02b1d84cbfa08ed46ce39ee7cf044108baac",
       "triggers": [
         "artifact",
         "benchmark",
@@ -447,7 +447,7 @@
       "authority": "measurement-contract",
       "path": "docs/eval/skill-context-evaluation.md",
       "summary": "Paired runtime-skill attribution and deterministic context-recoverability profiles over existing GEODE evidence authorities.",
-      "sha256": "34349ed3443f9046d86a094e002fc3bac82174018981fbf66b197b81335217e1",
+      "sha256": "258034c6aa9538506acacc7437161e2b6f19baee21a7940038f9e258d1653048",
       "triggers": [
         "ACES",
         "Scroll",

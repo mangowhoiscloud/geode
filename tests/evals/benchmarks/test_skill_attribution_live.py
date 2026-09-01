@@ -50,6 +50,9 @@ def test_model_visible_tool_schema_is_identical_between_skill_arms() -> None:
 
     assert digests["slop-audit"] == digests["deep-researcher"]
     assert digests["slop-audit"] != digests["grilling"]
+    assert skill_tool_schema_sha256(
+        (), target_skill="slop-audit", allowed_tools=frozenset()
+    ) != skill_tool_schema_sha256((), target_skill="slop-audit")
 
 
 def test_system_prompt_diff_is_only_the_available_skill_block(

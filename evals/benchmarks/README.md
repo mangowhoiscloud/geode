@@ -45,6 +45,14 @@ evals/
 The former flat adapter and runner modules remain importable as v1.0.x
 compatibility facades; new code uses the grouped paths above.
 
+The R11.2 prospective Skill suite lives in
+`skill_attribution_native.py` with its frozen fixture at
+`fixtures/skill-attribution-native.json`. It validates native web,
+file/repository, and delegation task contracts, matched production tool
+schemas, pairwise treatment identity, and family-conditioned source-example
+ITT analysis without making a model call. A live run remains separately gated
+by an approved `geode.eval-run-spec@1`.
+
 `HarnessSpec`, `BENCHMARK_HARNESSES`, `get_harness()`, and the former
 `benchmark_harness.harness` TOML table remain v1.0.x compatibility aliases;
 new code should use their benchmark-named equivalents. The manifest filename,

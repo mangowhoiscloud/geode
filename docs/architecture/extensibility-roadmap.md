@@ -237,7 +237,8 @@ evidence. The 2026-08-26 ACES/Scroll audit subsequently registered R11.1. Its
 paired Skill and context-recoverability contracts, execution path, and
 immutable diagnostics are delivered without altering the 62 terminal rows.
 The later native-capability and intervention-validity findings are isolated
-under R11.2, and there is no active claim.
+under R11.2, whose implementation is now merged to `develop` with no active
+claim.
 
 The program is complete when GEODE has:
 
@@ -285,12 +286,12 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `evals/` + `evolve/`) | 578 |
-| Test Python files | 697 |
+| Production Python files (`core/` + `evals/` + `evolve/`) | 579 |
+| Test Python files | 698 |
 | `core/` Python LOC | 124,265 |
-| `evals/` Python LOC | 29,606 |
+| `evals/` Python LOC | 30,375 |
 | `evolve/` Python LOC | 32,014 |
-| Test Python LOC | 188,912 |
+| Test Python LOC | 189,190 |
 | Tool definitions / model executions / valid schemas / policies | 86 / 86 / 86 / 86 (exact) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 5 |
@@ -580,8 +581,8 @@ and closure evidence are appended in §10.
 | EFFECT-001 | `ABSENT` | `ToolContext` carries physical call correlation and the common executor classifies effect policy, but no durable record is committed before an accepted effectful dispatch or replays a completed result without calling the sink again | The existing `sessions.db` owns a bounded, redacted effect receipt keyed by a caller-issued logical operation ID; one atomic admission distinguishes new, completed, conflicting, and uncertain operations, replays committed results, and never auto-reruns an uncertain effect | R12.1 | CAP-002, STORE-002 | `DONE` |
 | EFFECT-002 | `PARTIAL` | Checkpoints persist turn start, finalization, and model failures, while an ordinary successful tool batch appends its assistant call and result without an immediate checkpoint before the next model request | Every completed ordinary tool batch synchronizes the balanced call/result history and commits a checkpoint before the next model request; restart fixtures prove committed results remain model-visible and unfinished effect receipts surface an explicit uncertain outcome without automatic replay | R12.1 | EFFECT-001 | `DONE` |
 | EFFECT-003 | `MISFIT` | Middleware architecture prose calls the terminal boundary an `exactly-once executor`, although it proves one accepted in-process terminal invocation rather than exactly-once external effects; only MCP mid-call recovery currently states the read-only/idempotent retry boundary precisely | Runtime docs and executable retry/crash fixtures name single terminal invocation, durable effect admission, duplicate suppression, and uncertain outcome separately; automatic recovery remains limited to read-only or explicitly idempotent operations and no generic sink-level exactly-once claim remains | R12.1 | EFFECT-001, EFFECT-002 | `DONE` |
-| EVAL-003 | `PARTIAL` | The repeated paired Skill suite uses synthetic context and target-scoped registry or Grill tools, but does not exercise native web, file/repository, or delegation work | A prospective native-capability suite freezes those three task families, matched tool and workspace identities, task-specific output contracts, deterministic verifiers, lineage-safe repetitions, and separate quality, activation, cost, and safety results without reusing the synthetic score as promotion authority | R11.2 | EVAL-004 | `READY` |
-| EVAL-004 | `MISFIT` | Availability-only repetitions produced signed deltas of +4, -3, and -1 over 12 source examples, so repeating the same intervention cannot separate task-skill alignment, routing, and outcome quality from sampling variation | A preregistered design names the causal estimand, intervention, grouping, lineage-safe split, negative controls, uncertainty, and null/promotion rules before execution; it distinguishes availability, selection, activation, and verified outcome without post-hoc verifier tuning or an equal-weight composite | R11.2 | EVAL-001, VER-001 | `READY` |
+| EVAL-003 | `PARTIAL` | The repeated paired Skill suite uses synthetic context and target-scoped registry or Grill tools, but does not exercise native web, file/repository, or delegation work | A prospective native-capability suite freezes those three task families, matched tool and workspace identities, task-specific output contracts, deterministic verifiers, lineage-safe repetitions, and separate quality, activation, cost, and safety results without reusing the synthetic score as promotion authority | R11.2 | EVAL-004 | `IN_DEVELOP` |
+| EVAL-004 | `MISFIT` | Availability-only repetitions produced signed deltas of +4, -3, and -1 over 12 source examples, so repeating the same intervention cannot separate task-skill alignment, routing, and outcome quality from sampling variation | A preregistered design names the causal estimand, intervention, grouping, lineage-safe split, negative controls, uncertainty, and null/promotion rules before execution; it distinguishes availability, selection, activation, and verified outcome without post-hoc verifier tuning or an equal-weight composite | R11.2 | EVAL-001, VER-001 | `IN_DEVELOP` |
 
 ## 6. Dependency and merge sequence
 
@@ -2183,6 +2184,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R10.1 | DIST-001, DIST-002, DIST-003, DIST-004 | [#3165](https://github.com/mangowhoiscloud/geode/pull/3165) | `a71d95ee392e16f6254f648f3802100db861b71f` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,379 non-live tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install and update smoke, 649-file wheel and 651-file sdist inspection, clean installed-wheel mutation rejection with unchanged distribution digests, and 412 isolated kernel imports plus 59 kernel tests all passed; paid/live provider tests were not run) |
 | R12.1 | EFFECT-001, EFFECT-002, EFFECT-003 | [#3246](https://github.com/mangowhoiscloud/geode/pull/3246) | `493e81df875f99cca935b52a24c80b83270e707d` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,432 local non-live tests, 9m48s CI test-with-coverage and package-artifact job, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, wheel/sdist inspection, checkpoint-anchored crash/restart and reconciliation coverage, and committed-diff review with all findings resolved all passed; paid/live provider tests were not run) |
 | R11.1 | EVAL-001, EVAL-002 | implementation [#3214](https://github.com/mangowhoiscloud/geode/pull/3214), execution [#3216](https://github.com/mangowhoiscloud/geode/pull/3216), provider fix [#3218](https://github.com/mangowhoiscloud/geode/pull/3218), contract fix [#3220](https://github.com/mangowhoiscloud/geode/pull/3220), leakage fix [#3222](https://github.com/mangowhoiscloud/geode/pull/3222); diagnostics [#3219](https://github.com/mangowhoiscloud/geode/pull/3219), [#3221](https://github.com/mangowhoiscloud/geode/pull/3221) | `55129e53239262bca534ee7c1957914009b6faa6` | `uv run pytest -q tests/evals/benchmarks/test_context_recoverability.py tests/evals/benchmarks/test_skill_attribution.py tests/evals/benchmarks/test_skill_attribution_live.py`; `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (the implementation and follow-up PRs passed full non-live preflight and CI; the prospective repeated diagnostic produced 72/72 valid arms with immutable deltas `+4`, `-3`, and `-1`, while exact/summary-only/unavailable/corrupt recovery fixtures passed; no new live call was run, and follow-up native-capability/intervention findings are registered separately as EVAL-003/EVAL-004) |
+| R11.2 | EVAL-003, EVAL-004 | [#3258](https://github.com/mangowhoiscloud/geode/pull/3258) | `d3f4bd1a5f95c12366e77ce531b9f69d5f48a3ae` | `uv run pytest tests/evals/benchmarks/test_skill_attribution_native.py tests/evals/benchmarks/test_skill_attribution.py tests/evals/benchmarks/test_skill_attribution_live.py -q`; `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS ([CI run 33493881856](https://github.com/mangowhoiscloud/geode/actions/runs/33493881856) passed the final Gate, 11m13s test-with-coverage and package-artifact job, lint/format, type check, security, official-doc parity, 239-page Pages build, and macOS/Ubuntu install smoke; the 18-source-example native suite, strict loader, treatment-drift poison coverage, family-conditioned clustered ITT, negative controls, production-schema preflight, and explicit live-approval refusal passed; no live provider call was run) |
 
 ### 10.2 Main closure evidence
 
@@ -2405,6 +2407,9 @@ implemented and hardened through [#3214](https://github.com/mangowhoiscloud/geod
 [#3222](https://github.com/mangowhoiscloud/geode/pull/3222), and promoted to
 `main` through [#3224](https://github.com/mangowhoiscloud/geode/pull/3224) at
 `2962d5da7cc15be633717494f280ac0d63faa16a`. The immutable diagnostics remain
-null/adverse evidence rather than a promotion claim. R11.2 now owns the
-separately registered native-capability and intervention-validity follow-up,
-is `READY`, and has no active claim or live-call authority.
+null/adverse evidence rather than a promotion claim. R11.2's separately
+registered native-capability and intervention-validity contract merged through
+[#3258](https://github.com/mangowhoiscloud/geode/pull/3258) as
+`d3f4bd1a5f95c12366e77ce531b9f69d5f48a3ae`; EVAL-003/004 are now
+`IN_DEVELOP`, the active claim is removed, and no live-call or runtime-promotion
+authority was granted.

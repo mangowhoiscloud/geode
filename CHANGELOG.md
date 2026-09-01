@@ -70,6 +70,12 @@ functional change.
 
 ### Added
 
+- **Native Skill attribution validity contract.** A prospective web,
+  repository, and delegation suite now freezes disjoint design/final splits,
+  production tool schemas, isolated workspace and verifier identities, and
+  source-example-clustered family ITTs. Selection, activation, quality, cost,
+  irrelevant action, and safety remain separate; live execution still requires
+  a new approved run spec and has no promotion authority.
 - **Harbor ATIF export for Terminal-Bench.** The GEODE external agent now
   validates and writes ATIF 1.7 from the canonical session timeline, and it
   leaves timeout enforcement to Harbor's task-owned limits instead of adding a
@@ -112,6 +118,9 @@ functional change.
 
 ### Fixed
 
+- **Harbor terminal command deadlines.** The shared tool executor now honors
+  `terminal_exec`'s declared 600-second ceiling instead of cancelling every
+  command at the generic 120-second handler deadline.
 - **Effectful tool replay after crash windows.** Mutation, communication, and
   administrative calls now checkpoint the provider call before dispatch, admit
   a bounded receipt, and commit the PostToolUse-final result. Restart repairs
