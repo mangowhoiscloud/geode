@@ -225,6 +225,7 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
+| R11.2 | EVAL-003, EVAL-004 | `session=codex-root task=r11-native-skill-validity` | `feature/r11-native-skill-validity` | readiness [#3253](https://github.com/mangowhoiscloud/geode/pull/3253) | `2026-09-01T08:52:56Z` |
 
 ## 1. Program objective
 
@@ -237,7 +238,7 @@ evidence. The 2026-08-26 ACES/Scroll audit subsequently registered R11.1. Its
 paired Skill and context-recoverability contracts, execution path, and
 immutable diagnostics are delivered without altering the 62 terminal rows.
 The later native-capability and intervention-validity findings are isolated
-under R11.2, and there is no active claim.
+under R11.2, which now has one active claim.
 
 The program is complete when GEODE has:
 
@@ -580,8 +581,8 @@ and closure evidence are appended in §10.
 | EFFECT-001 | `ABSENT` | `ToolContext` carries physical call correlation and the common executor classifies effect policy, but no durable record is committed before an accepted effectful dispatch or replays a completed result without calling the sink again | The existing `sessions.db` owns a bounded, redacted effect receipt keyed by a caller-issued logical operation ID; one atomic admission distinguishes new, completed, conflicting, and uncertain operations, replays committed results, and never auto-reruns an uncertain effect | R12.1 | CAP-002, STORE-002 | `DONE` |
 | EFFECT-002 | `PARTIAL` | Checkpoints persist turn start, finalization, and model failures, while an ordinary successful tool batch appends its assistant call and result without an immediate checkpoint before the next model request | Every completed ordinary tool batch synchronizes the balanced call/result history and commits a checkpoint before the next model request; restart fixtures prove committed results remain model-visible and unfinished effect receipts surface an explicit uncertain outcome without automatic replay | R12.1 | EFFECT-001 | `DONE` |
 | EFFECT-003 | `MISFIT` | Middleware architecture prose calls the terminal boundary an `exactly-once executor`, although it proves one accepted in-process terminal invocation rather than exactly-once external effects; only MCP mid-call recovery currently states the read-only/idempotent retry boundary precisely | Runtime docs and executable retry/crash fixtures name single terminal invocation, durable effect admission, duplicate suppression, and uncertain outcome separately; automatic recovery remains limited to read-only or explicitly idempotent operations and no generic sink-level exactly-once claim remains | R12.1 | EFFECT-001, EFFECT-002 | `DONE` |
-| EVAL-003 | `PARTIAL` | The repeated paired Skill suite uses synthetic context and target-scoped registry or Grill tools, but does not exercise native web, file/repository, or delegation work | A prospective native-capability suite freezes those three task families, matched tool and workspace identities, task-specific output contracts, deterministic verifiers, lineage-safe repetitions, and separate quality, activation, cost, and safety results without reusing the synthetic score as promotion authority | R11.2 | EVAL-004 | `READY` |
-| EVAL-004 | `MISFIT` | Availability-only repetitions produced signed deltas of +4, -3, and -1 over 12 source examples, so repeating the same intervention cannot separate task-skill alignment, routing, and outcome quality from sampling variation | A preregistered design names the causal estimand, intervention, grouping, lineage-safe split, negative controls, uncertainty, and null/promotion rules before execution; it distinguishes availability, selection, activation, and verified outcome without post-hoc verifier tuning or an equal-weight composite | R11.2 | EVAL-001, VER-001 | `READY` |
+| EVAL-003 | `PARTIAL` | The repeated paired Skill suite uses synthetic context and target-scoped registry or Grill tools, but does not exercise native web, file/repository, or delegation work | A prospective native-capability suite freezes those three task families, matched tool and workspace identities, task-specific output contracts, deterministic verifiers, lineage-safe repetitions, and separate quality, activation, cost, and safety results without reusing the synthetic score as promotion authority | R11.2 | EVAL-004 | `IN_PROGRESS` |
+| EVAL-004 | `MISFIT` | Availability-only repetitions produced signed deltas of +4, -3, and -1 over 12 source examples, so repeating the same intervention cannot separate task-skill alignment, routing, and outcome quality from sampling variation | A preregistered design names the causal estimand, intervention, grouping, lineage-safe split, negative controls, uncertainty, and null/promotion rules before execution; it distinguishes availability, selection, activation, and verified outcome without post-hoc verifier tuning or an equal-weight composite | R11.2 | EVAL-001, VER-001 | `IN_PROGRESS` |
 
 ## 6. Dependency and merge sequence
 
@@ -2406,5 +2407,7 @@ implemented and hardened through [#3214](https://github.com/mangowhoiscloud/geod
 `main` through [#3224](https://github.com/mangowhoiscloud/geode/pull/3224) at
 `2962d5da7cc15be633717494f280ac0d63faa16a`. The immutable diagnostics remain
 null/adverse evidence rather than a promotion claim. R11.2 now owns the
-separately registered native-capability and intervention-validity follow-up,
-is `READY`, and has no active claim or live-call authority.
+separately registered native-capability and intervention-validity follow-up and
+is `IN_PROGRESS` under `session=codex-root task=r11-native-skill-validity` on
+`feature/r11-native-skill-validity`. The claim authorizes implementation but
+does not grant live-call or promotion authority.
