@@ -166,12 +166,12 @@ SPECIAL_EXECUTION_BINDINGS: frozenset[str] = frozenset(
 # force-killed — wait_for abandons the await (the turn proceeds, spinner
 # resolves) while the worker thread runs to completion in the background.
 _TOOL_DEADLINE_DEFAULT_S = 120.0
-# Keys MUST match REGISTERED handler names (pinned by
-# test_deadline_override_keys_match_registered_handler_names — Codex MCP
+# Keys MUST match REGISTERED handler names (pinned by the override-name test — Codex MCP
 # review 2026-06-12 caught "computer_use" vs the actual "computer").
 _TOOL_DEADLINE_OVERRIDES_S: dict[str, float] = {
     "petri_audit": 900.0,  # inspect_ai audit subprocess (own 600s wall clock)
     "eval_dspy_optimize": 900.0,  # optimizer loop
+    "terminal_exec": 600.0,  # Harbor schema permits task-local commands up to 600s
     "computer": 600.0,  # multi-step UI automation (_build_computer_use_handler)
     "computer_use": 600.0,  # emulated function-call UI automation
     # web_search: must cover per-attempt client timeout (100s,
