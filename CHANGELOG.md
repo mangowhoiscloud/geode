@@ -118,6 +118,9 @@ functional change.
 
 ### Fixed
 
+- **Harbor terminal command deadlines.** The shared tool executor now honors
+  `terminal_exec`'s declared 600-second ceiling instead of cancelling every
+  command at the generic 120-second handler deadline.
 - **Effectful tool replay after crash windows.** Mutation, communication, and
   administrative calls now checkpoint the provider call before dispatch, admit
   a bounded receipt, and commit the PostToolUse-final result. Restart repairs

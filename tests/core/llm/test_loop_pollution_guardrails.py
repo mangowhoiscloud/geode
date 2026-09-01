@@ -339,14 +339,14 @@ def test_deadline_overrides_cover_long_running_tools() -> None:
 
 
 def test_deadline_override_keys_match_registered_handler_names() -> None:
-    """Codex MCP review 2026-06-12 — the original table keyed
-    ``computer_use`` while the registered handler is ``computer``, so the
-    600s override silently never applied. Every override key must be an
-    actually-registered handler name."""
+    """Every override key must be an actually registered handler name."""
     from core.agent.tool_executor.executor import _TOOL_DEADLINE_OVERRIDES_S
     from evals.composition import build_tool_handlers
+    from evals.platforms.harbor import HarborExecTool
 
     registered = set(build_tool_handlers())
+    registered.add(HarborExecTool(None).name)
+    assert _TOOL_DEADLINE_OVERRIDES_S["terminal_exec"] == 600.0
     # ``computer`` registers only when GEODE_COMPUTER_USE_ENABLED + pyautogui
     # are present — pin its name against the builder source instead.
     single_tool_src = (REPO_ROOT / "core" / "tools" / "handlers" / "single_tool.py").read_text(
