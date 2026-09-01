@@ -21,8 +21,9 @@ eval_contracts:
 
 # Skill Attribution and Context Recoverability
 
-Status: executable offline and subscription-runner contract; two score-bearing
-diagnostics have been reported, neither with runtime promotion authority.
+Status: executable offline, subscription-runner, and prospective native-task
+contracts; two score-bearing diagnostics have been reported, neither with
+runtime promotion authority.
 
 This profile turns two frontier observations into separate GEODE measurements:
 
@@ -177,8 +178,8 @@ to future frozen runs.
 | SA-GAP-07 — verifier-target leakage | Positive fixtures reject model-visible required answer terms and require opaque `f<n>` / `q<n>` evaluator IDs. | Closed in source; current positive fixture exposes 0/24 required answer terms. |
 | SA-GAP-08 — uncontrolled seed semantics | Subscription specs require `unseeded-repetition-<n>` labels and the analysis discloses that they are not decoder seeds. | Closed as an honest measurement boundary, not as deterministic sampling. |
 | SA-GAP-09 — cross-skill tool noise | Slop/research remove grilling-only tools while matched arms retain identical schemas. | Closed in source and no-model schema-digest tests. |
-| SA-GAP-04 — narrow native capability | Synthetic tasks still omit native web, file, and delegation work. | Open; requires a separate preregistered native-capability suite. |
-| SA-GAP-05 — unstable treatment direction | The immutable repetitions remain `+4`, `-3`, and `-1`. | Open; more repetitions cannot repair the intervention design. |
+| SA-GAP-04 — narrow native capability | Synthetic tasks still omit native web, file, and delegation work. | Closed prospectively by the separate frozen R11.2 native-capability suite; no historical score changed. |
+| SA-GAP-05 — unstable treatment direction | The immutable repetitions remain `+4`, `-3`, and `-1`. | Closed as a design gap by the R11.2 source-example ITT, split, grouping, uncertainty, and null rules; the historical direction remains unstable. |
 
 The corrected runner emits `geode.skill-attribution-runner-result@2` and
 `geode.skill-attribution-verifier@2` because tool-schema identity is now
@@ -186,6 +187,35 @@ reported per target skill and verification uses target-specific response
 contracts. The fixture's JSON shape remains
 `geode.skill-attribution-fixtures.v1`; its content digest changes and a new run
 must freeze that new digest.
+
+#### Prospective native-capability suite
+
+R11.2 does not add repetitions to the synthetic score. The frozen
+[`skill-attribution-native.json`](../../evals/benchmarks/fixtures/skill-attribution-native.json)
+suite instead defines disjoint design and final-evaluation source examples for
+native web, repository, and delegation work. Its production tool schemas are
+identical across arms; only target-Skill availability changes.
+
+[`skill_attribution_native.py`](../../evals/benchmarks/skill_attribution_native.py)
+keeps availability, selection, successful activation, deterministic verifier
+outcome, tokens, elapsed time, irrelevant action, and safety separate. The
+primary result is a family-conditioned source-example ITT with repetitions
+averaged inside `example_id` and a deterministic 95% cluster-bootstrap
+interval. Negative controls are excluded from the ITT and report false
+selection/activation rates plus their verifier pass rate. There is no
+cross-family composite.
+
+The no-model preflight compiles GEODE's production tool plan and rejects any
+with/without schema difference. Pair construction also rejects workspace,
+reset-state, response, verifier, repetition, or non-target treatment drift.
+Model-facing views omit evaluator requirements, and the verifier does not
+require Skill activation for an outcome pass.
+
+The research and causal contract is recorded in
+[`2026-09-01-r11-native-skill-validity.md`](../plans/2026-09-01-r11-native-skill-validity.md).
+No live provider run was executed for R11.2 closure. A later design or final
+run needs its own frozen run ID, exact clean revision, model/time/privacy
+budget, and explicit approval; null or adverse results remain diagnostic-only.
 
 #### Rollout-learning boundary
 

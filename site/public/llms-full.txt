@@ -1559,6 +1559,10 @@ wheel은 `arxiv-digest`, `deep-researcher`,`frontier-ui-ux-catalog`, `geo`,`geod
 
 `capabilities: ["shell"]`은 본문에`` !`cmd` `` 동적 컨텍스트가 있을 때만 필요합니다. 이 권한은 명령을 샌드박스에 넣지 않습니다. 해당 스킬을 신뢰해 호출 시점에 GEODE 프로세스 권한으로 실행하도록 명시적으로 승인하는 것입니다.
 
+## 스킬 평가 경계
+
+GEODE의 prospective native suite는 web, repository, delegation 과제를 target Skill이 보이는 arm과 보이지 않는 arm으로 짝짓습니다. 두 arm은 같은 도구 schema와 격리 workspace를 사용하며, availability, selection, activation, verifier outcome, 비용·안전 지표를 따로 보고합니다. 반복은 새 example로 세지 않고 source example 안에서 묶습니다. 이 계약은 diagnostic-only이며 live 실행에는 별도 승인된 run spec이 필요합니다. 전체 계약은 [Skill attribution evaluation 문서](https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/skill-context-evaluation.md)를 따릅니다.
+
 ## 호출
 
 | 표면 | 동작 |
@@ -6694,8 +6698,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 578 |
-| 테스트 Python 파일 | 697 |
+| 프로덕션 Python 파일 | 579 |
+| 테스트 Python 파일 | 698 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 5 |

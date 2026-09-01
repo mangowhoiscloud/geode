@@ -70,6 +70,12 @@ functional change.
 
 ### Added
 
+- **Native Skill attribution validity contract.** A prospective web,
+  repository, and delegation suite now freezes disjoint design/final splits,
+  production tool schemas, isolated workspace and verifier identities, and
+  source-example-clustered family ITTs. Selection, activation, quality, cost,
+  irrelevant action, and safety remain separate; live execution still requires
+  a new approved run spec and has no promotion authority.
 - **Harbor ATIF export for Terminal-Bench.** The GEODE external agent now
   validates and writes ATIF 1.7 from the canonical session timeline, and it
   leaves timeout enforcement to Harbor's task-owned limits instead of adding a

@@ -187,14 +187,18 @@ def _allowed_tools(target_skill: str) -> frozenset[str]:
 
 
 def _skill_tool_plan(
-    available_skills: Sequence[str], *, target_skill: str
+    available_skills: Sequence[str],
+    *,
+    target_skill: str,
+    allowed_tools: frozenset[str] | None = None,
 ) -> tuple[Any, dict[str, Any], Any, Any]:
     from core.agent.loop._tool_factory import project_bound_tool_plan
     from core.tools.composition import compose_tool_plan
     from core.wiring.runtime import build_middleware_registry, build_policy_sources
 
     registry = _skill_registry(available_skills)
-    allowed_tools = _allowed_tools(target_skill)
+    if allowed_tools is None:
+        allowed_tools = _allowed_tools(target_skill)
     policy_sources = build_policy_sources()
     bound, transient = compose_tool_plan(skill_registry=registry)
     bound = project_bound_tool_plan(
@@ -212,10 +216,17 @@ def _skill_tool_plan(
     return bound, transient, registry, (policy_sources, middleware)
 
 
-def skill_tool_schema_sha256(available_skills: Sequence[str], *, target_skill: str) -> str:
+def skill_tool_schema_sha256(
+    available_skills: Sequence[str],
+    *,
+    target_skill: str,
+    allowed_tools: frozenset[str] | None = None,
+) -> str:
     """Return the model-visible schema digest for a no-model arm preflight."""
     bound, _transient, _registry, _services = _skill_tool_plan(
-        available_skills, target_skill=target_skill
+        available_skills,
+        target_skill=target_skill,
+        allowed_tools=allowed_tools,
     )
     from core.tools.plan import thaw_tool_schema
 
