@@ -579,6 +579,8 @@ and closure evidence are appended in §10.
 | EFFECT-001 | `ABSENT` | `ToolContext` carries physical call correlation and the common executor classifies effect policy, but no durable record is committed before an accepted effectful dispatch or replays a completed result without calling the sink again | The existing `sessions.db` owns a bounded, redacted effect receipt keyed by a caller-issued logical operation ID; one atomic admission distinguishes new, completed, conflicting, and uncertain operations, replays committed results, and never auto-reruns an uncertain effect | R12.1 | CAP-002, STORE-002 | `DONE` |
 | EFFECT-002 | `PARTIAL` | Checkpoints persist turn start, finalization, and model failures, while an ordinary successful tool batch appends its assistant call and result without an immediate checkpoint before the next model request | Every completed ordinary tool batch synchronizes the balanced call/result history and commits a checkpoint before the next model request; restart fixtures prove committed results remain model-visible and unfinished effect receipts surface an explicit uncertain outcome without automatic replay | R12.1 | EFFECT-001 | `DONE` |
 | EFFECT-003 | `MISFIT` | Middleware architecture prose calls the terminal boundary an `exactly-once executor`, although it proves one accepted in-process terminal invocation rather than exactly-once external effects; only MCP mid-call recovery currently states the read-only/idempotent retry boundary precisely | Runtime docs and executable retry/crash fixtures name single terminal invocation, durable effect admission, duplicate suppression, and uncertain outcome separately; automatic recovery remains limited to read-only or explicitly idempotent operations and no generic sink-level exactly-once claim remains | R12.1 | EFFECT-001, EFFECT-002 | `DONE` |
+| EVAL-003 | `PARTIAL` | The repeated paired Skill suite uses synthetic context and target-scoped registry or Grill tools, but does not exercise native web, file/repository, or delegation work | A prospective native-capability suite freezes those three task families, matched tool and workspace identities, task-specific output contracts, deterministic verifiers, lineage-safe repetitions, and separate quality, activation, cost, and safety results without reusing the synthetic score as promotion authority | R11.2 | EVAL-004 | `OPEN` |
+| EVAL-004 | `MISFIT` | Availability-only repetitions produced signed deltas of +4, -3, and -1 over 12 source examples, so repeating the same intervention cannot separate task-skill alignment, routing, and outcome quality from sampling variation | A preregistered design names the causal estimand, intervention, grouping, lineage-safe split, negative controls, uncertainty, and null/promotion rules before execution; it distinguishes availability, selection, activation, and verified outcome without post-hoc verifier tuning or an equal-weight composite | R11.2 | EVAL-001, VER-001 | `OPEN` |
 
 ## 6. Dependency and merge sequence
 
@@ -677,6 +679,13 @@ authorities. It must establish causal skill attribution and deterministic
 context-recoverability evidence before any later package may add a new context
 store, retention class, eviction index, or executable namespace. Any such
 runtime change requires its own measured GAP and serialized package.
+
+R11.2 preserves R11.1's immutable diagnostic results while separating the
+next experimental-design decision from broader native-capability execution.
+Its internal order fixes the estimand and intervention before adding web,
+file/repository, or delegation tasks. Registration grants no live-call or
+promotion authority; any provider execution still requires an independently
+frozen run spec and explicit approval.
 
 R12.1 is a runtime safety package over the delivered tool-plan, middleware,
 and session-store authorities. It localizes durability at the accepted
@@ -1963,6 +1972,36 @@ Acceptance:
 - live model execution remains outside this package until a frozen run spec
   names the model route, seeds, repetitions, cost budget, privacy boundary, and
   explicit approval.
+
+#### R11.2 Native skill attribution validity
+
+GAPs: EVAL-003, EVAL-004.
+
+This package follows the delivered paired runner and its immutable null result.
+It does not reinterpret the 72 historical arms, tune their verifier, or treat
+their repetitions as independent source examples. It freezes what a broader
+native-capability experiment means before any new score-bearing execution.
+
+Acceptance:
+
+- the preregistered design separates Skill availability, selection, activation,
+  and verified outcome; names one causal estimand, grouping rule, uncertainty
+  report, negative controls, and null/promotion decision before execution;
+- every arm and repetition from one source example remains in one lineage-safe
+  split, while final evaluation is isolated from fixture and intervention
+  design;
+- native web, file/repository, and delegation task families use task-specific
+  tool and response contracts, deterministic verifier receipts, matched
+  workspace/reset evidence, and pairwise treatment drift checks;
+- primary verified outcomes and activation, tokens, elapsed time, irrelevant
+  action, and safety deltas remain separate by task family; no equal-weight
+  composite or synthetic-suite score becomes promotion authority;
+- existing run-spec, attempt, native-result, trajectory, reward, analysis, and
+  publication authorities are reused without another raw transcript or result
+  store, and the published 72-arm diagnostic remains byte-immutable; and
+- live provider execution requires a new frozen run ID, exact clean revision,
+  cost/privacy budget, and explicit approval; an observed null or adverse result
+  is reported without post-hoc task, verifier, or denominator changes.
 
 ### R12 — Durable external-effect boundary
 
