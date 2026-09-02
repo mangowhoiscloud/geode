@@ -144,7 +144,7 @@ _TOML_TO_SETTINGS: dict[str, str] = {
 #: putting a secret in a committed/synced ``config.toml`` is the leak we avoid.
 #: The parity guard (test_toml_settings_map) allows exactly these.
 _TOML_ENV_ONLY_FIELDS: frozenset[str] = frozenset(
-    {"anthropic_api_key", "openai_api_key", "zai_api_key"}
+    {"anthropic_api_key", "openai_api_key", "openrouter_api_key", "zai_api_key"}
 )
 
 DEFAULT_CONFIG_TOML = """\
@@ -247,7 +247,12 @@ def _apply_toml_overlay(s: Settings, *, env_set_fields: set[str] | None = None) 
         if field_name in env_set:
             continue
         # Also check special alias env vars for API keys
-        if field_name in ("anthropic_api_key", "openai_api_key", "zai_api_key"):
+        if field_name in (
+            "anthropic_api_key",
+            "openai_api_key",
+            "openrouter_api_key",
+            "zai_api_key",
+        ):
             continue
         if hasattr(s, field_name):
             overlay[field_name] = toml_value

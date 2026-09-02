@@ -62,7 +62,9 @@ __all__ = [
 ]
 
 DEFAULT_MANIFEST_PATH = Path(__file__).parent / "routing.toml"
-EXECUTABLE_ROUTING_PROVIDERS: frozenset[str] = frozenset({"anthropic", "openai", "glm"})
+EXECUTABLE_ROUTING_PROVIDERS: frozenset[str] = frozenset(
+    {"anthropic", "openai", "openrouter", "glm"}
+)
 
 # Re-export from `core.paths` (SoT) so the routing manifest's user
 # override path stays aligned with every other ``~/.geode/`` file.

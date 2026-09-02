@@ -70,6 +70,11 @@ functional change.
 
 ### Added
 
+- **OpenRouter PAYG route.** `OPENROUTER_API_KEY`, `/login add`, `/key`, and
+  exact `openrouter/<publisher>/<model>` references now resolve through an
+  explicit Chat Completions adapter. Provider-reported charge and bounded
+  serving-route metadata feed the existing budget, usage, and LLM-event paths;
+  direct providers remain outside OpenRouter equivalence/fallback.
 - **Native Skill attribution validity contract.** A prospective web,
   repository, and delegation suite now freezes disjoint design/final splits,
   production tool schemas, isolated workspace and verifier identities, and
@@ -144,6 +149,9 @@ functional change.
 
 ### Infrastructure
 
+- **Pages dependency audit recovery.** Refresh the locked `browserslist`
+  dependency family to patched releases after the CI moderate-or-higher audit
+  began rejecting `browserslist<=4.28.6`; no direct site dependency changed.
 - **Property-based persistence coverage.** Hypothesis is now a development
   dependency and exercises `UsageRecord` JSONL writer/reader round trips across
   falsy and extension-field combinations.

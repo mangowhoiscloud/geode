@@ -15,8 +15,8 @@ export default function Page() {
         ko={
           <>
             <p>
-              GEODE는 세 프로바이더를 라우팅합니다. Anthropic, OpenAI(+ChatGPT 구독),
-              GLM입니다. 이 페이지는 모델이 어떻게 결정되고, 호출이 어느
+              GEODE는 Anthropic, OpenAI(+ChatGPT 구독), OpenRouter, GLM 네
+              프로바이더 경로를 명시적으로 라우팅합니다. 이 페이지는 모델이 어떻게 결정되고, 호출이 어느
               어댑터로 가며, 실패했을 때 무엇이 일어나는지 정리합니다.
             </p>
 
@@ -26,7 +26,7 @@ export default function Page() {
                 <tr><th>구성</th><th>코드</th></tr>
               </thead>
               <tbody>
-                <tr><td>프로바이더 유틸리티</td><td><code>core/llm/providers/anthropic.py</code>, <code>codex.py</code>, <code>glm.py</code>. 재시도·quota·request shaping을 어댑터에 제공</td></tr>
+                <tr><td>프로바이더 유틸리티</td><td><code>core/llm/providers/anthropic.py</code>, <code>codex.py</code>, <code>glm.py</code>, <code>openrouter.py</code>. 재시도·quota·identity/request shaping을 어댑터에 제공</td></tr>
                 <tr><td>비동기 호출 어댑터</td><td><code>core/llm/adapters/</code>. SDK client와 <code>acomplete()</code> 호출 표면 소유</td></tr>
                 <tr><td>프로바이더 composition</td><td><code>core/llm/registry.py</code>. 모델 identity, credential route, transport/API shape를 분리해 선언</td></tr>
                 <tr><td>어댑터 레지스트리</td><td><code>core/llm/adapters/registry.py</code>의 <code>bootstrap_builtins()</code>. 내장 factory와 운영자 정책이 승인한 <code>geode.llm_adapters</code> 진입점을 불변 generation snapshot으로 검색</td></tr>
@@ -39,6 +39,18 @@ export default function Page() {
               빈 레지스트리는 <code>AdapterNotFoundError</code>로 끝납니다. 각
               AgenticLoop 세션은 생성 시 현재 generation을 캡처하므로, reload는
               새 세션에만 보이고 실행 중 세션의 라우팅은 바뀌지 않습니다.
+            </p>
+
+            <h2>OpenRouter 경계</h2>
+            <p>
+              OpenRouter는 <code>openrouter</code> provider identity와
+              Chat Completions transport를 조합합니다. GEODE model id는{" "}
+              <code>openrouter/&lt;publisher&gt;/&lt;model&gt;</code>이며 어댑터가
+              외부 namespace 하나만 제거합니다. direct Anthropic/OpenAI와
+              equivalence group을 만들지 않으므로 자격이나 비용 경계가 조용히
+              바뀌지 않습니다. 응답이 제공한 실제 charge와 최종 serving route는
+              공통 usage/event 경로로 들어가고, 없을 때만 기존 정적 가격 추정을
+              사용합니다.
             </p>
 
             <h2>모델 해석 우선순위</h2>
@@ -145,8 +157,8 @@ export default function Page() {
         en={
           <>
             <p>
-              GEODE routes across three providers: Anthropic, OpenAI (+ChatGPT subscription),
-              and GLM. This page covers how the model gets resolved, which
+              GEODE exposes four explicit provider routes: Anthropic, OpenAI
+              (+ChatGPT subscription), OpenRouter, and GLM. This page covers how the model gets resolved, which
               adapter a call lands on, and what happens on failure.
             </p>
 
@@ -156,7 +168,7 @@ export default function Page() {
                 <tr><th>Piece</th><th>Code</th></tr>
               </thead>
               <tbody>
-                <tr><td>Provider utilities</td><td><code>core/llm/providers/anthropic.py</code>, <code>codex.py</code>, and <code>glm.py</code>; provide retry, quota, and request shaping to adapters</td></tr>
+                <tr><td>Provider utilities</td><td><code>core/llm/providers/anthropic.py</code>, <code>codex.py</code>, <code>glm.py</code>, and <code>openrouter.py</code>; provide retry, quota, identity, and request shaping to adapters</td></tr>
                 <tr><td>Async call adapters</td><td><code>core/llm/adapters/</code>; own SDK clients and the <code>acomplete()</code> call surface</td></tr>
                 <tr><td>Provider composition</td><td><code>core/llm/registry.py</code>; separately declares model identity, credential route, and transport/API shape</td></tr>
                 <tr><td>Adapter registry</td><td><code>bootstrap_builtins()</code> in <code>core/llm/adapters/registry.py</code>; discovers built-in factories and operator-authorized <code>geode.llm_adapters</code> entry points into an immutable generation snapshot</td></tr>
@@ -170,6 +182,18 @@ export default function Page() {
               <code>AdapterNotFoundError</code>. Each AgenticLoop captures the
               current generation at construction, so a reload affects only new
               sessions and cannot change routing in a running session.
+            </p>
+
+            <h2>The OpenRouter boundary</h2>
+            <p>
+              OpenRouter composes a distinct <code>openrouter</code> provider
+              identity with the shared Chat Completions transport. GEODE model
+              ids use <code>openrouter/&lt;publisher&gt;/&lt;model&gt;</code>;
+              the adapter removes exactly one outer namespace. It is not in an
+              equivalence group with direct Anthropic or OpenAI, so credential
+              and billing authority cannot silently cross. Provider-reported
+              charge and final serving route enter the common usage/event path;
+              static model pricing is used only when no charge was reported.
             </p>
 
             <h2>Model resolution precedence</h2>

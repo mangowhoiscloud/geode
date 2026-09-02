@@ -3,11 +3,12 @@
     "classes": [
       "AnthropicPaygAdapter",
       "OpenAIPaygAdapter",
+      "OpenRouterPaygAdapter",
       "CodexOAuthAdapter",
       "GlmPaygAdapter",
       "GlmCodingPlanAdapter"
     ],
-    "count": 5
+    "count": 6
   },
   "complexity_thresholds": {
     "max_args": 23,
@@ -228,7 +229,7 @@
         "has_default": true,
         "implementation": "ContextVar",
         "lifetime": "one CLI or agent session context",
-        "line": 455,
+        "line": 467,
         "owner": "core.llm.token_tracker",
         "path": "core/llm/token_tracker.py",
         "resetter": "core.llm.token_tracker.reset_tracker",
@@ -526,8 +527,8 @@
   },
   "packages": {
     "core": {
-      "python_files": 413,
-      "python_loc": 124265
+      "python_files": 415,
+      "python_loc": 124637
     },
     "evals": {
       "python_files": 93,
@@ -538,8 +539,8 @@
       "python_loc": 32014
     },
     "tests": {
-      "python_files": 698,
-      "python_loc": 189190
+      "python_files": 699,
+      "python_loc": 189458
     }
   },
   "schema_version": 6,

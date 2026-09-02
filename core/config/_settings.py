@@ -62,6 +62,10 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("openai_api_key", "OPENAI_API_KEY"),
     )
+    openrouter_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("openrouter_api_key", "OPENROUTER_API_KEY"),
+    )
     zai_api_key: str = Field(
         default="",
         validation_alias=AliasChoices("zai_api_key", "ZAI_API_KEY"),

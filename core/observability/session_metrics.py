@@ -125,7 +125,7 @@ class SessionMetrics:
     audit_call_count: int = 0
 
     # C. Billing surface (hermes sessions table parity)
-    billing_provider: str = ""  # anthropic / openai / glm / openai-codex
+    billing_provider: str = ""  # anthropic / openai / openrouter / glm / openai-codex
     billing_mode: str = ""  # payg / subscription / adapter
 
     # D. Resilience metrics

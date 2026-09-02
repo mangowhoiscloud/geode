@@ -40,7 +40,7 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              Anthropic의 내장 경로는 <code>api_key</code>뿐입니다. 과거
+              Anthropic과 OpenRouter의 내장 경로는 <code>api_key</code>뿐입니다. 과거
               <code>claude-cli</code>/<code>oauth</code> 값은 migration 안내를
               위해 읽지만 binary나 네트워크 호출 전에 중단됩니다.
             </p>
@@ -53,6 +53,7 @@ export default function Page() {
               등록됩니다(<code>core/llm/adapters/</code>의
               <code>anthropic_payg</code>, <code>openai_payg</code>,
               <code>codex_oauth</code>,
+              <code>openrouter_payg</code>,
               <code>glm_coding_plan</code>, <code>glm_payg</code>).
             </p>
 
@@ -71,7 +72,7 @@ export default function Page() {
                 <tr><td><code>/login openai</code></td><td>ChatGPT 구독 OAuth 로그인. device-code 플로우는 <code>core/auth/oauth_login.py</code>이고, 결과는 <code>auth.toml</code>에 OAUTH_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다.</td></tr>
                 <tr><td><code>/login anthropic</code></td><td><code>ANTHROPIC_API_KEY</code>를 등록하고 <code>api_key</code> 경로를 선택합니다.</td></tr>
                 <tr><td><code>/login google</code></td><td>Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts용 Google Workspace OAuth. 사용자가 만든 Desktop 앱 클라이언트를 가져오며 LLM 프로바이더 자격과 분리됩니다.</td></tr>
-                <tr><td><code>/login add</code></td><td>자격 추가. 키 모양(<code>sk-ant-</code>, <code>sk-proj-</code>, GLM {`{id}.{secret}`})으로 프로바이더를 추정합니다.</td></tr>
+                <tr><td><code>/login add</code></td><td>자격 추가. 키 모양(<code>sk-ant-</code>, <code>sk-proj-</code>, <code>sk-or-v1-</code>, GLM {`{id}.{secret}`})으로 프로바이더를 추정합니다.</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>프로파일 선택과 제거.</td></tr>
                 <tr><td><code>/login route</code></td><td>프로바이더와 플랜 라우팅 확인.</td></tr>
                 <tr><td><code>/login quota</code></td><td>구독 쿼터 상태.</td></tr>
@@ -148,6 +149,7 @@ export default function Page() {
             <pre>{`# ~/.geode/.env
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-proj-...
+OPENROUTER_API_KEY=sk-or-v1-...
 ZAI_API_KEY={id}.{secret}`}</pre>
             <p>
               GLM은 엔드포인트가 둘입니다. Coding Plan(구독 과금)과
@@ -221,7 +223,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
               </tbody>
             </table>
             <p>
-              Anthropic has one built-in source: <code>api_key</code>. Historical
+              Anthropic and OpenRouter have one built-in source: <code>api_key</code>. Historical
               <code>claude-cli</code>/<code>oauth</code> values are read only to
               emit a migration error before binary or network dispatch.
             </p>
@@ -235,6 +237,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
               concrete adapter in the registry
               (<code>core/llm/adapters/</code>: <code>anthropic_payg</code>,
               <code>openai_payg</code>, <code>codex_oauth</code>,
+              <code>openrouter_payg</code>,
               <code>glm_coding_plan</code>,
               <code>glm_payg</code>).
             </p>
@@ -254,7 +257,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
                 <tr><td><code>/login openai</code></td><td>ChatGPT subscription OAuth login. The device-code flow lives in <code>core/auth/oauth_login.py</code>; the result lands in <code>auth.toml</code> as an OAUTH_BORROWED plan plus profile pair.</td></tr>
                 <tr><td><code>/login anthropic</code></td><td>Registers <code>ANTHROPIC_API_KEY</code> and selects the <code>api_key</code> route.</td></tr>
                 <tr><td><code>/login google</code></td><td>Google Workspace OAuth for Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts. Imports a user-owned Desktop app client and stays separate from LLM-provider credentials.</td></tr>
-                <tr><td><code>/login add</code></td><td>Add a credential. The provider is sniffed from the key shape (<code>sk-ant-</code>, <code>sk-proj-</code>, GLM {`{id}.{secret}`}).</td></tr>
+                <tr><td><code>/login add</code></td><td>Add a credential. The provider is sniffed from the key shape (<code>sk-ant-</code>, <code>sk-proj-</code>, <code>sk-or-v1-</code>, GLM {`{id}.{secret}`}).</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>Select and remove profiles.</td></tr>
                 <tr><td><code>/login route</code></td><td>Inspect provider and plan routing.</td></tr>
                 <tr><td><code>/login quota</code></td><td>Subscription quota state.</td></tr>
@@ -336,6 +339,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
             <pre>{`# ~/.geode/.env
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-proj-...
+OPENROUTER_API_KEY=sk-or-v1-...
 ZAI_API_KEY={id}.{secret}`}</pre>
             <p>
               GLM has two endpoints: Coding Plan (subscription-billed) and

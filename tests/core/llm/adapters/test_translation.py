@@ -252,7 +252,7 @@ def test_response_translation_text_only() -> None:
 
     result = AdapterCallResult(
         text="hello world",
-        usage=UsageSummary(input_tokens=10, output_tokens=5),
+        usage=UsageSummary(input_tokens=10, output_tokens=5, reported_cost_usd=0.02),
         stop_reason="end_turn",
     )
     resp = agentic_response_from_adapter_result(result)
@@ -263,6 +263,7 @@ def test_response_translation_text_only() -> None:
     assert resp.stop_reason == "end_turn"
     assert resp.usage.input_tokens == 10
     assert resp.usage.output_tokens == 5
+    assert resp.usage.reported_cost_usd == 0.02
 
 
 def test_response_translation_tool_use_block() -> None:

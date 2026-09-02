@@ -54,6 +54,7 @@ cat > ~/.geode/.env << 'EOF'
 # LLM Providers (최소 1개 필수)
 ANTHROPIC_API_KEY=sk-ant-...       # https://console.anthropic.com/settings/keys
 OPENAI_API_KEY=sk-proj-...         # https://platform.openai.com/api-keys
+OPENROUTER_API_KEY=sk-or-v1-...    # https://openrouter.ai/keys (optional)
 ZAI_API_KEY=...                    # https://open.bigmodel.cn/usercenter/apikeys (optional)
 
 # Messaging (Slack Gateway)
@@ -345,6 +346,7 @@ advanced fallback that only fills missing global secrets. Behavior belongs in
 | **LLM** | | |
 | `ANTHROPIC_API_KEY` | | Claude API key |
 | `OPENAI_API_KEY` | | GPT API key (OpenAI adapter) |
+| `OPENROUTER_API_KEY` | | OpenRouter credit-backed API key; select exact refs as `openrouter/<publisher>/<model>` |
 | `ZAI_API_KEY` | | ZhipuAI GLM key |
 | `GEODE_MODEL` | `claude-opus-4-8` | Manual session override only; persist model choices in `config.toml` |
 | `GEODE_ENSEMBLE_MODE` | `single` | Manual session override only; prefer `config.toml` for durable behavior |

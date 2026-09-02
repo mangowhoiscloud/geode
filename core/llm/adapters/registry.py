@@ -536,10 +536,12 @@ def _builtin_registrations(
     from core.llm.adapters.glm_coding_plan import GlmCodingPlanAdapter
     from core.llm.adapters.glm_payg import GlmPaygAdapter
     from core.llm.adapters.openai_payg import OpenAIPaygAdapter
+    from core.llm.adapters.openrouter_payg import OpenRouterPaygAdapter
 
     factories: tuple[tuple[Callable[[], LLMAdapter], str], ...] = (
         (AnthropicPaygAdapter, "anthropic"),
         (OpenAIPaygAdapter, "openai"),
+        (OpenRouterPaygAdapter, "openrouter"),
         (CodexOAuthAdapter, "openai-codex"),
         (GlmPaygAdapter, "glm"),
         (GlmCodingPlanAdapter, "glm-coding"),

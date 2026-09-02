@@ -44,7 +44,7 @@ class CredentialSource(StrEnum):
     #: Resolver picks per the manifest ``allowed`` order (OAuth-first), gated
     #: by ``fallback_to_payg`` for the PAYG (``api_key``) entry.
     AUTO = "auto"
-    #: Pay-as-you-go API key (``ANTHROPIC_API_KEY`` / ``OPENAI_API_KEY``).
+    #: Pay-as-you-go API key (Anthropic / OpenAI / OpenRouter / GLM).
     API_KEY = "api_key"
     #: Retired input sentinel kept only so existing TOML can load and emit a
     #: migration error before dispatch. It is never an executable source.

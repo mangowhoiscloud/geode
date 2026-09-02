@@ -158,3 +158,29 @@ def test_cmd_model_explicit_name_unauthenticated_prints_hint(
         "_apply_model must NOT run when the model is unauthenticated — "
         "otherwise settings shift before the user sees the hint."
     )
+
+
+def test_cmd_model_accepts_exact_openrouter_reference() -> None:
+    from core.cli.commands import model as _model_mod
+
+    with (
+        patch("core.cli.commands.model.model_available", return_value=True),
+        patch("core.cli.commands.model._apply_model") as apply_model,
+    ):
+        _model_mod.cmd_model("openrouter/google/gemini-2.5-pro")
+
+    selected = apply_model.call_args.args[0]
+    assert selected.id == "openrouter/google/gemini-2.5-pro"
+    assert selected.provider == "openrouter"
+
+
+def test_cmd_model_rejects_ambiguous_router_owned_reference(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from core.cli.commands import model as _model_mod
+
+    with patch("core.cli.commands.model._apply_model") as apply_model:
+        _model_mod.cmd_model("openrouter/free")
+
+    assert "openrouter/<publisher>/<model>" in capsys.readouterr().out
+    apply_model.assert_not_called()

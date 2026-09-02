@@ -202,6 +202,7 @@ def agentic_response_from_adapter_result(result: AdapterCallResult) -> AgenticRe
         thinking_tokens=result.usage.reasoning_tokens,
         cache_creation_tokens=result.usage.cache_write_tokens,
         cache_read_tokens=result.usage.cached_input_tokens,
+        reported_cost_usd=result.usage.reported_cost_usd,
     )
     # A2 (v0.99.44) — Codex encrypted reasoning replay + reasoning summaries
     # forwarded. AgenticLoop's next-turn input builder reads

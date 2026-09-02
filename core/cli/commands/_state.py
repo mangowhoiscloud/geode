@@ -72,6 +72,21 @@ _OPENAI_PICKER_MODELS: tuple[ModelProfile, ...] = (
     ModelProfile("gpt-5.3-codex", "openai", "GPT-5.3 Codex (Legacy)", "$$"),
 )
 
+_OPENROUTER_PICKER_MODELS: tuple[ModelProfile, ...] = (
+    ModelProfile(
+        "openrouter/openrouter/free",
+        "openrouter",
+        "OpenRouter Free (smoke)",
+        "free*",
+    ),
+    ModelProfile(
+        "openrouter/openrouter/auto",
+        "openrouter",
+        "OpenRouter Auto (variable)",
+        "var",
+    ),
+)
+
 
 def _glm_label(model_id: str) -> str:
     return _GLM_LABELS.get(model_id, model_id)
@@ -116,6 +131,7 @@ def get_model_profiles(*, configured_model_ids: Iterable[str] = ()) -> list[Mode
         # infer_source selects OAuth subscription versus PAYG at call time.
         *_OPENAI_PICKER_MODELS,
     ]
+    openrouter_profiles = list(_OPENROUTER_PICKER_MODELS)
     glm_profiles = [
         # GLM — the live default (GLM_PRIMARY, glm-5.2 as shipped) leads so a
         # routing.toml reload is reflected mid-session (H11-tail), labelled via
@@ -126,7 +142,8 @@ def get_model_profiles(*, configured_model_ids: Iterable[str] = ()) -> list[Mode
     ]
 
     existing_ids = {
-        profile.id for profile in (*anthropic_profiles, *openai_profiles, *glm_profiles)
+        profile.id
+        for profile in (*anthropic_profiles, *openai_profiles, *openrouter_profiles, *glm_profiles)
     }
     configured_profiles: list[ModelProfile] = []
     for raw_model_id in (OPENAI_PRIMARY, *configured_model_ids):
@@ -147,17 +164,20 @@ def get_model_profiles(*, configured_model_ids: Iterable[str] = ()) -> list[Mode
     # retains future/custom provider ids without inventing another registry.
     configured_anthropic = [p for p in configured_profiles if p.provider == "anthropic"]
     configured_openai = [p for p in configured_profiles if p.provider in {"openai", "openai-codex"}]
+    configured_openrouter = [p for p in configured_profiles if p.provider == "openrouter"]
     configured_glm = [p for p in configured_profiles if p.provider == "glm"]
     configured_other = [
         p
         for p in configured_profiles
-        if p.provider not in {"anthropic", "openai", "openai-codex", "glm"}
+        if p.provider not in {"anthropic", "openai", "openai-codex", "openrouter", "glm"}
     ]
     return [
         *anthropic_profiles,
         *configured_anthropic,
         *openai_profiles,
         *configured_openai,
+        *openrouter_profiles,
+        *configured_openrouter,
         *glm_profiles,
         *configured_glm,
         *configured_other,

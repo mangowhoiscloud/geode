@@ -196,6 +196,15 @@ def _codex_extra_headers(_access_token: str) -> dict[str, str]:
     }
 
 
+def _openrouter_extra_headers(_api_key: str) -> dict[str, str]:
+    """Documented app attribution plus bounded router-decision evidence."""
+    return {
+        "HTTP-Referer": "https://mangowhoiscloud.github.io/geode/",
+        "X-OpenRouter-Title": "GEODE",
+        "X-OpenRouter-Metadata": "enabled",
+    }
+
+
 _COMMON_NATIVE = frozenset({"streaming", "web_search", "text_completion"})
 
 PROVIDER_VARIANTS: dict[str, ProviderSpec] = {
@@ -263,6 +272,24 @@ PROVIDER_VARIANTS: dict[str, ProviderSpec] = {
             default_base_url="https://chatgpt.com/backend-api/codex",
             native_capabilities=_COMMON_NATIVE,
             extra_headers_factory=_codex_extra_headers,
+        ),
+    ),
+    "openrouter": ProviderSpec(
+        profile=ProviderProfile("openrouter", "openrouter", "OpenRouter", "openrouter"),
+        credential=CredentialRoute(
+            source=SOURCE_PAYG,
+            account_provider="openrouter",
+            selector="settings",
+            auth_type="bearer",
+            billing_type=AdapterBillingType.CREDITS,
+            default=True,
+            quota_policy="provider-owned",
+        ),
+        transport=TransportSpec(
+            id="openrouter-chat-completions",
+            api="openai-chat-completions",
+            default_base_url="https://openrouter.ai/api/v1",
+            extra_headers_factory=_openrouter_extra_headers,
         ),
     ),
     "glm": ProviderSpec(

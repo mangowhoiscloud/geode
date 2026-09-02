@@ -333,6 +333,7 @@ def migrate_env_to_toml(
     for provider, key in (
         ("anthropic", settings.anthropic_api_key),
         ("openai", settings.openai_api_key),
+        ("openrouter", settings.openrouter_api_key),
         ("glm", settings.zai_api_key),
     ):
         if not key or is_placeholder(key):

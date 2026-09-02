@@ -109,6 +109,8 @@ def _has_any_llm_key() -> bool:
         return True
     if settings.openai_api_key and not _is_placeholder(settings.openai_api_key):
         return True
+    if settings.openrouter_api_key and not _is_placeholder(settings.openrouter_api_key):
+        return True
     return bool(settings.zai_api_key and not _is_placeholder(settings.zai_api_key))
 
 

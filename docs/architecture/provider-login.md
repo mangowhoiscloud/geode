@@ -3,7 +3,7 @@
 > **English** | [한국어](provider-login.ko.md)
 
 GEODE supports OpenAI Codex subscription credentials and ordinary PAYG API
-keys. Anthropic's built-in route is API-key only.
+keys. Anthropic and OpenRouter have API-key-only built-in routes.
 
 ## Runtime paths
 
@@ -12,7 +12,8 @@ keys. Anthropic's built-in route is API-key only.
 | OpenAI | `openai-codex` / legacy `oauth` | GEODE/Codex profile | Codex Responses adapter |
 | OpenAI | `api_key` | `OPENAI_API_KEY` | OpenAI PAYG adapter |
 | Anthropic | `api_key` / `auto` | `ANTHROPIC_API_KEY` | Anthropic Messages adapter |
-| Either | `none` | none | fail closed as provider-disabled |
+| OpenRouter | `api_key` | `OPENROUTER_API_KEY` | OpenRouter Chat Completions adapter |
+| Any provider | `none` | none | fail closed as provider-disabled |
 
 The retired Anthropic values `claude-cli` and `oauth` still parse so existing
 configuration can receive an actionable migration error. They never invoke a
