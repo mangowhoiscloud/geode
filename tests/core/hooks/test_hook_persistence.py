@@ -164,6 +164,7 @@ def test_public_extension_audit_uses_sqlite_and_active_timeline_only(
         "step_id": "t-1:step-1",
         "session_generation": 0,
         "verify_attempt": 0,
+        "activity_schema_version": 4,
         "_dispatch_duration_ms": row.payload["_dispatch_duration_ms"],
     }
     assert not (tmp_path / "events.jsonl").exists()
@@ -223,6 +224,66 @@ def test_tool_correlation_survives_sqlite_and_timeline_projection(tmp_path: Path
     assert timeline_row["payload"]["step_id"] == "t-tool:step-2"
     assert timeline_row["payload"]["session_generation"] == 3
     assert timeline_row["payload"]["verify_attempt"] == 1
+    hooks.close()
+
+
+def test_llm_route_charge_and_usage_survive_durable_projection(tmp_path: Path) -> None:
+    hooks, store = _wired_hooks(tmp_path)
+
+    with run_timeline_scope(_timeline(tmp_path)):
+        hooks.trigger(
+            HookEvent.LLM_CALL_ENDED,
+            {
+                "session_id": "s-llm",
+                "turn_id": "t-llm",
+                "llm_call_id": "call-llm",
+                "llm_attempt_id": "call-llm:attempt-1",
+                "model": "openrouter/deepseek/deepseek-v4-flash-0731",
+                "provider": "openrouter",
+                "adapter": "openrouter-payg",
+                "latency_ms": 123.5,
+                "error": None,
+                "usage": {
+                    "input_tokens": 101,
+                    "output_tokens": 23,
+                    "cached_input_tokens": 7,
+                    "reasoning_tokens": 11,
+                    "cache_write_tokens": 3,
+                },
+                "cost_usd": 0.00012,
+                "response_id": "generation-1",
+                "response_model": "deepseek/deepseek-v4-flash-0731",
+                "response_provider": "OpenInference",
+                "routing_strategy": "direct",
+                "routing_attempt": 1,
+            },
+        )
+
+    row = store.read()[0]
+    assert row.status == "ok"
+    assert row.entity_id == "call-llm"
+    assert row.payload["duration_ms"] == 123.5
+    assert row.payload["model"] == "openrouter/deepseek/deepseek-v4-flash-0731"
+    assert row.payload["provider"] == "openrouter"
+    assert row.payload["adapter"] == "openrouter-payg"
+    assert row.payload["usage"] == {
+        "input_tokens": 101,
+        "output_tokens": 23,
+        "cached_input_tokens": 7,
+        "reasoning_tokens": 11,
+        "cache_write_tokens": 3,
+    }
+    assert row.payload["cost_usd"] == 0.00012
+    assert row.payload["response_id"] == "generation-1"
+    assert row.payload["response_model"] == "deepseek/deepseek-v4-flash-0731"
+    assert row.payload["response_provider"] == "OpenInference"
+    assert row.payload["routing_strategy"] == "direct"
+    assert row.payload["routing_attempt"] == 1
+    assert row.payload["activity_schema_version"] == 4
+    timeline_payload = _read_timeline(tmp_path / "events.jsonl")[0]["payload"]
+    assert timeline_payload["response_provider"] == "OpenInference"
+    assert timeline_payload["cost_usd"] == 0.00012
+    assert timeline_payload["activity_schema_version"] == 4
     hooks.close()
 
 

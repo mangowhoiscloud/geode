@@ -199,9 +199,9 @@ class CodexOAuthAdapter:
             except Exception as exc:
                 self._last_error = exc
                 log.warning(
-                    "codex-oauth: responses.stream failed model=%s err=%s",
+                    "codex-oauth: responses.stream failed model=%s error_type=%s",
                     req.model,
-                    exc,
+                    type(exc).__name__,
                 )
                 raise
         result = translate_codex_response(final, accumulated_items=accumulated)

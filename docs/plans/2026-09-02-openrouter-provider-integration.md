@@ -1,12 +1,10 @@
 # OpenRouter provider integration plan
 
 > [!NOTE]
-> Design and research evidence only. This document does not enable a provider,
-> perform a live request, or authorize spend. Implementation status belongs in
-> the implementing PR and, if the architecture program adopts the work, its
-> canonical roadmap ledger.
+> Design, implementation, and dated live-acceptance evidence. Model inventory
+> and prices are a snapshot, not a bundled catalogue or availability promise.
 
-**Status:** Implemented and CI-verified in PR #3268; assigned to the v1.0.27 release train
+**Status:** Released in v1.0.27; live transport and AgenticLoop acceptance verified 2026-09-03
 
 **Research snapshot:** 2026-09-02
 
@@ -268,14 +266,99 @@ substitute for offline contract tests.
 
 Local verification on 2026-09-02 passed the focused provider, auth, routing,
 model-picker, usage, and event tests; the complete `scripts/preflight.sh` CI
-mirror; and the 239-route static site build. No live OpenRouter request was
-made. Such a request still requires an OpenRouter account and API key, even
-when the selected route is zero-priced.
+mirror; and the 239-route static site build. The dated live acceptance below
+used an operator-provided key and a bounded paid budget; credentials remain
+local and are not part of the evidence.
 
 Rollback is bounded because OpenRouter is opt-in. Removing its registration and
 UI rows must leave direct provider state and model references untouched. Stored
 OpenRouter profiles should then fail with an explicit unsupported-provider
 message rather than being interpreted as OpenAI profiles.
+
+## Live acceptance and catalogue snapshot — 2026-09-03
+
+The public `/api/v1/models` catalogue exposed the following relevant publisher
+families. `Models` is the number of exact IDs in that dated response;
+`tool-capable` means the model advertised the `tools` parameter. GEODE does not
+copy these rows into its picker because upstream availability and prices change.
+
+| Publisher prefix | Models | Tool-capable | Representative verified route |
+|---|---:|---:|---|
+| `deepseek` | 16 | 15 | `deepseek/deepseek-v4-flash-0731` |
+| `qwen` | 53 | 51 | `qwen/qwen3.8-flash` |
+| `z-ai` | 16 | 16 | `z-ai/glm-5.3-flash` |
+| `moonshotai` | 8 | 8 | `moonshotai/kimi-k2.7-code` |
+| `minimax` | 11 | 9 | `minimax/minimax-m3` |
+| `bytedance-seed` | 6 | 6 | `bytedance-seed/seed-1.6-flash` |
+| `tencent` | 7 | 3 | `tencent/hy3` |
+| `xiaomi` | 2 | 2 | `xiaomi/mimo-v2.5` |
+| `stepfun` | 2 | 2 | `stepfun/step-3.5-flash` |
+| `inclusionai` | 2 | 2 | `inclusionai/ling-3.0-flash` |
+| `meituan` | 1 | 1 | `meituan/longcat-2.0` |
+| `baidu` | 1 | 0 | Not probed: the listed ERNIE route did not advertise tools |
+| `bytedance` | 1 | 0 | Not probed: the listed UI-TARS route did not advertise tools |
+| `upstage` | 2 | 2 | `upstage/solar-pro4` |
+
+DeepSeek exact IDs in the snapshot were `deepseek-chat`,
+`deepseek-chat-v3-0324`, `deepseek-chat-v3.1`, `deepseek-r1`,
+`deepseek-r1-0528`, `deepseek-r1-distill-llama-70b`,
+`deepseek-v3.1-terminus`, `deepseek-v3.2`, `deepseek-v3.2-exp`,
+`deepseek-v4-flash`, `deepseek-v4-flash-0731`,
+`deepseek-v4-flash-0731:batch`, `deepseek-v4-flash-vision-exp`,
+`deepseek-v4-pro`, `deepseek-v4-pro-0813`, and
+`deepseek-v4-pro-0813:batch`, all under the `deepseek/` prefix. Upstage exposed
+`upstage/solar-pro-3` and `upstage/solar-pro4`.
+
+### Measured transport matrix
+
+All 15 representative exact routes completed through
+`OpenRouterPaygAdapter`. Qwen first encountered an upstream shared-pool `429`;
+GLM, ByteDance Seed, and Ling first exhausted a 64-token reasoning budget.
+One bounded retry per affected route completed successfully, so these were
+classified as route-capacity/budget observations rather than adapter defects.
+
+| Model | Serving provider observed | Successful probe charge (USD) |
+|---|---|---:|
+| `deepseek/deepseek-v4-flash-0731` | OpenInference | 0.00000560 |
+| `deepseek/deepseek-v4-pro-0813` | StreamLake | 0.00011616 |
+| `deepseek/deepseek-r1-0528` | SiliconFlow | 0.00010224 |
+| `qwen/qwen3.8-flash` | Alibaba | 0.00002851 |
+| `z-ai/glm-5.3-flash` | Novita | 0.00002840 |
+| `moonshotai/kimi-k2.7-code` | Ambient | 0.00013108 |
+| `minimax/minimax-m3` | Venice | 0.00007068 |
+| `bytedance-seed/seed-1.6-flash` | Seed | 0.00002385 |
+| `tencent/hy3` | Phala | 0.00002457 |
+| `xiaomi/mimo-v2.5` | Novita | 0.00003207 |
+| `stepfun/step-3.5-flash` | SiliconFlow | 0.00002130 |
+| `inclusionai/ling-3.0-flash` | DeepInfra | 0.00002246 |
+| `meituan/longcat-2.0` | AtlasCloud | 0.00004980 |
+| `upstage/solar-pro-3` | Upstage | 0.00001017 |
+| `upstage/solar-pro4` | Upstage | 0.00000270 |
+
+The account total below also includes the initially truncated reasoning probes,
+not only the successful rows in the table. The full `AgenticLoop` then
+completed a two-round synthetic tool-use task with
+one exact tool call and natural termination on both
+`deepseek/deepseek-v4-flash-0731` (USD 0.000271831616) and
+`upstage/solar-pro4` (USD 0.00015657). Session events retained redacted tool
+arguments, token usage, cost, verification, and termination evidence. A secret
+scan of the isolated run root passed. The OpenRouter key endpoint reported
+USD 0.00166413 total account usage after the complete acceptance sequence.
+
+### Live-discovered hardening
+
+The first upstream `429` exposed two implementation defects outside the wire
+translation itself:
+
+1. adapter warning logs interpolated the raw SDK exception, which could contain
+   account-linked upstream fields; logs now retain only the exception type;
+2. `LLM_CALL_ENDED` carried charge and serving-route fields in process, but its
+   typed durable projection reduced them to generic completion fields; activity
+   schema v4 now retains bounded token, cost, model, adapter, and route evidence
+   while discarding raw provider error text.
+
+These fixes apply at the shared adapter/activity boundaries rather than adding
+OpenRouter-only persistence or a second usage ledger.
 
 ## Design gate
 

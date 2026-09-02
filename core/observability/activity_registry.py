@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -62,10 +62,12 @@ from core.observability.activity import (
     LifecycleRetriedRow,
     LifecycleStartedDetails,
     LifecycleStartedRow,
+    LLMCallEndedDetails,
     LLMCallEndedRow,
     LLMCallFailedRow,
     LLMCallRetriedRow,
     LLMCallStartedRow,
+    LLMCallUsageDetails,
     McpServerConnectedRow,
     McpServerDetails,
     McpServerFailedRow,
@@ -156,6 +158,7 @@ def _lifecycle_started(
     actor_type_default: str = "system",
     actor_key: str = "session_id",
     identifier_key: str = "task_id",
+    identifier_fallback_key: str = "",
 ) -> Callable[[dict[str, Any], str], ActivityRowBase]:
     """Curry a builder for ``LifecycleStartedRow`` subclasses. The
     actor / identifier names are passed by keyword so each event can
@@ -163,7 +166,12 @@ def _lifecycle_started(
     ``task_id``, SESSION_STARTED uses ``session_id``)."""
 
     def _build(data: dict[str, Any], run_id: str) -> ActivityRowBase:
-        identifier = str(data.get(identifier_key) or data.get("session_id") or "")
+        identifier = str(
+            data.get(identifier_key)
+            or (data.get(identifier_fallback_key) if identifier_fallback_key else None)
+            or data.get("session_id")
+            or ""
+        )
         if not identifier:
             _warn_missing_identifier(row_cls.__name__, identifier_key)
         actor_id = str(data.get(actor_key) or data.get("session_id") or actor_type_default)
@@ -207,6 +215,60 @@ def _lifecycle_completed(
         )
 
     return _build
+
+
+def _llm_call_ended(data: dict[str, Any], run_id: str) -> ActivityRowBase:
+    """Project one LLM attempt without retaining raw provider error text."""
+    identifier = str(
+        data.get("llm_call_id") or data.get("call_id") or data.get("session_id") or "agent"
+    )
+    actor_id = str(data.get("session_id") or "agent")
+    raw_usage = data.get("usage")
+    usage = None
+    if isinstance(raw_usage, Mapping):
+        usage = LLMCallUsageDetails(
+            **{
+                key: int(raw_usage.get(key, 0) or 0)
+                for key in (
+                    "input_tokens",
+                    "output_tokens",
+                    "cached_input_tokens",
+                    "reasoning_tokens",
+                    "cache_write_tokens",
+                )
+            }
+        )
+
+    def _text(key: str) -> str | None:
+        value = data.get(key)
+        return str(value) if value not in (None, "") else None
+
+    error = data.get("error")
+    cost = data.get("cost_usd")
+    routing_attempt = data.get("routing_attempt")
+    return LLMCallEndedRow(
+        ts=time.time(),
+        run_id=run_id,
+        actor_type="agent",
+        actor_id=actor_id,
+        entity_id=identifier,
+        task_id=str(data["task_id"]) if data.get("task_id") else None,
+        details=LLMCallEndedDetails(
+            duration_ms=float(data.get("latency_ms", data.get("duration_ms", 0.0)) or 0.0),
+            success=bool(data.get("success", not bool(error))),
+            model=_text("model"),
+            provider=_text("provider"),
+            adapter=_text("adapter"),
+            error_type=_text("error_type") or ("provider_error" if error else None),
+            usage=usage,
+            cost_usd=float(cost) if cost is not None else None,
+            response_id=_text("response_id"),
+            response_model=_text("response_model"),
+            response_provider=_text("response_provider"),
+            routing_strategy=_text("routing_strategy"),
+            routing_attempt=int(routing_attempt) if routing_attempt is not None else None,
+        ),
+    )
 
 
 def _lifecycle_failed(
@@ -257,7 +319,7 @@ def _lifecycle_retried(
             run_id=run_id,
             actor_type=_infer_actor_type(actor_type_default),
             actor_id=actor_id,
-            entity_id=str(data.get("call_id") or actor_id),
+            entity_id=str(data.get("llm_call_id") or data.get("call_id") or actor_id),
             task_id=str(data["task_id"]) if data.get("task_id") else None,
             details=LifecycleRetriedDetails(attempt=attempt, reason=reason),
         )
@@ -274,7 +336,7 @@ def _infer_actor_type(default: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 21 lifecycle event → builder mapping
+# Lifecycle event → builder mapping
 # ---------------------------------------------------------------------------
 
 
@@ -285,7 +347,10 @@ HOOK_EVENT_TO_ROW_BUILDER: dict[HookEvent, Callable[[dict[str, Any], str], Activ
     ),
     HookEvent.SUBAGENT_STARTED: _lifecycle_started(SubAgentStartedRow, actor_type_default="agent"),
     HookEvent.LLM_CALL_STARTED: _lifecycle_started(
-        LLMCallStartedRow, actor_type_default="agent", identifier_key="call_id"
+        LLMCallStartedRow,
+        actor_type_default="agent",
+        identifier_key="llm_call_id",
+        identifier_fallback_key="call_id",
     ),
     HookEvent.TOOL_EXEC_STARTED: _lifecycle_started(
         ToolExecStartedRow, actor_type_default="agent", identifier_key="tool_call_id"
@@ -303,9 +368,7 @@ HOOK_EVENT_TO_ROW_BUILDER: dict[HookEvent, Callable[[dict[str, Any], str], Activ
     HookEvent.SUBAGENT_COMPLETED: _lifecycle_completed(
         SubAgentCompletedRow, actor_type_default="agent"
     ),
-    HookEvent.LLM_CALL_ENDED: _lifecycle_completed(
-        LLMCallEndedRow, actor_type_default="agent", identifier_key="call_id"
-    ),
+    HookEvent.LLM_CALL_ENDED: _llm_call_ended,
     HookEvent.TOOL_EXEC_ENDED: _lifecycle_completed(
         ToolExecEndedRow, actor_type_default="agent", identifier_key="tool_call_id"
     ),

@@ -60,6 +60,14 @@ functional change.
 - **Patched site audit dependency.** The locked transitive `@humanfs/node`
   dependency now uses 0.16.8, closing GHSA-p498-v437-472g in the Pages build.
 
+### Fixed
+
+- **Provider failures and routed-call evidence are now privacy-safe and
+  durable.** Built-in adapters no longer interpolate raw SDK exception bodies
+  into warning logs, failed LLM hooks retain only the exception type, and
+  activity schema v4 preserves bounded token, charge, requested/served model,
+  adapter, and OpenRouter route metadata through SQLite and run projections.
+
 ## [1.0.27] - 2026-09-02
 
 > Provider-boundary and evaluation-integrity release: OpenRouter joins as an
