@@ -6,7 +6,7 @@
 > the implementing PR and, if the architecture program adopts the work, its
 > canonical roadmap ledger.
 
-**Status:** Implemented and locally verified; feature CI, promotion, and release pending
+**Status:** Implemented and CI-verified in PR #3268; assigned to the v1.0.27 release train
 
 **Research snapshot:** 2026-09-02
 
