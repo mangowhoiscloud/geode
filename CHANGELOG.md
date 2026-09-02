@@ -149,6 +149,9 @@ functional change.
 
 ### Infrastructure
 
+- **Pages dependency audit recovery.** Refresh the locked `browserslist`
+  dependency family to patched releases after the CI moderate-or-higher audit
+  began rejecting `browserslist<=4.28.6`; no direct site dependency changed.
 - **Property-based persistence coverage.** Hypothesis is now a development
   dependency and exercises `UsageRecord` JSONL writer/reader round trips across
   falsy and extension-field combinations.
