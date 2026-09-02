@@ -47,6 +47,19 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Harbor trial replay receipts.** GEODE and an instrumented native Codex
+  adapter can now reconstruct agent-owned asciicast v2 replays from finalized
+  ATIF trajectories, with source/output hashes and explicit non-score,
+  non-raw-capture provenance. A fail-closed backfill command covers closed
+  historical Harbor jobs without overwriting existing recordings.
+
+### Infrastructure
+
+- **Patched site audit dependency.** The locked transitive `@humanfs/node`
+  dependency now uses 0.16.8, closing GHSA-p498-v437-472g in the Pages build.
+
 ## [1.0.27] - 2026-09-02
 
 > Provider-boundary and evaluation-integrity release: OpenRouter joins as an

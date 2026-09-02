@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Added\n\n- **Harbor trial replay receipts.** GEODE and an instrumented native Codex\n  adapter can now reconstruct agent-owned asciicast v2 replays from finalized\n  ATIF trajectories, with source/output hashes and explicit non-score,\n  non-raw-capture provenance. A fail-closed backfill command covers closed\n  historical Harbor jobs without overwriting existing recordings.\n\n### Infrastructure\n\n- **Patched site audit dependency.** The locked transitive `@humanfs/node`\n  dependency now uses 0.16.8, closing GHSA-p498-v437-472g in the Pages build."
   },
   {
     "version": "1.0.27",
