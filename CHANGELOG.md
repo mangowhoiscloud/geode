@@ -55,6 +55,11 @@ functional change.
   non-raw-capture provenance. A fail-closed backfill command covers closed
   historical Harbor jobs without overwriting existing recordings.
 
+### Infrastructure
+
+- **Patched site audit dependency.** The locked transitive `@humanfs/node`
+  dependency now uses 0.16.8, closing GHSA-p498-v437-472g in the Pages build.
+
 ## [1.0.27] - 2026-09-02
 
 > Provider-boundary and evaluation-integrity release: OpenRouter joins as an
