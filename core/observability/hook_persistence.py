@@ -172,6 +172,7 @@ class HookPersistenceSink:
                     key: details[key] for key in ("_fallback_reason", "input_len") if key in details
                 }
                 details["_generic_projection"] = True
+            details["activity_schema_version"] = int(row.schema_version)
             entity_id = str(row.entity_id)
             if dispatch.event is HookEvent.RESULT_FEEDBACK:
                 # ``subject`` is model/user supplied and may be a sentence or

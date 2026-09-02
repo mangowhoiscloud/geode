@@ -493,6 +493,38 @@ class TestAgenticLoopFailover:
         assert result is None
         assert loop._last_llm_error is not None
 
+    def test_failed_llm_event_omits_raw_provider_error(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        from core.hooks import HookEvent, HookSystem
+
+        observed: list[dict[str, Any]] = []
+        hooks = HookSystem()
+        hooks.register(
+            HookEvent.LLM_CALL_ENDED,
+            lambda _event, data: observed.append(dict(data)),
+            name="error-recorder",
+        )
+        loop = self._make_loop()
+        loop._hooks = hooks
+        self._install_acomplete_stub(
+            loop,
+            RuntimeError('upstream rejected request; user_id="account-linked-id"'),
+        )
+
+        with caplog.at_level("WARNING", logger="core.agent.loop._provider_call"):
+            result = asyncio.run(
+                loop._call_llm("system prompt", [{"role": "user", "content": "hello"}])
+            )
+
+        assert result is None
+        assert observed
+        assert all(event["error"] == "RuntimeError" for event in observed)
+        assert "account-linked-id" not in str(observed)
+        assert "account-linked-id" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
     def test_call_llm_propagates_billing_to_the_operator_boundary(self) -> None:
         """Billing must bypass ordinary retry and reach `_dispatch_llm_call`."""
         from core.llm.errors import BillingError

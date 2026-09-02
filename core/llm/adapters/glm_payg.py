@@ -134,9 +134,9 @@ class GlmPaygAdapter:
         except Exception as exc:
             self._last_error = exc
             log.warning(
-                "glm-payg: chat.completions.create failed model=%s err=%s",
+                "glm-payg: chat.completions.create failed model=%s error_type=%s",
                 req.model,
-                exc,
+                type(exc).__name__,
             )
             raise
         return translate_chat_response(response)

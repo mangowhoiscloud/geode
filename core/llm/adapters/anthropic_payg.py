@@ -97,9 +97,9 @@ class AnthropicPaygAdapter:
             except Exception as exc:
                 self._last_error = exc
                 log.warning(
-                    "anthropic-payg: messages.create failed model=%s err=%s",
+                    "anthropic-payg: messages.create failed model=%s error_type=%s",
                     req.model,
-                    exc,
+                    type(exc).__name__,
                 )
                 raise
         return translate_response(response)

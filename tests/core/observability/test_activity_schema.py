@@ -356,6 +356,35 @@ def test_k1_real_payloads_roundtrip_through_discriminated_union() -> None:
         )
 
 
+def test_llm_lifecycle_keeps_current_and_legacy_call_correlation() -> None:
+    current = {
+        "session_id": "session-1",
+        "llm_call_id": "current-call",
+        "attempt": 2,
+    }
+    started = map_hook_to_activity(
+        HookEvent.LLM_CALL_STARTED,
+        current,
+        run_id="r1",
+    )
+    retried = map_hook_to_activity(
+        HookEvent.LLM_CALL_RETRIED,
+        current,
+        run_id="r1",
+    )
+    ended = map_hook_to_activity(
+        HookEvent.LLM_CALL_ENDED,
+        current,
+        run_id="r1",
+    )
+    assert started.entity_id == retried.entity_id == ended.entity_id == "current-call"
+
+    legacy = {"session_id": "session-1", "call_id": "legacy-call"}
+    legacy_started = map_hook_to_activity(HookEvent.LLM_CALL_STARTED, legacy, run_id="r1")
+    legacy_ended = map_hook_to_activity(HookEvent.LLM_CALL_ENDED, legacy, run_id="r1")
+    assert legacy_started.entity_id == legacy_ended.entity_id == "legacy-call"
+
+
 def test_k2_raw_user_content_never_persists_to_timeline() -> None:
     """Privacy contract: raw ``user_input`` strings, cognitive-state
     snapshots, and full tool results must NOT appear in the row details —
