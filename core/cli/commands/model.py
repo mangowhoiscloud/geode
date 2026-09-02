@@ -540,6 +540,16 @@ def cmd_model(args: str) -> None:
             return
     else:
         selected = {profile.id: profile for profile in model_profiles}.get(arg)
+        if not selected and arg.startswith("openrouter/"):
+            try:
+                from core.llm.providers.openrouter import to_openrouter_model_id
+
+                upstream_model = to_openrouter_model_id(arg)
+            except ValueError as exc:
+                _pkg.console.print(f"  [warning]{exc}[/warning]")
+                _pkg.console.print()
+                return
+            selected = ModelProfile(arg, "openrouter", upstream_model, "var")
         if not selected:
             arg_norm = arg.lower().replace("-", "").replace(" ", "").replace("_", "")
             for p in model_profiles:

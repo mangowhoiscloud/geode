@@ -62,6 +62,8 @@ def cmd_key(args: str) -> bool:
             "[muted](interactive — picks provider by prefix)[/muted]\n"
             "  [label]/key openai <key>[/label]           → "
             "[label]/login set-key openai-payg <key>[/label]\n"
+            "  [label]/key openrouter <key>[/label]       → "
+            "[label]/login set-key openrouter-payg <key>[/label]\n"
             "  [label]/key glm <key>[/label]              → "
             "[label]/login set-key glm-payg <key>[/label]\n"
             "\n"
@@ -86,6 +88,20 @@ def cmd_key(args: str) -> bool:
         _invalidate("openai")
         clear_dry_run_opt_in()
         _pkg.console.print(f"  [success]OpenAI API key set[/success]  {_pkg._mask_key(value)}")
+        _pkg.console.print()
+        return True
+
+    if parts[0].lower() == "openrouter":
+        if len(parts) < 2:
+            _pkg.console.print("  [warning]Usage: /key openrouter <API_KEY>[/warning]")
+            return False
+        value = parts[1].strip()
+        settings.openrouter_api_key = value
+        _pkg._upsert_env("OPENROUTER_API_KEY", value)
+        _pkg._seed_payg_plan_from_key("openrouter", value)
+        _invalidate("openrouter")
+        clear_dry_run_opt_in()
+        _pkg.console.print(f"  [success]OpenRouter API key set[/success]  {_pkg._mask_key(value)}")
         _pkg.console.print()
         return True
 
@@ -117,6 +133,12 @@ def cmd_key(args: str) -> bool:
         _pkg._seed_payg_plan_from_key("anthropic", value)
         _invalidate("anthropic")
         _pkg.console.print(f"  [success]Anthropic API key set[/success]  {_pkg._mask_key(value)}")
+    elif value.startswith("sk-or-v1-"):
+        settings.openrouter_api_key = value
+        _pkg._upsert_env("OPENROUTER_API_KEY", value)
+        _invalidate("openrouter")
+        _pkg._seed_payg_plan_from_key("openrouter", value)
+        _pkg.console.print(f"  [success]OpenRouter API key set[/success]  {_pkg._mask_key(value)}")
     elif value.startswith("sk-proj-") or value.startswith("sk-"):
         settings.openai_api_key = value
         _pkg._upsert_env("OPENAI_API_KEY", value)
@@ -139,6 +161,7 @@ def cmd_key(args: str) -> bool:
         _pkg.console.print(
             "  [warning]Unrecognized key prefix. Use:[/warning]\n"
             "  [muted]/key <sk-ant-...>          → Anthropic[/muted]\n"
+            "  [muted]/key <sk-or-v1-...>        → OpenRouter[/muted]\n"
             "  [muted]/key openai <sk-proj-...>  → OpenAI[/muted]\n"
             "  [muted]/key glm <key>             → GLM[/muted]\n"
             "  [muted]Tip: use /login add for subscription plans (Coding Lite/Pro/Max).[/muted]"
@@ -212,9 +235,10 @@ def _check_provider_key(selected: ModelProfile) -> None:
     from core.wiring.startup import _is_placeholder
 
     provider_key_map: dict[str, tuple[str, str]] = {
-        "Anthropic": (settings.anthropic_api_key, "ANTHROPIC_API_KEY"),
-        "OpenAI": (settings.openai_api_key, "OPENAI_API_KEY"),
-        "GLM": (settings.zai_api_key, "ZAI_API_KEY"),
+        "anthropic": (settings.anthropic_api_key, "ANTHROPIC_API_KEY"),
+        "openai": (settings.openai_api_key, "OPENAI_API_KEY"),
+        "openrouter": (settings.openrouter_api_key, "OPENROUTER_API_KEY"),
+        "glm": (settings.zai_api_key, "ZAI_API_KEY"),
     }
 
     # openai-codex (ChatGPT subscription) requires OAuth — check token availability

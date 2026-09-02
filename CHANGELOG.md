@@ -47,9 +47,11 @@ functional change.
 
 ## [Unreleased]
 
-- **MCPMark Postgres dependency bound** — constrain the isolated
-  `postgres-mcp==0.3.0` launcher to `mcp<2`; the server still imports the MCP
-  1.x `FastMCP` path and otherwise exits during startup after resolving MCP 2.x.
+## [1.0.27] - 2026-09-02
+
+> Provider-boundary and evaluation-integrity release: OpenRouter joins as an
+> explicit PAYG route, while runtime recovery, benchmark ownership, native
+> artifacts, and Skill attribution remain bounded by durable evidence.
 
 ### Architecture
 
@@ -70,6 +72,11 @@ functional change.
 
 ### Added
 
+- **OpenRouter PAYG route.** `OPENROUTER_API_KEY`, `/login add`, `/key`, and
+  exact `openrouter/<publisher>/<model>` references now resolve through an
+  explicit Chat Completions adapter. Provider-reported charge and bounded
+  serving-route metadata feed the existing budget, usage, and LLM-event paths;
+  direct providers remain outside OpenRouter equivalence/fallback.
 - **Native Skill attribution validity contract.** A prospective web,
   repository, and delegation suite now freezes disjoint design/final splits,
   production tool schemas, isolated workspace and verifier identities, and
@@ -118,6 +125,9 @@ functional change.
 
 ### Fixed
 
+- **MCPMark Postgres dependency bound.** Constrain the isolated
+  `postgres-mcp==0.3.0` launcher to `mcp<2`; the server still imports the MCP
+  1.x `FastMCP` path and otherwise exits during startup after resolving MCP 2.x.
 - **Harbor terminal command deadlines.** The shared tool executor now honors
   `terminal_exec`'s declared 600-second ceiling instead of cancelling every
   command at the generic 120-second handler deadline.
@@ -144,6 +154,9 @@ functional change.
 
 ### Infrastructure
 
+- **Pages dependency audit recovery.** Refresh the locked `browserslist`
+  dependency family to patched releases after the CI moderate-or-higher audit
+  began rejecting `browserslist<=4.28.6`; no direct site dependency changed.
 - **Property-based persistence coverage.** Hypothesis is now a development
   dependency and exercises `UsageRecord` JSONL writer/reader round trips across
   falsy and extension-field combinations.

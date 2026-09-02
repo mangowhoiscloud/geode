@@ -309,6 +309,7 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
     _legacy_providers = {
         "anthropic": settings.anthropic_api_key,
         "openai": settings.openai_api_key,
+        "openrouter": settings.openrouter_api_key,
         "glm": settings.zai_api_key,
     }
     for _prov, _key in _legacy_providers.items():

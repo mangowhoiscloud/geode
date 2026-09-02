@@ -201,12 +201,13 @@ def test_register_duplicate_pair_fails_before_session() -> None:
         register_adapter(_Stub("b", "anthropic", SOURCE_PAYG))
 
 
-def test_bootstrap_builtins_registers_five() -> None:
+def test_bootstrap_builtins_registers_six() -> None:
     bootstrap_builtins()
     names = {a.name for a in list_adapters()}
     assert names == {
         "anthropic-payg",
         "openai-payg",
+        "openrouter-payg",
         "codex-oauth",
         "glm-payg",
         "glm-coding-plan",
@@ -217,7 +218,7 @@ def test_bootstrap_builtins_idempotent() -> None:
     first = bootstrap_builtins()
     second = bootstrap_builtins()  # Second call must not publish a generation.
     assert second is first
-    assert len(list_adapters()) == 5
+    assert len(list_adapters()) == 6
 
 
 class _FakeDistribution:
@@ -446,6 +447,7 @@ def test_bootstrap_builtins_provider_source_pairs() -> None:
         ("anthropic", "payg"),
         ("openai", "payg"),
         ("openai", "subscription"),
+        ("openrouter", "payg"),
         ("glm", "payg"),
         ("glm", "subscription"),
     }
@@ -465,6 +467,7 @@ def test_builtin_registrations_pin_profile_credential_transport() -> None:
     assert actual == {
         "anthropic-payg": ("anthropic", "settings", "anthropic-messages"),
         "openai-payg": ("openai", "settings", "openai-platform-responses"),
+        "openrouter-payg": ("openrouter", "settings", "openrouter-chat-completions"),
         "codex-oauth": ("openai-codex", "codex-oauth", "openai-codex-responses"),
         "glm-payg": ("glm", "settings", "glm-payg-chat-completions"),
         "glm-coding-plan": (

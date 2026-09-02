@@ -3,7 +3,7 @@
 > [English](provider-login.md) | **한국어**
 
 GEODE는 OpenAI Codex 구독 자격과 일반 PAYG API key를 지원합니다.
-Anthropic의 내장 실행 경로는 API key뿐입니다.
+Anthropic과 OpenRouter의 내장 실행 경로는 API key뿐입니다.
 
 ## 현재 실행 경로
 
@@ -12,7 +12,8 @@ Anthropic의 내장 실행 경로는 API key뿐입니다.
 | OpenAI | `openai-codex` / 과거 `oauth` | GEODE/Codex profile | Codex Responses adapter |
 | OpenAI | `api_key` | `OPENAI_API_KEY` | OpenAI PAYG adapter |
 | Anthropic | `api_key` / `auto` | `ANTHROPIC_API_KEY` | Anthropic Messages adapter |
-| 공통 | `none` | 없음 | provider-disabled 오류로 fail closed |
+| OpenRouter | `api_key` | `OPENROUTER_API_KEY` | OpenRouter Chat Completions adapter |
+| 모든 프로바이더 | `none` | 없음 | provider-disabled 오류로 fail closed |
 
 퇴역한 Anthropic 값 `claude-cli`와 `oauth`는 기존 설정에 정확한 migration
 오류를 보여주기 위해 파싱만 허용합니다. binary 실행, CLI credential 조회,

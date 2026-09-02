@@ -19,9 +19,9 @@ from typing import Any
 
 from core.llm.adapters._openai_common import (
     build_async_openai_client,
+    build_chat_completion_kwargs,
     build_messages,
     translate_chat_response,
-    translate_tool,
 )
 from core.llm.adapters.base import (
     SOURCE_PAYG,
@@ -122,26 +122,13 @@ class GlmPaygAdapter:
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         client = self._get_client()
-        kwargs: dict[str, Any] = {
-            "model": req.model,
-            "messages": build_messages(req),
-            "max_tokens": req.max_tokens,
-        }
-        if req.temperature is not None:
-            kwargs["temperature"] = req.temperature
-        if req.tools:
-            from core.llm.adapters._openai_common import cap_tools
-
-            translated = [translate_tool(t) for t in req.tools]
-            kwargs["tools"] = cap_tools(translated, model=req.model, adapter_name="glm-payg")
-            tc = _translate_tool_choice(req.tool_choice)
-            if tc is not None:
-                kwargs["tool_choice"] = tc
-        if req.stop_sequences:
-            kwargs["stop"] = list(req.stop_sequences)
-        _reasoning_xb = build_glm_reasoning_extra_body(req.model)
-        if _reasoning_xb is not None:
-            kwargs["extra_body"] = _reasoning_xb
+        kwargs = build_chat_completion_kwargs(
+            req,
+            model=req.model,
+            provider="glm",
+            adapter_name=self.name,
+            extra_body=build_glm_reasoning_extra_body(req.model),
+        )
         try:
             response = await client.chat.completions.create(**kwargs)
         except Exception as exc:
@@ -220,19 +207,6 @@ class GlmPaygAdapter:
             provider=self.provider,
             source_path="settings.zai_api_key",
         )
-
-
-def _translate_tool_choice(tc: str | dict[str, Any]) -> str | dict[str, Any] | None:
-    """Adapter-neutral ``tool_choice`` → GLM Chat Completions wire shape.
-
-    GLM is OpenAI-compatible (Chat Completions nested ``function`` shape).
-    Reuses the GLM helper in :func:`core.llm.tool_choice.normalize` to
-    accept the AgenticLoop's Anthropic-shape dicts (``{"type": "auto"}``
-    etc.).
-    """
-    from core.llm.tool_choice import normalize
-
-    return normalize("glm", tc)
 
 
 __all__ = ["GlmPaygAdapter"]

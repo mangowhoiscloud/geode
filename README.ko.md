@@ -15,6 +15,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Anthropic-Fable_5-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Fable 5">
   <img src="https://img.shields.io/badge/OpenAI-GPT--5.6-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.6">
+  <img src="https://img.shields.io/badge/OpenRouter-inference_router-6b46c1?style=flat-square" alt="OpenRouter">
   <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.2-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.2">
 </p>
 
@@ -30,7 +31,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v1.0.26 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.27 — Autonomous Agent Runtime + Evaluation Substrate
 
 자율적인 도구 작업을 수행하는 범용 에이전트 런타임입니다. 자연어로
 요청하면 GEODE가 계획을 세우고 도구를 호출한 뒤 결과를 보고합니다. 짧은
@@ -226,7 +227,10 @@ echo 'ANTHROPIC_API_KEY=sk-ant-여기에-붙여넣기' > ~/.geode/.env
 chmod 600 ~/.geode/.env
 ```
 
-OpenAI 또는 ZhipuAI GLM 도 쓰고 싶다면 같은 파일에 `OPENAI_API_KEY=sk-proj-...` 또는 `ZAI_API_KEY=...` 추가. GEODE 는 사용 가능한 키를 자동으로 선택합니다.
+OpenAI, OpenRouter 또는 ZhipuAI GLM을 쓰려면 같은 파일에
+`OPENAI_API_KEY=sk-proj-...`, `OPENROUTER_API_KEY=sk-or-v1-...` 또는
+`ZAI_API_KEY=...`를 추가하세요. OpenRouter 모델은
+`/model openrouter/anthropic/claude-sonnet-4`처럼 정확한 참조로 선택합니다.
 
 **비용 제어.** 가격은 model과 workload에 따라 달라집니다. provider의 최신
 가격을 확인한 뒤 `~/.geode/config.toml`에 hard cap을 설정하세요.
@@ -416,6 +420,7 @@ geode setup                          # wizard 재실행 (구독 OAuth 또는 API
 /login openai                        # 세션 중: 구독 OAuth
 /login google                        # 세션 중: Google Workspace OAuth
 /key openai sk-proj-...              # 세션 중: API 키 붙여넣기
+/key openrouter sk-or-v1-...         # 세션 중: OpenRouter 크레딧
 echo 'OPENAI_API_KEY=sk-proj-...' >> ~/.geode/.env    # 권위를 갖는 파일 직접 편집
 ```
 
@@ -448,7 +453,7 @@ PyPI 설치라면 `uv tool install geode-agent` 실행. 소스 체크아웃이�
 <details>
 <summary><strong>"401 Unauthorized" 또는 "Invalid API key"</strong> — 잘못된 키, 만료된 키, 또는 잘못된 파일 위치.</summary>
 
-`cat ~/.geode/.env` 로 확인 — 키는 `sk-ant-` (Anthropic), `sk-proj-` (OpenAI), `id.secret` (ZhipuAI GLM) 으로 시작해야 함. 공백이나 따옴표 추가되지 않았는지 체크. ChatGPT 구독 경로(Path A)면 GEODE 안에서 `/login openai`를 다시 실행.
+`cat ~/.geode/.env` 로 확인 — 키는 `sk-ant-` (Anthropic), `sk-proj-` (OpenAI), `sk-or-v1-` (OpenRouter), `id.secret` (ZhipuAI GLM)으로 시작해야 합니다. 공백이나 따옴표가 추가되지 않았는지 확인하세요. ChatGPT 구독 경로(Path A)면 GEODE 안에서 `/login openai`를 다시 실행합니다.
 </details>
 
 <details>
@@ -487,7 +492,7 @@ geode update --latest # uv 도구: minor/major 업데이트를 명시적으로 �
 | **`while(tool_use)` 루프** | 모든 자율 행동의 단일 원시 동작. 서브에이전트, 플랜, 배치 모두 같은 루프의 인스턴스 |
 | **실험적 scaffold 최적화 loop** | scaffold 후보를 변이시키고 적대적 안전성 루브릭으로 audit한 뒤, 실제 이득이 있을 때만 승격을 허용합니다. 공개 기록은 현재 지속적 개선보다 게이트 규율을 입증합니다. [closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) 참고 |
 | **Agentic tools + MCP 카탈로그** | 웹 검색, 파일 작업, 스케줄링, 메모리, Slack/Discord, Anthropic 발행 MCP 레지스트리, 선택형 [Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace) 통합. MCP 메타데이터는 `~/.geode/mcp/registry-cache.json`에 캐시 |
-| **3-프로바이더 페일오버** | Anthropic + OpenAI + ZhipuAI. ChatGPT 구독 OAuth는 프로세스 내부 OpenAI 어댑터가 처리하고 Anthropic은 API 키만 지원합니다. 페일오버는 동일 프로바이더 내에서만 동작합니다(예상치 못한 vendor 횡단 과금 없음, v0.53.0 거버넌스). |
+| **명시적 프로바이더 경로** | Anthropic + OpenAI + OpenRouter + ZhipuAI. OpenRouter는 Chat Completions 전송 규격을 재사용하되 독립 identity를 유지하며 실제 청구액과 serving route를 기록합니다. GEODE는 프로바이더를 조용히 넘나들지 않습니다. |
 | **5-tier 메모리** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). 영속화, 데몬 재시작 후에도 유지 |
 | **지속 goal + advisory plan** | `/goal`은 명시적 empty·active·paused·blocked·complete 상태를 관리하고, `/plan`은 관측에 따라 갱신 가능한 checklist를 설치합니다. 둘 다 실행 권한을 갖지 않으며 verify 실패 시 cognitive replan은 유지됩니다. |
 | **Typed 의사결정 + 가시성 제어** | `/grill`은 비순환 dependency frontier만 갱신하고, `/geo`는 fetch·retrieval·citation·placement·absorption·quality·outcome을 단일 점수로 뭉개지 않고 별도 증거 단계로 보존합니다. |
@@ -550,7 +555,7 @@ frontier 하네스 (Claude Code, Codex CLI, OpenClaw) 옆에서 GEODE 가 어디
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
-| 멀티 프로바이더 페일오버 | ✅ Anthropic + AWS Bedrock + Google Vertex (환경변수 라우팅) | ✅✅ OpenAI + Azure + Bedrock + Ollama + OpenAI-호환 엔드포인트 전체 (`model_providers` 설정) | ✅ `auth.order` 쿨다운 기반 자동 페일오버 | ✅ Anthropic + OpenAI + ZhipuAI, in-provider 전용 |
+| 멀티 프로바이더 라우팅 | ✅ Anthropic + AWS Bedrock + Google Vertex (환경변수 라우팅) | ✅✅ OpenAI + Azure + Bedrock + Ollama + OpenAI-호환 엔드포인트 전체 (`model_providers` 설정) | ✅ `auth.order` 쿨다운 기반 자동 페일오버 | ✅ Anthropic + OpenAI + OpenRouter + ZhipuAI; 조용한 cross-provider 폴백 없음 |
 | 구독 OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini 온보딩 | ChatGPT만 지원; Anthropic은 API key 사용 |
 | 토큰 / 비용 예산 가드 | ⚠️ 캐시 토큰 추적만 | ⚠️ 재시도 cap 만 (`request_max_retries`) | ⚠️ 부분 | ✅ 명시적 토큰 + 비용 예산 거버넌스 |
 | 컨텍스트 overflow 처리 | ✅ 자동 컴팩션 | ⚠️ Skills progressive disclosure + fork | ✅ 컴팩션 + 트랜스크립트 스트리밍 | ✅✅ 계층형 컨텍스트 overflow 처리 |
@@ -611,7 +616,7 @@ GEODE 는 두 개의 컨트롤 레이어가 있습니다:
 graph LR
     AG["Agent<br/>AgenticLoop, SubAgent<br/>CLIPoller, Gateway"] --> HA["Harness<br/>SessionLane, PolicyChain<br/>TaskGraph, HookSystem"]
     HA --> RT["Runtime<br/>Agentic tools, MCP catalog<br/>Memory, Skills"]
-    RT --> MD["Model<br/>Claude, OpenAI, GLM"]
+    RT --> MD["Model<br/>Claude, OpenAI, OpenRouter, GLM"]
 
     style AG fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
     style HA fill:#1e293b,stroke:#f59e0b,color:#e2e8f0

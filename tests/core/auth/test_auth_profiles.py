@@ -684,6 +684,7 @@ class TestBuildAuthZAI:
         with patch("core.config.settings") as mock_settings:
             mock_settings.anthropic_api_key = ""
             mock_settings.openai_api_key = ""
+            mock_settings.openrouter_api_key = ""
             mock_settings.zai_api_key = "test-zai-key"
 
             from core.wiring.container import build_auth
@@ -712,6 +713,7 @@ class TestBuildAuthZAI:
         with patch("core.config.settings") as mock_settings:
             mock_settings.anthropic_api_key = ""
             mock_settings.openai_api_key = ""
+            mock_settings.openrouter_api_key = ""
             mock_settings.zai_api_key = ""
 
             from core.wiring.container import build_auth

@@ -1193,6 +1193,7 @@ class TestAgenticLoop:
         ):
             mock_settings.anthropic_api_key = ""
             mock_settings.openai_api_key = ""
+            mock_settings.openrouter_api_key = ""
             mock_settings.zai_api_key = ""
             mock_console.input.return_value = "sk-ant-test-key-12345678"
             result = key_registration_gate()
@@ -1304,7 +1305,7 @@ class TestAgenticLoop:
         loop = AgenticLoop(context, executor, quiet=True)
 
         mock_response = MagicMock()
-        mock_response.usage = MagicMock(input_tokens=500, output_tokens=200)
+        mock_response.usage = MagicMock(input_tokens=500, output_tokens=200, reported_cost_usd=None)
 
         loop._track_usage(mock_response)
 
@@ -1341,6 +1342,7 @@ class TestAgenticLoop:
             thinking_tokens=0,
             cache_creation_tokens=0,
             cache_read_tokens=0,
+            reported_cost_usd=None,
         )
 
         asyncio.run(loop._track_usage_async(mock_response))
@@ -1389,6 +1391,7 @@ class TestAgenticLoop:
             cache_creation_tokens=20,
             cache_read_tokens=80,
             thinking_tokens=10,
+            reported_cost_usd=None,
         )
 
         loop._track_usage(mock_response)

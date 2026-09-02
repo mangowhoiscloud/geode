@@ -135,7 +135,7 @@ def test_credential_modules_reference_the_live_entry_point(rel_path: str) -> Non
 
 
 def test_key_command_invalidates_for_every_provider_branch() -> None:
-    """``/key`` handles anthropic / openai / glm — each branch must invalidate."""
+    """``/key`` invalidates every built-in API-key provider."""
     src = (_REPO / "core/cli/commands/key.py").read_text(encoding="utf-8")
     invalidated = {
         node.args[0].value
@@ -146,6 +146,6 @@ def test_key_command_invalidates_for_every_provider_branch() -> None:
         and node.args
         and isinstance(node.args[0], ast.Constant)
     }
-    assert {"anthropic", "openai", "glm"} <= invalidated, (
+    assert {"anthropic", "openai", "openrouter", "glm"} <= invalidated, (
         f"/key branches missing adapter invalidation: {invalidated}"
     )

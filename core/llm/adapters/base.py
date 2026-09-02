@@ -15,6 +15,7 @@ design and the deprecation roster for Layer 2 direct callers.
 
 from __future__ import annotations
 
+import math
 from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
@@ -181,6 +182,19 @@ class UsageSummary:
     cached_input_tokens: int = 0
     reasoning_tokens: int = 0
     cache_write_tokens: int = 0
+    reported_cost_usd: float | None = None
+
+    def __post_init__(self) -> None:
+        """Reject malformed provider billing before it reaches budget logic."""
+        cost = self.reported_cost_usd
+        if cost is None:
+            return
+        if isinstance(cost, bool) or not isinstance(cost, (int, float)):
+            raise TypeError("reported_cost_usd must be a number or None")
+        normalized = float(cost)
+        if not math.isfinite(normalized) or normalized < 0:
+            raise ValueError("reported_cost_usd must be finite and non-negative")
+        object.__setattr__(self, "reported_cost_usd", normalized)
 
 
 @dataclass(frozen=True)
@@ -229,6 +243,13 @@ class AdapterCallResult:
     # so the AgenticLoop can persist it on the next-turn message dict
     # for multi-turn replay.
     assistant_phase: str = ""
+    # Bounded response authority. Provider adapters may populate these from
+    # documented wire fields; raw SDK responses remain deliberately unpersisted.
+    response_id: str = ""
+    response_model: str = ""
+    response_provider: str = ""
+    routing_strategy: str = ""
+    routing_attempt: int = 0
 
 
 @dataclass(frozen=True)

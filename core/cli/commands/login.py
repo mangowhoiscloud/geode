@@ -513,7 +513,7 @@ def _login_add_interactive(_args: str) -> None:
         _pkg.console.print(
             "  [warning]/login add requires an interactive terminal.[/warning]\n"
             "  [muted]Set keys via env vars (ZAI_API_KEY, OPENAI_API_KEY, "
-            "ANTHROPIC_API_KEY) for non-interactive setup.[/muted]"
+            "OPENROUTER_API_KEY, ANTHROPIC_API_KEY) for non-interactive setup.[/muted]"
         )
         return
 
@@ -523,7 +523,7 @@ def _login_add_interactive(_args: str) -> None:
             "Subscription (GLM Coding Lite/Pro/Max · "
             "ChatGPT Plus/Pro/Pro Lite/Team/Business/Enterprise/Edu)",
         ),
-        ("payg", "Pay-as-you-go API key (Anthropic, OpenAI, GLM PAYG)"),
+        ("payg", "Pay-as-you-go API key (Anthropic, OpenAI, OpenRouter, GLM PAYG)"),
         ("oauth", "OAuth borrowed (Codex CLI)"),
     ]
     menu = TerminalMenu(
@@ -601,6 +601,7 @@ def _login_add_interactive(_args: str) -> None:
         providers = [
             ("anthropic", "Anthropic"),
             ("openai", "OpenAI"),
+            ("openrouter", "OpenRouter"),
             ("glm", "GLM (z.ai PAYG)"),
         ]
         pmenu = TerminalMenu(
@@ -638,6 +639,7 @@ def _login_add_interactive(_args: str) -> None:
         env_field_map = {
             "anthropic": ("anthropic_api_key", "ANTHROPIC_API_KEY"),
             "openai": ("openai_api_key", "OPENAI_API_KEY"),
+            "openrouter": ("openrouter_api_key", "OPENROUTER_API_KEY"),
             "glm": ("zai_api_key", "ZAI_API_KEY"),
         }
         if provider in env_field_map:

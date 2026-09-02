@@ -149,6 +149,9 @@ _MODEL_DESCRIPTIONS: dict[str, str] = {
     "gpt-5.4": "GPT-5.4 · balanced reasoning · API + subscription",
     "gpt-5.4-mini": "GPT-5.4 Mini · cheap + fast · API + subscription",
     "gpt-5.3-codex": "GPT-5.3 Codex · deprecated compatibility row",
+    # OpenRouter
+    "openrouter/openrouter/free": "Dynamic free-model route · smoke tests only",
+    "openrouter/openrouter/auto": "Dynamic model route · variable provider and cost",
     # GLM
     "glm-5.2": "GLM-5.2 · flagship reasoning · 1M-capable, automatic caching",
     "glm-5.1": "GLM-5.1 · always-on reasoning",

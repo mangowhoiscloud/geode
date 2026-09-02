@@ -26,9 +26,9 @@ from typing import Any
 from core.config.policy_source import PolicySourcePaths
 from core.llm.adapters._openai_common import (
     build_async_openai_client,
+    build_chat_completion_kwargs,
     build_messages,
     translate_chat_response,
-    translate_tool,
 )
 from core.llm.adapters.base import (
     SOURCE_SUBSCRIPTION,
@@ -90,27 +90,13 @@ class GlmCodingPlanAdapter:
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         client = self._get_client()
-        kwargs: dict[str, Any] = {
-            "model": req.model,
-            "messages": build_messages(req),
-            "max_tokens": req.max_tokens,
-        }
-        if req.temperature is not None:
-            kwargs["temperature"] = req.temperature
-        if req.tools:
-            from core.llm.adapters._openai_common import cap_tools
-            from core.llm.tool_choice import normalize
-
-            translated = [translate_tool(t) for t in req.tools]
-            kwargs["tools"] = cap_tools(translated, model=req.model, adapter_name="glm-coding-plan")
-            tc = normalize("glm", req.tool_choice)
-            if tc is not None:
-                kwargs["tool_choice"] = tc
-        if req.stop_sequences:
-            kwargs["stop"] = list(req.stop_sequences)
-        _reasoning_xb = build_glm_reasoning_extra_body(req.model)
-        if _reasoning_xb is not None:
-            kwargs["extra_body"] = _reasoning_xb
+        kwargs = build_chat_completion_kwargs(
+            req,
+            model=req.model,
+            provider="glm",
+            adapter_name=self.name,
+            extra_body=build_glm_reasoning_extra_body(req.model),
+        )
         try:
             response = await client.chat.completions.create(**kwargs)
         except Exception as exc:

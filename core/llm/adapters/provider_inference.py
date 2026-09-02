@@ -1,4 +1,4 @@
-"""Provider inference from model id (Codex / Anthropic / GLM / OpenAI).
+"""Provider inference from model id (Codex / Anthropic / OpenRouter / GLM / OpenAI).
 
 Used by callers that pin a model (e.g. Petri audit target
 ``geode/gpt-5.5``) but did not pin a provider — without this helper,
@@ -26,6 +26,7 @@ def infer_provider_from_model(model: str) -> str:
     - ``gpt-*`` / ``o3`` / ``o4-mini`` → ``"openai-codex"`` when a
       Codex OAuth token is resolvable, else ``"openai"`` (PAYG path).
     - ``claude-*`` → ``"anthropic"``.
+    - ``openrouter/*`` → ``"openrouter"``.
     - ``glm-*`` → ``"glm"``.
     - Provider-prefixed ids (``anthropic/...``, ``openai/...``,
       ``openai-codex/...``, ``geode/<base>``) — the prefix wins for
@@ -43,6 +44,8 @@ def infer_provider_from_model(model: str) -> str:
         return "openai-codex"
     if raw_prefix == "anthropic":
         return "anthropic"
+    if raw_prefix == "openrouter":
+        return "openrouter"
     if raw_prefix in ("openai", "openai-api"):
         return "openai"
 

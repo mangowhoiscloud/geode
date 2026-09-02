@@ -433,7 +433,6 @@ class TestAgenticLoopFailover:
     def test_llm_call_ended_carries_complete_usage(self) -> None:
         from core.hooks import HookEvent, HookSystem
         from core.llm.adapters.base import AdapterCallResult, UsageSummary
-        from core.llm.token_tracker import calculate_cost
 
         observed: list[dict[str, Any]] = []
         hooks = HookSystem()
@@ -454,8 +453,14 @@ class TestAgenticLoopFailover:
                     cached_input_tokens=40,
                     cache_write_tokens=10,
                     reasoning_tokens=8,
+                    reported_cost_usd=0.123,
                 ),
                 stop_reason="end_turn",
+                response_id="gen-1",
+                response_model="vendor/served-model",
+                response_provider="Provider A",
+                routing_strategy="fallback",
+                routing_attempt=2,
             ),
         )
 
@@ -469,13 +474,12 @@ class TestAgenticLoopFailover:
             "reasoning_tokens": 8,
             "cache_write_tokens": 10,
         }
-        assert ended["cost_usd"] == calculate_cost(
-            loop.model,
-            100,
-            20,
-            cache_creation_tokens=10,
-            cache_read_tokens=40,
-        )
+        assert ended["cost_usd"] == 0.123
+        assert ended["response_id"] == "gen-1"
+        assert ended["response_model"] == "vendor/served-model"
+        assert ended["response_provider"] == "Provider A"
+        assert ended["routing_strategy"] == "fallback"
+        assert ended["routing_attempt"] == 2
 
     def test_call_llm_returns_none_on_chain_exhaustion(self) -> None:
         """When ``acomplete`` raises, ``_call_llm`` returns None with an
