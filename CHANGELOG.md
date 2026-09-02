@@ -47,9 +47,11 @@ functional change.
 
 ## [Unreleased]
 
-- **MCPMark Postgres dependency bound** — constrain the isolated
-  `postgres-mcp==0.3.0` launcher to `mcp<2`; the server still imports the MCP
-  1.x `FastMCP` path and otherwise exits during startup after resolving MCP 2.x.
+## [1.0.27] - 2026-09-02
+
+> Provider-boundary and evaluation-integrity release: OpenRouter joins as an
+> explicit PAYG route, while runtime recovery, benchmark ownership, native
+> artifacts, and Skill attribution remain bounded by durable evidence.
 
 ### Architecture
 
@@ -123,6 +125,9 @@ functional change.
 
 ### Fixed
 
+- **MCPMark Postgres dependency bound.** Constrain the isolated
+  `postgres-mcp==0.3.0` launcher to `mcp<2`; the server still imports the MCP
+  1.x `FastMCP` path and otherwise exits during startup after resolving MCP 2.x.
 - **Harbor terminal command deadlines.** The shared tool executor now honors
   `terminal_exec`'s declared 600-second ceiling instead of cancelling every
   command at the generic 120-second handler deadline.
