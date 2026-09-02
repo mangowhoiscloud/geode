@@ -75,7 +75,26 @@ It:
   timeout at zero so Harbor's canonical task limit remains authoritative;
 - leaves task/container/verifier ownership with Harbor;
 - exports a digest-oriented geode.trajectory@1 sidecar and an ATIF 1.7
-  `trajectory.json` projected from the same canonical session timeline.
+  `trajectory.json` projected from the same canonical session timeline;
+- reconstructs `recording.cast` from the finalized ATIF trace and binds it to
+  the source with `recording.receipt.json`.
+
+Harbor's job layout permits `agent/recording.cast`, but its contents are owned
+by each agent implementation. Terminus-2 performs a raw asciinema capture;
+GEODE and the instrumented native Codex adapter instead emit an asciicast v2
+reconstruction after ATIF finalization. The reconstruction is replay evidence,
+not a raw PTY capture or score authority. It omits provider reasoning, redacts
+known secret forms, and remains private until a separate PII/path/publication
+review. Observer-side `script -r` files separately record the operator console
+and must not be described as Harbor-native trial recordings.
+
+Use `evals.platforms.harbor:RecordedCodexHarborAgent` instead of the built-in
+Codex name when future paired runs require the native arm to emit the derived
+cast automatically. Closed historical jobs can be audited and backfilled
+without changing result or trajectory files:
+
+    uv run python -m evals.platforms.harbor <job-or-run-root> --dry-run
+    uv run python -m evals.platforms.harbor <job-or-run-root>
 
 The adapter declares `SUPPORTS_ATIF=true` only after validating the projection
 with Harbor's own ATIF model. Scope-incomplete session history or unmatched

@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import importlib
 import importlib.metadata
 import json
+import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from core.memory.atomic_write import atomic_write_json, atomic_write_text
+from core.observability.redaction import redact_and_bound_text
 
 if TYPE_CHECKING:
 
@@ -25,11 +31,26 @@ if TYPE_CHECKING:
             **kwargs: Any,
         ) -> None: ...
 
+    class HarborCodexAgent:
+        logs_dir: Path
+        logger: Any
+
+        def populate_context_post_run(self, context: Any) -> None: ...
+
 else:
     try:
         HarborBaseAgent = importlib.import_module("harbor.agents.base").BaseAgent
     except ImportError:  # Harbor is an opt-in benchmark dependency.
         HarborBaseAgent = object
+    try:
+        HarborCodexAgent = importlib.import_module("harbor.agents.installed.codex").Codex
+    except ImportError:  # Harbor is an opt-in benchmark dependency.
+        HarborCodexAgent = object
+
+
+log = logging.getLogger(__name__)
+_MAX_RECORDING_EVENT_CHARS = 64_000
+_RECORDING_RECEIPT_SCHEMA = "geode.harbor-recording-receipt@1"
 
 
 @dataclass
@@ -238,11 +259,223 @@ def _atif_trajectory_from_geode(
 
 
 def _write_atif_trajectory(path: Path, payload: Mapping[str, Any]) -> None:
-    from core.memory.atomic_write import atomic_write_json
-
     trajectory_model = importlib.import_module("harbor.models.trajectories").Trajectory
     validated = trajectory_model.model_validate(payload)
     atomic_write_json(path, validated.to_json_dict(), indent=2)
+
+
+def _recording_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+
+
+def _recording_text(value: Any) -> str:
+    return (
+        redact_and_bound_text(value, _MAX_RECORDING_EVENT_CHARS)
+        .replace("\r\n", "\n")
+        .replace("\n", "\r\n")
+    )
+
+
+def _recording_step_output(step: Mapping[str, Any]) -> list[str]:
+    tool_calls = step.get("tool_calls")
+    calls = (
+        [call for call in tool_calls if isinstance(call, Mapping)]
+        if isinstance(tool_calls, list)
+        else []
+    )
+    chunks: list[str] = []
+    if calls:
+        for call in calls:
+            name = str(call.get("function_name") or "tool")
+            arguments = call.get("arguments")
+            arguments = arguments if isinstance(arguments, Mapping) else {}
+            action = arguments.get("command", arguments.get("input"))
+            if action is None:
+                action = json.dumps(arguments, ensure_ascii=False, sort_keys=True, default=str)
+            chunks.append(f"\x1b[1;36m$ [{name}]\x1b[0m {_recording_text(action)}\r\n")
+
+        observation = step.get("observation")
+        observation = observation if isinstance(observation, Mapping) else {}
+        results = observation.get("results")
+        if isinstance(results, list):
+            for result in results:
+                if not isinstance(result, Mapping):
+                    continue
+                content = _recording_text(result.get("content"))
+                if content:
+                    chunks.append(content + ("" if content.endswith("\r\n") else "\r\n"))
+        return chunks
+
+    message = _recording_text(step.get("message"))
+    if message:
+        source = str(step.get("source") or "event")
+        label = "task" if source == "user" else source
+        chunks.append(f"\x1b[1;33m[{label}]\x1b[0m {message}\r\n")
+    return chunks
+
+
+def _render_asciicast(trajectory: Mapping[str, Any]) -> tuple[str, dict[str, int]]:
+    schema_version = trajectory.get("schema_version")
+    if not isinstance(schema_version, str) or not schema_version.startswith("ATIF-v1."):
+        raise ValueError("recording reconstruction requires an ATIF v1 trajectory")
+    steps = trajectory.get("steps")
+    if not isinstance(steps, list) or not steps:
+        raise ValueError("ATIF trajectory must contain at least one step")
+
+    parsed = [
+        _recording_timestamp(step.get("timestamp")) if isinstance(step, Mapping) else None
+        for step in steps
+    ]
+    base = next((value for value in parsed if value is not None), None)
+    agent = trajectory.get("agent")
+    agent = agent if isinstance(agent, Mapping) else {}
+    header: dict[str, Any] = {
+        "version": 2,
+        "width": 120,
+        "height": 36,
+        "title": f"Harbor ATIF replay — {agent.get('name') or 'agent'}",
+        "env": {
+            "TERM": "xterm-256color",
+            "SHELL": "/bin/sh",
+            "GEODE_RECORDING_PROVENANCE": "trajectory-reconstruction",
+        },
+    }
+    if base is not None:
+        header["timestamp"] = int(base.timestamp())
+
+    events: list[list[Any]] = [
+        [
+            0.0,
+            "o",
+            "\x1b[1;35m[reconstructed]\x1b[0m Harbor ATIF replay; not a raw PTY capture.\r\n",
+        ]
+    ]
+    previous = 0.0
+    synthetic = 0
+    clamped = 0
+    for step, occurred_at in zip(steps, parsed, strict=True):
+        if not isinstance(step, Mapping):
+            continue
+        if occurred_at is None or base is None:
+            offset = previous + 0.001
+            synthetic += 1
+        else:
+            offset = (occurred_at - base).total_seconds()
+            if offset < previous:
+                offset = previous
+                clamped += 1
+        previous = offset
+        events.extend([round(offset, 6), "o", chunk] for chunk in _recording_step_output(step))
+
+    if len(events) == 1:
+        raise ValueError("ATIF trajectory contains no replayable content")
+    lines = [json.dumps(header, ensure_ascii=False)]
+    lines.extend(json.dumps(event, ensure_ascii=False) for event in events)
+    return "\n".join(lines) + "\n", {
+        "step_count": len(steps),
+        "event_count": len(events),
+        "synthetic_timestamp_count": synthetic,
+        "clamped_timestamp_count": clamped,
+    }
+
+
+def write_harbor_recording(
+    trajectory_path: Path,
+    *,
+    overwrite: bool = False,
+) -> dict[str, Any] | None:
+    """Write one derived cast and receipt; preserve any existing recording."""
+    trajectory_path = Path(trajectory_path)
+    recording_path = trajectory_path.with_name("recording.cast")
+    receipt_path = trajectory_path.with_name("recording.receipt.json")
+    if recording_path.exists() and not overwrite:
+        return None
+
+    source_bytes = trajectory_path.read_bytes()
+    trajectory = json.loads(source_bytes)
+    if not isinstance(trajectory, Mapping):
+        raise ValueError("ATIF trajectory root must be an object")
+    cast, timing = _render_asciicast(trajectory)
+    cast_bytes = cast.encode("utf-8")
+    receipt: dict[str, Any] = {
+        "schema_id": _RECORDING_RECEIPT_SCHEMA,
+        "recording_kind": "trajectory-reconstruction",
+        "score_authority": False,
+        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "source": {
+            "path": trajectory_path.name,
+            "sha256": hashlib.sha256(source_bytes).hexdigest(),
+            "schema_version": str(trajectory.get("schema_version") or ""),
+            "trajectory_id": str(trajectory.get("trajectory_id") or ""),
+        },
+        "output": {
+            "path": recording_path.name,
+            "sha256": hashlib.sha256(cast_bytes).hexdigest(),
+            "format": "asciicast-v2",
+        },
+        "timing": timing,
+        "privacy": {
+            "known_secret_patterns": "redacted",
+            "provider_reasoning": "omitted",
+            "publication_state": "private-review-required",
+        },
+    }
+    atomic_write_text(recording_path, cast)
+    atomic_write_json(receipt_path, receipt, indent=2)
+    return receipt
+
+
+def backfill_harbor_recordings(
+    root: Path,
+    *,
+    dry_run: bool = False,
+    overwrite: bool = False,
+) -> dict[str, int]:
+    """Create missing derived recordings below one closed Harbor job/run root."""
+    root = Path(root)
+    if not root.is_dir():
+        raise FileNotFoundError(root)
+    summary = {
+        "trajectories": 0,
+        "eligible": 0,
+        "created": 0,
+        "existing": 0,
+        "failed": 0,
+    }
+    for trajectory_path in sorted(root.rglob("agent/trajectory.json")):
+        summary["trajectories"] += 1
+        if trajectory_path.with_name("recording.cast").exists() and not overwrite:
+            summary["existing"] += 1
+            continue
+        try:
+            if dry_run:
+                trajectory = json.loads(trajectory_path.read_text(encoding="utf-8"))
+                if not isinstance(trajectory, Mapping):
+                    raise ValueError("ATIF trajectory root must be an object")
+                _render_asciicast(trajectory)
+            else:
+                write_harbor_recording(trajectory_path, overwrite=overwrite)
+                summary["created"] += 1
+            summary["eligible"] += 1
+        except (OSError, ValueError, json.JSONDecodeError):
+            summary["failed"] += 1
+    return summary
+
+
+def _write_recording_if_available(logs_dir: Path) -> None:
+    trajectory_path = logs_dir / "trajectory.json"
+    if not trajectory_path.is_file():
+        return
+    try:
+        write_harbor_recording(trajectory_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        log.warning("Harbor recording reconstruction failed: %s", exc)
 
 
 def _build_loop(
@@ -409,6 +642,42 @@ class GeodeHarborAgent(HarborBaseAgent):
                 metrics=usage,
             ),
         )
+        _write_recording_if_available(self.logs_dir)
 
 
-__all__ = ["GeodeHarborAgent", "HarborExecTool"]
+class RecordedCodexHarborAgent(HarborCodexAgent):
+    """Harbor Codex with post-run trajectory replay instrumentation."""
+
+    SUPPORTS_ATIF = True
+
+    def populate_context_post_run(self, context: Any) -> None:
+        super().populate_context_post_run(context)
+        _write_recording_if_available(self.logs_dir)
+
+
+def _recording_main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Reconstruct Harbor recordings from ATIF traces.")
+    parser.add_argument("root", type=Path, help="Closed Harbor job or run root")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--overwrite", action="store_true")
+    args = parser.parse_args(argv)
+    summary = backfill_harbor_recordings(
+        args.root,
+        dry_run=args.dry_run,
+        overwrite=args.overwrite,
+    )
+    print(json.dumps(summary, sort_keys=True))
+    return 1 if summary["failed"] else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_recording_main())
+
+
+__all__ = [
+    "GeodeHarborAgent",
+    "HarborExecTool",
+    "RecordedCodexHarborAgent",
+    "backfill_harbor_recordings",
+    "write_harbor_recording",
+]

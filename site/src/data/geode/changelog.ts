@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Added\n\n- **Harbor trial replay receipts.** GEODE and an instrumented native Codex\n  adapter can now reconstruct agent-owned asciicast v2 replays from finalized\n  ATIF trajectories, with source/output hashes and explicit non-score,\n  non-raw-capture provenance. A fail-closed backfill command covers closed\n  historical Harbor jobs without overwriting existing recordings."
   },
   {
     "version": "1.0.27",
