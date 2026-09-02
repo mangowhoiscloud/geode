@@ -339,7 +339,12 @@ if TYPE_CHECKING:
     import openai
 
 
-def build_async_openai_client(api_key: str, *, base_url: str | None = None) -> openai.AsyncOpenAI:
+def build_async_openai_client(
+    api_key: str,
+    *,
+    base_url: str | None = None,
+    default_headers: dict[str, str] | None = None,
+) -> openai.AsyncOpenAI:
     """Construct a fresh ``AsyncOpenAI`` bound to ``api_key`` (PAYG path).
 
     For Codex OAuth subscription routing, use
@@ -360,11 +365,15 @@ def build_async_openai_client(api_key: str, *, base_url: str | None = None) -> o
     # Anthropic adapter applies the same invariant
     # (``_anthropic_common.py:60``). Single source of retry truth =
     # AgenticLoop's ``_call_llm`` retry path.
+    kwargs: dict[str, Any] = {
+        "api_key": api_key,
+        "http_client": http_client,
+    }
     if base_url:
-        return openai.AsyncOpenAI(
-            api_key=api_key, base_url=base_url, http_client=http_client, max_retries=0
-        )
-    return openai.AsyncOpenAI(api_key=api_key, http_client=http_client, max_retries=0)
+        kwargs["base_url"] = base_url
+    if default_headers:
+        kwargs["default_headers"] = default_headers
+    return openai.AsyncOpenAI(max_retries=0, **kwargs)
 
 
 def build_async_codex_client(api_key: str) -> openai.AsyncOpenAI:
@@ -562,6 +571,37 @@ def build_messages(req: AdapterCallRequest) -> list[dict[str, Any]]:
             continue
         out.append({"role": m.role, "content": _stringify(m.content)})
     return out
+
+
+def build_chat_completion_kwargs(
+    req: AdapterCallRequest,
+    *,
+    model: str,
+    provider: str,
+    adapter_name: str,
+    extra_body: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the shared OpenAI-compatible Chat Completions request shape."""
+    from core.llm.tool_choice import normalize
+
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": build_messages(req),
+        "max_tokens": req.max_tokens,
+    }
+    if req.temperature is not None:
+        kwargs["temperature"] = req.temperature
+    if req.tools:
+        translated = [translate_tool(tool) for tool in req.tools]
+        kwargs["tools"] = cap_tools(translated, model=model, adapter_name=adapter_name)
+        tool_choice = normalize(provider, req.tool_choice)
+        if tool_choice is not None:
+            kwargs["tool_choice"] = tool_choice
+    if req.stop_sequences:
+        kwargs["stop"] = list(req.stop_sequences)
+    if extra_body:
+        kwargs["extra_body"] = extra_body
+    return kwargs
 
 
 def build_codex_input(req: AdapterCallRequest, *, backend: str = "codex") -> list[dict[str, Any]]:
@@ -1077,10 +1117,13 @@ def translate_chat_response(response: Any) -> AdapterCallResult:
             cached_input_tokens=cached_tokens,
             reasoning_tokens=reasoning_tokens,
             cache_write_tokens=cache_write_tokens,
+            reported_cost_usd=getattr(usage, "cost", None) if usage else None,
         ),
         stop_reason=getattr(choice, "finish_reason", "stop") if choice else "stop",
         tool_uses=tuple(tool_uses),
         raw_response=response,
+        response_id=str(getattr(response, "id", "") or ""),
+        response_model=str(getattr(response, "model", "") or ""),
     )
 
 

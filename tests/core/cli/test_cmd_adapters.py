@@ -49,11 +49,12 @@ def test_adapters_list_shows_openai_as_payg_and_subscription(runner: CliRunner) 
     for adapter_name in (
         "anthropic-payg",
         "openai-payg",
+        "openrouter-payg",
         "codex-oauth",
     ):
         assert adapter_name in result.output
     assert "codex-cli" not in result.output
-    assert "Registry generation 1: 5 adapter(s)." in result.output
+    assert "Registry generation 1: 6 adapter(s)." in result.output
 
 
 def test_adapters_list_shows_billing_type(runner: CliRunner) -> None:

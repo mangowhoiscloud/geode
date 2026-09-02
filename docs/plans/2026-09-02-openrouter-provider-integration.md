@@ -6,7 +6,7 @@
 > the implementing PR and, if the architecture program adopts the work, its
 > canonical roadmap ledger.
 
-**Status:** Proposed
+**Status:** Implemented and locally verified; feature CI, promotion, and release pending
 
 **Research snapshot:** 2026-09-02
 
@@ -73,7 +73,7 @@ default is not automatically an evaluation-grade route:
 - official evaluations must pin the model and routing policy, require supported
   parameters, declare privacy constraints, and disable model fallback unless
   fallback is the measured treatment;
-- `openrouter/free` and `openrouter/auto` must not produce an official fixed-model
+- `openrouter/openrouter/free` and `openrouter/openrouter/auto` must not produce an official fixed-model
   score.
 
 OpenRouter says it retains basic request metadata but does not log prompt and
@@ -111,7 +111,7 @@ The apparent provider abstractions are not duplicate implementations:
 | `AdapterRegistry` | immutable generation-bound `(provider, source)` resolution | Keep. Its request/session `ContextVar` is scoped runtime state, not a service locator. |
 | `ModelListingCapable` | optional remote catalogue discovery | Do not wire into the picker in V1. It is currently not a production UI dependency. |
 
-### Measured gaps
+### Planning-base measured gaps
 
 1. `translate_chat_response()` retains token counts but drops OpenRouter's
    `usage.cost` and `cost_details`.
@@ -124,6 +124,10 @@ The apparent provider abstractions are not duplicate implementations:
 5. GEODE's provider fallback/equivalence logic and OpenRouter's internal
    routing are different authorities. Combining them would make route evidence
    ambiguous.
+
+The implementation closes items 1–4 and preserves the separation in item 5.
+It also aligns the exported compatibility inference helper with the manifest so
+an `openrouter/...` model cannot be reclassified as its nested direct provider.
 
 ### Simplifications to preserve
 
@@ -192,8 +196,8 @@ GEODE's visible reference keeps the provider namespace:
 |---|---|
 | `openrouter/anthropic/claude-...` | `anthropic/claude-...` |
 | `openrouter/google/gemini-...` | `google/gemini-...` |
-| `openrouter/free` | `openrouter/free` |
-| `openrouter/auto` | `openrouter/auto` |
+| `openrouter/openrouter/free` | `openrouter/free` |
+| `openrouter/openrouter/auto` | `openrouter/auto` |
 
 The adapter removes exactly one outer `openrouter/` namespace for ordinary
 catalogue IDs. Router-owned IDs are preserved explicitly. This small mapping
@@ -206,16 +210,16 @@ V1 uses the existing `/login` and `/model` surfaces.
 1. `/login add` gains one PAYG choice: **OpenRouter**. It stores or discovers
    `OPENROUTER_API_KEY` through the existing API-key profile flow.
 2. `/model` gains two curated rows:
-   - `openrouter/free` — labelled “free smoke; limited and dynamically routed”;
-   - `openrouter/auto` — labelled “dynamic route; variable cost.”
+   - `openrouter/openrouter/free` — labelled “free smoke; limited and dynamically routed”;
+   - `openrouter/openrouter/auto` — labelled “dynamic route; variable cost.”
 3. `/model` accepts an exact `openrouter/<provider>/<model>` reference without
    fetching hundreds of remote rows. Validation requires the registered
    namespace and a non-empty upstream model; typos must not fall back to
    OpenAI.
-4. After a response, existing diagnostics/status output should show
-   `OpenRouter -> <served model/provider> · $<actual charge>` when those fields
-   are present. Before the response, the UI may show only requested-route
-   information.
+4. After a response, the bounded `LLM_CALL_ENDED` event records returned model,
+   selected provider, routing strategy/attempt, and actual charge when supplied.
+   A richer post-call status renderer remains deferred until an existing UI
+   consumer needs those fields.
 5. Advanced provider order, allow/ignore lists, ZDR, data-collection policy,
    price ceilings, and fallback toggles do not get a runtime form in V1.
    Ordinary use inherits the operator's OpenRouter account policy. Evaluation
@@ -235,7 +239,7 @@ observed `usage.cost == 0` may be labelled free.
 | P0-3 | OpenRouter cannot resolve or authenticate. | Register one profile/credential/transport composition, one PAYG adapter, and `OPENROUTER_API_KEY`. Reuse the existing async client and Chat helpers. | Existing provider identities and wire-shape characterization remain green; missing credentials fail before network I/O. |
 | P0-4 | Model namespace is absent. | Add explicit `openrouter/` routing and the focused model-ID mapping. | Unknown or malformed references fail closed; no OpenRouter equivalence/fallback into direct providers. |
 | P1-1 | UI cannot select the provider. | Add `/login` choice, two curated `/model` rows, and exact-ref selection. | No catalogue network request is required to open the picker. Labels distinguish free smoke from variable cost. |
-| P1-2 | Router policy is not frozen for evaluation. | Validate the evaluation/run manifest policy and thread it through existing `provider_options`; do not create a runtime-wide router config. | Artifacts record the policy and serving route; fixed-model evaluations reject auto/free and undeclared fallbacks. |
+| P1-2 | Router policy is not frozen for evaluation. | **Partially implemented:** the adapter validates a bounded `provider_options["openrouter"]` allowlist and records the serving route. Wiring a specific evaluation manifest remains deferred until an evaluation consumer is selected. | Runtime calls fail closed on unknown policy keys. No `auto`/`free` result is published as a fixed-model score. |
 | P2-1 | Remote catalogue convenience. | **Deferred.** Use `ModelListingCapable` only after measured demand for search, with TTL/cache/offline behavior. | Not a V1 dependency. |
 | P2-2 | BYOK/OAuth and account quota UI. | **Deferred.** Establish upstream-key lifecycle, shared-capacity fallback, and billing tests first. | Not a V1 claim. |
 
@@ -249,9 +253,9 @@ The implementation PR must add focused, offline tests for:
 
 - provider composition, route collision, source inference, and missing-key
   behavior;
-- exact model-ID mapping including `openrouter/free` and `openrouter/auto`;
+- exact model-ID mapping including `openrouter/openrouter/free` and `openrouter/openrouter/auto`;
 - request-body allowlisting and Chat Completions tool-call translation;
-- non-streaming and final-stream usage charge extraction;
+- non-streaming usage charge extraction (streaming is not advertised by the V1 adapter);
 - `None`, zero, and non-zero provider-reported cost precedence;
 - returned-model and fallback provenance;
 - `/login` and `/model` selection, including malformed/unknown references;
@@ -261,6 +265,12 @@ Then run the repository's ruff, format, mypy, import-contract, full non-live
 pytest, and package/install gates. A free-model live smoke is optional and
 requires explicit approval because it contacts an external service; it is not a
 substitute for offline contract tests.
+
+Local verification on 2026-09-02 passed the focused provider, auth, routing,
+model-picker, usage, and event tests; the complete `scripts/preflight.sh` CI
+mirror; and the 239-route static site build. No live OpenRouter request was
+made. Such a request still requires an OpenRouter account and API key, even
+when the selected route is zero-priced.
 
 Rollback is bounded because OpenRouter is opt-in. Removing its registration and
 UI rows must leave direct provider state and model references untouched. Stored

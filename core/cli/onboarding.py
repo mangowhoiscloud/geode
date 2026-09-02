@@ -388,6 +388,7 @@ def _key_patterns() -> list[tuple[str, str, str]]:
     except Exception:
         return [
             (r"^sk-ant-[A-Za-z0-9_-]{10,}$", "anthropic", "ANTHROPIC_API_KEY"),
+            (r"^sk-or-v1-[A-Za-z0-9_-]{10,}$", "openrouter", "OPENROUTER_API_KEY"),
             (r"^sk-proj-[A-Za-z0-9_-]{10,}$", "openai", "OPENAI_API_KEY"),
             (r"^sk-[A-Za-z0-9_-]{10,}$", "openai", "OPENAI_API_KEY"),
         ]
@@ -450,6 +451,7 @@ def key_registration_gate() -> str | None:
             "(plans + keys + OAuth)\n"
             "  [cyan]/login openai[/cyan]             — ChatGPT subscription OAuth\n"
             "  [cyan]/key <sk-ant-...>[/cyan]        — Quick paste (Anthropic)\n"
+            "  [cyan]/key <sk-or-v1-...>[/cyan]      — Quick paste (OpenRouter)\n"
             "  [cyan]/key openai <sk-...>[/cyan]     — Quick paste (OpenAI)\n"
             "  [cyan]/key glm <key>[/cyan]           — Quick paste (GLM PAYG)\n"
             "  [cyan]/quit[/cyan]                    — exit\n\n"
@@ -491,6 +493,7 @@ def key_registration_gate() -> str | None:
             settings_field_map = {
                 "ANTHROPIC_API_KEY": "anthropic_api_key",
                 "OPENAI_API_KEY": "openai_api_key",
+                "OPENROUTER_API_KEY": "openrouter_api_key",
                 "ZAI_API_KEY": "zai_api_key",
             }
             _upsert_env(env_var, key_value)

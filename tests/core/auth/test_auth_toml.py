@@ -107,16 +107,18 @@ class TestMigrateEnvToToml:
         with patch("core.config.settings") as mock_settings:
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_settings.openai_api_key = "sk-proj-test"
+            mock_settings.openrouter_api_key = "sk-or-v1-test"
             mock_settings.zai_api_key = ""
 
             seeded = migrate_env_to_toml(path=path)
-            assert seeded == 2
+            assert seeded == 3
             assert path.exists()
 
             registry = get_plan_registry()
             ids = {p.id for p in registry.list_all()}
             assert "anthropic-payg" in ids
             assert "openai-payg" in ids
+            assert "openrouter-payg" in ids
             assert "glm-payg" not in ids
         path.unlink()
 
@@ -131,6 +133,7 @@ class TestMigrateEnvToToml:
         with patch("core.config.settings") as mock_settings:
             mock_settings.anthropic_api_key = "sk-ant-..."  # placeholder
             mock_settings.openai_api_key = "sk-proj-real"
+            mock_settings.openrouter_api_key = ""
             mock_settings.zai_api_key = ""
 
             seeded = migrate_env_to_toml(path=path)
@@ -150,6 +153,7 @@ class TestMigrateEnvToToml:
         with patch("core.config.settings") as mock_settings:
             mock_settings.anthropic_api_key = "sk-ant-test"
             mock_settings.openai_api_key = ""
+            mock_settings.openrouter_api_key = ""
             mock_settings.zai_api_key = ""
 
             migrate_env_to_toml(path=path)

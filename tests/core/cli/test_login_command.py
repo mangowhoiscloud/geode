@@ -41,12 +41,13 @@ def _scrub_real_provider_keys(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     """
     import core.config as cfg
 
-    for _var in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ZAI_API_KEY"):
+    for _var in ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "ZAI_API_KEY"):
         monkeypatch.setenv(_var, "")
     monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
     monkeypatch.setattr(cfg, "_settings_instance", None, raising=False)
     settings = cfg.settings
     monkeypatch.setattr(settings, "openai_api_key", "", raising=False)
+    monkeypatch.setattr(settings, "openrouter_api_key", "", raising=False)
     monkeypatch.setattr(settings, "anthropic_api_key", "", raising=False)
     monkeypatch.setattr(settings, "zai_api_key", "", raising=False)
 
@@ -120,6 +121,22 @@ class TestSubcommandRouter:
 
 
 class TestSetKeyAndUse:
+    def test_legacy_key_detects_openrouter_before_generic_openai_prefix(self) -> None:
+        from core.cli.commands import cmd_key
+        from core.config import settings
+
+        key = "sk-or-v1-abcdefghij1234567890"
+        with (
+            patch("core.cli.commands.console"),
+            patch("core.cli.commands._upsert_env") as upsert,
+            patch("core.cli.commands._seed_payg_plan_from_key") as seed,
+        ):
+            assert cmd_key(key) is True
+
+        assert settings.openrouter_api_key == key
+        upsert.assert_called_once_with("OPENROUTER_API_KEY", key)
+        seed.assert_called_once_with("openrouter", key)
+
     def test_set_key_updates_existing_plan(self) -> None:
         _reset_state()
         registry = get_plan_registry()

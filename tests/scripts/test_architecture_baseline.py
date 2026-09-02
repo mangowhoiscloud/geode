@@ -215,10 +215,11 @@ def test_inventory_lists_traceable_architecture_details() -> None:
 
     assert measured["hook_events"]["count"] == len(measured["hook_events"]["members"])
     assert measured["built_in_adapters"] == {
-        "count": 5,
+        "count": 6,
         "classes": [
             "AnthropicPaygAdapter",
             "OpenAIPaygAdapter",
+            "OpenRouterPaygAdapter",
             "CodexOAuthAdapter",
             "GlmPaygAdapter",
             "GlmCodingPlanAdapter",

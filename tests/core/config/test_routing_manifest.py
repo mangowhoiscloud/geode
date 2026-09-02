@@ -104,6 +104,7 @@ def test_default_manifest_credentials_env_vars() -> None:
     manifest = load_routing_manifest()
     assert manifest.credential_env_vars.env_vars.get("anthropic") == "ANTHROPIC_API_KEY"
     assert manifest.credential_env_vars.env_vars.get("openai") == "OPENAI_API_KEY"
+    assert manifest.credential_env_vars.env_vars.get("openrouter") == "OPENROUTER_API_KEY"
     assert manifest.credential_env_vars.env_vars.get("glm") == "ZAI_API_KEY"
 
 
@@ -116,6 +117,8 @@ def test_default_manifest_credentials_env_vars() -> None:
         ("claude-opus-4-7", "anthropic"),
         ("claude-sonnet-4-6", "anthropic"),
         ("glm-5.1", "glm"),
+        ("openrouter/anthropic/claude-sonnet-4", "openrouter"),
+        ("openrouter/openrouter/free", "openrouter"),
         ("gpt-5.5", "openai-codex"),  # codex_only_models hits first
         ("gpt-5.5-pro", "openai-codex"),
         ("gpt-5.4", "openai"),  # gpt- prefix

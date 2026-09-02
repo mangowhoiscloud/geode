@@ -264,7 +264,7 @@ class AgenticLoop:
             self.model = act_model or ANTHROPIC_PRIMARY
         else:
             self.model = model
-        self._provider = provider  # "anthropic", "openai", or "glm"
+        self._provider = provider  # "anthropic", "openai", "openrouter", or "glm"
         # When True, sync_model_from_settings is a no-op — caller's model
         # stays sticky for the loop's lifetime.
         self._disable_settings_drift = disable_settings_drift

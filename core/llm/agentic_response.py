@@ -66,6 +66,7 @@ class ResponseUsage:
     thinking_tokens: int = 0
     cache_creation_tokens: int = 0
     cache_read_tokens: int = 0
+    reported_cost_usd: float | None = None
 
 
 @dataclass

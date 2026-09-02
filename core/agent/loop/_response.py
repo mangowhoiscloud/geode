@@ -109,6 +109,7 @@ def _record_usage(loop: AgenticLoop, response: Any) -> Any | None:
     think_tok = int(getattr(response.usage, "thinking_tokens", 0) or 0)
     cache_create = int(getattr(response.usage, "cache_creation_tokens", 0) or 0)
     cache_read = int(getattr(response.usage, "cache_read_tokens", 0) or 0)
+    reported_cost = getattr(response.usage, "reported_cost_usd", None)
     step = getattr(loop, "_current_step_snapshot", None)
     model = str(getattr(step, "model", "") or loop.model)
     tracker = get_tracker()
@@ -119,6 +120,7 @@ def _record_usage(loop: AgenticLoop, response: Any) -> Any | None:
         cache_creation_tokens=cache_create,
         cache_read_tokens=cache_read,
         thinking_tokens=think_tok,
+        reported_cost_usd=reported_cost,
     )
     if not loop._quiet:
         render_tokens(model, in_tok, out_tok, cost_usd=usage.cost_usd)

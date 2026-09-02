@@ -407,16 +407,21 @@ async def call_llm(
             cached_input_tokens = int(getattr(usage, "cached_input_tokens", 0) or 0)
             reasoning_tokens = int(getattr(usage, "reasoning_tokens", 0) or 0)
             cache_write_tokens = int(getattr(usage, "cache_write_tokens", 0) or 0)
+            reported_cost = getattr(usage, "reported_cost_usd", None)
             try:
                 from core.llm.token_tracker import calculate_cost
 
-                cost_usd = float(
-                    calculate_cost(
-                        active_request.model,
-                        input_tokens,
-                        output_tokens,
-                        cache_creation_tokens=cache_write_tokens,
-                        cache_read_tokens=cached_input_tokens,
+                cost_usd = (
+                    float(reported_cost)
+                    if reported_cost is not None
+                    else float(
+                        calculate_cost(
+                            active_request.model,
+                            input_tokens,
+                            output_tokens,
+                            cache_creation_tokens=cache_write_tokens,
+                            cache_read_tokens=cached_input_tokens,
+                        )
                     )
                 )
             except Exception:
@@ -427,6 +432,17 @@ async def call_llm(
                     exc_info=True,
                 )
                 cost_usd = 0.0
+            route_evidence = {
+                key: value
+                for key, value in {
+                    "response_id": getattr(attempt_result, "response_id", ""),
+                    "response_model": getattr(attempt_result, "response_model", ""),
+                    "response_provider": getattr(attempt_result, "response_provider", ""),
+                    "routing_strategy": getattr(attempt_result, "routing_strategy", ""),
+                    "routing_attempt": getattr(attempt_result, "routing_attempt", 0),
+                }.items()
+                if value
+            }
             await fire_hook_async(
                 loop._hooks,
                 HookEvent.LLM_CALL_ENDED,
@@ -445,6 +461,7 @@ async def call_llm(
                         "cache_write_tokens": cache_write_tokens,
                     },
                     "cost_usd": cost_usd,
+                    **route_evidence,
                 },
             )
             return attempt_result

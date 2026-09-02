@@ -6,7 +6,7 @@ Different LLM providers expect different ``tool_choice`` shapes:
   ``{"type": "auto"|"any"|"tool"|"none", "name"?: "..."}``
 - **OpenAI Responses API**: string or flat dict.
   ``"auto" | "none" | "required" | {"type": "function", "name": "..."}``
-- **GLM Chat Completions** (OpenAI-compat): string or nested dict.
+- **GLM / OpenRouter Chat Completions** (OpenAI-compat): string or nested dict.
   ``"auto" | "none" | "required" | {"type": "function", "function": {"name": "..."}}``
 
 Prior to v0.93, each adapter inlined its own conversion (anthropic.py:482-484,
@@ -102,7 +102,7 @@ def normalize(provider: str, choice: ToolChoice | None) -> str | dict[str, Any] 
     """Convert a tool_choice into the provider-native shape.
 
     ``provider`` is matched case-insensitively against ``anthropic`` /
-    ``openai`` / ``codex`` / ``glm``.  Unknown providers receive the
+    ``openai`` / ``codex`` / ``glm`` / ``openrouter``. Unknown providers receive the
     input back unchanged so callers do not crash when extending to new
     backends — log + add a branch when the new provider lands.
     """
@@ -111,6 +111,6 @@ def normalize(provider: str, choice: ToolChoice | None) -> str | dict[str, Any] 
         return _to_anthropic(choice)
     if p in ("openai", "codex"):
         return _to_openai(choice)
-    if p == "glm":
+    if p in ("glm", "openrouter"):
         return _to_glm(choice)
     return choice

@@ -60,6 +60,7 @@ glm = []
 # are listed in [routing.codex_only_models].
 
 [routing.prefixes]
+"openrouter/" = "openrouter"
 "claude-" = "anthropic"
 "glm-" = "glm"
 "gpt-" = "openai"
@@ -104,6 +105,7 @@ synthesizer = "claude-opus-4-8"
 
 [credentials.patterns]
 "^sk-ant-[A-Za-z0-9_-]{10,}$" = "anthropic"
+"^sk-or-v1-[A-Za-z0-9_-]{10,}$" = "openrouter"
 "^sk-proj-[A-Za-z0-9_-]{10,}$" = "openai"
 "^sk-[A-Za-z0-9_-]{10,}$" = "openai"
 
@@ -115,4 +117,5 @@ synthesizer = "claude-opus-4-8"
 [credentials.env_vars]
 anthropic = "ANTHROPIC_API_KEY"
 openai = "OPENAI_API_KEY"
+openrouter = "OPENROUTER_API_KEY"
 glm = "ZAI_API_KEY"

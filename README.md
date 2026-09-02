@@ -15,6 +15,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Anthropic-Fable_5-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Fable 5">
   <img src="https://img.shields.io/badge/OpenAI-GPT--5.6-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.6">
+  <img src="https://img.shields.io/badge/OpenRouter-inference_router-6b46c1?style=flat-square" alt="OpenRouter">
   <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.2-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.2">
 </p>
 
@@ -227,7 +228,10 @@ echo 'ANTHROPIC_API_KEY=sk-ant-paste-your-key-here' > ~/.geode/.env
 chmod 600 ~/.geode/.env
 ```
 
-Want OpenAI or ZhipuAI GLM instead? Add `OPENAI_API_KEY=sk-proj-...` or `ZAI_API_KEY=...` to the same file. GEODE picks whichever is available.
+Want OpenAI, OpenRouter, or ZhipuAI GLM instead? Add
+`OPENAI_API_KEY=sk-proj-...`, `OPENROUTER_API_KEY=sk-or-v1-...`, or
+`ZAI_API_KEY=...` to the same file. Select an OpenRouter model with an exact
+reference such as `/model openrouter/anthropic/claude-sonnet-4`.
 
 **Cost control.** Provider prices vary by model and workload. Check the
 provider's current pricing, then set a hard cap in `~/.geode/config.toml`:
@@ -414,6 +418,7 @@ geode setup                          # re-run the wizard (subscription OAuth or 
 /login openai                        # in a session: subscription OAuth
 /login google                        # in a session: Google Workspace OAuth
 /key openai sk-proj-...              # in a session: paste an API key
+/key openrouter sk-or-v1-...         # in a session: OpenRouter credits
 echo 'OPENAI_API_KEY=sk-proj-...' >> ~/.geode/.env    # edit the authoritative file
 ```
 
@@ -446,7 +451,7 @@ For a PyPI install, run `uv tool install geode-agent`. For a source checkout, ru
 <details>
 <summary><strong>"401 Unauthorized" or "Invalid API key"</strong>, wrong key, expired key, or wrong file location.</summary>
 
-Check `cat ~/.geode/.env` and confirm the key starts with `sk-ant-` (Anthropic), `sk-proj-` (OpenAI), or `id.secret` (ZhipuAI GLM). Make sure there are no extra spaces or quote characters. If you used the ChatGPT subscription path (Path A), run `/login openai` again inside GEODE.
+Check `cat ~/.geode/.env` and confirm the key starts with `sk-ant-` (Anthropic), `sk-proj-` (OpenAI), `sk-or-v1-` (OpenRouter), or `id.secret` (ZhipuAI GLM). Make sure there are no extra spaces or quote characters. If you used the ChatGPT subscription path (Path A), run `/login openai` again inside GEODE.
 </details>
 
 <details>
@@ -485,7 +490,7 @@ geode update --latest # uv tool: explicitly allow minor/major upgrades
 | **`while(tool_use)` loop** | The single primitive every behavior is built on. Sub-agents, plans, batches are all instances of the same loop |
 | **Experimental scaffold-optimization loop** | Mutates scaffold candidates, audits each change against an adversarial safety rubric, and permits promotion only on a real gain. The public record currently shows gate discipline, not sustained improvement. See [the closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) |
 | **Agentic tools + MCP catalog** | Web search, file ops, scheduling, memory, Slack/Discord, the Anthropic-published MCP registry, and optional [Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace) integration. MCP metadata is cached at `~/.geode/mcp/registry-cache.json` |
-| **3-provider failover** | Anthropic + OpenAI + ZhipuAI. ChatGPT subscription OAuth is handled by the in-process OpenAI adapter; pay-as-you-go API keys also work. Failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
+| **Explicit provider routes** | Anthropic + OpenAI + OpenRouter + ZhipuAI. OpenRouter keeps a separate identity while reusing the Chat Completions transport; its reported charge and serving route are recorded. GEODE never silently crosses providers |
 | **5-tier memory** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). Persistent, survives daemon restarts |
 | **Durable goals + advisory plans** | `/goal` owns explicit empty, active, paused, blocked, and complete states; `/plan` installs an observation-conditioned checklist. Neither grants execution authority, while cognitive replanning remains available after verification failure |
 | **Typed decision + visibility controls** | `/grill` admits only acyclic dependency-frontier updates; `/geo` records fetch, retrieval, citation, placement, absorption, quality, and outcome as separate evidence stages without inventing one GEO score |
@@ -548,7 +553,7 @@ A qualitative read on where GEODE sits next to the frontier harnesses (Claude Co
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
-| Multi-provider failover | ✅ Anthropic + AWS Bedrock + Google Vertex (env routing) | ✅✅ OpenAI + Azure + Bedrock + Ollama + any OpenAI-compatible (`model_providers` config) | ✅ `auth.order` cooldown-based auto-failover | ✅ Anthropic + OpenAI + ZhipuAI, in-provider only |
+| Multi-provider routing | ✅ Anthropic + AWS Bedrock + Google Vertex (env routing) | ✅✅ OpenAI + Azure + Bedrock + Ollama + any OpenAI-compatible (`model_providers` config) | ✅ `auth.order` cooldown-based auto-failover | ✅ Anthropic + OpenAI + OpenRouter + ZhipuAI; no silent cross-provider failover |
 | Subscription OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini onboarding | ChatGPT only; Anthropic uses API keys |
 | Token / cost budget guard | ⚠️ cache token tracking only | ⚠️ retry caps (`request_max_retries`) | ⚠️ partial | ✅ explicit token + cost budget governance |
 | Context overflow handling | ✅ autocompaction | ⚠️ skills progressive disclosure + fork | ✅ compaction + transcript streaming | ✅✅ layered context-overflow handling |
@@ -610,7 +615,7 @@ GEODE has two control layers:
 graph LR
     AG["Agent<br/>AgenticLoop, SubAgent<br/>CLIPoller, Gateway"] --> HA["Harness<br/>SessionLane, PolicyChain<br/>TaskGraph, HookSystem"]
     HA --> RT["Runtime<br/>Agentic tools, MCP catalog<br/>Memory, Skills"]
-    RT --> MD["Model<br/>Claude, OpenAI, GLM"]
+    RT --> MD["Model<br/>Claude, OpenAI, OpenRouter, GLM"]
 
     style AG fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
     style HA fill:#1e293b,stroke:#f59e0b,color:#e2e8f0

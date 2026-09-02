@@ -8,20 +8,20 @@ export default function Page() {
       slug="run/providers"
       title="Configure providers"
       titleKo="프로바이더 설정"
-      summary="Three-provider routing, where keys and behavior settings live, and how the effective model is resolved."
-      summaryKo="3-프로바이더 라우팅, 키와 동작 설정이 사는 곳, 실효 모델이 결정되는 순서."
+      summary="Four explicit provider routes, where keys and behavior settings live, and how the effective model is resolved."
+      summaryKo="4개 명시적 프로바이더 경로, 키와 동작 설정의 위치, 실효 모델 결정 순서."
     >
       <Bi
         ko={
           <>
             <p>
-              GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), GLM 세
-              프로바이더로 라우팅합니다. 이 페이지는 키와 설정이 어디에
+              GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), OpenRouter,
+              GLM 네 프로바이더 경로를 명시적으로 라우팅합니다. 이 페이지는 키와 설정이 어디에
               저장되는지, 모델이 어떤 순서로 결정되는지, 막혔을 때 어떻게
               디버깅하는지 다룹니다.
             </p>
 
-            <h2>3-프로바이더 라우팅</h2>
+            <h2>4개 명시적 프로바이더 경로</h2>
             <p>
               모델 id의 접두사가 프로바이더를 결정합니다. 라우팅 SoT는 배포
               매니페스트 <code>core/config/routing.toml</code>이고,
@@ -45,6 +45,12 @@ export default function Page() {
                   <td>ChatGPT 구독 OAuth(<code>~/.codex/auth.json</code>) 또는 <code>OPENAI_API_KEY</code></td>
                 </tr>
                 <tr>
+                  <td>OpenRouter</td>
+                  <td><code>openrouter/openrouter/free</code>, <code>openrouter/openrouter/auto</code> 또는 정확한 catalogue id</td>
+                  <td><code>openrouter/&lt;publisher&gt;/&lt;model&gt;</code>. 외부 namespace 하나를 제거해 OpenRouter에 전달</td>
+                  <td><code>OPENROUTER_API_KEY</code>. 크레딧 기반 PAYG이며 direct provider와 동치 폴백하지 않습니다.</td>
+                </tr>
+                <tr>
                   <td>GLM (ZhipuAI)</td>
                   <td><code>glm-5.2</code> (무료 티어 <code>glm-4.7-flash</code>)</td>
                   <td><code>glm-</code> 접두사</td>
@@ -57,6 +63,15 @@ export default function Page() {
               (<code>core/llm/adapters/</code>). <code>geode adapters list</code>로
               현재 등록 상태, API transport, billing, 자격 환경을 확인할 수 있습니다.
             </p>
+            <p>
+              OpenRouter는 OpenAI의 별칭이 아니라 별도 inference router입니다.{" "}
+              <code>/login add</code>로 키를 등록하고{" "}
+              <code>/model openrouter/anthropic/claude-sonnet-4</code>처럼 정확한
+              참조를 선택합니다. 응답의 <code>usage.cost</code>가 예산·사용량
+              기록의 권위이고, 반환 모델·선택 provider·routing attempt는 bounded
+              LLM-call event에 남습니다. <code>free</code>/<code>auto</code>는 동적
+              경로이므로 고정 모델 공식 평가에 사용하지 않습니다.
+            </p>
 
             <h2>키와 설정이 사는 곳</h2>
             <p>역할이 파일별로 분리되어 있습니다. 키는 .env, 동작은 config.toml입니다.</p>
@@ -67,7 +82,7 @@ export default function Page() {
               <tbody>
                 <tr>
                   <td><code>~/.geode/.env</code></td>
-                  <td>시크릿 전용. <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>ZAI_API_KEY</code>. 프로젝트 <code>.env</code>가 있으면 그쪽이 이깁니다.</td>
+                  <td>시크릿 전용. <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>OPENROUTER_API_KEY</code>, <code>ZAI_API_KEY</code>. 전역 파일이 권위를 가지며 프로젝트 <code>.env</code>는 빠진 값만 채웁니다.</td>
                 </tr>
                 <tr>
                   <td><code>~/.geode/config.toml</code></td>
@@ -179,13 +194,13 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
         en={
           <>
             <p>
-              GEODE routes across three providers: Anthropic, OpenAI (including
-              the ChatGPT subscription OAuth lane), and GLM. This page covers where keys and
+              GEODE exposes four explicit provider routes: Anthropic, OpenAI
+              (including the ChatGPT subscription OAuth lane), OpenRouter, and GLM. This page covers where keys and
               settings live, the order the effective model resolves in, and how
               to debug when a change does not take.
             </p>
 
-            <h2>Three-provider routing</h2>
+            <h2>Four explicit provider routes</h2>
             <p>
               The model id prefix decides the provider. The routing SoT is the
               shipped manifest <code>core/config/routing.toml</code>, overridden
@@ -209,6 +224,12 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
                   <td>ChatGPT subscription OAuth (<code>~/.codex/auth.json</code>) or <code>OPENAI_API_KEY</code></td>
                 </tr>
                 <tr>
+                  <td>OpenRouter</td>
+                  <td><code>openrouter/openrouter/free</code>, <code>openrouter/openrouter/auto</code>, or an exact catalogue id</td>
+                  <td><code>openrouter/&lt;publisher&gt;/&lt;model&gt;</code>; GEODE strips one outer namespace before sending the request</td>
+                  <td><code>OPENROUTER_API_KEY</code>. Credit-backed PAYG; never equivalent-fallbacks to a direct provider.</td>
+                </tr>
+                <tr>
                   <td>GLM (ZhipuAI)</td>
                   <td><code>glm-5.2</code> (free tier <code>glm-4.7-flash</code>)</td>
                   <td><code>glm-</code> prefix</td>
@@ -222,6 +243,16 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               shows each registered API transport, billing route, and credential
               status.
             </p>
+            <p>
+              OpenRouter is a distinct inference router, not an OpenAI alias. Add
+              its key with <code>/login add</code>, then select an exact reference
+              such as <code>/model openrouter/anthropic/claude-sonnet-4</code>.
+              Response <code>usage.cost</code> is authoritative for budgets and
+              usage records; returned model, selected provider, and routing attempt
+              are retained in the bounded LLM-call event. Dynamic{" "}
+              <code>free</code>/<code>auto</code> routes are not fixed-model official
+              evaluation targets.
+            </p>
 
             <h2>Where keys and settings live</h2>
             <p>Roles are split by file. Keys in .env, behavior in config.toml.</p>
@@ -232,7 +263,7 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               <tbody>
                 <tr>
                   <td><code>~/.geode/.env</code></td>
-                  <td>Secrets only. <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>ZAI_API_KEY</code>. A project-level <code>.env</code> beats the global one.</td>
+                  <td>Secrets only. <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>OPENROUTER_API_KEY</code>, <code>ZAI_API_KEY</code>. The global file is authoritative; a project <code>.env</code> only fills missing values.</td>
                 </tr>
                 <tr>
                   <td><code>~/.geode/config.toml</code></td>

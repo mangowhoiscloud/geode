@@ -21,6 +21,7 @@ def _no_keys_mock(mock_settings):
     """Configure mock_settings with all LLM keys empty."""
     mock_settings.anthropic_api_key = ""
     mock_settings.openai_api_key = ""
+    mock_settings.openrouter_api_key = ""
     mock_settings.zai_api_key = ""
 
 
@@ -196,6 +197,7 @@ class TestCheckReadiness:
         ):
             mock_settings.anthropic_api_key = "sk-ant-..."
             mock_settings.openai_api_key = "sk-..."
+            mock_settings.openrouter_api_key = "sk-or-v1-..."
             mock_settings.zai_api_key = "..."
             report = check_readiness(tmp_path)
 
@@ -267,6 +269,14 @@ class TestDetectApiKey:
         result = detect_api_key("sk-proj-abcdefghij1234567890")
         assert result is not None
         assert result[0] == "openai"
+
+    def test_openrouter_key(self):
+        result = detect_api_key("sk-or-v1-abcdefghij1234567890")
+        assert result == (
+            "openrouter",
+            "OPENROUTER_API_KEY",
+            "sk-or-v1-abcdefghij1234567890",
+        )
 
     def test_openai_sk_key(self):
         result = detect_api_key("sk-abcdefghij1234567890ABCD")

@@ -367,9 +367,9 @@ geode about              # 실효 모델 + 자격 상태 확인
 URL: https://mangowhoiscloud.github.io/geode/docs/run/providers
 Markdown: https://mangowhoiscloud.github.io/geode/docs/run/providers.md
 
-GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), GLM 세 프로바이더로 라우팅합니다. 이 페이지는 키와 설정이 어디에 저장되는지, 모델이 어떤 순서로 결정되는지, 막혔을 때 어떻게 디버깅하는지 다룹니다.
+GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), OpenRouter, GLM 네 프로바이더 경로를 명시적으로 라우팅합니다. 이 페이지는 키와 설정이 어디에 저장되는지, 모델이 어떤 순서로 결정되는지, 막혔을 때 어떻게 디버깅하는지 다룹니다.
 
-## 3-프로바이더 라우팅
+## 4개 명시적 프로바이더 경로
 
 모델 id의 접두사가 프로바이더를 결정합니다. 라우팅 SoT는 배포 매니페스트 `core/config/routing.toml`이고,`~/.geode/routing.toml`이 섹션 단위로 덮어씁니다.
 
@@ -377,9 +377,12 @@ GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), GLM 세 프로�
 | --- | --- | --- | --- |
 | Anthropic | `claude-opus-4-8` (보조 `claude-sonnet-4-6`, 저비용 `claude-haiku-4-5-20251001`) | `claude-` 접두사 | `ANTHROPIC_API_KEY` |
 | OpenAI / Codex | `gpt-5.5` | `gpt-`, `o3-`, `o4-` 접두사. 단 `gpt-5.5`, `gpt-5.5-pro`와 `-codex` 계열 접미사는 Codex OAuth 백엔드로만 라우팅. `gpt-5.6-sol/terra/luna`와 `gpt-5.4` 계열은 듀얼 레인 — 로그인 상태(API 키 ↔ 구독 OAuth)가 백엔드를 결정 | ChatGPT 구독 OAuth(`~/.codex/auth.json`) 또는 `OPENAI_API_KEY` |
+| OpenRouter | `openrouter/openrouter/free`, `openrouter/openrouter/auto` 또는 정확한 catalogue id | `openrouter/<publisher>/<model>`. 외부 namespace 하나를 제거해 OpenRouter에 전달 | `OPENROUTER_API_KEY`. 크레딧 기반 PAYG이며 direct provider와 동치 폴백하지 않습니다. |
 | GLM (ZhipuAI) | `glm-5.2` (무료 티어 `glm-4.7-flash`) | `glm-` 접두사 | `ZAI_API_KEY`. Coding Plan과 PAYG 엔드포인트가 분리되어 있습니다. |
 
 (프로바이더, 자격 소스) 조합마다 어댑터가 하나씩 등록됩니다 (`core/llm/adapters/`). `geode adapters list`로 현재 등록 상태, API transport, billing, 자격 환경을 확인할 수 있습니다.
+
+OpenRouter는 OpenAI의 별칭이 아니라 별도 inference router입니다. `/login add`로 키를 등록하고 `/model openrouter/anthropic/claude-sonnet-4`처럼 정확한 참조를 선택합니다. 응답의 `usage.cost`가 예산·사용량 기록의 권위이고, 반환 모델·선택 provider·routing attempt는 bounded LLM-call event에 남습니다. `free`/`auto`는 동적 경로이므로 고정 모델 공식 평가에 사용하지 않습니다.
 
 ## 키와 설정이 사는 곳
 
@@ -387,7 +390,7 @@ GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), GLM 세 프로�
 
 | 파일 | 역할 |
 | --- | --- |
-| `~/.geode/.env` | 시크릿 전용. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `ZAI_API_KEY`. 프로젝트 `.env`가 있으면 그쪽이 이깁니다. |
+| `~/.geode/.env` | 시크릿 전용. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `ZAI_API_KEY`. 전역 파일이 권위를 가지며 프로젝트 `.env`는 빠진 값만 채웁니다. |
 | `~/.geode/config.toml` | 전역 동작 설정. 모델 선택, effort, 로그인 소스가 여기 저장됩니다. |
 | `.geode/config.toml` | 프로젝트별 덮어쓰기. `/model`의 기본 저장 위치입니다. |
 | `~/.geode/routing.toml` | 라우팅 매니페스트 덮어쓰기. 폴백 체인 옵트인도 여기서 합니다. |
@@ -1163,19 +1166,23 @@ tool_request → schema validation → PreToolUse → revalidation
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/providers
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/providers.md
 
-GEODE는 세 프로바이더를 라우팅합니다. Anthropic, OpenAI(+ChatGPT 구독), GLM입니다. 이 페이지는 모델이 어떻게 결정되고, 호출이 어느 어댑터로 가며, 실패했을 때 무엇이 일어나는지 정리합니다.
+GEODE는 Anthropic, OpenAI(+ChatGPT 구독), OpenRouter, GLM 네 프로바이더 경로를 명시적으로 라우팅합니다. 이 페이지는 모델이 어떻게 결정되고, 호출이 어느 어댑터로 가며, 실패했을 때 무엇이 일어나는지 정리합니다.
 
 ## 구성 요소
 
 | 구성 | 코드 |
 | --- | --- |
-| 프로바이더 유틸리티 | `core/llm/providers/anthropic.py`, `codex.py`, `glm.py`. 재시도·quota·request shaping을 어댑터에 제공 |
+| 프로바이더 유틸리티 | `core/llm/providers/anthropic.py`, `codex.py`, `glm.py`, `openrouter.py`. 재시도·quota·identity/request shaping을 어댑터에 제공 |
 | 비동기 호출 어댑터 | `core/llm/adapters/`. SDK client와 `acomplete()` 호출 표면 소유 |
 | 프로바이더 composition | `core/llm/registry.py`. 모델 identity, credential route, transport/API shape를 분리해 선언 |
 | 어댑터 레지스트리 | `core/llm/adapters/registry.py`의 `bootstrap_builtins()`. 내장 factory와 운영자 정책이 승인한 `geode.llm_adapters` 진입점을 불변 generation snapshot으로 검색 |
 | 라우팅 매니페스트 | `core/config/routing.toml` (+ `~/.geode/routing.toml` 사용자 오버라이드). 모델 id prefix로 프로바이더 결정 |
 
 서브프로세스 워커는 부모의 wiring 컨테이너를 거치지 않으므로 `bootstrap_builtins()`를 명시적으로 호출해야 합니다. 빈 레지스트리는 `AdapterNotFoundError`로 끝납니다. 각 AgenticLoop 세션은 생성 시 현재 generation을 캡처하므로, reload는 새 세션에만 보이고 실행 중 세션의 라우팅은 바뀌지 않습니다.
+
+## OpenRouter 경계
+
+OpenRouter는 `openrouter` provider identity와 Chat Completions transport를 조합합니다. GEODE model id는 `openrouter/<publisher>/<model>`이며 어댑터가 외부 namespace 하나만 제거합니다. direct Anthropic/OpenAI와 equivalence group을 만들지 않으므로 자격이나 비용 경계가 조용히 바뀌지 않습니다. 응답이 제공한 실제 charge와 최종 serving route는 공통 usage/event 경로로 들어가고, 없을 때만 기존 정적 가격 추정을 사용합니다.
 
 ## 모델 해석 우선순위
 
@@ -5478,9 +5485,9 @@ GEODE는 구독 경로와 PAYG API 키를 받습니다. 어느 쪽을 쓸지는 
 | `oauth` | OpenAI는 Codex OAuth 별칭, Anthropic은 퇴역 오류 입력. |
 | `none` | 해당 프로바이더 비활성 센티널. |
 
-Anthropic의 내장 경로는 `api_key`뿐입니다. 과거`claude-cli`/`oauth` 값은 migration 안내를 위해 읽지만 binary나 네트워크 호출 전에 중단됩니다.
+Anthropic과 OpenRouter의 내장 경로는 `api_key`뿐입니다. 과거`claude-cli`/`oauth` 값은 migration 안내를 위해 읽지만 binary나 네트워크 호출 전에 중단됩니다.
 
-선택은 `[llm] anthropic_credential_source` /`openai_credential_source`(기본 `auto`)에 저장됩니다. `/login source <provider> <type>`은 toml에만 쓰므로 `.env`를 지워도 선택이 살아남습니다. (provider, source) 쌍마다 구체 어댑터가 하나씩 레지스트리에 등록됩니다(`core/llm/adapters/`의`anthropic_payg`, `openai_payg`,`codex_oauth`,`glm_coding_plan`, `glm_payg`).
+선택은 `[llm] anthropic_credential_source` /`openai_credential_source`(기본 `auto`)에 저장됩니다. `/login source <provider> <type>`은 toml에만 쓰므로 `.env`를 지워도 선택이 살아남습니다. (provider, source) 쌍마다 구체 어댑터가 하나씩 레지스트리에 등록됩니다(`core/llm/adapters/`의`anthropic_payg`, `openai_payg`,`codex_oauth`,`openrouter_payg`,`glm_coding_plan`, `glm_payg`).
 
 ## /login 대시보드
 
@@ -5491,7 +5498,7 @@ Anthropic의 내장 경로는 `api_key`뿐입니다. 과거`claude-cli`/`oauth` 
 | `/login openai` | ChatGPT 구독 OAuth 로그인. device-code 플로우는 `core/auth/oauth_login.py`이고, 결과는 `auth.toml`에 OAUTH\_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다. |
 | `/login anthropic` | `ANTHROPIC_API_KEY`를 등록하고 `api_key` 경로를 선택합니다. |
 | `/login google` | Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts용 Google Workspace OAuth. 사용자가 만든 Desktop 앱 클라이언트를 가져오며 LLM 프로바이더 자격과 분리됩니다. |
-| `/login add` | 자격 추가. 키 모양(`sk-ant-`, `sk-proj-`, GLM {id}.{secret})으로 프로바이더를 추정합니다. |
+| `/login add` | 자격 추가. 키 모양(`sk-ant-`, `sk-proj-`, `sk-or-v1-`, GLM {id}.{secret})으로 프로바이더를 추정합니다. |
 | `/login use` / `remove` | 프로파일 선택과 제거. |
 | `/login route` | 프로바이더와 플랜 라우팅 확인. |
 | `/login quota` | 구독 쿼터 상태. |
@@ -5536,6 +5543,7 @@ API 키는 시크릿이므로 `~/.geode/.env` 층에 삽니다. 온보딩과 `/l
 # ~/.geode/.env
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-proj-...
+OPENROUTER_API_KEY=sk-or-v1-...
 ZAI_API_KEY={id}.{secret}
 ```
 
@@ -5865,7 +5873,7 @@ GEODE는 종합입니다. 아래 표의 각 행은 적어도 하나의 frontier 
 | 메모리 | CLAUDE.md 계층 + auto memory (`~/.claude`) | AGENTS.md 계층 + memories 파이프라인 | 채널별 저장소 | persistent + skill 카탈로그 | `program.md` | 5-tier. Identity / User Profile / Org / Project / Session (`core/memory/context.py`) |
 | 자기 검증 | 없음 | sandbox | policy chain | 없음 | ratchet | Petri 적대 감사 + margin 게이트 + 프롬프트 해시 ratchet |
 | 자동화 트리거 | 훅 + scheduled cloud agents | lifecycle 훅 (cron 없음) | cron + standing order | skill auto-generate | overnight 루프 | 훅 이벤트 + 스케줄러 + auto-trigger 사이드카 |
-| 멀티 LLM | Anthropic 모델 전용 (API/Bedrock/Vertex 백엔드) | OpenAI 중심 + `model_providers` 확장 (Bedrock 포함) | 9개 model API 계열 | Anthropic-centric | (single) | 3-프로바이더 라우팅 (Anthropic / OpenAI+Codex / GLM): PAYG, ChatGPT OAuth, GLM Coding Plan 레인 |
+| 멀티 LLM | Anthropic 모델 전용 (API/Bedrock/Vertex 백엔드) | OpenAI 중심 + `model_providers` 확장 (Bedrock 포함) | 9개 model API 계열 | Anthropic-centric | (single) | 4개 명시적 경로 (Anthropic / OpenAI+Codex / OpenRouter / GLM): direct 경로와 inference-router identity를 분리 |
 | 서브에이전트 | Task tool | thread fork (`spawn_subagent`) | spawn + announce | delegate 병렬 spawn | 없음 | 차용. Task tool + OpenClaw Spawn+Announce (`core/agent/sub_agent.py`) |
 | 샌드박스 | bash 샌드박스 (opt-in) | OS 수준 | gateway 격리 | 없음 | 제약 루프 | 6계층 PolicyChain (`core/tools/policy.py`) |
 
@@ -6698,11 +6706,11 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 579 |
-| 테스트 Python 파일 | 698 |
+| 프로덕션 Python 파일 | 581 |
+| 테스트 Python 파일 | 699 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
-| 기본 LLM 어댑터 | 5 |
+| 기본 LLM 어댑터 | 6 |
 | 프로덕션 ContextVar | 25 |
 | core → outer import 지점 / 파일 | 0 / 0 |
 | import-linter 예외 edge | 0 |
