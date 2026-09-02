@@ -150,7 +150,11 @@ class OpenRouterPaygAdapter:
         try:
             response = await self._get_client().chat.completions.create(**kwargs)
         except Exception as exc:
-            log.warning("openrouter-payg: request failed model=%s err=%s", req.model, exc)
+            log.warning(
+                "openrouter-payg: request failed model=%s error_type=%s",
+                req.model,
+                type(exc).__name__,
+            )
             raise
         result = translate_chat_response(response)
         response_provider, routing_strategy, routing_attempt = _route_fields(response)

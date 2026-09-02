@@ -100,6 +100,8 @@ class _Completions:
 
     async def create(self, **kwargs: Any) -> Any:
         self.kwargs = kwargs
+        if isinstance(self.response, BaseException):
+            raise self.response
         return self.response
 
 
@@ -117,6 +119,37 @@ def test_missing_key_fails_before_network(monkeypatch: pytest.MonkeyPatch) -> No
                 )
             )
         )
+
+
+def test_provider_error_log_omits_raw_upstream_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    failure = RuntimeError('upstream rejected request; user_id="account-linked-id"')
+    completions = _Completions(failure)
+    adapter = OpenRouterPaygAdapter()
+    monkeypatch.setattr(
+        adapter,
+        "_get_client",
+        lambda: SimpleNamespace(chat=SimpleNamespace(completions=completions)),
+    )
+
+    with (
+        caplog.at_level("WARNING", logger="core.llm.adapters.openrouter_payg"),
+        pytest.raises(RuntimeError) as exc_info,
+    ):
+        asyncio.run(
+            adapter.acomplete(
+                AdapterCallRequest(
+                    model="openrouter/deepseek/deepseek-v4-flash-0731",
+                    messages=(Message(role="user", content="hi"),),
+                )
+            )
+        )
+
+    assert exc_info.value is failure
+    assert "error_type=RuntimeError" in caplog.text
+    assert "account-linked-id" not in caplog.text
 
 
 def test_completion_forwards_chat_tools_and_captures_charge_and_route(

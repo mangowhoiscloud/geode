@@ -398,7 +398,7 @@ def test_activity_and_hook_store_schema_versions_are_pinned():
     from core.observability.activity import ActivityRowBase
     from core.observability.event_store import EVENT_SCHEMA_VERSION
 
-    assert ActivityRowBase.model_fields["schema_version"].default == 3
+    assert ActivityRowBase.model_fields["schema_version"].default == 4
     # Hook persistence gained indexed correlation columns independently of the
     # activity-row payload contract.
     assert EVENT_SCHEMA_VERSION == 5

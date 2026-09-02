@@ -11,7 +11,7 @@ GEODE. Pre-PR-COMM-1 the ``HookEvent`` payloads were untyped
 
 Structure (PR-OBS-CONTRACT, 2026-06-13 — full coverage):
   - 1 envelope (``ActivityRowBase``) with ``schema_version``
-  - 4 lifecycle detail mixins (started / completed / failed / retried)
+  - 4 shared lifecycle detail models plus bounded LLM-call usage/route details
   - 19 lifecycle concrete classes (A=6 started, B=7 completed, C=5 failed,
     D=1 retried) with discriminator on ``action``
   - 38 K-group concrete classes covering every remaining HookEvent, each
@@ -22,9 +22,10 @@ Structure (PR-OBS-CONTRACT, 2026-06-13 — full coverage):
     builder that hits a malformed payload), never a routine destination —
     every current event has a concrete typed row.
 
-Construction is centralized in ``activity_registry.py``: 19 lifecycle
-curry-builders + a single declarative ``_TYPED_ROW_SPECS`` table that drives
-all K-group rows through one ``_build_from_spec`` builder.
+Construction is centralized in ``activity_registry.py``: shared lifecycle
+builders plus one LLM completion projection, and a single declarative
+``_TYPED_ROW_SPECS`` table that drives all K-group rows through one
+``_build_from_spec`` builder.
 """
 
 from __future__ import annotations
@@ -65,10 +66,12 @@ __all__ = [
     "ExtensionInvokedRow",
     "GenericActivityRow",
     "HandoffTriggeredRow",
+    "LLMCallEndedDetails",
     "LLMCallEndedRow",
     "LLMCallFailedRow",
     "LLMCallRetriedRow",
     "LLMCallStartedRow",
+    "LLMCallUsageDetails",
     "LifecycleCompletedDetails",
     "LifecycleCompletedRow",
     "LifecycleFailedDetails",
@@ -154,7 +157,7 @@ class ActivityRowBase(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: int = 3
+    schema_version: int = 4
     """Row-schema version (PR-OBS-CONTRACT, 2026-06-13). Bump when a
     field is added/renamed/retyped on any row class so JSONL re-readers
     can branch on shape instead of guessing from key presence.
@@ -163,7 +166,9 @@ class ActivityRowBase(BaseModel):
     (+details.stage) replaces six per-state auto-trigger rows, approval
     granted/denied rows deleted.
     v3 (R3.1, 2026-08-21): extension audit details gained physical step
-    correlation."""
+    correlation.
+    v4 (OpenRouter live acceptance, 2026-09-03): completed LLM calls retain
+    bounded usage, charge, and serving-route evidence."""
 
     ts: float
     run_id: str
@@ -207,6 +212,36 @@ class LifecycleCompletedDetails(BaseModel):
 
 class LifecycleCompletedRow(ActivityRowBase):
     details: LifecycleCompletedDetails
+
+
+class LLMCallUsageDetails(BaseModel):
+    """Bounded token counters retained for one completed model call."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    input_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
+    cached_input_tokens: int = Field(default=0, ge=0)
+    reasoning_tokens: int = Field(default=0, ge=0)
+    cache_write_tokens: int = Field(default=0, ge=0)
+
+
+class LLMCallEndedDetails(LifecycleCompletedDetails):
+    """Durable billing and serving-route evidence for one model attempt."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    model: str | None = None
+    provider: str | None = None
+    adapter: str | None = None
+    error_type: str | None = None
+    usage: LLMCallUsageDetails | None = None
+    cost_usd: float | None = Field(default=None, ge=0)
+    response_id: str | None = None
+    response_model: str | None = None
+    response_provider: str | None = None
+    routing_strategy: str | None = None
+    routing_attempt: int | None = Field(default=None, ge=0)
 
 
 class LifecycleFailedDetails(BaseModel):
@@ -304,6 +339,7 @@ class SubAgentCompletedRow(LifecycleCompletedRow):
 class LLMCallEndedRow(LifecycleCompletedRow):
     action: Literal["llm.call.ended"] = "llm.call.ended"
     entity_type: Literal["llm_call"] = "llm_call"
+    details: LLMCallEndedDetails
 
 
 class ToolExecEndedRow(LifecycleCompletedRow):

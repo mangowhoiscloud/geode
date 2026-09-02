@@ -173,9 +173,9 @@ class OpenAIPaygAdapter:
             except Exception as exc:
                 self._last_error = exc
                 log.warning(
-                    "openai-payg: responses.stream failed model=%s err=%s",
+                    "openai-payg: responses.stream failed model=%s error_type=%s",
                     req.model,
-                    exc,
+                    type(exc).__name__,
                 )
                 raise
         return translate_codex_response(final, accumulated_items=accumulated)

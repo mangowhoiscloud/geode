@@ -396,7 +396,8 @@ async def call_llm(
                         "provider": active_provider,
                         "adapter": active_name,
                         "latency_ms": (_llm_call_time.monotonic() - started_at) * 1_000,
-                        "error": str(exc) or type(exc).__name__,
+                        "error": type(exc).__name__,
+                        "error_type": type(exc).__name__,
                     },
                 )
                 raise
@@ -516,9 +517,9 @@ async def call_llm(
         error_detail = str(exc) or type(exc).__name__
         loop._last_llm_error = error_detail
         log.warning(
-            "AgenticLoop: adapter.acomplete failed (adapter=%s): %s",
+            "AgenticLoop: adapter.acomplete failed adapter=%s error_type=%s",
             adapter_name,
-            error_detail,
+            type(exc).__name__,
         )
         if _fail_fast_adapter_errors_enabled():
             raise
