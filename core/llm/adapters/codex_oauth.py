@@ -53,7 +53,11 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class CodexOAuthAdapter:
-    """Subscription-routed OpenAI adapter via Codex OAuth backend."""
+    """OpenAI models over the Codex backend with ChatGPT OAuth.
+
+    The name records transport plus auth, not a separate model provider:
+    ``provider`` remains ``openai`` and ``source`` remains ``subscription``.
+    """
 
     name: str = "codex-oauth"
     provider: str = "openai"

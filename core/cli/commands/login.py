@@ -965,6 +965,7 @@ def _login_use(rest: str) -> None:
         "glm-coding": ["glm-5.2", "glm-5.1", "glm-5", "glm-5-turbo", "glm-4.7-flash"],
         "glm": ["glm-5.2", "glm-5.1", "glm-5", "glm-5-turbo"],
         "openai": [
+            "gpt-6-astra",
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "gpt-5.6-luna",
@@ -972,6 +973,7 @@ def _login_use(rest: str) -> None:
             "gpt-5.4-mini",
         ],
         "openai-codex": [
+            "gpt-6-astra",
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "gpt-5.6-luna",

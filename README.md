@@ -14,7 +14,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Anthropic-Fable_5-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Fable 5">
-  <img src="https://img.shields.io/badge/OpenAI-GPT--5.6-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.6">
+  <img src="https://img.shields.io/badge/OpenAI-GPT--6_Astra-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-6 Astra">
   <img src="https://img.shields.io/badge/OpenRouter-inference_router-6b46c1?style=flat-square" alt="OpenRouter">
   <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.2-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.2">
 </p>
@@ -183,7 +183,9 @@ The wizard above covers everything below; this section exists as a manual refere
 
 #### Path A: ChatGPT subscription (the recommended path for OpenAI users)
 
-GEODE signs in directly through `/login openai` and calls the ChatGPT backend through its in-process `codex-oauth` adapter. It can also read an existing `~/.codex/auth.json` credential without spawning the Codex CLI executable.
+GEODE signs in directly through `/login openai` and calls the Codex backend with
+ChatGPT OAuth through its in-process `codex-oauth` adapter. It can also read an
+existing `~/.codex/auth.json` credential without spawning the Codex CLI executable.
 
 ```bash
 geode                                 # start GEODE
@@ -197,6 +199,10 @@ Plus and up to 1,600 on Pro 20x. Enterprise and Edu limits depend on whether
 the workspace uses flexible credits or legacy per-seat limits.
 
 **Tier notes**:
+- **[GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra) is rollout-gated.** GEODE recognizes `gpt-6-astra` on both the
+  ChatGPT subscription and Platform API lanes, but OpenAI is enabling account
+  access progressively. A valid login does not by itself prove that your
+  account has received the model yet.
 - **gpt-5.5 is subscription-only.** GPT-5.6 Sol/Terra/Luna and GPT-5.4 are dual-lane: GEODE uses ChatGPT OAuth when a subscription profile is active and the Platform API when an API-key profile is selected. If you want 5.5, you need ChatGPT.
 - Existing Codex CLI credentials remain importable, but `codex-cli` is not a GEODE inference backend.
 - **Free / Go** appear on OpenAI's pricing page but aren't listed in the CLI README. Treat them as best-effort; if it works, great, but no promises.

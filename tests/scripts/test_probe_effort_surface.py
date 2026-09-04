@@ -13,8 +13,10 @@ from scripts.probes.probe_effort_surface import (
 def test_visible_effort_surface_matches_picker() -> None:
     surface = visible_effort_surface()
 
-    assert len(surface) == 61
+    assert len(surface) == 66
     assert len(surface) == len(set(surface))
+    assert ("gpt-6-astra", "openai", "low") in surface
+    assert ("gpt-6-astra", "openai", "max") in surface
     assert ("gpt-5.6-sol", "openai", "max") in surface
     assert ("claude-fable-5", "anthropic", "xhigh") in surface
 

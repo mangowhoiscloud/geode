@@ -142,6 +142,7 @@ _MODEL_DESCRIPTIONS: dict[str, str] = {
     "claude-sonnet-4-6": "Sonnet 4.6 · Best for everyday tasks",
     "claude-haiku-4-5": "Haiku 4.5 · Fastest for quick answers",
     # OpenAI / Codex
+    "gpt-6-astra": "GPT-6 Astra · hardest end-to-end work · rollout-gated API + subscription",
     "gpt-5.6-sol": "GPT-5.6 Sol · frontier tier, max-effort capable · API + subscription",
     "gpt-5.6-terra": "GPT-5.6 Terra · balanced intelligence/cost · API + subscription",
     "gpt-5.6-luna": "GPT-5.6 Luna · efficient high-volume tier · API + subscription",
