@@ -14,7 +14,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Anthropic-Fable_5-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Fable 5">
-  <img src="https://img.shields.io/badge/OpenAI-GPT--6_Astra-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-6 Astra">
+  <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z"><img src="https://img.shields.io/badge/OpenAI-GPT--6_Astra_E2E_smoke_1%2F1-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-6 Astra E2E smoke 1/1"></a>
   <img src="https://img.shields.io/badge/OpenRouter-inference_router-6b46c1?style=flat-square" alt="OpenRouter">
   <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.2-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.2">
 </p>
@@ -77,6 +77,7 @@ harness revision, task set, model route, effort, timeout, attempt lineage에
 |---|---|
 | [Tau2](https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2) | native-user와 GEODE-user 트랙을 분리하며, 미완료·quota 오염 run은 aggregate score 권한 없이 보존합니다. |
 | [MCPMark](https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark) | 서비스 coverage, 과거 available-services 결과, 정정된 paired 관측, full-Verified 한계를 구분합니다. |
+| [Terminal-Bench 2.1](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench) | GPT-6 Astra 구독 E2E는 1 task, 1 repetition smoke입니다. reward 1/1, verifier 6/6이며 suite, 순위, 일반 계정 가용성은 주장하지 않습니다. |
 
 원본 receipt와 개인정보 검토를 통과한 trajectory는
 [평가 artifact 저장소](https://github.com/mangowhoiscloud/geode-eval-artifacts)에 보존합니다.
@@ -200,9 +201,11 @@ flexible credit 또는 legacy per-seat 방식 중 무엇을 쓰는지에 따라 
 
 **참고할 점**:
 - **[GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra)는 순차 배포 중입니다.** GEODE는 `gpt-6-astra`를 ChatGPT
-  구독과 Platform API 양쪽 경로에서 인식하지만, 실제 계정 접근은
-  OpenAI의 rollout 일정에 따릅니다. 유효한 로그인만으로 해당 계정에
-  모델이 열렸다고 단정하지 않습니다.
+  구독과 Platform API 양쪽 경로에서 인식합니다. 2026-09-05 현재 구독
+  계정에서는 canonical Terminal-Bench 2.1 task 1건을 reward 1/1, retry와
+  fallback 없이 완료했습니다. 이
+  [불변 E2E smoke](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z)는
+  해당 계정과 경로의 증거이며, 전체 계정에 대한 가용성 주장이 아닙니다.
 - **gpt-5.5 는 구독 전용입니다.** GPT-5.6 Sol/Terra/Luna와 GPT-5.4는 듀얼 레인입니다. 구독 프로필이 활성화되면 ChatGPT OAuth, API 키 프로필을 선택하면 Platform API를 사용합니다. 5.5가 필요하면 ChatGPT 구독이 필요합니다.
 - 기존 Codex CLI 자격은 가져올 수 있지만, `codex-cli`는 GEODE 추론 백엔드가 아닙니다.
 - **Free / Go** 는 OpenAI 가격 페이지엔 있지만 CLI README 엔 없습니다. 동작하면 다행, 보장은 안 합니다.

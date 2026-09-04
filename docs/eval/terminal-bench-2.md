@@ -131,6 +131,23 @@ suite, Hub upload, static analysis, and maintainer reward-hacking review.
 Official leaderboard values are reference context only. They do not replace a
 same-protocol comparator and must remain separate from local paired results.
 
+## 2026-09-05 GPT-6 Astra subscription E2E smoke
+
+The current account completed one preregistered
+`openssl-selfsigned-cert` trial through GEODE 1.0.27, Harbor 0.22.0,
+`gpt-6-astra`, reasoning `high`, and the OpenAI subscription route. The
+canonical result was **1/1 reward**, all **6/6 verifier checks** passed, and
+there was no retry or fallback.
+
+The [run record](2026-09-05-terminalbench-astra-openssl-smoke.md) binds the
+frozen contract, attempt lineage, publication manifest, and limitation set.
+The [append-only artifact bundle](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z)
+was read back byte-for-byte from its merge commit.
+
+This result establishes account-scoped route and task execution for one
+scenario only. It has no suite, rank, paired-comparison, promotion, or general
+account-availability authority.
+
 ## 2026-08-26 diagnostic
 
 The first current-contract Sol/max paired run is recorded in

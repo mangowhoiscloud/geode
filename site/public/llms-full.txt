@@ -47,7 +47,7 @@ GEODE 를 가르는 핵심은 **두 개의 루프**입니다.
 
 [05-operateGEODE 운영Serve와 게이트웨이, 메신저 연동, 작업 예약, 스케줄러 내부, …](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md)
 
-[06-benchmarks벤치마크GEO 가시성, Tau2, MCPMark](https://mangowhoiscloud.github.io/geode/docs/benchmarks/geo.md)
+[06-benchmarks벤치마크GEO 가시성, Terminal-Bench 2.1, Tau2, MCPMark](https://mangowhoiscloud.github.io/geode/docs/benchmarks/geo.md)
 
 [07-guides가이드도구 작성, 훅과 미들웨어 등록, Trajectory 게시, LLM 어댑터 추가, …](https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool.md)
 
@@ -3353,6 +3353,61 @@ slash의 typed state는 작업 진행을 위한 advisory projection입니다. �
 -   [Google generative AI optimization guide](https://developers.google.com/search/docs/fundamentals/ai-optimization-guide)
 -   [C-SEO Bench](https://proceedings.neurips.cc/paper_files/paper/2025/hash/27aa3aeff0f8460a7b43d30fa6c5c032-Abstract-Datasets_and_Benchmarks_Track.html)
 -   [Canonical GEO evaluation profile](https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/geo-visibility.md)
+
+---
+
+### Terminal-Bench 2.1 (Terminal-Bench 2.1)
+
+URL: https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench
+Markdown: https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md
+
+계정 범위 E2E 증거
+
+## Astra가 실제 container task를 끝냈습니다
+
+Canonical reward
+
+1 / 1
+
+단일 동결 task
+
+smoke only
+
+Verifier
+
+6 / 6
+
+task-owned 검사
+
+all passed
+
+Recovery
+
+0
+
+retry · fallback
+
+없음
+
+[Terminal-Bench 2.1](https://www.tbench.ai/news/terminal-bench-2-1)은 Harbor에서 89개 containerized terminal task를 실행하고 task-owned verifier로 채점합니다. 공식 제출은 [89 tasks × k≥5와 maintainer review](https://github.com/harbor-framework/terminal-bench-2-1/blob/7131e4375048a0e408a8fb404b5f499d726b695b/leaderboard/SUBMIT.md)를 요구합니다.
+
+2026-09-05에 GEODE 1.0.27은 OpenAI 구독 경로의 `gpt-6-astra`, reasoning `high`로 Harbor 0.22.0의 canonical `openssl-selfsigned-cert` 작업을 실행했습니다. 3 rounds와 정확히 짝지어진 terminal tool call/result 2쌍 뒤 자연 종료했고, canonical reward 1을 받았습니다.
+
+## 증거 권한
+
+| 질문 | 정본 |
+| --- | --- |
+| 무엇을 실행하기로 고정했나? | `run-spec.json` |
+| 재시도나 fallback이 있었나? | `attempts.jsonl` |
+| task가 성공했나? | Harbor `result.json`과 verifier CTRF |
+| 어떤 결론까지 가능한가? | `analysis.json` |
+| 공개 파일이 원본과 같은가? | publication manifest와 merge-SHA read-back |
+
+[`geode-eval-artifacts/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z)에 9개 공개 파일, 30,857바이트를 보존했습니다. 공개 trajectory는 scope-complete지만 9개 payload body를 digest로 대체해 replay-incomplete입니다. prompt, reasoning, OAuth 자료, raw tool payload, ATIF, recording, 로컬 경로는 비공개로 남겼습니다.
+
+## 해석 한계
+
+이 run은 89개 중 1 task, k=1입니다. 이 계정에서 model route가 열렸고 GEODE가 실제 container task를 끝냈다는 사실만 입증합니다. suite 정확도, leaderboard 순위, 다른 harness 대비 우위, 전체 계정의 Astra 가용성을 주장하지 않습니다. 공식 제출에는 89 tasks × k≥5와 maintainer의 static analysis 및 reward-hacking review가 필요합니다.
 
 ---
 

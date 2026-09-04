@@ -11,7 +11,7 @@
     "trajectory": "core/observability/schemas/trajectory.schema.json",
     "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
   },
-  "document_count": 23,
+  "document_count": 24,
   "documents": [
     {
       "id": "agent-world-comparison",
@@ -117,7 +117,7 @@
       "authority": "routing",
       "path": "docs/eval/README.md",
       "summary": "Machine and human entrypoint for GEODE evaluation contracts, benchmark ledgers, evidence, and publication.",
-      "sha256": "879cfabc006e52113829504bcbff02b1d84cbfa08ed46ce39ee7cf044108baac",
+      "sha256": "bb74f97a3a7610545e34dd9c49829ae7da57f29d74b9ad31598f9af7b500e2d6",
       "triggers": [
         "artifact",
         "benchmark",
@@ -514,7 +514,7 @@
       "authority": "suite-profile",
       "path": "docs/eval/terminal-bench-2.md",
       "summary": "GEODE adoption profile for canonical Terminal-Bench 2.1 execution through Harbor, including official-submission and diagnostic comparability boundaries.",
-      "sha256": "784a64f40bd69d443a445032f37276f709588a0b7510c85747b7970708a3b8c0",
+      "sha256": "9fafe92cf373a4b38f410209bd189483960ead52b7b421ee6c3086f66a1d5b9d",
       "triggers": [
         "Harbor",
         "Terminal-Bench 2",
@@ -526,6 +526,31 @@
         "core/observability/schemas/trajectory.schema.json",
         "docs/eval/schemas/analysis.schema.json",
         "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
+      "id": "terminalbench21-astra-high-openssl-smoke-20260904t202725z",
+      "family": "terminal-bench-2",
+      "title": "Terminal-Bench 2.1. GPT-6 Astra subscription E2E smoke",
+      "kind": "ledger",
+      "status": "historical",
+      "authority": "routing-and-behavior-diagnostic",
+      "path": "docs/eval/2026-09-05-terminalbench-astra-openssl-smoke.md",
+      "summary": "Preregistered one-task Terminal-Bench 2.1 smoke showing that GEODE reached GPT-6 Astra/high through the current OpenAI subscription route and earned canonical verifier reward 1 without retry or fallback.",
+      "sha256": "f288a81cf6d6e072b77f489f1b6a570306431028780d6c905fd95a72b6d6e008",
+      "triggers": [
+        "E2E smoke",
+        "GPT-6 Astra",
+        "Harbor",
+        "OpenAI subscription",
+        "Terminal-Bench 2.1"
+      ],
+      "contracts": [
+        "core/observability/schemas/trajectory.schema.json",
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/publication.schema.json",
         "docs/eval/schemas/run-spec.schema.json"
       ]
     },

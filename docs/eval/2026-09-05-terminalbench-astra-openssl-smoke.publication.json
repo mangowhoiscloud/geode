@@ -1,0 +1,205 @@
+{
+  "artifact_repository": {
+    "base_revision": "c52872aacd20a4b9f14be18d64acce3e9ed99070",
+    "destination_prefix": "terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z",
+    "url": "https://github.com/mangowhoiscloud/geode-eval-artifacts"
+  },
+  "entries": [
+    {
+      "bytes": 3627,
+      "classification": "public",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/analysis.json",
+      "remote_path": "terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z/analysis.json",
+      "sha256": "314991629de8f54de1dc0cc1cec97464add51262501e3268fbc58871736d8a2a"
+    },
+    {
+      "bytes": 2470,
+      "classification": "public",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/attempts.jsonl",
+      "remote_path": "terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z/attempts.jsonl",
+      "sha256": "fdc9b9c6372f69faf3ce2a2ddfc964101b594d84d062893ef0c0bdb1bf15d5e5"
+    },
+    {
+      "bytes": 816,
+      "classification": "withheld-private",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/config.json",
+      "reason": "Raw harness metadata, model interaction material, local-path-bearing result, or unreviewed task output was not approved for public disclosure.",
+      "remote_path": null,
+      "sha256": "de2a64a087e68aa44024542a6df995325919514af0f8012466f570cc09c0b624"
+    },
+    {
+      "bytes": 137,
+      "classification": "withheld-private",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/job.log",
+      "reason": "Raw harness metadata, model interaction material, local-path-bearing result, or unreviewed task output was not approved for public disclosure.",
+      "remote_path": null,
+      "sha256": "3ddb278b6a896fa128ef385701944c3a28c2940a2a36c1f2122d18f01b32bf65"
+    },
+    {
+      "bytes": 2173,
+      "classification": "withheld-private",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/lock.json",
+      "reason": "Raw harness metadata, model interaction material, local-path-bearing result, or unreviewed task output was not approved for public disclosure.",
+      "remote_path": null,
+      "sha256": "e799c1f83d7f5cced72dc20a72e9471e06ec9ea0b6866cda40cf4bf349f2e4f5"
+    },
+    {
+      "bytes": 11645,
+      "classification": "withheld-private",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/openssl-selfsigned-cert__nCXHtTa/agent/geode-trajectory.json",
+      "reason": "Raw harness metadata, model interaction material, local-path-bearing result, or unreviewed task output was not approved for public disclosure.",
+      "remote_path": null,
+      "sha256": "3718a5f20250c63426eb02febacb9442dbd6ee2d8a85bb81a56a3f653d42a068"
+    },
+    {
+      "bytes": 10020,
+      "classification": "withheld-private",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/openssl-selfsigned-cert__nCXHtTa/agent/recording.cast",
+      "reason": "Raw harness metadata, model interaction material, local-path-bearing result, or unreviewed task output was not approved for public disclosure.",
+      "remote_path": null,
+      "sha256": "c212ced20da06a19a89ebb57eacd2d10afe396e4636a30344a771fc5018b02fe"
+    },
+    {
+      "bytes": 831,
+      "classification": "withheld-private",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/openssl-selfsigned-cert__nCXHtTa/agent/recording.receipt.json",
+      "reason": "Raw harness metadata, model interaction material, local-path-bearing result, or unreviewed task output was not approved for public disclosure.",
+      "remote_path": null,
+      "sha256": "1d20bd1766390845b8ae85d0369bf4cc2d9dfe18d2cb3f4dcdc300553ff47786"
+    },
+    {
+      "bytes": 12517,
+      "classification": "withheld-private",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/openssl-selfsigned-cert__nCXHtTa/agent/trajectory.json",
+      "reason": "Raw harness metadata, model interaction material, local-path-bearing result, or unreviewed task output was not approved for public disclosure.",
+      "remote_path": null,
+      "sha256": "19adcc8e500d6a4c1f4e77231482401250858b7df448b0340a5d9f5e539b5b61"
+    },
+    {
+      "bytes": 159,
+      "classification": "withheld-private",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/openssl-selfsigned-cert__nCXHtTa/artifacts/manifest.json",
+      "reason": "Raw harness metadata, model interaction material, local-path-bearing result, or unreviewed task output was not approved for public disclosure.",
+      "remote_path": null,
+      "sha256": "c1db653f487fb773c4f9247162ab3314e7f0584a486914b9874c4b3d6949e42d"
+    },
+    {
+      "bytes": 756,
+      "classification": "withheld-private",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/openssl-selfsigned-cert__nCXHtTa/config.json",
+      "reason": "Raw harness metadata, model interaction material, local-path-bearing result, or unreviewed task output was not approved for public disclosure.",
+      "remote_path": null,
+      "sha256": "ac9dbed50f070fa527bf5aa1ee6cb476cf06c2f83b08d02c5c1f61e3ff2d188c"
+    },
+    {
+      "bytes": 1131,
+      "classification": "withheld-private",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/openssl-selfsigned-cert__nCXHtTa/lock.json",
+      "reason": "Raw harness metadata, model interaction material, local-path-bearing result, or unreviewed task output was not approved for public disclosure.",
+      "remote_path": null,
+      "sha256": "7b6da7851da2932f1043b49ccf11c6690fa8dc79d775e20ab0db9e6c581fd7f2"
+    },
+    {
+      "bytes": 4608,
+      "classification": "withheld-private",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/openssl-selfsigned-cert__nCXHtTa/result.json",
+      "reason": "Raw harness metadata, model interaction material, local-path-bearing result, or unreviewed task output was not approved for public disclosure.",
+      "remote_path": null,
+      "sha256": "508123574727b31672fb727442863b869c8799347b922bceb075028a244f2968"
+    },
+    {
+      "bytes": 137,
+      "classification": "withheld-private",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/openssl-selfsigned-cert__nCXHtTa/trial.log",
+      "reason": "Raw harness metadata, model interaction material, local-path-bearing result, or unreviewed task output was not approved for public disclosure.",
+      "remote_path": null,
+      "sha256": "3ddb278b6a896fa128ef385701944c3a28c2940a2a36c1f2122d18f01b32bf65"
+    },
+    {
+      "bytes": 2482,
+      "classification": "public",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/openssl-selfsigned-cert__nCXHtTa/verifier/ctrf.json",
+      "remote_path": "terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/openssl-selfsigned-cert__nCXHtTa/verifier/ctrf.json",
+      "sha256": "71d3b74211c4c013cbc4a187be7cea1866f022f800fb5ae16fec14adbc3adb8f"
+    },
+    {
+      "bytes": 2,
+      "classification": "public",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/openssl-selfsigned-cert__nCXHtTa/verifier/reward.txt",
+      "remote_path": "terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/openssl-selfsigned-cert__nCXHtTa/verifier/reward.txt",
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "bytes": 9810,
+      "classification": "withheld-private",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/openssl-selfsigned-cert__nCXHtTa/verifier/test-stdout.txt",
+      "reason": "Raw harness metadata, model interaction material, local-path-bearing result, or unreviewed task output was not approved for public disclosure.",
+      "remote_path": null,
+      "sha256": "f9dac13f9402ac1834c926a580cbc9f758d981fd749e8142650a2407ff3b207d"
+    },
+    {
+      "bytes": 1155,
+      "classification": "public",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/result.json",
+      "remote_path": "terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/result.json",
+      "sha256": "078321572fe643bd14e018fe3f272c2351146812c020cbe56b4c01f537bfa6ae"
+    },
+    {
+      "bytes": 4790,
+      "classification": "public",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/run-spec.json",
+      "remote_path": "terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z/run-spec.json",
+      "sha256": "0d0fbbacc040b0742a9bb7fc85796abaac7ee4bfe2f01c9472a037265500f0fe"
+    },
+    {
+      "bytes": 2564,
+      "classification": "public",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/public/README.md",
+      "remote_path": "terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z/README.md",
+      "sha256": "465041a468e968878fb67cfebf820f192c5122c14f96b2b5cae20ad8a54190c9"
+    },
+    {
+      "bytes": 11648,
+      "classification": "public",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/trajectory-releases/terminalbench-geode-terminalbench21-astra-high-openssl-smoke-20260904t202725z-20260904T204003Z-e248cf31969e/geode-trajectory.json",
+      "remote_path": "terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z/trajectories/terminalbench-geode-terminalbench21-astra-high-openssl-smoke-20260904t202725z-20260904T204003Z-e248cf31969e/geode-trajectory.json",
+      "sha256": "4ef6b0e15e6f1db7ec7d4903560ce7c46f4a5ad62278f59cf329e30e3e442dde"
+    },
+    {
+      "bytes": 2119,
+      "classification": "public",
+      "local_path": "artifacts/eval/runs/terminalbench21-astra-high-openssl-smoke-20260904t202725z/trajectory-releases/terminalbench-geode-terminalbench21-astra-high-openssl-smoke-20260904t202725z-20260904T204003Z-e248cf31969e/manifest.json",
+      "remote_path": "terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z/trajectories/terminalbench-geode-terminalbench21-astra-high-openssl-smoke-20260904t202725z-20260904T204003Z-e248cf31969e/manifest.json",
+      "sha256": "e248cf31969e4b60139f19db387323a9854b29b96a481657e4f9305255b7c92f"
+    }
+  ],
+  "geode": {
+    "repository": "https://github.com/mangowhoiscloud/geode",
+    "revision": "132dc61f90b0fe097cf16b01efa564e88d9d8dc9",
+    "run_record": "docs/eval/2026-09-05-terminalbench-astra-openssl-smoke.md"
+  },
+  "notes": {
+    "authority": "account-scoped one-task E2E smoke; no suite, rank, comparison, or general-availability authority",
+    "public_file_count": 9,
+    "withheld_file_count": 13,
+    "privacy": "Prompts, reasoning, raw tool payloads, OAuth material, ATIF, recordings, local paths, and unreviewed task outputs remain private."
+  },
+  "publication": {
+    "artifact_merge_revision": "a32abcbf78ab6100ea1e85540a2ace9436dc6f76",
+    "published_at": "2026-09-04T20:42:30Z",
+    "remote_readback": {
+      "bytes_verified": 30857,
+      "files_verified": 9,
+      "status": "passed",
+      "verified_at": "2026-09-04T20:42:44Z"
+    },
+    "status": "published"
+  },
+  "run_id": "terminalbench21-astra-high-openssl-smoke-20260904t202725z",
+  "schema": "geode.eval-artifact-publication.v1",
+  "verification": {
+    "local_identity_scrubbed": true,
+    "secret_scan_passed": true,
+    "source_hashes_verified": true
+  }
+}

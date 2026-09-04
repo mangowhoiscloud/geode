@@ -70,6 +70,7 @@ Version v1.0.27. Last sync 2026-09-02. Docs links point to clean markdown twins 
 ## Benchmarks
 
 - [GEO visibility](https://mangowhoiscloud.github.io/geode/docs/benchmarks/geo.md): A stage-aware F/R/C/P/A/Q/O measurement contract with frozen workloads, digest-bound receipts, and no aggregate GEO score.
+- [Terminal-Bench 2.1](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md): A one-task GPT-6 Astra subscription E2E smoke with canonical verifier and immutable publication evidence.
 - [Tau2](https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2.md): GEODE's tau2-bench measurements: the native user-simulator track headline, every verifier-backed run record, and links to the raw simulation logs.
 - [MCPMark](https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark.md): GEODE's MCPMark measurements: the Verified available-services headline, service coverage and blockers, every run record, and links to the raw run logs.
 
