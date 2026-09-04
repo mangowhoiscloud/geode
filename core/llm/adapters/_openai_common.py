@@ -102,6 +102,18 @@ class OpenAIModelSpec:
 
 # Registry — keep alphabetically sorted within each family for stable diffs.
 _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
+    # GPT-6 Astra (verified 2026-09-04). The official Responses contract
+    # excludes none/minimal effort and sampling controls. Account rollout is
+    # separate from this model capability entry.
+    # ref: https://developers.openai.com/api/docs/models/gpt-6-astra
+    "gpt-6-astra": OpenAIModelSpec(
+        model_id="gpt-6-astra",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("low", "medium", "high", "xhigh", "max"),
+        context_window=_catalog_context_window("gpt-6-astra"),
+        supports_tool_search=True,
+    ),
     # ── GPT-5 family (reasoning, max_completion_tokens, temperature blocked) ──
     "gpt-5.3-codex": OpenAIModelSpec(
         model_id="gpt-5.3-codex",

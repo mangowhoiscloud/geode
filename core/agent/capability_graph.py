@@ -69,20 +69,11 @@ def _support(
 
 
 def _context_window(model: str, provider: str) -> int | None:
-    lower = model.lower()
-    if provider == "glm":
-        if "5.1" in lower or "glm-5" in lower:
-            return 200_000
+    if provider not in {"anthropic", "glm", "openai", "openai-codex"}:
         return None
-    if provider == "anthropic":
-        if any(token in lower for token in ("fable-5", "opus-4-8", "opus-4-7", "opus-4-6")):
-            return 1_000_000
-        return None
-    if provider in {"openai", "openai-codex"}:
-        if any(token in lower for token in ("gpt-5.6", "gpt-5.5", "gpt-5.4", "gpt-5.3")):
-            return 1_000_000
-        return None
-    return None
+    from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
+
+    return MODEL_CONTEXT_WINDOW.get(model)
 
 
 def build_capability_graph(
