@@ -1,5 +1,9 @@
 # LLM Call-Stack Unification — zero-regression resolution of the dual/triple retry stack
 
+> Historical design record. Its retry matrix was superseded on 2026-09-03 by
+> [`2026-09-03-frontier-retry-policy-alignment.md`](2026-09-03-frontier-retry-policy-alignment.md);
+> do not treat the old five-attempt or terminal-rate-limit rows as current behavior.
+
 > [!NOTE]
 > This plan retains detailed retry and behavior-preservation evidence. Its
 > current delivery status rolls up to LLM-004 in

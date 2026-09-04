@@ -6,7 +6,9 @@ Shared by all providers (Anthropic, OpenAI, GLM).
 from __future__ import annotations
 
 import asyncio
+import email.utils
 import logging
+import math
 import random
 import time
 from dataclasses import dataclass
@@ -39,7 +41,6 @@ class RetryPolicy:
     filter_models: bool = True
     fallback_after_exhaustion: bool = False
     refresh_auth_once: bool = False
-    sleep_after_final_failure: bool = False
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -74,7 +75,16 @@ class RetryPolicy:
         """Return the delay after a one-based failure number."""
         if failure_number < 1:
             raise ValueError("failure_number must be positive")
-        ceiling = min(self.base_delay_s * (2 ** (failure_number - 1)), self.max_delay_s)
+        if self.base_delay_s == 0:
+            ceiling = 0.0
+        else:
+            try:
+                ceiling = min(
+                    self.base_delay_s * math.pow(2.0, failure_number - 1),
+                    self.max_delay_s,
+                )
+            except OverflowError:
+                ceiling = self.max_delay_s
         return random.uniform(0, ceiling) if self.jitter else ceiling
 
 
@@ -120,18 +130,26 @@ _TERMINAL_ERRORS = frozenset(
     {"auth", "bad_request", "billing", "context_overflow", "stream_interrupted"}
 )
 _TRANSIENT_ERRORS = frozenset({"connection", "rate_limit", "server", "timeout"})
+_MAX_SERVER_RETRY_AFTER_S = 60.0
 
 
-def interactive_retry_policy(*, max_attempts: int = 5) -> RetryPolicy:
-    """Operator-facing retry: quota is terminal and there is no model fallback."""
+def interactive_retry_policy(
+    *,
+    max_attempts: int | None = None,
+    base_delay_s: float | None = None,
+    max_delay_s: float | None = None,
+) -> RetryPolicy:
+    """Operator-facing retry: bounded same-model recovery without fallback."""
+    from core.config import settings
+
     return RetryPolicy(
         name="interactive",
-        max_attempts=max_attempts,
-        base_delay_s=2.0,
-        max_delay_s=30.0,
-        jitter=False,
-        retry_categories=frozenset({"connection", "server", "timeout", "unknown"}),
-        terminal_categories=_TERMINAL_ERRORS | {"rate_limit"},
+        max_attempts=max_attempts if max_attempts is not None else settings.llm_max_retries,
+        base_delay_s=(base_delay_s if base_delay_s is not None else settings.llm_retry_base_delay),
+        max_delay_s=max_delay_s if max_delay_s is not None else settings.llm_retry_max_delay,
+        jitter=True,
+        retry_categories=_TRANSIENT_ERRORS | {"unknown"},
+        terminal_categories=_TERMINAL_ERRORS,
     )
 
 
@@ -163,7 +181,7 @@ def provider_retry_policy(
     base_delay_s: float | None = None,
     max_delay_s: float | None = None,
 ) -> RetryPolicy:
-    """Provider compatibility retry with OAuth and legacy final sleep."""
+    """Provider compatibility retry with one OAuth refresh."""
     from core.config import settings
 
     return RetryPolicy(
@@ -177,7 +195,6 @@ def provider_retry_policy(
         filter_models=False,
         fallback_after_exhaustion=True,
         refresh_auth_once=True,
-        sleep_after_final_failure=True,
     )
 
 
@@ -282,16 +299,19 @@ def _guard_stream_replay(
 
 def _is_auth_error(exc: Exception) -> bool:
     """Check if exception is an authentication/401 error from any provider."""
+    anthropic_auth_error: type[Exception] | None = None
     try:
-        import anthropic
+        from anthropic import AuthenticationError
 
-        if isinstance(exc, anthropic.AuthenticationError):
-            return True
+        anthropic_auth_error = AuthenticationError
     except ImportError:
         pass
-    # OpenAI AuthenticationError
-    exc_name = type(exc).__name__
-    return exc_name == "AuthenticationError" or "401" in str(exc)[:50]
+    for link in exception_chain(exc):
+        if anthropic_auth_error is not None and isinstance(link, anthropic_auth_error):
+            return True
+        if type(link).__name__ == "AuthenticationError" or "401" in str(link)[:50]:
+            return True
+    return False
 
 
 def _try_oauth_refresh(provider_label: str) -> bool:
@@ -415,6 +435,74 @@ def exception_chain(exc: BaseException, *, limit: int = 4) -> list[BaseException
     return chain
 
 
+def _response_headers(exc: Exception) -> Any | None:
+    for link in exception_chain(exc):
+        response = getattr(link, "response", None)
+        headers = getattr(response, "headers", None)
+        if headers is not None:
+            return headers
+    return None
+
+
+def _header(headers: Any, name: str) -> str | None:
+    value = headers.get(name) if headers is not None else None
+    if value is None and headers is not None:
+        value = next(
+            (
+                item
+                for key, item in getattr(headers, "items", lambda: ())()
+                if str(key).lower() == name.lower()
+            ),
+            None,
+        )
+    return str(value).strip() if value is not None else None
+
+
+def _status_code(exc: Exception) -> int | None:
+    for link in exception_chain(exc):
+        status = getattr(link, "status_code", None)
+        if not isinstance(status, int):
+            status = getattr(getattr(link, "response", None), "status_code", None)
+        if isinstance(status, int):
+            return status
+    return None
+
+
+def _retry_after_seconds(headers: Any) -> float | None:
+    retry_after_ms = _header(headers, "retry-after-ms")
+    try:
+        if retry_after_ms is not None:
+            return float(retry_after_ms) / 1000.0
+    except ValueError:
+        pass
+
+    retry_after = _header(headers, "retry-after")
+    try:
+        if retry_after is not None:
+            return float(retry_after)
+    except ValueError:
+        pass
+    retry_date = email.utils.parsedate_tz(retry_after or "")
+    return float(email.utils.mktime_tz(retry_date) - time.time()) if retry_date else None
+
+
+def retry_delay_for(
+    policy: RetryPolicy,
+    failure_number: int,
+    exc: Exception | None = None,
+) -> float | None:
+    """Return a bounded retry delay, or ``None`` when the server vetoes retry."""
+    headers = _response_headers(exc) if exc is not None else None
+    if (_header(headers, "x-should-retry") or "").lower() == "false":
+        return None
+    retry_after = _retry_after_seconds(headers)
+    if retry_after is not None and math.isfinite(retry_after) and retry_after > 0:
+        if retry_after > _MAX_SERVER_RETRY_AFTER_S:
+            return None
+        return max(policy.delay_for(failure_number), retry_after)
+    return policy.delay_for(failure_number)
+
+
 def is_connection_transient(exc: Exception) -> bool:
     """Return whether a non-billing error chain is connection-class transient."""
     from core.llm.errors import BillingError, is_billing_fatal
@@ -449,7 +537,12 @@ def classify_retry_error(
         return "billing"
     if _is_auth_error(exc):
         return "auth"
-    if is_request_fatal(exc):
+    status = _status_code(exc)
+    if status == 408:
+        return "timeout"
+    if status == 409:
+        return "server"
+    if any(isinstance(link, Exception) and is_request_fatal(link) for link in exception_chain(exc)):
         return "bad_request"
     if (
         compatibility_bad_request_error is not None
@@ -462,10 +555,12 @@ def classify_retry_error(
         return classified
     if is_connection_transient(exc):
         return "connection"
-    status = getattr(exc, "status_code", None)
     if status == 429:
         return "rate_limit"
     if isinstance(status, int) and status >= 500:
+        return "server"
+    headers = _response_headers(exc)
+    if (_header(headers, "x-should-retry") or "").lower() == "true":
         return "server"
     if compatibility_bad_request_error is not None and isinstance(
         exc, compatibility_bad_request_error
@@ -576,7 +671,13 @@ async def run_with_retry_policy(
                     model=current_model,
                 )
                 failure_number = attempt_index + 1
-                delay = policy.delay_for(failure_number)
+                if attempt_index == policy.max_attempts - 1:
+                    advance_model = policy.fallback_after_exhaustion
+                    break
+                delay = retry_delay_for(policy, failure_number, exc)
+                if delay is None:
+                    advance_model = policy.fallback_after_exhaustion
+                    break
                 event = RetryAttempt(
                     policy=policy.name,
                     model=current_model,
@@ -602,10 +703,7 @@ async def run_with_retry_policy(
                         on_retry(event)
                     except Exception:
                         log.debug("Retry telemetry callback failed", exc_info=True)
-                if attempt_index < policy.max_attempts - 1 or policy.sleep_after_final_failure:
-                    await asyncio.sleep(delay)
-                if attempt_index == policy.max_attempts - 1:
-                    advance_model = policy.fallback_after_exhaustion
+                await asyncio.sleep(delay)
 
         if not advance_model:
             break

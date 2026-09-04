@@ -175,13 +175,11 @@ def save_auth_toml(
     }
 
     path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch(mode=0o600, exist_ok=True)
+    path.chmod(0o600)
     text = _to_toml(payload)
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        log.debug("Could not chmod %s to 0600", path)
     return path
 
 
@@ -269,6 +267,7 @@ def load_auth_toml(
 
     if not path.exists():
         return False
+    path.chmod(0o600)
     try:
         with open(path, "rb") as f:
             data = tomllib.load(f)

@@ -356,12 +356,11 @@ def build_async_openai_client(
         raise ValueError("build_async_openai_client: api_key is empty")
     import openai
 
-    _ensure_sdk_observability_installed()
     http_client = _build_async_httpx_client()
     # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION (2026-05-28, Codex MCP BLOCKER) —
     # ``max_retries=0`` disables the SDK-internal retry loop. Without this,
     # SDK retry x app retry compounds: 300s read-timeout * 2 SDK attempts +
-    # GEODE's own ``_LLM_RETRY_CAP`` retries = 10+ minute spin under stall.
+    # GEODE's configured app-level attempts = 10+ minute spin under stall.
     # Anthropic adapter applies the same invariant
     # (``_anthropic_common.py:60``). Single source of retry truth =
     # AgenticLoop's ``_call_llm`` retry path.
@@ -418,8 +417,6 @@ def build_async_codex_client(api_key: str) -> openai.AsyncOpenAI:
     # workaround before the first Codex backend call. Idempotent across
     # process lifetime; only patches when the openai SDK is importable.
     _install_codex_workaround()
-    _ensure_sdk_observability_installed()
-
     # PR-CODEX-NO-KEEPALIVE (2026-05-28) — Codex-specific httpx client
     # with ``max_keepalive_connections=0`` (see method docstring for the
     # stale-connection rationale). Other timeout / pool settings mirror
@@ -450,13 +447,6 @@ def build_async_codex_client(api_key: str) -> openai.AsyncOpenAI:
     )
 
 
-def _ensure_sdk_observability_installed() -> None:
-    """Install the SDK retry → UI bridge once. Safe to call repeatedly."""
-    from core.llm.adapters._sdk_retry_visibility import install as _install_retry_bridge
-
-    _install_retry_bridge()
-
-
 def _build_async_httpx_client() -> Any:
     """PR-ADAPTER-TIMEOUT (2026-05-28) — share Anthropic adapter's timeout
     policy with every OpenAI-family client (PAYG OpenAI, Codex OAuth, GLM
@@ -468,8 +458,7 @@ def _build_async_httpx_client() -> Any:
     ~10 minutes before the SDK's retry loop kicked in (operator-observed
     incident 2026-05-28 11:06→11:16, 620062 ms latency). Pinning
     ``settings.llm_read_timeout`` here caps the stall window — the
-    SDK's ``max_retries`` (default 2) then triggers within minutes
-    instead of hours.
+    app-owned retry policy then decides whether another attempt is safe.
 
     Reads the same ``llm_*_timeout`` / ``llm_*_connections`` settings the
     Anthropic adapter consumes so operators tune both providers with one

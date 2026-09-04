@@ -77,6 +77,7 @@ def load_env_files(*, skip_behavior_keys: bool = False) -> None:
     for env_file in (Path(".env"), GLOBAL_ENV_FILE):
         if not env_file.exists():
             continue
+        env_file.chmod(0o600)
         for key, val in dotenv_values(str(env_file)).items():
             # Empty values (e.g. ANTHROPIC_API_KEY=) must NOT clobber
             if not val or key in inherited:
@@ -118,17 +119,20 @@ def upsert_env(var_name: str, value: str, *, scope: EnvScope = "global") -> Path
     """
     env_path = _env_path_for_scope(scope)
     env_path.parent.mkdir(parents=True, exist_ok=True)
+    # Create privately before reading or writing.  ``write_text`` alone uses
+    # the process umask and previously left newly-created key files at 0644.
+    env_path.touch(mode=0o600, exist_ok=True)
+    env_path.chmod(0o600)
     lines: list[str] = []
     found = False
 
-    if env_path.exists():
-        raw = env_path.read_text(encoding="utf-8")
-        for line in raw.splitlines():
-            if re.match(rf"^{re.escape(var_name)}\s*=", line):
-                lines.append(f"{var_name}={value}")
-                found = True
-            else:
-                lines.append(line)
+    raw = env_path.read_text(encoding="utf-8")
+    for line in raw.splitlines():
+        if re.match(rf"^{re.escape(var_name)}\s*=", line):
+            lines.append(f"{var_name}={value}")
+            found = True
+        else:
+            lines.append(line)
 
     if not found:
         lines.append(f"{var_name}={value}")
@@ -256,6 +260,7 @@ def remove_env(var_name: str) -> bool:
     for env_path in paths:
         if not env_path.exists():
             continue
+        env_path.chmod(0o600)
         kept: list[str] = []
         path_removed = False
         for line in env_path.read_text(encoding="utf-8").splitlines():

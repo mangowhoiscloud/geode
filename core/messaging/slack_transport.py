@@ -76,6 +76,14 @@ class SlackTransportError(Exception):
     """A Slack Web API call failed (``error`` field or HTTP failure)."""
 
 
+def _slack_retry_after_seconds(headers: Any) -> float:
+    """Parse Slack's retry delay, falling back safely on malformed headers."""
+    try:
+        return max(float(headers.get("Retry-After", "1")), 0.0)
+    except (TypeError, ValueError):
+        return 1.0
+
+
 async def open_socket_mode_url(app_token: str | None = None) -> str:
     """Issue a validated temporary Socket Mode URL with an app-level token.
 
@@ -96,7 +104,7 @@ async def open_socket_mode_url(app_token: str | None = None) -> str:
         for attempt in range(_MAX_RATE_LIMIT_RETRIES + 1):
             response = await client.post(_SOCKET_OPEN_URL, json={}, headers=headers)
             if response.status_code == 429 and attempt < _MAX_RATE_LIMIT_RETRIES:
-                delay = max(float(response.headers.get("Retry-After", "1")), 0.0)
+                delay = _slack_retry_after_seconds(response.headers)
                 log.info("Slack Socket Mode URL rate-limited — retrying in %.0fs", delay)
                 await asyncio.sleep(delay)
                 continue
@@ -170,11 +178,11 @@ class SlackTransport:
                 else:
                     resp = await client.post(f"{_API_BASE}/{method}", json=payload, headers=headers)
                 if resp.status_code == 429 and attempt < _MAX_RATE_LIMIT_RETRIES:
-                    delay = float(resp.headers.get("Retry-After", "1"))
+                    delay = _slack_retry_after_seconds(resp.headers)
                     log.info("Slack 429 on %s — retrying in %.0fs", method, delay)
                     # Slack's Retry-After value is the contract. Capping it
                     # below the requested delay simply causes another 429.
-                    await asyncio.sleep(max(delay, 0.0))
+                    await asyncio.sleep(delay)
                     continue
                 resp.raise_for_status()
                 self._last_headers = dict(resp.headers)

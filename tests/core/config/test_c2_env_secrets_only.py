@@ -36,6 +36,7 @@ def test_upsert_env_defaults_to_global_secret_store(env_paths: dict[str, Path]) 
     written = upsert_env("ANTHROPIC_API_KEY", "sk-test")
     assert written == env_paths["global"]
     assert "ANTHROPIC_API_KEY=sk-test" in env_paths["global"].read_text()
+    assert env_paths["global"].stat().st_mode & 0o777 == 0o600
     assert not env_paths["project"].exists()
 
 
@@ -45,7 +46,20 @@ def test_upsert_env_can_target_project_scope(
     written = upsert_env("ANTHROPIC_API_KEY", "sk-project", scope="project")
     assert written == env_paths["project"]
     assert "ANTHROPIC_API_KEY=sk-project" in env_paths["project"].read_text()
+    assert env_paths["project"].stat().st_mode & 0o777 == 0o600
     assert not env_paths["global"].exists()
+
+
+def test_load_env_files_repairs_existing_secret_permissions(env_paths: dict[str, Path]) -> None:
+    from core.config.env_io import load_env_files
+
+    env_paths["global"].parent.mkdir(parents=True, exist_ok=True)
+    env_paths["global"].write_text("ANTHROPIC_API_KEY=sk-test\n")
+    env_paths["global"].chmod(0o644)
+
+    load_env_files()
+
+    assert env_paths["global"].stat().st_mode & 0o777 == 0o600
 
 
 @pytest.fixture()

@@ -74,7 +74,7 @@ export default function Page() {
             </p>
 
             <h2>키와 설정이 사는 곳</h2>
-            <p>역할이 파일별로 분리되어 있습니다. 키는 .env, 동작은 config.toml입니다.</p>
+            <p>역할이 파일별로 분리되어 있습니다. 키와 프로필은 로컬 비밀 파일, 동작은 config.toml에 둡니다.</p>
             <table>
               <thead>
                 <tr><th>파일</th><th>역할</th></tr>
@@ -82,7 +82,11 @@ export default function Page() {
               <tbody>
                 <tr>
                   <td><code>~/.geode/.env</code></td>
-                  <td>시크릿 전용. <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>OPENROUTER_API_KEY</code>, <code>ZAI_API_KEY</code>. 전역 파일이 권위를 가지며 프로젝트 <code>.env</code>는 빠진 값만 채웁니다.</td>
+                  <td>시크릿 전용 평문 파일(<code>0600</code>). <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>OPENROUTER_API_KEY</code>, <code>ZAI_API_KEY</code>. 전역 파일이 권위를 가지며 프로젝트 <code>.env</code>는 빠진 값만 채웁니다.</td>
+                </tr>
+                <tr>
+                  <td><code>~/.geode/auth.toml</code></td>
+                  <td>Plan/Profile 메타데이터와 GEODE가 관리하는 자격증명 평문 파일(<code>0600</code>). 외부 CLI가 관리하는 자격증명은 복제하지 않습니다.</td>
                 </tr>
                 <tr>
                   <td><code>~/.geode/config.toml</code></td>
@@ -98,6 +102,13 @@ export default function Page() {
                 </tr>
               </tbody>
             </table>
+            <p>
+              이 두 비밀 파일은 Git에서 제외되고 읽기·쓰기 때 소유자 전용 권한을
+              강제하지만 OS Keychain은 아닙니다. 같은 사용자 권한으로 실행되는
+              프로세스까지 격리하지는 못하므로 공유·비신뢰 호스트에서는 환경
+              주입 또는 전용 secret manager를 사용합니다. Google Workspace OAuth의
+              OS keyring 저장소는 이 LLM API-key 경로와 별개입니다.
+            </p>
             <p>
               모델, effort, 로그인 소스를 .env에 적는 방식은 폐기되었습니다.
               예전 버전이 남긴 .env의 모델 줄은 <code>/model</code>이 toml에
@@ -151,6 +162,28 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               <code>/model</code>로 직접 고르는 것이 의도된 복구 경로입니다.
               폴백 체인이 필요하면 <code>~/.geode/routing.toml</code>에서
               옵트인합니다.
+            </p>
+
+            <h2>재시도 경계</h2>
+            <p>
+              <code>llm_max_retries</code>는 최초 호출을 포함한 모델별 총 시도
+              횟수입니다(기본 3). 메인 에이전트 루프, 보조 호출, scaffold-search
+              mutator가 같은 설정을 사용하지만 각 논리 호출은 별도 예산을 가집니다.
+              SDK 자체 재시도는 0으로 두어 두 계층의 횟수가 곱해지지 않게 합니다.
+            </p>
+            <p>
+              연결 실패, timeout, 408/409, 일시적 429, 5xx만 jitter backoff로
+              재시도합니다. <code>retry-after-ms</code>와 숫자/HTTP-date 형식의
+              <code>Retry-After</code>를 존중하되 60초를 넘는 대기는 즉시
+              사용자에게 돌려줍니다. 인증·잘못된 요청·결제 소진과 이미 출력이
+              보인 stream 중단은 재호출하지 않습니다.
+            </p>
+            <p>
+              이 호출 예산은 도구 재실행 권한이 아닙니다. 로컬 부작용은 durable
+              effect receipt로 완료 여부를 확인하고, MCP 재접속은 서버가
+              <code>readOnlyHint</code> 또는 <code>idempotentHint</code>를 선언한
+              도구만 재호출합니다. scaffold-search의 <code>--mc</code>는
+              반복적/무효 후보의 의미적 재제안 횟수이며 네트워크 재시도가 아닙니다.
             </p>
 
             <h2>실패 모드</h2>
@@ -255,7 +288,7 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
             </p>
 
             <h2>Where keys and settings live</h2>
-            <p>Roles are split by file. Keys in .env, behavior in config.toml.</p>
+            <p>Roles are split by file. Keys and profiles live in local secret files; behavior lives in config.toml.</p>
             <table>
               <thead>
                 <tr><th>File</th><th>Role</th></tr>
@@ -263,7 +296,11 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               <tbody>
                 <tr>
                   <td><code>~/.geode/.env</code></td>
-                  <td>Secrets only. <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>OPENROUTER_API_KEY</code>, <code>ZAI_API_KEY</code>. The global file is authoritative; a project <code>.env</code> only fills missing values.</td>
+                  <td>Secrets-only plaintext file (<code>0600</code>). <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>OPENROUTER_API_KEY</code>, <code>ZAI_API_KEY</code>. The global file is authoritative; a project <code>.env</code> only fills missing values.</td>
+                </tr>
+                <tr>
+                  <td><code>~/.geode/auth.toml</code></td>
+                  <td>Plan/Profile metadata and GEODE-managed credentials in an owner-only plaintext file (<code>0600</code>). Credentials owned by external CLIs are not copied.</td>
                 </tr>
                 <tr>
                   <td><code>~/.geode/config.toml</code></td>
@@ -279,6 +316,14 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
                 </tr>
               </tbody>
             </table>
+            <p>
+              Both secret files are Git-ignored and forced to owner-only mode
+              when read or written, but they are not OS Keychain storage. They
+              do not isolate a process already running as the same user; use
+              environment injection or a dedicated secret manager on shared or
+              untrusted hosts. The Google Workspace OAuth keyring is a separate
+              path from these LLM API keys.
+            </p>
             <p>
               Writing the model, effort, or login source to .env is retired.
               When an older release left a model line in .env, the
@@ -333,6 +378,31 @@ geode about                   # the EFFECTIVE model + provider`}</pre>
               model in <code>/model</code> is the intended recovery. If you want
               a fallback chain, opt in by editing
               <code>~/.geode/routing.toml</code>.
+            </p>
+
+            <h2>Retry boundaries</h2>
+            <p>
+              <code>llm_max_retries</code> is the total attempts per model,
+              including the initial call (default 3). The main agent loop,
+              auxiliary calls, and scaffold-search mutator read the same setting,
+              while each logical call keeps its own budget. SDK retries stay at
+              zero so two retry layers cannot multiply the attempt count.
+            </p>
+            <p>
+              Only connection failures, timeouts, 408/409, transient 429, and
+              5xx responses use jittered backoff. GEODE honors
+              <code>retry-after-ms</code> and numeric/HTTP-date
+              <code>Retry-After</code>, but surfaces waits above 60 seconds instead
+              of silently blocking. Authentication, invalid requests, depleted
+              billing, and a stream failure after visible output are not replayed.
+            </p>
+            <p>
+              This call budget does not authorize tool replay. Local effects use
+              durable effect receipts to distinguish committed from uncertain
+              work; MCP reconnect retries only tools declaring
+              <code>readOnlyHint</code> or <code>idempotentHint</code>.
+              Scaffold-search <code>--mc</code> counts semantic re-proposals of
+              repetitive/invalid candidates, not network retries.
             </p>
 
             <h2>Failure modes</h2>

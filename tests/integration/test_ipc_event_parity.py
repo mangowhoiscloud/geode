@@ -1,7 +1,7 @@
 """IPC event parity test — ensures all produced events are consumed.
 
-Root cause prevention: PR #638 added emit_llm_retry/emit_llm_error/
-emit_retry_wait to agentic_ui.py but forgot to register them in
+Root cause prevention: PR #638 added retry/error emitters to agentic_ui.py but
+forgot to register their event vocabulary in
 ipc_client.py, causing raw dicts to leak to the user console.
 
 This test extracts all send_event("event_name") calls from production code

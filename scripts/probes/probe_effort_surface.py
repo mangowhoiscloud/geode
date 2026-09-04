@@ -99,29 +99,37 @@ async def _acomplete_with_runtime_retry(
     *,
     timeout_s: float,
     retry_history: list[dict[str, Any]],
-    sleep: Any = asyncio.sleep,
 ) -> Any:
-    """Mirror AgenticLoop's five-attempt retry for pre-response failures."""
+    """Use AgenticLoop's configured pre-response retry policy."""
     from core.llm.errors import classify_llm_error
+    from core.llm.fallback import interactive_retry_policy, run_with_retry_policy
 
-    retryable = {"connection", "server", "timeout", "unknown"}
-    for attempt in range(1, 6):
+    async def call(_model: str) -> Any:
         try:
             return await asyncio.wait_for(adapter.acomplete(request), timeout_s)
         except Exception as exc:
             category, _, _ = classify_llm_error(exc)
             retry_history.append(
                 {
-                    "attempt": attempt,
+                    "attempt": len(retry_history) + 1,
                     "error_type": type(exc).__name__,
                     "error_category": category,
                     "error": str(exc)[:2000],
                 }
             )
-            if category not in retryable or attempt == 5:
-                raise
-            await sleep(min(2**attempt, 30))
-    raise AssertionError("bounded effort measurement retry did not terminate")
+            raise
+
+    outcome = await run_with_retry_policy(
+        [request.model],
+        call,
+        policy=interactive_retry_policy(),
+        provider_label="effort probe",
+    )
+    if outcome.succeeded:
+        return outcome.value
+    if outcome.last_error is not None:
+        raise outcome.last_error
+    raise RuntimeError("effort measurement has no allowed model")
 
 
 async def measure(

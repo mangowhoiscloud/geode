@@ -26,7 +26,7 @@ export default function Page() {
                 <tr><th>구성</th><th>코드</th></tr>
               </thead>
               <tbody>
-                <tr><td>프로바이더 유틸리티</td><td><code>core/llm/providers/anthropic.py</code>, <code>codex.py</code>, <code>glm.py</code>, <code>openrouter.py</code>. 재시도·quota·identity/request shaping을 어댑터에 제공</td></tr>
+                <tr><td>프로바이더 유틸리티</td><td><code>core/llm/providers/anthropic.py</code>, <code>codex.py</code>, <code>glm.py</code>, <code>openrouter.py</code>. quota·identity·request shaping을 어댑터에 제공</td></tr>
                 <tr><td>비동기 호출 어댑터</td><td><code>core/llm/adapters/</code>. SDK client와 <code>acomplete()</code> 호출 표면 소유</td></tr>
                 <tr><td>프로바이더 composition</td><td><code>core/llm/registry.py</code>. 모델 identity, credential route, transport/API shape를 분리해 선언</td></tr>
                 <tr><td>어댑터 레지스트리</td><td><code>core/llm/adapters/registry.py</code>의 <code>bootstrap_builtins()</code>. 내장 factory와 운영자 정책이 승인한 <code>geode.llm_adapters</code> 진입점을 불변 generation snapshot으로 검색</td></tr>
@@ -86,11 +86,12 @@ export default function Page() {
 
             <h2>재시도와 fast-fail</h2>
             <p>
-              재시도는 <code>core/llm/fallback.py</code>의{" "}
-              <code>retry_with_backoff_generic</code>이 담당합니다. 상태를 가진
-              CircuitBreaker 클래스는 없습니다. <code>core/llm/errors.py</code>의
-              두 판정 함수가 재시도를
-              단락(short-circuit)시킵니다.
+              분류와 지연은 <code>core/llm/fallback.py</code>의{" "}
+              <code>RetryPolicy</code>, <code>classify_retry_error</code>,{" "}
+              <code>retry_delay_for</code>가 공유합니다. 메인 루프는 동일 모델
+              안에서, 보조 호출은 <code>run_with_retry_policy</code>로 명시된
+              모델 체인 안에서만 실행합니다. SDK 재시도는 0입니다. 상태를 가진
+              CircuitBreaker 클래스는 없습니다.
             </p>
             <table>
               <thead>
@@ -99,6 +100,8 @@ export default function Page() {
               <tbody>
                 <tr><td><code>is_billing_fatal</code></td><td>결제, 쿼터 소진</td><td>재시도 없이 즉시 실패</td></tr>
                 <tr><td><code>is_request_fatal</code></td><td>400류 요청 오류</td><td>같은 요청을 다시 보내봤자 같은 결과이므로 즉시 실패</td></tr>
+                <tr><td><code>classify_retry_error</code></td><td>연결, timeout, 408/409/429/5xx</td><td>설정된 총 시도 횟수 안에서 jitter backoff</td></tr>
+                <tr><td>stream/effect guard</td><td>이미 보인 출력, 불확실한 부작용</td><td>동일 호출을 재실행하지 않고 중단 또는 reconcile</td></tr>
               </tbody>
             </table>
 
@@ -168,7 +171,7 @@ export default function Page() {
                 <tr><th>Piece</th><th>Code</th></tr>
               </thead>
               <tbody>
-                <tr><td>Provider utilities</td><td><code>core/llm/providers/anthropic.py</code>, <code>codex.py</code>, <code>glm.py</code>, and <code>openrouter.py</code>; provide retry, quota, identity, and request shaping to adapters</td></tr>
+                <tr><td>Provider utilities</td><td><code>core/llm/providers/anthropic.py</code>, <code>codex.py</code>, <code>glm.py</code>, and <code>openrouter.py</code>; provide quota, identity, and request shaping to adapters</td></tr>
                 <tr><td>Async call adapters</td><td><code>core/llm/adapters/</code>; own SDK clients and the <code>acomplete()</code> call surface</td></tr>
                 <tr><td>Provider composition</td><td><code>core/llm/registry.py</code>; separately declares model identity, credential route, and transport/API shape</td></tr>
                 <tr><td>Adapter registry</td><td><code>bootstrap_builtins()</code> in <code>core/llm/adapters/registry.py</code>; discovers built-in factories and operator-authorized <code>geode.llm_adapters</code> entry points into an immutable generation snapshot</td></tr>
@@ -229,10 +232,12 @@ export default function Page() {
 
             <h2>Retry and fast-fail</h2>
             <p>
-              Retries run through <code>retry_with_backoff_generic</code> in{" "}
-              <code>core/llm/fallback.py</code>. There is no stateful
-              CircuitBreaker class. Instead, two predicates in{" "}
-              <code>core/llm/errors.py</code> short-circuit the retry loop.
+              Classification and delay are shared by <code>RetryPolicy</code>,{" "}
+              <code>classify_retry_error</code>, and <code>retry_delay_for</code> in{" "}
+              <code>core/llm/fallback.py</code>. The main loop stays on one
+              model; auxiliary calls use <code>run_with_retry_policy</code> only
+              inside an explicit model chain. SDK retries are zero. There is no
+              stateful CircuitBreaker class.
             </p>
             <table>
               <thead>
@@ -241,6 +246,8 @@ export default function Page() {
               <tbody>
                 <tr><td><code>is_billing_fatal</code></td><td>Billing, quota exhaustion</td><td>Fail immediately, no retry</td></tr>
                 <tr><td><code>is_request_fatal</code></td><td>400-class request errors</td><td>Resending the same request yields the same result, so fail immediately</td></tr>
+                <tr><td><code>classify_retry_error</code></td><td>Connection, timeout, 408/409/429/5xx</td><td>Jittered backoff within the configured total-attempt budget</td></tr>
+                <tr><td>Stream/effect guard</td><td>Visible output or uncertain side effects</td><td>Stop or reconcile instead of replaying the same call</td></tr>
               </tbody>
             </table>
 

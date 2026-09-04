@@ -379,6 +379,7 @@ async def call_provider(
         RetryAttempt,
         classify_retry_error,
         interactive_retry_policy,
+        retry_delay_for,
     )
 
     retry_policy = interactive_retry_policy(max_attempts=loop._LLM_RETRY_CAP)
@@ -465,22 +466,6 @@ async def call_provider(
     loop._save_checkpoint(turn.user_input, round_idx=round_idx)
 
     retry_action = retry_policy.action_for(error_type)
-    if error_type == "rate_limit":
-        result = _guards._build_model_action_result(
-            loop,
-            error_type=error_type,
-            severity=severity,
-            hint=hint,
-            rounds=round_idx + 1,
-            detail=loop._last_llm_error or str(adapter_exc),
-        )
-        return await assemble_termination(
-            loop,
-            result,
-            user_input=turn.user_input,
-            round_idx=round_idx + 1,
-        )
-
     if retry_action is RetryAction.TERMINAL:
         result = _guards._build_model_action_result(
             loop,
@@ -497,7 +482,7 @@ async def call_provider(
             round_idx=round_idx + 1,
         )
 
-    if loop._consecutive_llm_failures >= 2:
+    if 2 <= loop._consecutive_llm_failures < retry_policy.max_attempts:
         recovered = await _context.aggressive_context_recovery(
             loop,
             call.system_prompt,
@@ -515,11 +500,29 @@ async def call_provider(
                 loop._consecutive_llm_failures,
                 loop.model,
             )
-            loop._set_llm_retry_count(0)
             return None
 
     if loop._consecutive_llm_failures < retry_policy.max_attempts:
-        delay = retry_policy.delay_for(loop._consecutive_llm_failures)
+        delay = retry_delay_for(
+            retry_policy,
+            loop._consecutive_llm_failures,
+            adapter_exc,
+        )
+        if delay is None:
+            result = _guards._build_model_action_result(
+                loop,
+                error_type=error_type,
+                severity=severity,
+                hint=hint,
+                rounds=round_idx + 1,
+                detail=loop._last_llm_error or str(adapter_exc),
+            )
+            return await assemble_termination(
+                loop,
+                result,
+                user_input=turn.user_input,
+                round_idx=round_idx + 1,
+            )
         retry_event = RetryAttempt(
             policy=retry_policy.name,
             model=loop.model,
@@ -531,7 +534,7 @@ async def call_provider(
             elapsed_s=None,
         )
         log.info(
-            "LLM call failed (%s) — retrying in %ds (attempt %d/%d)",
+            "LLM call failed (%s) — retrying in %.1fs (attempt %d/%d)",
             error_type,
             delay,
             loop._consecutive_llm_failures,
@@ -540,7 +543,7 @@ async def call_provider(
         if not loop._quiet:
             from core.ui.agentic_ui import emit_llm_retry
 
-            emit_llm_retry(int(delay), loop._consecutive_llm_failures, retry_policy.max_attempts)
+            emit_llm_retry(delay, loop._consecutive_llm_failures, retry_policy.max_attempts)
         if loop._hooks:
             await loop._hooks.trigger_async(
                 HookEvent.LLM_CALL_RETRIED,
