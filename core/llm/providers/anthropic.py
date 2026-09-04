@@ -1,10 +1,9 @@
-"""Anthropic provider — low-level client + retry/quota utilities.
+"""Anthropic provider — low-level shaping and quota utilities.
 
-Owns the SYNC Anthropic client (configured httpx pool), retry/backoff, quota
-banner feeding, prompt-cache helpers, and native-tool shaping consumed by
-``core/llm/adapters``. Async clients live in the adapters layer
-(``build_async_anthropic_client``) — the provider-level async getter was
-removed 2026-07-29 once its last caller (the legacy agentic adapter) was gone.
+Owns quota banner feeding, prompt-cache helpers, native-tool shaping consumed
+by ``core/llm/adapters``, and a compatibility retry wrapper. SDK clients live
+in the adapters layer; the provider-level getter was removed 2026-07-29 once
+its last caller was gone.
 """
 
 from __future__ import annotations

@@ -1,5 +1,10 @@
 # R5.4 Call-stack convergence
 
+> Historical implementation contract. Retry behavior was re-audited and
+> superseded on 2026-09-03 by
+> [`2026-09-03-frontier-retry-policy-alignment.md`](2026-09-03-frontier-retry-policy-alignment.md).
+> The matrices below preserve the R5.4 baseline, not the current contract.
+
 > Execution status is owned only by
 > [`docs/architecture/extensibility-roadmap.md`](../architecture/extensibility-roadmap.md).
 > This document records the implementation contract for `LLM-004`; it does

@@ -241,7 +241,7 @@ export default function Page() {
                 <tr><td><code>llm_pool_timeout</code></td><td>10.0</td><td>풀 대기 타임아웃.</td></tr>
                 <tr><td><code>llm_retry_base_delay</code></td><td>2.0</td><td>재시도 기본 지연.</td></tr>
                 <tr><td><code>llm_retry_max_delay</code></td><td>30.0</td><td>재시도 최대 지연.</td></tr>
-                <tr><td><code>llm_max_retries</code></td><td>3</td><td>재시도 횟수.</td></tr>
+                <tr><td><code>llm_max_retries</code></td><td>3</td><td>최초 호출을 포함한 모델별 총 시도 횟수. 메인 루프·보조 호출·scaffold-search mutator가 공유합니다.</td></tr>
                 <tr><td><code>llm_max_fallback_cost_ratio</code></td><td>0.0</td><td>폴백 비용 비율 상한. 0이면 무제한.</td></tr>
               </tbody>
             </table>
@@ -602,7 +602,7 @@ export default function Page() {
                 <tr><td><code>llm_pool_timeout</code></td><td>10.0</td><td>Pool wait timeout.</td></tr>
                 <tr><td><code>llm_retry_base_delay</code></td><td>2.0</td><td>Retry base delay.</td></tr>
                 <tr><td><code>llm_retry_max_delay</code></td><td>30.0</td><td>Retry max delay.</td></tr>
-                <tr><td><code>llm_max_retries</code></td><td>3</td><td>Retry count.</td></tr>
+                <tr><td><code>llm_max_retries</code></td><td>3</td><td>Total attempts per model, including the initial call; shared by the main loop, auxiliary calls, and scaffold-search mutator.</td></tr>
                 <tr><td><code>llm_max_fallback_cost_ratio</code></td><td>0.0</td><td>Fallback cost-ratio cap. 0 means unlimited.</td></tr>
               </tbody>
             </table>

@@ -44,7 +44,8 @@ async def call_with_failover(
     Args:
         models: Ordered list of model names to try.
         call_fn: Async callable ``(model: str) -> response``.
-        max_retries: Per-model retry count (default: settings.llm_max_retries).
+        max_retries: Legacy name for total attempts per model, including the
+            initial call (default: settings.llm_max_retries).
         retry_base_delay: Base delay in seconds (default: settings.llm_retry_base_delay).
         retry_max_delay: Max delay cap in seconds (default: settings.llm_retry_max_delay).
 

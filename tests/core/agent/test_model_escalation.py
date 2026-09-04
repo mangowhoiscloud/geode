@@ -22,7 +22,7 @@ from unittest.mock import MagicMock
 from core.agent.conversation import ConversationContext
 from core.agent.loop import AgenticLoop, AgenticLoopConfig, _guards, _model_switching
 from core.agent.tool_executor import ToolExecutor
-from core.config import ANTHROPIC_PRIMARY
+from core.config import ANTHROPIC_PRIMARY, settings
 
 
 def _make_loop(
@@ -49,11 +49,12 @@ class TestNoAutoEscalation:
         assert not hasattr(AgenticLoop, "_try_cross_provider_escalation")
         assert not hasattr(AgenticLoop, "_persist_escalated_model")
 
-    def test_loop_has_no_escalation_threshold_constant(self) -> None:
+    def test_loop_has_no_escalation_threshold_constant(self, monkeypatch: Any) -> None:
+        monkeypatch.setattr(settings, "llm_max_retries", 4)
         loop = _make_loop()
         assert not hasattr(loop, "_ESCALATION_THRESHOLD")
         # Retry budget for the *same* model is still here.
-        assert loop._LLM_RETRY_CAP == 5
+        assert loop._LLM_RETRY_CAP == 4
         assert loop._consecutive_llm_failures == 0
 
     def test_model_switching_module_strips_escalation_helpers(self) -> None:

@@ -29,7 +29,7 @@ owns only the package version and sync date.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 581 production Python files,
+The current snapshot records 580 production Python files,
 700 test Python files,
 86 tool definitions, and
 57 `RuntimeEvent` members.
@@ -118,11 +118,12 @@ LLM router, providers, prompt assembly, hashing.
 - `prompt_assembler.py` — math-output helper used by the active prompt path.
   Production assembly lives in `core.agent.system_prompt` plus AgenticLoop
   per-round context; the legacy `PromptAssembler` class was removed.
-- `providers/` — low-level utilities only (retry, quota, cache and
-  native-tool shaping) consumed by `adapters/`; the sync client layer and
+- `providers/` — low-level quota, cache, identity, and native-tool shaping
+  consumed by `adapters/`; app-owned retry policy lives in `fallback.py` and
+  the loop/router call sites. The sync client layer and
   `providers/openai.py` were deleted 2026-07-29 — LLM completion is
   async-only and every SDK client is owned by `adapters/`.
-- `providers/anthropic.py` — retry/quota, prompt-cache + breakpoint helpers,
+- `providers/anthropic.py` — quota, prompt-cache + breakpoint helpers,
   native-tool and defer shaping.
 - `providers/glm.py` — GLM 5.x family. Context window 202_752 (not 200_000).
   Thinking gate (`thinking.type="off"|"none"`).

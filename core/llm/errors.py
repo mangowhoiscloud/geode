@@ -91,8 +91,8 @@ def __getattr__(name: str) -> Any:
 
 
 # v0.52.2 — billing-fatal error codes by provider SDK shape.
-# Retrying these wastes 40s per call (5 attempts × exponential backoff)
-# and never succeeds — billing/quota issues require user action, not a retry.
+# Retrying these wastes every configured attempt and never succeeds —
+# billing/quota issues require user action, not a retry.
 # Source: simonw/llm #112 (insufficient_quota → no retry), Hermes lesson
 # (no retry on classified non-transient), OpenClaw NON_RETRYABLE_ERRORS.
 _GLM_BILLING_CODES: frozenset[str] = frozenset(
@@ -236,7 +236,7 @@ _ERROR_CLASSIFICATION: dict[str, tuple[str, str, str]] = {
     "rate_limit": (
         "rate_limit",
         "warning",
-        "API rate limited. Switch to a different model with /model and re-run.",
+        "API rate limited. Retrying briefly; switch model with /model if it persists.",
     ),
     "timeout": ("timeout", "warning", "Request timed out. Retrying with backoff."),
     "connection": ("connection", "warning", "Connection failed. Check network or retry."),
@@ -354,8 +354,8 @@ def is_request_fatal(exc: Exception) -> bool:
     request-shape errors that the same backend will reject on every
     attempt. Production trigger: Codex backend rejected
     ``max_output_tokens`` with 400 ``"Unsupported parameter: max_output_tokens"``;
-    the retry loop hammered the same 400 across 5 attempts × 3 fallback
-    models = ~30s wasted before the circuit breaker opened.
+    the retry loop hammered the same 400 across every configured attempt and
+    fallback model before the request-fatal guard was added.
 
     We match on a small allow-list of HTTP status / detail substrings so
     a transient 400 (e.g. malformed JSON in a streamed body) doesn't

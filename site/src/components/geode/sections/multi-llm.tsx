@@ -17,9 +17,9 @@ const pipelinePricing = [
 /* ── Agentic pricing ── */
 const agenticPricing = [
   { model: "claude-opus-4-6", role: "Primary (기본)", roleEn: "Primary (Default)", input: "$5.00", output: "$25.00", color: "#F4B8C8" },
-  { model: "claude-sonnet-4-6", role: "Failover #1", roleEn: "Failover #1", input: "$3.00", output: "$15.00", color: "#818CF8" },
-  { model: "gpt-5.4", role: "Cross-Provider Failover", roleEn: "Cross-Provider Failover", input: "$2.50", output: "$15.00", color: "#34D399" },
-  { model: "glm-5", role: "Budget / Cross-Provider", roleEn: "Budget / Cross-Provider", input: "$0.72", output: "$2.30", color: "#F5C542" },
+  { model: "claude-sonnet-4-6", role: "선택 가능 경로", roleEn: "Selectable Route", input: "$3.00", output: "$15.00", color: "#818CF8" },
+  { model: "gpt-5.4", role: "선택 가능 경로", roleEn: "Selectable Route", input: "$2.50", output: "$15.00", color: "#34D399" },
+  { model: "glm-5", role: "저비용 선택 경로", roleEn: "Lower-Cost Route", input: "$0.72", output: "$2.30", color: "#F5C542" },
   { model: "claude-haiku-4-5", role: "Token Guard (budget)", roleEn: "Token Guard (Budget)", input: "$1.00", output: "$5.00", color: "#4ECDC4" },
 ];
 
@@ -30,36 +30,36 @@ const safeguardSteps = [
     nameKo: "Error Classification", nameEn: "Error Classification",
     descKo: "LLM 에러 발생 즉시 classify_llm_error()가 (type, severity, hint) 3-tuple을 반환합니다. 에러 유형별로 재시도 전략이 분기됩니다.",
     descEn: "On LLM error, classify_llm_error() returns a (type, severity, hint) 3-tuple. Retry strategy branches by error type.",
-    tags: ["auth → re-auth", "rate_limit → backoff", "context → prune", "network → switch"],
-    tradeoffKo: "분류 오버헤드 ~2ms. 분류 없이 일괄 retry하면 rate_limit에 같은 provider를 계속 때립니다.",
-    tradeoffEn: "Classification overhead ~2ms. Without it, blind retries keep hitting the same rate-limited provider.",
+    tags: ["auth → stop", "rate_limit → backoff", "context → prune", "network → same model"],
+    tradeoffKo: "요청 오류·인증·결제 한도는 즉시 중단하고, 일시적 연결·서버·rate limit만 제한된 예산 안에서 재시도합니다.",
+    tradeoffEn: "Request, auth, and billing failures stop immediately; only transient connection, server, and rate-limit failures consume the bounded retry budget.",
   },
   {
     id: "A2-b + C1", color: "#F5C542",
     nameKo: "Retry + Jitter Backoff", nameEn: "Retry + Jitter Backoff",
-    descKo: "Full jitter(random.uniform)로 thundering herd를 방지합니다. 사용자에게 실시간 카운트다운과 Ctrl+C 중단 힌트를 표시합니다.",
-    descEn: "Full jitter (random.uniform) prevents thundering herd. Real-time countdown with Ctrl+C abort hint shown to the user.",
-    tags: ["full jitter", "exp backoff 2s~30s", "Ctrl+C abort", "emit_retry_wait"],
-    tradeoffKo: "Jitter는 평균 +0.3~1.7s 레이턴시를 추가합니다. 고정 backoff 대비 P99 레이턴시 38% 감소.",
-    tradeoffEn: "Jitter adds ~0.3-1.7s avg latency. P99 latency 38% lower vs. fixed backoff.",
+    descKo: "Full jitter(random.uniform)와 2~30초 지연 설정을 사용합니다. 실제 다음 호출이 예약된 경우에만 llm_retry 이벤트를 표시합니다.",
+    descEn: "Full jitter (random.uniform) uses the configured 2–30 second bounds. An llm_retry event is shown only when another call is actually scheduled.",
+    tags: ["full jitter", "configurable backoff", "default: 3 total attempts", "llm_retry"],
+    tradeoffKo: "무작위 지연은 동시 재호출 집중을 줄이지만 완료 시간은 변동합니다. 서버가 60초를 넘는 대기를 요구하면 조용히 멈춰 있지 않고 운영자에게 반환합니다.",
+    tradeoffEn: "Random delay reduces synchronized retries but makes completion time variable. Provider waits above 60 seconds return control instead of silently stalling.",
   },
   {
     id: "C1-b", color: "#818CF8",
-    nameKo: "Cross-Provider Dispatch", nameEn: "Cross-Provider Dispatch",
-    descKo: "같은 provider에 retry하면 같은 장애에 부딪힙니다. 첫 retry부터 다른 provider를 시도합니다. CircuitBreaker OPEN인 provider는 건너뜁니다.",
-    descEn: "Retrying the same provider hits the same failure. First retry tries a different provider. Skips providers with OPEN CircuitBreaker.",
-    tags: ["Anthropic → OpenAI", "OPEN skip", "opt-in config", "auto-restore"],
-    tradeoffKo: "Cross-provider 전환은 모델 능력 차이를 수반합니다. 세션 중단보다 품질 저하가 낫습니다. 복구 후 자동 복귀.",
-    tradeoffEn: "Cross-provider swap means capability differences. Quality degradation beats session loss. Auto-restores after recovery.",
+    nameKo: "Explicit Model Chain", nameEn: "Explicit Model Chain",
+    descKo: "대화형 루프는 선택한 모델을 자동 변경하지 않습니다. 보조 작업만 호출자가 명시한 허용 모델 체인을 순서대로 이동할 수 있습니다.",
+    descEn: "The interactive loop never changes the selected model automatically. Auxiliary jobs may traverse only the ordered, allowed model chain supplied by their caller.",
+    tags: ["interactive → same model", "auxiliary only", "allowlist", "no hidden switch"],
+    tradeoffKo: "자동 전환보다 장애가 더 빨리 드러나지만 모델·비용·동작이 사용자 몰래 바뀌지 않습니다.",
+    tradeoffEn: "Failures surface sooner than with automatic switching, but model, cost, and behavior never change behind the operator's back.",
   },
   {
     id: "A3", color: "#4ECDC4",
-    nameKo: "Auto-Checkpoint", nameEn: "Auto-Checkpoint",
-    descKo: "모델 에스컬레이션이나 CRITICAL 에러 직전에 SessionCheckpoint를 자동 저장합니다. 최악의 경우에도 --resume으로 이어서 작업 가능합니다.",
-    descEn: "Automatically saves SessionCheckpoint before model escalation or CRITICAL error. Worst case, resume from last checkpoint via --resume.",
-    tags: ["conversation", "memory", "active plan", "--resume"],
-    tradeoffKo: "체크포인트 저장 ~50ms. 매 LLM 호출(~3s)의 1.6% 수준이라 장시간 세션에서도 복구 가능성이 지연 비용보다 큽니다.",
-    tradeoffEn: "Checkpoint save is around 50ms, roughly 1.6% of a 3s LLM call, so recoverability outweighs the latency cost in long-running sessions.",
+    nameKo: "Retry Checkpoint", nameEn: "Retry Checkpoint",
+    descKo: "실패를 분류한 뒤 메시지와 세션 체크포인트를 저장하고 재시도 또는 운영자 반환을 결정합니다. 재개는 저장된 세션 상태를 사용합니다.",
+    descEn: "After classifying a failure, GEODE saves messages and a session checkpoint before deciding to retry or return control. Resume uses that persisted session state.",
+    tags: ["messages", "session state", "before retry", "--resume"],
+    tradeoffKo: "실패마다 작은 로컬 쓰기가 추가되지만 재시도 한도 소진 뒤에도 같은 세션 상태에서 복구할 수 있습니다.",
+    tradeoffEn: "Each failure adds a small local write, preserving a resumable session state after the retry budget is exhausted.",
   },
   {
     id: "A2-c + A2-d", color: "#F4B8C8",
@@ -89,8 +89,8 @@ export function MultiLlmSection() {
           </h2>
           <p className="text-sm sm:text-base text-[#A0B4D4] max-w-xl mb-8 leading-relaxed">
             {t(locale,
-              "파이프라인과 에이전트 루프에서 LLM을 다르게 운용합니다. Port/Adapter DI 패턴으로 런타임에 프로바이더를 교체하고, 프로바이더 장애 시 자동 failover합니다.",
-              "LLMs are operated differently in pipelines vs. agent loops. Providers are swapped at runtime via the Port/Adapter DI pattern, with automatic failover on provider failure."
+              "파이프라인과 에이전트 루프에서 LLM을 다르게 운용합니다. 대화형 루프는 선택 모델을 유지하고, 보조 작업만 명시적으로 전달된 모델 체인을 사용할 수 있습니다.",
+              "LLMs are operated differently in pipelines and agent loops. Interactive turns keep the selected model; only auxiliary jobs may use an explicitly supplied model chain."
             )}
           </p>
         </ScrollReveal>
@@ -101,7 +101,7 @@ export function MultiLlmSection() {
             variant="default"
             tabs={[
               { id: "pipeline", label: "Pipeline", sub: "LLM-as-Judge", color: "#C084FC" },
-              { id: "agentic", label: "Agentic", sub: "Failover Chain", color: "#4ECDC4" },
+              { id: "agentic", label: "Agentic", sub: "Explicit Route", color: "#4ECDC4" },
               { id: "safeguards", label: "Safeguards", sub: "Recovery Chain", color: "#F4B8C8" },
             ]}
             activeId={mode}
@@ -179,7 +179,7 @@ export function MultiLlmSection() {
             </motion.div>
           )}
 
-          {/* ── Agentic Loop: Resilient Failover ── */}
+          {/* ── Agentic Loop: explicit route + bounded retry ── */}
           {mode === "agentic" && (
             <motion.div key="agentic" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }}>
             <div>
@@ -191,7 +191,7 @@ export function MultiLlmSection() {
                     </marker>
                   </defs>
                   <text x={380} y={22} textAnchor="middle" fill="white" fillOpacity={0.4} fontSize={11} fontFamily="ui-monospace, monospace" fontWeight={700}>
-                    {locale === "en" ? "LLM Resilience. Port/Adapter DI Runtime Swap" : "LLM Resilience. Port/Adapter DI 런타임 교체"}
+                    {locale === "en" ? "LLM Resilience. Explicit Route + Bounded Retry" : "LLM Resilience. 명시적 경로 + 제한된 재시도"}
                   </text>
                   <rect x={20} y={35} width={310} height={100} rx={12} fill="rgba(217,119,87,0.04)" stroke="#D97757" strokeWidth={1.5} strokeOpacity={0.3} />
                   <text x={175} y={52} textAnchor="middle" fill="#D97757" fillOpacity={0.6} fontSize={9} fontFamily="ui-monospace, monospace" fontWeight={700}>Anthropic Provider</text>
@@ -199,33 +199,33 @@ export function MultiLlmSection() {
                   <text x={100} y={88} textAnchor="middle" fill="#D97757" fontSize={12} fontFamily="ui-monospace, monospace" fontWeight={700}>Opus 4.6</text>
                   <text x={100} y={106} textAnchor="middle" fill="#D97757" fillOpacity={0.4} fontSize={9} fontFamily="ui-monospace, monospace">Primary</text>
                   <path d="M165,92 C180,92 185,92 195,92" stroke="#E87080" strokeOpacity={0.35} strokeWidth={1.2} strokeDasharray="4 3" fill="none" markerEnd="url(#arr-fail)" />
-                  <text x={180} y={84} textAnchor="middle" fill="#E87080" fillOpacity={0.45} fontSize={8} fontFamily="ui-monospace, monospace">fail</text>
+                  <text x={180} y={84} textAnchor="middle" fill="#E87080" fillOpacity={0.45} fontSize={8} fontFamily="ui-monospace, monospace">choose</text>
                   <rect x={195} y={65} width={120} height={55} rx={10} fill="#0C1220" stroke="#818CF8" strokeWidth={0.8} strokeOpacity={0.35} />
                   <text x={255} y={88} textAnchor="middle" fill="#818CF8" fontSize={11} fontFamily="ui-monospace, monospace" fontWeight={700}>Sonnet 4.6</text>
-                  <text x={255} y={106} textAnchor="middle" fill="#818CF8" fillOpacity={0.4} fontSize={9} fontFamily="ui-monospace, monospace">Failover</text>
+                  <text x={255} y={106} textAnchor="middle" fill="#818CF8" fillOpacity={0.4} fontSize={9} fontFamily="ui-monospace, monospace">Manual option</text>
                   <path d="M330,92 C350,92 365,92 385,92" stroke="#E87080" strokeOpacity={0.35} strokeWidth={1.2} strokeDasharray="4 3" fill="none" markerEnd="url(#arr-fail)" />
-                  <text x={358} y={84} textAnchor="middle" fill="#E87080" fillOpacity={0.45} fontSize={8} fontFamily="ui-monospace, monospace">fail</text>
+                  <text x={358} y={84} textAnchor="middle" fill="#E87080" fillOpacity={0.45} fontSize={8} fontFamily="ui-monospace, monospace">choose</text>
                   <rect x={385} y={35} width={150} height={100} rx={12} fill="rgba(52,211,153,0.04)" stroke="#34D399" strokeWidth={1.5} strokeOpacity={0.3} />
                   <text x={460} y={52} textAnchor="middle" fill="#34D399" fillOpacity={0.6} fontSize={9} fontFamily="ui-monospace, monospace" fontWeight={700}>OpenAI Provider</text>
                   <rect x={400} y={65} width={120} height={55} rx={10} fill="#0C1220" stroke="#34D399" strokeWidth={0.8} strokeOpacity={0.35} />
                   <text x={460} y={88} textAnchor="middle" fill="#34D399" fontSize={11} fontFamily="ui-monospace, monospace" fontWeight={700}>GPT-5.4</text>
-                  <text x={460} y={106} textAnchor="middle" fill="#34D399" fillOpacity={0.4} fontSize={9} fontFamily="ui-monospace, monospace">Cross-Provider</text>
+                  <text x={460} y={106} textAnchor="middle" fill="#34D399" fillOpacity={0.4} fontSize={9} fontFamily="ui-monospace, monospace">Manual option</text>
                   <path d="M535,92 C555,92 565,92 580,92" stroke="#E87080" strokeOpacity={0.35} strokeWidth={1.2} strokeDasharray="4 3" fill="none" markerEnd="url(#arr-fail)" />
-                  <text x={558} y={84} textAnchor="middle" fill="#E87080" fillOpacity={0.45} fontSize={8} fontFamily="ui-monospace, monospace">fail</text>
+                  <text x={558} y={84} textAnchor="middle" fill="#E87080" fillOpacity={0.45} fontSize={8} fontFamily="ui-monospace, monospace">choose</text>
                   <rect x={580} y={35} width={150} height={100} rx={12} fill="rgba(245,197,66,0.04)" stroke="#F5C542" strokeWidth={1.5} strokeOpacity={0.3} />
                   <text x={655} y={52} textAnchor="middle" fill="#F5C542" fillOpacity={0.6} fontSize={9} fontFamily="ui-monospace, monospace" fontWeight={700}>ZhipuAI Provider</text>
                   <rect x={595} y={65} width={120} height={55} rx={10} fill="#0C1220" stroke="#F5C542" strokeWidth={0.8} strokeOpacity={0.35} />
                   <text x={655} y={88} textAnchor="middle" fill="#F5C542" fontSize={11} fontFamily="ui-monospace, monospace" fontWeight={700}>GLM-5</text>
-                  <text x={655} y={106} textAnchor="middle" fill="#F5C542" fillOpacity={0.4} fontSize={9} fontFamily="ui-monospace, monospace">Budget Fallback</text>
+                  <text x={655} y={106} textAnchor="middle" fill="#F5C542" fillOpacity={0.4} fontSize={9} fontFamily="ui-monospace, monospace">Manual option</text>
                   <rect x={20} y={155} width={340} height={55} rx={10} fill="rgba(78,205,196,0.04)" stroke="#4ECDC4" strokeWidth={1} strokeOpacity={0.25} />
                   <text x={190} y={175} textAnchor="middle" fill="#4ECDC4" fillOpacity={0.7} fontSize={10} fontFamily="ui-monospace, monospace" fontWeight={700}>Haiku 4.5 Token Guard (Budget Tier)</text>
                   <text x={190} y={195} textAnchor="middle" fill="#4ECDC4" fillOpacity={0.4} fontSize={9} fontFamily="ui-monospace, monospace">SubAgent summary cap · context budget enforcement</text>
                   <rect x={385} y={155} width={345} height={55} rx={10} fill="rgba(129,140,248,0.04)" stroke="#818CF8" strokeWidth={1} strokeOpacity={0.25} />
                   <text x={557} y={175} textAnchor="middle" fill="#818CF8" fillOpacity={0.7} fontSize={10} fontFamily="ui-monospace, monospace" fontWeight={700}>Retry Policy</text>
-                  <text x={557} y={195} textAnchor="middle" fill="#818CF8" fillOpacity={0.4} fontSize={9} fontFamily="ui-monospace, monospace">max 3 retries · exp backoff + jitter · MODEL_SWITCHED hook</text>
+                  <text x={557} y={195} textAnchor="middle" fill="#818CF8" fillOpacity={0.4} fontSize={9} fontFamily="ui-monospace, monospace">default 3 total attempts · jitter · LLM_CALL_RETRIED</text>
                   <text x={380} y={235} textAnchor="middle" fill="white" fillOpacity={0.2} fontSize={9} fontFamily="ui-monospace, monospace">anthropic-payg · openai-payg · codex-oauth · glm-payg · glm-coding-plan</text>
                   <text x={380} y={252} textAnchor="middle" fill="white" fillOpacity={0.15} fontSize={8} fontFamily="ui-monospace, monospace">
-                    {locale === "en" ? "update_model() runtime swap · MODEL_SWITCHED hook · auto context window adapt" : "update_model() 런타임 교체 · MODEL_SWITCHED hook · auto context window adapt"}
+                    {locale === "en" ? "operator update_model() · no automatic cross-provider switch" : "운영자 update_model() · 자동 cross-provider 전환 없음"}
                   </text>
                 </svg>
               </div>
@@ -236,7 +236,7 @@ export function MultiLlmSection() {
                 </table>
               </div>
               <div className="mt-4 flex flex-wrap gap-1.5">
-                {["anthropic-payg", "openai-payg", "codex-oauth", "glm-payg", "glm-coding-plan", locale === "en" ? "update_model() runtime swap" : "update_model() 런타임 교체", "MODEL_SWITCHED hook"].map((tag) => (
+                {["anthropic-payg", "openai-payg", "codex-oauth", "glm-payg", "glm-coding-plan", locale === "en" ? "operator-selected route" : "운영자 선택 경로", "LLM_CALL_RETRIED hook"].map((tag) => (
                   <span key={tag} className="px-2 py-0.5 rounded text-[11px] font-mono text-[#4ECDC4]/70 bg-[#4ECDC4]/06 border border-[#4ECDC4]/12">{tag}</span>
                 ))}
               </div>

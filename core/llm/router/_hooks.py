@@ -1,7 +1,7 @@
 """LLM router hook system — optional lifecycle hooks for LLM call observability.
 
 Wires HookSystem into the router so call_llm*/call_with_failover can emit
-LLM_CALL_START/END and retry_wait events without depending on hooks at
+LLM_CALL_START/END and retry hook events without depending on hooks at
 import time. ``set_router_hooks`` is invoked from runtime wiring after hooks
 are built.
 """

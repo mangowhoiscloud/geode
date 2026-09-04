@@ -1,6 +1,6 @@
 """Regression pin for PR-ADAPTER-TIMEOUT-AND-SERIALIZATION (2026-05-28).
 
-Three sister fixes that all stem from one production incident — the
+Two fixes that stem from one production incident — the
 operator's 2026-05-28 10-minute hang on a single ``gpt-5.5`` turn (serve
 log 11:06:19 → 11:16:39, 620062 ms latency):
 
@@ -13,16 +13,7 @@ A. **httpx Timeout wiring** — ``build_async_openai_client`` /
    (PAYG OpenAI, Codex OAuth, GLM PAYG, GLM Coding Plan) — capping the
    stall at ``settings.llm_read_timeout`` (default 300 s).
 
-B. **SDK retry → UI bridge** — ``openai._base_client`` logs
-   ``Retrying request to /responses in 0.49 seconds`` at INFO level
-   when it retries, but the line landed only in the serve log file.
-   The operator watching the CLI spinner had no signal. A
-   ``logging.Handler`` on ``openai._base_client`` re-emits the retry
-   line through GEODE's existing ``emit_llm_retry`` event so the same
-   UI surface that agent-loop-side retries use covers SDK-side
-   retries too.
-
-C. **Summary SDK object → dict normalisation** — the same incident's
+B. **Summary SDK object → dict normalisation** — the same incident's
    serve log also surfaced
    ``TypeError: Object of type Summary is not JSON serializable`` from
    ``session_manager.py:433`` because ``translate_codex_response``
@@ -37,7 +28,6 @@ C. **Summary SDK object → dict normalisation** — the same incident's
 from __future__ import annotations
 
 import json
-import logging
 import re
 from types import SimpleNamespace
 
@@ -107,98 +97,7 @@ def test_openai_payg_adapter_inherits_timeout_via_builder() -> None:
 
 
 # ---------------------------------------------------------------------------
-# B — SDK retry log line surfaces through emit_llm_retry
-# ---------------------------------------------------------------------------
-
-
-def test_sdk_retry_visibility_bridge_emits_on_retrying_log_line() -> None:
-    """When openai SDK logs ``Retrying request to ... in 0.5 seconds``,
-    the bridge re-emits the GEODE ``emit_llm_retry`` event so the agentic
-    UI shows the retry — operator no longer sees an opaque spinner."""
-    from core.llm.adapters import _sdk_retry_visibility
-
-    _sdk_retry_visibility._for_test_reset()
-    _sdk_retry_visibility.install()
-
-    emitted: list[tuple[int, int, int]] = []
-
-    def _fake_emit(*, delay_s: int, attempt: int, max_attempts: int) -> None:
-        emitted.append((delay_s, attempt, max_attempts))
-
-    import core.ui.agentic_ui as agentic_ui_pkg
-
-    original = getattr(agentic_ui_pkg, "emit_llm_retry", None)
-    agentic_ui_pkg.emit_llm_retry = _fake_emit  # type: ignore[assignment]
-    try:
-        sdk_logger = logging.getLogger("openai._base_client")
-        # Make sure INFO records reach handlers regardless of root config.
-        sdk_logger.setLevel(logging.INFO)
-        sdk_logger.info("Retrying request to /responses in 0.49 seconds")
-    finally:
-        if original is not None:
-            agentic_ui_pkg.emit_llm_retry = original
-        _sdk_retry_visibility._for_test_reset()
-
-    assert emitted, "Bridge did not re-emit the SDK retry as a GEODE UI event"
-    delay_s, attempt, max_attempts = emitted[0]
-    assert delay_s >= 1
-    assert attempt == 1
-    assert max_attempts == 2
-
-
-def test_sdk_retry_visibility_install_is_idempotent() -> None:
-    """Repeated ``install()`` must not stack handlers — would cause the
-    same retry log line to be emitted N times to the operator."""
-    from core.llm.adapters import _sdk_retry_visibility
-
-    _sdk_retry_visibility._for_test_reset()
-    _sdk_retry_visibility.install()
-    _sdk_retry_visibility.install()
-    _sdk_retry_visibility.install()
-
-    sdk_logger = logging.getLogger("openai._base_client")
-    handler_count = sum(
-        1
-        for h in sdk_logger.handlers
-        if isinstance(h, _sdk_retry_visibility._OpenAISdkRetryEventBridge)
-    )
-    _sdk_retry_visibility._for_test_reset()
-    assert handler_count == 1, f"Expected exactly one retry-bridge handler, got {handler_count}"
-
-
-def test_sdk_retry_visibility_ignores_non_retry_log_lines() -> None:
-    """Only the ``Retrying request to ... in N seconds`` shape triggers
-    the bridge — other openai SDK logs (request starts, response
-    finishes) must not spam the UI."""
-    from core.llm.adapters import _sdk_retry_visibility
-
-    _sdk_retry_visibility._for_test_reset()
-    _sdk_retry_visibility.install()
-
-    emitted: list[object] = []
-
-    def _fake_emit(*, delay_s: int, attempt: int, max_attempts: int) -> None:
-        emitted.append((delay_s, attempt, max_attempts))
-
-    import core.ui.agentic_ui as agentic_ui_pkg
-
-    original = getattr(agentic_ui_pkg, "emit_llm_retry", None)
-    agentic_ui_pkg.emit_llm_retry = _fake_emit  # type: ignore[assignment]
-    try:
-        sdk_logger = logging.getLogger("openai._base_client")
-        sdk_logger.setLevel(logging.INFO)
-        sdk_logger.info("Sending HTTP Request: POST /responses")
-        sdk_logger.info("Received response.completed event")
-    finally:
-        if original is not None:
-            agentic_ui_pkg.emit_llm_retry = original
-        _sdk_retry_visibility._for_test_reset()
-
-    assert emitted == [], f"Bridge emitted on non-retry log lines: {emitted!r} — risks UI spam"
-
-
-# ---------------------------------------------------------------------------
-# C — Summary SDK objects normalise to JSON-safe dicts
+# B — Summary SDK objects normalise to JSON-safe dicts
 # ---------------------------------------------------------------------------
 
 
