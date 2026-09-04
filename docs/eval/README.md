@@ -145,7 +145,7 @@ with 51,985 canonical events and 3,964 exact tool pairs. This is a
 `geode_agent + geode_user` diagnostic, not the native Tau2 user-simulator
 headline; `promotion_authority=none`.
 
-The latest released-package regression is pinned to artifact commit
+An earlier released-package regression is pinned to artifact commit
 [`04ff1c4`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd):
 GEODE `v1.0.12@f99cea63` with GPT-5.4 subscription / effort `high` scored
 MCPMark filesystem/easy **9/10**, Tau2 mock **0/1**, and Tau2 Telecom-small
@@ -158,7 +158,7 @@ do not replace the 278-task Tau2 full-cycle authority.
 | 벤치 | Trust | 측정 | GEODE에서의 역할 | 문서 |
 |---|---|---|---|---|
 | τ²-bench | HIGH | conversational tool-use + DB state-diff (native pass@k) | **accuracy 헤드라인** | [tau2-bench.md](tau2-bench.md) |
-| Terminal-Bench 2.0 | HIGH | shell 자동화 (Docker + tmux + post-run test) | **frontier 시스템 카드 비교 신호** | [terminal-bench-2.md](terminal-bench-2.md) |
+| Terminal-Bench 2.1 | HIGH | containerized terminal 자동화와 task-owned verifier | **frontier 시스템 카드 비교 신호** | [terminal-bench-2.md](terminal-bench-2.md) |
 | Toolathlon | HIGH | 32 real apps × 604 MCP tools × 20턴 long-horizon | **야심 신호 (현 SOTA 38.6%)** | [toolathlon.md](toolathlon.md) |
 | HAL Reliability | HIGH | accuracy 위에 consistency/robustness/safety 레이어 | **차별화 — LangGraph reliability 스토리** | [hal-reliability.md](hal-reliability.md) |
 
@@ -189,7 +189,10 @@ root의 **FS30 `k=3` stability**다. 현재 `WHAM=80%`에서는 live launch를
 게시해 완료했다. 모델·계정 호출과 score는 0이고 `promotion_authority=none`이다.
 Tau2 live call은 Gate 0C `k=3`
 stability, 별도 PAYG 승인, quota headroom을 기다린다. MCPMark
-Verified와 Terminal-Bench 2.1은 앞선 lane이 clean할 때만 진행한다.
+Verified와 Terminal-Bench 2.1 official full submission은 앞선 lane이 clean할
+때만 진행한다. 현재 로컬 Terminal-Bench 증거에는 paired diagnostic과
+[GPT-6 Astra account-scoped E2E smoke](2026-09-05-terminalbench-astra-openssl-smoke.md)가
+있지만 official rank 권한은 없다.
 
 ## Public benchmark serving contract
 
@@ -212,6 +215,7 @@ Current public routes:
 |---|---|
 | `/docs/benchmarks/mcpmark` | MCPMark: Verified available-services headline, service coverage/blockers, run ledger, raw-log links |
 | `/docs/benchmarks/tau2` | Tau2: native user-simulator headline, run ledger, raw-log links |
+| `/docs/benchmarks/terminal-bench` | Terminal-Bench 2.1: canonical execution contract, Astra E2E smoke, verifier receipts, claim limits |
 
 Raw run logs live in the `geode-eval-artifacts` repository
 (https://github.com/mangowhoiscloud/geode-eval-artifacts); each docs page
@@ -249,7 +253,7 @@ Verified 다음에 τ²-bench를 둔다.
 | 벤치 | Smoke 비용 | Full run 비용 | CI 적합도 |
 |---|---|---|---|
 | τ²-bench | <$3 | $200-400 | GHA (smoke), VM (full) |
-| Terminal-Bench 2.0 | <$5 | $30-400 | VM (Docker 필요) |
+| Terminal-Bench 2.1 | <$5 | $30-400 | VM (Docker 필요) |
 | Toolathlon | <$1 | $80-200+ | **VM only** (32 MCP + real creds) |
 | HAL Reliability | <$2 | $150-500 (5×) | VM (full), GHA (single rerun) |
 
@@ -260,12 +264,13 @@ Verified 다음에 τ²-bench를 둔다.
 | Per-PR | τ² airline 5-task smoke | pass^1 −3pp 시 차단 |
 | Weekly (develop) | τ² 4-domain × 1 trial | telecom −3pp 시 알림 |
 | Monthly (main) | HAL Reliability 5-rerun + Toolathlon 15-task | accuracy −3pp / consistency −0.05 / robustness −0.05 시 release block |
-| Quarterly | Terminal-Bench 2.0 89-task full + Toolathlon 109-task full | 베이스라인 갱신 |
+| Quarterly | Terminal-Bench 2.1 89-task full + Toolathlon 109-task full | 베이스라인 갱신 |
 
 ## 변경 이력
 
 | 일자 | 변경 |
 |---|---|
+| 2026-09-05 | GPT-6 Astra/high OpenAI subscription E2E smoke 게시: canonical Terminal-Bench 2.1 `openssl-selfsigned-cert` reward 1/1, verifier 6/6, retry/fallback 0. 공개 9 files / 30,857 bytes를 artifact commit `a32abcb`에서 byte-for-byte 재검증. 1-task account-scoped smoke이며 suite·rank·일반 가용성 권한은 없음 |
 | 2026-09-01 | R11.2 prospective native Skill contract 동결: web/repository/delegation 18 source examples를 design 6/final 12로 분리하고 family별 production tool schema, deterministic verifier, pair drift, source-example ITT·cluster uncertainty를 고정. live model call과 새 score는 0이며 기존 72-arm 진단은 변경하지 않음 |
 | 2026-08-26 | GPT-5.6 Sol/max runtime-skill attribution 12-case paired diagnostic 게시: 24/24 valid, with-skill 6/12 vs without-skill 2/12, frozen delta +4/12 supported. Explicit with-skill 0/3, `deep-researcher` positive 0/3, negative-control activation을 승격 blocker로 보존하고 111 public files / 502,060 bytes와 reviewed digest trajectory를 artifact commit `fa352cb`에서 원격 재검증 |
 | 2026-08-14 | Tau2 Lane 1A 278-ID/pin/user/budget no-model freeze 완료·게시. 모델/계정 호출과 score는 0이며 exact receipt bytes를 artifact merge `dbfd948b`에서 원격 재검증; Gate 1B는 Gate 0C k=3, PAYG 승인, quota headroom 대기 |
