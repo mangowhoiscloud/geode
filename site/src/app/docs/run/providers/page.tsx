@@ -41,7 +41,7 @@ export default function Page() {
                 <tr>
                   <td>OpenAI / Codex</td>
                   <td><code>gpt-5.5</code></td>
-                  <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> 접두사. 단 <code>gpt-5.5</code>, <code>gpt-5.5-pro</code>와 <code>-codex</code> 계열 접미사는 Codex OAuth 백엔드로만 라우팅. <code>gpt-5.6-sol/terra/luna</code>와 <code>gpt-5.4</code> 계열은 듀얼 레인 — 로그인 상태(API 키 ↔ 구독 OAuth)가 백엔드를 결정</td>
+                  <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> 접두사. 단 <code>gpt-5.5</code>, <code>gpt-5.5-pro</code>와 <code>-codex</code> 계열 접미사는 Codex OAuth 백엔드로만 라우팅. <code>gpt-6-astra</code>, <code>gpt-5.6-sol/terra/luna</code>, <code>gpt-5.4</code> 계열은 듀얼 레인 — 로그인 상태(API 키 ↔ 구독 OAuth)가 백엔드를 결정. Astra의 실제 접근은 OpenAI 계정별 rollout에 따름</td>
                   <td>ChatGPT 구독 OAuth(<code>~/.codex/auth.json</code>) 또는 <code>OPENAI_API_KEY</code></td>
                 </tr>
                 <tr>
@@ -253,7 +253,7 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
                 <tr>
                   <td>OpenAI / Codex</td>
                   <td><code>gpt-5.5</code></td>
-                  <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> prefixes. Exception: <code>gpt-5.5</code>, <code>gpt-5.5-pro</code>, and <code>-codex</code> suffixed models route only to the Codex OAuth backend. <code>gpt-5.6-sol/terra/luna</code> and the <code>gpt-5.4</code> family are dual-lane — login state (API key ↔ subscription OAuth) picks the backend</td>
+                  <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> prefixes. Exception: <code>gpt-5.5</code>, <code>gpt-5.5-pro</code>, and <code>-codex</code> suffixed models route only to the Codex OAuth backend. <code>gpt-6-astra</code>, <code>gpt-5.6-sol/terra/luna</code>, and the <code>gpt-5.4</code> family are dual-lane — login state (API key ↔ subscription OAuth) picks the backend. Astra access remains account-rollout gated by OpenAI</td>
                   <td>ChatGPT subscription OAuth (<code>~/.codex/auth.json</code>) or <code>OPENAI_API_KEY</code></td>
                 </tr>
                 <tr>

@@ -49,6 +49,10 @@ functional change.
 
 ### Added
 
+- **GPT-6 Astra model support.** The OpenAI Responses adapters, model picker,
+  subscription/PAYG routing hints, reasoning controls, and cost/context
+  catalogue now recognize `gpt-6-astra` without changing the default model;
+  account access remains subject to OpenAI's rollout.
 - **Harbor trial replay receipts.** GEODE and an instrumented native Codex
   adapter can now reconstruct agent-owned asciicast v2 replays from finalized
   ATIF trajectories, with source/output hashes and explicit non-score,

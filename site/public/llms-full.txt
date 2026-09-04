@@ -376,7 +376,7 @@ GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), OpenRouter, GLM 
 | 프로바이더 | 기본 모델 | 라우팅 규칙 | 인증 레인 |
 | --- | --- | --- | --- |
 | Anthropic | `claude-opus-4-8` (보조 `claude-sonnet-4-6`, 저비용 `claude-haiku-4-5-20251001`) | `claude-` 접두사 | `ANTHROPIC_API_KEY` |
-| OpenAI / Codex | `gpt-5.5` | `gpt-`, `o3-`, `o4-` 접두사. 단 `gpt-5.5`, `gpt-5.5-pro`와 `-codex` 계열 접미사는 Codex OAuth 백엔드로만 라우팅. `gpt-5.6-sol/terra/luna`와 `gpt-5.4` 계열은 듀얼 레인 — 로그인 상태(API 키 ↔ 구독 OAuth)가 백엔드를 결정 | ChatGPT 구독 OAuth(`~/.codex/auth.json`) 또는 `OPENAI_API_KEY` |
+| OpenAI / Codex | `gpt-5.5` | `gpt-`, `o3-`, `o4-` 접두사. 단 `gpt-5.5`, `gpt-5.5-pro`와 `-codex` 계열 접미사는 Codex OAuth 백엔드로만 라우팅. `gpt-6-astra`, `gpt-5.6-sol/terra/luna`, `gpt-5.4` 계열은 듀얼 레인 — 로그인 상태(API 키 ↔ 구독 OAuth)가 백엔드를 결정. Astra의 실제 접근은 OpenAI 계정별 rollout에 따름 | ChatGPT 구독 OAuth(`~/.codex/auth.json`) 또는 `OPENAI_API_KEY` |
 | OpenRouter | `openrouter/openrouter/free`, `openrouter/openrouter/auto` 또는 정확한 catalogue id | `openrouter/<publisher>/<model>`. 외부 namespace 하나를 제거해 OpenRouter에 전달 | `OPENROUTER_API_KEY`. 크레딧 기반 PAYG이며 direct provider와 동치 폴백하지 않습니다. |
 | GLM (ZhipuAI) | `glm-5.2` (무료 티어 `glm-4.7-flash`) | `glm-` 접두사 | `ZAI_API_KEY`. Coding Plan과 PAYG 엔드포인트가 분리되어 있습니다. |
 
@@ -6559,7 +6559,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1546 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1547 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -6720,7 +6720,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 580 |
-| 테스트 Python 파일 | 700 |
+| 테스트 Python 파일 | 701 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |

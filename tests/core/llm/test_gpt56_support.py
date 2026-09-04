@@ -93,6 +93,7 @@ def test_model_picker_openai_surface_is_current_and_ordered() -> None:
         if profile.provider in {"openai", "openai-codex"}
     ]
     assert visible == [
+        "gpt-6-astra",
         "gpt-5.6-sol",
         "gpt-5.6-terra",
         "gpt-5.6-luna",
@@ -120,7 +121,7 @@ def test_capability_graph_context_window() -> None:
     from core.agent.capability_graph import _context_window
 
     for slug in SLUGS:
-        assert _context_window(slug, "openai-codex") == 1_000_000
+        assert _context_window(slug, "openai-codex") == 1_050_000
 
 
 def test_plugin_allowlists_include_gpt56() -> None:

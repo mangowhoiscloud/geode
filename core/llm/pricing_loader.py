@@ -11,7 +11,7 @@ Schema (matches the TOML, provider-prefixed):
   Loader applies the Anthropic derive: ``cache_write = input × 1.25`` and
   ``cache_read = input × 0.1``.
 - ``[pricing.openai.<model>]`` — same two keys plus optional
-  ``cached_per_mtok``. Loader applies ``cache_read = cached_per_mtok``.
+  ``cached_per_mtok`` and ``cache_write_per_mtok``.
   GLM models live under ``[pricing.openai.*]``
   by manifest convention (OpenAI-compatible API, openai derive formula).
 - ``[context_windows]`` — model id → int (tokens).
@@ -82,12 +82,14 @@ def _derive_openai(
     input_mtok: float,
     output_mtok: float,
     cached_mtok: float = 0.0,
+    cache_write_mtok: float = 0.0,
 ) -> ModelPrice:
-    """OpenAI derive: explicit cache-read price."""
+    """OpenAI derive: explicit cache-read and optional cache-write prices."""
     out = output_mtok / 1_000_000
     return ModelPrice(
         input=input_mtok / 1_000_000,
         output=out,
+        cache_write=cache_write_mtok / 1_000_000 if cache_write_mtok else 0.0,
         cache_read=cached_mtok / 1_000_000 if cached_mtok else 0.0,
         # OpenAI / GLM report ``prompt_tokens`` inclusive of cached tokens.
         cache_inclusive_input=True,
@@ -123,6 +125,7 @@ def _parse_provider(provider: str, entries: dict[str, Any]) -> dict[str, ModelPr
                 input_mtok,
                 output_mtok,
                 cached_mtok=float(fields.get("cached_per_mtok", 0.0)),
+                cache_write_mtok=float(fields.get("cache_write_per_mtok", 0.0)),
             )
         else:
             raise ValueError(

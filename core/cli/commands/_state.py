@@ -58,6 +58,9 @@ _GLM_MODELS: tuple[tuple[str, str], ...] = (
 _GLM_LABELS: dict[str, str] = dict(_GLM_MODELS)
 
 _OPENAI_PICKER_MODELS: tuple[ModelProfile, ...] = (
+    # Officially announced for API and ChatGPT plans; account access is
+    # rollout-gated independently of this model capability row.
+    ModelProfile("gpt-6-astra", "openai", "GPT-6 Astra", "$$$$"),
     # GPT-5.6 is dual-lane. The bare gpt-5.6 Platform alias stays off the
     # picker because it aliases Sol on the API and is absent from Codex.
     ModelProfile("gpt-5.6-sol", "openai", "GPT-5.6 Sol", "$$"),
