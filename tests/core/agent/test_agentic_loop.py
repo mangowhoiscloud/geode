@@ -1066,6 +1066,28 @@ class TestAgenticLoop:
             for payload in retry_payloads
         } == {("turn-retry:step-1", 4, 2)}
 
+    def test_context_recovery_does_not_reset_retry_budget(
+        self,
+        context: ConversationContext,
+        executor: ToolExecutor,
+    ) -> None:
+        """Successful compaction stays inside the configured total-attempt budget."""
+        from unittest.mock import AsyncMock
+
+        from core.agent.loop import _context
+
+        loop = AgenticLoop(context, executor, quiet=True)
+        failed_call = AsyncMock(return_value=None)
+        with (
+            patch.object(loop, "_call_llm", new=failed_call),
+            patch.object(_context, "aggressive_context_recovery", new=AsyncMock(return_value=1)),
+            patch("asyncio.sleep", new=AsyncMock(return_value=None)),
+        ):
+            result = asyncio.run(loop.arun("test"))
+
+        assert result.error == "model_action_required"
+        assert failed_call.await_count == loop._LLM_RETRY_CAP
+
     def test_context_preserved(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test that conversation context is maintained across runs."""
         loop = AgenticLoop(context, executor, quiet=True)

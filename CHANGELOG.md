@@ -62,6 +62,14 @@ functional change.
 
 ### Fixed
 
+- **LLM retries now have one bounded runtime policy.** The main AgenticLoop,
+  auxiliary calls, and scaffold-search mutator share the configured total
+  attempt count; transient 408/409/429 responses honor bounded server retry
+  hints with jitter while billing, invalid requests, unsafe stream replay, and
+  uncertain tool effects remain fail-stop.
+- **Local credential files are owner-only.** GEODE now creates and repairs
+  global/project dotenv files and its auth TOML with `0600` permissions instead
+  of inheriting or retaining a permissive mode.
 - **Provider failures and routed-call evidence are now privacy-safe and
   durable.** Built-in adapters no longer interpolate raw SDK exception bodies
   into warning logs, failed LLM hooks retain only the exception type, and

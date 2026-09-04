@@ -122,7 +122,7 @@ def measure_tokens_anthropic(prompt: str) -> int | None:
     try:
         import anthropic
 
-        client = anthropic.Anthropic(api_key=api_key)
+        client = anthropic.Anthropic(api_key=api_key, max_retries=0)
         from core.config import ANTHROPIC_PRIMARY
 
         counted = client.messages.count_tokens(

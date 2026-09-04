@@ -417,6 +417,14 @@ class Settings(BaseSettings):
             raise ValueError(f"duration must be > 0 seconds, got {v}")
         return v
 
+    @field_validator("llm_retry_max_delay")
+    @classmethod
+    def _validate_retry_delay_bounds(cls, v: float, info: ValidationInfo) -> float:
+        base = float(info.data.get("llm_retry_base_delay", 0.0))
+        if v < base:
+            raise ValueError(f"llm_retry_max_delay must be >= {base}, got {v}")
+        return v
+
     @field_validator("agentic_effort")
     @classmethod
     def _validate_effort(cls, v: str) -> str:
@@ -521,9 +529,9 @@ class Settings(BaseSettings):
     llm_read_timeout: float = 300.0  # response read timeout (5min for 1M context)
     llm_write_timeout: float = 30.0  # request write timeout (seconds)
     llm_pool_timeout: float = 10.0  # wait for available connection from pool (seconds)
-    llm_retry_base_delay: float = 2.0  # base delay for exponential backoff (seconds)
-    llm_retry_max_delay: float = 30.0  # max delay cap for retries (seconds)
-    llm_max_retries: int = 3  # max retry attempts per model
+    llm_retry_base_delay: float = Field(default=2.0, ge=0.0)
+    llm_retry_max_delay: float = Field(default=30.0, ge=0.0)
+    llm_max_retries: int = Field(default=3, ge=1)  # total attempts per model
 
     # v0.52.4 — per-provider auth-mode escape hatch (Codex CLI parity).
     # Default routing prefers SUBSCRIPTION/OAUTH plans over PAYG when both

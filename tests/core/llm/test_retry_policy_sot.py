@@ -1,14 +1,13 @@
 """Regression — single SOT for retry policy across providers (GAP-E1).
 
-Pre-fix: ``core/llm/providers/openai.py`` defined ``_MAX_RETRIES`` /
+Historical pre-fix: ``core/llm/providers/openai.py`` defined ``_MAX_RETRIES`` /
 ``_RETRY_BASE_DELAY`` / ``_RETRY_MAX_DELAY`` and passed them explicitly to
-``retry_with_backoff_generic``, which pinned OpenAI/GLM retry behavior to
+the old sync retry helper, which pinned OpenAI/GLM retry behavior to
 the hardcoded ``3`` regardless of ``settings.llm_max_retries`` /
 ``settings.llm_retry_base_delay`` / ``settings.llm_retry_max_delay``.
 
-Post-fix: the adapter no longer pins these arguments. ``retry_with_backoff_generic``
-resolves them from ``core.config.settings`` lazily, restoring the single
-source of truth shared with the Anthropic path.
+Current: the async compatibility wrapper and policy constructors resolve these
+values from ``core.config.settings`` lazily, preserving one source of truth.
 """
 
 from __future__ import annotations
@@ -16,6 +15,29 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
+
+
+def test_retry_attempt_setting_must_be_positive() -> None:
+    from core.config import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(llm_max_retries=0, _env_file=None)
+
+
+@pytest.mark.parametrize("field", ["llm_retry_base_delay", "llm_retry_max_delay"])
+def test_retry_delay_settings_must_be_non_negative(field: str) -> None:
+    from core.config import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(**{field: -0.1}, _env_file=None)
+
+
+def test_retry_max_delay_must_cover_base_delay() -> None:
+    from core.config import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(llm_retry_base_delay=3.0, llm_retry_max_delay=2.0, _env_file=None)
 
 
 def test_529_overloaded_class_is_sibling_of_internal_server_error() -> None:

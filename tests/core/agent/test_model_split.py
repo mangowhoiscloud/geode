@@ -97,7 +97,7 @@ def test_act_model_used_when_no_explicit_model(monkeypatch: pytest.MonkeyPatch) 
     explicit model, ``AgenticLoop.model`` reflects ``act_model``."""
     from core.agent.loop.agent_loop import AgenticLoop
 
-    fake_settings = SimpleNamespace(act_model="claude-sonnet-4-6")
+    fake_settings = SimpleNamespace(act_model="claude-sonnet-4-6", llm_max_retries=3)
     monkeypatch.setattr("core.config.settings", fake_settings)
     # Build a minimal loop — most kwargs are optional, but ConversationContext
     # + ToolExecutor are required. Use mocks.
@@ -112,7 +112,7 @@ def test_explicit_model_wins_over_act_model(monkeypatch: pytest.MonkeyPatch) -> 
     """Caller-passed ``model=...`` overrides ``settings.act_model``."""
     from core.agent.loop.agent_loop import AgenticLoop
 
-    fake_settings = SimpleNamespace(act_model="claude-sonnet-4-6")
+    fake_settings = SimpleNamespace(act_model="claude-sonnet-4-6", llm_max_retries=3)
     monkeypatch.setattr("core.config.settings", fake_settings)
     ctx = MagicMock()
     ctx.get_messages.return_value = []
@@ -127,7 +127,7 @@ def test_act_model_empty_falls_back_to_primary(monkeypatch: pytest.MonkeyPatch) 
     from core.agent.loop.agent_loop import AgenticLoop
     from core.config import ANTHROPIC_PRIMARY
 
-    fake_settings = SimpleNamespace(act_model="")
+    fake_settings = SimpleNamespace(act_model="", llm_max_retries=3)
     monkeypatch.setattr("core.config.settings", fake_settings)
     ctx = MagicMock()
     ctx.get_messages.return_value = []

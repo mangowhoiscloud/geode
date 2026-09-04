@@ -151,6 +151,22 @@ def test_rate_limit_honors_full_retry_after(
     assert sleeps == [61.0]
 
 
+def test_rate_limit_malformed_retry_after_uses_safe_default(
+    fake_api: _FakeAPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    fake_api.retry_after = "not-a-number"
+    fake_api.rate_limit_once.add("chat.postMessage")
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    asyncio.run(_transport().post_message("C123", "hello"))
+    assert sleeps == [1.0]
+
+
 def test_api_error_raises(fake_api: _FakeAPI) -> None:
     fake_api.responses["chat.postMessage"] = [{"ok": False, "error": "channel_not_found"}]
     with pytest.raises(SlackTransportError, match="channel_not_found"):

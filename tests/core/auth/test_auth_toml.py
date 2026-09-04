@@ -66,8 +66,10 @@ class TestRoundtrsubject:
         assert "max_calls = 80" in text
 
         # Reload into a fresh state
+        path.chmod(0o644)
         _reset_state()
         load_auth_toml(path=path)
+        assert path.stat().st_mode & 0o777 == 0o600
         registry2 = get_plan_registry()
         assert registry2.get("glm-coding-lite") is not None
         assert registry2.get_routing("glm-5.1") == ["glm-coding-lite"]

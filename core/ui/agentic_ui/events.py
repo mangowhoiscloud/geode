@@ -53,36 +53,6 @@ def emit_reasoning_summary(provider: str, model: str, text: str) -> None:
     _pkg.console.print(f"  [muted]∙ thinking · {snippet}[/muted]")
 
 
-def emit_retry_wait(
-    model: str,
-    attempt: int,
-    max_retries: int,
-    delay_s: float,
-    elapsed_s: float,
-    error_type: str,
-) -> None:
-    """Emit retry_wait event during LLM retry backoff."""
-    from core.ui import agentic_ui as _pkg
-
-    writer = getattr(_ipc_writer_local, "writer", None)
-    if writer is not None:
-        writer.send_event(
-            "retry_wait",
-            model=model,
-            attempt=attempt,
-            max_retries=max_retries,
-            delay_s=delay_s,
-            elapsed_s=elapsed_s,
-            error_type=error_type,
-        )
-        return
-    _pkg.console.print(
-        f"  [warning]~ Retrying in {delay_s:.1f}s... "
-        f"[{model} · {attempt}/{max_retries} · {elapsed_s:.0f}s elapsed] "
-        f"(Ctrl+C to skip)[/warning]"
-    )
-
-
 def emit_llm_error(
     error_type: str,
     severity: str,
@@ -147,7 +117,7 @@ def emit_model_switch_required(
     )
 
 
-def emit_llm_retry(delay_s: int, attempt: int, max_attempts: int) -> None:
+def emit_llm_retry(delay_s: float, attempt: int, max_attempts: int) -> None:
     """Emit llm_retry event when retrying after LLM failure with backoff."""
     from core.ui import agentic_ui as _pkg
 
@@ -161,7 +131,7 @@ def emit_llm_retry(delay_s: int, attempt: int, max_attempts: int) -> None:
         )
         return
     _pkg.console.print(
-        f"  [warning]~ LLM retry in {delay_s}s (attempt {attempt}/{max_attempts})[/warning]"
+        f"  [warning]~ LLM retry in {delay_s:.1f}s (attempt {attempt}/{max_attempts})[/warning]"
     )
 
 

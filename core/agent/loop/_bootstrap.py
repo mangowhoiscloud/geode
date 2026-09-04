@@ -189,7 +189,9 @@ def initialize_runtime(
         offload_store=getattr(tool_executor, "_offload_store", None),
     )
     loop._consecutive_llm_failures = 0
-    loop._LLM_RETRY_CAP = 5
+    from core.config import settings
+
+    loop._LLM_RETRY_CAP = settings.llm_max_retries
     loop._pre_execution_retry_errors = []
 
     from core.agent.context_manager import ContextWindowManager
