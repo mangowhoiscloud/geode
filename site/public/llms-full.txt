@@ -3432,6 +3432,14 @@ Pair 001~445는 89 tasks × 5 repetitions입니다. 각 쌍의 왼쪽은 GEODE, 
 
 [`Replay source · coverage · SHA-256 receipts`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/52b7d0eab37ec9122492ec51d77e1502d5b9e085/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/recording/replay-v19-20260905) · [`Frozen run · attempts · analysis`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z)
 
+### 보존된 원본에서 복구한 실행 지표
+
+호출별 usage를 GEODE 401셀·4,709건, Codex 418셀·12,214건에서 복구하고 Harbor trial 합계와 대조했습니다. GEODE cache 필드 648건은 미기록 상태인 null로 보존합니다. Cached input은 input에 포함되며, 확인된 부분합을 전체 cache 값으로 표시하지 않습니다. Usage event는 ATIF tool step과 다른 단위이므로 재생 위치와 연동하지 않습니다.
+
+Replay의 지표 항목을 펼치면 호출별 input·output·cache, environment setup·agent setup·execution·verifier 경과 시간, 완료된 shell command의 exit code 집계를 볼 수 있습니다. Nonzero exit는 tool 오류율이 아닙니다. 실제 CPU 사용률·peak RAM·subscription 청구액은 미계측이며, producer 비용 추정치는 청구액과 구분합니다. 원본 점수와 제외 규칙은 바뀌지 않았습니다.
+
+[`Recovered observability · method · source hashes`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/d277607f3a179f191ad24b1497c0934beb9d2470/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/recording/research-v20)
+
 Next.js·React·TypeScript 페이지에서 재생합니다. Pinned commit의 metadata JSON을 SHA-256으로 검증한 뒤 표시하며, 검증 실패 시 재생을 차단합니다. 외부 HTML이나 스크립트를 실행하지 않습니다. 기존 .html 주소는 새 경로로 연결됩니다. Private viewer는 공개하지 않습니다.
 
 ---
@@ -6800,7 +6808,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 580 |
-| 테스트 Python 파일 | 702 |
+| 테스트 Python 파일 | 701 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |
