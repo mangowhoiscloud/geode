@@ -3409,6 +3409,31 @@ retry · fallback
 
 이 run은 89개 중 1 task, k=1입니다. 이 계정에서 model route가 열렸고 GEODE가 실제 container task를 끝냈다는 사실만 입증합니다. suite 정확도, leaderboard 순위, 다른 harness 대비 우위, 전체 계정의 Astra 가용성을 주장하지 않습니다. 공식 제출에는 89 tasks × k≥5와 maintainer의 static analysis 및 reward-hacking review가 필요합니다.
 
+## Sol 비교 실행을 다시 읽는 Replay
+
+아래 기록은 Astra smoke와 별개인 2026-08-27~09-02 UTC의 Sol/max 비교 실행입니다. GEODE revision b549f3e의 OpenAI subscription 경로와 native Codex를 Harbor 0.22.0에서 실행했습니다. 동결 full-suite primary는 측정 불가이며, 공식 leaderboard 결과가 아닙니다.
+
+Pair 001~445는 89 tasks × 5 repetitions입니다. 각 쌍의 왼쪽은 GEODE, 오른쪽은 Codex이며, task·반복·arm 하나가 cell입니다. 재생하면 새 tool event가 아래에 나타나고 이전 기록은 위로 올라갑니다. 상단의 arm 정보는 고정됩니다.
+
+[445쌍 Replay 열기](https://mangowhoiscloud.github.io/geode/benchmarks/terminal-bench/replay.html)
+
+| 관찰 범위 | GEODE | Codex | 합계 |
+| --- | --- | --- | --- |
+| ATIF-derived tool events | 407 | 428 | 835 |
+| Receipt only | 28 | 7 | 35 |
+| 실행 전 제외 | 10 | 10 | 20 |
+| 계획된 cells | 445 | 445 | 890 |
+
+16,244개 tool 호출의 순서를 재구성했습니다. 공개판은 tool·프로그램 종류, payload 크기, 해시와 시각만 표시합니다. command/output 본문, 모델 메시지와 provider reasoning은 공개하지 않습니다. 원본 UTC를 보존하고 KST로 표시하며, 5 events/s는 편집 속도입니다. 좌우는 tool-event 순서로 정렬했으며 실제 동시 실행이나 wall-time 정렬이 아닙니다.
+
+35개 receipt-only cell에는 terminal 내용을 만들어 넣지 않았습니다. bn-fit-modify와 tune-mjcf의 20개 cell은 arm64 호스트에서 amd64 oracle/verifier가 정상 완료되지 않아 모델 호출 전에 대칭 제외했습니다. 별도로 미해소 native 인프라 무효가 6개 남았습니다. 공통 유효 429쌍의 secondary 결과는 GEODE 339/429, Codex 331/429이며, 이를 전체 suite 우위로 일반화하지 않습니다.
+
+화면의 raw verifier와 selected reward는 구분해서 읽어야 합니다. 동결 규칙상 canonical timeout과 safety refusal은 selected zero이며, raw verifier가 1인 18개 cell도 여기에 포함됩니다. 점수의 근거는 Harbor result/verifier와 frozen attempt ledger·analysis입니다. 이 화면은 원본 PTY나 새로운 점수 판정기가 아닙니다.
+
+[`Replay source · coverage · SHA-256 receipts`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/52b7d0eab37ec9122492ec51d77e1502d5b9e085/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/recording/replay-v19-20260905) · [`Frozen run · attempts · analysis`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z)
+
+재생 페이지는 pinned commit의 공개 HTML을 내려받아 SHA-256을 검증한 뒤 sandbox iframe에서 엽니다. 검증 실패 시 실행하지 않습니다. 개인정보가 포함될 수 있는 private viewer는 문서에 연결하지 않습니다.
+
 ---
 
 ### Tau2 (Tau2)

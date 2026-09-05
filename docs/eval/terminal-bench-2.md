@@ -20,6 +20,40 @@ eval_contracts:
 
 # Terminal-Bench 2.1 — GEODE execution profile
 
+## Historical Sol paired replay
+
+The frozen `terminalbench21-sol-max-fullsuite-paired-20260827t190300z` run
+has a [public paired replay](https://mangowhoiscloud.github.io/geode/benchmarks/terminal-bench/replay.html).
+The reviewed bytes and receipts are pinned to
+[artifact commit 52b7d0e](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/52b7d0eab37ec9122492ec51d77e1502d5b9e085/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/recording/replay-v19-20260905)
+from artifact PR #42. Public HTML SHA-256:
+`ef15b986535d6c04b395645afe9bf877c937a53e5fdfc489a0f69ac53d1a05d3`.
+
+All 445 task/repetition pairs are navigable, with GEODE left and Codex right.
+Of 890 planned cells, 835 have ATIF-derived tool events, 35 have receipts only,
+and 20 were prospectively excluded. The view adds the already-preserved
+`supplement-042-native` ATIF for `dna-insert` repetition 2 to the earlier
+834-cell cast coverage; it does not alter a source or score. The 16,244
+tool-event projections exclude command/output bodies and all model messages.
+UTC event timestamps are displayed in KST; the five-events/second cadence is
+editorial, not original PTY timing or proof of simultaneous arm execution.
+
+The full-suite primary remains not measurable. Secondary common valid cells
+remain GEODE 339/429 and native Codex 331/429. The view distinguishes raw
+verifier reward from selected reward, including 18 canonical timeout/refusal
+cells with raw verifier one and selected zero. Twenty `bn-fit-modify` and
+`tune-mjcf` cells were excluded before model calls because the amd64
+oracle/verifier could not complete normally on the arm64 host; six other
+native cells remain infrastructure-invalid. None are silently turned into
+passes or semantic zeroes.
+
+The official docs bridge fetches the immutable public HTML, verifies its
+SHA-256, and only then runs it inside a script-only sandboxed iframe. It
+stores no second raw-evidence copy. `site/scripts/verify-terminal-replay.mjs`
+checks success, corrupted-byte rejection, fetch rejection and sandbox
+permissions in every site build. Existing Astra smoke evidence remains a
+separate run.
+
 ## Canonical identity
 
 Terminal-Bench 2.1은 89개 containerized terminal task를 Harbor로 실행하고
