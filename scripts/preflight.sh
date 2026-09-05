@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run every gate CI enforces, locally, in CI's own scope.
+# Run the local pre-PR gates; required GitHub CI checks remain authoritative.
 #
 # Why this exists: the Pre-PR checklist listed five commands while CI enforced
 # seventeen gates, and three of the five were documented at a NARROWER scope
@@ -39,6 +39,10 @@ run() {
     FAILURES+=("$name")
   fi
 }
+
+generate_site_docs() (
+  cd site && npm run sync-stats && npm run build && npm run export-md
+)
 
 echo "── lint / type / security ──"
 run "ruff check"    uv run ruff check core/ evals/ evolve/ tests/ scripts/
@@ -83,8 +87,7 @@ if [ "$FAST" -eq 0 ]; then
   # file the local checklist never mentioned.
   if [ -d site/node_modules ]; then
     echo "── site generated docs ──"
-    ( cd site && npm run sync-stats >/dev/null 2>&1 && npm run build >/dev/null 2>&1 \
-        && npm run export-md >/dev/null 2>&1 )
+    run "site generation" generate_site_docs
     run "public-doc generators" git diff --exit-code -- \
       site/public/llms.txt site/public/llms-full.txt \
       site/src/data/geode/sot.ts site/src/data/geode/changelog.ts
