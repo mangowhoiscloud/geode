@@ -49,6 +49,7 @@ functional change.
 
 ### Changed
 
+- Extended the Terminal-Bench replay with independently verified call-token usage, explicit cache missingness, phase elapsed times and completed-command exit summaries. Recovered diagnostics are pinned to an append-only artifact commit; frozen scores are unchanged.
 - Migrated the Terminal-Bench paired replay to a native Next.js/React/TypeScript route with SHA-256-verified metadata JSON, accessible playback controls, and a legacy URL redirect. Frozen scores, raw evidence, and existing videos are unchanged.
 
 ### Added
