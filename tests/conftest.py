@@ -5,18 +5,17 @@ special test-time setup; the hook system is wired only when an
 HookSystem instance is present.
 """
 
-import contextlib
 import os
 import tempfile
 from collections.abc import Iterator
+from pathlib import Path
 
-# A non-live test run must never inherit billable provider credentials from the
-# operator shell or a repository ``.env``. Tests that exercise credential
-# discovery set synthetic values with ``monkeypatch``; explicitly live tests
-# resolve their own credentials inside the marked test body.
+# Remove inherited provider keys before settings imports. Credential tests set
+# synthetic values explicitly; dotenv and managed OAuth sources need separate isolation.
 for _credential_var in (
     "ANTHROPIC_API_KEY",
     "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
     "ZHIPUAI_API_KEY",
     "ZAI_API_KEY",
     "GOOGLE_API_KEY",
@@ -24,26 +23,21 @@ for _credential_var in (
 ):
     os.environ.pop(_credential_var, None)
 
+# Imports and test collection must not read an operator-provided auth path.
+# Keep the directory alive for this interpreter; each test gets its own below.
+_test_auth_dir = tempfile.TemporaryDirectory(prefix="geode-test-auth-")
+os.environ["GEODE_AUTH_TOML"] = str(Path(_test_auth_dir.name) / "auth.toml")
+
 # Redirect SessionCheckpoint to a temp directory during tests to prevent
 # production data contamination.
 _test_session_dir = os.path.join(tempfile.gettempdir(), "geode_test_sessions")
-
-from pathlib import Path  # noqa: E402
 
 import core.memory.session_checkpoint as _cp_mod  # noqa: E402
 
 _cp_mod.DEFAULT_SESSION_DIR = Path(_test_session_dir)
 
 
-# v0.50.0 — auth-plans singletons (ProfileStore, ProfileRotator, PlanRegistry)
-# leak between tests. Reset them around every test so state from one suite
-# (e.g. seeding a Coding Plan profile) doesn't influence another. Also
-# redirect ~/.geode/auth.toml writes to a temp file so tests can never
-# clobber a developer's real credentials.
 import pytest  # noqa: E402
-
-_test_auth_toml = os.path.join(tempfile.gettempdir(), "geode_test_auth.toml")
-os.environ.setdefault("GEODE_AUTH_TOML", _test_auth_toml)
 
 
 @pytest.fixture
@@ -127,30 +121,24 @@ def _isolate_state_root(
 
 
 @pytest.fixture(autouse=True)
-def _reset_auth_singletons():
+def _reset_auth_singletons(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
     from core.llm.strategies import plan_registry as _pr
     from core.wiring import container as _infra
 
     _infra._profile_store = None
     _infra._profile_rotator = None
     _pr._plan_registry = None
-    # Make sure no leftover auth.toml from a prior test run influences this one
-    # xdist-parallel race: two workers may both see the file exist then both try
-    # to remove it. Tolerate concurrent FileNotFoundError.
-    with contextlib.suppress(FileNotFoundError):
-        os.remove(_test_auth_toml)
-    yield
-    _infra._profile_store = None
-    _infra._profile_rotator = None
-    _pr._plan_registry = None
-    # xdist-parallel race: two workers may both see the file exist then both try
-    # to remove it. Tolerate concurrent FileNotFoundError.
-    with contextlib.suppress(FileNotFoundError):
-        os.remove(_test_auth_toml)
+    try:
+        yield
+    finally:
+        _infra._profile_store = None
+        _infra._profile_rotator = None
+        _pr._plan_registry = None
 
 
 @pytest.fixture(autouse=True)
-def _bootstrap_adapter_registry():
+def _bootstrap_adapter_registry(_reset_auth_singletons: None) -> Iterator[None]:
     """Populate the Path-B adapter registry before each test.
 
     PR-MAINPATH-1 (2026-05-24) — AgenticLoop now resolves its

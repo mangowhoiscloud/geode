@@ -7,13 +7,15 @@ Mirrors PR E/F (2026-05-11) 의 fa4 pattern 의 정식 인프라화 검증.
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
 import pytest
-from core.audit.diagnostics import DEFAULT_DIAGNOSTICS_DIR, diag, diagnostics_path
+from core.audit.diagnostics import diag, diagnostics_path
 
 
 class TestDiagnosticsPath:
@@ -53,9 +55,27 @@ class TestDiagnosticsPath:
         # mkdir was triggered
         assert path.parent.is_dir()
 
-    def test_default_dir_constant_under_dot_geode(self):
-        # Documented contract — caller-friendly constant for grep + jq.
-        assert Path.home() / ".geode" / "diagnostics" == DEFAULT_DIAGNOSTICS_DIR
+    @pytest.mark.parametrize("override", [False, True])
+    def test_default_dir_uses_geode_home(self, tmp_path: Path, override: bool) -> None:
+        env = {**os.environ, "HOME": str(tmp_path)}
+        env.pop("GEODE_HOME", None)
+        geode_home = tmp_path / ("custom-geode" if override else ".geode")
+        if override:
+            env["GEODE_HOME"] = str(geode_home)
+        # A fresh import verifies the constant without invalidating package reexports.
+        completed = subprocess.run(  # noqa: S603 - fixed path-only probe
+            [
+                sys.executable,
+                "-c",
+                "from core.audit.diagnostics import DEFAULT_DIAGNOSTICS_DIR; print(DEFAULT_DIAGNOSTICS_DIR)",
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+        assert Path(completed.stdout.strip()) == geode_home / "diagnostics"
 
 
 class TestDiag:
