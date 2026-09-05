@@ -597,7 +597,9 @@ def test_codex_cleanup_kills_its_spawned_process_group(tmp_path: Path) -> None:
             (
                 "import pathlib,subprocess,sys,time; "
                 "p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']); "
-                f"pathlib.Path({str(child_pid_path)!r}).write_text(str(p.pid)); "
+                f"pid_file=pathlib.Path({str(child_pid_path)!r}); "
+                "pid_file.with_suffix('.tmp').write_text(str(p.pid)); "
+                "pid_file.with_suffix('.tmp').replace(pid_file); "
                 "time.sleep(30)"
             ),
         ),
