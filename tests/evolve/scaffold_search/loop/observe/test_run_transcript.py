@@ -7,6 +7,9 @@ scope, and the hook-handler round-trip via journal_hooks.
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -179,32 +182,30 @@ def test_run_timeline_scope_restores_on_exception(tmp_path: Path) -> None:
     assert current_run_timeline() is None
 
 
-def test_default_path_uses_geode_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+@pytest.mark.parametrize("override", [False, True])
+def test_default_path_uses_geode_home(tmp_path: Path, override: bool) -> None:
     """Unset path falls back to ``GLOBAL_AUTORESEARCH_HANDOFF_DIR`` / <session> / events.jsonl."""
-    fake_home = tmp_path / "home"
-    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
-    # Reload both core.paths and evals.run_timeline so
-    # the lazy import resolves under the monkeypatched Path.home().
-    import importlib
-
-    import core.paths as paths_mod
-    import evals.run_timeline as journal_mod
-
-    importlib.reload(paths_mod)
-    importlib.reload(journal_mod)
-    journal = journal_mod.RunTimeline(
-        session_id="s-default",
-        gen_tag="g",
-        component="autoresearch",
+    env = {**os.environ, "HOME": str(tmp_path)}
+    env.pop("GEODE_HOME", None)
+    geode_home = tmp_path / ("custom-geode" if override else ".geode")
+    if override:
+        env["GEODE_HOME"] = str(geode_home)
+    # Do not reload the live module: that replaces its active ContextVar.
+    completed = subprocess.run(  # noqa: S603 - fixed, synthetic journal probe
+        [
+            sys.executable,
+            "-c",
+            "from evals.run_timeline import RunTimeline; journal = RunTimeline(session_id='s-default', gen_tag='g', component='autoresearch'); journal.append('event'); print(journal.path)",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=10,
     )
-    expected = fake_home / ".geode" / "autoresearch" / "handoff" / "s-default" / "events.jsonl"
-    assert journal.path == expected
-    journal.append("event")
+    expected = geode_home / "autoresearch" / "handoff" / "s-default" / "events.jsonl"
+    assert Path(completed.stdout.strip()) == expected
     assert expected.is_file()
-    # Restore originals so subsequent tests see the real home.
-    monkeypatch.undo()
-    importlib.reload(paths_mod)
-    importlib.reload(journal_mod)
 
 
 def test_hook_handlers_route_subagent_events_to_journal(tmp_path: Path) -> None:
