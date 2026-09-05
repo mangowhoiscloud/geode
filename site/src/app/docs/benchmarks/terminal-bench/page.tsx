@@ -6,6 +6,49 @@ export const metadata = { title: "Terminal-Bench 2.1 · GEODE Docs" };
 const ARTIFACT_REVISION = "a32abcbf78ab6100ea1e85540a2ace9436dc6f76";
 const RUN_PATH =
   "terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z";
+const REPLAY_REVISION = "52b7d0eab37ec9122492ec51d77e1502d5b9e085";
+const PAIRED_RUN = "terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z";
+
+function PairedReplay({ ko }: { ko: boolean }) {
+  return (
+    <section aria-labelledby="paired-execution-replay">
+      <h2 id="paired-execution-replay">{ko ? "Sol 비교 실행을 다시 읽는 Replay" : "Replay the Sol paired execution"}</h2>
+      <p>{ko
+        ? "아래 기록은 Astra smoke와 별개인 2026-08-27~09-02 UTC의 Sol/max 비교 실행입니다. GEODE revision b549f3e의 OpenAI subscription 경로와 native Codex를 Harbor 0.22.0에서 실행했습니다. 동결 full-suite primary는 측정 불가이며, 공식 leaderboard 결과가 아닙니다."
+        : "This is the separate August 27–September 2 UTC Sol/max comparison, not the Astra smoke above. Harbor 0.22.0 ran GEODE revision b549f3e and native Codex through the OpenAI subscription route. The frozen full-suite primary is not measurable; this is not an official leaderboard result."}</p>
+      <p>{ko
+        ? "Pair 001~445는 89 tasks × 5 repetitions입니다. 각 쌍의 왼쪽은 GEODE, 오른쪽은 Codex이며, task·반복·arm 하나가 cell입니다. 재생하면 새 tool event가 아래에 나타나고 이전 기록은 위로 올라갑니다. 상단의 arm 정보는 고정됩니다."
+        : "Pairs 001–445 represent 89 tasks × 5 repetitions. GEODE is on the left, Codex on the right; one task, repetition and arm form a cell. New tool events appear at the bottom and older lines move upward while arm metadata stays fixed."}</p>
+      <p><a href="/geode/benchmarks/terminal-bench/replay.html" target="_blank" rel="noopener noreferrer">
+        {ko ? "445쌍 Replay 열기" : "Open the 445-pair replay"}
+      </a></p>
+      <table>
+        <thead><tr><th>{ko ? "관찰 범위" : "Evidence coverage"}</th><th>GEODE</th><th>Codex</th><th>{ko ? "합계" : "Total"}</th></tr></thead>
+        <tbody>
+          <tr><td>ATIF-derived tool events</td><td>407</td><td>428</td><td>835</td></tr>
+          <tr><td>Receipt only</td><td>28</td><td>7</td><td>35</td></tr>
+          <tr><td>{ko ? "실행 전 제외" : "Not executed"}</td><td>10</td><td>10</td><td>20</td></tr>
+          <tr><td>{ko ? "계획된 cells" : "Intended cells"}</td><td>445</td><td>445</td><td>890</td></tr>
+        </tbody>
+      </table>
+      <p>{ko
+        ? "16,244개 tool 호출의 순서를 재구성했습니다. 공개판은 tool·프로그램 종류, payload 크기, 해시와 시각만 표시합니다. command/output 본문, 모델 메시지와 provider reasoning은 공개하지 않습니다. 원본 UTC를 보존하고 KST로 표시하며, 5 events/s는 편집 속도입니다. 좌우는 tool-event 순서로 정렬했으며 실제 동시 실행이나 wall-time 정렬이 아닙니다."
+        : "The view reconstructs 16,244 tool calls. It exposes tool/program labels, payload sizes, hashes and timestamps, not command/output bodies, model messages or provider reasoning. UTC sources are displayed in KST. Five events per second is editorial pacing; event-index alignment does not imply concurrent execution or wall-time synchronization."}</p>
+      <p>{ko
+        ? "35개 receipt-only cell에는 terminal 내용을 만들어 넣지 않았습니다. bn-fit-modify와 tune-mjcf의 20개 cell은 arm64 호스트에서 amd64 oracle/verifier가 정상 완료되지 않아 모델 호출 전에 대칭 제외했습니다. 별도로 미해소 native 인프라 무효가 6개 남았습니다. 공통 유효 429쌍의 secondary 결과는 GEODE 339/429, Codex 331/429이며, 이를 전체 suite 우위로 일반화하지 않습니다."
+        : "No terminal content is invented for 35 receipt-only cells. Twenty cells from bn-fit-modify and tune-mjcf were symmetrically excluded before model calls because their amd64 oracle/verifier did not complete normally on the arm64 host. Six native infrastructure-invalid cells remain unresolved. The 429 common valid pairs give secondary results of 339/429 for GEODE and 331/429 for Codex, not a general full-suite superiority claim."}</p>
+      <p>{ko
+        ? "화면의 raw verifier와 selected reward는 구분해서 읽어야 합니다. 동결 규칙상 canonical timeout과 safety refusal은 selected zero이며, raw verifier가 1인 18개 cell도 여기에 포함됩니다. 점수의 근거는 Harbor result/verifier와 frozen attempt ledger·analysis입니다. 이 화면은 원본 PTY나 새로운 점수 판정기가 아닙니다."
+        : "Read raw verifier and selected reward separately. Frozen rules assign selected zero to canonical timeouts and safety refusals, including 18 cells with raw verifier reward one. Harbor result/verifier, the frozen attempt ledger and analysis own scoring. This view is neither raw PTY footage nor a new scorer."}</p>
+      <p><RunLogLink path={`${PAIRED_RUN}/recording/replay-v19-20260905`} revision={REPLAY_REVISION} label="Replay source · coverage · SHA-256 receipts" />{" · "}
+        <RunLogLink path={PAIRED_RUN} revision={ARTIFACT_REVISION} label="Frozen run · attempts · analysis" />
+      </p>
+      <p className="text-sm text-[var(--ink-3)]">{ko
+        ? "재생 페이지는 pinned commit의 공개 HTML을 내려받아 SHA-256을 검증한 뒤 sandbox iframe에서 엽니다. 검증 실패 시 실행하지 않습니다. 개인정보가 포함될 수 있는 private viewer는 문서에 연결하지 않습니다."
+        : "The page fetches the public HTML at a pinned commit, verifies SHA-256, then opens it in a sandboxed iframe. Verification failure blocks execution. The private viewer is not linked or published."}</p>
+    </section>
+  );
+}
 
 function ResultStrip({ ko }: { ko: boolean }) {
   const cells = ko
@@ -53,8 +96,8 @@ export default function Page() {
       slug="benchmarks/terminal-bench"
       title="Terminal-Bench 2.1"
       titleKo="Terminal-Bench 2.1"
-      summary="A canonical container-task smoke for GEODE's current GPT-6 Astra subscription route, with verifier and publication boundaries kept explicit."
-      summaryKo="GEODE의 현재 GPT-6 Astra 구독 경로를 canonical container task로 확인한 smoke입니다. verifier와 공개 증거의 권한 경계를 분리해 제시합니다."
+      summary="Astra container-task smoke and the historical Sol paired replay, with scoring authority, coverage and publication limits kept separate."
+      summaryKo="Astra container-task smoke와 이전 Sol 비교 실행의 Replay를 소개합니다. 각 실행의 점수 근거, 관찰 범위와 공개 한계를 구분합니다."
     >
       <Bi
         ko={
@@ -104,6 +147,7 @@ export default function Page() {
               주장하지 않습니다. 공식 제출에는 89 tasks × k≥5와 maintainer의 static
               analysis 및 reward-hacking review가 필요합니다.
             </p>
+            <PairedReplay ko />
           </>
         }
         en={
@@ -153,6 +197,7 @@ export default function Page() {
               general Astra availability. An official submission requires 89 tasks at k≥5,
               maintainer static analysis, and reward-hacking review.
             </p>
+            <PairedReplay ko={false} />
           </>
         }
       />

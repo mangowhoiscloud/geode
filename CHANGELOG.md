@@ -49,6 +49,11 @@ functional change.
 
 ### Added
 
+- **Terminal-Bench paired replay in docs.** A SHA-256-pinned, sandboxed
+  public viewer covers all 445 intended GEODE/Codex pairs, with bottom-up
+  tool-event playback and explicit receipt-only/exclusion states. Site builds
+  check corrupted-payload and fetch-failure rejection; no raw model or tool
+  payloads are published by the viewer.
 - **GPT-6 Astra model support.** The OpenAI Responses adapters, model picker,
   subscription/PAYG routing hints, reasoning controls, and cost/context
   catalogue now recognize `gpt-6-astra` without changing the default model;
