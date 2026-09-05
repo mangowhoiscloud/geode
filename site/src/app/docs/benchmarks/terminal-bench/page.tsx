@@ -19,7 +19,7 @@ function PairedReplay({ ko }: { ko: boolean }) {
       <p>{ko
         ? "Pair 001~445는 89 tasks × 5 repetitions입니다. 각 쌍의 왼쪽은 GEODE, 오른쪽은 Codex이며, task·반복·arm 하나가 cell입니다. 재생하면 새 tool event가 아래에 나타나고 이전 기록은 위로 올라갑니다. 상단의 arm 정보는 고정됩니다."
         : "Pairs 001–445 represent 89 tasks × 5 repetitions. GEODE is on the left, Codex on the right; one task, repetition and arm form a cell. New tool events appear at the bottom and older lines move upward while arm metadata stays fixed."}</p>
-      <p><a href="/geode/benchmarks/terminal-bench/replay.html" target="_blank" rel="noopener noreferrer">
+      <p><a href="/geode/benchmarks/terminal-bench/replay/" target="_blank" rel="noopener noreferrer">
         {ko ? "445쌍 Replay 열기" : "Open the 445-pair replay"}
       </a></p>
       <table>
@@ -44,8 +44,8 @@ function PairedReplay({ ko }: { ko: boolean }) {
         <RunLogLink path={PAIRED_RUN} revision={ARTIFACT_REVISION} label="Frozen run · attempts · analysis" />
       </p>
       <p className="text-sm text-[var(--ink-3)]">{ko
-        ? "재생 페이지는 pinned commit의 공개 HTML을 내려받아 SHA-256을 검증한 뒤 sandbox iframe에서 엽니다. 검증 실패 시 실행하지 않습니다. 개인정보가 포함될 수 있는 private viewer는 문서에 연결하지 않습니다."
-        : "The page fetches the public HTML at a pinned commit, verifies SHA-256, then opens it in a sandboxed iframe. Verification failure blocks execution. The private viewer is not linked or published."}</p>
+        ? "Next.js·React·TypeScript 페이지에서 재생합니다. Pinned commit의 metadata JSON을 SHA-256으로 검증한 뒤 표시하며, 검증 실패 시 재생을 차단합니다. 외부 HTML이나 스크립트를 실행하지 않습니다. 기존 .html 주소는 새 경로로 연결됩니다. Private viewer는 공개하지 않습니다."
+        : "Playback runs in a native Next.js, React and TypeScript page. Metadata JSON from a pinned commit is SHA-256 verified before rendering; failure blocks playback. No external HTML or script is executed. The legacy .html URL redirects to the new route. The private viewer remains unpublished."}</p>
     </section>
   );
 }

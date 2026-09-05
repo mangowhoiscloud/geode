@@ -2,30 +2,10 @@
 <html lang="ko">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="referrer" content="no-referrer">
-<title>Terminal-Bench 2.1 paired replay · GEODE</title>
-<style>body{font-family:system-ui,sans-serif;margin:2rem}iframe{position:fixed;inset:0;width:100%;height:100%;border:0}</style>
-<p id="status" role="status">공개 replay의 SHA-256을 확인하고 있습니다. Verifying the public replay.</p>
-<p><a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/52b7d0eab37ec9122492ec51d77e1502d5b9e085/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/recording/replay-v19-20260905">Source, coverage and verification receipts</a></p>
-<script type="module">
-// The artifact repository owns the reviewed bytes; this bridge stores no run payload.
-const source = 'https://raw.githubusercontent.com/mangowhoiscloud/geode-eval-artifacts/52b7d0eab37ec9122492ec51d77e1502d5b9e085/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/recording/replay-v19-20260905/paired-execution-replay.html';
-const expected = 'ef15b986535d6c04b395645afe9bf877c937a53e5fdfc489a0f69ac53d1a05d3';
-try {
-  const response = await fetch(source, {credentials: 'omit', signal: AbortSignal.timeout(30000)});
-  if (!response.ok) throw new Error('fetch');
-  const bytes = await response.arrayBuffer();
-  const actual = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('');
-  if (actual !== expected) throw new Error('digest');
-  const frame = document.createElement('iframe');
-  frame.title = 'GEODE left, Codex right: 445 paired execution replays';
-  frame.setAttribute('sandbox', 'allow-scripts');
-  frame.srcdoc = new TextDecoder().decode(bytes);
-  document.body.append(frame);
-  document.getElementById('status').textContent = 'SHA-256 verified.';
-} catch {
-  document.getElementById('status').textContent = '검증 실패로 재생을 중단했습니다. Replay blocked: fetch or digest verification failed. Use the source link to inspect the evidence.';
-}
+<title>Terminal-Bench Replay has moved</title>
+<link rel="canonical" href="https://mangowhoiscloud.github.io/geode/benchmarks/terminal-bench/replay/">
+<p><a href="./replay/">새 Replay 열기 / Open the replay</a></p>
+<script>
+location.replace("./replay/" + location.search + location.hash);
 </script>
-<noscript>JavaScript가 필요합니다. Download the reviewed HTML from the source link for local playback.</noscript>
 </html>
