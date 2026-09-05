@@ -3415,7 +3415,7 @@ retry · fallback
 
 Pair 001~445는 89 tasks × 5 repetitions입니다. 각 쌍의 왼쪽은 GEODE, 오른쪽은 Codex이며, task·반복·arm 하나가 cell입니다. 재생하면 새 tool event가 아래에 나타나고 이전 기록은 위로 올라갑니다. 상단의 arm 정보는 고정됩니다.
 
-[445쌍 Replay 열기](https://mangowhoiscloud.github.io/geode/benchmarks/terminal-bench/replay.html)
+[445쌍 Replay 열기](https://mangowhoiscloud.github.io/geode/benchmarks/terminal-bench/replay/)
 
 | 관찰 범위 | GEODE | Codex | 합계 |
 | --- | --- | --- | --- |
@@ -3432,7 +3432,7 @@ Pair 001~445는 89 tasks × 5 repetitions입니다. 각 쌍의 왼쪽은 GEODE, 
 
 [`Replay source · coverage · SHA-256 receipts`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/52b7d0eab37ec9122492ec51d77e1502d5b9e085/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/recording/replay-v19-20260905) · [`Frozen run · attempts · analysis`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z)
 
-재생 페이지는 pinned commit의 공개 HTML을 내려받아 SHA-256을 검증한 뒤 sandbox iframe에서 엽니다. 검증 실패 시 실행하지 않습니다. 개인정보가 포함될 수 있는 private viewer는 문서에 연결하지 않습니다.
+Next.js·React·TypeScript 페이지에서 재생합니다. Pinned commit의 metadata JSON을 SHA-256으로 검증한 뒤 표시하며, 검증 실패 시 재생을 차단합니다. 외부 HTML이나 스크립트를 실행하지 않습니다. 기존 .html 주소는 새 경로로 연결됩니다. Private viewer는 공개하지 않습니다.
 
 ---
 
