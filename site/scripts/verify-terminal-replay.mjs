@@ -92,6 +92,50 @@ if (process.argv[2]) {
   }
   assert.equal(ids.size, 890); assert.equal(calls, 16244); assert.equal(differences, 18);
   assert.deepEqual(coverage, { "atif-derived-private": 835, "receipt-event": 35, "exclusion-card": 20 });
+  if (process.argv[3]) {
+    const raw = readFileSync(process.argv[3]);
+    const buffer = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
+    const recovered = await api.decodeObservability(buffer, data);
+    assert.equal(Object.keys(recovered).length, 890);
+    let geodeCalls = 0, nativeCalls = 0, missingCache = 0, notRun = 0;
+    for (const cell of Object.values(recovered)) {
+      const usage = cell.usage;
+      assert.ok(["verified-call-usage", "unavailable", "not-run"].includes(usage.status));
+      for (const key of ["input_tokens", "output_tokens", "cached_input_tokens", "observed_cached_tokens"])
+        assert.ok(usage[key] === null || (Number.isInteger(usage[key]) && usage[key] >= 0));
+      if (usage.status === "not-run") notRun++;
+      if (cell.arm === "geode") geodeCalls += usage.events.length; else nativeCalls += usage.events.length;
+      const absent = usage.events.filter(event => event.cached_input_tokens === null).length;
+      assert.equal(absent, usage.cache_missing_events); missingCache += absent;
+      if (absent) assert.equal(usage.cached_input_tokens, null);
+      if (usage.events.length) for (const key of ["input_tokens", "output_tokens"])
+        assert.equal(usage.events.reduce((sum, event) => sum + event[key], 0), usage[key]);
+      for (const event of usage.events) {
+        assert.ok(Number.isFinite(Date.parse(event.timestamp_utc)));
+        for (const key of ["input_tokens", "output_tokens"]) assert.ok(Number.isInteger(event[key]) && event[key] >= 0);
+      }
+      assert.deepEqual(Object.keys(cell.phases).sort(), ["agent_execution", "agent_setup", "environment_setup", "verifier"]);
+      for (const phase of Object.values(cell.phases)) {
+        assert.ok(["observed", "not-run", "not-reached", "incomplete"].includes(phase.status));
+        assert.ok(phase.seconds === null || (Number.isFinite(phase.seconds) && phase.seconds >= 0));
+      }
+      assert.ok(cell.commands.completed === null || Number.isInteger(cell.commands.completed));
+      assert.ok(cell.commands.nonzero === null || Number.isInteger(cell.commands.nonzero));
+      assert.ok(cell.cost.reported_estimate_usd === null || Number.isFinite(cell.cost.reported_estimate_usd));
+      assert.equal(cell.cost.billed_usd, null);
+    }
+    assert.deepEqual([geodeCalls, nativeCalls, missingCache, notRun], [4709, 12214, 648, 20]);
+    await assert.rejects(api.decodeObservability(new ArrayBuffer(0), data), /integrity/);
+    const wrongJoin = structuredClone(data); wrongJoin.pairs[0].geode.attempt_id = "wrong";
+    await assert.rejects(api.decodeObservability(buffer, wrongJoin), /join/);
+    try {
+      globalThis.fetch = async () => new Response(raw);
+      assert.equal(Object.keys(await api.loadObservability(new AbortController().signal, data)).length, 890);
+      globalThis.fetch = async () => new Response(null, { status: 503 });
+      await assert.rejects(api.loadObservability(new AbortController().signal, data), /download/);
+    } finally { globalThis.fetch = realFetch; }
+    console.log("Recovered observability: 890 joins, 16923 call events, null semantics, bad hash/join/download PASS");
+  }
   console.log("Pinned artifact: 445 pairs, 890 unique cells, 16244 tool calls, 18 raw/selected differences PASS");
 }
 console.log("Replay: SHA-256, fetch failures, state transitions, KST, query bounds, legacy redirect PASS");

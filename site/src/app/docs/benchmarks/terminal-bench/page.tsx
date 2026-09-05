@@ -7,6 +7,7 @@ const ARTIFACT_REVISION = "a32abcbf78ab6100ea1e85540a2ace9436dc6f76";
 const RUN_PATH =
   "terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z";
 const REPLAY_REVISION = "52b7d0eab37ec9122492ec51d77e1502d5b9e085";
+const OBSERVABILITY_REVISION = "d277607f3a179f191ad24b1497c0934beb9d2470";
 const PAIRED_RUN = "terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z";
 
 function PairedReplay({ ko }: { ko: boolean }) {
@@ -43,6 +44,14 @@ function PairedReplay({ ko }: { ko: boolean }) {
       <p><RunLogLink path={`${PAIRED_RUN}/recording/replay-v19-20260905`} revision={REPLAY_REVISION} label="Replay source · coverage · SHA-256 receipts" />{" · "}
         <RunLogLink path={PAIRED_RUN} revision={ARTIFACT_REVISION} label="Frozen run · attempts · analysis" />
       </p>
+      <h3>{ko ? "보존된 원본에서 복구한 실행 지표" : "Execution metrics recovered from preserved evidence"}</h3>
+      <p>{ko
+        ? "호출별 usage를 GEODE 401셀·4,709건, Codex 418셀·12,214건에서 복구하고 Harbor trial 합계와 대조했습니다. GEODE cache 필드 648건은 미기록 상태인 null로 보존합니다. Cached input은 input에 포함되며, 확인된 부분합을 전체 cache 값으로 표시하지 않습니다. Usage event는 ATIF tool step과 다른 단위이므로 재생 위치와 연동하지 않습니다."
+        : "Call-level usage was recovered and reconciled with Harbor trial totals for 401 GEODE cells / 4,709 events and 418 Codex cells / 12,214 events. The 648 missing GEODE cache fields remain null. Cached input is part of input; an observed subtotal is not presented as a complete total. Usage events are distinct from ATIF tool steps and are not synchronized to playback."}</p>
+      <p>{ko
+        ? "Replay의 지표 항목을 펼치면 호출별 input·output·cache, environment setup·agent setup·execution·verifier 경과 시간, 완료된 shell command의 exit code 집계를 볼 수 있습니다. Nonzero exit는 tool 오류율이 아닙니다. 실제 CPU 사용률·peak RAM·subscription 청구액은 미계측이며, producer 비용 추정치는 청구액과 구분합니다. 원본 점수와 제외 규칙은 바뀌지 않았습니다."
+        : "Expand the replay metrics to inspect per-call input, output and cache, phase elapsed times, and completed shell-command exit summaries. Nonzero exit is not a tool error rate. Actual CPU utilization, peak RAM and subscription billing are unmeasured; producer cost estimates are labeled separately. Original scores and exclusions remain unchanged."}</p>
+      <p><RunLogLink path={`${PAIRED_RUN}/recording/research-v20`} revision={OBSERVABILITY_REVISION} label="Recovered observability · method · source hashes" /></p>
       <p className="text-sm text-[var(--ink-3)]">{ko
         ? "Next.js·React·TypeScript 페이지에서 재생합니다. Pinned commit의 metadata JSON을 SHA-256으로 검증한 뒤 표시하며, 검증 실패 시 재생을 차단합니다. 외부 HTML이나 스크립트를 실행하지 않습니다. 기존 .html 주소는 새 경로로 연결됩니다. Private viewer는 공개하지 않습니다."
         : "Playback runs in a native Next.js, React and TypeScript page. Metadata JSON from a pinned commit is SHA-256 verified before rendering; failure blocks playback. No external HTML or script is executed. The legacy .html URL redirects to the new route. The private viewer remains unpublished."}</p>

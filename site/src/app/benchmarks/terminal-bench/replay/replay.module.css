@@ -44,6 +44,17 @@
 .empty { color: var(--ink-2); font-size: 14px; padding-bottom: 22px; max-width: 36em; }
 .lineage { margin-top: 20px; font-size: 12px; color: var(--ink-2); overflow-wrap: anywhere; }
 .lineage p { margin-top: 12px; }
+.metrics { margin-top: 20px; font-size: 13px; color: var(--ink-2); min-width: 0; }
+.metrics p { margin: 12px 0; word-break: keep-all; overflow-wrap: anywhere; }
+.metrics h4 { margin: 24px 0 10px; color: var(--ink); font-weight: 500; }
+.numbers { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px 12px; font-variant-numeric: tabular-nums; }
+.numbers > div { display: contents; }
+.numbers dd { text-align: right; color: var(--ink); }
+.tableScroll { overflow: auto; max-height: 320px; margin: 12px 0; }
+.tableScroll table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.tableScroll caption { text-align: left; padding: 8px 0; }
+.tableScroll :is(th,td) { padding: 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+.tableScroll th { font-weight: 500; color: var(--ink); }
 .page summary { cursor: pointer; min-height: 36px; }
 .caption { color: var(--ink-2); font-size: 13px; margin-top: 24px; max-width: 85ch; }
 .boundaries { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--rule); color: var(--ink-2); font-size: 14px; }
@@ -67,6 +78,9 @@
   .event, .event p + p { font-size: 11px; }
   .log { height: 340px; }
   .ordinal { min-width: 28px; }
+  .metrics { font-size: 11px; }
+  .numbers { grid-template-columns: minmax(0,1fr); gap: 4px; }
+  .numbers dd { text-align: left; margin-bottom: 6px; }
   .program { margin-left: 4px; }
 }
 @media (prefers-reduced-motion: reduce) { .page button { transition: none; } }
