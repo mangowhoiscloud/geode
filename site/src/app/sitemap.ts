@@ -11,6 +11,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "",
     "about",
     "portfolio",
+    "benchmarks/terminal-bench/replay",
     ...flattenSitemap().map((page) => `docs${page.slug ? `/${page.slug}` : ""}`),
   ];
   return paths.map((path) => ({ url: `${SITE}/${path}${path ? "/" : ""}` }));

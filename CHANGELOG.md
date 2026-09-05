@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- Migrated the Terminal-Bench paired replay to a native Next.js/React/TypeScript route with SHA-256-verified metadata JSON, accessible playback controls, and a legacy URL redirect. Frozen scores, raw evidence, and existing videos are unchanged.
+
 ### Added
 
 - **Terminal-Bench paired replay in docs.** A SHA-256-pinned, sandboxed
