@@ -152,7 +152,7 @@ export function ReplayPlayer() {
   useEffect(() => {
     if (!data) return;
     const keydown = (event: KeyboardEvent) => {
-      if (event.target instanceof Element && event.target.closest("input,select,button,a,summary,[contenteditable]")) return;
+      if (event.target instanceof Element && event.target.closest("input,select,button,a,summary,[contenteditable],[tabindex]")) return;
       if (event.code === "Space") { event.preventDefault(); toggle(); }
       if (event.code === "ArrowLeft") { event.preventDefault(); go(state.pair - 1); }
       if (event.code === "ArrowRight") { event.preventDefault(); go(state.pair + 1); }
