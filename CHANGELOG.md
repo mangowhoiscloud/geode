@@ -71,6 +71,11 @@ functional change.
 
 ### Infrastructure
 
+- **Isolated test authentication paths.** Pytest now owns separate collection,
+  worker, and per-test auth paths instead of preserving an external override or
+  deleting a shared temporary file. The credential scrub includes OpenRouter;
+  home-path regressions cover GEODE/Codex defaults and overrides without reloading
+  live modules. The settings-consumer guard no longer filters by checkout name.
 - **Patched site audit dependency.** The locked transitive `@humanfs/node`
   dependency now uses 0.16.8, closing GHSA-p498-v437-472g in the Pages build.
 

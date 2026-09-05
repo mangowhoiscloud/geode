@@ -140,6 +140,7 @@ class TestResolveLocalLabel:
         """No codex auth file + no GEODE profile → generic label."""
         # Re-route HOME so the real ~/.codex/auth.json isn't read
         monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("CODEX_HOME", raising=False)
         # Hard-fail the profile store import so source-2 falls through
         import core.wiring.container
 
@@ -150,8 +151,9 @@ class TestResolveLocalLabel:
         )
         assert resolve_local_chatgpt_plan_label() == "ChatGPT subscription"
 
+    @pytest.mark.parametrize("override", [False, True])
     def test_reads_codex_cli_auth_json(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, override: bool
     ) -> None:
         """Synthetic codex auth.json with prolite plan → resolved label."""
         import base64
@@ -163,12 +165,15 @@ class TestResolveLocalLabel:
         }
         encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
         fake_token = f"hdr.{encoded}.sig"
-        codex_dir = tmp_path / ".codex"
+        codex_dir = tmp_path / ("custom-codex" if override else ".codex")
         codex_dir.mkdir()
         (codex_dir / "auth.json").write_text(
             json.dumps({"tokens": {"id_token": fake_token}}), encoding="utf-8"
         )
         monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("CODEX_HOME", raising=False)
+        if override:
+            monkeypatch.setenv("CODEX_HOME", str(codex_dir))
         assert resolve_local_chatgpt_plan_label() == "ChatGPT Pro Lite"
 
     def test_malformed_codex_auth_falls_through(
@@ -180,6 +185,7 @@ class TestResolveLocalLabel:
         codex_dir.mkdir()
         (codex_dir / "auth.json").write_text("not json at all", encoding="utf-8")
         monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("CODEX_HOME", raising=False)
         import core.wiring.container
 
         monkeypatch.setattr(

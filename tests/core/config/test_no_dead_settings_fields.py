@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 from core.config._settings import Settings
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -34,7 +35,7 @@ def _consumer_texts() -> list[str]:
     for pkg in ("core", "evals", "evolve"):
         for path in (REPO_ROOT / pkg).rglob("*.py"):
             as_str = path.as_posix()
-            if as_str.endswith(skip_suffixes) or "test" in as_str:
+            if as_str.endswith(skip_suffixes):
                 continue
             texts.append(path.read_text(encoding="utf-8", errors="ignore"))
     return texts
@@ -53,3 +54,15 @@ def test_no_dead_settings_fields() -> None:
         "Settings fields with no consumer outside config/tests "
         f"(dead knobs — wire them to a reader or remove field + TOML map): {sorted(dead)}"
     )
+
+
+def test_consumer_scan_is_independent_of_checkout_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "test-checkout"
+    config = root / "core" / "config"
+    config.mkdir(parents=True)
+    (config / "_settings.py").write_text("declaration", encoding="utf-8")
+    (root / "core" / "latest.py").write_text("consumer", encoding="utf-8")
+    monkeypatch.setattr(f"{__name__}.REPO_ROOT", root)
+    assert _consumer_texts() == ["consumer"]
