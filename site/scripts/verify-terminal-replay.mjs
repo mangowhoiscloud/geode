@@ -25,6 +25,10 @@ for (const [query, expected] of [["", 0], ["?pair=445", 444], ["?pair=Infinity",
 }
 assert.match(api.timeKst("2026-08-27T19:15:00Z"), /28\/08.*04:15:00 KST/);
 assert.equal(api.timeKst(null), "Timestamp unavailable");
+assert.equal(api.elapsedSeconds(null), "n/a");
+assert.equal(api.elapsedSeconds(0), "0.0 s");
+assert.equal(api.elapsedSeconds(0.000075), "<0.1 s");
+assert.equal(api.elapsedSeconds(31.159), "31.2 s");
 assert.equal(api.statusLabel({ status_label: "NOT RUN / 사전 제외" }, false), "NOT RUN / prospective exclusion");
 assert.equal(api.statusLabel({ status_label: "INVALID / 인프라 무효" }, false), "INVALID / infrastructure-invalid");
 assert.equal(api.statusLabel({ status_label: "NOT RUN / 사전 제외" }, true), "NOT RUN / 사전 제외");

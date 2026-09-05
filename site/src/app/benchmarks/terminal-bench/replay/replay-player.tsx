@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ARTIFACT_COMMIT, DATA_SHA256, DATA_URL, EVIDENCE_URL, OBSERVABILITY_COMMIT, OBSERVABILITY_SHA256, OBSERVABILITY_URL, eventCount, loadObservability, loadReplay, nextFrame, pairFromSearch, statusLabel, timeKst } from "./replay-data";
+import { ARTIFACT_COMMIT, DATA_SHA256, DATA_URL, EVIDENCE_URL, OBSERVABILITY_COMMIT, OBSERVABILITY_SHA256, OBSERVABILITY_URL, elapsedSeconds, eventCount, loadObservability, loadReplay, nextFrame, pairFromSearch, statusLabel, timeKst } from "./replay-data";
 import type { Cell, Observability, Playback, ReplayData } from "./replay-data";
 import styles from "./replay.module.css";
 
@@ -39,7 +39,7 @@ function Metrics({ value, ko }: { value: Observability; ko: boolean }) {
     <h4>{ko ? "단계별 경과 시간" : "Phase elapsed time"}</h4>
     <dl className={styles.numbers}>{Object.entries(phases).map(([key, phase]) => <div key={key}>
       <dt>{labels[key as keyof typeof labels]}</dt><dd title={phase.started_at && phase.finished_at ? `${phase.started_at} → ${phase.finished_at}` : phase.status}>
-        {phase.seconds === null ? phase.status : `${phase.seconds.toFixed(1)} s`}</dd>
+        {phase.seconds === null ? phase.status : elapsedSeconds(phase.seconds)}</dd>
     </div>)}</dl>
     <p>{ko ? "UTC 시작·종료 시각의 차이입니다. 단계 사이의 간격과 teardown은 별도이며, CPU 사용 시간은 아닙니다." : "Differences of UTC start/end timestamps. Inter-phase gaps and teardown are separate; these are not CPU times."}</p>
     <h4>{ko ? "완료된 shell command" : "Completed shell commands"}</h4>
@@ -73,7 +73,7 @@ function Arm({ cell, metrics, step, done, playing, ko }: {
         <p className={styles.status}>Cell {cell.cell} / {done ? statusLabel(cell, ko) : (ko ? "기록 재생" : "Evidence playback")}</p>
         <p>{kind} / {events.length}/{cell.events.length} tool calls</p>
         <p>{cell.timing ? <>Trial start <time dateTime={cell.timing.started_at ?? undefined}>{timeKst(cell.timing.started_at)}</time></> : (ko ? "실행 전 대칭 제외" : "Prospective symmetric exclusion")}</p>
-        <p>Trial wall {cell.wall_seconds?.toFixed(1) ?? "n/a"} s <span>{ko ? "(전체 trial 경과 시간)" : "(full trial elapsed time)"}</span></p>
+        <p>Trial wall {elapsedSeconds(cell.wall_seconds)} <span>{ko ? "(전체 trial 경과 시간)" : "(full trial elapsed time)"}</span></p>
         <p>Raw verifier {cell.raw_verifier_reward ?? "n/a"} / selected {cell.selected_reward ?? "n/a"}</p>
       </div>
       <div ref={log} className={styles.log} tabIndex={0} aria-label={name + " event log"}>

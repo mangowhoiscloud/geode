@@ -80,6 +80,11 @@ export function timeKst(value: string | null | undefined): string {
   }).format(new Date(value)) + " KST";
 }
 
+export function elapsedSeconds(value: number | null): string {
+  if (value === null) return "n/a";
+  return value > 0 && value < 0.1 ? "<0.1 s" : `${value.toFixed(1)} s`;
+}
+
 export function statusLabel(cell: Cell, ko: boolean): string {
   return ko ? cell.status_label : cell.status_label
     .replace("사전 제외", "prospective exclusion")
