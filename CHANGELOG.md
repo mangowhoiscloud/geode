@@ -75,6 +75,10 @@ functional change.
 
 ### Fixed
 
+- **Preflight reports site-generation failures.** Failed metadata sync, site
+  builds, and Markdown exports now fail the local gate with diagnostics even
+  when generated files have no diff. Generated-file drift remains a separate
+  check, and skipped checks still report incomplete coverage.
 - **LLM retries now have one bounded runtime policy.** The main AgenticLoop,
   auxiliary calls, and scaffold-search mutator share the configured total
   attempt count; transient 408/409/429 responses honor bounded server retry
