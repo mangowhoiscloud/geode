@@ -615,6 +615,36 @@ class TestExecuteDispatch:
 
 
 class TestComputerUseAvailability:
+    @pytest.mark.parametrize("missing_key", ["DISPLAY", "unexpected"])
+    def test_python_driver_missing_display_does_not_break_requests(
+        self, monkeypatch: pytest.MonkeyPatch, missing_key: str
+    ) -> None:
+        import builtins
+
+        from core.config import settings
+        from core.llm.providers.anthropic import is_computer_use_enabled
+        from core.runtime_audit import reset_runtime_audit_active, set_runtime_audit_active
+
+        original_import = builtins.__import__
+
+        def import_with_headless_display(name, *args, **kwargs):
+            if name == "pyautogui":
+                raise KeyError(missing_key)
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(settings, "computer_use_enabled", True)
+        monkeypatch.setattr(settings, "computer_use_driver", "python")
+        token = set_runtime_audit_active(False)
+        try:
+            with patch("builtins.__import__", side_effect=import_with_headless_display):
+                if missing_key == "DISPLAY":
+                    assert is_computer_use_enabled() is False
+                else:
+                    with pytest.raises(KeyError, match="unexpected"):
+                        is_computer_use_enabled()
+        finally:
+            reset_runtime_audit_active(token)
+
     @pytest.mark.parametrize("audit_value", ["1", "true", "TRUE", "yes", "YeS"])
     @pytest.mark.parametrize("driver", ["helper", "auto", "python"])
     def test_unrestricted_audit_env_disables_every_host_driver(
