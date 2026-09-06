@@ -132,6 +132,24 @@ scope-incomplete aggregate does not receive an ATIF/replay completeness claim.
 Full-runtime ATIF steps leave reasoning effort null; only the configured root
 effort is declared, separately from worker and wrap-up policies.
 
+## Headless canary closure
+
+The first new image canary at revision
+`c2aa2baa71d690a8b00143551194514f507749d8` failed before API dispatch:
+`build_responses_kwargs` probed desktop availability, PyAutoGUI imported
+mouseinfo, and mouseinfo raised `KeyError('DISPLAY')` in the headless task
+container. An offline, socket-blocked reproduction confirmed this exact path.
+The generic availability probe now treats only that missing-display error as
+unavailable desktop automation; unrelated errors still propagate. Local image
+reading remains available and does not require a desktop display.
+
+The closed canary retains its Harbor result, three failed recorded call
+attempts with null usage, canonical SQLite/trajectory, verifier zero, and PTY
+capture under `terminalbench21-sol-max-fullruntime-gcode-20260906`.
+Neither G-code arm started. This is a failed non-benchmark integration gate,
+not a task-performance result or a recovered historical attempt. A corrected
+candidate needs a new source hash and prospective canary before expansion.
+
 ## Primary references
 
 - [Harbor custom agents](https://www.harborframework.com/docs/agents): the

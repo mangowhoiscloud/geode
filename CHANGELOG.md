@@ -49,6 +49,9 @@ functional change.
 
 ### Fixed
 
+- Treated PyAutoGUI's missing `DISPLAY` as unavailable desktop automation in
+  headless containers, without breaking ordinary model requests or hiding
+  unrelated import errors.
 - Preserved missing versus observed-zero cache usage through OpenAI/Anthropic
   parsing and durable LLM-call activity records; corrected Harbor's cache key
   and stopped treating unavailable cache/cost totals as zero.
