@@ -7,6 +7,7 @@ PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S5) — pin the hydration
 
 from __future__ import annotations
 
+import json
 import random
 from pathlib import Path
 
@@ -92,6 +93,42 @@ def test_next_phase_to_run_all_complete(tmp_path: Path) -> None:
     assert next_phase_to_run(tmp_path) is None
 
 
+@pytest.mark.parametrize("invalid_body", ["{}", "[]"])
+def test_invalid_checkpoint_cannot_mark_run_complete(tmp_path: Path, invalid_body: str) -> None:
+    for phase in _PHASE_ORDER:
+        write_checkpoint(
+            tmp_path,
+            phase=phase,
+            state_snapshot=_full_snapshot(completed_phases=list(_PHASE_ORDER)),
+            duration_ms=1.0,
+        )
+    (tmp_path / "checkpoints" / "supervisor.json").write_text(invalid_body, encoding="utf-8")
+    state, next_phase = resolve_resume_target(tmp_path)
+    assert state.run_id == "gen1-broken_tool_use"
+    assert next_phase == "supervisor"
+
+
+def test_invalid_latest_checkpoint_uses_prior_valid_snapshot(tmp_path: Path) -> None:
+    write_checkpoint(
+        tmp_path,
+        phase="supervisor",
+        state_snapshot=_full_snapshot(completed_phases=["supervisor"]),
+        duration_ms=1.0,
+    )
+    invalid = write_checkpoint(
+        tmp_path,
+        phase="literature_review",
+        state_snapshot=_full_snapshot(completed_phases=["supervisor", "literature_review"]),
+        duration_ms=1.0,
+    )
+    payload = json.loads(invalid.read_text(encoding="utf-8"))
+    payload["phase"] = "generator"
+    invalid.write_text(json.dumps(payload), encoding="utf-8")
+    state, next_phase = resolve_resume_target(tmp_path)
+    assert state.completed_phases == ["supervisor"]
+    assert next_phase == "literature_review"
+
+
 def test_hydrate_state_round_trip(tmp_path: Path) -> None:
     snap = _full_snapshot(completed_phases=["supervisor", "literature_review"])
     snap["run_dir"] = str(tmp_path)
@@ -147,7 +184,7 @@ def test_hydrate_state_missing_identity_fields_raises(tmp_path: Path) -> None:
         state_snapshot=snap,
         duration_ms=1.0,
     )
-    with pytest.raises(ResumeError, match="missing identity fields"):
+    with pytest.raises(ResumeError, match=r"no checkpoints.*nothing to resume"):
         hydrate_state(tmp_path)
 
 

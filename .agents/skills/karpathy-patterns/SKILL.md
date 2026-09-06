@@ -7,7 +7,25 @@ description: Reference when designing autonomous agent systems or deciding agent
 
 > **Source**: `karpathy/autoresearch` (Python, 3 files) + `karpathy/agenthub` (Go, single binary)
 > **Philosophy**: Quality is guaranteed by constraints, not infrastructure.
-> **Details**: [Blog 22](docs/blogs/22-karpathy-autoresearch-autonomous-ml-loop.md) · [Blog 23](docs/blogs/23-karpathy-agenthub-agent-native-infrastructure.md)
+> **Historical provenance**: Blog 22 (`22-karpathy-autoresearch-autonomous-ml-loop.md`)
+> and Blog 23 (`23-karpathy-agenthub-agent-native-infrastructure.md`) are absent
+> from this checkout; the former links are not maintained source references.
+
+## Current GEODE applicability — reviewed 2026-09-06
+
+The upstream pattern notes below are conceptual references. Their GEODE
+counterpart paragraphs are historical, not current implementation instructions:
+old node paths, iteration limits, layer numbers, and event counts must not be
+copied into new work. Ground present-day application in [AGENTS.md](../../../AGENTS.md),
+[code conventions](../../../docs/architecture/naming-conventions.md), and
+[runtime authority](../../../docs/architecture/coding-runtime-authority.md).
+`core` owns the runtime, `evals` measurement, and `evolve` scaffold search and
+promotion. Use the [architecture roadmap](../../../docs/architecture/extensibility-roadmap.md)
+for current GAP status; this skill is not another status ledger.
+
+The upstream Git/reset and unattended-run examples do not authorize discarding
+user work or starting live experiments. GEODE's workflow and frozen evaluation
+contract govern those actions.
 
 ## 10 Pattern Overview
 
@@ -34,7 +52,7 @@ Restrict agent freedom to the necessary minimum. autoresearch constraints: 3 fil
 
 **Judgment**: When designing an agent, did you define "what cannot be done" before "what can be done"?
 
-**GEODE counterpart**: Node contracts (output keys restriction, `core/nodes/*.py`), Clean Context (analyses blocked, `analysts.py:417`), Confidence Gate ≥ 0.7 + max 5 iter (`graph.py:66-68`).
+**Historical GEODE counterpart — not current**: Node contracts (output keys restriction, `core/nodes/*.py`), Clean Context (analyses blocked, `analysts.py:417`), Confidence Gate ≥ 0.7 + max 5 iter (`graph.py:66-68`).
 
 ---
 
@@ -52,7 +70,7 @@ autoresearch: train.py (~630 lines) = the only modification target
 | Autonomous experiment / config optimization | O |
 | Large-scale refactoring / multi-module changes | X |
 
-**GEODE counterpart**: Each Analyst/Evaluator has independent prompts + independent output models. One node does not modify another node's prompts.
+**Historical GEODE counterpart — not current**: Each Analyst/Evaluator had independent prompts + independent output models. One node did not modify another node's prompts.
 
 ---
 
@@ -64,7 +82,7 @@ TRAINING_BUDGET_SECONDS = 300  # Efficient architecture = more steps (automatic 
 
 Instead of "N iterations," use "do your best within T minutes" → the agent optimizes its own efficiency.
 
-**GEODE counterpart**: Currently iteration-based (max 5). Introducing wall-clock would require node timeout + partial result return patterns.
+**Historical GEODE counterpart — not current**: Then iteration-based (max 5); the note proposed node timeout + partial-result handling before wall-clock control.
 
 ---
 
@@ -79,9 +97,7 @@ LOOP:
 
 **Mitigation**: Diversity Forcing (5 consecutive same type → forced switch), Simulated Annealing, Multi-branch (AgentHub DAG), Meta-optimization (program.md self-modification).
 
-> Details: Blog 22 §3.3 Ratchet Mechanism
-
-**GEODE counterpart**: 5-Phase RLHF feedback loop (`automation/feedback_loop.py`). Broader exploration than ratchet (expert panel) + weaker convergence guarantee.
+**Historical GEODE counterpart — not current**: 5-Phase RLHF feedback loop (`automation/feedback_loop.py`). Broader exploration than ratchet (expert panel) + weaker convergence guarantee.
 
 ---
 
@@ -93,9 +109,7 @@ Commit = experiment record     Branch tip = best solution     git reset = discar
 
 Zero infrastructure cost. **Weakness**: `git reset` loses failure records → risk of repeating the same failures.
 
-> Details: Blog 22 §6 (includes MLflow/W&B comparison)
-
-**GEODE counterpart**: 3-Tier Memory (`memory/organization.py`, `project.py`, `session.py`) solves the failure loss problem via hierarchical TTL.
+**Historical GEODE counterpart — not current**: 3-Tier Memory (`memory/organization.py`, `project.py`, `session.py`) was presented as retaining failure history via hierarchical TTL.
 
 ---
 
@@ -107,9 +121,7 @@ grep "^val_bpb:" run.log          # L2: Extract (only 2 lines)
                                   # L3: Summarize → 1-bit judgment (improved/degraded)
 ```
 
-> Details: Blog 22 §7
-
-**GEODE counterpart**: Clean Context — existing analyses excluded from Send API (`analysts.py:418-434`). Session TTL (`session.py:43-51`). PromptAssembler — assembles only needed information per node (`prompt_assembler.py:48-110`).
+**Historical GEODE counterpart — not current**: Clean Context — existing analyses excluded from Send API (`analysts.py:418-434`). Session TTL (`session.py:43-51`). PromptAssembler assembled selected information per node (`prompt_assembler.py:48-110`).
 
 ---
 
@@ -119,7 +131,7 @@ program.md = agent instruction document. Composed of Setup (initialization) + Ex
 
 **Key point**: The quality of program.md determines the quality of the agent's research. To change behavior, modify the instruction document, not the code.
 
-**GEODE counterpart**: CLAUDE.md (project instruction document) + skill system (domain-specific expert instruction documents) + HookSystem 26 events (`hooks.py:19-62`).
+**Historical GEODE counterpart — not current inventory**: CLAUDE.md (project instruction document) + skill system (domain-specific expert instruction documents) + HookSystem 26 events (`hooks.py:19-62`).
 
 ---
 
@@ -138,9 +150,7 @@ Dumb Platform (AgentHub):        Platform = storage + delivery only, orchestrati
 | Frequent orchestration changes / open-ended exploration | Dumb |
 | **Hybrid** | Pipeline is Smart, inter-agent discussion is Dumb |
 
-> Details: Blog 23 §4, §9 (OpenClaw comparison)
-
-**GEODE counterpart**: Currently Smart Platform. Partial Dumb elements can be introduced when L6 Custom Agent support is added.
+**Historical GEODE counterpart — not current**: Classified as Smart Platform; the note proposed partial Dumb elements with a future L6 Custom Agent layer. That layer map is not the current architecture.
 
 ---
 
@@ -148,9 +158,7 @@ Dumb Platform (AgentHub):        Platform = storage + delivery only, orchestrati
 
 A DAG where commits branch out in all directions, without branches/PRs/merges. Core operations: `leaves` (frontier), `lineage` (ancestor path), `children` (direct descendants).
 
-> Details: Blog 23 §3
-
-**GEODE counterpart**: TaskSystem's `get_ready_tasks()` (`task_system.py:116-120`) follows the same pattern as the `leaves` operation — pending tasks with fulfilled dependencies = frontier nodes.
+**Historical GEODE counterpart — not current**: TaskSystem's `get_ready_tasks()` (`task_system.py:116-120`) was compared with `leaves` — pending tasks with fulfilled dependencies as frontier nodes.
 
 ---
 
@@ -168,7 +176,7 @@ program.md: "Add 20 lines for 0.001 improvement? Reject. Delete code for 0.001 i
 
 LLMs are inherently biased toward adding code. The instruction document must explicitly include "prefer simple solutions."
 
-**GEODE counterpart**: Same philosophy as the system prompt's "Avoid over-engineering. Only make changes that are directly requested" principle.
+**Historical GEODE counterpart — not current prompt text**: Compared with the system prompt's "Avoid over-engineering. Only make changes that are directly requested" principle.
 
 ---
 

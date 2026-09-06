@@ -224,7 +224,7 @@ def uninstall(
     keep_config: bool = typer.Option(
         False,
         "--keep-config",
-        help="Preserve ~/.geode/.env and config.toml",
+        help="Preserve runtime .env, config.toml, and auth.toml in place",
     ),
     keep_data: bool = typer.Option(
         False,
@@ -235,12 +235,13 @@ def uninstall(
     """Remove GEODE runtime data and the installed CLI."""
     from core.cli.commands.lifecycle import do_uninstall
 
-    do_uninstall(
+    if not do_uninstall(
         dry_run=dry_run,
         force=force,
         keep_config=keep_config,
         keep_data=keep_data,
-    )
+    ):
+        raise typer.Exit(1)
 
 
 def history(

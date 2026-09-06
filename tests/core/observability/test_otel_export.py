@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from core.observability import (
@@ -15,13 +18,43 @@ from core.observability import (
 from core.observability.otel_export import resolve_endpoint
 
 
-def test_status_default_disabled() -> None:
-    snap = status()
-    assert isinstance(snap.enabled, bool)
-    # ``status()`` returns the live module singleton — enabled MUST be
-    # False when called from a fresh test interpreter (other tests in
-    # this file may flip it later, but this test is module-load order
-    # tolerant: the singleton starts disabled).
+def _fresh_import_snapshot(tmp_path: Path) -> dict[str, object]:
+    completed = subprocess.run(  # noqa: S603 - fixed import-only probe
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            """
+import json
+import sys
+sys.path.insert(0, sys.argv[1])
+import core.observability as obs
+print(json.dumps({
+    "enabled": obs.status().enabled,
+    "traceloop_modules": [name for name in sys.modules
+                         if name == "traceloop" or name.startswith("traceloop.")],
+}))
+""",
+            str(Path(__file__).resolve().parents[3]),
+        ],
+        cwd=tmp_path,
+        env={
+            "HOME": str(tmp_path),
+            "GEODE_HOME": str(tmp_path / "geode"),
+            "CODEX_HOME": str(tmp_path / "codex"),
+            "GEODE_AUTH_TOML": str(tmp_path / "auth.toml"),
+            "OTEL_SDK_DISABLED": "true",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=10,
+    )
+    return json.loads(completed.stdout)
+
+
+def test_status_default_disabled(tmp_path: Path) -> None:
+    assert _fresh_import_snapshot(tmp_path)["enabled"] is False
 
 
 def test_resolve_endpoint_explicit_wins() -> None:
@@ -65,22 +98,9 @@ def test_disable_is_noop_when_already_disabled() -> None:
     assert snap.enabled is False
 
 
-def test_module_level_imports_do_not_pull_traceloop() -> None:
+def test_module_level_imports_do_not_pull_traceloop(tmp_path: Path) -> None:
     """Importing core.observability must not import traceloop on cold path."""
-    # Sanity — the lazy guard in otel_export.enable() only activates when
-    # called. Module import alone must not touch traceloop.
-    if "traceloop" in sys.modules:
-        # Another test may have force-imported it; this test is best-effort.
-        pytest.skip("traceloop already in sys.modules from a sibling test")
-    # Re-import path that we exercise on cold start. importlib so ruff
-    # can't elide these as "unused" — the test asserts the side effect.
-    import importlib
-
-    importlib.import_module("core.observability")
-    importlib.import_module("core.observability.otel_export")
-
-    assert "traceloop" not in sys.modules
-    assert "traceloop.sdk" not in sys.modules
+    assert _fresh_import_snapshot(tmp_path)["traceloop_modules"] == []
 
 
 def test_otel_status_object_round_trips_to_dict() -> None:

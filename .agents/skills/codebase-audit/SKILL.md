@@ -21,9 +21,13 @@ Proven in the GEODE v0.24.0 session (3,205 lines reduced, __init__.py -57%).
    → Worktree isolation
 5. Implementation + Verification
    → Delete/extract/convert then lint + test
-6. Docs-sync + main
-   → CHANGELOG, progress.md, global reinstall
+6. Docs-sync + authorized integration
+   → CHANGELOG for functional changes; tracking docs follow their main-owned workflow
 ```
+
+An audit alone does not authorize implementation, merge, global reinstall, or
+runtime restart. Use the [canonical workflow](../../../docs/workflow.md) for
+the requested scope; deploy or restart only when separately in scope.
 
 ## Phase 1: Audit
 
@@ -37,12 +41,15 @@ for f in $(find core/ -name "*.py" -not -name "__init__.py" -not -path "*__pycac
     module_path=$(echo $f | sed 's/\.py$//' | tr '/' '.')
     count=$(grep -rn "from ${module_path}\|import ${module_path}" core/ --include="*.py" | grep -v "$f" | wc -l)
     if [ "$count" -eq 0 ]; then
-        echo "DEAD: $f ($(wc -l < $f) lines)"
+        echo "CANDIDATE: $f ($(wc -l < $f) lines; no matching textual imports)"
     fi
 done
 ```
 
-Note: Search by **full module path**, not basename, to prevent false positives.
+Note: Search by **full module path**, not basename, to reduce false positives.
+This core-only text scan misses relative imports, outer-package callers,
+entrypoints, registries, public exports, and dynamic loading. Apply the deletion
+gate below before deciding that a module is unused.
 
 ### Duplicate Function Detection
 
@@ -61,7 +68,8 @@ find core/ -name "*.py" -not -path "*__pycache__*" -exec wc -l {} + | sort -rn |
 ```
 
 - Large files are candidates for responsibility tracing, not automatic splits.
-- `grep -c "^def " FILE` to determine the number of responsibilities
+- `grep -c "^def " FILE` counts top-level function declarations, not responsibilities.
+  Trace callers, state ownership, and reasons to change before proposing a split.
 
 ### Parameter Bloat Detection
 
@@ -82,45 +90,41 @@ grep -rn "def __init__" core/ --include="*.py" -A20 | grep -B1 "def __init__" | 
 
 ### Circular Import Prevention
 
-```python
-# When the new module references a function from the original module → deferred import
-def extracted_function():
-    from core.cli import _original_helper  # lazy import inside function
-    return _original_helper()
-```
+Trace dependency direction before extraction. A deferred back-import can hide
+the cycle rather than remove it; do not bypass a package boundary that way.
+Use [naming conventions §1 and §6](../../../docs/architecture/naming-conventions.md)
+for ownership and the limited reasons to defer an import.
 
 ### Thin Wrapper (Delegation Function)
 
-When the original module must continue exporting the extracted function:
-
-```python
-# core/cli/__init__.py
-def _build_tool_handlers(**kwargs):
-    """Delegate to tool_handlers (single source)."""
-    from core.cli.tool_handlers import _build_tool_handlers as _build
-    return _build(**kwargs)
-```
+Keep a wrapper only for a named compatibility consumer and one canonical
+implementation. If only symbol identity must be preserved, prefer the existing
+explicit re-export pattern instead of introducing another function.
 
 ### re-export (ruff F401 prevention)
 
 ```python
-from core.cli.pipeline_executor import _run_analysis as _run_analysis  # explicit re-export
+from core.cli.tool_handlers import _build_tool_handlers as _build_tool_handlers
 ```
 
 ## Phase 4: Verification
 
 ```bash
-# 1. Lint
-uv run ruff check core/
+# 1. Lint the production/test/script roots used by CI
+uv run ruff check core/ evals/ evolve/ tests/ scripts/
 
-# 2. Type check (changed files only)
-uv run mypy core/cli/__init__.py core/cli/new_module.py
+# 2. Type check; narrow to actual changed modules during local iteration
+uv run mypy core/ evals/ evolve/ scripts/
 
 # 3. Full test suite
 uv run pytest tests/ -m "not live" -q
 
 # 4. Preserve a surviving test for each behavior or invariant after deletion
 ```
+
+These are selected checks, not a full CI pass. Use the current
+[verification gates](../geode-workflow/references/verification-gates.md) and
+`scripts/preflight.sh`, and report exactly what ran or was skipped.
 
 ## GEODE Proven Results
 
@@ -137,7 +141,7 @@ uv run pytest tests/ -m "not live" -q
 1. **Searching imports by basename** → false positives (e.g., "repl" matching the string "REPL")
 2. **Treating shared names as duplicate behavior** → trace callers before changing either implementation
 3. **Not deleting originals after refactoring** → the most dangerous pattern; old version called from serve, leading to lengthy debugging
-4. **Assuming `uv tool install . --force` is sufficient** → `--reinstall` may be required in some cases
+4. **Reinstalling or restarting as an audit side effect** → require an in-scope deployment request and verify the installation/process owner first
 
 For dead-code or test-deletion decisions, follow
 `.agents/skills/agent-anti-pattern/references/field-guide.md`. Zero textual

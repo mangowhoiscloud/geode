@@ -306,8 +306,8 @@ def test_auto_override_outranks_api_key_setting_without_authorizing_fallback(mon
 
 
 @pytest.mark.policy_real
-def test_self_improving_loop_fallback_policy_returns_true_when_unconfigured(monkeypatch):
-    """self_improving_loop_fallback_policy() defaults True when [self_improving_loop] absent.
+def test_self_improving_loop_fallback_policy_returns_false_when_unconfigured(monkeypatch):
+    """Missing policy uses the schema's strict default.
 
     Tested by monkeypatching load_self_improving_loop_config to return the default
     SelfImprovingLoopConfig (which has fallback_to_payg=False per the strict
@@ -336,9 +336,8 @@ def test_self_improving_loop_fallback_policy_reads_user_config(monkeypatch):
 
 
 @pytest.mark.policy_real
-def test_self_improving_loop_fallback_policy_safe_on_import_error(monkeypatch):
-    """If evals.config is unavailable, helper returns True
-    (back-compat preservation)."""
+def test_self_improving_loop_fallback_policy_raises_on_import_error(monkeypatch):
+    """An unavailable policy loader must not authorize PAYG."""
     import builtins
 
     real_import = builtins.__import__
@@ -349,13 +348,13 @@ def test_self_improving_loop_fallback_policy_safe_on_import_error(monkeypatch):
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", _raising)
-    assert cs.self_improving_loop_fallback_policy() is True
+    with pytest.raises(ImportError, match="simulated"):
+        cs.self_improving_loop_fallback_policy()
 
 
 @pytest.mark.policy_real
-def test_self_improving_loop_fallback_policy_safe_on_load_failure(monkeypatch):
-    """If load_self_improving_loop_config raises (corrupt TOML, etc.), helper
-    returns True and logs a warning rather than breaking the run."""
+def test_self_improving_loop_fallback_policy_raises_on_load_failure(monkeypatch):
+    """An unreadable policy must not authorize PAYG."""
 
     def _raise():
         raise RuntimeError("corrupt config")
@@ -364,7 +363,70 @@ def test_self_improving_loop_fallback_policy_safe_on_load_failure(monkeypatch):
         "evals.config.load_self_improving_loop_config",
         _raise,
     )
-    assert cs.self_improving_loop_fallback_policy() is True
+    with pytest.raises(RuntimeError, match="corrupt config"):
+        cs.self_improving_loop_fallback_policy()
+
+
+@pytest.mark.policy_real
+@pytest.mark.parametrize(
+    "body",
+    [
+        "[self_improving_loop]\nfalback_to_payg = true\n",
+        "[self_improving_loop\n",
+        'self_improving_loop = "not a table"\n',
+    ],
+)
+def test_invalid_policy_stops_model_mapping_before_credential_resolution(
+    tmp_path, monkeypatch, body
+):
+    from unittest.mock import Mock
+
+    from evals.petri.models import to_inspect_model
+
+    config = tmp_path / "config.toml"
+    config.write_text(body, encoding="utf-8")
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(config))
+    resolver = Mock(return_value="api_key")
+    monkeypatch.setattr(cs, "resolve_credential_source", resolver)
+
+    with pytest.raises(ValueError):
+        to_inspect_model("gpt-5.5")
+    resolver.assert_not_called()
+
+
+@pytest.mark.policy_real
+@pytest.mark.parametrize(
+    ("fallback_to_payg", "provider", "override", "expected"),
+    [
+        (False, "openai", None, None),
+        (True, "openai", None, "api_key"),
+        (False, "openai", "api_key", "api_key"),
+        (False, "anthropic", None, "api_key"),
+        (False, "zhipuai", None, "api_key"),
+    ],
+)
+def test_real_policy_preserves_authorized_api_key_routes(
+    tmp_path, monkeypatch, fallback_to_payg, provider, override, expected
+):
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f"[self_improving_loop]\nfallback_to_payg = {str(fallback_to_payg).lower()}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(config))
+    monkeypatch.setattr(cs, "is_adapter_available", lambda provider, source: source == "api_key")
+    policy = cs.self_improving_loop_fallback_policy()
+    assert policy is fallback_to_payg
+
+    if expected is None:
+        with pytest.raises(cs.CredentialResolutionError) as exc_info:
+            cs.resolve_credential_source(provider, override=override, fallback_to_payg=policy)
+        assert exc_info.value.subscription_only is True
+    else:
+        assert (
+            cs.resolve_credential_source(provider, override=override, fallback_to_payg=policy)
+            == expected
+        )
 
 
 def test_smoke_adapter_module_round_trip(monkeypatch):
@@ -484,9 +546,7 @@ def test_self_improving_loop_fallback_policy_emits_journal_on_config_success(tmp
 
 @pytest.mark.policy_real
 def test_self_improving_loop_fallback_policy_emits_journal_on_load_error(tmp_path, monkeypatch):
-    """When the loader raises, the helper still returns the lenient
-    default but the journal records source='load_error_default' so the
-    silent fallback is auditable."""
+    """Failure is observable without recording a resolved value or raw input."""
     import json
 
     from evals.run_timeline import run_timeline_scope
@@ -500,13 +560,14 @@ def test_self_improving_loop_fallback_policy_emits_journal_on_load_error(tmp_pat
         "evals.config.load_self_improving_loop_config",
         _raise,
     )
-    with run_timeline_scope(journal):
-        assert cs.self_improving_loop_fallback_policy() is True
+    with run_timeline_scope(journal), pytest.raises(RuntimeError, match="corrupt config"):
+        cs.self_improving_loop_fallback_policy()
     rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
-    events = [r for r in rows if r["event"] == "fallback_policy_resolved"]
+    events = [r for r in rows if r["event"] == "fallback_policy_resolution_failed"]
     assert len(events) == 1
-    assert events[0]["level"] == "warn"
-    assert events[0]["payload"] == {"value": True, "source": "load_error_default"}
+    assert events[0]["level"] == "error"
+    assert events[0]["payload"] == {"error_type": "RuntimeError"}
+    assert not any(r["event"] == "fallback_policy_resolved" for r in rows)
 
 
 def test_credential_journal_emit_noop_outside_scope(monkeypatch):

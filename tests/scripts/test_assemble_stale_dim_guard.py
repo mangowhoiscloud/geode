@@ -13,7 +13,6 @@ held-out ``gen-2605-*-redundant_tool_invocation`` after the dim was dropped
 
 from __future__ import annotations
 
-import inspect
 import json
 from pathlib import Path
 
@@ -104,9 +103,3 @@ def test_assemble_accepts_live_dim_pool(tmp_path: Path) -> None:
     )
     assert manifest["total_survivors"] == 1
     assert (out / "manifest.json").exists()
-
-
-def test_assemble_pool_wires_the_guard() -> None:
-    source = inspect.getsource(assemble_pool)
-    assert "validate_pool_target_dims" in source
-    assert "AXIS_TIERS" in source

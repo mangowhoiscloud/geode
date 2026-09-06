@@ -164,6 +164,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint site source
+        run: npm run lint
+
       - name: Audit locked site dependencies
         run: npm audit --audit-level=moderate
 

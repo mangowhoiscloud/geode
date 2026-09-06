@@ -67,5 +67,9 @@ Every fix attempt must include:
 | Scenario | Explore | Reason | Act |
 |----------|---------|--------|-----|
 | Hook handler modification | Read `core/hooks/system.py` + bootstrap registration entirely | Handler-exists-but-unregistered hypothesis | Wire one handler, fire-path test |
-| Tool addition | Read `definitions.json` + `tool_handlers.py` + `tool_executor.py` | Analyze existing tool patterns | Implement following the pattern, unit test |
-| Memory change | Read `context.py` + session/project/org hierarchy | Verify 4-tier assembly order | Modify only the relevant tier, assembly test |
+| Tool addition | Read `core/tools/definitions.json`, the category handler, `core/tools/registry.py`, and `core/tools/composition.py` | Trace schema, registration, and execution ownership; CLI handlers live under `core/cli/tool_handlers/` | Implement following the existing path, test schema/execution parity |
+| Memory change | Read `core/memory/context.py` + identity/profile/org/project/session hierarchy | Verify five-tier assembly order and budgets | Modify only the relevant tier, assembly test |
+
+For current package boundaries and context ownership, use
+[naming conventions](../../../docs/architecture/naming-conventions.md), not
+the retired six-layer or service-locator DI model.

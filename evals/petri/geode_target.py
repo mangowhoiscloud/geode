@@ -208,6 +208,52 @@ async def _default_geode_runner(
             "at least the initial user message before calling generate()."
         )
 
+    from evals.petri.credential_source import (
+        resolve_credential_source,
+        self_improving_loop_fallback_policy,
+    )
+
+    # Validate policy before bootstrap, including the settings-driven default
+    # target. A missing model retains its existing unpinned drift behavior.
+    fallback_to_payg = self_improving_loop_fallback_policy()
+    resolved_provider = "anthropic"
+    resolved_source = ""
+    if model:
+        from core.llm.adapters import infer_provider_from_model
+
+        from evals.petri.manifest import load_manifest
+        from evals.petri.models import _ROUTING_TO_AUDIT_PROVIDER
+        from evals.petri.registry import get_binding
+        from evals.petri.user_overrides import read_role_override
+
+        manifest = load_manifest()
+        if model in manifest.get_role("target").allowed_models:
+            binding = get_binding("target", model=model)
+            resolved_provider = binding.provider
+            resolved_source = translate_petri_source(binding.source)
+        else:
+            # Native runtime models need not be in the Petri picker catalog,
+            # but a known provider still obeys its credential contract.
+            source_override = read_role_override("target").get("source")
+            resolved_provider = infer_provider_from_model(model)
+            credential_provider = _ROUTING_TO_AUDIT_PROVIDER.get(resolved_provider)
+            if credential_provider is not None:
+                resolved_source = translate_petri_source(
+                    resolve_credential_source(
+                        credential_provider,
+                        override=source_override,
+                        fallback_to_payg=fallback_to_payg,
+                    )
+                )
+                resolved_provider = credential_provider
+            elif source_override:
+                raise ValueError(
+                    f"No Petri credential contract for provider {resolved_provider!r}; "
+                    "cannot apply the explicit target source."
+                )
+            # Providers outside Petri's manifest retain native runtime source
+            # selection, not SIL subscription/suppression coverage.
+
     # Lazy imports — keep the module-level surface bootstrap-free.
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop, AgenticLoopConfig
@@ -297,26 +343,9 @@ async def _default_geode_runner(
 
     # Resolve the audit binding before freezing the executable plan so provider
     # visibility and ADR-012/013 policy are shared by executor and loop.
-    from core.llm.adapters import infer_provider_from_model
     from core.llm.adapters.registry import bootstrap_builtins
 
     bootstrap_builtins(policy_sources=policy_sources)
-    resolved_provider = infer_provider_from_model(model) if model else "anthropic"
-    resolved_source = ""
-    if model:
-        try:
-            from evals.petri.registry import get_binding
-
-            binding = get_binding("target", model=model)
-            resolved_provider = binding.provider
-            resolved_source = translate_petri_source(binding.source)
-        except Exception:
-            log.debug(
-                "geode_target: get_binding('target', model=%s) failed; "
-                "falling back to inferred provider + default source",
-                model,
-                exc_info=True,
-            )
 
     from core.agent.loop._tool_factory import project_bound_tool_plan
     from core.llm.adapters._source_inference import infer_source

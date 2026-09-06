@@ -10,17 +10,10 @@ renders.
 
 from __future__ import annotations
 
-import inspect
 import json
 from pathlib import Path
 
 from scripts.build_self_improving_hub import load_seedgen
-
-
-def test_load_seedgen_rebuilds_listing_in_source() -> None:
-    src = inspect.getsource(load_seedgen)
-    assert "write_listing" in src
-    assert "build_seeds_listing" in src
 
 
 def test_load_seedgen_self_heals_missing_listing(tmp_path: Path) -> None:

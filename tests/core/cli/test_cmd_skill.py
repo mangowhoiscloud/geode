@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
+import pytest
 from core.cli.commands.skill import app
 from typer.testing import CliRunner
 
@@ -129,3 +131,124 @@ class TestSkillRemove:
     def test_remove_not_found(self):
         result = runner.invoke(app, ["remove", "nonexistent-xyz"])
         assert result.exit_code == 1
+
+
+@pytest.mark.parametrize("command", ["create", "remove"])
+@pytest.mark.parametrize("name", ["", ".", "..", "../outside", "nested/name", "nested\\name"])
+def test_skill_rejects_nonlocal_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str, name: str
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".geode" / "skills").mkdir(parents=True)
+    if command == "remove":
+        (tmp_path / ".geode" / "skills" / name).mkdir(parents=True, exist_ok=True)
+    with patch("shutil.rmtree") as remove, patch.object(Path, "mkdir") as mkdir:
+        result = runner.invoke(app, [command, "--", name])
+    assert result.exit_code != 0
+    remove.assert_not_called()
+    mkdir.assert_not_called()
+
+
+@pytest.mark.parametrize("command", ["create", "remove"])
+def test_skill_rejects_absolute_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    outside = tmp_path / "outside"
+    if command == "remove":
+        outside.mkdir()
+    with patch("shutil.rmtree") as remove, patch.object(Path, "mkdir") as mkdir:
+        result = runner.invoke(app, [command, str(outside)])
+    assert result.exit_code != 0
+    remove.assert_not_called()
+    mkdir.assert_not_called()
+
+
+@pytest.mark.parametrize("command", ["create", "remove"])
+def test_skill_rejects_symlinked_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (tmp_path / ".geode").symlink_to(outside, target_is_directory=True)
+    (outside / "skills" / "demo").mkdir(parents=True)
+    with patch("shutil.rmtree") as remove, patch.object(Path, "mkdir") as mkdir:
+        result = runner.invoke(app, [command, "new" if command == "create" else "demo"])
+    assert result.exit_code != 0
+    remove.assert_not_called()
+    mkdir.assert_not_called()
+
+
+@pytest.mark.parametrize("private", [False, True])
+@pytest.mark.parametrize("command", ["create", "remove"])
+@pytest.mark.parametrize("case_alias", [False, True])
+def test_skill_never_mutates_bundled_tier(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+    private: bool,
+    case_alias: bool,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    bundled = tmp_path / ".geode" / "skills"
+    (bundled / "demo").mkdir(parents=True)
+    monkeypatch.setattr("core.skills.skills._PACKAGE_ROOT", tmp_path)
+    selected = bundled.with_name("SKILLS") if case_alias else bundled
+    if case_alias and not selected.exists():
+        pytest.skip("Filesystem does not provide case-insensitive aliases")
+    monkeypatch.setattr("core.cli.commands.skill._PROJECT_SKILLS", selected)
+    if private:
+        monkeypatch.setattr("core.cli.commands.skill._PROJECT_SKILLS", tmp_path / "project")
+        monkeypatch.setattr("core.cli.commands.skill._PERSONAL_SKILLS", selected)
+    args = [command, "new" if command == "create" else "demo"]
+    if command == "create" and private:
+        args.append("--private")
+    with patch("shutil.rmtree") as remove, patch.object(Path, "mkdir") as mkdir:
+        result = runner.invoke(app, args)
+    assert result.exit_code != 0
+    remove.assert_not_called()
+    mkdir.assert_not_called()
+
+
+def test_private_skill_does_not_modify_project_gitignore(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    ignore = tmp_path / ".gitignore"
+    ignore.write_text("existing-rule\n")
+    personal = tmp_path / "personal" / "skills"
+    monkeypatch.setattr("core.cli.commands.skill._PERSONAL_SKILLS", personal)
+    assert runner.invoke(app, ["create", "private-demo", "--private"]).exit_code == 0
+    assert ignore.read_text() == "existing-rule\n"
+    assert (personal / "private-demo" / "SKILL.md").is_file()
+
+
+def test_remove_preserves_personal_override_until_project_skill_is_removed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    project = tmp_path / ".geode" / "skills" / "demo"
+    personal = tmp_path / "personal" / "demo"
+    project.mkdir(parents=True)
+    personal.mkdir(parents=True)
+    monkeypatch.setattr("core.cli.commands.skill._PERSONAL_SKILLS", personal.parent)
+    assert runner.invoke(app, ["remove", "demo"]).exit_code == 0
+    assert not project.exists()
+    assert personal.exists()
+    assert runner.invoke(app, ["remove", "demo"]).exit_code == 0
+    assert not personal.exists()
+
+
+def test_remove_rejects_symlinked_skill(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "evidence").write_text("preserve")
+    skills = tmp_path / ".geode" / "skills"
+    skills.mkdir(parents=True)
+    (skills / "alias").symlink_to(outside, target_is_directory=True)
+    with patch("shutil.rmtree") as remove:
+        assert runner.invoke(app, ["remove", "alias"]).exit_code != 0
+    remove.assert_not_called()
+    assert (outside / "evidence").read_text() == "preserve"

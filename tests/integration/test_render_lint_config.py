@@ -114,6 +114,20 @@ def test_pages_workflow_has_lint_gate() -> None:
     )
 
 
+def test_pages_build_runs_site_lint_after_install() -> None:
+    data = yaml.safe_load(PAGES_WORKFLOW.read_text(encoding="utf-8"))
+    build = data["jobs"]["build"]
+    assert build["defaults"]["run"]["working-directory"] == "site"
+    steps = build["steps"]
+    commands = [step.get("run") for step in steps]
+    assert (
+        commands.index("npm ci") < commands.index("npm run lint") < commands.index("npm run build")
+    )
+    lint = steps[commands.index("npm run lint")]
+    assert not lint.get("continue-on-error", False)
+    assert "if" not in lint
+
+
 @pytest.mark.parametrize(
     "path",
     [
