@@ -481,6 +481,54 @@ class TestAgenticLoopFailover:
         assert ended["routing_strategy"] == "fallback"
         assert ended["routing_attempt"] == 2
 
+    @pytest.mark.parametrize(
+        ("cache_count", "present", "expected"), [(0, False, None), (0, True, 0), (40, False, 40)]
+    )
+    def test_llm_call_cache_presence_reaches_durable_activity(
+        self, cache_count: int, present: bool, expected: int | None
+    ) -> None:
+        from core.hooks import HookEvent, HookSystem
+        from core.llm.adapters.base import AdapterCallResult, UsageSummary
+        from core.observability.activity_registry import map_hook_to_activity
+
+        observed: list[dict[str, Any]] = []
+        hooks = HookSystem()
+        hooks.register(
+            HookEvent.LLM_CALL_ENDED,
+            lambda _event, data: observed.append(dict(data)),
+            name="cache-presence-recorder",
+        )
+        loop = self._make_loop()
+        loop._hooks = hooks
+        self._install_acomplete_stub(
+            loop,
+            AdapterCallResult(
+                text="done",
+                usage=UsageSummary(
+                    input_tokens=100,
+                    output_tokens=20,
+                    cached_input_tokens=cache_count,
+                    cache_write_tokens=cache_count,
+                    cached_input_tokens_present=present,
+                    cache_write_tokens_present=present,
+                    reported_cost_usd=0.123,
+                ),
+                stop_reason="end_turn",
+            ),
+        )
+
+        asyncio.run(loop._call_llm("system", [{"role": "user", "content": "go"}]))
+
+        ended = observed[-1]
+        assert ended["usage"]["cached_input_tokens"] == expected
+        assert ended["usage"]["cache_write_tokens"] == expected
+        row = map_hook_to_activity(HookEvent.LLM_CALL_ENDED, ended, run_id="test-run")
+        durable = row.model_dump(mode="json")["details"]
+        assert durable["usage"] == ended["usage"]
+        assert durable["cost_usd"] == 0.123
+        assert durable["usage"]["input_tokens"] == 100
+        assert durable["usage"]["output_tokens"] == 20
+
     def test_call_llm_returns_none_on_chain_exhaustion(self) -> None:
         """When ``acomplete`` raises, ``_call_llm`` returns None with an
         error message."""

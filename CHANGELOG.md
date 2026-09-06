@@ -49,6 +49,14 @@ functional change.
 
 ### Fixed
 
+- Preserved missing versus observed-zero cache usage through OpenAI/Anthropic
+  parsing and durable LLM-call activity records; corrected Harbor's cache key
+  and stopped treating unavailable cache/cost totals as zero.
+- Preserved local image tool outputs as multimodal content rather than text or
+  native computer-use results; durable records retain image provenance, not bytes.
+- Added opt-in absolute model-policy loading with fail-closed validation and
+  Codex adapter snapshots, preventing worker and auxiliary requests from silently
+  changing a frozen evaluation model.
 - Restricted skill creation/removal to validated user-tier names and paths, preserving bundled skills and rejecting traversal, symlink escapes, and filesystem case aliases. Removed an unreachable private-gitignore helper.
 - Limited uninstall to a dedicated runtime home and a verified uv tool installation. Project files, development environments, and caches are preserved; keep flags preserve files in place, including case-variant names. Stop, deletion, or package-removal failures no longer report success. Disk summaries exclude symlink targets, failed socket probes close their handles, and failed Git status checks no longer imply a clean checkout.
 - Made invalid or unreadable self-improving-loop credential configuration fail closed before provider dispatch, and preserved explicit per-role source selections. Model-name heuristics, suppressed credentials, and adapter lookup failures no longer create an implicit PAYG route. Named targets for Petri-managed providers use the same credential boundary, including native models outside the picker catalog; model listing is independent of credential policy.
@@ -62,6 +70,10 @@ functional change.
 
 ### Added
 
+- Added an opt-in Harbor 0.22 installed agent using the native GEODE runtime and
+  session-service composition, isolated trial state, content-addressed source
+  installation, and finalization receipts. Historical thin-adapter runs remain
+  separate; live benchmark parity still requires prospective validation.
 - **Terminal-Bench paired replay in docs.** A SHA-256-pinned, sandboxed
   public viewer covers all 445 intended GEODE/Codex pairs, with bottom-up
   tool-event playback and explicit receipt-only/exclusion states. Site builds
