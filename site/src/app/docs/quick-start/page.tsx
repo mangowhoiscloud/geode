@@ -107,8 +107,20 @@ geode setup -r     # 처음부터 다시`}</pre>
 
             <h2>업데이트와 삭제</h2>
             <pre>{`geode update                  # uv: 최신 patch; 소스: pull + rebuild
-geode update --latest         # uv: minor/major 업데이트를 명시적으로 허용
-geode uninstall --dry-run     # 삭제 대상과 설치 소유권 확인
+geode update --latest         # uv: minor/major 업데이트를 명시적으로 허용`}</pre>
+            <p>
+              공개 v1.0.27에는 아래의 새 삭제 보호가 아직 포함되지 않았습니다.
+              이 버전의 uv 설치는 원래 패키지 매니저로 CLI만 제거하고, 런타임·프로젝트
+              데이터는 남겨두세요.
+            </p>
+            <pre>{`uv tool uninstall geode-agent # CLI만 제거; 런타임·프로젝트 데이터 보존`}</pre>
+            <p>
+              <strong>소스 체크아웃 전용 — Unreleased.</strong> 아래 절차와 보존 보장은{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/pull/3295">PR #3295</a>를
+              포함한 소스 설치에 적용됩니다. main 반영과 PyPI 릴리스는 별개이므로,
+              버전 문자열만으로 이 보호의 포함 여부를 판단하지 마세요.
+            </p>
+            <pre>{`geode uninstall --dry-run     # 삭제 대상과 설치 소유권 확인
 geode uninstall               # 확인된 런타임 데이터 + uv CLI 제거`}</pre>
             <p>
               삭제 범위는 <code>GEODE_HOME</code>(기본 <code>~/.geode</code>)과
@@ -226,8 +238,21 @@ geode setup -r     # start over`}</pre>
 
             <h2>Update and uninstall</h2>
             <pre>{`geode update                  # uv: latest patch; source: pull + rebuild
-geode update --latest         # uv: explicitly allow minor/major upgrades
-geode uninstall --dry-run     # inspect targets and installation ownership
+geode update --latest         # uv: explicitly allow minor/major upgrades`}</pre>
+            <p>
+              Published v1.0.27 does not include the new removal protections below.
+              For a uv installation of that version, remove only the CLI with the
+              original package manager and leave runtime and project data intact.
+            </p>
+            <pre>{`uv tool uninstall geode-agent # CLI only; keeps runtime and project data`}</pre>
+            <p>
+              <strong>Source checkout only — Unreleased.</strong> The procedure and
+              preservation guarantees below apply to source installs containing{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/pull/3295">PR #3295</a>.
+              Landing on main is separate from a PyPI release; the version string
+              alone does not establish whether these protections are included.
+            </p>
+            <pre>{`geode uninstall --dry-run     # inspect targets and installation ownership
 geode uninstall               # remove verified runtime data + uv CLI`}</pre>
             <p>
               Removal is limited to <code>GEODE_HOME</code> (default <code>~/.geode</code>)
