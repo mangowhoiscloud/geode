@@ -227,16 +227,24 @@ def _llm_call_ended(data: dict[str, Any], run_id: str) -> ActivityRowBase:
     usage = None
     if isinstance(raw_usage, Mapping):
         usage = LLMCallUsageDetails(
+            cached_input_tokens=(
+                int(raw_usage["cached_input_tokens"])
+                if raw_usage.get("cached_input_tokens") is not None
+                else None
+            ),
+            cache_write_tokens=(
+                int(raw_usage["cache_write_tokens"])
+                if raw_usage.get("cache_write_tokens") is not None
+                else None
+            ),
             **{
                 key: int(raw_usage.get(key, 0) or 0)
                 for key in (
                     "input_tokens",
                     "output_tokens",
-                    "cached_input_tokens",
                     "reasoning_tokens",
-                    "cache_write_tokens",
                 )
-            }
+            },
         )
 
     def _text(key: str) -> str | None:

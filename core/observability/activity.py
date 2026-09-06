@@ -215,15 +215,15 @@ class LifecycleCompletedRow(ActivityRowBase):
 
 
 class LLMCallUsageDetails(BaseModel):
-    """Bounded token counters retained for one completed model call."""
+    """Bounded call counters; cache null means the provider did not report it."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     input_tokens: int = Field(default=0, ge=0)
     output_tokens: int = Field(default=0, ge=0)
-    cached_input_tokens: int = Field(default=0, ge=0)
+    cached_input_tokens: int | None = Field(default=None, ge=0)
     reasoning_tokens: int = Field(default=0, ge=0)
-    cache_write_tokens: int = Field(default=0, ge=0)
+    cache_write_tokens: int | None = Field(default=None, ge=0)
 
 
 class LLMCallEndedDetails(LifecycleCompletedDetails):

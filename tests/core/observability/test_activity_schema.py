@@ -385,6 +385,14 @@ def test_llm_lifecycle_keeps_current_and_legacy_call_correlation() -> None:
     assert legacy_started.entity_id == legacy_ended.entity_id == "legacy-call"
 
 
+@pytest.mark.parametrize("usage", [{}, {"cached_input_tokens": None, "cache_write_tokens": None}])
+def test_llm_activity_missing_cache_is_not_observed_zero(usage: dict[str, None]) -> None:
+    row = map_hook_to_activity(HookEvent.LLM_CALL_ENDED, {"usage": usage}, run_id="cache-test")
+    payload = row.model_dump(mode="json")["details"]["usage"]
+    assert payload["cached_input_tokens"] is None
+    assert payload["cache_write_tokens"] is None
+
+
 def test_k2_raw_user_content_never_persists_to_timeline() -> None:
     """Privacy contract: raw ``user_input`` strings, cognitive-state
     snapshots, and full tool results must NOT appear in the row details —

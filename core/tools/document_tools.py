@@ -1,14 +1,18 @@
 """Document Tools — local file reading as LLM-callable tool.
 
-Provides:
-- ReadDocumentTool: Read a local file (markdown, text, JSON)
-  with offset/limit support and file size guards.
+Provides local text reads and bounded image inputs for the current model.
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import io
+import json
 import logging
+import warnings
+from pathlib import Path
 from typing import Any
 
 from core.tools.sandbox import validate_path
@@ -19,10 +23,13 @@ log = logging.getLogger(__name__)
 _MAX_FILE_SIZE_BYTES = 262_144  # 256 KB — pre-read check
 _MAX_READ_TOKENS = 25_000  # post-read token estimate check
 _CHARS_PER_TOKEN = 4  # rough estimate for token counting
+_IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif"})
+_MAX_IMAGE_BYTES = 5 * 1024 * 1024
+_MAX_IMAGE_PIXELS = 20_000_000
 
 
 class ReadDocumentTool:
-    """Read a local file (markdown, text, JSON)."""
+    """Read local text or inspect a static image through the model's vision input."""
 
     @property
     def name(self) -> str:
@@ -30,7 +37,75 @@ class ReadDocumentTool:
 
     @property
     def description(self) -> str:
-        return "Read a local file (markdown, text, JSON)."
+        return "Read local text or view PNG, JPEG, WebP, and static GIF images."
+
+    @staticmethod
+    def _read_image(file_path: Path) -> dict[str, Any]:
+        from core.tools.base import tool_error
+
+        try:
+            from PIL import Image, ImageOps
+        except ImportError:
+            return tool_error(
+                "Image reading requires the optional Pillow dependency.",
+                error_type="dependency",
+                recoverable=False,
+            )
+        try:
+            # Bound both compressed input and decoded pixels before loading.
+            with file_path.open("rb") as source_file:
+                raw = source_file.read(_MAX_IMAGE_BYTES + 1)
+            if len(raw) > _MAX_IMAGE_BYTES:
+                raise ValueError("Image exceeds the 5 MiB file limit; crop or resize it first.")
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", Image.DecompressionBombWarning)
+                with Image.open(io.BytesIO(raw), formats=["PNG", "JPEG", "WEBP", "GIF"]) as image:
+                    if image.width * image.height > _MAX_IMAGE_PIXELS:
+                        raise ValueError("Image exceeds the 20 megapixel limit; crop it first.")
+                    if getattr(image, "n_frames", 1) != 1:
+                        raise ValueError("Animated images are unsupported; extract a frame first.")
+                    source_media_type = Image.MIME[image.format or ""]
+                    image.load()
+                    view = ImageOps.exif_transpose(image).convert("RGBA")
+                    # Re-encode pixels only: do not send EXIF, ICC, or text metadata.
+                    view.info.clear()
+                    encoded = io.BytesIO()
+                    view.save(encoded, format="PNG")
+                    image_bytes = encoded.getvalue()
+                    width, height = view.size
+            if len(image_bytes) > _MAX_IMAGE_BYTES:
+                raise ValueError("Decoded PNG exceeds the 5 MiB limit; crop or resize it first.")
+        except (
+            OSError,
+            ValueError,
+            Image.DecompressionBombError,
+            Image.DecompressionBombWarning,
+        ) as exc:
+            return tool_error(str(exc), error_type="validation", recoverable=True)
+        metadata = {
+            "file_path": str(file_path),
+            "source_sha256": hashlib.sha256(raw).hexdigest(),
+            "source_media_type": source_media_type,
+            "image_sha256": hashlib.sha256(image_bytes).hexdigest(),
+            "media_type": "image/png",
+            "width": width,
+            "height": height,
+        }
+        return {
+            "type": "tool_result",
+            "result": metadata,
+            "content": [
+                {"type": "text", "text": json.dumps(metadata, ensure_ascii=False)},
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": base64.b64encode(image_bytes).decode("ascii"),
+                    },
+                },
+            ],
+        }
 
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         file_path_str: str = kwargs["file_path"]
@@ -61,6 +136,14 @@ class ReadDocumentTool:
                 hint="Provide a path to a file, not a directory.",
                 context={"file_path": str(file_path)},
             )
+
+        if file_path.suffix.lower() in _IMAGE_EXTENSIONS:
+            if offset != 1 or limit is not None:
+                return tool_error(
+                    "offset and limit apply to text only; omit them to view an image.",
+                    error_type="validation",
+                )
+            return self._read_image(file_path)
 
         # Pre-read file size guard: only when no explicit limit (full-file read)
         from core.config import settings

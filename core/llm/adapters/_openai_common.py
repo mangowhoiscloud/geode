@@ -24,6 +24,7 @@ smoke that hit both ``Unsupported parameter: 'max_tokens'`` and
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import logging
@@ -673,7 +674,13 @@ def build_codex_input(req: AdapterCallRequest, *, backend: str = "codex") -> lis
             out.extend(_convert_assistant_msg_to_responses(m.content, phase=m.phase))
             continue
         if m.role == "user":
-            out.extend(_convert_user_msg_to_responses(m.content))
+            # The originating call, not an image-shaped result, owns tool identity.
+            computer_call_ids = {
+                item["call_id"] for item in out if item.get("type") == "computer_call"
+            }
+            out.extend(
+                _convert_user_msg_to_responses(m.content, computer_call_ids=computer_call_ids)
+            )
             continue
         if m.role == "system":
             # Parity with inject_reasoning_replay: system text travels via
@@ -853,6 +860,13 @@ def _convert_user_msg_to_chat(content: Any) -> list[dict[str, Any]]:
         btype = block.get("type")
         if btype == "tool_result":
             raw = block.get("content", "")
+            if isinstance(raw, list) and any(
+                isinstance(part, dict) and part.get("type") == "image" for part in raw
+            ):
+                raise ValueError(
+                    "Image tool results require Anthropic or OpenAI Responses; "
+                    "Chat Completions image tool output is unsupported"
+                )
             result.append(
                 {
                     "role": "tool",
@@ -961,16 +975,14 @@ def _convert_assistant_msg_to_responses(
     return [fallback]
 
 
-def _maybe_computer_call_output(block: dict[str, Any]) -> dict[str, Any] | None:
+def _maybe_computer_call_output(
+    block: dict[str, Any], computer_call_ids: set[str]
+) -> dict[str, Any] | None:
     """If a ``tool_result`` block carries a computer-use screenshot, return the
     OpenAI Responses GA ``computer_call_output`` item; otherwise ``None``.
 
-    The computer harness is the ONLY tool whose ``tool_result.content`` is a
-    content-block LIST holding a base64 ``image`` block
-    (``core.agent.tool_executor.processor._serialize_computer_result``), so that
-    shape is a reliable, name-free signal at INPUT-build time (the tool name is
-    not carried on the ``tool_result`` block). Ordinary tools keep their
-    ``function_call_output`` shape.
+    Only a result joined to an earlier native ``computer_call`` may use this
+    shape. Ordinary tools can return images too and remain function outputs.
 
     Per the GA contract the output object is ``{"type": "computer_screenshot",
     "image_url": <url>}``. The harness encodes JPEG, so the base64 data is
@@ -982,6 +994,8 @@ def _maybe_computer_call_output(block: dict[str, Any]) -> dict[str, Any] | None:
     # ref: ctx7 /websites/developers_openai_api guides/tools-computer-use
     # backend acceptance: platform live-verified 2026-06-17 (codex rejects)
     """
+    if block.get("tool_use_id") not in computer_call_ids:
+        return None
     raw = block.get("content")
     if not isinstance(raw, list):
         return None
@@ -1020,7 +1034,9 @@ def _maybe_computer_call_output(block: dict[str, Any]) -> dict[str, Any] | None:
     return output_item
 
 
-def _convert_user_msg_to_responses(content: Any) -> list[dict[str, Any]]:
+def _convert_user_msg_to_responses(
+    content: Any, *, computer_call_ids: set[str] | None = None
+) -> list[dict[str, Any]]:
     """Anthropic user content → Responses API typed items.
 
     ``tool_result`` blocks become ``{"type": "function_call_output",
@@ -1041,12 +1057,52 @@ def _convert_user_msg_to_responses(content: Any) -> list[dict[str, Any]]:
             continue
         btype = block.get("type")
         if btype == "tool_result":
-            computer_output = _maybe_computer_call_output(block)
+            computer_output = _maybe_computer_call_output(block, computer_call_ids or set())
             if computer_output is not None:
                 items.append(computer_output)
                 continue
             raw = block.get("content", "")
-            output = raw if isinstance(raw, str) else json.dumps(raw, ensure_ascii=False)
+            output: str | list[dict[str, Any]]
+            if isinstance(raw, list) and any(
+                isinstance(part, dict) and part.get("type") == "image" for part in raw
+            ):
+                # Ref: openai/codex core/src/tools/handlers/view_image.rs:
+                # FunctionCallOutputBody::ContentItems(InputImage). This is
+                # image input, not the unsupported Codex computer-use tool.
+                output = []
+                for part in raw:
+                    if not isinstance(part, dict):
+                        raise ValueError("Image tool output must contain content blocks")
+                    if part.get("type") == "text":
+                        output.append({"type": "input_text", "text": part.get("text", "")})
+                    elif part.get("type") == "image":
+                        source = part.get("source")
+                        if (
+                            not isinstance(source, dict)
+                            or source.get("type") != "base64"
+                            or source.get("media_type")
+                            not in {"image/png", "image/jpeg", "image/webp", "image/gif"}
+                            or not isinstance(source.get("data"), str)
+                            or not source["data"]
+                        ):
+                            raise ValueError("Image tool output requires a supported base64 source")
+                        try:
+                            base64.b64decode(source["data"], validate=True)
+                        except ValueError as exc:
+                            raise ValueError("Image tool output has invalid base64 data") from exc
+                        output.append(
+                            {
+                                "type": "input_image",
+                                "image_url": (
+                                    f"data:{source['media_type']};base64,{source['data']}"
+                                ),
+                                "detail": "high",
+                            }
+                        )
+                    else:
+                        raise ValueError("Unsupported image tool content block")
+            else:
+                output = raw if isinstance(raw, str) else json.dumps(raw, ensure_ascii=False)
             items.append(
                 {
                     "type": "function_call_output",
@@ -1104,8 +1160,8 @@ def translate_chat_response(response: Any) -> AdapterCallResult:
     cached_tokens = 0
     reasoning_tokens = 0
     cache_write_tokens = 0
+    prompt_details = getattr(usage, "prompt_tokens_details", None)
     if usage is not None:
-        prompt_details = getattr(usage, "prompt_tokens_details", None)
         cached_tokens = int(getattr(prompt_details, "cached_tokens", 0) or 0)
         cache_write_tokens = int(getattr(prompt_details, "cache_write_tokens", 0) or 0)
         completion_details = getattr(usage, "completion_tokens_details", None)
@@ -1116,8 +1172,11 @@ def translate_chat_response(response: Any) -> AdapterCallResult:
             input_tokens=getattr(usage, "prompt_tokens", 0) if usage else 0,
             output_tokens=getattr(usage, "completion_tokens", 0) if usage else 0,
             cached_input_tokens=cached_tokens,
+            cached_input_tokens_present=getattr(prompt_details, "cached_tokens", None) is not None,
             reasoning_tokens=reasoning_tokens,
             cache_write_tokens=cache_write_tokens,
+            cache_write_tokens_present=getattr(prompt_details, "cache_write_tokens", None)
+            is not None,
             reported_cost_usd=getattr(usage, "cost", None) if usage else None,
         ),
         stop_reason=getattr(choice, "finish_reason", "stop") if choice else "stop",
@@ -1295,8 +1354,8 @@ def translate_codex_response(
     cached_tokens = 0
     reasoning_tokens = 0
     cache_write_tokens = 0
+    input_details = getattr(usage, "input_tokens_details", None)
     if usage is not None:
-        input_details = getattr(usage, "input_tokens_details", None)
         cached_tokens = int(getattr(input_details, "cached_tokens", 0) or 0)
         cache_write_tokens = int(getattr(input_details, "cache_write_tokens", 0) or 0)
         output_details = getattr(usage, "output_tokens_details", None)
@@ -1307,8 +1366,11 @@ def translate_codex_response(
             input_tokens=getattr(usage, "input_tokens", 0) if usage else 0,
             output_tokens=getattr(usage, "output_tokens", 0) if usage else 0,
             cached_input_tokens=cached_tokens,
+            cached_input_tokens_present=getattr(input_details, "cached_tokens", None) is not None,
             reasoning_tokens=reasoning_tokens,
             cache_write_tokens=cache_write_tokens,
+            cache_write_tokens_present=getattr(input_details, "cache_write_tokens", None)
+            is not None,
         ),
         stop_reason=getattr(response, "status", "completed") or "completed",
         tool_uses=tuple(tool_uses),

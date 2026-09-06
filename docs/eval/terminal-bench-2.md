@@ -152,6 +152,27 @@ suite, Hub upload, static analysis, and maintainer reward-hacking review.
 
 ## Required execution ladder
 
+### Opt-in full-runtime candidate
+
+`evals.platforms.harbor_runtime:GeodeRuntimeHarborAgent` uses Harbor 0.22.0's
+`BaseInstalledAgent` lifecycle and installs a hash-pinned GEODE source bundle
+inside each task container. Harbor retains job/trial, isolation, timeout,
+verifier and result ownership. Native GEODE factories create the runtime,
+tools, internal services and workers; no external scaffold-search loop runs.
+This candidate is not interchangeable with the historical one-tool control.
+
+The entry point requires a container-local home, explicit subscription routing,
+an absolute required model policy, and no API-key environment variables.
+Root effort, worker-difficulty settings and auxiliary defaults are distinct.
+Native state is preserved under the trial's `agent/geode-home/`; credentials
+are transferred outside the collected logs. These are private sources until
+separate secret, PII and local-path scans authorize a public derivative.
+Missing cache observations stay null, and AgenticLoop usage subtotals do not
+populate Harbor whole-runtime totals while auxiliary calls remain unobserved.
+
+Use Harbor's `--install-only` for the no-model installation gate. A live study
+still needs the existing run-spec/attempt contracts and the ladder below.
+
 1. Pin Harbor version, dataset version/digest, task manifest, GEODE revision,
    model route, reasoning effort, timeout, concurrency, repetitions, and
    exclusion rule in a validated prospective run spec.

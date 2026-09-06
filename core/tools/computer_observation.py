@@ -71,7 +71,7 @@ def _omitted_screenshot(value: str) -> dict[str, Any]:
 
 
 def sanitize_computer_payload(value: Any) -> Any:
-    """Return a checkpoint/tool-log safe copy with screenshot bytes removed.
+    """Return a checkpoint/tool-log safe copy with tool image bytes removed.
 
     Native computer-use must send screenshots to the model as image blocks in
     memory, but persistent resume state should retain only compact provenance.
@@ -92,14 +92,14 @@ def _sanitize_computer_payload(value: Any, *, in_tool_result: bool) -> Any:
     if current_in_tool_result and value.get("type") == "image":
         source = value.get("source")
         if isinstance(source, dict) and isinstance(source.get("data"), str):
-            omitted = _omitted_screenshot(source["data"])
             return {
                 "type": "text",
                 "text": json.dumps(
                     {
                         "image_omitted": True,
                         "media_type": source.get("media_type", "image/jpeg"),
-                        **omitted,
+                        "image_sha256": screenshot_digest(source["data"]),
+                        "omitted_reason": "tool image bytes are not persisted",
                     },
                     ensure_ascii=False,
                     sort_keys=True,

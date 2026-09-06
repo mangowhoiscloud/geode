@@ -260,7 +260,9 @@ class ToolCallProcessor:
             bound_tool_plan=self._step_bound_plan(),
         )
         durable_input = personal_data_omitted(tool_name) if personal else tool_input
-        durable_result = personal_data_omitted(tool_name) if personal else result
+        durable_result = (
+            personal_data_omitted(tool_name) if personal else sanitize_computer_payload(result)
+        )
 
         # Progressive log: show tool result summary (skip if already logged)
         if isinstance(result, dict):
@@ -312,17 +314,12 @@ class ToolCallProcessor:
                         entity_id=tool_use_id or "computer",
                     )
 
-        stored_result = (
-            sanitize_computer_payload(durable_result)
-            if tool_name in {"computer", "computer_use"} and isinstance(result, dict)
-            else durable_result
-        )
         self._tool_log.append(
             sanitize_personal_data_payload(
                 {
                     "tool": tool_name,
                     "input": durable_input,
-                    "result": stored_result,
+                    "result": durable_result,
                     "tool_use_id": tool_use_id,
                 }
             )
@@ -401,6 +398,19 @@ class ToolCallProcessor:
         # before the token guard / offload that would otherwise corrupt them.
         if tool_name == "computer" and isinstance(result, dict) and result.get("screenshot"):
             return self._serialize_computer_result(result, block_id)
+        if (
+            tool_name == "read_document"
+            and isinstance(result, dict)
+            and result.get("type") == "tool_result"
+            and isinstance(result.get("content"), list)
+        ):
+            image_content = list(result["content"])
+            extra = {k: v for k, v in result.items() if k not in {"type", "result", "content"}}
+            if extra:
+                image_content.append(
+                    {"type": "text", "text": json.dumps(extra, ensure_ascii=False)}
+                )
+            return {"type": "tool_result", "tool_use_id": block_id, "content": image_content}
 
         # MCP may repeat structuredContent as content for compatibility. Keep
         # the raw result in the durable log above, but choose one model view.

@@ -274,7 +274,7 @@
         "has_default": true,
         "implementation": "ContextVar",
         "lifetime": "one AgenticLoop session task",
-        "line": 41,
+        "line": 42,
         "owner": "core.agent.loop.AgenticLoop",
         "path": "core/observability/session_timeline.py",
         "resetter": "core.observability.session_timeline.set_current_session_timeline(None)",
@@ -528,19 +528,19 @@
   "packages": {
     "core": {
       "python_files": 414,
-      "python_loc": 124775
+      "python_loc": 125031
     },
     "evals": {
-      "python_files": 93,
-      "python_loc": 30627
+      "python_files": 94,
+      "python_loc": 31251
     },
     "evolve": {
       "python_files": 73,
       "python_loc": 32014
     },
     "tests": {
-      "python_files": 703,
-      "python_loc": 191341
+      "python_files": 706,
+      "python_loc": 192258
     }
   },
   "schema_version": 6,

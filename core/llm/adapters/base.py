@@ -183,9 +183,16 @@ class UsageSummary:
     reasoning_tokens: int = 0
     cache_write_tokens: int = 0
     reported_cost_usd: float | None = None
+    # Numeric defaults retain billing compatibility; absence is not an observed zero.
+    cached_input_tokens_present: bool = False
+    cache_write_tokens_present: bool = False
 
     def __post_init__(self) -> None:
         """Reject malformed provider billing before it reaches budget logic."""
+        if self.cached_input_tokens > 0:
+            object.__setattr__(self, "cached_input_tokens_present", True)
+        if self.cache_write_tokens > 0:
+            object.__setattr__(self, "cache_write_tokens_present", True)
         cost = self.reported_cost_usd
         if cost is None:
             return

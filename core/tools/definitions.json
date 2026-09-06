@@ -1155,7 +1155,7 @@
   },
   {
     "name": "read_document",
-    "description": "Reads a local file (markdown, text, JSON). Use when the user wants to view local file contents. For remote URLs, use web_fetch instead. For file discovery, use glob_files first.",
+    "description": "Read local text (markdown, text, JSON) or view a PNG, JPEG, WebP, or static GIF image. Images are visual input, not OCR text, and require a vision-capable model on Anthropic or OpenAI Responses, plus Pillow. Image limits are 5 MiB and 20 megapixels; omit line controls. For remote URLs, use web_fetch. For file discovery, use glob_files.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {

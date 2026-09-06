@@ -23,7 +23,8 @@ import os
 import threading
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from core.auth.codex_cli_oauth import codex_auth_path
 from core.llm.adapters._openai_common import (
@@ -47,6 +48,9 @@ from core.llm.adapters.base import (
 )
 from core.llm.loop_affinity import LoopAffineClientCache
 from core.orchestration.openai_api_lane import acquire_openai_api_lane_async
+
+if TYPE_CHECKING:
+    from core.config import ModelPolicy
 
 log = logging.getLogger(__name__)
 
@@ -106,6 +110,19 @@ class CodexOAuthAdapter:
     )
     _token_fingerprint: str = field(default="", init=False, repr=False)
     _token_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _model_policy: ModelPolicy | None = field(default=None, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        from core.config import load_model_policy, settings
+
+        if settings.model_policy_path:
+            self._model_policy = load_model_policy(Path(settings.model_policy_path), required=True)
+
+    def _require_model_allowed(self, model: str) -> None:
+        from core.config import is_model_allowed
+
+        if self._model_policy is not None and not is_model_allowed(model, self._model_policy):
+            raise ValueError("Codex request model is disallowed by the required model policy")
 
     def computer_tool_param(
         self, *, display_width: int, display_height: int
@@ -174,6 +191,7 @@ class CodexOAuthAdapter:
         :attr:`AdapterCallResult.reasoning_items` and the legacy bridge
         forwards them to :attr:`AgenticResponse.codex_reasoning_items`.
         """
+        self._require_model_allowed(req.model)
         client = self._get_client()
         kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
         # PR-LEGACY-PROVIDER-REMOVAL (2026-05-28) — pre-send input-shape
@@ -306,8 +324,9 @@ class CodexOAuthAdapter:
         from core.config import CODEX_PRIMARY
         from core.llm.adapters._capability_impls import openai_web_search_urls
 
-        client = self._get_client()
         search_model = model or CODEX_PRIMARY
+        self._require_model_allowed(search_model)
+        client = self._get_client()
         text_parts: list[str] = []
         source_urls: list[str] = []
         citation_urls: list[str] = []
@@ -390,6 +409,7 @@ class CodexOAuthAdapter:
         )
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
+        self._require_model_allowed(req.model)
         client = self._get_client()
         kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
         async with client.responses.stream(**kwargs) as stream:

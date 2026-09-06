@@ -9,6 +9,7 @@ exposed only for type hints and test fixtures.
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 
 from pydantic import AliasChoices, Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -74,6 +75,21 @@ class Settings(BaseSettings):
     # bumped 4-7 → 4-8 to match routing.toml [model.defaults] anthropic.
     # ANTHROPIC_PRIMARY constant is the source of truth; this default mirrors it.
     model: str = "claude-opus-4-8"
+    model_policy_path: str = Field(
+        default="",
+        description=(
+            "Absolute path to a required model policy. Empty preserves the optional "
+            "project policy; Codex adapters snapshot a required policy at construction."
+        ),
+    )
+
+    @field_validator("model_policy_path")
+    @classmethod
+    def _validate_model_policy_path(cls, value: str) -> str:
+        if value and not Path(value).is_absolute():
+            raise ValueError("model_policy_path must be absolute or empty")
+        return value
+
     learning_extract_model: str = Field(
         default="glm-4.7-flash",
         validation_alias=AliasChoices("learning_extract_model", "GEODE_LEARNING_EXTRACT_MODEL"),

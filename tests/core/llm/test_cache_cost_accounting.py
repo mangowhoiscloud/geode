@@ -11,6 +11,9 @@ cost path subtract cached from the billable input for those providers only.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import pytest
 from core.llm.pricing_loader import ModelPrice
 from core.llm.token_tracker import TokenTracker
 
@@ -159,3 +162,39 @@ def test_anthropic_usage_carries_cache_write_and_thinking_tokens() -> None:
     assert result.usage.cached_input_tokens == 60
     assert result.usage.cache_write_tokens == 15
     assert result.usage.reasoning_tokens == 3
+
+
+@pytest.mark.parametrize("provider", ["chat", "codex", "anthropic"])
+@pytest.mark.parametrize("cache_values", [None, (None, None), (0, 0), (7, 3), (None, 0), (0, None)])
+def test_provider_cache_presence_preserves_missing_and_zero(
+    provider: str, cache_values: tuple[int | None, int | None] | None
+) -> None:
+    from core.llm.adapters._anthropic_common import translate_response
+    from core.llm.adapters._openai_common import translate_chat_response, translate_codex_response
+
+    cache_fields = ("cached_tokens", "cache_write_tokens")
+    if provider == "anthropic":
+        cache_fields = ("cache_read_input_tokens", "cache_creation_input_tokens")
+    detail = SimpleNamespace(
+        **dict(zip(cache_fields, cache_values, strict=True)) if cache_values is not None else {}
+    )
+    usage = SimpleNamespace(input_tokens=100, output_tokens=20)
+    response = SimpleNamespace(content=[], choices=[], output=[], usage=usage)
+    if provider == "chat":
+        usage.prompt_tokens = 100
+        usage.completion_tokens = 20
+        usage.prompt_tokens_details = detail
+        result = translate_chat_response(response)
+    elif provider == "codex":
+        usage.input_tokens_details = detail
+        result = translate_codex_response(response)
+    else:
+        vars(usage).update(vars(detail))
+        result = translate_response(response)
+
+    read, write = cache_values if cache_values is not None else (None, None)
+    assert result.usage.cached_input_tokens == (read or 0)
+    assert result.usage.cache_write_tokens == (write or 0)
+    assert result.usage.cached_input_tokens_present is (read is not None)
+    assert result.usage.cache_write_tokens_present is (write is not None)
+    assert (result.usage.input_tokens, result.usage.output_tokens) == (100, 20)
