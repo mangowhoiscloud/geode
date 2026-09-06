@@ -47,6 +47,14 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- Restricted skill creation/removal to validated user-tier names and paths, preserving bundled skills and rejecting traversal, symlink escapes, and filesystem case aliases. Removed an unreachable private-gitignore helper.
+- Limited uninstall to a dedicated runtime home and a verified uv tool installation. Project files, development environments, and caches are preserved; keep flags preserve files in place, including case-variant names. Stop, deletion, or package-removal failures no longer report success. Disk summaries exclude symlink targets, failed socket probes close their handles, and failed Git status checks no longer imply a clean checkout.
+- Made invalid or unreadable self-improving-loop credential configuration fail closed before provider dispatch, and preserved explicit per-role source selections. Model-name heuristics, suppressed credentials, and adapter lookup failures no longer create an implicit PAYG route. Named targets for Petri-managed providers use the same credential boundary, including native models outside the picker catalog; model listing is independent of credential policy.
+- Reused cancel-safe Lane acquisition for direct global/session callers and cleaned up Bash subprocess tasks on external cancellation before propagating cancellation.
+- Made seed-generation resume count only readable, phase-matched successful checkpoints with required run identity; malformed snapshots and partial ranker records no longer imply phase completion.
+
 ### Changed
 
 - Extended the Terminal-Bench replay with independently verified call-token usage, explicit cache missingness, phase elapsed times and completed-command exit summaries. Recovered diagnostics are pinned to an append-only artifact commit; frozen scores are unchanged.

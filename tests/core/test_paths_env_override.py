@@ -53,6 +53,7 @@ def test_geode_home_env_override_redirects_global_tree(
     monkeypatch.setenv("GEODE_HOME", str(tmp_path / "alt_home"))
     importlib.reload(paths)
     assert tmp_path / "alt_home" == paths.GEODE_HOME
+    assert Path.home() / ".geode" == paths.DEFAULT_GEODE_HOME
     # A derived GLOBAL_* constant follows the single override point.
     assert tmp_path / "alt_home" / "petri.toml" == paths.GLOBAL_PETRI_TOML
     assert tmp_path / "alt_home" / "projects" == paths.GLOBAL_PROJECTS_DIR
@@ -64,6 +65,20 @@ def test_geode_home_default_is_dot_geode(
     monkeypatch.delenv("GEODE_HOME", raising=False)
     importlib.reload(paths)
     assert Path.home() / ".geode" == paths.GEODE_HOME
+    assert paths.GEODE_HOME == paths.DEFAULT_GEODE_HOME
+
+
+def test_path_boundary_does_not_swallow_inspection_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert not paths.is_path_within(tmp_path / "missing", tmp_path / "other")
+
+    def denied(_path: Path, _other: Path) -> bool:
+        raise PermissionError("cannot inspect boundary")
+
+    monkeypatch.setattr(Path, "samefile", denied)
+    with pytest.raises(PermissionError, match="cannot inspect boundary"):
+        paths.is_path_within(tmp_path / "missing", tmp_path / "other")
 
 
 def test_geode_home_tilde_expands(monkeypatch: pytest.MonkeyPatch, reload_paths: None) -> None:

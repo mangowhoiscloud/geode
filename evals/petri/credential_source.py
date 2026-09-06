@@ -256,44 +256,32 @@ def list_credential_sources(provider: str) -> list[dict[str, Any]]:
 def self_improving_loop_fallback_policy() -> bool:
     """Read the ``[self_improving_loop] fallback_to_payg`` flag from config.toml.
 
-    Default ``True`` preserves pre-2026-05-19 behaviour. Production
+    Missing configuration uses the schema's ``False`` default. Import, read,
+    parse, and validation failures propagate; they cannot authorize PAYG.
     Petri call sites (``registry.get_binding`` / ``models.to_inspect_model``)
     invoke this helper to thread the flag into
     :func:`resolve_credential_source` without each call site needing
-    to import ``core.config.self_improving`` directly.
+    to import ``evals.config`` directly.
 
     Lazy import so this module stays usable in test contexts that
     stub ``core.config``.
     """
     try:
         from evals.config import load_self_improving_loop_config
-    except ImportError:
-        # P1b — record the silent default so the operator can see
-        # whether the run actually consulted the user's config or fell
-        # back to the lenient default.
-        _emit_credential_event(
-            "fallback_policy_resolved",
-            payload={"value": True, "source": "import_error_default"},
-        )
-        return True
-    try:
+
         resolved = load_self_improving_loop_config().fallback_to_payg
+    except Exception as exc:
         _emit_credential_event(
-            "fallback_policy_resolved",
-            payload={"value": resolved, "source": "config"},
+            "fallback_policy_resolution_failed",
+            level="error",
+            payload={"error_type": type(exc).__name__},
         )
-        return resolved
-    except Exception:
-        log.warning(
-            "self-improving-loop config load failed; defaulting to fallback_to_payg=True",
-            exc_info=True,
-        )
-        _emit_credential_event(
-            "fallback_policy_resolved",
-            level="warn",
-            payload={"value": True, "source": "load_error_default"},
-        )
-        return True
+        raise
+    _emit_credential_event(
+        "fallback_policy_resolved",
+        payload={"value": resolved, "source": "config"},
+    )
+    return resolved
 
 
 def resolve_credential_source(

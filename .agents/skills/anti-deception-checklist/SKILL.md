@@ -65,11 +65,15 @@ Verdict: 3+ new `type: ignore` additions = **WARNING**, rule disabling = **FAIL*
 # Coverage threshold lowered in config
 git diff HEAD~1 -- pyproject.toml | grep -E "^\+.*(fail_under|min_coverage)"
 
-# Test count decrease (compare pytest -q output)
-uv run pytest tests/ -m "not live" -q 2>&1 | tail -1
+# Run the selected non-live suite without hiding its exit status.
+uv run pytest tests/ -m "not live" -q
 ```
 
-Verdict: Coverage drop of 5% or more = **FAIL**
+Use the coverage command in `.github/workflows/ci.yml` and the threshold in
+`pyproject.toml` (`tool.coverage.report.fail_under`); plain pytest output does
+not measure coverage. A failing coverage gate or an unjustified threshold,
+omit, or test exclusion change is **FAIL**. Compare coverage on the same scope
+and review regressions even when the configured threshold still passes.
 
 ## Check 4: Secret Exposure Detection
 
@@ -99,9 +103,14 @@ Verdict: Dependency downgrade without explicit justification = **WARNING**
 
 ## GEODE-Specific Checks
 
-| Item | Command | FAIL Criteria |
-|------|---------|---------------|
-| Test count ratchet | `pytest -q` result comparison | Decrease from baseline |
-| E2E tier invariant | `geode analyze "Cowboy Bebop" --dry-run` | A (68.4) changed |
-| Tool count | `definitions.json` count | Decrease from baseline |
-| Module count | `find core/ -name "*.py"` count | Unreasonable decrease |
+| Item | Current authority | Review requirement |
+|------|-------------------|--------------------|
+| Tests | `uv run pytest tests/ -m "not live"` and `uv run pytest tests/ --collect-only` | Explain removed cases and identify surviving behavior checks; a count decrease alone is not a regression verdict |
+| CLI surface | `uv run geode version` plus targeted command tests | Preserve the current CLI contract; the retired `geode analyze` domain fixture is not a runtime gate |
+| Tool/module inventory | `uv run python scripts/architecture_baseline.py --check` | Review inventory and parity changes; do not regenerate the baseline merely to hide drift |
+| Prompt ratchet | `verify_prompt_integrity(raise_on_drift=True)` in `core.llm.prompts` | Preserve pinned prompt hashes or update them with the reviewed prompt change |
+
+Use [verification gates](../geode-workflow/references/verification-gates.md)
+for executable checks and the [deletion gate](../agent-anti-pattern/references/field-guide.md#deletion-gate)
+before removing code or tests. Inventory counts and source scans discover
+candidates; they do not establish behavior, authorize deletion, or replace CI.

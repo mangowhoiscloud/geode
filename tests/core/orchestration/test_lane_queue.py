@@ -77,6 +77,62 @@ class TestLane:
         asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("per_session", [False, True], ids=["global", "session"])
+def test_direct_async_acquire_releases_cancelled_grant(
+    per_session: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lane = (
+        SessionLane(timeout_s=1.0) if per_session else Lane("test", max_concurrent=1, timeout_s=1.0)
+    )
+    assert lane.try_acquire("key")
+    started = threading.Event()
+    granted = threading.Event()
+    raw_acquire = lane._raw_acquire
+    raw_release = lane._raw_release
+
+    def acquire(key: str) -> bool:
+        started.set()
+        acquired = raw_acquire(key)
+        granted.set()
+        return acquired
+
+    monkeypatch.setattr(lane, "_raw_acquire", acquire)
+
+    async def scenario() -> None:
+        released = asyncio.Event()
+
+        def release(key: str) -> None:
+            raw_release(key)
+            released.set()
+
+        monkeypatch.setattr(lane, "_raw_release", release)
+
+        async def use_lane() -> None:
+            async with lane.acquire_async("key"):
+                pytest.fail("a cancelled waiter must not enter the lane")
+
+        waiter = asyncio.create_task(use_lane())
+        try:
+            assert await asyncio.to_thread(started.wait, 1.0)
+            waiter.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await waiter
+            lane.manual_release("key")
+            assert await asyncio.to_thread(granted.wait, 1.0)
+            await asyncio.wait_for(released.wait(), timeout=1.0)
+            assert lane.active_count == 0
+            assert lane.stats.acquired == lane.stats.released == 2
+            assert lane.try_acquire("key")
+            lane.manual_release("key")
+        finally:
+            waiter.cancel()
+            await asyncio.gather(waiter, return_exceptions=True)
+            if lane.active_count:
+                lane.manual_release("key")
+
+    asyncio.run(scenario())
+
+
 class TestLaneQueue:
     def test_add_and_list_lanes(self):
         q = LaneQueue()

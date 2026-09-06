@@ -205,18 +205,16 @@ def _handle_command(
             dry_run=("--dry-run" in opts),
         )
     elif action == "uninstall":
-        # v0.63.0 — full system removal (Hermes ``cmd_uninstall`` parity).
-        # Args: ``--force`` to skip confirmation, ``--dry-run`` to preview,
-        # ``--keep-config`` ``--keep-data`` for partial uninstall.
         from core.cli.commands.lifecycle import do_uninstall
 
         opts = args.split()
-        do_uninstall(
+        if not do_uninstall(
             force=("--force" in opts),
             dry_run=("--dry-run" in opts),
             keep_config=("--keep-config" in opts),
             keep_data=("--keep-data" in opts),
-        )
+        ):
+            console.print("  [error]Uninstall did not complete; review the failure above.[/error]")
     else:
         console.print(f"  [warning]Unknown command: {cmd}[/warning]")
         console.print("  [muted]Type /help for available commands.[/muted]")

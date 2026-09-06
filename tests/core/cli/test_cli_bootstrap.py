@@ -121,10 +121,10 @@ class TestBootstrapGeode:
 
     def test_load_env_false_does_not_call_dotenv(self) -> None:
         """When load_env=False, dotenv should not be invoked."""
-        with patch("core.cli.bootstrap.log") as _:
-            # Just verify no crash; dotenv import is conditional
+        with patch("core.cli.bootstrap.load_daemon_env") as load_daemon_env:
             boot = bootstrap_geode(load_env=False)
             assert boot is not None
+            load_daemon_env.assert_not_called()
 
     def test_load_env_true_calls_daemon_env_loader(self) -> None:
         """When load_env=True, daemon env loading is attempted without real IO."""

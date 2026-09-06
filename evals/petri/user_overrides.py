@@ -36,7 +36,6 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import GLOBAL_PETRI_TOML
-from pydantic import ValidationError
 
 log = logging.getLogger(__name__)
 
@@ -165,7 +164,7 @@ def _read_role_from_self_improving_loop(role: str) -> RoleOverride:
     ``core.config``).
 
     Strict-mode validation errors (``ValueError`` raised by
-    :func:`core.config.self_improving.load_self_improving_loop_config`) are
+    :func:`evals.config.load_self_improving_loop_config`) and read failures are
     intentionally *not* caught — they propagate so an operator who
     typos a key sees the failure rather than silently keeps reading
     the legacy ``petri.toml``. ``ImportError`` is the only exception
@@ -184,20 +183,7 @@ def _read_role_from_self_improving_loop(role: str) -> RoleOverride:
             payload={"role": role, "reason": "import_error"},
         )
         return {}
-    try:
-        cfg = load_self_improving_loop_config()
-    except ValidationError as exc:
-        # PR-SIL-5THEME C6 (2026-05-23) — D1 provider closure 후 operator
-        # config 의 ``source = "api_key"`` 가 Pydantic Source literal 에서
-        # 제거됐다. autoresearch / mutator 의 직접 호출은 ValidationError 가
-        # 의도된 surface (PR-C-P1 패턴) 이나, petri standalone CLI 의 user
-        # overrides read 는 graceful 이 맞다 — operator 가 petri.toml 의
-        # legacy 경로로 fallback 가능. event emit 으로 추적 가능.
-        _emit_user_overrides_event(
-            "petri_role_legacy_fallback",
-            payload={"role": role, "reason": "validation_error", "error": str(exc)[:200]},
-        )
-        return {}
+    cfg = load_self_improving_loop_config()
     # Step J-b.1 — audit role bindings now live under
     # ``[self_improving_loop.autoresearch.<role>]`` (control layer).
     # The legacy ``[petri.<role>]`` section is auto-migrated by
@@ -212,12 +198,10 @@ def _read_role_from_self_improving_loop(role: str) -> RoleOverride:
     out: RoleOverride = {}
     if entry.model:
         out["model"] = entry.model
-    # Pydantic does not expose whether a default was explicit here. Skip active
-    # defaults; retain retired ``claude-cli`` so the resolver emits migration
-    # guidance instead of silently changing billing routes.
-    _KNOWN_DEFAULTS = ("auto", "api_key")
-    explicit_openai_source = role == "target" and getattr(cfg, "openai_source", None)
-    if entry.source and (entry.source not in _KNOWN_DEFAULTS or explicit_openai_source):
+    # An explicit API-key selection is authorization, unlike the schema default.
+    # Keep auto as unset and retired claude-cli for actionable migration errors.
+    explicit_source = "source" in getattr(entry, "model_fields_set", set())
+    if entry.source and entry.source != "auto" and (entry.source != "api_key" or explicit_source):
         out["source"] = entry.source
     return out
 

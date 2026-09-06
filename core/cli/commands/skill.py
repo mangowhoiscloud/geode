@@ -17,12 +17,42 @@ from typing import Annotated
 
 import typer
 
-from core.paths import GLOBAL_SKILLS_DIR, PROJECT_SKILLS_DIR
+from core.paths import GLOBAL_SKILLS_DIR, PROJECT_SKILLS_DIR, is_path_within
 
 app = typer.Typer(name="skill", help="Manage GEODE skills (list/create/install).")
 
 _PROJECT_SKILLS = PROJECT_SKILLS_DIR
 _PERSONAL_SKILLS = GLOBAL_SKILLS_DIR
+
+
+def _writable_skill_directory(base: Path, name: str) -> Path:
+    """Resolve one user-tier directory without following writable aliases."""
+    from core.skills.skills import SkillLoader
+
+    if (
+        not name.strip()
+        or name in {".", ".."}
+        or Path(name).is_absolute()
+        or any(char in name for char in ("/", "\\", "\0", "\r", "\n"))
+    ):
+        raise typer.BadParameter("Skill name must be a single directory name.")
+    directory = base / name
+    root = base.resolve()
+    target = directory.resolve()
+    if (
+        base.is_symlink()
+        or base.parent.is_symlink()
+        or directory.is_symlink()
+        or target == root
+        or not target.is_relative_to(root)
+    ):
+        raise typer.BadParameter("Skill writes require a directory inside an unaliased user tier.")
+    bundled = SkillLoader().skills_dir.resolve()
+    if is_path_within(target, bundled) or is_path_within(bundled, target):
+        raise typer.BadParameter(
+            "Bundled skills are read-only; use a separate project or --private."
+        )
+    return directory
 
 
 def _discover_skills() -> list[dict[str, str]]:
@@ -83,7 +113,7 @@ def create(
 ) -> None:
     """Create a new skill from template."""
     base = _PERSONAL_SKILLS if private else _PROJECT_SKILLS
-    skill_dir = base / name
+    skill_dir = _writable_skill_directory(base, name)
     if skill_dir.exists():
         typer.echo(f"Skill '{name}' already exists at {skill_dir}", err=True)
         raise typer.Exit(1)
@@ -91,7 +121,7 @@ def create(
     visibility = "private" if private else "public"
     desc = description or f"{name} skill"
 
-    skill_dir.mkdir(parents=True, exist_ok=True)
+    skill_dir.mkdir(parents=True)
     skill_md = skill_dir / "SKILL.md"
     skill_md.write_text(
         f"""---
@@ -110,12 +140,10 @@ Add your skill instructions here.
     tier = "personal" if private else "project"
     typer.echo(f"Created skill '{name}' ({visibility}) at {skill_dir}")
 
-    # Auto-add to .gitignore if private and in project dir
     if private:
         typer.echo(f"  tier: {tier} (not committed to git)")
     else:
         typer.echo(f"  tier: {tier}")
-        _ensure_gitignore_if_private(name, visibility)
 
 
 @app.command()
@@ -125,7 +153,8 @@ def remove(
     """Remove a skill."""
     for base in [_PROJECT_SKILLS, _PERSONAL_SKILLS]:
         skill_dir = base / name
-        if skill_dir.exists():
+        if skill_dir.exists() or skill_dir.is_symlink():
+            skill_dir = _writable_skill_directory(base, name)
             shutil.rmtree(skill_dir)
             typer.echo(f"Removed skill '{name}' from {base}")
             return
@@ -159,17 +188,3 @@ def show(
         return
     typer.echo(f"Skill '{name}' not found.", err=True)
     raise typer.Exit(1)
-
-
-def _ensure_gitignore_if_private(name: str, visibility: str) -> None:
-    """Add private skill to .gitignore if needed."""
-    if visibility != "private":
-        return
-    gitignore = Path(".gitignore")
-    if not gitignore.exists():
-        return
-    pattern = f".geode/skills/{name}/"
-    content = gitignore.read_text(encoding="utf-8")
-    if pattern not in content:
-        with gitignore.open("a", encoding="utf-8") as f:
-            f.write(f"\n{pattern}\n")

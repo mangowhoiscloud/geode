@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from core.tools.bash_tool import BASH_TOOL_DEFINITION, BashResult, BashTool
@@ -130,6 +132,60 @@ class TestBashToolValidation:
         result = BashResult(denied=True, error="Denied", command="ls")
         tr = bash.to_tool_result(result)
         assert tr["denied"] is True
+
+
+@pytest.mark.parametrize("termination_fails", [False, True], ids=["terminated", "cleanup-error"])
+def test_task_cancellation_terminates_process_and_drains_communicate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, termination_fails: bool
+) -> None:
+    bash = BashTool(working_dir=str(tmp_path))
+    terminate = AsyncMock(
+        side_effect=OSError("synthetic cleanup failure") if termination_fails else None
+    )
+    monkeypatch.setattr(bash, "_terminate_process_tree", terminate)
+    monkeypatch.setattr(
+        "core.tools.package_guard.check_install_command", AsyncMock(return_value=None)
+    )
+    monkeypatch.setattr("core.tools.bash_tool.resolve_sandbox_argv", lambda *a, **kw: (None, None))
+
+    async def scenario() -> None:
+        started = asyncio.Event()
+        finished = asyncio.Event()
+        pending = asyncio.Event()
+        communicate_tasks: list[asyncio.Task[Any]] = []
+
+        async def communicate() -> tuple[bytes, bytes]:
+            task = asyncio.current_task()
+            assert task is not None
+            communicate_tasks.append(task)
+            started.set()
+            try:
+                await pending.wait()
+                return b"", b""
+            finally:
+                finished.set()
+
+        process = Mock(returncode=None, communicate=AsyncMock(side_effect=communicate))
+        monkeypatch.setattr(
+            "core.tools.bash_tool.asyncio.create_subprocess_shell",
+            AsyncMock(return_value=process),
+        )
+        task = asyncio.create_task(bash.aexecute("sleep 10", cancellation=asyncio.Event()))
+        try:
+            await asyncio.wait_for(started.wait(), timeout=1.0)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            terminate.assert_awaited_once_with(process)
+            assert finished.is_set()
+            assert all(task.done() for task in communicate_tasks)
+        finally:
+            task.cancel()
+            for communicate_task in communicate_tasks:
+                communicate_task.cancel()
+            await asyncio.gather(task, *communicate_tasks, return_exceptions=True)
+
+    asyncio.run(scenario())
 
 
 class TestBashOutputTruncation:

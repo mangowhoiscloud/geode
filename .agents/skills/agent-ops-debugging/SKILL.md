@@ -1,13 +1,16 @@
 ---
 name: agent-ops-debugging
-description: Autonomous agent system operational debugging patterns. Safe Default Anti-pattern, Multi-gap root cause analysis, ContextVar DI lifecycle, closure capture pattern, Graceful Degradation vs Correctness distinction. Triggered by "debugging" ("디버깅"), "safe default", "contextvar", "dry-run", "operations" ("운영"), "degradation", "multi-gap", "closure capture" ("클로저 캡처") keywords.
+description: Diagnose agent operational failures through default-policy checks, multi-gap analysis, explicit service ownership, request-context lifetime, and degradation-versus-correctness checks.
 ---
 
 # Agent Ops Debugging — Autonomous Agent Operational Debugging Patterns
 
 > **Source**: Distilled from GEODE operational debugging sessions (2026-03-14)
 > **Philosophy**: "Not crashing" and "working correctly" are different problems.
-> **Details**: [Blog 25](docs/blogs/25-operational-debugging-four-layer-fix.md) · [ADR-008](docs/plans/ADR-008-subagent-dry-run-bypass.md)
+> **Historical incident**: [ADR-008](../../../docs/adr/ADR-008-subagent-dry-run-bypass.md).
+> The referenced Blog 25 (`25-operational-debugging-four-layer-fix.md`) is absent
+> from this checkout; it is retained here only as historical provenance.
+> **Current contract**: [construction and lifecycle](../../../docs/architecture/naming-conventions.md#33-construction-and-lifecycle).
 
 ## 5 Pattern Overview
 
@@ -15,8 +18,8 @@ description: Autonomous agent system operational debugging patterns. Safe Defaul
 |---|---------|-------------------|-----------------|
 | D1 | Safe Default Anti-pattern | Safe defaults guarantee stability but not correctness | All layers |
 | D2 | Multi-gap Root Cause | Individual gaps are harmless but N gaps combined manifest — individual tests cannot catch them | Pipeline |
-| D3 | ContextVar Lifecycle | ContextVar DI must be initialized at every entry point | DI layer |
-| D4 | Closure Capture Bypass | Thread-isolated ContextVars are bypassed via closure capture | DI + Concurrency |
+| D3 | Ownership and Context Lifetime | Compose services explicitly; bind and reset request-local context | Wiring + Runtime |
+| D4 | Execution Boundary | Choose explicit snapshots or context propagation according to ownership | Runtime + Concurrency |
 | D5 | Degradation ≠ Correctness | Graceful skip/fallback and functional correctness must be verified separately | Verification |
 
 ---
@@ -29,7 +32,7 @@ When defaults are set to safe values like `True`, `None`, or `""`, the system do
 
 ### Diagnostic Criteria
 
-```
+```text
 Q: If this code path operates with the default value, is the result "normal" or "degraded"?
 ```
 
@@ -49,7 +52,9 @@ dry_run = args.get("dry_run", True)
 dry_run = args.get("dry_run", force_dry_run)  # force_dry_run is readiness-based
 ```
 
-> Do not hardcode defaults — derive them from system state (readiness, config, env).
+> Use the owner's declared default and distinguish normal, degraded, and failed
+> outcomes. The example above describes the 2026-03-14 incident; credential
+> availability alone does not authorize live calls or changing a dry-run request.
 
 ---
 
@@ -61,7 +66,7 @@ The most difficult operational bugs to find are those that **manifest only when 
 
 ### Analysis Framework
 
-```
+```text
 1. Symptom definition: "On which path, under which conditions, does the result differ from expectations"
 2. Path comparison: "Identify divergence points compared to the normally working path"
 3. Gap enumeration: "Verify whether each divergence point has an independent gap"
@@ -70,7 +75,7 @@ The most difficult operational bugs to find are those that **manifest only when 
 
 ### Case: Sub-agent dry-run (3-gap)
 
-```
+```text
 Gap 1: Handler default = True (hardcoded)
   → Alone: Solvable if LLM passes dry_run=False
 Gap 2: dry_run not defined in tool schema
@@ -81,56 +86,48 @@ Gap 3: ContextVar thread isolation
 All 3 present → sub-agent path always runs in dry-run
 ```
 
-> Multi-gap bug fix strategy: **Resolve the most fundamental single gap** and the remaining gaps become harmless. No need to fix all 3.
+> Fix the smallest root cause, then verify whether the remaining gaps are
+> actually harmless. Do not close them from the existence of one fix alone.
 
 ---
 
-## D3. ContextVar DI Lifecycle
+## D3. Service Ownership and Request Context
 
 ### Principle
 
-When using Python `contextvars.ContextVar` as a DI container, it must be initialized at **every entry point**. If set at only one entry point, other entry points return `None`.
+Current GEODE composes services in `core.wiring` through constructors or existing
+typed contexts. Do not restore the historical ContextVar service locator.
+ContextVars may hold request identity, diagnostics, or request-local state;
+their binding and reset must match the logical request lifetime.
 
 ### Entry Point Checklist
 
-```
+```text
 Typical entry points for an agent system:
-[ ] CLI single command (e.g., `geode analyze "Berserk"`)
+[ ] CLI single command
 [ ] REPL interactive loop (e.g., `geode` → interactive)
-[ ] Pipeline internal (e.g., GeodeRuntime.run())
-[ ] Sub-agent thread (e.g., delegate_task → separate thread)
-[ ] HTTP endpoint (e.g., trigger_endpoint)
+[ ] Hosted runtime turn
+[ ] Sub-agent task, worker thread, or subprocess
+[ ] Server or scheduled-job entry point
 [ ] Test fixture (e.g., pytest conftest.py)
 ```
 
-### Safe Pattern
-
-```python
-# Method 1: Explicit initialization at each entry point
-def _interactive_loop():
-    set_project_memory(ProjectMemory())
-    set_org_memory(MonoLakeOrganizationMemory())
-    ...
-
-# Method 2: Batch initialization in Bootstrap layer (recommended as scale grows)
-class Bootstrap:
-    def init_all_contextvars(self):
-        set_project_memory(ProjectMemory())
-        set_org_memory(MonoLakeOrganizationMemory())
-        set_readiness(ReadinessReport(...))
-```
-
-> If there are 3 or more entry points, introduce a Bootstrap layer to eliminate initialization logic duplication.
+For the affected entry points, trace the service constructor to its consumer
+and the request-context binder to its reset, including errors and cancellation.
+Reuse the existing composition owner; entry-point count alone does not justify
+another bootstrap layer or DI container.
 
 ---
 
-## D4. Closure Capture Bypass
+## D4. Crossing Task, Thread, and Process Boundaries
 
 ### Principle
 
-ContextVar is **only valid within the thread/task where it was set**. If a handler running in a separate thread needs to access a ContextVar, **capture it via closure at handler creation time**.
+Check how the actual execution primitive propagates context. A copied context
+does not synchronize mutable services, and a captured value can become stale.
+Pass services explicitly and choose the lifetime of value snapshots deliberately.
 
-### Pattern
+### Historical pattern — ADR-008, 2026-03-14
 
 ```python
 def make_handler(*, force_dry_run: bool = True):
@@ -140,21 +137,22 @@ def make_handler(*, force_dry_run: bool = True):
         ...
     return handler
 
-# Call site: fix readiness state at creation time
+# Historical call site: fix readiness state at handler creation time
 readiness = _get_readiness()
 handler = make_handler(force_dry_run=readiness.force_dry_run)
 ```
 
-### Alternative Comparison
+### Current decision criteria
 
-| Method | Complexity | Thread-safe | Testability |
-|--------|-----------|-------------|-------------|
-| Closure capture | Low | Safe (immutable value) | Injectable as parameter |
-| `contextvars.copy_context()` | Medium | Safe (context copy) | Requires setup |
-| Global variable | Low | Unsafe (race condition) | Breaks test isolation |
-| Thread-local | Medium | Safe | Incompatible with asyncio |
+| Value | Boundary treatment | Verify |
+|-------|--------------------|--------|
+| Service dependency | Constructor or existing typed context | Correct owner and teardown |
+| Immutable per-turn policy | Explicit snapshot at the owning turn boundary | A later config change affects the intended next turn |
+| Request identity or diagnostics | Scoped binding or explicit context propagation | Correlation preserved; reset on success/error/cancel |
+| Cross-process input | Existing serialized request contract | No assumption that in-process ContextVars cross the boundary |
 
-> If the value does not change after handler creation, closure capture is the best option. If the value can change at runtime, use `copy_context()`.
+The historical closure fixed one readiness lookup. It is not a recommendation
+to capture mutable credentials or long-lived policy at handler construction.
 
 ---
 
@@ -166,26 +164,28 @@ Graceful degradation is a system **stability** pattern. It must be verified sepa
 
 ### Verification Matrix
 
-```
+```text
 For all external dependencies:
 
 | Dependency | Expected behavior when present | Expected behavior when absent | Actual behavior |
 |------------|-------------------------------|-------------------------------|-----------------|
-| API key    | live LLM call                 | fixture return                | ???             |
+| Provider   | authorized call uses selected source | explicit error or explicitly requested fixture mode | ??? |
 | MCP        | tool list loaded              | skip + warning                | ???             |
 | Redis      | L1 cache used                 | direct L2 query               | ???             |
 ```
 
-> Do not only test the "when absent" column. Separately verify that the "when present" column truly takes the live path.
+> Test both columns with offline fakes first. Live verification requires the
+> task's authorization; merely finding credentials does not authorize it.
 
 ### Distinction Criteria
 
-```
+```text
 Stability test: "Does the system not crash when dependency X is absent?"
 Correctness test: "Does the system actually use X when dependency X is present?"
 ```
 
-Both questions must be answered "yes" for the system to be healthy.
+Verify the declared outcome in both cases. A required dependency may correctly
+fail closed instead of returning a successful-looking fallback.
 
 ---
 
@@ -193,7 +193,7 @@ Both questions must be answered "yes" for the system to be healthy.
 
 When encountering a symptom of "it works but not correctly" during operations:
 
-```
+```text
 1. Symptom → Identify the affected layer (infrastructure/UI/DI/pipeline)
 2. Compare with the normal path to find divergence points
 3. Check defaults at divergence points — D1 Safe Default applicable?

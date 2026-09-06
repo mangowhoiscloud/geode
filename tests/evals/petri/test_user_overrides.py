@@ -365,6 +365,66 @@ model = "geode/gpt-5.5"
         uo.read_role_override("target")
 
 
+def test_invalid_config_does_not_read_legacy_override(
+    petri_toml: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unittest.mock import Mock
+
+    from pydantic import ValidationError
+
+    config = tmp_path / "config.toml"
+    config.write_text("[self_improving_loop]\nfalback_to_payg = true\n", encoding="utf-8")
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(config))
+    legacy_reader = Mock(return_value={"target": {"model": "legacy-model"}})
+    monkeypatch.setattr(uo, "load_user_overrides", legacy_reader)
+
+    with pytest.raises(ValidationError, match="falback_to_payg"):
+        uo.read_role_override("target")
+    legacy_reader.assert_not_called()
+
+
+@pytest.mark.parametrize("role", ["auditor", "target", "judge"])
+@pytest.mark.parametrize("source", [None, "api_key", "auto", "openai-codex", "claude-cli"])
+def test_role_source_projection_preserves_explicit_selection(
+    petri_toml: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    role: str,
+    source: str | None,
+) -> None:
+    config = tmp_path / "config.toml"
+    body = f'[self_improving_loop.autoresearch.{role}]\nmodel = "gpt-5.5"\n'
+    if source is not None:
+        body += f'source = "{source}"\n'
+    config.write_text(body, encoding="utf-8")
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(config))
+
+    expected = {"model": "gpt-5.5"}
+    if source not in (None, "auto"):
+        expected["source"] = source
+    assert uo.read_role_override(role) == expected
+
+
+@pytest.mark.policy_real
+def test_saved_explicit_api_key_reaches_binding_with_fallback_disabled(
+    petri_toml: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from evals.petri import credential_source as cs
+    from evals.petri.registry import get_binding
+
+    config = tmp_path / "config.toml"
+    config.write_text("[self_improving_loop]\nfallback_to_payg = false\n", encoding="utf-8")
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(config))
+    monkeypatch.setattr(cs, "_settings_source", lambda provider: None)
+    monkeypatch.setattr(cs, "is_adapter_available", lambda provider, source: False)
+
+    uo.save_role_override_to_config_toml("judge", model="gpt-5.5", source="api_key")
+    binding = get_binding("judge")
+    assert cs.self_improving_loop_fallback_policy() is False
+    assert binding.source == "api_key"
+    assert binding.inspect_id == "openai/gpt-5.5"
+
+
 def test_read_role_override_falls_through_on_import_error(
     petri_toml: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

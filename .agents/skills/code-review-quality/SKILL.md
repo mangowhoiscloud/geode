@@ -70,19 +70,30 @@ grep -rn "ContextVar\|contextvars" core/ --include="*.py"
 ```
 
 GEODE context:
-- ContextVar DI is thread-safe (Sub-Agent isolation)
-- Module-level dict/list should use Lock or frozenset
-- `_announce_queue` is protected by `_announce_lock` (verified)
+- `core.wiring` composes services through constructors/configuration or typed
+  contexts such as `ToolContext`; a service-locator `ContextVar` is not the DI contract.
+- Request-local `ContextVar` use does not prove mutable values are isolated or
+  that context propagates across every thread/task boundary. Trace the actual
+  producer, handoff, mutation, and reset paths.
+- For a module-level dict/list, establish whether concurrent mutation exists
+  and which owner serializes it before recommending a lock or immutable type.
+
+See [architecture boundaries](../../../docs/architecture/naming-conventions.md#12-process-and-capability-boundaries).
 
 ## Check 5: SOLID Principles
 
-| Principle | Violation Symptoms | Detection |
+| Principle | Discovery candidates, not violations | Detection |
 |-----------|-------------------|-----------|
 | **SRP** | 500+ line files, classes with 5+ responsibilities | `wc -l core/**/*.py \| sort -rn \| head` |
 | **OCP** | if/elif chains with 10+ branches | grep -rn "elif" count |
 | **LSP** | NotImplementedError in subclasses | grep -rn "NotImplementedError" |
-| **ISP** | Protocol with 10+ methods | Check ports/ directory |
-| **DIP** | Direct import of implementations (bypassing Port) | Layer violation detection |
+| **ISP** | Protocol with 10+ methods | Trace actual Protocol consumers |
+| **DIP** | Import bypassing a declared package/capability boundary | Check the current import-linter contracts |
+
+These source/size heuristics need caller and failure evidence. Concrete-class
+imports are valid when no declared boundary or substitution contract is bypassed.
+Use the [field guide](../agent-anti-pattern/references/field-guide.md) before
+deleting code/tests or introducing an abstraction.
 
 ## Check 6: Performance
 

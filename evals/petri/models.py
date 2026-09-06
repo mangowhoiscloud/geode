@@ -133,21 +133,14 @@ def to_inspect_model(
     A user who explicitly pins ``openai/gpt-5.5`` stays on per-token
     PAYG; the OAuth re-routing happens only on bare ``gpt-*`` ids.
 
-    **PR #6 (2026-05-14) — OAuth routing**: ``gpt-5.*`` ids (``gpt-5.5``,
-    ``gpt-5.4``, ``gpt-5.4-mini``, ``gpt-5.3-codex``) re-route to
-    ``openai-codex/<model>`` so judge / auditor calls consume ChatGPT
-    subscription quota instead of per-token billing. ``use_oauth`` controls
-    the auto-detect:
+    ``use_oauth=None`` uses the credential resolver and the SIL PAYG fallback
+    policy. ``True`` requests OpenAI OAuth; ``False`` explicitly selects the
+    API-key route. A concrete ``source`` takes precedence over this flag.
 
-    - ``None`` (default) → auto-detect: re-route when a Codex OAuth
-      token resolves, else fall back to ``openai/<model>``.
-    - ``True`` → force OAuth re-route regardless (token must exist or
-      ``OpenAICodexAPI.__init__`` will raise at call time).
-    - ``False`` → keep the legacy ``openai/<model>`` mapping.
-
-    ``o3`` / ``o4-mini`` are NOT covered by OAuth — they are not on
-    the Codex backend's model catalogue, so they always stay on the
-    per-token path.
+    The current bare-id OAuth heuristic covers only ``gpt-5*`` names. A
+    concrete subscription source pin bypasses that heuristic, not credential
+    resolution. Other names require an explicit source or raw provider/model
+    identifier; a mapping limitation is not proof of backend availability.
     """
     if not geode_id:
         raise AuditModelMappingError("Empty model id")
@@ -182,79 +175,74 @@ def to_inspect_model(
     if source and source != CredentialSource.AUTO:
         source_override: str | None = source
     else:
-        source_override = _source_from_use_oauth(geode_id, provider, use_oauth)
-
-    # Cap 'auto' cascade for ids the provider's OAuth backend can't serve
-    # (e.g. o3 / o4-mini are not on the Codex catalogue) — force api_key
-    # so the 'auto' expansion never lands on the OAuth source for them.
-    if (
-        source_override is None
-        and provider != "anthropic"
-        and not _supports_oauth_for_provider(geode_id, provider)
-    ):
-        source_override = "api_key"
+        source_override = _source_from_use_oauth(provider, use_oauth)
 
     # P1-G — credential_source layer handles settings → manifest default →
     # 'auto' cascade. Lazy import keeps this module loadable on the
     # bootstrap-free path (matches the existing _credential_source
     # helper's contract).
     from evals.petri.credential_source import (
-        CredentialResolutionError,
+        _settings_source,
         resolve_credential_source,
         self_improving_loop_fallback_policy,
     )
     from evals.petri.manifest import load_manifest
 
-    try:
-        # PR-β1 — strict subscription mode propagates here too. Default
-        # True keeps pre-2026-05-19 behaviour when [self_improving_loop] is unset.
-        source = resolve_credential_source(
-            provider,
-            override=source_override,
-            fallback_to_payg=self_improving_loop_fallback_policy(),
+    fallback_to_payg = self_improving_loop_fallback_policy()
+    pinned_source = (
+        source if source and source != CredentialSource.AUTO else _settings_source(provider)
+    )
+    # A name heuristic is not billing authorization. Preserve its legacy
+    # API-key mapping only when the operator permits PAYG fallback.
+    if (
+        fallback_to_payg
+        and source_override is None
+        and pinned_source is None
+        and provider != "anthropic"
+        and not _supports_oauth_for_provider(geode_id, provider)
+    ):
+        source_override = "api_key"
+
+    source = resolve_credential_source(
+        provider,
+        override=source_override,
+        fallback_to_payg=fallback_to_payg,
+    )
+
+    if (
+        source == CredentialSource.OPENAI_CODEX
+        and pinned_source != CredentialSource.OPENAI_CODEX
+        and not _supports_oauth_for_provider(geode_id, provider)
+    ):
+        raise AuditModelMappingError(
+            f"The current audit OAuth mapping does not cover {geode_id!r}. "
+            "Select a concrete source or an explicit 'provider/model' identifier."
         )
-    except CredentialResolutionError as exc:
-        # PR-CRED-SOURCE-CENTRALIZE — when the STRICT subscription gate fired
-        # (``fallback_to_payg=False`` + only PAYG left), re-raise. Silently
-        # routing to ``api_key`` here would defeat the resolution-time PAYG
-        # guard that this refactor relies on as the safety boundary. Only the
-        # non-strict "no credential at all" case preserves the legacy api_key
-        # prefix (inspect_ai surfaces the env-var error at call time).
-        if exc.subscription_only:
-            raise
-        source = "api_key"
 
     manifest = load_manifest()
-    try:
-        adapter = manifest.get_adapter(provider, source)
-    except KeyError:
-        adapter = manifest.get_adapter(provider, "api_key")
+    adapter = manifest.get_adapter(provider, source)
     return f"{adapter.inspect_prefix}/{geode_id}"
 
 
 def _supports_oauth_for_provider(model: str, provider: str) -> bool:
-    """True when ``provider`` has an OAuth path that serves this model id.
-
-    Only ``gpt-5.*`` ids are eligible for the Codex backend. Anthropic and
-    zhipuai have no built-in OAuth path.
-    """
+    """Return this mapper's bare-id OAuth coverage, not backend entitlement."""
     if provider == "openai":
         return model.startswith("gpt-5")
     return False
 
 
-def _source_from_use_oauth(geode_id: str, provider: str, use_oauth: bool | None) -> str | None:
+def _source_from_use_oauth(provider: str, use_oauth: bool | None) -> str | None:
     """Translate the legacy ``use_oauth`` flag to a manifest source override.
 
     ``None`` → no override. ``False`` → ``api_key``. ``True`` selects
-    OpenAI Codex OAuth for supported ``gpt-5.*`` ids; other providers stay
-    on ``api_key``.
+    OpenAI Codex OAuth; unmapped names fail after source resolution instead
+    of authorizing PAYG. Other providers stay on ``api_key``.
     """
     if use_oauth is None:
         return None
     if use_oauth is False:
         return "api_key"
-    if provider == "openai" and geode_id.startswith("gpt-5"):
+    if provider == "openai":
         return "openai-codex"
     return "api_key"
 
@@ -302,25 +290,18 @@ def to_inspect_target(geode_id: str | None) -> str:
 def list_audit_models() -> list[tuple[str, str]]:
     """Return ``(geode_id, inspect_id)`` pairs for every catalog model.
 
-    Powers ``--help`` output and the tool description. Catalog source is
-    ``MODEL_PRICING`` so adding a model in ``token_tracker.py`` auto-flows
-    here. Skips models whose provider the mapping rules don't recognise
-    (defensive — should be empty in practice).
+    Uses the manifest's API-key prefix for display only, without resolving
+    credentials or billing policy. Execution still uses :func:`to_inspect_model`.
+    Skips pricing keys whose provider the audit mapping does not recognise.
     """
-    from evals.petri.credential_source import CredentialResolutionError
+    from evals.petri.manifest import load_manifest
 
+    manifest = load_manifest()
     pairs: list[tuple[str, str]] = []
     for geode_id in MODEL_PRICING:
-        try:
-            pairs.append((geode_id, to_inspect_model(geode_id)))
-        except AuditModelMappingError:
+        provider = provider_of(geode_id)
+        if provider == "unknown":
             continue
-        except CredentialResolutionError:
-            # PR-CRED-SOURCE-CENTRALIZE — catalog listing (--help / tool
-            # description) must stay credential-INDEPENDENT. Now that
-            # ``to_inspect_model`` re-raises the strict subscription gate
-            # (``fallback_to_payg=False``), fall back to the deterministic
-            # api_key-adapter prefix so every catalog model is still listed
-            # regardless of runtime credential availability.
-            pairs.append((geode_id, to_inspect_model(geode_id, source="api_key")))
+        adapter = manifest.get_adapter(provider, "api_key")
+        pairs.append((geode_id, f"{adapter.inspect_prefix}/{geode_id}"))
     return pairs

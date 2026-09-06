@@ -281,8 +281,22 @@ geode
 ```
 geode update                  # uv: 최신 patch; 소스: pull + rebuild
 geode update --latest         # uv: minor/major 업데이트를 명시적으로 허용
-geode uninstall               # 런타임 데이터 + CLI 제거
 ```
+
+공개 v1.0.27에는 아래의 새 삭제 보호가 아직 포함되지 않았습니다. 이 버전의 uv 설치는 원래 패키지 매니저로 CLI만 제거하고, 런타임·프로젝트 데이터는 남겨두세요.
+
+```
+uv tool uninstall geode-agent # CLI만 제거; 런타임·프로젝트 데이터 보존
+```
+
+**소스 체크아웃 전용 — Unreleased.** 아래 절차와 보존 보장은 [PR #3295](https://github.com/mangowhoiscloud/geode/pull/3295)를 포함한 소스 설치에 적용됩니다. main 반영과 PyPI 릴리스는 별개이므로, 버전 문자열만으로 이 보호의 포함 여부를 판단하지 마세요.
+
+```
+geode uninstall --dry-run     # 삭제 대상과 설치 소유권 확인
+geode uninstall               # 확인된 런타임 데이터 + uv CLI 제거
+```
+
+삭제 범위는 `GEODE_HOME`(기본 `~/.geode`)과 설치 소유권이 확인된 uv 도구입니다. 프로젝트의 `.geode/`, 소스, 가상환경과 빌드 캐시는 보존합니다. `--keep-config`는 런타임의 `.env`, `config.toml`, `auth.toml`을,`--keep-data`는 vault·identity·user\_profile을 원래 위치에 남깁니다. 다른 설치 방식이나 사용자 지정 uv 설치는 자동 삭제가 거부될 수 있으므로 원래 패키지 매니저를 사용합니다. 중간 단계가 실패하면 명령은 실패로 종료하며, 이미 삭제된 데이터가 자동 복구되지는 않습니다.
 
 ## 다음 단계
 
@@ -6647,7 +6661,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1548 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1550 KB — fetch the Markdown twin above for the complete page)
 
 ---
 

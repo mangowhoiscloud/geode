@@ -256,7 +256,7 @@ def load_checkpoint(run_dir: Path, phase: str) -> PhaseCheckpoint | None:
         return None
     try:
         payload = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         log.warning("checkpointer: %s checkpoint at %s unreadable — %s", phase, target, exc)
         return None
     if not isinstance(payload, dict):
@@ -275,7 +275,7 @@ def load_partial_ranker_checkpoint(run_dir: Path) -> RankerPartialCheckpoint | N
         return None
     try:
         payload = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         log.warning("checkpointer: ranker partial checkpoint at %s unreadable — %s", target, exc)
         return None
     if not isinstance(payload, dict):
@@ -288,7 +288,7 @@ def load_partial_ranker_checkpoint(run_dir: Path) -> RankerPartialCheckpoint | N
 
 
 def list_completed_phases(run_dir: Path) -> list[str]:
-    """Return phase names with a saved checkpoint, ordered by
+    """Return phase names with valid success checkpoints, ordered by
     ``completed_at`` ascending (the order they actually finished).
 
     The orchestrator's ``_PHASE_ORDER`` is the canonical sequence;
@@ -301,14 +301,28 @@ def list_completed_phases(run_dir: Path) -> list[str]:
         return []
     items: list[tuple[float, str]] = []
     for entry in ck_dir.iterdir():
-        if not entry.is_file() or entry.suffix != ".json":
+        if (
+            not entry.is_file()
+            or entry.suffix != ".json"
+            or entry.name == RANKER_PARTIAL_CHECKPOINT
+        ):
             continue
         phase = entry.stem
-        try:
-            payload = json.loads(entry.read_text(encoding="utf-8"))
-            ts = float(payload.get("completed_at", 0.0))
-        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        checkpoint = load_checkpoint(run_dir, phase)
+        if checkpoint is None:
             continue
-        items.append((ts, phase))
+        # Match the file's phase and the identity fields required by hydrate_state.
+        # An unreadable snapshot or a partial/failure record is not completion.
+        if (
+            checkpoint.phase != phase
+            or checkpoint.error is not None
+            or not all(
+                checkpoint.state_snapshot.get(field)
+                for field in ("run_id", "target_dim", "gen_tag")
+            )
+        ):
+            log.warning("checkpointer: %s is not a valid completed-phase checkpoint", entry)
+            continue
+        items.append((checkpoint.completed_at, phase))
     items.sort()
     return [phase for _ts, phase in items]

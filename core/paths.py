@@ -85,6 +85,24 @@ def is_geode_source_root(path: Path) -> bool:
     return isinstance(project, dict) and project.get("name") == "geode-agent"
 
 
+def is_path_within(path: Path, boundary: Path) -> bool:
+    """Include filesystem aliases when checking a path against a boundary.
+
+    Missing descendants use their existing ancestors. Inspection errors other
+    than absence propagate; this is not protection against concurrent path swaps.
+    """
+    path, boundary = path.resolve(), boundary.resolve()
+    if path.is_relative_to(boundary):
+        return True
+    for ancestor in (path, *path.parents):
+        try:
+            if ancestor.samefile(boundary):
+                return True
+        except FileNotFoundError:
+            continue
+    return False
+
+
 _EXPLICIT_EVOLVE_WORKSPACE = os.environ.get("GEODE_EVOLVE_WORKSPACE")
 if _EXPLICIT_EVOLVE_WORKSPACE:
     EVOLVE_WORKSPACE_ROOT: Path | None = Path(_EXPLICIT_EVOLVE_WORKSPACE).expanduser().resolve()
@@ -108,7 +126,8 @@ def require_evolve_workspace() -> Path:
 # ``GEODE_HOME`` is defined here (moved up from the Global section below) so the
 # state roots can derive the runtime home from it. See the Global section for
 # the full frontier ``{APP}_HOME`` convention note.
-GEODE_HOME = Path(os.environ.get("GEODE_HOME") or (Path.home() / ".geode")).expanduser()
+DEFAULT_GEODE_HOME = Path.home() / ".geode"
+GEODE_HOME = Path(os.environ.get("GEODE_HOME") or DEFAULT_GEODE_HOME).expanduser()
 
 # --- State homes by lifecycle (PR-STATE-SOT-RUNTIME-SPLIT, 2026-06-14) -------
 # Operator decision: split the CSP-7 repo-root ``state/`` (which mixed both)

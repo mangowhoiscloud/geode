@@ -16,7 +16,7 @@ tool handlers, prompt assembly, or schema changes.
 ```bash
 uv run ruff check core/ evals/ evolve/ tests/ scripts/
 uv run ruff format --check core/ evals/ evolve/ tests/ scripts/
-uv run mypy core/ evals/ evolve/
+uv run mypy core/ evals/ evolve/ scripts/
 uv run lint-imports
 git diff --check
 ```
@@ -29,8 +29,8 @@ Run this when `core/llm/prompts/` changed:
 
 ```bash
 uv run python - <<'PY'
-from core.llm.prompts import check_prompt_integrity
-print(check_prompt_integrity())
+from core.llm.prompts import verify_prompt_integrity
+verify_prompt_integrity(raise_on_drift=True)
 PY
 ```
 

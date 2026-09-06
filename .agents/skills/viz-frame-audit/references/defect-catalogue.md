@@ -33,7 +33,7 @@ in a new scene, treat the fix as the default starting point.
 |--------|----------|---------|-----|
 | `geode_hero` #1 | Bit 2 `outer_label = "GEODE " + _t("stage_1")` | Helvetica Neue + Pango on macOS inserts ~0.06-unit spurious space between "GE" and "ODE" | Drop the "GEODE " prefix; title bar + footer chain still carry the wordmark |
 | `geode_hero` #6 | Outro x-axis `_t("generations_label") = "generation"` at `font_size=16` | Spurious gaps: "g eneratio ns" | Pluralize to "generations" + raise font 16 → 20; larger glyphs amortise the per-pair kerning quirks |
-| `geode_hero` (general) | Any English text at `font_size < 16` rendered via Helvetica Neue + Pango | Same drift pattern across words containing "GE", "ge", "fit", "cr" — see [README in this repo's docs/visualizations/text-overflow-map.md](../../../docs/visualizations/text-overflow-map.md) | Use `font_size ≥ 16` for visible labels; Step 2 typography drift gate will catch the others at compile time |
+| `geode_hero` (general) | Any English text at `font_size < 16` rendered via Helvetica Neue + Pango | Same drift pattern across words containing "GE", "ge", "fit", "cr" — see [text overflow map](../../../../docs/visualizations/text-overflow-map.md) | Use `font_size ≥ 16` for visible labels; Step 2 typography drift gate will catch the others at compile time |
 
 ## Category 4 — Frame-order error
 

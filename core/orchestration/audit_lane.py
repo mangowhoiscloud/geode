@@ -21,19 +21,10 @@ A module-level Lane works in both contexts and stays cheap (just a
 Why ``max_concurrent=1``
 ========================
 
-Two stacked rationales:
-
-1. **Inter-process serialisation**: when a daemon-driven cron audit
-   collides with a manual ``geode audit`` (operator-initiated), both
-   would otherwise spawn ``inspect eval`` simultaneously. Even after
-   FIX-1/2 caps inspect_ai's *per-process* burst to 1, two processes
-   running together = 2 inflight against the same provider account.
-   Lane=1 keeps the host emitting at most one audit's worth of API
-   requests at a time.
-2. **Predictable external load**: an audit can fan out many judge calls.
-   Serialising audit subprocesses preserves provider headroom for the
-   interactive runtime regardless of whether it uses API-key or Codex
-   subscription credentials.
+This semaphore serializes callers that acquire it in the same Python process.
+It does not coordinate independent CLI/daemon processes, nor audit entry points
+that do not acquire it. Per-audit request limits and account quotas are separate
+boundaries; this lane cannot guarantee host-wide provider headroom.
 
 Multi-account future
 ====================

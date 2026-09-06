@@ -586,9 +586,9 @@ class SelfImprovingLoopConfig(BaseModel):
     When set, ``_propagate_openai_source`` fills the three sub-fields and is
     **authoritative** — a per-role ``source`` that was *explicitly* set to a
     different value is superseded with a ``UserWarning`` (visible, but not a
-    swallowed ``ValidationError`` — so the chosen lane is deterministic even on
-    the petri-CLI ``read_role_override`` path that gracefully degrades on
-    validation errors). ``None`` (default) → no propagation; each role keeps its
+    swallowed ``ValidationError``). Invalid configuration propagates through
+    the Petri CLI reader before credential selection.
+    ``None`` (default) → no propagation; each role keeps its
     own ``source`` (full back-compat)."""
 
     warn_threshold: Annotated[float, Field(ge=0.0, le=1.0)] = 0.5
@@ -688,9 +688,8 @@ class SelfImprovingLoopConfig(BaseModel):
         reflects what the operator pinned explicitly.
 
         ``openai_source`` is authoritative: a sub-field the operator set explicitly
-        to a DIFFERENT value is overwritten and a ``UserWarning`` is emitted (visible,
-        but not a ``ValidationError`` that ``read_role_override`` would swallow — so
-        the resolved lane stays deterministic on that path). An explicit pin equal to
+        to a DIFFERENT value is overwritten and a ``UserWarning`` is emitted.
+        An explicit pin equal to
         ``openai_source`` overwrites silently (no-op, no warning); anything left at its
         schema default is overwritten with ``openai_source``.
         """
@@ -701,11 +700,7 @@ class SelfImprovingLoopConfig(BaseModel):
 
         def _apply(current: CredentialSource, explicit: bool, path: str) -> CredentialSource:
             # Authoritative: openai_source supersedes an explicit per-role pin, but
-            # WARNS (not raises) so the resolved lane is deterministic even on the
-            # ``read_role_override`` path that swallows ValidationError for graceful
-            # petri-CLI degradation. A swallowed conflict-raise there would let the
-            # target silently fall back to the manifest cascade — the warn+overwrite
-            # avoids that entirely.
+            # warns so the operator can remove the superseded per-role setting.
             if explicit and current != lane:
                 warnings.warn(
                     f"[self_improving_loop] openai_source={lane.value!r} supersedes the "
@@ -758,7 +753,7 @@ def _emit_defaults_notice(reason: str, path: Path) -> None:
 
     P2 — closes the "config loader default sub silent" gap from the
     2026-05-19 observability audit §4. ``reason`` is one of
-    ``file_missing`` / ``read_error`` / ``section_missing`` so the
+    ``file_missing`` / ``section_missing`` so the
     operator can tell which fallback fired without re-reading the file.
     The emit is a no-op outside an :func:`run_timeline_scope` so
     callers that load the config without an active audit run (REPL
@@ -772,7 +767,7 @@ def _emit_defaults_notice(reason: str, path: Path) -> None:
             return
         journal.append(
             "self_improving_loop_config_defaults_applied",
-            level="warn" if reason == "read_error" else "info",
+            level="info",
             payload={"reason": reason, "path": str(path)},
         )
     except Exception:  # pragma: no cover - defensive
@@ -791,29 +786,22 @@ def load_self_improving_loop_config(path: Path | str | None = None) -> SelfImpro
     - the file has no ``[self_improving_loop]`` section.
 
     Raises:
+        OSError: when an existing path cannot be read as a file.
+        tomllib.TOMLDecodeError: when the file is not valid TOML.
         ValueError: when the ``[self_improving_loop.*]`` section exists but
-            contains unknown fields or fails pydantic validation.
+            is not a table, contains unknown fields, or fails pydantic validation.
             The error is bubbled verbatim so the operator sees the
             offending key / value.
     """
     resolved = resolve_config_toml_path(path)
-    if not resolved.is_file():
-        log.debug("self-improving-loop config: %s does not exist; using defaults", resolved)
-        _emit_defaults_notice("file_missing", resolved)
-        return SelfImprovingLoopConfig()
     try:
         with resolved.open("rb") as fh:
             raw = tomllib.load(fh)
-    except OSError as exc:
-        log.warning(
-            "self-improving-loop config: could not read %s (%s); using defaults",
-            resolved,
-            exc,
-        )
-        _emit_defaults_notice("read_error", resolved)
+    except FileNotFoundError:
+        log.debug("self-improving-loop config: %s does not exist; using defaults", resolved)
+        _emit_defaults_notice("file_missing", resolved)
         return SelfImprovingLoopConfig()
-    section = raw.get("self_improving_loop")
-    if not isinstance(section, dict):
+    if "self_improving_loop" not in raw:
         _emit_defaults_notice("section_missing", resolved)
         return SelfImprovingLoopConfig()
-    return SelfImprovingLoopConfig.model_validate(section)
+    return SelfImprovingLoopConfig.model_validate(raw["self_improving_loop"])
