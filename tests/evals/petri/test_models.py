@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from unittest.mock import Mock
+
 import pytest
 from evals.petri.models import (
     AuditModelMappingError,
@@ -192,3 +195,209 @@ def test_gpt_source_api_key_routes_to_openai(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(openai_codex_oauth, "is_available", lambda: True)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-test")
     assert to_inspect_model("gpt-5.5") == "openai/gpt-5.5"
+
+
+@pytest.fixture
+def strict_mapping_policy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    from core.config import settings
+    from evals.petri import credential_source as cs
+
+    config = tmp_path / "config.toml"
+    config.write_text("[self_improving_loop]\nfallback_to_payg = false\n", encoding="utf-8")
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(config))
+    monkeypatch.setattr(settings, "openai_credential_source", "auto")
+    monkeypatch.setattr(cs, "is_suppressed", lambda provider, source: False)
+    monkeypatch.setattr(cs, "is_adapter_available", lambda provider, source: True)
+    return config
+
+
+@pytest.mark.policy_real
+@pytest.mark.usefixtures("strict_mapping_policy")
+class TestStrictMappingPolicy:
+    @pytest.mark.parametrize("model", ["gpt-6-astra", "o3", "o4-mini"])
+    def test_forced_oauth_does_not_become_payg(self, model: str) -> None:
+        with pytest.raises(AuditModelMappingError, match=r"audit.*mapping"):
+            to_inspect_model(model, use_oauth=True)
+
+    @pytest.mark.parametrize("model", ["gpt-6-astra", "o3", "o4-mini"])
+    def test_auto_oauth_unmapped_id_does_not_become_payg(self, model: str) -> None:
+        with pytest.raises(AuditModelMappingError, match=r"audit.*mapping"):
+            to_inspect_model(model)
+
+    def test_no_oauth_does_not_authorize_payg(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from evals.petri import credential_source as cs
+
+        monkeypatch.setattr(
+            cs, "is_adapter_available", lambda provider, source: source == "api_key"
+        )
+        with pytest.raises(cs.CredentialResolutionError) as excinfo:
+            to_inspect_model("gpt-6-astra")
+        assert excinfo.value.subscription_only is True
+
+    @pytest.mark.parametrize("authorization", ["source", "use_oauth", "settings"])
+    def test_explicit_payg_remains_allowed(
+        self, monkeypatch: pytest.MonkeyPatch, authorization: str
+    ) -> None:
+        from core.config import settings
+
+        if authorization == "source":
+            actual = to_inspect_model("gpt-6-astra", source="api_key", use_oauth=True)
+        elif authorization == "use_oauth":
+            actual = to_inspect_model("gpt-6-astra", use_oauth=False)
+        else:
+            monkeypatch.setattr(settings, "openai_credential_source", "api_key")
+            actual = to_inspect_model("gpt-6-astra")
+        assert actual == "openai/gpt-6-astra"
+
+    @pytest.mark.parametrize("authorization", ["source", "settings", "legacy_settings"])
+    @pytest.mark.parametrize("fallback", [False, True])
+    def test_concrete_oauth_pin_bypasses_only_the_name_heuristic(
+        self,
+        strict_mapping_policy: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        authorization: str,
+        fallback: bool,
+    ) -> None:
+        from core.config import settings
+
+        strict_mapping_policy.write_text(
+            f"[self_improving_loop]\nfallback_to_payg = {str(fallback).lower()}\n",
+            encoding="utf-8",
+        )
+        if authorization == "source":
+            actual = to_inspect_model("gpt-6-astra", source="openai-codex")
+        else:
+            monkeypatch.setattr(
+                settings,
+                "openai_credential_source",
+                "oauth" if authorization == "legacy_settings" else "openai-codex",
+            )
+            actual = to_inspect_model("gpt-6-astra")
+        assert actual == "openai-codex/gpt-6-astra"
+
+    def test_concrete_oauth_pin_still_obeys_source_suppression(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from evals.petri import credential_source as cs
+
+        monkeypatch.setattr(cs, "is_suppressed", lambda provider, source: source == "openai-codex")
+        with pytest.raises(cs.CredentialResolutionError) as excinfo:
+            to_inspect_model("gpt-6-astra", source="openai-codex")
+        assert excinfo.value.subscription_only is True
+
+    @pytest.mark.parametrize("source", ["unregistered", "api_key"])
+    def test_non_subscription_resolution_errors_are_not_payg_authority(
+        self, monkeypatch: pytest.MonkeyPatch, source: str
+    ) -> None:
+        from evals.petri import credential_source as cs
+
+        monkeypatch.setattr(cs, "is_suppressed", lambda provider, source: True)
+        with pytest.raises(cs.CredentialResolutionError) as excinfo:
+            to_inspect_model("gpt-6-astra", source=source)
+        assert excinfo.value.subscription_only is False
+
+    @pytest.mark.parametrize("model", ["gpt-6-astra", "o3", "o4-mini"])
+    def test_explicit_fallback_policy_preserves_legacy_auto_mapping(
+        self, strict_mapping_policy: Path, model: str
+    ) -> None:
+        strict_mapping_policy.write_text(
+            "[self_improving_loop]\nfallback_to_payg = true\n", encoding="utf-8"
+        )
+        assert to_inspect_model(model) == f"openai/{model}"
+
+    @pytest.mark.parametrize("model", ["gpt-5.5", "gpt-6-astra"])
+    def test_payg_fallback_does_not_revive_suppressed_sources(
+        self,
+        strict_mapping_policy: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        model: str,
+    ) -> None:
+        from evals.petri import credential_source as cs
+
+        strict_mapping_policy.write_text(
+            "[self_improving_loop]\nfallback_to_payg = true\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(cs, "is_suppressed", lambda provider, source: True)
+        with pytest.raises(cs.CredentialResolutionError) as excinfo:
+            to_inspect_model(model)
+        assert excinfo.value.subscription_only is False
+
+    def test_explicit_api_key_mapping_does_not_require_key_availability(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from evals.petri import credential_source as cs
+
+        monkeypatch.setattr(cs, "is_adapter_available", lambda provider, source: False)
+        assert to_inspect_model("gpt-5.5", source="api_key") == "openai/gpt-5.5"
+
+    def test_enabled_payg_fallback_still_requires_an_available_source(
+        self, strict_mapping_policy: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from evals.petri import credential_source as cs
+
+        strict_mapping_policy.write_text(
+            "[self_improving_loop]\nfallback_to_payg = true\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(cs, "is_adapter_available", lambda provider, source: False)
+        with pytest.raises(cs.CredentialResolutionError):
+            to_inspect_model("gpt-5.5")
+
+    def test_missing_subscription_adapter_does_not_select_api_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from evals.petri import manifest as manifest_module
+
+        manifest = manifest_module.load_manifest()
+        unavailable = Mock(wraps=manifest)
+        unavailable.get_adapter.side_effect = [
+            KeyError("missing subscription adapter"),
+            manifest.get_adapter("openai", "api_key"),
+        ]
+        monkeypatch.setattr(manifest_module, "load_manifest", lambda: unavailable)
+        with pytest.raises(KeyError, match="missing subscription adapter"):
+            to_inspect_model("gpt-5.5", source="openai-codex")
+        unavailable.get_adapter.assert_called_once_with("openai", "openai-codex")
+
+    def test_raw_oauth_identifier_remains_an_explicit_escape_hatch(self) -> None:
+        assert to_inspect_model("openai-codex/gpt-6-astra") == "openai-codex/gpt-6-astra"
+
+    @pytest.mark.parametrize(
+        ("model", "expected"),
+        [
+            ("gpt-5.5", "openai-codex/gpt-5.5"),
+            ("claude-opus-4-7", "anthropic/claude-opus-4-7"),
+            ("glm-5", "geode/glm-5"),
+        ],
+    )
+    def test_existing_mappings_remain_available(
+        self, monkeypatch: pytest.MonkeyPatch, model: str, expected: str
+    ) -> None:
+        from core.config import settings
+
+        monkeypatch.setattr(settings, "anthropic_credential_source", "auto")
+        assert to_inspect_model(model) == expected
+
+    def test_payg_fallback_does_not_override_a_forced_oauth_request(
+        self, strict_mapping_policy: Path
+    ) -> None:
+        strict_mapping_policy.write_text(
+            "[self_improving_loop]\nfallback_to_payg = true\n", encoding="utf-8"
+        )
+        with pytest.raises(AuditModelMappingError, match=r"audit.*mapping"):
+            to_inspect_model("gpt-6-astra", use_oauth=True)
+
+    def test_catalog_display_does_not_resolve_billing_policy(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from evals.petri import credential_source as cs
+        from evals.petri import models
+
+        model_ids = ("gpt-6-astra", "o3", "o4-mini")
+        monkeypatch.setattr(models, "MODEL_PRICING", dict.fromkeys(model_ids))
+        policy = Mock(side_effect=ValueError("invalid policy"))
+        resolver = Mock(side_effect=AssertionError("display must not resolve credentials"))
+        monkeypatch.setattr(cs, "self_improving_loop_fallback_policy", policy)
+        monkeypatch.setattr(cs, "resolve_credential_source", resolver)
+        assert list_audit_models() == [(model, f"openai/{model}") for model in model_ids]
+        policy.assert_not_called()
+        resolver.assert_not_called()

@@ -1,94 +1,67 @@
 ---
 name: dependency-review
-description: GEODE 6-Layer architecture dependency health review. Reverse layer violations, circular imports, eager/lazy loading, TYPE_CHECKING guards. Triggered by "dependency", "import", "dependencies" ("의존성"), "layer" ("레이어"), "circular" ("순환"), "lazy", "eager" keywords.
+description: Review GEODE dependency direction, composition boundaries, circular imports, and optional-dependency loading when changing package or subsystem dependencies.
 ---
 
 # Dependency & Layer Review Lens
 
-Review the dependency health of the GEODE 6-Layer architecture.
+Review against [code conventions](../../../docs/architecture/naming-conventions.md)
+and the executable import-linter contracts in [pyproject.toml](../../../pyproject.toml).
+The historical six-layer/plugin map is not the current dependency contract.
 
-## Layer Rules (Violations Prohibited)
+## Ownership and direction
 
-```
-L0: CLI & AGENT       → L1, L2, L3 (OK)
-L1: INFRASTRUCTURE    → Ports only (no inter-implementation dependencies)
-L2: MEMORY            → L1 Ports (OK), L0 direct import (VIOLATION)
-L3: ORCHESTRATION     → L1 Ports, L2 Ports (OK)
-L4: EXTENSIBILITY     → L1 Ports (OK), L0/L3 direct import (VIOLATION)
-L5: DOMAIN PLUGINS    → L1 Ports, DomainPort Protocol (OK)
+```text
+evolve -> evals -> core
+evolve --------> core
 ```
 
-Allowed:
-- Upper layer → Lower layer Port (Protocol)
-- Dependency injection via ContextVar DI
+`core` owns the runtime; `evals` measures it; `evolve` searches over runtime
+evidence. Neither `core -> evals/evolve` nor `evals -> evolve` is allowed.
+Within `core`, follow the named process/capability contracts rather than
+inventing a numeric layer order.
 
-Prohibited:
-- Lower layer → Upper layer implementations
-- Direct import bypassing Port
-- Circular dependency (A → B → A)
+- `core.wiring` composes services through constructors and existing typed contexts.
+- Use a narrow, named Protocol at a real consumer/provider boundary. A concrete
+  import inside the owning subsystem is not automatically a port violation;
+  one implementation does not invalidate an existing isolation boundary.
+- ContextVars carry request identity, diagnostics, or request-local state, not
+  service-locator DI. Do not hide a forbidden dependency behind a late import.
 
 ## Review Checklist
 
-### 1. Reverse Layer Violations
+### 1. Trace imports against the active contracts
 
 ```bash
-# L1(infrastructure) → L0(cli) violation
-grep -rn "from core\.cli" core/infrastructure/ --include="*.py"
-
-# L2(memory) → L0(cli) violation
-grep -rn "from core\.cli" core/memory/ --include="*.py"
-
-# L4(extensibility) → L0(cli) violation
-grep -rn "from core\.cli" core/extensibility/ --include="*.py"
-
-# L1 direct dependency between implementations (between adapters)
-grep -rn "from core\.infrastructure\.adapters\." core/infrastructure/adapters/ --include="*.py" | grep -v "__init__"
+rg -n '^(from|import) (evals|evolve)' core/ -g '*.py'
+rg -n '^(from|import) evolve' evals/ -g '*.py'
+uv run lint-imports
 ```
 
-### 2. Circular Import Detection
+Search results are candidates: inspect guarded, dynamic, and transitive imports
+and the importing caller. The gate owns the declared forbidden directions.
+
+### 2. Check cycles and composition
 
 ```bash
-# Bidirectional import patterns
-# Case where A imports B and B imports A
-grep -rn "from core\.memory" core/orchestration/ --include="*.py"
-grep -rn "from core\.orchestration" core/memory/ --include="*.py"
-
-# TYPE_CHECKING guard for circular avoidance verification
-grep -rn "if TYPE_CHECKING" core/ --include="*.py"
+rg -n 'from core\.memory' core/orchestration/ -g '*.py'
+rg -n 'from core\.orchestration' core/memory/ -g '*.py'
+rg -n 'TYPE_CHECKING|ContextVar|Protocol' core/ -g '*.py'
 ```
 
-### 3. Heavy Import (Eager Loading)
+For each suspected cycle, trace the actual import chain and the service's
+construction, binding, and teardown. A `TYPE_CHECKING` guard is not evidence
+that runtime composition is safe, and a Protocol count is not a quality score.
 
-```bash
-# Heavy packages loaded at module level
-grep -rn "^import anthropic\|^import openai\|^import langgraph" core/ --include="*.py"
-grep -rn "^from anthropic\|^from openai\|^from langgraph" core/ --include="*.py" | grep -v "TYPE_CHECKING"
+### 3. Verify optional and cold-start imports
 
-# Lazy import pattern inside functions
-grep -rn "def.*:" core/ --include="*.py" -A3 | grep "import "
-```
+Keep imports at module level unless an optional dependency, a measured startup
+cost, or a genuine cycle justifies deferral. Load optional SDKs at their owning
+adapter boundary. A fresh-interpreter check must fail if the forbidden eager
+import occurs; do not skip merely because the SDK is already imported.
 
-Rules:
-- Heavy SDKs like `anthropic`, `openai`, `langgraph` should use TYPE_CHECKING guard or lazy import inside functions
-- Lightweight packages like `Pydantic`, `dataclasses`, `typing` are OK at module level
+### 4. Report ownership and the surviving contract
 
-### 4. Port Bypass Detection
-
-```bash
-# Direct import of implementations without Port Protocol
-grep -rn "from core\.llm\.client import" core/nodes/ --include="*.py"
-grep -rn "from core\.memory\.session import" core/nodes/ --include="*.py"
-grep -rn "from core\.memory\.organization import" core/nodes/ --include="*.py"
-
-# Correct pattern: access through Port
-grep -rn "from core\.infrastructure\.ports" core/ --include="*.py"
-```
-
-## GEODE Existing Findings
-
-| Pattern | Status | Notes |
-|---------|--------|-------|
-| ContextVar DI | Normal | `set_llm_callable()`, `set_domain()`, etc. |
-| Port/Adapter separation | Normal | Protocol defined in `ports/` directory |
-| TYPE_CHECKING guard | Partially applied | Applied in `runtime.py`, `sub_agent.py` |
-| Lazy import | Partially applied | Deferred loading in `_build_*` methods |
+Name the caller, dependency owner, violated contract, smallest correction, and
+the behavioral/import test that must survive. Use current source evidence;
+historical architecture inventories are not automatic deletion instructions.

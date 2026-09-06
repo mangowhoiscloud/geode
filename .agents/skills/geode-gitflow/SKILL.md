@@ -5,6 +5,11 @@ description: GEODE branch strategy and PR rules. feature → develop → main me
 
 # GEODE Git & PR Workflow
 
+Apply only the stages authorized by the current request. Review or local edits
+do not authorize commit, push, merge, cleanup, reinstall, or runtime restart.
+The [canonical workflow](../../../docs/workflow.md) and `AGENTS.md` own current
+worktree and main-maintained tracking exceptions.
+
 ## Merge Flow (mandatory)
 
 **feature → develop → main** order. Direct push to main prohibited — must go through PR.
@@ -88,10 +93,9 @@ git merge origin/develop            # resolve on the feature branch (squash-merg
 # CHANGELOG.md is the usual (often only) conflict.
 ```
 
-- **Fold, don't stack.** Absorb the concurrent `[Unreleased]` / entry INTO your
-  release version's own `### Added/Changed/Fixed` — a release captures *all*
-  unreleased work since the last version. Never leave a `## [Unreleased]`
-  heading on a branch bound for main (CLAUDE.md forbids it).
+- **Preserve concurrent entries.** Ordinary fixes stay under `[Unreleased]`.
+  Only an authorized release promotes entries into a versioned section and
+  leaves a fresh `[Unreleased]` heading for subsequent work.
 - **Re-check the version number isn't already taken.** If the other session
   bumped `pyproject`/CHANGELOG to the number you picked, bump past it
   (`grep -m1 '^version' <(git show origin/develop:pyproject.toml)` before
@@ -186,8 +190,8 @@ gh pr create --base main --head develop \
 ### Deliberate main-to-develop pre-sync
 
 There is no automatic backmerge workflow. Before every `develop -> main`
-promotion, fetch both protected branches and compare their content. If main
-has unique tracking work and the sync is conflict-free, open a CI-gated PR
+promotion, fetch both protected branches and compare their content and ancestry.
+If main has commits not in develop and the sync is conflict-free, open a CI-gated PR
 directly from the current `main` head to `develop`. Do not put that clean sync
 behind the trusted sync-branch prefix: a merge from current main may simply
 fast-forward and therefore has no two-parent head.
@@ -254,7 +258,7 @@ DISCOVER (investigate harnesses via parallel Agents)
 
 ## Step 0: One-time machine setup
 
-`.pre-commit-config.yaml` defines 17 hooks, but they only run once the git hook
+The hooks in `.pre-commit-config.yaml` only run once the git hook
 is installed — and a fresh clone has no `.git/hooks/pre-commit`. Worktrees share
 the main repo's hooks directory, so installing once covers every worktree.
 
@@ -262,8 +266,9 @@ the main repo's hooks directory, so installing once covers every worktree.
 uv run pre-commit install     # verify: ls .git/hooks/pre-commit
 ```
 
-Even installed, pre-commit covers 2 of the 17 gates CI enforces; `scripts/preflight.sh`
-is what closes the rest. Install both.
+Installed pre-commit hooks do not cover the full CI contract. Use
+`scripts/preflight.sh` for the current local pre-PR checks and confirm required
+GitHub checks on the actual PR head before merge.
 
 ## Step 1: Worktree Open (alloc)
 
@@ -300,8 +305,8 @@ Code changes complete
 ┌─────────────────────────────────────────┐
 │  Step 1: CI Guardrails (all must pass)  │
 │                                         │
-│  scripts/preflight.sh                   │ → runs every gate CI enforces
-│  scripts/preflight.sh --fast            │ → same minus tests + site build
+│  scripts/preflight.sh                   │ → local pre-PR gates; inspect skips
+│  scripts/preflight.sh --fast            │ → skips tests + site build
 │                                         │
 │  Any failure → fix → re-run Step 1      │
 │                                         │
@@ -321,12 +326,12 @@ Code changes complete
 │    - Added / Changed / Fixed / Removed  │
 │    - Can skip if no code changes        │
 │                                         │
-│  □ Sync CLAUDE.md metrics (if changed)  │
-│    - When Tests, Modules change         │
+│  □ Check generated architecture data   │
+│    - Review drift; do not hand-count    │
 │                                         │
-│  □ Update docs/progress.md today's      │
-│    date section                         │
-│    - Completion table + remaining table  │
+│  □ Tracking updates only if in scope   │
+│    - Follow the main-owned workflow    │
+│    - Respect its explicit exceptions   │
 │                                         │
 │  Omission found → fix → re-run Step 1   │
 └────────────────┬────────────────────────┘
@@ -348,6 +353,10 @@ Code changes complete
 ```
 
 ### Quality Gate Anti-patterns
+
+Neither `--fast` nor a skipped local gate establishes a full pass. Preflight
+does not replace the current required checks in `.github/workflows/ci.yml`;
+site ESLint is `npm run lint`, distinct from documentation render lint.
 
 | Anti-pattern | Result | Correct Approach |
 |-------------|--------|------------------|
@@ -454,7 +463,7 @@ gh pr checks <PR#> --watch --repo mangowhoiscloud/geode
 
 | Failure | Response |
 |---------|----------|
-| `ruff` lint error | `uv run ruff check --fix core/ tests/` + `uv run ruff format core/ tests/` |
+| `ruff` lint error | Fix the affected files, then rerun the Ruff scopes in `scripts/preflight.sh` |
 | `mypy` type error | Fix types, minimize `# type: ignore` |
 | `bandit` security warning | Add `# nosec` or to pyproject.toml skips (only when justified) |
 | `pytest` failure | Fix test code, add tests for new code |
@@ -491,7 +500,7 @@ gh pr checks <PR#> --watch --repo mangowhoiscloud/geode
 | `"develop → main merge. X changes."` (1 line) | Include PR numbers, CI confirmation results for develop→main too |
 | Summary only without listing changed files | Per-file AS-IS → TO-BE + one-line rationale |
 | `XXXX passed` (placeholder) | `2168 passed` (actual number) |
-| Skipping Quality Gate checklist | All 5 CI tools + 4 docs items checked |
+| Skipping Quality Gate checklist | Report actual commands, skipped checks, and required PR check results |
 
 ## PR Body Detailed Template (feature → develop)
 
@@ -546,7 +555,7 @@ gh pr checks <PR#> --watch --repo mangowhoiscloud/geode
 - [x] CHANGELOG.md [Unreleased] entry added
 - [x] README.md metric consistency verified
 - [ ] CLAUDE.md sync (if applicable)
-- [x] docs/progress.md today's date section updated
+- [ ] Main-maintained tracking update (only if requested, through its own workflow)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 ```
@@ -609,9 +618,9 @@ main merge complete (step 10)
    ▼
 ┌──────────────────────────────────────────────────┐
 │  □ README.md metric consistency                   │
-│    - modules: find core/ -name "*.py" | wc -l     │
-│    - tests: uv run pytest --co 2>&1 | wc -l       │
-│    - tools count, version                         │
+│    - architecture_baseline.py --check             │
+│    - pytest --collect-only: use collection summary │
+│    - reviewed inventory and version               │
 │                                                   │
 │  □ CLAUDE.md metric consistency                   │
 │    - Verify Tests, Modules using same criteria    │
@@ -619,16 +628,16 @@ main merge complete (step 10)
 │  □ CHANGELOG.md [Unreleased] omission check       │
 │    - Are changes merged to main recorded?         │
 │                                                   │
-│  □ docs/progress.md today's date section exists   │
-│    - If missing, add and commit                   │
+│  □ In-scope tracking update follows its owner     │
+│    - Main-owned work is a separate transaction    │
 │                                                   │
 │  □ pyproject.toml coverage omit                   │
 │    - Check if new module is in omit breaking      │
 │      coverage                                     │
 │                                                   │
 │  → If mismatch found:                             │
-│    docs(sync) commit → feature → develop → main   │
-│    (apply same gitflow loop)                      │
+│    Use the owning document's permitted branch     │
+│    and CI-gated workflow; do not edit in place     │
 │  → If no issues: proceed to step 12               │
 │    (workspace cleanup)                            │
 └──────────────────────────────────────────────────┘
@@ -653,7 +662,7 @@ main ─────────────────────────
   └── develop ────────────────── integration (CI mandatory)
         │
         ├── feature/<name> ───── Feature development
-        ├── hotfix/<name> ────── Emergency fixes (branch from main)
+        ├── hotfix/<name> ────── Runtime fixes (branch from origin/develop)
         └── release/v<semver> ── Release preparation
 ```
 
@@ -678,12 +687,8 @@ security ──┘
 ```
 
 ```bash
-# Local CI guardrails (Pre-PR)
-uv run ruff check core/ tests/
-uv run ruff format --check core/ tests/
-uv run mypy core/
-uv run bandit -r core/ -c pyproject.toml
-uv run pytest tests/ -m "not live" -q
+# Local pre-PR gates; report any skipped checks, not just the exit code.
+scripts/preflight.sh
 
 # GitHub CI ratchet (Post-PR, mandatory before merge)
 gh pr checks <PR#> --watch --repo mangowhoiscloud/geode
@@ -791,35 +796,24 @@ it remove remote branch → worktree → squash-only local branch and prune. A
 refusal must be investigated; never delete another session's owner-protected
 worktree manually.
 
-## Rebuild & Restart (Workflow Step 7)
+## Rebuild & Restart (only when authorized)
 
-After merging to main, rebuild CLI and serve to update the runtime to the latest code.
+A merge does not authorize changing the user's global installation or running
+services. When deployment or restart is explicitly in scope:
 
-```bash
-# 1) Stop any running geode serve daemon(s). Use `pgrep -f`, NOT
-#    `ps aux | grep "geode serve"` — ps aux truncates the long python path
-#    before "geode serve", so the grep silently matches nothing, the kill is a
-#    no-op, and stale daemons survive a "rebuild" and then fight over
-#    ~/.geode/cli.sock (the multi-serve pathology behind the 2026-06-09
-#    model-resolution bug: banner shows one daemon's model, calls route through
-#    another). `geode serve stop` / `geode doctor` already use pgrep -f
-#    internally (core/cli/cmd_lifecycle.py, core/cli/doctor.py); this manual
-#    line should match.
-pkill -f "geode serve" || true   # no-op if none running; verify: pgrep -f "geode serve"
-
-# 2) Reinstall CLI as editable + sync dependencies.
-#    The [audit] extra (inspect_ai) is REQUIRED — the seed-generation pilot's
-#    petri_audit tool and the self-improving loop's audit subprocess both need
-#    it. Omitting it makes the pilot fail loudly ("petri_audit aborted —
-#    install the [audit] extra") instead of measuring; pre-fix it silently
-#    emitted all-zero dim_means (PR-PILOT-PETRI-AUDIT-WIRING, 2026-06-01).
-uv tool install -e ".[audit]" --force
-uv sync --extra audit
-
-# 3) Verify version + restart serve
-geode version          # Confirm version match
-geode serve &          # Restart in background
-```
+1. Resolve the intended installation, checkout, process identity, and owner.
+   Inspect the current lifecycle implementation in
+   `core/cli/commands/lifecycle.py` before choosing a stop/restart operation;
+   a process-name match alone does not establish ownership.
+2. Stop only the confirmed in-scope process. Do not use a broad `pkill -f`,
+   terminate another session, or hide a failed stop with `|| true`.
+3. Install only the requested channel and required extras. Editable global
+   installation and the `[audit]` extra are not defaults for ordinary runtime
+   work; follow the [distribution contract](../geode-distribution/SKILL.md)
+   when installation is part of the task.
+4. Verify version, process identity, and the requested runtime smoke result
+   before reporting completion. If ownership or restart authority is unclear,
+   stop at the local/merged artifact and ask for direction.
 
 ## Progress Board (Workflow Step 8)
 

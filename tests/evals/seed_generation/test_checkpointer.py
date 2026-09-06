@@ -103,6 +103,20 @@ def test_load_checkpoint_non_dict_payload_returns_none(tmp_path: Path) -> None:
     assert load_checkpoint(tmp_path, "evolver") is None
 
 
+@pytest.mark.parametrize("reader", ["phase", "completed", "partial-ranker"])
+def test_invalid_utf8_checkpoint_is_ignored(tmp_path: Path, reader: str) -> None:
+    name = RANKER_PARTIAL_CHECKPOINT if reader == "partial-ranker" else "supervisor.json"
+    target = tmp_path / CHECKPOINT_SUBDIR / name
+    target.parent.mkdir()
+    target.write_bytes(b"\xff")
+    if reader == "phase":
+        assert load_checkpoint(tmp_path, "supervisor") is None
+    elif reader == "completed":
+        assert list_completed_phases(tmp_path) == []
+    else:
+        assert load_partial_ranker_checkpoint(tmp_path) is None
+
+
 def test_list_completed_phases_ordered_by_completed_at(tmp_path: Path) -> None:
     write_checkpoint(
         tmp_path,
@@ -142,6 +156,43 @@ def test_list_completed_phases_empty_dir(tmp_path: Path) -> None:
     assert list_completed_phases(tmp_path) == []
 
 
+@pytest.mark.parametrize("body", ["{}", "[]", "42", "null", "{invalid json"])
+def test_list_completed_phases_excludes_malformed_checkpoints(tmp_path: Path, body: str) -> None:
+    target = tmp_path / CHECKPOINT_SUBDIR / "supervisor.json"
+    target.parent.mkdir()
+    target.write_text(body, encoding="utf-8")
+    assert list_completed_phases(tmp_path) == []
+
+
+@pytest.mark.parametrize("missing", ["run_id", "target_dim", "gen_tag"])
+def test_list_completed_phases_requires_snapshot_identity(tmp_path: Path, missing: str) -> None:
+    snapshot = _make_snapshot("supervisor")
+    snapshot.pop(missing)
+    write_checkpoint(tmp_path, phase="supervisor", state_snapshot=snapshot, duration_ms=1.0)
+    assert list_completed_phases(tmp_path) == []
+
+
+def test_list_completed_phases_rejects_phase_identity_mismatch(tmp_path: Path) -> None:
+    target = write_checkpoint(
+        tmp_path, phase="supervisor", state_snapshot=_make_snapshot("supervisor"), duration_ms=1.0
+    )
+    payload = json.loads(target.read_text(encoding="utf-8"))
+    payload["phase"] = "critic"
+    target.write_text(json.dumps(payload), encoding="utf-8")
+    assert list_completed_phases(tmp_path) == []
+
+
+def test_list_completed_phases_excludes_failure_checkpoint(tmp_path: Path) -> None:
+    write_checkpoint(
+        tmp_path,
+        phase="supervisor",
+        state_snapshot=_make_snapshot("supervisor"),
+        duration_ms=1.0,
+        error="synthetic failure",
+    )
+    assert list_completed_phases(tmp_path) == []
+
+
 def test_write_partial_ranker_checkpoint_round_trip(tmp_path: Path) -> None:
     target = write_partial_ranker_checkpoint(
         tmp_path,
@@ -166,3 +217,4 @@ def test_write_partial_ranker_checkpoint_round_trip(tmp_path: Path) -> None:
     assert ck.partial_ratings == {"c-1": 1016.0, "c-2": 984.0}
     assert ck.partial_outcomes_serialised[0]["match_id"] == "m000"
     assert ck.total_matches == 5
+    assert list_completed_phases(tmp_path) == []

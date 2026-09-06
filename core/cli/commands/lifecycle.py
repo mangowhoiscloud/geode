@@ -1,7 +1,7 @@
 """Lifecycle commands — stop, status, clean, update, uninstall.
 
 Provides process management, disk usage reporting, selective cleanup,
-installation-aware updates, and complete system removal for GEODE installations.
+installation-aware updates, and owned runtime data / verified tool removal.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from core.paths import (
     APPROVE_HISTORY,
     CLI_SOCKET_PATH,
     CLI_STARTUP_LOCK,
+    DEFAULT_GEODE_HOME,
     GEODE_HOME,
     GLOBAL_PROJECTS_DIR,
     GLOBAL_RUNS_DIR,
@@ -39,6 +40,7 @@ from core.paths import (
     PROJECT_SCHEDULER_LOG_DIR,
     PROJECT_TOOL_OFFLOAD,
     SERVE_LOG_PATH,
+    is_path_within,
 )
 from core.ui.console import console
 
@@ -83,13 +85,13 @@ class CleanTarget:
 
 
 def _scan_directory(path: Path) -> DirUsage:
-    """Walk a directory and sum file sizes."""
+    """Sum regular file bytes without counting symlink targets."""
     if not path.exists():
         return DirUsage(path=path)
     total = 0
     count = 0
     for f in path.rglob("*"):
-        if f.is_file():
+        if not f.is_symlink() and f.is_file():
             try:
                 total += f.stat().st_size
                 count += 1
@@ -173,10 +175,9 @@ def _is_socket_orphan(path: Path) -> bool:
     import socket as _socket
 
     try:
-        sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
-        sock.settimeout(1.0)
-        sock.connect(str(path))
-        sock.close()
+        with _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM) as sock:
+            sock.settimeout(1.0)
+            sock.connect(str(path))
     except (ConnectionRefusedError, OSError):
         return True  # File exists but nothing listens
     return False  # Something is listening — not orphan
@@ -656,10 +657,10 @@ def _has_dirty_worktree(repo_root: Path) -> bool:
         )
     except (subprocess.TimeoutExpired, OSError):
         return True
-    return bool(result.stdout.strip())
+    return result.returncode != 0 or bool(result.stdout.strip())
 
 
-def _run_update_step(
+def _run_lifecycle_step(
     label: str,
     command: list[str],
     *,
@@ -668,7 +669,7 @@ def _run_update_step(
     timeout: int = 300,
     extra_env: dict[str, str] | None = None,
 ) -> bool:
-    """Run one update command and print a compact lifecycle status line."""
+    """Run one package command and report its actual completion status."""
     quoted = " ".join(command)
     if extra_env:
         env_prefix = " ".join(f"{key}={value}" for key, value in extra_env.items())
@@ -856,7 +857,7 @@ def _do_source_update(
         ("Verify CLI version", [geode_executable, "version"], 30, None),
     ]
     for label, command, timeout, extra_env in steps:
-        if not _run_update_step(
+        if not _run_lifecycle_step(
             label,
             command,
             cwd=repo_root,
@@ -940,7 +941,7 @@ def _do_uv_tool_update(
             ("Verify CLI version", [geode_executable, "version"], 30, None),
         ]
         for label, command, timeout, extra_env in steps:
-            if _run_update_step(
+            if _run_lifecycle_step(
                 label,
                 command,
                 cwd=isolated_cwd,
@@ -1022,174 +1023,160 @@ def do_update(
 # ---------------------------------------------------------------------------
 
 
+def _uninstall_home() -> Path:
+    """Require a dedicated runtime home, not a project or broad ancestor."""
+    home = GEODE_HOME.expanduser().resolve()
+    protected = (Path.home().resolve(), Path.cwd().resolve(), Path(__file__).resolve().parents[3])
+    default_home = DEFAULT_GEODE_HOME.resolve()
+    is_default_home = home == default_home or (
+        home.exists() and default_home.exists() and home.samefile(default_home)
+    )
+    project_markers = (".git", "pyproject.toml", "package.json")
+    if (
+        GEODE_HOME.is_symlink()
+        or GEODE_HOME.parent.is_symlink()
+        or any(is_path_within(path, home) for path in protected)
+        or (is_path_within(home, PROJECT_GEODE_DIR) and not is_default_home)
+        or any((home / marker).exists() for marker in project_markers)
+        or (
+            home.name.casefold() == PROJECT_GEODE_DIR.name.casefold()
+            and not is_default_home
+            and any((home.parent / marker).exists() for marker in project_markers)
+        )
+        or (home.exists() and not home.is_dir())
+    ):
+        raise ValueError(
+            "GEODE_HOME must identify a dedicated runtime directory, not a project or home."
+        )
+    return home
+
+
 def do_uninstall(
     *,
     dry_run: bool = False,
     force: bool = False,
     keep_config: bool = False,
     keep_data: bool = False,
-) -> None:
-    """Completely remove GEODE from this system."""
+) -> bool:
+    """Remove owned runtime data and a verified uv tool, preserving project files."""
     mode_label = "[muted](dry-run)[/muted] " if dry_run else ""
     console.print()
     console.print(f"  {mode_label}[header]GEODE Uninstall[/header]")
     console.print()
 
-    # Survey what exists
-    items: list[tuple[str, Path, int, bool]] = []  # (label, path, bytes, is_dir)
-
-    # 1. Project-local .geode/
-    if PROJECT_GEODE_DIR.exists():
-        usage = _scan_directory(PROJECT_GEODE_DIR)
-        items.append(("Project data (.geode/)", PROJECT_GEODE_DIR, usage.total_bytes, True))
-
-    # 2. Global ~/.geode/
-    if GEODE_HOME.exists():
-        usage = _scan_directory(GEODE_HOME)
-        items.append((f"Global data ({GEODE_HOME})", GEODE_HOME, usage.total_bytes, True))
-
-    # 3. Build caches
-    cwd = Path.cwd()
-    build_total = 0
-    build_paths: list[Path] = []
-    for name in (".venv", ".mypy_cache", ".pytest_cache", ".ruff_cache"):
-        path = cwd / name
-        if path.exists():
-            u = _scan_directory(path)
-            build_total += u.total_bytes
-            build_paths.append(path)
-    if build_paths:
-        items.append(("Build caches", cwd, build_total, True))
-
-    # 4. CLI binary
-    geode_bin = shutil.which("geode")
-    if geode_bin:
-        items.append(("CLI binary", Path(geode_bin), 0, False))
-
-    if not items:
-        console.print("  [muted]Nothing to uninstall.[/muted]")
-        return
-
-    # Preview
-    total_bytes = sum(size for _, _, size, _ in items)
-    for label, _path, size, _ in items:
-        console.print(f"    {label:<35s} {_format_size(size):>10s}")
-    if keep_config:
-        console.print("    [success]Keep: .env, config.toml[/success]")
-    if keep_data:
-        console.print("    [success]Keep: vault/, identity/, user_profile/[/success]")
-    console.print()
-    console.print(f"    Total: {_format_size(total_bytes)}")
-    console.print()
-
-    if dry_run:
-        console.print(f"  [muted]{_format_size(total_bytes)} would be freed.[/muted]")
-        return
-
-    # Safety confirmations
-    if not force:
-        if not _confirm("This will remove ALL GEODE data. Continue?"):
-            console.print("  [muted]Cancelled.[/muted]")
-            return
-
-        if not keep_config and not _confirm(
-            "[warning]This includes API keys and credentials. Sure?[/warning]"
-        ):
-            console.print("  [muted]Cancelled.[/muted]")
-            return
-
-        if not _confirm_typed("Type 'uninstall' to confirm:", "uninstall"):
-            console.print("  [muted]Cancelled.[/muted]")
-            return
-
-    # Execute
-    freed = 0
-
-    # Step 1: Stop processes
-    console.print("  [muted]Stopping processes...[/muted]")
-    stop_serve(force=True, timeout=10)
-
-    # Step 2: Handle --keep-config and --keep-data (save before deletion)
-    saved_files: list[tuple[Path, Path]] = []  # (original, temp)
-    if keep_config and GEODE_HOME.exists():
-        import tempfile
-
-        tmpdir = Path(tempfile.mkdtemp(prefix="geode-keep-"))
-        for name in (".env", "config.toml"):
-            src = GEODE_HOME / name
-            if src.exists():
-                dst = tmpdir / name
-                shutil.copy2(src, dst)
-                saved_files.append((src, dst))
-
-    saved_dirs: list[tuple[Path, Path]] = []  # (original, temp)
-    if keep_data and GEODE_HOME.exists():
-        import tempfile
-
-        tmpdir_data = Path(tempfile.mkdtemp(prefix="geode-keep-data-"))
-        for name in ("vault", "identity", "user_profile"):
-            src = GEODE_HOME / name
-            if src.exists():
-                dst = tmpdir_data / name
-                shutil.copytree(src, dst)
-                saved_dirs.append((src, dst))
-
-    # Step 3: Remove project-local .geode/
-    if PROJECT_GEODE_DIR.exists():
-        usage = _scan_directory(PROJECT_GEODE_DIR)
-        shutil.rmtree(PROJECT_GEODE_DIR, ignore_errors=True)
-        freed += usage.total_bytes
-        console.print(f"  Removed .geode/ ({_format_size(usage.total_bytes)})")
-
-    # Step 4: Remove global ~/.geode/
-    if GEODE_HOME.exists():
-        usage = _scan_directory(GEODE_HOME)
-        shutil.rmtree(GEODE_HOME, ignore_errors=True)
-        freed += usage.total_bytes
-        console.print(f"  Removed {GEODE_HOME} ({_format_size(usage.total_bytes)})")
-
-    # Step 5: Restore kept files
-    if saved_files or saved_dirs:
-        GEODE_HOME.mkdir(parents=True, exist_ok=True)
-        for original, tmp in saved_files:
-            shutil.copy2(tmp, original)
-        for original, tmp in saved_dirs:
-            shutil.copytree(tmp, original)
-        # Clean temp dirs
-        cleaned_parents: set[Path] = set()
-        for _, tmp in [*saved_files, *saved_dirs]:
-            if tmp.parent.exists() and tmp.parent not in cleaned_parents:
-                shutil.rmtree(tmp.parent, ignore_errors=True)
-                cleaned_parents.add(tmp.parent)
-
-        kept = []
+    try:
+        home = _uninstall_home()
+        kept: set[str] = set()
         if keep_config:
-            kept.append(".env, config.toml")
+            kept.update((".env", "config.toml", "auth.toml"))
         if keep_data:
-            kept.append("vault/, identity/, user_profile/")
-        console.print(f"  [success]Preserved: {', '.join(kept)}[/success]")
+            kept.update(("vault", "identity", "user_profile"))
+        targets = (
+            [path for path in home.iterdir() if path.name.casefold() not in kept]
+            if home.exists()
+            else []
+        )
+        sizes = {
+            path: 0
+            if path.is_symlink()
+            else (_scan_directory(path).total_bytes if path.is_dir() else path.stat().st_size)
+            for path in targets
+        }
+    except (OSError, ValueError) as exc:
+        console.print(f"  [error]Cannot select uninstall data: {exc}[/error]")
+        return False
 
-    # Step 6: Remove build caches
-    for path in build_paths:
-        u = _scan_directory(path)
-        shutil.rmtree(path, ignore_errors=True)
-        freed += u.total_bytes
-    if build_paths:
-        console.print(f"  Removed build caches ({_format_size(build_total)})")
-
-    # Step 7: Uninstall CLI via uv tool
+    geode_bin = shutil.which("geode")
+    tool_env: dict[str, str] | None = None
     if geode_bin:
-        try:
-            subprocess.run(
-                ["uv", "tool", "uninstall", "geode-agent"],  # noqa: S607
-                capture_output=True,
-                text=True,
-                timeout=30,
+        target = detect_update_target()
+        if (
+            target.kind in (UpdateKind.SOURCE, UpdateKind.UV_TOOL)
+            and target.uv_tool_dir is not None
+            and target.uv_tool_bin_dir is not None
+            and Path(geode_bin).parent.resolve() == target.uv_tool_bin_dir
+        ):
+            tool_env = {
+                "UV_TOOL_DIR": str(target.uv_tool_dir),
+                "UV_TOOL_BIN_DIR": str(target.uv_tool_bin_dir),
+            }
+        else:
+            console.print(
+                "  [warning]CLI installation ownership is not verified. "
+                "Remove it with its original package manager; project environments are preserved."
+                "[/warning]"
             )
-            console.print(f"  Removed CLI ({geode_bin})")
-        except (subprocess.TimeoutExpired, OSError) as exc:
-            console.print(f"  [warning]Failed to uninstall CLI: {exc}[/warning]")
+            if not dry_run:
+                return False
 
-    # Summary
+    if not targets and not geode_bin:
+        console.print("  [muted]Nothing to uninstall; project files are preserved.[/muted]")
+        return True
+
+    total_bytes = sum(sizes.values())
+    console.print(f"  Runtime home: {home}")
+    console.print(
+        "  Project .geode/, source, virtual environments, and build caches are preserved."
+    )
+    for path in targets:
+        console.print(f"    {path.name:<35s} {_format_size(sizes[path]):>10s}")
+    if kept:
+        console.print(f"  Keep in place: {', '.join(sorted(kept))}")
+    if tool_env:
+        console.print(f"  CLI tool: {geode_bin}")
+    console.print(f"  Selected file bytes: {_format_size(total_bytes)} (excludes CLI environment)")
+    if dry_run:
+        console.print("  [muted]Preview only; no processes, files, or packages changed.[/muted]")
+        return True
+
+    if not force:
+        if not _confirm("Remove the listed GEODE runtime data and CLI?"):
+            return False
+        if not keep_config and not _confirm(
+            "[warning]This includes runtime credentials. Continue?[/warning]"
+        ):
+            return False
+        if not _confirm_typed("Type 'uninstall' to confirm:", "uninstall"):
+            return False
+
+    if not stop_serve(force=True, timeout=10):
+        console.print(
+            "  [error]Serve could not be stopped; uninstall aborted before removal.[/error]"
+        )
+        return False
+
+    removed_bytes = 0
+    try:
+        if _uninstall_home() != home:
+            raise ValueError("Runtime home changed after confirmation.")
+        for path in targets:
+            if path.is_symlink():
+                path.unlink()
+            elif path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink(missing_ok=True)
+            removed_bytes += sizes[path]
+            console.print(f"  Removed {path.name}")
+        if home.exists() and not any(home.iterdir()):
+            home.rmdir()
+    except (OSError, ValueError) as exc:
+        console.print(f"  [error]Uninstall incomplete; data removal failed: {exc}[/error]")
+        return False
+
+    if tool_env and not _run_lifecycle_step(
+        "Uninstall CLI",
+        ["uv", "tool", "uninstall", "geode-agent"],
+        cwd=Path.cwd(),
+        timeout=30,
+        extra_env=tool_env,
+    ):
+        console.print("  [error]Runtime data was removed, but CLI removal is incomplete.[/error]")
+        return False
+
     console.print()
-    console.print(f"  [success]Uninstall complete. Freed {_format_size(freed)}.[/success]")
+    console.print(
+        f"  [success]Uninstall complete. Removed {_format_size(removed_bytes)} "
+        "of selected file data; physical disk recovery may differ.[/success]"
+    )
+    return True

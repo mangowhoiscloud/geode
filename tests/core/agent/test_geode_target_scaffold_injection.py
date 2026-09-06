@@ -63,6 +63,10 @@ def _capture_internal_prompt(
         return AgenticResult(text="ok", rounds=0, termination_reason="end_turn")
 
     monkeypatch.setattr(al.AgenticLoop, "arun", _fake_arun)
+    # Prompt assembly has no live credential dependency; authorize its fake route explicitly.
+    monkeypatch.setattr(
+        "evals.petri.credential_source._settings_source", lambda provider: "api_key"
+    )
 
     asyncio.run(_default_geode_runner(auditor_messages, model=model))
     return captured["prompt"]

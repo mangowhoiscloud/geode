@@ -42,10 +42,13 @@ def test_to_inspect_model_uses_oauth_when_token_present() -> None:
         assert to_inspect_model("gpt-5.3-codex") == "openai-codex/gpt-5.3-codex"
 
 
-def test_to_inspect_model_falls_back_to_per_token_without_token() -> None:
-    """Auto-detect: no token → legacy ``openai/<model>``."""
+def test_to_inspect_model_falls_back_to_per_token_without_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Permitted fallback needs an available API key when OAuth is absent."""
     from evals.petri.models import to_inspect_model
 
+    monkeypatch.setenv("OPENAI_API_KEY", "test-only-api-key")
     with patch("evals.petri.adapters.openai_codex_oauth.is_available", return_value=False):
         assert to_inspect_model("gpt-5.5") == "openai/gpt-5.5"
         assert to_inspect_model("gpt-5.4-mini") == "openai/gpt-5.4-mini"
@@ -237,10 +240,11 @@ def test_run_audit_no_oauth_flag_forces_per_token() -> None:
     assert "openai-codex" not in joined
 
 
-def test_run_audit_falls_back_when_no_token() -> None:
-    """No OAuth token + auto-detect → legacy ``openai/`` path."""
+def test_run_audit_falls_back_when_no_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No OAuth token + available API key → permitted ``openai/`` fallback."""
     from evals.petri.runner import run_audit
 
+    monkeypatch.setenv("OPENAI_API_KEY", "test-only-api-key")
     with patch("evals.petri.adapters.openai_codex_oauth.is_available", return_value=False):
         report = run_audit(
             judge="gpt-5.5",

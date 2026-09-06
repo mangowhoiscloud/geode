@@ -80,6 +80,67 @@ def test_load_returns_defaults_when_section_missing(tmp_path: Path) -> None:
     assert cfg == SelfImprovingLoopConfig()
 
 
+def test_load_empty_section_keeps_safe_defaults(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    _write_toml(path, "[self_improving_loop]\n")
+    assert load_self_improving_loop_config(path) == SelfImprovingLoopConfig()
+
+
+@pytest.mark.parametrize("value", ['"not a table"', "false", "42", "[]"])
+def test_load_non_table_section_raises(tmp_path: Path, value: str) -> None:
+    from pydantic import ValidationError
+
+    path = tmp_path / "config.toml"
+    _write_toml(path, f"self_improving_loop = {value}\n")
+    with pytest.raises(ValidationError):
+        load_self_improving_loop_config(path)
+
+
+def test_load_directory_is_not_a_missing_config(tmp_path: Path) -> None:
+    with pytest.raises(OSError):
+        load_self_improving_loop_config(tmp_path)
+
+
+def test_load_malformed_toml_raises(tmp_path: Path) -> None:
+    import tomllib
+
+    path = tmp_path / "config.toml"
+    _write_toml(path, "[self_improving_loop\n")
+    with pytest.raises(tomllib.TOMLDecodeError):
+        load_self_improving_loop_config(path)
+
+
+@pytest.mark.parametrize("consumer", ["train", "mutator"])
+def test_config_read_failure_stops_execution_consumers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, consumer: str
+) -> None:
+    from unittest.mock import Mock
+
+    from core import config
+    from evolve.scaffold_search import train
+    from evolve.scaffold_search.loop.mutate import runner
+
+    path = tmp_path / "config.toml"
+    _write_toml(path, "[self_improving_loop]\n")
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(path))
+    real_open = Path.open
+
+    def _open(self: Path, *args: object, **kwargs: object):
+        if self == path:
+            raise PermissionError("synthetic config is unreadable")
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", _open)
+    provider_resolver = Mock()
+    monkeypatch.setattr(config, "_resolve_provider", provider_resolver)
+    with pytest.raises(PermissionError, match="synthetic config"):
+        if consumer == "train":
+            train._get_autoresearch_config()
+        else:
+            runner._default_llm_call("synthetic system", "synthetic user")
+    provider_resolver.assert_not_called()
+
+
 def test_load_reads_self_improving_loop_section(tmp_path: Path) -> None:
     """[self_improving_loop] section keys override defaults."""
     path = tmp_path / "config.toml"
@@ -455,10 +516,10 @@ def test_load_emits_section_missing_notice_into_session_journal(tmp_path: Path) 
     assert rows[0]["level"] == "info"
 
 
-def test_load_emits_read_error_notice_as_warn(
+def test_load_read_error_propagates_without_defaults_notice(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """OSError on read → notice with ``reason='read_error'`` at level ``warn``."""
+    """Permission failure is not equivalent to an absent configuration."""
     from evals.run_timeline import run_timeline_scope
 
     journal = _make_journal(tmp_path)
@@ -469,18 +530,14 @@ def test_load_emits_read_error_notice_as_warn(
 
     def _boom(self: Path, *args: object, **kwargs: object):
         if self == path:
-            raise OSError("simulated permission denied")
+            raise PermissionError("simulated permission denied")
         return real_open(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "open", _boom)
 
-    with run_timeline_scope(journal):
-        cfg = load_self_improving_loop_config(path)
-    assert cfg == SelfImprovingLoopConfig()
-    rows = _read_journal(journal.path)
-    assert len(rows) == 1
-    assert rows[0]["payload"]["reason"] == "read_error"
-    assert rows[0]["level"] == "warn"
+    with run_timeline_scope(journal), pytest.raises(PermissionError, match="simulated"):
+        load_self_improving_loop_config(path)
+    assert not journal.path.exists()
 
 
 def test_load_silent_when_no_run_timeline_scope(tmp_path: Path) -> None:
@@ -724,6 +781,6 @@ def test_openai_source_reaches_petri_target_binding(tmp_path: Path, monkeypatch)
     )
     monkeypatch.setenv("GEODE_CONFIG_TOML", str(path))
     override = read_role_override("target")
-    # "api_key" is not a known-default, so it surfaces as the source override
-    # that get_binding feeds into resolve_credential_source → openai-payg.
-    assert str(override.get("source")) == "api_key" or override.get("source") == "api_key"
+    # The authoritative OpenAI source marks the target source as configured,
+    # even though its value equals the role schema's default.
+    assert override == {"source": "api_key"}

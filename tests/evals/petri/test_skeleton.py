@@ -17,7 +17,8 @@ import asyncio
 import importlib.util
 from dataclasses import dataclass
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -102,6 +103,135 @@ def test_default_runner_rejects_empty_messages() -> None:
 
     with pytest.raises(ValueError, match="Empty message history"):
         asyncio.run(_default_geode_runner(messages=[]))
+
+
+@pytest.fixture
+def target_credential_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, Mock]:
+    from evals.petri import credential_source as cs
+    from evals.petri.audit_mode import AuditMode
+
+    monkeypatch.chdir(tmp_path)
+    config = tmp_path / "config.toml"
+    config.write_text("[self_improving_loop]\nfallback_to_payg = false\n")
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(config))
+    monkeypatch.setenv("GEODE_PETRI_TOML", str(tmp_path / "absent-petri.toml"))
+    monkeypatch.setattr(cs, "_settings_source", lambda provider: None)
+    monkeypatch.setattr(cs, "is_suppressed", lambda provider, source: False)
+    monkeypatch.setattr(cs, "is_adapter_available", lambda provider, source: True)
+    monkeypatch.setattr("core.llm.providers.codex.is_codex_oauth_available", lambda: False)
+    monkeypatch.setattr("evals.petri.audit_mode.resolve", lambda: AuditMode())
+    monkeypatch.setattr("core.wiring.startup.check_readiness", lambda: object())
+    monkeypatch.setattr("core.cli.session_state.set_readiness", lambda readiness: None)
+    monkeypatch.setattr("core.audit.diagnostics.diag", lambda *args, **kwargs: None)
+    loop = Mock(
+        return_value=SimpleNamespace(
+            model="synthetic-model",
+            arun=AsyncMock(return_value=SimpleNamespace(text="ok", usage=None)),
+        )
+    )
+    monkeypatch.setattr("core.agent.loop.AgenticLoop", loop)
+    return config, loop
+
+
+@pytest.mark.policy_real
+@pytest.mark.parametrize("model", [None, "gpt-5.5", "gpt-4o", "openrouter/example/model"])
+def test_target_invalid_policy_stops_before_loop(
+    target_credential_boundary: tuple[Path, Mock], model: str | None
+) -> None:
+    from evals.petri.geode_target import _default_geode_runner
+
+    config, loop = target_credential_boundary
+    config.write_text("[self_improving_loop]\nunknown_policy = true\n")
+    with pytest.raises(ValueError, match="unknown_policy"):
+        asyncio.run(_default_geode_runner([{"role": "user", "content": "hello"}], model=model))
+    loop.assert_not_called()
+
+
+@pytest.mark.policy_real
+def test_default_target_keeps_runtime_settings_drift(
+    target_credential_boundary: tuple[Path, Mock],
+) -> None:
+    from evals.petri.geode_target import _default_geode_runner
+
+    config, loop = target_credential_boundary
+    config.write_text(
+        '[self_improving_loop.autoresearch.target]\nmodel = "gpt-5.5"\nsource = "openai-codex"\n'
+    )
+    assert asyncio.run(_default_geode_runner([{"role": "user", "content": "hello"}])) == (
+        "ok",
+        None,
+    )
+    assert loop.call_args.kwargs["model"] is None
+    assert loop.call_args.kwargs["config"].source == ""
+    assert loop.call_args.kwargs["config"].disable_settings_drift is False
+
+
+@pytest.mark.policy_real
+@pytest.mark.parametrize("model", ["gpt-5.5", "gpt-4o"])
+@pytest.mark.parametrize("fallback", [False, True])
+def test_target_suppressed_credentials_stop_before_loop(
+    target_credential_boundary: tuple[Path, Mock],
+    monkeypatch: pytest.MonkeyPatch,
+    model: str,
+    fallback: bool,
+) -> None:
+    from evals.petri import credential_source as cs
+    from evals.petri.geode_target import _default_geode_runner
+
+    config, loop = target_credential_boundary
+    config.write_text(f"[self_improving_loop]\nfallback_to_payg = {str(fallback).lower()}\n")
+    monkeypatch.setattr(cs, "is_suppressed", lambda provider, source: True)
+    with pytest.raises(cs.CredentialResolutionError):
+        asyncio.run(_default_geode_runner([{"role": "user", "content": "hello"}], model=model))
+    loop.assert_not_called()
+
+
+@pytest.mark.policy_real
+def test_native_target_outside_catalog_keeps_explicit_subscription(
+    target_credential_boundary: tuple[Path, Mock],
+) -> None:
+    from evals.petri.geode_target import _default_geode_runner
+
+    config, loop = target_credential_boundary
+    config.write_text('[self_improving_loop.autoresearch.target]\nsource = "openai-codex"\n')
+    assert asyncio.run(
+        _default_geode_runner([{"role": "user", "content": "hello"}], model="gpt-4o")
+    ) == ("ok", None)
+    assert loop.call_args.kwargs["model"] == "gpt-4o"
+    assert loop.call_args.kwargs["provider"] == "openai"
+    assert loop.call_args.kwargs["config"].source == "codex-oauth"
+
+
+@pytest.mark.policy_real
+@pytest.mark.parametrize("explicit_source", [False, True])
+def test_native_provider_without_petri_contract_does_not_discard_source_pin(
+    target_credential_boundary: tuple[Path, Mock],
+    monkeypatch: pytest.MonkeyPatch,
+    explicit_source: bool,
+) -> None:
+    from evals.petri.geode_target import _default_geode_runner
+
+    config, loop = target_credential_boundary
+    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda provider: "payg")
+    if explicit_source:
+        config.write_text('[self_improving_loop.autoresearch.target]\nsource = "api_key"\n')
+        with pytest.raises(ValueError, match="credential contract"):
+            asyncio.run(
+                _default_geode_runner(
+                    [{"role": "user", "content": "hello"}], model="openrouter/example/model"
+                )
+            )
+        loop.assert_not_called()
+    else:
+        assert asyncio.run(
+            _default_geode_runner(
+                [{"role": "user", "content": "hello"}], model="openrouter/example/model"
+            )
+        ) == ("ok", None)
+        assert loop.call_args.kwargs["provider"] == "openrouter"
+        assert loop.call_args.kwargs["config"].source == ""
 
 
 def test_default_runner_passes_pinned_model_to_loop_with_drift_disabled() -> None:
@@ -309,6 +439,10 @@ def test_default_runner_returns_text_and_usage_tuple(monkeypatch) -> None:
     )
     monkeypatch.setattr("core.agent.tool_executor.ToolExecutor", lambda **k: None)
     monkeypatch.setattr("core.agent.loop.AgenticLoop", _FakeLoop)
+    # This usage-envelope test selects a synthetic route; the loop never calls it.
+    monkeypatch.setattr(
+        "evals.petri.credential_source._settings_source", lambda provider: "api_key"
+    )
 
     text, usage = asyncio.run(
         _default_geode_runner(

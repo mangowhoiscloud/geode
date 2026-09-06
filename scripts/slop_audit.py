@@ -5,10 +5,10 @@ codebase health if uncaught:
 
 1. **Unused imports** (`ruff F401`) — module-level imports never
    referenced.
-2. **Dead functions** (heuristic: private defs without another textual
-   reference in the same file).
-3. **Duplicate patterns** (≥3 inline copies of the same N-line
-   snippet) — usually a missed lift-to-helper opportunity.
+2. **Private-function candidates** (synchronous private defs without another
+   textual reference in the same file; external and dynamic callers unproven).
+3. **Repeated-name candidates** (the same synchronous function name defined
+   ≥3 times) — does not compare signatures or implementation bodies.
 4. **Abandoned TODOs** (`TODO` / `FIXME` / `XXX` without an owner
    handle or date stamp).
 5. **Lint bypass markers** (`# noqa` / `# type: ignore`) — candidates for
@@ -108,7 +108,7 @@ def lens_unused_imports() -> LensResult:
 
 
 # ---------------------------------------------------------------------------
-# Lens 2 — Dead functions (heuristic)
+# Lens 2 — Same-file private-name reference candidates
 # ---------------------------------------------------------------------------
 
 
@@ -116,12 +116,12 @@ _DEF_PATTERN = re.compile(r"^\s*def\s+(_[a-zA-Z0-9_]+)\s*\(", re.MULTILINE)
 
 
 def lens_dead_private_functions() -> LensResult:
-    """Detect ``def _foo(...)`` (private) with zero external callers.
+    """Find synchronous ``def _foo(...)`` names mentioned once in their file.
 
     Walks every .py file, collects private def names per file, then
-    greps the same file for ``_foo`` references outside the def line.
-    Lightweight: misses cross-module callers but those are rare for
-    private helpers.
+    counts textual occurrences of each name in that file. This does not prove
+    dead code: cross-module imports, registries, and dynamic dispatch need
+    separate caller checks before removal.
     """
     samples: list[str] = []
     count = 0
@@ -148,7 +148,7 @@ def lens_dead_private_functions() -> LensResult:
 
 
 # ---------------------------------------------------------------------------
-# Lens 3 — Duplicate patterns (3+ inline copies)
+# Lens 3 — Repeated synchronous function names (3+ definitions)
 # ---------------------------------------------------------------------------
 
 
@@ -158,8 +158,9 @@ _SIGNATURE_PATTERN = re.compile(r"^\s*def\s+([a-zA-Z0-9_]+)\s*\(", re.MULTILINE)
 def lens_duplicate_signatures() -> LensResult:
     """Detect ``def <same_name>`` repeated ≥3 times across files.
 
-    Repeated names are a weak signal — could be legitimate (init,
-    execute) or a missed shared-helper opportunity. We exclude
+    Parameters and bodies are not compared. Repeated names are a weak signal:
+    they may represent legitimate independent contracts or a shared-helper
+    opportunity that still needs behavior and caller evidence. We exclude
     common Python dunders + framework method names (execute, run,
     setUp, tearDown, __init__).
     """
@@ -256,7 +257,7 @@ def lens_lint_bypass() -> LensResult:
 
 _STALE_REFS: tuple[str, ...] = (
     # Pre-PR-0 / PR-1 cleanups — keep this list current as features
-    # are removed so a re-appearance in docs is flagged.
+    # are removed so a re-appearance in scanned source files is flagged.
     "BudgetGuard",
     "SUBAGENT_BUDGET_WARNING",
     "seeds_safe10",

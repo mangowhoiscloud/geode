@@ -213,6 +213,17 @@ class BashTool:
                 returncode=process.returncode or 0,
                 command=command,
             )
+        except asyncio.CancelledError:
+            try:
+                if process is not None:
+                    await self._terminate_process_tree(process)
+            except Exception:
+                log.warning("Failed to terminate cancelled shell process", exc_info=True)
+            finally:
+                child_tasks = [task for task in (communicate_task, cancel_task) if task is not None]
+                self._cancel_pending(*child_tasks)
+                await asyncio.gather(*child_tasks, return_exceptions=True)
+            raise
         except TimeoutError:
             if process is not None:
                 await self._terminate_process_tree(process)
