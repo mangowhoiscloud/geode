@@ -171,6 +171,12 @@ This candidate is not interchangeable with the historical one-tool control.
 The entry point requires a container-local home, explicit subscription routing,
 an absolute required model policy, and no API-key environment variables.
 Root effort, worker-difficulty settings and auxiliary defaults are distinct.
+The fresh task-container profile permits dangerous tools so the native shell
+is available; this does not change host policy or bypass worker-role toolkits.
+The adapter's `verify_mode` option defaults to `rule_based`; freeze `reflexion`
+explicitly when evaluating LLM-assisted repair. Mode, judge model and shell
+admission are checked before inference. GEODE verification supplies runtime
+feedback, not the Harbor task verifier's score authority.
 Native state is preserved under the trial's `agent/geode-home/`; credentials
 are transferred outside the collected logs. These are private sources until
 separate secret, PII and local-path scans authorize a public derivative.
