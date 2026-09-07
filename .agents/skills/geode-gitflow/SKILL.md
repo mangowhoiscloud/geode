@@ -1,820 +1,237 @@
 ---
 name: geode-gitflow
-description: GEODE branch strategy and PR rules. feature → develop → main merge flow, Pre-PR Quality Gate (CI guardrails + docs-sync loop), Post-PR CI ratchet (gh pr checks --watch mandatory), Korean PRs, assignee settings. Triggers on "branch", "git", "pr", "merge", "커밋", "풀리퀘스트".
+description: Prepare GEODE worktrees, Korean PRs, CI-gated merges, and guarded cleanup. Use for repository branch, commit, PR, merge, or release work; apply only the stages the user authorized.
 ---
 
 # GEODE Git & PR Workflow
 
 Apply only the stages authorized by the current request. Review or local edits
 do not authorize commit, push, merge, cleanup, reinstall, or runtime restart.
-The [canonical workflow](../../../docs/workflow.md) and `AGENTS.md` own current
-worktree and main-maintained tracking exceptions.
+The [workflow](../../../docs/workflow.md) owns development phases;
+this skill owns the GitFlow procedure. Read `AGENTS.md` for repository guardrails.
 
-## Merge Flow (mandatory)
+## Merge Flow
 
-**feature → develop → main** order. Direct push to main prohibited — must go through PR.
+| Transaction | Base and head | Merge method |
+|---|---|---|
+| Feature, fix, or release preparation | fetched `origin/develop` → topic branch → `develop` | squash |
+| Canonical pre-sync | current `main` → `develop`, or the trusted conflict-resolution head below | merge |
+| Promotion | `develop` → `main` | merge |
 
-```
-feature/xxx ──PR──→ develop ──PR──→ main
-```
+Never push directly to `main` or `develop`. Promotion can batch verified
+features; it does not itself authorize a tag, package publication, installation,
+or service restart. `[Unreleased]` may remain on main.
 
-For releases (version stamp bump + CHANGELOG promote), the release branch lands on **develop first**, then a straight pass-through develop → main PR ships to production. See `## Release Flow` below — this rotation eliminates the post-release backmerge that the older pattern required.
+## Worktree Allocation
 
-## Full Workflow
+Inspect `git status --short --branch`, `git worktree list`, and any `.owner`
+before editing. Continue in the correct existing worktree when available;
+read-only inspection does not require allocating another checkout.
 
-> **Principle 1**: Every work unit **starts with worktree open (alloc) and ends with worktree close (free)**.
-> No direct `git checkout feature/*` in the main repo. No exceptions.
->
-> **Principle 2**: develop merge uses a **queue approach** — one at a time. Rebase next worktree after merge.
-
-```
-0.  ★ Frontier Research (for new infrastructure features)
-    DISCOVER → COMPARE → DECIDE → DOCUMENT
-1.  worktree open + feature branch creation  ← alloc
-2.  Code changes (within worktree)
-3.  ★ Pre-PR Quality Gate (iterate)
-4.  Commit (code + docs together)
-5.  PR creation (feature → develop)
-6.  ★★ Post-PR CI Ratchet (mandatory)
-7.  merge (feature → develop)            ← queue: one at a time
-8.  develop → main PR creation (batchable)
-9.  ★★ Post-PR CI Ratchet (mandatory)
-10. merge (develop → main)
-11. ★★★ Docs-Sync Final Verification
-12. worktree close + branch deletion          ← free
-```
-
-> **Step 0 applicability**: Mandatory for new infrastructure features (Gap, architecture changes).
-> Can be skipped for simple bug fixes, documentation updates, or repeating existing patterns.
-
-### Develop Merge Queue (when running parallel worktrees)
-
-When multiple worktrees are open simultaneously, manage develop merges as a sequential queue.
-
-```
-Worktree A (fix/xxx)  ──→ PR → CI pass → merge #1 ──┐
-                                                      │ develop updated
-Worktree B (fix/yyy)  ──→ PR → CI pass ──→ rebase ──→ merge #2 ──┐
-                                                                   │
-Worktree C (fix/zzz)  ──→ PR → CI pass ──→ rebase ──→ merge #3 ──┘
-                                                                   │
-                                              develop → main PR (batch)
-```
-
-**Queue rules:**
-- Only one merge to develop at a time (conflict prevention)
-- After merge, next waiting worktree rebases onto develop then pushes
-- Re-run CI after merge (code changed due to rebase)
-- develop → main can batch multiple features
+For a new implementation worktree:
 
 ```bash
-# Queue order management — rebase next worktree
-cd .claude/worktrees/<next-task-name>
-git fetch origin develop
-git rebase origin/develop
-git push --force-with-lease
-# → CI re-triggered → confirm pass → merge
+git fetch origin
+git worktree add .claude/worktrees/<task-name> \
+  -b feature/<branch-name> origin/develop
 ```
+
+Use the host's branch prefix when specified. Record the current session and
+`task_id=<task-name>` in the gitignored `.owner` file using the available file
+editor. Do not overwrite another session's ownership record, change branches
+inside a worktree, or move a checkout held by another session. Fetching does
+not update a checked-out local `develop`; allocate from the remote-tracking tip.
+
+### Architecture Ledger
+
+Ordinary tracking documents are maintained from `main`. Architecture-program
+exceptions and status transitions belong to
+[`extensibility-roadmap.md` §0.3](../../../docs/architecture/extensibility-roadmap.md).
+Read that section only when the task participates in the program.
+
+Implementation starts from `origin/develop` after its package-atomic claim is
+merged there. It preserves `IN_PROGRESS`; no prospective `IN_DEVELOP` or `DONE`.
+The roadmap-only readiness, claim, registration, reconciliation, and full-ledger
+audit paths use the roadmap's own prerequisites, not an extra implementation
+claim. Tracking-only `DONE` work starts from `origin/main`, targets `main`,
+carries no implementation, and is followed by a CI-gated main-to-develop sync.
+Do not turn an ordinary bug or documentation fix into a new architecture program.
+
+## Pre-PR Quality Gate
+
+Use [verification-gates.md](../geode-workflow/references/verification-gates.md)
+to select local checks by changed behavior and risk. `scripts/preflight.sh` is
+the existing broad local gate runner; `--fast` skips tests and site generation.
+Report skipped checks explicitly. Neither a targeted pass nor `--fast` proves
+the full suite passed, and local checks never replace required remote CI.
+
+Reuse passing evidence while the relevant code, configuration, dependencies,
+and environment are unchanged. Rerun or broaden for a new change, failed check,
+or unresolved concern—not merely because another workflow stage was reached.
+Never hide exit codes with `gate | tail`, `gate | grep -c`, or `check; merge`.
+
+Functional commits include their `CHANGELOG.md` entry and necessary user-facing
+documentation. Documentation-only corrections need no artificial code commit
+or version bump. Regenerate affected derived artifacts through their existing
+generators; do not hand-edit generated snapshots. Stage only in-scope paths.
+
+## PR Body Template
+
+Use the single [repository PR template](../../../.github/PULL_REQUEST_TEMPLATE.md).
+Write the title and body in Korean, keep titles under 70 characters, and assign
+`mangowhoiscloud`. Keep `Summary`, `Why`, `Changes`, and `Verification`; fill them
+from the actual diff against the fetched target branch and executed checks.
+Group related files when that is clearer than repeating one sentence per file.
+
+Add a GAP Audit table for audit-driven work. Include design choices, compatibility,
+migrations, external sources, or live-test limitations only when relevant.
+Promotion PRs identify included PRs, the pre-sync result, and head-specific CI;
+they link feature evidence instead of copying its whole report. Do not pre-check
+unrun gates, fabricate counts, or attribute work to a tool/model that did not do it.
+
+Prepare a Markdown body file with the editor and pass `--body-file <path>` to
+`gh pr create`; a safely quoted heredoc is also valid. The transport is not a
+quality rule—preserve the rendered body and inspect it after creation.
+
+```bash
+gh pr create --base develop --head <topic-branch> \
+  --assignee mangowhoiscloud --title "<type>: <한국어 설명>" \
+  --body-file <pr-body.md>
+```
+
+## Post-PR CI Ratchet
+
+Before every merge, confirm the current PR head, base, mergeability, and actual
+required check results. Zero attached checks, an unknown result, pending work,
+or a failed/cancelled/timed-out required check is not green. An intended skip is
+acceptable only when repository policy permits it and the required gate passes.
+
+```bash
+gh pr checks <PR#> --watch --repo mangowhoiscloud/geode
+gh pr view <PR#> --repo mangowhoiscloud/geode \
+  --json headRefOid,baseRefName,mergeable,statusCheckRollup
+```
+
+Run these as inspected steps, not as an unconditional command chain followed
+by merge. Preserve command failures. Use a bounded watcher when waiting;
+report meaningful state changes rather than polling an unchanged failure.
+On failure, inspect `gh run view <run-id> --log-failed`, fix the actual cause,
+verify affected behavior, push the scoped fix, and wait for the new head's CI.
+Do not delete tests or suppress a security finding merely to get green.
+
+Once authorized and verified, merge remotely with the method from
+[Merge Flow](#merge-flow), pinning the exact head that passed. For a topic PR
+into develop:
+
+```bash
+gh api --method PUT repos/mangowhoiscloud/geode/pulls/<PR#>/merge \
+  -f merge_method=squash \
+  -f sha=<verified-full-head-sha>
+```
+
+For canonical sync or develop-to-main promotion, use `-f merge_method=merge`.
+Require the response to report `merged: true`, then read the merged PR and
+record its merge SHA. A changed head requires fresh verification. Never use
+`--admin` to bypass gates or `gh pr merge --delete-branch` inside a linked
+worktree: GitHub CLI may switch that checkout while deleting the local branch.
+The guarded cleanup below owns branch/worktree deletion.
 
 ### Concurrent-session drift & CI-trigger recovery
 
-Two failure modes surface when **another session merges to develop while your
-feature PR is open** (e.g. a Tau2-promotion or scheduled routine running in
-parallel). Both are expected under multi-session work — recognise and recover,
-don't re-investigate from scratch each time.
+Serialize develop merges. After another merge, fetch and inspect the actual
+content, ancestry, mergeability, and CI before deciding an update is needed.
+Commit-count asymmetry alone does not require rebasing every waiting worktree.
 
-**A. PR goes `CONFLICTING` / `DIRTY` — usually a CHANGELOG collision.** The
-other merge added its own top entry (often under `## [Unreleased]`) or bumped
-the version, so your top-of-CHANGELOG insert conflicts. Recover:
+For a conflicting feature PR, merge current `origin/develop` in its owned
+worktree, preserve concurrent changes, stage only resolved in-scope paths, and
+rerun affected checks plus required CI on the new head. Do not rewrite another
+session's branch. Only an authorized release changes version stamps; verify the
+version remains available and regenerate affected metadata after resolving it.
+Ordinary fixes stay under `[Unreleased]`.
 
-```bash
-git fetch origin
-git merge origin/develop            # resolve on the feature branch (squash-merge flattens it later)
-# CHANGELOG.md is the usual (often only) conflict.
-```
-
-- **Preserve concurrent entries.** Ordinary fixes stay under `[Unreleased]`.
-  Only an authorized release promotes entries into a versioned section and
-  leaves a fresh `[Unreleased]` heading for subsequent work.
-- **Re-check the version number isn't already taken.** If the other session
-  bumped `pyproject`/CHANGELOG to the number you picked, bump past it
-  (`grep -m1 '^version' <(git show origin/develop:pyproject.toml)` before
-  resolving — see [[feedback_concurrent_session_version_collision]]).
-- **Regenerate the derived SoT after editing CHANGELOG.md** — the version
-  fan-out is not just the 5 text files: `node site/scripts/sync-stats.mjs`
-  (rebuilds `changelog.ts` / `sot.ts` / `llms.txt`) + `uv run python
-  scripts/check_llms_version.py --fix`, else the CI version ratchet blocks the
-  merge on a stale `changelog.ts`.
-- Re-run the gates, `git add -A`, `git commit` (completes the merge), push.
-
-**B. A fresh PR attaches 0 CI checks (webhook miss).** `gh pr checks <N>` prints
-"no checks reported" and stays that way. Confirm it's a *miss*, not slowness:
-
-```bash
-gh api "repos/<owner>/<repo>/commits/$(git rev-parse HEAD)/check-runs" --jq .total_count   # 0 = nothing attached
-```
-
-If `total_count` is 0 minutes after opening (Actions enabled, other PRs' runs
-present), re-fire the trigger:
-
-```bash
-gh pr close <N> && gh pr reopen <N>   # fires a `reopened` event → CI re-triggers
-```
-
-Verify attachment via the `check-runs` API, **not** `gh pr checks` alone (it
-errors identically on "not yet run" and "will never run"). Don't leave a monitor
-spinning on the repeating "no checks" error — diagnose the trigger first.
-
----
-
-## Release Flow (rotation — eliminates backmerge)
-
-Pre-2026-05-23 GEODE used the canonical gitflow pattern: release branch off
-develop → merge to main → backmerge main → develop. That created a one-way
-push of version stamps + CHANGELOG promotes into main, leaving develop's
-stamps stale until the backmerge PR landed. Every release cycle paid the
-cost of a 6-file backmerge PR, **AND** CHANGELOG conflicts when
-develop moved while the release PR was in flight (we hit this 4 times
-across PR #1499, #1504, #1506).
-
-The current pattern rotates the order so release stamps land on develop
-first:
-
-```
-develop ──cut──→ release/vX.Y.Z (stamp bump + CHANGELOG promote)
-                       │
-                       └─PR─→ develop  (1)  ← release branch absorbs back
-                                │
-                                └─PR─→ main (2)  ← straight pass-through
-```
-
-**Step (1)** — release/* → develop PR. Carries the 5-location stamp bump
-(`pyproject.toml`, `CLAUDE.md`, `README.md`, `README.ko.md`, CHANGELOG
-header) and the `## [Unreleased]` → `## [X.Y.Z]` promote. Insert a fresh
-empty `## [Unreleased]` above the just-promoted section so the next batch
-of feature PRs has somewhere to land. Develop is now content-equivalent to
-the eventual main state.
-
-**Step (2)** — develop → main PR. No new commits beyond merge — it just
-moves main's tip up to develop's. Abbreviated PR body (Summary +
-Verification only) is fine here.
-
-**No release-generated backmerge step.** Develop already has every release
-commit that main has. After release, the two are content-identical modulo
-gitflow merge-commit asymmetry. Main-maintained tracking transactions are a
-separate source of drift and use the deliberate pre-sync below.
-
-```bash
-# ── Release flow (rotation) ──
-
-# 1. Cut release branch
-git fetch origin
-git worktree add .claude/worktrees/release-vX.Y.Z -b release/vX.Y.Z origin/develop
-
-# 2. Bump stamps + CHANGELOG promote + add fresh [Unreleased]
-# (edit 5 files; see geode-changelog skill for [Unreleased] ratchet rules)
-
-# 3. PR release → develop
-gh pr create --base develop --head release/vX.Y.Z \
-  --title "release: vX.Y.Z — <summary>" \
-  --body "<release notes>"
-# → CI ratchet → merge
-
-# 4. PR develop → main (straight pass-through)
-gh pr create --base main --head develop \
-  --title "release: vX.Y.Z (develop → main)" \
-  --body "<abbreviated body>"
-# → CI ratchet → merge → Pages workflow fires
-```
+If a new PR has no checks, inspect Actions availability, applicable workflow
+events/path filters, and the current head's check-runs API before treating it as
+a missed event. An outage is not a code failure. After confirming a missed
+`pull_request` event and authorized PR operation, close/reopen once to regenerate
+the event, then verify new runs attached. If checks remain absent, report the
+specific blocker instead of repeating mutations or treating absence as success.
 
 ### Deliberate main-to-develop pre-sync
 
-There is no automatic backmerge workflow. Before every `develop -> main`
-promotion, fetch both protected branches and compare their content and ancestry.
-If main has commits not in develop and the sync is conflict-free, open a CI-gated PR
-directly from the current `main` head to `develop`. Do not put that clean sync
-behind the trusted sync-branch prefix: a merge from current main may simply
-fast-forward and therefore has no two-parent head.
+Before every `develop -> main` promotion, fetch both protected branches and
+compare content and ancestry. If main has commits not in develop and the sync is
+conflict-free, open a CI-gated PR directly from the current `main` head to
+`develop`. Do not put a fast-forwarded copy of main behind a trusted sync prefix.
 
-When conflict resolution is required, create
-`sync/main-into-develop-<task>` from current develop and make an explicit merge
-commit from current main. The sync head must have first parent exactly
-`refs/remotes/origin/develop` and second parent exactly
-`refs/remotes/origin/main`. CI grants main-ledger trust only to that
-same-repository graph. Pull-request events do not rerun merely because the
-unrelated main branch advances, so fetch and run the same resolver immediately
-before merge:
+If conflicts require a separate worktree, create
+`sync/main-into-develop-<task>` from current `origin/develop` and explicitly merge
+current `origin/main`. Its head must have exactly two parents, in this order:
+current `origin/develop`, current `origin/main`. Immediately before merge,
+fetch and rerun the trust resolver from that sync worktree:
 
 ```bash
 git fetch origin
 uv run python scripts/resolve_architecture_roadmap_trust.py \
-  --event-mode pull_request \
-  --target-branch develop \
+  --event-mode pull_request --target-branch develop \
   --head-ref "sync/main-into-develop-<task>" \
-  --head-repo mangowhoiscloud/geode \
-  --repository mangowhoiscloud/geode \
-  --head-sha "$(git rev-parse HEAD)" \
-  --require-trust main
+  --head-repo mangowhoiscloud/geode --repository mangowhoiscloud/geode \
+  --head-sha "$(git rev-parse HEAD)" --require-trust main
 ```
 
-If the resolver fails, recreate the sync head from the new tips and rerun CI;
-never merge the previously green but now-stale PR.
+For a direct-main sync, use `--head-ref main` and the current canonical main SHA.
+The resolver must pass for that exact head. If either tip invalidates the trust
+proof, reconstruct from the new tips and rerun CI; an earlier green is stale.
+After sync, promote current develop through a separate CI-gated merge PR.
 
-### Docs pipeline compatibility
+## Release Flow
 
-The rotation pattern preserves every existing docs / release workflow
-trigger:
+Only when a release is requested, create its worktree from `origin/develop`,
+prepare version stamps and promote the changelog under
+[`geode-changelog`](../geode-changelog/SKILL.md), then squash into develop.
+Leave a fresh `[Unreleased]` heading. Perform the canonical pre-sync above and
+promote develop to main with a merge commit. Release preparation does not bypass
+CI or add an automatic post-release backmerge; main-owned tracking may still
+require its own sync transaction.
 
-| Workflow | Trigger | Behavior under rotation |
-|----------|---------|-------------------------|
-| `pages.yml` | `push: main` (paths include `CHANGELOG.md`, `pyproject.toml`, `CLAUDE.md`) | Fires when develop → main pass-through PR merges. Same moment as before. |
-| `petri-publish.yml` | `push: main, develop` | Fires on develop merge AND main merge. Unchanged. |
-| `release.yml` | `workflow_dispatch` (manual, default `ref: main`) | Manual trigger unchanged. The `version` input matches both `pyproject.toml` and `CHANGELOG.md` `## [X.Y.Z]` header. |
-| `site/scripts/sync-stats.mjs` | invoked by `pages.yml` build | Counts CHANGELOG `## [X.Y.Z]` headers excluding `[Unreleased]`. Rotation's fresh-`[Unreleased]` block is correctly skipped. |
+Tags, GitHub Release, PyPI publication, and installed-version verification follow
+[`geode-distribution`](../geode-distribution/SKILL.md) only when authorized.
+Inspect the affected workflow's actual trigger before promising deployment;
+do not infer publication from a merge SHA or static workflow description.
 
-No release workflow needs editing for the rotation. Main-maintained tracking
-work still follows the explicit pre-sync above.
+## Post-Merge Cleanup
 
----
-
-## Step 0: ★ Frontier Research (mandatory pre-implementation research)
-
-> Applicability: Mandatory for new infrastructure features (Gap, architecture changes). Can skip for simple bug fixes.
-
-Investigate implementations in frontier harnesses (Claude Code, Codex CLI, OpenClaw, Aider, autoresearch, etc.),
-create a comparison matrix, and document design decisions.
-
-```
-DISCOVER (investigate harnesses via parallel Agents)
-  → COMPARE (feature × harness matrix)
-  → DECIDE (Option A/B/C + selection rationale)
-  → DOCUMENT (docs/plans/research-<topic>.md)
-```
-
-> Open source (Codex, Aider, autoresearch, OpenClaw) — verify source directly via `gh api`.
-> Closed source (Claude Code only) — official docs/secondary sources — state verification limitations.
-
----
-
-## Step 0: One-time machine setup
-
-The hooks in `.pre-commit-config.yaml` only run once the git hook
-is installed — and a fresh clone has no `.git/hooks/pre-commit`. Worktrees share
-the main repo's hooks directory, so installing once covers every worktree.
+After an owned feature PR merges and the checkout is no longer needed, run the
+guarded command from outside the target worktree:
 
 ```bash
-uv run pre-commit install     # verify: ls .git/hooks/pre-commit
-```
-
-Installed pre-commit hooks do not cover the full CI contract. Use
-`scripts/preflight.sh` for the current local pre-PR checks and confirm required
-GitHub checks on the actual PR head before merge.
-
-## Step 1: Worktree Open (alloc)
-
-**Every work unit** starts by opening a worktree. No exceptions.
-
-```bash
-# Fetch the canonical integration head; do not move a checkout held by another
-# worktree or reuse a dirty main checkout.
-git fetch origin
-git worktree add .claude/worktrees/<task-name> \
-  -b feature/<branch-name> origin/develop
-
-cd .claude/worktrees/<task-name>
-
-# → Steps 2~11 all performed within this worktree
-```
-
-**Worktree rules:**
-- `.claude/worktrees/` is in `.gitignore`
-- No `git checkout` within worktree (HEAD conflict)
-- No `git checkout feature/*` in main repo — access only via worktree
-- Leak check: `git worktree list` to find unclosed worktrees
-
----
-
-## ★ Pre-PR Quality Gate (mandatory loop before commit)
-
-**After code changes, this loop must pass before commit/PR.**
-
-```
-Code changes complete
-   │
-   ▼
-┌─────────────────────────────────────────┐
-│  Step 1: CI Guardrails (all must pass)  │
-│                                         │
-│  scripts/preflight.sh                   │ → local pre-PR gates; inspect skips
-│  scripts/preflight.sh --fast            │ → skips tests + site build
-│                                         │
-│  Any failure → fix → re-run Step 1      │
-│                                         │
-│  ※ Detailed inspection lenses:          │
-│    code-review-workflow                  │
-│    (structure/deps/security/migration/   │
-│     performance)                         │
-└────────────────┬────────────────────────┘
-                 │ All passed
-                 ▼
-┌─────────────────────────────────────────┐
-│  Step 2: Docs Writing (mandatory on     │
-│  code changes)                          │
-│                                         │
-│  □ Add entry to CHANGELOG.md            │
-│    [Unreleased]                         │
-│    - Added / Changed / Fixed / Removed  │
-│    - Can skip if no code changes        │
-│                                         │
-│  □ Check generated architecture data   │
-│    - Review drift; do not hand-count    │
-│                                         │
-│  □ Tracking updates only if in scope   │
-│    - Follow the main-owned workflow    │
-│    - Respect its explicit exceptions   │
-│                                         │
-│  Omission found → fix → re-run Step 1   │
-└────────────────┬────────────────────────┘
-                 │ All complete
-                 ▼
-┌─────────────────────────────────────────┐
-│  Step 3: Commit                         │
-│                                         │
-│  Include code + docs in a single commit │
-│  No separate docs-only commits          │
-│  (maintain consistency)                 │
-│                                         │
-│  git add <code files> CHANGELOG.md ...  │
-│  git commit -m "<type>: <description>"  │
-└────────────────┬────────────────────────┘
-                 │
-                 ▼
-           Ready to create PR
-```
-
-### Quality Gate Anti-patterns
-
-Neither `--fast` nor a skipped local gate establishes a full pass. Preflight
-does not replace the current required checks in `.github/workflows/ci.yml`;
-site ESLint is `npm run lint`, distinct from documentation render lint.
-
-| Anti-pattern | Result | Correct Approach |
-|-------------|--------|------------------|
-| Creating PR with CI failures | Wastes reviewer time | Pass all locally before PR |
-| Code-only commit, docs in separate PR | CHANGELOG missing, version mismatch | Code + docs in same commit |
-| Direct push to main | Gitflow violation, history pollution | Must go through PR |
-| Skipping docs-sync | README/CHANGELOG fall behind | Step 2 checklist mandatory |
-| **Merging without CI confirmation** | **Broken code enters main** | **gh pr checks --watch mandatory** |
-
----
-
-## ★★ Post-PR CI Ratchet — Mandatory Before Merge (CRITICAL)
-
-> **Karpathy P4**: Ratchet = advance only on verification pass, rollback on failure.
-> Merging a PR without CI green is a **ratchet violation**.
-
-### Absolute Rule
-
-**Before running any merge command, you must check CI status with `gh pr checks`.**
-Merge prohibited if CI is still running or has failed.
-
-### Merge Ratchet Loop
-
-```
-PR creation complete
-   │
-   ▼
-┌──────────────────────────────────────────────────┐
-│  Step A: Wait for CI completion + check results   │
-│                                                   │
-│  gh pr checks <PR#> --watch --repo <owner/repo>   │
-│                                                   │
-│  → All pass  → Proceed to Step B                  │
-│  → Any fail → Proceed to Step C                   │
-│  → pending/running → Wait (--watch auto-waits)    │
-└────────────────┬──────────────────────────────────┘
-                 │
-        ┌────────┴────────┐
-        ▼                 ▼
-┌──────────────┐  ┌──────────────────────────────┐
-│  Step B:     │  │  Step C: Failure fix loop      │
-│  Run Merge   │  │                                │
-│              │  │  1. gh run view --log-failed    │
-│  gh pr merge │  │     → Identify failure cause    │
-│  <PR#>       │  │  2. Fix locally                 │
-│  --merge     │  │  3. Commit + push (same branch) │
-│              │  │  4. CI auto re-triggered         │
-│              │  │  5. Return to Step A             │
-│              │  │                                  │
-│              │  │  (Repeat until pass)             │
-└──────────────┘  └──────────────────────────────────┘
-```
-
-### Merge Command Template (copy and use)
-
-```bash
-# ── feature → develop ──
-
-# 1. Create PR
-gh pr create --base develop --assignee mangowhoiscloud \
-  --title "<type>: <description>" \
-  --body "<detailed body template>"
-
-# 2. ★★ CI Ratchet: Wait for checks to pass (MUST — never skip)
-gh pr checks <PR#> --watch --repo mangowhoiscloud/geode
-
-# 3. Merge remotely only after all pass. Do not let gh delete the branch here;
-#    the guarded free command below owns remote/worktree/local cleanup.
-gh api --method PUT repos/mangowhoiscloud/geode/pulls/<PR#>/merge \
-  -f merge_method=squash
-
-# ── develop → main ──
-
-# 4. Create PR
-gh pr create --base main --head develop --assignee mangowhoiscloud \
-  --title "<type>: <description> (develop → main)" \
-  --body "<develop → main template>"
-
-# 5. ★★ CI Ratchet: Wait for checks to pass (MUST — never skip)
-gh pr checks <PR#> --watch --repo mangowhoiscloud/geode
-
-# 6. Merge only after all pass
-gh pr merge <PR#> --merge --repo mangowhoiscloud/geode
-```
-
-### CI Failure Fix Loop
-
-```bash
-# Check failure logs
-gh pr checks <PR#> --repo mangowhoiscloud/geode
-gh run view <run_id> --log-failed
-
-# Fix locally → push → CI auto re-runs
-# ... fix ...
-git add -A && git commit -m "fix: <CI failure cause fix>"
-git push
-
-# Check ratchet again
-gh pr checks <PR#> --watch --repo mangowhoiscloud/geode
-# pass → merge
-```
-
-### Common CI Failure Causes and Responses
-
-| Failure | Response |
-|---------|----------|
-| `ruff` lint error | Fix the affected files, then rerun the Ruff scopes in `scripts/preflight.sh` |
-| `mypy` type error | Fix types, minimize `# type: ignore` |
-| `bandit` security warning | Add `# nosec` or to pyproject.toml skips (only when justified) |
-| `pytest` failure | Fix test code, add tests for new code |
-| `coverage < 75%` | Add tests for modules with insufficient coverage |
-
----
-
-## PR Writing Rules
-
-| Item | Rule |
-|------|------|
-| **Language** | **Korean** (both title + body) |
-| **Title** | `<type>: <Korean description>` (under 70 chars) |
-| **Assignee** | `--assignee mangowhoiscloud` (always) |
-| **Base** | feature → `develop`, develop → `main` |
-
-### ★ PR Body Build Rules (CRITICAL — must follow)
-
-> **A weak PR body prevents reviewers from understanding the change intent.**
-> A 1-3 line PR body is an **anti-pattern**. Fill all required sections from the template below.
-
-**Before generating PR body, you must:**
-1. Check full diff with `git diff develop...HEAD`
-2. Classify all changed **files** into core/secondary/docs
-3. Write a one-line **why** rationale for each file change
-4. Copy test result numbers from **actual execution output** (no XXXX placeholders)
-5. Use HEREDOC format (prevents line break/markdown breakage)
-
-### Anti-pattern vs Correct PR Body
-
-| Anti-pattern (prohibited) | Correct Approach |
-|---------------------------|------------------|
-| `"progress hooks"` (3 words) | Write summary + changes + impact scope + QG in full |
-| `"develop → main merge. X changes."` (1 line) | Include PR numbers, CI confirmation results for develop→main too |
-| Summary only without listing changed files | Per-file AS-IS → TO-BE + one-line rationale |
-| `XXXX passed` (placeholder) | `2168 passed` (actual number) |
-| Skipping Quality Gate checklist | Report actual commands, skipped checks, and required PR check results |
-
-## PR Body Detailed Template (feature → develop)
-
-**All sections are required. If not applicable, state "N/A".**
-
-```markdown
-## Summary
-<!-- Required. 2-3 lines. "What" + "why" changed. Include background motivation. -->
-
-<Core of the change in 2-3 sentences. What problem existed and how this PR solves it.>
-
-## Changes
-
-### Core Changes (Code)
-<!-- Required. List all changed files without omission. -->
-- `filepath:line-range`: Change content — AS-IS → TO-BE
-  - Rationale: One-line explanation of why this change was made
-
-### Secondary Changes (Code)
-<!-- If N/A, state "None" -->
-- `filepath`: Rename/format/type fixes etc.
-
-### Documentation/Config Changes
-<!-- Required. If code changed, CHANGELOG must be included. -->
-- `CHANGELOG.md`: Items added to [Unreleased] > Fixed/Added/Changed
-- `CLAUDE.md`: Updated items (if applicable)
-- `pyproject.toml`: Dependency/config changes (if applicable)
-
-## Impact Scope
-<!-- Required. -->
-- **Affected modules**: <specific paths like core/cli, core/ui>
-- **Backward compatibility**: Maintained / Broken (if broken, attach migration guide)
-- **Test changes**: Added N / Modified N / Deleted N
-
-## Design Decisions
-<!-- Required for structural changes. For simple bug fixes, state "Simple fix, no design decisions needed." -->
-- Why was approach B chosen over approach A?
-- If referencing frontier harness cases: link `docs/plans/research-<topic>.md`
-- Alternative comparison: Option A (pros/cons) vs Option B (pros/cons) → selection rationale
-
-## Pre-PR Quality Gate (required — paste actual execution results)
-
-<!-- Why one script instead of a command list: CI enforces 17 gates while this
-     checklist listed 5, and 3 of those 5 were documented at a NARROWER scope
-     than CI runs them (`mypy core/` vs CI's `mypy core/ evals/ evolve/ scripts/`).
-     A branch could pass the checklist verbatim and still fail CI — 5 of 60
-     sampled July 2026 failures were exactly that scope gap. Keep preflight.sh
-     as the single source; if CI gains a gate, add it there, not here. -->
-
-- [x] `scripts/preflight.sh` — **all gates passed** (paste the final line)
-- [x] `pytest -m "not live"` — **N passed** in Xs
-- [x] CHANGELOG.md [Unreleased] entry added
-- [x] README.md metric consistency verified
-- [ ] CLAUDE.md sync (if applicable)
-- [ ] Main-maintained tracking update (only if requested, through its own workflow)
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-```
-
-## PR Body Template (develop → main)
-
-```markdown
-## Summary
-develop → main merge. <1-2 line summary of main changes. What features/fixes are included.>
-
-## Included Changes
-<!-- Required. List all feature PRs with numbers and titles. -->
-- #number `<type>: <title>` — One-line summary of core change
-- #number `<type>: <title>` — One-line summary of core change
-
-## Change Metrics
-- **Files**: N files changed
-- **Tests**: N passed (compared to previous +N/-N)
-- **Modules**: N (specify if changed)
-
-## Testing
-- [x] Full CI passed (`gh pr checks --watch` confirmed)
-- [x] feature → develop CI pass confirmed
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-```
-
-### gh pr create Command — HEREDOC Required
-
-PR body must be passed in **HEREDOC** format. Inline `--body "..."` prohibited.
-
-```bash
-# ✅ Correct: HEREDOC
-gh pr create --base develop --assignee mangowhoiscloud \
-  --title "<type>: <description>" \
-  --body "$(cat <<'PRBODY'
-## Summary
-...fill full template...
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-PRBODY
-)"
-
-# ❌ Prohibited: Inline (line breaks broken, content truncated)
-gh pr create --body "One line summary"
-```
-
----
-
-## ★★★ Docs-Sync Final Verification (after main merge, before cleanup)
-
-> Performed after the work unit is fully merged to main.
-> Even if docs were written in Pre-PR Step 2, metrics may change during the merge process, so final verification is needed.
-
-### Verification Checklist
-
-```
-main merge complete (step 10)
-   │
-   ▼
-┌──────────────────────────────────────────────────┐
-│  □ README.md metric consistency                   │
-│    - architecture_baseline.py --check             │
-│    - pytest --collect-only: use collection summary │
-│    - reviewed inventory and version               │
-│                                                   │
-│  □ CLAUDE.md metric consistency                   │
-│    - Verify Tests, Modules using same criteria    │
-│                                                   │
-│  □ CHANGELOG.md [Unreleased] omission check       │
-│    - Are changes merged to main recorded?         │
-│                                                   │
-│  □ In-scope tracking update follows its owner     │
-│    - Main-owned work is a separate transaction    │
-│                                                   │
-│  □ pyproject.toml coverage omit                   │
-│    - Check if new module is in omit breaking      │
-│      coverage                                     │
-│                                                   │
-│  → If mismatch found:                             │
-│    Use the owning document's permitted branch     │
-│    and CI-gated workflow; do not edit in place     │
-│  → If no issues: proceed to step 12               │
-│    (workspace cleanup)                            │
-└──────────────────────────────────────────────────┘
-```
-
-### Pre-PR Step 2 vs Docs-Sync Final Verification
-
-| Phase | Timing | Role |
-|-------|--------|------|
-| Pre-PR Step 2 | Before commit | **Write** docs (CHANGELOG entry, CLAUDE.md metrics) |
-| Docs-Sync Final Verification | After main merge | **Verify** docs (README metrics, coverage omit, omission check) |
-
-Docs are written in Pre-PR, and the final verification after main merge catches anything missed — a dual-layer structure.
-
----
-
-## Branch Structure
-
-```
-main ─────────────────────────── production (stable, tagged)
-  │
-  └── develop ────────────────── integration (CI mandatory)
-        │
-        ├── feature/<name> ───── Feature development
-        ├── hotfix/<name> ────── Runtime fixes (branch from origin/develop)
-        └── release/v<semver> ── Release preparation
-```
-
-## Commit Convention
-
-```
-<type>(<scope>): <description>
-
-Types: feat, fix, refactor, test, docs, ci, chore
-Scopes: pipeline, scoring, analysis, verification, cli, memory, tools, llm
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
-```
-
-## CI Pipeline (GitHub Actions)
-
-```
-lint ─────┐
-typecheck ─┤
-test ──────┼──→ gate (all must pass for merge)
-security ──┘
-```
-
-```bash
-# Local pre-PR gates; report any skipped checks, not just the exit code.
-scripts/preflight.sh
-
-# GitHub CI ratchet (Post-PR, mandatory before merge)
-gh pr checks <PR#> --watch --repo mangowhoiscloud/geode
-```
-
-## Step 12: Worktree Close (free)
-
-**After feature merge completion**, worktree must be closed. Run the canonical
-guarded cleanup from outside the target worktree:
-
-```bash
-cd ~/workspace/geode
 uv run python scripts/check_repo_hygiene.py free-merged-worktree \
-  --pr <feature-pr> \
-  --worktree .claude/worktrees/<task-name>
+  --pr <feature-pr> --worktree .claude/worktrees/<task-name>
 ```
 
-The command performs the leak check and prune. A refusal is a blocking signal;
-inspect the reported dirty, owner, ancestry, or tree mismatch instead of using
-manual `--force` cleanup.
+It verifies the merged PR and final head, replays that head onto the merge's
+base to compare the resulting tree, checks local ancestry and remote head,
+requires a clean checkout, and validates `.owner.task_id`. It then removes the
+remote branch, worktree, and squash-only local branch and prunes. The owner
+record's task-name check is not proof that another active session has released
+the checkout; confirm current session ownership first. Use `--dry-run` when
+inspection is needed. A refusal requires investigation, never manual force.
 
-## Worktree Allocation (Workflow Step 0)
+After promotion, verify fetched branch content and the actual requested CI or
+deployment result. Reuse unchanged docs/test evidence; investigate drift if the
+merged result differs. Update tracking only when in scope, through its owning
+workflow. Report PRs, merge SHAs, verification, skipped work, and cleanup results.
 
-Record on the Progress Board, then allocate the worktree.
+## Rebuild & Restart
 
-```bash
-# 1) Record Backlog → In Progress on Progress Board (from main)
-
-# 2) Allocate Worktree
-git fetch origin
-git worktree add .claude/worktrees/<task-name> \
-  -b feature/<branch-name> origin/develop
-# Note: the target path IS the worktree checkout root; `.owner` is gitignored
-# (see /.owner in .gitignore) so the convention does not pollute feature branches.
-echo "session=$(date -Iseconds) task_id=<task-name>" > .claude/worktrees/<task-name>/.owner
-```
-
-On completion (after the PR merges) tear down all three stale artifacts —
-remote branch, worktree, local branch — per [Post-Merge Cleanup](#post-merge-cleanup-mandatory-after-every-merge)
-below. A PR reporting "No commits between" is a content/branch-selection issue,
-not permission to push protected branches directly.
-
-## PR Body Template (MANDATORY)
-
-```
-## Summary
-<1-3 bullet points: what changed and why>
-
-## Why
-<Problem statement — what broke, what was missing, what user reported>
-
-## Changes
-| File | Change |
-|------|--------|
-| `path/to/file.py` | description of change |
-
-## GAP Audit (if applicable)
-| Item | Status | Notes |
-|------|--------|-------|
-| ... | Implemented / Dropped / Already exists | ... |
-
-## Verification
-- [ ] ruff check clean
-- [ ] mypy clean
-- [ ] pytest pass (count)
-- [ ] E2E unchanged (if applicable)
-
-## Reference
-<Source: frontier codebase, PR, issue, serve log, etc.>
-```
-
-Minimum required sections: **Summary**, **Why**, **Changes**, **Verification**.
-develop → main PRs may use abbreviated form (Summary + Verification only).
-
-| Change | Cascading Updates |
-|--------|-------------------|
-| New tool | `definitions.json` + handlers + E2E |
-| LLM adapter | `core/llm/router/` + `core/llm/providers/` + E2E |
-
-## Post-Merge Cleanup (MANDATORY after every merge)
-
-A squash-merged feature PR leaves three stale artifacts behind: the remote
-branch, worktree, and local branch. `git branch -d` cannot recognize a squash
-merge and is therefore not the cleanup gate. Run the repository command from
-outside the target worktree:
-
-Never run `gh pr merge ... --delete-branch` from a linked worktree. GitHub CLI
-may switch that checkout to the PR base branch and fast-forward it as part of
-local branch cleanup, violating the one-branch-per-worktree contract. Use the
-remote-only API merge above, leave the linked checkout untouched, then free it
-from the repository root:
-
-```bash
-cd ~/workspace/geode
-uv run python scripts/check_repo_hygiene.py free-merged-worktree \
-  --pr <feature-pr> \
-  --worktree .claude/worktrees/<task-name>
-```
-
-The command fails before mutation unless the PR is `MERGED`, its final head
-tree equals the merge tree, the checked-out local branch is an ancestor of
-that final head, the remote has not advanced, the checkout is clean, and
-`.owner.task_id` matches the worktree directory. Only after those proofs does
-it remove remote branch → worktree → squash-only local branch and prune. A
-refusal must be investigated; never delete another session's owner-protected
-worktree manually.
-
-## Rebuild & Restart (only when authorized)
-
-A merge does not authorize changing the user's global installation or running
-services. When deployment or restart is explicitly in scope:
+A merge does not authorize changing global installations or running services.
+When deployment or restart is explicitly in scope:
 
 1. Resolve the intended installation, checkout, process identity, and owner.
-   Inspect the current lifecycle implementation in
-   `core/cli/commands/lifecycle.py` before choosing a stop/restart operation;
+   Inspect `core/cli/commands/lifecycle.py` before selecting the operation;
    a process-name match alone does not establish ownership.
-2. Stop only the confirmed in-scope process. Do not use a broad `pkill -f`,
-   terminate another session, or hide a failed stop with `|| true`.
-3. Install only the requested channel and required extras. Editable global
-   installation and the `[audit]` extra are not defaults for ordinary runtime
-   work; follow the [distribution contract](../geode-distribution/SKILL.md)
-   when installation is part of the task.
-4. Verify version, process identity, and the requested runtime smoke result
-   before reporting completion. If ownership or restart authority is unclear,
-   stop at the local/merged artifact and ask for direction.
-
-## Progress Board (Workflow Step 8)
-
-Update project tracking from main. Backlog → In Progress → Done.
+2. Stop only the confirmed in-scope process. Do not use broad `pkill -f`, stop
+   another session, or hide a failed stop with `|| true`.
+3. Install the requested channel and extras under the distribution contract.
+   Editable global installation and `[audit]` are not ordinary runtime defaults.
+4. Verify version, process identity, and the requested smoke result. If ownership
+   or restart authority is unclear, preserve the artifact and ask for direction.

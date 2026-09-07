@@ -5,7 +5,11 @@ description: Implement proven backend architecture patterns including Clean Arch
 
 # Architecture Patterns
 
-Master proven backend architecture patterns including Clean Architecture, Hexagonal Architecture, and Domain-Driven Design to build maintainable, testable, and scalable systems.
+These generic examples explain Clean Architecture, Hexagonal Architecture, and
+Domain-Driven Design. They are not GEODE's package blueprint. For GEODE changes,
+start with [naming conventions](../../../docs/architecture/naming-conventions.md)
+and [dependency review](../dependency-review/SKILL.md); introduce a boundary only
+for a demonstrated consumer, substitution need, or ownership constraint.
 
 ## When to Use This Skill
 
@@ -465,14 +469,6 @@ class OrderRepository:
         order._events.clear()
 ```
 
-## Resources
-
-- **references/clean-architecture-guide.md**: Detailed layer breakdown
-- **references/hexagonal-architecture-guide.md**: Ports and adapters patterns
-- **references/ddd-tactical-patterns.md**: Entities, value objects, aggregates
-- **assets/clean-architecture-template/**: Complete project structure
-- **assets/ddd-examples/**: Domain modeling examples
-
 ## Best Practices
 
 1. **Dependency Rule**: Dependencies always point inward
@@ -482,13 +478,13 @@ class OrderRepository:
 5. **Bounded Contexts**: Clear domain boundaries
 6. **Ubiquitous Language**: Consistent terminology
 7. **Thin Controllers**: Delegate to use cases
-8. **Rich Domain Models**: Behavior with data
+8. **Cohesive Models**: Keep behavior with its owner; data-only records are valid
 
 ## Common Pitfalls
 
-- **Anemic Domain**: Entities with only data, no behavior
+- **Misplaced Behavior**: The same invariant is independently enforced by several owners
 - **Framework Coupling**: Business logic depends on frameworks
 - **Fat Controllers**: Business logic in controllers
 - **Repository Leakage**: Exposing ORM objects
-- **Missing Abstractions**: Concrete dependencies in core
+- **Boundary Bypass**: A dependency violates a declared contract; a concrete dependency alone is not a violation
 - **Over-Engineering**: Clean architecture for simple CRUD

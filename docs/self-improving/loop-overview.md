@@ -1,184 +1,94 @@
-# GEODE self-improving loop — overview (DATA + program SoT)
+# GEODE self-improving loop: ownership and execution
 
-The self-improving loop's **DATA** splits by lifecycle
-(PR-STATE-SOT-RUNTIME-SPLIT, 2026-06-14): the git-tracked SoT (ledgers +
-policies + seed pools) is in-repo at `evolve/scaffold_search/state/` (the single
-canonical `core.paths.AUTORESEARCH_STATE_DIR`), while the runtime scratch (the
-LATEST `baseline.json`, `run.log`, handoff, per-run dirs) is out-of-repo at
-`~/.geode/self-improving/` (`core.paths.RUNTIME_ROOT`, env-overridable via
-`GEODE_STATE_ROOT`). The **agent program SoT** is
-`evolve/scaffold_search/program.md`. The loop *CODE* lives under the
-`evolve.scaffold_search` product package —
-`evolve/scaffold_search/train.py` (the audit runner, formerly
-`autoresearch/train.py`), `evolve/scaffold_search/prepare.py`,
-`evolve/scaffold_search/{admire,bench}_means.py`, the loop runtime under
-`evolve/scaffold_search/loop/`, and the campaign driver
-`evolve/scaffold_search/campaign.py`.
+The outer loop searches over GEODE's scaffold, not model weights. Petri measures
+candidate behavior; the search loop uses that evidence to accept or reject a
+candidate. A better observed score is not a guarantee of general improvement.
 
-PR-STATE-SELF-IMPROVING-RENAME (2026-06-01) moved the DATA + program SoT off
-the vestigial `autoresearch/` package (which had become an empty shell — only
-`__init__.py` remained — so a third party could not tell `autoresearch/state`
-related to the self-improving loop). This file was that package's `README.md`.
-
-Petri's `geode-eval audit` subprocess scores each transcript on the 20-dim
-alignment rubric and emits a per-dim `mean + stderr` baseline; the driver
-(now `evolve/scaffold_search/train.py`) runs the wrapper-prompt mutation loop on
-top of that baseline, picking hypotheses that push the fitness scalar up
-without regressing the 5 critical dims.
-
-The 3-file shape (`prepare` / `train` / `program.md`), fixed per-run
-budget, and "git as optimiser" idiom are borrowed from Karpathy's
-[autoresearch](https://github.com/karpathy/autoresearch) (MIT,
-2026-03, 26K+ stars). The domain is GEODE's own alignment audit —
-not GPT pre-training — so `val_bpb` is replaced by the AlphaEval
-fitness scalar, `fineweb` tokenisation by the Petri seed pool +
-20-dim rubric, and the Muon-optimised training loop by a single
-audit invocation per file edit.
+The maintained agent instruction is
+[program.md](../../evolve/scaffold_search/program.md). This page maps owners;
+it does not duplicate the scoring formula, model defaults, or experiment budget.
 
 ## Role split — petri vs autoresearch
 
-| Layer | Owner | Outputs |
-|------|-------|---------|
-| dim universe (20 names + 3 info) | `evals/petri/judge_dims/geode_judge_subset.yaml` | rubric YAML |
-| per-dim raw measurement (`mean` + `stderr`, 1-10 concerning scale) | `geode-eval audit` subprocess (LLM judge) → `core/audit/dim_extractor` | `dim_means` / `dim_stderr` dicts |
-| per-run baseline (latest "good" snapshot) | autoresearch (`state/baseline.json` after promote) | promoted snapshot |
-| tier classification (critical / auxiliary / info) | autoresearch (`AXIS_TIERS` in `train.py`) | constant tuples |
-| weight allocation (17 + stability sum to 1.0) | autoresearch (`DIM_WEIGHTS` + `STABILITY_WEIGHT`) | constant dict |
-| cross-axis gate + auto-promote rule | autoresearch (`compute_fitness` / `decide_promote`) | scalar + verdict |
-| wrapper-prompt mutation candidate | self-improving-loop agent (edits `WRAPPER_PROMPT_SECTIONS`) | git commit |
+| Responsibility | Current owner |
+|---|---|
+| Judge rubric and fitness dimensions | `evals/petri/judge_dims/geode_judge_subset.yaml`, `evals/petri/dimensions.py` |
+| Raw per-dimension evidence | `evals/petri/`, `core/audit/dim_extractor.py` |
+| Audit invocation and role configuration | `evolve/scaffold_search/measure.py`, `evals/config.py` |
+| Fitness computation | `evolve/scaffold_search/fitness.py` |
+| Promotion decision and candidate recovery | `evolve/scaffold_search/gate.py` |
+| Baseline and result persistence | `evolve/scaffold_search/ledger.py` |
+| Mutation-policy state | `evolve/scaffold_search/loop/mutate/policies.py` |
+| Runtime policy injection | `core/agent/policy_injection/`, `core/agent/system_prompt.py` |
 
-Petri owns *what* gets measured; autoresearch owns *how it accrues into
-fitness* and *what counts as a promote*. No code overlap — the boundary
-runs through `dim_extractor` → `compute_fitness`.
+Read the owner when changing a contract. In particular, use
+`ledger.RESULTS_TSV_HEADER` for TSV fields instead of copying a second schema.
+Judge dimensions and weighted fitness dimensions are different sets.
 
 ## How it works
 
-Same three-file structure borrowed from Karpathy autoresearch (the code
-lives under `evolve/scaffold_search/`; `program.md` stays here):
+The Karpathy-style `prepare` / `train` / `program.md` shape separates frozen
+measurement from candidate edits. `prepare.py` validates the measurement setup;
+`train.py` invokes the experiment; `program.md` limits the operator's actions.
+The calculation and persistence helpers in the table above remain measurement
+apparatus, not extra mutation targets.
 
-- **`evolve/scaffold_search/prepare.py`** — Petri seed pool + AlphaEval 20-dim
-  rubric existence/format sanity check and audit-harness self-test. The
-  agent **does not modify** this file.
-- **`evolve/scaffold_search/train.py`** — GEODE wrapper system-prompt sections
-  (mutation target) + `geode-eval audit` subprocess invocation + AlphaEval fitness
-  extraction. **The single file the agent modifies.** Section
-  wording, additions, deletions, and reordering are all fair game.
-- **`evolve/scaffold_search/program.md`** — instructions to the agent. Humans modify this.
-
-The Karpathy 5-min wall-clock budget maps onto the audit budget
-(default ~5 min, capped by ChatGPT subscription quota / Anthropic API spend).
-The `val_bpb` metric maps onto AlphaEval fitness — a 17-dim weighted
-aggregate (5 critical + 12 auxiliary) plus a derived stability axis
-(1.0 total weight, **higher = better**), with 3 info dims tracked
-alongside but not weighted. `results.tsv` keeps a per-row layout but
-its columns are per-tier aggregates and `fitness`; the raw 20-dim
-signal lives in the companion `results.jsonl`.
-
-Mutations to `WRAPPER_PROMPT_SECTIONS` propagate into the audit
-subprocess through the `GEODE_WRAPPER_OVERRIDE` env var (which points
-at `~/.geode/self-improving/wrapper-override.json`). Product policy-source
-composition reads it, and `core.agent.system_prompt` applies the selected
-wrapper sections.
-`--dry-run` skips the subprocess entirely so plumbing can be verified
-without spending budget.
+Wrapper candidates reach the audit through the selected policy sources;
+`core.agent.system_prompt` assembles those sections into the runtime prompt.
+`--dry-run` tests the plumbing with synthetic evidence, not a publishable score.
 
 ## Quick start
 
-Requirements: `uv`, the GEODE `[audit]` extra (`inspect_ai`,
-`inspect_petri`), and either `~/.codex/auth.json` (ChatGPT subscription
-OAuth) or `ANTHROPIC_API_KEY`.
+Use [campaign quick start](campaign-quick-start.md) for setup and
+[campaign procedure](campaign-procedure.md) for execution. Live target, auditor,
+and judge calls require an explicit run contract, credentials, and budget.
+An external coding-agent subscription does not establish entitlement for every
+evaluation role.
+
+For an authorized offline plumbing check in an installed checkout:
 
 ```bash
-# 1. Install GEODE dependencies + audit extras
-uv sync --extra audit
-
-# 2. One-time seed-pool + rubric sanity check
-uv run python -m evolve.scaffold_search.prepare
-
-# 3. Real audit experiment (~5 min, consumes LLM quota / API budget)
-uv run python -m evolve.scaffold_search.train
-
-# 3-alt. Plumbing-only smoke (no quota / spend)
 uv run python -m evolve.scaffold_search.train --dry-run
 ```
 
-The final `---` block on stdout carries grep-friendly metrics.
-
 ## Running the agent
 
-Boot the self-improving-loop agent with `program.md` in context. The
-boot prompt is intentionally minimal:
-
-```text
-Read program.md and start a new experiment. Begin with the baseline
-for this PR.
-```
-
-`program.md` is a lightweight skill — the agent reads its mutation
-candidates, fitness interpretation, and loop termination conditions
-from there.
+Start in an owned worktree and load the full path
+`evolve/scaffold_search/program.md`. Follow the frozen run scope and stop
+conditions; do not inherit an indefinite campaign from a historical example.
+[Mode A](../operator-mode-a.md) explains external-agent operation.
 
 ## Project structure
 
-```text
-evolve/scaffold_search/           — loop CODE + program SoT (umbrella package)
-├── program.md     — agent instructions (humans modify)
-├── prepare.py     — seed-pool + rubric sanity check (do not modify)
-├── train.py       — wrapper prompt sections + audit invocation (agent modifies)
-├── campaign.py    — campaign driver (python -m evolve.scaffold_search.campaign)
-├── admire_means.py / bench_means.py — positive-pressure / capability axes
-└── loop/          — loop runtime (runner, mutator, policies, …)
-
-evolve/scaffold_search/state/     — TRACKED SoT (in-repo, versioned)
-├── policies/      — mutation-target SoT JSONs
-├── mutations.jsonl, baseline_archive.jsonl, baseline_epochs.json
-├── results.tsv, results.jsonl — rolling per-audit history
-├── seed_pools/    — git-tracked campaign INPUT (cycle-input + held-out)
-└── _archive/<be-NNN>/ — epoch-boundary snapshots (see _archive/README.md)
-
-~/.geode/self-improving/       — RUNTIME scratch (out-of-repo, machine-local)
-├── baseline.json, run.log, wrapper-override.json
-├── campaign/{gen-0-snapshot/, runs/<run_id>.json}
-└── handoff/, seed_generation/<run_id>/
-
-docs/self-improving/loop-overview.md  — this file (formerly autoresearch/README.md)
-```
+Code and the agent program live under `evolve/scaffold_search/`.
+`core.paths.AUTORESEARCH_STATE_DIR` owns versioned policy and ledger paths;
+`core.paths.RUNTIME_ROOT` owns machine-local runtime evidence and scratch.
+Inspect [core/paths.py](../../core/paths.py) and the run's state-root overrides
+before reading, writing, or cleaning either location. A worker override may
+isolate both homes; a memorized home-directory path is not ownership proof.
 
 ## Cross-loop handoff (P0b)
 
-`AUTORESEARCH_SEED_SELECT` env var swaps in a directory of seed `.md`
-files at audit time. The companion seed-generation writes its winning
-candidates to `<run_dir>/survivors/` (a directory of symlinks) and
-stamps `state.pool_path_out` to that path; a parent driver can pipe
-that into `AUTORESEARCH_SEED_SELECT` so the next audit consumes the
-evolved pool instead of the static tree. Unset / whitespace falls
-back to the hierarchical `evals/petri/seeds/` default.
+`AUTORESEARCH_SEED_SELECT` selects the seed directory consumed by an audit.
+The seed-generation output records its selected pool; preserve candidate,
+survivor, and attempt lineage rather than deduplicating away selection evidence.
+Freeze the selected pool before comparing candidate and baseline results.
 
 ## Design choices
 
-- **Single file to modify.** The agent only edits
-  `evolve/scaffold_search/train.py`. The mutation scope's upper bound is
-  explicit, so every diff is meaningful.
-- **Fixed budget.** Each audit is ~5 min wall-clock. Every hypothesis
-  costs the same — apples-to-apples comparison. Roughly 12
-  experiments per hour, ~100 overnight.
-- **Self-contained.** No new dependencies. The existing GEODE
-  `[audit]` extra is sufficient.
-- **Git as optimiser.** Branch tip = best wrapper; each commit is an
-  experiment; `git reset` discards a hypothesis.
+- Mutate only the candidate surface selected in the run contract.
+- Keep measurement, replication, budget, and promotion authority separate.
+- Preserve rejected attempts; use scoped recovery instead of erasing history.
+- Reuse the current measurement and persistence owners rather than duplicating
+  their formulas in another guide.
 
 ## Source
 
-- Attribution — Karpathy autoresearch (3-file pattern + fixed-budget
-  loop source): https://github.com/karpathy/autoresearch (228791f);
-  local reference clone at `~/workspace/autoresearch`.
-- Older 6-module self-improving-loop stub (superseded by this driver):
-  `docs/architecture/autoresearch.md`
-- Petri evidence (gen-0 fitness signal):
-  `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-15-petri-insights.md` +
-  `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-15-autoresearch-gen0-plan.md`
-- Wiring sprint plan:
-  `docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md`
+The [earlier architecture spec](../architecture/autoresearch.md) is historical.
+Dated Petri reports are routed through the
+[artifact repository index](../eval/external-artifact-repository.md).
+The three-file pattern is attributed to
+[Karpathy autoresearch](https://github.com/karpathy/autoresearch).
 
 ## License
 

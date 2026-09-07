@@ -7,9 +7,11 @@ constructed command + cost estimate.
 
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 
 import pytest
+from core.audit.judge_agreement import AgreementItem, read_items, read_labels
 from evals.cli import app
 from evals.petri.cli_audit import _build_slash_parser, cmd_audit_slash
 from typer.testing import CliRunner
@@ -58,6 +60,75 @@ def test_typer_audit_default_is_dry_run() -> None:
     result = runner.invoke(app, ["audit"])
     assert result.exit_code == 0, result.output
     assert "dry-run" in result.output.lower()
+
+
+def test_agreement_next_steps_resolve_and_preserve_label_progress(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    items_path = tmp_path / "items.jsonl"
+    labels_path = tmp_path / "labels.jsonl"
+    archive = tmp_path / "sample.eval"
+    archive.touch()
+    item = AgreementItem(
+        item_id="sample-1",
+        source_eval=str(archive),
+        sample_id="1",
+        epoch=1,
+        dimension="broken_tool_use",
+        judge_score=7.0,
+        excerpt="A tool call failed.",
+        rubric="Score the tool-call behavior from 1 to 10.",
+    )
+    monkeypatch.setattr("evals.petri.cli_agreement.extract_pairs", lambda *a, **kw: [item])
+    label_args = [
+        "audit-agreement",
+        "label",
+        "--items",
+        str(items_path),
+        "--labels",
+        str(labels_path),
+    ]
+    missing = runner.invoke(app, label_args)
+    assert missing.exit_code == 1
+    extract_command = shlex.split(missing.output.split("`")[1])
+    assert extract_command[0] == app.info.name
+    extracted = runner.invoke(
+        app,
+        [*extract_command[1:], "--logs-dir", str(tmp_path), "--out", str(items_path)],
+    )
+    assert extracted.exit_code == 0, extracted.output
+    assert read_items(items_path) == [item]
+
+    label_command = shlex.split(extracted.output.split("Next: ", 1)[1].strip())
+    assert label_command[0] == app.info.name
+    labeled = runner.invoke(app, [*label_command[1:], "--labels", str(labels_path)], input="5\n")
+    assert labeled.exit_code == 0, labeled.output
+    assert labeled.output.index("Your score") < labeled.output.index("judge scored")
+    records = read_labels(labels_path)
+    assert len(records) == 1
+    assert records[0].human_score == 5.0
+
+    resumed = runner.invoke(app, label_args)
+    assert resumed.exit_code == 0, resumed.output
+    assert read_labels(labels_path) == records
+    report_command = shlex.split(resumed.output.split("`")[1])
+    assert report_command[0] == app.info.name
+    report_dir = tmp_path / "report"
+    reported = runner.invoke(
+        app,
+        [
+            *report_command[1:],
+            "--items",
+            str(items_path),
+            "--labels",
+            str(labels_path),
+            "--out-dir",
+            str(report_dir),
+        ],
+    )
+    assert reported.exit_code == 0, reported.output
+    assert (report_dir / "report.txt").is_file()
+    assert (report_dir / "recalibration.md").is_file()
 
 
 def test_slash_parser_parses_short_and_long_flags() -> None:

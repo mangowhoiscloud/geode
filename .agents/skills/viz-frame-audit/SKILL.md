@@ -35,16 +35,17 @@ catalogue of verified incidents per category lives in
 
 ## Workflow
 
-1. **Decide timestamps** — 7-10 per video, one per major bit, avoiding the
-   transition zones (target the middle of each bit's wait phase).
+1. **Decide timestamps** — cover the changed sections and adjacent transitions;
+   use existing key-frame manifests when applicable. Stable layout frames and
+   transition frames answer different questions.
 2. **Extract** — `ffmpeg -ss <t> -frames:v 1 -update 1 -q:v 2` per timestamp.
-3. **Inspect** — Read each `.png` through Claude Code's `Read` tool so the
-   model sees the actual frame; `Bash(cat / tail)` will NOT show the image.
+3. **Inspect** — Use the available image-viewing tool so the model sees the
+   actual frame; `Bash(cat / tail)` will NOT show the image.
 4. **Classify** — for every finding, assign one of the four category numbers.
-5. **Report** — present a `Bit X — symptom one-liner` table to the user;
-   never auto-apply fixes (the user judges whether a layout choice is
-   intentional).
-6. **Fix → re-render → re-extract → re-Read** the same timestamps. Compare
+5. **Report** — present findings with timestamps and visible evidence. A review
+   request does not authorize edits; if fixes were requested, implement clear
+   defects and ask only about choices that materially change the intended design.
+6. **When fixes are in scope**, re-render and inspect the same timestamps. Compare
    before/after; check for collateral regressions in adjacent bits.
 
 Workflow details in [rules/audit-workflow.md](rules/audit-workflow.md) and
@@ -56,23 +57,17 @@ Workflow details in [rules/audit-workflow.md](rules/audit-workflow.md) and
 |------|---------|
 | [rules/audit-workflow.md](rules/audit-workflow.md) | ffmpeg extraction + Read inspection + timestamp selection + iteration loop |
 | [rules/reporting.md](rules/reporting.md) | The reporting format to the user (Bit / category / location), tone rules, before/after table format |
-| [rules/pixel-ratchet.md](rules/pixel-ratchet.md) | `pixelmatch-py` integration plan — Step 3 deterministic catch for categories 2 + 4 |
-| [rules/typography-drift-gate.md](rules/typography-drift-gate.md) | `uharfbuzz` integration plan — Step 2 compile-time catch for category 3 |
+| [rules/pixel-ratchet.md](rules/pixel-ratchet.md) | Existing `pixelmatch-py` frame comparison and evidence limits |
+| [rules/typography-drift-gate.md](rules/typography-drift-gate.md) | `uharfbuzz` typography gate reference; verify current code before using historical snippets |
 | [references/defect-catalogue.md](references/defect-catalogue.md) | 12+ verified incidents (filewalk × 5, hero × 7) — location, symptom, fix |
 | [references/external-oss.md](references/external-oss.md) | Yusuke710/manim-skill (4-phase loop), pytest-mpl (baseline UX), pixelmatch-py, uharfbuzz, frames-mcp — stars / last-push verified 2026-05-21 |
 
 ## Quick reference — extract + inspect
 
-```bash
-mkdir -p /tmp/<name>_audit && rm -f /tmp/<name>_audit/*.png
-for t in 2.5 6.5 10.5 14.5 18.5 24.0 28.0; do
-    ffmpeg -hide_banner -loglevel error -ss $t \
-        -i media/videos/<scene>/1080p60/<Name>-EN.mp4 \
-        -frames:v 1 -update 1 -q:v 2 /tmp/<name>_audit/EN_${t}s.png -y
-done
-```
-
-Then `Read` each `.png` in Claude Code. KO is audited separately because
+Use the isolated extraction example in
+[audit workflow](rules/audit-workflow.md#2-extract-frames), then inspect each
+PNG with the available image viewer. Preserve prior renders and audit frames.
+KO is audited separately because
 Korean text width differs from English — typographic and padding defects
 do not transfer 1:1.
 

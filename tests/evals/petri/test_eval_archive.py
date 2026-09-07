@@ -17,6 +17,7 @@ git). Tests focus on:
 from __future__ import annotations
 
 import importlib.util
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -198,6 +199,8 @@ def test_petri_archive_command_registered_on_typer_app() -> None:
     on `evals.cli.app` so `geode-eval petri-archive` keeps working after
     refactors of the cli wiring module."""
     from evals.cli import app
+    from typer.main import get_command
+    from typer.testing import CliRunner
 
     names: list[str] = []
     for cmd in app.registered_commands:
@@ -207,6 +210,13 @@ def test_petri_archive_command_registered_on_typer_app() -> None:
     assert "petri-archive" in names, (
         f"`petri-archive` not registered on the Typer app. Found: {names}"
     )
+    command = get_command(app).commands["petri-archive"]
+    eval_path_arg = next(param for param in command.params if param.name == "eval_path")
+    producer_command = shlex.split(eval_path_arg.help.split("`")[-2])
+    assert producer_command[0] == app.info.name
+    # --help resolves the advertised command/options without starting a live audit.
+    result = CliRunner().invoke(app, [*producer_command[1:], "--help"])
+    assert result.exit_code == 0, result.output
 
 
 def test_petri_archive_appears_in_cli_audit_all() -> None:

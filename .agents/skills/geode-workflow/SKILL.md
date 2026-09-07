@@ -12,29 +12,11 @@ then report honestly.
 
 ## Core Loop
 
-1. **Scope**: confirm branch, dirty files, objective, and unrelated work.
-2. **GAP audit**: search before designing; classify existing, partial, absent,
-   or misfit. For architecture/extensibility work, read
-   `docs/architecture/extensibility-roadmap.md`, claim a `READY` work package
-   on canonical `develop`, and carry its stable GAP IDs through the PR and
-   reconciliation flow.
-3. **Grounding**: use official docs/source for provider, SDK, model, OS,
-   browser, package, or current external behaviour.
-4. **Preflight**: classify task type, affected providers, required tools,
-   evidence class, and out-of-scope surfaces.
-5. **Design contract**: define schema, log, event, state, trajectory, provider
-   split, and rollback behaviour before code.
-6. **Implement**: use existing registries, adapters, redaction helpers,
-   transcript helpers, and atomic-write utilities. For abstraction, naming,
-   type/class, persisted-schema, test-placement, site, or version decisions,
-   use `$geode-code-conventions`.
-7. **Observe**: make runtime behaviour inspectable with bounded structured
-   records.
-8. **Verify**: run targeted checks first, then broaden when risk justifies
-   it. Non-trivial PRs also get a Codex MCP second-opinion review of the
-   committed diff before push (see `references/verification-gates.md`).
-9. **Report/GitFlow**: state what changed, what ran, what failed or was
-   skipped, and only claim merge/push/cleanup after commands complete.
+Follow the [canonical workflow](../../../docs/workflow.md#core-loop) and its
+[execution scope](../../../docs/workflow.md#execution-scope). Produce the
+requested reviewable result; load only the references relevant to the task.
+For abstraction, naming, type/class, schema, test, site, or version decisions,
+use `$geode-code-conventions`.
 
 ## Reference Routing
 
@@ -47,7 +29,7 @@ Read only the reference needed for the current task:
 | Provider/model/API capability claims | `references/provider-grounding.md` |
 | Schema/log/event/state/trajectory consistency | `references/observability-contract.md` |
 | Same-task Codex–GEODE production and comparison | `references/codex-geode-paired-coding.md` |
-| Test, lint, type, prompt, and full-suite reporting gates | `references/verification-gates.md` |
+| Test, lint, type, prompt, full-suite reporting, or failure-to-rule review | `references/verification-gates.md` |
 | Branch, PR, merge, and cleanup operations | `references/gitflow.md` |
 
 For simple docs or trivial bug fixes, use the core loop and skip references

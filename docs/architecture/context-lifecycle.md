@@ -96,8 +96,8 @@ When the explicit facade exceeds its budget, `ContextAssembler.compress()` alloc
 |--------|----------|-------------|
 | GEODE.md | Project root | T0 SOUL identity |
 | `~/.geode/user_profile/` | Global | T0.5 User preferences |
-| `~/.geode/.env` | Global | API keys (baseline) |
-| `.env` | Project root | API keys (override, non-empty only) |
+| `~/.geode/.env` | Global | Authoritative file-based secrets; existing process exports take precedence |
+| `.env` | Project root | Fills keys absent from global secrets and process exports |
 | `~/.geode/scheduler/jobs.json` | Global | Scheduler state (atomic JSON) |
 | `~/.geode/cli.sock` | Global | IPC socket (serve daemon) |
 

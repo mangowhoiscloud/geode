@@ -102,12 +102,13 @@ class TestSkillDefinitionV2:
             "web_fetch",
             "llms_txt_index",
         ]
-        assert "independent" in skill.body
-        assert "contradiction" in skill.body
-        assert "instead of creating a competing checklist" in skill.body
-        assert "only when the user explicitly requests" in skill.body
-        assert "remain depth one" in skill.body
-        assert "memory_save" not in skill.body
+        body = " ".join(skill.body.split())
+        assert "independent" in body
+        assert "contradiction" in body
+        assert "instead of creating a competing checklist" in body
+        assert "only when the user explicitly requests" in body
+        assert "remain depth one" in body
+        assert "memory_save" not in body
 
     def test_bundled_geo_uses_bounded_evidence_frontier(self) -> None:
         repo_root = Path(__file__).parents[3]

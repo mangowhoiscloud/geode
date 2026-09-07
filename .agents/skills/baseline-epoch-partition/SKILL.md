@@ -7,12 +7,16 @@ description: Content-addressed baseline-archive epoch partitioning. Partition ba
 
 > **Source**: operator design 2026-05-30 ([[project_baseline_archive_partition_plan]] · [[project_per_mutator_partition_plan]]).
 > **Philosophy**: baselines produced under different production logic are **not comparable** — partition them, never average across the boundary. The boundary is the *spec*, and the spec is *content-addressed* so the discriminator can't drift.
-> **Builds on**: the v0.99.89 registry (`autoresearch/train.py:_append_baseline_registry_row`, `baseline_archive.jsonl`) which already records `margin_rule` + `role_provenance`.
+> **Historical basis**: the v0.99.89 baseline registry, which already recorded
+> `margin_rule` + `role_provenance`. Current owners are
+> [`baseline_epoch.py`](../../../evolve/scaffold_search/loop/observe/baseline_epoch.py)
+> for spec construction/hashing and [`ledger.py`](../../../evolve/scaffold_search/ledger.py)
+> for `_append_baseline_registry_row`. Do not recreate the retired implementation path.
 
 ## When this applies
 
 Every promote appends a `kind="baseline"` row to the git-tracked
-`autoresearch/state/baseline_archive.jsonl`. Those rows must be partitioned into
+`evolve/scaffold_search/state/baseline_archive.jsonl`. Those rows are partitioned into
 **epochs** — like seed-generation's `gen-*` series — keyed by the production
 logic, and the self-improving hub serves them **under a `baseline` section,
 grouped by epoch**. This skill specifies how the epoch discriminator is computed
@@ -32,6 +36,12 @@ stable). The discriminator is derived from the spec, so it can never lie about
 what produced the baseline.
 
 ## The spec field-set (what is hashed)
+
+The JSON below preserves the original schema-1 design for provenance, not a
+template for new writes. Current schema 2 also hashes `promote_policy`; use
+`build_baseline_spec` and `canonical_spec_json` from the current owner above
+instead of copying a field list or serializer from this document. Never
+recompute stored historical hashes using the current schema or fitness logic.
 
 Hash a **fixed, enumerated** field-set — the *surface* (how a baseline is made),
 NEVER the *instance* (the baseline's measured values):
@@ -98,13 +108,13 @@ epoch and destroy the partition.
 
 ## What each registry row records
 
-Augment `_append_baseline_registry_row` to add: `baseline_spec` (the hashed
-sub-object), `spec_schema_version`, `epoch_hash`, `epoch_label`. The existing
+`_append_baseline_registry_row` already writes `baseline_spec` (the hashed
+sub-object), `spec_schema_version`, `epoch_hash`, and `epoch_label`. The existing
 `margin_rule` + `role_provenance` are folded INTO `baseline_spec` (no
 duplication — keep them top-level too for back-compat readers, but the canonical
 comparability key is `epoch_hash`).
 
-## Hub serving (Phase 2-4)
+## Hub serving
 
 Serve baselines under a top-level **`baseline`** section, grouped by `epoch_hash`,
 each epoch rendered as a sub-series (like a `gen-*` run): `epoch_label` as the
@@ -115,7 +125,11 @@ verdict`). Mirror `scripts/build_self_improving_hub.py:_render_seedgen_index_row
 Never render two epochs in one comparison table (the whole point is they are not
 comparable).
 
-## Determinism + guards (must ship with the impl)
+## Determinism + guards
+
+The following are invariant descriptions, not a request to add another test
+suite. Locate and preserve the existing checks under
+`tests/evolve/scaffold_search/` before adding a missing case.
 
 - `test_epoch_hash_deterministic` — same spec dict → same hash across calls.
 - `test_epoch_hash_changes_on_each_surface_field` — flipping any spec field

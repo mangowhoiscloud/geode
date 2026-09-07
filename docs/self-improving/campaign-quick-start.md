@@ -57,11 +57,10 @@ can reach instead.
 
 ### Config and keys
 
-1. Copy the annotated template, then edit the values for your accounts:
-
-   ```bash
-   cp docs/examples/self_improving_loop.config.toml.example ~/.geode/config.toml
-   ```
+1. Use the [annotated template](../examples/self_improving_loop.config.toml.example)
+   as a reference and merge the needed `[self_improving_loop.*]` sections into
+   `~/.geode/config.toml`. Preserve existing settings and credential choices;
+   update existing tables rather than replacing the file or duplicating tables.
 
    The template documents every `[self_improving_loop.*]` key: `budget_minutes`,
    `use_oauth`, `seed_limit`, `seed_select`, `dim_set`, `max_turns`, plus the
@@ -88,11 +87,12 @@ can reach instead.
 
 ### Step a: get an isolated worktree
 
-Never run code work on `main` / `develop`. Allocate a worktree off `develop`:
+Never run code work on `main` / `develop`. Allocate a worktree from the fetched
+`origin/develop` tip:
 
 ```bash
 git fetch origin
-git worktree add .claude/worktrees/my-campaign -b feature/my-campaign develop
+git worktree add .claude/worktrees/my-campaign -b feature/my-campaign origin/develop
 ```
 
 All subsequent commands run from inside that worktree checkout.
@@ -144,8 +144,7 @@ The campaign driver runs three arms (`never`, `random`, `gate`) from a matched
 gen-0 reset so any observed gain is attributable to the gate, not to drift or
 chance. Run a short version first (`--n 1` cycle per arm).
 
-Recommended entry, the `geode-evolve campaign` command (a sibling change adds this CLI;
-prefer it once available):
+Recommended entry, the registered `geode-evolve campaign` command:
 
 ```bash
 geode-evolve campaign --n 1 --k 5 --arms never,random,gate
@@ -186,7 +185,7 @@ the full loop completes before scaling up.
 | Mutation ledger | `evolve/scaffold_search/state/mutations.jsonl` | One row per mutate / apply / audit / baseline / attribution event (git-tracked). Arms are tagged via `promote_policy` / `promote_policy_seed`, so you can split the stream by arm. |
 | Promoted baseline | `~/.geode/self-improving/baseline.json` | The promoted baseline `dim_means` + `dim_stderr`. Advances only on a gate promote; a reject leaves it untouched. |
 | Per-cycle eval | `~/.geode/petri/logs/*.eval` (+ `latest.eval`) | The Petri `.eval` per cycle, the single source for per-dim evidence. |
-| Run logs | `~/.geode/self-improving/run.log` (single audit), `state/campaign/` (campaign progress + runs) | Stdout / progress for inspection. |
+| Run logs | `~/.geode/self-improving/run.log` (single audit), `~/.geode/self-improving/campaign-progress.log` and `~/.geode/self-improving/campaign/runs/` (campaign) | Stdout / progress for inspection; campaign paths follow `core.paths.RUNTIME_ROOT` when a state-root override is set. |
 | Self-improving hub | `docs/self-improving/` (`index.html`) | The rendered pages: baseline epochs and the cross-generation evidence page. The held-out fitness curve, partitioned by baseline epoch and by arm, is the curve that counts. |
 
 Read order for a finished run: the per-arm held-out curves on the hub

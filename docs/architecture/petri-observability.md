@@ -67,7 +67,7 @@ inspect_ai's scope (single-eval) leaves out:
    recommended path for the next time some GEODE code-path inside the
    audit harness needs to leave evidence for a post-mortem.
 
-Everything else inspect_ai already covers — see [§Out of scope](#out-of-scope).
+Everything else inspect_ai already covers — see [§Out of scope](#out-of-scope-already-covered-by-inspect_ai).
 
 ## Layer 1 — Raw archive (inspect_ai native)
 

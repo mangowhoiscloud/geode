@@ -91,7 +91,6 @@ def test_worktree_free_contract_is_shared_by_every_entrypoint() -> None:
         "AGENTS.md",
         "CLAUDE.md",
         "docs/workflow.md",
-        ".claude/skills/geode-workflow/references/gitflow.md",
         ".claude/skills/geode-gitflow/SKILL.md",
     )
 
@@ -103,9 +102,14 @@ def test_worktree_free_contract_is_shared_by_every_entrypoint() -> None:
     assert "git branch -d feature/<branch-name>" not in gitflow
     assert "git checkout develop &&" not in gitflow
     assert "gh pr merge <PR#> --squash --delete-branch" not in gitflow
-    for text in (gitflow, workflow_reference):
-        assert "gh pr merge ... --delete-branch" in text
-        assert "gh api --method PUT repos/mangowhoiscloud/geode/pulls/" in text
+    canonical_link = "../../geode-gitflow/SKILL.md"
+    assert canonical_link in workflow_reference
+    reference_dir = ROOT / ".claude/skills/geode-workflow/references"
+    assert (reference_dir / canonical_link).resolve() == (
+        ROOT / ".agents/skills/geode-gitflow/SKILL.md"
+    ).resolve()
+    assert "gh pr merge --delete-branch" in gitflow
+    assert "gh api --method PUT repos/mangowhoiscloud/geode/pulls/" in gitflow
 
 
 def _run(cwd: Path, *argv: str, check: bool = True) -> subprocess.CompletedProcess[str]:

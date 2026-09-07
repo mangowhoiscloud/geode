@@ -6,14 +6,16 @@ description: Research process for comparing frontier harnesses (Claude Code, Cod
 # Frontier Harness Research — Comparative Research Process
 
 > **Purpose**: Before implementing a feature, compare relevant frontier harnesses and the original/upstream implementation, then establish design decision rationale for GEODE application.
-> **When to apply**: Must be performed during Implementation Workflow Step 1 (Research → Plan).
+> **When to apply**: The user requests a comparison, or an external contract or
+> architectural choice needs evidence. Ordinary fixes using an established
+> local pattern do not require a multi-system survey.
 
 ## Research Sources
 
 | # | System | Type | Core Pattern Areas | GEODE Skill Reference |
 |---|--------|------|-------------------|----------------------|
-| 1 | **Claude Code** | CLI agent | Permission model, Hook, Memory, Skill, Context management, UI | (built-in knowledge) |
-| 2 | **Codex** | Cloud agent | Sandbox execution, TDD loop, PR workflow, code review, multi-file editing | (built-in knowledge) |
+| 1 | **Claude Code** | CLI agent | Permission model, Hook, Memory, Skill, Context management, UI | current official documentation |
+| 2 | **Codex** | Coding agent | Sandbox execution, PR workflow, code review, multi-file editing | current official documentation and source |
 | 3 | **OpenClaw** | Chat agent | Gateway, Session Key, Binding, Lane Queue, Plugin, Failover, 4-tier automation | `openclaw-patterns` |
 | 4 | **autoresearch** | Autonomous experiment loop | Constraint-based design, ratchet, Context Budget, program.md, Simplicity Selection | `karpathy-patterns` |
 | 5 | **Prime Agent** | RLM-native coding/research harness | Persistent REPL, programmable context, recursive subagents, continual harness state, native-harness evaluation | official source and technical report |
@@ -33,7 +35,10 @@ Example:
 
 ### Step 2: Relevant-Source Pattern Exploration
 
-Explore patterns related to the topic in each system. **Read the skill file first if available**, otherwise extract from built-in knowledge.
+Explore only systems relevant to the decision. Read applicable local skills for
+source routing, then verify external claims against current primary docs or
+pinned source. Recalled knowledge supplies search terms, not verification;
+report unavailable evidence without inventing a capability.
 
 #### 2a. Claude Code Pattern Exploration
 
@@ -127,16 +132,17 @@ Select items to implement from GAP analysis results and document design decision
 
 | Criterion | Application |
 |-----------|-------------|
-| Same pattern in 3+ systems | → Must adopt |
-| Similar pattern in 2 systems | → Extract core, adapt for GEODE context |
-| Exists in only 1 system | → Verify necessity before deciding |
+| Pattern appears in several systems | Compare the failure it solves and whether GEODE has that failure; prevalence alone does not require adoption |
+| Pattern appears in one system | Evaluate the same consumer, failure, and verification evidence; source count alone does not reject it |
 | Over-engineering risk | → Apply Karpathy P10, implement minimally |
 | Conflicts with existing GEODE patterns | → Existing pattern takes priority, gradual transition |
 | Benchmark integration or platform adapter | → Preserve original semantics and require parity evidence before equivalence claims |
 
 ### Step 5: Plan Document Writing
 
-Write a plan document in `docs/plans/`. Research result summary must be included.
+Record the decision in the existing task plan or PR. Use a `docs/plans/` document
+when durable research detail warrants one; do not create a second plan merely
+to satisfy this skill.
 
 ```markdown
 # Plan: [Feature Name]
@@ -161,23 +167,19 @@ Write a plan document in `docs/plans/`. Research result summary must be included
 
 ## Research Checklist
 
-Verify the following before feature implementation:
+For the selected research scope, verify:
 
 - [ ] Topic keywords defined
-- [ ] Claude Code pattern exploration complete
-- [ ] Codex pattern exploration complete
-- [ ] OpenClaw pattern exploration complete (see `openclaw-patterns` skill)
-- [ ] autoresearch pattern exploration complete (see `karpathy-patterns` skill)
-- [ ] Prime Agent pattern exploration complete or marked N/A
+- [ ] Relevant systems selected and primary evidence cited; irrelevant systems omitted
 - [ ] Original/upstream source pinned and native invariants checked
 - [ ] Adapter parity requirement recorded for benchmark integration or platform adapter
 - [ ] GAP analysis table written
 - [ ] Design decision rationale documented
-- [ ] Research summary included in docs/plans/ plan document
+- [ ] Decision and limitations recorded in the existing task artifact
 
 ## Notes
 
-- **Research is performed before implementation.** Even if patterns are discovered during implementation, do not go back — improve in the next iteration.
+- **Ground the affected decision before implementation.** If later evidence changes it, revise the plan and verify the affected behavior before proceeding.
 - **Not every frontier system is relevant.** Mark irrelevant systems "N/A"; the original/upstream source is mandatory whenever one exists.
 - **Always read skill files first if they exist.** The `openclaw-patterns` and `karpathy-patterns` skills already contain distilled patterns, preventing redundant exploration.
-- **Prevent over-research**: Research time must not exceed implementation time. Apply Karpathy P3 (fixed time budget).
+- **Prevent over-research**: Stop once the decision is supported or the missing evidence is identified. Respect the task's time and cost budget.

@@ -19,15 +19,16 @@ Run the composed gate from the repository root:
 uv run python scripts/check_official_docs.py
 ```
 
-The command performs four steps in order:
+The command composes the current checks in `scripts/check_official_docs.py`:
 
 1. Check bilingual release surfaces: `README.md`, `README.ko.md`, and the
-   current `CHANGELOG.md` release section must all target the same version, and
-   the changelog section must contain both Korean and English release notes.
-2. `npm run sync-stats` in `site/`.
-3. `scripts/check_docs_links.py --quiet`.
-4. `scripts/lint_pages_markdown.sh`.
-5. `npm run build` in `site/`.
+   current `CHANGELOG.md` release section must target the same version.
+   Release notes are English; `SECURITY.md` must support the current series.
+2. Check the generated architecture inventory and evaluation catalog.
+3. Run `npm run sync-stats` in `site/`.
+4. Check docs links and lint render-gated Markdown.
+5. Run `npm run build`, then `npm run export-md` in `site/`.
+6. Fail if regenerated tracked outputs differ from the committed versions.
 
 Use `--skip-build` only for quick local authoring loops. Release validation must
 run the full command.
@@ -39,20 +40,21 @@ run the full command.
 - `site/src/data/geode/sot.ts`
 - `site/src/data/geode/changelog.ts`
 - `site/public/llms.txt`
-- `site/public/llms-full.txt`
+
+After the site build, `site/scripts/export-docs-md.mjs` owns
+`site/public/llms-full.txt` and the published Markdown twins under `site/out/docs/`.
+`sync-stats` alone does not refresh their body content.
 
 If any source input changes (`pyproject.toml`, `CHANGELOG.md`, site docs, or
 public docs metadata), regenerate and commit the outputs in the same change.
 
 ## Next Automation Targets
 
-The reference projects expose two useful future generators that GEODE does not
-yet have:
+Possible future automation, not prerequisites for ordinary documentation work:
 
 - A CLI reference generator from Typer command metadata.
 - A tool catalog generator from `core/tools/definitions.json`.
-- A fuller bilingual-docs generator/checker that pairs English and Korean pages
-  beyond the current README/changelog release-surface gate.
+- A bilingual-docs checker beyond the current README release-surface gate.
 
 Until those exist, CLI and tool pages remain curated docs backed by link, render,
 and site-build checks.

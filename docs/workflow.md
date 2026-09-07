@@ -9,6 +9,24 @@ GUI/computer-use work, PDF/document ingestion, observability changes, and large
 audits. The full procedure is split across the `geode-workflow` skill and its
 `references/` files so agents load only the detail needed for the task.
 
+## Execution scope
+
+Treat a request to do work, including "can you" in an action context, as an
+instruction to produce a reviewable result within the authorized scope.
+Complete already-authorized work before asking about a missing decision;
+ask only when it materially changes correctness, scope, or authority. A review
+or status request remains read-only. Merge, publication, paid calls, global
+installation, and service changes need authority from the request or context.
+
+User instructions override skill guidelines within the applicable system,
+permission, and safety boundaries. If a skill blocks or redirects work, cite
+the exact instruction and distinguish its requirement from an interpretation.
+
+Delegate independent, bounded work when available tools and permissions allow
+it and parallel work can improve time or quality. Do not force delegation by
+call count or invent unavailable tools. Report outcomes concisely; routine
+monitoring reports meaningful changes, completion, failure, or needed input.
+
 ## Core Loop
 
 1. **Scope**: confirm branch, dirty files, objective, and unrelated work.
@@ -18,12 +36,12 @@ audits. The full procedure is split across the `geode-workflow` skill and its
    or current API behaviour with official docs/source.
 4. **Preflight**: capture task class, affected providers, required tools,
    evidence class, and explicit non-goals.
-5. **Design contract**: define schema, log, event, state, trajectory, provider
-   split, and rollback behaviour before code.
+5. **Plan**: state the smallest measurable change. Define schema, state,
+   provider, or rollback contracts only when the change affects them.
 6. **Implement**: use existing GEODE registries, adapters, redaction helpers,
    transcript helpers, and atomic-write utilities.
-7. **Observe**: make runtime behaviour inspectable with bounded structured
-   records.
+7. **Observe**: use existing evidence; extend bounded records only when the
+   changed behavior would otherwise be unobservable.
 8. **Verify**: run targeted checks first, then broaden when risk justifies it.
 9. **Report/GitFlow**: state what changed, what ran, what failed or was
    skipped, and only claim merge/push/cleanup after commands complete.
@@ -88,34 +106,16 @@ feature/<name> -> develop -> main
 - `develop -> main` is a pass-through merge after gates are satisfied.
 - Post-merge cleanup runs
   `scripts/check_repo_hygiene.py free-merged-worktree` from outside the target
-  checkout. It verifies the merged PR's final tree, branch ancestry, remote
-  head, clean state, and owner before removing remote branch, worktree, local
-  squash branch, then pruning.
+  checkout. It verifies the squash tree by replaying the final PR head onto the
+  merge parent, plus branch ancestry, remote head, clean state, and owner before
+  removing remote branch, worktree, local squash branch, then pruning.
 
 ## Minimum Verification
 
-Use targeted tests for the changed behaviour, then broaden based on blast
-radius:
-
-```bash
-uv run pytest -q tests/<targeted_path>.py
-uv run ruff check core/ evals/ evolve/ tests/ scripts/
-uv run ruff format --check core/ evals/ evolve/ tests/ scripts/
-uv run mypy core/ evals/ evolve/
-uv run lint-imports
-git diff --check
-```
-
-Live tests require explicit user approval. Provider acceptance that cannot be
-proven without a live call must remain guarded or marked `live_test_required`.
-
-## Cross-Verification (Codex MCP)
-
-Local gates alone do not close verification. Before pushing a non-trivial PR,
-run an independent second-opinion review of the committed diff through the
-Codex MCP server (read-only sandbox, numbered findings with HIGH/MED/LOW
-severity). Fix or explicitly accept every finding, then re-verify the fixes.
-Historical yield is ~1.6 real catches per PR that local gates missed.
+The [verification reference](../.agents/skills/geode-workflow/references/verification-gates.md)
+owns check selection, evidence reuse, independent review, and live-test gates.
+Run checks appropriate to the change, complete required checks, and report
+exact commands, results, and omissions. Passing a subset is not a full CI pass.
 
 ## Paired Coding Assistance
 

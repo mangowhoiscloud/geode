@@ -38,7 +38,7 @@ uv run geode
 | Agent-World Benchmark | `docs/eval/agent-world-comparison-contract.md` + `.claude/skills/agent-world-benchmark/` | Three-suite comparison profile, paired runtime control, replication, and artifact contract |
 | Architecture/Extensibility Program | `docs/architecture/extensibility-roadmap.md` | Single execution SOT for GAP IDs, merge order, status, acceptance, and closure evidence |
 | Package Classification | `docs/architecture/package-classification.md` | Closed kernel, product shell, bundled feature, and external extension boundaries |
-| Hook System | `docs/architecture/hook-system.md` | HookSystem 56 events |
+| Hook System | `docs/architecture/hook-system.md` | Hook contracts; current inventory is generated in `site/src/data/geode/architecture-baseline.json` |
 | Scaffold | `CLAUDE.md` | Development workflow, quality gates, CANNOT/CAN (this file) |
 
 ## Project Structure
@@ -53,16 +53,8 @@ Key entry points: `core/agent/loop/`(AgenticLoop), `core/runtime.py`(bootstrap).
 
 ## Development
 
-```bash
-# Test
-uv run python -m pytest tests/ -q
-
-# Lint (runtime + evaluation + evolution roots gated)
-uv run ruff check core/ evals/ evolve/ tests/
-
-# Type check (all production roots gated)
-uv run mypy core/ evals/ evolve/
-```
+Use the [verification reference](.agents/skills/geode-workflow/references/verification-gates.md)
+for risk-scoped local checks and `scripts/preflight.sh` for the broad gate run.
 
 ### Expected Test Results
 
@@ -90,29 +82,29 @@ Rationale cites the originating incident when one exists. The `karpathy-patterns
 
 | Area | Rule | Rationale |
 |------|------|-----------|
-| **Git** | No code work without a worktree (allocation procedure → [§0](#0-board--worktree-alloc)) | Isolated execution (OpenClaw Session) |
+| **Git** | No code work without a worktree (allocation procedure → [GitFlow allocation](.agents/skills/geode-gitflow/SKILL.md#worktree-allocation)) | Isolated execution (OpenClaw Session) |
 | | No direct push to main/develop — PR → CI → merge | Ratchet (P4) |
 | | No deleting other sessions' worktrees (`.owner` mismatch) | Ownership protection |
 | | No `git checkout` switching within a worktree | Isolation maintenance |
 | | No modifying tracking documents from feature/develop, except the user-authorized roadmap-only readiness, claim, GAP-registration, reconciliation, and full-ledger audit PRs for `docs/architecture/extensibility-roadmap.md` defined in that file's §0.3 | Single source of truth on main, with one serialized program-ledger exception |
-| | No branch creation when remote is out of sync | Conflict prevention |
+| | Fetch before allocating a branch from its authorized remote base | Conflict prevention |
 | | No claiming "branch needs sync" from commit count alone — verify content with `git diff A B --stat` first | Graph asymmetry ≠ content asymmetry (gitflow merge commits) |
-| **Planning** | No starting implementation without Socratic Gate (except bugs/docs) | Prevent over-engineering |
+| **Planning** | For non-trivial changes, inspect existing behavior and state the smallest measurable plan before editing | Prevent over-engineering |
 | | No interpreting ambiguous "제거"/"remove" as code-path deletion — disambiguate first (knob vs deletion) | Avoid wasted reverts. *Incident: PR-fallback-knob ~30-file revert (2026-05-21)* |
 | **Quality** | No committing with lint/type/test failures | Ratchet (P4) |
 | | No placeholders (XXXX) in metrics — measured values only | Truth guarantee |
 | | No excessive `# type: ignore` — fix type errors instead | Correctness |
 | | No bare `_` for unused variables — use `_prefix` naming (e.g. `_tok_before`) | Readability |
 | | No unauthorized live test (`-m live`) execution | Cost control (P3) |
-| | No gate / CI-status command behind an exit-code absorber — never `gate \| tail`, `gate \| grep -c`, or `check; merge`. Assert gates bare; gate merges on the REAL result (`test "$(gh pr checks N \| grep -cE 'fail\|pending')" -eq 0 && gh pr merge …`) | Gate integrity. *Incidents (2026-07-02/03, same session): PR #2463 merged with a failing Test job because the check was chained with `;`; the slop-ratchet failure on PR #2482 was invisible locally behind `\| tail -1`. A swallowed exit code turns every downstream "green" claim into fiction.* |
+| | No gate / CI-status command behind an exit-code absorber — never `gate \| tail`, `gate \| grep -c`, or `check; merge`. Preserve the command exit status; missing checks or a failed status lookup never establish green CI | Gate integrity. *Incidents (2026-07-02/03, same session): PR #2463 merged with a failing Test job because the check was chained with `;`; the slop-ratchet failure on PR #2482 was invisible locally behind `\| tail -1`. A swallowed exit code turns every downstream "green" claim into fiction.* |
 | | No "graceful" return contract without applying it at every schema-typed cast (not just outer try) | Boundary completeness. *Incident: PR-G3 #1347 (2026-05-20) — `float()` on non-numeric raised before contract* |
 | | No seed / pool referencing a dim outside the live fitness taxonomy (`evolve.scaffold_search.fitness.AXIS_TIERS`) — a phantom-dim "hallucination" (the audit probes a removed dimension, the held-out ruler pins at the floor, the gate rejects every cycle for a measurement reason = invalid experiment). When a dim is dropped (e.g. PR-DROP-ANALYTICS-DIMS), every pool referencing it goes stale. Validate at **assemble time** (`scripts/assemble_seed_pool.py` → `validate_pool_target_dims`), not only at campaign runtime. | Phantom-dim drift. *Incident: held-out `gen-2605-*-redundant_tool_invocation` stale after the dim was removed; the campaign HALTed but the stale pool had already shipped — fail at assemble so it never enters the pipeline (2026-06-11). Guard: `tests/scripts/test_assemble_stale_dim_guard.py`* |
 | | No conflating "latest" and "promoted" SoTs — readers must document which they assume; persist both if the loop needs both | SoT clarity. *Incident: PR-G2 #1346 (2026-05-20) — downstream read stale evidence forever* |
 | | No dual SoT (disk + fallback literal) without shared anchor + drift invariant test | Drift prevention. *Incident: PR-MINIMAL-2 #1398 (2026-05-21) — `program.md` ↔ `_FALLBACK_SYSTEM_PROMPT` divergence* |
-| | No external-SDK / 3rd-party-backend capability assumption (e.g. ``supports_X=True``, hosted tool acceptance, model availability) hardcoded as ``True`` without `ctx7 library` + `ctx7 docs` verification first; if ctx7 is ambiguous, mark the assumption ``unverified — live test required`` in the docstring and surface the live-test as an explicit pending verification | Doc-before-behaviour. *Incident: PR-NO-FALLBACK #1839 (2026-05-28) — `codex_oauth.supports_web_search` flipped False → True based on SDK ``ToolParam`` Union alone; Codex backend's actual acceptance of ``{"type": "web_search"}`` is undocumented in ctx7 / Codex CLI repo, so the assumption needed a live-test gate rather than a behavioural test* |
+| | No unsupported external-SDK or backend capability claim. Use official docs/source through any available tool; ambiguous backend acceptance stays disabled or guarded pending an authorized live test | Doc-before-behaviour. *Incident: PR-NO-FALLBACK #1839 (2026-05-28) — `codex_oauth.supports_web_search` flipped False → True based on SDK ``ToolParam`` Union alone; Codex backend's actual acceptance of ``{"type": "web_search"}`` is undocumented in ctx7 / Codex CLI repo, so the assumption needed a live-test gate rather than a behavioural test* |
 | | No deep-linking into a vendored SPA viewer (Inspect View / petri-bundle / seed-generation bundle) by *assuming* its URL/route scheme — verify the route against the bundle's actual JS (`createHashRouter`, `navigate(...)` calls) before generating links. Inspect View exposes only `#/logs/<encodeURIComponent(eval_filename)>`; there is **no** `/tasks/<id>` route. Key deep-links on the `logs/listing.json` filename, never the task_id. | Artifact-before-behaviour. *Incident: PR-HUB-AUDIT-DEEPLINK (2026-05-30) — `#/tasks/<task_id>` (plus a `.eval`-header-scan apparatus built only to extract the 22-char task_id) targeted a route that does not exist, so every audit/seedgen deep-link silently fell back to the run list. Guard: `tests/test_self_improving_hub_e2e.py::test_audit_deeplinks_use_logs_route_and_resolve`* |
 | **Docs** | No omitting CHANGELOG from code commits | Traceability |
-| | No leaving `[Unreleased]` on main | Release discipline |
+| | Keep ordinary changes under `[Unreleased]`; promote entries only for an authorized release and retain a fresh empty heading | Release discipline |
 | | No version mismatch across 5 locations | Single source of truth |
 | | No non-English content in files injected into LLM context (`GEODE.md`, memory, prompts) — the model consumes them at runtime | Prompt clarity (moved from GEODE.md Conventions, PR-GEODE-SOUL) |
 | | No `You are ...` / `Act as ...` identity assertion in newly edited model-facing prompt text. Use `.claude/skills/prompt-writing/` and prefer metadata/behavioral clauses (`Agent:`, `Runtime:`, `Mode:`, `Scope:`). | Fable-style prompt discipline; prevents generic roleplay drift and fast-chat identity regressions |
@@ -124,20 +116,20 @@ Rationale cites the originating incident when one exists. The `karpathy-patterns
 | | No `_helpers.py` / `_utils.py` / `_misc.py` filenames once a caller appears — rename to the actual responsibility (the catch-all suffix hides intent) | autoresearch / openclaw avoid; PR-CLEANUP-1 absorbed `_announce.py` + `_decomposition.py` for similar reason |
 | **Compat** | No re-export shim / backward-compat module past its 1-release grace — delete it and migrate callers in the same PR | *Incidents: `core/llm/client.py` removed PR-CLEANUP-4, `core/agent/loop/loop.py` removed PR-CLEANUP-1* |
 | **Registry** | No two registries for the same domain (skill / tool / adapter / plugin) — one schema, one loader, one call surface | *Incident: `core/llm/skill_registry.py` ↔ `core/skills/skills.py` parsing the same `~/.geode/skills/*.md` twice* |
-| **PR** | No PR that violates the [§6 template](#6-pr--merge) (HEREDOC body with Summary/Why/Changes/Verification) or merges without CI 5/5 green | Format + traceability + Ratchet (P4) |
+| **PR** | Use the [PR template](.github/PULL_REQUEST_TEMPLATE.md); never merge without confirming required checks on the current PR head | Format + traceability + Ratchet (P4) |
 
 ### CAN — Permitted Freedoms
 
-Anything not in CANNOT is freely permitted. Specifically:
+Within the user's authorized task scope, choose the simplest useful approach:
 
 | Freedom | Description |
 |---------|-------------|
 | Simple bug/doc fixes | Skip Plan, implement directly in worktree |
 | Discovering improvements not in plan | Handle in next iteration after completing current work |
-| Selective test execution | Run only tests relevant to changes first, full suite at the end |
+| Selective test execution | Choose checks by the affected behavior; broaden or repeat only for new changes, failures, or unresolved concerns |
 | Commit message language | Korean/English freely (maintain consistency only) |
-| Tool selection | Freely choose faster tool if results are equivalent. For external library/SDK API questions, ground via `ctx7 library <name>` → `ctx7 docs <id>` before quoting (avoid recalled-from-training hallucination). |
-| Cleanup / refactor PRs may bundle aggressively | The Socratic Q4 "minimum change" guard does **not** apply when the PR's purpose *is* cleanup — find every fold, prune, and rename in scope and ship them together. (cf. [[feedback-cleanup-no-minimal-change]]) |
+| Tool selection | Use any available tool that retrieves the required primary evidence; a particular documentation connector is not a prerequisite. |
+| Scoped cleanup | Remove proven duplication and obsolete guidance; preserve historical evidence and unrelated behavior. Cleanup does not authorize speculative renames or new abstractions. |
 
 ### Wiring Verification (Anti-Disconnection)
 
@@ -159,153 +151,25 @@ Anything not in CANNOT is freely permitted. Specifically:
 
 | Item | Rule |
 |------|------|
-| **Implementation completeness** | No marking plan items complete when partially implemented, stubbed (`pass` only), or shelled out as re-exports while code remains in the original. An independent zero-context agent cross-checks plan + diff and FAILs on any omission. See `verification-team` + `anti-deception-checklist` skills for the operational checklist. |
+| **Implementation completeness** | Do not mark partial implementations, stubs (`pass` only), or re-export shells as complete. Cross-check the plan against the diff; use independent review under the [verification gates](.agents/skills/geode-workflow/references/verification-gates.md). |
 | **CHANGELOG/PR-body parity** | Every verb/adjective in the PR title + CHANGELOG ("git-tracked", "X-driven", "automatic", "committed") must be grep-provable in code. Run `git check-ignore`, `grep -rn "<source-doc>"`, and "is there a caller?" before push. *Incident: PR-G5b #1350 (2026-05-20) — both "git-tracked audit log" and "program.md-driven runner" were un-backed; fixed in `runner.py:_load_program_md` and pinned by `test_load_program_md_actually_reads_disk_file`.* |
 
-### Workflow Steps
+### Workflow and verification
 
-```
-0. Board + Worktree → 1. GAP Audit → 2. Plan + Socratic Gate → 3. Implement+Test → 4. Verify (Implementation GAP Audit) → 5. Docs-Sync → 6. PR → 7. Rebuild → 8. Board
-```
+Follow [docs/workflow.md](docs/workflow.md) for scope, planning, delegation,
+and completion. Load only the relevant detail:
 
-#### 0. Board + Worktree Alloc
+| Need | Authority |
+|---|---|
+| Local checks and independent review | [Verification gates](.agents/skills/geode-workflow/references/verification-gates.md) |
+| Provider or backend claims | [Provider grounding](.agents/skills/geode-workflow/references/provider-grounding.md) |
+| Branches, CI, PRs, and integration | [GitFlow](.agents/skills/geode-gitflow/SKILL.md) |
+| Changelog and authorized release preparation | [Changelog convention](.agents/skills/geode-changelog/SKILL.md) |
 
-Record on Progress Board, then allocate the worktree. Commands: `geode-gitflow` skill § "Worktree Allocation". On completion, run the squash-aware `scripts/check_repo_hygiene.py free-merged-worktree` command from outside the target checkout; the `geode-gitflow` skill § "Post-Merge Cleanup" owns the exact invocation.
-
-#### 1. GAP Audit
-
-> Before implementing, verify "is this actually needed?" through code inspection. Never rebuild what already exists.
-
-**Process**:
-1. List TO-BE items from plan documents or issues
-2. For each item, use `grep`/`Explore` to **verify whether it already exists in code**
-3. Classify into 3 categories:
-
-| Classification | Criteria | Action |
-|----------------|----------|--------|
-| **Fully Implemented** | Exists in code + tests pass | Remove from plan, move to `_done/` |
-| **Partially Implemented** | Code exists but integration/tests incomplete | Implement remaining parts only |
-| **Not Implemented** | Does not exist in code | Implementation target |
-
-#### 2. Plan + Socratic Gate
-
-> Simple bug/doc fixes may skip this. All other implementation requires the Socratic Gate.
-
-**Socratic 5 Questions — for each plan item:**
-
-| # | Question | On Failure |
-|---|----------|------------|
-| Q1 | **Does it already exist in code?** (`grep`/`Explore` verification) | → Remove |
-| Q2 | **What breaks if we don't do this?** (actual failure scenario) | No answer → Remove |
-| Q3 | **How do we measure the effect?** (tests, metrics, dry-run) | Cannot measure → Defer |
-| Q4 | **What is the simplest implementation?** (P10 Simplicity Selection) | Adopt minimum changes only |
-| Q5 | **Is this the same pattern across 3+ frontier systems?** (Claude Code, Codex CLI, OpenClaw, autoresearch) | Only 1 → Re-verify necessity |
-
-#### 3. Implement → Unit Verify (iterate)
-
-Code changes → re-run the [Quality Gates](#quality-gates) on each iteration. Fix on failure before continuing.
-
-#### 4. Verify (Implementation GAP Audit)
-
-> Confirm the implementation is complete, correct, and free of deception.
-
-**4a. Completeness — Plan vs Diff cross-check**
-
-| Check | FAIL condition |
-|-------|---------------|
-| Omission | Plan item has no corresponding code change |
-| Stub disguise | Function exists but does nothing (`pass`/`return None`) |
-| Partial implementation | Only 1 of 3 sub-items done, marked complete |
-| Original residue | Code exists in both old and new location |
-
-**4b. Correctness — Quality gates + E2E**
-
-All 4 [Quality Gates](#quality-gates) must pass (lint / type / test / CLI smoke) plus any E2E relevant to the change.
-
-**4c. Cleanliness — Dead code & regression audit**
-
-Run the `anti-deception-checklist` skill — it covers test deletion/disabling, lint bypass (`# noqa`, `# type: ignore`), coverage regression, secret exposure, and dependency downgrade. Any FAIL verdict blocks merge.
-
-**4d. External-contract attestation — doc-before-behaviour**
-
-When the PR introduces or flips an assumption about an external SDK or 3rd-party backend (capability flag, hosted tool acceptance, endpoint behaviour, model availability), run `ctx7 library <name>` → `ctx7 docs <id> "<question>"` **before** any agent-behaviour live test. Three outcomes:
-
-| ctx7 result | Action |
-|-------------|--------|
-| Confirms the assumption | Cite the ctx7 source (file path on GitHub) in the docstring next to the assumption (`# ref: openai/types/responses/tool_param.py:ToolParam`). |
-| Refutes the assumption | Revert the change. Open a separate decision branch about why the assumption was tempting (often a misread doc, fix the misread). |
-| **Ambiguous** (SDK contract allows, backend acceptance undocumented) | Mark the assumption ``unverified — live test required`` in the docstring + open a follow-up task. Do not let the behaviour land in production behind a True-flag without the live-test gate. Honest error message on the dispatch path is the safety net but does not substitute for the gate. |
-
-*Incident: PR-NO-FALLBACK #1839 (2026-05-28) flipped `codex_oauth.supports_web_search` to `True` based on the SDK `ToolParam` Union alone; ctx7 of `/openai/codex` showed Responses API accepts a `tools` array but does NOT document which `type` values the Codex backend accepts. The assumption should have shipped as `unverified` until a live test confirmed.*
-
-**4e. Verification team (large-scale changes only)**
-
-See `verification-team` + `anti-deception-checklist` skills.
-
-#### 5. Docs-Sync
-
-See `geode-changelog` skill.
-
-| Sync Target | Verification |
-|-------------|--------------|
-| Version across 5 locations | CHANGELOG, CLAUDE.md, README.md, README.ko.md, pyproject.toml |
-| Metrics | Tests, Modules, Commands — measured values |
-| 사이트 버전 SoT | `site/public/llms.txt` + `llms-full.txt`의 `Version vX` 헤더 **및** `site/src/data/geode/sot.ts`의 `version` == pyproject. 버전 범프 시 `node site/scripts/sync-stats.mjs` (llms.txt + sot.ts + changelog.ts 재생성) + `uv run python scripts/check_llms_version.py --fix` (llms-full 헤더). 드리프트는 ci.yml `check_llms_version.py` ratchet가 3파일 전부 차단(committed 스냅샷이 12버전 stale했던 사건). llms-full **본문·크기 마커도 로컬 재생성 대상** — `site/`에서 `npm run build && npm run export-md` 후 커밋해야 pages.yml의 public-doc 생성기 검증 게이트를 통과(v1.0.2 트레인: CHANGELOG 성장만으로 changelog 페이지 크기 마커 1460→1462 KB 드리프트, CI 1회 반려 실측). CHANGELOG/[Unreleased] 편집이나 core LOC 변동 시 `scripts/architecture_baseline.py --update`(baseline JSON+AGENTS.md+roadmap §2.1)도 같은 커밋에. |
-
-**Versioning**: post-1.0 default = **PATCH for every routine landing** (features included — the 0.99.x patch-train continues as 1.0.x). MINOR/MAJOR are operator-declared milestones only; before proposing one, grep `removed in v` for pledged numbers and get explicit operator approval. Docs only = none. Full policy + mis-stamp correction procedure: `geode-changelog` skill.
-
-#### 6. PR & Merge
-
-See `geode-gitflow` skill. **Flow**: `feature → develop` **squash-merged** (one commit per change — collapses Codex-round fix commits; no per-feature merge commit on main), then `develop → main` pass-through `--merge`. HEREDOC PR. CI 5/5 required.
-
-> **Before EVERY `develop → main` merge, fetch and compare `origin/main` with
-> `origin/develop`.** If main has unique tracking work and a direct sync is
-> conflict-free, open a CI-gated PR from the current `main` head to `develop`.
-> If conflict resolution is required, create `sync/main-into-develop-<task>`
-> from the current `origin/develop` and make an explicit merge commit from the
-> current `origin/main`. That sync head must be the exact two-parent merge of
-> those remote tips (develop first, main second), and
-> `scripts/resolve_architecture_roadmap_trust.py --require-trust main` must pass
-> immediately before merge. This deliberate pre-sync covers both the kanban and
-> main-maintained architecture closure records. It replaces the deleted
-> `auto-backmerge.yml`, whose per-push PRs accumulated against divergent
-> histories.
-
-> **Architecture closure exception**: only a tracking-only roadmap PR that
-> records package-atomic `DONE` after release starts from `origin/main` and
-> targets `main`. It carries no implementation code and is immediately
-> followed by a CI-gated `main → develop` sync PR. All implementation and
-> ordinary roadmap ledger work still starts from `origin/develop`.
-
-> **Concurrent-session drift is expected, not an anomaly.** While your feature PR is open, another session (Tau2 promotion, a scheduled routine) may merge to develop — your PR then goes `CONFLICTING`/`DIRTY` (usually a CHANGELOG top-entry collision) and/or your version number gets taken. Recover per `geode-gitflow` skill § "Concurrent-session drift & CI-trigger recovery": merge `origin/develop`, **fold** the concurrent `[Unreleased]`/entry into your release version (never leave `[Unreleased]`), re-verify the version number is still free, then **regenerate the derived version SoT** (`sync-stats.mjs` + `check_llms_version.py --fix`) or the CI ratchet blocks on a stale `changelog.ts`. Separately, a freshly-opened PR that attaches **0 CI checks** (webhook miss — verify with `gh api commits/<sha>/check-runs .total_count`, not `gh pr checks` alone) is re-triggered by `gh pr close <N> && gh pr reopen <N>`; don't leave a monitor spinning on the repeating "no checks" error.
-
-**PR Body Template (MANDATORY):** see `geode-gitflow` skill § "PR Body Template". Minimum required sections: **Summary**, **Why**, **Changes**, **Verification**. Cascading updates (new tool → `definitions.json` + handlers + E2E; LLM adapter → `core/llm/router/` + `core/llm/providers/` + E2E) are listed there too.
-
-**Post-Merge Cleanup is MANDATORY after every feature merge** — run `uv run python scripts/check_repo_hygiene.py free-merged-worktree --pr <N> --worktree <path>` from outside the target checkout. The command fails closed unless the PR is merged, its final head tree equals the merge tree, the local branch is contained in that head, the remote has not advanced, the checkout is clean, and `.owner` matches the worktree. It then removes remote branch → worktree → squash-only local branch. See `geode-gitflow` skill § "Post-Merge Cleanup".
-
-#### 7. Rebuild & Restart
-
-After merging to main, rebuild CLI and serve. Commands: `geode-gitflow` skill § "Rebuild & Restart". Two traps live there: stop daemons with `pgrep -f` (never `ps aux | grep`), and install with the `[audit]` extra.
-
-#### 8. Progress Board
-
-Update project tracking from main. Backlog → In Progress → Done.
-
-### Quality Gates
-
-| Gate | Command | Criteria |
-|------|---------|----------|
-| Lint | `uv run ruff check core/ evals/ evolve/ tests/ scripts/` | 0 errors — `scripts/` 포함 (CI와 동일 범위) |
-| Format | `uv run ruff format --check core/ evals/ evolve/ tests/ scripts/` | 0 reformats |
-| Type | `uv run mypy core/ evals/ evolve/` | 0 errors |
-| Imports | `uv run lint-imports` | contracts kept |
-| Test | `uv run pytest tests/ -m "not live"` | 9200+ pass |
-| CLI smoke | `uv run geode version` | version prints |
-
-> 게이트 명령을 파이프로 감싸지 말 것 — `ruff check … \| tail -1` 은 zsh 기본
-> pipefail off라 ruff의 exit 1을 삼켜 `&&` 체인이 실패를 통과시킨다. heredoc
-> 수정 스크립트는 실패가 후속 명령을 막도록 같은 `&&` 체인에 묶고, push 직전
-> 게이트를 풀 출력으로 한 번 더 단언한다 (PR-CLEANUP-D2 no-op 커밋 사건).
+Post-merge cleanup uses `scripts/check_repo_hygiene.py free-merged-worktree`
+from outside the owned checkout; the GitFlow skill owns its exact procedure.
+A merge does not authorize a release, global installation, or service restart.
+Tracking updates follow their main-owned workflow only when in scope.
 
 ## Custom Skills (Scaffold)
 

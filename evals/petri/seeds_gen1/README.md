@@ -1,41 +1,22 @@
-# seeds_gen1 — first co-scientist generated batch
+# seeds_gen1 — historical generation placeholder
 
-This directory will hold the first `gen1` batch of Petri seeds produced
-by the seed-generation orchestrator (`evals/seed_generation/`). It is the
-output of the S12 generation run (sprint plan
-`docs/plans/2026-05-18-seed-generation-sprint-plan.md`).
+This directory records the intended S12 `gen1` output location from
+`docs/plans/2026-05-18-seed-generation-sprint-plan.md`. It is not the current
+runtime output directory or an execution-status ledger.
 
-## Current status
+## Current runtime path
 
-**EMPTY — awaiting first run.** S12 ships the scaffolding (this
-directory + the run-book at
-`docs/audits/seed-generation-runs/2026-05-18/`) but the actual
-generation is deferred behind one prerequisite + one external
-constraint:
+- `evals/seed_generation/cli.py` builds the run under
+  `core.paths.STATE_SEED_GENERATION_DIR / run_id` and prints the resolved
+  directory, state file, and survivor output.
+- `_registry_builder.populate_registry()` installs the picker-resolved agent
+  bindings before `Pipeline.arun()`. The old empty-registry prerequisite has
+  been resolved; this placeholder is not evidence that generation is blocked.
+- Use `geode-eval audit-seeds generate --help` for the current operator interface.
+  Live generation requires an approved run contract, resolved model/source
+  bindings, and budget. No current account-quota claim is maintained here.
 
-1. **PipelineRegistry agent factories** — `evals/seed_generation/cli.py`
-   `_dispatch_pipeline()` currently builds an empty
-   `PipelineRegistry`, so `Pipeline.run()` raises a `RuntimeError("no
-   registered agent")` on the first phase. The 7 concrete agents
-   (Generator, Critic, Proximity, Pilot, Ranker, Evolver,
-   MetaReviewer — all S2-S8) need to be instantiated with their
-   resolved `RoleBinding` from the picker and registered before
-   `geode audit-seeds generate` can produce real seeds.
-
-2. **Credit availability** — the user has flagged Anthropic credits
-   as currently constrained (Session 60-62 baseline retry notes).
-   When credits become available the operator can execute the
-   run-book below; until then the gate flow + cost preview + slash
-   command are all exercisable end-to-end with the empty registry to
-   verify the operator experience.
-
-## Once the prereqs land
-
-See `docs/audits/seed-generation-runs/2026-05-18/run-book.md` for the
-step-by-step procedure. Expected output: 15 candidate `.md` files
-named `<gen_tag>-<uuid>.md`, frontmatter declaring `target_dim`,
-selected via the Ranker top-K (`survivors_k=5`) AND optionally the
-Evolution agent's section-rewrite variants. After human ratification,
-the surviving seeds are promoted into `seeds_safe<N>/` and the
-`state/autoresearch/baseline.json` is refreshed from the audit's
-dim_means/dim_stderr.
+Read the emitted run artifacts to establish what actually executed. Historical
+run plans and candidate counts do not authorize a new run or prove promotion.
+Publication follows `docs/eval/external-artifact-repository.md`; do not recreate
+retired output paths or rewrite frozen campaign evidence here.

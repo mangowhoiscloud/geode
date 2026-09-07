@@ -239,7 +239,7 @@ If any audit block field is missing, render `<span class="muted">schema v1 (no a
 
 ### 4.4 Generation timeline (`<table class="records">`)
 
-Source: `evolve/scaffold_search/state/baseline_archive.jsonl` ([`core/paths.py:339`](../../core/paths.py) — `BASELINE_ARCHIVE_PATH`). Each row in that JSONL is one promoted baseline snapshot (append-only, see [`evolve/scaffold_search/loop/runner.py:1621-1645`](../../evolve/scaffold_search/loop/runner.py)).
+Source: `evolve/scaffold_search/state/baseline_archive.jsonl` ([`core/paths.py:339`](../../core/paths.py) — `BASELINE_ARCHIVE_PATH`). Each row in that JSONL is one promoted baseline snapshot (append-only, see [`evolve/scaffold_search/loop/runner.py:1621-1645`](../../evolve/scaffold_search/loop/mutate/runner.py)).
 
 6 columns:
 
@@ -543,7 +543,7 @@ Values are computed at build time by scanning the JSONL. This avoids:
 2. Render-N-pre-filtered-tables explosion
 3. URL-param-based static partition pages (high maintenance, low value)
 
-The single table is sorted **newest first by `ts`** (the float timestamp field on both ApplyRecord — [`runner.py:91`](../../evolve/scaffold_search/loop/runner.py) — and AttributionRecord — [`attribution.py:61`](../../evolve/scaffold_search/loop/attribution.py)).
+The single table is sorted **newest first by `ts`** (the float timestamp field on both ApplyRecord — [`runner.py:91`](../../evolve/scaffold_search/loop/mutate/runner.py) — and AttributionRecord — [`attribution.py:61`](../../evolve/scaffold_search/loop/observe/attribution.py)).
 
 ### 6.3 Mutations table columns (9 cols)
 
@@ -1551,8 +1551,8 @@ Every constant cited in this spec, with the file:line source:
 | `N1_FITNESS_MARGIN_FLOOR` | `0.20` | [`evolve/scaffold_search/train.py:1881`](../../evolve/scaffold_search/train.py) |
 | `fitness_margin_floor` (default) | `0.05` | [`evolve/scaffold_search/train.py:1914`](../../evolve/scaffold_search/train.py) |
 | `ANALYTICS_WEIGHT_MULTIPLIER` | `0.5` | [`evolve/scaffold_search/train.py:347`](../../evolve/scaffold_search/train.py) |
-| `ApplyRecord` (W4) | pydantic schema | [`evolve/scaffold_search/loop/runner.py:80-135`](../../evolve/scaffold_search/loop/runner.py) |
-| `AttributionRecord` (W4) | pydantic schema | [`evolve/scaffold_search/loop/attribution.py:51-97`](../../evolve/scaffold_search/loop/attribution.py) |
+| `ApplyRecord` (W4) | pydantic schema | [`evolve/scaffold_search/loop/runner.py:80-135`](../../evolve/scaffold_search/loop/mutate/runner.py) |
+| `AttributionRecord` (W4) | pydantic schema | [`evolve/scaffold_search/loop/attribution.py:51-97`](../../evolve/scaffold_search/loop/observe/attribution.py) |
 | Policy file count | 14 (13 .json + 1 .jsonl) | [`core/paths.py:246-318`](../../core/paths.py) |
 
 ---

@@ -1,6 +1,6 @@
 ---
 name: smoke-green-loop
-description: Repeat diagnose, fix, verify, merge, rebuild, and smoke for a GEODE workflow until its declared end-to-end acceptance is green. Use when a smoke run fails, produces empty artifacts, or needs CI-gated iterative repair.
+description: Diagnose and repair a failed GEODE smoke workflow within the requested acceptance criteria. Preserve failed evidence, verify the shared root cause, and apply merge, rebuild, or live rerun stages only when authorized.
 ---
 
 # Smoke-Green Loop
@@ -15,13 +15,16 @@ each iteration:
    failure from quota, credentials, remote service, or harness contamination.
 3. Fix the shared root, add one regression check, and run targeted static and
    test gates. Update `CHANGELOG.md` for functional changes.
-4. Merge through a feature PR to `develop` only after required CI is green.
-   Rebuild from the merged revision before rerunning the smoke.
+4. If integration is authorized, follow the repository GitFlow and required
+   CI. Rebuild or restart only when in scope; a local fix can be verified in
+   its owned worktree without first merging or changing a global installation.
 5. Archive the prior run, obtain explicit approval for any live or paid call,
    and rerun with the same frozen inputs unless the hypothesis explicitly
    changes them.
 
-Stop only when the declared completion event exists, every required subtask is
-successful, requested artifacts are non-empty, and no failure event remains.
-Report every iteration, including invalid attempts and costs; do not select
-only the first green run.
+Declare success only when the specified acceptance checks pass and requested
+artifacts contain the expected evidence. Preserve historical failure events;
+they do not need to disappear for a later attempt to succeed. Stop and report
+when remaining work needs new authority, user input, or an external-state
+change. Report attempted iterations, invalid attempts, costs, and unresolved
+limits; do not select only the first green run.

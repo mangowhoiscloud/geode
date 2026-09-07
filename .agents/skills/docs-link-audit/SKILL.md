@@ -30,13 +30,6 @@ $ python3 scripts/check_docs_links.py --quiet      # broken 만 출력 (CI 적�
 | **anchor #section** | `href="#tier-3"` | 같은 page.tsx 의 `id="..."` 와 대조 |
 | **external https://** | `<a href="https://github.com/...">` | `--http` 옵트인 시 HEAD/GET, concurrency 8, 8s timeout, 200/3xx OK |
 
-### Link 패턴 추출 — 2 개 정규식
-
-| Pattern | 매칭 예시 |
-|---|---|
-| `\b(?:href\|src\|to)\s*=\s*\{?\s*['"`​]([^'"`​{}\s]+)['"`​]` | `href="..."`, `href={"..."}`, `href={`...`}`, `src="/img.svg"`, `to="/portfolio"` |
-| `\]\(([^)\s]+)\)` | markdown `[text](url)` — `MarkdownLite` 가 렌더하는 CHANGELOG entry 등 |
-
 ### 특이 처리
 
 - **`/geode/` deploy basepath 정규화** — `/geode/docs/foo` 도 source-side `/docs/foo` 와 매칭
@@ -77,28 +70,11 @@ $ python3 scripts/check_docs_links.py --quiet      # broken 만 출력 (CI 적�
 | **Slug 오타** | 페이지 처음 작성 시 디렉터리 명 오타 | typo 수정 |
 | **External URL 만료** | 외부 doc 의 link 가 404 (e.g. dev portal 페이지 이전) | `--http` 가 잡음. 새 URL 또는 archive.org 로 교체 |
 
-## CI wiring (선택, 별 PR)
+## CI wiring
 
-A. **Pages build pre-step** — `pages.yml` 의 build job 최상단에 추가:
-
-```yaml
-- name: Verify docs links
-  run: python3 scripts/check_docs_links.py
-```
-
-→ broken 들어오면 deploy 차단.
-
-B. **Lint job** — `ci.yml` 에 별 job, dispatch 시 `--http` 포함:
-
-```yaml
-docs-links:
-  if: github.event_name == 'workflow_dispatch'
-  steps:
-    - run: pip install requests
-    - run: python3 scripts/check_docs_links.py --http
-```
-
-→ 매일/주간 schedule cron 으로 외부 link rot 감지.
+`.github/workflows/pages.yml` already runs the static link check. Inspect the
+current workflow before proposing another job. External HTTP probes remain
+opt-in and do not authorize a recurring monitor or another workflow.
 
 ## 실제 case study
 
@@ -122,10 +98,10 @@ ad-hoc grep 으로 잡았지만 본 스크립트가 다음번부터는 1 명령�
 | **Dynamic `href={url}`** | 변수 보간된 link 는 정적 분석 불가 → `unresolved` (broken 아님) |
 | **External URL rate-limit / login wall** | `--http` 가 401/403 받으면 broken 으로 분류 — 일부 사이트 (Anthropic dev portal 등) 가 anti-bot 으로 403 가능 |
 | **Anchor 검사 단위** | 같은 page.tsx 내 anchor 만 검증. 크로스 페이지 anchor `/docs/foo#bar` 는 `/docs/foo` 만 OK 면 통과 (anchor 자체는 검증 안 됨) |
-| **MarkdownLite regex 패턴 문자열** | `markdown-lite.tsx:14,133` 의 regex 안의 `url` 문자열이 markdown link `]( )` 패턴 매칭 — 2 unresolved 항상 발생 (false positive, 무시) |
+| **정규식·코드 예시** | 리터럴 패턴이 링크 후보로 잡힐 수 있으므로 원문을 확인한다. 고정 파일·행 번호나 과거 건수만으로 무시하지 않는다. |
 
 ## 관련 skill
 
-- `geode-changelog` — CHANGELOG entry 작성 (모든 doc fix PR 에 필수)
-- `geode-gitflow` — feature → develop → main cascade (broken link fix 도 동일)
+- `geode-changelog` — 기능 변경을 함께 포함할 때 기록; 문서 전용 수정은 생략
+- `geode-gitflow` — 요청 범위에 포함된 PR·병합 단계에 적용
 - `frontier-harness-research` — peer comparison 표가 외부 URL 다수 → `--http` audit 가치 큼

@@ -34,13 +34,25 @@ imperceptible (the outro x-axis label drift was fixed this way).
 
 ## Render commands
 
-```bash
-# EN
-uv run manim -qh -o <Name>-EN scripts/visualizations/<file>.py <SceneClass>
+Render only the requested languages. For an EN/KO pair, use an isolated output
+directory so concurrent work and before/after evidence are not overwritten:
 
-# KO
-GEODE_HERO_LANG=ko uv run manim -qh -o <Name>-KO scripts/visualizations/<file>.py <SceneClass>
+```bash
+(
+    set -e
+    render_dir=$(mktemp -d "${TMPDIR:-/tmp}/geode-render.XXXXXX")
+    printf 'Render output: %s\n' "$render_dir"
+    uv run manim -qh --media_dir "$render_dir" --disable_caching \
+        -o <Name>-EN scripts/visualizations/<file>.py <SceneClass>
+    GEODE_HERO_LANG=ko uv run manim -qh --media_dir "$render_dir" --disable_caching \
+        -o <Name>-KO scripts/visualizations/<file>.py <SceneClass>
+)
 ```
+
+These are documented [Manim CLI options](https://docs.manim.community/en/stable/guides/configuration.html).
+Confirm support in the installed version's help if the environment differs.
+`--disable_caching` avoids cache reuse but still writes cache files inside the
+isolated output directory; it is not a cleanup command.
 
 `-qh` is **1080p60 high quality**. Other useful flags:
 
@@ -51,32 +63,25 @@ GEODE_HERO_LANG=ko uv run manim -qh -o <Name>-KO scripts/visualizations/<file>.p
 | `-qh` | 1080p60 | Default for finished scenes |
 | `-qk` | 4K60 | Only for hero / release |
 
-Output path: `media/videos/<file>/1080p60/<Name>-{EN,KO}.mp4`.
+Default layout under the printed output directory:
+`videos/<file>/1080p60/<Name>-{EN,KO}.mp4`. Inspect the actual render output and
+record its path; a project config can customize directories.
 
 ## Sync to Downloads
 
-```bash
-cp media/videos/<file>/1080p60/<Name>-{EN,KO}.mp4 ~/Downloads/
-```
-
-The user opens `~/Downloads/` in Finder to review. Keep filenames in
-`<SceneName>-{EN,KO}.mp4` shape — the audit workflow (extract frames + diff)
-relies on consistent naming.
+Copy verified artifacts to `~/Downloads/` only when requested. Resolve exact
+source and destination files first and do not overwrite an unrelated existing
+artifact. Keep paired filenames in `<SceneName>-{EN,KO}.mp4` shape and report
+which render revision each contains.
 
 ## Parallel KO render gotcha
 
 When iterating on EN first (typical), remember KO is one render behind
-unless explicitly re-rendered. After every code change that affects layout
-or text:
-
-```bash
-rm -rf media/videos/<file>/
-uv run manim -qh -o <Name>-EN scripts/visualizations/<file>.py <SceneClass>
-GEODE_HERO_LANG=ko uv run manim -qh -o <Name>-KO scripts/visualizations/<file>.py <SceneClass>
-```
-
-The full re-render is necessary because Manim's per-bit partial movie cache
-sometimes keeps stale fragments when constants like `font_size` change.
+unless explicitly re-rendered. A layout or text change affecting both languages
+requires both outputs to be verified from that revision. Use the isolated,
+cache-disabled procedure above; never delete the shared `media/videos/<file>/`
+tree. Unchanged source, fonts, renderer configuration, and environment may reuse
+the recorded passing evidence.
 
 ## KO-specific layout drift
 

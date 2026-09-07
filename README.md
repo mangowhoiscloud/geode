@@ -43,7 +43,7 @@ sustained self-improvement.
 > experiments, not stable production features. Their protocols, promotion
 > gates, schemas, and reported results may change as validation continues.
 
-> **Have a ChatGPT Plus, Pro, Business, Edu, or Enterprise plan?** Route GEODE through that subscription. No API key. [Subscription setup ↓](#path-a--chatgpt-subscription-the-recommended-path-for-openai-users)
+> **Have a ChatGPT Plus, Pro, Business, Edu, or Enterprise plan?** Route GEODE through that subscription. No API key. [Subscription setup ↓](#path-a-chatgpt-subscription-the-recommended-path-for-openai-users)
 >
 > **Using Anthropic?** GEODE's built-in Anthropic route requires
 > `ANTHROPIC_API_KEY`. The former Claude CLI subscription integration is retired;
@@ -369,7 +369,7 @@ Once GEODE works in your terminal, you can let it answer on the messaging channe
 geode serve                          # starts the always-on Gateway daemon
 ```
 
-Put Slack's `SLACK_BOT_TOKEN` (`xoxb-`) and Socket Mode `SLACK_APP_TOKEN` (`xapp-`) in `~/.geode/.env`; put channel bindings, receiver choices, and project-specific Gateway behavior in `.geode/config.toml`. See [docs/setup.md → Gateway](docs/setup.md#gateway) for the full setup. After that, mentioning the bot in a bound channel routes the pushed event into the same agent loop you use locally; later replies in that thread continue the same checkpoint without another mention.
+Put Slack's `SLACK_BOT_TOKEN` (`xoxb-`) and Socket Mode `SLACK_APP_TOKEN` (`xapp-`) in `~/.geode/.env`; put channel bindings, receiver choices, and project-specific Gateway behavior in `.geode/config.toml`. See [Slack Gateway setup](docs/setup.md#slack-gateway) for the full setup. After that, mentioning the bot in a bound channel routes the pushed event into the same agent loop you use locally; later replies in that thread continue the same checkpoint without another mention.
 
 Remote desktop control stays disabled in Gateway sessions unless the operator
 explicitly sets `[gateway] allow_computer_use = true`; see the
@@ -460,13 +460,13 @@ For a PyPI install, run `uv tool install geode-agent`. For a source checkout, ru
 <details>
 <summary><strong>"401 Unauthorized" or "Invalid API key"</strong>, wrong key, expired key, or wrong file location.</summary>
 
-Check `cat ~/.geode/.env` and confirm the key starts with `sk-ant-` (Anthropic), `sk-proj-` (OpenAI), `sk-or-v1-` (OpenRouter), or `id.secret` (ZhipuAI GLM). Make sure there are no extra spaces or quote characters. If you used the ChatGPT subscription path (Path A), run `/login openai` again inside GEODE.
+Inspect the provider entry in `~/.geode/.env` privately in an editor; do not print or paste credentials into logs, chat, or issues. Check for accidental whitespace and verify the key's status in the provider console. If you used the ChatGPT subscription path (Path A), run `/login openai` again inside GEODE.
 </details>
 
 <details>
 <summary><strong>"Address already in use" when running `geode serve`</strong>, daemon is already running.</summary>
 
-`ps aux | grep "geode serve"` to find the PID, then `kill <PID>`. Or use `geode serve --port <other>` to pick a different port.
+Check which process owns the configured IPC socket and whether it serves another session. Reuse a healthy daemon; stop only a confirmed owned process when a restart is authorized. GEODE uses Unix-socket IPC, not a `serve --port` option. See the [daemon guide](docs/setup.md#geode-serve--unified-daemon).
 </details>
 
 <details>
@@ -666,16 +666,13 @@ Tier 3    Session         In-memory, conversation, tool results, plans
 <details>
 <summary><strong>Development workflow (Scaffold)</strong></summary>
 
-CANNOT (guardrails) before CAN (freedom). A 7-step workflow plus quality gates.
+CANNOT (guardrails) before CAN (freedom). Follow the evidence-first workflow.
 The CI gates (pytest with coverage, mypy, Ruff, and dependency/import checks)
 must pass before any merge. Test deletion requires a surviving behavior
 invariant; a raw test count is not a quality signal.
 
-| Gate | Command | Target |
-|------|---------|--------|
-| Lint | `uv run ruff check core/ tests/` | 0 errors |
-| Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | all pass |
+The [verification reference](.agents/skills/geode-workflow/references/verification-gates.md)
+owns current commands and check selection. Live tests require explicit approval.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/workflow.md](docs/workflow.md).
 

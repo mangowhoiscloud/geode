@@ -102,6 +102,7 @@ def test_migrate_yes_appends_to_config_when_destination_absent(
     result = runner.invoke(app, ["migrate-petri-toml", "--yes"])
     assert result.exit_code == 0, result.output
     assert "Appended 2 role(s)" in result.output
+    assert "`geode-eval audit`" in " ".join(result.output.split())
     assert target.is_file()
     content = target.read_text(encoding="utf-8")
     assert "[self_improving_loop.autoresearch.auditor]" in content

@@ -11,12 +11,6 @@ git clone https://github.com/mangowhoiscloud/geode.git
 cd geode
 uv sync
 
-# Run tests
-uv run python -m pytest tests/ -m "not live" -q
-
-# Lint and type check
-uv run ruff check core/ tests/
-uv run mypy core/
 ```
 
 ## Development Workflow
@@ -53,14 +47,10 @@ feature/<name> → develop → main
 
 ## Quality Gates
 
-All PRs must pass these checks:
-
-| Gate | Command | Criteria |
-|------|---------|----------|
-| Lint | `uv run ruff check core/ tests/` | 0 errors |
-| Format | `uv run ruff format --check core/ tests/` | 0 diffs |
-| Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run python -m pytest tests/ -m "not live"` | All pass |
+Use the [verification reference](.agents/skills/geode-workflow/references/verification-gates.md)
+for current commands and risk-scoped local checks. `scripts/preflight.sh` runs
+the broad local gate. Report results and skipped checks; required CI must pass
+on the actual PR head before merge. Live tests require explicit approval.
 
 ## Pull Request Guidelines
 
@@ -68,7 +58,7 @@ All PRs must pass these checks:
 - Write clear commit messages (conventional commits preferred)
 - Include tests for new functionality
 - Update documentation if behavior changes
-- PR body must include: **Summary**, **Why**, **Changes**, **Verification**
+- Use the [PR template](.github/PULL_REQUEST_TEMPLATE.md).
 
 ## Code Style
 
