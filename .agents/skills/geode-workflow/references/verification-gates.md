@@ -12,6 +12,39 @@ and verification environment. Repeat or broaden only after changes, failures,
 or unresolved concerns. Record the tested revision or diff and exact commands.
 Required remote CI must still pass on the actual PR head before merge.
 
+## Failure-to-rule review
+
+Use this after a failed check or when consolidating instructions. Record the
+case in the existing task receipt; keep reusable rules here rather than copying
+incident logs into every prompt or adding a new ledger.
+
+- **Manual: inspect the check's inputs and consumers.** Locate code and tests
+  that consume changed guidance before selecting targeted checks. Identify the
+  files, environment, revision, and property the check actually covers; use the
+  [hygiene procedure](#repo-hygiene-ratchet) for tracked-file scans. When merging
+  docs, preserve a usable route to supported entry points, constraints, and
+  recovery. A valid link alone does not prove that contract survived.
+- **Karpathy: preserve the acceptance criteria.** Keep failures and subsequent
+  results distinguishable, change the smallest responsible surface, and verify
+  against the same contract. A broken test is not permission to lower a gate.
+  If the test encodes obsolete prose, replace it only after identifying the
+  intended contract and checking that the replacement still detects its loss.
+- **Tao: test the assumptions.** Ask what precondition made the
+  check applicable and what counterexample would disprove the diagnosis.
+  Distinguish missing behavior or guidance from stale wording. Normalize prose
+  whitespace only when formatting is not the contract; parsed syntax, command
+  identifiers, and prompt hashes remain exact. Reuse passing evidence only
+  under the unchanged-input conditions above.
+
+These are GEODE procedures, not a new framework or mandatory reviewer personas.
+The [autoresearch program](https://github.com/karpathy/autoresearch/blob/master/program.md)
+provides the fixed-evaluation and simplicity reference; its reset and unbounded
+loop instructions do not transfer permission to GEODE. For the assumption-check
+lens, see Terence Tao's
+[discussion of hypotheses, examples, and simpler sufficient results](https://terrytao.wordpress.com/career-advice/learn-and-relearn-your-field/).
+Applying that mathematical advice to software checks is our analogy, not a
+published Tao agent algorithm.
+
 ## Targeted
 
 ```bash

@@ -29,7 +29,7 @@ Read only the reference needed for the current task:
 | Provider/model/API capability claims | `references/provider-grounding.md` |
 | Schema/log/event/state/trajectory consistency | `references/observability-contract.md` |
 | Same-task Codex–GEODE production and comparison | `references/codex-geode-paired-coding.md` |
-| Test, lint, type, prompt, and full-suite reporting gates | `references/verification-gates.md` |
+| Test, lint, type, prompt, full-suite reporting, or failure-to-rule review | `references/verification-gates.md` |
 | Branch, PR, merge, and cleanup operations | `references/gitflow.md` |
 
 For simple docs or trivial bug fixes, use the core loop and skip references

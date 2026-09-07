@@ -99,7 +99,7 @@ existing Unreleased entry; generated site data was synchronized accordingly.
 | Final router hash, behavior, workflow, skill surface, preflight | 30 passed across prompt integrity, G1 behavior, workflow scaffold, skill surface, and preflight tests. |
 | Petri role bindings, evolver contract, runtime skills | 59 passed: `tests/evals/petri/test_manifest.py`, `tests/evals/seed_generation/test_evolver.py`, skill-loader tiers, and skill-surface policy. Three edited runtime skills also loaded through the real `SkillLoader`. |
 | Test-count reconciliation | The expanded groups contain 229 unique cases after overlap removal. Including the initial batch's 11 organization-memory cases, 240 unique cases passed across this local patch; collection-only confirmed the union, not a second full-suite execution. |
-| All-Markdown links and duplicates | 576 retained files, 1,932 parsed links, zero missing local targets or unresolved heading candidates, 31 preserved snapshot duplicate groups. External HTTP reachability was not exhaustively checked. |
+| All-Markdown links and duplicates | 576 retained files, 1,935 parsed links, zero missing local targets or unresolved heading candidates, 31 preserved snapshot duplicate groups. External HTTP reachability was not exhaustively checked. |
 | Skill validation | Initial five skills valid; nine additional edited development skills valid. The existing `scandinavian-design` `compatibility` frontmatter field is rejected by Codex's narrow validator; it was preserved rather than silently removing cross-host metadata. Runtime skills use their actual loader checks. |
 | Site and generated metadata | Architecture baseline check, site-link checker (714 occurrences), Pages Markdown lint, static build/TypeScript (241 pages), and export (76 Markdown twins) passed. Package version remains 1.0.27. |
 | Visual guidance grounding | `verify_hero_layout.py --help` and `--static-check` passed (168 site/language entries). No render, font measurement, or baseline update was performed. |
@@ -160,6 +160,25 @@ Final integration checks:
   passed locally (31 cases), bringing distinct local coverage to 318 passes.
   No test was disabled, no threshold reduced, and independent review found no
   weakening. The full suite must pass on the subsequent PR head before merge.
+
+## Failure lessons in the instruction surface
+
+The user requested that observed failures inform the system prompt and scaffold.
+`GEODE.md` now tightens the existing evidence principle and adds one bounded
+failure-learning principle. The existing G1 assembly test verifies every
+directive reaches the default system prompt and remains absent with persona
+disabled or audit mode enabled; no new prompt loader or ratchet exception is
+needed. The developer workflow routes detailed failure analysis to its existing
+verification reference: inspect actual inputs/consumers, preserve the acceptance
+contract, and check the assumptions behind a diagnosis. Stage-first hygiene and
+partial-versus-full CI rules remain in their original sections, not duplicated.
+The reference links Karpathy's fixed-evaluation/simplicity approach and Terence
+Tao's hypothesis/example checks as methodological sources, not impersonation or
+a claimed published agent algorithm. Incident details stay in this receipt.
+The six affected prompt/assembly/workflow/preflight modules passed again
+(49 cases; repeated coverage, not 49 additional unique cases). The final
+Markdown scan covers 576 files and 1,935 links with no missing local target or
+unresolved anchor candidate; the 31 historical duplicate groups remain intact.
 
 Root checkout and other sessions' worktrees were preserved during editing;
 `harbor-4` remains paused. Live model calls, benchmark reruns, release/tag/package

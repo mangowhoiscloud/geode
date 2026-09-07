@@ -53,6 +53,8 @@ functional change.
   explicitly configured recovery; removed conflicting development instructions
   for repeated verification, automatic release/restart, and tool-specific review.
   Evaluation help and next-step messages now use the `geode-eval` entry point.
+  Runtime guidance now binds verification claims to inspected inputs and
+  preserves acceptance criteria and failed evidence during correction.
 - Treated PyAutoGUI's missing `DISPLAY` as unavailable desktop automation in
   headless containers, without breaking ordinary model requests or hiding
   unrelated import errors.
