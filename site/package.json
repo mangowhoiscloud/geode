@@ -11,6 +11,7 @@
     "render-diagrams": "node scripts/render-diagrams.mjs",
     "build-layer-graph": "node scripts/build-layer-graph.mjs",
     "export-md": "node scripts/export-docs-md.mjs",
+    "test:docs": "node scripts/test-docs-navigation.mjs && node scripts/test-docs-export.mjs",
     "verify-metadata": "node scripts/verify-public-metadata.mjs",
     "verify-geo": "node scripts/verify-geo-preflight.mjs"
   },

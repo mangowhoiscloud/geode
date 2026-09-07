@@ -75,6 +75,7 @@ does not claim the package or authorize expanding the implementation diff.
 | Abstraction, naming, type/class, schema, test, site, and version conventions | `.agents/skills/geode-code-conventions/SKILL.md` + `docs/architecture/naming-conventions.md` |
 | Provider/model/API capability claims | `.claude/skills/geode-workflow/references/provider-grounding.md` |
 | Schema/log/event/state/trajectory consistency | `.claude/skills/geode-workflow/references/observability-contract.md` |
+| Usage/cache fields, cost authority, incomplete accounting | `docs/architecture/usage-accounting.md` |
 | Same-task Codex–GEODE production and comparison | `.claude/skills/geode-workflow/references/codex-geode-paired-coding.md` |
 | Evaluation question, run spec, attempt lineage, analysis, and publication | `.agents/skills/geode-eval/SKILL.md` + `docs/eval/index.json` |
 | Test, lint, type, prompt, and full-suite gates | `.claude/skills/geode-workflow/references/verification-gates.md` |

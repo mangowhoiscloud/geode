@@ -10,6 +10,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/release.yml"
 PORTFOLIO_PATH = REPO_ROOT / "site/src/app/portfolio/page.tsx"
+INSTALL_PATH = REPO_ROOT / "site/src/components/geode/landing-install.tsx"
 DISTRIBUTION_SKILL_PATH = REPO_ROOT / ".claude/skills/geode-distribution/SKILL.md"
 RELEASE_DOC_PATH = REPO_ROOT / "site/src/app/docs/ops/release-pypi-lifecycle/page.tsx"
 
@@ -166,6 +167,7 @@ def test_current_distribution_surfaces_do_not_restore_the_deleted_tap() -> None:
         for path in (
             WORKFLOW_PATH,
             PORTFOLIO_PATH,
+            INSTALL_PATH,
             DISTRIBUTION_SKILL_PATH,
             RELEASE_DOC_PATH,
         )
@@ -187,7 +189,7 @@ def test_release_retry_preserves_release_body_bytes() -> None:
 
 
 def test_public_install_commands_use_the_stable_pypi_channel() -> None:
-    text = PORTFOLIO_PATH.read_text(encoding="utf-8")
+    text = INSTALL_PATH.read_text(encoding="utf-8")
 
     assert "brew install" not in text
     assert "mangowhoiscloud/tap" not in text

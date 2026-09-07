@@ -61,20 +61,21 @@ export default function Page() {
             <h2>릴리스 흐름</h2>
             <p>
               평소에는 feature가 develop으로 머지됩니다. 릴리스는{" "}
-              <code>release/*</code> 브랜치가 버전 스탬프와 CHANGELOG 정리를
+              릴리스 준비용 topic 브랜치가 버전 스탬프와 CHANGELOG 정리를
               싣고 develop에 먼저 머지된 뒤, develop이 main으로 그대로
               통과합니다. 승격 직전에는 두 원격 브랜치를 fetch하고 내용을
-              비교합니다. main에 추적 전용 변경이 있고 충돌이 없으면 현재 main
+              비교합니다. main에 고유 커밋이 있고 충돌이 없으면 현재 main
               head에서 develop로 직접 CI-gated PR을 엽니다. 충돌 해결이 필요할
               때만 현재 develop에서 <code>sync/main-into-develop-*</code> 브랜치를
               만들고 현재 main을 명시적 merge commit으로 병합합니다. 이 sync
               head는 두 원격 tip을 정확한 부모로 가져야 하며 merge 직전에 trust
               resolver를 다시 통과해야 합니다. 자동 backmerge workflow는 없습니다.
             </p>
-            <pre>{`# 1. CHANGELOG [Unreleased] → [vX.Y.Z] - YYYY-MM-DD
+            <pre>{`# 1. CHANGELOG [Unreleased] → [X.Y.Z] - YYYY-MM-DD; 빈 [Unreleased] 유지
 # 2. 다섯 위치 동시 bump (CHANGELOG / pyproject / CLAUDE.md / README.md / README.ko.md)
 # 3. main drift: clean이면 main → develop PR, 충돌 시에만 sync/main-into-develop-*
-# 4. release PR: release/* → develop → main (develop→main PR은 Summary + Verification 축약형 허용)
+# 4. topic → develop → main: 각 PR의 실제 head에서 필수 CI green 확인
+#    PR 본문은 Summary / Why / Changes / Verification 유지
 # 5. 패키지 배포는 main 머지로 자동 발화하지 않음. 아래 워크플로우를 수동 dispatch`}</pre>
 
             <h2>release.yml은 수동 전용입니다</h2>
@@ -194,11 +195,11 @@ geode serve &`}</pre>
             <h2>Release flow</h2>
             <p>
               Day to day, features merge into develop. For a release, a{" "}
-              <code>release/*</code> branch carries the version stamp and
+              release-preparation topic branch carries the version stamp and
               CHANGELOG cleanup, merges into develop first, and develop then
               passes straight through to main. Immediately before promotion,
               fetch and compare both remote branches. If main contains unique
-              tracking changes and the sync is conflict-free, open a CI-gated PR
+              commits and the sync is conflict-free, open a CI-gated PR
               directly from the current main head to develop. Only when conflict
               resolution is required, create <code>sync/main-into-develop-*</code>
               from current develop and merge current main in an explicit merge
@@ -206,11 +207,11 @@ geode serve &`}</pre>
               exact parents and rerun the trust resolver immediately before merge.
               There is no automatic backmerge workflow.
             </p>
-            <pre>{`# 1. CHANGELOG [Unreleased] → [vX.Y.Z] - YYYY-MM-DD
+            <pre>{`# 1. CHANGELOG [Unreleased] → [X.Y.Z] - YYYY-MM-DD; retain an empty [Unreleased]
 # 2. bump all five locations (CHANGELOG / pyproject / CLAUDE.md / README.md / README.ko.md)
 # 3. main drift: main → develop PR if clean; sync/main-into-develop-* only on conflict
-# 4. release PR: release/* → develop → main (develop→main PRs may use the
-#    abbreviated Summary + Verification body)
+# 4. topic → develop → main: require green CI on each actual PR head
+#    retain Summary / Why / Changes / Verification in every PR body
 # 5. package publishing does NOT fire on the main merge. dispatch the
 #    workflow below manually`}</pre>
 

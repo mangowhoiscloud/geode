@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.28] - 2026-09-08
+
+> Evidence-led runtime release: bounded verification, cache accounting,
+> failure preservation, and navigable runtime/evaluation documentation.
+> Historical benchmark scores are unchanged; full-runtime parity and complete
+> whole-runtime usage remain separate validation work.
+
 ### Added
 
 - Added opt-in `GEODE_VERIFY_MODE=reflexion`: a bounded, tool-disabled LLM
@@ -57,8 +64,34 @@ functional change.
   Prior attempts remain visible during revision; final result usage includes
   judge calls, and isolated workers inherit the selected judge model.
 
+- Added an opt-in Harbor 0.22 installed agent using the native GEODE runtime and
+  session-service composition, isolated trial state, content-addressed source
+  installation, and finalization receipts. Historical thin-adapter runs remain
+  separate; live benchmark parity still requires prospective validation.
+- **Terminal-Bench paired replay in docs.** A SHA-256-pinned, sandboxed
+  public viewer covers all 445 intended GEODE/Codex pairs, with bottom-up
+  tool-event playback and explicit receipt-only/exclusion states. Site builds
+  check corrupted-payload and fetch-failure rejection; no raw model or tool
+  payloads are published by the viewer.
+- **GPT-6 Astra model support.** The OpenAI Responses adapters, model picker,
+  subscription/PAYG routing hints, reasoning controls, and cost/context
+  catalogue now recognize `gpt-6-astra` without changing the default model;
+  account access remains subject to OpenAI's rollout.
+- **Harbor trial replay receipts.** GEODE and an instrumented native Codex
+  adapter can now reconstruct agent-owned asciicast v2 replays from finalized
+  ATIF trajectories, with source/output hashes and explicit non-score,
+  non-raw-capture provenance. A fail-closed backfill command covers closed
+  historical Harbor jobs without overwriting existing recordings.
+
 ### Fixed
 
+- Corrected inclusive-input cache-write estimates so known cache reads and
+  writes are each charged once. Runtime, classic/fullscreen IPC clients, and
+  cost summaries now retain cache counts and distinguish estimated API cost
+  from subscription charges.
+- Preserved Harbor's primary run error when session finalization, hook cleanup,
+  or trajectory export fails during error handling; standalone cleanup errors
+  still fail the run.
 - Restored native shell-tool admission in Harbor's fresh task-container profile
   without changing host or worker-role restrictions. Full-runtime trials now
   pin their verification mode and reject missing shell capability before inference.
@@ -111,44 +144,6 @@ functional change.
 - Reused cancel-safe Lane acquisition for direct global/session callers and cleaned up Bash subprocess tasks on external cancellation before propagating cancellation.
 - Made seed-generation resume count only readable, phase-matched successful checkpoints with required run identity; malformed snapshots and partial ranker records no longer imply phase completion.
 
-### Changed
-
-- Extended the Terminal-Bench replay with independently verified call-token usage, explicit cache missingness, phase elapsed times and completed-command exit summaries. Recovered diagnostics are pinned to an append-only artifact commit; frozen scores are unchanged.
-- Migrated the Terminal-Bench paired replay to a native Next.js/React/TypeScript route with SHA-256-verified metadata JSON, accessible playback controls, and a legacy URL redirect. Frozen scores, raw evidence, and existing videos are unchanged.
-
-### Added
-
-- Added an opt-in Harbor 0.22 installed agent using the native GEODE runtime and
-  session-service composition, isolated trial state, content-addressed source
-  installation, and finalization receipts. Historical thin-adapter runs remain
-  separate; live benchmark parity still requires prospective validation.
-- **Terminal-Bench paired replay in docs.** A SHA-256-pinned, sandboxed
-  public viewer covers all 445 intended GEODE/Codex pairs, with bottom-up
-  tool-event playback and explicit receipt-only/exclusion states. Site builds
-  check corrupted-payload and fetch-failure rejection; no raw model or tool
-  payloads are published by the viewer.
-- **GPT-6 Astra model support.** The OpenAI Responses adapters, model picker,
-  subscription/PAYG routing hints, reasoning controls, and cost/context
-  catalogue now recognize `gpt-6-astra` without changing the default model;
-  account access remains subject to OpenAI's rollout.
-- **Harbor trial replay receipts.** GEODE and an instrumented native Codex
-  adapter can now reconstruct agent-owned asciicast v2 replays from finalized
-  ATIF trajectories, with source/output hashes and explicit non-score,
-  non-raw-capture provenance. A fail-closed backfill command covers closed
-  historical Harbor jobs without overwriting existing recordings.
-
-### Infrastructure
-
-- **Isolated test authentication paths.** Pytest now owns separate collection,
-  worker, and per-test auth paths instead of preserving an external override or
-  deleting a shared temporary file. The credential scrub includes OpenRouter;
-  home-path regressions cover GEODE/Codex defaults and overrides without reloading
-  live modules. The settings-consumer guard no longer filters by checkout name.
-- **Patched site audit dependency.** The locked transitive `@humanfs/node`
-  dependency now uses 0.16.8, closing GHSA-p498-v437-472g in the Pages build.
-
-### Fixed
-
 - **Preflight reports site-generation failures.** Failed metadata sync, site
   builds, and Markdown exports now fail the local gate with diagnostics even
   when generated files have no diff. Generated-file drift remains a separate
@@ -166,6 +161,29 @@ functional change.
   into warning logs, failed LLM hooks retain only the exception type, and
   activity schema v4 preserves bounded token, charge, requested/served model,
   adapter, and OpenRouter route metadata through SQLite and run projections.
+
+### Changed
+
+- Reconciled the landing and official documentation with shared route content,
+  collapsible chapter navigation, local navigation filtering, and separate
+  evaluation/verifier guidance. Existing paired replay and score authority are
+  preserved; native/full-runtime diagnostics remain distinct from historical runs.
+
+- Extended the Terminal-Bench replay with independently verified call-token usage, explicit cache missingness, phase elapsed times and completed-command exit summaries. Recovered diagnostics are pinned to an append-only artifact commit; frozen scores are unchanged.
+- Migrated the Terminal-Bench paired replay to a native Next.js/React/TypeScript route with SHA-256-verified metadata JSON, accessible playback controls, and a legacy URL redirect. Frozen scores, raw evidence, and existing videos are unchanged.
+
+### Infrastructure
+
+- Retained raw architecture performance samples and bounded, redacted child
+  diagnostics without changing sample order, medians, or acceptance thresholds.
+
+- **Isolated test authentication paths.** Pytest now owns separate collection,
+  worker, and per-test auth paths instead of preserving an external override or
+  deleting a shared temporary file. The credential scrub includes OpenRouter;
+  home-path regressions cover GEODE/Codex defaults and overrides without reloading
+  live modules. The settings-consumer guard no longer filters by checkout name.
+- **Patched site audit dependency.** The locked transitive `@humanfs/node`
+  dependency now uses 0.16.8, closing GHSA-p498-v437-472g in the Pages build.
 
 ## [1.0.27] - 2026-09-02
 

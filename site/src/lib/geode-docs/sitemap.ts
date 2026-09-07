@@ -41,6 +41,8 @@ export type DocPage = {
   summary?: string;
   summaryKo?: string;
   quadrant: DocQuadrant;
+  /** Optional chapter within a section; pages remain flat for publication. */
+  chapter?: string;
   /** Optional outbound link. If set, sidebar shows it and the page may simply redirect. */
   externalUrl?: string;
 };
@@ -49,6 +51,7 @@ export type DocSection = {
   id: string;
   title: string;
   titleKo: string;
+  chapters?: { id: string; title: string; titleKo: string }[];
   pages: DocPage[];
 };
 
@@ -96,20 +99,27 @@ export const DOCS_SITEMAP: DocSection[] = [
   },
   {
     id: "04-self-improving",
-    title: "The Self-Improving Loop",
-    titleKo: "자기개선 루프",
+    title: "Experimental Loop",
+    titleKo: "Experimental Loop",
+    chapters: [
+      { id: "search", title: "Search and selection", titleKo: "탐색과 선택" },
+      { id: "evaluation", title: "Evaluation and judging", titleKo: "측정과 판정" },
+      { id: "generation", title: "Scenario generation", titleKo: "시나리오 생성" },
+      { id: "evidence", title: "Published evidence", titleKo: "공개 결과" },
+    ],
     pages: [
-      { slug: "capabilities/autoresearch", title: "Closed-Loop", titleKo: "Closed-Loop", summary: "The outer loop end to end. Mutate the scaffold, audit with Petri, gate the fitness gain on a margin, then promote or revert. No model weight or parameter ever changes.", summaryKo: "바깥쪽 루프의 전체 흐름입니다. 스캐폴드를 변이하고, Petri로 감사하고, fitness 이득을 margin 게이트로 검증해 승격하거나 되돌립니다. 모델 가중치와 파라미터는 일절 바꾸지 않습니다.", quadrant: "explanation" },
-      { slug: "capabilities/co-scientist", title: "Seed Scenario Generation", titleKo: "Seed Scenario Generation", summary: "A nine-role generation loop that grows the evaluation scenario corpus. Supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer.", summaryKo: "평가용 scenario corpus를 키우는 9-역할 생성 루프입니다. supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer로 이어집니다.", quadrant: "explanation" },
-      { slug: "capabilities/seed-pipeline", title: "Seed pipeline", titleKo: "Seed 파이프라인", summary: "The plugin that regenerates the seed corpus each generation. Picker, orchestrator, manifest, cost preview, and frontier-band survivor selection.", summaryKo: "세대마다 seed 코퍼스를 다시 만드는 플러그인입니다. picker, orchestrator, manifest, cost preview와 frontier-band 생존자 선택을 다룹니다.", quadrant: "reference" },
-      { slug: "capabilities/outer-loop", title: "Crucible outer loop", titleKo: "Crucible 아우터 루프", summary: "A bounded private search loop with frozen admission, paired evaluation, CAS advancement, and a separate sealed-test boundary.", summaryKo: "동결된 admission, paired 평가, CAS 전진, 별도 sealed-test 경계를 갖춘 제한형 private search 루프입니다.", quadrant: "reference" },
-      { slug: "petri/overview", title: "Petri × GEODE", titleKo: "Petri × GEODE", summary: "Anthropic Alignment Science's evaluation framework, wrapped over the GEODE agent as the loop's measurement layer.", summaryKo: "Anthropic Alignment Science의 평가 프레임워크를 GEODE 에이전트 위에 얹어 루프의 측정 계층으로 씁니다.", quadrant: "explanation" },
-      { slug: "petri/scenarios", title: "Scenarios", titleKo: "시나리오", summary: "The Petri seed corpus plus GEODE-specific seeds, grouped into critical, auxiliary, and info dimension buckets.", summaryKo: "Petri seed 코퍼스에 GEODE 전용 seed를 더해 critical, auxiliary, info 차원 버킷으로 묶습니다.", quadrant: "reference" },
-      { slug: "petri/run", title: "Run an audit", titleKo: "감사 실행", summary: "geode audit, or inspect eval for the raw path. Choose model roles, dimension set, seeds, and turn budget. Dry-run by default.", summaryKo: "geode audit, 또는 raw 경로인 inspect eval을 씁니다. 모델 역할, 차원 세트, seeds, 턴 예산을 고릅니다. 기본은 dry-run입니다.", quadrant: "how-to" },
-      { slug: "petri/judge-dimensions", title: "Judge dimensions", titleKo: "Judge 차원", summary: "The 22-dim rubric and the 18-dim fitness universe. Critical floors versus auxiliary drift, on a 1-10 lower-is-better scale.", summaryKo: "22-dim 루브릭과 18-dim fitness universe를 설명합니다. critical 바닥값과 auxiliary drift를 1-10 lower-is-better 스케일에서 구분합니다.", quadrant: "reference" },
-      { slug: "petri/seeds", title: "Seed-generation runs", titleKo: "Seed 생성 런", summary: "The per-generation dashboard. Survivors, tokens, meta-review, and next-generation priors per run.", summaryKo: "세대별 대시보드입니다. 런마다 생존 후보, 토큰, 메타리뷰, 다음 세대 prior를 보여줍니다.", quadrant: "reference" },
-      { slug: "capabilities/lineage", title: "Lineage and positioning", titleKo: "계보와 좌표", summary: "Where this loop sits in the self-evolving agents literature. An honest recombination of known parts, not a new primitive.", summaryKo: "이 루프가 self-evolving agents 문헌에서 어디에 위치하는지 짚습니다. 새로운 primitive가 아니라, 알려진 조각들을 정직하게 재조합한 결과입니다.", quadrant: "explanation" },
-      { slug: "petri/bundle", title: "Bundle viewer", titleKo: "번들 뷰어", summary: "The live inspect_ai transcript viewer for the latest audit run.", summaryKo: "가장 최근 감사 런의 라이브 inspect_ai 트랜스크립트 뷰어입니다.", quadrant: "reference", externalUrl: "/self-improving/petri-bundle/" },
+      { slug: "capabilities/autoresearch", title: "Scaffold search", titleKo: "스캐폴드 탐색", summary: "Mutate the scaffold, audit with Petri, and promote or revert using an uncertainty-aware fitness margin. Model weights remain unchanged.", summaryKo: "스캐폴드를 변이하고 Petri로 측정한 뒤, 불확실성을 고려한 fitness margin으로 승격하거나 되돌립니다. 모델 가중치는 바꾸지 않습니다.", quadrant: "explanation", chapter: "search" },
+      { slug: "capabilities/co-scientist", title: "Seed Scenario Generation", titleKo: "Seed Scenario Generation", summary: "A nine-role generation loop that grows the evaluation scenario corpus. Supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer.", summaryKo: "평가용 scenario corpus를 키우는 9-역할 생성 루프입니다. supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer로 이어집니다.", quadrant: "explanation", chapter: "generation" },
+      { slug: "capabilities/seed-pipeline", title: "Seed pipeline", titleKo: "Seed 파이프라인", summary: "Regenerate the seed corpus each generation: picker, orchestrator, manifest, cost preview, and frontier-band survivor selection.", summaryKo: "세대마다 seed 코퍼스를 다시 구성합니다. picker, orchestrator, manifest, 비용 미리보기와 frontier-band 생존자 선택을 다룹니다.", quadrant: "reference", chapter: "generation" },
+      { slug: "capabilities/outer-loop", title: "Crucible bounded search", titleKo: "Crucible 제한형 탐색", summary: "A bounded private search loop with frozen admission, paired evaluation, CAS advancement, and a separate sealed-test boundary.", summaryKo: "동결된 admission, paired 평가, CAS 전진, 별도 sealed-test 경계를 갖춘 제한형 private search 루프입니다.", quadrant: "reference", chapter: "search" },
+      { slug: "verification/evaluation", title: "Verification and evaluation", titleKo: "검증과 평가", summary: "Runtime acceptance, task verifiers, Petri LLM-as-a-judge, human calibration, and Inspect .eval evidence have different authorities.", summaryKo: "런타임 수락, 과제 verifier, Petri LLM-as-a-judge, 사람과의 보정, Inspect .eval 기록의 권한을 구분합니다.", quadrant: "explanation", chapter: "evaluation" },
+      { slug: "petri/overview", title: "Petri × GEODE", titleKo: "Petri × GEODE", summary: "Anthropic Alignment Science's evaluation framework, wrapped over the GEODE agent as the loop's measurement layer.", summaryKo: "Anthropic Alignment Science의 평가 프레임워크를 GEODE 에이전트 위에 얹어 루프의 측정 계층으로 씁니다.", quadrant: "explanation", chapter: "evaluation" },
+      { slug: "petri/scenarios", title: "Scenarios", titleKo: "시나리오", summary: "The Petri seed corpus plus GEODE-specific seeds, grouped into critical, auxiliary, and info dimension buckets.", summaryKo: "Petri seed 코퍼스에 GEODE 전용 seed를 더해 critical, auxiliary, info 차원 버킷으로 묶습니다.", quadrant: "reference", chapter: "evaluation" },
+      { slug: "petri/run", title: "Run an audit", titleKo: "감사 실행", summary: "geode-eval audit, or inspect eval for the raw path. Choose model roles, dimension set, seeds, and turn budget. Dry-run by default.", summaryKo: "geode-eval audit, 또는 raw 경로인 inspect eval을 씁니다. 모델 역할, 차원 세트, seeds, 턴 예산을 고릅니다. 기본은 dry-run입니다.", quadrant: "how-to", chapter: "evaluation" },
+      { slug: "petri/judge-dimensions", title: "Judge dimensions", titleKo: "Judge 차원", summary: "The 22-dim rubric, score polarity, human calibration, and the separate 18-dim fitness selection policy.", summaryKo: "22개 judge 차원의 점수 방향과 사람의 라벨을 통한 보정, 별도 18개 차원의 fitness 선택 정책을 설명합니다.", quadrant: "reference", chapter: "evaluation" },
+      { slug: "petri/seeds", title: "Seed-generation runs", titleKo: "Seed 생성 런", summary: "The per-generation dashboard. Survivors, tokens, meta-review, and next-generation priors per run.", summaryKo: "세대별 대시보드입니다. 런마다 생존 후보, 토큰, 메타리뷰, 다음 세대 prior를 보여줍니다.", quadrant: "reference", chapter: "evidence" },
+      { slug: "capabilities/lineage", title: "Lineage and positioning", titleKo: "계보와 좌표", summary: "Where this loop sits in the self-evolving agents literature. An honest recombination of known parts, not a new primitive.", summaryKo: "이 루프가 self-evolving agents 문헌에서 어디에 위치하는지 짚습니다. 새로운 primitive가 아니라, 알려진 조각들을 정직하게 재조합한 결과입니다.", quadrant: "explanation", chapter: "search" },
+      { slug: "petri/bundle", title: "Audit transcripts", titleKo: "감사 트랜스크립트", summary: "Inspect the audit transcripts included in the published bundle snapshot. New runs require a separate publication step.", summaryKo: "공개된 번들 스냅샷에 포함된 감사 트랜스크립트를 확인합니다. 새 실행 기록은 별도로 게시해야 합니다.", quadrant: "reference", chapter: "evidence", externalUrl: "/self-improving/petri-bundle/" },
     ],
   },
   {
@@ -134,7 +144,7 @@ export const DOCS_SITEMAP: DocSection[] = [
     titleKo: "벤치마크",
     pages: [
       { slug: "benchmarks/geo", title: "GEO visibility", titleKo: "GEO 가시성", summary: "A stage-aware F/R/C/P/A/Q/O measurement contract with frozen workloads, digest-bound receipts, and no aggregate GEO score.", summaryKo: "고정 workload와 digest-bound receipt로 F/R/C/P/A/Q/O를 분리 측정하며 단일 GEO 점수를 만들지 않는 계약입니다.", quadrant: "reference" },
-      { slug: "benchmarks/terminal-bench", title: "Terminal-Bench 2.1", titleKo: "Terminal-Bench 2.1", summary: "A one-task GPT-6 Astra subscription E2E smoke with canonical verifier and immutable publication evidence.", summaryKo: "GPT-6 Astra 구독 경로를 task 1건으로 확인한 E2E smoke입니다. canonical verifier와 불변 공개 증거를 함께 제시합니다.", quadrant: "reference" },
+      { slug: "benchmarks/terminal-bench", title: "Terminal-Bench 2.1", titleKo: "Terminal-Bench 2.1", summary: "GPT-5.6 Sol at max effort: GEODE versus native Codex through Harbor, with paired results, exclusions, uncertainty and immutable evidence.", summaryKo: "GPT-5.6 Sol·max effort로 Harbor에서 GEODE와 native Codex를 비교한 실험입니다. 대응 결과, 제외 기준, 불확실성과 고정된 공개 증거를 함께 읽습니다.", quadrant: "reference" },
       { slug: "benchmarks/tau2", title: "Tau2", titleKo: "Tau2", summary: "GEODE's tau2-bench measurements: the native user-simulator track headline, every verifier-backed run record, and links to the raw simulation logs.", summaryKo: "GEODE의 tau2-bench 실측입니다. native user-simulator 트랙 headline, verifier-backed run 기록 전체, 원본 simulation 로그 링크를 담습니다.", quadrant: "reference" },
       { slug: "benchmarks/mcpmark", title: "MCPMark", titleKo: "MCPMark", summary: "GEODE's MCPMark measurements: the Verified available-services headline, service coverage and blockers, every run record, and links to the raw run logs.", summaryKo: "GEODE의 MCPMark 실측입니다. Verified available-services headline, 서비스 coverage와 blocker, run 기록 전체, 원본 run 로그 링크를 담습니다.", quadrant: "reference" },
     ],

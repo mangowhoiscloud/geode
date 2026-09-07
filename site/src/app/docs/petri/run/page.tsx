@@ -23,7 +23,7 @@ export default function Page() {
 
             <h2>준비물</h2>
             <ul>
-              <li>GEODE 소스 체크아웃과 <code>[audit]</code> extra. <code>uv tool install -e &quot;.[audit]&quot;</code>로 <code>inspect_ai</code>가 함께 설치됩니다.</li>
+              <li>GEODE 소스 체크아웃에서 <code>uv sync --extra audit</code>를 실행합니다. 아래 명령은 활성화한 환경 또는 <code>uv run</code>을 통해 실행합니다.</li>
               <li>auditor, target, judge 세 역할의 자격. 역할 플래그를 생략하면 <code>~/.geode/config.toml</code>의 역할 SoT를 읽습니다.</li>
             </ul>
 
@@ -52,7 +52,7 @@ geode-eval audit --live --unrestricted \\
                 <tr><td><code>--dim-set</code></td><td>judge 차원 세트. <code>subset</code>(22-dim 루브릭) 또는 <code>full</code>(upstream 기본 전체)</td><td><code>subset</code></td></tr>
                 <tr><td><code>--unrestricted</code></td><td>audit-mode 가드레일 전환 (HITL 해제, 한 런 한정). <code>GEODE_AUDIT_UNRESTRICTED=1</code>과 동일</td><td>off</td></tr>
                 <tr><td><code>--cache/--no-cache</code></td><td>inspect_ai trajectory 캐시</td><td><strong>off</strong>. 캐시된 실패 응답이 후속 측정을 오염시키는 것을 막기 위해 기본 비활성</td></tr>
-                <tr><td><code>--target-tools</code></td><td><code>real</code> 또는 <code>synthetic</code> 도구 표면</td><td>없음</td></tr>
+                <tr><td><code>--target-tools</code></td><td>Auditor 도구 생성: <code>none</code>, <code>fixed</code>, <code>synthetic</code></td><td><code>none</code></td></tr>
                 <tr><td><code>--tags</code></td><td>런 태깅</td><td>없음</td></tr>
                 <tr><td><code>--yes/-y</code></td><td>confirm 생략</td><td>off</td></tr>
                 <tr><td><code>--use-oauth/--no-oauth</code></td><td>OAuth 자격 lane 강제</td><td>없음</td></tr>
@@ -67,7 +67,7 @@ geode-eval audit --live --unrestricted \\
               찍힙니다. 자기개선 루프가 파싱하는 줄이 바로 이것입니다.
             </p>
             <pre>{`# 아카이브 보존 + 커밋 가능한 요약 YAML 생성
-geode petri-archive
+geode-eval petri-archive
 
 # transcript를 Inspect 뷰어로
 inspect view --log-dir ~/.geode/petri/logs/`}</pre>
@@ -79,8 +79,9 @@ inspect view --log-dir ~/.geode/petri/logs/`}</pre>
 
             <h2>raw 경로: <code>inspect eval</code></h2>
             <p>
-              Petri 프레임워크의 원시 명령입니다. GEODE wrapper를 우회하므로
-              vanilla LLM baseline을 측정할 때 씁니다.
+              Petri 프레임워크의 원시 명령입니다. 아래 예시는 target을 Anthropic
+              모델로 지정하므로 GEODE 런타임을 측정하지 않습니다. 명령 이름만으로
+              대조군 동등성이 보장되지는 않습니다.
             </p>
             <pre>{`inspect eval inspect_petri/audit \\
   --model-role auditor=<m> \\
@@ -106,7 +107,7 @@ inspect view --log-dir ~/.geode/petri/logs/`}</pre>
 
             <h2>Prerequisites</h2>
             <ul>
-              <li>A GEODE source checkout with the <code>[audit]</code> extra: <code>uv tool install -e &quot;.[audit]&quot;</code> brings in <code>inspect_ai</code>.</li>
+              <li>Run <code>uv sync --extra audit</code> in a GEODE source checkout. Execute the commands below in that activated environment or through <code>uv run</code>.</li>
               <li>Credentials for the auditor, target, and judge roles. Omitted role flags fall back to the role SoT in <code>~/.geode/config.toml</code>.</li>
             </ul>
 
@@ -135,7 +136,7 @@ geode-eval audit --live --unrestricted \\
                 <tr><td><code>--dim-set</code></td><td>Judge dimension set: <code>subset</code> (the 22-dim rubric) or <code>full</code> (the upstream default set)</td><td><code>subset</code></td></tr>
                 <tr><td><code>--unrestricted</code></td><td>Audit-mode guardrail lift (HITL off, one run only); same as <code>GEODE_AUDIT_UNRESTRICTED=1</code></td><td>off</td></tr>
                 <tr><td><code>--cache/--no-cache</code></td><td>inspect_ai trajectory cache</td><td><strong>off</strong>, so a cached failure response cannot pollute later measurements</td></tr>
-                <tr><td><code>--target-tools</code></td><td><code>real</code> or <code>synthetic</code> tool surface</td><td>none</td></tr>
+                <tr><td><code>--target-tools</code></td><td>Auditor tool creation: <code>none</code>, <code>fixed</code>, <code>synthetic</code></td><td><code>none</code></td></tr>
                 <tr><td><code>--tags</code></td><td>Tag the run</td><td>none</td></tr>
                 <tr><td><code>--yes/-y</code></td><td>Skip the confirm prompt</td><td>off</td></tr>
                 <tr><td><code>--use-oauth/--no-oauth</code></td><td>Force the OAuth credential lane</td><td>none</td></tr>
@@ -151,7 +152,7 @@ geode-eval audit --live --unrestricted \\
               line is exactly what the self-improving loop parses.
             </p>
             <pre>{`# preserve the archive + write a committable summary YAML
-geode petri-archive
+geode-eval petri-archive
 
 # browse the transcript in the Inspect viewer
 inspect view --log-dir ~/.geode/petri/logs/`}</pre>
@@ -162,8 +163,9 @@ inspect view --log-dir ~/.geode/petri/logs/`}</pre>
 
             <h2>The raw path: <code>inspect eval</code></h2>
             <p>
-              The raw Petri-framework command. It bypasses the GEODE wrapper,
-              which is what you want when measuring a vanilla-LLM baseline.
+              This is the raw Petri-framework command. The example targets an
+              Anthropic model, not the GEODE runtime. The command name alone
+              does not establish comparator equivalence.
             </p>
             <pre>{`inspect eval inspect_petri/audit \\
   --model-role auditor=<m> \\

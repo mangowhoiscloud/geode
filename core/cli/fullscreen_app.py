@@ -36,6 +36,7 @@ from prompt_toolkit.widgets import Frame
 from core import __version__
 from core.time_format import format_elapsed
 from core.ui import spinner_glyph
+from core.ui.event_renderer import format_cache_tokens
 from core.ui.geodi_art import geodi_pixel_lines
 from core.ui.mascot import _spec_lines
 
@@ -302,6 +303,8 @@ class FullscreenState:
     model: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
     cost: float = 0.0
     turn_started_at: float = 0.0
     busy: bool = False
@@ -408,7 +411,7 @@ class FullscreenThinCli:
                     height=Dimension(min=0, max=7),
                     style="class:activity",
                 ),
-                Window(self.status_control, height=2, style="class:status"),
+                Window(self.status_control, height=Dimension(min=2, max=3), style="class:status"),
                 self.input_frame,
                 Window(self.footer_control, height=1, style="class:footer"),
             ]
@@ -566,6 +569,8 @@ class FullscreenThinCli:
             self.state.turn_started_at = time.monotonic()
             self.state.input_tokens = 0
             self.state.output_tokens = 0
+            self.state.cache_read_tokens = 0
+            self.state.cache_write_tokens = 0
             self.state.cost = 0.0
             self.state.activity = ""
             self.state.transcript_scroll = 0
@@ -654,8 +659,11 @@ class FullscreenThinCli:
                 parts.append(self.state.model)
             if self.state.input_tokens or self.state.output_tokens:
                 parts.append(f"down {self.state.input_tokens} up {self.state.output_tokens}")
+            cache = format_cache_tokens(self.state.cache_read_tokens, self.state.cache_write_tokens)
+            if cache:
+                parts.append(cache)
             if self.state.cost:
-                parts.append(f"${self.state.cost:.4f}")
+                parts.append(f"est. API ${self.state.cost:.4f}")
         return " - ".join(parts)
 
     def _on_stream(self, data: str) -> None:
@@ -730,6 +738,8 @@ class FullscreenThinCli:
                 self.state.model = str(event.get("model", "")) or self.state.model
                 self.state.input_tokens += int(event.get("input", 0) or 0)
                 self.state.output_tokens += int(event.get("output", 0) or 0)
+                self.state.cache_read_tokens += int(event.get("cache_read_tokens", 0) or 0)
+                self.state.cache_write_tokens += int(event.get("cache_write_tokens", 0) or 0)
                 self.state.cost += float(event.get("cost", 0) or 0)
             self._invalidate()
             return
@@ -981,6 +991,8 @@ class FullscreenThinCli:
             started = self.state.turn_started_at
             input_tokens = self.state.input_tokens
             output_tokens = self.state.output_tokens
+            cache_read_tokens = self.state.cache_read_tokens
+            cache_write_tokens = self.state.cache_write_tokens
             cost = self.state.cost
         if not status:
             return FormattedText([("class:dim", "")])
@@ -1003,14 +1015,17 @@ class FullscreenThinCli:
             details.append(activity)
         if input_tokens or output_tokens:
             details.append(f"down {input_tokens} up {output_tokens}")
+        cache = format_cache_tokens(cache_read_tokens, cache_write_tokens)
         if cost:
-            details.append(f"${cost:.4f}")
+            details.append(f"est. API ${cost:.4f}")
 
         fragments: list[tuple[str, str]] = []
         fragments.extend(_gradient_fragments("class:run bold", f"  ◆ {label}"))
         fragments.append(("", "\n"))
         detail_text = " · ".join(details) if details else "ready"
         fragments.append(("class:dim", f"    {detail_text}"))
+        if cache:
+            fragments.append(("class:dim", f"\n    {cache}"))
         return FormattedText(fragments)
 
     def _footer_fragments(self) -> FormattedText:

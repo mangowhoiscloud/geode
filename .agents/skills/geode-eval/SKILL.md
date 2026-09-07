@@ -1,6 +1,6 @@
 ---
 name: geode-eval
-description: Scope, preregister, execute, audit, normalize, and publish GEODE evaluations with research-question, reproduction, attempt-lineage, trajectory, verifier-receipt, and immutable artifact contracts. Use for benchmark runs or comparisons, eval-artifact audits, GPT or subscription result normalization, research question or hypothesis framing, retry diagnosis, trajectory publication, DPO or reward-data readiness reviews, and requests involving MCPMark, tau2, BFCL, Agent-World, HAL, Terminal-Bench, or Toolathlon.
+description: Scope, preregister, execute, audit, normalize, and publish GEODE evaluations with research-question, reproduction, attempt-lineage, trajectory, verifier-receipt, and immutable artifact contracts. Use for benchmark runs or comparisons, eval-artifact and cache-accounting audits, GPT or subscription result normalization, research question or hypothesis framing, retry diagnosis, trajectory publication, DPO or reward-data readiness reviews, and requests involving MCPMark, tau2, BFCL, Agent-World, HAL, Terminal-Bench, or Toolathlon.
 ---
 
 # GEODE Evaluation
@@ -43,6 +43,13 @@ deduplication, lineage-safe splits, and label quality pass.
      `.claude/skills/stanford-test-time-compute/`
 
 Do not scan every eval document or load `site/public/llms-full.txt` by default.
+
+For token/cache/cost evidence, read the
+[usage accounting contract](../../../docs/architecture/usage-accounting.md).
+Use its actual field map, producer-specific zero/missing rules and source-bound
+reconciliation gates. Keep accounting coverage separate from the paired score
+denominator; no post-hoc cache repair replaces frozen raw results or grants
+publication authority. Load the detailed contract only for that scope.
 
 ## Freeze Before Execution
 

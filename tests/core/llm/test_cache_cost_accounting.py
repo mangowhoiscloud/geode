@@ -58,6 +58,32 @@ class TestInclusiveProviderNoDoubleCount:
         cost = _tracker(price).calculate_cost("m", 1000, 0, cache_read_tokens=800)
         assert cost == 1000.0  # all 1000 at full input rate, none free
 
+    @pytest.mark.parametrize(
+        ("read_rate", "write_rate", "expected"),
+        [(0.1, 1.25, 505.0), (0.0, 1.25, 1045.0), (0.1, 0.0, 480.0), (0.0, 0.0, 1020.0)],
+    )
+    def test_cache_reads_and_writes_billed_once_with_known_rate_fallback(
+        self, read_rate: float, write_rate: float, expected: float
+    ) -> None:
+        price = ModelPrice(
+            input=1.0,
+            output=2.0,
+            cache_read=read_rate,
+            cache_write=write_rate,
+            cache_inclusive_input=True,
+        )
+        cost = _tracker(price).calculate_cost(
+            "m", 1000, 10, cache_read_tokens=600, cache_creation_tokens=100
+        )
+        # The 1,000 input tokens include 600 reads, 100 writes and 300 ordinary
+        # tokens. A missing cache rate leaves that category at the input rate.
+        assert cost == pytest.approx(expected)
+
+    def test_all_cache_writes_billed_once_at_write_rate(self) -> None:
+        price = ModelPrice(input=1.0, output=2.0, cache_write=1.25, cache_inclusive_input=True)
+        cost = _tracker(price).calculate_cost("m", 1000, 0, cache_creation_tokens=1000)
+        assert cost == 1250.0
+
 
 class TestDisjointProviderUnchanged:
     """Anthropic: input_tokens DISJOINT from cache → no subtraction (the cost
@@ -69,6 +95,13 @@ class TestDisjointProviderUnchanged:
         cost = _tracker(price).calculate_cost("m", 200, 0, cache_read_tokens=800)
         # 200 * 1.0 + 800 * 0.1 = 280 (no subtraction)
         assert cost == 280.0
+
+    def test_anthropic_reads_and_writes_remain_disjoint(self) -> None:
+        price = ModelPrice(input=1.0, output=2.0, cache_read=0.1, cache_write=1.25)
+        cost = _tracker(price).calculate_cost(
+            "m", 300, 10, cache_read_tokens=600, cache_creation_tokens=100
+        )
+        assert cost == 505.0
 
 
 def test_reasoning_breakdown_is_observed_without_double_billing() -> None:

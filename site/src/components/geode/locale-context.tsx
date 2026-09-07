@@ -30,22 +30,26 @@ export function LocaleProvider({
   allowQueryOverride?: boolean;
 }) {
   const [locale, setLocale] = useState<Locale>(defaultLocale);
+  const [queryReady, setQueryReady] = useState(false);
 
   // Explicit ?lang= param only — never the browser locale. The param wins
   // over the surface default when that surface allows language switching.
   useEffect(() => {
-    if (!allowQueryOverride) return;
     const params = new URLSearchParams(window.location.search);
     const lang = params.get("lang");
-    if (lang !== "en" && lang !== "ko") return;
     // Defer until after hydration; the server cannot observe the query string.
-    const timer = window.setTimeout(() => setLocale(lang), 0);
+    const timer = window.setTimeout(() => {
+      if (allowQueryOverride && (lang === "en" || lang === "ko")) setLocale(lang);
+      setQueryReady(true);
+    }, 0);
     return () => window.clearTimeout(timer);
   }, [allowQueryOverride]);
 
   // Update html lang attribute + URL param (param present only when the
   // locale differs from this surface's default, so default URLs stay clean).
   useEffect(() => {
+    // Preserve the requested language through StrictMode's effect replay.
+    if (!queryReady) return;
     document.documentElement.lang = locale;
     const url = new URL(window.location.href);
     if (locale !== defaultLocale) {
@@ -54,7 +58,7 @@ export function LocaleProvider({
       url.searchParams.delete("lang");
     }
     window.history.replaceState({}, "", url.toString());
-  }, [locale, defaultLocale]);
+  }, [locale, defaultLocale, queryReady]);
 
   return (
     <LocaleContext.Provider value={locale}>

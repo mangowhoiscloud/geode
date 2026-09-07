@@ -5,8 +5,9 @@ from __future__ import annotations
 import io
 import re
 import time
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from core.ui.agentic_ui import (
     OperationLogger,
@@ -140,6 +141,135 @@ class TestRenderTokens:
         assert "500" in printed
         assert "100" in printed
         assert "s" not in printed or "claude" in printed  # no time suffix
+
+    def test_cache_counts_and_estimated_cost_are_visible(self) -> None:
+        with patch("core.ui.agentic_ui.console") as mock_console:
+            render_tokens(
+                "gpt-5.5",
+                2000,
+                100,
+                cost_usd=0.1234,
+                cache_read_tokens=1200,
+                cache_write_tokens=30,
+            )
+        printed = str(mock_console.print.call_args)
+        assert "cache read 1,200 / write 30 tok" in printed
+        assert "est. API $0.1234" in printed
+        assert "%" not in printed
+
+    def test_cache_counts_reach_ipc_turn_renderer(self) -> None:
+        from core.ui.agentic_ui import _ipc_writer_local
+        from core.ui.event_renderer import EventRenderer
+
+        writer = MagicMock()
+        with patch.object(_ipc_writer_local, "writer", writer, create=True):
+            render_tokens(
+                "gpt-5.5",
+                2000,
+                100,
+                cost_usd=0.1234,
+                cache_read_tokens=1200,
+                cache_write_tokens=30,
+            )
+        writer.send_event.assert_called_once_with(
+            "tokens",
+            model="gpt-5.5",
+            input=2000,
+            output=100,
+            cost=0.1234,
+            cache_read_tokens=1200,
+            cache_write_tokens=30,
+        )
+        renderer = EventRenderer()
+        renderer._out = io.StringIO()
+        renderer.on_event({"type": "tokens", **writer.send_event.call_args.kwargs})
+        renderer.on_event({"type": "tokens", "input": 100, "output": 10, "cost": 0.0})
+        renderer.on_event({"type": "turn_end"})
+        rendered = renderer._out.getvalue()
+        assert "cache read 1,200 / write 30 tok" in rendered
+        assert "est. API $0.1234" in rendered
+        assert "2.1k" in rendered
+        renderer.on_event({"type": "turn_end"})
+        assert renderer._out.getvalue() == rendered
+        assert renderer._turn_cache_read_tokens == 0
+        assert renderer._turn_cache_write_tokens == 0
+
+    def test_ipc_cache_only_usage_is_not_dropped(self) -> None:
+        from core.ui.event_renderer import EventRenderer
+
+        renderer = EventRenderer()
+        renderer._out = io.StringIO()
+        renderer.on_event({"type": "tokens", "cache_read_tokens": 1200})
+        renderer.on_event({"type": "turn_end"})
+        assert "cache read 1,200 / write 0 tok" in renderer._out.getvalue()
+
+    def test_status_line_uses_per_turn_cache_delta(self) -> None:
+        from core.llm.token_tracker import LLMUsage, TokenTracker
+
+        tracker = TokenTracker()
+        tracker.accumulator.record(
+            LLMUsage(
+                model="gpt-5.5",
+                input_tokens=900,
+                cache_read_tokens=800,
+                cache_creation_tokens=10,
+                cost_usd=0.4,
+            )
+        )
+        snap = tracker.snapshot()
+        tracker.accumulator.record(
+            LLMUsage(
+                model="gpt-5.5",
+                input_tokens=1000,
+                output_tokens=100,
+                cache_read_tokens=600,
+                cache_creation_tokens=50,
+                cost_usd=0.1,
+            )
+        )
+        with (
+            patch("core.llm.token_tracker.get_tracker", return_value=tracker),
+            patch("core.ui.agentic_ui._turn_snapshot", snap),
+            patch(
+                "core.ui.agentic_ui.render.get_session_meter",
+                return_value=SimpleNamespace(
+                    model="gpt-5.5",
+                    turn_elapsed_display="1s",
+                ),
+            ),
+            patch("core.ui.agentic_ui.console") as mock_console,
+        ):
+            render_status_line()
+        printed = str(mock_console.print.call_args)
+        assert "cache read 600 / write 50 tok" in printed
+        assert "est. API $0.1000" in printed
+        assert "1,400" not in printed
+
+    def test_session_summary_preserves_cache_counts_and_cost_caveat(self) -> None:
+        from core.llm.token_tracker import LLMUsage, LLMUsageAccumulator
+        from core.ui.agentic_ui import render_session_cost_summary
+
+        acc = LLMUsageAccumulator(
+            calls=[
+                LLMUsage(
+                    model="gpt-5.5",
+                    input_tokens=1000,
+                    output_tokens=100,
+                    cache_read_tokens=600,
+                    cache_creation_tokens=50,
+                    cost_usd=0.1,
+                )
+            ]
+        )
+        with (
+            patch("core.llm.router.get_usage_accumulator", return_value=acc),
+            patch("core.ui.agentic_ui.console") as mock_console,
+        ):
+            render_session_cost_summary()
+        printed = " ".join(str(call) for call in mock_console.print.call_args_list)
+        assert "cache read 600 / write 50 tok" in printed
+        assert "Estimated API cost: $0.1000" in printed
+        assert "Not subscription charges" in printed
 
 
 class TestRenderPlanSteps:

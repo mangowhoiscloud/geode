@@ -123,7 +123,14 @@ def _record_usage(loop: AgenticLoop, response: Any) -> Any | None:
         reported_cost_usd=reported_cost,
     )
     if not loop._quiet:
-        render_tokens(model, in_tok, out_tok, cost_usd=usage.cost_usd)
+        render_tokens(
+            model,
+            in_tok,
+            out_tok,
+            cost_usd=usage.cost_usd,
+            cache_read_tokens=cache_read,
+            cache_write_tokens=cache_create,
+        )
     log.info(
         "LLM call: model=%s in=%d out=%d think=%d cache_w=%d cache_r=%d cost=$%.4f",
         model,

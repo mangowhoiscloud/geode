@@ -1,0 +1,138 @@
+{
+  "presentationOnly": true,
+  "paired": {
+    "runId": "terminalbench21-sol-max-fullsuite-paired-20260827t190300z",
+    "commit": "c52872aacd20a4b9f14be18d64acce3e9ed99070",
+    "model": "gpt-5.6-sol",
+    "reasoning": "max",
+    "route": "OpenAI subscription",
+    "harness": "Harbor 0.22.0",
+    "geodeRevision": "b549f3e448f06c75db45df6082013dc21a611dec",
+    "dataset": "terminal-bench/terminal-bench-2-1@6",
+    "datasetDigest": "sha256:7d7bdc1cbedad549fc1140404bd4dc45e5fd0ea7c4186773687d177ad3a0699a",
+    "comparator": "native Codex CLI 0.145.0",
+    "scope": "secondary exact-common-cell paired-runtime diagnostic",
+    "frozenTasks": 89,
+    "includedTasks": 87,
+    "repetitions": 5,
+    "frozenTrialsPerArm": 445,
+    "commonTrials": 429,
+    "geodePasses": 339,
+    "nativePasses": 331,
+    "primaryStatus": "not-measurable",
+    "decision": "inconclusive",
+    "officialSubmissionEligible": false,
+    "taskBalancedDeltaPp": 1.264367816091954,
+    "taskBootstrap95Pp": [-5.402298850574713, 8.045977011494253],
+    "excludedTasks": ["bn-fit-modify", "tune-mjcf"],
+    "unresolvedNativeTrials": 6,
+    "sources": {
+      "spec": {
+        "url": "https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/c52872aacd20a4b9f14be18d64acce3e9ed99070/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/run-spec.json",
+        "sha256": "46685f7ebcdc515c4cc71185ab49c3fa2326873b0aee003587e602da4f1d22e7",
+        "pointers": ["/reproduction", "/study/primary_metric"]
+      },
+      "data": {
+        "url": "https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/c52872aacd20a4b9f14be18d64acce3e9ed99070/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/native-results.json",
+        "sha256": "00d3b61303127f48aec4cc694281ff42a49a8ffa9d023fc429ce362fe3233fa4",
+        "pointers": ["/exact_common_cell_comparison", "/primary_metric", "/suite", "/excluded_tasks", "/secondary_observed_coverage"]
+      },
+      "analysis": {
+        "url": "https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/c52872aacd20a4b9f14be18d64acce3e9ed99070/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/analysis.json",
+        "sha256": "c32619e98bb3a4056a1c34e30f8d0be68137f2db5d68884f060c29fc8a1278ab",
+        "pointers": ["/decision", "/limitations"]
+      },
+      "statistics": {
+        "url": "https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/c52872aacd20a4b9f14be18d64acce3e9ed99070/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/recording/figures-v6/provenance.json",
+        "sha256": "f6eb9b4d8dba934a2fdd40d8d80de83fe2aed455053d69d2527e92971ca3163b",
+        "pointers": ["/task_cluster_bootstrap"]
+      },
+      "video": {
+        "url": "https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/c52872aacd20a4b9f14be18d64acce3e9ed99070/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/recording/public/terminalbench21-geode-vs-native-evidence-v6-ko-en.mp4",
+        "sha256": "27ae8a4e9825449757c4fa9f5927c06491bf3979ae9966fb3cc7b160d47eba10"
+      }
+    }
+  },
+  "astra": {
+    "runId": "terminalbench21-astra-high-openssl-smoke-20260904t202725z",
+    "attemptId": "astra-openssl-r01-original",
+    "commit": "a32abcbf78ab6100ea1e85540a2ace9436dc6f76",
+    "model": "gpt-6-astra",
+    "reasoning": "high",
+    "route": "OpenAI subscription",
+    "geodeVersion": "1.0.27",
+    "harness": "Harbor 0.22.0",
+    "task": "openssl-selfsigned-cert",
+    "taskCount": 1,
+    "repetitions": 1,
+    "validity": "valid",
+    "passedTrials": 1,
+    "selectedTrials": 1,
+    "verifierPassed": 6,
+    "verifierTotal": 6,
+    "rounds": 3,
+    "toolCalls": 2,
+    "toolResults": 2,
+    "orphanCalls": 0,
+    "orphanResults": 0,
+    "termination": "natural",
+    "retries": 0,
+    "fallbacks": 0,
+    "inputTokens": 10442,
+    "outputTokens": 1948,
+    "cachedTokens": 0,
+    "promotionAuthority": "none",
+    "trace": {
+      "eventCount": 12,
+      "scopeComplete": true,
+      "replayComplete": false,
+      "omittedPayloadCount": 9,
+      "events": [
+        {"ordinal": 1, "occurredAt": "2026-09-04T20:29:27.091323Z", "kind": "session.started", "actor": "agent", "status": "active", "payloadOmitted": false},
+        {"ordinal": 2, "occurredAt": "2026-09-04T20:29:27.093552Z", "kind": "message.user", "actor": "user", "payloadOmitted": true},
+        {"ordinal": 3, "occurredAt": "2026-09-04T20:29:27.121798Z", "kind": "preflight.recorded", "actor": "agent", "payloadOmitted": true},
+        {"ordinal": 4, "occurredAt": "2026-09-04T20:29:32.734022Z", "kind": "tool.called", "actor": "agent", "callId": "call_S0NFvUTVVf7b3Y3bXO9flCBO", "tool": "terminal_exec", "payloadOmitted": true},
+        {"ordinal": 5, "occurredAt": "2026-09-04T20:29:32.942249Z", "kind": "tool.completed", "actor": "agent", "callId": "call_S0NFvUTVVf7b3Y3bXO9flCBO", "tool": "terminal_exec", "status": "ok", "payloadOmitted": true},
+        {"ordinal": 6, "occurredAt": "2026-09-04T20:30:27.264528Z", "kind": "tool.called", "actor": "agent", "callId": "call_1ReSHYoH6VNVpQ2EeiEvs3NN", "tool": "terminal_exec", "payloadOmitted": true},
+        {"ordinal": 7, "occurredAt": "2026-09-04T20:30:28.789785Z", "kind": "tool.completed", "actor": "agent", "callId": "call_1ReSHYoH6VNVpQ2EeiEvs3NN", "tool": "terminal_exec", "status": "ok", "payloadOmitted": true},
+        {"ordinal": 8, "occurredAt": "2026-09-04T20:30:45.173736Z", "kind": "verification.decided", "actor": "policy", "status": "accept", "payloadOmitted": true},
+        {"ordinal": 9, "occurredAt": "2026-09-04T20:30:45.175711Z", "kind": "message.assistant", "actor": "assistant", "payloadOmitted": true},
+        {"ordinal": 10, "occurredAt": "2026-09-04T20:30:45.176784Z", "kind": "usage.recorded", "actor": "agent", "payloadOmitted": false},
+        {"ordinal": 11, "occurredAt": "2026-09-04T20:30:45.177727Z", "kind": "turn.completed", "actor": "agent", "status": "completed", "payloadOmitted": true},
+        {"ordinal": 12, "occurredAt": "2026-09-04T20:30:45.197200Z", "kind": "session.ended", "actor": "agent", "status": "completed", "payloadOmitted": false}
+      ]
+    },
+    "sources": {
+      "spec": {
+        "url": "https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z/run-spec.json",
+        "sha256": "0d0fbbacc040b0742a9bb7fc85796abaac7ee4bfe2f01c9472a037265500f0fe",
+        "pointers": ["/reproduction"]
+      },
+      "attempts": {
+        "url": "https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z/attempts.jsonl",
+        "sha256": "fdc9b9c6372f69faf3ce2a2ddfc964101b594d84d062893ef0c0bdb1bf15d5e5",
+        "pointers": ["/attempt_id", "/change", "/observed_result"]
+      },
+      "data": {
+        "url": "https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/result.json",
+        "sha256": "078321572fe643bd14e018fe3f272c2351146812c020cbe56b4c01f537bfa6ae",
+        "pointers": ["/n_total_trials", "/stats"]
+      },
+      "trajectory": {
+        "url": "https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z/trajectories/terminalbench-geode-terminalbench21-astra-high-openssl-smoke-20260904t202725z-20260904T204003Z-e248cf31969e/geode-trajectory.json",
+        "sha256": "4ef6b0e15e6f1db7ec7d4903560ce7c46f4a5ad62278f59cf329e30e3e442dde",
+        "pointers": ["/events", "/outcome", "/integrity"]
+      },
+      "verifier": {
+        "url": "https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z/raw/harbor/terminalbench21-astra-high-openssl-smoke-20260904t202725z/openssl-selfsigned-cert__nCXHtTa/verifier/ctrf.json",
+        "sha256": "71d3b74211c4c013cbc4a187be7cea1866f022f800fb5ae16fec14adbc3adb8f",
+        "pointers": ["/results/summary"]
+      },
+      "analysis": {
+        "url": "https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z/analysis.json",
+        "sha256": "314991629de8f54de1dc0cc1cec97464add51262501e3268fbc58871736d8a2a",
+        "pointers": ["/metrics", "/decision", "/limitations"]
+      }
+    }
+  }
+}

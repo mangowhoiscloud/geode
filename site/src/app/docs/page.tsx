@@ -1,16 +1,18 @@
 "use client";
 
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
-import { FallIn } from "@/components/geode-docs/fall-in";
-import { DOCS_SITEMAP } from "@/lib/geode-docs/sitemap";
+import Link from "next/link";
+import { DocsNavigation } from "@/components/geode-docs/docs-navigation";
+import { findPage } from "@/lib/geode-docs/sitemap";
+import { DOCS_NAV_GROUPS, docsPageHref } from "@/lib/geode-docs/navigation";
 import { useLocale, t } from "@/components/geode/locale-context";
 
 export default function DocsIndex() {
   const locale = useLocale();
   const summaryEn =
-    "A general-purpose autonomous execution agent for research, analysis, automation, and scheduling. Its signature: an outer loop that improves the system itself, kept honest by an adversarial safety audit.";
+    "Start a task, configure your runtime, or inspect the contracts and evidence behind GEODE.";
   const summaryKo =
-    "리서치, 분석, 자동화, 스케줄 작업을 수행하는 범용 자율 실행 에이전트. 시그니처는 시스템 자체를 개선하는 바깥쪽 루프이고, 그 과정을 적대적 안전 감사가 검증합니다.";
+    "작업을 시작하고 런타임을 설정하거나, GEODE의 내부 계약과 평가 근거를 확인합니다.";
   return (
     <DocsShell
       slug=""
@@ -19,6 +21,29 @@ export default function DocsIndex() {
       summary={summaryEn}
       summaryKo={summaryKo}
     >
+      <section className="docs-task-routes" aria-label={t(locale, "목적별 시작점", "Start with your task")}>
+        {DOCS_NAV_GROUPS.map((group) => (
+          <div key={group.id} className="docs-task-route">
+            <div>
+              <h2>{t(locale, group.titleKo, group.title)}</h2>
+              <p>{t(locale, group.summaryKo, group.summary)}</p>
+            </div>
+            <ul>{group.entrySlugs.map((slug) => {
+              const page = findPage(slug)!.page;
+              return <li key={slug}><Link href={docsPageHref(slug, locale)}>{t(locale, page.titleKo, page.title)}</Link></li>;
+            })}</ul>
+          </div>
+        ))}
+      </section>
+
+      <section className="docs-index-directory">
+        <h2>{t(locale, "전체 문서", "All documentation")}</h2>
+        <p>{t(locale, "주제를 펼쳐 문서를 찾거나 제목·요약·경로로 범위를 좁히세요.", "Open a topic or narrow the directory by title, summary, or path.")}</p>
+        <DocsNavigation slug="" directory />
+      </section>
+
+      <details className="docs-index-background">
+        <summary>{t(locale, "GEODE의 개념과 설계 배경", "GEODE concepts and design background")}</summary>
       <Bi
         ko={
           <>
@@ -51,9 +76,9 @@ export default function DocsIndex() {
             <ul>
               <li>
                 <strong>Inner loop (Agentic Loop)</strong>. 한 작업을 푸는{" "}
-                <code>while(tool_use)</code> 실행 루프입니다. 라운드 상한과 종료
-                경로 안에서 도구를 deferred loading으로 관리하며 일을 끝까지
-                처리합니다.
+                <code>while(tool_use)</code> 실행 루프입니다. 기본 라운드 상한은
+                0(무제한)이며 시간 예산과 종료 경로가 실행을 제어합니다.
+                도구는 필요에 따라 지연 로딩합니다.
               </li>
               <li>
                 <strong>Outer loop (Self-Improving Loop)</strong>. 작업을 처리하는
@@ -104,8 +129,8 @@ export default function DocsIndex() {
               <li>
                 <strong>Inner loop (the Agentic Loop)</strong>. The{" "}
                 <code>while(tool_use)</code> primitive that solves one task. It
-                works through a task within a round cap and a set of termination
-                paths, loading tools on demand.
+                loads tools on demand. The default round limit is 0 (unlimited);
+                time budgets and explicit termination paths govern execution.
               </li>
               <li>
                 <strong>Outer loop (the Self-Improving Loop)</strong>. A closed
@@ -184,38 +209,6 @@ export default function DocsIndex() {
         }
       />
 
-      <h2>{t(locale, "섹션", "Sections")}</h2>
-      <div className="not-prose mt-3 border-t border-[var(--rule)]">
-        {DOCS_SITEMAP.map((section, idx) => (
-          <FallIn
-            key={section.id}
-            delay={idx * 0.07}
-            tilt={idx % 2 === 0 ? -0.9 : 0.9}
-          >
-            <a
-              href={`/geode/docs/${section.pages[0]?.slug ?? ""}`}
-              className="flex flex-col gap-0.5 border-b border-[var(--rule)] py-3 group"
-            >
-              <span className="font-display font-semibold text-[var(--ink)] group-hover:text-[var(--acc-soft)]">
-                <span className="mr-2 text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
-                  {section.id}
-                </span>
-                {t(locale, section.titleKo, section.title)}
-              </span>
-              <span className="text-sm text-[var(--ink-2)]">
-                {section.pages.slice(0, 4).map((p, i) => (
-                  <span key={p.slug}>
-                    {i > 0 && ", "}
-                    {t(locale, p.titleKo, p.title)}
-                  </span>
-                ))}
-                {section.pages.length > 4 && ", …"}
-              </span>
-            </a>
-          </FallIn>
-        ))}
-      </div>
-
       <Bi
         ko={
           <>
@@ -273,6 +266,7 @@ export default function DocsIndex() {
           </>
         }
       />
+      </details>
     </DocsShell>
   );
 }
