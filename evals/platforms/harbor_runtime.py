@@ -133,6 +133,7 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
         provider: str = "openai",
         source: str = "subscription",
         effort: str = "max",
+        verify_mode: str = "rule_based",
         agent_timeout_sec: float,
         **kwargs: Any,
     ) -> None:
@@ -143,6 +144,9 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
         if harbor_version != "0.22.0":
             raise RuntimeError("native GEODE integration is validated only with harbor==0.22.0")
         super().__init__(*args, **kwargs)
+        from core.agent.verify import VerifyMode
+
+        self.verify_mode = VerifyMode(verify_mode).value
         self.provider = provider
         self.source = source
         self.effort = effort
@@ -244,6 +248,14 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
             environment, command=f"test ! -e {_LOGS}/geode-home && mkdir {_LOGS}/geode-home"
         )
         await environment.upload_file(config_path, f"{_LOGS}/geode-home/config.toml")
+        # This profile belongs only to the fresh task container. Approval
+        # bypass alone does not admit shell tools in the native profile policy.
+        profile_path = self.logs_dir / "runtime-preferences.toml"
+        atomic_write_text(profile_path, "[policy]\nallow_dangerous = true\n")
+        await self.exec_as_agent(environment, command=f"mkdir {_LOGS}/geode-home/user_profile")
+        await environment.upload_file(
+            profile_path, f"{_LOGS}/geode-home/user_profile/preferences.toml"
+        )
         args = [
             f"{_INSTALL}/.venv/bin/python",
             "-m",
@@ -258,6 +270,8 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
             str(self.agent_timeout_sec),
             "--revision",
             self.source_revision,
+            "--verify-mode",
+            self.verify_mode,
         ]
         # This environment belongs only to the new container process.
         env = {
@@ -273,6 +287,7 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
             "GEODE_COGNITIVE_REFLECTION_MODEL": model,
             "GEODE_ACT_MODEL": model,
             "GEODE_JUDGE_MODEL": model,
+            "GEODE_VERIFY_MODE": self.verify_mode,
         }
         atomic_write_json(
             self.logs_dir / "runtime-contract.json",
@@ -284,6 +299,9 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
                 "model": model,
                 "source": self.source,
                 "effort": self.effort,
+                "verify_mode": self.verify_mode,
+                "required_tools": ["run_bash"],
+                "profile_scope": "fresh task container only; allow_dangerous=true",
                 "effort_scope": "root setting; native worker difficulty and wrap-up policies apply",
                 "agent_timeout_sec": self.agent_timeout_sec,
                 "uv_version": _UV_VERSION,
@@ -359,6 +377,7 @@ async def _run_native(args: argparse.Namespace) -> int:
     Path(f"{_LOGS}/runtime.pid").write_text(str(os.getpid()))
     from core.agent.loop.models import TerminationReason, is_successful_task_termination
     from core.agent.session_mode import SessionMode
+    from core.agent.verify import VerifyMode, get_verify_mode
     from core.config import load_model_policy, settings
     from core.memory.atomic_write import atomic_write_json
     from core.observability.event_store import HookEventStore
@@ -372,6 +391,9 @@ async def _run_native(args: argparse.Namespace) -> int:
         or load_model_policy().allowlist != [args.model]
         or settings.openai_credential_source != "openai-codex"
         or settings.anthropic_credential_source != "none"
+        or get_verify_mode() != VerifyMode(args.verify_mode)
+        or os.environ.get("GEODE_VERIFY_MODE") != args.verify_mode
+        or settings.judge_model != args.model
         or any(value for key, value in os.environ.items() if key.endswith("API_KEY"))
     ):
         raise RuntimeError("runtime model/credential isolation preflight failed")
@@ -400,6 +422,10 @@ async def _run_native(args: argparse.Namespace) -> int:
     error_type: str | None = None
     succeeded = False
     try:
+        if "run_bash" not in {tool["name"] for tool in loop._tools} or (
+            executor._session_scope_denial("run_bash") is not None
+        ):
+            raise RuntimeError("runtime shell capability preflight failed")
         async with asyncio.timeout(max(0, args.timeout - (time.monotonic() - started))):
             result = await loop.arun(Path(args.instruction).read_text())
         outcome = str(result.termination_reason)
@@ -463,6 +489,7 @@ async def _run_native(args: argparse.Namespace) -> int:
                 "termination_reason": outcome,
                 "error_type": error_type,
                 "source_revision": args.revision,
+                "verify_mode": args.verify_mode,
                 "usage": usage,
                 "score_authority": "Harbor task verifier, not this runtime receipt",
             }
@@ -519,6 +546,7 @@ def main() -> int:
     parser.add_argument("--effort", required=True)
     parser.add_argument("--timeout", type=float, required=True)
     parser.add_argument("--revision", required=True)
+    parser.add_argument("--verify-mode", default="rule_based")
     args = parser.parse_args()
     if not math.isfinite(args.timeout) or args.timeout <= 0:
         parser.error("timeout must be positive and finite")

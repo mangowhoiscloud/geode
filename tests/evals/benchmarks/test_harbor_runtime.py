@@ -7,7 +7,7 @@ import json
 import tarfile
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from evals.platforms.harbor import RecordedCodexHarborAgent
@@ -132,13 +132,16 @@ def test_stop_runtime_waits_for_shutdown_receipt_and_fails_closed() -> None:
         asyncio.run(_stop_runtime(environment))
 
 
-def test_runtime_config_pins_role_models_and_absolute_policy(tmp_path: Path) -> None:
+def test_runtime_config_pins_role_models_and_absolute_policy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import tomllib
 
     agent = object.__new__(GeodeRuntimeHarborAgent)
     agent.logs_dir = tmp_path
     agent.model_name = "gpt-5.6-sol"
     agent.effort = "max"
+    agent.verify_mode = "reflexion"
     agent.source = "subscription"
     agent.source_revision = "a" * 40
     agent.source_sha256 = "b" * 64
@@ -158,6 +161,67 @@ def test_runtime_config_pins_role_models_and_absolute_policy(tmp_path: Path) -> 
     call = agent.exec_as_agent.call_args.kwargs
     assert "runtime.log 2>&1" in call["command"]
     assert call["env"]["PYTHONFAULTHANDLER"] == "1"
+    assert call["env"]["GEODE_VERIFY_MODE"] == "reflexion"
+    assert "--verify-mode reflexion" in call["command"]
+    profile_path = tmp_path / "runtime-preferences.toml"
+    assert tomllib.loads(profile_path.read_text()) == {"policy": {"allow_dangerous": True}}
+    environment.upload_file.assert_any_await(
+        profile_path, "/logs/agent/geode-home/user_profile/preferences.toml"
+    )
+    contract = json.loads((tmp_path / "runtime-contract.json").read_text())
+    assert contract["verify_mode"] == "reflexion"
+    assert contract["required_tools"] == ["run_bash"]
+
+    from core.agent.loop.models import AgenticResult
+    from core.agent.subagent_roles import SUBAGENT_ROLES
+    from core.agent.tool_executor import ToolExecutor
+    from core.agent.worker import WorkerRequest, _run_agentic
+    from core.config import settings
+    from core.server.supervised.services import SessionMode, SharedServices
+    from core.tools.composition import compose_tool_plan
+
+    # Keep native catalog/profile/session admission; stub only inference and
+    # unrelated startup so this gate cannot read credentials or execute tools.
+    monkeypatch.setattr(settings, "model", agent.model_name)
+    monkeypatch.setattr(settings, "openai_credential_source", "openai-codex")
+    monkeypatch.setattr("core.config.reload_settings_from_disk", lambda: None)
+    monkeypatch.setattr(SharedServices, "_build_sub_agent_manager", lambda self: None)
+    monkeypatch.setattr("core.wiring.bootstrap.build_worker_hooks", lambda **kwargs: None)
+    executors: list[ToolExecutor] = []
+
+    def fake_loop(_conversation, executor, **_kwargs):
+        executors.append(executor)
+        loop = MagicMock()
+        loop.arun = AsyncMock(return_value=AgenticResult(text="ok", termination_reason="unknown"))
+        return loop
+
+    monkeypatch.setattr("core.agent.loop.AgenticLoop", fake_loop)
+    bound, transient = compose_tool_plan()
+    services = SharedServices(bound_tool_plan=bound, transient_tool_handlers=transient)
+    monkeypatch.setattr("core.paths.GLOBAL_USER_PREFERENCES", tmp_path / "missing-preferences.toml")
+    executor, _loop = services.create_session(SessionMode.REPL)
+    assert "run_bash" not in executor._bound_tool_plan.tool_names
+    assert executor._session_scope_denial("run_bash") is not None
+
+    monkeypatch.setattr("core.paths.GLOBAL_USER_PREFERENCES", profile_path)
+    executor, _loop = services.create_session(SessionMode.REPL)
+    assert "run_bash" in executor._bound_tool_plan.tool_names
+    assert executor._session_scope_denial("run_bash") is None
+    for role in ("verifier", "", "reviewer"):
+        _run_agentic(
+            WorkerRequest(
+                task_id=role or "default",
+                description="Inspect shell admission without executing it.",
+                model=agent.model_name,
+                provider="openai",
+                source="subscription",
+                agent_allowed_tools=list(SUBAGENT_ROLES[role].tools) if role else [],
+            ),
+            lambda: (bound, transient),
+        )
+        executor = executors[-1]
+        assert ("run_bash" in executor._bound_tool_plan.tool_names) is (role == "verifier")
+        assert (executor._session_scope_denial("run_bash") is None) is (role == "verifier")
 
 
 def test_installed_agent_uses_harbor_lifecycle_and_classifies_timeout(tmp_path: Path) -> None:
@@ -189,6 +253,9 @@ def test_installed_agent_uses_harbor_lifecycle_and_classifies_timeout(tmp_path: 
 
     agent = GeodeRuntimeHarborAgent(**kwargs)
     assert isinstance(agent, BaseInstalledAgent)
+    assert agent.verify_mode == "rule_based"
+    with pytest.raises(ValueError, match="is not a valid VerifyMode"):
+        GeodeRuntimeHarborAgent(**kwargs, verify_mode="reflexionn")
     assert GeodeRuntimeHarborAgent.setup is BaseInstalledAgent.setup
     assert agent.SUPPORTS_ATIF
     assert isinstance(
