@@ -11,8 +11,8 @@ and Claude Code's ``<system-reminder>``/``<workingDir>`` tags.
 Slop-cleanup (2026-06-11): the analyst / evaluator / synthesizer /
 tool_augmented templates and the empty-husk ``axes.py`` were deleted —
 they served the Game-IP analysis pipeline removed in v0.99.149 and had
-zero production callers since. The live template is ``router``
-(AgenticLoop system + agentic suffix).
+zero production callers since. ``router`` owns the default system and agentic
+suffix; ``reviewer`` owns the opt-in adversarial review contract.
 """
 
 from __future__ import annotations
@@ -89,6 +89,7 @@ def hash_rendered_prompt(template: str, **kwargs: Any) -> str:
 _router = _load_template("router")
 ROUTER_SYSTEM: str = _router["system"]
 AGENTIC_SUFFIX: str = _router["agentic_suffix"]
+REVIEWER_SYSTEM: str = load_prompt("reviewer")
 
 # ---------------------------------------------------------------------------
 # Prompt version hashes
@@ -97,6 +98,7 @@ AGENTIC_SUFFIX: str = _router["agentic_suffix"]
 PROMPT_VERSIONS: dict[str, str] = {
     "ROUTER_SYSTEM": _hash_prompt(ROUTER_SYSTEM),
     "AGENTIC_SUFFIX": _hash_prompt(AGENTIC_SUFFIX),
+    "REVIEWER_SYSTEM": _hash_prompt(REVIEWER_SYSTEM),
 }
 
 _log.debug("Prompt versions loaded (%d): %s", len(PROMPT_VERSIONS), PROMPT_VERSIONS)
@@ -113,6 +115,7 @@ _log.debug("Prompt versions loaded (%d): %s", len(PROMPT_VERSIONS), PROMPT_VERSI
 _PINNED_HASHES: dict[str, str] = {
     "AGENTIC_SUFFIX": "05f56b99ba7a",
     "ROUTER_SYSTEM": "6e86f4dc622c",
+    "REVIEWER_SYSTEM": "2b640e3c98ac",
 }
 
 
@@ -141,6 +144,7 @@ def verify_prompt_integrity(*, raise_on_drift: bool = False) -> list[str]:
 __all__ = [
     "AGENTIC_SUFFIX",
     "PROMPT_VERSIONS",
+    "REVIEWER_SYSTEM",
     "ROUTER_SYSTEM",
     "_hash_prompt",
     "hash_rendered_prompt",

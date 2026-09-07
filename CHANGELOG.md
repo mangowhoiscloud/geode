@@ -63,6 +63,10 @@ functional change.
   can express unused fields on Responses schemas. Invalid non-positive line
   controls now return validation errors instead of accidental slices.
 
+- Connected the read-only reviewer role to a pinned adversarial evidence-review
+  system prompt, retaining its existing tool restrictions and findings schema.
+  Review guidance now separates substantiated defects, unverified scope, and
+  the owning acceptance decision.
 - Aligned runtime guidance with authorized task scope, available delegation, and
   explicitly configured recovery; removed conflicting development instructions
   for repeated verification, automatic release/restart, and tool-specific review.

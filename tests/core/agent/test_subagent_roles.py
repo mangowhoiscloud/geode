@@ -202,6 +202,33 @@ def _role_task(role: str, task_id: str = "t1") -> SubTask:
 
 
 class TestWorkerRequestRoleWiring:
+    @pytest.mark.parametrize("role", ["", "no_such_role", "repo_researcher", "patcher", "verifier"])
+    def test_non_reviewer_keeps_default_system_prompt(self, role: str) -> None:
+        req = _manager()._protocol.build_worker_request(_role_task(role))
+        assert req.agent_system_prompt == ""
+
+    def test_reviewer_preserves_explicit_agent_and_restricts_its_tools(self) -> None:
+        from core.llm.prompts import REVIEWER_SYSTEM
+        from core.skills.agents import AgentDefinition, AgentRegistry
+
+        registry = AgentRegistry()
+        registry.register(
+            AgentDefinition(
+                name="domain-review",
+                role="domain",
+                system_prompt="Scope: dependency analysis.",
+                tools=["read_document", "write_file"],
+            )
+        )
+        manager = SubAgentManager(IsolatedRunner(), agent_registry=registry)
+        task = _role_task("reviewer")
+        task.agent = "domain-review"
+        req = manager._protocol.build_worker_request(task)
+        assert req.agent_system_prompt == "Scope: dependency analysis.\n\n" + REVIEWER_SYSTEM
+        assert "write_file" in req.denied_tools
+        assert "read_document" not in req.denied_tools
+        assert '"findings"' in req.description
+
     def test_role_narrows_denied_tools(self) -> None:
         req = _manager()._protocol.build_worker_request(_role_task("repo_researcher"))
         denied = set(req.denied_tools)

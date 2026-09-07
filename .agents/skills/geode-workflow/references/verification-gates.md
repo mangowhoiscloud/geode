@@ -99,15 +99,37 @@ path guarded.
 ## Independent Review
 
 Non-trivial changes get an independent, read-only review when a suitable
-reviewer is available. Give it the exact diff/base and relevant invariants;
-verify findings locally and resolve or explicitly disposition them. Re-review
-changed or unresolved parts, not an unchanged, already-reviewed diff.
+reviewer is available. Before dispatch, the parent fixes the final artifact
+revision (base/head/diff or a saved content digest), goal, acceptance contract,
+source evidence, and excluded scope. Supply the necessary original evidence;
+withhold producer rationale and previous review scores unless the task needs
+them. Verify findings locally and resolve or explicitly disposition them.
+Re-review changed or unresolved parts, not an unchanged, already-reviewed
+artifact.
 
 Use the [Codex MCP skill](../../codex-mcp-verify/SKILL.md) when its user-request
 and tool-availability conditions hold. Otherwise an available independent
 subagent can review; if no reviewer is available, disclose that limit instead
 of inventing tools, reading credentials, or blocking indefinitely. Review is
 evidence, not a replacement for deterministic checks or required CI.
+
+### Adversarial Review
+
+Use this optional focus for consequential documents, designs, PRs, or
+publication decisions when their claims need challenge. In GEODE, call
+`delegate_task` with `role="reviewer"`; its behavior lives in the
+[canonical reviewer prompt](../../../../core/llm/prompts/reviewer.md).
+Reuse that contract instead of adding another role, score, or review ledger.
+
+The reviewer can only use its permitted `grep_files` and `read_document`
+tools. It returns the existing `findings[{file,line,severity,summary}]` schema,
+not an approval. The parent keeps inspected and unverified scope in the task
+receipt and checks findings against the original evidence. Schema validation
+success or an empty findings list does not establish a pass, authorize a
+merge, or replace missing checks. Report evidence limits without fabricating
+findings to fill them.
+
+### Architecture Program Review
 
 For architecture/extensibility **implementation PRs**, verification also
 confirms that canonical `develop` contains the selected package's

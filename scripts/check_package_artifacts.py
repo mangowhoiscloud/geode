@@ -76,6 +76,7 @@ REQUIRED_WHEEL_PATHS = (
         "core/config/routing.toml",
         "core/llm/model_pricing.toml",
         "core/llm/prompts/router.md",
+        "core/llm/prompts/reviewer.md",
         "evals/__init__.py",
         "evals/cli.py",
         "evals/worker.py",

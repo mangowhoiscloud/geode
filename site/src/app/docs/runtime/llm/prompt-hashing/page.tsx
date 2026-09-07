@@ -8,22 +8,22 @@ export default function Page() {
       slug="runtime/llm/prompt-hashing"
       title="Prompt hashing"
       titleKo="프롬프트 해싱"
-      summary="Four pinned prompt hashes that break the build on unintended drift, and the deliberate re-pin workflow."
-      summaryKo="의도하지 않은 drift에 빌드를 깨뜨리는 4개의 프롬프트 해시 핀과, 의도된 변경의 re-pin 절차를 다룹니다."
+      summary="Pinned prompt sections, drift detection, and the deliberate re-pin workflow."
+      summaryKo="프롬프트 섹션의 해시 핀, drift 감지, 의도된 변경의 re-pin 절차를 다룹니다."
     >
       <Bi
         ko={
           <>
             <p>
-              핵심 프롬프트 템플릿은 해시로 핀됩니다. 템플릿이 한 글자라도
-              바뀌면 계산된 해시가 핀과 어긋나고 CI가 깨집니다. 프롬프트
-              모든 프롬프트 변경을 의도된 diff로 드러내는 래칫입니다.
+              핵심 프롬프트 섹션은 해시로 핀됩니다. 로더가 추출하고 양끝
+              공백을 제거한 본문이 바뀌면 계산된 해시가 핀과 어긋나 CI가
+              실패합니다. 해시는 변경을 드러내며, 동작 품질 자체를 증명하지는 않습니다.
             </p>
 
-            <h2>네 개의 핀</h2>
+            <h2>핀 대상</h2>
             <p>
               <code>core/llm/prompts/__init__.py</code>가 .md 템플릿
-              (<code>router.md</code>, <code>commentary.md</code>)을 로드해
+              (<code>router.md</code>, <code>reviewer.md</code>)을 로드해
               SHA-256 앞 12자를 <code>PROMPT_VERSIONS</code>로 계산하고,
               하드코딩된 <code>_PINNED_HASHES</code>와 비교합니다.
             </p>
@@ -34,14 +34,13 @@ export default function Page() {
               <tbody>
                 <tr><td><code>ROUTER_SYSTEM</code></td><td><code>core/llm/prompts/router.md</code></td><td>AgenticLoop 시스템 프롬프트의 베이스 템플릿.</td></tr>
                 <tr><td><code>AGENTIC_SUFFIX</code></td><td><code>core/llm/prompts/router.md</code></td><td>agentic 모드에서 덧붙는 suffix 절.</td></tr>
-                <tr><td><code>COMMENTARY_SYSTEM</code></td><td><code>core/llm/prompts/commentary.md</code></td><td>커멘터리 시스템 프롬프트.</td></tr>
-                <tr><td><code>COMMENTARY_USER</code></td><td><code>core/llm/prompts/commentary.md</code></td><td>커멘터리 사용자 템플릿.</td></tr>
+                <tr><td><code>REVIEWER_SYSTEM</code></td><td><code>core/llm/prompts/reviewer.md</code></td><td>reviewer 역할을 선택한 서브에이전트의 읽기 전용 적대적 검토.</td></tr>
               </tbody>
             </table>
             <p>
               비교 함수는 <code>verify_prompt_integrity</code>입니다. 어긋난
-              핀의 목록을 반환하고, <code>raise_on_drift=True</code>면 첫
-              불일치에서 RuntimeError를 던집니다. CI 테스트가 이 검증을
+              핀의 목록을 반환하고, <code>raise_on_drift=True</code>면
+              불일치가 있을 때 RuntimeError를 던집니다. CI 테스트가 이 검증을
               게이트로 겁니다.
             </p>
 
@@ -73,7 +72,7 @@ export default function Page() {
             <h2>경계</h2>
             <p>
               핀 대상은 정적 템플릿이지 렌더된 프롬프트가 아닙니다. 메모리
-              레이어, 날짜, wrapper override처럼 런타임에 합성되는 부분은
+              레이어, 날짜, 사용자 정의 wrapper처럼 런타임에 합성되는 부분은
               해시 범위 밖입니다. 렌더 결과의 재현성 감사가 필요하면
               <code>hash_rendered_prompt</code>가 같은 12자 해시를 렌더된
               문자열에 적용합니다.
@@ -108,15 +107,15 @@ export default function Page() {
         en={
           <>
             <p>
-              The core prompt templates are pinned by hash. Change a single
-              character and the computed hash diverges from the pin; CI
-              breaks. Every change must show up as a deliberate diff. A ratchet.
+              Core prompt sections are pinned by hash. A change to the extracted,
+              trimmed section body changes its hash and fails CI. This detects
+              drift; it does not establish behavioral quality.
             </p>
 
-            <h2>The four pins</h2>
+            <h2>Pinned sections</h2>
             <p>
               <code>core/llm/prompts/__init__.py</code> loads the .md
-              templates (<code>router.md</code>, <code>commentary.md</code>),
+              templates (<code>router.md</code>, <code>reviewer.md</code>),
               computes the first 12 hex chars of SHA-256 into
               <code>PROMPT_VERSIONS</code>, and compares them against the
               hardcoded <code>_PINNED_HASHES</code>.
@@ -128,15 +127,14 @@ export default function Page() {
               <tbody>
                 <tr><td><code>ROUTER_SYSTEM</code></td><td><code>core/llm/prompts/router.md</code></td><td>Base template of the AgenticLoop system prompt.</td></tr>
                 <tr><td><code>AGENTIC_SUFFIX</code></td><td><code>core/llm/prompts/router.md</code></td><td>Suffix section appended in agentic mode.</td></tr>
-                <tr><td><code>COMMENTARY_SYSTEM</code></td><td><code>core/llm/prompts/commentary.md</code></td><td>Commentary system prompt.</td></tr>
-                <tr><td><code>COMMENTARY_USER</code></td><td><code>core/llm/prompts/commentary.md</code></td><td>Commentary user template.</td></tr>
+                <tr><td><code>REVIEWER_SYSTEM</code></td><td><code>core/llm/prompts/reviewer.md</code></td><td>Read-only adversarial review for an explicitly selected reviewer sub-agent.</td></tr>
               </tbody>
             </table>
             <p>
               The comparator is <code>verify_prompt_integrity</code>: it
               returns the list of drifted pins, and with
-              <code>raise_on_drift=True</code> raises RuntimeError on the
-              first mismatch. A CI test gates on this verification.
+              <code>raise_on_drift=True</code> raises RuntimeError when any
+              mismatch exists. A CI test gates on this verification.
             </p>
 
             <h2>Why break the build</h2>
@@ -169,7 +167,7 @@ export default function Page() {
             <h2>Scope</h2>
             <p>
               The pins cover the static templates, not the rendered prompt.
-              Memory layers, the date, and the wrapper override are composed
+              Memory layers, the date, and user-defined wrappers are composed
               at runtime and sit outside the hash. For reproducibility audits
               of rendered output, <code>hash_rendered_prompt</code> applies
               the same 12-char hash to a rendered string.

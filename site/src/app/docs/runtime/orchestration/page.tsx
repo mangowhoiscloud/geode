@@ -141,6 +141,34 @@ export default function Page() {
               참고합니다.
             </p>
 
+            <h2>선택적 적대적 검토</h2>
+            <p>
+              중요한 문서, 설계, PR, 공개 결론을 반증 관점에서 검토할 때는 기존{" "}
+              <code>reviewer</code> 역할을 선택합니다. 부모가 최종 산출물의 판본,
+              목표, 판정 계약, 원근거와 제외 범위를 먼저 고정합니다.
+              작성자의 설명이나 이전 리뷰 점수는 검토에 필요한 경우에만 전달합니다.
+              다음은 <code>delegate_task</code>의 요청 인자 예시입니다.
+            </p>
+            <pre><code>{`{
+  "task_type": "analyze",
+  "role": "reviewer",
+  "task_description": "Review the frozen artifact and source evidence supplied with this task against its stated goal and acceptance contract."
+}`}</code></pre>
+            <p>
+              <code>core/agent/subagent_roles.py</code>의 역할은{" "}
+              <code>grep_files</code>와 <code>read_document</code>만 허용합니다.
+              <code>core/agent/subagent_protocol.py</code>가{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/tree/main/core/llm/prompts">
+                프롬프트 소스 디렉터리
+              </a>의 <code>reviewer.md</code>를 워커에 전달합니다.
+              새 역할이나 승격 게이트는 아닙니다.
+            </p>
+            <p>
+              결과는 기존 <code>findings</code> JSON입니다. 형식 검증 성공이나
+              빈 목록은 PASS 또는 병합 승인이 아닙니다. 부모가 근거를 대조하고
+              미확인 범위를 별도로 기록하며, 필요한 테스트와 CI는 그대로 수행합니다.
+            </p>
+
             <h2>결과와 오류 분류</h2>
             <p>
               완료 봉투는 <code>SubResult</code> 하나입니다. <code>success</code>,{" "}
@@ -316,6 +344,36 @@ export default function Page() {
               (<code>core/agent/worker.py</code> builds native handlers only).
               Resolution details are in{" "}
               <a href="/geode/docs/runtime/tools/protocol">Tools and toolsets</a>.
+            </p>
+
+            <h2>Optional adversarial review</h2>
+            <p>
+              Select the existing <code>reviewer</code> role when a consequential
+              document, design, PR, or publication claim needs challenge. The
+              parent first fixes the final artifact revision, goal, acceptance
+              contract, source evidence, and exclusions. Include producer
+              rationale or previous review scores only when the task needs them.
+              Example arguments for <code>delegate_task</code>:
+            </p>
+            <pre><code>{`{
+  "task_type": "analyze",
+  "role": "reviewer",
+  "task_description": "Review the frozen artifact and source evidence supplied with this task against its stated goal and acceptance contract."
+}`}</code></pre>
+            <p>
+              The role in <code>core/agent/subagent_roles.py</code> permits only{" "}
+              <code>grep_files</code> and <code>read_document</code>.
+              <code>core/agent/subagent_protocol.py</code> passes the{" "}
+              canonical <code>reviewer.md</code> from the{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/tree/main/core/llm/prompts">
+                prompt source directory
+              </a> to the worker. This adds neither a new role nor a promotion gate.
+            </p>
+            <p>
+              Results keep the existing <code>findings</code> JSON contract.
+              Schema validation success or an empty list is not a pass or merge
+              approval. The parent checks the evidence and records unverified
+              scope separately; required tests and CI still apply.
             </p>
 
             <h2>Results and error taxonomy</h2>
