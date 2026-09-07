@@ -18,7 +18,7 @@ artifacts that wrap the base model — NOT the base model's weights. One cycle:
    *mutated* scaffold as the base of its system prompt, with the auditor's seed
    scenario layered on top as `system_suffix`. The mutated scaffold is therefore
    in the causal path of the audited behaviour (pinned by
-   `tests/test_geode_target_scaffold_injection.py`).
+   `tests/core/agent/test_geode_target_scaffold_injection.py`).
 4. The audit's per-dimension judge scores are folded into a scalar **fitness**.
 5. A **promote gate** compares the candidate's fitness against the baseline and
    either commits the mutation (new best) or reverts the SoT to pre-mutation.
@@ -32,7 +32,7 @@ spec hash — see `baseline-epoch-partition`).
 
 The mutable scaffold is the set of policy artifacts under
 `evolve/scaffold_search/state/policies/`, dispatched by `mutation.target_kind`
-(`evolve/scaffold_search/loop/policies.py::TARGET_KINDS`).
+(`evolve/scaffold_search/loop/mutate/policies.py::TARGET_KINDS`).
 
 ### 2.1 TARGET_KINDS (7 behaviour kinds)
 
@@ -71,7 +71,7 @@ PR-DROP-HYPERPARAM-MUTATION (2026-05-31) — see §2.2.
     rejected at `parse_mutation` / `apply_mutation`
     (`_reject_hyperparam_mutation`, PR-DROP-HYPERPARAM-MUTATION, 2026-05-31;
     pinned by
-    `tests/test_policy_mutation.py::test_parse_mutation_rejects_hyperparam_kind_with_clear_message`).
+    `tests/evolve/scaffold_search/test_policy_mutation.py::test_parse_mutation_rejects_hyperparam_kind_with_clear_message`).
     The `hyperparam.json` SoT and its runtime readers
     (`evolve.scaffold_search.train._load_hyperparam_overrides`) are preserved — only the
     mutation surface is removed.
@@ -110,11 +110,11 @@ The baseline is content-addressed into a **baseline-epoch** (`be-NNN`): the full
 production+measurement spec (margin_rule, fitness/margin logic version, the 4
 roles' model+source, rubric/dim-set, bench, seed-pool identity) is hashed; a spec
 change starts a new epoch series (like seed-gen `gen-*`). See the
-`baseline-epoch-partition` skill and `evolve/scaffold_search/loop/baseline_epoch.py`.
+`baseline-epoch-partition` skill and `evolve/scaffold_search/loop/observe/baseline_epoch.py`.
 
 ## 5. Per-cycle flow
 
-Driven by `evolve/scaffold_search/loop/runner.py::SelfImprovingLoop.run_once`:
+Driven by `evolve/scaffold_search/loop/mutate/runner.py::SelfImprovingLoopRunner.run_once`:
 
 1. **Mutate** — the mutator LLM proposes one `(target_kind, target_section,
    new_value)`; `parse_mutation` validates it (bounds, char caps, the fixed-

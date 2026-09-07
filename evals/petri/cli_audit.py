@@ -391,7 +391,7 @@ _EVAL_PATH_ARG = typer.Argument(
     ...,
     exists=True,
     readable=True,
-    help="Path to a finished `logs/*.eval` produced by `geode audit --live`.",
+    help="Path to a finished `logs/*.eval` produced by `geode-eval audit --live`.",
 )
 _RAW_ARCHIVE_OPT = typer.Option(
     None,

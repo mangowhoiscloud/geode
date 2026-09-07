@@ -25,14 +25,14 @@ skill.
 ## Runtime Boundaries
 
 - Canonical execution path is async-first: `AgenticLoop.arun()`, tool `aexecute()`, async provider clients.
-- `core/agent/loop/agent_loop.py` is the implementation. `DEFAULT_MAX_ROUNDS = 0` means unlimited rounds; time budget and model-emitted termination signals (`model_action_required`, `user_clarification_needed`) control completion.
+- `core/agent/loop/agent_loop.py` is the implementation. `DEFAULT_MAX_ROUNDS = 0` means no round cap. Model completion and runtime guard exits are distinct `TerminationReason` values in `core/agent/loop/models.py`; a diagnostic or budget exit is not task success.
 - Sub-agents: `core/agent/sub_agent.py` (`SubAgentManager`) — max depth 1 (no recursion), session-wide cap 15, global Lane concurrency 50 (`core/wiring/container.py`).
-- Headless modes (DAEMON / SCHEDULER) deny `run_bash` / `delegate_task` / `computer` outright (`HEADLESS_DENIED_TOOLS`, `core/agent/safety.py`).
+- Headless mode policy lives in `core/server/supervised/services.py`: `run_bash` and delegation remain denied; DAEMON desktop control requires explicit `gateway.allow_computer_use`, while SCHEDULER keeps the desktop denial. The active tool plan and profile can further restrict access.
 
 ## Prompt And Context Injection
 
-- `core/llm/prompt_assembler.py` owns prompt assembly and emits `PROMPT_ASSEMBLED`.
-- `core/agent/system_prompt.py` inserts `__GEODE_PROMPT_CACHE_BOUNDARY__` between STATIC and DYNAMIC blocks; dynamic context is wrapped in `<dynamic_context>`.
+- `core/agent/system_prompt.py` builds the base prompt; `core/agent/loop/_context.py` composes skill and session context. `core/llm/prompt_assembler.py` contains shared formatting helpers, not another assembler.
+- `PROMPT_CACHE_BOUNDARY` is the opening `<dynamic_context>` tag. Stable instructions precede it; per-turn context stays inside the closed envelope. `core/agent/loop/agent_loop.py` emits `PROMPT_ASSEMBLED` after each per-round rebuild.
 - Skill metadata is injected as `<available_skills>` (metadata only); full skill bodies load on demand via the `use_skill` tool.
 - Do not inject old Game IP pipeline facts, fixed DAG claims, analyst/evaluator topology, or confidence-threshold loop claims into the system prompt.
 

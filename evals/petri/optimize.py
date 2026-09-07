@@ -236,7 +236,7 @@ def optimize_prompt(
     if not eval_log.exists():
         raise OptimizeError(
             f"eval log not found: {eval_log}. Run a Petri smoke first "
-            f"(`geode audit --live ...`) and re-invoke with the *.eval "
+            f"(`geode-eval audit --live ...`) and re-invoke with the *.eval "
             f"path."
         )
 

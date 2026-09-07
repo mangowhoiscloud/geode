@@ -1,19 +1,24 @@
 # Layout ratchet — `verify_hero_layout.py`
 
-The ratchet is the standing line of defence against the regressions the
-filewalk and hero audits caught. Every PR with a layout / text change either
-keeps text/container ratios within the recorded baseline or fails CI.
+The ratchet checks the registered hero layout sites. Local measurement
+compares current geometry and glyph sequences with the baseline; CI checks
+the committed baseline only, not whether the current render matches it.
 
 ## The script
 
-`scripts/visualizations/verify_hero_layout.py` does two jobs:
+[`verify_hero_layout.py`](../../../../scripts/visualizations/verify_hero_layout.py)
+has three checks:
 
 1. **Font presence gate** — `_ensure_fonts_installed()` runs `fc-list` and
    aborts if either `EN_FONT` (Helvetica Neue) or `KOR_FONT` (Pretendard)
-   is missing. CI installs both before invoking the verifier.
+   is missing from its output. If `fc-list` itself is unavailable, this
+   check warns and skips. The CI static mode does not run font checks.
 2. **Layout ratchet** — measures every `Site` × `("en", "ko")` pair via
    `_make_text(...).width` / `.height`, divides by the container box's
    width/height, and compares against `layout_baseline.json`.
+3. **Typography drift** — local measurement compares recorded HarfBuzz
+   glyph sequences; see the [typography gate](../../viz-frame-audit/rules/typography-drift-gate.md)
+   for the distinction between measurement and static validation.
 
 ## SITES tuple
 
@@ -31,6 +36,7 @@ class Site:
     container_height: float
     text_string_en: str | None = None   # inline literal override
     text_string_ko: str | None = None
+    font_family: str | None = None      # explicit family override, e.g. Menlo
 ```
 
 Example entry:
@@ -57,10 +63,12 @@ uv run python scripts/visualizations/verify_hero_layout.py
 uv run python scripts/visualizations/verify_hero_layout.py --update-baseline
 ```
 
-The first form fails on **(a)** any ratio > 1.0 (overflow) or **(b)** any
-ratio growing past the baseline + `RATCHET_TOLERANCE` (0.03). The second
-form refreshes the baseline JSON so the new measurements become the
-ratchet floor.
+The first form fails on overflow (ratio > 1.0), growth past the baseline +
+`RATCHET_TOLERANCE` (0.03), glyph drift, or measurement/shaping errors.
+The second form writes the measured baseline and returns 0 even when the
+measurement loop collected failures. Use it only for an intentional,
+reviewed baseline change, inspect the diff, then run the first form and
+`--static-check`; an update exit code alone is not verification.
 
 When measuring locally requires fonts + Manim, this is slow (Manim imports
 take ~3 s, then each `_make_text` is another fraction of a second). Run
@@ -78,6 +86,9 @@ without importing Manim. Checks:
 - Every `Site × lang` exists in the JSON (catches stale baseline after a
   new Site is added but `--update-baseline` was not run).
 - Every recorded `ratio_w` and `ratio_h` is ≤ 1.0 (overflow guard).
+- Every site with declared text has a non-empty `glyph_clusters` list.
+  This does not recompute glyphs or validate each pair's integer shape;
+  the latter is covered by the [baseline tests](../../../../tests/visualizations/test_verify_hero_layout.py).
 
 Runs in <1 s on Linux CI. The full-measurement path is reserved for
 local "did I make it worse?" checks.
@@ -86,9 +97,10 @@ local "did I make it worse?" checks.
 
 1. Add the `Rectangle / Square` and its inner `Text` to the scene.
 2. Append a `Site(...)` entry to `SITES` tuple in `verify_hero_layout.py`.
-3. Run `uv run python scripts/visualizations/verify_hero_layout.py --update-baseline`
-   locally. The JSON is updated with the measured ratios.
-4. Commit both files (`<scene>.py` + `layout_baseline.json`) together.
+3. Review the intended layout, update the baseline locally as above, then
+   run measurement and static checks without updating it.
+4. Include the scene, verifier `SITES` change, and baseline together when
+   integration is authorized.
 
 ## CI step
 
@@ -102,7 +114,7 @@ The `if:` gate skips the step on docs-only PRs.
 
 ## What the ratchet does NOT catch
 
-The ratchet measures **text-vs-container geometry only**. It cannot catch:
+The geometry portion measures **text-vs-container extents only**. It cannot catch:
 
 - Arrow head colour mismatches
 - Label overlapping a dashed line (the dashed line isn't in `SITES`)
@@ -110,7 +122,8 @@ The ratchet measures **text-vs-container geometry only**. It cannot catch:
 - Glyph kerning drift inside the box (the box width metric is unchanged
   even when Pango inserts spurious gaps)
 
-For those, the post-render audit workflow in [[viz-frame-audit]] is the
-backstop. Future Step 2 ([uharfbuzz typography drift gate](../../viz-frame-audit/rules/typography-drift-gate.md))
-and Step 3 ([pixelmatch frame ratchet](../../viz-frame-audit/rules/pixel-ratchet.md))
-will add deterministic catches for the typography + transition cases.
+For those, use the [post-render audit workflow](../../viz-frame-audit/rules/audit-workflow.md).
+The implemented [typography drift gate](../../viz-frame-audit/rules/typography-drift-gate.md)
+and [pixel frame ratchet](../../viz-frame-audit/rules/pixel-ratchet.md)
+provide additional checks within their recorded sites/frames and available
+dependencies. They do not prove every rendered glyph or transition is correct.

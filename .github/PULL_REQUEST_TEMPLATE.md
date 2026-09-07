@@ -10,7 +10,11 @@
 | `path/to/file.py` | description |
 
 ## Verification
-- [ ] `uv run ruff check core/ tests/` — clean
-- [ ] `uv run ruff format --check core/ tests/` — clean
-- [ ] `uv run mypy core/` — clean
-- [ ] `uv run pytest tests/ -m "not live"` — pass
+<!-- List actual commands, results, and skipped checks with reasons. Choose scope
+     using .agents/skills/geode-workflow/references/verification-gates.md.
+     Do not pre-check unexecuted gates or equate targeted/--fast checks with CI.
+     Before merge, confirm required checks on the current PR head. -->
+
+<!-- For audit-driven work, add a GAP Audit table with implemented, retained,
+     removed, and deferred decisions. Add compatibility, migration, risk, or
+     design rationale only when relevant to this change. -->

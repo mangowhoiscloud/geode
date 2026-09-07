@@ -369,7 +369,7 @@ pgrep -f "geode serve"    # 출력 없어야 함
 geode serve                          # 백그라운드 Gateway 데몬 시작
 ```
 
-Slack의 `SLACK_BOT_TOKEN`(`xoxb-`)과 Socket Mode `SLACK_APP_TOKEN`(`xapp-`)은 `~/.geode/.env`에, 채널 바인딩과 receiver 설정은 `.geode/config.toml`에 둡니다. 자세한 setup은 [docs/setup.md → Gateway](docs/setup.md#gateway)를 참고하세요. 설정 후 바운드 채널에서 봇을 멘션하면 push 이벤트가 로컬과 동일한 에이전트 루프로 라우팅되며, 같은 스레드의 후속 대댓글은 재멘션 없이 동일 체크포인트를 이어갑니다.
+Slack의 `SLACK_BOT_TOKEN`(`xoxb-`)과 Socket Mode `SLACK_APP_TOKEN`(`xapp-`)은 `~/.geode/.env`에, 채널 바인딩과 receiver 설정은 `.geode/config.toml`에 둡니다. 자세한 내용은 [Slack Gateway 설정](docs/setup.ko.md#slack-gateway)을 참고하세요. 설정 후 바운드 채널에서 봇을 멘션하면 push 이벤트가 로컬과 동일한 에이전트 루프로 라우팅되며, 같은 스레드의 후속 대댓글은 재멘션 없이 동일 체크포인트를 이어갑니다.
 
 Gateway의 원격 desktop control은 운영자가
 `[gateway] allow_computer_use = true`를 명시하기 전까지 차단됩니다. 제한된
@@ -463,13 +463,13 @@ PyPI 설치라면 `uv tool install geode-agent` 실행. 소스 체크아웃이�
 <details>
 <summary><strong>"401 Unauthorized" 또는 "Invalid API key"</strong> — 잘못된 키, 만료된 키, 또는 잘못된 파일 위치.</summary>
 
-`cat ~/.geode/.env` 로 확인 — 키는 `sk-ant-` (Anthropic), `sk-proj-` (OpenAI), `sk-or-v1-` (OpenRouter), `id.secret` (ZhipuAI GLM)으로 시작해야 합니다. 공백이나 따옴표가 추가되지 않았는지 확인하세요. ChatGPT 구독 경로(Path A)면 GEODE 안에서 `/login openai`를 다시 실행합니다.
+`~/.geode/.env`의 provider 항목을 로컬 편집기에서 확인하세요. 키를 로그·채팅·이슈에 출력하거나 붙여 넣지 마세요. 불필요한 공백과 provider 콘솔의 키 상태를 확인합니다. ChatGPT 구독 경로(Path A)면 GEODE 안에서 `/login openai`를 다시 실행합니다.
 </details>
 
 <details>
 <summary><strong>"Address already in use" — `geode serve` 실행 시 포트 충돌.</strong></summary>
 
-`ps aux | grep "geode serve"` 로 PID 찾아 `kill <PID>`. 또는 `geode serve --port <other>` 로 다른 포트 사용.
+설정된 IPC socket을 점유한 프로세스와 다른 세션의 사용 여부를 먼저 확인하세요. 정상 데몬은 재사용하고, 재시작이 승인된 경우 소유권을 확인한 프로세스만 중지합니다. GEODE는 Unix-socket IPC를 쓰며 `serve --port` 옵션은 없습니다. [데몬 가이드](docs/setup.ko.md#geode-serve--통합-daemon)를 참고하세요.
 </details>
 
 <details>
@@ -668,16 +668,13 @@ Tier 3    Session         메모리 — 대화, 도구 결과, 플랜
 <details>
 <summary><strong>개발 워크플로 (Scaffold)</strong></summary>
 
-CANNOT (가드레일)이 CAN (자유)보다 먼저. 7-step 워크플로 + 품질 게이트.
+CANNOT (가드레일)이 CAN (자유)보다 먼저입니다. 근거 중심 워크플로를 따릅니다.
 CI 게이트(pytest + coverage, mypy, Ruff, dependency/import 검사)를 통과해야
 머지합니다. 테스트 삭제는 남는 행동 불변식을 증명해야 하며, 원시 테스트
 개수는 품질 신호로 사용하지 않습니다.
 
-| Gate | 명령 | 목표 |
-|------|------|------|
-| Lint | `uv run ruff check core/ tests/` | 0 에러 |
-| Type | `uv run mypy core/` | 0 에러 |
-| Test | `uv run pytest tests/ -q` | 전체 통과 |
+최신 명령과 검사 범위는 [검증 규칙](.agents/skills/geode-workflow/references/verification-gates.md)에서
+관리합니다. Live 테스트에는 명시적인 승인이 필요합니다.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) 와 [docs/workflow.md](docs/workflow.md) 참고.
 

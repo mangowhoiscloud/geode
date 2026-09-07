@@ -1,12 +1,17 @@
 ---
 name: verification-team
-description: Verification team with 4 personas. Kent Beck (TDD/design), Andrej Karpathy (agents/constraints), Peter Steinberger (Gateway/operations), Boris Cherny (CLI agents/sub-agents). Review implementations from each persona's perspective. Triggers on "검증", "검증팀", "review", "verify", "점검", "리뷰".
+description: Select complementary review lenses for a requested multi-perspective review or a high-risk GEODE change. Covers design, agent constraints, gateway operations, and CLI/tool behavior; not a mandatory four-agent gate for ordinary edits.
 ---
 
 # Verification Team — 4-Persona Verification Framework
 
 > **Purpose**: Multi-angle verification of implementation results from 4 frontier engineer perspectives.
-> **When to apply**: Implementation Workflow Step 1d (research verification) + Step 3v (implementation verification), run in parallel.
+Use only the lenses relevant to the requested review and changed behavior.
+Delegate independent, bounded reviews when tools are available and doing so
+improves coverage or speed; one reviewer may cover several lenses. The names
+below label perspectives, not impersonated reviewers or attributed findings.
+Follow [verification gates](../geode-workflow/references/verification-gates.md)
+for check scope, evidence reuse, and unavailable-tool handling.
 
 ## Team Composition
 
@@ -14,7 +19,6 @@ description: Verification team with 4 personas. Kent Beck (TDD/design), Andrej K
 
 | Item | Details |
 |------|---------|
-| **Background** | Creator of XP (Extreme Programming), inventor of TDD, co-developer of JUnit, author of _Test-Driven Development_ |
 | **Perspective** | "Clean code that works" |
 | **Verification focus** | Test coverage, design simplicity, refactoring needs, over-engineering detection |
 
@@ -28,7 +32,7 @@ description: Verification team with 4 personas. Kent Beck (TDD/design), Andrej K
 **Verification checklist:**
 - [ ] Tests exist for new code
 - [ ] Tests verify behavior, not implementation details
-- [ ] Duplication under 3 lines is not abstracted (YAGNI)
+- [ ] Shared behavior is unified only when a named consumer or failure justifies it
 - [ ] Interfaces have minimal surface area
 - [ ] Error paths are tested
 
@@ -38,20 +42,19 @@ description: Verification team with 4 personas. Kent Beck (TDD/design), Andrej K
 
 | Item | Details |
 |------|---------|
-| **Background** | Former Tesla AI Director, OpenAI founding member, developer of autoresearch (autonomous ML loop) + AgentHub (agent Git DAG) |
 | **Perspective** | "Constraints guarantee quality. Design with constraints, not infrastructure." |
 | **Verification focus** | Context management, ratchet mechanisms, time budgets, simplicity selection, agent autonomy boundaries |
 
 **Questions Karpathy would ask:**
 - How much of the agent's context window does this feature consume? (P6 Context Budget)
-- Is there an automatic recovery (ratchet) mechanism on failure? (P4 Ratchet)
+- Does failure produce the declared recovery or explicit failure outcome? (P4 Ratchet)
 - Was "what it cannot do" defined first? (P1 Constraint-based design)
 - Would deleting this code make the system better? (P10 Simplicity Selection)
 - Is the modification surface area minimized? (P2 Single-file constraint)
 
 **Verification checklist (see `karpathy-patterns` skill):**
 - [ ] Token Guard — Tool results do not explode the context
-- [ ] Ratchet — Structure that cannot regress (e.g., test count cannot decrease)
+- [ ] Ratchet — Required behavior and coverage gates survive; explain removed tests rather than treating counts as proof
 - [ ] Constraints stated — Limitations are explicit in code/config
 - [ ] No over-abstraction — No single-use utilities/helpers
 - [ ] Time budget — Timeouts exist for infinite loops/recursion
@@ -62,7 +65,6 @@ description: Verification team with 4 personas. Kent Beck (TDD/design), Andrej K
 
 | Item | Details |
 |------|---------|
-| **Background** | Founder of PSPDFKit (13-year bootstrap, ~$100M exit), OpenClaw developer, later joined OpenAI. 20-year iOS/macOS expert. From Austria. |
 | **Perspective** | "Everything is a session, every execution goes through a queue, every extension is a plugin." |
 | **Verification focus** | Gateway routing, Session Key isolation, Lane Queue concurrency, Plugin extensibility, Failover, operational stability |
 
@@ -70,7 +72,7 @@ description: Verification team with 4 personas. Kent Beck (TDD/design), Andrej K
 - What session key isolates this request? Is there state leakage between sessions?
 - Is message routing deterministic (0 LLM calls)? Is it predictable via Binding rules?
 - When concurrent requests arrive, are they serialized via Lane Queue, or is there a race condition?
-- Can new features be added as plugins without modifying existing code?
+- Does extension follow the existing registry or composition boundary without introducing a duplicate plugin layer?
 - Are MCP server processes cleaned up on exit? Are there no orphans?
 - Is atomic write (tmp+rename) used? Are state files corruption-safe on crash?
 
@@ -78,8 +80,8 @@ description: Verification team with 4 personas. Kent Beck (TDD/design), Andrej K
 - [ ] Session Key — Per-request session isolation boundary exists
 - [ ] Binding — Static routing rules (config hot-reload capable)
 - [ ] Lane Queue — Serial by default, explicitly parallel principle followed
-- [ ] Plugin — New channels/tools/skills registerable without code changes
-- [ ] Failover — Automatic recovery path exists on failure
+- [ ] Extension — New channels/tools/skills use the owning registration path
+- [ ] Failover — Only configured and authorized fallback paths run; otherwise preserve the failure
 - [ ] Lifecycle — start/stop/cleanup explicit, atexit registered
 
 ---
@@ -88,7 +90,6 @@ description: Verification team with 4 personas. Kent Beck (TDD/design), Andrej K
 
 | Item | Details |
 |------|---------|
-| **Background** | Creator and Head of Claude Code, former Meta Principal Engineer (5 years), author of _Programming TypeScript_. Co-leads Claude Code team with Sid Bidasaria (sub-agent design) and Cat Wu (PM). |
 | **Perspective** | "An agent lives in the terminal, understands the codebase, calls tools, observes results, and repeats the loop of deciding its next action." |
 | **Verification focus** | AgenticLoop flow, tool safety classification (HITL), sub-agent isolation, prompt design, context management |
 
@@ -112,26 +113,25 @@ description: Verification team with 4 personas. Kent Beck (TDD/design), Andrej K
 
 ## Verification Execution Method
 
-### Step 1d (Research Verification) — Frontier GAP Detection
+### Research Verification
 
-Check research results from all 4 perspectives:
+Select relevant perspectives; require primary-source evidence for external
+claims and preserve benchmark authority boundaries. The following questions
+are optional review assignments, not a required four-agent deployment:
 
 ```
-Run 4 parallel agents:
   Agent 1 (Beck): "What unnecessary complexity exists in this design?"
   Agent 2 (Karpathy): "What are the constraints and context costs of this feature?"
   Agent 3 (Steinberger): "What operational patterns are missing compared to OpenClaw patterns?"
   Agent 4 (Cherny): "Is this consistent with the AgenticLoop/tool system?"
 ```
 
-### Step 3v (Implementation Verification) — Parallel with E2E
+### Implementation Verification
 
 ```
-Deploy parallel agents (Explore agent):
-  - Inject persona prompt into each agent
-  - Provide list of changed files
-  - Audit against each persona's checklist criteria
-  - Consolidate results into a table
+Provide the exact diff and affected invariants to each selected reviewer.
+Keep review read-only unless implementation is separately assigned.
+Consolidate actionable findings with file/line evidence; omit unused lenses.
 ```
 
 ### Verification Results Format
@@ -141,10 +141,7 @@ Deploy parallel agents (Explore agent):
 
 | Reviewer | Findings | Severity | Key Findings |
 |----------|----------|----------|--------------|
-| Kent Beck | N items | P0/P1/P2 | ... |
-| Karpathy | N items | P0/P1/P2 | ... |
-| Steinberger | N items | P0/P1/P2 | ... |
-| Cherny | N items | P0/P1/P2 | ... |
+| <actual reviewer / selected lens> | N items | P0/P1/P2 | ... |
 
 ### P0 (Fix immediately)
 - ...
@@ -161,10 +158,8 @@ Deploy parallel agents (Explore agent):
 Inject the following prompt when running verification agents:
 
 ```
-You are {name}. As an engineer with {background} experience,
-you are reviewing the following code changes.
-
-Perspective: {perspective}
+Mode: read-only code review.
+Perspective: {selected lens}
 Focus: {verification focus}
 
 Changed files: {file list}

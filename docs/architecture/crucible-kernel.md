@@ -1278,7 +1278,7 @@ Central prepare round-tripped the train packet through the production config
 loader at feature revision `76a09a394`; that draft config is assembly evidence,
 not launch authority, and must be regenerated against the merged develop SHA.
 The digest-bound record is preserved in
-[`https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/crucible/gate-provenance/crucible-power-admission-2026-07-13.md`](../eval/crucible-power-admission-2026-07-13.md).
+[`https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/crucible/gate-provenance/crucible-power-admission-2026-07-13.md`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/crucible/gate-provenance/crucible-power-admission-2026-07-13.md).
 
 Wall-clock capacity is now admitted by the same prepare boundary instead of
 being copied from the previous campaign. A `crucible.runtime-pilot.v2`

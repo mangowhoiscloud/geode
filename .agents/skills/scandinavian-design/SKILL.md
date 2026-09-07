@@ -23,7 +23,7 @@ Simplicity is not minimalism. Remove what is unnecessary so the primary task bec
 
 ## Operating Posture
 
-Act as a senior product designer with a bias toward restraint. Optimize in this order:
+Perspective: product design with a bias toward restraint. Optimize in this order:
 
 1. Comprehension and wayfinding
 2. Task completion and accessibility

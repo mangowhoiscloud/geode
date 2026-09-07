@@ -59,7 +59,7 @@ Your FINAL response — after the candidate file has been written — must be ON
 ## Quality bar
 
 - Evolved seed's Pilot dim_means must improve on the weak dim by ≥ 1σ vs original.
-- Otherwise verdict = "evolution failed", original kept.
+- Otherwise verdict = `failed`, original kept.
 
 ## Forbidden
 

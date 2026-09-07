@@ -24,7 +24,8 @@ What actually happened. Include error messages or logs if available.
 - GEODE version: (`geode version`)
 - Python version: (`python --version`)
 - OS: (e.g., macOS 15, Ubuntu 24.04)
-- LLM Provider: (Anthropic / OpenAI / GLM)
+- Provider, model ID, and credential source (names only, never keys or tokens):
 
 ## Additional Context
-Any other context, screenshots, or log output.
+Any other context, screenshots, or log output. Redact credentials and private
+data before sharing; do not attach `.env`, auth profiles, or raw credential dumps.

@@ -1,6 +1,16 @@
 # Verification Gates
 
-Run targeted checks first, then broaden based on blast radius.
+Run targeted checks first, then broaden based on blast radius. Read-only audits
+need source evidence, not a full test run. For documentation-only edits, check
+affected links, examples, or generated output; runtime-loaded prompts also need
+the relevant assembly and mode-boundary tests.
+
+For a changed behavior, preserve the smallest meaningful regression check.
+Do not add tests that only repeat arbitrary wording or implementation details.
+Once the required checks pass, reuse results for unchanged code, configuration,
+and verification environment. Repeat or broaden only after changes, failures,
+or unresolved concerns. Record the tested revision or diff and exact commands.
+Required remote CI must still pass on the actual PR head before merge.
 
 ## Targeted
 
@@ -36,14 +46,16 @@ PY
 
 ## Full Suite
 
-For broad runtime work, run when feasible:
+For broad runtime changes, use `scripts/preflight.sh` and inspect its results
+and skips. The full Python suite is:
 
 ```bash
 uv run pytest tests/ -m "not live"
 ```
 
-If it fails because of known environment or fixture gaps, report exact failing
-groups and keep targeted tests clean.
+A known environment or fixture failure remains a failed check: report exact
+groups and the remaining verification. `--fast`, missing optional dependencies,
+and unavailable site tooling do not establish a full pass.
 
 ## Live Tests
 
@@ -51,18 +63,18 @@ Live provider checks require explicit user approval. Without approval, mark
 ambiguous provider acceptance as `live_test_required` and keep the production
 path guarded.
 
-## Cross-Verification (Codex MCP)
+## Independent Review
 
-Local gates alone do not close verification — run an independent
-second-opinion review before push:
+Non-trivial changes get an independent, read-only review when a suitable
+reviewer is available. Give it the exact diff/base and relevant invariants;
+verify findings locally and resolve or explicitly disposition them. Re-review
+changed or unresolved parts, not an unchanged, already-reviewed diff.
 
-- Commit first, then ask the Codex MCP server to review the committed diff
-  against the base branch (read-only sandbox, `approval-policy: never`).
-- The prompt names the exact scope, the invariants to attack (threading,
-  ANSI/cursor math, scope/lifetime, CHANGELOG parity), and demands numbered
-  findings with HIGH/MED/LOW severity + file:line, or "No findings".
-- Fix or explicitly accept every finding; amend and re-verify fixes.
-- Historical yield: ~1.6 real catches per PR that local gates missed.
+Use the [Codex MCP skill](../../codex-mcp-verify/SKILL.md) when its user-request
+and tool-availability conditions hold. Otherwise an available independent
+subagent can review; if no reviewer is available, disclose that limit instead
+of inventing tools, reading credentials, or blocking indefinitely. Review is
+evidence, not a replacement for deterministic checks or required CI.
 
 For architecture/extensibility **implementation PRs**, verification also
 confirms that canonical `develop` contains the selected package's
@@ -75,7 +87,7 @@ A registration PR adds only `OPEN` scope and does not authorize implementation.
 Neither local gates nor review can justify a prospective `IN_DEVELOP` or `DONE`
 status in an implementation PR.
 
-After R0.2 lands, every roadmap-only PR runs the canonical ledger validator
+Every roadmap-only PR runs the canonical ledger validator
 against its actual target: `--base-ref origin/develop` for ordinary ledger
 work and `--base-ref origin/main` for a tracking-only closure PR.
 

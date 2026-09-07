@@ -15,8 +15,8 @@ Proven in the GEODE v0.24.0 session (3,205 lines reduced, __init__.py -57%).
    → Dead code + duplicates + God Object + Parameter Bloat detection
 2. Triage
    → Verdict: candidate / refactoring / defer, backed by caller evidence
-3. Kanban Registration
-   → Register in Backlog by priority
+3. Scope and plan
+   → Record keep/change/delete decisions; tracking updates only when requested
 4. Workspace Isolation
    → Worktree isolation
 5. Implementation + Verification
@@ -109,22 +109,10 @@ from core.cli.tool_handlers import _build_tool_handlers as _build_tool_handlers
 
 ## Phase 4: Verification
 
-```bash
-# 1. Lint the production/test/script roots used by CI
-uv run ruff check core/ evals/ evolve/ tests/ scripts/
-
-# 2. Type check; narrow to actual changed modules during local iteration
-uv run mypy core/ evals/ evolve/ scripts/
-
-# 3. Full test suite
-uv run pytest tests/ -m "not live" -q
-
-# 4. Preserve a surviving test for each behavior or invariant after deletion
-```
-
-These are selected checks, not a full CI pass. Use the current
-[verification gates](../geode-workflow/references/verification-gates.md) and
-`scripts/preflight.sh`, and report exactly what ran or was skipped.
+Preserve a surviving check for every affected behavior or invariant after
+deletion. Follow the [verification reference](../geode-workflow/references/verification-gates.md)
+for scope and evidence reuse; do not run a full suite merely to report an audit.
+Use `scripts/preflight.sh` when broad checks are warranted and report all skips.
 
 ## GEODE Proven Results
 

@@ -59,7 +59,7 @@ SELF-IMPROVING  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,in
 AGENT           AgenticLoop(while tool_use), SubAgentManager, CLIPoller, Gateway
 HARNESS         SessionLane, LaneQueue, PolicyChain, TaskGraph, HookSystem
 RUNTIME         ToolRegistry, MCP Registry, Skills, Memory(5-Tier), Reports
-MODEL           ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider routing)
+MODEL           LLM adapter registry + provider-specific transport
 ```
 
 엔트리 포인트는 런타임 `geode`와 `geode-mcp`, 측정 `geode-eval`, 탐색
@@ -75,7 +75,8 @@ MODEL           ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider routing)
   경로 인용은 신뢰하지 말고 현재 트리에서 재확인한다.
 - vanity metric 금지: tool/hook/module/test/LOC/release 카운트를 본문에 쓰지
   않는다. 기능적 임계값(round cap, token guard, lane limit)은 허용.
-- 외부 SDK·서드파티 주장은 ctx7 검증 후 인용.
+- 외부 SDK·서드파티 주장은 공식 문서나 원본 코드로 검증한다. 사용 가능한
+  도구로 근거를 확보하며 특정 문서 커넥터를 필수 조건으로 두지 않는다.
 - `sot.ts`, `changelog.ts`, `public/llms.txt`는 `sync-stats.mjs` 생성물.
   수동 편집 금지.
 
@@ -115,12 +116,10 @@ MODEL           ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider routing)
 - `@xyflow/react`는 docs 신규 사용 금지. 스크린샷은 실물 UI 증거가 필요할
   때만.
 
-## 7. IA 타깃 (재생성 기준)
+## 7. 현행 정보구조
 
-- 9섹션 골격 유지. **08b Verification 섹션 삭제**(G1-G4 가드레일, BiasBuster,
-  cross-LLM, cause-decision-tree는 v0.99.154에서 코드 삭제됨).
-  observability 페이지만 05 Operate로 이동.
-- 신규 페이지: geode-mcp 가이드, llms.txt 컨벤션, baseline epoch(be-NNN).
-- 신규 CLI 표면 반영: `geode seeds assemble`, `geode hub build`,
-  `geode config explain`, `/recall`.
-- config 계열 페이지(07)는 config unification(C-3/C-4) 머지 후 재생성한다.
+섹션과 페이지 목록의 정본은 `src/lib/geode-docs/sitemap.ts`다. 이전
+재설계의 섹션 번호나 삭제 계획을 현재 실행 지시로 재사용하지 않는다.
+페이지 이동·제거 시 본문과 내비게이션의 소비 경로를 함께 확인하고
+`scripts/check_docs_links.py`로 검증한다. 검증·관측 문서의 현재 경로는
+`src/app/docs/verification/observability/page.tsx`다.

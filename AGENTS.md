@@ -97,9 +97,8 @@ The agentic loop. `while(tool_use)` primitive that drives every turn.
   with a closed `TerminationReason` alphabet defined in `loop/models.py`.
   Auto-escalation was removed in v0.90.0. The model itself emits the
   termination signal.
-- `system_prompt.py` — `build_system_prompt()`. Inserts the
-  `__GEODE_PROMPT_CACHE_BOUNDARY__` marker between STATIC and DYNAMIC blocks.
-  Since v0.93 the DYNAMIC block is wrapped in `<dynamic_context>` XML.
+- `system_prompt.py` — `build_system_prompt()`. `PROMPT_CACHE_BOUNDARY`
+  is the opening `<dynamic_context>` tag separating STATIC and DYNAMIC blocks.
 - `sub_agent.py` — `SubAgentManager`: max depth 1 (no recursion), session cap 15,
   global Lane concurrency 50 (`core/wiring/container.py`).
 
@@ -129,7 +128,7 @@ LLM router, providers, prompt assembly, hashing.
   Thinking gate (`thinking.type="off"|"none"`).
 - `providers/codex.py` — OAuth token resolution + async client.
 - `prompts/__init__.py` — `_PINNED_HASHES` (2 entries). Karpathy P4 ratchet.
-- `prompts/*.md` — 2 templates (`decomposer` / `router`).
+- `prompts/router.md` — router-system and agentic-suffix sections, both hash-pinned.
 - `postprocess/html_output.py` — strips OpenAI data-URL HTML.
 
 Read this first when changing prompt content (will break the hash ratchet),
@@ -253,7 +252,7 @@ Slack / Discord / Telegram adapters. Lane queue concurrency.
 
 Petri × GEODE alignment audit (v0.92+).
 
-- `cli_audit.py` — `geode audit` Typer wrapper.
+- `cli_audit.py` — `geode-eval audit` Typer wrapper.
 - `seeds/` — 20 GEODE-specific seeds organised across 3 tiers
   (critical / auxiliary / info), spanning autonomy, calibration,
   compute_use, efficiency, exploratory, reasoning, research.
@@ -350,41 +349,15 @@ mirrors that scaffold.
 
 ### Quality Gates
 
-Use the repo's current CI-equivalent commands when scope requires full checks:
-
-```bash
-uv run ruff check core/ evals/ evolve/ tests/ scripts/
-uv run ruff format --check core/ evals/ evolve/ tests/ scripts/
-uv run mypy core/ evals/ evolve/
-uv run lint-imports
-uv run pytest tests/ -m "not live"
-uv run geode version
-```
-
-Do not pipe gate output through commands that can hide non-zero exit codes.
-For local iteration, targeted subsets are fine, but the final report must state
-exactly what ran and what did not.
+Use the [verification reference](.agents/skills/geode-workflow/references/verification-gates.md)
+for scope, commands, and evidence reuse. `scripts/preflight.sh` runs broad local
+checks; required CI on the actual PR head remains the merge gate. Report exact
+results and skipped checks without hiding non-zero exit codes.
 
 ### PR Body
 
-Every feature PR needs at least:
-
-```markdown
-## Summary
-- What changed and why.
-
-## Why
-Problem, missing capability, or user-reported failure.
-
-## Changes
-| File | Change |
-|------|--------|
-
-## Verification
-- Commands run and results.
-```
-
-Add a GAP Audit table when the PR was driven by a plan, audit, or cleanup.
+Use [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md).
+GitFlow owns integration-specific additions; do not maintain another template.
 
 ## Where to look for things
 

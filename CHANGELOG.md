@@ -49,6 +49,10 @@ functional change.
 
 ### Fixed
 
+- Aligned runtime guidance with authorized task scope, available delegation, and
+  explicitly configured recovery; removed conflicting development instructions
+  for repeated verification, automatic release/restart, and tool-specific review.
+  Evaluation help and next-step messages now use the `geode-eval` entry point.
 - Treated PyAutoGUI's missing `DISPLAY` as unavailable desktop automation in
   headless containers, without breaking ordinary model requests or hiding
   unrelated import errors.
@@ -10937,7 +10941,7 @@ Bundles 3 PRs: PR-EVOLVER-JACCARD-OBS, PR-PETRI-BUNDLE-LANDING, PR-HANDOFF-SCHEM
   schema (no phase progress yet — that field doesn't exist in
   `state.json`; no candidate titles yet — would require `.md`
   frontmatter fetch). Once
-  [`docs/plans/2026-05-23-seed-gen-loop3-bundle-serving.md`](../docs/plans/2026-05-23-seed-gen-loop3-bundle-serving.md)
+  [`docs/plans/2026-05-23-seed-gen-loop3-bundle-serving.md`](docs/plans/2026-05-23-seed-gen-loop3-bundle-serving.md)
   Phase 2 ships its `LiteratureReview` agent the same viewer can be
   extended with a literature column without schema churn.
 

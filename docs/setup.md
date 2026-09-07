@@ -22,7 +22,9 @@ uv run geode
 uv run geode serve
 ```
 
-API key 없이 시작하면 자동으로 dry-run 모드로 전환됩니다.
+A usable API key, subscription OAuth login, or GEODE login profile enables LLM
+calls. Without credentials, onboarding offers setup or an explicit dry-run
+choice; the absence of an API key alone does not imply dry-run.
 
 ---
 
@@ -47,11 +49,13 @@ geode (thin CLI) ── Unix socket IPC ──→ geode serve (unified daemon)
 
 ### 1. API Keys
 
-```bash
-# Global keys (모든 프로젝트에 적용)
-mkdir -p ~/.geode
-cat > ~/.geode/.env << 'EOF'
-# LLM Providers (최소 1개 필수)
+Edit `~/.geode/.env`, preserving existing entries and adding only the credentials
+you need. If creating the file, restrict it to owner read/write (`0600`) before
+adding secrets. The following is example file content, not a replacement
+command. Subscription-only use does not require a provider API key.
+
+```dotenv
+# API-key providers (only those you use)
 ANTHROPIC_API_KEY=sk-ant-...       # https://console.anthropic.com/settings/keys
 OPENAI_API_KEY=sk-proj-...         # https://platform.openai.com/api-keys
 OPENROUTER_API_KEY=sk-or-v1-...    # https://openrouter.ai/keys (optional)
@@ -61,7 +65,11 @@ ZAI_API_KEY=...                    # https://open.bigmodel.cn/usercenter/apikeys
 SLACK_BOT_TOKEN=xoxb-...           # https://api.slack.com/apps → OAuth & Permissions
 SLACK_APP_TOKEN=xapp-...           # Basic Information → App-Level Tokens (connections:write)
 SLACK_TEAM_ID=T...                 # optional; enables clickable doctor links
-EOF
+```
+
+Check that the file remains owner-only after editing:
+
+```bash
 chmod 600 ~/.geode/.env
 ```
 
@@ -72,10 +80,10 @@ chmod 600 ~/.geode/.env
 ```bash
 # .geode/ 구조 초기화
 uv run geode init
-
-# 또는 수동으로
-cp .env.example .env       # 프로젝트 시크릿. 전역에 없는 키만 채움(전역이 권위)
 ```
+
+For manual secret configuration, use `.env.example` as a reference and merge
+only needed entries into an existing project `.env`; do not replace it.
 
 ### 3. Global CLI Install
 
@@ -141,8 +149,8 @@ nohup geode serve >/dev/null 2>&1 &
 ### Startup Sequence
 
 1. Daemon environment load
-2. Readiness check (API keys)
-3. GeodeRuntime (MCP 13 servers, 10-30s)
+2. Readiness check (API keys, subscription OAuth, or login profiles)
+3. GeodeRuntime (connects configured MCP servers)
 4. SchedulerService (load jobs, start 60s tick)
 5. Gateway receivers (Slack Socket Mode, Discord/Telegram pollers)
 6. CLIPoller (Unix socket `~/.geode/cli.sock`)
@@ -178,9 +186,9 @@ geode → is_serve_running()? → No → start_serve_if_needed(30s) → connect 
 
 ### 2. Channel Binding (`.geode/config.toml`)
 
-```bash
-cp .geode/config.toml.example .geode/config.toml
-```
+Use `.geode/config.toml.example` as a reference. Merge the gateway settings below
+into `.geode/config.toml`, preserving unrelated sections and existing bindings.
+Update an existing `[gateway]` table rather than declaring it twice.
 
 ```toml
 [gateway]
@@ -339,7 +347,7 @@ advanced fallback that only fills missing global secrets. Behavior belongs in
 `config.toml`; project `./.geode/config.toml` overrides
 `~/.geode/config.toml`.
 
-`.env` variables (full list: `core/config.py`):
+Environment settings (declarations: [`core/config/_settings.py`](../core/config/_settings.py)):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -371,11 +379,10 @@ Before running a campaign, three prerequisites are BLOCKING:
 2. **Model accounts**:
    - An **auditor + judge model** (Anthropic): the auditor drives the Petri scenario and the judge scores each rollout. Configured via the `[self_improving_loop.autoresearch.auditor]` / `[self_improving_loop.autoresearch.judge]` sections (`model` + `source`).
    - A **target model**: defaults to the manifest `claude-haiku-4-5`; override to `geode/gpt-5.5` via ChatGPT / Codex OAuth with `[self_improving_loop.autoresearch.target]` (`model = "geode/gpt-5.5"`, `source = "openai-codex"`) in config.
-3. **Config**: copy `docs/examples/self_improving_loop.config.toml.example` to `~/.geode/config.toml` (or merge the `[self_improving_loop.*]` sections into an existing one). Absent sections fall back to documented defaults.
+3. **Config**: use `docs/examples/self_improving_loop.config.toml.example` as a reference and merge the needed `[self_improving_loop.*]` sections into `~/.geode/config.toml`. Preserve existing settings and credential choices; do not replace the file. Absent sections fall back to documented defaults.
 
 ```bash
 uv sync --extra audit
-cp docs/examples/self_improving_loop.config.toml.example ~/.geode/config.toml
 ```
 
 To run a campaign, start with the quick-start runbook: [docs/self-improving/campaign-quick-start.md](self-improving/campaign-quick-start.md). For the full procedure (difficulty seeding, baseline re-measurement, the 3-arm comparison, the bench axis), see [docs/self-improving/campaign-procedure.md](self-improving/campaign-procedure.md).
@@ -384,9 +391,13 @@ To run a campaign, start with the quick-start runbook: [docs/self-improving/camp
 
 ## Testing
 
+Select checks by the affected behavior using the canonical
+[verification gates](../.agents/skills/geode-workflow/references/verification-gates.md).
+For broad local preflight checks:
+
 ```bash
-uv run pytest tests/ -m "not live" -q     # 3,422+ tests
-uv run ruff check core/ tests/            # Lint
-uv run mypy core/                         # Type check (190 modules)
-uv run geode version                      # CLI smoke
+scripts/preflight.sh
 ```
+
+Report the checks and skips actually observed. Targeted checks or `--fast` are
+not a full preflight pass; remote CI on the current PR head remains the merge gate.
