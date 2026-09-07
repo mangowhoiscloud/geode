@@ -136,7 +136,14 @@ and must not be described as Harbor-native trial recordings.
 
 Use `evals.platforms.harbor:RecordedCodexHarborAgent` instead of the built-in
 Codex name when future paired runs require the native arm to emit the derived
-cast automatically. Closed historical jobs can be audited and backfilled
+cast automatically. For subscription authentication, set `CODEX_FORCE_AUTH_JSON=1`
+in the Harbor **process environment**, not `agent.env` in its job configuration.
+Harbor 0.22.0 treats AUTH-named configuration values as secrets and can replace
+every `1` in trial files with `[REDACTED]`, corrupting JSON, rewards and ATIF.
+The instrumented adapter rejects this configuration before execution; actual
+credential redaction remains enabled. Freeze and verify the process-level route.
+
+Closed historical jobs can be audited and backfilled
 without changing result or trajectory files:
 
     uv run python -m evals.platforms.harbor <job-or-run-root> --dry-run

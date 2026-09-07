@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from evals.platforms.harbor import RecordedCodexHarborAgent
 from evals.platforms.harbor_runtime import (
     GeodeRuntimeHarborAgent,
     _run_native,
@@ -17,6 +18,12 @@ from evals.platforms.harbor_runtime import (
     _summarize_usage,
     _verify_bundle,
 )
+
+
+@pytest.mark.parametrize("value", ["1", "true", "0", "false", "${CODEX_FORCE_AUTH_JSON}"])
+def test_native_auth_flag_rejects_harbor_secret_scrubbing_path(value: str) -> None:
+    with pytest.raises(ValueError, match=r"process environment, not agent\.env"):
+        RecordedCodexHarborAgent(extra_env={"CODEX_FORCE_AUTH_JSON": value})
 
 
 def test_source_bundle_rejects_mismatch_traversal_and_links(tmp_path: Path) -> None:
@@ -148,6 +155,9 @@ def test_runtime_config_pins_role_models_and_absolute_policy(tmp_path: Path) -> 
     policy = tomllib.loads((tmp_path / "model-policy.toml").read_text())
     assert policy == {"policy": {"allowlist": ["gpt-5.6-sol"]}}
     assert config["agentic"]["effort"] == "max"
+    call = agent.exec_as_agent.call_args.kwargs
+    assert "runtime.log 2>&1" in call["command"]
+    assert call["env"]["PYTHONFAULTHANDLER"] == "1"
 
 
 def test_installed_agent_uses_harbor_lifecycle_and_classifies_timeout(tmp_path: Path) -> None:

@@ -261,6 +261,7 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
         ]
         # This environment belongs only to the new container process.
         env = {
+            "PYTHONFAULTHANDLER": "1",
             "GEODE_HOME": f"{_LOGS}/geode-home",
             "GEODE_MODEL": model,
             "GEODE_AGENTIC_EFFORT": self.effort,
