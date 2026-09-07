@@ -35,6 +35,8 @@ if TYPE_CHECKING:
         logs_dir: Path
         logger: Any
 
+        def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+
         def populate_context_post_run(self, context: Any) -> None: ...
 
 else:
@@ -745,6 +747,14 @@ class RecordedCodexHarborAgent(HarborCodexAgent):
     """Harbor Codex with post-run trajectory replay instrumentation."""
 
     SUPPORTS_ATIF = True
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        if "CODEX_FORCE_AUTH_JSON" in (kwargs.get("extra_env") or {}):
+            raise ValueError(
+                "Set CODEX_FORCE_AUTH_JSON in the Harbor process environment, not agent.env: "
+                "Harbor treats AUTH flags as secrets and can corrupt numeric result fields."
+            )
+        super().__init__(*args, **kwargs)
 
     def populate_context_post_run(self, context: Any) -> None:
         super().populate_context_post_run(context)

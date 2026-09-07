@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from evals.platforms.harbor import RecordedCodexHarborAgent
 from evals.platforms.harbor_runtime import (
     GeodeRuntimeHarborAgent,
     _run_native,
@@ -17,6 +18,12 @@ from evals.platforms.harbor_runtime import (
     _summarize_usage,
     _verify_bundle,
 )
+
+
+@pytest.mark.parametrize("value", ["1", "true", "0", "false", "${CODEX_FORCE_AUTH_JSON}"])
+def test_native_auth_flag_rejects_harbor_secret_scrubbing_path(value: str) -> None:
+    with pytest.raises(ValueError, match=r"process environment, not agent\.env"):
+        RecordedCodexHarborAgent(extra_env={"CODEX_FORCE_AUTH_JSON": value})
 
 
 def test_source_bundle_rejects_mismatch_traversal_and_links(tmp_path: Path) -> None:

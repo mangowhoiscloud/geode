@@ -49,6 +49,9 @@ functional change.
 
 ### Fixed
 
+- Reject Codex subscription boolean flags in Harbor `agent.env`, where secret
+  scrubbing can replace numeric result fields; use the process environment instead.
+
 - Enabled Python's fatal-signal traceback in Harbor native GEODE trials, writing
   crash stacks to the existing private runtime log without changing scoring,
   timeouts, retries, or historical evidence.
