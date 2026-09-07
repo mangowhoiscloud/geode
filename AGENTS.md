@@ -127,8 +127,9 @@ LLM router, providers, prompt assembly, hashing.
 - `providers/glm.py` — GLM 5.x family. Context window 202_752 (not 200_000).
   Thinking gate (`thinking.type="off"|"none"`).
 - `providers/codex.py` — OAuth token resolution + async client.
-- `prompts/__init__.py` — `_PINNED_HASHES` (2 entries). Karpathy P4 ratchet.
+- `prompts/__init__.py` — `_PINNED_HASHES`. Karpathy P4 ratchet.
 - `prompts/router.md` — router-system and agentic-suffix sections, both hash-pinned.
+- `prompts/reviewer.md` — opt-in read-only adversarial review, hash-pinned.
 - `postprocess/html_output.py` — strips OpenAI data-URL HTML.
 
 Read this first when changing prompt content (will break the hash ratchet),

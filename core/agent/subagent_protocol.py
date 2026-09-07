@@ -215,6 +215,10 @@ class SubagentProtocol:
 
         description = task.description
         if role is not None:
+            if role.role == "reviewer":
+                from core.llm.prompts import REVIEWER_SYSTEM
+
+                system_prompt = "\n\n".join(filter(None, (system_prompt, REVIEWER_SYSTEM)))
             if not toolkit and not allowed_tools:
                 allowed_tools = list(role.tools)
             schema_line = output_schema_line(role)

@@ -153,19 +153,15 @@ Consolidate actionable findings with file/line evidence; omit unused lenses.
 - ...
 ```
 
-## Persona Prompt Template
+## Adversarial Review Routing
 
-Inject the following prompt when running verification agents:
+For a consequential document, design, PR, or publication, use the
+[adversarial review procedure](../geode-workflow/references/verification-gates.md#adversarial-review)
+when challenging the claims would improve the decision. This is an optional
+focus for the existing reviewer, not another persona or a mandatory review.
 
-```
-Mode: read-only code review.
-Perspective: {selected lens}
-Focus: {verification focus}
-
-Changed files: {file list}
-
-Audit against the following checklist:
-{checklist}
-
-Classify discovered issues as P0/P1/P2 and report.
-```
+GEODE's built-in `reviewer` uses the
+[canonical system prompt](../../../core/llm/prompts/reviewer.md). Supply the
+selected perspective and frozen task inputs, not a second system prompt or a
+copy of its criteria. The Markdown report above is the coordinator's summary;
+the runtime reviewer keeps its existing JSON output contract.
