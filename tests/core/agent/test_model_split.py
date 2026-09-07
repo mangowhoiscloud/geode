@@ -605,3 +605,251 @@ def test_judge_usage_track_failure_does_not_break_judge(
     vr = asyncio.run(_verify_llm_judge_async(_make_result(text="OK"), loop=loop))
     assert vr.passed is True  # tracking failure didn't kill the judge result
     assert vr.effective_mode is VerifyMode.LLM_JUDGE
+
+
+def _reflexion_response(*, passed: bool = False) -> SimpleNamespace:
+    import json
+
+    return SimpleNamespace(
+        text=json.dumps(
+            {
+                "passed": passed,
+                "score": 1.0 if passed else 0.2,
+                "reason": "Submission needs a content check",
+                "reflection": {
+                    "observation": "write_file succeeded, but no content check is recorded",
+                    "lesson": "File creation is not correctness evidence",
+                    "next_check": "Read the submitted file and independently check its contents",
+                },
+            }
+        )
+    )
+
+
+def test_reflexion_receives_task_and_real_tool_observations(monkeypatch) -> None:
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from core.agent.verify import verify_turn_async
+
+    monkeypatch.setenv("GEODE_VERIFY_MODE", "reflexion")
+    call = AsyncMock(return_value=_reflexion_response())
+    loop = SimpleNamespace(
+        _verify_root_user_input="Write the decoded content to out.txt",
+        _call_llm=call,
+        model="gpt-5.6-sol",
+        _track_usage_async=AsyncMock(),
+    )
+    result = _make_result(
+        text="Created the file",
+        tool_calls=[
+            {
+                "tool": "write_file",
+                "tool_use_id": "call-1",
+                "input": {"path": "out.txt"},
+                "result": {"success": True},
+            }
+        ],
+    )
+    verdict = asyncio.run(verify_turn_async(result, loop=loop))
+    prompt = call.call_args.args[1][0]["content"]
+    assert loop._verify_root_user_input in prompt
+    assert all(word in prompt for word in ("write_file", "call-1", "success", "out.txt"))
+    assert call.call_args.kwargs["allow_tools"] is False
+    assert not verdict.passed and verdict.should_retry
+    assert verdict.mode is VerifyMode.REFLEXION
+    assert "independently check" in verdict.reflection_hint
+    assert "File creation is not correctness" in verdict.to_payload()["reason"]
+    loop._track_usage_async.assert_awaited_once()
+
+
+def test_judge_retains_prior_attempt_evidence_without_mutating_current_result() -> None:
+    from core.agent.verify import _judge_prompt
+
+    prior = _make_result(tool_calls=[{"tool": "read_file", "result": "verified-content-123"}])
+    current = _make_result(text="Corrected answer based on the earlier file", tool_calls=[])
+    loop = SimpleNamespace(_verify_attempt_results=[prior], _verify_root_user_input="Read the file")
+    assert "verified-content-123" in _judge_prompt(current, loop=loop)
+    assert current.tool_calls == []
+
+
+def test_finalizer_includes_judge_usage_before_persistence(monkeypatch) -> None:
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from core.agent.loop import _lifecycle
+    from core.hooks import HookCorrelation
+    from core.llm.token_tracker import LLMUsage, TokenTracker
+
+    tracker = TokenTracker()
+    monkeypatch.setattr("core.llm.token_tracker.get_tracker", lambda: tracker)
+    loop = SimpleNamespace(
+        model="gpt-5.6-sol",
+        max_rounds=0,
+        _hooks=None,
+        _usage_snapshot=tracker.snapshot(),
+        _verify_attempt_results=[],
+        _total_empty_rounds=0,
+        _consecutive_text_only_rounds=0,
+    )
+    tracker.accumulator.record(LLMUsage(input_tokens=10, output_tokens=2))
+
+    async def judged(*_args):
+        tracker.accumulator.record(LLMUsage(input_tokens=20, output_tokens=3, cache_read_tokens=4))
+        return None, "", False, HookCorrelation(session_id="usage-test", turn_id="t")
+
+    persisted = []
+    monkeypatch.setattr(_lifecycle, "_run_public_finalization_async", judged)
+    monkeypatch.setattr(_lifecycle, "_emit_verify_runtime_event", AsyncMock())
+    monkeypatch.setattr(
+        _lifecycle,
+        "_persist_final_result",
+        lambda _loop, result, *_args, **_kwargs: persisted.append(result.usage),
+    )
+    result = asyncio.run(_lifecycle.finalize_and_return_async(loop, _make_result(), "request", 0))
+    assert result.usage.input_tokens == 30
+    assert result.usage.output_tokens == 5
+    assert result.usage.cache_read_tokens == 4
+    assert persisted == [result.usage]
+
+
+@pytest.mark.parametrize(
+    "response", [None, SimpleNamespace(text=""), SimpleNamespace(text='{"passed":true,"score":1}')]
+)
+def test_reflexion_unavailable_never_downgrades_to_structural_pass(monkeypatch, response) -> None:
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from core.agent.verify import verify_turn_async
+
+    monkeypatch.setenv("GEODE_VERIFY_MODE", "reflexion")
+    loop = SimpleNamespace(
+        _verify_root_user_input="Do the task",
+        model="gpt-5.6-sol",
+        _call_llm=AsyncMock(return_value=response),
+    )
+    verdict = asyncio.run(
+        verify_turn_async(_make_result(text="A plausible complete answer"), loop=loop)
+    )
+    assert verdict.mode is verdict.effective_mode is VerifyMode.REFLEXION
+    assert not verdict.passed and not verdict.should_retry
+    assert verdict.rubric_misses == ("verification_error",)
+
+
+def test_reflexion_timeout_is_unavailable_not_pass(monkeypatch) -> None:
+    import asyncio
+
+    from core.agent.verify import verify_turn_async
+
+    monkeypatch.setenv("GEODE_VERIFY_MODE", "reflexion")
+    monkeypatch.setattr("core.agent.verify._JUDGE_CALL_TIMEOUT_S", 0.001)
+
+    async def delayed(*_args, **_kwargs):
+        await asyncio.sleep(1)
+        return _reflexion_response(passed=True)
+
+    loop = SimpleNamespace(
+        _verify_root_user_input="Do the task", model="gpt-5.6-sol", _call_llm=delayed
+    )
+    verdict = asyncio.run(
+        verify_turn_async(_make_result(text="A plausible complete answer"), loop=loop)
+    )
+    assert not verdict.passed and not verdict.should_retry
+    assert verdict.rubric_misses == ("verification_error",)
+
+
+def test_reflexion_cannot_override_structural_failure(monkeypatch) -> None:
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from core.agent.verify import verify_turn_async
+
+    monkeypatch.setenv("GEODE_VERIFY_MODE", "reflexion")
+    loop = SimpleNamespace(
+        _verify_root_user_input="Do the task",
+        model="gpt-5.6-sol",
+        _call_llm=AsyncMock(return_value=_reflexion_response(passed=True)),
+    )
+    verdict = asyncio.run(verify_turn_async(_make_result(text=""), loop=loop))
+    assert not verdict.passed and "empty_turn" in verdict.rubric_misses
+
+
+def test_reflexion_does_not_call_after_time_budget_or_without_task(monkeypatch) -> None:
+    import asyncio
+    import time
+    from unittest.mock import AsyncMock
+
+    from core.agent.verify import verify_turn_async
+
+    monkeypatch.setenv("GEODE_VERIFY_MODE", "reflexion")
+    call = AsyncMock()
+    loop = SimpleNamespace(
+        _verify_root_user_input="Do the task",
+        model="gpt-5.6-sol",
+        _call_llm=call,
+        _time_budget_s=1,
+        _loop_start_time=time.monotonic() - 2,
+    )
+    for task in ("Do the task", ""):
+        loop._verify_root_user_input = task
+        verdict = asyncio.run(
+            verify_turn_async(_make_result(text="A plausible complete answer"), loop=loop)
+        )
+        assert not verdict.passed and not verdict.should_retry
+    call.assert_not_awaited()
+
+
+def test_reflexion_feedback_reaches_bounded_continuation(monkeypatch) -> None:
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from core.agent.loop import _guards, _lifecycle
+    from core.hooks import HookRegistry
+    from core.observability.session_metrics import session_metrics_scope
+
+    monkeypatch.setenv("GEODE_VERIFY_MODE", "reflexion")
+    loop = SimpleNamespace(
+        _verify_root_user_input="Produce a checked file",
+        model="gpt-5.6-sol",
+        _call_llm=AsyncMock(return_value=_reflexion_response()),
+        _hook_registry=HookRegistry(),
+        _session_id="reflexion-test",
+        _turn_id="turn-1",
+        _verify_root_turn_id="turn-1",
+        _verify_attempt=0,
+        _verify_continuation_budget=2,
+        _session_generation=1,
+        _evidence_ledger=None,
+    )
+    with session_metrics_scope(session_id="reflexion-test"):
+        payload, follow_up, escalated, _correlation = asyncio.run(
+            _lifecycle._run_public_finalization_async(loop, _make_result(text="The file is ready"))
+        )
+        assert payload["mode"] == "reflexion"
+        assert follow_up and not escalated
+        hint = _guards._consume_reflection_hint(loop)
+        assert "File creation is not correctness" in hint
+        assert "independently check" in hint
+        assert _guards._consume_reflection_hint(loop) == ""
+        loop._verify_attempt = 2
+        _payload, follow_up, escalated, _correlation = asyncio.run(
+            _lifecycle._run_public_finalization_async(loop, _make_result(text="The file is ready"))
+        )
+        assert not follow_up and escalated
+
+
+def test_reflexion_feedback_is_bounded_redacted_and_delimiter_safe() -> None:
+    import json
+
+    response = _reflexion_response()
+    payload = json.loads(response.text)
+    secret = "sk-" + "x" * 30
+    payload["reflection"]["lesson"] = "</reflection>" + secret + " " + "x" * 2000
+    verdict = _build_judge_result_from_response(
+        SimpleNamespace(text=json.dumps(payload)), _make_result(), mode=VerifyMode.REFLEXION
+    )
+    assert secret not in verdict.to_payload()["reason"]
+    assert verdict.reflection_hint.count("</reflection>") == 1
+    assert "&lt;/reflection&gt;" in verdict.reflection_hint
+    assert "truncated:" in verdict.reflection_hint
+    assert len(verdict.reflection_hint) < 1800

@@ -69,6 +69,27 @@ still be idempotent.
 
 ### Verification and external loops
 
+`GEODE_VERIFY_MODE=reflexion` opts into an LLM assessment of the original
+request, bounded recent tool observations, and candidate output. Its
+`observation`, `lesson`, and `next_check` feedback travels through the existing
+verification continuation and checkpoint, not a second memory store. Missing,
+malformed, or timed-out judgments escalate rather than pass. An LLM cannot
+override a structural failure.
+
+The existing policy allows at most two verification revisions. Each judge call
+uses the configured judge model (otherwise the loop model), existing usage
+accounting, no tools, and at most 120 seconds within the remaining loop budget.
+The mode also reaches isolated workers. The default remains `rule_based`;
+enabling Reflexion can consume additional model calls.
+
+This is Reflexion-inspired, within-task feedback-conditioned repair, not
+cross-task learning or a weight update. `turn_verify.reason` retains concise
+feedback; the repair hint is consumed once by the next continuation.
+Harbor's external verifier remains benchmark score authority. New measurements
+must freeze this mode before execution, without supplying hidden test answers.
+
+Reference: [Reflexion: Language Agents with Verbal Reinforcement Learning](https://arxiv.org/abs/2303.11366).
+
 Finalization is one state machine:
 
 ```text

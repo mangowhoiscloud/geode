@@ -247,7 +247,7 @@ const VERIFY_ROWS: Row[] = [
     name: "VerifyMode",
     ko: "턴 단위 rubric 검증. 회복 가능한 miss는 재시도로 수렴",
     en: "Per-turn rubric verification; recoverable misses converge through retries",
-    control: "GEODE_VERIFY_MODE (off / rule_based / llm_judge)",
+    control: "GEODE_VERIFY_MODE (off / rule_based / llm_judge / reflexion)",
     path: "core/agent/verify.py",
   },
   {

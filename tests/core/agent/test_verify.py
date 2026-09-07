@@ -555,6 +555,8 @@ def test_post_verify_escalation_withholds_candidate_before_persistence(
     turn = TurnState(turn_id="t-1", termination_reason=TerminationReason.NATURAL)
     loop = SimpleNamespace(
         _verify_attempt_results=[],
+        _total_empty_rounds=0,
+        _consecutive_text_only_rounds=0,
         _checkpoint=checkpoint,
         _session_id="s-escalated",
         _turn_state=turn,

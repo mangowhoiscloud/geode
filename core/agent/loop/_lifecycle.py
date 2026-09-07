@@ -374,6 +374,13 @@ def _prepare_final_result(
     metrics = build_reasoning_metrics(loop, result)
     result.reasoning_metrics = metrics.to_dict()
 
+    _refresh_result_usage(loop, result)
+    if persist:
+        _persist_final_result(loop, result, user_input, round_idx)
+
+
+def _refresh_result_usage(loop: AgenticLoop, result: AgenticResult) -> None:
+    """Snapshot this attempt's usage, including verification before persistence."""
     # Defect A F-A1 (2026-05-11) — aggregate per-arun usage via tracker
     # snapshot delta. Inspect_ai's role_usage aggregation reads this off
     # the ModelEvent.output.usage that ``GeodeModelAPI.generate`` emits,
@@ -401,9 +408,6 @@ def _prepare_final_result(
                 )
         except Exception:
             log.debug("usage delta snapshot failed", exc_info=True)
-
-    if persist:
-        _persist_final_result(loop, result, user_input, round_idx)
 
 
 def _persist_final_result(
@@ -916,6 +920,8 @@ async def finalize_and_return_async(
     verify_payload, follow_up, escalated, correlation = await _run_public_finalization_async(
         loop, result
     )
+    _refresh_result_usage(loop, result)
+    result.reasoning_metrics = build_reasoning_metrics(loop, result).to_dict()
     await _emit_verify_runtime_event(loop, verify_payload)
     if follow_up:
         await _close_verify_attempt(loop, result, user_input, round_idx, verify_payload)

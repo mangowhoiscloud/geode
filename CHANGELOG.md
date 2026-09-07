@@ -47,6 +47,16 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- Added opt-in `GEODE_VERIFY_MODE=reflexion`: a bounded, tool-disabled LLM
+  evaluates the original request and recorded tool observations, then returns
+  observation/lesson/next-check feedback through the existing two-revision
+  continuation and checkpoint path. Missing judges fail closed; structural
+  failures cannot be overridden. Judge usage reuses existing call accounting.
+  Prior attempts remain visible during revision; final result usage includes
+  judge calls, and isolated workers inherit the selected judge model.
+
 ### Fixed
 
 - Reject Codex subscription boolean flags in Harbor `agent.env`, where secret
