@@ -529,6 +529,46 @@ class TestAgenticLoopFailover:
         assert durable["usage"]["input_tokens"] == 100
         assert durable["usage"]["output_tokens"] == 20
 
+    @pytest.mark.parametrize("cache", [None, 0, 40])
+    def test_responses_identity_and_cache_reach_durable_activity(self, cache: int | None) -> None:
+        from types import SimpleNamespace
+
+        from core.hooks import HookEvent, HookSystem
+        from core.llm.adapters._openai_common import translate_codex_response
+        from core.observability.activity_registry import map_hook_to_activity
+
+        result = translate_codex_response(
+            SimpleNamespace(
+                id="resp_fixture",
+                model="returned-model-fixture",
+                output_text="done",
+                output=[],
+                status="completed",
+                usage=SimpleNamespace(
+                    input_tokens=100,
+                    output_tokens=20,
+                    input_tokens_details=SimpleNamespace(cached_tokens=cache),
+                ),
+            )
+        )
+        observed: list[dict[str, Any]] = []
+        hooks = HookSystem()
+        hooks.register(
+            HookEvent.LLM_CALL_ENDED,
+            lambda _event, data: observed.append(dict(data)),
+            name="responses-evidence-recorder",
+        )
+        loop = self._make_loop()
+        loop._hooks = hooks
+        self._install_acomplete_stub(loop, result)
+        asyncio.run(loop._call_llm("system", [{"role": "user", "content": "go"}]))
+        row = map_hook_to_activity(HookEvent.LLM_CALL_ENDED, observed[-1], run_id="test-run")
+        durable = row.model_dump(mode="json")["details"]
+        assert durable["response_id"] == "resp_fixture"
+        assert durable["response_model"] == "returned-model-fixture"
+        assert durable["usage"]["cached_input_tokens"] == cache
+        assert durable["usage"]["cache_write_tokens"] is None
+
     def test_call_llm_returns_none_on_chain_exhaustion(self) -> None:
         """When ``acomplete`` raises, ``_call_llm`` returns None with an
         error message."""

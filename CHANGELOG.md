@@ -49,6 +49,10 @@ functional change.
 
 ### Fixed
 
+- Preserved provider-returned response ID and model through the Responses adapter
+  so existing lifecycle evidence can identify the response without inferring it
+  from the configured model.
+
 - Allowed explicit null line controls in local document reads so image calls
   can express unused fields on Responses schemas. Invalid non-positive line
   controls now return validation errors instead of accidental slices.

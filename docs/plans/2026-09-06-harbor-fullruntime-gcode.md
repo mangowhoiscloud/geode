@@ -177,7 +177,60 @@ Historical 0/5 versus 4/5 motivates development, not a held-out test. A fresh
 full-runtime comparison changes more than image access and cannot establish
 the image tool's causal effect or generalization across Terminal-Bench.
 
+## Observability follow-up (2026-09-07)
+
+The published historical recovery at artifact commit
+`d277607f3a179f191ad24b1497c0934beb9d2470` reports verified call usage for
+401 GEODE trials (4,709 events) and 418 Codex trials (12,214 events).
+GEODE has 648 missing cache events, not 648 cache misses. Cache-positive
+trial counts are 384 and 418 respectively; these are coverage diagnostics,
+not a paired cache-efficiency comparison. The downloaded observability
+projection hashes to `2f97bca0041174f4a2653996a0572d4b75df7c8b6c95f7d58dc6eda6d3e2cf84`,
+matching its publication manifest. Private-source revalidation was not
+repeated; the public receipt's 2,142 source checks are historical evidence.
+Recounting the downloaded 890-cell projection reproduces the usage-event
+coverage and finds zero non-null cache totals in trials with missing events.
+
+Current cache extraction preserves field presence separately from billing
+defaults. Lifecycle events retain absent cache as null, explicit zero as
+zero, and positive counts as reported. Harbor refuses a complete subtotal
+when attempt start/end identities do not pair or a field is missing.
+The full-runtime adapter deliberately leaves Harbor token totals null:
+reflection, judging, text completion and hosted search are not fully covered.
+Its metadata carries the recorded AgenticLoop subtotal and missing counts.
+Do not remove this guard to make a comparison possible.
+
+A separate loss was confirmed in Responses translation: the SDK response ID
+and returned model were not copied to the existing result fields consumed by
+the lifecycle writer. The fix mirrors the Chat Completions translator and
+leaves absent identities empty. Configured routing is not proof of the model
+returned by a server. This patch does not retrofit historical identities.
+
+Remaining admission limits before a cache-efficiency claim:
+
+- Reconcile provider response -> attempt event -> private trajectory -> admitted
+  numeric projection on a fresh smoke; deterministic fixtures are not live proof.
+- Input/output/reasoning numeric defaults outside the cache-presence path still
+  require a presence audit before treating every zero as observed.
+- Legacy `LLMUsage.to_dict` and monthly `UsageRecord.to_dict` omit zero cache
+  counters and their readers default absence to zero. They are not new-run
+  cache authorities. The native Harbor adapter reads durable attempt events,
+  not these lossy serialized rollups.
+- Whole-runtime auxiliary-call coverage remains incomplete. Compare only an
+  explicitly matched measured scope, or finish coverage before claiming totals.
+- Phase durations describe elapsed time, not CPU or peak RAM. Neither resource
+  usage nor subscription dollar billing can be recovered from token counts.
+- Historical usage events are not joined to ATIF tool steps; do not label them
+  tokens per tool turn. Re-execution creates new evidence, not recovered history.
+
+No model calls or artifact publication occurred in this follow-up.
+
 ## Primary references
+
+- [Published recovery receipt](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/d277607f3a179f191ad24b1497c0934beb9d2470/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/recording/research-v20/data/recovery-check.json)
+  and its adjacent publication manifest: historical numeric recovery, not a new run.
+- [OpenAI Responses contract](https://developers.openai.com/api/reference/typescript/resources/beta/subresources/responses/methods/create):
+  response ID/model and usage fields; subscription live presence remains to be checked.
 
 - [Harbor custom agents](https://www.harborframework.com/docs/agents): the
   adapter here is checked against the installed `harbor==0.22.0` source.
