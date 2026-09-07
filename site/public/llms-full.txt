@@ -1518,6 +1518,22 @@ SessionLane은 세션 키 256개까지 유지하고 유휴 키를 정리합니�
 
 서브에이전트가 받는 것은 선언된 툴킷으로 해석된 네이티브 도구 핸들러입니다. frontmatter의 `toolkit:` 이름이 먼저, 레거시 `tools:` 목록이 다음, 둘 다 없으면 읽기 전용 `_default`입니다. 부모의 MCP 연결과 스킬 레지스트리는 워커 프로세스로 전달되지 않습니다 (`core/agent/worker.py`는 네이티브 핸들러만 구성). 자세한 해석 규칙은 [도구와 툴셋](https://mangowhoiscloud.github.io/geode/docs/runtime/tools/protocol.md)을 참고합니다.
 
+## 선택적 적대적 검토
+
+중요한 문서, 설계, PR, 공개 결론을 반증 관점에서 검토할 때는 기존 `reviewer` 역할을 선택합니다. 부모가 최종 산출물의 판본, 목표, 판정 계약, 원근거와 제외 범위를 먼저 고정합니다. 작성자의 설명이나 이전 리뷰 점수는 검토에 필요한 경우에만 전달합니다. 다음은 `delegate_task`의 요청 인자 예시입니다.
+
+```
+{
+  "task_type": "analyze",
+  "role": "reviewer",
+  "task_description": "Review the frozen artifact and source evidence supplied with this task against its stated goal and acceptance contract."
+}
+```
+
+`core/agent/subagent_roles.py`의 역할은 `grep_files`와 `read_document`만 허용합니다.`core/agent/subagent_protocol.py`가 [정본 시스템 프롬프트](https://github.com/mangowhoiscloud/geode/blob/main/core/llm/prompts/reviewer.md)를 워커에 전달합니다. 새 역할이나 승격 게이트는 아닙니다.
+
+결과는 기존 `findings` JSON입니다. 형식 검증 성공이나 빈 목록은 PASS 또는 병합 승인이 아닙니다. 부모가 근거를 대조하고 미확인 범위를 별도로 기록하며, 필요한 테스트와 CI는 그대로 수행합니다.
+
 ## 결과와 오류 분류
 
 완료 봉투는 `SubResult` 하나입니다. `success`, `output`, `error`, duration과 사용량 롤업 (prompt\_tokens, completion\_tokens, usd\_spent)을 담습니다. 구독이나 CLI 레인에서 사용량을 제공하지 않으면 0으로 기록됩니다.
@@ -5824,20 +5840,19 @@ AgenticLoop는 라운드 번호나 날짜를 합성 user message로 만들지 �
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-hashing
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-hashing.md
 
-핵심 프롬프트 템플릿은 해시로 핀됩니다. 템플릿이 한 글자라도 바뀌면 계산된 해시가 핀과 어긋나고 CI가 깨집니다. 프롬프트 모든 프롬프트 변경을 의도된 diff로 드러내는 래칫입니다.
+핵심 프롬프트 섹션은 해시로 핀됩니다. 로더가 추출하고 양끝 공백을 제거한 본문이 바뀌면 계산된 해시가 핀과 어긋나 CI가 실패합니다. 해시는 변경을 드러내며, 동작 품질 자체를 증명하지는 않습니다.
 
-## 네 개의 핀
+## 핀 대상
 
-`core/llm/prompts/__init__.py`가 .md 템플릿 (`router.md`, `commentary.md`)을 로드해 SHA-256 앞 12자를 `PROMPT_VERSIONS`로 계산하고, 하드코딩된 `_PINNED_HASHES`와 비교합니다.
+`core/llm/prompts/__init__.py`가 .md 템플릿 (`router.md`, `reviewer.md`)을 로드해 SHA-256 앞 12자를 `PROMPT_VERSIONS`로 계산하고, 하드코딩된 `_PINNED_HASHES`와 비교합니다.
 
 | 핀 | 출처 | 역할 |
 | --- | --- | --- |
 | `ROUTER_SYSTEM` | `core/llm/prompts/router.md` | AgenticLoop 시스템 프롬프트의 베이스 템플릿. |
 | `AGENTIC_SUFFIX` | `core/llm/prompts/router.md` | agentic 모드에서 덧붙는 suffix 절. |
-| `COMMENTARY_SYSTEM` | `core/llm/prompts/commentary.md` | 커멘터리 시스템 프롬프트. |
-| `COMMENTARY_USER` | `core/llm/prompts/commentary.md` | 커멘터리 사용자 템플릿. |
+| `REVIEWER_SYSTEM` | `core/llm/prompts/reviewer.md` | reviewer 역할을 선택한 서브에이전트의 읽기 전용 적대적 검토. |
 
-비교 함수는 `verify_prompt_integrity`입니다. 어긋난 핀의 목록을 반환하고, `raise_on_drift=True`면 첫 불일치에서 RuntimeError를 던집니다. CI 테스트가 이 검증을 게이트로 겁니다.
+비교 함수는 `verify_prompt_integrity`입니다. 어긋난 핀의 목록을 반환하고, `raise_on_drift=True`면 불일치가 있을 때 RuntimeError를 던집니다. CI 테스트가 이 검증을 게이트로 겁니다.
 
 ## 왜 빌드를 깨는가
 
@@ -5857,7 +5872,7 @@ python -c "from core.llm.prompts import PROMPT_VERSIONS as V; \
 
 ## 경계
 
-핀 대상은 정적 템플릿이지 렌더된 프롬프트가 아닙니다. 메모리 레이어, 날짜, wrapper override처럼 런타임에 합성되는 부분은 해시 범위 밖입니다. 렌더 결과의 재현성 감사가 필요하면`hash_rendered_prompt`가 같은 12자 해시를 렌더된 문자열에 적용합니다.
+핀 대상은 정적 템플릿이지 렌더된 프롬프트가 아닙니다. 메모리 레이어, 날짜, 사용자 정의 wrapper처럼 런타임에 합성되는 부분은 해시 범위 밖입니다. 렌더 결과의 재현성 감사가 필요하면`hash_rendered_prompt`가 같은 12자 해시를 렌더된 문자열에 적용합니다.
 
 ## 실패 모드
 

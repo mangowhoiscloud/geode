@@ -465,6 +465,53 @@ class TestSubAgentReasoningWiring:
         assert config.time_budget_s == 240.0
 
 
+def test_reviewer_prompt_reaches_worker_assembly_and_read_only_executor(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from core.agent.loop import AgenticLoop
+    from core.agent.sub_agent import SubAgentManager, SubTask
+    from core.agent.worker import _run_agentic
+    from core.llm.prompts import AGENTIC_SUFFIX, REVIEWER_SYSTEM
+    from core.orchestration.isolated_execution import IsolatedRunner
+
+    manager = SubAgentManager(IsolatedRunner())
+    request = manager._protocol.build_worker_request(
+        SubTask(
+            task_id="review-contract",
+            task_type="analyze",
+            description="Review the artifact.",
+            role="reviewer",
+        )
+    )
+    restored = WorkerRequest.from_dict(json.loads(json.dumps(request.to_dict())))
+    assert restored.agent_system_prompt == REVIEWER_SYSTEM
+    observed: list[str] = []
+
+    def fake_loop(conversation, executor, **kwargs):
+        actual_loop = AgenticLoop(conversation, executor, **kwargs)
+        observed.append(actual_loop._build_system_prompt())
+
+        async def review(_prompt: str) -> AgenticResult:
+            for name in ("run_bash", "write_file", "delegate_task", "computer"):
+                result = await executor.aexecute(name, {})
+                assert result["denied"] is True
+            return AgenticResult(text='{"findings": []}', termination_reason="natural")
+
+        loop = MagicMock()
+        loop.arun = AsyncMock(side_effect=review)
+        return loop
+
+    monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
+    with patch("core.agent.loop.AgenticLoop", side_effect=fake_loop):
+        result = _run_agentic(restored, _empty_tool_plan_builder)
+
+    assert result.success is True
+    assert observed == [REVIEWER_SYSTEM + "\n" + AGENTIC_SUFFIX]
+
+
 def test_run_agentic_shares_one_bound_plan_with_executor_and_loop(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
