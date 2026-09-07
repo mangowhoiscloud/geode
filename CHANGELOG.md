@@ -49,6 +49,12 @@ functional change.
 
 ### Fixed
 
+- Stopped recording verifier exceptions and malformed judge verdicts as passes;
+  verification errors retain a distinct reason and do not request automatic repair.
+- Removed category/cost-based automatic tool substitution: unrelated tool success
+  no longer counts as recovery of the requested operation. Same-tool retry and
+  explicit failure lineage remain available.
+
 - Preserved provider-returned response ID and model through the Responses adapter
   so existing lifecycle evidence can identify the response without inferring it
   from the configured model.

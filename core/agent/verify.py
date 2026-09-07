@@ -223,8 +223,8 @@ def _check_step_expected_match(text: str) -> bool:
     fails the keyword overlap heuristic (case-insensitive substring
     match on any non-trivial token >=3 chars in expected_outcome).
 
-    Failures NEVER raise — falls back to True so observability mustn't
-    break the run it observes.
+    Failure to read the plan is a verification error, never a successful
+    match. The public dispatcher records the error without crashing the run.
     """
     try:
         from core.observability.session_metrics import current_session_metrics
@@ -246,8 +246,8 @@ def _check_step_expected_match(text: str) -> bool:
         if not tokens:
             return True
         return any(tok in haystack for tok in tokens)
-    except Exception:
-        return True
+    except Exception as exc:
+        raise RuntimeError("Plan verification unavailable") from exc
 
 
 def _verify_rule_based(result: AgenticResult) -> VerifyResult:
@@ -345,8 +345,7 @@ def _judge_prompt(result: AgenticResult) -> str:
 def _parse_judge_payload(raw: str) -> tuple[bool, float, str]:
     """Extract ``(passed, score, reason)`` from the judge's single-line JSON.
 
-    Falls back to neutral pass with score=0.5 when parsing fails — judge
-    crashes must not break the agent run.
+    Reject malformed verdicts without turning missing evidence into success.
     """
     import json
 
@@ -358,15 +357,18 @@ def _parse_judge_payload(raw: str) -> tuple[bool, float, str]:
     try:
         obj = json.loads(text)
     except (json.JSONDecodeError, ValueError):
-        log.debug("LLM judge returned non-JSON; treating as pass", extra={"raw": text[:200]})
-        return True, 0.5, "judge_unparseable"
-    passed = bool(obj.get("passed", True))
-    raw_score = obj.get("score", 0.5)
-    try:
-        score = float(raw_score)
-    except (TypeError, ValueError):
-        score = 0.5
-    score = max(0.0, min(1.0, score))
+        return False, 0.0, "verification_error"
+    if not isinstance(obj, dict) or not isinstance(obj.get("passed"), bool):
+        return False, 0.0, "verification_error"
+    raw_score = obj.get("score")
+    if (
+        not isinstance(raw_score, (int, float))
+        or isinstance(raw_score, bool)
+        or not 0 <= raw_score <= 1
+    ):
+        return False, 0.0, "verification_error"
+    score = float(raw_score)
+    passed = obj["passed"]
     reason = str(obj.get("reason", ""))[:200]
     return passed, score, reason
 
@@ -385,6 +387,8 @@ def _build_judge_result_from_response(response: Any, result: AgenticResult) -> V
     if not raw_text:
         return _llm_judge_fallback(result)
     passed, score, reason = _parse_judge_payload(raw_text)
+    if reason == "verification_error":
+        return _verification_error(VerifyMode.LLM_JUDGE)
     misses: tuple[str, ...] = ()
     hint = ""
     if not passed:
@@ -532,8 +536,25 @@ async def verify_turn_async(result: AgenticResult, *, loop: Any | None = None) -
             return await _verify_llm_judge_async(result, loop=loop)
         return _verify_rule_based(result)
     except Exception:
-        log.warning("verify_turn_async crashed; treating as pass", exc_info=True)
-        return VerifyResult(passed=True, mode=mode, effective_mode=mode, ts=time.monotonic())
+        log.warning("verify_turn_async crashed; verification unavailable", exc_info=True)
+        return _verification_error(mode)
+
+
+def _verification_error(mode: VerifyMode) -> VerifyResult:
+    """An internal check failure supplies neither success nor a repair signal.
+
+    The zero score belongs to this structural check, not to a benchmark
+    outcome. Consumers must retain the verification_error reason.
+    """
+    return VerifyResult(
+        passed=False,
+        mode=mode,
+        effective_mode=mode,
+        score=0.0,
+        rubric_misses=("verification_error",),
+        should_retry=False,
+        ts=time.monotonic(),
+    )
 
 
 def verify_turn(result: AgenticResult, *, loop: Any | None = None) -> VerifyResult:
@@ -545,9 +566,8 @@ def verify_turn(result: AgenticResult, *, loop: Any | None = None) -> VerifyResu
       - ``LLM_JUDGE`` — opt-in self-judge call (stub in this PR; A6 fills).
 
     Failures inside the verify path NEVER propagate — observability must
-    not break the run it observes. On exception we log + return a
-    passing sentinel marked with mode so a downstream consumer can
-    distinguish "verify ran clean" from "verify crashed silently".
+    not break the run it observes. On exception return verification_error,
+    not a passing sentinel or a retry instruction.
     """
     mode = get_verify_mode()
     if mode is VerifyMode.OFF:
@@ -557,8 +577,8 @@ def verify_turn(result: AgenticResult, *, loop: Any | None = None) -> VerifyResu
             return _verify_llm_judge(result, loop=loop)
         return _verify_rule_based(result)
     except Exception:
-        log.warning("verify_turn crashed; treating as pass", exc_info=True)
-        return VerifyResult(passed=True, mode=mode, effective_mode=mode, ts=time.monotonic())
+        log.warning("verify_turn crashed; verification unavailable", exc_info=True)
+        return _verification_error(mode)
 
 
 @dataclass(frozen=True, slots=True)

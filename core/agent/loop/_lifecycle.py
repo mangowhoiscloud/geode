@@ -606,7 +606,7 @@ async def _run_public_finalization_async(
             passed=False,
             rubric_misses=misses,
             reflection_hint="\n".join(part for part in hint_parts if part),
-            should_retry=True,
+            should_retry="verification_error" not in vr.rubric_misses,
         )
 
     verify_payload = (

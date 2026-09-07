@@ -1,7 +1,7 @@
 """Tests for adaptive error recovery system.
 
 Covers:
-- ErrorRecoveryStrategy: retry, alternative, fallback, escalate
+- ErrorRecoveryStrategy: bounded retry and escalation, no cross-tool substitution
 - AgenticLoop integration: recovery chain replaces auto-skip
 - Safety: DANGEROUS/WRITE tools excluded from recovery
 - Hook events: TOOL_RECOVERY_ATTEMPTED/SUCCEEDED/FAILED
@@ -85,33 +85,31 @@ class TestErrorRecoveryStrategy:
         assert result.recovered is True
         assert result.strategy_used == RecoveryStrategy.RETRY
 
-    def test_retry_failure_then_alternative(self, executor: ToolExecutor) -> None:
-        """retry fails → alternative tool (same category) succeeds."""
-        # check_status and show_help are both discovery category
-        call_count = 0
-
-        def failing_status(**kwargs: Any) -> dict[str, Any]:
-            nonlocal call_count
-            call_count += 1
-            return {"error": "Connection timeout"}
-
-        executor._handlers["check_status"] = failing_status
+    @pytest.mark.parametrize("tool_name", ["check_status", "read_document", "petri_audit"])
+    def test_failure_never_substitutes_category_or_cheaper_tool(
+        self, executor: ToolExecutor, tool_name: str
+    ) -> None:
+        failed = MagicMock(return_value={"error": "operation failed"})
+        help_handler = executor._handlers["show_help"]
+        executor._handlers[tool_name] = failed
         strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
+        result = _run_recovery(strategy, tool_name, {}, failure_count=2)
+        assert not result.recovered
+        assert result.final_result["recovery_exhausted"]
+        assert all(attempt.tool_name == tool_name for attempt in result.attempts)
+        assert [attempt.strategy for attempt in result.attempts] == [
+            RecoveryStrategy.RETRY,
+            RecoveryStrategy.ESCALATE,
+        ]
+        help_handler.assert_not_called()
 
-        result = _run_recovery(strategy, "check_status", {}, failure_count=2)
-        # retry fails, then alternative (show_help) succeeds
-        assert result.recovered is True
-        assert result.strategy_used == RecoveryStrategy.ALTERNATIVE
-        assert len(result.attempts) >= 2
-
-    def test_no_alternative_then_fallback(self, executor: ToolExecutor) -> None:
-        """No alternative in same category → try cheaper fallback."""
-        executor._handlers["petri_audit"] = MagicMock(return_value={"error": "API timeout"})
+    def test_error_type_without_message_is_not_recovered(self) -> None:
+        executor = MagicMock()
+        executor.aexecute = AsyncMock(return_value={"error_type": "timeout"})
         strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
-
-        result = _run_recovery(strategy, "petri_audit", {}, failure_count=2)
-        # Should try: retry (fail) → alternative (might find one or fail) → fallback/escalate
-        assert len(result.attempts) >= 2
+        result = _run_recovery(strategy, "read_document", {}, failure_count=1)
+        assert not result.recovered
+        assert not result.attempts[0].success
 
     def test_all_strategies_exhausted_returns_failure(self, executor: ToolExecutor) -> None:
         """All strategies fail → recovery exhausted."""
@@ -209,33 +207,6 @@ class TestErrorRecoveryStrategy:
         attempt = strategy._try_escalate("check_status", {}, time.monotonic())
         assert attempt.success is False
         assert attempt.result.get("escalated") is True
-
-    def test_alternative_finds_same_category_tool(self, strategy: ErrorRecoveryStrategy) -> None:
-        """Alternative lookup finds tools in the same category."""
-        alt = strategy._find_alternative("check_status")
-        assert alt == "show_help"
-
-    def test_alternative_skips_excluded_tools(self, executor: ToolExecutor) -> None:
-        """Alternative lookup skips DANGEROUS/WRITE tools."""
-        executor._handlers["memory_save"] = MagicMock(return_value={"status": "ok"})
-        strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
-        # memory_save is 'memory' category, same as memory_search
-        # But memory_save is excluded
-        alt = strategy._find_alternative("memory_save")
-        assert alt is None  # memory_save itself is excluded from recovery
-
-    def test_fallback_finds_cheaper_tier(self, strategy: ErrorRecoveryStrategy) -> None:
-        """Fallback finds a cheaper tool (lower cost_tier)."""
-        fallback = strategy._find_fallback("petri_audit")
-        assert fallback is not None
-        # The fallback should be a registered tool with lower cost tier
-        tool_def = strategy._tool_lookup.get(fallback, {})
-        assert tool_def.get("cost_tier") in ("free", "cheap")
-
-    def test_fallback_returns_none_for_free_tools(self, strategy: ErrorRecoveryStrategy) -> None:
-        """No fallback exists for tools already at 'free' tier."""
-        fallback = strategy._find_fallback("check_status")
-        assert fallback is None
 
 
 # ---------------------------------------------------------------------------

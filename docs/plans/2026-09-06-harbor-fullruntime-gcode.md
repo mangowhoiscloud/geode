@@ -225,7 +225,45 @@ Remaining admission limits before a cache-efficiency claim:
 
 No model calls or artifact publication occurred in this follow-up.
 
+## Verification and recovery candidates (2026-09-07)
+
+Two deterministic false-success paths are fixed before any new paid run:
+
+- Verifier exceptions and malformed judge verdicts previously became passes.
+  They now retain `verification_error`, structural score 0, and no automatic
+  repair request, including when PreVerify adds requirements. This is not a
+  Harbor reward zero; the external task verifier remains score authority.
+- Automatic recovery previously treated category/price as tool equivalence.
+  A successful help response could replace a failed read/status operation.
+  Remove this substitution, retaining same-tool retry, admission gates and
+  attempt lineage. The model may select a new tool after observing the failure.
+
+Acceptance is observable correctness first: malformed verdicts never pass,
+unrelated tool success never clears the requested operation's failure, and
+existing successful retries still work. Targeted tests pass (121 cases);
+these checks do not establish a benchmark gain.
+
+The measured loop will keep the frozen baseline, prospectively register the
+candidate revision and matched resources, preserve all attempts, and promote
+only after independent task-verifier results and observation-coverage checks.
+Do not optimize on verifier exceptions, overwrite old trajectories with fresh
+runs, or count missing cache fields as zero. Present this as an engineering
+hill-climbing experiment, not an implemented DGM search system. Outcome slides
+remain pending until measurement finishes.
+
+Live admission is still blocked: the host has approximately 5.2 GiB free on
+2026-09-07, below the task's 10 GiB storage allocation before image overhead.
+Do not prune other sessions or silently shrink the frozen environment.
+
 ## Primary references
+
+- [Darwin Godel Machine](https://arxiv.org/abs/2505.22954): empirical evaluation
+  of code candidates and candidate archives; inspiration, not implementation parity.
+- [Reward tampering research](https://www.anthropic.com/research/reward-tampering):
+  motivates keeping evaluator authority separate from the optimized agent.
+  The defects above are harness bugs, not evidence of deliberate reward hacking.
+- [Datasheets for Datasets](https://arxiv.org/abs/1803.09010): preserve collection
+  conditions, missingness, permitted interpretations and lineage in run artifacts.
 
 - [Published recovery receipt](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/d277607f3a179f191ad24b1497c0934beb9d2470/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/recording/research-v20/data/recovery-check.json)
   and its adjacent publication manifest: historical numeric recovery, not a new run.
