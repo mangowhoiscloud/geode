@@ -150,6 +150,33 @@ Neither G-code arm started. This is a failed non-benchmark integration gate,
 not a task-performance result or a recovered historical attempt. A corrected
 candidate needs a new source hash and prospective canary before expansion.
 
+## Nullable image-call follow-up (2026-09-07)
+
+The closed corrected-headless canary also failed: its trace contains 17
+recorded model calls, repeated numeric line controls on `read_document`, no
+image provenance, and a verifier zero. This is not a G-code outcome.
+The follow-up makes unused line controls explicitly nullable in the tool
+schema and reader; positive text ranges and image size/path guards remain.
+Zero/negative/bool/string line controls are rejected, not treated as missing.
+The deterministic regression crosses schema validation and the registered
+handler, then checks image content and null text defaults.
+
+Responses can normalize unspecified strictness into a strict schema; explicit
+nullable fields follow the official function-calling contract. This does not
+prove the subscription backend's resolved schema or that a live model will
+select the right arguments. A new prospective canary must establish image
+provenance, a subsequent provider response and verifier success before G-code.
+
+Category-only recovery selecting `show_help` is a separate confirmed defect:
+absence of a tool error is not evidence that the original image read succeeded.
+It is unchanged in this candidate. The canary gate must not use that status as
+its acceptance criterion. Provider-returned identity and whole-runtime
+auxiliary usage also remain explicitly unverified where records are absent.
+
+Historical 0/5 versus 4/5 motivates development, not a held-out test. A fresh
+full-runtime comparison changes more than image access and cannot establish
+the image tool's causal effect or generalization across Terminal-Bench.
+
 ## Primary references
 
 - [Harbor custom agents](https://www.harborframework.com/docs/agents): the

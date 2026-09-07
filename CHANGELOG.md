@@ -49,6 +49,10 @@ functional change.
 
 ### Fixed
 
+- Allowed explicit null line controls in local document reads so image calls
+  can express unused fields on Responses schemas. Invalid non-positive line
+  controls now return validation errors instead of accidental slices.
+
 - Aligned runtime guidance with authorized task scope, available delegation, and
   explicitly configured recovery; removed conflicting development instructions
   for repeated verification, automatic release/restart, and tool-specific review.
