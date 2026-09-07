@@ -394,6 +394,7 @@ def test_token_tracker_record_appends_to_geode_usage_jsonl(tmp_path: Path) -> No
     assert '"input_tokens": 10' in body or '"input": 10' in body or "10" in body
 
 
+@pytest.mark.usefixtures("target_credential_boundary")
 def test_default_runner_returns_text_and_usage_tuple(monkeypatch) -> None:
     """F-A1 contract — ``_default_geode_runner`` returns ``(text,
     usage_dict)``. The Custom ModelAPI surfaces ``usage_dict`` into

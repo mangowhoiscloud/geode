@@ -8,6 +8,10 @@ description: Slack Gateway operations guide. Socket Mode credentials, config.tom
 > **Source**: Distilled from Gateway debugging session (2026-03-26)
 > **Primary failure modes**: missing binding, missing `xapp-` token, or bot not invited to a bound channel
 
+Diagnosing a connection does not authorize credential changes, channel messages,
+or process restarts. Apply only the requested operation and keep credential
+values, fragments, and private message content out of reports.
+
 ## Architecture
 
 ```
@@ -25,18 +29,28 @@ migration path, not the operational target.
 
 | Item | How to verify |
 |------|---------------|
-| `SLACK_BOT_TOKEN` | `echo $SLACK_BOT_TOKEN` — `xoxb-...` |
-| `SLACK_APP_TOKEN` | `echo $SLACK_APP_TOKEN` — `xapp-...`, `connections:write` |
+| `SLACK_BOT_TOKEN` | `test -n "${SLACK_BOT_TOKEN:-}"` — exit status only, no value output |
+| `SLACK_APP_TOKEN` | `test -n "${SLACK_APP_TOKEN:-}"` — exit status only; app requires `connections:write` |
 | App settings | Socket Mode on; bot events `app_mention`, `message.channels` |
-| `.geode/config.toml` | `cat .geode/config.toml` — bindings.rules exist |
-| Slack health | `geode doctor slack` is `OPERATIONAL`; every binding says `bot_member=True` |
+| Gateway config | Inspect only `gateway.bindings.rules` in the global config and project overlay; do not dump the entire config |
+| Slack health | When live diagnostics are authorized, `geode doctor slack` is `OPERATIONAL` and every binding says `bot_member=True` |
+
+The shell presence checks cover inherited environment variables only. An unset
+variable does not prove the runtime lacks a credential: the resolver also uses
+the global `.env`. Do not print or copy that file to investigate.
+
+`geode doctor slack` makes live Slack calls (`auth.test`, `apps.connections.open`,
+and channel membership checks). Its credential rows use partial masking, not
+full redaction; workspace/bot identifiers also appear. Keep raw diagnostics
+local and report only check names, status, and redacted findings. The temporary
+Socket Mode URL is omitted from the successful diagnostic report.
 
 ## config.toml Setup
 
-```bash
-# Copy from template (on clean clone)
-cp .geode/config.toml.example .geode/config.toml
-```
+Use `.geode/config.toml.example` to create a project config only when none exists.
+If it already exists, edit the required binding fields in place and preserve
+unrelated settings. Never overwrite an existing global config or project overlay
+with the template.
 
 ```toml
 [gateway.bindings]
@@ -46,7 +60,7 @@ channel = "slack"
 channel_id = "C0XXXXXXXXX"  # Slack channel → Click channel name → Channel ID at bottom
 auto_respond = true
 require_mention = true       # true: respond only on @mention
-max_rounds = 5
+time_budget_s = 90           # optional per-message override; otherwise inherit gateway budget
 ```
 
 - `config.toml` is in `.gitignore` — not deleted by git pull
@@ -55,24 +69,24 @@ max_rounds = 5
 
 ## Start/Restart
 
-```bash
-# Kill existing process
-kill $(pgrep -f "geode serve")
+Follow [Rebuild & Restart](../geode-gitflow/SKILL.md#rebuild--restart) only when
+startup or restart is authorized. Confirm the installation, GEODE home/socket,
+PID, and session owner before stopping anything. The lifecycle implementation
+in `core/cli/commands/lifecycle.py` currently discovers the first matching serve
+PID; neither that match nor the stop command proves ownership. If several
+sessions match or ownership is unclear, stop and request direction.
 
-# Restart (background)
-nohup uv run geode serve >/dev/null 2>&1 &
-
-# Or foreground
-uv run geode serve
-```
+Restart the confirmed installation through its existing launcher and retain
+startup diagnostics. Do not replace a managed service with an unrelated
+background process or discard its logs into `/dev/null`. Verify the requested
+process and socket before claiming it restarted.
 
 ## Debugging Checklist
 
 ### Symptom: Bot does not respond to messages
 
 ```bash
-# 1. Check process
-ps aux | grep "geode serve"
+# 1. Identify the intended process/socket without stopping it (see Start/Restart).
 
 # 2. Verify binding load
 grep "binding" ~/.geode/logs/serve.log
@@ -86,7 +100,7 @@ grep -i "gateway config sources" ~/.geode/logs/serve.log
 grep -E "Slack inbound mode|Slack Socket Mode connected" ~/.geode/logs/serve.log
 # Expected: Socket Mode (push), then connected
 
-# 4. Verify credentials, scopes, and channel membership
+# 4. Only when live Slack diagnostics are authorized; do not publish raw output.
 geode doctor slack
 
 # 5. Verify message reception after an @geode mention
@@ -97,8 +111,8 @@ grep "Slack message from" ~/.geode/logs/serve.log
 
 | Symptom | Cause | Resolution |
 |---------|-------|------------|
-| "Loaded 0 gateway bindings" | `.geode/config.toml` missing | `cp config.toml.example config.toml` + enter channel ID |
-| `polling fallback` | `SLACK_APP_TOKEN` missing | Create an `xapp-` app token with `connections:write`, add it to `~/.geode/.env`, restart |
+| "Loaded 0 gateway bindings" | Binding absent or not loaded from the merged config | Check global/project sources; add only the missing binding without replacing existing config |
+| `polling fallback` | `SLACK_APP_TOKEN` missing | If configuration changes are authorized, set an app token with `connections:write` in the global credential store; restart only through the owned-process procedure |
 | `not_in_channel` / `bot_member=False` | Bot was not invited | Run `/invite @geode` in the linked channel |
 | Repeated disconnects | App token invalid or Socket Mode disabled | Run `geode doctor slack`, then verify app-level token and Socket Mode settings |
 | New top-level/unengaged message receives no response | `require_mention=true` but no @mention | Mention @botname once or set `require_mention=false` |

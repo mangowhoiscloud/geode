@@ -1,6 +1,8 @@
 # Phase Checklist
 
-Use this when the task is more than a trivial edit.
+Use this for non-trivial work alongside the [canonical loop](../../../../docs/workflow.md#core-loop).
+Capture only the fields that affect the requested change; do not create a new
+schema, log, or tracking transaction to fill this checklist.
 
 ## Phase 0: Worktree And Scope
 
@@ -37,7 +39,7 @@ target `main`, then sync the merge back through a CI-gated
 Search first:
 
 ```bash
-rg "<capability|schema|event|tool|provider|workflow>" core tests docs plugins scripts
+rg "<capability|schema|event|tool|provider|workflow>" core evals evolve tests docs scripts
 rg --files | rg "<domain|feature|provider>"
 ```
 
@@ -76,7 +78,7 @@ Write down:
 
 ## Phase 3: Design
 
-Define before editing:
+For affected contracts only, define before editing:
 
 - schema version and payload shape
 - log destination and redaction boundary

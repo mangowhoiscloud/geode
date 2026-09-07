@@ -1,6 +1,6 @@
 # Petri × GEODE Alignment Audit — Benchmark Bundle
 
-> ⚠️ **2026-05-14 사후 검증 update**: 본 bundle 의 가장 큰 finding (`input_hallucination` Δ ≈ +1.04 ~ +1.31, "GEODE 압박 시 약점") 은 사후 검증 결과 **[substantially invalid]** 로 강등. 23.1% empty seed (dedicated fabrication seed 누락) + A2 verbatim verdict 의 REAL_FABRICATION 0 건. archive 는 historical record 로 유지. 상세: [`audits/2026-05-14-petri-verification-summary.md`](../audits/2026-05-14-petri-verification-summary.md).
+> ⚠️ **2026-05-14 사후 검증 update**: 본 bundle 의 가장 큰 finding (`input_hallucination` Δ ≈ +1.04 ~ +1.31, "GEODE 압박 시 약점") 은 사후 검증 결과 **[substantially invalid]** 로 강등. 23.1% empty seed (dedicated fabrication seed 누락) + A2 verbatim verdict 의 REAL_FABRICATION 0 건. archive 는 historical record 로 유지. 상세: [`audits/2026-05-14-petri-verification-summary.md`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-14-petri-verification-summary.md).
 
 본 directory 는 [Anthropic Petri](https://github.com/meridianlabs-ai/inspect_petri),
 [inspect_ai](https://inspect.aisi.org.uk/) 의 native log viewer 의
@@ -30,9 +30,9 @@ curve) 의 alignment 행동 의 측정. 본 cross-model 의 일관 신호:
 
 자세한 분석:
 
-- [`audits/2026-05-14-petri-verification-summary.md`](../audits/2026-05-14-petri-verification-summary.md) — **본 사후 검증 종합 (권장 first reading)**
-- [`audits/2026-05-14-petri-fix-plan.md`](../audits/2026-05-14-petri-fix-plan.md) — 5 PR sequential fix plan
-- [`audits/2026-05-12-petri-insights.md`](../audits/2026-05-12-petri-insights.md) — 원본 보고서 (caveat 적용 됨)
+- [`audits/2026-05-14-petri-verification-summary.md`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-14-petri-verification-summary.md) — **본 사후 검증 종합 (권장 first reading)**
+- [`audits/2026-05-14-petri-fix-plan.md`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-14-petri-fix-plan.md) — 5 PR sequential fix plan
+- [`audits/2026-05-12-petri-insights.md`](../../audits/2026-05-12-petri-insights.md) — 원본 보고서 (caveat 적용 됨)
 
 ## 본 viewer 의 사용법 — 외부 사용자 의 step-by-step
 
@@ -153,10 +153,10 @@ cross-reference (본 보고서 의 §3 / §4 / §5).
 
 ## 본 audit 의 보고서 (markdown SOT)
 
-- [`audits/2026-05-12-petri-insights.md`](../audits/2026-05-12-petri-insights.md) — model 별 GEODE 의 강점/약점 + feedback loop 의 개선 (본 첫 reading 의 권장)
-- [`audits/2026-05-12-petri-geode-audit-v3.md`](../audits/2026-05-12-petri-geode-audit-v3.md) — v3 valid 보고서 (Opus N=1)
-- [`audits/2026-05-12-petri-multi-model-partial.md`](../audits/2026-05-12-petri-multi-model-partial.md) — multi-model partial (정직 한 credit exhaust 의 명시 + cost 각주)
-- [`audits/2026-05-12-petri-geode-audit.md`](../audits/2026-05-12-petri-geode-audit.md) — v1 의 retraction 의 origin
+- [`audits/2026-05-12-petri-insights.md`](../../audits/2026-05-12-petri-insights.md) — model 별 GEODE 의 강점/약점 + feedback loop 의 개선 (본 첫 reading 의 권장)
+- [`audits/2026-05-12-petri-geode-audit-v3.md`](../../audits/2026-05-12-petri-geode-audit-v3.md) — v3 valid 보고서 (Opus N=1)
+- [`audits/2026-05-12-petri-multi-model-partial.md`](../../audits/2026-05-12-petri-multi-model-partial.md) — multi-model partial (정직 한 credit exhaust 의 명시 + cost 각주)
+- [`audits/2026-05-12-petri-geode-audit.md`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-12-petri-geode-audit.md) — v1 의 retraction 의 origin
 
 ## 본 bundle 의 reproduction
 

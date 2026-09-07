@@ -51,6 +51,7 @@ PROJECT_CONFIG_PATH = PROJECT_CONFIG_TOML
 # Only mapped keys are applied; unknown TOML keys are silently ignored.
 _TOML_TO_SETTINGS: dict[str, str] = {
     "llm.primary_model": "model",
+    "llm.model_policy_path": "model_policy_path",
     "llm.learning_extract_model": "learning_extract_model",
     # PR-CL-A6 (2026-05-23) — Action / Judge model knobs. Empty string
     # falls back to ``llm.primary_model``. Planning inherits loop.model.
@@ -500,21 +501,49 @@ class ModelPolicy:
     default_model: str = ""
 
 
-def load_model_policy(policy_path: Path | None = None) -> ModelPolicy:
-    """Load .geode/model-policy.toml. Returns empty policy (all allowed) if missing."""
+def load_model_policy(policy_path: Path | None = None, *, required: bool = False) -> ModelPolicy:
+    """Load the configured policy, failing closed for an explicit required path.
+
+    The legacy optional project policy keeps its missing/malformed fallback.
+    An absolute ``llm.model_policy_path`` selects strict loading instead.
+    """
+    if policy_path is None:
+        configured_path = _get_settings().model_policy_path
+        if configured_path:
+            policy_path = Path(configured_path)
+            required = True
     path = policy_path or MODEL_POLICY_PATH
+    if required and not path.is_absolute():
+        raise ValueError("required model policy path must be absolute")
     if not path.exists():
+        if required:
+            raise ValueError("required model policy is missing")
         return ModelPolicy()
     try:
         with open(path, "rb") as f:
             raw = tomllib.load(f)
         section = raw.get("policy", {})
+        if required:
+            if "policy" not in raw or not isinstance(section, dict):
+                raise ValueError("required model policy must contain a policy table")
+            if section.keys() - {"allowlist", "denylist", "default_model"}:
+                raise ValueError("required model policy contains unknown policy fields")
+            for key in ("allowlist", "denylist"):
+                models = section.get(key, [])
+                if not isinstance(models, list) or not all(
+                    isinstance(model, str) and model.strip() for model in models
+                ):
+                    raise ValueError("required model policy lists must contain model names")
+            if not isinstance(section.get("default_model", ""), str):
+                raise ValueError("required model policy default_model must be a string")
         return ModelPolicy(
             allowlist=section.get("allowlist", []),
             denylist=section.get("denylist", []),
             default_model=section.get("default_model", ""),
         )
-    except Exception:
+    except Exception as exc:
+        if required:
+            raise ValueError("required model policy is malformed or unreadable") from exc
         log.warning("Failed to load model policy from %s, using empty policy", path, exc_info=True)
         return ModelPolicy()
 

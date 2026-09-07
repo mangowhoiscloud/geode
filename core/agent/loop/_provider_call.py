@@ -457,9 +457,15 @@ async def call_llm(
                     "usage": {
                         "input_tokens": input_tokens,
                         "output_tokens": output_tokens,
-                        "cached_input_tokens": cached_input_tokens,
+                        "cached_input_tokens": cached_input_tokens
+                        if getattr(usage, "cached_input_tokens_present", False)
+                        or cached_input_tokens > 0
+                        else None,
                         "reasoning_tokens": reasoning_tokens,
-                        "cache_write_tokens": cache_write_tokens,
+                        "cache_write_tokens": cache_write_tokens
+                        if getattr(usage, "cache_write_tokens_present", False)
+                        or cache_write_tokens > 0
+                        else None,
                     },
                     "cost_usd": cost_usd,
                     **route_evidence,

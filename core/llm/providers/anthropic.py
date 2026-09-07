@@ -715,6 +715,13 @@ def is_computer_use_enabled() -> bool:
     except ImportError:
         log.debug("computer-use disabled: pyautogui not installed")
         return False
+    except KeyError as exc:
+        # PyAutoGUI/mouseinfo reads DISPLAY while importing on headless Linux.
+        # An unavailable desktop must not break ordinary model requests.
+        if exc.args != ("DISPLAY",):
+            raise
+        log.debug("computer-use disabled: no X11 DISPLAY")
+        return False
 
 
 # This module is a low-level utility layer (clients, retry, quota, cache

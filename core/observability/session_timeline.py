@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from core.observability.redaction import redact_and_bound_text, redact_secrets
+from core.tools.computer_observation import sanitize_computer_payload
 
 log = logging.getLogger(__name__)
 
@@ -1251,7 +1252,7 @@ def bound_session_payload(
 ) -> dict[str, Any]:
     """Redact secrets and bound a session-history payload."""
     active = policy or SessionEventPolicy()
-    bounded = _bounded_value(payload, active, depth=0)
+    bounded = _bounded_value(sanitize_computer_payload(dict(payload)), active, depth=0)
     result = bounded if isinstance(bounded, dict) else {"value": bounded}
     encoded = json.dumps(
         result,

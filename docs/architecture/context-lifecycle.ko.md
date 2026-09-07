@@ -96,8 +96,8 @@ GeodeRuntime.assemble_context()  # 명시적 facade
 |------|------|-----------|
 | GEODE.md | 프로젝트 루트 | T0 SOUL 아이덴티티 |
 | `~/.geode/user_profile/` | Global | T0.5 사용자 선호 설정 |
-| `~/.geode/.env` | Global | API keys (기본값) |
-| `.env` | 프로젝트 루트 | API keys (오버라이드, 비어있지 않은 값만) |
+| `~/.geode/.env` | Global | 파일 기반 시크릿 정본. 기존 프로세스 export가 우선 |
+| `.env` | 프로젝트 루트 | 전역 시크릿과 프로세스 export에 없는 키만 보충 |
 | `~/.geode/scheduler/jobs.json` | Global | Scheduler 상태 (atomic JSON) |
 | `~/.geode/cli.sock` | Global | IPC socket (serve daemon) |
 

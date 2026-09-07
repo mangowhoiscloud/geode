@@ -22,7 +22,9 @@ uv run geode
 uv run geode serve
 ```
 
-API key 없이 시작하면 자동으로 dry-run 모드로 전환됩니다.
+사용 가능한 API key, 구독 OAuth 로그인, GEODE 로그인 프로필 중 하나가 있으면
+LLM을 호출할 수 있습니다. 자격 증명이 없으면 온보딩에서 설정 또는 명시적
+dry-run을 선택합니다. API key가 없다는 이유만으로 dry-run이 되는 것은 아닙니다.
 
 ---
 
@@ -47,11 +49,13 @@ geode (thin CLI) ── Unix socket IPC ──→ geode serve (unified daemon)
 
 ### 1. API Keys
 
-```bash
-# Global keys (모든 프로젝트에 적용)
-mkdir -p ~/.geode
-cat > ~/.geode/.env << 'EOF'
-# LLM Providers (최소 1개 필수)
+`~/.geode/.env`를 편집하되 기존 항목을 보존하고 필요한 자격 증명만 추가하세요.
+새 파일을 만든다면 비밀을 넣기 전에 소유자 읽기·쓰기 전용 권한(`0600`)으로
+제한하세요. 아래는 파일 내용의 예시이며 기존 파일을 교체하는 명령이 아닙니다.
+구독 OAuth만 사용한다면 provider API key는 필요하지 않습니다.
+
+```dotenv
+# API-key provider (사용하는 항목만 설정)
 ANTHROPIC_API_KEY=sk-ant-...       # https://console.anthropic.com/settings/keys
 OPENAI_API_KEY=sk-proj-...         # https://platform.openai.com/api-keys
 OPENROUTER_API_KEY=sk-or-v1-...    # https://openrouter.ai/keys (선택)
@@ -61,8 +65,11 @@ ZAI_API_KEY=...                    # https://open.bigmodel.cn/usercenter/apikeys
 SLACK_BOT_TOKEN=xoxb-...           # https://api.slack.com/apps → OAuth & Permissions
 SLACK_APP_TOKEN=xapp-...           # Basic Information → App-Level Tokens (connections:write)
 SLACK_TEAM_ID=T...                 # 선택; doctor의 클릭 가능한 채널 링크에 사용
+```
 
-EOF
+편집 후에도 파일이 소유자 전용 권한인지 확인하세요.
+
+```bash
 chmod 600 ~/.geode/.env
 ```
 
@@ -145,8 +152,8 @@ nohup geode serve >/dev/null 2>&1 &
 ### 시작 순서
 
 1. 데몬 환경 로드
-2. Readiness check (API keys)
-3. GeodeRuntime (MCP 13 servers, 10-30s)
+2. Readiness check (API key, 구독 OAuth, 로그인 프로필)
+3. GeodeRuntime (설정된 MCP 서버 연결)
 4. SchedulerService (jobs 로드, 60s tick 시작)
 5. Gateway receivers (Slack Socket Mode, Discord/Telegram poller)
 6. CLIPoller (Unix socket `~/.geode/cli.sock`)
@@ -182,9 +189,9 @@ geode → is_serve_running()? → No → start_serve_if_needed(30s) → connect 
 
 ### 2. Channel Binding (`.geode/config.toml`)
 
-```bash
-cp .geode/config.toml.example .geode/config.toml
-```
+`.geode/config.toml.example`을 참고해 아래 gateway 설정을
+`.geode/config.toml`에 병합하세요. 다른 섹션과 기존 바인딩은 보존하고,
+`[gateway]` 테이블이 이미 있다면 중복 선언하지 말고 해당 테이블을 수정하세요.
 
 ```toml
 [gateway]
@@ -332,7 +339,7 @@ global secret 이 없을 때만 채우는 고급 fallback 입니다. Behavior �
 `config.toml` 에 두며, project `./.geode/config.toml` 이
 `~/.geode/config.toml` 보다 우선합니다.
 
-`.env` 변수 (전체 목록: `core/config.py`):
+환경 설정 선언: [`core/config/_settings.py`](../core/config/_settings.py).
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
@@ -341,7 +348,7 @@ global secret 이 없을 때만 채우는 고급 fallback 입니다. Behavior �
 | `OPENAI_API_KEY` | | GPT API key (OpenAI adapter) |
 | `OPENROUTER_API_KEY` | | OpenRouter 크레딧 기반 API key; `openrouter/<publisher>/<model>` 형태로 정확한 모델 참조 선택 |
 | `ZAI_API_KEY` | | ZhipuAI GLM key |
-| `GEODE_MODEL` | `claude-opus-4-6` | 수동 session override 전용; 지속 설정은 `config.toml` 사용 |
+| `GEODE_MODEL` | `claude-opus-4-8` | 수동 session override 전용; 지속 설정은 `config.toml` 사용 |
 | `GEODE_ENSEMBLE_MODE` | `single` | 수동 session override 전용; 지속 설정은 `config.toml` 사용 |
 | **Gateway** | | |
 | `GEODE_GATEWAY_ENABLED` | `false` | 수동 session override; 지속 설정은 `config.toml` 의 `[gateway] enabled = true` 권장 |
@@ -356,9 +363,13 @@ global secret 이 없을 때만 채우는 고급 fallback 입니다. Behavior �
 
 ## 테스트
 
+변경한 동작에 맞는 검증 범위는
+[공통 verification gate](../.agents/skills/geode-workflow/references/verification-gates.md)를
+따릅니다. 광범위한 로컬 preflight 검사는 다음 명령으로 실행합니다.
+
 ```bash
-uv run pytest tests/ -m "not live" -q     # 3,422+ tests
-uv run ruff check core/ tests/            # Lint
-uv run mypy core/                         # Type check (190 modules)
-uv run geode version                      # CLI 스모크
+scripts/preflight.sh
 ```
+
+실제로 실행한 검사와 skip을 보고하세요. 부분 검사나 `--fast`는 전체 preflight
+통과가 아니며, 병합에는 현재 PR head의 원격 CI 결과가 필요합니다.

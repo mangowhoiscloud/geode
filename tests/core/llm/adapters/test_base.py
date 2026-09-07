@@ -73,6 +73,14 @@ def test_usage_summary_defaults_zero() -> None:
     assert u.cached_input_tokens == 0
     assert u.reasoning_tokens == 0
     assert u.cache_write_tokens == 0
+    assert u.cached_input_tokens_present is False
+    assert u.cache_write_tokens_present is False
+
+
+def test_usage_positive_cache_counts_are_known_without_new_flags() -> None:
+    usage = UsageSummary(cached_input_tokens=40, cache_write_tokens=10)
+    assert usage.cached_input_tokens_present is True
+    assert usage.cache_write_tokens_present is True
 
 
 def test_environment_report_ok_path() -> None:

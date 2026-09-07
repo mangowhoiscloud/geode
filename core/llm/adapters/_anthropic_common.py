@@ -460,14 +460,18 @@ def translate_response(response: Any) -> AdapterCallResult:
             )
     usage = getattr(response, "usage", None)
     output_details = getattr(usage, "output_tokens_details", None) if usage else None
+    cached_tokens = getattr(usage, "cache_read_input_tokens", None)
+    cache_write_tokens = getattr(usage, "cache_creation_input_tokens", None)
     return AdapterCallResult(
         text="".join(text_blocks),
         usage=UsageSummary(
             input_tokens=getattr(usage, "input_tokens", 0) if usage else 0,
             output_tokens=getattr(usage, "output_tokens", 0) if usage else 0,
-            cached_input_tokens=getattr(usage, "cache_read_input_tokens", 0) if usage else 0,
+            cached_input_tokens=int(cached_tokens or 0),
+            cached_input_tokens_present=cached_tokens is not None,
             reasoning_tokens=int(getattr(output_details, "thinking_tokens", 0) or 0),
-            cache_write_tokens=int(getattr(usage, "cache_creation_input_tokens", 0) or 0),
+            cache_write_tokens=int(cache_write_tokens or 0),
+            cache_write_tokens_present=cache_write_tokens is not None,
         ),
         stop_reason=getattr(response, "stop_reason", "end_turn") or "end_turn",
         tool_uses=tuple(tool_uses),

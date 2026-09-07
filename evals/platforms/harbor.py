@@ -115,15 +115,50 @@ def _agent_time_budget(value: float | None) -> float:
     return budget
 
 
+def _summarize_usage(events: list[Any]) -> dict[str, Any]:
+    """Project existing durable events, preserving unknowns and attempt IDs."""
+    calls = [e for e in events if e.action == "llm.call.ended"]
+    usages = [e.payload.get("usage") for e in calls]
+    recorded = [u for u in usages if isinstance(u, dict)]
+    started = [e for e in events if e.action == "llm.call.started"]
+    start_ids = [e.llm_attempt_id for e in started]
+    end_ids = [e.llm_attempt_id for e in calls]
+    paired = (
+        bool(start_ids)
+        and all(start_ids)
+        and all(end_ids)
+        and len(set(start_ids)) == len(start_ids)
+        and len(set(end_ids)) == len(end_ids)
+        and set(start_ids) == set(end_ids)
+    )
+    complete = paired and len(recorded) == len(calls)
+    result: dict[str, Any] = {
+        "scope": "recorded-agentic-loop-attempts-only",
+        "whole_runtime_complete": False,
+        "limitation": "reflection, judging, hosted search and text calls are not fully observed",
+        "call_events": len(calls),
+        "started_events": len(started),
+        "usage_events": len(recorded),
+        "attempt_pairing_complete": paired,
+    }
+    for field in ("input_tokens", "output_tokens", "cached_input_tokens", "cache_write_tokens"):
+        values = [u.get(field) for u in recorded]
+        observed = [v for v in values if isinstance(v, int) and not isinstance(v, bool) and v >= 0]
+        result[field] = sum(observed) if complete and len(observed) == len(calls) else None
+        result[f"{field}_observed_sum"] = sum(observed)
+        result[f"{field}_missing_events"] = len(calls) - len(observed)
+    return result
+
+
 def _atif_trajectory_from_geode(
     trajectory: Mapping[str, Any],
     *,
     model: str,
     provider: str,
     source: str,
-    effort: str,
+    effort: str | None,
     version: str,
-    metrics: Mapping[str, int | float],
+    metrics: Mapping[str, int | float | None],
 ) -> dict[str, Any]:
     integrity = trajectory.get("integrity")
     if not isinstance(integrity, Mapping) or not integrity.get("scope_complete"):
@@ -244,10 +279,10 @@ def _atif_trajectory_from_geode(
             "llm_call_count is therefore unknown."
         ),
         "final_metrics": {
-            "total_prompt_tokens": int(metrics.get("input_tokens") or 0),
-            "total_completion_tokens": int(metrics.get("output_tokens") or 0),
-            "total_cached_tokens": int(metrics.get("cache_read_input_tokens") or 0),
-            "total_cost_usd": float(metrics.get("cost_usd") or 0.0),
+            "total_prompt_tokens": metrics.get("input_tokens"),
+            "total_completion_tokens": metrics.get("output_tokens"),
+            "total_cached_tokens": metrics.get("cache_read_tokens"),
+            "total_cost_usd": metrics.get("cost_usd"),
             "total_steps": len(steps),
         },
         "extra": {
@@ -490,7 +525,10 @@ def _build_loop(
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop, AgenticLoopConfig
     from core.agent.tool_executor import ToolExecutor
+    from core.hooks.system import HookSystem
     from core.llm.adapters.registry import bootstrap_builtins
+    from core.observability.event_store import HookEventStore
+    from core.observability.hook_persistence import HookPersistenceSink
     from core.tools.registry import ToolRegistry
     from core.wiring.runtime import build_policy_sources
 
@@ -507,7 +545,8 @@ def _build_loop(
         hitl_level=0,
         tool_input_schemas={tool.name: tool.parameters},
     )
-    return AgenticLoop(
+    hooks = HookSystem()
+    loop = AgenticLoop(
         ConversationContext(max_turns=200),
         executor,
         config=AgenticLoopConfig(
@@ -528,9 +567,24 @@ def _build_loop(
         provider=provider,
         tool_registry=registry,
         quiet=True,
+        hooks=hooks,
         activity_sink_provider=current_activity_sink,
         policy_sources=policy_sources,
     )
+    # Observe the thin control without installing native behavioral hooks.
+    # Both rails share its existing session DB; no parallel raw store.
+    if loop._timeline is None:
+        hooks.close()
+        raise RuntimeError("Harbor observation requires the canonical session timeline")
+    hooks.register_sink(
+        HookPersistenceSink(
+            HookEventStore(loop._timeline.db_path),
+            session_key=loop._session_id,
+            run_id=f"harbor-{loop._session_id}",
+        ),
+        name="harbor_observation",
+    )
+    return loop
 
 
 class GeodeHarborAgent(HarborBaseAgent):
@@ -566,8 +620,6 @@ class GeodeHarborAgent(HarborBaseAgent):
         return None
 
     async def run(self, instruction: str, environment: Any, context: Any) -> None:
-        from core.observability.trajectory import export_trajectory, trajectory_from_sessions
-
         model = (self.model_name or "gpt-5.6-terra").removeprefix("geode/")
         loop = _build_loop(
             environment,
@@ -579,13 +631,16 @@ class GeodeHarborAgent(HarborBaseAgent):
         )
         previous = os.environ.get("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT")
         os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] = "1"
+        result = None
+        error_type = None
         try:
             result = await loop.arun(instruction)
             if getattr(result, "error", None):
                 await loop.amark_session_error()
             else:
                 await loop.amark_session_completed()
-        except BaseException:
+        except BaseException as exc:
+            error_type = type(exc).__name__
             await loop.amark_session_error()
             raise
         finally:
@@ -593,16 +648,48 @@ class GeodeHarborAgent(HarborBaseAgent):
                 os.environ.pop("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", None)
             else:
                 os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] = previous
+            loop._hooks.close()
+            try:
+                self._export_result(instruction, context, loop, result, error_type)
+            except Exception as exc:
+                if error_type is None:
+                    raise
+                # Retain Harbor's original timeout/error classification even
+                # when incomplete dialogue cannot be converted to ATIF.
+                log.warning("Harbor interrupted-run export failed: %s", type(exc).__name__)
 
-        usage = _usage(result)
-        context.n_input_tokens = int(usage.get("input_tokens") or 0)
-        context.n_cache_tokens = int(usage.get("cache_read_input_tokens") or 0)
-        context.n_output_tokens = int(usage.get("output_tokens") or 0)
-        context.cost_usd = float(usage.get("cost_usd") or 0.0)
+    def _export_result(
+        self,
+        instruction: str,
+        context: Any,
+        loop: Any,
+        result: Any,
+        error_type: str | None,
+    ) -> None:
+        from core.observability.event_store import HookEventStore
+        from core.observability.trajectory import export_trajectory, trajectory_from_sessions
+
+        # Closing the sink also closes its reader. Open an independent reader
+        # of the same DB after this loop's writers have stopped. Filter by
+        # session so concurrent Harbor trials cannot contaminate the totals.
+        store = HookEventStore(loop._timeline.db_path)
+        try:
+            events: list[Any] = []
+            while batch := store.read(session_id=loop._session_id, limit=500, offset=len(events)):
+                events.extend(batch)
+        finally:
+            store.close()
+        usage = _summarize_usage(events)
+        context.n_input_tokens = usage["input_tokens"]
+        context.n_cache_tokens = usage["cached_input_tokens"]
+        context.n_output_tokens = usage["output_tokens"]
+        context.cost_usd = _usage(result).get("cost_usd")
         context.metadata = {
             "geode_session_id": loop._session_id,
             "termination_reason": str(getattr(result, "termination_reason", "unknown")),
             "rounds": int(getattr(result, "rounds", 0) or 0),
+            "error_type": error_type,
+            "usage": usage,
         }
         source_identity = {
             "harness": "harbor",
@@ -611,6 +698,7 @@ class GeodeHarborAgent(HarborBaseAgent):
         }
         trajectory = trajectory_from_sessions(
             [loop._session_id],
+            db_path=store.db_path,
             trajectory_id=f"harbor-{loop._session_id}",
             source=source_identity,
             outcome=context.metadata,
@@ -622,6 +710,7 @@ class GeodeHarborAgent(HarborBaseAgent):
         export_trajectory(self.logs_dir / "geode-trajectory.json", trajectory)
         full_trajectory = trajectory_from_sessions(
             [loop._session_id],
+            db_path=store.db_path,
             trajectory_id=f"harbor-{loop._session_id}",
             source=source_identity,
             outcome=context.metadata,
@@ -630,16 +719,23 @@ class GeodeHarborAgent(HarborBaseAgent):
             trajectory_class=("benchmark", "terminal", "tool", "lifecycle"),
             content_policy="full",
         )
+        # Preserve canonical partial evidence before stricter ATIF conversion.
+        export_trajectory(self.logs_dir / "geode-trajectory.private.json", full_trajectory)
         _write_atif_trajectory(
             self.logs_dir / "trajectory.json",
             _atif_trajectory_from_geode(
                 full_trajectory,
-                model=model,
+                model=(self.model_name or "gpt-5.6-terra").removeprefix("geode/"),
                 provider=self.provider,
                 source=self.source,
                 effort=self.effort,
                 version=self.version(),
-                metrics=usage,
+                metrics={
+                    "input_tokens": usage["input_tokens"],
+                    "output_tokens": usage["output_tokens"],
+                    "cache_read_tokens": usage["cached_input_tokens"],
+                    "cost_usd": context.cost_usd,
+                },
             ),
         )
         _write_recording_if_available(self.logs_dir)

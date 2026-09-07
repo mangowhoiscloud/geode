@@ -22,9 +22,10 @@ Before searching, state internally:
 - the claims that would answer the question;
 - freshness, source-authority, and budget requirements.
 
-Use `update_plan` for a compact advisory checklist. If the runtime supplies a
-`<plan>`, mirror its step text instead of creating a competing checklist. The
-tool records progress after observed work; it does not execute steps.
+When useful and available, use `update_plan` for a compact advisory checklist.
+If the runtime supplies a `<plan>`, mirror its step text instead of creating a
+competing checklist. The tool records observed progress; it does not execute
+steps. Missing planning or delegation tools do not prevent bounded local work.
 
 Use `create_goal` only when the user explicitly requests a persistent,
 multi-turn research goal. Ordinary deep-research requests remain bounded in
@@ -34,17 +35,21 @@ completion or a blocker that has repeated for three consecutive goal turns.
 
 ## Workflow
 
-1. Split the question into dependency-aware research axes. Parallelize only
-   axes that can be answered independently.
-2. Send one bounded `delegate_task` batch with `task_type="search"` for short,
-   independent axes. Use `spawn_agent` only when a child must remain steerable
+1. Split the question into dependency-aware research axes when that helps.
+   Parallelize only independent work that benefits from separate collection.
+2. When delegation tools are available and permitted, use one bounded
+   `delegate_task` batch with `task_type="search"` for short, independent axes.
+   Otherwise continue locally within the task's limits. Use `spawn_agent` only
+   when available, permitted, and a child must remain steerable
    across waits or follow-ups; then control it with `list_agents`, `wait_agent`,
    `send_message`, `followup_task`, or `interrupt_agent`. Keep prerequisite
    work, source inspection, and synthesis in the parent. Do not use `best_of`
    for different questions.
-3. While children run, inspect the critical-path sources locally. Use
-   `llms_txt_index` first for documentation sites, `general_web_search` for
-   discovery, and `web_fetch` for the primary text.
+3. Inspect critical-path sources locally, while children run if delegated.
+   With available, permitted tools, use `llms_txt_index` for documentation-site
+   discovery, `general_web_search` for broader discovery, and `web_fetch` for
+   primary text. Reuse supplied primary evidence; report material access or
+   freshness gaps instead of assuming an unavailable lookup succeeded.
 4. Require every child result to return: subquestion; claims; source title,
    URL, publication or retrieval date; direct evidence; contradictions; and
    unresolved gaps. Preserve failed child results instead of silently replacing

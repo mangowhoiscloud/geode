@@ -23,27 +23,16 @@ description: Code review from the Kent Beck Simple Design 4 Rules perspective. G
 find core/ -name "*.py" -exec wc -l {} + | sort -rn | head -20
 ```
 
-Criteria:
-- 500+ lines: Consider splitting
-- 1000+ lines: Immediate splitting required
-- GEODE status: `cli/__init__.py` (2800+ lines) splitting already in progress
+File size identifies inspection candidates, not a split requirement. Trace
+responsibilities, callers, and reasons to change before proposing extraction.
+Do not carry a dated file-size snapshot forward as current implementation status.
 
 ### Method Size & Complexity
 
-```bash
-# Detect 50+ line functions
-grep -n "def " core/ -r --include="*.py" | while read line; do
-  echo "$line"
-done
-
-# Detect nesting depth 4+
-grep -rn "if\|for\|while\|with\|try" core/ --include="*.py" | grep -c "        " # 4 indent levels
-```
-
-Criteria:
-- Function 50+ lines: Consider extraction
-- Nesting 4+ levels: Early return or extraction
-- 10+ branches: Strategy pattern or dispatch table
+Inspect the actual function and its callers. Function length, nesting, and
+branch counts do not by themselves justify a Strategy, dispatch table, or new
+module. Prefer an early return or an existing helper when it resolves the
+identified failure without obscuring domain behavior.
 
 ### Reveals Intention
 
@@ -58,30 +47,26 @@ Criteria:
 
 Detect idea-level duplication (not just copy-paste but missing abstractions):
 
-```bash
-# Repeated similar patterns
-grep -rn "def _call_llm_" core/ --include="*.py"  # 3 similar functions per provider
-grep -rn "def _build_" core/runtime.py  # 10+ similar builder patterns
-```
-
-Criteria:
-- 3+ repetitions: Consider extraction
-- Structural similarity: Consider unification via Protocol/generics
+Trace repeated decisions through their shared owner. Unify behavior that must
+change together; keep similar-looking paths separate when their contracts differ.
+Neither repetition count nor structural similarity alone requires a factory,
+Protocol, or generic abstraction.
 
 ### Fewest Elements
 
 | Unnecessary Element | Criteria |
 |--------------------|----------|
 | Unused parameters | Wrappers that only pass `**kwargs` |
-| ABC with single implementation | Protocol is sufficient |
-| Empty `__init__.py` | Remove if no re-exports |
+| ABC with single implementation | Check the substitution contract; a concrete class may be sufficient |
+| Empty `__init__.py` | Check package, distribution, discovery, and import contracts before removal |
 | Unused imports | Auto-detected by ruff F401 |
 
-## GEODE Codebase Existing Findings
+## Scope and Verification
 
-| Item | File | Status |
-|------|------|--------|
-| `cli/__init__.py` 2800+ lines | L0 | Splitting in progress (repl.py, commands.py extracted) |
-| `agentic_loop.py` 1400+ lines | L0 | `_process_tool_calls` 88 lines — extraction candidate |
-| `runtime.py` 1400+ lines | DI | 10+ `_build_*` builders — pattern unification candidate |
-| `policy.py` 430 lines | L4 | Within acceptable range |
+A review does not authorize refactoring. Follow the
+[workflow](../../../docs/workflow.md) for requested changes and the
+[deletion gate](../agent-anti-pattern/references/field-guide.md#deletion-gate)
+before removing code, tests, or package files. Use
+[verification gates](../geode-workflow/references/verification-gates.md) for
+targeted checks and evidence reuse. Report concrete findings with current
+file/line evidence; no finding is preferable to a speculative simplification.

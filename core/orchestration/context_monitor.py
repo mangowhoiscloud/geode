@@ -344,6 +344,11 @@ def summarize_tool_results(
         role = msg.get("role")
         if role == "tool":
             content = msg.get("content", "")
+            if isinstance(content, list) and any(
+                isinstance(part, dict) and part.get("type") in {"image", "image_url", "input_image"}
+                for part in content
+            ):
+                continue  # Image bytes are not text tokens or text-summary input.
             if isinstance(content, str) and len(content) < TOOL_RESULT_SUMMARY_MIN_CHARS:
                 continue
             estimated = len(json.dumps(content, default=str)) // CHARS_PER_TOKEN
@@ -375,6 +380,11 @@ def summarize_tool_results(
             if not isinstance(block, dict) or block.get("type") != "tool_result":
                 continue
             inner = block.get("content", "")
+            if isinstance(inner, list) and any(
+                isinstance(part, dict) and part.get("type") in {"image", "image_url", "input_image"}
+                for part in inner
+            ):
+                continue  # Preserve pixels; stale-round masking still applies separately.
             if isinstance(inner, str) and len(inner) < TOOL_RESULT_SUMMARY_MIN_CHARS:
                 continue  # already small
             estimated = len(json.dumps(block, default=str)) // CHARS_PER_TOKEN

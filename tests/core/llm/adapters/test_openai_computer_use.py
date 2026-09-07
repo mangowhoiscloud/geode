@@ -277,7 +277,13 @@ class TestComputerCallOutputFormatting:
         }
         req = AdapterCallRequest(
             model=_GA_MODEL,
-            messages=(Message(role="user", content=[tool_result]),),
+            messages=(
+                Message(
+                    role="assistant",
+                    content=[{"type": "tool_use", "id": "cc_9", "name": "computer", "input": {}}],
+                ),
+                Message(role="user", content=[tool_result]),
+            ),
         )
         resp_input = common.build_codex_input(req)
         outputs = [i for i in resp_input if i.get("type") == "computer_call_output"]
@@ -299,7 +305,13 @@ class TestComputerCallOutputFormatting:
         }
         req = AdapterCallRequest(
             model=_GA_MODEL,
-            messages=(Message(role="user", content=[tool_result]),),
+            messages=(
+                Message(
+                    role="assistant",
+                    content=[{"type": "tool_use", "id": "fc_9", "name": "read_file", "input": {}}],
+                ),
+                Message(role="user", content=[tool_result]),
+            ),
         )
         resp_input = common.build_codex_input(req)
         assert any(i.get("type") == "function_call_output" for i in resp_input)
@@ -325,7 +337,13 @@ class TestComputerCallOutputFormatting:
         }
         req = AdapterCallRequest(
             model=_GA_MODEL,
-            messages=(Message(role="user", content=[tool_result]),),
+            messages=(
+                Message(
+                    role="assistant",
+                    content=[{"type": "tool_use", "id": "cc_ack", "name": "computer", "input": {}}],
+                ),
+                Message(role="user", content=[tool_result]),
+            ),
         )
         out = next(
             i for i in common.build_codex_input(req) if i.get("type") == "computer_call_output"

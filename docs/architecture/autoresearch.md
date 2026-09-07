@@ -1,4 +1,4 @@
-# Autoresearch -- Outer-loop architecture spec
+# Autoresearch -- Historical outer-loop architecture spec
 
 > **English** | [한국어](autoresearch.ko.md)
 
@@ -8,10 +8,12 @@
 > AlphaEval-mapped aggregate). The 3-file pattern of Karpathy autoresearch
 > (2026-03, 26K+ stars) is preserved as-is.
 >
-> This document is the SOT reflecting the fork's **actual implementation
-> state**. The design history (the earlier 6-module spec draft) is traceable
-> through PR #1155 ~ #1159 in the git log plus earlier revisions of this
-> architecture.md.
+> **Historical design record, not an execution contract.** The formulas,
+> column counts, directory diagrams, and reset recipes below describe earlier
+> revisions. Do not use them as current commands or promotion criteria.
+> Current ownership is in [the loop overview](../self-improving/loop-overview.md);
+> execution is governed by [program.md](../../evolve/scaffold_search/program.md).
+> Earlier design revisions remain traceable through PR #1155 ~ #1159.
 
 ## 1. Mission
 

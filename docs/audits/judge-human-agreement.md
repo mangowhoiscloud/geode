@@ -6,9 +6,9 @@ labels pending. No agreement coefficient is reported until labels exist.
 ## Why this exists
 
 GEODE's self-improving loop scores every audit transcript with an LLM judge
-(`plugins/petri_audit` → inspect_petri's `audit_judge`, the 22-dim rubric in
-`judge_dims/geode_judge_subset.yaml`). Those per-dim scores drive the fitness
-aggregate in `core/self_improving/`. The obvious objection — the one that ends
+(`evals/petri` → inspect_petri's `audit_judge`, the 22-dim rubric in
+`evals/petri/judge_dims/geode_judge_subset.yaml`). Those per-dim scores drive the fitness
+aggregate in `evolve/scaffold_search/`. The obvious objection — the one that ends
 interviews — is: *how do you know the judge is right?* If the only thing
 validating the judge is another judge, the loop is closed and a shared blind
 spot is invisible.
@@ -24,12 +24,12 @@ built for ordinal data. The judge is no longer graded only by machines.
    under `~/.geode/petri/logs/` (`core/audit/judge_agreement.py::extract_pairs`).
 2. **Label** each item blind: the labeler sees the transcript excerpt + the
    dimension's 1–10 rubric and commits a score *before* the judge's score is
-   revealed (`geode audit-agreement label`).
+   revealed (`geode-eval audit-agreement label`).
 3. **Report** per-dimension weighted Cohen's kappa + an overall Krippendorff's
    alpha, plus disagreement cases and systematic-bias direction
-   (`geode audit-agreement report`).
+   (`geode-eval audit-agreement report`).
 4. **Recalibrate**: disagreements and directional bias become concrete
-   judge-prompt / rubric-anchor edit proposals (`geode audit-agreement
+   judge-prompt / rubric-anchor edit proposals (`geode-eval audit-agreement
    recalibrate`), fed back through the normal self-improving gate.
 
 ## Blinding
@@ -140,18 +140,24 @@ gate, never auto-applied.
 
 ## Commands
 
-```bash
-# 1. stage the pilot (deterministic; already run — 20 items, 4 per dim)
-geode audit-agreement extract --total 20 --seed 0
+Current evaluation commands use `geode-eval`. The original pilot staging
+command below is retained as historical procedure evidence, not a command to
+rerun on existing items.
 
+```bash
+# Historical pilot staging (already run — 20 items, 4 per dim)
+geode audit-agreement extract --total 20 --seed 0
+```
+
+```bash
 # 2. label blind (resumable — quit with q, re-run to continue)
-geode audit-agreement label
+geode-eval audit-agreement label
 
 # 3. report agreement (per-dim weighted kappa + overall ordinal alpha)
-geode audit-agreement report
+geode-eval audit-agreement report
 
 # 4. judge-recalibration proposals from the disagreements
-geode audit-agreement recalibrate
+geode-eval audit-agreement recalibrate
 ```
 
 Artifacts live under `~/.geode/audit/agreement/`: `items.jsonl` (staged blind

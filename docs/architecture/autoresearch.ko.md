@@ -1,4 +1,4 @@
-# Autoresearch -- Outer-loop 아키텍처 스펙
+# Autoresearch -- 과거 Outer-loop 아키텍처 스펙
 
 > [English](autoresearch.md) | **한국어**
 
@@ -7,9 +7,11 @@
 > fitness(5-axis AlphaEval-mapped aggregate)의 monotone ratchet을 진행한다.
 > Karpathy autoresearch(2026-03, 26K+ stars)의 3-file 패턴을 그대로 보존한다.
 >
-> 이 문서는 fork의 **실제 구현 상태**를 반영한 SOT다. design history(이전
-> 6-module 스펙 안)는 git log의 PR #1155 ~ #1159와 이 architecture.md의
-> 이전 revision에서 추적할 수 있다.
+> **과거 설계 기록이며 현재 실행 계약이 아닙니다.** 아래 수식·열 개수·경로·
+> reset 예시는 이전 구현을 설명합니다. 현재 명령이나 승격 기준으로 사용하지
+> 마세요. 현행 소유권은 [루프 개요](../self-improving/loop-overview.md), 실행
+> 계약은 [program.md](../../evolve/scaffold_search/program.md)를 따릅니다.
+> 초기 설계는 PR #1155 ~ #1159와 이전 revision에서 확인할 수 있습니다.
 
 ## 1. 미션
 

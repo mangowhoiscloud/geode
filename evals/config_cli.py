@@ -206,7 +206,7 @@ def migrate_petri_toml(
     _console.print(f"[success]Appended {len(plan)} role(s) to {target}.[/success]")
     _console.print(
         "[muted]Legacy ~/.geode/petri.toml is unchanged — verify the new path "
-        "via `geode audit` smoke, then delete the legacy file manually.[/muted]"
+        "via `geode-eval audit` smoke, then delete the legacy file manually.[/muted]"
     )
 
 

@@ -84,7 +84,7 @@ def extract(
     typer.echo("Per-dim distribution:")
     for dim, count in sorted(dist.items()):
         typer.echo(f"  {dim:<24} {count}")
-    typer.echo(f"\nNext: geode audit-agreement label --items {out}")
+    typer.echo(f"\nNext: geode-eval audit-agreement label --items {out}")
 
 
 def _read_score(prompt: str) -> float | None | str:
@@ -161,13 +161,15 @@ def label(
     picks up where you left off."""
     staged = read_items(items)
     if not staged:
-        typer.echo(f"No items at {items}. Run `geode audit-agreement extract` first.", err=True)
+        typer.echo(
+            f"No items at {items}. Run `geode-eval audit-agreement extract` first.", err=True
+        )
         raise typer.Exit(1)
     existing = read_labels(labels)
     todo = pending_items(staged, existing)
     typer.echo(f"{len(staged)} staged · {len(existing)} labeled · {len(todo)} remaining\n")
     if not todo:
-        typer.echo("All items labeled. Run `geode audit-agreement report`.")
+        typer.echo("All items labeled. Run `geode-eval audit-agreement report`.")
         return
     labeled = 0
     for item in todo:

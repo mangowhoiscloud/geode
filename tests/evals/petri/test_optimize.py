@@ -167,7 +167,7 @@ def test_dry_run_default_cap(tmp_path: Path) -> None:
 
 
 def test_live_missing_eval_log_raises(tmp_path: Path) -> None:
-    with pytest.raises(OptimizeError, match="eval log not found"):
+    with pytest.raises(OptimizeError, match="eval log not found") as exc_info:
         optimize_prompt(
             judge="claude-haiku-4-5-20251001",
             generator="gpt-5.4",
@@ -175,6 +175,7 @@ def test_live_missing_eval_log_raises(tmp_path: Path) -> None:
             output_dir=tmp_path,
             dry_run=False,
         )
+    assert "`geode-eval audit --live ...`" in str(exc_info.value)
 
 
 def test_live_without_reason_extra_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

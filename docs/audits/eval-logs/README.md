@@ -1,10 +1,10 @@
 # Petri eval-log summaries
 
 Each `*.summary.yaml` here is a small, diffable extract of a finished
-`logs/*.eval` produced by `geode audit --live`. The raw `.eval` files
+`logs/*.eval` produced by `geode-eval audit --live`. The raw `.eval` files
 are **not** in git — they are large and can carry transcript data — so
 they live in `~/.geode/petri/logs/<basename>` instead, copied there by
-`geode petri-archive <eval-path>`.
+`geode-eval petri-archive <eval-path>`.
 
 ## Filename convention
 
@@ -53,8 +53,8 @@ trivial. The schema mirrors `core/audit/manifest.py:extract_manifest_entry`.
 
 ### Live runs — auto-append
 
-`plugins/petri_audit/runner.py:_append_manifest_line` writes a line
-after every `geode audit --live`. Best-effort + idempotent
+`evals/petri/runner.py:_append_manifest_line` writes a line
+after every `geode-eval audit --live`. Best-effort + idempotent
 (archive_sha dedup); a manifest failure is recorded as a note on the
 `AuditReport`, never surfaced as an audit failure.
 
@@ -86,8 +86,8 @@ jq -c 'select(.models.auditor | startswith("claude-")) | .role_usage_summary.aud
 ## How to add a new entry (manual path)
 
 ```bash
-# After `geode audit --live` finishes:
-uv run geode petri-archive logs/<timestamp>_audit_<id>.eval
+# After `geode-eval audit --live` finishes:
+uv run geode-eval petri-archive logs/<timestamp>_audit_<id>.eval
 ```
 
 The command writes the raw archive (`~/.geode/petri/logs/`) + the YAML

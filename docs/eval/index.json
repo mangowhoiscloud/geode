@@ -514,7 +514,7 @@
       "authority": "suite-profile",
       "path": "docs/eval/terminal-bench-2.md",
       "summary": "GEODE adoption profile for canonical Terminal-Bench 2.1 execution through Harbor, including official-submission and diagnostic comparability boundaries.",
-      "sha256": "a37d73014c993d98afc233196da45f03160993b5feb6e7f768dd5bf4d40a74c8",
+      "sha256": "b29ba9a69037b105bb1e6f0560a571348b6aa7f76a081dd80e30a601456b9f38",
       "triggers": [
         "Harbor",
         "Terminal-Bench 2",

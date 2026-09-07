@@ -8,20 +8,38 @@ that the behavioral sections are injected and the numeric Defaults are not.
 
 from __future__ import annotations
 
-from core.agent.system_prompt import _build_identity_context
+import pytest
+from core.agent.system_prompt import _build_identity_context, build_system_prompt
+from core.memory.organization import MonoLakeOrganizationMemory
 
 
-def test_behavioral_sections_injected_into_g1() -> None:
-    out = _build_identity_context()
-    assert out, "G1 identity context is empty — GEODE.md not loaded?"
-    # the behavioral half must be present
-    assert "Voice & Conduct" in out
-    assert "Operating Principles" in out
-    assert "RUNTIME CANNOT" in out
-    # a few concrete behavioral directives must survive the extraction
-    assert "Warm without flattery" in out
-    assert "Persistent" in out
-    assert "decline like a person" in out
+@pytest.mark.parametrize(
+    "persona,audit,expected",
+    [("on", False, True), ("off", False, False), ("on", True, False)],
+)
+def test_behavioral_sections_injected_into_g1(
+    monkeypatch: pytest.MonkeyPatch, persona: str, audit: bool, expected: bool
+) -> None:
+    monkeypatch.setenv("GEODE_PERSONA", persona)
+    monkeypatch.setenv("GEODE_AUDIT_UNRESTRICTED", "1" if audit else "0")
+    out = build_system_prompt()
+    assert ("<agent_identity>" in out) is expected
+    if not expected:
+        return
+
+    identity = out.split("<agent_identity>\n", 1)[1].split("\n</agent_identity>", 1)[0]
+    soul = MonoLakeOrganizationMemory().get_soul()
+    for title in ("Identity", "Voice & Conduct", "Operating Principles", "RUNTIME CANNOT"):
+        body = soul.split(f"## {title}\n", 1)[1].split("\n## ", 1)[0]
+        # Every authored directive must survive the identity budget and assembly,
+        # not just the section headings or selected phrases.
+        directives = [
+            line for line in body.splitlines() if line.strip() and not line.startswith(">")
+        ]
+        assert directives, title
+        for line in directives:
+            assert line in identity
+    assert out.index("</agent_identity>") < out.index("<dynamic_context>")
 
 
 def test_numeric_defaults_not_injected_into_g1() -> None:

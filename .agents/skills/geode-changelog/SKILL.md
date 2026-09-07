@@ -26,7 +26,9 @@ description: GEODE CHANGELOG.md management rules. Version releases, change loggi
 
 ## Versioning Policy
 
-**Post-1.0 default: every routine landing is a PATCH — features included.**
+**Post-1.0 default: every authorized routine release is a PATCH — features included.**
+Ordinary changes stay under `[Unreleased]`; a code landing does not itself
+request a release or version bump.
 The 0.99.x patch-train (~330 releases where features, fixes, and refactors
 all bumped PATCH) continues unchanged as 1.0.x. Textbook SemVer's
 "feature = MINOR" does NOT apply here.
@@ -41,10 +43,10 @@ MAJOR: operator-declared ONLY (breaking pipeline/State schema)
 
 ### Before choosing ANY non-patch version
 
-1. `grep -rn "removed in v" core/` — minors may be pledged in advance to
+1. `rg -n "removed in v" core/ evals/ evolve/` — minors may be pledged in advance to
    deprecation removals (v1.1.0 is pledged to the legacy
    `[self_improving_loop.petri.*]` / `[self_improving_loop.mutator]`
-   removals in `core/config/self_improving.py`). A pledged number is
+   removals in `evals/config.py`). A pledged number is
    RESERVED; landing unrelated work under it breaks the pledge.
 2. Ask the operator. A minor is a product statement, not a diff size.
 
@@ -108,7 +110,7 @@ normal PR chain.
 
 ```
 1. Determine change type → Add 1-line entry to appropriate [Unreleased] category
-2. Sync CLAUDE.md metrics when changed (Tests, Modules)
+2. Regenerate architecture inventory when its inputs change; do not hand-count modules/tests
 3. Sync README.md metrics + description + Mermaid visualization when changed
 4. Bundle code + CHANGELOG + docs in a single commit
 ```
@@ -127,59 +129,20 @@ After writing the CHANGELOG, check the following:
 □ If .claude/mcp_servers.json changed, was the README MCP section also updated?
 ```
 
-### On Release
+#### On Release
 
-The release flow follows the rotation pattern from `geode-gitflow` skill —
-release branch merges to **develop first**, then develop → main is a
-straight pass-through (no backmerge needed). All edits below happen on the
-`release/vX.Y.Z` branch in one commit.
+Only an authorized release promotes entries and stamps a version. Follow
+[versioning conventions](../../../docs/architecture/naming-conventions.md#9-versioning-and-compatibility)
+for source stamps, generated mirrors, and immutable artifacts, and
+[GitFlow](../geode-gitflow/SKILL.md#release-flow) for branch/CI/integration steps.
 
-1. Convert `[Unreleased]` → `[X.Y.Z] — YYYY-MM-DD`
-2. **Insert a fresh empty `## [Unreleased]` ABOVE the just-promoted
-   section** — so the next batch of feature PRs has a section to land in
-3. Bump version in **5 locations** (CLAUDE.md guards this as a CANNOT
-   rule): `pyproject.toml`, `CLAUDE.md` `**Version**:` line, `README.md`
-   title heading + frontier-comparison row, `README.ko.md` title heading +
-   frontier-comparison row
-4. Refresh measured metrics on `CLAUDE.md` line: `Modules: X core + Y
-   product = Z` (from `find ... -name "*.py" | wc -l`), `Tests: N (+5 live)`
-   (from `uv run pytest tests/ --collect-only`)
-5. CHANGELOG header `## [X.Y.Z] — YYYY-MM-DD` carries an optional release
-   blurb (`> ...`) summarizing the sprint scope
-
-### Release Checklist
-```bash
-# 1. Allocate release worktree
-git worktree add .claude/worktrees/release-vX.Y.Z \
-  -b release/vX.Y.Z origin/develop
-
-# 2. Bump 5 stamps + CHANGELOG promote + fresh [Unreleased]
-# (one commit covering all stamp files)
-
-# 3. Local gates
-uv run ruff check core/ evals/ evolve/ tests/ scripts/
-uv run mypy core/ evals/ evolve/
-uv run geode version   # confirms version stamp lands
-
-# 3b. Derived-SoT regeneration (CI blocks on any of these being stale)
-uv run python scripts/architecture_baseline.py --update   # CHANGELOG/[Unreleased] edits + core LOC drift
-node site/scripts/sync-stats.mjs
-uv run python scripts/check_llms_version.py --fix
-(cd site && npm ci && npm run build && npm run export-md) # llms-full body + size markers
-# Incident: v1.0.2 train (2026-07-29) — CHANGELOG growth alone drifted the
-# changelog page size marker in llms-full.txt (1460→1462 KB) and the
-# architecture baseline; two CI rounds were spent rediscovering this list.
-
-# 4. PR release → develop (NOT main — rotation pattern)
-gh pr create --base develop --head release/vX.Y.Z \
-  --title "release: vX.Y.Z — <summary>" \
-  --body "<release notes>"
-
-# 5. After merge, PR develop → main (straight pass-through)
-gh pr create --base main --head develop \
-  --title "release: vX.Y.Z (develop → main)" \
-  --body "<abbreviated body>"
-```
+1. Promote `[Unreleased]` to the chosen version and date; leave a fresh empty
+   `[Unreleased]` heading above it.
+2. Regenerate inventory with `scripts/architecture_baseline.py --update` when
+   its inputs change. File inventory and collected pytest cases are different
+   measurements; neither is a manually maintained CLAUDE.md counter.
+3. Regenerate version and public-doc mirrors through their owning commands;
+   verify the diff contains only intended source and generated changes.
 
 ## Subsection Guide (within Added)
 
@@ -198,17 +161,11 @@ For large releases, organize Added into functional areas:
 - ...
 ```
 
-Area list (GEODE standard):
-- Core Pipeline (LangGraph)
-- Analysis Engine (Analysts + Evaluators)
-- Verification Layer
-- CLI (REPL + Commands)
-- Agentic Loop
-- Memory System
-- Infrastructure (Ports/Adapters)
-- Orchestration (Hooks/Tasks/Runner)
-- Tools & Policies
-- Automation (L4.5)
+Choose an affected current package or user-facing capability; examples:
+- Runtime and CLI (`core`)
+- Evaluation (`evals`)
+- Experimental Loop (`evolve`)
+- Tools, memory, and provider integrations
 
 ## Example
 

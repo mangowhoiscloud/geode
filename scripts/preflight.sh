@@ -110,7 +110,7 @@ elif [ "$FAST" -eq 1 ] || [ ${#SKIPPED[@]} -gt 0 ]; then
   notrun="${SKIPPED[*]:-}"
   [ "$FAST" -eq 1 ] && notrun="pytest, site generated docs"
   echo -e "\033[33mgates passed, but NOT all ran — skipped: ${notrun}\033[0m"
-  echo "  a green here does not mean CI is green; resolve the skips before opening a PR"
+  echo "  report skipped checks and why; required CI must still pass on the actual PR head"
 else
   echo -e "\033[32mall gates passed\033[0m"
 fi
