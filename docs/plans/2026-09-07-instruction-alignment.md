@@ -34,7 +34,7 @@ into repository tests or GitFlow. Frozen tasks, model, schedule, and limits rema
 ## Initial batch verification
 
 All commands ran in the isolated worktree with `PYTHONPATH="$PWD"` and the
-existing `/Users/mango/workspace/geode/.venv/bin/python` (`$PY` below). The import
+existing root-checkout `.venv/bin/python` (`$PY` below). The import
 path was checked before testing. No Python dependencies were installed.
 
 | Check | Command / evidence | Result |
@@ -141,6 +141,12 @@ Final integration checks:
   Git-diff check and failed because the intentional generated changelog diff
   was not staged yet. After verifying and staging the intended generated diff,
   the same command passed on the candidate. The earlier failure is retained.
+- The first PR head failed repository hygiene in CI because this new receipt
+  included the local interpreter's absolute user-home path. The earlier local
+  hygiene pass did not scan the then-untracked receipt. The path was made
+  checkout-relative, and the workflow now requires staging the intended new
+  files before running the tracked-file hygiene check. CI must pass again on
+  the corrected head; the initial failure remains part of the evidence.
 
 Root checkout and other sessions' worktrees were preserved during editing;
 `harbor-4` remains paused. Live model calls, benchmark reruns, release/tag/package

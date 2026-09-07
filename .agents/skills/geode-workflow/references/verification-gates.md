@@ -95,6 +95,9 @@ work and `--base-ref origin/main` for a tracking-only closure PR.
 
 Run before every push (CI's Lint & Format job includes it; local ruff does not):
 
+Stage the intended candidate first. This check scans tracked files, so a pass
+before adding a new file does not cover that file.
+
 ```bash
 uv run python scripts/check_repo_hygiene.py
 ```
