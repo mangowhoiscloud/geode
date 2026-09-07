@@ -148,6 +148,9 @@ def test_runtime_config_pins_role_models_and_absolute_policy(tmp_path: Path) -> 
     policy = tomllib.loads((tmp_path / "model-policy.toml").read_text())
     assert policy == {"policy": {"allowlist": ["gpt-5.6-sol"]}}
     assert config["agentic"]["effort"] == "max"
+    call = agent.exec_as_agent.call_args.kwargs
+    assert "runtime.log 2>&1" in call["command"]
+    assert call["env"]["PYTHONFAULTHANDLER"] == "1"
 
 
 def test_installed_agent_uses_harbor_lifecycle_and_classifies_timeout(tmp_path: Path) -> None:
