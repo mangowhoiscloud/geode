@@ -126,7 +126,8 @@ Final integration checks:
   `tests/evals/petri/test_cli_audit.py`, `test_eval_archive.py`,
   `test_optimize.py`, and `tests/evals/test_config_cli.py`. One new offline
   case follows the printed commands through extraction, blind labeling,
-  resume, and report output. Total local passed coverage is 287 unique cases;
+  resume, and report output. Before CI-driven corrections, local passed coverage
+  was 287 unique cases;
   the eight skips are not counted as passes and require the audit-enabled CI.
 - Touched-file ruff/format and mypy passed. `scripts/preflight.sh --fast`
   passed all 15 executed gates using the existing environment without sync;
@@ -147,6 +148,18 @@ Final integration checks:
   checkout-relative, and the workflow now requires staging the intended new
   files before running the tracked-file hygiene check. CI must pass again on
   the corrected head; the initial failure remains part of the evidence.
+- The next full CI suite reported 8 failures, 10,808 passes, and 37 skips
+  (80.74% coverage, above the unchanged 75% threshold). Seven failures pinned
+  Mode A's old duplicated prose/policy list, and one pinned a line-wrapped
+  deep-research sentence. Reviewing their intent also found a real omission:
+  the operator guide needed the still-supported Mode B entry point.
+  The guide now names the CLI and conditional slash surface. All seven docs
+  tests remain, checking valid owner links, the actual mutable policy set,
+  dispatcher wiring, history, baseline, and authorization; the skill test
+  preserves its assertions while normalizing whitespace. Both affected modules
+  passed locally (31 cases), bringing distinct local coverage to 318 passes.
+  No test was disabled, no threshold reduced, and independent review found no
+  weakening. The full suite must pass on the subsequent PR head before merge.
 
 Root checkout and other sessions' worktrees were preserved during editing;
 `harbor-4` remains paused. Live model calls, benchmark reruns, release/tag/package

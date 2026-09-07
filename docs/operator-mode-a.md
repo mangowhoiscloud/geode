@@ -5,6 +5,10 @@ and inspect mutations. Mode B uses GEODE's configured mutator. Both consume
 the same runtime evidence and policy owners; changing the operator does not
 grant extra tool permissions, budget, or promotion authority.
 
+Mode B's single-mutation entry point is `geode-evolve scaffold run`.
+Hosts that register evolution slash commands expose the same dispatcher as
+`/self-improving run`; neither entry point expands the approved run contract.
+
 ## Before a run
 
 Read [the maintained experiment program](../evolve/scaffold_search/program.md)
