@@ -158,9 +158,10 @@ export default function Page() {
               <code>core/agent/subagent_roles.py</code>의 역할은{" "}
               <code>grep_files</code>와 <code>read_document</code>만 허용합니다.
               <code>core/agent/subagent_protocol.py</code>가{" "}
-              <a href="https://github.com/mangowhoiscloud/geode/blob/main/core/llm/prompts/reviewer.md">
-                정본 시스템 프롬프트
-              </a>를 워커에 전달합니다. 새 역할이나 승격 게이트는 아닙니다.
+              <a href="https://github.com/mangowhoiscloud/geode/tree/main/core/llm/prompts">
+                프롬프트 소스 디렉터리
+              </a>의 <code>reviewer.md</code>를 워커에 전달합니다.
+              새 역할이나 승격 게이트는 아닙니다.
             </p>
             <p>
               결과는 기존 <code>findings</code> JSON입니다. 형식 검증 성공이나
@@ -363,8 +364,9 @@ export default function Page() {
               The role in <code>core/agent/subagent_roles.py</code> permits only{" "}
               <code>grep_files</code> and <code>read_document</code>.
               <code>core/agent/subagent_protocol.py</code> passes the{" "}
-              <a href="https://github.com/mangowhoiscloud/geode/blob/main/core/llm/prompts/reviewer.md">
-                canonical system prompt
+              canonical <code>reviewer.md</code> from the{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/tree/main/core/llm/prompts">
+                prompt source directory
               </a> to the worker. This adds neither a new role nor a promotion gate.
             </p>
             <p>
