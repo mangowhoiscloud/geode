@@ -65,6 +65,27 @@ Schema로 최초 입력과 rewrite 후 입력을 모두 검증한다. raw provid
 
 ### Verification과 외부 loop
 
+`GEODE_VERIFY_MODE=reflexion`을 설정하면 LLM이 원래 요청, 길이를 제한한
+최근 tool 관측, 후보 응답을 함께 검토한다. `observation`, `lesson`,
+`next_check` 피드백은 기존 verification continuation과 checkpoint에
+기록한다. 별도 memory store는 만들지 않는다. 판단이 누락되거나 형식이
+잘못됐거나 timeout되면 pass가 아닌 escalate로 처리하며, LLM은
+구조적 검증 실패를 성공으로 뒤집을 수 없다.
+
+기존 정책에 따라 verification revision은 최대 두 번이다. judge는 설정된
+judge model(없으면 loop model)을 쓰고, 기존 usage 경로에 사용량을 기록한다.
+tool은 호출하지 않으며 남은 loop budget 안에서 최대 120초를 사용한다.
+같은 모드를 isolated worker에도 전달한다. 기본값은 `rule_based`이며,
+Reflexion 활성화 시 모델 호출이 추가될 수 있다.
+
+이 기능은 한 태스크 안에서 피드백으로 수정을 유도하는 Reflexion-inspired
+구현이다. 태스크 간 학습이나 weight update는 아니다. 간결한 피드백은
+`turn_verify.reason`에 남고, 수정 hint는 다음 continuation에서 한 번만 읽는다.
+벤치 점수는 여전히 Harbor의 외부 verifier가 판정한다. 신규 측정은 실행 전에
+이 모드를 동결해야 하며, 숨겨진 정답이나 test 내용을 제공하지 않는다.
+
+참고: [Reflexion: Language Agents with Verbal Reinforcement Learning](https://arxiv.org/abs/2303.11366).
+
 finalization은 하나의 state machine이다.
 
 ```text

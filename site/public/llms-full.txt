@@ -6237,7 +6237,7 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 
 | 메커니즘 | 묶는 발산 | 제어 지점 | 위치 |
 | --- | --- | --- | --- |
-| **VerifyMode** | 턴 단위 rubric 검증. 회복 가능한 miss는 재시도로 수렴 | GEODE\_VERIFY\_MODE (off / rule\_based / llm\_judge) | `core/agent/verify.py` |
+| **VerifyMode** | 턴 단위 rubric 검증. 회복 가능한 miss는 재시도로 수렴 | GEODE\_VERIFY\_MODE (off / rule\_based / llm\_judge / reflexion) | `core/agent/verify.py` |
 | **compute\_fitness** | per-dim 감사 점수를 stability 가중으로 단일 fitness 스칼라에 집계 | critical\_margin 0.5, MC margin 1000 samples | `evolve/scaffold_search/fitness.py` |
 | **AXIS\_TIERS + critical floors** | 차원을 tier로 분류. critical 5개 dim은 후퇴 시 무조건 거부 | CRITICAL\_DIMS, tier weights | `evolve/scaffold_search/fitness.py` |
 | **Promotion margin gate** | gain 대 stderr margin으로 승격 판정. critical veto가 항상 선행 | fitness\_margin\_floor, hard-contract veto | `evolve/scaffold_search/gate.py` |
@@ -6676,7 +6676,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1552 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1553 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
