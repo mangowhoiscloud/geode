@@ -59,6 +59,10 @@ functional change.
 
 ### Fixed
 
+- Restored native shell-tool admission in Harbor's fresh task-container profile
+  without changing host or worker-role restrictions. Full-runtime trials now
+  pin their verification mode and reject missing shell capability before inference.
+
 - Reject Codex subscription boolean flags in Harbor `agent.env`, where secret
   scrubbing can replace numeric result fields; use the process environment instead.
 
