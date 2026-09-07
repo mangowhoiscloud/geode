@@ -53,7 +53,7 @@ $ python3 scripts/check_docs_links.py --quiet      # broken 만 출력 (CI 적�
         ↓
 2. python3 scripts/check_docs_links.py
         ↓
-3. broken 0 → 통과; PR 으로 진행
+3. broken 0 → 내부 정적 링크 검사 통과; 외부·동적 링크 성공과 구분
    broken N → 메시지의 file:line 으로 이동 + slug 정정
         ↓
 4. (선택) --http 도 돌려서 외부 URL reachability 확인
@@ -61,7 +61,7 @@ $ python3 scripts/check_docs_links.py --quiet      # broken 만 출력 (CI 적�
 5. PR cascade — fix(docs): broken link N 종 정정 (M 사이트)
 ```
 
-## 잘못된 link 의 4 흔한 원인
+## 잘못된 link 의 흔한 원인
 
 | 패턴 | 발생 시점 | 해결책 |
 |---|---|---|
@@ -69,12 +69,14 @@ $ python3 scripts/check_docs_links.py --quiet      # broken 만 출력 (CI 적�
 | **Section 이전** | `/docs/ops/observability` → `/docs/verification/observability` 로 옮겼는데 cross-link 갱신 누락 | 동일 |
 | **Slug 오타** | 페이지 처음 작성 시 디렉터리 명 오타 | typo 수정 |
 | **External URL 만료** | 외부 doc 의 link 가 404 (e.g. dev portal 페이지 이전) | `--http` 가 잡음. 새 URL 또는 archive.org 로 교체 |
+| **아직 공개되지 않은 대상** | 새 문서의 `blob/main` 또는 배포 전 버전 태그가 PR에서 404 | 이미 공개된 commit에 문서를 고정하거나 릴리스 목록을 연결. 미래 배포를 검사 예외로 숨기지 않음 |
 
 ## CI wiring
 
-`.github/workflows/pages.yml` already runs the static link check. Inspect the
-current workflow before proposing another job. External HTTP probes remain
-opt-in and do not authorize a recurring monitor or another workflow.
+`.github/workflows/pages.yml` already runs the static check and a lychee check
+on built HTML, including external URLs. Inspect that workflow before proposing
+another job. Local `--http` probes remain opt-in; dynamic URLs need rendered
+output or direct inspection. None of these checks authorizes another monitor.
 
 ## 실제 case study
 

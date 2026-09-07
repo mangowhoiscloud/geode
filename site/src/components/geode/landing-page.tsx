@@ -7,7 +7,6 @@ import { LocaleProvider, t, useLocale } from "@/components/geode/locale-context"
 import { RecordedRun } from "@/components/geode/landing-run";
 import { BenchmarkComparison } from "@/components/geode/landing-benchmark";
 import { InstallCommands } from "@/components/geode/landing-install";
-import { GEODE_SOT } from "@/data/geode/sot";
 import { galmuri } from "@/fonts/galmuri";
 import "./landing.css";
 
@@ -176,7 +175,7 @@ function LandingContent() {
         <div className="landing-footer-links">
           <a href={locale === "en" ? "/geode/report-en.pdf" : "/geode/report.pdf"}>{t(locale, "기술 보고서 PDF", "Technical report PDF")}</a>
           <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts">{t(locale, "평가 데이터", "Evaluation data")}</a>
-          <a href={`${repository}/releases/tag/v${GEODE_SOT.version}`}>{t(locale, "릴리즈 노트", "Release notes")}</a>
+          <a href={`${repository}/releases`}>{t(locale, "릴리즈 노트", "Release notes")}</a>
           <Link href="/about">{t(locale, "만든 사람", "About the author")}</Link>
         </div>
       </footer>

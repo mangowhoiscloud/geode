@@ -15,7 +15,7 @@ function UsageAccounting({ ko }: { ko: boolean }) {
       <p>{ko
         ? "Legacy 월별 원장과 일부 UI 합산은 필드 부재를 끝까지 보존하지 않습니다. 과거 캐시 0은 미사용 증거가 아니며, 기록 범위는 벤치마크의 성공률 분모와도 다릅니다. 보정 자료는 원본 결과를 덮어쓰지 않고 별도 증거로 연결합니다."
         : "The legacy monthly ledger and some UI aggregates do not preserve field absence end to end. A historical cache zero is not evidence of non-use, and accounting coverage is not a benchmark pass-rate denominator. Corrections attach separate evidence without overwriting original results."}</p>
-      <p><a href="https://github.com/mangowhoiscloud/geode/blob/main/docs/architecture/usage-accounting.md">{ko ? "생산자·필드·독자별 회계 계약과 남은 한계" : "Accounting contract: producers, fields, readers, and remaining limits"}</a></p>
+      <p><a href="https://github.com/mangowhoiscloud/geode/blob/fd08bd84b209c59f8c92350f50267764186ca9fd/docs/architecture/usage-accounting.md">{ko ? "생산자·필드·독자별 회계 계약과 남은 한계" : "Accounting contract: producers, fields, readers, and remaining limits"}</a></p>
     </section>
   );
 }

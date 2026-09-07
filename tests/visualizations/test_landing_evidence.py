@@ -12,6 +12,23 @@ ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "site/src/data/geode/landing-evidence.json"
 
 
+def test_shared_landing_release_link_does_not_require_an_unpublished_tag() -> None:
+    landing = (ROOT / "site/src/components/geode/landing-page.tsx").read_text()
+    assert "href={`${repository}/releases`}" in landing
+    assert "/releases/tag/" not in landing
+    for route in ("page.tsx", "portfolio/page.tsx"):
+        assert "GeodeLanding" in (ROOT / "site/src/app" / route).read_text()
+
+
+def test_new_accounting_contract_links_to_public_source_before_main_promotion() -> None:
+    page = (ROOT / "site/src/app/docs/verification/observability/page.tsx").read_text()
+    links = re.findall(r'href="([^"]*usage-accounting\.md)"', page)
+    assert links == [
+        "https://github.com/mangowhoiscloud/geode/blob/"
+        "fd08bd84b209c59f8c92350f50267764186ca9fd/docs/architecture/usage-accounting.md"
+    ]
+
+
 def test_landing_sources_are_immutable_and_digest_bound() -> None:
     data = json.loads(EVIDENCE.read_text(encoding="utf-8"))
     assert data["presentationOnly"] is True
