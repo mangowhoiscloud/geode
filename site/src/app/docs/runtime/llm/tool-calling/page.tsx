@@ -137,7 +137,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td>모델이 tool call 없이 텍스트로 끝냄</td><td>자연 종료로 처리하고 최종 텍스트를 반환</td></tr>
-                <tr><td>같은 도구가 연속 실패</td><td>2회 실패를 기록한 뒤 다음 호출에서 adaptive recovery chain을 시작</td></tr>
+                <tr><td>같은 도구가 연속 실패</td><td>2회 실패 뒤 다음 호출에서 같은 도구를 제한적으로 재시도합니다. 실패하면 원인을 반환하며, category나 비용만으로 다른 도구를 대신 실행하지 않습니다.</td></tr>
                 <tr><td>전체 도구 오류가 3회 이상 연속</td><td>다른 접근을 요구하는 backpressure hint를 다음 턴에 삽입</td></tr>
                 <tr><td>서로 다른 라운드에서 같은 도구와 같은 인자를 5회 반복</td><td>no-progress loop로 보고 diversity hint를 삽입</td></tr>
                 <tr><td>CLI adapter를 선택</td><td>도구 schema를 subprocess에 전달하지 않는 text-only 경로</td></tr>
@@ -263,7 +263,7 @@ export default function Page() {
               <thead><tr><th>Situation</th><th>GEODE behavior</th></tr></thead>
               <tbody>
                 <tr><td>The model ends with text and no tool call</td><td>Natural termination; return the final text</td></tr>
-                <tr><td>The same tool fails repeatedly</td><td>After recording two failures, start adaptive recovery on the next call</td></tr>
+                <tr><td>The same tool fails repeatedly</td><td>After two failures, retry the same tool on the next call within the recovery limit. Return failure if it still fails; category and cost do not authorize tool substitution.</td></tr>
                 <tr><td>Three or more consecutive tool errors overall</td><td>Inject a backpressure hint asking for another approach</td></tr>
                 <tr><td>The same tool and arguments repeat across five rounds</td><td>Treat it as no progress and inject a diversity hint</td></tr>
                 <tr><td>A CLI adapter is selected</td><td>Text-only path; tool schemas do not cross the subprocess boundary</td></tr>

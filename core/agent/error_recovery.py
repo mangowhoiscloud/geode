@@ -1,13 +1,8 @@
-"""Adaptive Error Recovery — strategy-based recovery for tool failures.
+"""Bounded same-tool retry for tool failures.
 
-Replaces the simple 2-consecutive-failure auto-skip with a recovery chain
-that progressively tries alternative strategies before giving up:
-
-    retry (exponential backoff) → alternative tool (same category)
-    → fallback (cheaper cost tier) → escalate (HITL)
-
-Safety: DANGEROUS and WRITE tools are excluded from recovery attempts
-to preserve the existing HITL safety gates.
+Category and price do not establish semantic equivalence. After a failed
+retry, return the failure so the caller can choose a different approach.
+Existing safety exclusions and executor admission gates remain in force.
 """
 
 from __future__ import annotations
@@ -25,8 +20,6 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-# Tool definitions loaded from centralized SOT (core/tools/base.py)
-
 # Tools that must NEVER be auto-recovered (safety gate preservation)
 _EXCLUDED_TOOLS: frozenset[str] = frozenset(
     {
@@ -41,18 +34,12 @@ _EXCLUDED_TOOLS: frozenset[str] = frozenset(
     }
 )
 
-# Cost tier ordering: cheaper is better for fallback
-_COST_TIER_ORDER: dict[str, int] = {
-    "free": 0,
-    "cheap": 1,
-    "expensive": 2,
-}
-
 
 class RecoveryStrategy(StrEnum):
     """Recovery strategy types, in escalation order."""
 
     RETRY = "retry"
+    # Retained for reading historical recovery records, never selected for new calls.
     ALTERNATIVE = "alternative"
     FALLBACK = "fallback"
     ESCALATE = "escalate"
@@ -92,45 +79,10 @@ class RecoveryResult:
         )
 
 
-def _load_tool_definitions() -> list[dict[str, Any]]:
-    """Load tool definitions from centralized JSON (SOT: core/tools/base.py)."""
-    try:
-        from core.tools.base import load_all_tool_definitions
-
-        return load_all_tool_definitions()
-    except Exception:
-        log.warning("Failed to load tool definitions for error recovery")
-        return []
-
-
-def _build_category_map(
-    tool_defs: list[dict[str, Any]],
-) -> dict[str, list[dict[str, Any]]]:
-    """Build category → [tool_def] mapping."""
-    category_map: dict[str, list[dict[str, Any]]] = {}
-    for tool_def in tool_defs:
-        category = tool_def.get("category", "")
-        if category:
-            category_map.setdefault(category, []).append(tool_def)
-    return category_map
-
-
-def _build_cost_tier_map(
-    tool_defs: list[dict[str, Any]],
-) -> dict[str, list[dict[str, Any]]]:
-    """Build cost_tier → [tool_def] mapping."""
-    tier_map: dict[str, list[dict[str, Any]]] = {}
-    for tool_def in tool_defs:
-        tier = tool_def.get("cost_tier", "")
-        if tier:
-            tier_map.setdefault(tier, []).append(tool_def)
-    return tier_map
-
-
 class ErrorRecoveryStrategy:
     """Adaptive error recovery with strategy chain.
 
-    Strategies are tried in order: retry → alternative → fallback → escalate.
+    Strategies are tried in order: same-tool retry → escalate.
     Each strategy gets one chance. The chain stops on first success or
     after max_recovery_attempts total attempts.
 
@@ -147,11 +99,6 @@ class ErrorRecoveryStrategy:
         self._executor = executor
         self._max_recovery_attempts = max_recovery_attempts
         self._retry_base_delay = retry_base_delay
-        self._tool_defs = _load_tool_definitions()
-        self._category_map = _build_category_map(self._tool_defs)
-        self._cost_tier_map = _build_cost_tier_map(self._tool_defs)
-        # Map tool_name → tool_def for quick lookup
-        self._tool_lookup: dict[str, dict[str, Any]] = {t["name"]: t for t in self._tool_defs}
 
     def is_recoverable(self, tool_name: str) -> bool:
         """Check if a tool failure can be recovered.
@@ -230,16 +177,11 @@ class ErrorRecoveryStrategy:
         """Determine which strategies to try based on failure context.
 
         First failure: retry only.
-        Second+ failure: retry → alternative → fallback → escalate.
+        Second+ failure: retry → escalate; never substitute unrelated tools.
         """
         strategies: list[RecoveryStrategy] = [RecoveryStrategy.RETRY]
 
         if failure_count >= 2:
-            # After 2+ failures, try progressively more aggressive strategies
-            if self._has_alternatives(tool_name):
-                strategies.append(RecoveryStrategy.ALTERNATIVE)
-            if self._has_fallback(tool_name):
-                strategies.append(RecoveryStrategy.FALLBACK)
             strategies.append(RecoveryStrategy.ESCALATE)
 
         return strategies
@@ -259,24 +201,6 @@ class ErrorRecoveryStrategy:
 
         if strategy == RecoveryStrategy.RETRY:
             return await self._atry_retry(
-                tool_name,
-                tool_input,
-                start,
-                attempt_index=attempt_index,
-                context_factory=context_factory,
-                on_execution_started=on_execution_started,
-            )
-        if strategy == RecoveryStrategy.ALTERNATIVE:
-            return await self._atry_alternative(
-                tool_name,
-                tool_input,
-                start,
-                attempt_index=attempt_index,
-                context_factory=context_factory,
-                on_execution_started=on_execution_started,
-            )
-        if strategy == RecoveryStrategy.FALLBACK:
-            return await self._atry_fallback(
                 tool_name,
                 tool_input,
                 start,
@@ -314,99 +238,11 @@ class ErrorRecoveryStrategy:
             on_execution_started=on_execution_started,
         )
         elapsed = (time.monotonic() - start) * 1000
-        success = not (isinstance(result, dict) and result.get("error"))
+        success = not (result.get("error") or result.get("error_type"))
 
         return RecoveryAttempt(
             strategy=RecoveryStrategy.RETRY,
             tool_name=tool_name,
-            success=success,
-            result=result,
-            duration_ms=elapsed,
-        )
-
-    async def _atry_alternative(
-        self,
-        tool_name: str,
-        tool_input: dict[str, Any],
-        start: float,
-        *,
-        attempt_index: int,
-        context_factory: Callable[[str, int], Any] | None,
-        on_execution_started: Callable[[int, str, dict[str, Any]], None] | None,
-    ) -> RecoveryAttempt:
-        """Try a different tool from the same category via async dispatch."""
-        alt_name = self._find_alternative(tool_name)
-        if alt_name is None:
-            return RecoveryAttempt(
-                strategy=RecoveryStrategy.ALTERNATIVE,
-                tool_name=tool_name,
-                success=False,
-                result={"error": f"No alternative tool found for '{tool_name}'"},
-                duration_ms=(time.monotonic() - start) * 1000,
-            )
-
-        log.info(
-            "Recovery[alternative]: trying '%s' instead of '%s'",
-            alt_name,
-            tool_name,
-        )
-        result = await self._execute_recovery_tool(
-            alt_name,
-            tool_input,
-            attempt_index=attempt_index,
-            context_factory=context_factory,
-            on_execution_started=on_execution_started,
-        )
-        elapsed = (time.monotonic() - start) * 1000
-        success = not (isinstance(result, dict) and result.get("error"))
-
-        return RecoveryAttempt(
-            strategy=RecoveryStrategy.ALTERNATIVE,
-            tool_name=alt_name,
-            success=success,
-            result=result,
-            duration_ms=elapsed,
-        )
-
-    async def _atry_fallback(
-        self,
-        tool_name: str,
-        tool_input: dict[str, Any],
-        start: float,
-        *,
-        attempt_index: int,
-        context_factory: Callable[[str, int], Any] | None,
-        on_execution_started: Callable[[int, str, dict[str, Any]], None] | None,
-    ) -> RecoveryAttempt:
-        """Try a cheaper tool from any category via async dispatch."""
-        fallback_name = self._find_fallback(tool_name)
-        if fallback_name is None:
-            return RecoveryAttempt(
-                strategy=RecoveryStrategy.FALLBACK,
-                tool_name=tool_name,
-                success=False,
-                result={"error": f"No cheaper fallback found for '{tool_name}'"},
-                duration_ms=(time.monotonic() - start) * 1000,
-            )
-
-        log.info(
-            "Recovery[fallback]: trying cheaper '%s' instead of '%s'",
-            fallback_name,
-            tool_name,
-        )
-        result = await self._execute_recovery_tool(
-            fallback_name,
-            tool_input,
-            attempt_index=attempt_index,
-            context_factory=context_factory,
-            on_execution_started=on_execution_started,
-        )
-        elapsed = (time.monotonic() - start) * 1000
-        success = not (isinstance(result, dict) and result.get("error"))
-
-        return RecoveryAttempt(
-            strategy=RecoveryStrategy.FALLBACK,
-            tool_name=fallback_name,
             success=success,
             result=result,
             duration_ms=elapsed,
@@ -459,89 +295,3 @@ class ErrorRecoveryStrategy:
             },
             duration_ms=(time.monotonic() - start) * 1000,
         )
-
-    # ------------------------------------------------------------------
-    # Alternative / Fallback lookup
-    # ------------------------------------------------------------------
-
-    def _has_alternatives(self, tool_name: str) -> bool:
-        """Check if there are alternative tools in the same category."""
-        return self._find_alternative(tool_name) is not None
-
-    def _has_fallback(self, tool_name: str) -> bool:
-        """Check if there's a cheaper fallback tool."""
-        return self._find_fallback(tool_name) is not None
-
-    def _find_alternative(self, tool_name: str) -> str | None:
-        """Find an alternative tool in the same category.
-
-        Returns the first tool in the same category that:
-        - Is not the failed tool itself
-        - Is not excluded (DANGEROUS/WRITE)
-        - Has a registered handler in the executor
-        """
-        tool_def = self._tool_lookup.get(tool_name)
-        if tool_def is None:
-            return None
-
-        category = tool_def.get("category", "")
-        if not category:
-            return None
-
-        candidates = self._category_map.get(category, [])
-        registered = set(self._executor.registered_tools)
-
-        for candidate in candidates:
-            cand_name: str = str(candidate["name"])
-            if cand_name == tool_name:
-                continue
-            if cand_name in _EXCLUDED_TOOLS:
-                continue
-            if cand_name in registered:
-                return cand_name
-        return None
-
-    def _find_fallback(self, tool_name: str) -> str | None:
-        """Find a cheaper tool that could serve as fallback.
-
-        Looks for tools in cheaper cost tiers (within the same category
-        first, then across all categories) that have a registered handler.
-        """
-        tool_def = self._tool_lookup.get(tool_name)
-        if tool_def is None:
-            return None
-
-        current_tier = tool_def.get("cost_tier", "")
-        current_order = _COST_TIER_ORDER.get(current_tier, 0)
-        category = tool_def.get("category", "")
-        registered = set(self._executor.registered_tools)
-
-        # First: same category, cheaper tier
-        if category:
-            candidates = self._category_map.get(category, [])
-            for candidate in candidates:
-                cand_name: str = str(candidate["name"])
-                cand_tier = candidate.get("cost_tier", "")
-                cand_order = _COST_TIER_ORDER.get(cand_tier, 0)
-                if cand_name == tool_name:
-                    continue
-                if cand_name in _EXCLUDED_TOOLS:
-                    continue
-                if cand_order < current_order and cand_name in registered:
-                    return cand_name
-
-        # Then: any category, cheaper tier
-        for tier_name in ("free", "cheap"):
-            tier_order = _COST_TIER_ORDER[tier_name]
-            if tier_order >= current_order:
-                continue
-            for candidate in self._cost_tier_map.get(tier_name, []):
-                cand_name = str(candidate["name"])
-                if cand_name == tool_name:
-                    continue
-                if cand_name in _EXCLUDED_TOOLS:
-                    continue
-                if cand_name in registered:
-                    return cand_name
-
-        return None

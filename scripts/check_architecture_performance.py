@@ -284,7 +284,7 @@ def _measure_probe() -> dict[str, float]:
 
 
 def collect_measurements(*, samples: int = 3) -> dict[str, float]:
-    """Collect medians from isolated fresh-process probes."""
+    """Collect medians and emit each isolated probe's diagnostic evidence."""
     if samples < 1:
         raise ValueError("samples must be positive")
     rows: list[dict[str, float]] = []
@@ -308,12 +308,28 @@ def collect_measurements(*, samples: int = 3) -> dict[str, float]:
                 [sys.executable, str(Path(__file__).resolve()), "--probe"],
                 cwd=sample_root,
                 env=env,
-                check=True,
+                check=False,
                 capture_output=True,
                 text=True,
                 timeout=120,
             )
-            rows.append(json.loads(completed.stdout))
+            if completed.stderr:
+                # Parent-only import leaves the child's cold-start probe unchanged.
+                from core.observability.redaction import redact_and_bound_text
+
+                stderr = redact_and_bound_text(completed.stderr, 4096)
+                print(
+                    f"performance sample {index + 1}/{samples} stderr: {json.dumps(stderr)}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            completed.check_returncode()
+            row = json.loads(completed.stdout)
+            rows.append(row)
+            print(
+                f"performance sample {index + 1}/{samples}: {json.dumps(row, sort_keys=True)}",
+                flush=True,
+            )
     names = set(rows[0])
     if any(set(row) != names for row in rows):
         raise RuntimeError("performance probe returned inconsistent metric sets")

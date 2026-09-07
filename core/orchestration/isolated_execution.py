@@ -192,6 +192,9 @@ class IsolatedRunner:
         "GEODE_STATE_ROOT",
         "GEODE_CONFIG_PATH",
         "GEODE_DATA_DIR",
+        "GEODE_VERIFY_MODE",
+        "GEODE_JUDGE_MODEL",
+        "GEODE_VERIFY_MIN_TEXT_CHARS",
         # Daemon-wide skip-permissions; the PER-SESSION value (ContextVar) is
         # forwarded explicitly at spawn (the whitelist only carries the parent
         # process env, not the per-connection ContextVar).

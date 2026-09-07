@@ -28,6 +28,7 @@ Read only the reference needed for the current task:
 | Abstraction, naming, type/class, schema, test, site, and version conventions | `$geode-code-conventions` (follow its task-specific SOT routing) |
 | Provider/model/API capability claims | `references/provider-grounding.md` |
 | Schema/log/event/state/trajectory consistency | `references/observability-contract.md` |
+| Usage/cache fields, estimates versus billing, incomplete accounting | [Usage accounting contract](../../../docs/architecture/usage-accounting.md) |
 | Same-task Codex–GEODE production and comparison | `references/codex-geode-paired-coding.md` |
 | Test, lint, type, prompt, full-suite reporting, or failure-to-rule review | `references/verification-gates.md` |
 | Branch, PR, merge, and cleanup operations | `references/gitflow.md` |

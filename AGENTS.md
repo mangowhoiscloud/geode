@@ -30,7 +30,7 @@ The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
 The current snapshot records 581 production Python files,
-706 test Python files,
+707 test Python files,
 86 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->
@@ -137,6 +137,11 @@ adding a provider, or touching cache/tool-choice/streaming behaviour. Also read
 `.claude/skills/prompt-writing/` before creating or editing model-facing prompt
 text: GEODE prompts use metadata/behavioral clauses, not direct identity
 assertions such as `You are ...`.
+
+For token/cache accounting, cost output, or usage artifacts, read
+[`docs/architecture/usage-accounting.md`](docs/architecture/usage-accounting.md).
+It maps the actual fields and validators and distinguishes normalized zero,
+missing final usage, completed-call lower bounds, and cost/billing authority.
 
 ### `core/tools/`
 
@@ -369,7 +374,7 @@ GitFlow owns integration-specific additions; do not maintain another template.
 | Why a layer? | `core/agent/loop/agent_loop.py` plus `docs/architecture/` |
 | Which code convention applies? | `docs/architecture/naming-conventions.md` plus `.agents/skills/geode-code-conventions/` |
 | How are hooks wired? | `core/hooks/system.py` plus `core/wiring/bootstrap.py` |
-| How is cost tracked? | `~/.geode/usage/*.jsonl` plus `core/audit/diagnostics.py` |
+| How are usage, cache, and costs represented? | `docs/architecture/usage-accounting.md`, `core/llm/token_tracker.py`, and `core/llm/usage_store.py` |
 | Petri audit run? | `evals/petri/cli_audit.py` |
 | Site docs? | `site/src/app/docs/**` |
 

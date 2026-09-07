@@ -1166,16 +1166,19 @@
           "description": "Path to the file to read. Symlinks allowed if they resolve within the project directory."
         },
         "offset": {
-          "type": "integer",
-          "description": "Line number to start reading from, 1-indexed (default: 1)"
+          "type": ["integer", "null"],
+          "description": "Line number to start reading from, 1-indexed. Omit or use null for default 1; use null for images.",
+          "minimum": 1
         },
         "limit": {
-          "type": "integer",
-          "description": "Number of lines to read. Omit for full file (subject to 256KB size limit)."
+          "type": ["integer", "null"],
+          "description": "Number of text lines to read. Omit or use null for full file (subject to 256KB size limit); use null for images.",
+          "minimum": 1
         },
         "max_lines": {
-          "type": "integer",
-          "description": "Deprecated — use 'limit' instead. Maximum lines to read."
+          "type": ["integer", "null"],
+          "description": "Deprecated — use 'limit' instead. Omit or use null when unused or viewing images.",
+          "minimum": 1
         }
       },
       "required": [

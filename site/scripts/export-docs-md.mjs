@@ -86,15 +86,27 @@ function extractDocsProse(html, htmlPath) {
   fail(`unbalanced <article> tags in ${htmlPath}`);
 }
 
-function buildTurndown() {
+export function buildTurndown() {
   const td = new TurndownService({
     headingStyle: "atx",
     codeBlockStyle: "fenced",
     hr: "---",
     bulletListMarker: "-",
+    // Turndown handles empty block nodes before its removal rules.
+    blankReplacement: (_content, node) => node.getAttribute("aria-hidden") === "true" ? "" : node.isBlock ? "\n\n" : "",
   });
   td.use(gfm);
   td.remove(["script", "style"]);
+  // Decorative chart bars/axes must not break GFM table rows or duplicate data.
+  td.remove((node) => node.getAttribute("aria-hidden") === "true");
+  td.addRule("describedSvg", {
+    filter: (node) => node.nodeName.toLowerCase() === "svg" && Boolean(node.querySelector("desc")),
+    replacement: (_content, node) => `\n\n${node.querySelector("desc").textContent}\n\n`,
+  });
+  td.addRule("tableCaption", {
+    filter: "caption",
+    replacement: (content) => `\n\n${content}\n\n`,
+  });
   // Turndown's default <br> replacement is two trailing spaces + newline.
   // That leaks whitespace into the committed llms-full.txt and breaks table
   // cells across physical lines. Keep the break explicit and portable.
@@ -246,4 +258,4 @@ function main() {
   );
 }
 
-main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

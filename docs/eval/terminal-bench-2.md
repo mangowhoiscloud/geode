@@ -136,7 +136,14 @@ and must not be described as Harbor-native trial recordings.
 
 Use `evals.platforms.harbor:RecordedCodexHarborAgent` instead of the built-in
 Codex name when future paired runs require the native arm to emit the derived
-cast automatically. Closed historical jobs can be audited and backfilled
+cast automatically. For subscription authentication, set `CODEX_FORCE_AUTH_JSON=1`
+in the Harbor **process environment**, not `agent.env` in its job configuration.
+Harbor 0.22.0 treats AUTH-named configuration values as secrets and can replace
+every `1` in trial files with `[REDACTED]`, corrupting JSON, rewards and ATIF.
+The instrumented adapter rejects this configuration before execution; actual
+credential redaction remains enabled. Freeze and verify the process-level route.
+
+Closed historical jobs can be audited and backfilled
 without changing result or trajectory files:
 
     uv run python -m evals.platforms.harbor <job-or-run-root> --dry-run
@@ -164,6 +171,12 @@ This candidate is not interchangeable with the historical one-tool control.
 The entry point requires a container-local home, explicit subscription routing,
 an absolute required model policy, and no API-key environment variables.
 Root effort, worker-difficulty settings and auxiliary defaults are distinct.
+The fresh task-container profile permits dangerous tools so the native shell
+is available; this does not change host policy or bypass worker-role toolkits.
+The adapter's `verify_mode` option defaults to `rule_based`; freeze `reflexion`
+explicitly when evaluating LLM-assisted repair. Mode, judge model and shell
+admission are checked before inference. GEODE verification supplies runtime
+feedback, not the Harbor task verifier's score authority.
 Native state is preserved under the trial's `agent/geode-home/`; credentials
 are transferred outside the collected logs. These are private sources until
 separate secret, PII and local-path scans authorize a public derivative.

@@ -1379,6 +1379,8 @@ def translate_codex_response(
         reasoning_summaries=tuple(reasoning_summaries),
         codex_output_items=tuple(_json_safe(item) for item in items_source),
         assistant_phase=assistant_phase,
+        response_id=str(getattr(response, "id", "") or ""),
+        response_model=str(getattr(response, "model", "") or ""),
     )
 
 

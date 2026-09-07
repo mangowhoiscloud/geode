@@ -1,6 +1,6 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
-export const metadata = { title: "Crucible outer loop — GEODE Docs" };
+export const metadata = { title: "Crucible bounded search — GEODE Docs" };
 
 function CrucibleLoop({ ko }: { ko: boolean }) {
   const loop = [
@@ -98,8 +98,8 @@ export default function Page() {
     <DocsShell
       wide
       slug="capabilities/outer-loop"
-      title="Crucible outer loop"
-      titleKo="Crucible 아우터 루프"
+      title="Crucible bounded search"
+      titleKo="Crucible 제한형 탐색"
       summary="A bounded private search loop with frozen admission, paired evaluation, CAS advancement, and a separate sealed-test boundary."
       summaryKo="동결된 admission, paired 평가, CAS 전진, 별도 sealed-test 경계를 갖춘 제한형 private search 루프입니다."
     >
@@ -113,16 +113,22 @@ export default function Page() {
               동결하고, 각 반복의 KEEP·REJECT·INVALID와 비용을 원장에 남깁니다.
             </p>
             <CrucibleLoop ko />
-
-            <h2>왜 아우터 루프 설정이 한 곳에 있나</h2>
             <p>
-              아우터 루프는 역할이 많습니다. auditor, target, judge, mutator가
+              실행 진입점은 <code>geode-evolve crucible loop &lt;config&gt;</code>입니다.
+              <code>geode-evolve crucible prepare</code>가 선언형 명세를 검증해
+              campaign 설정을 준비합니다. 이 설정은 아래의 스캐폴드·Petri용 TOML과
+              별개이며, KEEP은 private search head만 갱신하고 배포를 승인하지 않습니다.
+            </p>
+
+            <h2>스캐폴드 탐색과 Petri의 공통 설정</h2>
+            <p>
+              스캐폴드 탐색과 Petri 감사는 역할이 많습니다. auditor, target, judge, mutator가
               각각 모델과 자격 lane을 갖고, seed 풀과 promote 정책과 스케줄러
               knob이 더해집니다. 이것이 env, 모듈 상수, 별도 TOML로 흩어지면
               &quot;지금 루프가 실제로 무엇으로 도는가&quot;를 답할 수 없게 됩니다.
-              그래서 전부 <code>~/.geode/config.toml</code>의{" "}
+              이 역할 설정과 기본값은 <code>~/.geode/config.toml</code>의{" "}
               <code>[self_improving_loop]</code> 섹션 한 곳에 모았고, 로더는{" "}
-              <code>core/config/self_improving.py</code>의{" "}
+              <code>evals/config.py</code>의{" "}
               <code>load_self_improving_loop_config</code>입니다.
             </p>
 
@@ -159,8 +165,9 @@ cron = "0 */6 * * *"
 min_interval_minutes = 60`}</pre>
             <p>
               정확한 필드 정의와 docstring은{" "}
-              <code>core/config/self_improving.py</code>가 SoT입니다. 위 값들은
-              스키마의 기본값입니다.
+              <code>evals/config.py</code>가 SoT입니다. 위 수치와 정책은
+              스키마 기본값이며, <code>model = &quot;...&quot;</code>은 실제 모델 ID로
+              교체해야 하는 자리 표시자입니다.
             </p>
 
             <h2>로드 경로와 strict 검증</h2>
@@ -177,7 +184,7 @@ min_interval_minutes = 60`}</pre>
             <h2>레거시 마이그레이션과 디버깅</h2>
             <ul>
               <li>
-                <code>geode config migrate-petri-toml</code>. 옛{" "}
+                <code>geode-eval config migrate-petri-toml</code>. 옛{" "}
                 <code>~/.geode/petri.toml</code> 역할 override를{" "}
                 <code>[self_improving_loop.autoresearch.&lt;role&gt;]</code>로
                 옮깁니다. 기본은 dry-run입니다.
@@ -191,7 +198,7 @@ min_interval_minutes = 60`}</pre>
 
             <h2>다음</h2>
             <ul>
-              <li><a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>. 이 설정을 소비하는 루프 본체.</li>
+              <li><a href="/geode/docs/capabilities/autoresearch">스캐폴드 탐색</a>. 공통 TOML 설정을 소비하는 루프.</li>
               <li><a href="/geode/docs/config/reference">설정 레퍼런스</a>. config.toml 전체 표면.</li>
             </ul>
           </>
@@ -206,19 +213,26 @@ min_interval_minutes = 60`}</pre>
               records every KEEP, REJECT, INVALID, and resource receipt.
             </p>
             <CrucibleLoop ko={false} />
-
-            <h2>Why the outer loop has one config root</h2>
             <p>
-              The outer loop juggles many roles: auditor, target, judge, and
+              The execution entry point is <code>geode-evolve crucible loop &lt;config&gt;</code>.
+              <code>geode-evolve crucible prepare</code> validates a declarative spec
+              and prepares the campaign configuration. This is separate from the
+              scaffold/Petri TOML below. KEEP advances only the private search head;
+              it does not authorize a release.
+            </p>
+
+            <h2>Shared scaffold-search and Petri configuration</h2>
+            <p>
+              Scaffold search and Petri audits use several roles: auditor, target, judge, and
               mutator each carry a model and a credential lane, plus seed
               pools, promote policy, and scheduler knobs. Scattered across env
               vars, module constants, and side TOML files, the question
               &quot;what is the loop actually running with right now&quot;
-              becomes unanswerable. So everything lives in the{" "}
+              becomes unanswerable. These role settings and defaults live in the{" "}
               <code>[self_improving_loop]</code> section of{" "}
               <code>~/.geode/config.toml</code>, loaded by{" "}
               <code>load_self_improving_loop_config</code> in{" "}
-              <code>core/config/self_improving.py</code>.
+              <code>evals/config.py</code>.
             </p>
 
             <h2>Schema sketch</h2>
@@ -254,8 +268,9 @@ cron = "0 */6 * * *"
 min_interval_minutes = 60`}</pre>
             <p>
               The exact field definitions and docstrings live in{" "}
-              <code>core/config/self_improving.py</code>; the values above are
-              the schema defaults.
+              <code>evals/config.py</code>. Numeric and policy values above are
+              schema defaults; <code>model = &quot;...&quot;</code> is a placeholder
+              that requires a real model ID.
             </p>
 
             <h2>Load path and strict validation</h2>
@@ -273,7 +288,7 @@ min_interval_minutes = 60`}</pre>
             <h2>Legacy migration and debugging</h2>
             <ul>
               <li>
-                <code>geode config migrate-petri-toml</code>. Moves legacy{" "}
+                <code>geode-eval config migrate-petri-toml</code>. Moves legacy{" "}
                 <code>~/.geode/petri.toml</code> role overrides into{" "}
                 <code>[self_improving_loop.autoresearch.&lt;role&gt;]</code>.
                 Dry-run by default.
@@ -287,8 +302,8 @@ min_interval_minutes = 60`}</pre>
 
             <h2>Next</h2>
             <ul>
-              <li><a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>. The loop body these settings drive.</li>
-              <li><a href="/geode/docs/config/reference">Config reference</a>. The full config.toml surface.</li>
+              <li><a href="/geode/docs/capabilities/autoresearch?lang=en">Scaffold search</a>. The loop that consumes the shared TOML settings.</li>
+              <li><a href="/geode/docs/config/reference?lang=en">Config reference</a>. The full config.toml surface.</li>
             </ul>
           </>
         }

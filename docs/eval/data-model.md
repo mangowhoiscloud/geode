@@ -4,11 +4,13 @@ eval_family: eval-data-model
 eval_kind: contract
 eval_status: canonical
 eval_authority: derived-view-contract
-eval_summary: Versioned joins for examples, rollouts, immutable trajectories, and evaluator-owned rewards.
+eval_summary: Versioned joins for examples, rollouts, immutable trajectories, and evaluator-owned rewards, with supplementary usage and cache-accounting evidence.
 eval_triggers:
   - example rollout trajectory reward
   - learning data
   - evaluation data model
+  - cache accounting
+  - usage and cost evidence
 eval_contracts:
   - docs/eval/schemas/example.schema.json
   - docs/eval/schemas/rollout.schema.json
@@ -38,6 +40,14 @@ The canonical join is `example → rollout → trajectory → reward`.
 `geode.eval-learning-view@2` versions the joined release, not the native
 benchmark receipt. Native results, retry manifests, verifier receipts, and
 session records remain their respective authorities.
+
+Usage and cache accounting is supplementary evidence, not a reward label.
+Read the [usage accounting contract](../architecture/usage-accounting.md) for
+the field map, existing data formats, normalized-zero limitations, and
+interrupted-call coverage. Reference the original result/ledger or a reviewed
+derived audit with the existing attempt `other` evidence kind; do not copy
+usage into immutable trajectories or redefine a frozen score denominator.
+Accounting coverage, task outcome and observability integrity stay separate.
 
 ## Admission rules
 

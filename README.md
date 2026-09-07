@@ -31,7 +31,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v1.0.27 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.28 — Autonomous Agent Runtime + Evaluation Substrate
 
 A general-purpose runtime for autonomous tool work. You ask in plain language;
 GEODE plans, calls tools, and reports, for one prompt or a long-running session.
@@ -52,6 +52,13 @@ sustained self-improvement.
 ---
 
 ## One distribution, three boundaries
+
+In v1.0.28, cache read/write counts reach the terminal, failure handling
+preserves the original error, and opt-in Reflexion uses recorded observations
+for bounded revision. The [official guide](https://mangowhoiscloud.github.io/geode/docs)
+groups runtime, evaluation, and experimental-loop workflows. See
+[usage accounting](docs/architecture/usage-accounting.md) for coverage limits;
+API estimates are not subscription invoices.
 
 The `geode-agent` wheel ships four commands without turning the installed
 package into a writable workspace:

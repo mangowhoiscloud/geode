@@ -35,6 +35,14 @@ class TestCacheHitRate:
         acc.record(_usage(creation=1000, read=3000))
         assert acc.cache_hit_rate == 0.75
 
+    def test_read_only_provider_rate_is_not_total_input_coverage(self) -> None:
+        acc = LLMUsageAccumulator()
+        acc.record(LLMUsage(model="gpt-5.5", input_tokens=1000, cache_read_tokens=100))
+        # Preserve the legacy cache-activity ratio; displaying it as 10% or
+        # 100% of total input would silently change or mislabel its contract.
+        assert acc.cache_hit_rate == 1.0
+        assert acc.to_dict()["cache_hit_rate"] == 1.0
+
     def test_to_dict_includes_rate_only_with_cache_activity(self):
         acc = LLMUsageAccumulator()
         acc.record(_usage())  # no cache tokens

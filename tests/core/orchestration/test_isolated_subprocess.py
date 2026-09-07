@@ -20,6 +20,29 @@ def _runner(*, lane: object | None = None) -> IsolatedRunner:
 class TestSubprocessMode:
     """Test IsolatedRunner with WorkerRequest (subprocess path)."""
 
+    def test_verification_settings_reach_worker_spawn(self) -> None:
+        runner = _runner()
+        req = WorkerRequest(task_id="verify-env", description="hello")
+        cfg = IsolationConfig(session_id="verify-env", post_to_main=False)
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "GEODE_VERIFY_MODE": "reflexion",
+                    "GEODE_VERIFY_MIN_TEXT_CHARS": "40",
+                    "GEODE_JUDGE_MODEL": "gpt-5.6-sol",
+                },
+            ),
+            patch(
+                "asyncio.create_subprocess_exec", side_effect=OSError("spawn unavailable")
+            ) as spawn,
+        ):
+            result = asyncio.run(runner.arun(req, config=cfg))
+        assert result.success is False
+        assert spawn.call_args.kwargs["env"]["GEODE_VERIFY_MODE"] == "reflexion"
+        assert spawn.call_args.kwargs["env"]["GEODE_JUDGE_MODEL"] == "gpt-5.6-sol"
+        assert spawn.call_args.kwargs["env"]["GEODE_VERIFY_MIN_TEXT_CHARS"] == "40"
+
     def test_subprocess_requires_composed_worker_before_spawn(self) -> None:
         runner = IsolatedRunner()
         req = WorkerRequest(task_id="unconfigured", description="hello")

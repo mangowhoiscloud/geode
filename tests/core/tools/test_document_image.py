@@ -60,6 +60,33 @@ def test_missing_pillow_is_an_explicit_dependency_error(
     assert result["recoverable"] is False
 
 
+def test_null_line_controls_deliver_image_through_registered_handler(tmp_path: Path) -> None:
+    path = tmp_path / "panel.png"
+    Image.new("RGB", (8, 8), "blue").save(path)
+    definition = next(d for d in load_all_tool_definitions() if d["name"] == "read_document")
+    from jsonschema import validate
+
+    arguments = {"file_path": str(path), "offset": None, "limit": None, "max_lines": None}
+    validate(arguments, definition["input_schema"])
+    result = asyncio.run(_build_delegated_handlers()["read_document"](**arguments))
+    assert result["content"][1]["type"] == "image"
+    text_path = tmp_path / "notes.txt"
+    text_path.write_text("first\nsecond\n")
+    text_result = asyncio.run(
+        ReadDocumentTool().aexecute(**{**arguments, "file_path": str(text_path)})
+    )
+    assert text_result["result"]["content"] == "first\nsecond"
+
+
+@pytest.mark.parametrize("value", [0, -1, True, "1"])
+def test_invalid_line_controls_fail_explicitly(tmp_path: Path, value: object) -> None:
+    path = tmp_path / "notes.txt"
+    path.write_text("first\nsecond\n")
+    for field in ("offset", "limit", "max_lines"):
+        result = asyncio.run(ReadDocumentTool().aexecute(file_path=str(path), **{field: value}))
+        assert result["error_type"] == "validation"
+
+
 def test_rejects_invalid_large_animated_and_outside_images(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

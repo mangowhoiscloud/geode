@@ -2,6 +2,24 @@ import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
 export const metadata = { title: "Observability — GEODE Docs" };
 
+function UsageAccounting({ ko }: { ko: boolean }) {
+  return (
+    <section aria-labelledby="usage-accounting">
+      <h2 id="usage-accounting">{ko ? "캐시·토큰·비용: 같은 범위를 비교합니다" : "Cache, tokens, and cost: compare matched coverage"}</h2>
+      <p>{ko
+        ? "UI는 입력·출력과 캐시 읽기·쓰기 수를 구분합니다. OpenAI의 입력에는 캐시가 포함되지만 Anthropic의 일반 입력·캐시 읽기·생성은 분리돼 있습니다. cache_hit_rate는 읽기 / (읽기 + 생성) 비율이지 프롬프트 전체의 캐시 적중률이 아닙니다. API 단가 추정은 구독 계정 청구액이 아닙니다."
+        : "The UI separates input/output from cache reads/writes. OpenAI input includes cached tokens; Anthropic ordinary input, cache reads, and creation are disjoint. cache_hit_rate is reads / (reads + creation), not cached coverage of the full prompt. API-price estimates are not subscription invoices."}</p>
+      <p>{ko
+        ? "Durable 호출 기록은 명시적인 0과 미보고 값을 구분합니다. Harbor는 정확한 session과 attempt ID로 시작·종료를 결합하며, 불완전한 합계는 null, 복구된 부분합은 observed_sum으로 남깁니다. 범위는 recorded-agentic-loop-attempts-only이고 whole_runtime_complete=false입니다. Reflection·judge·hosted search·text 호출 전체의 회계로 확대 해석하지 않습니다."
+        : "Durable call records distinguish explicit zero from unreported fields. Harbor joins starts/ends by exact session and attempt ID; incomplete totals remain null and recovered partial sums remain observed_sum. Its scope is recorded-agentic-loop-attempts-only with whole_runtime_complete=false. This does not claim complete accounting for reflection, judging, hosted search, or text calls."}</p>
+      <p>{ko
+        ? "Legacy 월별 원장과 일부 UI 합산은 필드 부재를 끝까지 보존하지 않습니다. 과거 캐시 0은 미사용 증거가 아니며, 기록 범위는 벤치마크의 성공률 분모와도 다릅니다. 보정 자료는 원본 결과를 덮어쓰지 않고 별도 증거로 연결합니다."
+        : "The legacy monthly ledger and some UI aggregates do not preserve field absence end to end. A historical cache zero is not evidence of non-use, and accounting coverage is not a benchmark pass-rate denominator. Corrections attach separate evidence without overwriting original results."}</p>
+      <p><a href="https://github.com/mangowhoiscloud/geode/blob/fd08bd84b209c59f8c92350f50267764186ca9fd/docs/architecture/usage-accounting.md">{ko ? "생산자·필드·독자별 회계 계약과 남은 한계" : "Accounting contract: producers, fields, readers, and remaining limits"}</a></p>
+    </section>
+  );
+}
+
 const queryExample = `from core.observability.event_store import HookEventStore
 
 store = HookEventStore()
@@ -65,6 +83,7 @@ export default function Page() {
               <a href="https://github.com/mangowhoiscloud/geode/blob/main/core/observability/schemas/trajectory.schema.json"><code>geode.trajectory@1</code></a>입니다.
             </p>
 
+            <UsageAccounting ko />
             <h2>Session record 운영과 migration</h2>
             <pre>{recordCommands}</pre>
             <ul>
@@ -195,6 +214,7 @@ export default function Page() {
               <a href="https://github.com/mangowhoiscloud/geode/blob/main/core/observability/schemas/trajectory.schema.json"><code>geode.trajectory@1</code></a>.
             </p>
 
+            <UsageAccounting ko={false} />
             <h2>Operate and migrate session records</h2>
             <pre>{recordCommands}</pre>
             <ul>

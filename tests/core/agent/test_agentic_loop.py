@@ -1425,6 +1425,38 @@ class TestAgenticLoop:
         assert last.cache_read_tokens == 80
         assert last.thinking_tokens == 10
 
+    def test_track_usage_forwards_cache_counts_to_ui(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        from core.agent.loop._response import _record_usage
+
+        loop = AgenticLoop(context, executor, quiet=False)
+        response = SimpleNamespace(
+            usage=SimpleNamespace(
+                input_tokens=1000,
+                output_tokens=100,
+                cache_read_tokens=600,
+                cache_creation_tokens=80,
+                thinking_tokens=20,
+                reported_cost_usd=None,
+            )
+        )
+        tracker = MagicMock()
+        tracker.record.return_value = SimpleNamespace(cost_usd=0.1234)
+        with (
+            patch("core.llm.token_tracker.get_tracker", return_value=tracker),
+            patch("core.ui.agentic_ui.render_tokens") as render,
+        ):
+            assert _record_usage(loop, response) is tracker
+        render.assert_called_once_with(
+            loop.model,
+            1000,
+            100,
+            cost_usd=0.1234,
+            cache_read_tokens=600,
+            cache_write_tokens=80,
+        )
+
     def test_track_usage_logs_warning_on_schema_mismatch(
         self,
         context: ConversationContext,

@@ -111,10 +111,23 @@ class ReadDocumentTool:
         file_path_str: str = kwargs["file_path"]
 
         # offset/limit with max_lines backward compat
-        offset: int = kwargs.get("offset", 1)
-        limit: int | None = kwargs.get("limit") or kwargs.get("max_lines")
+        offset = kwargs.get("offset")
+        if offset is None:
+            offset = 1
+        limit = kwargs.get("limit")
+        if limit is None:
+            limit = kwargs.get("max_lines")
 
         from core.tools.base import tool_error
+
+        for name, value in (("offset", offset), ("limit", limit)):
+            if value is not None and (
+                not isinstance(value, int) or isinstance(value, bool) or value < 1
+            ):
+                return tool_error(
+                    f"{name} must be a positive integer or null.",
+                    error_type="validation",
+                )
 
         result = validate_path(file_path_str, write=False)
         if isinstance(result, dict):
@@ -140,7 +153,8 @@ class ReadDocumentTool:
         if file_path.suffix.lower() in _IMAGE_EXTENSIONS:
             if offset != 1 or limit is not None:
                 return tool_error(
-                    "offset and limit apply to text only; omit them to view an image.",
+                    "Line controls apply to text only; omit them or set them to null "
+                    "to view an image.",
                     error_type="validation",
                 )
             return self._read_image(file_path)
