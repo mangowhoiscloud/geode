@@ -49,6 +49,20 @@ functional change.
 
 ### Fixed
 
+- Stopped recording verifier exceptions and malformed judge verdicts as passes;
+  verification errors retain a distinct reason and do not request automatic repair.
+- Removed category/cost-based automatic tool substitution: unrelated tool success
+  no longer counts as recovery of the requested operation. Same-tool retry and
+  explicit failure lineage remain available.
+
+- Preserved provider-returned response ID and model through the Responses adapter
+  so existing lifecycle evidence can identify the response without inferring it
+  from the configured model.
+
+- Allowed explicit null line controls in local document reads so image calls
+  can express unused fields on Responses schemas. Invalid non-positive line
+  controls now return validation errors instead of accidental slices.
+
 - Connected the read-only reviewer role to a pinned adversarial evidence-review
   system prompt, retaining its existing tool restrictions and findings schema.
   Review guidance now separates substantiated defects, unverified scope, and

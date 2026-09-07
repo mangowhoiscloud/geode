@@ -321,25 +321,28 @@ def test_consume_reflexion_hint_legacy_alias() -> None:
         assert _guards._consume_reflexion_hint(object()) == "<reflection>z</reflection>"
 
 
-def test_verify_turn_crash_treats_as_pass() -> None:
-    """If the verify path itself raises, return a passing sentinel — the
-    observability layer must not break the run it observes."""
+@pytest.mark.parametrize("use_async", [False, True])
+def test_verify_turn_crash_is_not_success(monkeypatch: pytest.MonkeyPatch, use_async: bool) -> None:
+    """Verification failure must not create success or an unbounded repair."""
 
     # Build a result that triggers a rule-based check, then monkeypatch
     # ``_verify_rule_based`` to raise so we exercise the except branch.
     import core.agent.verify as verify_module
 
-    original = verify_module._verify_rule_based
-
     def boom(_result: AgenticResult) -> VerifyResult:
         raise RuntimeError("boom")
 
-    verify_module._verify_rule_based = boom  # type: ignore[assignment]
-    try:
+    monkeypatch.setattr(verify_module, "_verify_rule_based", boom)
+    if use_async:
+        import asyncio
+
+        vr = asyncio.run(verify_module.verify_turn_async(_make_result(text="")))
+    else:
         vr = verify_turn(_make_result(text=""))
-        assert vr.passed is True
-    finally:
-        verify_module._verify_rule_based = original  # type: ignore[assignment]
+    assert vr.passed is False
+    assert vr.score == 0.0
+    assert vr.rubric_misses == ("verification_error",)
+    assert vr.should_retry is False
 
 
 def test_env_does_not_leak_between_tests() -> None:
@@ -764,8 +767,10 @@ def test_post_verify_timeout_preserves_the_builtin_result(
     assert escalated is False
 
 
+@pytest.mark.parametrize("verification_error", [False, True])
 def test_pre_verify_strengthening_is_monotone(
     monkeypatch: pytest.MonkeyPatch,
+    verification_error: bool,
 ) -> None:
     from core.agent.loop import _lifecycle
 
@@ -784,7 +789,8 @@ def test_pre_verify_strengthening_is_monotone(
         observed_passed.append(bool(invocation.payload["passed"]))
         return HookDecision(action=HookAction.ESCALATE)
 
-    registry.register(HookName.POST_VERIFY, observe_post)
+    if not verification_error:
+        registry.register(HookName.POST_VERIFY, observe_post)
     loop = SimpleNamespace(
         _hook_registry=registry,
         _session_id="",
@@ -797,6 +803,14 @@ def test_pre_verify_strengthening_is_monotone(
     )
 
     async def passed_verify(*args: object, **kwargs: object) -> VerifyResult:
+        if verification_error:
+            return VerifyResult(
+                passed=False,
+                mode=VerifyMode.RULE_BASED,
+                score=0.0,
+                rubric_misses=("verification_error",),
+                should_retry=False,
+            )
         return VerifyResult(passed=True, mode=VerifyMode.RULE_BASED)
 
     monkeypatch.setattr("core.agent.verify.verify_turn_async", passed_verify)
@@ -810,8 +824,14 @@ def test_pre_verify_strengthening_is_monotone(
 
     assert payload is not None
     assert payload["passed"] is False
-    assert payload["rubric_misses"] == ["ci_missing"]
-    assert observed_passed == [False]
+    if verification_error:
+        assert payload["rubric_misses"] == ["verification_error", "ci_missing"]
+        assert not payload["should_retry"]
+        assert _follow_up == ""
+        assert _escalated
+    else:
+        assert payload["rubric_misses"] == ["ci_missing"]
+        assert observed_passed == [False]
 
 
 def test_final_hook_payloads_include_verify_payload(

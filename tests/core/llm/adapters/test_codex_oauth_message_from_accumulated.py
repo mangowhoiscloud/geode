@@ -58,6 +58,28 @@ def _empty_response() -> SimpleNamespace:
     return SimpleNamespace(output_text="", output=[], status="completed", usage=None)
 
 
+def test_response_identity_and_cache_presence_survive_translation() -> None:
+    for cache in (None, 0, 96):
+        response = _empty_response()
+        response.id = "resp_fixture"
+        response.model = "returned-model-fixture"
+        response.usage = SimpleNamespace(
+            input_tokens=128,
+            output_tokens=8,
+            input_tokens_details=SimpleNamespace(cached_tokens=cache),
+        )
+        result = translate_codex_response(response)
+        assert result.response_id == response.id
+        assert result.response_model == response.model
+        assert result.response_provider == ""  # Never infer returned identity from routing.
+        assert result.usage.cached_input_tokens == (cache or 0)
+        assert result.usage.cached_input_tokens_present is (cache is not None)
+        assert result.usage.cache_write_tokens_present is False
+    missing = translate_codex_response(_empty_response())
+    assert missing.response_id == missing.response_model == ""
+    assert missing.usage.cached_input_tokens_present is False
+
+
 def test_message_text_recovered_from_accumulated_when_response_empty() -> None:
     """The smoke 20/21/22 voter case — final.output empty, SSE delivered
     a message item with text. Pre-fix this returned text='', causing

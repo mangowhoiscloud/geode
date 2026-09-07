@@ -12,7 +12,7 @@ Coverage:
 - ``_verify_llm_judge`` falls back to ``rule_based`` (with
   ``effective_mode=RULE_BASED``) when the loop reference is None or the
   LLM call errors.
-- Judge JSON parsing tolerates code fences + bad JSON + non-numeric scores.
+- Judge JSON parsing accepts code fences and rejects malformed verdicts.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from core.agent.loop import AgenticLoopConfig
 from core.agent.loop.models import AgenticResult
 from core.agent.verify import (
     VerifyMode,
+    _build_judge_result_from_response,
     _judge_prompt,
     _llm_judge_fallback,
     _parse_judge_payload,
@@ -333,26 +334,30 @@ def test_parse_judge_payload_code_fence_wrapped() -> None:
     assert reason == "weak"
 
 
-def test_parse_judge_payload_bad_json_treats_as_pass() -> None:
-    """Unparsable → neutral pass with score=0.5 + ``judge_unparseable`` reason."""
-    passed, score, reason = _parse_judge_payload("not even close to JSON")
-    assert passed is True  # neutral
-    assert score == pytest.approx(0.5)
-    assert reason == "judge_unparseable"
-
-
-def test_parse_judge_payload_non_numeric_score_defaults_half() -> None:
-    """Score field that isn't a number → 0.5."""
-    _passed, score, _reason = _parse_judge_payload('{"passed": true, "score": "high"}')
-    assert score == pytest.approx(0.5)
-
-
-def test_parse_judge_payload_score_clamped() -> None:
-    """Scores outside [0, 1] are clamped."""
-    _, score_high, _ = _parse_judge_payload('{"passed": true, "score": 5.0}')
-    assert score_high == 1.0
-    _, score_low, _ = _parse_judge_payload('{"passed": true, "score": -0.5}')
-    assert score_low == 0.0
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "not JSON",
+        "[]",
+        "null",
+        "{}",
+        '{"passed": "false", "score": 1}',
+        '{"passed": true}',
+        '{"passed": true, "score": "high"}',
+        '{"passed": true, "score": true}',
+        '{"passed": true, "score": 5.0}',
+        '{"passed": true, "score": -0.5}',
+        '{"passed": true, "score": NaN}',
+        '{"passed": true, "score": Infinity}',
+    ],
+)
+def test_malformed_judge_verdict_is_not_success_or_repair_signal(payload: str) -> None:
+    assert _parse_judge_payload(payload) == (False, 0.0, "verification_error")
+    verdict = _build_judge_result_from_response(SimpleNamespace(text=payload), _make_result())
+    assert not verdict.passed
+    assert verdict.score == 0.0
+    assert verdict.rubric_misses == ("verification_error",)
+    assert not verdict.should_retry
 
 
 def test_judge_prompt_includes_turn_context() -> None:
