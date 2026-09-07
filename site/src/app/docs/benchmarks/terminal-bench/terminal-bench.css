@@ -1,0 +1,67 @@
+.terminal-bench-study .tb-question {
+  color: var(--ink);
+  font-size: 1.2rem;
+  line-height: 1.6;
+}
+
+.terminal-bench-study :is(.tb-protocol, .tb-uncertainty) {
+  border-block: 1px solid var(--rule);
+  padding-block: 24px;
+}
+
+.terminal-bench-study strong { color: var(--ink); }
+.terminal-bench-study figcaption { text-align: left; margin-top: 20px; line-height: 1.6; }
+.terminal-bench-study .tb-shared > strong { display: block; margin-bottom: 12px; }
+.terminal-bench-study .tb-shared dl { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 28px; }
+.terminal-bench-study :is(dt, dd) { margin: 0; }
+.terminal-bench-study dt { font-size: 14px; }
+.terminal-bench-study dd { color: var(--ink); overflow-wrap: anywhere; }
+.terminal-bench-study .tb-arms { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-block: 24px; }
+.terminal-bench-study .tb-arms > div { border-top: 1px solid var(--rule); padding-top: 16px; }
+.terminal-bench-study .tb-arms > div:first-child { border-color: var(--acc-artifact); }
+.terminal-bench-study .tb-arms h3 { margin: 0; }
+.terminal-bench-study .tb-arms p { margin-bottom: 0; }
+.terminal-bench-study .tb-pairing { border-top: 1px solid var(--rule); padding-top: 16px; }
+.terminal-bench-study .tb-pairing > span { display: block; margin-top: 4px; }
+
+.terminal-bench-study .tb-results { display: table; table-layout: fixed; }
+.terminal-bench-study .tb-results caption { text-align: left; padding-bottom: 12px; color: var(--ink-2); }
+.terminal-bench-study .tb-results :is(td, th) { border-inline: 0; vertical-align: middle; padding: 18px 10px; }
+.terminal-bench-study .tb-results td { font-variant-numeric: tabular-nums; }
+.terminal-bench-study .tb-results th:last-child { width: 42%; }
+.terminal-bench-study .tb-results strong { font-size: 1.35rem; font-weight: 500; }
+.terminal-bench-study .tb-bar { height: 8px; background: var(--paper-2); margin-block: 8px 4px; }
+.terminal-bench-study .tb-bar span { display: block; height: 100%; background: var(--ink-2); }
+.terminal-bench-study .tb-bar [data-runtime="GEODE"] { background: var(--acc-artifact); }
+.terminal-bench-study .tb-scale { display: flex; justify-content: space-between; font-size: 14px; }
+.terminal-bench-study .tb-verdict { border-top: 1px solid var(--rule); padding-top: 16px; }
+
+.terminal-bench-study .tb-denominator { list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; padding: 0; margin-block: 24px; }
+.terminal-bench-study .tb-denominator li { border-top: 1px solid var(--rule); padding-top: 12px; margin: 0; }
+.terminal-bench-study .tb-denominator :is(strong, span, small) { display: block; }
+.terminal-bench-study .tb-denominator strong { font-size: 2rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.terminal-bench-study .tb-denominator small { margin-top: 4px; font-size: 14px; }
+.terminal-bench-study .tb-interval-heading strong { display: block; font-size: 1.75rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.terminal-bench-study .tb-interval-heading span { display: block; margin-top: 4px; }
+.terminal-bench-study .tb-uncertainty svg { display: block; width: 100%; height: auto; margin-top: 16px; overflow: visible; }
+.terminal-bench-study .tb-uncertainty text { fill: var(--ink-2); font-size: 16px; }
+.terminal-bench-study .tb-axis { stroke: var(--ink-2); stroke-width: 1; }
+.terminal-bench-study .tb-zero { stroke: var(--ink-2); stroke-dasharray: 4 4; }
+.terminal-bench-study .tb-ci { stroke: var(--acc-artifact); stroke-width: 3; }
+.terminal-bench-study .tb-estimate { fill: var(--ink); }
+
+.terminal-bench-study .tb-details { margin-top: 24px; border-top: 1px solid var(--rule); }
+.terminal-bench-study .tb-details > summary { min-height: 44px; padding-block: 14px; color: var(--ink); cursor: pointer; }
+.terminal-bench-study .tb-details code { overflow-wrap: anywhere; }
+.terminal-bench-study .tb-sources td code { display: block; margin-top: 8px; font-size: 14px; }
+
+@media (max-width: 540px) {
+  .terminal-bench-study .tb-shared dl,
+  .terminal-bench-study .tb-arms { grid-template-columns: 1fr; gap: 20px; }
+  .terminal-bench-study .tb-denominator { grid-template-columns: 1fr; gap: 12px; }
+  .terminal-bench-study .tb-denominator li { display: grid; grid-template-columns: 72px 1fr; column-gap: 12px; }
+  .terminal-bench-study .tb-denominator strong { grid-row: span 2; }
+  .terminal-bench-study .tb-results :is(td, th) { padding-inline: 5px; }
+  .terminal-bench-study .tb-results strong { font-size: 1.15rem; }
+  .terminal-bench-study .tb-uncertainty text { font-size: 28px; }
+}

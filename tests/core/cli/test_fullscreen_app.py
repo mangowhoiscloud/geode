@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from unittest.mock import patch
 
 from core.cli.fullscreen_app import (
     FullscreenThinCli,
@@ -20,6 +21,47 @@ class _Client:
 
     def send_command_streaming(self, *_args: object, **_kwargs: object) -> dict[str, object]:
         return {"type": "result", "text": "streamed"}
+
+
+def test_cache_tokens_accumulate_render_and_reset_each_turn() -> None:
+    app = FullscreenThinCli(_Client())
+    app.state.status = "Working"
+    app._on_event(
+        {
+            "type": "tokens",
+            "model": "gpt-5.5",
+            "input": 2000,
+            "output": 100,
+            "cache_read_tokens": 1200,
+            "cache_write_tokens": 30,
+            "cost": 0.1234,
+        }
+    )
+    app._on_event({"type": "tokens", "input": 100, "output": 10, "cache_read_tokens": 50})
+    # Older token events remain accepted and do not erase collected cache data.
+    app._on_event({"type": "tokens", "input": 100, "output": 10})
+    assert app.state.cache_read_tokens == 1250
+    assert app.state.cache_write_tokens == 30
+    status = "".join(text for _style, text in app._status_fragments())
+    assert status.splitlines()[2] == "    cache read 1,250 / write 30 tok"
+    assert app.status_control.create_content(width=80, height=3).line_count == 3
+    status_window = app._build_root().children[4]
+    assert status_window.preferred_height(80, 24).preferred == 3
+    for rendered in (status, app._done_line()):
+        assert "cache read 1,250 / write 30 tok" in rendered
+        assert "est. API $0.1234" in rendered
+        assert "down 2200 up 120" in rendered
+    with patch("core.cli.fullscreen_app.threading.Thread"):
+        app._submit_text("next task")
+    assert app.state.cache_read_tokens == 0
+    assert app.state.cache_write_tokens == 0
+    assert "cache read" not in app._done_line()
+    # prompt_toolkit caches fragments for one render counter; a live app
+    # increments it on redraw. Simulate that next frame without running a UI.
+    with patch("prompt_toolkit.layout.controls.get_app") as prompt_app:
+        prompt_app.return_value.render_counter = 1
+        assert app.status_control.create_content(width=80, height=3).line_count == 2
+        assert status_window.preferred_height(80, 24).preferred == 2
 
 
 def test_geo_slash_input_uses_streaming_command_path() -> None:

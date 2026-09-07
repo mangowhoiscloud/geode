@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 
 from core.paths import PROJECT_CONFIG_TOML
+from core.ui.event_renderer import format_cache_tokens
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +44,10 @@ def cmd_cost(args: str) -> None:
     if not sub or sub == "session":
         _pkg.console.print()
         _pkg.console.print("  [header]Cost Dashboard[/header]")
+        _pkg.console.print(
+            "  [muted]Estimated API costs, not subscription charges; "
+            "provider-reported cost used when available.[/muted]"
+        )
 
         # Session
         if acc.calls:
@@ -52,7 +57,14 @@ def cmd_cost(args: str) -> None:
             _pkg.console.print(
                 f"    Tokens: {acc.total_input_tokens:,} in / {acc.total_output_tokens:,} out"
             )
-            _pkg.console.print(f"    Cost: [warning]${acc.total_cost_usd:.4f}[/warning]")
+            cache = format_cache_tokens(
+                acc.total_cache_read_tokens, acc.total_cache_creation_tokens
+            )
+            if cache:
+                _pkg.console.print(f"    {cache}")
+            _pkg.console.print(
+                f"    Estimated API cost: [warning]${acc.total_cost_usd:.4f}[/warning]"
+            )
         else:
             _pkg.console.print()
             _pkg.console.print("  [label]Session[/label]  [muted]no calls yet[/muted]")
@@ -63,7 +75,9 @@ def cmd_cost(args: str) -> None:
         _pkg.console.print()
         _pkg.console.print(f"  [label]Month ({today.year}-{today.month:02d})[/label]")
         _pkg.console.print(f"    Calls: {summary['total_calls']}")
-        _pkg.console.print(f"    Cost: [warning]${summary['total_cost']:.2f}[/warning]")
+        _pkg.console.print(
+            f"    Estimated API cost: [warning]${summary['total_cost']:.2f}[/warning]"
+        )
 
         if summary["by_model"]:
             for model, stats in sorted(summary["by_model"].items(), key=lambda x: -x[1]["cost"]):
@@ -88,7 +102,7 @@ def cmd_cost(args: str) -> None:
         _pkg.console.print()
         _pkg.console.print(f"  [header]Daily Cost — {daily['date']}[/header]")
         _pkg.console.print(f"    Calls: {daily['total_calls']}")
-        _pkg.console.print(f"    Cost: [warning]${daily['total_cost']:.4f}[/warning]")
+        _pkg.console.print(f"    Estimated API cost: [warning]${daily['total_cost']:.4f}[/warning]")
         if daily["by_model"]:
             for model, stats in sorted(daily["by_model"].items(), key=lambda x: -x[1]["cost"]):
                 _pkg.console.print(
@@ -111,10 +125,12 @@ def cmd_cost(args: str) -> None:
         _pkg.console.print("  [header]Recent LLM Calls (last 10)[/header]")
         for rec in records:
             ts = datetime.fromtimestamp(rec.ts).strftime("%H:%M:%S")
+            cache = format_cache_tokens(rec.cache_read_tokens, rec.cache_creation_tokens)
+            cache_suffix = f"  {cache}" if cache else ""
             _pkg.console.print(
                 f"    {ts}  {rec.model:<30s}  "
                 f"{rec.input_tokens:>6,}in {rec.output_tokens:>6,}out  "
-                f"${rec.cost_usd:.4f}"
+                f"est. API ${rec.cost_usd:.4f}{cache_suffix}"
             )
         _pkg.console.print()
         return

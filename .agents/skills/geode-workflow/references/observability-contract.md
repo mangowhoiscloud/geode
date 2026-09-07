@@ -3,6 +3,12 @@
 Use this whenever a change touches schema, log, event, state, trajectory,
 evidence, transcripts, tool results, or recovery.
 
+For usage/cache/cost changes, read the
+[usage accounting contract](../../../../docs/architecture/usage-accounting.md)
+and trace its real producer/reader pair. Preserve units, denominator, scope,
+zero versus missing, and cost authority; generic event parity does not prove
+accounting completeness.
+
 ## Required Surfaces
 
 | Surface | Requirement |

@@ -146,7 +146,9 @@ def test_ipc_poller_fast_chat_emits_visible_status_event(
     async def fake_complete_text(_prompt: str, **_kwargs: object) -> TextCompletionResult:
         return TextCompletionResult(
             text="짧은 답변",
-            usage=UsageSummary(input_tokens=10, output_tokens=3),
+            usage=UsageSummary(
+                input_tokens=10, output_tokens=3, cached_input_tokens=6, cache_write_tokens=2
+            ),
             adapter_name="fake",
             adapter_provider="openai",
             adapter_source="subscription",
@@ -181,3 +183,5 @@ def test_ipc_poller_fast_chat_emits_visible_status_event(
     assert client.events[0]["type"] == "fast_chat_start"
     assert client.events[0]["provider"] == "openai"
     assert client.events[1]["type"] == "tokens"
+    assert client.events[1]["cache_read_tokens"] == 6
+    assert client.events[1]["cache_write_tokens"] == 2

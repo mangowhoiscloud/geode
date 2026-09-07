@@ -101,12 +101,13 @@ class LLMUsageAccumulator:
 
     @property
     def cache_hit_rate(self) -> float:
-        """Fraction of cacheable input tokens served from cache.
+        """Read share of reported cache activity, not of all input tokens.
 
-        ``read / (read + creation)`` — 1.0 means every cacheable token was a
-        cache hit, 0.0 means every one was a fresh write (the symptom of a
-        silently-invalidated prefix). Returns 0.0 when there is no cache
-        activity yet (avoids div-by-zero).
+        ``read / (read + creation)`` — 1.0 means all reported cache activity
+        was reads, 0.0 means it was all writes. Returns 0.0 when there is no cache
+        activity yet (avoids div-by-zero). Providers that report reads but no
+        writes yield 1.0 whenever reads are nonzero; this is not their prompt
+        cache coverage. Keep this legacy metric's denominator explicit.
         """
         read = self.total_cache_read_tokens
         denom = read + self.total_cache_creation_tokens
@@ -312,19 +313,22 @@ class TokenTracker:
             return 0.0
         # For providers whose reported ``input_tokens`` already INCLUDES the
         # cached tokens (OpenAI / GLM: prompt_tokens is the total), bill only
-        # the uncached remainder at the full input rate — the cached portion is
-        # billed below at ``cache_read``. Anthropic reports input_tokens
-        # DISJOINT from cache, so it is left whole (no double-subtract).
+        # the uncached remainder at the full input rate — cache reads and
+        # writes are billed below at their separate rates. Anthropic reports
+        # input_tokens DISJOINT from cache, so it is left whole (no double-subtract).
         #
-        # Gate on ``price.cache_read`` being nonzero: if a model has no
-        # configured cached rate (e.g. o3 with no ``cached_per_mtok``),
+        # Gate each subtraction on its configured rate being nonzero: if a model
+        # has no configured cached rate (e.g. o3 with no ``cached_per_mtok``),
         # subtracting would move cached tokens off the input rate and bill them
-        # at 0 — i.e. make cached input FREE (undercount). Without a known
-        # discount, leave them in billable_input at the full rate (the safe,
-        # slight-over-estimate fallback).
+        # at 0 — i.e. make cached input FREE (undercount). Without a configured
+        # cache-category rate, retain the existing full-input-rate fallback.
         billable_input = input_tokens
-        if price.cache_inclusive_input and cache_read_tokens and price.cache_read:
-            billable_input = max(0, input_tokens - cache_read_tokens)
+        if price.cache_inclusive_input:
+            if price.cache_read:
+                billable_input -= cache_read_tokens
+            if price.cache_write:
+                billable_input -= cache_creation_tokens
+            billable_input = max(0, billable_input)
         cost = billable_input * price.input + output_tokens * price.output
         if cache_creation_tokens:
             cost += cache_creation_tokens * price.cache_write

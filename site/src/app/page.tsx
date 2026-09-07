@@ -1,15 +1,21 @@
 /**
- * GEODE site landing — /geode/ IS the portfolio (operator-directed
- * 2026-07-10): the deploy link mangowhoiscloud.github.io/geode serves the
- * loop-punk portfolio directly. The reference manual stays at /docs, the
- * person page at /about; /portfolio remains as an alias of this page.
+ * GEODE's product landing. The manual stays at /docs and the author at
+ * /about; /portfolio remains an alias of this page.
  */
 import type { Metadata } from "next";
-import GeodePortfolioPage from "./portfolio/page";
+import { GeodeLanding } from "@/components/geode/landing-page";
 import { JsonLd } from "@/components/json-ld";
 import { GEODE_SOT } from "@/data/geode/sot";
 
 export const metadata: Metadata = {
+  title: "GEODE | An agent runtime for tool-driven work",
+  description:
+    "Run tasks with your models and tools. Inspect execution records and source-bound Harbor / Terminal-Bench comparisons against native Codex.",
+  openGraph: {
+    title: "GEODE | An agent runtime for tool-driven work",
+    description: "Run the task. Inspect the result. A self-hosting runtime with public execution evidence.",
+    type: "website",
+  },
   alternates: { canonical: "https://mangowhoiscloud.github.io/geode/" },
 };
 
@@ -36,7 +42,7 @@ export default function Page() {
           },
         }}
       />
-      <GeodePortfolioPage />
+      <GeodeLanding />
     </>
   );
 }

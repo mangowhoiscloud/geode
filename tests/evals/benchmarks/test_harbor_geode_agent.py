@@ -335,3 +335,87 @@ def test_thin_observer_preserves_canonical_evidence_when_atif_export_fails(
         trajectory = json.loads((agent.logs_dir / name).read_text())
         assert trajectory["runtime_event_refs"]
         assert trajectory["outcome"]["usage"]["scope"] == "recorded-agentic-loop-attempts-only"
+
+
+@pytest.mark.parametrize("phase", ["session_error", "hooks", "export"])
+@pytest.mark.parametrize("primary", [TimeoutError("primary"), asyncio.CancelledError("primary")])
+@pytest.mark.parametrize(
+    "secondary", [RuntimeError("secondary"), asyncio.CancelledError("secondary")]
+)
+def test_thin_observer_preserves_primary_failure_through_cleanup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    phase: str,
+    primary: BaseException,
+    secondary: BaseException,
+) -> None:
+    import os
+
+    from core.agent.loop import AgenticLoop
+    from core.hooks.system import HookSystem
+    from evals.platforms import harbor
+
+    agent, loops = _observed_agent(tmp_path, monkeypatch, cache=4, failure=primary)
+
+    async def reject_finalization(_loop: Any) -> None:
+        raise secondary
+
+    close = HookSystem.close
+
+    def reject_cleanup(hooks: HookSystem) -> None:
+        close(hooks)
+        raise secondary
+
+    def reject_export(*_args: Any, **_kwargs: Any) -> None:
+        raise secondary
+
+    if phase == "session_error":
+        monkeypatch.setattr(AgenticLoop, "amark_session_error", reject_finalization)
+    elif phase == "hooks":
+        monkeypatch.setattr(HookSystem, "close", reject_cleanup)
+    else:
+        monkeypatch.setattr(harbor, "_write_atif_trajectory", reject_export)
+
+    context = SimpleNamespace()
+    with pytest.raises(type(primary)) as raised:
+        asyncio.run(agent.run("Inspect the task.", _Environment(), context))
+    assert raised.value is primary
+    assert loops[0]._hooks.closed
+    assert os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] == "original"
+    assert context.metadata["error_type"] == type(primary).__name__
+    assert context.metadata["usage"]["cached_input_tokens_observed_sum"] == 4
+    assert (agent.logs_dir / "geode-trajectory.json").is_file()
+
+
+@pytest.mark.parametrize("phase", ["hooks", "export"])
+@pytest.mark.parametrize("failure", [RuntimeError("cleanup"), asyncio.CancelledError("cleanup")])
+def test_thin_observer_does_not_swallow_first_cleanup_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    phase: str,
+    failure: BaseException,
+) -> None:
+    import os
+
+    from core.hooks.system import HookSystem
+    from evals.platforms import harbor
+
+    agent, loops = _observed_agent(tmp_path, monkeypatch, cache=0)
+    close = HookSystem.close
+
+    def reject_cleanup(hooks: HookSystem) -> None:
+        close(hooks)
+        raise failure
+
+    def reject_export(*_args: Any, **_kwargs: Any) -> None:
+        raise failure
+
+    if phase == "hooks":
+        monkeypatch.setattr(HookSystem, "close", reject_cleanup)
+    else:
+        monkeypatch.setattr(harbor, "_write_atif_trajectory", reject_export)
+    with pytest.raises(type(failure)) as raised:
+        asyncio.run(agent.run("Inspect the task.", _Environment(), SimpleNamespace()))
+    assert raised.value is failure
+    assert loops[0]._hooks.closed
+    assert os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] == "original"

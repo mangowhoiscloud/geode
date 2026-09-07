@@ -84,6 +84,13 @@ def _fmt_tokens(n: int) -> str:
     return str(n)
 
 
+def format_cache_tokens(read_tokens: int, write_tokens: int) -> str:
+    """Format reported cache activity without assuming a prompt denominator."""
+    if not read_tokens and not write_tokens:
+        return ""
+    return f"cache read {read_tokens:,} / write {write_tokens:,} tok"
+
+
 @dataclass
 class _ThinkingRegion:
     start_ts: float
@@ -198,6 +205,8 @@ class EventRenderer:
         self._turn_model: str = ""
         self._turn_in_tokens: int = 0
         self._turn_out_tokens: int = 0
+        self._turn_cache_read_tokens: int = 0
+        self._turn_cache_write_tokens: int = 0
         self._turn_cost: float = 0.0
         # Raw daemon console output is normally Rich/status UI. If the daemon
         # accidentally streams plain assistant Markdown, keep enough state to
@@ -441,6 +450,8 @@ class EventRenderer:
         self._turn_model = str(event.get("model", "")) or self._turn_model
         self._turn_in_tokens += int(event.get("input", 0))
         self._turn_out_tokens += int(event.get("output", 0))
+        self._turn_cache_read_tokens += int(event.get("cache_read_tokens", 0) or 0)
+        self._turn_cache_write_tokens += int(event.get("cache_write_tokens", 0) or 0)
         self._turn_cost += float(event.get("cost", 0))
 
     def _handle_turn_end(self, event: dict[str, Any]) -> None:
@@ -1021,7 +1032,8 @@ class EventRenderer:
 
     def _render_turn_status(self) -> None:
         """Render Claude Code-style status line: ✢ Worked for Xs · model · ↓Nk ↑Nk · $X.XX"""
-        if self._turn_in_tokens == 0 and self._turn_out_tokens == 0:
+        cache = format_cache_tokens(self._turn_cache_read_tokens, self._turn_cache_write_tokens)
+        if self._turn_in_tokens == 0 and self._turn_out_tokens == 0 and not cache:
             return
         elapsed = time.monotonic() - self._turn_start
         in_str = _fmt_tokens(self._turn_in_tokens)
@@ -1030,14 +1042,18 @@ class EventRenderer:
         if self._turn_model:
             parts.append(self._turn_model)
         parts.append(f"\u2193{in_str} \u2191{out_str}")
+        if cache:
+            parts.append(cache)
         if self._turn_cost > 0:
-            parts.append(f"${self._turn_cost:.4f}")
+            parts.append(f"est. API ${self._turn_cost:.4f}")
         line = " \u00b7 ".join(parts)
         self._out.write(f"\n  {DIM}{line}{RESET}\n")
         self._out.flush()
         # Reset so duplicate stop() calls don't double-render
         self._turn_in_tokens = 0
         self._turn_out_tokens = 0
+        self._turn_cache_read_tokens = 0
+        self._turn_cache_write_tokens = 0
         self._turn_cost = 0.0
 
     # -- Repeat mode helpers ---------------------------------------------------

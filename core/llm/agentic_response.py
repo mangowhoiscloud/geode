@@ -49,16 +49,10 @@ class TextBlock:
 class ResponseUsage:
     """Token usage from an LLM response.
 
-    Cache fields (Defect A F-A2, 2026-05-11): previously the normalize
-    layer dropped Anthropic's ``cache_creation_input_tokens`` and
-    ``cache_read_input_tokens``, so even though the adapter paid the
-    cost (and ``TokenTracker.calculate_cost`` accepted the kwargs),
-    the per-call record arriving at ``_response.track_usage`` had no
-    cache counts to forward. The result was a silently underestimated
-    session cost and an empty cache column in ``~/.geode/usage/``
-    JSONL — the kind of silent loss the petri Defect A live verify
-    (#1020) flagged. Codex/GLM normalizers leave these at 0 until
-    those providers ship cache surfaces.
+    Adapters map reported cache reads/writes to the fields below while
+    retaining the provider's input-token convention. Missing provider detail
+    may normalize to zero; these counters do not preserve field presence.
+    See docs/architecture/usage-accounting.md for the writer/reader contract.
     """
 
     input_tokens: int = 0

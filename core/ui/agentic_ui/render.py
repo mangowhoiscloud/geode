@@ -9,7 +9,7 @@ from core.ui.agentic_ui._state import (
     _ipc_writer_local,
     get_session_meter,
 )
-from core.ui.event_renderer import _fmt_tokens
+from core.ui.event_renderer import _fmt_tokens, format_cache_tokens
 
 
 def render_tool_call(tool_name: str, tool_input: dict[str, Any]) -> None:
@@ -59,6 +59,9 @@ def render_tokens(
     output_tokens: int,
     elapsed_s: float | None = None,
     cost_usd: float | None = None,
+    *,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
 ) -> None:
     """Render token usage line (Claude Code ✢ style)."""
     from core.ui import agentic_ui as _pkg
@@ -71,13 +74,18 @@ def render_tokens(
             input=input_tokens,
             output=output_tokens,
             cost=cost_usd or 0.0,
+            cache_read_tokens=cache_read_tokens,
+            cache_write_tokens=cache_write_tokens,
         )
         return
     in_str = _fmt_tokens(input_tokens)
     out_str = _fmt_tokens(output_tokens)
     time_str = f" · {elapsed_s:.1f}s" if elapsed_s else ""
-    cost_str = f" · ${cost_usd:.4f}" if cost_usd and cost_usd > 0 else ""
+    cost_str = f" · est. API ${cost_usd:.4f}" if cost_usd and cost_usd > 0 else ""
     line = f"  [token_info]✢ {model} · ↓{in_str} ↑{out_str}"
+    cache = format_cache_tokens(cache_read_tokens, cache_write_tokens)
+    if cache:
+        line += f" · {cache}"
     line += f"{cost_str}{time_str}[/token_info]"
     _pkg.console.print(line)
 
@@ -98,7 +106,13 @@ def render_session_cost_summary() -> None:
         in_str = _fmt_tokens(acc.total_input_tokens)
         out_str = _fmt_tokens(acc.total_output_tokens)
         _pkg.console.print(f"  [dim]Tokens:[/dim] ↓{in_str} ↑{out_str}")
-        _pkg.console.print(f"  [warning]Total: ${acc.total_cost_usd:.4f}[/warning]")
+        cache = format_cache_tokens(acc.total_cache_read_tokens, acc.total_cache_creation_tokens)
+        if cache:
+            _pkg.console.print(f"  [dim]{cache}[/dim]")
+        _pkg.console.print(f"  [warning]Estimated API cost: ${acc.total_cost_usd:.4f}[/warning]")
+        _pkg.console.print(
+            "  [dim]Not subscription charges; provider-reported cost used when available.[/dim]"
+        )
         # Per-model breakdown
         model_costs: dict[str, float] = {}
         model_calls: dict[str, int] = {}
@@ -303,11 +317,15 @@ def render_status_line() -> None:
             in_tok = delta.total_input_tokens
             out_tok = delta.total_output_tokens
             cost = delta.total_cost_usd
+            cache_read = delta.total_cache_read_tokens
+            cache_write = delta.total_cache_creation_tokens
         else:
             acc = tracker.accumulator
             in_tok = acc.total_input_tokens
             out_tok = acc.total_output_tokens
             cost = acc.total_cost_usd
+            cache_read = acc.total_cache_read_tokens
+            cache_write = acc.total_cache_creation_tokens
 
         in_str = _fmt_tokens(in_tok)
         out_str = _fmt_tokens(out_tok)
@@ -316,8 +334,11 @@ def render_status_line() -> None:
         parts = [f"✢ Worked for {meter.turn_elapsed_display}"]
         parts.append(meter.model)
         parts.append(f"↓{in_str} ↑{out_str}")
+        cache = format_cache_tokens(cache_read, cache_write)
+        if cache:
+            parts.append(cache)
         if cost > 0:
-            parts.append(f"${cost:.4f}")
+            parts.append(f"est. API ${cost:.4f}")
         parts.append(f"{ctx_pct:.0f}% context")
 
         line = " · ".join(parts)

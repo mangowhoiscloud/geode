@@ -2,7 +2,7 @@
 
 > GEODE is an autonomous agent runtime and evaluation substrate: an inner agentic loop runs tasks (research, analysis, automation, scheduling), while an experimental safety-gated outer loop mutates and evaluates scaffold candidates.
 
-Version v1.0.27. Last sync 2026-09-02. Docs links point to clean markdown twins (.md); drop the .md suffix for the rendered page.
+Version v1.0.28. Last sync 2026-09-07. Docs links point to clean markdown twins (.md); drop the .md suffix for the rendered page.
 
 ## Start here
 
@@ -41,19 +41,20 @@ Version v1.0.27. Last sync 2026-09-02. Docs links point to clean markdown twins 
 - [Sub-agent orchestration](https://mangowhoiscloud.github.io/geode/docs/runtime/orchestration.md): Spawning sub-agents as isolated worker processes in parallel lanes. The parent gets back a summary; write access is governed by toolkit composition.
 - [Skills](https://mangowhoiscloud.github.io/geode/docs/runtime/skills.md): User-invocable skills, distinct from tools. Discovery, lifecycle, override.
 
-## The Self-Improving Loop
+## Experimental Loop
 
-- [Closed-Loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md): The outer loop end to end. Mutate the scaffold, audit with Petri, gate the fitness gain on a margin, then promote or revert. No model weight or parameter ever changes.
+- [Scaffold search](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md): Mutate the scaffold, audit with Petri, and promote or revert using an uncertainty-aware fitness margin. Model weights remain unchanged.
 - [Seed Scenario Generation](https://mangowhoiscloud.github.io/geode/docs/capabilities/co-scientist.md): A nine-role generation loop that grows the evaluation scenario corpus. Supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer.
-- [Seed pipeline](https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipeline.md): The plugin that regenerates the seed corpus each generation. Picker, orchestrator, manifest, cost preview, and frontier-band survivor selection.
-- [Crucible outer loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/outer-loop.md): A bounded private search loop with frozen admission, paired evaluation, CAS advancement, and a separate sealed-test boundary.
+- [Seed pipeline](https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipeline.md): Regenerate the seed corpus each generation: picker, orchestrator, manifest, cost preview, and frontier-band survivor selection.
+- [Crucible bounded search](https://mangowhoiscloud.github.io/geode/docs/capabilities/outer-loop.md): A bounded private search loop with frozen admission, paired evaluation, CAS advancement, and a separate sealed-test boundary.
+- [Verification and evaluation](https://mangowhoiscloud.github.io/geode/docs/verification/evaluation.md): Runtime acceptance, task verifiers, Petri LLM-as-a-judge, human calibration, and Inspect .eval evidence have different authorities.
 - [Petri × GEODE](https://mangowhoiscloud.github.io/geode/docs/petri/overview.md): Anthropic Alignment Science's evaluation framework, wrapped over the GEODE agent as the loop's measurement layer.
 - [Scenarios](https://mangowhoiscloud.github.io/geode/docs/petri/scenarios.md): The Petri seed corpus plus GEODE-specific seeds, grouped into critical, auxiliary, and info dimension buckets.
-- [Run an audit](https://mangowhoiscloud.github.io/geode/docs/petri/run.md): geode audit, or inspect eval for the raw path. Choose model roles, dimension set, seeds, and turn budget. Dry-run by default.
-- [Judge dimensions](https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions.md): The 22-dim rubric and the 18-dim fitness universe. Critical floors versus auxiliary drift, on a 1-10 lower-is-better scale.
+- [Run an audit](https://mangowhoiscloud.github.io/geode/docs/petri/run.md): geode-eval audit, or inspect eval for the raw path. Choose model roles, dimension set, seeds, and turn budget. Dry-run by default.
+- [Judge dimensions](https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions.md): The 22-dim rubric, score polarity, human calibration, and the separate 18-dim fitness selection policy.
 - [Seed-generation runs](https://mangowhoiscloud.github.io/geode/docs/petri/seeds.md): The per-generation dashboard. Survivors, tokens, meta-review, and next-generation priors per run.
 - [Lineage and positioning](https://mangowhoiscloud.github.io/geode/docs/capabilities/lineage.md): Where this loop sits in the self-evolving agents literature. An honest recombination of known parts, not a new primitive.
-- [Bundle viewer](https://mangowhoiscloud.github.io/geode/docs/petri/bundle.md): The live inspect_ai transcript viewer for the latest audit run.
+- [Audit transcripts](https://mangowhoiscloud.github.io/geode/docs/petri/bundle.md): Inspect the audit transcripts included in the published bundle snapshot. New runs require a separate publication step.
 
 ## Operating GEODE
 
@@ -70,7 +71,7 @@ Version v1.0.27. Last sync 2026-09-02. Docs links point to clean markdown twins 
 ## Benchmarks
 
 - [GEO visibility](https://mangowhoiscloud.github.io/geode/docs/benchmarks/geo.md): A stage-aware F/R/C/P/A/Q/O measurement contract with frozen workloads, digest-bound receipts, and no aggregate GEO score.
-- [Terminal-Bench 2.1](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md): A one-task GPT-6 Astra subscription E2E smoke with canonical verifier and immutable publication evidence.
+- [Terminal-Bench 2.1](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md): GPT-5.6 Sol at max effort: GEODE versus native Codex through Harbor, with paired results, exclusions, uncertainty and immutable evidence.
 - [Tau2](https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2.md): GEODE's tau2-bench measurements: the native user-simulator track headline, every verifier-backed run record, and links to the raw simulation logs.
 - [MCPMark](https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark.md): GEODE's MCPMark measurements: the Verified available-services headline, service coverage and blockers, every run record, and links to the raw run logs.
 

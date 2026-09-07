@@ -1,11 +1,15 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 import { RunLogLink } from "@/components/geode-docs/benchmark-run-ledger";
+import evidence from "@/data/geode/landing-evidence.json";
+import "./terminal-bench.css";
 
 export const metadata = { title: "Terminal-Bench 2.1 · GEODE Docs" };
 
-const ARTIFACT_REVISION = "a32abcbf78ab6100ea1e85540a2ace9436dc6f76";
-const RUN_PATH =
-  "terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z";
+const paired = evidence.paired;
+const astra = evidence.astra;
+const signed = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(2)}`;
+const rate = (passes: number) => (passes / paired.commonTrials) * 100;
+
 const REPLAY_REVISION = "52b7d0eab37ec9122492ec51d77e1502d5b9e085";
 const OBSERVABILITY_REVISION = "d277607f3a179f191ad24b1497c0934beb9d2470";
 const PAIRED_RUN = "terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z";
@@ -16,11 +20,11 @@ function PairedReplay({ ko }: { ko: boolean }) {
       <h2 id="paired-execution-replay">{ko ? "Sol 비교 실행을 다시 읽는 Replay" : "Replay the Sol paired execution"}</h2>
       <p>{ko
         ? "아래 기록은 Astra smoke와 별개인 2026-08-27~09-02 UTC의 Sol/max 비교 실행입니다. GEODE revision b549f3e의 OpenAI subscription 경로와 native Codex를 Harbor 0.22.0에서 실행했습니다. 동결 full-suite primary는 측정 불가이며, 공식 leaderboard 결과가 아닙니다."
-        : "This is the separate August 27–September 2 UTC Sol/max comparison, not the Astra smoke above. Harbor 0.22.0 ran GEODE revision b549f3e and native Codex through the OpenAI subscription route. The frozen full-suite primary is not measurable; this is not an official leaderboard result."}</p>
+        : "This is the separate August 27–September 2 UTC Sol/max comparison, not the separate Astra smoke. Harbor 0.22.0 ran GEODE revision b549f3e and native Codex through the OpenAI subscription route. The frozen full-suite primary is not measurable; this is not an official leaderboard result."}</p>
       <p>{ko
         ? "Pair 001~445는 89 tasks × 5 repetitions입니다. 각 쌍의 왼쪽은 GEODE, 오른쪽은 Codex이며, task·반복·arm 하나가 cell입니다. 재생하면 새 tool event가 아래에 나타나고 이전 기록은 위로 올라갑니다. 상단의 arm 정보는 고정됩니다."
         : "Pairs 001–445 represent 89 tasks × 5 repetitions. GEODE is on the left, Codex on the right; one task, repetition and arm form a cell. New tool events appear at the bottom and older lines move upward while arm metadata stays fixed."}</p>
-      <p><a href="/geode/benchmarks/terminal-bench/replay/" target="_blank" rel="noopener noreferrer">
+      <p><a href={`/geode/benchmarks/terminal-bench/replay/?lang=${ko ? "ko" : "en"}`} target="_blank" rel="noopener noreferrer">
         {ko ? "445쌍 Replay 열기" : "Open the 445-pair replay"}
       </a></p>
       <table>
@@ -42,7 +46,7 @@ function PairedReplay({ ko }: { ko: boolean }) {
         ? "화면의 raw verifier와 selected reward는 구분해서 읽어야 합니다. 동결 규칙상 canonical timeout과 safety refusal은 selected zero이며, raw verifier가 1인 18개 cell도 여기에 포함됩니다. 점수의 근거는 Harbor result/verifier와 frozen attempt ledger·analysis입니다. 이 화면은 원본 PTY나 새로운 점수 판정기가 아닙니다."
         : "Read raw verifier and selected reward separately. Frozen rules assign selected zero to canonical timeouts and safety refusals, including 18 cells with raw verifier reward one. Harbor result/verifier, the frozen attempt ledger and analysis own scoring. This view is neither raw PTY footage nor a new scorer."}</p>
       <p><RunLogLink path={`${PAIRED_RUN}/recording/replay-v19-20260905`} revision={REPLAY_REVISION} label="Replay source · coverage · SHA-256 receipts" />{" · "}
-        <RunLogLink path={PAIRED_RUN} revision={ARTIFACT_REVISION} label="Frozen run · attempts · analysis" />
+        <RunLogLink path={PAIRED_RUN} revision={paired.commit} label="Frozen run · attempts · analysis" />
       </p>
       <h3>{ko ? "보존된 원본에서 복구한 실행 지표" : "Execution metrics recovered from preserved evidence"}</h3>
       <p>{ko
@@ -59,43 +63,207 @@ function PairedReplay({ ko }: { ko: boolean }) {
   );
 }
 
-function ResultStrip({ ko }: { ko: boolean }) {
-  const cells = ko
-    ? [
-        ["Canonical reward", "1 / 1", "단일 동결 task", "smoke only"],
-        ["Verifier", "6 / 6", "task-owned 검사", "all passed"],
-        ["Recovery", "0", "retry · fallback", "없음"],
-      ]
-    : [
-        ["Canonical reward", "1 / 1", "One frozen task", "Smoke only"],
-        ["Verifier", "6 / 6", "Task-owned checks", "All passed"],
-        ["Recovery", "0", "Retry · fallback", "None"],
-      ];
+function Study({ ko }: { ko: boolean }) {
+  const excludedTrials = paired.excludedTasks.length * paired.repetitions;
+  const availableTrials = paired.frozenTrialsPerArm - excludedTrials;
+  const pooledDelta = rate(paired.geodePasses) - rate(paired.nativePasses);
+  const [lower, upper] = paired.taskBootstrap95Pp;
+  // One common, symmetric percentage-point axis; no rescaling by runtime.
+  const intervalPosition = (value: number) => 40 + ((value + 10) / 20) * 520;
+  const sources = [
+    { label: "run-spec.json", role: ko ? "질문·고정 조건·제외 규칙" : "Question, fixed conditions, exclusion rules", ...paired.sources.spec },
+    { label: "native-results.json", role: ko ? "공통 셀·성공 수·측정 유효성" : "Common cells, pass counts, measurement validity", ...paired.sources.data },
+    { label: "analysis.json", role: ko ? "사전 등록 지표의 상태와 결론" : "Preregistered primary status and decision", ...paired.sources.analysis },
+    { label: "figures-v6/provenance.json", role: ko ? "작업별 가중치·bootstrap 산식" : "Task weighting and bootstrap calculation", ...paired.sources.statistics },
+    { label: ko ? "증거 영상 (한국어/영어)" : "Evidence film (KO/EN)", role: ko ? "실행 절차를 설명하는 파생 자료; 채점 근거 아님" : "Derived explanation of execution; not score authority", ...paired.sources.video },
+  ];
 
   return (
-    <section aria-labelledby="terminal-bench-result" className="mb-14">
-      <div className="border-b border-[var(--rule)] pb-3">
-        <p className="!m-0 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--ink-3)]">
-          {ko ? "계정 범위 E2E 증거" : "Account-scoped E2E evidence"}
+    <div className="terminal-bench-study">
+      <p className="tb-question">
+        {ko
+          ? "같은 모델과 추론 강도를 쓰더라도, 실행을 맡는 런타임이 달라지면 실제 작업 완수율은 어떻게 달라질까요?"
+          : "With the model and reasoning effort held fixed, how does the runtime change completion of real terminal tasks?"}
+      </p>
+      <p>
+        {ko ? "이 페이지의 중심은 " : "This study compares "}
+        <strong>GPT-5.6 Sol / max effort</strong>
+        {ko
+          ? "를 사용한 GEODE와 native Codex의 Harbor 짝 비교입니다. 두 실행군을 같은 작업·반복 번호로 맞춰 비교하며, 모델 세대의 우열이나 공식 리더보드 순위를 평가하지 않습니다."
+          : " in GEODE and native Codex through Harbor. It matches the two execution arms by task and repetition, rather than comparing model generations or claiming an official leaderboard rank."}
+      </p>
+
+      <h2>{ko ? "실험 설계: 공유 조건과 런타임의 차이" : "Study design: shared conditions, different runtimes"}</h2>
+      <figure className="tb-protocol">
+        <div className="tb-shared">
+          <strong>{ko ? "두 실행군이 공유하는 조건" : "Shared by both arms"}</strong>
+          <dl>
+            <div><dt>{ko ? "모델 / 추론" : "Model / effort"}</dt><dd>{paired.model} / {paired.reasoning}</dd></div>
+            <div><dt>{ko ? "접근 경로" : "Route"}</dt><dd>{paired.route}</dd></div>
+            <div><dt>{ko ? "실행·채점" : "Execution / scoring"}</dt><dd>{paired.harness} / {ko ? "task 소유 verifier" : "task-owned verifier"}</dd></div>
+            <div><dt>{ko ? "동결 범위" : "Frozen workload"}</dt><dd>{paired.frozenTasks} {ko ? "개 작업" : "tasks"} × {paired.repetitions} {ko ? "회 반복 / 실행군" : "repetitions / arm"}</dd></div>
+          </dl>
+        </div>
+        <div className="tb-arms">
+          <div><h3>GEODE</h3><p>{ko ? "측정 당시 revision b549f3e의 thin AgenticLoop adapter입니다. custom system_prompt_override와 terminal_exec만 노출한 도구 표면을 사용했습니다. 현재 native/full-runtime 구성의 측정은 별도 실험입니다." : "The measured b549f3e revision used a thin AgenticLoop adapter, a custom system_prompt_override, and a terminal_exec-only tool surface. Measuring today's native/full-runtime configuration is a separate experiment."}</p></div>
+          <div><h3>native Codex</h3><p>{paired.comparator}. {ko ? "Codex 고유의 실행 루프와 도구 경로를 대조군으로 둡니다." : "The control retains Codex's own execution loop and tool path."}</p></div>
+        </div>
+        <div className="tb-pairing">
+          <strong>{ko ? "각 실행 결과를 task × repetition으로 결합" : "Join results by task × repetition"}</strong>{" "}
+          <span>{ko ? "양쪽이 모두 유효한 셀만 비교하고, 성공 여부는 task verifier가 판정합니다." : "Compare cells valid in both arms; task verifiers determine success."}</span>
+        </div>
+        <figcaption>
+          {ko
+            ? "실제 순서는 배치마다 GEODE 다음 native Codex입니다. 두 런타임을 동시에 시작한 실험이 아닙니다. 실행군 내부 concurrency는 8,192 MiB 작업에서 1, 나머지에서 2로 고정했습니다. 반복 측정은 best-of-5 선택이 아닙니다."
+            : "Each batch runs GEODE followed by native Codex, not simultaneous starts of both runtimes. Within-arm concurrency is fixed at 1 for 8,192 MiB tasks and 2 otherwise. Repeated measurement is not best-of-five selection."}
+        </figcaption>
+      </figure>
+      <p>
+        <a href="https://www.tbench.ai/news/terminal-bench-2-1">Terminal-Bench 2.1</a>
+        {ko
+          ? "은 격리된 컨테이너에서 실제 terminal 작업을 풀고 외부 verifier로 최종 상태를 검사하는 벤치마크입니다. 비교 대상은 위 두 하네스 구성입니다. prompt, 도구 인터페이스, 컨텍스트 관리의 개별 기여를 분리한 ablation은 아닙니다."
+          : " evaluates terminal work in isolated containers against external task verifiers. The comparison is between the two harness configurations above, not an ablation that isolates the contribution of prompts, tool interfaces, or context management."}
+        {" "}<a href={paired.sources.spec.url}>{ko ? "동결된 실행 계약" : "Frozen execution contract"}</a>
+      </p>
+
+      <p>
+        {ko
+          ? "여기서 verifier는 과제가 소유한 테스트로 실행 후 상태를 검사합니다. GEODE의 턴 수락이나 Petri의 LLM-as-a-judge 점수가 아닙니다. 기록 무결성도 과제 성공과는 별개입니다."
+          : "Here the verifier checks post-execution state using task-owned tests. It is neither GEODE's turn acceptance nor a Petri LLM-as-a-judge score. Recording integrity is also separate from task success."}
+        {" "}<a href={`/geode/docs/verification/evaluation${ko ? "" : "?lang=en"}`}>{ko ? "검증과 평가의 역할 구분" : "Verification and evaluation boundaries"}</a>
+      </p>
+
+      <h2 id="terminal-bench-result">{ko ? "공통 유효 셀에서 관측한 성공률" : "Observed pass rates on common valid cells"}</h2>
+      <p>
+        {ko
+          ? `두 런타임에서 모두 유효한 ${paired.commonTrials}개 task–repetition 쌍만 비교했습니다. 아래 값은 전체 동결 지표가 아닌 후속 짝 비교 진단입니다.`
+          : `The comparison uses ${paired.commonTrials} task–repetition pairs valid in both runtimes. These are secondary paired-runtime diagnostics, not the full frozen primary metric.`}
+      </p>
+      <table className="tb-results">
+        <caption>{ko ? "성공 수 / 공통 유효 실행 수. 막대는 같은 0–100% 축을 사용합니다." : "Passed / common valid trials. Bars share a 0–100% scale."}</caption>
+        <thead><tr><th scope="col">{ko ? "런타임" : "Runtime"}</th><th scope="col">{ko ? "성공 / 유효" : "Passed / valid"}</th><th scope="col">{ko ? "성공률" : "Pass rate"}</th></tr></thead>
+        <tbody>
+          {[
+            { name: "GEODE", passes: paired.geodePasses },
+            { name: "native Codex", passes: paired.nativePasses },
+          ].map(({ name, passes }) => (
+            <tr key={name}>
+              <th scope="row">{name}</th>
+              <td>{passes} / {paired.commonTrials}</td>
+              <td><strong>{rate(passes).toFixed(2)}%</strong><div className="tb-bar" aria-hidden="true"><span data-runtime={name} style={{ width: `${rate(passes)}%` }} /></div><div className="tb-scale" aria-hidden="true"><span>0%</span><span>100%</span></div></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="tb-verdict">
+        <strong>{ko ? "결론은 미확정입니다." : "The decision is inconclusive."}</strong>{" "}
+        {ko
+          ? "관측한 차이는 작고 불확실성 구간이 0을 포함합니다. 이 결과만으로 GEODE의 성능 우위를 입증할 수 없습니다."
+          : "The observed difference is small and its uncertainty interval includes zero. This result does not establish GEODE's superiority."}
+        {" "}<a href={paired.sources.analysis.url}>{ko ? "분석 원본" : "Read the analysis"}</a>
+      </p>
+
+      <h2>{ko ? "분모: 실행환경 문제를 어떻게 제외했나" : "Denominator: how infrastructure exclusions work"}</h2>
+      <ol className="tb-denominator">
+        <li><strong>{paired.frozenTrialsPerArm}</strong>{" "}<span>{ko ? "실행군별 동결 계획" : "Frozen per arm"}</span>{" "}<small>{paired.frozenTasks} × {paired.repetitions}</small></li>
+        <li><strong>{availableTrials}</strong>{" "}<span>{ko ? "환경 미지원 작업 제외" : "Environment-available"}</span>{" "}<small>−{excludedTrials} / {paired.excludedTasks.length} {ko ? "개 작업 × 반복" : "tasks × repetitions"}</small></li>
+        <li><strong>{paired.commonTrials}</strong>{" "}<span>{ko ? "양쪽 공통 유효 셀" : "Common valid cells"}</span>{" "}<small>−{paired.unresolvedNativeTrials} {ko ? "개 인프라 무효 쌍" : "infrastructure-invalid pairs"}</small></li>
+      </ol>
+      <p>
+        <code>{paired.excludedTasks.join(" / ")}</code>
+        {ko
+          ? "는 arm64 호스트에서 amd64 verifier를 실행할 수 없어 양쪽에서 대칭 제외했습니다. 남은 native Codex의 인프라 무효 실행은 대응하는 GEODE 결과도 함께 제외했습니다. 좋은 결과만 남기거나 각 런타임에 서로 다른 분모를 쓰지 않습니다."
+          : " were excluded symmetrically because their amd64 verifiers could not run on the arm64 host. Remaining infrastructure-invalid native Codex trials also remove their GEODE counterparts. This avoids retaining only favorable outcomes or using a different denominator for each runtime."}
+      </p>
+      <p>
+        <strong>{ko ? "정상 실행 뒤 작업에 실패한 경우는 분모에 남고 reward 0입니다." : "A valid execution that fails the task remains in the denominator with reward 0."}</strong>{" "}
+        {ko
+          ? `인프라 무효는 모델 실패의 0점으로 바꾸지 않습니다. 다만 제외 후 ${paired.commonTrials}회 결과를 사전 등록한 ${paired.frozenTrialsPerArm}회 지표로 바꿔 부를 수도 없습니다. 전체 primary는 not-measurable 상태를 유지합니다.`
+          : `Infrastructure invalidity is not converted into a semantic zero. Conversely, the remaining ${paired.commonTrials} trials cannot replace the preregistered ${paired.frozenTrialsPerArm}-trial metric. The full primary remains not-measurable.`}
+        {" "}<a href={paired.sources.data.url}>{ko ? "셀 선택·제외 원본" : "Inspect cell selection and exclusions"}</a>
+      </p>
+
+      <h2>{ko ? "불확실성: 반복 실행을 독립 작업처럼 세지 않습니다" : "Uncertainty: repetitions are not independent tasks"}</h2>
+      <figure className="tb-uncertainty">
+        <div className="tb-interval-heading"><strong>{signed(paired.taskBalancedDeltaPp)} {ko ? "%p" : "pp"}</strong>{" "}<span>{ko ? "작업별 동일 가중치 평균 차이: GEODE − native Codex" : "Task-balanced mean difference: GEODE − native Codex"}</span></div>
+        <svg viewBox="0 0 600 118" role="img" aria-labelledby="tb-ci-title tb-ci-description">
+          <title id="tb-ci-title">{ko ? "작업 단위 bootstrap 95% 구간" : "95% task-cluster bootstrap interval"}</title>
+          <desc id="tb-ci-description">{`${signed(paired.taskBalancedDeltaPp)} pp; 95% interval ${signed(lower)} to ${signed(upper)} pp. ${ko ? "0을 포함합니다." : "Includes zero."}`}</desc>
+          <line className="tb-axis" x1="40" x2="560" y1="72" y2="72" />
+          <line className="tb-zero" x1={intervalPosition(0)} x2={intervalPosition(0)} y1="16" y2="78" />
+          {[-10, -5, 0, 5, 10].map((tick) => <g key={tick}><line className="tb-axis" x1={intervalPosition(tick)} x2={intervalPosition(tick)} y1="68" y2="78" /><text x={intervalPosition(tick)} y="102" textAnchor="middle">{tick > 0 ? `+${tick}` : tick}</text></g>)}
+          <line className="tb-ci" x1={intervalPosition(lower)} x2={intervalPosition(upper)} y1="42" y2="42" />
+          {[lower, upper].map((bound) => <line key={bound} className="tb-ci" x1={intervalPosition(bound)} x2={intervalPosition(bound)} y1="32" y2="52" />)}
+          <circle className="tb-estimate" cx={intervalPosition(paired.taskBalancedDeltaPp)} cy="42" r="6" />
+        </svg>
+        <figcaption>
+          {ko
+            ? `단위: %p. 점은 작업별 동일 가중치 추정값, 선은 ${signed(lower)}~${signed(upper)}의 95% task-cluster bootstrap 구간입니다. ${paired.includedTasks}개 작업을 단위로 반복 측정의 묶음을 유지합니다.`
+            : `Units: percentage points (pp). The dot is the task-balanced estimate; the line is the 95% task-cluster bootstrap interval, ${signed(lower)} to ${signed(upper)}. Repeated trials remain clustered within ${paired.includedTasks} tasks.`}
+        </figcaption>
+      </figure>
+      <p>
+        {ko
+          ? `위 성공률을 단순히 뺀 pooled 차이는 ${signed(pooledDelta)}%p입니다. 작업별 유효 반복 수가 같지 않아, 각 작업에 같은 가중치를 준 ${signed(paired.taskBalancedDeltaPp)}%p와 다릅니다. ${paired.repetitions}회 반복은 같은 정책의 변동성을 측정합니다. 한 번이라도 성공했는지를 세는 pass@5나 최상위 답을 고르는 best-of-5가 아닙니다.`
+          : `Subtracting the pooled pass rates gives ${signed(pooledDelta)} pp. Because valid repetition counts differ across tasks, this differs from the equally task-weighted ${signed(paired.taskBalancedDeltaPp)} pp estimate. The ${paired.repetitions} repetitions measure one policy's variability; they are not pass@5 or best-of-five answer selection.`}
+        {" "}<a href={paired.sources.statistics.url}>{ko ? "통계 산식·출처" : "Statistical method and provenance"}</a>
+      </p>
+
+      <PairedReplay ko={ko} />
+
+      <h2>{ko ? "다음 실험: 점수 확대보다 비교 가능성 복구" : "Next experiment: restore comparability before scaling"}</h2>
+      <details className="tb-details">
+        <summary>{ko ? "캐시·토큰·비용을 읽을 때의 주의점" : "Reading cache, token, and cost accounting"}</summary>
+        <p>
+          {ko
+            ? "기존 GEODE Harbor 변환부에서 캐시 필드 이름이 맞지 않아, 런타임에 기록된 cache_read_tokens가 결과와 ATIF 출력에서 0으로 표시될 수 있었습니다. 따라서 과거 출력의 캐시 0만으로 캐시가 사용되지 않았다고 판단하지 않습니다. 세션별 원장과 대조한 별도 보정 자료가 필요합니다. 위 replay의 복구 자료는 이 방식으로 공개됐으며, 원본 결과와 성공률은 바꾸지 않습니다."
+            : "The earlier GEODE Harbor bridge read a mismatched cache field: runtime cache_read_tokens could become zero in results and ATIF output. A historical zero therefore does not establish that caching was unused. Corrections require a separate session-ledger reconciliation. The recovered replay evidence above follows that process; original results and pass rates remain unchanged."}
         </p>
-        <h2 id="terminal-bench-result" className="!mb-0 !mt-1">
-          {ko ? "Astra가 실제 container task를 끝냈습니다" : "Astra completed a real container task"}
-        </h2>
-      </div>
-      <div className="grid gap-x-8 gap-y-6 py-6 md:grid-cols-3">
-        {cells.map(([label, value, scope, status], index) => (
-          <div
-            key={label}
-            className={"border-t border-[var(--rule-soft)] pt-4 " + (index > 0 ? "md:border-l md:pl-6" : "")}
-          >
-            <p className="!m-0 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-3)]">{label}</p>
-            <p className="!my-2 font-serif-docs text-3xl font-black text-[var(--ink)]">{value}</p>
-            <p className="!m-0 text-sm text-[var(--ink-2)]">{scope}</p>
-            <p className="!mt-2 font-mono text-[10px] uppercase tracking-wider text-[var(--section-accent)]">{status}</p>
-          </div>
-        ))}
-      </div>
-    </section>
+        <p>
+          {ko
+            ? "시간 초과로 최종 usage가 없으면 미수집 상태입니다. 완료된 호출에서 복구한 토큰은 관측 하한일 뿐, 실행 전체의 합계가 아닙니다. 입력·캐시 읽기·캐시 쓰기·출력을 같은 계측 범위에서 비교하고, 토큰 단가로 계산한 비용 추정치를 구독 계정의 실제 청구액으로 해석하지 않습니다."
+            : "Missing final usage after a timeout is unknown. Tokens recovered from completed calls are an observed lower bound, not a whole-trial total. Compare input, cache reads, cache writes, and output over matched coverage; token-price estimates are not the subscription account's actual bill."}
+        </p>
+      </details>
+      <p>
+        {ko
+          ? "여러 날에 걸친 구독 경로 실행은 시점, 공급자 용량, 인증 계정의 영향을 런타임 효과와 완전히 분리하지 못합니다. 같은 경로라고 해서 전 기간에 같은 인증 계정을 썼다는 뜻은 아닙니다. Harbor 0.22.0은 공통 seed 제어도 제공하지 않았습니다. 아래는 후속 실험 설계이며 이번 결과에 추가된 측정이 아닙니다."
+          : "A subscription-route study spanning several days cannot fully separate timing, provider capacity, and credential-principal effects from runtime effects. The same route does not mean the same credential principal throughout. Harbor 0.22.0 also exposed no shared seed control. The following is a proposed follow-up, not additional measurement in this result."}
+      </p>
+      <table>
+        <thead><tr><th scope="col">{ko ? "질문" : "Question"}</th><th scope="col">{ko ? "다음 개입" : "Next intervention"}</th><th scope="col">{ko ? "필요한 증거" : "Required evidence"}</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">{ko ? "전체 분모를 회복할 수 있나?" : "Can the full denominator be restored?"}</th><td>{ko ? "verifier와 맞는 실행 아키텍처, 두 실행군의 인증·설치 사전 점검" : "Verifier-compatible architecture and auth/setup preflight for both arms"}</td><td>{ko ? "새 동결 계약, no-model oracle, 양쪽 유효 smoke 후 전체 실행" : "A new frozen contract, no-model oracle, valid smoke in both arms, then the full run"}</td></tr>
+          <tr><th scope="row">{ko ? "차이를 만든 런타임 요소는 무엇인가?" : "Which runtime behavior explains a difference?"}</th><td>{ko ? "모델·도구·예산을 고정하고 한 정책만 바꾸는 paired ablation" : "Paired ablation of one policy with model, tools, and budget fixed"}</td><td>{ko ? "task별 결과와 행동·종료·실패 경로의 결속, 별도 held-out 검증" : "Task outcomes joined to action, termination, and failure paths; separate held-out validation"}</td></tr>
+          <tr><th scope="row">{ko ? "품질과 실행 비용을 함께 개선했나?" : "Did quality and execution cost improve together?"}</th><td>{ko ? "계정·시점·concurrency를 명시한 반복 블록 설계" : "Repeated blocks with explicit accounts, timing, and concurrency"}</td><td>{ko ? "동일한 비용·시간 계측 범위와 작업 단위 불확실성 보고" : "Matched cost/time instrumentation and task-level uncertainty"}</td></tr>
+        </tbody>
+      </table>
+      <p>
+        {ko ? "공식 제출의 " : "The "}<a href="https://github.com/harbor-framework/terminal-bench-2-1/blob/7131e4375048a0e408a8fb404b5f499d726b695b/leaderboard/SUBMIT.md">{ko ? "고정 계약" : "pinned official submission contract"}</a>
+        {ko
+          ? `은 ${paired.frozenTasks}개 작업 × k≥${paired.repetitions}, 오류 실행의 0점 유지, canonical 환경·한도와 maintainer review를 요구합니다. 로컬 진단용 인프라 제외 규칙을 공식 점수에 적용하지 않습니다. 이 자료는 공식 제출·순위·제품 승격 권한을 갖지 않습니다.`
+          : ` requires ${paired.frozenTasks} tasks at k≥${paired.repetitions}, errored trials retained as zero, canonical environments and limits, and maintainer review. The local diagnostic exclusion rule does not apply to official scores. This artifact has no official submission, rank, or product-promotion authority.`}
+      </p>
+
+      <details className="tb-details">
+        <summary>{ko ? "원자료·통계·공개 근거 확인" : "Inspect source data, statistics, and provenance"}</summary>
+        <p>{ko ? "공개 스냅샷" : "Public snapshot"}: <code>{paired.commit}</code><br />Run: <code>{paired.runId}</code></p>
+        <p>{ko ? "측정한 GEODE revision" : "Measured GEODE revision"}: <code>{paired.geodeRevision}</code><br />Dataset: <code>{paired.dataset}</code><br /><code>{paired.datasetDigest}</code></p>
+        <p>{ko ? "이 페이지와 영상은 읽기용 파생 뷰입니다. 성공 여부는 Harbor 결과와 task verifier가, 셀 선택과 해석은 결속된 분석 자료가 소유합니다. 영상 재생만으로 점수를 검증했다고 주장하지 않습니다." : "This page and the film are reading views. Harbor results and task verifiers own success; bound analysis artifacts own cell selection and interpretation. Watching a replay is not score verification."}</p>
+        <table className="tb-sources"><thead><tr><th scope="col">{ko ? "자료" : "Artifact"}</th><th scope="col">{ko ? "역할 / SHA-256" : "Role / SHA-256"}</th></tr></thead><tbody>{sources.map((source) => <tr key={source.url}><th scope="row"><a href={source.url}>{source.label}</a></th><td>{source.role}{" "}<code>{source.sha256}</code></td></tr>)}</tbody></table>
+      </details>
+      <details className="tb-details">
+        <summary>{ko ? "별도 기록: GPT-6 Astra 단일 작업 smoke" : "Separate record: GPT-6 Astra single-task smoke"}</summary>
+        <p>
+          <code>{astra.model}</code> / <code>{astra.reasoning}</code>, GEODE {astra.geodeVersion}, {astra.harness}: <code>{astra.task}</code>.
+          {ko
+            ? ` ${astra.passedTrials}/${astra.selectedTrials}회 성공, verifier ${astra.verifierPassed}/${astra.verifierTotal}개 통과, retry ${astra.retries}회·fallback ${astra.fallbacks}회입니다. 이 계정에서 실제 작업을 끝낸 경로 증거이며, 위 Sol/max 비교에 합산하지 않습니다.`
+            : ` ${astra.passedTrials}/${astra.selectedTrials} trial passed, ${astra.verifierPassed}/${astra.verifierTotal} verifier checks passed, ${astra.retries} retries and ${astra.fallbacks} fallbacks. This is account-scoped task-execution evidence, not an additional observation in the Sol/max comparison.`}
+        </p>
+        <p>{ko ? `공개 trace는 scope-complete지만 ${astra.trace.omittedPayloadCount}개 payload 본문이 생략되어 replay-incomplete입니다. 전체 suite 성능이나 일반 계정 접근성을 입증하지 않습니다.` : `The public trace is scope-complete but replay-incomplete, with ${astra.trace.omittedPayloadCount} payload bodies withheld. It does not establish full-suite performance or access for other accounts.`}</p>
+        <p><a href={astra.sources.analysis.url}>{ko ? "Astra smoke 분석" : "Astra smoke analysis"}</a>{" / "}<a href={astra.sources.verifier.url}>{ko ? "task verifier 결과" : "Task verifier result"}</a></p>
+      </details>
+    </div>
   );
 }
 
@@ -105,111 +273,10 @@ export default function Page() {
       slug="benchmarks/terminal-bench"
       title="Terminal-Bench 2.1"
       titleKo="Terminal-Bench 2.1"
-      summary="Astra container-task smoke and the historical Sol paired replay, with scoring authority, coverage and publication limits kept separate."
-      summaryKo="Astra container-task smoke와 이전 Sol 비교 실행의 Replay를 소개합니다. 각 실행의 점수 근거, 관찰 범위와 공개 한계를 구분합니다."
+      summary="GPT-5.6 Sol at max effort: GEODE and native Codex compared through Harbor, with paired outcomes, infrastructure exclusions, and uncertainty kept explicit."
+      summaryKo="GPT-5.6 Sol·max effort로 GEODE와 native Codex를 Harbor에서 비교한 실험입니다. 공통 실행 결과, 인프라 제외, 불확실성을 함께 읽습니다."
     >
-      <Bi
-        ko={
-          <>
-            <ResultStrip ko />
-            <p>
-              <a href="https://www.tbench.ai/news/terminal-bench-2-1">Terminal-Bench 2.1</a>은
-              Harbor에서 89개 containerized terminal task를 실행하고 task-owned
-              verifier로 채점합니다. 공식 제출은{" "}
-              <a href="https://github.com/harbor-framework/terminal-bench-2-1/blob/7131e4375048a0e408a8fb404b5f499d726b695b/leaderboard/SUBMIT.md">
-                89 tasks × k≥5와 maintainer review
-              </a>
-              를 요구합니다.
-            </p>
-            <p>
-              2026-09-05에 GEODE 1.0.27은 OpenAI 구독 경로의 <code>gpt-6-astra</code>,
-              reasoning <code>high</code>로 Harbor 0.22.0의 canonical{" "}
-              <code>openssl-selfsigned-cert</code> 작업을 실행했습니다. 3 rounds와
-              정확히 짝지어진 terminal tool call/result 2쌍 뒤 자연 종료했고,
-              canonical reward 1을 받았습니다.
-            </p>
-
-            <h2>증거 권한</h2>
-            <table>
-              <thead><tr><th>질문</th><th>정본</th></tr></thead>
-              <tbody>
-                <tr><td>무엇을 실행하기로 고정했나?</td><td><code>run-spec.json</code></td></tr>
-                <tr><td>재시도나 fallback이 있었나?</td><td><code>attempts.jsonl</code></td></tr>
-                <tr><td>task가 성공했나?</td><td>Harbor <code>result.json</code>과 verifier CTRF</td></tr>
-                <tr><td>어떤 결론까지 가능한가?</td><td><code>analysis.json</code></td></tr>
-                <tr><td>공개 파일이 원본과 같은가?</td><td>publication manifest와 merge-SHA read-back</td></tr>
-              </tbody>
-            </table>
-            <p>
-              <RunLogLink path={RUN_PATH} revision={ARTIFACT_REVISION} />에 9개 공개
-              파일, 30,857바이트를 보존했습니다. 공개 trajectory는 scope-complete지만
-              9개 payload body를 digest로 대체해 replay-incomplete입니다. prompt,
-              reasoning, OAuth 자료, raw tool payload, ATIF, recording, 로컬 경로는
-              비공개로 남겼습니다.
-            </p>
-
-            <h2>해석 한계</h2>
-            <p>
-              이 run은 89개 중 1 task, k=1입니다. 이 계정에서 model route가 열렸고
-              GEODE가 실제 container task를 끝냈다는 사실만 입증합니다. suite 정확도,
-              leaderboard 순위, 다른 harness 대비 우위, 전체 계정의 Astra 가용성을
-              주장하지 않습니다. 공식 제출에는 89 tasks × k≥5와 maintainer의 static
-              analysis 및 reward-hacking review가 필요합니다.
-            </p>
-            <PairedReplay ko />
-          </>
-        }
-        en={
-          <>
-            <ResultStrip ko={false} />
-            <p>
-              <a href="https://www.tbench.ai/news/terminal-bench-2-1">Terminal-Bench 2.1</a>{" "}
-              runs 89 containerized terminal tasks through Harbor and scores them with
-              task-owned verifiers. Its{" "}
-              <a href="https://github.com/harbor-framework/terminal-bench-2-1/blob/7131e4375048a0e408a8fb404b5f499d726b695b/leaderboard/SUBMIT.md">
-                official submission contract
-              </a>{" "}
-              requires 89 tasks at k≥5 and maintainer review.
-            </p>
-            <p>
-              On 2026-09-05, GEODE 1.0.27 used <code>gpt-6-astra</code> with{" "}
-              <code>high</code> reasoning through the OpenAI subscription route to run
-              Harbor 0.22.0&apos;s canonical <code>openssl-selfsigned-cert</code> task.
-              It terminated naturally after three rounds and two exactly paired terminal
-              tool calls, then received canonical reward 1.
-            </p>
-
-            <h2>Evidence authority</h2>
-            <table>
-              <thead><tr><th>Question</th><th>Authority</th></tr></thead>
-              <tbody>
-                <tr><td>What was frozen before execution?</td><td><code>run-spec.json</code></td></tr>
-                <tr><td>Was there a retry or fallback?</td><td><code>attempts.jsonl</code></td></tr>
-                <tr><td>Did the task pass?</td><td>Harbor <code>result.json</code> and verifier CTRF</td></tr>
-                <tr><td>What conclusion is supported?</td><td><code>analysis.json</code></td></tr>
-                <tr><td>Do public bytes match the source?</td><td>Publication manifest and merge-SHA read-back</td></tr>
-              </tbody>
-            </table>
-            <p>
-              <RunLogLink path={RUN_PATH} revision={ARTIFACT_REVISION} /> retains nine
-              public files totaling 30,857 bytes. The public trajectory is scope-complete
-              but replay-incomplete because nine payload bodies are represented by digests.
-              Prompts, reasoning, OAuth material, raw tool payloads, ATIF, recordings, and
-              local paths remain private.
-            </p>
-
-            <h2>Interpretation limit</h2>
-            <p>
-              This run covers one of 89 tasks at k=1. It establishes that this account had
-              route access and that GEODE completed one real container task. It does not
-              estimate suite accuracy, claim leaderboard rank, compare harnesses, or prove
-              general Astra availability. An official submission requires 89 tasks at k≥5,
-              maintainer static analysis, and reward-hacking review.
-            </p>
-            <PairedReplay ko={false} />
-          </>
-        }
-      />
+      <Bi ko={<Study ko />} en={<Study ko={false} />} />
     </DocsShell>
   );
 }

@@ -1,13 +1,13 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
-export const metadata = { title: "Closed-Loop — GEODE Docs" };
+export const metadata = { title: "Scaffold search — GEODE Docs" };
 
 export default function Page() {
   return (
     <DocsShell
       slug="capabilities/autoresearch"
-      title="Closed-Loop"
-      titleKo="Closed-Loop"
+      title="Scaffold search"
+      titleKo="스캐폴드 탐색"
       summary="The outer loop end to end. Mutate the scaffold, audit with Petri, gate the fitness gain on a margin, then promote or revert. No model weight or parameter ever changes."
       summaryKo="바깥쪽 루프의 전체 흐름입니다. 스캐폴드를 변이하고, Petri로 감사하고, fitness 이득을 margin 게이트로 검증해 승격하거나 되돌립니다. 모델 가중치와 파라미터는 일절 바꾸지 않습니다."
     >
@@ -20,8 +20,15 @@ export default function Page() {
               갱신 대상은 모델을 감싼 스캐폴드, 곧 시스템 프롬프트
               섹션(<code>WRAPPER_PROMPT_SECTIONS</code>)과 7개 behaviour
               kinds입니다. 메커니즘은 선택입니다. 변이를 만들고,
-              적대적 안전 감사로 측정하고, 통계적으로 유의한 개선만 승격합니다.
+              적대적 안전 감사로 측정합니다. 기본 gate 정책은 측정 불확실성을
+              고려한 margin을 넘는 개선을 선택하며, 통계적 유의성을 보장하지는 않습니다.
             </p>
+            <h2>세 가지 흐름의 구분</h2>
+            <ul>
+              <li><a href="/geode/docs/architecture/agentic-loop">런타임 작업 실행</a>은 <code>core/</code>에서 요청을 도구 호출과 결과로 처리합니다. 일반 작업 실행이 곧 스캐폴드 변경을 뜻하지는 않습니다.</li>
+              <li>이 문서의 <code>evolve/scaffold_search/</code>는 후보 스캐폴드를 측정하고 baseline을 선택합니다. <a href="/geode/docs/capabilities/outer-loop">Crucible 제한형 탐색</a>은 별도의 동결된 평가 계약과 private search head를 사용합니다.</li>
+              <li><a href="/geode/docs/capabilities/seed-pipeline">시나리오 생성</a>은 <code>evals/seed_generation/</code>에서 평가용 seed 코퍼스를 만듭니다. 후보 시스템의 개선과 평가 입력의 생성을 구분해야 합니다.</li>
+            </ul>
             <figure>
               <img
                 src="/geode/diagrams/self-improving-cycle.svg"
@@ -46,7 +53,7 @@ export default function Page() {
               <tbody>
                 <tr>
                   <td><code>evolve/scaffold_search/train.py</code></td>
-                  <td>루프 드라이버. 호출 1회 = 감사 1회. 에이전트가 수정하는 유일한 파일이며 <code>WRAPPER_PROMPT_SECTIONS</code>를 소유합니다.</td>
+                  <td>측정과 게이트를 실행하는 드라이버. <code>WRAPPER_PROMPT_SECTIONS</code>를 읽고 감사 반복 횟수는 <code>replicate</code> 설정을 따릅니다. 변이 가능한 정책 파일은 아래에서 별도로 구분합니다.</td>
                 </tr>
                 <tr>
                   <td><code>evolve/scaffold_search/measure.py</code></td>
@@ -66,7 +73,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td><code>evolve/scaffold_search/loop/</code></td>
-                  <td>Mode B 런타임. <code>mutate/</code>는 제안과 적용, <code>observe/</code>는 attribution과 provenance, <code>inject/</code>는 in-context 슬롯을 맡습니다.</td>
+                  <td>Mode B 런타임. <code>mutate/</code>는 제안과 적용, <code>observe/</code>는 attribution과 provenance, <code>auto_trigger.py</code>는 예약 실행의 락과 최소 간격을 맡습니다.</td>
                 </tr>
               </tbody>
             </table>
@@ -117,7 +124,7 @@ export default function Page() {
             </p>
             <ol>
               <li>하드 tool-call 계약 거부권. <code>required_tool_path</code>와 <code>args_shape_valid</code> 계약을 어긴 후보는 점수와 무관하게 즉시 거부됩니다.</li>
-              <li>이전 baseline이 없으면 부트스트랩 승격.</li>
+              <li>이전 baseline이 없으면 차원 완전성과 fitness ≥ 0.30을 확인한 뒤 부트스트랩 승격합니다. 조건이 부족하면 거부됩니다.</li>
               <li>critical 축이 퇴행하면 fitness가 0.0으로 붕괴되어 거부됩니다.</li>
               <li>
                 fitness 이득이 margin을 넘어야 승격됩니다.
@@ -143,7 +150,7 @@ export default function Page() {
               <figcaption>승격된 스캐폴드만 체인을 늘립니다. 거부된 변이는 가지에서 끝나고 체인에 들어가지 않습니다.</figcaption>
             </figure>
             <p>
-              승격되면 <code>state/autoresearch/baseline.json</code>이 갱신되고
+              승격되면 기본 경로인 <code>~/.geode/self-improving/baseline.json</code>이 갱신되고
               <code>baseline_archive.jsonl</code>에 baseline 행이 추가됩니다.
               <code>baseline.json</code>은 승격된 champion의 SoT이지 최신 측정
               결과가 아닙니다. 거부되면 <code>_revert_sot_after_reject</code>가
@@ -151,6 +158,10 @@ export default function Page() {
               SoT를 복원합니다. 승격된 스캐폴드 상태의 계보가 git-tracked
               장부로 이어지는 것, 이것이 &quot;git이 옵티마이저&quot;라는 말의
               의미입니다. 거부된 변이는 체인에 남지 않습니다.
+            </p>
+            <p>
+              격리 실행에서는 baseline이 <code>$GEODE_STATE_ROOT/autoresearch/baseline.json</code>에
+              기록됩니다. 이 로컬 baseline 선택은 패키지 배포나 GitHub 공개를 승인하지 않습니다.
             </p>
             <p>
               결과 행의 <code>verdict</code>는 게이트 결과에서 파생됩니다.
@@ -166,8 +177,8 @@ export default function Page() {
               checkout의 절대 경로로 지정하세요. wheel은 read-only 기본값과
               dry-run만 제공하며 rolling ledger를 설치 디렉터리에 쓰지 않습니다.
             </p>
-            <pre>{`# 단일 사이클 (변이 1회 + 감사 1회 + 게이트)
-uv run python -m evolve.scaffold_search.train
+            <pre>{`# 실제 호출 없이 측정 경로 확인
+uv run python -m evolve.scaffold_search.train --dry-run
 
 # 3-arm 캠페인 (gen-0 baseline K회 → never / random / gate)
 geode-evolve campaign --n 10 --k 5 --dry-run
@@ -199,8 +210,15 @@ geode-evolve campaign --n 10 --k 5 --dry-run
               system-prompt sections (<code>WRAPPER_PROMPT_SECTIONS</code>) and
               seven behaviour kinds. The mechanism is selection: produce a
               variation, measure it with an adversarial safety audit, and
-              promote only statistically significant improvement.
+              apply the configured selection policy. The default gate uses an
+              uncertainty-aware margin; it does not guarantee statistical significance.
             </p>
+            <h2>Three distinct workflows</h2>
+            <ul>
+              <li><a href="/geode/docs/architecture/agentic-loop?lang=en">Runtime task execution</a> in <code>core/</code> turns requests into tool calls and results. Ordinary task execution does not itself imply scaffold modification.</li>
+              <li>This page covers <code>evolve/scaffold_search/</code>, which measures candidate scaffolds and selects a baseline. <a href="/geode/docs/capabilities/outer-loop?lang=en">Crucible bounded search</a> uses a separate frozen evaluation contract and private search head.</li>
+              <li><a href="/geode/docs/capabilities/seed-pipeline?lang=en">Scenario generation</a> in <code>evals/seed_generation/</code> builds an evaluation seed corpus. Improving a candidate system and generating its evaluation inputs are distinct activities.</li>
+            </ul>
             <figure>
               <img
                 src="/geode/diagrams/self-improving-cycle.svg"
@@ -226,7 +244,7 @@ geode-evolve campaign --n 10 --k 5 --dry-run
               <tbody>
                 <tr>
                   <td><code>evolve/scaffold_search/train.py</code></td>
-                  <td>Loop driver. One invocation, one audit. The single file the agent modifies; owns <code>WRAPPER_PROMPT_SECTIONS</code>.</td>
+                  <td>Measurement and gate driver. Reads <code>WRAPPER_PROMPT_SECTIONS</code>; audit repetitions follow <code>replicate</code>. Mutable policy files are described separately below.</td>
                 </tr>
                 <tr>
                   <td><code>evolve/scaffold_search/measure.py</code></td>
@@ -246,7 +264,7 @@ geode-evolve campaign --n 10 --k 5 --dry-run
                 </tr>
                 <tr>
                   <td><code>evolve/scaffold_search/loop/</code></td>
-                  <td>Mode B runtime. <code>mutate/</code> (propose and apply), <code>observe/</code> (attribution and provenance), <code>inject/</code> (in-context slots).</td>
+                  <td>Mode B runtime. <code>mutate/</code> proposes and applies candidates, <code>observe/</code> tracks attribution and provenance, and <code>auto_trigger.py</code> applies scheduled-run locks and minimum intervals.</td>
                 </tr>
               </tbody>
             </table>
@@ -301,7 +319,7 @@ geode-evolve campaign --n 10 --k 5 --dry-run
             </p>
             <ol>
               <li>Hard tool-call contract veto. A candidate that fails the <code>required_tool_path</code> or <code>args_shape_valid</code> contract is rejected outright, regardless of score.</li>
-              <li>No prior baseline: bootstrap promote.</li>
+              <li>No prior baseline: require complete dimensions and fitness ≥ 0.30 before bootstrap promotion. Otherwise reject.</li>
               <li>A critical-axis regression collapses fitness to 0.0: reject.</li>
               <li>
                 The fitness gain must exceed the margin:
@@ -327,7 +345,7 @@ geode-evolve campaign --n 10 --k 5 --dry-run
               <figcaption>Only promoted scaffolds extend the chain; rejected mutations dead-end off it.</figcaption>
             </figure>
             <p>
-              A promote updates <code>state/autoresearch/baseline.json</code>{" "}
+              A promote updates <code>~/.geode/self-improving/baseline.json</code> by default{" "}
               and appends a baseline row to <code>baseline_archive.jsonl</code>.
               <code>baseline.json</code> is the promoted champion&apos;s SoT,
               not the latest measurement. A reject runs{" "}
@@ -337,6 +355,10 @@ geode-evolve campaign --n 10 --k 5 --dry-run
               states lives in git-tracked ledgers; that is what &quot;git as
               the optimiser&quot; means. Rejected mutations never enter the
               chain.
+            </p>
+            <p>
+              Isolated runs write the baseline to <code>$GEODE_STATE_ROOT/autoresearch/baseline.json</code>.
+              Selecting this local baseline does not authorize a package release or GitHub publication.
             </p>
             <p>
               The <code>verdict</code> on each results row is derived from the
@@ -353,8 +375,8 @@ geode-evolve campaign --n 10 --k 5 --dry-run
               that checkout&apos;s absolute path. A wheel provides read-only defaults
               and dry runs; it never writes rolling ledgers into the install.
             </p>
-            <pre>{`# one cycle (one mutation + one audit + the gate)
-uv run python -m evolve.scaffold_search.train
+            <pre>{`# check the measurement path without live calls
+uv run python -m evolve.scaffold_search.train --dry-run
 
 # 3-arm campaign (K gen-0 baselines, then never / random / gate)
 geode-evolve campaign --n 10 --k 5 --dry-run

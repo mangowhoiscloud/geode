@@ -933,6 +933,8 @@ class CLIPoller:
                     "model": model,
                     "input": result.usage.input_tokens,
                     "output": result.usage.output_tokens,
+                    "cache_read_tokens": result.usage.cached_input_tokens,
+                    "cache_write_tokens": result.usage.cache_write_tokens,
                     "cost": 0,
                 }
             )

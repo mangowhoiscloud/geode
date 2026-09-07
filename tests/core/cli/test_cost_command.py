@@ -16,6 +16,8 @@ def mock_tracker():
     acc.calls = [MagicMock(), MagicMock()]
     acc.total_input_tokens = 1500
     acc.total_output_tokens = 300
+    acc.total_cache_read_tokens = 1200
+    acc.total_cache_creation_tokens = 30
     acc.total_cost_usd = 0.0234
     tracker.accumulator = acc
     return tracker
@@ -44,6 +46,8 @@ def mock_store():
     rec.model = "claude-opus-4-6"
     rec.input_tokens = 500
     rec.output_tokens = 100
+    rec.cache_read_tokens = 400
+    rec.cache_creation_tokens = 20
     rec.cost_usd = 0.005
     store.get_recent_records.return_value = [rec]
     return store
@@ -55,7 +59,12 @@ class TestCmdCost:
     def test_session_summary(self, mock_gt, mock_gs, mock_tracker, mock_store):
         mock_gt.return_value = mock_tracker
         mock_gs.return_value = mock_store
-        cmd_cost("")  # no error
+        with patch("core.cli.commands.console") as mock_console:
+            cmd_cost("")
+        printed = " ".join(str(call) for call in mock_console.print.call_args_list)
+        assert "cache read 1,200 / write 30 tok" in printed
+        assert "Estimated API cost" in printed
+        assert "not subscription charges" in printed
 
     @patch("core.llm.usage_store.get_usage_store")
     @patch("core.llm.token_tracker.get_tracker")
@@ -87,7 +96,11 @@ class TestCmdCost:
     def test_recent_subcommand(self, mock_gt, mock_gs, mock_tracker, mock_store):
         mock_gt.return_value = mock_tracker
         mock_gs.return_value = mock_store
-        cmd_cost("recent")  # no error
+        with patch("core.cli.commands.console") as mock_console:
+            cmd_cost("recent")
+        printed = " ".join(str(call) for call in mock_console.print.call_args_list)
+        assert "cache read 400 / write 20 tok" in printed
+        assert "est. API $0.0050" in printed
         mock_store.get_recent_records.assert_called_once_with(10)
 
     @patch("core.llm.usage_store.get_usage_store")

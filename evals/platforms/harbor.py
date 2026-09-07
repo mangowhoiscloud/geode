@@ -643,17 +643,25 @@ class GeodeHarborAgent(HarborBaseAgent):
                 await loop.amark_session_completed()
         except BaseException as exc:
             error_type = type(exc).__name__
-            await loop.amark_session_error()
+            try:
+                await loop.amark_session_error()
+            except BaseException as cleanup_error:
+                log.warning("Harbor session finalization failed: %s", type(cleanup_error).__name__)
             raise
         finally:
             if previous is None:
                 os.environ.pop("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", None)
             else:
                 os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] = previous
-            loop._hooks.close()
+            try:
+                loop._hooks.close()
+            except BaseException as cleanup_error:
+                if error_type is None:
+                    raise
+                log.warning("Harbor hook cleanup failed: %s", type(cleanup_error).__name__)
             try:
                 self._export_result(instruction, context, loop, result, error_type)
-            except Exception as exc:
+            except BaseException as exc:
                 if error_type is None:
                     raise
                 # Retain Harbor's original timeout/error classification even

@@ -309,6 +309,14 @@ learning views are digest-bound projections.
 
 ### 4.2 Schema identity
 
+When documenting or changing a data boundary, make its contract inspectable:
+name the producer → field → reader, unit and denominator, missing/zero
+semantics, identity/scope, authority, version/migration, privacy, and executable
+validator or regression test. Link to existing typed owners and schemas. Mark
+legacy unversioned records explicitly instead of inventing a schema ID or
+claiming validation that does not run. For a concrete cross-boundary example,
+see [usage and cache accounting](usage-accounting.md).
+
 Keep schema identity next to the builder and validator as a named constant.
 GEODE has established families with different historical delimiters:
 

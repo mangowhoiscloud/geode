@@ -8,7 +8,7 @@
 
 A general-purpose autonomous execution agent. The core runtime is an **AgenticLoop** (`while tool_use`) — sub-agents, plans, and batches are all instances of the same loop. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 1.0.27
+- **Version**: 1.0.28
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
@@ -34,6 +34,7 @@ uv run geode
 | Operational Workflow | `docs/workflow.md` + `.claude/skills/geode-workflow/` | Evidence-first execution scaffold shared by Claude Code, Codex, and contributors |
 | Code Conventions | `docs/architecture/naming-conventions.md` + `.agents/skills/geode-code-conventions/` | Measured abstraction, naming, type/class, schema, test, site, and versioning decisions |
 | Evaluation Workflow | `docs/eval/index.json` + `.agents/skills/geode-eval/` | Generated eval routing, frozen research/reproduction contract, append-only attempt lineage, analysis, and artifact publication |
+| Usage and Cache Accounting | `docs/architecture/usage-accounting.md` | Writer/reader field map, existing data contracts, zero/missing coverage, estimates versus billing, and reconciliation gates |
 | Test-Time Compute Grounding | `.claude/skills/stanford-test-time-compute/` | Stanford CS329A Part 2 evidence and GEODE/Eco²/SIL/Crucible application boundaries |
 | Agent-World Benchmark | `docs/eval/agent-world-comparison-contract.md` + `.claude/skills/agent-world-benchmark/` | Three-suite comparison profile, paired runtime control, replication, and artifact contract |
 | Architecture/Extensibility Program | `docs/architecture/extensibility-roadmap.md` | Single execution SOT for GAP IDs, merge order, status, acceptance, and closure evidence |

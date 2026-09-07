@@ -8,6 +8,34 @@
 
 ---
 
+## Current landing and docs contract (2026-09-08)
+
+The restored landing replaces the historical full-rose choreography below on
+`/` and `/portfolio/` only. Both routes share `landing-page.tsx`; the
+author/about/archive surfaces retain their existing design. Keep the GEODE
+palette and character, with a dark reading substrate, visible navigation,
+recorded Task/Tool/Result evidence, and install choices. Release labels read
+`generatedSOT`; historical measurements retain their measured version.
+
+The docs shell projects the existing sitemap into four reader tasks. Native
+disclosures expose topics and Experimental Loop chapters; title/summary/path
+filtering works in the sidebar, mobile drawer, and index. The sitemap remains
+the sole route and previous/next authority. Preserve bilingual routes,
+Markdown twins, keyboard focus and explicit language queries. Do not introduce
+another navigation catalog, a UI dependency, or a site-wide CSS reset.
+
+Benchmark charts disclose the common denominator and uncertainty. The native
+Terminal-Bench replay and recovered cache/phase evidence remain intact; neither
+replay nor a runtime self-judge owns benchmark scores. Public evidence snapshots
+are presentation data, not a new evaluator or release gate. Keep missing usage
+distinct from zero and a partial subtotal distinct from a complete bill.
+
+Before publication: run `npm run test:docs`, the landing evidence regression,
+the static build and Markdown export, link/metadata checks, then desktop and
+mobile browser checks for landing, docs filtering, active chapters, language
+links, replay navigation, overflow and console errors. A local preview is not
+deployment proof.
+
 ## 1. Visual Theme & Atmosphere
 
 **Mood**: a modern dark developer surface keyed to the GEODE character — a rose axolotl explorer with a gold headlamp and an aqua magnifier (`public/images/geode-*.png`). Cool near-black substrate with a violet undertone, one saturated signature accent (rose) carried everywhere as low-opacity tints, gold reserved for action, aqua for information. Reads like a well-lit terminal, not a leather desk.

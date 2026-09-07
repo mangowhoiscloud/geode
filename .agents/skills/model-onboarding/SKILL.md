@@ -23,6 +23,10 @@ runtime. Establish the current contract for every change:
 5. Update `CHANGELOG.md` and user-facing model docs when behavior changes, then
    follow the repository workflow and GitFlow gates.
 
+For usage/cache field or cost changes, load the
+[usage accounting contract](../../../docs/architecture/usage-accounting.md)
+to check provider denominators, missing detail, and billing authority.
+
 Credentials come only from the existing provider configuration path. Never ask
 for, print, commit, or copy API keys, OAuth tokens, or credential files into a
 prompt, test fixture, log, PR, or research note.
