@@ -630,9 +630,13 @@ class SubAgentManager:
             control = _background_controls.get(task_id)
             if control is None:
                 return False
+            if task_id in _background_interrupting:
+                return True
             _background_interrupting.add(task_id)
-        task, runner, _done = control
-        if not runner.cancel(task_id) and not task.done():
+        task, _runner, _done = control
+        if not task.done():
+            # The runner's async cancellation path drains worker finalization;
+            # its public cancel() is an immediate, evidence-losing hard kill.
             task.get_loop().call_soon_threadsafe(task.cancel)
         return True
 

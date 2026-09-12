@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve cancellation evidence for started tool calls and delegated workers.
+  Parallel tools drain sibling cleanup before propagating cancellation; isolated
+  workers receive a bounded graceful shutdown before forced termination. Missing
+  evidence after forced termination still fails trajectory completeness checks.
+- Update the site's Next.js, sharp and js-yaml patch versions to clear the
+  mandatory dependency security gate; benchmark runtime dependencies are unchanged.
+
 ## [1.0.28] - 2026-09-08
 
 > Evidence-led runtime release: bounded verification, cache accounting,

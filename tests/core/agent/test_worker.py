@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -256,6 +257,69 @@ class TestWorkerSubprocess:
         assert backup.exists()
         data = json.loads(backup.read_text())
         assert data["task_id"] == "bk-001"
+
+
+@pytest.mark.parametrize("signal_phase", ["turn", "session_close"])
+def test_sigterm_cancels_turn_closes_error_session_and_flushes_hooks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, signal_phase: str
+) -> None:
+    import asyncio
+    import io
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from core.agent.worker import main
+
+    lifecycle: list[str] = []
+
+    async def run_until_signal(_prompt: str) -> AgenticResult:
+        if signal_phase == "session_close":
+            return AgenticResult(text="done", termination_reason="natural")
+        asyncio.get_running_loop().call_soon(signal.raise_signal, signal.SIGTERM)
+        try:
+            await asyncio.Event().wait()
+        finally:
+            lifecycle.append("turn_cancelled")
+        raise AssertionError("signal did not cancel the turn")
+
+    async def close_completed() -> None:
+        asyncio.get_running_loop().call_soon(signal.raise_signal, signal.SIGTERM)
+        try:
+            await asyncio.Event().wait()
+        finally:
+            lifecycle.append("close_cancelled")
+
+    async def close_session() -> None:
+        lifecycle.append("session_error")
+
+    loop = MagicMock()
+    loop.arun = run_until_signal
+    loop.amark_session_error = AsyncMock(side_effect=close_session)
+    loop.amark_session_completed = AsyncMock(side_effect=close_completed)
+    hooks = MagicMock()
+    hooks.close.side_effect = lambda: lifecycle.append("hooks_closed")
+    stdout = io.StringIO()
+    monkeypatch.setattr(sys, "stdin", io.StringIO('{"task_id":"cancel-worker"}\n'))
+    monkeypatch.setattr(sys, "stdout", stdout)
+    monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
+    previous_sigterm = signal.getsignal(signal.SIGTERM)
+    with (
+        patch("core.agent.tool_executor.ToolExecutor"),
+        patch("core.agent.loop.AgenticLoop", return_value=loop),
+        patch("core.wiring.bootstrap.build_worker_hooks", return_value=hooks),
+        patch("core.observability.logging_config.configure_logging"),
+    ):
+        main(_empty_tool_plan_builder)
+
+    result = json.loads(stdout.getvalue())
+    assert result["task_id"] == "cancel-worker"
+    assert result["success"] is False
+    assert result["error"] == "Worker cancelled"
+    cancelled_phase = "turn_cancelled" if signal_phase == "turn" else "close_cancelled"
+    assert lifecycle == [cancelled_phase, "session_error", "hooks_closed"]
+    loop.amark_session_error.assert_awaited_once()
+    assert loop.amark_session_completed.await_count == (signal_phase == "session_close")
+    assert signal.getsignal(signal.SIGTERM) is previous_sigterm
+    assert json.loads((tmp_path / "cancel-worker.result.json").read_text()) == result
 
 
 class TestResolveWorkerOutcome:
