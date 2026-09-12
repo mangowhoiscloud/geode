@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import patch
+import signal
+import sys
+from unittest.mock import MagicMock, patch
 
+import pytest
 from core.agent.worker import WorkerRequest
 from core.orchestration.isolated_execution import (
     IsolatedRunner,
@@ -15,6 +18,117 @@ from core.orchestration.isolated_execution import (
 
 def _runner(*, lane: object | None = None) -> IsolatedRunner:
     return IsolatedRunner(lane=lane, worker_module="core.worker")
+
+
+@pytest.mark.parametrize("cooperate", [True, False])
+@pytest.mark.parametrize("shutdown", ["cancel", "timeout"])
+def test_worker_shutdown_drains_pipes_reaps_process_and_releases_lane(
+    cooperate: bool, shutdown: str
+) -> None:
+    """Exercise OS signals and pipe pressure with a child that cannot call a model."""
+    from core.orchestration.lane_queue import Lane
+
+    child = """
+import json, signal, sys
+request = json.loads(sys.stdin.readline())
+def terminate(signum, frame):
+    print("x" * 262144, flush=True)
+    sys.stderr.write("finalized\\n" + "e" * 262144)
+    sys.stderr.flush()
+    print(json.dumps({"task_id": request["task_id"], "success": False,
+                      "error": "Worker cancelled"}), flush=True)
+    sys.exit(0)
+signal.signal(signal.SIGTERM, terminate if COOPERATE else signal.SIG_IGN)
+print(json.dumps({"type": "activity", "tool": "ready"}), flush=True)
+while True:
+    signal.pause()
+""".replace("COOPERATE", repr(cooperate))
+
+    async def scenario() -> None:
+        lane = Lane("global", max_concurrent=1, timeout_s=5)
+        runner = _runner(lane=lane)
+        runner.TERMINATE_WAIT_S = 0.2
+        runner.KILL_WAIT_S = 1
+        request = WorkerRequest(task_id="cancel-no-model")
+        config = IsolationConfig(
+            session_id=request.task_id,
+            timeout_s=2 if shutdown == "timeout" else 30,
+            post_to_main=False,
+        )
+        ready = asyncio.Event()
+        children: list[asyncio.subprocess.Process] = []
+        create = asyncio.create_subprocess_exec
+
+        async def spawn(*_args: object, **kwargs: object) -> asyncio.subprocess.Process:
+            proc = await create(sys.executable, "-c", child, **kwargs)
+            children.append(proc)
+            return proc
+
+        with (
+            patch("asyncio.create_subprocess_exec", side_effect=spawn),
+            patch.object(runner, "_save_stderr") as save_stderr,
+        ):
+            task = asyncio.create_task(
+                runner.arun(request, config=config, on_activity=lambda _data: ready.set())
+            )
+            try:
+                await asyncio.wait_for(ready.wait(), timeout=5)
+                if shutdown == "cancel":
+                    task.cancel()
+                    with pytest.raises(asyncio.CancelledError):
+                        await asyncio.wait_for(task, timeout=5)
+                else:
+                    result = await asyncio.wait_for(task, timeout=5)
+                    assert result.success is False
+                    assert result.error == "Timeout after 2s"
+                assert len(children) == 1
+                assert children[0].returncode == (0 if cooperate else -signal.SIGKILL)
+                assert runner.active_count == 0
+                assert lane.active_count == 0
+                assert not [
+                    pending
+                    for pending in asyncio.all_tasks()
+                    if pending is not asyncio.current_task() and not pending.done()
+                ]
+                if cooperate:
+                    save_stderr.assert_called_once_with(
+                        request.task_id, b"finalized\n" + b"e" * 262144
+                    )
+                else:
+                    save_stderr.assert_not_called()
+            finally:
+                for proc in children:
+                    if proc.returncode is None:
+                        proc.kill()
+                    await proc.wait()
+                if not task.done():
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(scenario())
+
+
+def test_cancellation_during_shutdown_pipe_drain_propagates() -> None:
+    async def scenario() -> None:
+        proc = MagicMock(spec=asyncio.subprocess.Process)
+        proc.returncode = 0
+        draining = asyncio.Event()
+
+        async def pump() -> tuple[None, bytes]:
+            draining.set()
+            await asyncio.Event().wait()
+            return None, b""
+
+        pump_task = asyncio.create_task(pump())
+        shutdown = asyncio.create_task(_runner()._stop_worker(proc, pump_task, "draining"))
+        await draining.wait()
+        shutdown.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await shutdown
+        assert pump_task.done()
+        proc.kill.assert_not_called()
+
+    asyncio.run(scenario())
 
 
 class TestSubprocessMode:

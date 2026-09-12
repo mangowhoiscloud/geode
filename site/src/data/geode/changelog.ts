@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Fixed\n\n- Preserve cancellation evidence for started tool calls and delegated workers.\n  Parallel tools drain sibling cleanup before propagating cancellation; isolated\n  workers receive a bounded graceful shutdown before forced termination. Missing\n  evidence after forced termination still fails trajectory completeness checks.\n- Update the site's Next.js, sharp and js-yaml patch versions to clear the\n  mandatory dependency security gate; benchmark runtime dependencies are unchanged."
   },
   {
     "version": "1.0.28",
