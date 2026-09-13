@@ -14,11 +14,11 @@ from core.llm.agentic_response import AgenticResponse, TextBlock
 from core.llm.token_tracker import LLMUsage
 
 
-def _loop() -> AgenticLoop:
+def _loop(*, time_budget_s: float = 900.0) -> AgenticLoop:
     return AgenticLoop(
         ConversationContext(),
         ToolExecutor(auto_approve=True),
-        config=AgenticLoopConfig(max_rounds=0, time_budget_s=900),
+        config=AgenticLoopConfig(max_rounds=0, time_budget_s=time_budget_s),
         model="gpt-5.6-sol",
         provider="openai",
         quiet=True,
@@ -94,9 +94,51 @@ def test_first_candidate_reserves_repair_without_disabling_repair_tools(
     )
     assert request.tool_choice == {"type": expected_choice}
     system = request.system_prompt
-    assert ("Remaining wall time" in system) is (mode == "reflexion" and allow_tools)
+    assert ("Total root wall-time budget" in system) is (mode == "reflexion" and allow_tools)
     if "Candidate checkpoint" in system:
         assert system.index("Candidate checkpoint") < system.index("</dynamic_context>")
+
+
+@pytest.mark.parametrize("time_budget_s", [900.0, 120.0])
+@pytest.mark.parametrize("attempt", [0, 1])
+def test_reflexion_budget_hint_keeps_ordinary_codex_prefix_stable(
+    monkeypatch: pytest.MonkeyPatch, time_budget_s: float, attempt: int
+) -> None:
+    from core.config import settings
+    from core.llm.adapters._openai_common import build_responses_kwargs
+
+    monkeypatch.setenv("GEODE_VERIFY_MODE", "reflexion")
+    monkeypatch.setattr(settings, "prompt_cache_key_enabled", True)
+    monkeypatch.setattr(_provider_call._context, "check_context_overflow", AsyncMock())
+    loop = _loop(time_budget_s=time_budget_s)
+    loop._loop_start_time = 100.0
+    loop._verify_attempt = attempt
+    serialized = []
+    for round_idx, now in enumerate((110.0, 120.0)):
+        monkeypatch.setattr("time.monotonic", lambda now=now: now)
+        request, *_rest = asyncio.run(
+            _provider_call._prepare_request(
+                loop,
+                "Static\n<dynamic_context></dynamic_context>",
+                [{"role": "user", "content": "Synthetic task"}],
+                round_idx=round_idx,
+                model=None,
+                response_schema=None,
+                allow_tools=True,
+            )
+        )
+        assert request.tool_choice == {"type": "auto"}
+        serialized.append(
+            build_responses_kwargs(request, backend="codex", adapter_name="codex-oauth")
+        )
+    first, second = serialized
+    assert first["input"] == second["input"]
+    assert first["prompt_cache_key"] == second["prompt_cache_key"]
+    assert first["instructions"] == second["instructions"]
+    assert f"Total root wall-time budget: {time_budget_s:.0f} seconds" in first["instructions"]
+    assert "Verification and repair do not restart this clock." in first["instructions"]
+    assert "Remaining wall time" not in first["instructions"]
+    assert loop._loop_start_time == 100.0
 
 
 @pytest.mark.parametrize("is_last_round", [False, True])

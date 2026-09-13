@@ -85,6 +85,9 @@ function EvaluationGuide({ ko }: { ko: boolean }) {
         {" "}<a href="https://github.com/mangowhoiscloud/geode/blob/main/core/agent/verify.py">{ko ? "현재 턴 검증 구현" : "Current turn-verification implementation"}</a>
       </p>
       <p>{ko
+        ? "이미지 근거는 텍스트 tool 기록과 별도로 선택해, 파일 쓰기나 계획 갱신 때문에 밀려나지 않도록 합니다. 이전 시도와 현재 시도의 관측, 전달하지 못한 이미지도 구분합니다. 이전 자료가 여전히 유용할 수는 있지만 수정 후 새로 확인한 증거와 같지는 않습니다."
+        : "Image evidence has a separate bounded window, so writes and plan updates do not displace it. Reviews identify prior versus current observations and omitted images. Earlier source material may remain useful, but is not a fresh post-repair check."}</p>
+      <p>{ko
         ? "Reflexion의 verdict와 continuation 기록은 있지만, 다음 요청에서 힌트를 소비했음을 결속하는 digest/event는 아직 없습니다. 이 기록만으로 힌트 소비까지 전 과정이 실측됐거나 성능 개선 효과가 입증됐다고 주장하지 않습니다."
         : "Reflexion records verdicts and continuation, but does not yet bind hint consumption in the next request with a digest/event. These records do not establish end-to-end measured consumption or a performance benefit."}</p>
       <details>

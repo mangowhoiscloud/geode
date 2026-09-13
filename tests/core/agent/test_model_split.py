@@ -725,88 +725,317 @@ def test_judge_observation_bounds_preserve_the_latest_outcome() -> None:
     assert len(prompt) < 25000
 
 
-def test_judge_replays_only_recent_observed_images_as_native_input() -> None:
+def _add_observed_judge_call(context, call_id: str, images: list[str] | None = None) -> dict:
+    import json
+
+    from core.tools.computer_observation import sanitize_computer_payload
+
+    name = "read_document" if images is not None else "update_plan"
+    arguments = {"file_path": f"{call_id}.png"} if images is not None else {"step": call_id}
+    content = (
+        [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": data}}
+            for data in images
+        ]
+        if images is not None
+        else json.dumps({"completed": call_id})
+    )
+    context.add_assistant_message(
+        [
+            {"type": "thinking", "thinking": "PRIVATE_REASONING"},
+            {"type": "text", "text": "UNNECESSARY_PROSE"},
+            {"type": "tool_use", "id": call_id, "name": name, "input": arguments},
+        ]
+    )
+    context.messages[-1]["codex_reasoning_items"] = [{"encrypted_content": "PRIVATE_BLOB"}]
+    result = {"type": "tool_result", "tool_use_id": call_id, "content": content}
+    context.add_tool_result([result])
+    return {
+        "tool": name,
+        "tool_use_id": call_id,
+        "input": arguments,
+        "result": sanitize_computer_payload(result),
+    }
+
+
+def _judge_coverage(messages) -> dict:
+    import json
+
+    return json.loads(messages[0]["content"].rsplit("Image evidence coverage: ", 1)[1])
+
+
+def test_judge_replays_observed_images_despite_intervening_nonvisual_calls() -> None:
+    import base64
     import copy
     import json
 
+    from core.agent.conversation import ConversationContext
     from core.agent.verify import _judge_messages
     from core.llm.adapters._openai_common import build_codex_input
-    from core.llm.adapters.base import AdapterCallRequest, Message
+    from core.llm.adapters.translation import build_adapter_request
     from core.tools.computer_observation import sanitize_computer_payload
 
-    image_block = {
-        "type": "image",
-        "source": {"type": "base64", "media_type": "image/png", "data": "aW1hZ2U="},
-    }
-    history = []
+    context = ConversationContext()
     calls = []
-    for index in range(4):
-        call_id = f"image-call-{index}"
-        content = [copy.deepcopy(image_block)]
-        history.extend(
-            [
-                {
-                    "role": "assistant",
-                    "content": [
-                        {"type": "thinking", "thinking": "PRIVATE_REASONING"},
-                        {"type": "text", "text": "UNNECESSARY_PROSE"},
-                        {
-                            "type": "tool_use",
-                            "id": call_id,
-                            "name": "read_document",
-                            "input": {"file_path": f"observed-{index}.png"},
-                        },
-                    ],
-                    "codex_reasoning_items": [{"encrypted_content": "PRIVATE_BLOB"}],
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "tool_result", "tool_use_id": call_id, "content": content}
-                    ],
-                },
-            ]
-        )
-        calls.append(
-            {
-                "tool": "read_document",
-                "tool_use_id": call_id,
-                "result": {"type": "tool_result", "content": content},
-            }
+    image_ids = [f"image-call-{index}" for index in range(7)]
+    image_data = [base64.b64encode(name.encode()).decode() for name in image_ids]
+    for index, call_id in enumerate(image_ids):
+        calls.append(_add_observed_judge_call(context, call_id, [image_data[index]]))
+        calls.extend(
+            _add_observed_judge_call(context, f"nonvisual-{index}-{noise}") for noise in range(3)
         )
     # An unrelated image is not admitted merely because it is in context.
-    result = _make_result(tool_calls=calls[:3])
+    _add_observed_judge_call(context, "unrelated-image", ["aW1hZ2U="])
+    result = _make_result(tool_calls=calls)
     loop = SimpleNamespace(
-        context=SimpleNamespace(messages=history),
+        context=context,
         _verify_root_user_input="Verify the observed drawing",
     )
-    before = copy.deepcopy(history)
+    before = copy.deepcopy(context.messages)
     prompt = _judge_prompt(result, loop=loop)
     messages = _judge_messages(result, loop=loop, prompt=prompt)
-    assert history == before
+    assert context.messages == before
+    assert '"image-call-0"' not in prompt and "12/28" in prompt
     serialized = json.dumps(messages)
     assert all(
         marker not in serialized
         for marker in ("PRIVATE_REASONING", "PRIVATE_BLOB", "UNNECESSARY_PROSE")
     )
     pairs = [message for message in messages if message["role"] == "assistant"]
-    assert [message["content"][0]["id"] for message in pairs] == ["image-call-1", "image-call-2"]
-    assert "aW1hZ2U=" not in prompt
+    assert [message["content"][0]["id"] for message in pairs] == image_ids
+    assert all(data not in prompt for data in image_data)
     safe = sanitize_computer_payload({"type": "tool_result", "content": messages})
-    assert "aW1hZ2U=" not in json.dumps(safe)
-    request = AdapterCallRequest(
+    assert all(data not in json.dumps(safe) for data in image_data)
+    coverage = _judge_coverage(messages)
+    assert coverage["matched_image_calls"] == coverage["replayed_images"] == 7
+    assert coverage["current_attempt_replayed_images"] == 7
+    assert coverage["omitted_image_blocks_by_reason"] == {}
+    assert coverage["unmatched_logged_calls_unknown_images"] == 0
+    request = build_adapter_request(
         model="gpt-5.6-sol",
-        messages=tuple(
-            Message(role=message["role"], content=message["content"]) for message in messages
-        ),
+        system="Verify supplied evidence",
+        messages=messages,
+        tools=[],
+        tool_choice={"type": "none"},
+        max_tokens=1000,
+        temperature=0,
+        thinking_budget=0,
+        effort="max",
     )
     wire = build_codex_input(request)
     outputs = [item for item in wire if item.get("type") == "function_call_output"]
-    assert [item["call_id"] for item in outputs] == ["image-call-1", "image-call-2"]
+    assert [item["call_id"] for item in outputs] == image_ids
     assert all(item["output"][0]["type"] == "input_image" for item in outputs)
-    assert all(
-        item["output"][0]["image_url"] == "data:image/png;base64,aW1hZ2U=" for item in outputs
+    assert [item["output"][0]["image_url"] for item in outputs] == [
+        f"data:image/png;base64,{data}" for data in image_data
+    ]
+
+
+def test_judge_image_window_precedes_dedup_and_keeps_original_ids() -> None:
+    import base64
+
+    from core.agent.conversation import ConversationContext
+    from core.agent.verify import _judge_messages
+
+    context = ConversationContext()
+    calls = []
+    for index in range(13):
+        data = base64.b64encode(f"image-{min(index, 11)}".encode()).decode()
+        calls.append(_add_observed_judge_call(context, f"image-{index}", [data]))
+    messages = _judge_messages(
+        _make_result(tool_calls=calls), loop=SimpleNamespace(context=context), prompt="Judge"
     )
+    coverage = _judge_coverage(messages)
+    assert coverage["matched_image_calls"] == 13
+    assert coverage["considered_image_calls"] == 12
+    assert coverage["replayed_images"] == 11
+    assert coverage["omitted_image_blocks_by_reason"] == {"duplicate": 1, "image_call_window": 1}
+    assert [row["tool_use_id"] for row in coverage["replayed_calls"]] == [
+        *(f"image-{index}" for index in range(1, 11)),
+        "image-12",
+    ]
+
+
+def test_judge_bounds_per_call_after_dedup_and_invalid_image_skip() -> None:
+    from core.agent.conversation import ConversationContext
+    from core.agent.verify import _judge_messages
+
+    context = ConversationContext()
+    call = _add_observed_judge_call(context, "many-images", ["AAAA", "BBBB", "CCCC", "CCCC"])
+    # An unsupported source must not consume a per-call slot.
+    context.messages[-1]["content"][0]["content"].append(
+        {"type": "image", "source": {"type": "url", "url": "not-fetched"}}
+    )
+    messages = _judge_messages(
+        _make_result(tool_calls=[call]), loop=SimpleNamespace(context=context), prompt="Judge"
+    )
+    coverage = _judge_coverage(messages)
+    assert coverage["replayed_images"] == 2
+    assert coverage["encoded_image_bytes"] == 8
+    assert coverage["omitted_image_blocks_by_reason"] == {
+        "unsupported_image": 1,
+        "duplicate": 1,
+        "per_call_limit": 1,
+    }
+    assert [image["source"]["data"] for image in messages[-1]["content"][0]["content"]] == [
+        "BBBB",
+        "CCCC",
+    ]
+
+
+def test_judge_encoded_image_budget_accepts_boundary_and_skips_to_smaller_image() -> None:
+    from core.agent.conversation import ConversationContext
+    from core.agent.verify import _judge_messages
+
+    mib = 1024 * 1024
+    context = ConversationContext()
+    data = ["AAAA", "B" * 8, "C" * (7 * mib - 4), "D" * (7 * mib), "E" * (7 * mib + 4)]
+    calls = [
+        _add_observed_judge_call(context, f"image-{index}", [value])
+        for index, value in enumerate(data)
+    ]
+    messages = _judge_messages(
+        _make_result(tool_calls=calls), loop=SimpleNamespace(context=context), prompt="Judge"
+    )
+    coverage = _judge_coverage(messages)
+    assert coverage["encoded_image_bytes"] == 14 * mib
+    assert coverage["replayed_images"] == 3
+    assert coverage["omitted_image_blocks_by_reason"] == {
+        "per_image_bytes": 1,
+        "aggregate_bytes": 1,
+    }
+    assert [row["tool_use_id"] for row in coverage["replayed_calls"]] == [
+        "image-0",
+        "image-2",
+        "image-3",
+    ]
+
+
+def test_judge_labels_prior_observations_without_claiming_new_checks() -> None:
+    import copy
+    import json
+
+    from core.agent.conversation import ConversationContext
+    from core.agent.verify import _judge_messages
+
+    context = ConversationContext()
+    call = _add_observed_judge_call(context, "old-image", ["AAAA"])
+    prior = _make_result(tool_calls=[call])
+    current = _make_result(tool_calls=[])
+    loop = SimpleNamespace(
+        context=context,
+        _verify_attempt_results=[prior],
+        _verify_attempt=1,
+        _verify_root_user_input="Review the candidate",
+    )
+    before = copy.deepcopy([prior.tool_calls, current.tool_calls, context.messages])
+    prompt = _judge_prompt(current, loop=loop)
+    messages = _judge_messages(current, loop=loop, prompt=prompt)
+    assert json.dumps({"attempt_index": 0, "scope": "prior", "tool_calls": 1}) in prompt
+    assert json.dumps({"attempt_index": 1, "scope": "current", "tool_calls": 0}) in prompt
+    assert '"attempt_index": 0, "scope": "prior", "tool"' in prompt
+    coverage = _judge_coverage(messages)
+    assert coverage["current_attempt_replayed_images"] == 0
+    assert coverage["replayed_calls"] == [
+        {"tool_use_id": "old-image", "attempt_index": 0, "scope": "prior", "images": 1}
+    ]
+    fresh_loop = SimpleNamespace(
+        _verify_attempt_results=[_make_result()],
+        _verify_attempt=1,
+        _verify_root_user_input="Review the candidate",
+    )
+    assert prompt != _judge_prompt(_make_result(tool_calls=[call]), loop=fresh_loop)
+    assert [prior.tool_calls, current.tool_calls, context.messages] == before
+
+
+def test_judge_dedup_preserves_the_current_observation_provenance() -> None:
+    from core.agent.conversation import ConversationContext
+    from core.agent.verify import _judge_messages
+
+    context = ConversationContext()
+    old = _add_observed_judge_call(context, "prior-image", ["AAAA"])
+    current = _add_observed_judge_call(context, "current-image", ["AAAA"])
+    messages = _judge_messages(
+        _make_result(tool_calls=[current]),
+        loop=SimpleNamespace(
+            context=context, _verify_attempt_results=[_make_result(tool_calls=[old])]
+        ),
+        prompt="Judge",
+    )
+    coverage = _judge_coverage(messages)
+    assert coverage["current_attempt_replayed_images"] == 1
+    assert coverage["omitted_image_blocks_by_reason"] == {"duplicate": 1}
+    assert coverage["replayed_calls"] == [
+        {"tool_use_id": "current-image", "attempt_index": 1, "scope": "current", "images": 1}
+    ]
+
+
+@pytest.mark.parametrize(
+    "context_state", ["sanitized", "masked", "missing", "unknown", "nonvisual"]
+)
+def test_judge_discloses_unavailable_image_context_without_inventing_images(context_state) -> None:
+    import json
+
+    from core.agent.conversation import ConversationContext
+    from core.agent.verify import _judge_messages
+    from core.orchestration.context_monitor import mask_stale_observations
+    from core.tools.computer_observation import sanitize_computer_payload
+
+    context = ConversationContext()
+    call = _add_observed_judge_call(
+        context, "observed-call", None if context_state in {"unknown", "nonvisual"} else ["AAAA"]
+    )
+    calls = [call]
+    if context_state == "sanitized":
+        context.messages = sanitize_computer_payload(context.messages)
+    elif context_state == "masked":
+        calls.append(_add_observed_judge_call(context, "later-nonvisual"))
+        assert mask_stale_observations(context.messages, keep_recent_rounds=1) == 1
+    elif context_state in {"missing", "unknown"}:
+        context.clear()
+    else:
+        context.messages[-1]["content"][0]["content"] = [
+            {"type": "text", "text": "image_omitted and image_sha256 are only words here"},
+            {"type": "text", "text": json.dumps({"image_omitted": False, "image_sha256": "x"})},
+        ]
+    messages = _judge_messages(
+        _make_result(tool_calls=calls), loop=SimpleNamespace(context=context), prompt="Judge"
+    )
+    coverage = _judge_coverage(messages)
+    assert coverage["replayed_images"] == coverage["current_attempt_replayed_images"] == 0
+    assert len(messages) == 1
+    assert (
+        coverage["omitted_image_blocks_by_reason"]
+        == {
+            "sanitized": {"context_image_unavailable": 1},
+            "masked": {"context_image_unavailable": 1},
+            "missing": {"unmatched_context": 1},
+            "unknown": {},
+            "nonvisual": {},
+        }[context_state]
+    )
+    assert coverage["matched_image_calls"] == int(context_state in {"sanitized", "masked"})
+    assert coverage["unmatched_logged_image_calls"] == int(context_state == "missing")
+    assert coverage["unmatched_logged_calls_unknown_images"] == int(context_state == "unknown")
+
+
+def test_judge_does_not_guess_attempt_for_ambiguous_call_id() -> None:
+    from core.agent.conversation import ConversationContext
+    from core.agent.verify import _judge_messages
+
+    context = ConversationContext()
+    old = _add_observed_judge_call(context, "same-call", ["AAAA"])
+    current = _add_observed_judge_call(context, "same-call", ["BBBB"])
+    messages = _judge_messages(
+        _make_result(tool_calls=[current]),
+        loop=SimpleNamespace(
+            context=context, _verify_attempt_results=[_make_result(tool_calls=[old])]
+        ),
+        prompt="Judge",
+    )
+    coverage = _judge_coverage(messages)
+    assert coverage["ambiguous_call_ids_unknown_images"] == 1
+    assert coverage["replayed_images"] == 0 and len(messages) == 1
 
 
 @pytest.mark.parametrize("mode", ["llm_judge", "reflexion"])
@@ -896,7 +1125,11 @@ def test_judge_does_not_replay_sensitive_or_unbounded_image_origin(omission) -> 
     messages = _judge_messages(
         result, loop=SimpleNamespace(context=SimpleNamespace(messages=history)), prompt="Judge"
     )
-    assert messages == [{"role": "user", "content": "Judge"}]
+    assert len(messages) == 1 and messages[0]["role"] == "user"
+    coverage = _judge_coverage(messages)
+    assert coverage["replayed_images"] == coverage["current_attempt_replayed_images"] == 0
+    reason = "unsafe_origin" if omission == "oversized" else "privacy"
+    assert coverage["omitted_image_blocks_by_reason"] == {reason: 1}
     assert value not in json.dumps(messages)
 
 

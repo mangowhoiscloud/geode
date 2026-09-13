@@ -168,8 +168,9 @@ async def _prepare_request(
                 system = _context.inject_runtime_hints(
                     system,
                     "<execution_budget>\n"
-                    f"Remaining wall time: {max(0.0, remaining_time):.0f} seconds, "
+                    f"Total root wall-time budget: {loop._time_budget_s:.0f} seconds, "
                     "including verification and any repair.\n"
+                    "Verification and repair do not restart this clock.\n"
                     "Produce the requested artifact early and inspect its contents with "
                     "available tools. Prefer a working candidate over more exploration. "
                     "Resolve uncertainty with observable checks before claiming completion.\n"

@@ -56,6 +56,11 @@ functional change.
   reserves time for a first-candidate review and repair. Long text alone no
   longer triggers a clarification exit. Session-specific duration limits also
   reach delegated workers; parent cancellation owns the outer deadline.
+  Judge image evidence has a separate bounded window, so intervening text tools
+  cannot displace it. Reviews distinguish prior observations from current-attempt
+  checks and disclose omitted visual evidence.
+  Keep ordinary budget guidance stable across calls instead of rewriting the
+  system prefix with a countdown; checkpoint and timeout enforcement are unchanged.
   External benchmark scoring is unchanged.
 - Preserve cancellation evidence for started tool calls and delegated workers.
   Parallel tools drain sibling cleanup before propagating cancellation; isolated

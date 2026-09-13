@@ -77,6 +77,11 @@ malformed, or timed-out judgments escalate rather than pass in both LLM modes.
 Mechanical empty/action-required checks remain; output length, keyword overlap
 and recovered tool errors no longer veto semantic review. Reflexion can reuse
 bounded image evidence already observed by the agent, without new file access.
+Text uses the latest 12 tool observations; image evidence has its own window of
+12 image-bearing calls from the current verification chain. At most two distinct
+images per call are replayed, bounded to 7 MiB per image and 14 MiB in aggregate
+(encoded payload size). The prompt labels prior/current observations and omitted
+evidence; it does not treat old source material as a newly executed check.
 
 The existing policy allows at most two verification revisions. Each judge call
 uses the configured judge model (otherwise the loop model), existing usage

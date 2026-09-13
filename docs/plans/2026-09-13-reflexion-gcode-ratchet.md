@@ -58,3 +58,54 @@ inside each attempt. The old full-suite result and its exclusions stay immutable
 5. Accept the development ratchet only for a complete valid 5/5 batch, then use
    feature-to-develop PR and required green CI. No release, tag, PyPI publication
    or modification of historical benchmark bytes is authorized.
+
+## First candidate: a judge pass was not sufficient
+
+Source `d1e742081117b78f80fb7cdf173fd0133069b5ce` completed all five frozen
+attempts: **2/5 passed the official verifier; all five attempts were valid**.
+All five received an internal judge pass on the first candidate, so none
+entered repair. This is evidence of three false-positive internal verdicts,
+not evidence that the repair path improved correctness.
+
+The failed attempts had successful image reads and an untruncated final-file
+readback. Their content was nevertheless incorrect. They produced seven,
+nine and nine image observations; the passing fourth attempt used two.
+The frozen selector kept at most two recent images. In the third attempt,
+ordinary tool calls also pushed earlier images outside its 12-call window.
+This establishes a source-level evidence-selection loss. No persisted judge-input
+receipt establishes actual visual attention, and these few observations do not
+establish that the selector caused the score difference.
+
+The next candidate therefore targets evidence delivery, not the task answer:
+
+- Keep text observations bounded to the latest 12 calls, but select images from
+  the latest 12 image-bearing, originally logged and matched calls in the same
+  verification chain. Retain image-size, aggregate-size and privacy limits.
+- Label current versus prior attempt observations and disclose visual omissions.
+  Old source material may remain relevant; it is not a new post-feedback check.
+- Preserve the runtime's existing LLM feedback and bounded tool-enabled repair.
+  Do not add a new mandatory-tool heuristic or alter the official verifier.
+- Replace the per-call remaining-time number with the configured total budget.
+  The old number changed Codex `instructions` before the otherwise identical
+  conversation input. Keep computed checkpoints and hard deadlines unchanged.
+  [OpenAI's cache documentation](https://developers.openai.com/api/docs/guides/prompt-caching)
+  requires an identical rendered prefix for reuse. A stable prefix removes this
+  avoidable mutation; it does not establish measured cache or latency gains, or
+  subscription support for optional platform cache controls.
+
+Local evidence remains under
+`artifacts/eval/runs/terminalbench21-sol-max-reflexion-ratchet-r1-20260913/`.
+Harbor's original trial IDs and paths remain unchanged; the canonical attempt-ID
+projection must normalize their uppercase suffixes to the existing lowercase
+schema. This is an output-normalization correction, not a new score or trial.
+
+## Subsequent candidate admission
+
+The first candidate's complete-five rule stays frozen. For subsequent candidates,
+prospectively stop at the first valid verifier zero or infrastructure-invalid
+attempt. Retain every executed attempt and mark the remainder unexecuted, not
+zero. A partial candidate has no measured five-attempt pass rate; omit an analysis
+that the current schema cannot truthfully represent. Only five fresh valid
+passes under one unchanged source/spec pass the development gate. Do not combine
+successful attempts across candidates, or infer general quality from this
+development-exposed stopping rule.
