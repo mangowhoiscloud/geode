@@ -480,12 +480,11 @@ def test_webhook_bridge_marshals_into_main_loop_not_a_throwaway_loop() -> None:
     )
 
 
-def test_sync_llm_judge_inside_running_loop_downgrades_to_rule_based(
+def test_sync_llm_judge_inside_running_loop_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Behavioral pin — the sync judge wrapper called from INSIDE a running
-    loop must downgrade to the rule-based fallback (effective_mode marks
-    the downgrade) instead of bridging through ThreadPoolExecutor +
+    loop must report unavailable instead of bridging through ThreadPoolExecutor +
     ``asyncio.run`` (a disposable loop per call, removed
     PR-GATEWAY-BRIDGE-FRONTIER)."""
     from core.agent.loop.agent_loop import AgenticResult
@@ -499,9 +498,9 @@ def test_sync_llm_judge_inside_running_loop_downgrades_to_rule_based(
 
     verdict = asyncio.run(_call_from_inside_loop())
     assert verdict.mode is VerifyMode.LLM_JUDGE
-    assert verdict.effective_mode is VerifyMode.RULE_BASED, (
-        "sync judge inside a running loop must downgrade, not thread-bridge"
-    )
+    assert verdict.effective_mode is VerifyMode.LLM_JUDGE
+    assert not verdict.passed and not verdict.should_retry
+    assert verdict.rubric_misses == ("verification_error",)
 
 
 def test_verify_judge_has_no_thread_pool_loop_bridge() -> None:

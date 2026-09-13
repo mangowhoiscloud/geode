@@ -47,6 +47,37 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- Ground Reflexion verification in bounded observations instead of response
+  length, keyword overlap or recovered tool-error vetoes. LLM verification
+  failures remain unavailable rather than falling back to structural success.
+  Verification repairs share the originating time budget; bounded Reflexion
+  reserves time for a first-candidate review and repair. Long text alone no
+  longer triggers a clarification exit. Session-specific duration limits also
+  reach delegated workers; parent cancellation owns the outer deadline.
+  Judge image evidence has a separate bounded window, so intervening text tools
+  cannot displace it. Reviews distinguish prior observations from current-attempt
+  checks and disclose omitted visual evidence.
+  Present evidence before candidate claims and replace the success-filled
+  Reflexion example with a neutral verdict contract. Readback consistency and
+  failed delegation are not independent correctness evidence.
+  Keep ordinary budget guidance stable across calls instead of rewriting the
+  system prefix with a countdown; checkpoint and timeout enforcement are unchanged.
+  External benchmark scoring is unchanged.
+- Preserve parent-model inheritance for bundled or custom agents that omit a
+  model. Only explicit agent/task models override the execution model; no
+  provider-specific default silently changes a delegated subscription route.
+- Retain bounded image counts and digests from completed Codex request payloads
+  in the existing LLM-call event. Missing receipts remain unknown, not zero;
+  these describe serialized images, not model attention or successful decoding.
+- Preserve cancellation evidence for started tool calls and delegated workers.
+  Parallel tools drain sibling cleanup before propagating cancellation; isolated
+  workers receive a bounded graceful shutdown before forced termination. Missing
+  evidence after forced termination still fails trajectory completeness checks.
+- Update the site's Next.js, sharp and js-yaml patch versions to clear the
+  mandatory dependency security gate; benchmark runtime dependencies are unchanged.
+
 ## [1.0.28] - 2026-09-08
 
 > Evidence-led runtime release: bounded verification, cache accounting,

@@ -272,6 +272,47 @@ def test_interrupt_and_resume_generation(tmp_path) -> None:
     asyncio.run(scenario())
 
 
+def test_repeated_interrupt_drains_background_cleanup_before_terminal_state(tmp_path) -> None:
+    async def scenario() -> None:
+        cleaning = asyncio.Event()
+        flushed = asyncio.Event()
+
+        class GracefulRunner(_ControlledRunner):
+            async def arun(self, *_args: Any, **_kwargs: Any) -> IsolationResult:
+                self.started.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    cleaning.set()
+                    await asyncio.wait_for(flushed.wait(), timeout=1)
+                raise AssertionError("cancelled run must not return")
+
+            def cancel(self, _session_id: str) -> bool:
+                pytest.fail("background interrupt must not bypass graceful worker shutdown")
+
+        runner = GracefulRunner()
+        manager = SubAgentManager(
+            runner,
+            action_handlers={},
+            collaboration_store=CollaborationStore(tmp_path / "sessions.db"),
+        )
+        await manager.aspawn(
+            [SubTask("child-cleanup", "inspect", "analyze")], parent_session_id="parent-1"
+        )
+        await runner.started.wait()
+        assert manager.interrupt_task("parent-1", "child-cleanup")
+        await asyncio.wait_for(cleaning.wait(), timeout=1)
+        assert manager.interrupt_task("parent-1", "child-cleanup")
+        await asyncio.sleep(0)
+        running = await manager.wait_for_task("parent-1", "child-cleanup", timeout_s=0)
+        assert running is not None and running.status == "running"
+        flushed.set()
+        terminal = await manager.wait_for_task("parent-1", "child-cleanup", timeout_s=1)
+        assert terminal is not None and terminal.status == "interrupted"
+
+    asyncio.run(scenario())
+
+
 def test_wait_polls_durable_state_without_a_local_control(tmp_path) -> None:
     async def scenario() -> None:
         store = CollaborationStore(tmp_path / "sessions.db")

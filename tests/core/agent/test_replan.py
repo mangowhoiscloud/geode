@@ -282,15 +282,14 @@ def test_low_confidence_replan_is_edge_triggered(monkeypatch: pytest.MonkeyPatch
     assert all(event[2]["trigger"] == "low_confidence" for event in timeline_events)
 
 
-def test_verify_expected_outcome_feeds_retryable_replan_evidence() -> None:
+def test_mechanical_verify_does_not_infer_plan_completion_from_keywords() -> None:
     plan = Plan(steps=(PlanStep("s1", "Search", "arxiv paper found"),))
     with session_metrics_scope(session_id="verify-plan"):
         current_session_metrics().set_active_plan(plan)
         mismatch = verify_turn(_result("unrelated output"))
-        assert "step_expected_mismatch" in mismatch.rubric_misses
-        assert mismatch.should_retry is True
+        assert mismatch.passed and not mismatch.should_retry
         matched = verify_turn(_result("The arxiv paper was found"))
-        assert "step_expected_mismatch" not in matched.rubric_misses
+        assert matched.passed and not matched.should_retry
 
 
 def test_maybe_replan_installs_verify_revision(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -20,14 +20,16 @@ spawns child sub-agents (depth=1 enforced, matching Claude Code).
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import inspect
 import json
 import logging
 import os
+import signal
 import sys
 import time
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -57,18 +59,14 @@ log = logging.getLogger(__name__)
 WORKER_DIR = GLOBAL_WORKERS_DIR  # P2 — was `Path.home() / ".geode" / "workers"`
 
 
-async def _await_close(outcome: Awaitable[Any]) -> None:
-    await outcome
-
-
-def _close_worker_session(loop: Any, *, success: bool) -> None:
+async def _close_worker_session(loop: Any, *, success: bool) -> None:
     """Prefer async public lifecycle, retaining simple test/legacy doubles."""
     suffix = "completed" if success else "error"
     async_close = getattr(loop, f"amark_session_{suffix}", None)
     if callable(async_close):
         outcome = async_close()
         if inspect.isawaitable(outcome):
-            run_process_coroutine(_await_close(outcome))
+            await outcome
             return
     sync_close = getattr(loop, f"mark_session_{suffix}", None)
     if callable(sync_close):
@@ -428,6 +426,7 @@ def _run_agentic(
     *,
     middleware_builder: Callable[..., MiddlewareRegistry] | None = None,
     activity_sink_provider: RunEventSinkProvider | None = None,
+    handle_sigterm: bool = False,
 ) -> WorkerResult:
     """Bootstrap minimal GEODE runtime and run AgenticLoop."""
     started = time.time()
@@ -582,164 +581,185 @@ def _run_agentic(
             exc_info=True,
         )
 
-    loop = AgenticLoop(
-        conversation,
-        executor,
-        config=AgenticLoopConfig(
-            max_rounds=0,
-            max_tokens=request.subagent_max_tokens,
-            thinking_budget=request.thinking_budget,
-            effort=request.effort,
-            time_budget_s=request.time_budget_s,
-            system_prompt_override=system_prompt_override,
-            parent_session_key=request.parent_session_key,
-            parent_session_id=request.parent_session_id,
-            allowed_tool_names=allowed_tool_names,
-            force_include_allowed_tools=True,
-            source=request.source,
-            session_id=request.task_id,
-            response_schema=request.response_schema,
-        ),
-        model=effective_model,
-        provider=effective_provider,
-        hooks=worker_hooks,
-        activity_sink_provider=activity_sink_provider,
-        policy_sources=policy_sources,
-        # v0.55.0 R5 — propagate reasoning depth + time budget into the
-        # sub-agent's loop. Pre-fix every sub-agent ran at the
-        # AgenticLoop defaults (effort="high", thinking_budget=0,
-        # time_budget_s=0.0) because the kwargs were never threaded
-        # through, even though WorkerRequest carried them. Mirrors
-        # Hermes ``delegate_tool.py:607-636`` (parent-inherit + per-child
-        # config override) and Claude Code ``loadAgentsDir.ts:116``
-        # (agent-level effort frontmatter).
-        quiet=True,  # Suppress spinner — parent handles UI
-        # PR-Q.5 (2026-05-24, single-anchor invariant I1 in
-        # docs/plans/2026-05-24-timeline-standardization-and-claude-resume.md):
-        # the sub-agent's task_id becomes the AgenticLoop's session_id so
-        # the worker's SessionTimeline projection (events.jsonl) lands in the
-        # SAME ``<run_dir>/sub_agents/<task_id>/`` directory as
-        # result.json + stderr.log. Without this the AgenticLoop generates
-        # a fresh ``s-<uuid>`` and events.jsonl falls into a sibling
-        # directory that the operator cannot reach from the timeline's
-        # ``details.task_id`` reference.
-        # PR-JSON-WIRE (2026-05-25) — thread the per-task JSON Schema
-        # to the AgenticLoop so every spawned adapter call carries
-        # ``AdapterCallRequest.response_schema``. Empty / None
-        # preserves legacy free-form text responses for callers that
-        # didn't declare a schema (REPL, gateway, ad-hoc CLI).
-    )
-    if resume_state is not None and resume_checkpoint is not None:
-        resume_checkpoint.reopen(resume_state.session_id)
-        loop.restore_from_checkpoint(resume_state)
+    async def _execute_worker() -> WorkerResult:
+        event_loop = asyncio.get_running_loop()
+        task = asyncio.current_task()
+        assert task is not None
+        previous_sigterm = signal.getsignal(signal.SIGTERM)
 
-    # 7. Build prompt
-    prompt = request.description
-    if request.args:
-        prompt += f"\n\nParameters: {json.dumps(request.args, ensure_ascii=False)}"
+        def _cancel_worker() -> None:
+            if not task.cancelling():
+                task.cancel("Worker cancelled by SIGTERM")
 
-    # 8. Run
-    def _run_worker_turn(turn_prompt: str) -> Any:
+        if handle_sigterm:
+            event_loop.add_signal_handler(signal.SIGTERM, _cancel_worker)
+        loop: AgenticLoop | None = None
         try:
-            return run_process_coroutine(loop.arun(turn_prompt))
+            loop = AgenticLoop(
+                conversation,
+                executor,
+                config=AgenticLoopConfig(
+                    max_rounds=0,
+                    max_tokens=request.subagent_max_tokens,
+                    thinking_budget=request.thinking_budget,
+                    effort=request.effort,
+                    time_budget_s=request.time_budget_s,
+                    system_prompt_override=system_prompt_override,
+                    parent_session_key=request.parent_session_key,
+                    parent_session_id=request.parent_session_id,
+                    allowed_tool_names=allowed_tool_names,
+                    force_include_allowed_tools=True,
+                    source=request.source,
+                    session_id=request.task_id,
+                    response_schema=request.response_schema,
+                ),
+                model=effective_model,
+                provider=effective_provider,
+                hooks=worker_hooks,
+                activity_sink_provider=activity_sink_provider,
+                policy_sources=policy_sources,
+                # v0.55.0 R5 — propagate reasoning depth + time budget into the
+                # sub-agent's loop. Pre-fix every sub-agent ran at the
+                # AgenticLoop defaults (effort="high", thinking_budget=0,
+                # time_budget_s=0.0) because the kwargs were never threaded
+                # through, even though WorkerRequest carried them. Mirrors
+                # Hermes ``delegate_tool.py:607-636`` (parent-inherit + per-child
+                # config override) and Claude Code ``loadAgentsDir.ts:116``
+                # (agent-level effort frontmatter).
+                quiet=True,  # Suppress spinner — parent handles UI
+                # PR-Q.5 (2026-05-24, single-anchor invariant I1 in
+                # docs/plans/2026-05-24-timeline-standardization-and-claude-resume.md):
+                # the sub-agent's task_id becomes the AgenticLoop's session_id so
+                # the worker's SessionTimeline projection (events.jsonl) lands in the
+                # SAME ``<run_dir>/sub_agents/<task_id>/`` directory as
+                # result.json + stderr.log. Without this the AgenticLoop generates
+                # a fresh ``s-<uuid>`` and events.jsonl falls into a sibling
+                # directory that the operator cannot reach from the timeline's
+                # ``details.task_id`` reference.
+                # PR-JSON-WIRE (2026-05-25) — thread the per-task JSON Schema
+                # to the AgenticLoop so every spawned adapter call carries
+                # ``AdapterCallRequest.response_schema``. Empty / None
+                # preserves legacy free-form text responses for callers that
+                # didn't declare a schema (REPL, gateway, ad-hoc CLI).
+            )
+            if resume_state is not None and resume_checkpoint is not None:
+                resume_checkpoint.reopen(resume_state.session_id)
+                loop.restore_from_checkpoint(resume_state)
+
+            # 7. Build prompt
+            prompt = request.description
+            if request.args:
+                prompt += f"\n\nParameters: {json.dumps(request.args, ensure_ascii=False)}"
+
+            # 8. Run
+            agentic_result = await loop.arun(prompt)
+
+            # PR-WORKER-SCHEMA-AWARE-RETRY (2026-05-26) — when the caller declared
+            # a ``response_schema`` (PR-JSON-WIRE wired per-role schemas through
+            # ``WorkerRequest`` → ``AgenticLoop``) but the first run produced
+            # empty / unparsable / schema-missing-keys output, the prompt-level
+            # PR-HANDOFF-SCHEMAS gate already failed for this task. Inject the
+            # validator's verdict as a follow-up user turn (paperclip + open-
+            # scientist validation-feedback pattern) and re-issue the loop once.
+            # Cap at exactly one retry — a third pass would burn budget without
+            # changing the underlying behaviour (the role contract is the same).
+            #
+            # Codex MCP review (2026-05-26) caught two pre-merge issues, both
+            # patched below:
+            #
+            # 1. ``AgenticLoop.arun`` resets ``_loop_start_time`` on every call,
+            #    so the second pass would get another
+            #    full ``time_budget_s`` rather than the remainder. Guard the
+            #    retry on ``elapsed_before_retry < 0.5 * request.timeout_s`` so
+            #    a worker pegged near its wall-clock cap doesn't get pushed past
+            #    it (the subprocess ``asyncio.wait_for`` would kill the retry
+            #    mid-flight, leaving the parent with no usable signal).
+            # 2. The no-retry success exits (``input_blocked`` / ``user_cancelled``
+            #    / ``user_clarification_needed``) carry intentional non-JSON text
+            #    that the parent expects to surface as-is. The earlier guard would
+            #    have fired the retry on these because they aren't in
+            #    ``_FAILURE_TERMINATION_REASONS``; ``_needs_schema_retry`` now
+            #    checks ``_NO_RETRY_TERMINATION_REASONS`` (see helper below).
+            elapsed_before_retry = time.time() - started
+            if (
+                request.response_schema is not None
+                and _needs_schema_retry(agentic_result, request.response_schema)
+                and elapsed_before_retry < 0.5 * request.timeout_s
+            ):
+                feedback_prompt = _build_schema_retry_prompt(
+                    request.response_schema, agentic_result
+                )
+                log.warning(
+                    "worker.schema_retry task_id=%s reason=empty_or_malformed "
+                    "first_text_len=%d elapsed=%.1fs cap=%.1fs — re-issuing with "
+                    "validator feedback",
+                    request.task_id,
+                    len(agentic_result.text) if agentic_result else 0,
+                    elapsed_before_retry,
+                    request.timeout_s,
+                )
+                agentic_result = await loop.arun(feedback_prompt)
+            elif request.response_schema is not None and _needs_schema_retry(
+                agentic_result, request.response_schema
+            ):
+                # Same trigger fired, but the elapsed-time gate vetoed the retry.
+                # Observability: surface why so an operator reading the worker
+                # log can correlate "no retry" with "out of budget".
+                log.warning(
+                    "worker.schema_retry_skipped task_id=%s elapsed=%.1fs cap=%.1fs "
+                    "— retry would push past 50%% of wall-clock cap",
+                    request.task_id,
+                    elapsed_before_retry,
+                    request.timeout_s,
+                )
+
+            elapsed_ms = (time.time() - started) * 1000
+            if getattr(agentic_result, "error", None) or not is_successful_task_termination(
+                getattr(agentic_result, "termination_reason", "")
+            ):
+                await _close_worker_session(loop, success=False)
+            else:
+                await _close_worker_session(loop, success=True)
+            success, summary, text = _resolve_worker_outcome(agentic_result)
+
+            # PR-SEEDGEN-TOKENS (2026-05-30) — surface the sub-agent's per-arun
+            # usage to the parent. ``agentic_result.usage`` is an ``LLMUsage``
+            # aggregate (or None when the loop made no LLM call); subscription /
+            # CLI calls leave it empty so the fields stay 0 — never fabricated.
+            prompt_tokens = 0
+            completion_tokens = 0
+            usd_spent = 0.0
+            usage = agentic_result.usage if agentic_result is not None else None
+            if usage is not None:
+                prompt_tokens = usage.input_tokens
+                completion_tokens = usage.output_tokens
+                usd_spent = usage.cost_usd
+
+            result = WorkerResult(
+                task_id=request.task_id,
+                success=success,
+                output=text,
+                summary=summary,
+                duration_ms=elapsed_ms,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                usd_spent=usd_spent,
+            )
+            return result
         except BaseException:
-            _close_worker_session(loop, success=False)
+            if loop is not None:
+                await _close_worker_session(loop, success=False)
             raise
+        finally:
+            try:
+                if worker_hooks is not None:
+                    worker_hooks.close()
+            finally:
+                if handle_sigterm:
+                    event_loop.remove_signal_handler(signal.SIGTERM)
+                    signal.signal(signal.SIGTERM, previous_sigterm)
 
-    agentic_result = _run_worker_turn(prompt)
-
-    # PR-WORKER-SCHEMA-AWARE-RETRY (2026-05-26) — when the caller declared
-    # a ``response_schema`` (PR-JSON-WIRE wired per-role schemas through
-    # ``WorkerRequest`` → ``AgenticLoop``) but the first run produced
-    # empty / unparsable / schema-missing-keys output, the prompt-level
-    # PR-HANDOFF-SCHEMAS gate already failed for this task. Inject the
-    # validator's verdict as a follow-up user turn (paperclip + open-
-    # scientist validation-feedback pattern) and re-issue the loop once.
-    # Cap at exactly one retry — a third pass would burn budget without
-    # changing the underlying behaviour (the role contract is the same).
-    #
-    # Codex MCP review (2026-05-26) caught two pre-merge issues, both
-    # patched below:
-    #
-    # 1. ``AgenticLoop.arun`` resets ``_loop_start_time`` on every call,
-    #    so the second pass would get another
-    #    full ``time_budget_s`` rather than the remainder. Guard the
-    #    retry on ``elapsed_before_retry < 0.5 * request.timeout_s`` so
-    #    a worker pegged near its wall-clock cap doesn't get pushed past
-    #    it (the subprocess ``asyncio.wait_for`` would kill the retry
-    #    mid-flight, leaving the parent with no usable signal).
-    # 2. The no-retry success exits (``input_blocked`` / ``user_cancelled``
-    #    / ``user_clarification_needed``) carry intentional non-JSON text
-    #    that the parent expects to surface as-is. The earlier guard would
-    #    have fired the retry on these because they aren't in
-    #    ``_FAILURE_TERMINATION_REASONS``; ``_needs_schema_retry`` now
-    #    checks ``_NO_RETRY_TERMINATION_REASONS`` (see helper below).
-    elapsed_before_retry = time.time() - started
-    if (
-        request.response_schema is not None
-        and _needs_schema_retry(agentic_result, request.response_schema)
-        and elapsed_before_retry < 0.5 * request.timeout_s
-    ):
-        feedback_prompt = _build_schema_retry_prompt(request.response_schema, agentic_result)
-        log.warning(
-            "worker.schema_retry task_id=%s reason=empty_or_malformed "
-            "first_text_len=%d elapsed=%.1fs cap=%.1fs — re-issuing with "
-            "validator feedback",
-            request.task_id,
-            len(agentic_result.text) if agentic_result else 0,
-            elapsed_before_retry,
-            request.timeout_s,
-        )
-        agentic_result = _run_worker_turn(feedback_prompt)
-    elif request.response_schema is not None and _needs_schema_retry(
-        agentic_result, request.response_schema
-    ):
-        # Same trigger fired, but the elapsed-time gate vetoed the retry.
-        # Observability: surface why so an operator reading the worker
-        # log can correlate "no retry" with "out of budget".
-        log.warning(
-            "worker.schema_retry_skipped task_id=%s elapsed=%.1fs cap=%.1fs "
-            "— retry would push past 50%% of wall-clock cap",
-            request.task_id,
-            elapsed_before_retry,
-            request.timeout_s,
-        )
-
-    elapsed_ms = (time.time() - started) * 1000
-    if getattr(agentic_result, "error", None) or not is_successful_task_termination(
-        getattr(agentic_result, "termination_reason", "")
-    ):
-        _close_worker_session(loop, success=False)
-    else:
-        _close_worker_session(loop, success=True)
-    success, summary, text = _resolve_worker_outcome(agentic_result)
-
-    # PR-SEEDGEN-TOKENS (2026-05-30) — surface the sub-agent's per-arun
-    # usage to the parent. ``agentic_result.usage`` is an ``LLMUsage``
-    # aggregate (or None when the loop made no LLM call); subscription /
-    # CLI calls leave it empty so the fields stay 0 — never fabricated.
-    prompt_tokens = 0
-    completion_tokens = 0
-    usd_spent = 0.0
-    usage = agentic_result.usage if agentic_result is not None else None
-    if usage is not None:
-        prompt_tokens = usage.input_tokens
-        completion_tokens = usage.output_tokens
-        usd_spent = usage.cost_usd
-
-    result = WorkerResult(
-        task_id=request.task_id,
-        success=success,
-        output=text,
-        summary=summary,
-        duration_ms=elapsed_ms,
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
-        usd_spent=usd_spent,
-    )
-    if worker_hooks is not None:
-        worker_hooks.close()
-    return result
+    return run_process_coroutine(_execute_worker())
 
 
 # PR-DEFECT-AB (2026-05-24) — propagate AgenticLoop failures past the
@@ -1006,6 +1026,7 @@ def main(
             # No reset token is needed: the subprocess exits at the bottom of main.
             worker_activity_binder(Path(inherited_run_dir))
 
+    raw = ""
     result: WorkerResult | None = None
     try:
         # Read request from stdin (single JSON line)
@@ -1023,12 +1044,22 @@ def main(
                 tool_plan_builder,
                 middleware_builder=middleware_builder,
                 activity_sink_provider=activity_sink_provider,
+                handle_sigterm=True,
             )
     except json.JSONDecodeError as exc:
         result = WorkerResult(
             task_id="unknown",
             success=False,
             error=f"Invalid JSON on stdin: {exc}",
+        )
+    except asyncio.CancelledError:
+        task_id = "unknown"
+        with contextlib.suppress(Exception):
+            task_id = json.loads(raw).get("task_id", "unknown")
+        result = WorkerResult(
+            task_id=task_id,
+            success=False,
+            error="Worker cancelled",
         )
     except Exception as exc:
         task_id = "unknown"

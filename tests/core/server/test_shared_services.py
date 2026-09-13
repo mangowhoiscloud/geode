@@ -333,6 +333,29 @@ class TestSharedServicesCreateSession:
         _, loop = services.create_session(SessionMode.DAEMON, time_budget_override=120.0)
         assert loop._time_budget_s == 120.0
 
+    def test_session_time_budgets_reach_independent_worker_requests(
+        self, services: SharedServices
+    ) -> None:
+        from core.agent.sub_agent import SubTask
+        from core.agent.worker import WorkerRequest
+
+        sessions = [
+            services.create_session(SessionMode.REPL, time_budget_override=900.0),
+            services.create_session(SessionMode.REPL, time_budget_override=120.0),
+            services.create_session(SessionMode.SCHEDULER),
+            services.create_session(SessionMode.REPL),
+        ]
+        managers = [executor._sub_agent_manager for executor, _ in sessions]
+        assert len({id(manager) for manager in managers}) == len(sessions)
+        for (executor, loop), expected in zip(sessions, (900.0, 120.0, 300.0, 0.0), strict=True):
+            assert loop._time_budget_s == expected
+            manager = executor._sub_agent_manager
+            assert manager is not None
+            request = manager._protocol.build_worker_request(
+                SubTask(task_id="budget-child", description="inspect", task_type="analyze")
+            )
+            assert WorkerRequest.from_dict(request.to_dict()).time_budget_s == expected
+
     def test_allowed_tools_reach_model_and_executor_rails(self, services: SharedServices) -> None:
         executor, loop = services.create_session(
             SessionMode.REPL,

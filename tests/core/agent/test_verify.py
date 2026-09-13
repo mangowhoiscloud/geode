@@ -4,10 +4,9 @@ Coverage:
 - ``VerifyMode`` StrEnum values
 - ``VerifyResult`` dataclass shape (frozen, slots, to_payload)
 - ``get_verify_mode`` env knob parsing (default + override + invalid fallback)
-- ``_verify_rule_based`` catches: empty_turn, short_output, tool_error,
-  model_action_required
+- ``_verify_rule_based`` catches only empty_turn and model_action_required
 - ``synthesize_reflection_hint`` renders the failure-reflection block
-- ``verify_turn`` dispatcher: OFF / RULE_BASED / LLM_JUDGE (stub-falls-back)
+- ``verify_turn`` dispatcher: OFF / mechanical RULE_BASED / fail-closed judge modes
 - SessionMetrics integration: ``record_verify`` + ``last_verify_reflection_hint``
 - AgenticLoop hint consumption: ``_consume_reflection_hint`` reads+clears
 """
@@ -24,7 +23,6 @@ import pytest
 from core.agent.loop import _guards
 from core.agent.loop.models import AgenticResult
 from core.agent.verify import (
-    DEFAULT_MIN_TEXT_CHARS,
     VerifyMode,
     VerifyResult,
     get_verify_mode,
@@ -162,11 +160,11 @@ def test_rule_based_flags_empty_turn() -> None:
     assert vr.reflexion_hint == vr.reflection_hint
 
 
-def test_rule_based_flags_short_output() -> None:
-    """Below MIN_TEXT_CHARS without tool calls → short_output."""
-    result = _make_result(text="x" * (DEFAULT_MIN_TEXT_CHARS - 1), tool_calls=[])
+def test_rule_based_does_not_infer_failure_from_short_output() -> None:
+    result = _make_result(text="7", tool_calls=[])
     vr = verify_turn(result)
-    assert "short_output" in vr.rubric_misses
+    assert vr.passed and not vr.should_retry
+    assert vr.rubric_misses == ()
 
 
 def test_rule_based_short_output_ok_when_tool_used() -> None:
@@ -179,8 +177,8 @@ def test_rule_based_short_output_ok_when_tool_used() -> None:
     assert vr.passed is True
 
 
-def test_rule_based_flags_tool_error() -> None:
-    """Any tool call with error=True → tool_error."""
+def test_rule_based_does_not_judge_historical_tool_errors() -> None:
+    """A prior error is evidence for the judge, not a semantic veto."""
     result = _make_result(
         text="I called the tool",
         tool_calls=[
@@ -189,7 +187,7 @@ def test_rule_based_flags_tool_error() -> None:
         ],
     )
     vr = verify_turn(result)
-    assert "tool_error" in vr.rubric_misses
+    assert vr.passed and not vr.should_retry
 
 
 def test_rule_based_flags_model_action_required() -> None:
@@ -203,12 +201,14 @@ def test_rule_based_flags_model_action_required() -> None:
     assert "model_action_required" in vr.rubric_misses
 
 
-def test_rule_based_min_chars_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``GEODE_VERIFY_MIN_TEXT_CHARS`` lifts the short-output threshold."""
+def test_removed_min_chars_knob_does_not_change_mechanical_checks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The old threshold cannot silently revive the semantic heuristic."""
     monkeypatch.setenv("GEODE_VERIFY_MIN_TEXT_CHARS", "100")
     result = _make_result(text="x" * 50, tool_calls=[])
     vr = verify_turn(result)
-    assert "short_output" in vr.rubric_misses
+    assert vr.passed and not vr.should_retry
 
 
 # -- Reflection hint ----------------------------------------------------
@@ -245,17 +245,13 @@ def test_off_mode_skips_checks(monkeypatch: pytest.MonkeyPatch) -> None:
     assert vr.rubric_misses == ()
 
 
-def test_llm_judge_falls_back_to_rule_based_in_this_pr(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """LLM_JUDGE wiring stub uses rule-based until PR-CL-A6 lands. Mode label
-    in the result reflects the requested mode (not silent downgrade)."""
-    monkeypatch.setenv("GEODE_VERIFY_MODE", "llm_judge")
-    result = _make_result(text="", tool_calls=[])
-    vr = verify_turn(result)
-    assert vr.mode is VerifyMode.LLM_JUDGE  # surfaced intent
-    assert vr.passed is False  # rule-based logic ran underneath
-    assert "empty_turn" in vr.rubric_misses
+@pytest.mark.parametrize("mode", ["llm_judge", "reflexion"])
+def test_judge_without_loop_is_unavailable(monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
+    monkeypatch.setenv("GEODE_VERIFY_MODE", mode)
+    vr = verify_turn(_make_result(text="A plausible answer"))
+    assert vr.mode is vr.effective_mode is VerifyMode(mode)
+    assert not vr.passed and not vr.should_retry
+    assert vr.rubric_misses == ("verification_error",)
 
 
 # -- SessionMetrics integration ----------------------------------------
@@ -352,41 +348,18 @@ def test_env_does_not_leak_between_tests() -> None:
 
 
 def test_rule_based_multi_miss_combination() -> None:
-    """Codex MCP LOW #5 — a single turn can flag multiple rubric codes
-    simultaneously. Empty text + tool error → both codes surface."""
-    result = _make_result(
-        text="",
-        tool_calls=[{"name": "search", "error": True}],
-    )
+    result = _make_result(text="", termination_reason="model_action_required")
     vr = verify_turn(result)
-    assert vr.passed is False
-    # ``empty_turn`` doesn't fire when tool_calls is non-empty, so the
-    # genuine multi-miss case is ``model_action_required + tool_error``.
-    multi_result = _make_result(
-        text="",
-        tool_calls=[{"name": "search", "error": True}],
-        termination_reason="model_action_required",
-    )
-    multi_vr = verify_turn(multi_result)
-    assert "tool_error" in multi_vr.rubric_misses
-    assert "model_action_required" in multi_vr.rubric_misses
-    assert len(multi_vr.rubric_misses) >= 2
-    # Reflection hint surfaces both codes.
-    assert "tool_error" in multi_vr.reflection_hint
-    assert "model_action_required" in multi_vr.reflection_hint
+    assert vr.rubric_misses == ("empty_turn", "model_action_required")
+    assert not vr.passed and not vr.should_retry
+    assert all(miss in vr.reflection_hint for miss in vr.rubric_misses)
 
 
-def test_effective_mode_distinguishes_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Codex MCP LOW #4 — ``mode`` records operator intent, ``effective_mode``
-    records the path that actually ran. LLM_JUDGE → RULE_BASED fallback
-    surfaces both values."""
+def test_unavailable_judge_preserves_requested_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEODE_VERIFY_MODE", "llm_judge")
-    vr = verify_turn(_make_result(text=""))
-    assert vr.mode is VerifyMode.LLM_JUDGE
-    assert vr.effective_mode is VerifyMode.RULE_BASED
-    payload = vr.to_payload()
-    assert payload["mode"] == "llm_judge"
-    assert payload["effective_mode"] == "rule_based"
+    payload = verify_turn(_make_result()).to_payload()
+    assert payload["mode"] == payload["effective_mode"] == "llm_judge"
+    assert payload["passed"] is False
 
 
 def test_effective_mode_off_passthrough(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -932,8 +905,7 @@ def test_final_result_detaches_from_the_reusable_tool_log() -> None:
 
 
 def test_should_retry_signal_for_recoverable_miss() -> None:
-    """Codex MCP MEDIUM #4 — ``should_retry`` True for recoverable misses
-    (``empty_turn`` / ``short_output`` / ``tool_error``)."""
+    """Empty execution can request a bounded repair."""
     result = _make_result(text="", tool_calls=[])
     vr = verify_turn(result)
     assert vr.passed is False
@@ -957,35 +929,28 @@ def test_should_retry_false_for_hard_fail_only() -> None:
 
 
 def test_should_retry_false_when_hard_fail_co_occurs() -> None:
-    """Codex MCP HIGH #1 (PR-CL-A1 update, 2026-05-23) — hard fail
-    (``model_action_required``) ALWAYS wins, even when a retryable miss
-    (e.g. ``tool_error``) co-occurs. Pre-A1 the ``any(...)`` check let
-    the recoverable miss flip should_retry True alongside a hard fail,
-    looping the agent on a billing/cost-cap event."""
+    """An operator-action signal wins over an otherwise repairable empty turn."""
     result = _make_result(
         text="",
-        tool_calls=[{"name": "search", "error": True}],
+        tool_calls=[],
         termination_reason="model_action_required",
     )
     vr = verify_turn(result)
-    assert "tool_error" in vr.rubric_misses
+    assert "empty_turn" in vr.rubric_misses
     assert "model_action_required" in vr.rubric_misses
     assert vr.should_retry is False  # hard fail wins
     payload = vr.to_payload()
     assert payload["should_retry"] is False
 
 
-def test_should_retry_true_for_pure_recoverable_miss() -> None:
-    """Without ``model_action_required``, a retryable miss flips
-    should_retry True (the normal recoverable-error path)."""
+def test_historical_tool_error_does_not_request_automatic_repair() -> None:
     result = _make_result(
-        text="I tried",
-        tool_calls=[{"name": "search", "error": True}],
+        text="Recovered and checked",
+        tool_calls=[{"tool": "read_file", "result": {"error": "earlier failure"}}],
     )
     vr = verify_turn(result)
-    assert "tool_error" in vr.rubric_misses
-    assert "model_action_required" not in vr.rubric_misses
-    assert vr.should_retry is True
+    assert vr.passed and not vr.should_retry
+    assert vr.rubric_misses == ()
 
 
 def test_payload_includes_should_retry() -> None:

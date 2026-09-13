@@ -280,7 +280,7 @@ async def _admit_session_budget(loop: Any, user_input: str) -> AgenticResult | N
 # Guard chain — the loop's transition guards, in priority order
 # ------------------------------------------------------------------
 # Call order in ``arun`` IS the priority order:
-#   post-response: cost_budget → overthinking → model_refusal
+#   post-response: cost_budget → model_refusal
 #   post-tool:     convergence → repeated_success_no_progress
 # Each guard returns a terminal AgenticResult (born via
 # ``_terminal_result``) or None to proceed. Guard counters live on
@@ -344,60 +344,6 @@ def _guard_cost_budget(
             )
     except Exception:
         log.debug("Cost budget check failed", exc_info=True)
-    return None
-
-
-async def _guard_overthinking(
-    loop: Any,
-    response: Any,
-    *,
-    messages: list[dict[str, Any]],
-    round_idx: int,
-) -> AgenticResult | None:
-    """Overthinking guard — N consecutive long-text/no-tool rounds stop
-    the loop with ``user_clarification_needed`` (threshold is
-    context-proportional, 1% / floor 1024). Owns the counter reset on
-    tool-use rounds.
-    """
-    if response.stop_reason != "tool_use":
-        out_tok = getattr(response.usage, "output_tokens", 0) if response.usage else 0
-        threshold = _overthinking_token_threshold(loop)
-        if out_tok > threshold:
-            loop._consecutive_text_only_rounds += 1
-        else:
-            loop._consecutive_text_only_rounds = 0
-        if loop._consecutive_text_only_rounds >= 2:
-            # count this flagged round ONCE — adding the running
-            # consec would inflate the total quadratically
-            loop._total_empty_rounds += 1
-            log.warning(
-                "Overthinking detected: %d consecutive text-only rounds "
-                "(>%d tok each) — surfacing user_clarification_needed",
-                loop._consecutive_text_only_rounds,
-                threshold,
-            )
-            loop._op_logger.finalize()
-            _context.sync_messages_to_context(loop, messages)
-            last_text = loop._extract_text(response).strip()
-            summary = last_text[:400] + ("…" if len(last_text) > 400 else "")
-            clarification = (
-                f"~ I've spent {loop._consecutive_text_only_rounds} consecutive "
-                f"rounds reasoning without taking any action "
-                f"(>{threshold} output tokens each). "
-                "Could you narrow the request — point at a specific file, "
-                "behaviour, or step you want me to focus on next?\n\n"
-                f"Most recent reasoning (truncated):\n{summary}"
-            )
-            await loop._record_text_only_round(round_idx, text=last_text)
-            return _terminal_result(
-                loop,
-                TerminationReason.USER_CLARIFICATION_NEEDED,
-                clarification,
-                rounds=round_idx + 1,
-                tool_calls=loop._tool_processor.tool_log,
-            )
-    else:
-        loop._consecutive_text_only_rounds = 0
     return None
 
 
@@ -864,21 +810,6 @@ def _check_session_budget_and_maybe_handoff(loop: Any) -> str | None:
     except Exception:
         log.warning("Session budget check failed", exc_info=True)
     return None
-
-
-def _overthinking_token_threshold(loop: Any) -> int:
-    """Per-round output-token threshold for the overthinking signal.
-
-    Context-proportional (1% of context window, floor 1024). Falls
-    back to 2000 when the token-tracker lookup fails (mocked module).
-    """
-    try:
-        from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
-
-        ctx_window = MODEL_CONTEXT_WINDOW.get(loop.model, 200_000)
-        return max(1024, int(ctx_window) // 100)
-    except (TypeError, ValueError, AttributeError):
-        return 2000
 
 
 def _build_model_action_result(

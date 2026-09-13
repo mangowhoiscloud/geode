@@ -8,7 +8,8 @@ import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-from core.agent.error_recovery import RecoveryResult, RecoveryStrategy
+import pytest
+from core.agent.error_recovery import ErrorRecoveryStrategy, RecoveryResult, RecoveryStrategy
 from core.agent.tool_executor import ToolExecutor
 from core.agent.tool_executor.processor import ToolCallProcessor
 from core.hooks import (
@@ -178,6 +179,108 @@ def test_session_tool_start_is_durable_before_handler_execution() -> None:
     asyncio.run(processor._execute_single(_block()))
 
     assert order == ["tool.called", "handler", "tool.completed"]
+
+
+@pytest.mark.parametrize("recovery", [False, True])
+@pytest.mark.parametrize("started", [False, True])
+@pytest.mark.parametrize("recording_fails", [False, True])
+def test_cancelled_tool_closes_only_a_started_call(
+    recovery: bool, started: bool, recording_fails: bool
+) -> None:
+    async def scenario() -> None:
+        entered = asyncio.Event()
+        timeline = MagicMock()
+        if recording_fails:
+            timeline.record_tool_result.side_effect = OSError("private persistence failure")
+        executor = MagicMock(spec=ToolExecutor)
+        executor._contains_restricted_data.return_value = False
+
+        async def execute(name, arguments, *, context, on_execution_started):
+            if started:
+                on_execution_started(name, arguments)
+            entered.set()
+            await asyncio.Event().wait()
+
+        executor.aexecute = execute
+        processor = ToolCallProcessor(
+            executor=executor,
+            op_logger=MagicMock(),
+            error_recovery=ErrorRecoveryStrategy(executor, retry_base_delay=0),
+            timeline=timeline,
+        )
+        if recovery:
+            processor._consecutive_failures["read_file"] = processor.MAX_CONSECUTIVE_FAILURES
+        task = asyncio.create_task(processor._safe_execute_single(_block()))
+        await entered.wait()
+        task.cancel("private cancellation reason")
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert timeline.record_tool_call.call_count == int(started)
+        assert timeline.record_tool_result.call_count == int(started)
+        if started:
+            event = timeline.record_tool_result.call_args
+            assert event.args[1] == "error"
+            assert event.kwargs["call_id"] == ("tool-1:recovery:1" if recovery else "tool-1")
+            assert event.kwargs["result"]["error_type"] == "CancelledError"
+            assert "private cancellation reason" not in str(event)
+
+    asyncio.run(scenario())
+
+
+def test_parallel_cancellation_waits_for_sibling_cleanup() -> None:
+    async def scenario() -> None:
+        processor, _hooks, _executor = _processor()
+        entered = asyncio.Event()
+        cleaned: list[str] = []
+
+        async def execute(block, **_kwargs):
+            if block.id == "cancelled":
+                await entered.wait()
+                raise asyncio.CancelledError
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                await asyncio.sleep(0)
+                cleaned.append(block.id)
+
+        processor._safe_execute_single = execute
+        blocks = [_block(), _block()]
+        blocks[0].id, blocks[1].id = "cancelled", "sibling"
+        with pytest.raises(asyncio.CancelledError):
+            await processor._execute_parallel(blocks)
+        assert cleaned == ["sibling"]
+
+    asyncio.run(scenario())
+
+
+def test_cancelled_private_tool_keeps_arguments_out_of_completion() -> None:
+    async def scenario() -> None:
+        entered = asyncio.Event()
+        timeline = MagicMock()
+        processor, _hooks, executor = _processor()
+        processor._timeline = timeline
+        executor._contains_restricted_data.return_value = False
+
+        async def execute(name, arguments, *, context, on_execution_started):
+            context.contains_personal_data = True
+            on_execution_started(name, {"omitted": True})
+            entered.set()
+            await asyncio.Event().wait()
+
+        executor.aexecute = execute
+        task = asyncio.create_task(
+            processor._execute_single(_block(tool_input={"path": "private-path-marker"}))
+        )
+        await entered.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert timeline.record_tool_result.call_count == 1
+        assert "private-path-marker" not in str(timeline.mock_calls)
+        assert "private-path-marker" not in str(processor.tool_log)
+
+    asyncio.run(scenario())
 
 
 def test_external_execution_ack_does_not_claim_tool_completion() -> None:

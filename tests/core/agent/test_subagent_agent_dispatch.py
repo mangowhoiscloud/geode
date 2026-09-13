@@ -237,6 +237,31 @@ def test_build_worker_request_honors_default_model() -> None:
     assert request.model == "claude-opus-4-8"
 
 
+@pytest.mark.parametrize("agent", [None, "data_analyst"])
+def test_bundled_analyst_inherits_parent_model_provider_and_source(agent: str | None) -> None:
+    registry = AgentRegistry()
+    registry.load_defaults()
+    manager = _make_manager(registry)
+    task = SubTask(
+        task_id="d-bundled",
+        description="inspect observed evidence",
+        task_type="analyze",
+        agent=agent,
+        source="subscription",
+    )
+
+    request = manager._protocol.build_worker_request(task, default_model="gpt-5.6-sol")
+
+    assert request.agent_name == "data_analyst"
+    assert request.toolkit == "data_analysis"
+    assert request.agent_system_prompt
+    assert (request.model, request.provider, request.source) == (
+        "gpt-5.6-sol",
+        "openai",
+        "subscription",
+    )
+
+
 def test_builtin_role_inherits_parent_model_instead_of_type_agent() -> None:
     """An explicit capability role must not leak into a type agent's model."""
     registry = AgentRegistry()
@@ -286,11 +311,42 @@ def test_task_and_agent_model_override_win_over_default_model(
     )
     # Per-task model (voter) wins over both.
     voter_task = SubTask(
-        task_id="d-3", description="x", task_type="unknown", args={}, agent=None, model="glm-5"
+        task_id="d-3",
+        description="x",
+        task_type="seed-generation",
+        args={},
+        agent="seed_generator",
+        model="glm-5",
+        source="subscription",
+    )
+    voter_request = manager._protocol.build_worker_request(
+        voter_task, default_model="claude-opus-4-8"
     )
     assert (
-        manager._protocol.build_worker_request(voter_task, default_model="claude-opus-4-8").model
-        == "glm-5"
+        voter_request.model,
+        voter_request.provider,
+        voter_request.source,
+    ) == ("glm-5", "glm", "subscription")
+
+
+def test_explicit_agent_model_does_not_fall_back_to_parent_route(
+    seed_generator_registry: AgentRegistry,
+) -> None:
+    manager = _make_manager(seed_generator_registry)
+    task = SubTask(
+        task_id="d-explicit-agent",
+        description="inspect evidence",
+        task_type="seed-generation",
+        agent="seed_generator",
+        source="subscription",
+    )
+
+    request = manager._protocol.build_worker_request(task, default_model="gpt-5.6-sol")
+
+    assert (request.model, request.provider, request.source) == (
+        "claude-sonnet-4-6",
+        "anthropic",
+        "subscription",
     )
 
 

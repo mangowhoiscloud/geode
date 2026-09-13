@@ -48,11 +48,6 @@ export default function Page() {
                   <td><code>cost_budget &gt; 0</code>이면 80%에서 1회 경고, 도달 시 종료. 세션 비용은 token tracker 누적치입니다.</td>
                   <td><code>cost_budget_exceeded</code></td>
                 </tr>
-                <tr>
-                  <td>overthinking 감지</td>
-                  <td>도구 호출 없이 고출력 텍스트 라운드가 연속되면 멈추고 사용자에게 묻습니다.</td>
-                  <td><code>user_clarification_needed</code></td>
-                </tr>
               </tbody>
             </table>
             <p>
@@ -157,11 +152,6 @@ OpenAI/GLM  80%   클라이언트 LLM 기반 compaction
                   <td>Cost budget</td>
                   <td>With <code>cost_budget &gt; 0</code>: one warning at 80%, termination at the budget. Session cost comes from the token tracker accumulator.</td>
                   <td><code>cost_budget_exceeded</code></td>
-                </tr>
-                <tr>
-                  <td>Overthinking detection</td>
-                  <td>Consecutive high-output text-only rounds stop the loop and ask the user.</td>
-                  <td><code>user_clarification_needed</code></td>
                 </tr>
               </tbody>
             </table>

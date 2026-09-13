@@ -98,7 +98,7 @@ export default function Page() {
                 <tr><td><code>cost_budget_exceeded</code></td><td>세션 비용이 예산에 닿았습니다. 80% 지점에서 한 번 경고합니다.</td></tr>
                 <tr><td><code>context_exhausted</code></td><td>압축과 정리 후에도 컨텍스트가 임계 상태입니다.</td></tr>
                 <tr><td><code>model_refusal</code></td><td>모델 안전 분류기가 응답을 거절했습니다. HTTP 200으로 오는 <code>stop_reason: &quot;refusal&quot;</code>을 잡아 거절 사유 카테고리를 포함한 정직한 메시지로 종료합니다.</td></tr>
-                <tr><td><code>user_clarification_needed</code></td><td>도구 없이 긴 출력만 반복되는 과사고를 감지하면 멈추고 사용자에게 묻습니다.</td></tr>
+                <tr><td><code>user_clarification_needed</code></td><td>과거 종료 기록을 읽기 위해 유지한 값입니다. 도구 없이 긴 텍스트가 반복된다는 이유로 실행을 멈추던 가드는 제거됐습니다.</td></tr>
                 <tr><td><code>llm_error</code></td><td>재시도로 회복하지 못한 모델 호출 오류입니다.</td></tr>
               </tbody>
             </table>
@@ -237,7 +237,7 @@ export default function Page() {
                 <tr><td><code>cost_budget_exceeded</code></td><td>Session cost reached the budget. A single warning fires at 80%.</td></tr>
                 <tr><td><code>context_exhausted</code></td><td>The context stayed critical even after compaction and pruning.</td></tr>
                 <tr><td><code>model_refusal</code></td><td>The model&apos;s safety classifiers declined. The loop captures <code>stop_reason: &quot;refusal&quot;</code> arriving as HTTP 200 and ends with an honest message that includes the refusal category.</td></tr>
-                <tr><td><code>user_clarification_needed</code></td><td>Overthinking detection: repeated long text-only rounds stop the loop and ask the user.</td></tr>
+                <tr><td><code>user_clarification_needed</code></td><td>Retained for historical termination records. The guard that stopped execution for repeated long text-only rounds has been removed.</td></tr>
                 <tr><td><code>llm_error</code></td><td>A model-call error that retries could not recover.</td></tr>
               </tbody>
             </table>

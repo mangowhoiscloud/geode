@@ -560,6 +560,17 @@ class ToolCallProcessor:
                     context=tool_ctx,
                     on_execution_started=record_execution_start,
                 )
+            except asyncio.CancelledError:
+                if execution_started:
+                    self._record_tool_cancellation(
+                        tool_ctx.effective_tool_name or tool_name,
+                        tool_ctx.effective_tool_arguments
+                        if tool_ctx.effective_tool_arguments is not None
+                        else tool_input,
+                        block.id,
+                        contains_personal_data=tool_ctx.contains_personal_data,
+                    )
+                raise
             except Exception as exc:
                 effective_name = tool_ctx.effective_tool_name or tool_name
                 self._log_tool_exception(
@@ -632,6 +643,33 @@ class ToolCallProcessor:
             effective_tool_name,
             contains_personal_data=contains_personal_data,
         )
+
+    def _record_tool_cancellation(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        call_id: str,
+        *,
+        contains_personal_data: bool = False,
+    ) -> None:
+        try:
+            self._record_tool_activity(
+                tool_name,
+                arguments,
+                {
+                    "error": "Tool execution cancelled; external effects may be incomplete",
+                    "error_type": "CancelledError",
+                    "recoverable": False,
+                },
+                False,
+                call_id,
+                contains_personal_data=contains_personal_data,
+                record_call=False,
+            )
+        except Exception as exc:
+            # A persistence failure must not turn cancellation into a normal
+            # tool_result. Missing evidence still fails the export integrity gate.
+            log.error("Cancellation evidence persistence failed (%s)", type(exc).__name__)
 
     async def _execute_sequential(self, tool_blocks: list[Any]) -> list[dict[str, Any]]:
         """Execute tool blocks one by one (single-tool fast path)."""
@@ -733,15 +771,24 @@ class ToolCallProcessor:
         # Step 4: Execute parallel pool
         if parallel_items:
             batch_approved_indexes = {idx for idx, _block in tiered[2]}
-            gathered = await asyncio.gather(
-                *[
+            tasks = [
+                asyncio.create_task(
                     self._safe_execute_single(
                         block,
                         batch_cost_approved=idx in batch_approved_indexes,
                     )
-                    for idx, block in parallel_items
-                ]
-            )
+                )
+                for idx, block in parallel_items
+            ]
+            try:
+                gathered = await asyncio.gather(*tasks)
+            except asyncio.CancelledError:
+                # A cancelled child does not cancel its gather siblings.
+                for task in tasks:
+                    if not task.done() and not task.cancelling():
+                        task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                raise
 
             for (idx, _block), result in zip(parallel_items, gathered, strict=True):
                 results[idx] = result
@@ -827,13 +874,21 @@ class ToolCallProcessor:
                     call_id=f"{tool_use_id}:recovery:{attempt_index}",
                 )
 
-        recovery_result = await self._error_recovery.arecover(
-            tool_name,
-            tool_input,
-            fail_count,
-            context_factory=context_factory,
-            on_execution_started=record_execution_start,
-        )
+        try:
+            recovery_result = await self._error_recovery.arecover(
+                tool_name,
+                tool_input,
+                fail_count,
+                context_factory=context_factory,
+                on_execution_started=record_execution_start,
+            )
+        except asyncio.CancelledError:
+            # Recovery awaits one same-tool retry; escalation is synchronous.
+            for index, (effective_name, arguments) in started_attempts.items():
+                self._record_tool_cancellation(
+                    effective_name, arguments, f"{tool_use_id}:recovery:{index}"
+                )
+            raise
         attempt_rows = [
             {
                 "strategy": attempt.strategy.value,

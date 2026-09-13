@@ -10,6 +10,7 @@ Inspired by OpenClaw's isolated session pattern, this module provides:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
 import json
 import logging
@@ -156,7 +157,7 @@ class IsolatedRunner:
       Used for simple callbacks and tests.
     - **Subprocess mode**: Run a WorkerRequest through a composition-provided
       worker module. Used for sub-agent and scheduler workloads. Provides crash
-      isolation and clean timeout via SIGKILL.
+      isolation and bounded graceful shutdown with SIGKILL fallback.
 
     Usage::
 
@@ -172,6 +173,7 @@ class IsolatedRunner:
 
     MAX_RESULTS_CACHE = 200  # Evict oldest results beyond this limit
     SLOT_WAIT_S = 30.0  # Wait up to 30s for a lane slot
+    TERMINATE_WAIT_S = 5.0  # Allow worker session/error hooks to flush after SIGTERM
     KILL_WAIT_S = 5.0  # Wait for process death after SIGKILL
 
     # Subprocess env whitelist — only these vars are forwarded to child processes.
@@ -458,9 +460,9 @@ class IsolatedRunner:
           cannot drop the slot mid-acquisition — the underlying
           ``to_thread`` is drained in the ``finally`` block and the
           slot is released if it ended up acquired.
-        * Timeout via ``asyncio.wait_for(self._pump_worker(...), ...)``;
-          on timeout, ``proc.kill()`` + ``await proc.wait()`` guarantee
-          process death before the slot is released.
+        * Timeout/cancellation allows bounded worker finalization after SIGTERM,
+          then kills/reaps an unresponsive worker before releasing its slot.
+          The shielded pipe reader keeps stdout/stderr draining during shutdown.
         * stderr persisted to ``~/.geode/workers/<sid>.stderr.log``.
 
         Fleet-view Stage 1.5 — the stdout read is line-by-line (not a single
@@ -491,6 +493,7 @@ class IsolatedRunner:
         acquired = False
         started = time.time()
         proc: asyncio.subprocess.Process | None = None
+        pump_task: asyncio.Task[tuple[dict[str, Any] | None, bytes]] | None = None
         acquire_task: asyncio.Task[IsolationResult | None] = asyncio.create_task(
             asyncio.to_thread(self._acquire_slot, config),
             name=f"isolated-acquire:{config.session_id}",
@@ -543,33 +546,28 @@ class IsolatedRunner:
                 self._active[config.session_id] = proc
 
             request_bytes = json.dumps(request.to_dict()).encode("utf-8") + b"\n"
+            pump_task = asyncio.create_task(
+                self._pump_worker(proc, request_bytes, on_activity),
+                name=f"isolated-pump:{config.session_id}",
+            )
             try:
                 result_obj, stderr_bytes = await asyncio.wait_for(
-                    self._pump_worker(proc, request_bytes, on_activity),
+                    asyncio.shield(pump_task),
                     timeout=config.timeout_s,
                 )
             except TimeoutError:
-                # Clean timeout: kill + await death before releasing slot.
-                proc.kill()
-                try:
-                    await asyncio.wait_for(proc.wait(), timeout=self.KILL_WAIT_S)
-                except TimeoutError:
-                    log.warning(
-                        "Async subprocess %s did not die within %.1fs after kill",
-                        config.session_id,
-                        self.KILL_WAIT_S,
-                    )
+                await self._stop_worker(proc, pump_task, config.session_id)
                 completed = time.time()
                 duration_ms = (completed - started) * 1000
                 log.warning(
-                    "Async subprocess session %s killed after %.1fs timeout",
+                    "Async subprocess session %s timed out after %.1fs",
                     config.session_id,
                     config.timeout_s,
                 )
                 return IsolationResult(
                     session_id=config.session_id,
                     success=False,
-                    error=f"Timeout after {config.timeout_s}s (process killed)",
+                    error=f"Timeout after {config.timeout_s}s",
                     duration_ms=duration_ms,
                     started_at=started,
                     completed_at=completed,
@@ -617,22 +615,14 @@ class IsolatedRunner:
             return result
 
         except asyncio.CancelledError:
-            # CancelledError is BaseException (not Exception) on 3.8+, so
-            # the broader handler below would miss it. Kill the worker
-            # before re-raising so cancellation never orphans a child.
-            if proc is not None and proc.returncode is None:
-                proc.kill()
-                import contextlib as _cl
-
-                with _cl.suppress(TimeoutError):
-                    await asyncio.wait_for(proc.wait(), timeout=self.KILL_WAIT_S)
+            if proc is not None:
+                await self._stop_worker(proc, pump_task, config.session_id)
             raise
         except Exception as exc:
             if proc is not None and proc.returncode is None:
-                proc.kill()
-                import contextlib as _cl
-
-                with _cl.suppress(TimeoutError):
+                with contextlib.suppress(ProcessLookupError):
+                    proc.kill()
+                with contextlib.suppress(TimeoutError):
                     await asyncio.wait_for(proc.wait(), timeout=self.KILL_WAIT_S)
             completed = time.time()
             duration_ms = (completed - started) * 1000
@@ -649,7 +639,15 @@ class IsolatedRunner:
             # Hard guarantee: even if a path above missed it, kill any
             # still-live child before releasing the lane slot.
             if proc is not None and proc.returncode is None:
-                proc.kill()
+                with contextlib.suppress(ProcessLookupError):
+                    proc.kill()
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(proc.wait(), timeout=self.KILL_WAIT_S)
+            if pump_task is not None:
+                if not pump_task.done():
+                    pump_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await pump_task
             with self._lock:
                 self._active.pop(config.session_id, None)
             # Drain the (possibly still-running) acquire_task so a
@@ -673,6 +671,33 @@ class IsolatedRunner:
             if acquired:
                 await asyncio.to_thread(self._release_slot, config)
 
+    async def _stop_worker(
+        self,
+        proc: asyncio.subprocess.Process,
+        pump_task: asyncio.Task[tuple[dict[str, Any] | None, bytes]] | None,
+        session_id: str,
+    ) -> None:
+        """Give the worker time to close its own lifecycle, then kill and drain."""
+        if proc.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
+                proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=self.TERMINATE_WAIT_S)
+            except TimeoutError:
+                with contextlib.suppress(ProcessLookupError):
+                    proc.kill()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=self.KILL_WAIT_S)
+                except TimeoutError:
+                    log.warning("Worker %s did not exit after SIGKILL", session_id)
+        if pump_task is not None:
+            # The child's result is diagnostic only: timeout/cancellation remains
+            # the parent's outcome even if a final result raced with termination.
+            with contextlib.suppress(Exception):
+                _result, stderr_bytes = await asyncio.wait_for(pump_task, self.KILL_WAIT_S)
+                if stderr_bytes:
+                    await asyncio.to_thread(self._save_stderr, session_id, stderr_bytes)
+
     async def _pump_worker(
         self,
         proc: asyncio.subprocess.Process,
@@ -690,9 +715,9 @@ class IsolatedRunner:
         dropped. stderr is drained concurrently so a chatty worker cannot fill
         its stderr pipe buffer and deadlock while we read stdout.
 
-        Cancellation-safe: on the caller's ``wait_for`` timeout this coroutine is
-        cancelled at an await point; the ``finally`` cancels the stderr drain so
-        no orphan task is left, and the caller's timeout branch kills the process.
+        The owner shields this task during timeout/cancellation so both pipes
+        remain drained while the worker finalizes. If forced cleanup cancels
+        this task, its stderr reader is also cancelled and awaited.
         """
         import contextlib as _cl
 

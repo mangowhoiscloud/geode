@@ -63,6 +63,49 @@ function PairedReplay({ ko }: { ko: boolean }) {
   );
 }
 
+function GcodeDevelopmentGate({ ko }: { ko: boolean }) {
+  const record = "https://github.com/mangowhoiscloud/geode/blob/b193a06bf08c85c60487f1e198a73fa1114f8d19/docs/plans/2026-09-13-reflexion-gcode-ratchet.md";
+  return (
+    <section aria-labelledby="gcode-development-gate">
+      <h2 id="gcode-development-gate">{ko ? "후속 개발 검증: 내부 수락과 실제 정답의 간극" : "Development follow-up: acceptance is not correctness"}</h2>
+      <p>{ko
+        ? "첫 G-code 후보에서는 내부 judge가 5회를 모두 수락했지만, 공식 task verifier를 통과한 실행은 2회였습니다. 파일을 쓰고 다시 읽었다는 사실은 저장 성공만 확인할 뿐, 해석한 내용이 정답이라는 근거가 되지 못했습니다. 이 불일치를 출발점으로 검증 입력과 실행 경로를 고쳤습니다."
+        : "The first G-code candidate received five internal judge acceptances, but only two trials passed the official task verifier. Writing and reading back a file established persistence, not a correct interpretation. That disagreement guided changes to verification inputs and execution paths."}</p>
+      <p>{ko
+        ? "짧은 답이나 복구한 tool 오류를 이유로 후보를 탈락시키던 의미 판정 규칙을 제거했습니다. Reflexion judge에는 관측 근거를 먼저, 후보의 주장을 마지막에 전달하고, 이미 관찰한 이미지가 일반 tool 기록에 밀려나지 않도록 했습니다. 위임 모델의 잘못된 기본값도 고쳤습니다. 검증 호출 실패는 성공으로 대체하지 않으며, 수정 작업은 최초 실행 예산을 공유합니다."
+        : "The runtime no longer rejects candidates through short-answer or recovered-tool-error heuristics. The Reflexion judge receives observations before candidate claims, and already-observed images have a separate bounded window. An incorrect delegated-model default was also fixed. Judge failures never become structural passes, and repairs share the original execution budget."}</p>
+      <table>
+        <caption>{ko ? "후보별 실행 이력. 이전 후보의 성공을 새 후보에 합산하지 않았습니다." : "Candidate history. Passes are never pooled across revisions."}</caption>
+        <thead><tr><th scope="col">{ko ? "소스 revision" : "Source revision"}</th><th scope="col">{ko ? "공식 verifier 결과" : "Official verifier outcomes"}</th><th scope="col">{ko ? "판정" : "Decision"}</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>d1e7420</code></th><td>0, 0, 0, 1, 1</td><td>{ko ? "2/5. 내부 judge의 오수락 3건을 확인했습니다." : "2/5. Three false-positive internal verdicts."}</td></tr>
+          <tr><th scope="row"><code>c863c71</code></th><td>1, 0</td><td>{ko ? "사전 등록한 첫 실패 중단 규칙을 적용했습니다. 나머지 3회는 미실행입니다." : "Stopped at the first failure under the prospective rule; three trials were not executed."}</td></tr>
+          <tr><th scope="row"><code>815f759</code></th><td>1, 1, 1, 1, 1</td><td>{ko ? "신규 5/5, 무효 0건. 개발 통과 조건을 충족했습니다." : "Fresh 5/5, zero invalid attempts. Development gate passed."}</td></tr>
+        </tbody>
+      </table>
+      <p>{ko
+        ? "마지막 5회는 2026-09-13 10:05부터 10:49 UTC까지(19:05부터 19:49 KST까지) 실행했습니다. OpenAI subscription gpt-5.6-sol, actor effort max, Harbor 0.22.0의 full-runtime adapter, agent 한도 900초, 동시성 1, 자동 재시도 0을 고정했습니다. 공식 gcode-to-text 이미지와 verifier는 변경하지 않았습니다."
+        : "The final five trials ran on September 13, 2026, from 10:05 to 10:49 UTC (19:05 to 19:49 KST). The frozen configuration used OpenAI subscription gpt-5.6-sol, actor effort max, the full-runtime adapter on Harbor 0.22.0, a 900-second agent limit, concurrency one and zero automatic retries. The official gcode-to-text image and verifier were unchanged."}</p>
+      <p>{ko
+        ? "관측한 AgenticLoop 호출 87건에는 input 2,264,797, output 58,579, cached-input 946,432 토큰이 기록됐고, 이 세 필드의 누락은 0건입니다. 실제 요청에 이미지를 담았는지도 별도 receipt로 확인했습니다. 이는 기록된 호출 범위의 관측이며, 보조 LLM 호출을 포함한 전체 런타임 비용이나 구독 청구액은 아닙니다."
+        : "The 87 recorded AgenticLoop calls contain 2,264,797 input, 58,579 output and 946,432 cached-input tokens, with no missing values in those three fields. Separate receipts confirm image serialization into requests. These observations cover recorded calls, not all auxiliary LLM activity, complete runtime cost or subscription billing."}</p>
+      <p><strong>{ko ? "5/5는 개발 조건의 충족이지, repair 효과의 입증은 아닙니다." : "5/5 passes the development gate; it does not prove a repair effect."}</strong>{" "}{ko
+        ? "5회 모두 내부 judge가 첫 후보를 수락해 실제 repair는 발생하지 않았습니다. 후보 선정에 사용한 한 과제이며, 새 baseline·native Codex 대조군이나 held-out 평가는 실행하지 않았습니다. 위 full-suite 결과와 제외 규칙, 기존 replay·영상은 그대로입니다."
+        : "All five judges accepted candidate attempt zero, so no repair occurred. This is one task used for candidate selection, without a fresh baseline, native Codex control or held-out evaluation. The full-suite results, exclusions and existing replay/film remain unchanged."}</p>
+      <details className="tb-details">
+        <summary>{ko ? "소스·원본 보존·공개 범위" : "Source, custody and disclosure"}</summary>
+        <p><code>terminalbench21-sol-max-reflexion-ratchet-r3-20260913</code>{ko
+          ? "의 run-spec, attempts, native result, trajectory, verifier receipt, analysis와 녹화는 로컬 private 원본으로 보존했습니다. 문서 공개와 원본 artifact 공개는 다릅니다. 이번 5회의 공개 artifact 패키지와 갱신 영상은 아직 게시하지 않았습니다."
+          : " retains its run spec, attempts, native results, trajectories, verifier receipts, analysis and recordings as local private evidence. Publishing this documentation does not publish those sources. A public artifact package and updated film for these five trials have not been posted."}</p>
+        <p>{ko
+          ? "중간 후보 c863c71은 감사 중 SQLite SHM 해시가 바뀌어 canonical closure가 보류됐습니다. 해당 admission을 새 해시로 덮어쓰지 않았으며, 별도로 검증을 통과한 마지막 5회와 섞지 않았습니다."
+          : "The intermediate c863c71 candidate remains blocked from canonical closure after an audit changed SQLite SHM bytes. Its admission was not rewritten with a new hash, and it was not mixed into the separately validated final five trials."}</p>
+        <p><a href={record}>{ko ? "실험 기록·한계·SHA-256" : "Run record, limitations and SHA-256"}</a>{" · "}<a href="https://github.com/mangowhoiscloud/geode/pull/3315">{ko ? "구현과 CI: PR #3315" : "Implementation and CI: PR #3315"}</a></p>
+      </details>
+    </section>
+  );
+}
+
 function Study({ ko }: { ko: boolean }) {
   const excludedTrials = paired.excludedTasks.length * paired.repetitions;
   const availableTrials = paired.frozenTrialsPerArm - excludedTrials;
@@ -210,6 +253,8 @@ function Study({ ko }: { ko: boolean }) {
       </p>
 
       <PairedReplay ko={ko} />
+
+      <GcodeDevelopmentGate ko={ko} />
 
       <h2>{ko ? "다음 실험: 점수 확대보다 비교 가능성 복구" : "Next experiment: restore comparability before scaling"}</h2>
       <details className="tb-details">

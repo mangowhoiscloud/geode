@@ -130,38 +130,10 @@ class TestModelActionDiagnostic:
         assert "detail" not in msg
 
 
-class TestOverthinkingThreshold:
-    """The 2000-token magic was replaced with a context-window-proportional one."""
-
-    def test_threshold_is_one_percent_of_ctx_window_with_floor(self) -> None:
-        from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
-
-        loop = _make_loop()
-        # Pick any registered model — the formula should match exactly.
-        for model, ctx in MODEL_CONTEXT_WINDOW.items():
-            loop.model = model
-            assert _guards._overthinking_token_threshold(loop) == max(1024, ctx // 100), (
-                f"threshold mismatch for model={model} (ctx={ctx})"
-            )
-
-    def test_threshold_falls_back_to_200k_for_unknown_model(self) -> None:
-        loop = _make_loop()
-        loop.model = "definitely-not-a-real-model"
-        # 200_000 // 100 = 2000 (parity with the legacy magic number)
-        assert _guards._overthinking_token_threshold(loop) == 2000
-
-    def test_threshold_floor_protects_small_context_models(self) -> None:
-        """Models with <102_400 ctx hit the 1024 floor instead of going below."""
-        from unittest.mock import patch
-
-        loop = _make_loop()
-        loop.model = "tiny-model"
-        with patch.dict(
-            "core.llm.token_tracker.MODEL_CONTEXT_WINDOW",
-            {"tiny-model": 64_000},
-            clear=False,
-        ):
-            assert _guards._overthinking_token_threshold(loop) == 1024
+def test_output_length_does_not_own_a_terminal_state() -> None:
+    """Candidate correctness belongs to verification, not a token threshold."""
+    assert not hasattr(_guards, "_guard_overthinking")
+    assert not hasattr(_guards, "_overthinking_token_threshold")
 
 
 # ---------------------------------------------------------------------------
