@@ -93,6 +93,11 @@ function EvaluationGuide({ ko }: { ko: boolean }) {
       <p>{ko
         ? "Reflexion의 verdict와 continuation 기록은 있지만, 다음 요청에서 힌트를 소비했음을 결속하는 digest/event는 아직 없습니다. 이 기록만으로 힌트 소비까지 전 과정이 실측됐거나 성능 개선 효과가 입증됐다고 주장하지 않습니다."
         : "Reflexion records verdicts and continuation, but does not yet bind hint consumption in the next request with a digest/event. These records do not establish end-to-end measured consumption or a performance benefit."}</p>
+      <p>{ko
+        ? "2026-09-13 G-code 개발 검증에서는 최종 후보의 신규 5회가 공식 verifier를 모두 통과했습니다. 다만 내부 judge가 첫 후보를 모두 수락해 repair는 발생하지 않았습니다. 앞선 후보의 오수락 사례, 실행 조건과 관측 범위를 함께 읽어야 합니다."
+        : "In the September 13, 2026 G-code development gate, all five fresh trials of the final revision passed the official verifier. Each internal judge accepted the first candidate, so no repair occurred. Read this alongside earlier false acceptances, frozen execution conditions and accounting coverage."}{" "}
+        <a href={`${docsHref("benchmarks/terminal-bench")}#gcode-development-gate`}>{ko ? "G-code 개발 검증 기록" : "G-code development evidence"}</a>
+      </p>
       <details>
         <summary>{ko ? "Judge를 믿기 전에 확인할 항목" : "Checks before trusting a judge"}</summary>
         <ul>

@@ -253,7 +253,7 @@ AgenticLoop는 `while stop_reason == "tool_use"` 루프입니다. 매 라운드�
 | `cost_budget_exceeded` | 세션 비용이 예산에 닿았습니다. 80% 지점에서 한 번 경고합니다. |
 | `context_exhausted` | 압축과 정리 후에도 컨텍스트가 임계 상태입니다. |
 | `model_refusal` | 모델 안전 분류기가 응답을 거절했습니다. HTTP 200으로 오는 `stop_reason: "refusal"`을 잡아 거절 사유 카테고리를 포함한 정직한 메시지로 종료합니다. |
-| `user_clarification_needed` | 도구 없이 긴 출력만 반복되는 과사고를 감지하면 멈추고 사용자에게 묻습니다. |
+| `user_clarification_needed` | 과거 종료 기록을 읽기 위해 유지한 값입니다. 도구 없이 긴 텍스트가 반복된다는 이유로 실행을 멈추던 가드는 제거됐습니다. |
 | `llm_error` | 재시도로 회복하지 못한 모델 호출 오류입니다. |
 
 어느 경로로 끝나든 결과는 종료 사유와 함께 소켓으로 돌아갑니다. 종료 결과마다 이유가 남는 설계입니다.
@@ -2152,6 +2152,8 @@ Petri에서는 auditor가 seed에 따라 감사 상황을 탐색하고, target�
 
 Reflexion의 verdict와 continuation 기록은 있지만, 다음 요청에서 힌트를 소비했음을 결속하는 digest/event는 아직 없습니다. 이 기록만으로 힌트 소비까지 전 과정이 실측됐거나 성능 개선 효과가 입증됐다고 주장하지 않습니다.
 
+2026-09-13 G-code 개발 검증에서는 최종 후보의 신규 5회가 공식 verifier를 모두 통과했습니다. 다만 내부 judge가 첫 후보를 모두 수락해 repair는 발생하지 않았습니다. 앞선 후보의 오수락 사례, 실행 조건과 관측 범위를 함께 읽어야 합니다. [G-code 개발 검증 기록](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md#gcode-development-gate)
+
 Judge를 믿기 전에 확인할 항목
 
 -   Judge 모델·버전·경로, rubric 원본, 점수 방향, seed와 transcript 범위를 고정합니다. 높은 점수가 좋은지는 차원마다 확인합니다.
@@ -3734,6 +3736,34 @@ Replay의 지표 항목을 펼치면 호출별 input·output·cache, environment
 [`Recovered observability · method · source hashes`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/d277607f3a179f191ad24b1497c0934beb9d2470/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/recording/research-v20)
 
 Next.js·React·TypeScript 페이지에서 재생합니다. Pinned commit의 metadata JSON을 SHA-256으로 검증한 뒤 표시하며, 검증 실패 시 재생을 차단합니다. 외부 HTML이나 스크립트를 실행하지 않습니다. 기존 .html 주소는 새 경로로 연결됩니다. Private viewer는 공개하지 않습니다.
+
+## 후속 개발 검증: 내부 수락과 실제 정답의 간극
+
+첫 G-code 후보에서는 내부 judge가 5회를 모두 수락했지만, 공식 task verifier를 통과한 실행은 2회였습니다. 파일을 쓰고 다시 읽었다는 사실은 저장 성공만 확인할 뿐, 해석한 내용이 정답이라는 근거가 되지 못했습니다. 이 불일치를 출발점으로 검증 입력과 실행 경로를 고쳤습니다.
+
+짧은 답이나 복구한 tool 오류를 이유로 후보를 탈락시키던 의미 판정 규칙을 제거했습니다. Reflexion judge에는 관측 근거를 먼저, 후보의 주장을 마지막에 전달하고, 이미 관찰한 이미지가 일반 tool 기록에 밀려나지 않도록 했습니다. 위임 모델의 잘못된 기본값도 고쳤습니다. 검증 호출 실패는 성공으로 대체하지 않으며, 수정 작업은 최초 실행 예산을 공유합니다.
+
+후보별 실행 이력. 이전 후보의 성공을 새 후보에 합산하지 않았습니다.
+
+| 소스 revision | 공식 verifier 결과 | 판정 |
+| --- | --- | --- |
+| `d1e7420` | 0, 0, 0, 1, 1 | 2/5. 내부 judge의 오수락 3건을 확인했습니다. |
+| `c863c71` | 1, 0 | 사전 등록한 첫 실패 중단 규칙을 적용했습니다. 나머지 3회는 미실행입니다. |
+| `815f759` | 1, 1, 1, 1, 1 | 신규 5/5, 무효 0건. 개발 통과 조건을 충족했습니다. |
+
+마지막 5회는 2026-09-13 10:05부터 10:49 UTC까지(19:05부터 19:49 KST까지) 실행했습니다. OpenAI subscription gpt-5.6-sol, actor effort max, Harbor 0.22.0의 full-runtime adapter, agent 한도 900초, 동시성 1, 자동 재시도 0을 고정했습니다. 공식 gcode-to-text 이미지와 verifier는 변경하지 않았습니다.
+
+관측한 AgenticLoop 호출 87건에는 input 2,264,797, output 58,579, cached-input 946,432 토큰이 기록됐고, 이 세 필드의 누락은 0건입니다. 실제 요청에 이미지를 담았는지도 별도 receipt로 확인했습니다. 이는 기록된 호출 범위의 관측이며, 보조 LLM 호출을 포함한 전체 런타임 비용이나 구독 청구액은 아닙니다.
+
+**5/5는 개발 조건의 충족이지, repair 효과의 입증은 아닙니다.** 5회 모두 내부 judge가 첫 후보를 수락해 실제 repair는 발생하지 않았습니다. 후보 선정에 사용한 한 과제이며, 새 baseline·native Codex 대조군이나 held-out 평가는 실행하지 않았습니다. 위 full-suite 결과와 제외 규칙, 기존 replay·영상은 그대로입니다.
+
+소스·원본 보존·공개 범위
+
+`terminalbench21-sol-max-reflexion-ratchet-r3-20260913`의 run-spec, attempts, native result, trajectory, verifier receipt, analysis와 녹화는 로컬 private 원본으로 보존했습니다. 문서 공개와 원본 artifact 공개는 다릅니다. 이번 5회의 공개 artifact 패키지와 갱신 영상은 아직 게시하지 않았습니다.
+
+중간 후보 c863c71은 감사 중 SQLite SHM 해시가 바뀌어 canonical closure가 보류됐습니다. 해당 admission을 새 해시로 덮어쓰지 않았으며, 별도로 검증을 통과한 마지막 5회와 섞지 않았습니다.
+
+[실험 기록·한계·SHA-256](https://github.com/mangowhoiscloud/geode/blob/b193a06bf08c85c60487f1e198a73fa1114f8d19/docs/plans/2026-09-13-reflexion-gcode-ratchet.md) · [구현과 CI: PR #3315](https://github.com/mangowhoiscloud/geode/pull/3315)
 
 ## 다음 실험: 점수 확대보다 비교 가능성 복구
 
