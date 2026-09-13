@@ -469,6 +469,7 @@ async def call_llm(
                     "response_provider": getattr(attempt_result, "response_provider", ""),
                     "routing_strategy": getattr(attempt_result, "routing_strategy", ""),
                     "routing_attempt": getattr(attempt_result, "routing_attempt", 0),
+                    "request_image_receipt": getattr(attempt_result, "request_image_receipt", None),
                 }.items()
                 if value
             }

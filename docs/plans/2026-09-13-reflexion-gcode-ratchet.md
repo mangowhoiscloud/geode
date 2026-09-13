@@ -109,3 +109,39 @@ that the current schema cannot truthfully represent. Only five fresh valid
 passes under one unchanged source/spec pass the development gate. Do not combine
 successful attempts across candidates, or infer general quality from this
 development-exposed stopping rule.
+
+## Second candidate: visual access did not eliminate false acceptance
+
+Source `c863c7162509b74af7f533003eb28f2c370e623c` produced valid rewards
+`[1, 0]` and stopped prospectively; three trials were not executed. This is a
+failed development gate, not a measured five-trial rate. Both internal verdicts
+passed without repair. The failed submission had two character substitutions
+despite successful image observations and an untruncated readback.
+
+The judge's concise feedback treated candidate/file agreement as support, then
+proposed comparison against that same candidate. Prompt anchoring is a plausible
+hypothesis, not an established cause. More concretely, all three delegated
+workers failed before inference: an omitted model on the bundled analyst became
+an Anthropic default while retaining the OpenAI parent's subscription route.
+There was no independent worker assessment.
+
+The next source therefore repairs inherited model selection, presents observations
+before candidate claims, and removes the success-filled judge example. Material
+ambiguity should request an independent, permitted check through the existing
+repair path. No expected task answer, additional judge framework or altered scorer
+is introduced. Completed Codex requests should retain bounded image-dispatch
+metadata through the existing event owner, so selected images are not confused
+with serialized inputs or model attention.
+
+[Intrinsic self-correction research](https://arxiv.org/abs/2310.01798) reports
+failures without external feedback in its studied models and tasks; it is not a
+universal claim about current models.
+[CRITIC](https://arxiv.org/abs/2305.11738) studies tool-grounded checking before
+revision. These motivate distinguishing independent observations from repeated
+self-consistency, while the unchanged external verifier remains score authority.
+
+A post-admission audit changed the first trial's rebuildable SQLite SHM bytes.
+DB, WAL and all other admission-bound files still match. The original admission
+is preserved; canonical closure is blocked pending explicit custody review, not
+silently rehashed or reported as validated. See the run-local incident receipt.
+Future inspections use copied DB/WAL snapshots, never open original databases.

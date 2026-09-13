@@ -378,7 +378,7 @@ def test_malformed_judge_verdict_is_not_success_or_repair_signal(payload: str) -
 
 def test_judge_prompt_includes_turn_context() -> None:
     """The user-side prompt carries termination_reason / rounds / tool
-    names / truncated text so the judge can rate the turn."""
+    names / observations; candidate claims are presented after image evidence."""
     result = _make_result(
         text="long output " * 100,
         tool_calls=[{"name": "search"}, {"name": "fetch"}],
@@ -388,7 +388,7 @@ def test_judge_prompt_includes_turn_context() -> None:
     assert "natural" in prompt
     assert "search" in prompt and "fetch" in prompt
     assert "rounds: 1" in prompt
-    # Text truncated at 2000 chars
+    assert "long output" not in prompt
     assert len(prompt) < 3000
 
 
@@ -684,6 +684,11 @@ def test_reflexion_receives_task_and_real_tool_observations(monkeypatch) -> None
     )
     verdict = asyncio.run(verify_turn_async(result, loop=loop))
     prompt = call.call_args.args[1][0]["content"]
+    system = call.call_args.args[0]
+    assert '"passed": true' not in system
+    assert "not independent corroboration" in system
+    assert "Created the file" not in prompt
+    assert call.call_args.args[1][-1]["content"].endswith("Created the file")
     assert loop._verify_root_user_input in prompt
     assert all(word in prompt for word in ("write_file", "call-1", "success", "out.txt"))
     assert call.call_args.kwargs["allow_tools"] is False
@@ -786,7 +791,7 @@ def test_judge_replays_observed_images_despite_intervening_nonvisual_calls() -> 
         )
     # An unrelated image is not admitted merely because it is in context.
     _add_observed_judge_call(context, "unrelated-image", ["aW1hZ2U="])
-    result = _make_result(tool_calls=calls)
+    result = _make_result(tool_calls=calls, text="UNSUPPORTED_CANDIDATE_CLAIM " * 100)
     loop = SimpleNamespace(
         context=context,
         _verify_root_user_input="Verify the observed drawing",
@@ -795,6 +800,11 @@ def test_judge_replays_observed_images_despite_intervening_nonvisual_calls() -> 
     prompt = _judge_prompt(result, loop=loop)
     messages = _judge_messages(result, loop=loop, prompt=prompt)
     assert context.messages == before
+    assert "UNSUPPORTED_CANDIDATE_CLAIM" not in prompt
+    assert messages[-1]["role"] == "user"
+    assert messages[-1]["content"].startswith("Candidate output (claim only;")
+    assert "UNSUPPORTED_CANDIDATE_CLAIM" in messages[-1]["content"]
+    assert len(messages[-1]["content"]) < 2200
     assert '"image-call-0"' not in prompt and "12/28" in prompt
     serialized = json.dumps(messages)
     assert all(
@@ -823,6 +833,7 @@ def test_judge_replays_observed_images_despite_intervening_nonvisual_calls() -> 
         effort="max",
     )
     wire = build_codex_input(request)
+    assert "UNSUPPORTED_CANDIDATE_CLAIM" in wire[-1]["content"]
     outputs = [item for item in wire if item.get("type") == "function_call_output"]
     assert [item["call_id"] for item in outputs] == image_ids
     assert all(item["output"][0]["type"] == "input_image" for item in outputs)
@@ -877,7 +888,7 @@ def test_judge_bounds_per_call_after_dedup_and_invalid_image_skip() -> None:
         "duplicate": 1,
         "per_call_limit": 1,
     }
-    assert [image["source"]["data"] for image in messages[-1]["content"][0]["content"]] == [
+    assert [image["source"]["data"] for image in messages[-2]["content"][0]["content"]] == [
         "BBBB",
         "CCCC",
     ]
@@ -1003,7 +1014,7 @@ def test_judge_discloses_unavailable_image_context_without_inventing_images(cont
     )
     coverage = _judge_coverage(messages)
     assert coverage["replayed_images"] == coverage["current_attempt_replayed_images"] == 0
-    assert len(messages) == 1
+    assert len(messages) == 2 and all(isinstance(m["content"], str) for m in messages)
     assert (
         coverage["omitted_image_blocks_by_reason"]
         == {
@@ -1035,7 +1046,8 @@ def test_judge_does_not_guess_attempt_for_ambiguous_call_id() -> None:
     )
     coverage = _judge_coverage(messages)
     assert coverage["ambiguous_call_ids_unknown_images"] == 1
-    assert coverage["replayed_images"] == 0 and len(messages) == 1
+    assert coverage["replayed_images"] == 0
+    assert len(messages) == 2 and all(isinstance(m["content"], str) for m in messages)
 
 
 @pytest.mark.parametrize("mode", ["llm_judge", "reflexion"])
@@ -1125,7 +1137,8 @@ def test_judge_does_not_replay_sensitive_or_unbounded_image_origin(omission) -> 
     messages = _judge_messages(
         result, loop=SimpleNamespace(context=SimpleNamespace(messages=history)), prompt="Judge"
     )
-    assert len(messages) == 1 and messages[0]["role"] == "user"
+    assert len(messages) == 2 and all(m["role"] == "user" for m in messages)
+    assert all(isinstance(m["content"], str) for m in messages)
     coverage = _judge_coverage(messages)
     assert coverage["replayed_images"] == coverage["current_attempt_replayed_images"] == 0
     reason = "unsafe_origin" if omission == "oversized" else "privacy"

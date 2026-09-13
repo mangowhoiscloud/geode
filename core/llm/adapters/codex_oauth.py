@@ -22,13 +22,14 @@ import logging
 import os
 import threading
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.auth.codex_cli_oauth import codex_auth_path
 from core.llm.adapters._openai_common import (
     build_async_codex_client,
+    build_request_image_receipt,
     build_responses_kwargs,
     translate_codex_response,
 )
@@ -210,6 +211,7 @@ class CodexOAuthAdapter:
         lane_key = f"codex-oauth:{req.model}"
         async with acquire_openai_api_lane_async(lane_key):
             try:
+                image_receipt = build_request_image_receipt(kwargs.get("input"))
                 async with client.responses.stream(**kwargs) as stream:
                     accumulated: list[Any] = []
                     async for event in stream:
@@ -226,7 +228,10 @@ class CodexOAuthAdapter:
                     type(exc).__name__,
                 )
                 raise
-        result = translate_codex_response(final, accumulated_items=accumulated)
+        result = replace(
+            translate_codex_response(final, accumulated_items=accumulated),
+            request_image_receipt=image_receipt,
+        )
         # PR-CODEX-OAUTH-EMPTY-TEXT-DUMP (2026-05-25) — Codex sometimes
         # returns ``output_text=""`` while emitting reasoning-only items
         # (gpt-5.x reasoning mode skipping the visible-answer block).
