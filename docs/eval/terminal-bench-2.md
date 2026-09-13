@@ -183,8 +183,12 @@ separate secret, PII and local-path scans authorize a public derivative.
 Missing cache observations stay null, and AgenticLoop usage subtotals do not
 populate Harbor whole-runtime totals while auxiliary calls remain unobserved.
 
-Use Harbor's `--install-only` for the no-model installation gate. A live study
-still needs the existing run-spec/attempt contracts and the ladder below.
+Use Harbor's `--install-only` for the no-model installation gate. Every live
+study needs the existing run-spec/attempt contracts and its frozen admission
+rules. The ladder below describes paired comparisons and their publication;
+a candidate-only development gate can instead preregister one runtime, its
+no-model preflights and a private evidence destination. It does not acquire
+paired-comparison or public-release authority by passing that gate.
 
 1. Pin Harbor version, dataset version/digest, task manifest, GEODE revision,
    model route, reasoning effort, timeout, concurrency, repetitions, and
@@ -192,13 +196,38 @@ still needs the existing run-spec/attempt contracts and the ladder below.
 2. Fail closed on Docker, task architecture, subscription auth, adapter import,
    and canonical verifier availability.
 3. Run a no-model oracle smoke.
-4. Run one paid GEODE/native smoke without changing the frozen task.
-5. Expand only after both arms are infrastructure-valid.
+4. For a paired comparison, run one paid GEODE/native smoke without changing
+   the frozen task.
+5. Expand a paired comparison only after both arms are infrastructure-valid.
 6. Preserve semantic failures as valid reward 0; retry only recorded
    infrastructure-invalid attempts under the preregistered retry rule.
 7. Validate run spec, attempt lineage, native result, trajectory, verifier and
-   outcome receipts, analysis, publication manifest, source hashes, secret
-   scan, and remote read-back.
+   outcome receipts, analysis and source hashes. Before public publication,
+   also validate the publication manifest and privacy scans; verify remote
+   read-back after uploading the admitted bytes.
+
+## 2026-09-13 full-runtime G-code development gate
+
+The separate `terminalbench21-sol-max-reflexion-ratchet-r3-20260913` run
+completed five fresh `gcode-to-text` trials: **5/5 official verifier passes,
+zero invalid attempts**. It measured source
+`815f75950af580b42cbd52dcc78b0b3ea0017a8f` with OpenAI subscription
+`gpt-5.6-sol`, actor effort `max`, Harbor 0.22.0, `verify_mode=reflexion`,
+a 900-second agent limit, concurrency 1 and zero automatic retries. The task
+image and external scorer were unchanged; earlier candidates were not pooled.
+
+The [development record](../plans/2026-09-13-reflexion-gcode-ratchet.md)
+preserves candidate failures, source/spec hashes, admission checks and the
+intermediate candidate's unresolved SHM custody incident. The final run's
+existing canonical bundle passed validation. Its private raw evidence remains
+local; a public artifact package or updated film is not implied by this report.
+
+All five internal judges accepted candidate attempt 0; no repair occurred.
+The 87 recorded AgenticLoop calls have no missing input/output/cached-input
+fields, but this remains scoped accounting, not whole-runtime cost or billing.
+This task was used for candidate selection. There is no fresh baseline/native
+Codex comparator, held-out claim, measured repair effect or change to the
+historical full-suite primary's not-measurable status.
 
 ## Comparability grades
 
