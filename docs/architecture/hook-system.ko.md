@@ -69,20 +69,43 @@ Schema로 최초 입력과 rewrite 후 입력을 모두 검증한다. raw provid
 최근 tool 관측, 후보 응답을 함께 검토한다. `observation`, `lesson`,
 `next_check` 피드백은 기존 verification continuation과 checkpoint에
 기록한다. 별도 memory store는 만들지 않는다. 판단이 누락되거나 형식이
-잘못됐거나 timeout되면 pass가 아닌 escalate로 처리하며, LLM은
-구조적 검증 실패를 성공으로 뒤집을 수 없다.
+잘못됐거나 timeout되면 두 LLM 모드 모두 pass가 아닌 escalate로 처리한다.
+빈 실행과 운영자 조치 필요 상태는 계속 검사한다. 응답 길이, 키워드 일치,
+이미 복구한 tool 오류는 의미 판정을 막지 않는다. Reflexion은 에이전트가 이미
+관찰한 이미지도 제한된 범위에서 다시 볼 수 있지만, 새 파일을 읽지는 않는다.
+텍스트는 최근 tool 관측 12개를 사용한다. 이미지는 같은 verification chain에서
+이미지를 반환한 최근 호출 12개를 별도로 선택한다. 호출당 서로 다른 이미지 두 장,
+이미지당 7 MiB, 합계 14 MiB 이내의 인코딩된 데이터만 전달한다. 프롬프트에는
+이전 시도와 현재 시도의 관측, 생략한 근거를 구분해 표시한다. 이전에 읽은 자료를
+수정 후 새로 실행한 검사로 취급하지 않는다.
+관측 근거를 먼저 제시하고 후보의 주장은 마지막에 보여준다. judge에는 성공 예시
+대신 중립적인 출력 형식을 주고, 원본과의 일치와 동일한 값을 쓰고 읽은 일관성을
+구별하도록 요청한다. 중요한 모호함이 남으면 기존 수정 경로에서 이를 판별할 수
+있는 검사를 제안한다. 특정 tool 사용을 강제하거나 judge를 추가하지 않는다.
 
 기존 정책에 따라 verification revision은 최대 두 번이다. judge는 설정된
 judge model(없으면 loop model)을 쓰고, 기존 usage 경로에 사용량을 기록한다.
 tool은 호출하지 않으며 남은 loop budget 안에서 최대 120초를 사용한다.
-같은 모드를 isolated worker에도 전달한다. 기본값은 `rule_based`이며,
-Reflexion 활성화 시 모델 호출이 추가될 수 있다.
+수정 단계도 최초 실행의 시계를 공유한다. 시간 제한이 있는 Reflexion은 모델 호출
+사이에 남은 시간을 확인하고, 마지막 3분의 1(최대 300초)에 첫 후보를 요청한다.
+진행 중인 호출이 이 시점을 넘길 수 있으므로 수정 시간 확보를 보장하지는 않는다.
+수정 단계에서는 기존의 최종 종료 구간 전까지 tool을 쓸 수 있다. 세션 예산은
+isolated worker에도 전달되며, 전체 종료 시점은 부모 실행의 취소가 통제한다.
+agent 정의에서 모델을 생략하면 부모의 기본 모델을 상속한다. task나 agent에
+명시한 모델은 그대로 우선한다. 기본값은 기계적 검사만
+수행하는 `rule_based`이다. Reflexion은 모델 호출을 추가하며, 검토 결과가 항상
+옳다는 보장은 없다.
 
 이 기능은 한 태스크 안에서 피드백으로 수정을 유도하는 Reflexion-inspired
 구현이다. 태스크 간 학습이나 weight update는 아니다. 간결한 피드백은
 `turn_verify.reason`에 남고, 수정 hint는 다음 continuation에서 한 번만 읽는다.
 벤치 점수는 여전히 Harbor의 외부 verifier가 판정한다. 신규 측정은 실행 전에
 이 모드를 동결해야 하며, 숨겨진 정답이나 test 내용을 제공하지 않는다.
+완료된 Codex 호출은 기존 LLM-call event의 `request_image_receipt`에 요청으로
+직렬화한 이미지 수, 인코딩 바이트 수, 이미지와 호출의 digest를 제한된 크기로 남긴다.
+이미지 본문과 URL은 이 receipt에 저장하지 않는다. 완료 응답이 없는 호출처럼
+receipt가 없으면 0이 아닌 미관측으로 남긴다. completeness는 메타데이터의 범위이지
+모델이 이미지를 이해했거나 태스크에 성공했다는 뜻이 아니다.
 
 참고: [Reflexion: Language Agents with Verbal Reinforcement Learning](https://arxiv.org/abs/2303.11366).
 

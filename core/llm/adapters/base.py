@@ -257,6 +257,9 @@ class AdapterCallResult:
     response_provider: str = ""
     routing_strategy: str = ""
     routing_attempt: int = 0
+    # Optional adapter-owned, bounded receipt of serialized request images.
+    # None means unavailable, not an observed zero. No raw request content.
+    request_image_receipt: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

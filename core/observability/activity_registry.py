@@ -68,6 +68,7 @@ from core.observability.activity import (
     LLMCallRetriedRow,
     LLMCallStartedRow,
     LLMCallUsageDetails,
+    LLMRequestImageReceiptDetails,
     McpServerConnectedRow,
     McpServerDetails,
     McpServerFailedRow,
@@ -254,6 +255,12 @@ def _llm_call_ended(data: dict[str, Any], run_id: str) -> ActivityRowBase:
     error = data.get("error")
     cost = data.get("cost_usd")
     routing_attempt = data.get("routing_attempt")
+    receipt = None
+    if data.get("request_image_receipt") is not None:
+        try:
+            receipt = LLMRequestImageReceiptDetails.model_validate(data["request_image_receipt"])
+        except ValidationError:
+            log.warning("Invalid request image receipt omitted from LLM event")
     return LLMCallEndedRow(
         ts=time.time(),
         run_id=run_id,
@@ -275,6 +282,7 @@ def _llm_call_ended(data: dict[str, Any], run_id: str) -> ActivityRowBase:
             response_provider=_text("response_provider"),
             routing_strategy=_text("routing_strategy"),
             routing_attempt=int(routing_attempt) if routing_attempt is not None else None,
+            request_image_receipt=receipt,
         ),
     )
 

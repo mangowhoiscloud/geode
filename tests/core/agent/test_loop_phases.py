@@ -163,7 +163,6 @@ def test_pending_tool_batch_checkpoint_failure_prevents_dispatch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(_guards, "_guard_cost_budget", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(_guards, "_guard_overthinking", _async_none)
     monkeypatch.setattr(_guards, "_guard_model_refusal", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         _guards,

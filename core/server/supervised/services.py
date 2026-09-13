@@ -326,7 +326,7 @@ class SharedServices:
         # (max_subagent_depth / max_total_subagents) no longer initialize from
         # a stale pre-reload singleton.
         # Build sub-agent manager + executor + loop
-        sub_mgr = self._build_sub_agent_manager()
+        sub_mgr = self._build_sub_agent_manager(time_budget_s=time_budget)
         approval_cb = kwargs.get("approval_callback")
         executor = ToolExecutor(
             action_handlers=None if bound_tool_plan is not None else dict(handlers),
@@ -392,7 +392,7 @@ class SharedServices:
 
     # --- internal helpers -----------------------------------------------------
 
-    def _build_sub_agent_manager(self) -> Any:
+    def _build_sub_agent_manager(self, *, time_budget_s: float = 0.0) -> Any:
         """Build SubAgentManager with shared resources.
 
         S2-wire (2026-05-18): construct AgentRegistry from .claude/agents/
@@ -423,6 +423,7 @@ class SharedServices:
             hook_registry=self.hook_registry,
             max_depth=settings.max_subagent_depth,
             max_total_subagents=settings.max_total_subagents,
+            time_budget_s=time_budget_s,
             activity_sink_provider=self.activity_sink_provider,
             policy_sources=self.policy_sources,
             bound_tool_plan=self.bound_tool_plan,

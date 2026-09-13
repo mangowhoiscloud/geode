@@ -73,20 +73,43 @@ still be idempotent.
 request, bounded recent tool observations, and candidate output. Its
 `observation`, `lesson`, and `next_check` feedback travels through the existing
 verification continuation and checkpoint, not a second memory store. Missing,
-malformed, or timed-out judgments escalate rather than pass. An LLM cannot
-override a structural failure.
+malformed, or timed-out judgments escalate rather than pass in both LLM modes.
+Mechanical empty/action-required checks remain; output length, keyword overlap
+and recovered tool errors no longer veto semantic review. Reflexion can reuse
+bounded image evidence already observed by the agent, without new file access.
+Text uses the latest 12 tool observations; image evidence has its own window of
+12 image-bearing calls from the current verification chain. At most two distinct
+images per call are replayed, bounded to 7 MiB per image and 14 MiB in aggregate
+(encoded payload size). The prompt labels prior/current observations and omitted
+evidence; it does not treat old source material as a newly executed check.
+Evidence precedes the candidate claim. The neutral verdict contract asks the
+judge to distinguish source agreement from circular write/readback consistency.
+Unresolved material ambiguity requests a permitted distinguishing check through
+the existing repair path; no mandatory-tool heuristic or extra judge is added.
 
 The existing policy allows at most two verification revisions. Each judge call
 uses the configured judge model (otherwise the loop model), existing usage
 accounting, no tools, and at most 120 seconds within the remaining loop budget.
-The mode also reaches isolated workers. The default remains `rule_based`;
-enabling Reflexion can consume additional model calls.
+Repairs share the original root-turn clock. Between model calls, bounded
+Reflexion requests its first candidate when the final third (at most 300 seconds)
+remains. An in-flight call can cross that threshold, so this is headroom policy,
+not guaranteed repair time. Repair tools remain available until the ordinary
+final cutoff. Per-session time budgets reach isolated workers; parent cancellation
+still owns the outer deadline. An agent definition with no model inherits the
+parent/default model; explicit task and agent model overrides remain authoritative.
+The default remains mechanical `rule_based`; enabling Reflexion consumes
+additional model calls and does not guarantee a correct verdict.
 
 This is Reflexion-inspired, within-task feedback-conditioned repair, not
 cross-task learning or a weight update. `turn_verify.reason` retains concise
 feedback; the repair hint is consumed once by the next continuation.
 Harbor's external verifier remains benchmark score authority. New measurements
 must freeze this mode before execution, without supplying hidden test answers.
+Completed Codex calls retain a bounded `request_image_receipt` in the existing
+LLM-call event: serialized image count, encoded bytes, and image/call digests.
+No image bytes or URLs are persisted by this receipt. Missing receipts, including
+calls without a completed result, remain unknown. Receipt completeness describes
+the bounded metadata, not visual attention, full runtime coverage or task success.
 
 Reference: [Reflexion: Language Agents with Verbal Reinforcement Learning](https://arxiv.org/abs/2303.11366).
 

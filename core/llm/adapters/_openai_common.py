@@ -1612,6 +1612,89 @@ def _prompt_cache_key(system_prompt: str) -> str:
     return f"geode-{digest}"
 
 
+def build_request_image_receipt(resp_input: Any) -> dict[str, Any] | None:
+    """Describe serialized Responses images without retaining their contents.
+
+    Only typed wire image blocks count; text is never parsed as evidence.
+    Digests cover decoded image bytes and exact tool call IDs. Missing/remote
+    images are counted but not fetched. At most 24 references and 4 KiB survive;
+    this is dispatch-shape evidence, not proof of model attention or task success.
+    """
+    if not isinstance(resp_input, list):
+        return None
+    refs: list[dict[str, str | None]] = []
+    image_count = 0
+    encoded_bytes: int | None = 0
+    for item in resp_input:
+        if not isinstance(item, dict):
+            continue
+        kind = item.get("type")
+        blocks = (
+            item.get("output")
+            if kind in {"function_call_output", "computer_call_output"}
+            else item.get("content")
+        )
+        if isinstance(blocks, dict) and kind == "computer_call_output":
+            blocks = [blocks]
+        if not isinstance(blocks, list):
+            continue
+        call_id = (
+            item.get("call_id")
+            if kind in {"function_call_output", "computer_call_output"}
+            else None
+        )
+        for block in blocks:
+            if not isinstance(block, dict) or block.get("type") not in {
+                "input_image",
+                "computer_screenshot",
+            }:
+                continue
+            image_count += 1
+            url = block.get("image_url")
+            prefix, _, data = url.partition(",") if isinstance(url, str) else ("", "", "")
+            if (
+                prefix
+                not in {
+                    "data:image/png;base64",
+                    "data:image/jpeg;base64",
+                    "data:image/webp;base64",
+                    "data:image/gif;base64",
+                }
+                or not data.isascii()
+            ):
+                encoded_bytes = None
+                continue
+            if encoded_bytes is not None:
+                encoded_bytes += len(data)
+            if not data or len(data) > 7 * 1024 * 1024 or len(refs) >= 24:
+                continue
+            try:
+                digest = hashlib.sha256(base64.b64decode(data, validate=True)).hexdigest()
+            except ValueError:
+                continue
+            refs.append(
+                {
+                    "call_sha256": hashlib.sha256(call_id.encode()).hexdigest()
+                    if isinstance(call_id, str) and call_id
+                    else None,
+                    "sha256": digest,
+                }
+            )
+    receipt: dict[str, Any] = {
+        "scope": "responses-input-images",
+        "image_count": image_count,
+        "encoded_image_bytes": encoded_bytes,
+        "complete": len(refs) == image_count and encoded_bytes is not None,
+        "rows_omitted": image_count - len(refs),
+        "refs": refs,
+    }
+    while len(json.dumps(receipt, separators=(",", ":")).encode()) > 4096 and refs:
+        refs.pop()
+        receipt["rows_omitted"] += 1
+        receipt["complete"] = False
+    return receipt
+
+
 def build_responses_kwargs(
     req: AdapterCallRequest, *, backend: str, adapter_name: str
 ) -> dict[str, Any]:

@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 __all__ = [
     "ActivityRow",
@@ -72,6 +72,8 @@ __all__ = [
     "LLMCallRetriedRow",
     "LLMCallStartedRow",
     "LLMCallUsageDetails",
+    "LLMRequestImageReceiptDetails",
+    "LLMRequestImageRefDetails",
     "LifecycleCompletedDetails",
     "LifecycleCompletedRow",
     "LifecycleFailedDetails",
@@ -157,7 +159,7 @@ class ActivityRowBase(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: int = 4
+    schema_version: int = 5
     """Row-schema version (PR-OBS-CONTRACT, 2026-06-13). Bump when a
     field is added/renamed/retyped on any row class so JSONL re-readers
     can branch on shape instead of guessing from key presence.
@@ -168,7 +170,8 @@ class ActivityRowBase(BaseModel):
     v3 (R3.1, 2026-08-21): extension audit details gained physical step
     correlation.
     v4 (OpenRouter live acceptance, 2026-09-03): completed LLM calls retain
-    bounded usage, charge, and serving-route evidence."""
+    bounded usage, charge, and serving-route evidence.
+    v5: completed LLM calls may retain bounded serialized-image receipts."""
 
     ts: float
     run_id: str
@@ -226,6 +229,38 @@ class LLMCallUsageDetails(BaseModel):
     cache_write_tokens: int | None = Field(default=None, ge=0)
 
 
+class LLMRequestImageRefDetails(BaseModel):
+    """One image in wire order; call digest is absent for non-tool images."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    call_sha256: str | None = Field(pattern=r"^[a-f0-9]{64}$")
+    sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class LLMRequestImageReceiptDetails(BaseModel):
+    """Completed adapter's local wire-shape evidence, never model attention."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    scope: Literal["responses-input-images"]
+    image_count: int = Field(ge=0)
+    encoded_image_bytes: int | None = Field(ge=0)
+    complete: bool
+    rows_omitted: int = Field(ge=0)
+    refs: list[LLMRequestImageRefDetails] = Field(max_length=24)
+
+    @model_validator(mode="after")
+    def validate_receipt(self) -> LLMRequestImageReceiptDetails:
+        if self.image_count != len(self.refs) + self.rows_omitted:
+            raise ValueError("image receipt count mismatch")
+        if self.complete != (self.rows_omitted == 0 and self.encoded_image_bytes is not None):
+            raise ValueError("image receipt completeness mismatch")
+        if len(self.model_dump_json().encode()) > 4096:
+            raise ValueError("image receipt exceeds 4 KiB")
+        return self
+
+
 class LLMCallEndedDetails(LifecycleCompletedDetails):
     """Durable billing and serving-route evidence for one model attempt."""
 
@@ -242,6 +277,7 @@ class LLMCallEndedDetails(LifecycleCompletedDetails):
     response_provider: str | None = None
     routing_strategy: str | None = None
     routing_attempt: int | None = Field(default=None, ge=0)
+    request_image_receipt: LLMRequestImageReceiptDetails | None = None
 
 
 class LifecycleFailedDetails(BaseModel):

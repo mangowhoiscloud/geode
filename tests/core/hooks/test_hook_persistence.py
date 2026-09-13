@@ -6,6 +6,7 @@ import asyncio
 import json
 from pathlib import Path
 
+import pytest
 from core.hooks import (
     HookCorrelation,
     HookEvent,
@@ -164,7 +165,7 @@ def test_public_extension_audit_uses_sqlite_and_active_timeline_only(
         "step_id": "t-1:step-1",
         "session_generation": 0,
         "verify_attempt": 0,
-        "activity_schema_version": 4,
+        "activity_schema_version": 5,
         "_dispatch_duration_ms": row.payload["_dispatch_duration_ms"],
     }
     assert not (tmp_path / "events.jsonl").exists()
@@ -279,11 +280,49 @@ def test_llm_route_charge_and_usage_survive_durable_projection(tmp_path: Path) -
     assert row.payload["response_provider"] == "OpenInference"
     assert row.payload["routing_strategy"] == "direct"
     assert row.payload["routing_attempt"] == 1
-    assert row.payload["activity_schema_version"] == 4
+    assert row.payload["activity_schema_version"] == 5
     timeline_payload = _read_timeline(tmp_path / "events.jsonl")[0]["payload"]
     assert timeline_payload["response_provider"] == "OpenInference"
     assert timeline_payload["cost_usd"] == 0.00012
-    assert timeline_payload["activity_schema_version"] == 4
+    assert timeline_payload["activity_schema_version"] == 5
+    hooks.close()
+
+
+@pytest.mark.parametrize("receipt_state", ["missing", "zero", "malformed"])
+def test_optional_image_receipt_preserves_usage_without_fabricating_zero(
+    tmp_path: Path, receipt_state: str
+) -> None:
+    hooks, store = _wired_hooks(tmp_path)
+    receipt = {
+        "scope": "responses-input-images",
+        "image_count": 0,
+        "encoded_image_bytes": 0,
+        "complete": True,
+        "rows_omitted": 0,
+        "refs": [],
+    }
+    data = {
+        "session_id": "synthetic-session",
+        "llm_call_id": "synthetic-call",
+        "llm_attempt_id": "synthetic-call:attempt-1",
+        "latency_ms": 1,
+        "error": None,
+        "usage": {"input_tokens": 2, "output_tokens": 1},
+    }
+    if receipt_state != "missing":
+        data["request_image_receipt"] = receipt
+    if receipt_state == "malformed":
+        receipt["input"] = "SYNTHETIC_PRIVATE_DATA"
+    with run_timeline_scope(_timeline(tmp_path)):
+        hooks.trigger(HookEvent.LLM_CALL_ENDED, data)
+    row = store.read()[0]
+    expected = receipt if receipt_state == "zero" else None
+    assert row.payload["request_image_receipt"] == expected
+    assert row.payload["usage"]["input_tokens"] == 2
+    assert row.payload["usage"]["output_tokens"] == 1
+    assert "SYNTHETIC_PRIVATE_DATA" not in json.dumps(row.payload)
+    mirror = _read_timeline(tmp_path / "events.jsonl")[0]["payload"]
+    assert mirror["request_image_receipt"] == expected
     hooks.close()
 
 

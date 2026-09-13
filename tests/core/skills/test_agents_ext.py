@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from core.config import ANTHROPIC_SECONDARY
 from core.skills._frontmatter import parse_yaml_frontmatter
 from core.skills.agents import (
     AgentDefinition,
@@ -20,7 +19,7 @@ class TestAgentDefinition:
         assert agent.name == "test"
         assert agent.role == "Tester"
         assert agent.tools == []
-        assert agent.model == ANTHROPIC_SECONDARY
+        assert agent.model == ""
 
     def test_create_with_all_fields(self):
         agent = AgentDefinition(
@@ -138,6 +137,20 @@ class TestSubagentLoader:
         assert agent.tools == ["search"]
         assert agent.model == "gpt-4"
         assert "test agent" in agent.system_prompt
+
+    @pytest.mark.parametrize(
+        ("model_field", "expected"),
+        [("", ""), ('model: ""\n', ""), ("model: gpt-5.6-sol\n", "gpt-5.6-sol")],
+    )
+    def test_load_file_preserves_model_inheritance_or_explicit_override(
+        self, tmp_path: Path, model_field: str, expected: str
+    ) -> None:
+        path = tmp_path / "analyst.md"
+        path.write_text(f"---\nname: analyst\nrole: Analyst\n{model_field}---\nInspect evidence.")
+
+        agent = SubagentLoader(agents_dir=tmp_path).load_file(path)
+
+        assert agent.model == expected
 
     def test_load_file_missing_role_raises(self, tmp_path: Path):
         md = "---\nname: no_role\n---\nBody."

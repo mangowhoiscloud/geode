@@ -185,7 +185,7 @@ def test_runtime_config_pins_role_models_and_absolute_policy(
     monkeypatch.setattr(settings, "model", agent.model_name)
     monkeypatch.setattr(settings, "openai_credential_source", "openai-codex")
     monkeypatch.setattr("core.config.reload_settings_from_disk", lambda: None)
-    monkeypatch.setattr(SharedServices, "_build_sub_agent_manager", lambda self: None)
+    monkeypatch.setattr(SharedServices, "_build_sub_agent_manager", lambda self, **kwargs: None)
     monkeypatch.setattr("core.wiring.bootstrap.build_worker_hooks", lambda **kwargs: None)
     executors: list[ToolExecutor] = []
 

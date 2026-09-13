@@ -13,8 +13,12 @@ References:
 from __future__ import annotations
 
 import asyncio
+import copy
+import hashlib
+import json
 from types import SimpleNamespace
 
+import pytest
 from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
 from core.llm.adapters._openai_common import _prompt_cache_key, build_responses_kwargs
 from core.llm.adapters.base import (
@@ -24,6 +28,266 @@ from core.llm.adapters.base import (
     ToolSpec,
     UsageSummary,
 )
+
+
+def _wire_image(data: str, call_id: str = "synthetic-call") -> dict:
+    return {
+        "type": "function_call_output",
+        "call_id": call_id,
+        "output": [{"type": "input_image", "image_url": f"data:image/png;base64,{data}"}],
+    }
+
+
+def test_request_image_receipt_counts_wire_order_without_deduplicating_or_leaking() -> None:
+    from core.llm.adapters._openai_common import build_request_image_receipt
+    from core.tools.computer_observation import screenshot_digest
+
+    wire = [
+        {"type": "reasoning", "encrypted_content": "SYNTHETIC_PRIVATE_REASONING"},
+        {"role": "user", "content": "SYNTHETIC_PRIVATE_TEXT input_image"},
+        _wire_image("AAAA", "private synthetic call-id"),
+        _wire_image("BBBB", "another synthetic call-id"),
+        _wire_image("AAAA", "private synthetic call-id"),
+    ]
+    before = copy.deepcopy(wire)
+    receipt = build_request_image_receipt(wire)
+    assert receipt is not None
+    assert receipt["scope"] == "responses-input-images"
+    assert receipt["image_count"] == 3 and receipt["encoded_image_bytes"] == 12
+    assert receipt["complete"] is True and receipt["rows_omitted"] == 0
+    assert [row["sha256"] for row in receipt["refs"]] == [
+        screenshot_digest(data) for data in ("AAAA", "BBBB", "AAAA")
+    ]
+    assert (
+        receipt["refs"][0]["call_sha256"]
+        == hashlib.sha256(b"private synthetic call-id").hexdigest()
+    )
+    encoded = json.dumps(receipt)
+    assert all(
+        word not in encoded
+        for word in (
+            "SYNTHETIC_PRIVATE",
+            "private synthetic",
+            "data:image",
+            "AAAA",
+            "BBBB",
+        )
+    )
+    assert wire == before
+
+
+@pytest.mark.parametrize("wire", [[], [{"role": "user", "content": "ordinary text"}]])
+def test_request_image_receipt_observed_zero_is_not_missing(wire) -> None:
+    from core.llm.adapters._openai_common import build_request_image_receipt
+
+    receipt = build_request_image_receipt(wire)
+    assert receipt == {
+        "scope": "responses-input-images",
+        "image_count": 0,
+        "encoded_image_bytes": 0,
+        "complete": True,
+        "rows_omitted": 0,
+        "refs": [],
+    }
+    assert build_request_image_receipt(None) is None
+    assert (
+        AdapterCallResult(
+            text="ok", usage=UsageSummary(), stop_reason="completed"
+        ).request_image_receipt
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://invalid.example/synthetic-private.png",
+        "data:image/png;base64,not-valid-base64!",
+        "data:image/png;base64," + "A" * (7 * 1024 * 1024 + 4),
+    ],
+)
+def test_request_image_receipt_unknown_or_oversized_image_stays_incomplete(url) -> None:
+    from core.llm.adapters._openai_common import build_request_image_receipt
+
+    wire = _wire_image("AAAA")
+    wire["output"][0]["image_url"] = url
+    receipt = build_request_image_receipt([wire])
+    assert receipt is not None
+    assert receipt["image_count"] == receipt["rows_omitted"] == 1
+    assert receipt["complete"] is False and receipt["refs"] == []
+    assert receipt["encoded_image_bytes"] == (
+        None if url.startswith("https:") else len(url.split(",", 1)[1])
+    )
+    assert url not in json.dumps(receipt)
+
+
+def test_request_image_receipt_caps_references_and_survives_existing_event_bounds() -> None:
+    from core.llm.adapters._openai_common import build_request_image_receipt
+    from core.observability.activity import LLMRequestImageReceiptDetails
+    from core.observability.event_store import bound_event_payload
+
+    receipt = build_request_image_receipt([_wire_image("AAAA", f"call-{i}") for i in range(25)])
+    assert receipt is not None
+    assert receipt["image_count"] == 25 and len(receipt["refs"]) == 24
+    assert receipt["rows_omitted"] == 1 and receipt["complete"] is False
+    assert len(json.dumps(receipt, separators=(",", ":")).encode()) <= 4096
+    validated = LLMRequestImageReceiptDetails.model_validate(receipt).model_dump()
+    assert bound_event_payload({"request_image_receipt": validated}) == {
+        "request_image_receipt": receipt,
+    }
+
+
+def test_request_image_receipt_includes_direct_and_computer_images_without_fake_tool_join() -> None:
+    from core.llm.adapters._openai_common import build_request_image_receipt
+
+    receipt = build_request_image_receipt(
+        [
+            {"role": "user", "content": _wire_image("AAAA")["output"]},
+            {
+                "type": "computer_call_output",
+                "call_id": "computer-call",
+                "output": {
+                    "type": "computer_screenshot",
+                    "image_url": "data:image/jpeg;base64,BBBB",
+                },
+            },
+        ]
+    )
+    assert receipt is not None
+    assert receipt["image_count"] == 2 and receipt["complete"] is True
+    assert receipt["refs"][0]["call_sha256"] is None
+    assert receipt["refs"][1]["call_sha256"] == hashlib.sha256(b"computer-call").hexdigest()
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+def test_codex_receipt_tracks_post_middleware_wire_and_completed_event(
+    monkeypatch,
+    tmp_path,
+    cancel,
+) -> None:
+    from dataclasses import replace
+
+    from core.agent.conversation import ConversationContext
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig
+    from core.agent.tool_executor import ToolExecutor
+    from core.hooks import HookEvent, HookSystem, LlmCallRequest, MiddlewareRegistry
+    from core.llm.adapters._openai_common import build_request_image_receipt
+    from core.llm.adapters.codex_oauth import CodexOAuthAdapter
+    from core.observability.event_store import HookEventStore
+    from core.observability.hook_persistence import HookPersistenceSink
+    from core.tools.computer_observation import screenshot_digest
+
+    captured = {}
+    ended = []
+
+    class Stream:
+        async def __aenter__(self):
+            if cancel:
+                raise asyncio.CancelledError
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            raise StopAsyncIteration
+
+        async def get_final_response(self):
+            return None
+
+    def stream(**kwargs):
+        captured.update(copy.deepcopy(kwargs))
+        return Stream()
+
+    client = SimpleNamespace(responses=SimpleNamespace(stream=stream))
+    monkeypatch.setattr(CodexOAuthAdapter, "_get_client", lambda _self: client)
+    monkeypatch.setattr(
+        "core.llm.adapters.codex_oauth.translate_codex_response",
+        lambda *_args, **_kwargs: AdapterCallResult(
+            text="done",
+            usage=UsageSummary(input_tokens=1, output_tokens=1),
+            stop_reason="completed",
+        ),
+    )
+
+    class RewriteImages:
+        async def llm_request(self, request: LlmCallRequest) -> LlmCallRequest:
+            messages = copy.deepcopy(list(request.request.messages))
+            messages[-1].content[0]["content"] = messages[-1].content[0]["content"][-1:]
+            return request.with_request(
+                replace(
+                    request.request,
+                    messages=messages,
+                    metadata={"cache_invalidation_reason": "synthetic image selection"},
+                )
+            )
+
+    middleware = MiddlewareRegistry()
+    middleware.register_llm_request(
+        RewriteImages(), name="image-selection", allow_cache_invalidation=True
+    )
+    hooks = HookSystem()
+    hooks.register(
+        HookEvent.LLM_CALL_ENDED, lambda _e, data: ended.append(dict(data)), name="receipt"
+    )
+    store = HookEventStore(tmp_path / "receipt-events.db")
+    hooks.register_sink(
+        HookPersistenceSink(store, session_key="synthetic-session", run_id="receipt-test"),
+        name="receipt-persistence",
+    )
+    loop = AgenticLoop(
+        ConversationContext(),
+        ToolExecutor(middleware_registry=middleware),
+        config=AgenticLoopConfig(source="codex-oauth", disable_settings_drift=True),
+        model="gpt-5.6-sol",
+        provider="openai",
+        hooks=hooks,
+        quiet=True,
+    )
+    images = [
+        {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": data}}
+        for data in ("AAAA", "BBBB")
+    ]
+    messages = [
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "image-call",
+                    "name": "read_document",
+                    "input": {"file_path": "/synthetic/private.png"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "tool_result", "tool_use_id": "image-call", "content": images}],
+        },
+    ]
+    if cancel:
+        with pytest.raises(asyncio.CancelledError):
+            asyncio.run(loop._call_llm("Synthetic judge", messages, allow_tools=False))
+        assert "request_image_receipt" not in ended[-1]
+        assert "usage" not in ended[-1]
+    else:
+        asyncio.run(loop._call_llm("Synthetic judge", messages, allow_tools=False))
+        receipt = ended[-1]["request_image_receipt"]
+        assert receipt == build_request_image_receipt(captured["input"])
+        assert receipt["image_count"] == 1 and receipt["encoded_image_bytes"] == 4
+        assert receipt["refs"][0]["sha256"] == screenshot_digest("BBBB")
+        assert ended[-1]["usage"]["input_tokens"] == 1
+    row = store.read(event_filter=HookEvent.LLM_CALL_ENDED.value)[0]
+    assert row.llm_attempt_id == ended[-1]["llm_attempt_id"]
+    assert row.payload["request_image_receipt"] == ended[-1].get("request_image_receipt")
+    assert row.payload["usage"] == ended[-1].get("usage")
+    assert row.payload["activity_schema_version"] == 5
+    assert "private.png" not in json.dumps(row.payload)
+    assert len(images) == 2
+    hooks.close()
 
 
 def _req(model: str = "gpt-5.5", **kw: object) -> AdapterCallRequest:
