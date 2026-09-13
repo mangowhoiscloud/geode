@@ -145,3 +145,46 @@ DB, WAL and all other admission-bound files still match. The original admission
 is preserved; canonical closure is blocked pending explicit custody review, not
 silently rehashed or reported as validated. See the run-local incident receipt.
 Future inspections use copied DB/WAL snapshots, never open original databases.
+
+## Third candidate: the five-attempt development gate passed
+
+Source `815f75950af580b42cbd52dcc78b0b3ea0017a8f` completed five fresh
+sequential trials with official rewards **[1, 1, 1, 1, 1]**: numerator 5,
+denominator 5, invalid attempts 0. The unchanged task image and verifier,
+OpenAI subscription `gpt-5.6-sol` route, actor `max` effort, 900-second agent
+limit, concurrency 1 and zero retries remained frozen. No earlier candidate's
+pass was selected. Trials ran on 2026-09-13 from 10:05 to 10:49 UTC
+(19:05 to 19:49 KST); observer PTY and operator logs were retained for each.
+
+The existing attempt ledger, analysis and run-bundle validators passed. All
+five admissions validated source/config, model route, trajectory/DB binding,
+completed-call pairing, serialized-image receipts and official verifier
+receipts. Across 87 recorded AgenticLoop calls, input/output/cached-input
+fields were present: 2,264,797 input tokens, 58,579 output tokens and 946,432
+cached-input tokens. These are recorded-call totals, not complete runtime
+cost accounting. Dollar cost remains unknown. The five judge requests contained
+5, 3, 1, 4 and 4 images respectively; this establishes local serialization,
+not attention or interpretation by the provider.
+
+All five internal judges accepted candidate attempt 0. No feedback-conditioned
+repair was observed. Therefore this closes the requested development gate,
+not a claim that repair caused the passes. The task was used for candidate
+selection; no fresh baseline or native-Codex control was run. Held-out quality,
+full-suite eligibility and the historical results are unchanged.
+
+The private canonical run remains under
+`artifacts/eval/runs/terminalbench21-sol-max-reflexion-ratchet-r3-20260913/`.
+Closure hashes (SHA-256):
+
+| Artifact | Hash |
+|---|---|
+| `run-spec.json` | `349a35016fce026e783155295ccb617e8ecbe05dde3b770f0908175c56217b0e` |
+| `attempts.jsonl` | `b6cbf02742506341454f4dcb8fdda775c9fdaf01fcf34a971c0e1d01d3458ff2` |
+| `analysis.json` | `c23045215e093e02b09f8843bad71374f25f4e64b6e073ebd93276a917bba48c` |
+| `closure-receipt.json` | `d74febff9afad3fb4430676379aabb3cf5354cba52ec8aadb6afbf2b08d3de8a` |
+
+The runtime source passed the complete non-live test suite, targeted tests,
+ruff, mypy, import contracts, local fast gates and the site build before the
+model calls. This results-only documentation update does not change that frozen
+runtime. Required remote CI on the final PR head remains a separate merge gate;
+neither a release nor public artifact publication is implied by local closure.
