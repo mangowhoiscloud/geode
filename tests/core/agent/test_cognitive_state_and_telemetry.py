@@ -253,11 +253,10 @@ def test_text_only_round_also_calls_record_round() -> None:
     / user_clarification_needed completions.
 
     Pin that ``_record_text_only_round`` exists and is called from
-    both text-only return paths so round_count + observations stay
+    the shared natural/forced-text path so round_count + observations stay
     in lock-step with the actual round count regardless of how the
     round ended."""
-    from core.agent.loop import _guards, _phases
-    from core.agent.loop import agent_loop as _agent_loop_mod
+    from core.agent.loop import _phases
     from core.agent.loop.agent_loop import AgenticLoop
 
     # The helper exists and updates round_count + emits REFLECT/UPDATE.
@@ -267,16 +266,12 @@ def test_text_only_round_also_calls_record_round() -> None:
     assert "HookEvent.COGNITIVE_REFLECT" in src
     assert "HookEvent.COGNITIVE_UPDATE_MEMORY" in src
 
-    # Both text-only return paths call it before ``return``.
-    module_src = inspect.getsource(_agent_loop_mod)
-    phase_src = inspect.getsource(_phases)
-    calls = module_src.count("await self._record_text_only_round(")
-    calls += phase_src.count("await loop._record_text_only_round(")
-    calls += inspect.getsource(_guards).count("await loop._record_text_only_round(")
-    assert calls >= 2, (
-        "Both text-only return paths (user_clarification_needed and "
-        "natural/forced_text) must call _record_text_only_round before "
-        "returning, or round_count drifts from the actual round count."
+    # The obsolete output-length early return was removed; both terminal reasons
+    # now share this call. Behavioral coverage lives in test_verification_budget.
+    phase_src = inspect.getsource(_phases.process_tool_calls)
+    assert phase_src.count("await loop._record_text_only_round(") == 1
+    assert phase_src.index("await loop._record_text_only_round(") < phase_src.index(
+        "reason = TerminationReason.FORCED_TEXT"
     )
 
 

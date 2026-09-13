@@ -151,17 +151,44 @@ async def _prepare_request(
     if loop.max_rounds > 0:
         remaining = loop.max_rounds - round_idx
         wrap_up = remaining <= loop.WRAP_UP_HEADROOM
-    if not wrap_up and loop._time_budget_s > 0:
+    if loop._time_budget_s > 0:
         import time as _time
 
         remaining_time = loop._time_budget_s - (_time.monotonic() - loop._loop_start_time)
-        wrap_up = remaining_time <= loop._WRAP_UP_TIME_HEADROOM_S
+        headroom = loop._WRAP_UP_TIME_HEADROOM_S
+        if allow_tools:
+            from core.agent.verify import VerifyMode, get_verify_mode
+
+            if get_verify_mode() is VerifyMode.REFLEXION:
+                # First candidate needs time for feedback and repair, not just
+                # a final sentence. Repairs keep tools until the normal cutoff.
+                reserve = min(300.0, loop._time_budget_s / 3)
+                if getattr(loop, "_verify_attempt", 0) == 0:
+                    headroom = max(headroom, reserve)
+                system = _context.inject_runtime_hints(
+                    system,
+                    "<execution_budget>\n"
+                    f"Remaining wall time: {max(0.0, remaining_time):.0f} seconds, "
+                    "including verification and any repair.\n"
+                    "Produce the requested artifact early and inspect its contents with "
+                    "available tools. Prefer a working candidate over more exploration. "
+                    "Resolve uncertainty with observable checks before claiming completion.\n"
+                    + (
+                        "Candidate checkpoint: summarize the current result and unresolved "
+                        "evidence for review now. No new tools on this call; a failed review "
+                        "may request repair within the remaining budget.\n"
+                        if remaining_time <= headroom
+                        else f"Reserve roughly {reserve:.0f} seconds for review and repair.\n"
+                    )
+                    + "</execution_budget>",
+                )
+        wrap_up = wrap_up or remaining_time <= headroom
     tool_choice: dict[str, str] = (
         {"type": "none"} if wrap_up or not allow_tools else {"type": "auto"}
     )
 
     # Adaptive compute — context-proportional caps; the only adaptive
-    # case left is wrap-up (overthinking exits the loop instead).
+    # case left is wrap-up. Text length alone does not establish failure.
     from core.config import settings as _settings
     from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 

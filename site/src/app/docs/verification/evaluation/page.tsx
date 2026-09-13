@@ -70,18 +70,18 @@ function EvaluationGuide({ ko }: { ko: boolean }) {
       <p>
         <code>core/agent/verify.py</code>{ko ? "의 " : " has a separate "}<code>llm_judge</code>
         {ko
-          ? "는 별도의 opt-in 턴 검증 모드입니다. 기본은 LLM 호출이 없는 rule_based이며, judge 호출이 실패하면 실제 적용 모드가 달라질 수 있으므로 mode와 effective_mode를 함께 읽습니다. 이 self-judge를 Petri의 외부 감사 점수로 취급하지 않습니다."
-          : " opt-in turn-verification mode. The default rule_based mode makes no judge call. A failed judge call can change the effective mode, so read mode alongside effective_mode. This self-judge is not a Petri audit score."}
+          ? "는 별도의 opt-in 턴 검증 모드입니다. 기본 rule_based는 빈 실행과 운영자 조치 필요 상태를 검사하며 LLM을 호출하지 않습니다. 내부 self-judge는 Petri의 외부 감사 점수가 아닙니다."
+          : " opt-in turn-verification mode. The default rule_based checks empty execution and operator-action requirements without an LLM call. The internal self-judge is not a Petri audit score."}
       </p>
       <p>
         {ko
-          ? "잘못된 JSON, 필드 타입 또는 점수는 성공으로 바뀌지 않습니다. verification_error로 passed=false, score=0, should_retry=false를 기록합니다. 이 0은 턴 검증 오류이지 벤치마크 reward가 아닙니다. llm_judge가 호출 실패·응답 부재로 rule_based에 위임한 경우에도 요청 모드와 실제 모드를 구분합니다."
-          : "Malformed JSON, invalid field types, or invalid scores do not become success. They produce verification_error with passed=false, score=0, and should_retry=false. This zero describes a turn-verification error, not benchmark reward. When an unavailable or failed llm_judge call delegates to rule_based, the requested and effective modes remain distinct."}
+          ? "잘못된 JSON, 필드 타입, 점수와 judge 호출 실패는 verification_error로 기록합니다. passed=false, score=0, should_retry=false이며, rule_based 성공으로 대체하지 않습니다. 이 0은 검토 오류를 나타내는 내부 값이지 벤치마크 reward가 아닙니다."
+          : "Malformed JSON, invalid fields or scores, and unavailable judge calls produce verification_error: passed=false, score=0, should_retry=false. Neither LLM mode falls back to structural success. This zero describes an internal verification error, not benchmark reward."}
       </p>
       <p>
         <code>reflexion</code>{ko
-          ? "도 opt-in 모드입니다. 구조 검사에 원래 요청과 제한·비식별화된 관찰을 더해 observation / lesson / next_check를 남깁니다. Judge의 통과가 구조적 실패를 덮어쓸 수 없고, judge가 실패하면 rule_based 성공으로 대체하지 않습니다. 후속 작업은 기존 continuation 예산을 사용하며 judge usage도 TokenTracker에 기록합니다. 이는 독립적인 외부 평가나 자동 승격이 아닙니다."
-          : " is also opt-in. It combines structural checks, the original request, and bounded redacted observations to retain observation / lesson / next_check. A judge pass cannot override structural failure; judge failure does not fall back to rule-based success. Continuation uses the existing budget, and judge usage is recorded by TokenTracker. This is neither independent external evaluation nor automatic promotion."}
+          ? "도 opt-in 모드입니다. 원래 요청, 후보, 제한된 최근 tool 결과와 이미 관찰한 이미지를 검토하고 observation / lesson / next_check를 남깁니다. 짧은 응답이나 복구한 tool 오류만으로 후보를 탈락시키지 않습니다. 최초 예산 안에서 최대 두 번 수정합니다. 남은 시간이 전체의 3분의 1(최대 300초) 이하이면 다음 모델 호출에서 첫 후보 검토를 요청합니다. 진행 중인 호출을 이 시점에 강제 중단하지는 않습니다. Judge usage는 기존 TokenTracker에 기록합니다. 최종 벤치 점수는 여전히 외부 verifier가 판정합니다."
+          : " is also opt-in. It assesses the request and candidate against bounded recent tool results and already-observed images, returning observation / lesson / next_check. Concise output and recovered tool errors do not veto review. Up to two repairs share the original deadline. Once the final third remains, capped at 300 seconds, the next model call requests the first candidate for review; this does not interrupt an in-flight call. Judge usage uses the existing TokenTracker. The external verifier still owns benchmark reward."}
         {" "}<a href="https://github.com/mangowhoiscloud/geode/blob/main/core/agent/verify.py">{ko ? "현재 턴 검증 구현" : "Current turn-verification implementation"}</a>
       </p>
       <p>{ko

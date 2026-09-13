@@ -218,7 +218,7 @@ class AgenticLoop:
         self._thinking_budget = thinking_budget
         self._effort = effort
         self._time_budget_s = time_budget_s
-        # Adaptive compute: track consecutive text-only rounds for overthinking detection
+        # Legacy checkpoint/metrics fields, not a text-length termination policy.
         self._consecutive_text_only_rounds = 0
         self._total_empty_rounds = 0
         # Low-confidence replan is edge-triggered: fires once when

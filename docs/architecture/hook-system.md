@@ -73,14 +73,22 @@ still be idempotent.
 request, bounded recent tool observations, and candidate output. Its
 `observation`, `lesson`, and `next_check` feedback travels through the existing
 verification continuation and checkpoint, not a second memory store. Missing,
-malformed, or timed-out judgments escalate rather than pass. An LLM cannot
-override a structural failure.
+malformed, or timed-out judgments escalate rather than pass in both LLM modes.
+Mechanical empty/action-required checks remain; output length, keyword overlap
+and recovered tool errors no longer veto semantic review. Reflexion can reuse
+bounded image evidence already observed by the agent, without new file access.
 
 The existing policy allows at most two verification revisions. Each judge call
 uses the configured judge model (otherwise the loop model), existing usage
 accounting, no tools, and at most 120 seconds within the remaining loop budget.
-The mode also reaches isolated workers. The default remains `rule_based`;
-enabling Reflexion can consume additional model calls.
+Repairs share the original root-turn clock. Between model calls, bounded
+Reflexion requests its first candidate when the final third (at most 300 seconds)
+remains. An in-flight call can cross that threshold, so this is headroom policy,
+not guaranteed repair time. Repair tools remain available until the ordinary
+final cutoff. Per-session time
+budgets reach isolated workers; parent cancellation still owns the outer deadline.
+The default remains mechanical `rule_based`; enabling Reflexion consumes
+additional model calls and does not guarantee a correct verdict.
 
 This is Reflexion-inspired, within-task feedback-conditioned repair, not
 cross-task learning or a weight update. `turn_verify.reason` retains concise

@@ -909,7 +909,6 @@ while stop_reason == "tool_use":
 | 시간 예산 | `time_budget_s > 0`, wall-clock 기준 | `time_budget_expired`로 종료 |
 | 세션 예산 | 기본 세션 상한 2시간 (`core/agent/budget.py`) | 임계 직전 `HANDOFF_TRIGGERED` 훅 1회, 만료 시 하드 스톱 |
 | 비용 예산 | `cost_budget > 0` | 80%에서 1회 경고, 도달 시 `cost_budget_exceeded` |
-| overthinking 감지 | 도구 없이 고출력 텍스트 라운드가 연속될 때. 임계값은 컨텍스트 윈도 비례(윈도의 1%, 최소 1024 토큰) | `user_clarification_needed`로 멈추고 사용자에게 묻습니다 |
 
 ## 종료 경로
 
@@ -925,7 +924,7 @@ while stop_reason == "tool_use":
 | `context_exhausted` | 압축과 정리 후에도 컨텍스트가 임계 상태 |
 | `llm_error` | 복구 불가능한 LLM 호출 실패 |
 | `model_action_required` | 모델이 외부 조치를 요구하며 종료 신호를 보냄 |
-| `user_clarification_needed` | 모델이 확인을 요청하거나 overthinking 감지가 멈춤 |
+| `user_clarification_needed` | 과거 종료 기록을 읽기 위해 유지한 값. 현재는 응답 길이만으로 실행을 멈추지 않습니다. |
 | `model_refusal` | 모델이 안전 거절로 응답 (아래 절) |
 | `input_blocked` | 입력이 인터셉터에서 차단됨 |
 | `billing_error` | 결제/쿼터 치명 오류 |
@@ -2141,11 +2140,11 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/verification/evaluation.m
 
 Petri에서는 auditor가 seed에 따라 감사 상황을 탐색하고, target이 응답하며, judge가 transcript를 rubric으로 채점합니다. judge가 과제 환경을 다시 실행해서 정답을 검증하는 구조는 아닙니다. [Petri 공식 설명](https://github.com/meridianlabs-ai/inspect_petri)
 
-`core/agent/verify.py`의 `llm_judge`는 별도의 opt-in 턴 검증 모드입니다. 기본은 LLM 호출이 없는 rule\_based이며, judge 호출이 실패하면 실제 적용 모드가 달라질 수 있으므로 mode와 effective\_mode를 함께 읽습니다. 이 self-judge를 Petri의 외부 감사 점수로 취급하지 않습니다.
+`core/agent/verify.py`의 `llm_judge`는 별도의 opt-in 턴 검증 모드입니다. 기본 rule\_based는 빈 실행과 운영자 조치 필요 상태를 검사하며 LLM을 호출하지 않습니다. 내부 self-judge는 Petri의 외부 감사 점수가 아닙니다.
 
-잘못된 JSON, 필드 타입 또는 점수는 성공으로 바뀌지 않습니다. verification\_error로 passed=false, score=0, should\_retry=false를 기록합니다. 이 0은 턴 검증 오류이지 벤치마크 reward가 아닙니다. llm\_judge가 호출 실패·응답 부재로 rule\_based에 위임한 경우에도 요청 모드와 실제 모드를 구분합니다.
+잘못된 JSON, 필드 타입, 점수와 judge 호출 실패는 verification\_error로 기록합니다. passed=false, score=0, should\_retry=false이며, rule\_based 성공으로 대체하지 않습니다. 이 0은 검토 오류를 나타내는 내부 값이지 벤치마크 reward가 아닙니다.
 
-`reflexion`도 opt-in 모드입니다. 구조 검사에 원래 요청과 제한·비식별화된 관찰을 더해 observation / lesson / next\_check를 남깁니다. Judge의 통과가 구조적 실패를 덮어쓸 수 없고, judge가 실패하면 rule\_based 성공으로 대체하지 않습니다. 후속 작업은 기존 continuation 예산을 사용하며 judge usage도 TokenTracker에 기록합니다. 이는 독립적인 외부 평가나 자동 승격이 아닙니다. [현재 턴 검증 구현](https://github.com/mangowhoiscloud/geode/blob/main/core/agent/verify.py)
+`reflexion`도 opt-in 모드입니다. 원래 요청, 후보, 제한된 최근 tool 결과와 이미 관찰한 이미지를 검토하고 observation / lesson / next\_check를 남깁니다. 짧은 응답이나 복구한 tool 오류만으로 후보를 탈락시키지 않습니다. 최초 예산 안에서 최대 두 번 수정합니다. 남은 시간이 전체의 3분의 1(최대 300초) 이하이면 다음 모델 호출에서 첫 후보 검토를 요청합니다. 진행 중인 호출을 이 시점에 강제 중단하지는 않습니다. Judge usage는 기존 TokenTracker에 기록합니다. 최종 벤치 점수는 여전히 외부 verifier가 판정합니다. [현재 턴 검증 구현](https://github.com/mangowhoiscloud/geode/blob/main/core/agent/verify.py)
 
 Reflexion의 verdict와 continuation 기록은 있지만, 다음 요청에서 힌트를 소비했음을 결속하는 digest/event는 아직 없습니다. 이 기록만으로 힌트 소비까지 전 과정이 실측됐거나 성능 개선 효과가 입증됐다고 주장하지 않습니다.
 
@@ -3214,7 +3213,6 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/long-running.md
 | 실행 time budget | `time_budget_s > 0`일 때 wall-clock 검사. 게이트웨이 120초, 스케줄러 300초가 모드 기본값입니다. | `time_budget_expired` |
 | 세션 budget | 세션 전체 기본 2시간 (`core/agent/budget.py`). 임계 도달 전 `HANDOFF_TRIGGERED` 훅이 한 번 발화해 인수인계 기회를 줍니다. | `session_time_budget_expired` |
 | 비용 budget | `cost_budget > 0`이면 80%에서 1회 경고, 도달 시 종료. 세션 비용은 token tracker 누적치입니다. | `cost_budget_exceeded` |
-| overthinking 감지 | 도구 호출 없이 고출력 텍스트 라운드가 연속되면 멈추고 사용자에게 묻습니다. | `user_clarification_needed` |
 
 마무리 단계(`force_text`)에서는 적응형 컴퓨트가 걸립니다. max\_tokens를 컨텍스트 윈도의 0.5%(하한 4096)로 줄이고 thinking을 끄고 effort를 낮춰, 마지막 응답이 예산을 더 태우지 않게 합니다.
 
@@ -7140,7 +7138,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 581 |
-| 테스트 Python 파일 | 707 |
+| 테스트 Python 파일 | 708 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |

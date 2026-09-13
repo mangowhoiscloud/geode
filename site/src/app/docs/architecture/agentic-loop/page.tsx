@@ -102,11 +102,6 @@ export default function Page() {
                   <td><code>cost_budget &gt; 0</code></td>
                   <td>80%에서 1회 경고, 도달 시 <code>cost_budget_exceeded</code></td>
                 </tr>
-                <tr>
-                  <td>overthinking 감지</td>
-                  <td>도구 없이 고출력 텍스트 라운드가 연속될 때. 임계값은 컨텍스트 윈도 비례(윈도의 1%, 최소 1024 토큰)</td>
-                  <td><code>user_clarification_needed</code>로 멈추고 사용자에게 묻습니다</td>
-                </tr>
               </tbody>
             </table>
 
@@ -128,7 +123,7 @@ export default function Page() {
                 <tr><td><code>context_exhausted</code></td><td>압축과 정리 후에도 컨텍스트가 임계 상태</td></tr>
                 <tr><td><code>llm_error</code></td><td>복구 불가능한 LLM 호출 실패</td></tr>
                 <tr><td><code>model_action_required</code></td><td>모델이 외부 조치를 요구하며 종료 신호를 보냄</td></tr>
-                <tr><td><code>user_clarification_needed</code></td><td>모델이 확인을 요청하거나 overthinking 감지가 멈춤</td></tr>
+                <tr><td><code>user_clarification_needed</code></td><td>과거 종료 기록을 읽기 위해 유지한 값. 현재는 응답 길이만으로 실행을 멈추지 않습니다.</td></tr>
                 <tr><td><code>model_refusal</code></td><td>모델이 안전 거절로 응답 (아래 절)</td></tr>
                 <tr><td><code>input_blocked</code></td><td>입력이 인터셉터에서 차단됨</td></tr>
                 <tr><td><code>billing_error</code></td><td>결제/쿼터 치명 오류</td></tr>
@@ -281,11 +276,6 @@ export default function Page() {
                   <td><code>cost_budget &gt; 0</code></td>
                   <td>Warns once at 80%, terminates with <code>cost_budget_exceeded</code> when reached</td>
                 </tr>
-                <tr>
-                  <td>Overthinking detection</td>
-                  <td>Consecutive high-output text-only rounds; the threshold is proportional to the context window (1% of the window, floor 1024 tokens)</td>
-                  <td>Stops and asks the user via <code>user_clarification_needed</code></td>
-                </tr>
               </tbody>
             </table>
 
@@ -308,7 +298,7 @@ export default function Page() {
                 <tr><td><code>context_exhausted</code></td><td>Context still critical after compaction and pruning</td></tr>
                 <tr><td><code>llm_error</code></td><td>Unrecoverable LLM call failure</td></tr>
                 <tr><td><code>model_action_required</code></td><td>The model signalled that external action is required</td></tr>
-                <tr><td><code>user_clarification_needed</code></td><td>The model asked for confirmation, or overthinking detection stopped the run</td></tr>
+                <tr><td><code>user_clarification_needed</code></td><td>Retained for historical termination records. Text length alone no longer stops execution.</td></tr>
                 <tr><td><code>model_refusal</code></td><td>The model declined on safety grounds (next section)</td></tr>
                 <tr><td><code>input_blocked</code></td><td>Input was blocked by <code>UserPromptSubmit</code></td></tr>
                 <tr><td><code>billing_error</code></td><td>Fatal billing or quota error</td></tr>

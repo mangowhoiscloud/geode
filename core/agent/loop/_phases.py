@@ -157,6 +157,10 @@ async def prepare_input(
     goal_continuation_trigger: str,
 ) -> PreparedTurn | AgenticResult:
     """Cross input/interceptor boundaries and freeze turn-level inputs."""
+    # Verification repairs share the original execution budget, including
+    # preparation and judge calls. Only a new user/goal turn starts a clock.
+    if verify_continuation is None:
+        loop._loop_start_time = time.monotonic()
     user_input, blocked = await _guards._begin_turn(
         loop,
         user_input,
@@ -216,7 +220,6 @@ async def prepare_input(
     )
     _context.maybe_prune_messages(loop, messages)
 
-    loop._loop_start_time = time.monotonic()
     from core.llm.token_tracker import get_tracker
 
     loop._usage_snapshot = get_tracker().snapshot()
@@ -587,13 +590,6 @@ async def process_tool_calls(
     await loop._track_usage_async(response)
 
     terminal = _guards._guard_cost_budget(loop, messages=turn.messages, round_idx=round_idx)
-    if terminal is None:
-        terminal = await _guards._guard_overthinking(
-            loop,
-            response,
-            messages=turn.messages,
-            round_idx=round_idx,
-        )
     if terminal is None:
         terminal = _guards._guard_model_refusal(
             loop,
