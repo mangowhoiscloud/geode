@@ -103,13 +103,15 @@ gh pr create --base develop --head <topic-branch> \
 
 Before every merge, confirm the current PR head, base, mergeability, and actual
 required check results. Zero attached checks, an unknown result, pending work,
-or a failed/cancelled/timed-out required check is not green. An intended skip is
-acceptable only when repository policy permits it and the required gate passes.
+or a failed/cancelled/timed-out/skipped/neutral required check is not green.
+An inapplicable inner step may skip only when explicit change detection permits
+it and the enclosing required check completes successfully.
 
 ```bash
 gh pr checks <PR#> --watch --repo mangowhoiscloud/geode
 gh pr view <PR#> --repo mangowhoiscloud/geode \
   --json headRefOid,baseRefName,mergeable,statusCheckRollup
+uv run python scripts/merge_pr.py --pr <PR#>
 ```
 
 Run these as inspected steps, not as an unconditional command chain followed
@@ -119,22 +121,35 @@ On failure, inspect `gh run view <run-id> --log-failed`, fix the actual cause,
 verify affected behavior, push the scoped fix, and wait for the new head's CI.
 Do not delete tests or suppress a security finding merely to get green.
 
-Once authorized and verified, merge remotely with the method from
-[Merge Flow](#merge-flow), pinning the exact head that passed. For a topic PR
-into develop:
+The read-only merge guard checks the current head and base, all required
+GitHub Actions checks (app 15368), and server protection: strict up-to-date
+checks, administrator enforcement and no force-push/deletion bypass. It rejects
+missing or ambiguous evidence rather than interpreting an empty list as green.
+Pages Render lint and Build are required alongside CI and both install-smoke
+platforms; Deploy is intentionally not a PR check. A green CI Gate alone is
+insufficient when Pages fails.
+
+Once authorized, use the same guard's explicit merge mode. It rereads the
+snapshot immediately before the head-pinned REST request and verifies the
+merged PR afterward:
 
 ```bash
-gh api --method PUT repos/mangowhoiscloud/geode/pulls/<PR#>/merge \
-  -f merge_method=squash \
-  -f sha=<verified-full-head-sha>
+uv run python scripts/merge_pr.py --pr <PR#> --merge
 ```
 
-For canonical sync or develop-to-main promotion, use `-f merge_method=merge`.
-Require the response to report `merged: true`, then read the merged PR and
-record its merge SHA. A changed head requires fresh verification. Never use
+The guard chooses squash for ordinary feature-to-develop PRs and merge for
+canonical main/develop synchronization. Conflict-resolved roadmap syncs still
+need the graph-trust procedure below and must not fall back to an unguarded
+merge if the guard refuses their shape. Record its merge SHA and receipt.
+A changed head or base requires fresh verification. Never use
 `--admin` to bypass gates or `gh pr merge --delete-branch` inside a linked
 worktree: GitHub CLI may switch that checkout while deleting the local branch.
 The guarded cleanup below owns branch/worktree deletion.
+
+The server settings are a live prerequisite, not a promise made by this file.
+If protection is removed, weakened or unavailable, stop; do not downgrade the
+guard to proceed. An administrator can still change repository policy itself;
+the guard rejects observed policy drift but does not claim tamper-proof hosting.
 
 ### Concurrent-session drift & CI-trigger recovery
 

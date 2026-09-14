@@ -263,6 +263,7 @@ class CodexOAuthAdapter:
                     f"dump={dump_path or '<dump failed>'}",
                     mark_recovered=lambda: _mark_empty_text_recovered(dump_path),
                     mark_actionable=lambda: _mark_empty_text_actionable(dump_path),
+                    completed_result=result,
                 )
         return result
 

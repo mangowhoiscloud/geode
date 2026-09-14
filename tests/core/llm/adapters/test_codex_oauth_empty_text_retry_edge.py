@@ -169,6 +169,13 @@ def test_acomplete_empty_response_env_fail_fast_still_dumps(
 
     dumps = list((tmp_path / "codex-oauth-empty-text").glob("*-gpt-5.5.json"))
     assert len(dumps) == 1
+    completed = error.value.completed_result
+    assert completed is not None
+    assert completed.usage.input_tokens == 1292
+    assert completed.usage.output_tokens == 515
+    assert completed.usage.input_tokens_present is True
+    assert completed.usage.output_tokens_present is True
+    assert completed.usage.reasoning_tokens_present is False
     error.value.mark_recovered()
     assert Path(f"{dumps[0]}.recovered").is_file()
 
@@ -191,6 +198,98 @@ def test_acomplete_empty_response_can_attest_actionable_partial(
     dump = next((tmp_path / "codex-oauth-empty-text").glob("*-gpt-5.5.json"))
     error.value.mark_actionable()
     assert Path(f"{dump}.actionable").is_file()
+
+
+@pytest.mark.parametrize("recovers", [False, True])
+def test_completed_empty_attempt_usage_reaches_sql_once_per_attempt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recovers: bool
+) -> None:
+    from core.agent.conversation import ConversationContext
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig
+    from core.agent.tool_executor import ToolExecutor
+    from core.hooks import HookEvent, HookSystem
+    from core.observability.event_store import HookEventStore
+    from core.observability.hook_persistence import HookPersistenceSink
+
+    calls = 0
+
+    def stream(**_kwargs: Any) -> _MockStream:
+        nonlocal calls
+        calls += 1
+        return _MockStream(
+            SimpleNamespace(
+                id=f"response-{calls}",
+                model="gpt-5.6-sol",
+                output_text="done" if recovers and calls == 2 else "",
+                output=[],
+                status="completed",
+                usage=SimpleNamespace(
+                    input_tokens=100 * calls,
+                    output_tokens=10 * calls,
+                    input_tokens_details=SimpleNamespace(cached_tokens=0),
+                    output_tokens_details=SimpleNamespace(reasoning_tokens=0),
+                ),
+            )
+        )
+
+    client = SimpleNamespace(responses=SimpleNamespace(stream=stream))
+    monkeypatch.setattr(CodexOAuthAdapter, "_get_client", lambda _self: client)
+    monkeypatch.setenv("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", "1")
+    monkeypatch.setenv("GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR", "1")
+    monkeypatch.setattr("core.agent.loop._provider_call._FAIL_FAST_RETRY_DELAY_S", 0)
+    monkeypatch.setattr(
+        "core.llm.adapters.codex_oauth._dump_empty_text_postmortem", lambda **_kw: None
+    )
+    monkeypatch.setattr(
+        "core.llm.adapters.codex_oauth._mark_empty_text_recovered", lambda _path: None
+    )
+    hooks = HookSystem()
+    store = HookEventStore(tmp_path / "empty-attempts.db")
+    hooks.register_sink(HookPersistenceSink(store, session_key="test", run_id="empty-test"))
+    loop = AgenticLoop(
+        ConversationContext(),
+        ToolExecutor(),
+        config=AgenticLoopConfig(source="codex-oauth", disable_settings_drift=True),
+        model="gpt-5.6-sol",
+        provider="openai",
+        hooks=hooks,
+        quiet=True,
+    )
+    try:
+        if recovers:
+            response = asyncio.run(
+                loop._call_llm("Synthetic test", [{"role": "user", "content": "go"}])
+            )
+            assert response is not None and response.text == "done"
+        else:
+            with pytest.raises(EmptyModelOutputError):
+                asyncio.run(loop._call_llm("Synthetic test", [{"role": "user", "content": "go"}]))
+        starts = store.read(event_filter=HookEvent.LLM_CALL_STARTED.value)
+        ends = store.read(event_filter=HookEvent.LLM_CALL_ENDED.value)
+        assert calls == (2 if recovers else 3)
+        assert len(starts) == len(ends) == calls
+        assert {row.llm_attempt_id for row in starts} == {row.llm_attempt_id for row in ends}
+        assert len({row.llm_call_id for row in ends}) == 1
+        for row in ends:
+            attempt = int(row.llm_attempt_id.rsplit("-", 1)[1])
+            success = recovers and attempt == calls
+            assert row.status == ("ok" if success else "failed")
+            assert row.payload["success"] is success
+            assert row.payload["response_id"] == f"response-{attempt}"
+            assert row.payload["usage"] == {
+                "input_tokens": 100 * attempt,
+                "output_tokens": 10 * attempt,
+                "cached_input_tokens": 0,
+                "reasoning_tokens": 0,
+                "cache_write_tokens": None,
+            }
+            assert row.payload["cost_usd"] > 0
+            assert "raw_response" not in row.payload
+        assert sum(row.payload["usage"]["input_tokens"] for row in ends) == (
+            300 if recovers else 600
+        )
+    finally:
+        hooks.close()
 
 
 def test_acomplete_empty_response_cannot_attest_without_dump(

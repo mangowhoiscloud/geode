@@ -47,8 +47,30 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- Fail the CI merge gate on missing, skipped, cancelled or failed prerequisites,
+  including unavailable change detection. Run required Pages checks on every
+  main/develop pull request so a code-only green gate cannot mask a site failure.
+  Runtime `GEODE.md` and `.geode/` changes trigger the full code checks.
+  The explicit merge command rechecks current head/base and app-bound required
+  checks against enforced branch protection before submitting a pinned merge.
+
 ### Fixed
 
+- Distinguish a completed negative check from a tool outage in the shared
+  runtime prompt. Required failed or unrun checks cannot establish completion
+  or merge readiness, including persona-off and audit prompt paths.
+- Preserve trial observations across tool exceptions, cancellation and native
+  Harbor cleanup/export failures. Durable tool terminals distinguish failure
+  from uncertain external effects; failed observers cannot silently certify
+  complete usage from the remaining event pairs. Known completed empty-output
+  attempts retain their usage, and missing input/output/reasoning counters stay
+  unknown instead of becoming zero. Harbor's existing usage export includes
+  numeric per-attempt counters with source IDs and hashes for traceable Replay
+  accounting. Activity rows use schema version 6;
+  historical records, benchmark scores and whole-runtime accounting limits
+  remain unchanged.
 - Ground Reflexion verification in bounded observations instead of response
   length, keyword overlap or recovered tool-error vetoes. LLM verification
   failures remain unavailable rather than falling back to structural success.

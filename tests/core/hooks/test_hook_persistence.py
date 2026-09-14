@@ -165,7 +165,7 @@ def test_public_extension_audit_uses_sqlite_and_active_timeline_only(
         "step_id": "t-1:step-1",
         "session_generation": 0,
         "verify_attempt": 0,
-        "activity_schema_version": 5,
+        "activity_schema_version": 6,
         "_dispatch_duration_ms": row.payload["_dispatch_duration_ms"],
     }
     assert not (tmp_path / "events.jsonl").exists()
@@ -280,11 +280,11 @@ def test_llm_route_charge_and_usage_survive_durable_projection(tmp_path: Path) -
     assert row.payload["response_provider"] == "OpenInference"
     assert row.payload["routing_strategy"] == "direct"
     assert row.payload["routing_attempt"] == 1
-    assert row.payload["activity_schema_version"] == 5
+    assert row.payload["activity_schema_version"] == 6
     timeline_payload = _read_timeline(tmp_path / "events.jsonl")[0]["payload"]
     assert timeline_payload["response_provider"] == "OpenInference"
     assert timeline_payload["cost_usd"] == 0.00012
-    assert timeline_payload["activity_schema_version"] == 5
+    assert timeline_payload["activity_schema_version"] == 6
     hooks.close()
 
 
@@ -361,3 +361,91 @@ def test_hook_system_close_closes_owned_sink(tmp_path: Path) -> None:
     hooks.close()
     assert hooks.closed is True
     assert store.closed is True
+
+
+@pytest.mark.parametrize("event", [HookEvent.LLM_CALL_STARTED, HookEvent.LLM_CALL_ENDED])
+@pytest.mark.parametrize(
+    "method", ["trigger_async", "trigger_with_result_async", "trigger_interceptor_async"]
+)
+def test_cancelled_observer_persists_failed_dispatch_before_propagation(
+    tmp_path: Path, event: HookEvent, method: str
+) -> None:
+    async def scenario() -> None:
+        hooks, store = _wired_hooks(tmp_path)
+        entered = asyncio.Event()
+        seen: list[object] = []
+        tail: list[str] = []
+
+        async def waiting(_event, _data):
+            entered.set()
+            await asyncio.Event().wait()
+
+        hooks.register(event, waiting, name="waiting", priority=1)
+        hooks.register(event, lambda _event, _data: tail.append("not-run"), name="tail", priority=2)
+        hooks.register_sink(seen.append, name="capture")
+        payload = {
+            "session_id": "s-cancel",
+            "llm_call_id": "call-cancel",
+            "llm_attempt_id": "call-cancel:attempt-1",
+            "latency_ms": 1.0,
+            "usage": {"input_tokens": 7, "output_tokens": 1},
+        }
+        try:
+            task = asyncio.create_task(getattr(hooks, method)(event, payload))
+            await entered.wait()
+            task.cancel("private cancellation reason")
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert task.cancelled()
+            assert tail == []
+            rows = store.read()
+            assert len(rows) == 1 and len(seen) == 1
+            row = rows[0]
+            assert row.event == event.value
+            assert row.status == "handler_error"
+            assert row.handler_count == row.handler_error_count == 1
+            assert row.payload["_failed_handlers"] == ["waiting"]
+            assert row.llm_attempt_id == payload["llm_attempt_id"]
+            assert "private cancellation reason" not in str(row.payload)
+            # A failed observer is not a provider/model cancellation result.
+            assert row.payload.get("error_type") is None
+            if event is HookEvent.LLM_CALL_ENDED:
+                assert row.payload["usage"]["input_tokens"] == 7
+            assert hooks.has_sink_failures is False
+        finally:
+            hooks.close()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("persistence_first", [False, True])
+def test_sink_interruption_does_not_replace_original_observer_cancellation(
+    tmp_path: Path, persistence_first: bool
+) -> None:
+    original = asyncio.CancelledError("private original cancellation")
+    secondary = asyncio.CancelledError("private sink cancellation")
+    hooks = HookSystem()
+    store = HookEventStore(tmp_path / "sink-order.db")
+
+    async def cancelled(_event, _data):
+        raise original
+
+    def failing_sink(_dispatch):
+        raise secondary
+
+    hooks.register(HookEvent.LLM_CALL_STARTED, cancelled, name="cancelled")
+    sink = HookPersistenceSink(store, session_key="synthetic", run_id="run-sinks")
+    if persistence_first:
+        hooks.register_sink(sink, name="persistence")
+    hooks.register_sink(failing_sink, name="failing")
+    if not persistence_first:
+        hooks.register_sink(sink, name="persistence")
+    try:
+        with pytest.raises(asyncio.CancelledError) as raised:
+            asyncio.run(hooks.trigger_async(HookEvent.LLM_CALL_STARTED, {"llm_call_id": "c"}))
+        assert raised.value is original
+        assert len(store.read()) == 1
+        assert hooks.has_sink_failures is True
+    finally:
+        hooks.close()
+    assert hooks.has_sink_failures is True

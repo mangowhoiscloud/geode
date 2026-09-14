@@ -40,10 +40,12 @@ class EmptyModelOutputError(RuntimeError):
         *,
         mark_recovered: Callable[[], None] | None = None,
         mark_actionable: Callable[[], None] | None = None,
+        completed_result: AdapterCallResult | None = None,
     ) -> None:
         super().__init__(message)
         self._mark_recovered = mark_recovered
         self._mark_actionable_callbacks = [mark_actionable] if mark_actionable is not None else []
+        self.completed_result = completed_result
 
     def mark_recovered(self) -> None:
         """Attest that an identical retry returned usable model output."""
@@ -186,13 +188,21 @@ class UsageSummary:
     # Numeric defaults retain billing compatibility; absence is not an observed zero.
     cached_input_tokens_present: bool = False
     cache_write_tokens_present: bool = False
+    input_tokens_present: bool = False
+    output_tokens_present: bool = False
+    reasoning_tokens_present: bool = False
 
     def __post_init__(self) -> None:
         """Reject malformed provider billing before it reaches budget logic."""
-        if self.cached_input_tokens > 0:
-            object.__setattr__(self, "cached_input_tokens_present", True)
-        if self.cache_write_tokens > 0:
-            object.__setattr__(self, "cache_write_tokens_present", True)
+        for name in (
+            "input_tokens",
+            "output_tokens",
+            "cached_input_tokens",
+            "reasoning_tokens",
+            "cache_write_tokens",
+        ):
+            if getattr(self, name) > 0:
+                object.__setattr__(self, f"{name}_present", True)
         cost = self.reported_cost_usd
         if cost is None:
             return

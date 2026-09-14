@@ -20,6 +20,61 @@ from . import _context
 log = logging.getLogger(__name__)
 
 
+def _completed_attempt_payload(result: Any, model: str) -> dict[str, Any]:
+    """Project only completed-response accounting and bounded route evidence."""
+    if result is None:
+        return {}
+    usage = getattr(result, "usage", None)
+    counters: dict[str, int | None] = {}
+    for key in (
+        "input_tokens",
+        "output_tokens",
+        "cached_input_tokens",
+        "reasoning_tokens",
+        "cache_write_tokens",
+    ):
+        count = int(getattr(usage, key, 0) or 0)
+        counters[key] = count if getattr(usage, f"{key}_present", False) or count > 0 else None
+    reported_cost = getattr(usage, "reported_cost_usd", None)
+    input_tokens, output_tokens = counters["input_tokens"], counters["output_tokens"]
+    cost_usd = None
+    try:
+        from core.llm.token_tracker import calculate_cost
+
+        if reported_cost is not None:
+            cost_usd = float(reported_cost)
+        elif input_tokens is not None and output_tokens is not None:
+            cost_usd = float(
+                calculate_cost(
+                    model,
+                    input_tokens,
+                    output_tokens,
+                    cache_creation_tokens=counters["cache_write_tokens"] or 0,
+                    cache_read_tokens=counters["cached_input_tokens"] or 0,
+                )
+            )
+    except Exception:
+        log.warning(
+            "calculate_cost failed for model=%s; cost remains unknown", model, exc_info=True
+        )
+    return {
+        "usage": counters,
+        "cost_usd": cost_usd,
+        **{
+            key: value
+            for key in (
+                "response_id",
+                "response_model",
+                "response_provider",
+                "routing_strategy",
+                "routing_attempt",
+                "request_image_receipt",
+            )
+            if (value := getattr(result, key, None))
+        },
+    }
+
+
 def _validate_bound_request_rewrite(
     original: AdapterCallRequest,
     effective: AdapterCallRequest,
@@ -415,64 +470,26 @@ async def call_llm(
             try:
                 attempt_result = await active_adapter.acomplete(active_request)
             except BaseException as exc:
-                await fire_hook_async(
-                    loop._hooks,
-                    HookEvent.LLM_CALL_ENDED,
-                    {
-                        **attempt_correlation,
-                        "model": active_request.model,
-                        "provider": active_provider,
-                        "adapter": active_name,
-                        "latency_ms": (_llm_call_time.monotonic() - started_at) * 1_000,
-                        "error": type(exc).__name__,
-                        "error_type": type(exc).__name__,
-                    },
-                )
+                completed = exc.completed_result if isinstance(exc, EmptyModelOutputError) else None
+                try:
+                    await fire_hook_async(
+                        loop._hooks,
+                        HookEvent.LLM_CALL_ENDED,
+                        {
+                            **attempt_correlation,
+                            "model": active_request.model,
+                            "provider": active_provider,
+                            "adapter": active_name,
+                            "latency_ms": (_llm_call_time.monotonic() - started_at) * 1_000,
+                            "error": type(exc).__name__,
+                            "error_type": type(exc).__name__,
+                            **_completed_attempt_payload(completed, active_request.model),
+                        },
+                    )
+                except BaseException:
+                    log.warning("Failed to record LLM failure; preserving original exception")
                 raise
 
-            usage = getattr(attempt_result, "usage", None)
-            input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
-            output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
-            cached_input_tokens = int(getattr(usage, "cached_input_tokens", 0) or 0)
-            reasoning_tokens = int(getattr(usage, "reasoning_tokens", 0) or 0)
-            cache_write_tokens = int(getattr(usage, "cache_write_tokens", 0) or 0)
-            reported_cost = getattr(usage, "reported_cost_usd", None)
-            try:
-                from core.llm.token_tracker import calculate_cost
-
-                cost_usd = (
-                    float(reported_cost)
-                    if reported_cost is not None
-                    else float(
-                        calculate_cost(
-                            active_request.model,
-                            input_tokens,
-                            output_tokens,
-                            cache_creation_tokens=cache_write_tokens,
-                            cache_read_tokens=cached_input_tokens,
-                        )
-                    )
-                )
-            except Exception:
-                log.warning(
-                    "calculate_cost failed for model=%s — recording cost_usd=0.0 "
-                    "(cost limiter will under-count this call)",
-                    active_request.model,
-                    exc_info=True,
-                )
-                cost_usd = 0.0
-            route_evidence = {
-                key: value
-                for key, value in {
-                    "response_id": getattr(attempt_result, "response_id", ""),
-                    "response_model": getattr(attempt_result, "response_model", ""),
-                    "response_provider": getattr(attempt_result, "response_provider", ""),
-                    "routing_strategy": getattr(attempt_result, "routing_strategy", ""),
-                    "routing_attempt": getattr(attempt_result, "routing_attempt", 0),
-                    "request_image_receipt": getattr(attempt_result, "request_image_receipt", None),
-                }.items()
-                if value
-            }
             await fire_hook_async(
                 loop._hooks,
                 HookEvent.LLM_CALL_ENDED,
@@ -483,21 +500,7 @@ async def call_llm(
                     "adapter": active_name,
                     "latency_ms": (_llm_call_time.monotonic() - started_at) * 1_000,
                     "error": None,
-                    "usage": {
-                        "input_tokens": input_tokens,
-                        "output_tokens": output_tokens,
-                        "cached_input_tokens": cached_input_tokens
-                        if getattr(usage, "cached_input_tokens_present", False)
-                        or cached_input_tokens > 0
-                        else None,
-                        "reasoning_tokens": reasoning_tokens,
-                        "cache_write_tokens": cache_write_tokens
-                        if getattr(usage, "cache_write_tokens_present", False)
-                        or cache_write_tokens > 0
-                        else None,
-                    },
-                    "cost_usd": cost_usd,
-                    **route_evidence,
+                    **_completed_attempt_payload(attempt_result, active_request.model),
                 },
             )
             return attempt_result

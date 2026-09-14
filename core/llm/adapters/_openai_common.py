@@ -1161,19 +1161,23 @@ def translate_chat_response(response: Any) -> AdapterCallResult:
     reasoning_tokens = 0
     cache_write_tokens = 0
     prompt_details = getattr(usage, "prompt_tokens_details", None)
+    completion_details = getattr(usage, "completion_tokens_details", None)
     if usage is not None:
         cached_tokens = int(getattr(prompt_details, "cached_tokens", 0) or 0)
         cache_write_tokens = int(getattr(prompt_details, "cache_write_tokens", 0) or 0)
-        completion_details = getattr(usage, "completion_tokens_details", None)
         reasoning_tokens = int(getattr(completion_details, "reasoning_tokens", 0) or 0)
     return AdapterCallResult(
         text=text,
         usage=UsageSummary(
-            input_tokens=getattr(usage, "prompt_tokens", 0) if usage else 0,
-            output_tokens=getattr(usage, "completion_tokens", 0) if usage else 0,
+            input_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+            output_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+            input_tokens_present=getattr(usage, "prompt_tokens", None) is not None,
+            output_tokens_present=getattr(usage, "completion_tokens", None) is not None,
             cached_input_tokens=cached_tokens,
             cached_input_tokens_present=getattr(prompt_details, "cached_tokens", None) is not None,
             reasoning_tokens=reasoning_tokens,
+            reasoning_tokens_present=getattr(completion_details, "reasoning_tokens", None)
+            is not None,
             cache_write_tokens=cache_write_tokens,
             cache_write_tokens_present=getattr(prompt_details, "cache_write_tokens", None)
             is not None,
@@ -1355,19 +1359,22 @@ def translate_codex_response(
     reasoning_tokens = 0
     cache_write_tokens = 0
     input_details = getattr(usage, "input_tokens_details", None)
+    output_details = getattr(usage, "output_tokens_details", None)
     if usage is not None:
         cached_tokens = int(getattr(input_details, "cached_tokens", 0) or 0)
         cache_write_tokens = int(getattr(input_details, "cache_write_tokens", 0) or 0)
-        output_details = getattr(usage, "output_tokens_details", None)
         reasoning_tokens = int(getattr(output_details, "reasoning_tokens", 0) or 0)
     return AdapterCallResult(
         text=text,
         usage=UsageSummary(
-            input_tokens=getattr(usage, "input_tokens", 0) if usage else 0,
-            output_tokens=getattr(usage, "output_tokens", 0) if usage else 0,
+            input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
+            output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
+            input_tokens_present=getattr(usage, "input_tokens", None) is not None,
+            output_tokens_present=getattr(usage, "output_tokens", None) is not None,
             cached_input_tokens=cached_tokens,
             cached_input_tokens_present=getattr(input_details, "cached_tokens", None) is not None,
             reasoning_tokens=reasoning_tokens,
+            reasoning_tokens_present=getattr(output_details, "reasoning_tokens", None) is not None,
             cache_write_tokens=cache_write_tokens,
             cache_write_tokens_present=getattr(input_details, "cache_write_tokens", None)
             is not None,
