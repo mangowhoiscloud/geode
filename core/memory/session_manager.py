@@ -507,6 +507,7 @@ class SessionManager:
     def __init__(self, db_path: Path | None = None) -> None:
         self._db_path = db_path or _get_default_db_path()
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        # Shared connections need the same guard through execute, fetch and close.
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
@@ -644,9 +645,10 @@ class SessionManager:
 
     def get(self, session_id: str) -> SessionMeta | None:
         """Fetch a single session by ID."""
-        row = self._conn.execute(
-            "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
+            ).fetchone()
         if row is None:
             return None
         return self._row_to_meta(row)
@@ -658,16 +660,17 @@ class SessionManager:
         limit: int = 50,
     ) -> list[SessionMeta]:
         """List sessions, optionally filtered by status, ordered by updated_at desc."""
-        if status:
-            rows = self._conn.execute(
-                "SELECT * FROM sessions WHERE status = ? ORDER BY updated_at DESC LIMIT ?",
-                (status, limit),
-            ).fetchall()
-        else:
-            rows = self._conn.execute(
-                "SELECT * FROM sessions ORDER BY updated_at DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
+        with self._lock:
+            if status:
+                rows = self._conn.execute(
+                    "SELECT * FROM sessions WHERE status = ? ORDER BY updated_at DESC LIMIT ?",
+                    (status, limit),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT * FROM sessions ORDER BY updated_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
         return [self._row_to_meta(r) for r in rows]
 
     def delete(self, session_id: str) -> bool:
@@ -790,24 +793,26 @@ class SessionManager:
 
     def get_messages(self, session_id: str) -> list[dict[str, Any]]:
         """Fetch all messages for ``session_id`` in ``seq`` order."""
-        rows = self._conn.execute(
-            """\
-            SELECT seq, role, content, tool_call_id, tool_calls, tool_name,
-                   timestamp, token_count, finish_reason, reasoning, metadata
-            FROM messages
-            WHERE session_id = ?
-            ORDER BY seq ASC
-            """,
-            (session_id,),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                """\
+                SELECT seq, role, content, tool_call_id, tool_calls, tool_name,
+                       timestamp, token_count, finish_reason, reasoning, metadata
+                FROM messages
+                WHERE session_id = ?
+                ORDER BY seq ASC
+                """,
+                (session_id,),
+            ).fetchall()
         return [self._row_to_message(r) for r in rows]
 
     def count_messages(self, session_id: str) -> int:
         """Return the number of mirrored messages for ``session_id``."""
-        row = self._conn.execute(
-            "SELECT COUNT(*) FROM messages WHERE session_id = ?",
-            (session_id,),
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT COUNT(*) FROM messages WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
         return int(row[0]) if row else 0
 
     def delete_messages(self, session_id: str) -> int:
@@ -870,7 +875,8 @@ class SessionManager:
         sql += " ORDER BY m.timestamp DESC LIMIT ?"
         params.append(limit)
         try:
-            rows = self._conn.execute(sql, params).fetchall()
+            with self._lock:
+                rows = self._conn.execute(sql, params).fetchall()
         except sqlite3.OperationalError as exc:
             log.warning("search_messages FTS5 query failed: %s", exc)
             return []
@@ -995,17 +1001,18 @@ class SessionManager:
             clauses.append(f"kind IN ({placeholders})")
             params.extend(kinds)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-        rows = self._conn.execute(
-            f"""\
-            SELECT artifact_id, session_id, kind, source_start_seq, source_end_seq,
-                   content, metadata, token_count, model, provider, created_at, updated_at
-            FROM context_artifacts
-            {where}
-            ORDER BY updated_at DESC
-            LIMIT ?
-            """,  # noqa: S608  # nosec B608 - placeholders are generated from a fixed count.
-            (*params, max(1, int(limit))),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                f"""\
+                SELECT artifact_id, session_id, kind, source_start_seq, source_end_seq,
+                       content, metadata, token_count, model, provider, created_at, updated_at
+                FROM context_artifacts
+                {where}
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,  # noqa: S608  # nosec B608 - placeholders are generated from a fixed count.
+                (*params, max(1, int(limit))),
+            ).fetchall()
         return [self._row_to_context_artifact(r) for r in rows]
 
     def search_context_artifacts(
@@ -1043,7 +1050,8 @@ class SessionManager:
         sql += " ORDER BY rank LIMIT ?"
         params.append(max(1, int(limit)))
         try:
-            rows = self._conn.execute(sql, params).fetchall()
+            with self._lock:
+                rows = self._conn.execute(sql, params).fetchall()
         except sqlite3.OperationalError as exc:
             log.warning("search_context_artifacts FTS5 query failed: %s", exc)
             return []
@@ -1117,7 +1125,8 @@ class SessionManager:
 
     def close(self) -> None:
         """Close the database connection."""
-        self._conn.close()
+        with self._lock:
+            self._conn.close()
 
     @staticmethod
     def _row_to_context_artifact(row: tuple) -> ContextArtifact:  # type: ignore[type-arg]
