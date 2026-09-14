@@ -49,6 +49,16 @@ functional change.
 
 ### Fixed
 
+- Preserve trial observations across tool exceptions, cancellation and native
+  Harbor cleanup/export failures. Durable tool terminals distinguish failure
+  from uncertain external effects; failed observers cannot silently certify
+  complete usage from the remaining event pairs. Known completed empty-output
+  attempts retain their usage, and missing input/output/reasoning counters stay
+  unknown instead of becoming zero. Harbor's existing usage export includes
+  numeric per-attempt counters with source IDs and hashes for traceable Replay
+  accounting. Activity rows use schema version 6;
+  historical records, benchmark scores and whole-runtime accounting limits
+  remain unchanged.
 - Ground Reflexion verification in bounded observations instead of response
   length, keyword overlap or recovered tool-error vetoes. LLM verification
   failures remain unavailable rather than falling back to structural success.

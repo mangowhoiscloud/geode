@@ -183,6 +183,22 @@ separate secret, PII and local-path scans authorize a public derivative.
 Missing cache observations stay null, and AgenticLoop usage subtotals do not
 populate Harbor whole-runtime totals while auxiliary calls remain unobserved.
 
+Native bootstrap first writes `runtime-finalized.json` with
+`exports_complete=false`. Child shutdown, session closure, source reads and
+the two canonical trajectory exports are finalized independently; a cleanup
+failure does not discard available evidence or replace the original execution
+error. Bounded stage/error-class receipts accompany partial exports. Only
+successful required exports from a complete source snapshot may set the flag
+true. Python cleanup cannot guarantee recovery after SIGKILL, OOM or host loss;
+a false or missing finalization receipt is not evidence of no execution.
+
+Fresh reexecution can add behavior and cache observations to Replay, but it
+cannot fill historical unknowns in place. Freeze a new candidate and attempt
+lineage, preserve the task/model/resource contract, and identify the updated
+runtime as a treatment change. Keep original reward and historical absence
+alongside the separately labeled supplementary trace. Excluded tasks remain
+excluded unless a new study supplies a compatible environment prospectively.
+
 Use Harbor's `--install-only` for the no-model installation gate. Every live
 study needs the existing run-spec/attempt contracts and its frozen admission
 rules. The ladder below describes paired comparisons and their publication;

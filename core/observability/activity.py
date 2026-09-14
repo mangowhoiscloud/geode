@@ -117,6 +117,7 @@ __all__ = [
     "SubAgentStartedRow",
     "ToolApprovalDetails",
     "ToolApprovalRequestedRow",
+    "ToolExecEndedDetails",
     "ToolExecEndedRow",
     "ToolExecFailedRow",
     "ToolExecStartedRow",
@@ -159,7 +160,7 @@ class ActivityRowBase(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: int = 5
+    schema_version: int = 6
     """Row-schema version (PR-OBS-CONTRACT, 2026-06-13). Bump when a
     field is added/renamed/retyped on any row class so JSONL re-readers
     can branch on shape instead of guessing from key presence.
@@ -217,15 +218,36 @@ class LifecycleCompletedRow(ActivityRowBase):
     details: LifecycleCompletedDetails
 
 
+class ToolExecEndedDetails(LifecycleCompletedDetails):
+    """Tool terminal metadata; null execution means completion is uncertain.
+
+    Status/success describe the local invocation, not verifier-confirmed
+    external effects. A STARTED pair proves admission, not effect completion.
+    Optional fields preserve legacy rows without inventing a classification.
+    """
+
+    tool_name: str = Field(default="", max_length=256)
+    executed: bool | None = None
+    terminal_status: Literal["completed", "failed", "cancelled"] | None = None
+    error_type: str | None = Field(default=None, max_length=128)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_legacy_details(cls, value: Any) -> Any:
+        if type(value) is LifecycleCompletedDetails:
+            return value.model_dump()
+        return value
+
+
 class LLMCallUsageDetails(BaseModel):
-    """Bounded call counters; cache null means the provider did not report it."""
+    """Bounded call counters; null means the provider did not report it."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    input_tokens: int = Field(default=0, ge=0)
-    output_tokens: int = Field(default=0, ge=0)
+    input_tokens: int | None = Field(default=None, ge=0)
+    output_tokens: int | None = Field(default=None, ge=0)
     cached_input_tokens: int | None = Field(default=None, ge=0)
-    reasoning_tokens: int = Field(default=0, ge=0)
+    reasoning_tokens: int | None = Field(default=None, ge=0)
     cache_write_tokens: int | None = Field(default=None, ge=0)
 
 
@@ -381,6 +403,7 @@ class LLMCallEndedRow(LifecycleCompletedRow):
 class ToolExecEndedRow(LifecycleCompletedRow):
     action: Literal["tool.exec.ended"] = "tool.exec.ended"
     entity_type: Literal["tool_call"] = "tool_call"
+    details: ToolExecEndedDetails
 
 
 class ToolRecoverySucceededRow(LifecycleCompletedRow):

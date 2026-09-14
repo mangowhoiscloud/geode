@@ -465,11 +465,14 @@ def translate_response(response: Any) -> AdapterCallResult:
     return AdapterCallResult(
         text="".join(text_blocks),
         usage=UsageSummary(
-            input_tokens=getattr(usage, "input_tokens", 0) if usage else 0,
-            output_tokens=getattr(usage, "output_tokens", 0) if usage else 0,
+            input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
+            output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
+            input_tokens_present=getattr(usage, "input_tokens", None) is not None,
+            output_tokens_present=getattr(usage, "output_tokens", None) is not None,
             cached_input_tokens=int(cached_tokens or 0),
             cached_input_tokens_present=cached_tokens is not None,
             reasoning_tokens=int(getattr(output_details, "thinking_tokens", 0) or 0),
+            reasoning_tokens_present=getattr(output_details, "thinking_tokens", None) is not None,
             cache_write_tokens=int(cache_write_tokens or 0),
             cache_write_tokens_present=cache_write_tokens is not None,
         ),

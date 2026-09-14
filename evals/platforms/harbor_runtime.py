@@ -20,6 +20,8 @@ import signal
 import sqlite3
 import tarfile
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -59,7 +61,7 @@ _FINALIZE_SECONDS = 20
 
 async def _stop_runtime(environment: Any) -> None:
     """Wait for export and process exit before Harbor downloads agent logs."""
-    command = f"""import os, signal, time
+    command = f"""import json, os, signal, time
 from pathlib import Path
 p = Path('{_LOGS}/runtime.pid')
 if not p.is_file():
@@ -84,12 +86,16 @@ while True:
     if time.monotonic() >= deadline:
         raise RuntimeError('runtime finalization deadline exceeded')
     time.sleep(0.1)
-if not Path('{_LOGS}/runtime-finalized.json').is_file():
+p = Path('{_LOGS}/runtime-finalized.json')
+if not p.is_file() or json.loads(p.read_text()).get('exports_complete') is not True:
     raise RuntimeError('runtime export incomplete')
 """
-    result = await environment.exec(
-        command="python3 -c " + shlex.quote(command), timeout_sec=_FINALIZE_SECONDS + 5
-    )
+    # This deadline belongs to the stop task, not its repeatedly cancellable
+    # host caller. The environment operation must cooperate with cancellation.
+    async with asyncio.timeout(_FINALIZE_SECONDS + 5):
+        result = await environment.exec(
+            command="python3 -c " + shlex.quote(command), timeout_sec=_FINALIZE_SECONDS + 5
+        )
     if result.return_code != 0:
         raise RuntimeError("runtime shutdown/export incomplete; trial is infrastructure-invalid")
 
@@ -314,10 +320,35 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
                 command=shlex.join(args) + f" > {_LOGS}/runtime.log 2>&1",
                 env=env,
             )
-        except BaseException:
+        except BaseException as primary_error:
             # Harbor owns the deadline. Request finalization from the exact
             # trial process, without starting another inference or extending it.
-            await asyncio.shield(_stop_runtime(environment))
+            stop_task = asyncio.create_task(_stop_runtime(environment))
+            # Keep this exact, independently bounded stop task owned until it
+            # is terminal. A second cancellation must not race log download.
+            while not stop_task.done():
+                try:
+                    await asyncio.shield(stop_task)
+                except asyncio.CancelledError:
+                    continue
+                except BaseException:
+                    break  # Read its terminal exception below, once.
+            try:
+                stop_task.result()
+            except BaseException as stop_error:
+                # The host execution failure remains authoritative. Do not put
+                # exception text (which can contain task data) in the receipt.
+                try:
+                    path = self.logs_dir / "runtime-contract.json"
+                    contract = json.loads(path.read_text())
+                    contract["finalization_errors"] = [
+                        {"stage": "host_stop_runtime", "error_type": type(stop_error).__name__}
+                    ]
+                    atomic_write_json(path, contract)
+                except BaseException as receipt_error:
+                    primary_error.add_note(
+                        "host finalization receipt failed: " + type(receipt_error).__name__
+                    )
             raise
 
     def populate_context_post_run(self, context: Any) -> None:
@@ -368,6 +399,199 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
         write_harbor_recording(self.logs_dir / "trajectory.json")
 
 
+async def _finalize_native(
+    runtime: Any,
+    services: Any,
+    executor: Any,
+    loop: Any,
+    *,
+    succeeded: bool,
+    metadata: dict[str, Any],
+    event_loop: asyncio.AbstractEventLoop | None,
+) -> BaseException | None:
+    """Recover existing exports independently; never replace an execution error."""
+    from core.memory.atomic_write import atomic_write_json
+    from core.observability.event_store import HookEventStore
+    from core.observability.trajectory import export_trajectory, trajectory_from_sessions
+
+    errors: list[dict[str, str]] = []
+    first_error: BaseException | None = None
+
+    def record_error(stage: str, error: BaseException) -> None:
+        nonlocal first_error
+        if first_error is None:
+            first_error = error
+        # Several children may fail identically; the receipt is bounded by
+        # stage/error classes, not child count or private exception contents.
+        entry = {"stage": stage, "error_type": type(error).__name__}
+        if entry not in errors:
+            errors.append(entry)
+
+    @contextmanager
+    def stage(name: str) -> Iterator[None]:
+        try:
+            yield
+        except BaseException as error:
+            record_error(name, error)
+
+    if executor is not None and loop is not None:
+        with stage("children"):
+            manager = executor._sub_agent_manager
+            if manager is not None:
+                children = manager.list_collaboration_runs(loop._session_id)
+                for child in children:
+                    with stage("child_interrupt"):
+                        manager.interrupt_task(loop._session_id, child.task_id)
+                # Drain all waits even when one fails, before reading sources.
+                results = await asyncio.gather(
+                    *(
+                        manager.wait_for_task(loop._session_id, child.task_id, timeout_s=10)
+                        for child in children
+                    ),
+                    return_exceptions=True,
+                )
+                for result in results:
+                    if isinstance(result, BaseException):
+                        record_error("child_wait", result)
+                if any(
+                    child.status in {"pending", "running"}
+                    for child in manager.list_collaboration_runs(loop._session_id)
+                ):
+                    raise RuntimeError("child shutdown incomplete")
+    if loop is not None:
+        with stage("session_end"):
+            if succeeded:
+                await loop.amark_session_completed()
+            else:
+                await loop.amark_session_error()
+    # Stop native writers before paging the isolated trial's durable sources.
+    if services is not None:
+        with stage("services_close"):
+            services.close()
+    if runtime is not None:
+        with stage("runtime_shutdown"):
+            runtime.shutdown()
+
+    events: list[Any] = []
+    reader = None
+    if runtime is not None:
+        with stage("usage_read"):
+            reader = HookEventStore(db_path=runtime.event_store.db_path)
+            while batch := reader.read(limit=500, offset=len(events)):
+                events.extend(batch)
+        if reader is not None:
+            with stage("usage_reader_close"):
+                reader.close()
+    snapshot_complete = runtime is not None and loop is not None and not errors
+    usage = _summarize_usage([])
+    with stage("usage_summary"):
+        usage = _summarize_usage(
+            events,
+            known_sink_failure=runtime is not None and runtime.hooks.has_sink_failures is True,
+        )
+    if usage.get("observation_status") == "degraded":
+        record_error("observation_health", RuntimeError("native observation degraded"))
+    snapshot_complete = snapshot_complete and not errors
+    usage["source_snapshot_complete"] = snapshot_complete
+    if not snapshot_complete:
+        # Matching surviving IDs cannot prove a complete source snapshot.
+        # Keep the observed sums without turning them into complete totals.
+        for field in ("input_tokens", "output_tokens", "cached_input_tokens", "cache_write_tokens"):
+            usage[field] = None
+    metadata.update(usage=usage, finalization_errors=errors)
+
+    sessions: list[str] = []
+    canonical_scope_complete = True
+    if runtime is not None:
+        with (
+            stage("session_inventory"),
+            sqlite3.connect(runtime.event_store.db_path) as connection,
+        ):
+            sessions = [
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT DISTINCT session_id FROM session_events ORDER BY session_id"
+                )
+            ]
+        # A failed inventory must not prevent exporting the known root session.
+        session_id = metadata["geode_session_id"]
+        if session_id and session_id not in sessions:
+            sessions.append(session_id)
+        for policy, name in (
+            ("digest", "geode-trajectory.json"),
+            ("full", "geode-trajectory.private.json"),
+        ):
+            if not sessions:
+                continue  # No invented session identity for failed bootstrap.
+            with stage(f"trajectory_{policy}"):
+                trajectory = trajectory_from_sessions(
+                    sessions,
+                    trajectory_id=f"harbor-{session_id or sessions[0]}",
+                    source={"harness": "harbor", "session": session_id or sessions[0]},
+                    db_path=runtime.event_store.db_path,
+                    outcome=metadata,
+                    provenance={"adapter": "evals.platforms.harbor_runtime"},
+                    privacy={"review_state": "local"},
+                    content_policy=policy,
+                )
+                canonical_scope_complete = (
+                    canonical_scope_complete and trajectory["integrity"]["scope_complete"] is True
+                )
+                if not snapshot_complete or any(e["stage"] == "session_inventory" for e in errors):
+                    integrity = trajectory["integrity"]
+                    integrity.update(complete=False, scope_complete=False, replay_complete=False)
+                    integrity["scope_incompleteness"].append("native source snapshot incomplete")
+                    integrity["incompleteness"] = list(
+                        dict.fromkeys(
+                            integrity["scope_incompleteness"] + integrity["replay_incompleteness"]
+                        )
+                    )
+                export_trajectory(Path(_LOGS) / name, trajectory)
+
+    if sessions and not canonical_scope_complete:
+        record_error("trajectory_scope", RuntimeError("native canonical scope incomplete"))
+
+    if event_loop is not None:
+        with stage("signal_handler_remove"):
+            event_loop.remove_signal_handler(signal.SIGTERM)
+    with stage("runtime_result"):
+        atomic_write_json(
+            Path(_LOGS) / "runtime-result.json",
+            {
+                "usage": usage,
+                "metadata": metadata,
+                "tool_definitions": [
+                    {
+                        "name": tool["name"],
+                        "description": tool.get("description", ""),
+                        "parameters": tool.get("input_schema", {}),
+                    }
+                    for tool in (loop._tools if loop is not None else [])
+                ],
+            },
+        )
+    with stage("runtime_receipt"):
+        atomic_write_json(
+            Path(_LOGS) / "runtime-finalized.json",
+            {
+                "exports_complete": bool(snapshot_complete and sessions and not errors),
+                "status": "finalized",
+                "execution_started": metadata["execution_started"],
+                "error_type": metadata["error_type"],
+                "finalization_errors": errors,
+            },
+        )
+    if any(error["stage"] == "runtime_receipt" for error in errors):
+        # A failed receipt replacement leaves the initial false marker. Retain
+        # its bounded failure classification in the other existing export.
+        with stage("runtime_result_update"):
+            path = Path(_LOGS) / "runtime-result.json"
+            result = json.loads(path.read_text())
+            result["metadata"]["finalization_errors"] = errors
+            atomic_write_json(path, result)
+    return first_error
+
+
 async def _run_native(args: argparse.Namespace) -> int:
     # Imports follow container/env checks so native path singletons can never
     # initialize against the operator's home during an accidental host launch.
@@ -375,58 +599,68 @@ async def _run_native(args: argparse.Namespace) -> int:
         raise RuntimeError("container-local runtime entry point only")
     started = time.monotonic()
     Path(f"{_LOGS}/runtime.pid").write_text(str(os.getpid()))
-    from core.agent.loop.models import TerminationReason, is_successful_task_termination
-    from core.agent.session_mode import SessionMode
-    from core.agent.verify import VerifyMode, get_verify_mode
-    from core.config import load_model_policy, settings
     from core.memory.atomic_write import atomic_write_json
-    from core.observability.event_store import HookEventStore
-    from core.observability.trajectory import export_trajectory, trajectory_from_sessions
-    from core.wiring.runtime import build_runtime, build_shared_services
 
-    if (
-        settings.model != args.model
-        or settings.agentic_effort != args.effort
-        or settings.model_policy_path != f"{_INSTALL}/model-policy.toml"
-        or load_model_policy().allowlist != [args.model]
-        or settings.openai_credential_source != "openai-codex"
-        or settings.anthropic_credential_source != "none"
-        or get_verify_mode() != VerifyMode(args.verify_mode)
-        or os.environ.get("GEODE_VERIFY_MODE") != args.verify_mode
-        or settings.judge_model != args.model
-        or any(value for key, value in os.environ.items() if key.endswith("API_KEY"))
-    ):
-        raise RuntimeError("runtime model/credential isolation preflight failed")
-    runtime = build_runtime()
-    services = build_shared_services(
-        mcp_manager=runtime.mcp_manager,
-        skill_registry=runtime.skill_registry,
-        hook_system=runtime.hooks,
-        hook_registry=runtime.hook_registry,
-        middleware_registry=runtime.middleware_registry,
-        policy_sources=runtime.policy_sources,
-        activity_sink_provider=runtime.activity_sink_provider,
-        lane_queue=runtime.lane_queue,
-        persistence=runtime.persistence_services,
-        integrations=runtime.integration_services,
-        scheduler_service=runtime.scheduler_service,
-        user_profile=runtime.user_profile,
+    atomic_write_json(
+        Path(_LOGS) / "runtime-finalized.json", {"exports_complete": False, "status": "bootstrap"}
     )
-    executor, loop = services.create_session(SessionMode.REPL, time_budget_override=args.timeout)
-    task = asyncio.current_task()
-    assert task is not None
+    runtime = services = executor = loop = None
     event_loop = asyncio.get_running_loop()
-    event_loop.add_signal_handler(signal.SIGTERM, task.cancel)
+    signal_installed = False
     outcome = "error"
     exit_code = 0
     error_type: str | None = None
+    primary_error: BaseException | None = None
     succeeded = False
+    execution_started = False
     try:
+        task = asyncio.current_task()
+        assert task is not None
+        event_loop.add_signal_handler(signal.SIGTERM, task.cancel)
+        signal_installed = True
+        from core.agent.loop.models import TerminationReason, is_successful_task_termination
+        from core.agent.session_mode import SessionMode
+        from core.agent.verify import VerifyMode, get_verify_mode
+        from core.config import load_model_policy, settings
+        from core.wiring.runtime import build_runtime, build_shared_services
+
+        if (
+            settings.model != args.model
+            or settings.agentic_effort != args.effort
+            or settings.model_policy_path != f"{_INSTALL}/model-policy.toml"
+            or load_model_policy().allowlist != [args.model]
+            or settings.openai_credential_source != "openai-codex"
+            or settings.anthropic_credential_source != "none"
+            or get_verify_mode() != VerifyMode(args.verify_mode)
+            or os.environ.get("GEODE_VERIFY_MODE") != args.verify_mode
+            or settings.judge_model != args.model
+            or any(value for key, value in os.environ.items() if key.endswith("API_KEY"))
+        ):
+            raise RuntimeError("runtime model/credential isolation preflight failed")
+        runtime = build_runtime()
+        services = build_shared_services(
+            mcp_manager=runtime.mcp_manager,
+            skill_registry=runtime.skill_registry,
+            hook_system=runtime.hooks,
+            hook_registry=runtime.hook_registry,
+            middleware_registry=runtime.middleware_registry,
+            policy_sources=runtime.policy_sources,
+            activity_sink_provider=runtime.activity_sink_provider,
+            lane_queue=runtime.lane_queue,
+            persistence=runtime.persistence_services,
+            integrations=runtime.integration_services,
+            scheduler_service=runtime.scheduler_service,
+            user_profile=runtime.user_profile,
+        )
+        executor, loop = services.create_session(
+            SessionMode.REPL, time_budget_override=args.timeout
+        )
         if "run_bash" not in {tool["name"] for tool in loop._tools} or (
             executor._session_scope_denial("run_bash") is not None
         ):
             raise RuntimeError("runtime shell capability preflight failed")
         async with asyncio.timeout(max(0, args.timeout - (time.monotonic() - started))):
+            execution_started = True
             result = await loop.arun(Path(args.instruction).read_text())
         outcome = str(result.termination_reason)
         if result.error:
@@ -440,102 +674,87 @@ async def _run_native(args: argparse.Namespace) -> int:
             exit_code = 124
         elif not succeeded:
             exit_code = 1
-    except TimeoutError:
+    except TimeoutError as exc:
+        primary_error = exc
         error_type = "TimeoutError"
-        outcome = "time_budget"
-        exit_code = 124
+        if execution_started:
+            outcome = "time_budget"
+            exit_code = 124
     except BaseException as exc:
+        primary_error = exc
         error_type = type(exc).__name__
         if isinstance(exc, asyncio.CancelledError):
             outcome = "external_cancellation"
-        raise
     finally:
+        finalization_error = None
+        finalizer_returned = False
         try:
-            manager = executor._sub_agent_manager
-            if manager is not None:
-                children = manager.list_collaboration_runs(loop._session_id)
-                for child in children:
-                    manager.interrupt_task(loop._session_id, child.task_id)
-                await asyncio.gather(
-                    *(
-                        manager.wait_for_task(loop._session_id, child.task_id, timeout_s=10)
-                        for child in children
-                    )
-                )
-                if any(
-                    child.status in {"pending", "running"}
-                    for child in manager.list_collaboration_runs(loop._session_id)
-                ):
-                    raise RuntimeError("child shutdown incomplete; no complete usage claim")
-            if succeeded:
-                await loop.amark_session_completed()
-            else:
-                await loop.amark_session_error()
-            # Stop native writers before paging the durable event source.
-            services.close()
-            runtime.shutdown()
-            # The isolated trial database includes root/worker events. Export
-            # the existing canonical sources, not a parallel raw-event store.
-            events: list[Any] = []
-            reader = HookEventStore(db_path=runtime.event_store.db_path)
-            try:
-                while batch := reader.read(limit=500, offset=len(events)):
-                    events.extend(batch)
-            finally:
-                reader.close()
-            usage = _summarize_usage(events)
-            metadata = {
-                "geode_session_id": loop._session_id,
-                "termination_reason": outcome,
-                "error_type": error_type,
-                "source_revision": args.revision,
-                "verify_mode": args.verify_mode,
-                "usage": usage,
-                "score_authority": "Harbor task verifier, not this runtime receipt",
-            }
-            atomic_write_json(
-                Path(_LOGS) / "runtime-result.json",
-                {
-                    "usage": usage,
-                    "metadata": metadata,
-                    "tool_definitions": [
-                        {
-                            "name": tool["name"],
-                            "description": tool.get("description", ""),
-                            "parameters": tool.get("input_schema", {}),
-                        }
-                        for tool in loop._tools
-                    ],
+            finalization_error = await _finalize_native(
+                runtime,
+                services,
+                executor,
+                loop,
+                succeeded=succeeded,
+                metadata={
+                    "geode_session_id": loop._session_id if loop is not None else None,
+                    "termination_reason": outcome,
+                    "error_type": error_type,
+                    "execution_started": execution_started,
+                    "source_revision": args.revision,
+                    "verify_mode": args.verify_mode,
+                    "score_authority": "Harbor task verifier, not this runtime receipt",
                 },
+                event_loop=event_loop if signal_installed else None,
             )
-            with sqlite3.connect(runtime.event_store.db_path) as connection:
-                sessions = [
-                    str(row[0])
-                    for row in connection.execute(
-                        "SELECT DISTINCT session_id FROM session_events ORDER BY session_id"
-                    )
-                ]
-            source = {"harness": "harbor", "session": loop._session_id}
-            for policy, name in (
-                ("digest", "geode-trajectory.json"),
-                ("full", "geode-trajectory.private.json"),
-            ):
-                trajectory = trajectory_from_sessions(
-                    sessions,
-                    trajectory_id=f"harbor-{loop._session_id}",
-                    source=source,
-                    db_path=runtime.event_store.db_path,
-                    outcome=metadata,
-                    provenance={"adapter": "evals.platforms.harbor_runtime"},
-                    privacy={"review_state": "local"},
-                    content_policy=policy,
+            finalizer_returned = True
+        except BaseException as exc:
+            finalization_error = exc
+            # Even finalizer import/setup failure must leave a bounded status,
+            # not an apparent bootstrap-only receipt after execution started.
+            try:
+                atomic_write_json(
+                    Path(_LOGS) / "runtime-finalized.json",
+                    {
+                        "exports_complete": False,
+                        "status": "finalization_failed",
+                        "execution_started": execution_started,
+                        "error_type": error_type,
+                        "finalization_errors": [
+                            {"stage": "finalizer", "error_type": type(exc).__name__}
+                        ],
+                    },
                 )
-                export_trajectory(Path(_LOGS) / name, trajectory)
-            atomic_write_json(Path(_LOGS) / "runtime-finalized.json", {"exports_complete": True})
+            except BaseException as receipt_error:
+                exc.add_note("finalization receipt failed: " + type(receipt_error).__name__)
         finally:
-            services.close()
-            runtime.shutdown()
-            event_loop.remove_signal_handler(signal.SIGTERM)
+            if signal_installed and not finalizer_returned:
+                try:
+                    event_loop.remove_signal_handler(signal.SIGTERM)
+                except BaseException as exc:
+                    if finalization_error is None:
+                        finalization_error = exc
+                    for name in ("runtime-finalized.json", "runtime-result.json"):
+                        try:
+                            path = Path(_LOGS) / name
+                            value = json.loads(path.read_text())
+                            if name == "runtime-finalized.json":
+                                value["exports_complete"] = False
+                                metadata = value
+                            else:
+                                metadata = value["metadata"]
+                            metadata.setdefault("finalization_errors", []).append(
+                                {"stage": "signal_handler_remove", "error_type": type(exc).__name__}
+                            )
+                            atomic_write_json(path, value)
+                        except BaseException as receipt_error:
+                            exc.add_note(
+                                "signal cleanup receipt failed: " + type(receipt_error).__name__
+                            )
+    if primary_error is not None:
+        if not (isinstance(primary_error, TimeoutError) and execution_started):
+            raise primary_error
+    elif finalization_error is not None and exit_code == 0:
+        raise finalization_error
     return exit_code
 
 
