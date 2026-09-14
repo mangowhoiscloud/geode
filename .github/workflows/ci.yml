@@ -24,6 +24,7 @@ jobs:
     if: github.event.pull_request.draft != true
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -57,6 +58,13 @@ jobs:
               - 'pyproject.toml'
               - 'uv.lock'
               - '.github/workflows/**'
+            docs:
+              - 'AGENTS.md'
+              - 'CLAUDE.md'
+              - 'docs/workflow.md'
+              - 'docs/scaffold-skills.md'
+              - 'docs/architecture/*.md'
+              - 'docs/eval/**'
 
   lint:
     name: Lint & Format
@@ -64,16 +72,23 @@ jobs:
     needs: changes
     steps:
       - name: Skip — no code change
-        if: needs.changes.outputs.code != 'true'
+        if: needs.changes.outputs.code != 'true' && needs.changes.outputs.docs != 'true'
         run: echo "::notice::Docs-only PR — skipping lint."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.docs == 'true'
         with:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
-        if: needs.changes.outputs.code == 'true'
-      - if: needs.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.docs == 'true'
+      - if: needs.changes.outputs.code == 'true' || needs.changes.outputs.docs == 'true'
         run: uv sync
+      - name: Documentation owner paths and scaffold contracts
+        if: needs.changes.outputs.docs == 'true'
+        run: |
+          uv run python scripts/check_official_docs.py --check-map
+          uv run pytest -q tests/test_workflow_scaffold.py \
+            tests/integration/test_check_official_docs.py \
+            tests/integration/test_render_lint_config.py
       - if: needs.changes.outputs.code == 'true'
         run: uv run ruff check core/ evals/ evolve/ tests/ scripts/
       - if: needs.changes.outputs.code == 'true'
@@ -317,5 +332,7 @@ jobs:
               sys.exit(f"::error::Missing or non-success prerequisites: {failed}; received: {sorted(needs)}")
           if needs["changes"].get("outputs", {}).get("code") not in {"true", "false"}:
               sys.exit("::error::Change detection did not produce an explicit code classification")
+          if needs["changes"].get("outputs", {}).get("docs") not in {"true", "false"}:
+              sys.exit("::error::Change detection did not produce an explicit docs classification")
           print("All required prerequisites succeeded on this workflow revision")
           PY

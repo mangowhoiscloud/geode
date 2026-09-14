@@ -269,14 +269,15 @@ def classify_and_check(
 def http_probe(urls: list[str], timeout: float = 8.0) -> list[str]:
     """Return list of broken external URLs.
 
-    HEAD with GET fallback. Concurrency 8. Skipped if ``requests`` not
-    installed; we then return an empty list and print a notice.
+    HEAD with GET fallback. Concurrency 8. A requested HTTP check fails
+    if ``requests`` is unavailable; unqueried URLs must not become a pass.
     """
     try:
         import requests
-    except ImportError:
-        print("  (skipping external probe — `pip install requests` to enable)", file=sys.stderr)
-        return []
+    except ImportError as exc:
+        raise SystemExit(
+            "HTTP link audit requires requests; no external URLs were checked"
+        ) from exc
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
 

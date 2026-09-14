@@ -15,9 +15,12 @@ C5 가 2 wiring point 활성:
 from __future__ import annotations
 
 import asyncio
+from html import escape
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+from core.agent.loop._context import build_system_prompt
 from core.agent.loop._model_switching import (
     _inject_model_switch_breadcrumb,
     purge_stale_model_switch_acks,
@@ -196,9 +199,15 @@ def test_update_model_async_fires_model_switched_with_purged_count() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_sync_and_rebuild_fires_prompt_assembled_on_drift() -> None:
-    """Model drift (settings.model 변경) 감지 시 PROMPT_ASSEMBLED 발화 +
-    payload 에 model / provider / reason / x2_injected / prompt_len."""
+@pytest.mark.parametrize(
+    "mode", ["default", "audit", "persona_off", "override", "escaped", "fenced_example"]
+)
+def test_sync_and_rebuild_fires_prompt_assembled_on_drift(
+    monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    """Rebuild telemetry reports the assembled model card, not merely the event."""
+    monkeypatch.setenv("GEODE_AUDIT_UNRESTRICTED", "1" if mode == "audit" else "0")
+    monkeypatch.setenv("GEODE_PERSONA", "off" if mode == "persona_off" else "on")
     hooks = HookSystem()
     received: list[dict[str, Any]] = []
 
@@ -207,13 +216,29 @@ def test_sync_and_rebuild_fires_prompt_assembled_on_drift() -> None:
 
     hooks.register(HookEvent.PROMPT_ASSEMBLED, capture)
 
-    # Fake AgenticLoop
+    # Real prompt assembly without constructing a live loop or provider client.
     loop = MagicMock()
     loop._hooks = hooks
     loop.model = "gpt-5.5"
     loop._provider = "openai"
     loop._prompt_dirty = False
-    loop._build_system_prompt = MagicMock(return_value="rebuilt system prompt body")
+    loop._skill_registry = None
+    loop._policy_sources = {}
+    loop._user_profile = None
+    loop._system_suffix = ""
+    loop._system_prompt_override = None
+    if mode == "override":
+        loop._system_prompt_override = "Mode: explicit worker role."
+    elif mode == "escaped":
+        loop._system_prompt_override = escape(
+            "<model_card>\nModel: gpt-5.5 (openai).\n</model_card>"
+        )
+    elif mode == "fenced_example":
+        loop._system_prompt_override = (
+            "Example only:\n```xml\n<model_card>\nModel: fictional-model (example).\n"
+            "</model_card>\n```"
+        )
+    loop._build_system_prompt = MagicMock(side_effect=lambda: build_system_prompt(loop))
 
     # Manually invoke the bound method
     from core.agent.loop.agent_loop import AgenticLoop
@@ -225,15 +250,16 @@ def test_sync_and_rebuild_fires_prompt_assembled_on_drift() -> None:
         result = asyncio.run(AgenticLoop._sync_model_and_rebuild_prompt(loop, "old prompt", None))
     # rebuild 됐는지 — _build_system_prompt 가 호출됐는지 확인
     loop._build_system_prompt.assert_called_once()
-    assert result == "rebuilt system prompt body"
+    expected_card = mode not in {"override", "escaped", "fenced_example"}
+    assert ("<model_card>\nModel: gpt-5.5" in result) is expected_card
     # hook 발화 확인
     assert len(received) == 1
     payload = received[0]
     assert payload["model"] == "gpt-5.5"
     assert payload["provider"] == "openai"
     assert payload["reason"] == "model_drift"
-    assert payload["x2_injected"] is True
-    assert payload["prompt_len"] == len("rebuilt system prompt body")
+    assert payload["x2_injected"] is expected_card
+    assert payload["prompt_len"] == len(result)
 
 
 def test_sync_and_rebuild_fires_prompt_assembled_on_prompt_dirty() -> None:

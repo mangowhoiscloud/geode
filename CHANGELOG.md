@@ -59,11 +59,23 @@ functional change.
   missing or different efforts are not relabeled or repaired in place.
   Retain explicit worker overrides across idle resume in the existing
   collaboration store; legacy rows continue to inherit the caller's effort.
+- Align runtime skill guidance with its admitted registry and authority limits;
+  make the copy template loadable and report model-card injection from the
+  assembled prompt instead of an unconditional telemetry flag.
+- Fail documentation checks when a declared Markdown target or a requested
+  HTTP probe dependency is missing, without emitting a false success receipt.
+
 - Separate turn-final LLM verification usage from agent execution with the
   version 8 `turn_verification` purpose, preserving unknown historical usage.
   Persist bounded judge timeout reasons and retain native Harbor verification
   holds without a synthetic runtime exception; delivery and expansion gates
   remain closed while verification or observation is incomplete.
+
+### Infrastructure
+
+- Share contributor instructions through Claude Code's native `@AGENTS.md`
+  import. Check declared code/documentation/verification paths in the existing
+  docs gate, and run focused scaffold checks for contributor-doc-only changes.
 
 ## [1.0.29] - 2026-09-14
 

@@ -28,6 +28,7 @@ GENERATED_DOCS = (
     "site/public/llms-full.txt",
 )
 PUBLIC_IDENTITY = "Autonomous Agent Runtime + Evaluation Substrate"
+OWNER_MAP = Path("docs/architecture/official-docs-generation.md")
 
 
 @dataclass(frozen=True)
@@ -103,6 +104,36 @@ def _project_version() -> str:
     return version
 
 
+def check_owner_map() -> None:
+    """Check the small declared owner table, not prose or whole-codebase coverage."""
+    document = REPO_ROOT / OWNER_MAP
+    _, heading, section = document.read_text(encoding="utf-8").partition(
+        "## Code and documentation owners\n"
+    )
+    rows = [
+        line.strip()
+        for line in section.split("\n## ", 1)[0].splitlines()
+        if line.lstrip().startswith("|")
+    ]
+    if not heading or len(rows) < 3 or not re.fullmatch(r"\|(?:\s*:?-+:?\s*\|){4}", rows[1]):
+        raise SystemExit(f"{OWNER_MAP}: missing code/documentation owner table")
+    for row in rows[2:]:
+        cells = row.strip("|").split("|")
+        if len(cells) != 4:
+            raise SystemExit(f"{OWNER_MAP}: owner row must have four columns: {row}")
+        for cell in cells[1:]:
+            links = re.findall(r"\]\(([^)\s]+)\)", cell)
+            if not links:
+                raise SystemExit(
+                    f"{OWNER_MAP}: missing code, guidance, or verification link: {row}"
+                )
+            for link in links:
+                target = (document.parent / link.split("#", 1)[0]).resolve()
+                if not target.is_relative_to(REPO_ROOT.resolve()) or not target.is_file():
+                    raise SystemExit(f"{OWNER_MAP}: missing or non-repository owner path: {link}")
+    print(f"owner map OK: {len(rows) - 2} declared surfaces (paths only)")
+
+
 def check_release_surfaces() -> None:
     """Ensure public release surfaces point at this version."""
     version = _project_version()
@@ -150,6 +181,8 @@ def _command_env() -> dict[str, str]:
 
 def run_docs_gate(commands: Sequence[DocsCommand]) -> None:
     env = _command_env()
+    print("==> check code/documentation owner paths")
+    check_owner_map()
     print("==> check release surfaces")
     check_release_surfaces()
     for command in commands:
@@ -164,9 +197,16 @@ def main() -> None:
         action="store_true",
         help="Regenerate and validate docs without running the Next.js production build.",
     )
+    parser.add_argument(
+        "--check-map",
+        action="store_true",
+        help="Only check declared code, documentation owner, and verification file links.",
+    )
     args = parser.parse_args()
-
-    run_docs_gate(build_docs_commands(skip_build=args.skip_build))
+    if args.check_map:
+        check_owner_map()
+    else:
+        run_docs_gate(build_docs_commands(skip_build=args.skip_build))
 
 
 if __name__ == "__main__":
