@@ -38,17 +38,17 @@ The security review and handling contracts are recorded in
 | `geode-gitflow` | branch, git, pr, merge, commit | Gitflow strategy, PR templates, CI fix loops |
 | `geode-changelog` | changelog, release, version, release | CHANGELOG management, post-1.0 patch-first versioning (minors are operator-declared; mis-stamp correction procedure) |
 | `geode-code-conventions` | abstraction, naming, module, class, type, schema, test placement, versioning | Measured GEODE convention workflow backed by the canonical architecture, naming, data, site, and compatibility guide |
-| `agent-ops-debugging` | safe default, root cause, contextvar, multi-gap | Agent-ops debugging patterns — Safe Default anti-pattern, multi-gap root cause, ContextVar DI |
+| `agent-ops-debugging` | safe default, root cause, service binding, multi-gap | [Operational failure diagnosis](../.agents/skills/agent-ops-debugging/SKILL.md): default policy, explicit service ownership, and request-local state |
 | `architecture-patterns` | architecture, layering, pattern, design | Cross-harness architecture patterns reference |
 | `karpathy-patterns` | autoresearch, agenthub, ratchet, context budget | 10 autonomous agent design principles (P1-P10) |
 | `openclaw-patterns` | gateway, session, binding, lane, plugin | Agent system design patterns (OpenClaw) |
 | `frontier-harness-research` | research, gap, frontier, harness, case study | Comparative research across Claude Code, Codex, OpenClaw, autoresearch, Prime Agent, and the pinned upstream authority |
-| `verification-team` | verification, review, verify, inspect | 5-persona verification (Beck/Karpathy/Steinberger/Cherny + Anti-Deception) |
+| `verification-team` | verification, review, verify, inspect | [Complementary review lenses](../.agents/skills/verification-team/SKILL.md), selected by the changed risk rather than a fixed persona count |
 | `tech-blog-writer` | blog, posting, tech blog | Technical blog writing guide |
 | `explore-reason-act` | explore, reason, root cause, read before write | 3-phase explore-reason-act before code modification |
 | `anti-deception-checklist` | deception, fake success, regression | Fake success prevention verification checklist |
 | `code-review-quality` | quality, SOLID, dead code, resource leak | Python code quality 6-lens review |
-| `dependency-review` | dependency, import, layer, circular, lazy | 6-Layer dependency health review |
+| `dependency-review` | dependency, import, layer, circular, lazy | [Dependency direction and composition review](../.agents/skills/dependency-review/SKILL.md), including cycles and optional-dependency loading |
 | `kent-beck-review` | kent beck, simple design, simplify, god object, SRP | Simple Design 4-rule code review |
 | `codebase-audit` | audit, dead code, refactor, god object, duplication | Code audit + refactoring workflow (v0.24.0 proven) |
 | `geode-serve` | serve, gateway, slack, binding, poller, config.toml | Slack Gateway operations + debugging guide |

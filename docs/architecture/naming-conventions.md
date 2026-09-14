@@ -118,8 +118,9 @@ or lifecycle that subclasses extend.
 - Keep implementation-only modules or symbols prefixed with `_`.
 - A package facade may re-export its canonical implementation; it must not keep
   an obsolete implementation alive.
-- Compatibility modules get at most the documented one-release grace. Migrate
-  callers and delete the shim; Git history is the archive.
+- Compatibility modules follow [the compatibility policy](#92-compatibility-changes):
+  migrate callers and delete internal shims; retain longer support only for a
+  named external contract with its documented removal condition.
 - Optional dependencies are imported lazily at the boundary that uses them.
 
 ## 2. Packages, files, and symbols

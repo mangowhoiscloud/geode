@@ -16,7 +16,10 @@ the workflow does not already catch.
 
 from __future__ import annotations
 
+import fnmatch
 import json
+import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -146,6 +149,68 @@ def test_caveat_files_exist(path: str) -> None:
     """
 
     assert (REPO_ROOT / path).is_file(), f"missing {path}"
+
+
+@pytest.mark.parametrize("missing_readme", [False, True])
+def test_markdown_lint_invokes_public_targets_or_fails_before_lint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing_readme: bool
+) -> None:
+    source = (REPO_ROOT / "scripts/lint_pages_markdown.sh").read_text(encoding="utf-8")
+    targets = re.findall(r'^\s*"(docs/[^\"]+)"', source, re.M)
+    readme = "docs/self-improving/petri-bundle/README.md"
+    assert readme in targets
+    for name in targets:
+        if missing_readme and name == readme:
+            continue
+        target = tmp_path / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.touch()
+    script = tmp_path / "scripts/lint_pages_markdown.sh"
+    script.parent.mkdir()
+    script.write_text(source, encoding="utf-8")
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    linter = fake_bin / "pymarkdown"
+    linter.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n', encoding="utf-8")
+    linter.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake_bin}:/usr/bin:/bin")
+    # The script and linter are test-owned fixtures, never caller-supplied commands.
+    result = subprocess.run(  # noqa: S603
+        ["/bin/bash", str(script)], capture_output=True, text=True, check=False
+    )
+    if missing_readme:
+        assert result.returncode == 1
+        assert f"missing render-gated markdown: {readme}" in result.stderr
+        assert not result.stdout
+    else:
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.splitlines() == ["--config", ".pymarkdown.json", "scan", *targets]
+
+
+def test_docs_only_owner_checks_do_not_enable_full_runtime_tests() -> None:
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    jobs = workflow["jobs"]
+    changes = jobs["changes"]
+    filter_step = next(step for step in changes["steps"] if step.get("id") == "filter")
+    filters = yaml.safe_load(filter_step["with"]["filters"])
+    for path in (
+        "CLAUDE.md",
+        "docs/workflow.md",
+        "docs/scaffold-skills.md",
+        "docs/architecture/official-docs-generation.md",
+    ):
+        assert any(fnmatch.fnmatchcase(path, pattern) for pattern in filters["docs"])
+        assert not any(fnmatch.fnmatchcase(path, pattern) for pattern in filters["code"])
+    docs_step = next(
+        step
+        for step in jobs["lint"]["steps"]
+        if step.get("name") == "Documentation owner paths and scaffold contracts"
+    )
+    assert docs_step["if"] == "needs.changes.outputs.docs == 'true'"
+    assert "scripts/check_official_docs.py --check-map" in docs_step["run"]
+    assert "tests/test_workflow_scaffold.py" in docs_step["run"]
+    full_test = next(step for step in jobs["test"]["steps"] if "--cov=core" in step.get("run", ""))
+    assert full_test["if"] == "needs.changes.outputs.code == 'true'"
 
 
 def test_petri_bundle_json_parses() -> None:

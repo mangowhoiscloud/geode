@@ -29,10 +29,11 @@ first.
 
 If the checkout is `main` or `develop`, fetch and allocate a feature worktree
 from `origin/develop` rather than switching branches in place or assuming the
-local `develop` ref moved with fetch. The only exception is a roadmap
-tracking-only `DONE` PR after release: allocate it from current `origin/main`,
-target `main`, then sync the merge back through a CI-gated
-`main -> develop` PR.
+local `develop` ref moved with fetch. Main-maintained tracking work instead
+uses a dedicated `origin/main` worktree. Read
+[GitFlow allocation](../../geode-gitflow/SKILL.md#worktree-allocation) and the
+roadmap's §0.3 for exact exceptions; its tracking-only `DONE` PR targets `main`
+after release, then syncs back through a CI-gated `main -> develop` PR.
 
 ## Phase 1: GAP Audit
 

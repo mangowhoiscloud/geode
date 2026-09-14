@@ -1,62 +1,50 @@
-# Skill: [Skill Name]
-
-> Copy this template to `.geode/skills/<skill-name>/SKILL.md` to create a custom skill.
-> Skills extend GEODE's capabilities with domain-specific knowledge and workflows.
-
-## Metadata
-
-```yaml
+---
 name: skill-name
 description: One-line description of what this skill does
-visibility: public          # public | private | unlisted
-triggers: [keyword1, keyword2, keyword3]   # inline list or comma-string only
-                                            # (multi-line YAML lists are not parsed)
-```
+visibility: public
+triggers: [keyword1, keyword2, keyword3]
+---
 
-### Visibility Levels
+# Skill Name
 
-| Level | Storage | Git | `geode skill list` |
-|-------|---------|-----|---------------------|
-| `public` | `.geode/skills/` | committed | visible |
-| `unlisted` | `.geode/skills/` | committed | hidden |
-| `private` | `~/.geode/skills/` | never committed | visible (local) |
+> Copy to `.geode/skills/<skill-name>/SKILL.md` and replace the authoring guidance
+> below, or start with `geode skill create <skill-name> --desc "Description"`.
+> Keep metadata between the opening `---` lines. Trigger lists must use an
+> inline list or comma-separated string, not multi-line YAML lists.
 
-## Purpose
+## Purpose and scope
 
-What does this skill do? When should it be activated?
+Name the task, useful result, activation conditions, and explicit non-goals.
+Apply the workflow only within the user's authorized task and available tools.
 
-## Instructions
+## Inputs and ownership
 
-<!-- Write the skill's system instructions here. -->
-<!-- GEODE will inject this content when the skill is triggered. -->
+Identify required inputs and the existing file, service, or state owner to
+inspect or change. State what missing input would block the task.
 
-### Input Format
+## Procedure
 
-Describe what input the skill expects.
+Describe only necessary steps and branches. Refer to existing instructions
+instead of copying them; do not turn reference sections into mandatory steps.
 
-### Output Format
+## Output and verification
 
-Describe what output the skill produces.
+Name the result and its consumer. Give the smallest check that demonstrates
+the requested outcome, including where to run it and what passing means.
 
-### Rules
+## Failure and recovery
 
-1. Rule one
-2. Rule two
-3. Rule three
+Identify likely failures, where evidence remains, and the next permitted
+action. Preserve failed results separately from reruns; do not weaken checks.
 
-## Examples
+## Invocation
 
-### Example 1: [Scenario]
+The runtime advertises metadata, including triggers, in `<available_skills>`;
+trigger text does not automatically inject the body. The model loads it with
+`use_skill(name="skill-name")`, or the user invokes `/skill skill-name [args]`.
+`$ARGUMENTS` in the body receives the supplied argument string.
 
-**Input**: `geode "trigger keyword with context"`
-
-**Expected Output**:
-```
-Skill output here
-```
-
-## Notes
-
-- Any caveats, limitations, or configuration requirements.
-- Skills are loaded from `.geode/skills/` at runtime via `SkillRegistry`.
-- Trigger keywords are matched against user input for auto-activation.
+Project skills live in `.geode/skills/`; personal skills belong in
+`~/.geode/skills/` (`geode skill create <skill-name> --private`). `visibility: unlisted`
+hides a skill from `geode skill list` unless `--all` is used; it is not an
+access-control boundary. `user-invocable: false` hides it from `/skills`.

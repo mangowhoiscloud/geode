@@ -294,6 +294,17 @@ class TestMultiScopeDiscovery:
 class TestTriggerFrontmatter:
     """The ``triggers:`` frontmatter key (TEMPLATE.md schema) is honored by the loader."""
 
+    def test_authoring_template_loads_as_runtime_skill(self) -> None:
+        template = Path(__file__).parents[3] / ".geode/skills/TEMPLATE.md"
+        skill = SkillLoader().load_file(template)
+
+        assert skill.name == "skill-name"
+        assert skill.description
+        assert skill.visibility == "public"
+        assert skill.triggers == ["keyword1", "keyword2", "keyword3"]
+        assert skill.body == ""
+        assert skill.load_body().startswith("# Skill Name")
+
     def _load_with(self, skills_root: Path, frontmatter: str):
         skill_md = skills_root / "sample" / "SKILL.md"
         skill_md.parent.mkdir(parents=True)

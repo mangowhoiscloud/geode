@@ -797,7 +797,11 @@ class AgenticLoop:
                         "model": self.model,
                         "provider": self._provider,
                         "reason": reason,
-                        "x2_injected": True,  # identity line always present
+                        "x2_injected": (
+                            not self._system_prompt_override
+                            and "<model_card>\nModel: " in system_prompt
+                            and "</model_card>" in system_prompt
+                        ),
                         "prompt_len": len(system_prompt),
                     },
                 )

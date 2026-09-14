@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -24,7 +25,7 @@ def test_merge_gate_executes_actual_predicate_and_rejects_non_success(result: st
     assert gate["if"] == "${{ always() }}"
     assert set(gate["needs"]) == {"changes", "lint", "typecheck", "test", "security"}
     needs: dict[str, dict[str, object]] = {key: {"result": "success"} for key in gate["needs"]}
-    needs["changes"]["outputs"] = {"code": "true"}
+    needs["changes"]["outputs"] = {"code": "true", "docs": "false"}
     needs["test"]["result"] = result
     script = gate["steps"][0]["run"]
     checked = subprocess.run(  # noqa: S603 - execute the tracked gate against synthetic results
@@ -37,13 +38,15 @@ def test_merge_gate_executes_actual_predicate_and_rejects_non_success(result: st
     assert (checked.returncode == 0) is (result == "success"), checked.stderr
 
 
-@pytest.mark.parametrize("missing", ["test", "classification", "all"])
+@pytest.mark.parametrize("missing", ["test", "classification", "docs_classification", "all"])
 def test_merge_gate_rejects_absent_evidence(missing: str) -> None:
     gate = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]["gate"]
     needs: dict[str, dict[str, object]] = {key: {"result": "success"} for key in gate["needs"]}
-    needs["changes"]["outputs"] = {"code": "false"}
+    needs["changes"]["outputs"] = {"code": "false", "docs": "false"}
     if missing == "classification":
         del needs["changes"]["outputs"]
+    elif missing == "docs_classification":
+        needs["changes"]["outputs"] = {"code": "false"}
     elif missing == "all":
         needs.clear()
     else:
@@ -140,9 +143,22 @@ def test_paired_coding_reference_preserves_runtime_and_verification_boundaries()
     assert reference_path in workflow
 
 
+def _entrypoint_instructions(path: str) -> str:
+    text = _read(path)
+    if path == "CLAUDE.md":
+        # Claude Code strips block HTML comments before loading project context.
+        assert re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL).strip() == "@AGENTS.md"
+        return _read("AGENTS.md")
+    return text
+
+
+def test_agent_entrypoints_share_the_same_development_contract() -> None:
+    assert _entrypoint_instructions("CLAUDE.md") == _entrypoint_instructions("AGENTS.md")
+
+
 def test_agent_entrypoints_reference_canonical_workflow() -> None:
     for path in ("CLAUDE.md", "AGENTS.md"):
-        text = _read(path)
+        text = _entrypoint_instructions(path)
 
         assert "docs/workflow.md" in text
         assert ".claude/skills/geode-workflow/" in text
@@ -159,7 +175,7 @@ def test_worktree_free_contract_is_shared_by_every_entrypoint() -> None:
     )
 
     for path in paths:
-        assert command in _read(path), path
+        assert command in _entrypoint_instructions(path), path
 
     gitflow = _read(".claude/skills/geode-gitflow/SKILL.md")
     workflow_reference = _read(".claude/skills/geode-workflow/references/gitflow.md")

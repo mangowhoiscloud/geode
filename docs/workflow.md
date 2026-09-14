@@ -9,6 +9,13 @@ GUI/computer-use work, PDF/document ingestion, observability changes, and large
 audits. The full procedure is split across the `geode-workflow` skill and its
 `references/` files so agents load only the detail needed for the task.
 
+`AGENTS.md` owns the shared contributor entry point. `CLAUDE.md` imports it with
+`@AGENTS.md`, the [official Claude Code mechanism](https://code.claude.com/docs/en/memory#agentsmd)
+for sharing project instructions. Imported content is loaded too: this avoids
+drift, not context cost by itself. Keep task detail in the owners below.
+Claude Code project context is separate from its system prompt and execution
+permissions; GEODE's own runtime SOUL and assembly remain separate again.
+
 ## Execution scope
 
 Treat a request to do work, including "can you" in an action context, as an
@@ -45,6 +52,37 @@ monitoring reports meaningful changes, completion, failure, or needed input.
 8. **Verify**: run targeted checks first, then broaden when risk justifies it.
 9. **Report/GitFlow**: state what changed, what ran, what failed or was
    skipped, and only claim merge/push/cleanup after commands complete.
+
+## Contract checks
+
+Apply these checks when the changed path uses the corresponding contract:
+
+- Trace producer → stored field → reader → decision, including explicit-input
+  and automatic-selection branches. Verify hook registration and service
+  binding/reset at the actual composition owner, plus refresh/invalidation
+  for mutable configuration and credentials. An implementation with no caller
+  is not a working feature.
+- Apply failure/validation behavior at every schema conversion, not only an
+  outer handler. Keep source files and fallback literals under a shared anchor
+  and drift test when both are necessary. Prefer removing the duplicate.
+- Distinguish latest from promoted evidence; identify which a reader consumes.
+  Validate seed dimensions against the live taxonomy at pool assembly. Verify
+  native viewer routes from the shipped bundle and real artifact filenames,
+  not a guessed task-ID URL.
+- Put index freshness in the existing build/publish producer; verify the
+  reader sees newly produced items. Do not make every read-only renderer write
+  merely to compensate for a disconnected producer.
+- Check Git tracking only for artifacts explicitly intended for repository
+  publication. Private runtime audit/history files may be ignored or live
+  outside the repo; retain redaction and privacy boundaries. Do not publish raw
+  transcripts to satisfy a generic tracking rule.
+- Preserve failed evidence and command exit status. PR/CHANGELOG claims must
+  map to actual callers, changed behavior, or execution receipts. Do not turn
+  unknown values into measured zero or a partial check into full verification.
+
+The [verification reference](../.agents/skills/geode-workflow/references/verification-gates.md)
+owns failure-to-rule review and evidence reuse; do not copy its incident ledger
+into each startup prompt.
 
 ## Architecture And Extensibility Program
 
@@ -91,6 +129,9 @@ feature/<name> -> develop -> main
   fetched `origin/develop` tip.
 - A roadmap tracking-only `DONE` branch starts from `origin/main`, targets
   `main`, and is followed by a CI-gated `main -> develop` sync.
+- Other main-maintained tracking documents use their dedicated `origin/main`
+  worktree. Read [GitFlow allocation](../.agents/skills/geode-gitflow/SKILL.md#worktree-allocation)
+  and the roadmap's §0.3 for the exact tracking/program exceptions.
 - Use the current `main` head directly when the sync is mergeable under strict
   up-to-date protection; do not wrap a copied or fast-forwarded main head in a
   trusted sync branch.
