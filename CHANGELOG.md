@@ -47,11 +47,19 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.29] - 2026-09-14
+
 ### Infrastructure
 
 - Resolve superseded CI runs through GitHub CLI's current required-check view,
   then bind exact check IDs to the app, head and PR; never fall back to an older
   success when the selected check is pending or failed.
+- Fail the CI merge gate on missing, skipped, cancelled or failed prerequisites,
+  including unavailable change detection. Run required Pages checks on every
+  main/develop pull request so a code-only green gate cannot mask a site failure.
+  Runtime `GEODE.md` and `.geode/` changes trigger the full code checks.
+  The explicit merge command rechecks current head/base and app-bound required
+  checks against enforced branch protection before submitting a pinned merge.
 
 ### Fixed
 
@@ -77,19 +85,6 @@ functional change.
   a healthy root export. Workers require the real async session lifecycle;
   missing methods no longer silently pass through a test-double fallback.
 
-## [1.0.29] - 2026-09-14
-
-### Infrastructure
-
-- Fail the CI merge gate on missing, skipped, cancelled or failed prerequisites,
-  including unavailable change detection. Run required Pages checks on every
-  main/develop pull request so a code-only green gate cannot mask a site failure.
-  Runtime `GEODE.md` and `.geode/` changes trigger the full code checks.
-  The explicit merge command rechecks current head/base and app-bound required
-  checks against enforced branch protection before submitting a pinned merge.
-
-### Fixed
-
 - Keep model-specific facts out of the SOUL's static reference table; route
   detailed model guidance through the existing bundled `geode-context` skill.
   Dynamic model cards retain exact catalog context limits and distinguish API
@@ -105,7 +100,7 @@ functional change.
   attempts retain their usage, and missing input/output/reasoning counters stay
   unknown instead of becoming zero. Harbor's existing usage export includes
   numeric per-attempt counters with source IDs and hashes for traceable Replay
-  accounting. Activity rows use schema version 6;
+  accounting. Activity rows use schema version 7;
   historical records, benchmark scores and whole-runtime accounting limits
   remain unchanged.
 - Ground Reflexion verification in bounded observations instead of response
