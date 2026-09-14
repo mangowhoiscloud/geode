@@ -171,6 +171,7 @@ def _usage_event_metadata(event: Any) -> dict[str, Any]:
         and purpose
         in {
             "agentic_loop",
+            "turn_verification",
             "cognitive_reflection",
             "candidate_judge",
             "text_completion",

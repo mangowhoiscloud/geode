@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Fixed\n\n- Separate turn-final LLM verification usage from agent execution with the\n  version 8 `turn_verification` purpose, preserving unknown historical usage.\n  Persist bounded judge timeout reasons and retain native Harbor verification\n  holds without a synthetic runtime exception; delivery and expansion gates\n  remain closed while verification or observation is incomplete."
   },
   {
     "version": "1.0.29",

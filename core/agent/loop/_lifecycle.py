@@ -557,6 +557,12 @@ def _finalize_verify_outcome(
         should_retry=vr.should_retry,
     )
     payload: dict[str, Any] = vr.to_payload()
+    if "verification_error" in vr.rubric_misses:
+        payload["error_type"] = (
+            vr.reason
+            if vr.reason in {"judge_timeout", "verification_time_budget_exhausted"}
+            else "verification_error"
+        )
     payload["session_id"] = getattr(loop, "_session_id", "")
     payload["rounds"] = int(getattr(result, "rounds", 0) or 0)
     payload["termination_reason"] = getattr(result, "termination_reason", "") or ""

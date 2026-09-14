@@ -34,6 +34,7 @@ _COUNTERS = ("input_tokens", "output_tokens", "cached_input_tokens", "cache_writ
 _SCOPE_BLOCKER = "whole-runtime producer coverage not established"
 _PURPOSES = {
     "agentic_loop",
+    "turn_verification",
     "cognitive_reflection",
     "candidate_judge",
     "text_completion",

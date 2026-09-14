@@ -549,6 +549,37 @@ def test_native_finalizes_success_timeout_and_cancel(
 
 
 @pytest.mark.parametrize(
+    ("termination", "error"),
+    [
+        ("external_verification_required", "external_verification_required"),
+        ("external_verification_required", "private unexpected error"),
+        ("natural", "external_verification_required"),
+    ],
+)
+def test_native_verification_hold_preserves_failure_without_synthetic_exception(
+    native_trial: SimpleNamespace, termination: str, error: str
+) -> None:
+    trial = native_trial
+    trial.loop.arun.return_value.termination_reason = termination
+    trial.loop.arun.return_value.error = error
+    held = termination == error == "external_verification_required"
+    if held:
+        assert asyncio.run(_run_native(trial.args)) == 1
+    else:
+        with pytest.raises(RuntimeError, match="native runtime reported an execution error"):
+            asyncio.run(_run_native(trial.args))
+    result = json.loads((trial.path / "runtime-result.json").read_text())
+    receipt = json.loads((trial.path / "runtime-finalized.json").read_text())
+    assert result["metadata"]["termination_reason"] == termination
+    assert result["metadata"]["error_type"] == (None if held else "RuntimeError")
+    assert receipt["error_type"] == result["metadata"]["error_type"]
+    assert receipt["exports_complete"] is True
+    trial.loop.amark_session_completed.assert_not_awaited()
+    trial.loop.amark_session_error.assert_awaited_once()
+    assert "private unexpected error" not in json.dumps(result)
+
+
+@pytest.mark.parametrize(
     "failure_stage",
     ["runtime_bootstrap", "services_bootstrap", "session_bootstrap", "shell_preflight"],
 )
