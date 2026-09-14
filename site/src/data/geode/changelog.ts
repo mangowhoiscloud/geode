@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Fixed\n\n- Preserve the owning loop's reasoning effort across reflection, candidate\n  judging, worker delegation/resumption and wrap-up. Carry inherited effort\n  through OpenAI reasoning-capable auxiliary text/search requests and their\n  durable observations. Add an opt-in uniform-effort export check; historical\n  missing or different efforts are not relabeled or repaired in place."
   },
   {
     "version": "1.0.29",

@@ -178,6 +178,7 @@ class ToolCallProcessor:
             source=(step.source if step is not None else self._source),
             model=(step.model if step is not None else self._model),
             adapter_name=(step.adapter_name if step is not None else self._adapter_name),
+            effort=getattr(self._agent_loop, "_effort", ""),
             tool_plan_hash=(step.tool_plan_hash if step is not None else ""),
             tool_plan_generation=(step.tool_plan_generation if step is not None else 0),
             bound_tool_plan=(step.bound_tool_plan if step is not None else None),

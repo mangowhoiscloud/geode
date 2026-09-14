@@ -25,8 +25,13 @@ async contexts so the migration is signature-only at the boundary.
 from __future__ import annotations
 
 import ast
+import asyncio
 import inspect
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
 
 # ---------------------------------------------------------------------------
 # llm_extract_learning — async + adapter dispatch + no direct SDK imports
@@ -50,6 +55,24 @@ def test_extract_handler_is_async() -> None:
 
     _name, handler = make_llm_extract_handler()
     assert inspect.iscoroutinefunction(handler)
+
+
+@pytest.mark.parametrize("effort", [None, "max"])
+def test_extract_handler_preserves_turn_effort(
+    monkeypatch: pytest.MonkeyPatch, effort: str | None
+) -> None:
+    from core.config import settings
+    from core.hooks import HookEvent
+    from core.hooks.llm_extract_learning import make_llm_extract_handler
+
+    monkeypatch.setattr(settings, "agentic_effort", "low")
+    dispatch = AsyncMock(return_value=SimpleNamespace(text="NONE"))
+    monkeypatch.setattr("core.llm.adapters.dispatch.complete_text_via_adapters", dispatch)
+    _name, handler = make_llm_extract_handler(lambda: SimpleNamespace())
+    asyncio.run(handler(HookEvent.TURN_COMPLETED, {"user_input": "context" * 10, "effort": effort}))
+    dispatch.assert_awaited_once()
+    assert dispatch.await_args.kwargs["effort"] == (effort or "low")
+    assert settings.agentic_effort == "low"
 
 
 def test_extract_helpers_no_longer_import_provider_sdks_directly() -> None:

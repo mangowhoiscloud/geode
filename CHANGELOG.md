@@ -47,6 +47,14 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve the owning loop's reasoning effort across reflection, candidate
+  judging, worker delegation/resumption and wrap-up. Carry inherited effort
+  through OpenAI reasoning-capable auxiliary text/search requests and their
+  durable observations. Add an opt-in uniform-effort export check; historical
+  missing or different efforts are not relabeled or repaired in place.
+
 ## [1.0.29] - 2026-09-14
 
 ### Infrastructure

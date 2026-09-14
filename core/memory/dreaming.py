@@ -17,6 +17,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from core.config import settings
 from core.memory.session_manager import SessionManager
 from core.orchestration.context_budget import (
     ContextBudgetPolicy,
@@ -188,6 +189,7 @@ class DreamingService:
         *,
         provider: str = "openai",
         model: str = "",
+        effort: str | None = None,
         use_llm: bool = True,
         limit_messages: int | None = None,
     ) -> DreamResult:
@@ -231,6 +233,7 @@ class DreamingService:
                     prompt,
                     provider=provider,
                     model=model,
+                    effort=effort,
                     session_id=session_id,
                 )
                 llm_used = bool(content)
@@ -275,8 +278,10 @@ class DreamingService:
         *,
         provider: str = "openai",
         model: str = "",
+        effort: str | None = None,
     ) -> threading.Thread:
         """Start an owned daemon job without blocking the foreground turn."""
+        resolved_effort = effort or settings.agentic_effort
         job = _DreamJob()
         worker = DreamingService(
             session_manager=self._session_manager,
@@ -295,7 +300,9 @@ class DreamingService:
                 raise asyncio.CancelledError()
             budget = None if self._deadline is None else max(0.0, self._deadline - time.monotonic())
             async with asyncio.timeout(budget):
-                result = await worker.dream_session(session_id, provider=provider, model=model)
+                result = await worker.dream_session(
+                    session_id, provider=provider, model=model, effort=resolved_effort
+                )
                 job.error_type = result.error_type
                 return result
 
@@ -363,6 +370,7 @@ class DreamingService:
         *,
         provider: str,
         model: str,
+        effort: str | None = None,
         session_id: str = "",
     ) -> str | None:
         try:
@@ -383,6 +391,7 @@ class DreamingService:
                 prompt,
                 system=_DREAM_SYSTEM_PROMPT,
                 model=model,
+                effort=effort or settings.agentic_effort,
                 max_tokens=max_tokens,
                 prefer_provider=canonical_provider,
                 prefer_source=resolved_source,
@@ -484,6 +493,7 @@ def make_dreaming_handler(
             session_id,
             provider=str(data.get("provider") or "openai"),
             model=str(data.get("model") or ""),
+            effort=str(data.get("effort") or "") or None,
         )
 
     return "turn_dreaming", _on_turn_completed

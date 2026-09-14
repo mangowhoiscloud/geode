@@ -335,12 +335,15 @@ def test_finished_cognitive_tool_round_calls_maybe_reflect(
     ]
 
 
+@pytest.mark.parametrize("effort", ["low", "max"])
 def test_maybe_reflect_inherits_loop_model_provider_source(
     monkeypatch: pytest.MonkeyPatch,
     reflection_loop: tuple[AgenticLoop, HookSystem],
     reflection_call: Any,
+    effort: str,
 ) -> None:
     loop, _hooks = reflection_loop
+    loop._effort = effort
     loop.cognitive_state.record_round(action="synthetic", observation="synthetic")
     # The actual adapter's route wins over a stale loop source value.
     monkeypatch.setattr(loop, "_source", "payg")
@@ -355,6 +358,7 @@ def test_maybe_reflect_inherits_loop_model_provider_source(
         [],
         model="gpt-5.5",
         max_tokens=321,
+        effort=effort,
         provider="openai-codex",
         source="subscription",
         policy_sources=EMPTY_POLICY_SOURCES,
@@ -386,6 +390,7 @@ def test_maybe_reflect_configured_model_stays_explicit(
         [],
         model="claude-haiku-4-5-20251001",
         max_tokens=321,
+        effort=loop._effort,
         provider=None,
         source=None,
         policy_sources=EMPTY_POLICY_SOURCES,

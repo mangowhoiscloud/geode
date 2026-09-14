@@ -77,11 +77,16 @@ def test_active_goal_or_plan_requires_the_agentic_path() -> None:
     assert CLIPoller._requires_agentic_prompt(active_goal) is True
 
 
-def test_ipc_poller_fast_chat_uses_text_completion(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("effort", ["", "max"])
+def test_ipc_poller_fast_chat_uses_text_completion(
+    monkeypatch: pytest.MonkeyPatch, effort: str
+) -> None:
+    from core.config import settings
     from core.llm.adapters.base import TextCompletionResult, UsageSummary
     from core.server.ipc_server.poller import CLIPoller
 
     calls: dict[str, object] = {}
+    monkeypatch.setattr(settings, "agentic_effort", "low")
     monkeypatch.setenv("GEODE_FAST_CHAT", "1")
 
     async def fake_complete_text(prompt: str, **kwargs: object) -> TextCompletionResult:
@@ -108,6 +113,7 @@ def test_ipc_poller_fast_chat_uses_text_completion(monkeypatch: pytest.MonkeyPat
             "model": "gpt-5.5",
             "_provider": "openai-codex",
             "_source": "subscription",
+            "_effort": effort,
             "_session_id": "s-fast",
             "_control_state_renderers": {},
             "_goal_store": None,
@@ -132,6 +138,7 @@ def test_ipc_poller_fast_chat_uses_text_completion(monkeypatch: pytest.MonkeyPat
     kwargs = cast(dict[str, object], calls["kwargs"])
     assert kwargs["prefer_provider"] == "openai"
     assert kwargs["prefer_source"] == "subscription"
+    assert kwargs["effort"] == (effort or "low")
     assert "Agent: GEODE" in str(kwargs["system"])
     assert "Tool loop: inactive" in str(kwargs["system"])
     assert "You are" not in str(kwargs["system"])

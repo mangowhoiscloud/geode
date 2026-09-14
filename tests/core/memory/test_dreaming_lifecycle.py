@@ -8,15 +8,46 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from core.hooks import HookEvent, HookSystem
 from core.hooks.llm_observation import observe_llm_call
 from core.llm.adapters.base import UsageSummary
-from core.memory.dreaming import DreamingService, DreamResult
+from core.memory.dreaming import DreamingService, DreamResult, make_dreaming_handler
 from core.memory.session_manager import SessionManager
 from core.observability.event_store import HookEventStore
 from core.observability.hook_persistence import HookPersistenceSink
+
+
+def test_dreaming_hook_keeps_each_turn_effort_across_threads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "agentic_effort", "low")
+    dispatch = AsyncMock(return_value=SimpleNamespace(text="summary"))
+    monkeypatch.setattr("core.llm.adapters.dispatch.complete_text_via_adapters", dispatch)
+    manager = SessionManager(tmp_path / "effort.db")
+    owner = DreamingService(session_manager=manager)
+    _name, handler = make_dreaming_handler(service=owner)
+    try:
+        for session_id, effort in (("default", None), ("explicit", "max")):
+            manager.upsert_messages(session_id, [{"role": "user", "content": "context", "seq": 0}])
+            handler(
+                HookEvent.TURN_COMPLETED,
+                {"session_id": session_id, "rounds": 1, "model": "gpt-5.6-sol", "effort": effort},
+            )
+        asyncio.run(owner.settle(deadline=time.monotonic() + 2))
+        assert {
+            call.kwargs["correlation"]["session_id"]: call.kwargs["effort"]
+            for call in dispatch.await_args_list
+        } == {"default": "low", "explicit": "max"}
+        assert dispatch.await_count == 2
+        assert settings.agentic_effort == "low"
+    finally:
+        owner.close()
+        manager.close()
 
 
 @pytest.mark.parametrize("mode", ["settle", "cancel", "deadline", "uncooperative"])

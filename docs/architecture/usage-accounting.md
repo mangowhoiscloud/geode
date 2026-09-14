@@ -33,8 +33,13 @@ additional charge. Harbor's cache metric is reads, never reads plus writes.
   input/output/reasoning zeros do not establish provider-reported presence.
 - Activity schema version 7 adds call `purpose`, credential `source`, and
   requested `effort`. Missing legacy fields remain null. Request effort is not
-  proof of the provider's internal compute. Root configuration does not label
-  auxiliary calls: reflection keeps its existing `medium` request default.
+  proof of the provider's internal compute. New reflection, candidate and
+  worker calls inherit the owning loop's effort; explicit worker overrides
+  remain distinct. Wrap-up retains that effort rather than forcing `low`.
+  Earlier reflection `medium` defaults remain part of their original evidence.
+  Worker overrides apply to the current request and queued continuation. The
+  existing durable collaboration record does not retain effort; an idle resumed
+  worker inherits its caller's current effort, not a recovered historical override.
 - A completed Codex response rejected for empty visible output retains its
   known usage on that failed attempt. An identical retry gets another attempt
   ID and is counted separately, not substituted for the failed consumption.
@@ -57,8 +62,10 @@ additional charge. Harbor's cache metric is reads, never reads plus writes.
   observation path; parsing a declined or malformed response does not erase
   its usage. Native text/compaction, learning extraction and hosted search
   pass their event bus explicitly to the same observation helper. Capability
-  calls without an exposed request effort keep that field unknown; it is not
-  inferred from the root's setting. Earlier `recorded-agentic-loop-attempts-only` exports retain their
+  calls on supported OpenAI reasoning models now carry the inherited effort
+  through the actual request and observation helper. Other capability backends
+  retain their existing policies and unknown effort; no cross-provider effort
+  equivalence is claimed. Earlier `recorded-agentic-loop-attempts-only` exports retain their
   original scope. Pairing describes retained events, not all dispatched
   calls: a lost start/end pair can evade that check. Final-result cost and
   durable token totals have different coverage and are not a reconciled invoice.

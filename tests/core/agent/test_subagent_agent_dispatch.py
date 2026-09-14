@@ -51,6 +51,24 @@ def _make_manager(
     )
 
 
+@pytest.mark.parametrize(
+    ("explicit", "inherited", "expected"),
+    [("low", "max", "low"), ("", "max", "max"), ("", "", "high")],
+)
+def test_worker_effort_precedence(
+    monkeypatch: pytest.MonkeyPatch, explicit: str, inherited: str, expected: str
+) -> None:
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "agentic_effort", "high")
+    manager = _make_manager(AgentRegistry())
+    task = SubTask("effort-child", "inspect", "analyze", effort=explicit)
+    request = manager._protocol.build_worker_request(task, default_effort=inherited)
+    assert request.effort == expected
+    assert WorkerRequest.from_dict(request.to_dict()).effort == expected
+    assert task.effort == explicit
+
+
 def test_build_worker_request_pulls_agent_system_prompt(
     seed_generator_registry: AgentRegistry,
 ) -> None:
@@ -375,11 +393,16 @@ def test_delegate_dispatch_forwards_tool_context_model() -> None:
     mgr.adelegate = AsyncMock(return_value=[])  # type: ignore[method-assign]
     executor = ToolExecutor(sub_agent_manager=mgr, auto_approve=True, hitl_level=0)
     ctx = ToolContext(
-        provider="anthropic", source="subscription", model="claude-opus-4-8", adapter_name="x"
+        provider="anthropic",
+        source="subscription",
+        model="claude-opus-4-8",
+        adapter_name="x",
+        effort="max",
     )
     asyncio.run(executor.aexecute("delegate_task", {"task_description": "do a thing"}, context=ctx))
     assert mgr.adelegate.await_count == 1
     assert mgr.adelegate.await_args.kwargs.get("default_model") == "claude-opus-4-8"
+    assert mgr.adelegate.await_args.kwargs.get("default_effort") == "max"
 
 
 def test_delegate_dispatch_forwards_tool_context_source() -> None:

@@ -178,6 +178,7 @@ _EXHAUSTED_SYSTEM = (
 async def _context_exhausted_message(
     user_input: str,
     *,
+    effort: str | None = None,
     hooks: RuntimeEventBus | None = None,
     correlation: Mapping[str, Any] | None = None,
 ) -> str:
@@ -217,6 +218,7 @@ async def _context_exhausted_message(
             system=_EXHAUSTED_SYSTEM,
             model=model,
             max_tokens=150,
+            effort=effort,
             prefer_provider=provider,
             prefer_source=source,
             hooks=hooks,

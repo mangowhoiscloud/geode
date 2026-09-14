@@ -77,6 +77,7 @@ def _build_context(data: dict[str, Any]) -> str:
 async def _call_budget_llm(
     prompt: str,
     *,
+    effort: str | None = None,
     hooks: RuntimeEventBus | None = None,
     correlation: Mapping[str, Any] | None = None,
 ) -> str | None:
@@ -116,6 +117,7 @@ async def _call_budget_llm(
         result = await complete_text_via_adapters(
             prompt,
             model=settings.learning_extract_model,
+            effort=effort or settings.agentic_effort,
             max_tokens=300,
             prefer_provider=provider,
             prefer_source=source,
@@ -227,6 +229,7 @@ def make_llm_extract_handler(
         prompt = _EXTRACT_PROMPT.format(context=context)
         llm_output = await _call_budget_llm(
             prompt,
+            effort=str(data.get("effort") or "") or None,
             hooks=hooks_ref() if hooks_ref is not None else None,
             correlation={key: data[key] for key in ("session_id", "turn_id") if key in data},
         )

@@ -1751,6 +1751,7 @@ class ToolExecutor:
 
         default_model = getattr(context, "model", "") or ""
         default_source = getattr(context, "source", "") or ""
+        default_effort = getattr(context, "effort", "") or ""
 
         tasks_raw: list[dict[str, Any]] = tool_input.get("tasks", [])
         # ``best_of`` applies ONLY to single-task mode. Keyed on the caller's
@@ -1901,6 +1902,7 @@ class ToolExecutor:
             on_progress=_on_progress,
             on_activity=_on_activity,
             default_model=default_model,
+            default_effort=default_effort,
         )
 
         # Fleet view: guarantee a terminal state for EVERY dispatched task.
@@ -1978,6 +1980,7 @@ class ToolExecutor:
                 [task],
                 parent_session_id=parent_session_id,
                 default_model=str(getattr(context, "model", "") or ""),
+                default_effort=str(getattr(context, "effort", "") or ""),
             )
         except ValueError as exc:
             return {"error": str(exc)}
@@ -2030,6 +2033,7 @@ class ToolExecutor:
                     task_id,
                     message,
                     default_model=default_model,
+                    default_effort=str(getattr(context, "effort", "") or ""),
                 )
                 return {"task": run.to_dict(), "turn_triggered": resumed, "resumed": resumed}
             return {"error": f"Unknown collaboration tool: {tool_name}"}
@@ -2081,6 +2085,7 @@ class ToolExecutor:
             model=model,
             provider=judge_provider,
             source=judge_source,
+            effort=getattr(context, "effort", "") or None,
             middleware_registry=self._middleware_registry,
             correlation=asdict(self._tool_correlation(context)),
         )

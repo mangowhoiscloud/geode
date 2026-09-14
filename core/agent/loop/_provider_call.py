@@ -203,7 +203,6 @@ async def _prepare_request(
         # wrap-up: minimal budget (0.5% of window, floor 4096)
         adaptive_max_tokens = max(4096, min(loop.max_tokens, ctx_window // 200))
         adaptive_thinking = 0
-        adaptive_effort = "low"
 
     # config-driven temperature (1.0 default)
     loop_temperature = _settings.temperature_agent_loop
