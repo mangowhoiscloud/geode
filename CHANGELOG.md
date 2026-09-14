@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.29] - 2026-09-14
+
 ### Infrastructure
 
 - Fail the CI merge gate on missing, skipped, cancelled or failed prerequisites,
@@ -58,6 +60,11 @@ functional change.
 
 ### Fixed
 
+- Keep model-specific facts out of the SOUL's static reference table; route
+  detailed model guidance through the existing bundled `geode-context` skill.
+  Dynamic model cards retain exact catalog context limits and distinguish API
+  rate estimates from account access and billing evidence. Model defaults,
+  authentication and fallback policy are unchanged.
 - Distinguish a completed negative check from a tool outage in the shared
   runtime prompt. Required failed or unrun checks cannot establish completion
   or merge readiness, including persona-off and audit prompt paths.
