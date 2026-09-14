@@ -141,6 +141,74 @@ def test_owner_cleanup_does_not_create_a_self_cycle() -> None:
     assert owner_ref() is None
 
 
+@pytest.mark.parametrize("operation", ["close", "replace", "unregister", "cancel"])
+def test_sink_close_failure_remains_visible_to_final_exporters(
+    operation: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    hooks = HookSystem()
+    closed: list[str] = []
+
+    class _Sink:
+        def __call__(self, _dispatch: HookDispatch) -> None:
+            return None
+
+        def close(self) -> None:
+            closed.append("failed")
+            raise OSError("private buffered content")
+
+    subscription = hooks.register_sink(_Sink(), name="buffered")
+    assert hooks.has_sink_failures is False
+    if operation == "replace":
+        hooks.register_sink(lambda _dispatch: None, name="buffered", replace=True)
+    elif operation == "unregister":
+        assert hooks.unregister_sink("buffered") is True
+    elif operation == "cancel":
+        assert subscription.cancel() is True
+    else:
+        hooks.close()
+    assert hooks.has_sink_failures is True
+    hooks.close()
+    assert closed == ["failed"]
+    assert hooks.has_sink_failures is True
+    assert "OSError" in caplog.text
+    assert "private buffered content" not in caplog.text
+
+
+@pytest.mark.parametrize("failing_owner", ["sink", "cleanup"])
+def test_cancelled_close_drains_remaining_owners_then_preserves_cancellation(
+    failing_owner: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    hooks = HookSystem()
+    closed: list[str] = []
+    original = asyncio.CancelledError("private cancellation")
+
+    class _Sink:
+        def __call__(self, _dispatch: HookDispatch) -> None:
+            return None
+
+        def close(self) -> None:
+            closed.append("good")
+
+    class _CancelledSink(_Sink):
+        def close(self) -> None:
+            closed.append("cancelled")
+            raise original
+
+    hooks.register_sink(_Sink(), name="good")
+    if failing_owner == "sink":
+        hooks.register_sink(_CancelledSink(), name="cancelled")
+    else:
+        hooks.add_cleanup("cancelled", _CancelledSink().close)
+    with pytest.raises(asyncio.CancelledError) as error:
+        hooks.close()
+    assert error.value is original
+    assert closed == ["cancelled", "good"]
+    assert hooks.has_sink_failures is True
+    hooks.close()
+    assert closed == ["cancelled", "good"]
+    assert "private cancellation" not in caplog.text
+
+
 def test_replacing_or_cancelling_sink_releases_previous_resource() -> None:
     hooks = HookSystem()
     closed: list[str] = []

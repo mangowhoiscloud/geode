@@ -390,6 +390,7 @@ class DreamingService:
             await self._cancellation_checkpoint()
             result = await complete_text_via_adapters(
                 prompt,
+                purpose="memory_dreaming",
                 system=_DREAM_SYSTEM_PROMPT,
                 model=model,
                 effort=effort or settings.agentic_effort,

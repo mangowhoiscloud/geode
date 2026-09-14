@@ -600,6 +600,7 @@ async def _call_summarize(
     try:
         result = await complete_text_via_adapters(
             conversation_text,
+            purpose="context_compaction",
             system=_COMPACTION_PROMPT,
             model=model,
             effort=effort or settings.agentic_effort,

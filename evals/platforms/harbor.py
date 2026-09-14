@@ -175,6 +175,10 @@ def _usage_event_metadata(event: Any) -> dict[str, Any]:
             "cognitive_reflection",
             "candidate_judge",
             "text_completion",
+            "context_compaction",
+            "learning_extraction",
+            "memory_dreaming",
+            "context_exhaustion",
             "hosted_search",
         }
         else None,

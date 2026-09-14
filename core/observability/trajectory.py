@@ -45,10 +45,13 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.memory.atomic_write import atomic_write_json
 from core.paths import GEODE_HOME, GLOBAL_TRANSCRIPTS_DIR
+
+if TYPE_CHECKING:
+    from core.observability.session_timeline import PersistedSessionEvent
 
 TRAJECTORY_SCHEMA_ID = "geode.trajectory@1"
 TRAJECTORY_SCHEMA_VERSION = 1
@@ -517,6 +520,34 @@ def verify_trajectory_integrity(trajectory: Mapping[str, Any]) -> dict[str, Any]
     }
 
 
+def _session_trajectory_event(
+    row: PersistedSessionEvent, *, content_policy: str = "full"
+) -> dict[str, Any]:
+    """Project one retained row; shared by export and read-only source reconciliation."""
+    event_payload: dict[str, Any] = {
+        **row.payload,
+        "model": row.model,
+        "provider": row.provider,
+        "status": row.status,
+        "source": row.source,
+        "session_generation": row.session_generation,
+        "parent_event_id": row.parent_event_id,
+        "source_payload_hash": row.payload_hash,
+    }
+    if content_policy == "digest":
+        event_payload = _digest_private_event_payload(row.kind, event_payload)
+    return {
+        "event_id": row.event_id,
+        "occurred_at": row.occurred_at,
+        "kind": row.kind,
+        "actor": row.role or "agent",
+        "session_id": row.session_id,
+        "turn_id": row.turn_id,
+        "call_id": row.call_id,
+        "payload": event_payload,
+    }
+
+
 def trajectory_from_sessions(
     session_ids: Sequence[str],
     *,
@@ -543,32 +574,7 @@ def trajectory_from_sessions(
     rows.sort(key=lambda row: row.id)
     if content_policy not in {"full", "digest"}:
         raise ValueError("trajectory content_policy must be 'full' or 'digest'")
-    events = []
-    for row in rows:
-        event_payload: dict[str, Any] = {
-            **row.payload,
-            "model": row.model,
-            "provider": row.provider,
-            "status": row.status,
-            "source": row.source,
-            "session_generation": row.session_generation,
-            "parent_event_id": row.parent_event_id,
-            "source_payload_hash": row.payload_hash,
-        }
-        if content_policy == "digest":
-            event_payload = _digest_private_event_payload(row.kind, event_payload)
-        events.append(
-            {
-                "event_id": row.event_id,
-                "occurred_at": row.occurred_at,
-                "kind": row.kind,
-                "actor": row.role or "agent",
-                "session_id": row.session_id,
-                "turn_id": row.turn_id,
-                "call_id": row.call_id,
-                "payload": event_payload,
-            }
-        )
+    events = [_session_trajectory_event(row, content_policy=content_policy) for row in rows]
     incompleteness = []
     if not ordered_session_ids:
         incompleteness.append("source carried no GEODE session identifiers")
