@@ -113,7 +113,8 @@ feature/<name> -> develop -> main
   Required checks on `main` and `develop` must be strict and apply to
   administrators; never bypass them.
   Repeated runs can coexist on one head (for example, Draft → Ready). The
-  command uses GitHub CLI's current required-check selection and binds its
+  command scopes GitHub CLI's current required-check selection by its explicit
+  `pull_request` event (excluding same-head push runs), then binds its
   exact links to REST check IDs, app/head, PR workflow/suite and rollup evidence.
   Superseded runs remain in history; an older success cannot replace a current failure.
 - Post-merge cleanup runs

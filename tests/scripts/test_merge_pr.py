@@ -63,7 +63,12 @@ def _evidence(head: str = "a" * 40, base: str = "b" * 40) -> dict[str, Any]:
         "checks": {"total_count": len(runs), "check_runs": runs},
         "required": {
             "checks": [
-                {"name": row["name"], "state": "SUCCESS", "link": row["details_url"]}
+                {
+                    "name": row["name"],
+                    "state": "SUCCESS",
+                    "link": row["details_url"],
+                    "event": "pull_request",
+                }
                 for row in runs
             ]
         },
@@ -136,7 +141,7 @@ class _GitHub:
             assert arguments[-5:] == [
                 "--required",
                 "--json",
-                "name,state,link",
+                "name,state,link,event",
                 "--jq",
                 "{checks: .}",
             ]
@@ -269,7 +274,10 @@ def test_native_current_check_selection_never_falls_back_to_old_success(
         assert github.mutations == []
 
 
-@pytest.mark.parametrize("defect", ["missing", "duplicate", "unbound_link", "unknown_name"])
+@pytest.mark.parametrize(
+    "defect",
+    ["missing", "duplicate", "unbound_link", "unknown_name", "missing_event", "wrong_event"],
+)
 def test_native_selection_requires_exact_complete_binding(monkeypatch, capsys, defect: str) -> None:
     data = _evidence()
     selected = data["required"]["checks"]
@@ -279,6 +287,10 @@ def test_native_selection_requires_exact_complete_binding(monkeypatch, capsys, d
         selected.append(selected[0].copy())
     elif defect == "unbound_link":
         selected[0]["link"] += "0"
+    elif defect == "missing_event":
+        selected[0].pop("event")
+    elif defect == "wrong_event":
+        selected[0]["event"] = "push"
     else:
         selected[0]["name"] = "untrusted check"
     github = _GitHub(data)
@@ -456,7 +468,11 @@ def test_sync_main_tip_drift_between_snapshots_never_merges(monkeypatch) -> None
     assert github.mutations == []
 
 
-def test_unrelated_check_suites_do_not_hide_current_pr_evidence(monkeypatch) -> None:
+@pytest.mark.parametrize("pr_state", ["SUCCESS", "FAILURE", "IN_PROGRESS", "MISSING"])
+@pytest.mark.parametrize("extra_event", ["push", "pull_request"])
+def test_unrelated_check_suites_do_not_hide_current_pr_evidence(
+    monkeypatch, pr_state, extra_event
+) -> None:
     data = _evidence()
     for index, row in enumerate(copy.deepcopy(data["checks"]["check_runs"]), 200):
         row.update(id=index, check_suite={"id": 9999}, conclusion="failure")
@@ -470,11 +486,23 @@ def test_unrelated_check_suites_do_not_hide_current_pr_evidence(monkeypatch) -> 
                 "conclusion": "FAILURE",
             }
         )
+        data["required"]["checks"].append(
+            {
+                "name": row["name"],
+                "state": "SUCCESS",
+                "link": row["details_url"],
+                "event": extra_event,
+            }
+        )
     data["checks"]["total_count"] = len(data["checks"]["check_runs"])
+    data["required"]["checks"][0]["state"] = pr_state
+    if pr_state == "MISSING":
+        data["required"]["checks"].pop(0)
     github = _GitHub(data)
     monkeypatch.setattr(merge_pr, "_gh", github)
-    assert merge_pr.main(["--pr", "3319", "--merge"]) == 0
-    assert len(github.mutations) == 1
+    ready = pr_state == "SUCCESS" and extra_event == "push"
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == (0 if ready else 1)
+    assert len(github.mutations) == (1 if ready else 0)
 
 
 @pytest.mark.parametrize(

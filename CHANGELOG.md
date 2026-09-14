@@ -57,7 +57,8 @@ functional change.
 
 - **CI-gated GitFlow synchronization.** Accept an exact ordered develop/main
   two-parent sync when strict ancestry blocks the canonical head. Validate the
-  native-selected checks against their PR workflow, suite and job, preserving
+  native-selected checks within their PR workflow scope, suite and job;
+  same-head push checks cannot create ambiguous PR evidence. Preserve
   strict protection, administrator enforcement and head/base revalidation.
 - Retain auxiliary LLM attempt usage from cognitive reflection, candidate
   selection, text completion and hosted search using the existing durable
