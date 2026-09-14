@@ -6,6 +6,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -20,6 +21,135 @@ from evals.platforms.harbor import (
 from scripts.eval import check_harbor_observations as gate
 
 from tests.scripts.test_eval_contract import _run_spec
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        None,
+        "dropped-pair",
+        "tool-pair",
+        "tool-content",
+        "session-hash",
+        "payload-hash",
+        "session",
+        "wal",
+    ],
+)
+def test_source_reconciliation_reads_complete_snapshot_without_mutating(
+    tmp_path: Path, fault: str | None
+) -> None:
+    from core.hooks import HookEvent, HookSystem
+    from core.observability.event_store import HookEventStore
+    from core.observability.hook_persistence import HookPersistenceSink
+    from core.observability.session_timeline import (
+        SessionEventKind,
+        SessionEventStore,
+        SessionEventWrite,
+    )
+    from core.observability.trajectory import trajectory_from_sessions
+
+    path = tmp_path / "sessions.db"
+    store = HookEventStore(path)
+    hooks = HookSystem()
+    hooks.register_sink(HookPersistenceSink(store, session_key="trial", run_id="run"))
+    for index in range(2):
+        payload = {
+            "session_id": "session-1",
+            "turn_id": "turn-1",
+            "llm_call_id": f"call-{index}",
+            "llm_attempt_id": f"attempt-{index}",
+            "model": "gpt-5.6-sol",
+            "provider": "openai",
+            "adapter": "codex_oauth",
+            "purpose": "agentic_loop",
+            "source": "subscription",
+            "effort": "max",
+        }
+        hooks.trigger(HookEvent.LLM_CALL_STARTED, payload)
+        hooks.trigger(
+            HookEvent.LLM_CALL_ENDED,
+            {
+                **payload,
+                "latency_ms": 1,
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 2,
+                    "cached_input_tokens": 0,
+                    "cache_write_tokens": None,
+                },
+            },
+        )
+    rows = store.read()
+    hooks.close()
+    timeline = SessionEventStore(path)
+    for kind, payload in (
+        (SessionEventKind.SESSION_STARTED, {}),
+        (SessionEventKind.USER_MESSAGE, {"content": "fixture task"}),
+        (SessionEventKind.TOOL_CALLED, {"tool": "run_bash", "arguments": {"command": "true"}}),
+        (SessionEventKind.TOOL_COMPLETED, {"tool": "run_bash", "result": "ok"}),
+        (
+            SessionEventKind.SESSION_ENDED,
+            {"record_failures": 0, "runtime_observation_status": "no_known_faults"},
+        ),
+    ):
+        timeline.append(
+            SessionEventWrite(
+                session_id="session-1",
+                kind=kind,
+                turn_id="turn-1",
+                call_id="tool-1"
+                if kind in {SessionEventKind.TOOL_CALLED, SessionEventKind.TOOL_COMPLETED}
+                else "",
+                payload=payload,
+            )
+        )
+    full = trajectory_from_sessions(
+        ["session-1"],
+        trajectory_id="source-check",
+        source={"harness": "harbor", "session": "session-1"},
+        db_path=path,
+    )
+    with sqlite3.connect(path) as db:
+        if fault == "payload-hash":
+            db.execute("UPDATE hook_events SET payload_hash = ? WHERE id = 1", ("0" * 64,))
+        if fault == "session-hash":
+            db.execute("UPDATE session_events SET payload_hash = ? WHERE id = 1", ("0" * 64,))
+    db.close()
+    if fault == "wal":
+        path.with_name(path.name + "-wal").write_bytes(b"uncheckpointed evidence")
+    selected_rows = (
+        rows if fault != "dropped-pair" else [r for r in rows if r.llm_call_id == "call-0"]
+    )
+    usage = _summarize_usage(selected_rows)
+    if fault in {"tool-pair", "tool-content"}:
+        if fault == "tool-pair":
+            full["events"] = [e for e in full["events"] if not e["kind"].startswith("tool.")]
+        else:
+            full["events"][2]["payload"]["arguments"]["command"] = "false"
+        full = build_trajectory(
+            trajectory_id=full["trajectory_id"],
+            source=full["source"],
+            events=full["events"],
+            outcome=full["outcome"],
+            provenance=full["provenance"],
+            privacy=full["privacy"],
+            captured_at=full["captured_at"],
+        )
+        # Self-consistent full/digest/ATIF/cast projections must not hide source loss.
+        _projections(tmp_path, full)
+    before = path.read_bytes()
+    sessions = {"unrelated"} if fault == "session" else {"session-1"}
+    if fault:
+        with pytest.raises(ValueError):
+            gate._reconcile_usage_source(path, usage, sessions, full)
+    else:
+        result = gate._reconcile_usage_source(path, usage, sessions, full)
+        assert result["reconciled"] is True
+        assert result["database_sha256"] == hashlib.sha256(before).hexdigest()
+        assert result["hook_rows"] == 4
+        assert result["session_rows"] == 5
+    assert path.read_bytes() == before
 
 
 def _write(path: Path, value: Any) -> None:
@@ -447,7 +577,15 @@ def test_absent_cache_key_is_export_loss_not_provider_null(trial, model_boundary
 
 
 @pytest.mark.parametrize(
-    ("purpose", "effort"), [("cognitive_reflection", "medium"), ("turn_verification", "max")]
+    ("purpose", "effort"),
+    [
+        ("cognitive_reflection", "medium"),
+        ("turn_verification", "max"),
+        ("context_compaction", "max"),
+        ("learning_extraction", "max"),
+        ("memory_dreaming", "max"),
+        ("context_exhaustion", "max"),
+    ],
 )
 def test_observed_call_purpose_and_effort_are_retained(trial, model_boundary, purpose, effort):
     root = trial["trial_dir"]

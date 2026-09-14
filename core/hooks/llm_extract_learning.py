@@ -116,6 +116,7 @@ async def _call_budget_llm(
     try:
         result = await complete_text_via_adapters(
             prompt,
+            purpose="learning_extraction",
             model=settings.learning_extract_model,
             effort=effort or settings.agentic_effort,
             max_tokens=300,

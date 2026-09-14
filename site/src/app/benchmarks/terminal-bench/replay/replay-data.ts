@@ -59,6 +59,33 @@ export function eventCount(pair: Pair): number {
   return Math.max(1, pair.geode.events.length, pair.native.events.length);
 }
 
+export function recordedToolCount(cell: Pick<Cell, "replay_kind" | "events">): number | null {
+  if (cell.replay_kind === "atif-derived-private") return cell.events.length;
+  if (cell.replay_kind === "exclusion-card") return 0;
+  // An empty receipt projection does not establish zero executed tool calls.
+  return null;
+}
+
+export function emptyReplayMessage(cell: Pick<Cell, "replay_kind" | "events">, ko: boolean): string {
+  if (cell.events.length) return ko
+    ? "재생하면 보존된 tool event가 아래에서부터 표시됩니다."
+    : "Play to reveal preserved tool events from the bottom.";
+  switch (cell.replay_kind) {
+    case "atif-derived-private": return ko
+      ? "ATIF 기록이 있습니다. 이 기록의 도구 호출은 0개입니다."
+      : "ATIF is retained. This trace contains zero recorded tool calls.";
+    case "receipt-event": return ko
+      ? "이 Replay에는 결과 receipt가 연결되어 있습니다. 도구 호출 수는 확인되지 않았습니다."
+      : "This replay links result receipts. The tool-call count is unknown.";
+    case "exclusion-card": return ko
+      ? "모델 호출 전에 사전 제외된 셀입니다. 실행되지 않았습니다."
+      : "This cell was prospectively excluded before model calls. It was not executed.";
+    default: return ko
+      ? "이 Replay에서 실행 근거의 종류와 도구 호출 수를 확인할 수 없습니다."
+      : "The execution-evidence kind and tool-call count are unknown in this replay.";
+  }
+}
+
 export function nextFrame(state: Playback, pairs: Pair[]): Playback {
   if (!state.playing) return state;
   if (state.step < eventCount(pairs[state.pair])) return { ...state, step: state.step + 1 };

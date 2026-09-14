@@ -321,8 +321,24 @@ models, regenerates the cast from the retained trajectory, checks the receipt
 hashes, and reconciles the existing usage projections. Invoke it with
 `trial_dir`, `--run-spec`, `--run-spec-sha256`, `--source-sha256`,
 `--trial-name`, `--task-name`, and `--task-checksum`, all taken from the frozen
-plan rather than inferred from a successful result. It does not reopen a
-session database or create a second raw store.
+plan rather than inferred from a successful result. Optional `--source-db`
+opens the preserved trial-local database immutable/read-only (no migration or
+checkpoint). It verifies each retained hook payload hash, reconciles all
+retained call starts/ends and counters, and compares every canonical event's
+identity, order, timestamp, payload and source hash through the existing exporter.
+Consistently dropping a tool call/result pair from all exports therefore fails.
+It rejects a nonempty WAL rather than silently reading a stale
+database. Preserve and recover such a WAL separately before claiming a closed
+snapshot. No second raw store is created.
+
+For a new native-profile study, freeze collection admission separately from
+provider-internal or invoice completeness: require the reviewed producer
+inventory and regression evidence above, successful owner shutdown, and this
+exact source/export reconciliation. Do not use the checker's unconditional
+`whole_runtime_complete=false` as evidence of a newly discovered missing
+producer, or change a historical run's admission rule after execution. The
+checker alone grants no admission; completed-call cache coverage and every
+unreported cancellation counter remain separately reported.
 
 For a prospectively frozen uniform-effort study, add `--require-uniform-effort`.
 The checker rejects missing request metadata or any root/auxiliary effort that
@@ -354,11 +370,14 @@ Zero observed calls do not establish that a conditional path was tested.
 | Root/worker compaction and model-switch summary | Capability dispatch with owning loop event bus | Context/model-switch policy |
 | Root dreaming | Runtime-owned background service and capability dispatch | Full turn-completed hook; absent from minimal worker hooks |
 
-Text helpers share `purpose=text_completion`. The numeric usage projection
-cannot independently attribute their live calls to learning, compaction,
-context exhaustion, model-switch summary or dreaming. Retain those per-producer
-live coverage claims as unproven unless another source-bound receipt identifies
-the producer; deterministic wiring tests alone do not establish live exercise.
+New text-helper observations distinguish `learning_extraction`,
+`context_compaction` (including model-switch summary), `context_exhaustion`
+and `memory_dreaming` in the existing purpose field. Older `text_completion`
+rows remain unattributed; do not infer their producer from timing. Deterministic
+wiring tests do not establish live exercise. The optional database check closes
+the retained-source-to-export join, not the claim that every physical provider
+dispatch was recorded. A failed sink close also degrades final observation
+health, even if every surviving call pair matches.
 
 The run-local ratchet may admit only the *next declared collection cell* after
 this code-bound inventory, current preflight, writer shutdown and intact

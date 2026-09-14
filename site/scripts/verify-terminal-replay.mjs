@@ -34,6 +34,23 @@ assert.equal(api.statusLabel({ status_label: "INVALID / 인프라 무효" }, fal
 assert.equal(api.statusLabel({ status_label: "NOT RUN / 사전 제외" }, true), "NOT RUN / 사전 제외");
 assert.equal(api.statusLabel({ status_label: "ZERO / selected 0" }, false), "ZERO / selected 0");
 
+for (const [kind, count, ko, en] of [
+  ["atif-derived-private", 0, /ATIF.*0개/, /ATIF.*zero recorded tool calls/],
+  ["receipt-event", null, /receipt.*확인되지/, /receipts.*unknown/],
+  ["exclusion-card", 0, /모델 호출 전에.*실행되지/, /excluded before model calls.*not executed/],
+  ["unrecognized", null, /종류와.*확인할 수 없/, /kind and tool-call count are unknown/],
+  [undefined, null, /종류와.*확인할 수 없/, /kind and tool-call count are unknown/],
+]) {
+  const empty = { replay_kind: kind, events: [] };
+  assert.equal(api.recordedToolCount(empty), count);
+  assert.match(api.emptyReplayMessage(empty, true), ko);
+  assert.match(api.emptyReplayMessage(empty, false), en);
+}
+const retained = { replay_kind: "atif-derived-private", events: [{}, {}] };
+assert.equal(api.recordedToolCount(retained), 2);
+assert.match(api.emptyReplayMessage(retained, true), /재생하면.*tool event/);
+assert.match(api.emptyReplayMessage(retained, false), /Play to reveal preserved tool events/);
+
 const fixture = Buffer.from(JSON.stringify({ run_id: api.RUN_ID, pairs: Array(445).fill(pairs[0]) }));
 const hash = createHash("sha256").update(fixture).digest("hex");
 const fixtureApi = await compile(source.replace(api.DATA_SHA256, hash));
@@ -66,7 +83,7 @@ assert.equal(target, "./replay/?pair=445&lang=en#evidence");
 if (process.argv[2]) {
   const bytes = readFileSync(process.argv[2]);
   const data = await api.decodeReplay(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
-  const ids = new Set(), pairIds = new Set(), coverage = {};
+  const ids = new Set(), pairIds = new Set(), coverage = {}, emptyCoverage = {};
   let calls = 0, differences = 0;
   for (const pair of data.pairs) {
     assert.equal(typeof pair.task, "string");
@@ -79,6 +96,8 @@ if (process.argv[2]) {
       assert.ok(Number.isInteger(item.cell) && item.cell >= 1 && item.cell <= 890 && !ids.has(item.cell)); ids.add(item.cell);
       assert.equal(typeof item.status_label, "string");
       coverage[item.replay_kind] = (coverage[item.replay_kind] ?? 0) + 1;
+      if (!item.events.length) emptyCoverage[item.replay_kind] = (emptyCoverage[item.replay_kind] ?? 0) + 1;
+      assert.equal(api.recordedToolCount(item), item.replay_kind === "receipt-event" ? null : item.events.length);
       assert.ok(item.wall_seconds === null || Number.isFinite(item.wall_seconds));
       if (item.timing?.started_at) assert.ok(Number.isFinite(Date.parse(item.timing.started_at)));
       for (const key of ["raw_verifier_reward", "selected_reward"]) assert.ok(item[key] == null || [0, 1].includes(item[key]));
@@ -96,6 +115,7 @@ if (process.argv[2]) {
   }
   assert.equal(ids.size, 890); assert.equal(calls, 16244); assert.equal(differences, 18);
   assert.deepEqual(coverage, { "atif-derived-private": 835, "receipt-event": 35, "exclusion-card": 20 });
+  assert.deepEqual(emptyCoverage, { "atif-derived-private": 16, "receipt-event": 35, "exclusion-card": 20 });
   if (process.argv[3]) {
     const raw = readFileSync(process.argv[3]);
     const buffer = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
@@ -142,4 +162,4 @@ if (process.argv[2]) {
   }
   console.log("Pinned artifact: 445 pairs, 890 unique cells, 16244 tool calls, 18 raw/selected differences PASS");
 }
-console.log("Replay: SHA-256, fetch failures, state transitions, KST, query bounds, legacy redirect PASS");
+console.log("Replay: SHA-256, fetch failures, state transitions, evidence-specific empty states, unknown counts, KST, query bounds, legacy redirect PASS");

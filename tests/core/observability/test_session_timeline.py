@@ -571,6 +571,47 @@ def test_session_end_preserves_error_terminal_status(tmp_path: Path) -> None:
     assert terminal.payload["rounds"] == 3
 
 
+@pytest.mark.parametrize("metrics", ["omitted", "null", "zero", "measured"])
+def test_session_end_metrics_preserve_unknown_zero_and_measurement(
+    tmp_path: Path, metrics: str
+) -> None:
+    from core.observability.record_paths import normalize_event_row
+    from core.observability.record_schema import validate_record
+    from core.observability.trajectory import trajectory_from_session, verify_trajectory_integrity
+
+    db = tmp_path / "sessions.db"
+    timeline = SessionTimeline("s-metrics", db_path=db)
+    timeline.record_session_start()
+    value = 1.23456789 if metrics == "measured" else 0 if metrics == "zero" else None
+    count = 3 if metrics == "measured" else 0 if metrics == "zero" else None
+    if metrics == "omitted":
+        timeline.record_session_end()
+    else:
+        timeline.record_session_end(
+            duration_s=value,
+            total_cost=value,
+            rounds=count,
+            prompt_tokens=count,
+            completion_tokens=count,
+        )
+    expected = {
+        "duration_s": round(value, 3) if value is not None else None,
+        "total_cost_usd": round(value, 6) if value is not None else None,
+        "rounds": count,
+        "prompt_tokens": count,
+        "completion_tokens": count,
+    }
+    terminal = SessionEventStore(db).read("s-metrics")[-1]
+    validate_record(terminal.as_dict(), schema_id=SESSION_EVENT_SCHEMA_ID)
+    assert {key: terminal.payload[key] for key in expected} == expected
+    assert normalize_event_row(terminal.as_dict())["total_cost"] == expected["total_cost_usd"]
+    for policy in ("full", "digest"):
+        trajectory = trajectory_from_session("s-metrics", db_path=db, content_policy=policy)
+        assert verify_trajectory_integrity(trajectory)["scope_complete"] is True
+        payload = trajectory["events"][-1]["payload"]
+        assert {key: payload[key] for key in expected} == expected
+
+
 def test_turn_completion_does_not_close_active_session() -> None:
     captured: dict[str, object] = {}
 
@@ -630,4 +671,14 @@ def test_terminal_timeline_records_its_own_bus_health(tmp_path: Path, failed: bo
     assert terminal.status == "completed"  # Observation does not rewrite task success.
     assert terminal.payload["runtime_observation_status"] == (
         "degraded" if failed else "no_known_faults"
+    )
+    assert all(
+        terminal.payload[field] is None
+        for field in (
+            "duration_s",
+            "total_cost_usd",
+            "rounds",
+            "prompt_tokens",
+            "completion_tokens",
+        )
     )

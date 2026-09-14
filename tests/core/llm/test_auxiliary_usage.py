@@ -23,6 +23,9 @@ from core.llm.adapters.dispatch import (
     complete_text_via_adapters,
     web_search_via_adapters,
 )
+from core.observability.event_store import HookEventStore
+from core.observability.hook_persistence import HookPersistenceSink
+from evals.platforms.harbor import _summarize_usage
 
 
 def _observations() -> tuple[HookSystem, list[tuple[HookEvent, dict[str, Any]]]]:
@@ -174,6 +177,81 @@ def test_codex_text_keeps_request_default_and_is_counted_once(
     assert rows[1][1]["effort"] is None  # The capability signature does not expose request effort.
 
 
+@pytest.mark.parametrize(
+    ("purpose", "outcome"),
+    [
+        ("text_completion", "returned"),
+        ("context_compaction", "returned"),
+        ("learning_extraction", "returned"),
+        ("memory_dreaming", "returned"),
+        ("context_exhaustion", "returned"),
+        ("learning_extraction", "retry"),
+        ("memory_dreaming", "cancelled"),
+    ],
+)
+def test_text_producer_purpose_survives_durable_projection_without_wire_change(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any, purpose: Any, outcome: str
+) -> None:
+    class ReadError(Exception):
+        pass
+
+    result = TextCompletionResult(
+        text="private result",
+        usage=UsageSummary(input_tokens=23, output_tokens=1, cached_input_tokens_present=True),
+    )
+    call = AsyncMock(
+        side_effect=asyncio.CancelledError()
+        if outcome == "cancelled"
+        else [ReadError(), result]
+        if outcome == "retry"
+        else [result]
+    )
+    _adapter(monkeypatch, call)
+    hooks = HookSystem()
+    store = HookEventStore(tmp_path / "producer-events.db")
+    hooks.register_sink(HookPersistenceSink(store, session_key="synthetic", run_id="producer"))
+    try:
+        request = complete_text_via_adapters(
+            "private prompt",
+            system="private system",
+            model="gpt-5.6-sol",
+            effort="max",
+            max_tokens=300,
+            hooks=hooks,
+            correlation={"session_id": "session-producer"},
+            **({"purpose": purpose} if purpose != "text_completion" else {}),
+        )
+        if outcome == "cancelled":
+            with pytest.raises(asyncio.CancelledError):
+                asyncio.run(request)
+        else:
+            asyncio.run(request)
+        starts = store.read(event_filter=HookEvent.LLM_CALL_STARTED.value)
+        ends = list(reversed(store.read(event_filter=HookEvent.LLM_CALL_ENDED.value)))
+        assert len(starts) == len(ends) == call.await_count == (2 if outcome == "retry" else 1)
+        usage = _summarize_usage([*starts, *ends])
+        assert usage["attempt_pairing_complete"] is True
+        assert usage["mapping_anomaly_events"] == 0
+        assert {row["purpose"] for row in usage["recorded_attempts"]} == {purpose}
+        assert {row["effort"] for row in usage["recorded_attempts"]} == {"max"}
+        assert {row.payload["activity_schema_version"] for row in ends} == {9}
+        assert usage["input_tokens"] == (23 if outcome == "returned" else None)
+        assert usage["cached_input_tokens"] == (0 if outcome == "returned" else None)
+        if outcome == "cancelled":
+            assert ends[0].payload["error_type"] == "CancelledError"
+            assert ends[0].payload["usage"] is None
+        for observed_call in call.await_args_list:
+            assert observed_call.args == ("private prompt",)
+            assert observed_call.kwargs == {
+                "system": "private system",
+                "model": "gpt-5.6-sol",
+                "max_tokens": 300,
+                "effort": "max",
+            }
+    finally:
+        hooks.close()
+
+
 @pytest.mark.parametrize("consumer", ["learning", "exhausted", "compaction", "dreaming"])
 def test_native_text_consumers_emit_usage_before_discarding_text(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Any, consumer: str
@@ -204,9 +282,15 @@ def test_native_text_consumers_emit_usage_before_discarding_text(
             add_learned_pattern=lambda *a: pytest.fail("NONE is not a memory")
         )
         _name, handler = make_llm_extract_handler(lambda: profile, hooks=hooks)
-        asyncio.run(handler(HookEvent.TURN_COMPLETED, {**correlation, "user_input": "z" * 60}))
+        asyncio.run(
+            handler(
+                HookEvent.TURN_COMPLETED, {**correlation, "user_input": "z" * 60, "effort": "max"}
+            )
+        )
     elif consumer == "exhausted":
-        asyncio.run(_context_exhausted_message("input", hooks=hooks, correlation=correlation))
+        asyncio.run(
+            _context_exhausted_message("input", effort="max", hooks=hooks, correlation=correlation)
+        )
     else:
         with closing(SessionManager(tmp_path / "auxiliary.db")) as manager:
             messages = [
@@ -219,6 +303,7 @@ def test_native_text_consumers_emit_usage_before_discarding_text(
                         messages,
                         "openai",
                         "gpt-5.6-sol",
+                        effort="max",
                         keep_recent=4,
                         session_id="session-consumer",
                         session_manager=manager,
@@ -230,7 +315,7 @@ def test_native_text_consumers_emit_usage_before_discarding_text(
                 manager.upsert_messages("session-consumer", messages)
                 asyncio.run(
                     DreamingService(session_manager=manager, hooks=hooks).dream_session(
-                        "session-consumer", model="gpt-5.6-sol"
+                        "session-consumer", model="gpt-5.6-sol", effort="max"
                     )
                 )
     assert call.await_count == 1
@@ -238,6 +323,17 @@ def test_native_text_consumers_emit_usage_before_discarding_text(
     assert rows[1][1]["session_id"] == "session-consumer"
     assert rows[1][1]["usage"]["cached_input_tokens"] == 0
     assert rows[1][1]["usage"]["input_tokens"] == 23
+    assert (
+        rows[1][1]["purpose"]
+        == {
+            "learning": "learning_extraction",
+            "exhausted": "context_exhaustion",
+            "compaction": "context_compaction",
+            "dreaming": "memory_dreaming",
+        }[consumer]
+    )
+    assert rows[1][1]["effort"] == call.await_args.kwargs["effort"] == "max"
+    assert "purpose" not in call.await_args.kwargs
 
 
 @pytest.mark.parametrize("present", [True, False])

@@ -215,6 +215,7 @@ async def _context_exhausted_message(
     try:
         result = await complete_text_via_adapters(
             user_input[:200],
+            purpose="context_exhaustion",
             system=_EXHAUSTED_SYSTEM,
             model=model,
             max_tokens=150,

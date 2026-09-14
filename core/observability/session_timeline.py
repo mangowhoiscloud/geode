@@ -756,20 +756,25 @@ class SessionTimeline:
         self,
         *,
         status: str = "completed",
-        duration_s: float = 0,
-        total_cost: float = 0,
-        rounds: int = 0,
-        prompt_tokens: int = 0,
-        completion_tokens: int = 0,
+        duration_s: float | None = None,
+        total_cost: float | None = None,
+        rounds: int | None = None,
+        prompt_tokens: int | None = None,
+        completion_tokens: int | None = None,
         runtime_observation_status: Literal["no_known_faults", "degraded", "unavailable"]
         | None = None,
     ) -> None:
+        """Close the session; unprovided aggregate metrics remain unknown.
+
+        A terminal status is not a metric snapshot. Explicit zero is preserved,
+        and caller-provided aggregates do not imply whole-runtime accounting.
+        """
         self._record(
             SessionEventKind.SESSION_ENDED,
             status=status,
             payload={
-                "duration_s": round(duration_s, 3),
-                "total_cost_usd": round(total_cost, 6),
+                "duration_s": round(duration_s, 3) if duration_s is not None else None,
+                "total_cost_usd": round(total_cost, 6) if total_cost is not None else None,
                 "rounds": rounds,
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,

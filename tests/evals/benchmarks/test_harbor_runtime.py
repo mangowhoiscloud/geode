@@ -781,7 +781,9 @@ def test_host_stop_error_does_not_mask_execution_failure(
     assert "private" not in json.dumps(receipt)
 
 
-@pytest.mark.parametrize("health_source", ["before_close", "during_close", "mapping_anomaly"])
+@pytest.mark.parametrize(
+    "health_source", ["before_close", "during_close", "sink_close", "mapping_anomaly"]
+)
 def test_native_rejects_degraded_observation_without_discarding_exports(
     native_trial: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, health_source: str
 ) -> None:
@@ -793,6 +795,12 @@ def test_native_rejects_degraded_observation_without_discarding_exports(
         trial.runtime.shutdown.side_effect = lambda **_kwargs: setattr(
             trial.runtime.hooks, "has_sink_failures", True
         )
+    if health_source == "sink_close":
+        sink = MagicMock()
+        sink.close.side_effect = OSError("private buffered content")
+        trial.recording_hooks.register_sink(sink, name="failed-flush")
+        trial.runtime.hooks = trial.recording_hooks
+        trial.runtime.shutdown.side_effect = lambda **_kwargs: trial.recording_hooks.close()
     if health_source == "mapping_anomaly":
         with monkeypatch.context() as patcher:
             patcher.setattr(

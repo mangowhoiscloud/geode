@@ -165,7 +165,7 @@ def test_public_extension_audit_uses_sqlite_and_active_timeline_only(
         "step_id": "t-1:step-1",
         "session_generation": 0,
         "verify_attempt": 0,
-        "activity_schema_version": 8,
+        "activity_schema_version": 9,
         "_dispatch_duration_ms": row.payload["_dispatch_duration_ms"],
     }
     assert not (tmp_path / "events.jsonl").exists()
@@ -280,11 +280,11 @@ def test_llm_route_charge_and_usage_survive_durable_projection(tmp_path: Path) -
     assert row.payload["response_provider"] == "OpenInference"
     assert row.payload["routing_strategy"] == "direct"
     assert row.payload["routing_attempt"] == 1
-    assert row.payload["activity_schema_version"] == 8
+    assert row.payload["activity_schema_version"] == 9
     timeline_payload = _read_timeline(tmp_path / "events.jsonl")[0]["payload"]
     assert timeline_payload["response_provider"] == "OpenInference"
     assert timeline_payload["cost_usd"] == 0.00012
-    assert timeline_payload["activity_schema_version"] == 8
+    assert timeline_payload["activity_schema_version"] == 9
     hooks.close()
 
 

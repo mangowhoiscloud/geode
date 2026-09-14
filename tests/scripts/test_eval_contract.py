@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from core.observability.trajectory import build_trajectory
 from jsonschema import Draft202012Validator
-from scripts.eval import contract
+from scripts.eval import close_terminalbench_smoke, contract
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -1051,6 +1051,343 @@ def test_primary_metric_requires_authoritative_result_source(tmp_path: Path) -> 
             analysis_path,
             run_spec_path=run_spec_path,
             attempts_path=attempts_path,
+        )
+
+
+def _terminalbench_verifier_bundle(
+    run_dir: Path,
+    *,
+    raw_reward: int = 1,
+    timeout: bool = True,
+    receipt_name: str = "selected-verifier.json",
+) -> tuple[Path, Path, Path]:
+    spec_path, attempts_path, analysis_path = (
+        run_dir / name for name in ("run-spec.json", "attempts.jsonl", "analysis.json")
+    )
+    _write_json(spec_path, _run_spec())
+    spec = contract._load_json_object(spec_path)
+    spec["study"]["invalidation_rule"] = (
+        "Outside this hold, canonical agent timeout and protocol-correct semantic zero "
+        "remain valid failures; no replacement."
+    )
+    spec["artifacts"]["trajectory"] = None
+    _write_json(spec_path, spec)
+    attempt = _attempt(run_dir)
+    selected = 0 if timeout else raw_reward
+    attempt.update(
+        outcome="passed" if selected else "failed",
+        failure_class="AgentTimeoutError" if timeout else (None if selected else "verifier-zero"),
+    )
+    _write_json(
+        run_dir / "native.json",
+        {
+            "verifier_result": {"rewards": {"reward": raw_reward}},
+            "exception_info": {"exception_type": "AgentTimeoutError"} if timeout else None,
+            "config": {"timeout_multiplier": 1},
+            "agent_result": {
+                "metadata": {
+                    "termination_reason": "external_cancellation" if timeout else "natural",
+                    "error_type": "CancelledError" if timeout else None,
+                }
+            },
+        },
+    )
+    (run_dir / "reward.txt").write_text(f"{raw_reward}\n")
+    native_ref = {
+        "kind": "native-result",
+        "path": "native.json",
+        "sha256": contract._sha256(run_dir / "native.json"),
+    }
+    reward_ref = {
+        "kind": "verifier-receipt",
+        "path": "reward.txt",
+        "sha256": contract._sha256(run_dir / "reward.txt"),
+    }
+    receipt = {
+        "schema": "terminalbench21.verifier-receipts.v1",
+        "run_id": spec["run_id"],
+        "run_spec_sha256": contract._sha256(spec_path),
+        "selection_rule": spec["study"]["invalidation_rule"],
+        "primary_metric": {
+            "name": "accuracy",
+            "value": selected,
+            "numerator": selected,
+            "denominator": 1,
+        },
+        "receipts": [
+            {
+                "attempt_id": attempt["attempt_id"],
+                "validity": "valid",
+                "outcome": attempt["outcome"],
+                "native_reward": raw_reward,
+                "selected_reward": selected,
+                "selection_reason": "canonical-agent-timeout" if timeout else "native-verifier",
+                "raw_result": "native.json",
+                "raw_result_sha256": native_ref["sha256"],
+                "reward_receipt": "reward.txt",
+                "reward_receipt_sha256": reward_ref["sha256"],
+                "repetition": 1,
+            }
+        ],
+    }
+    _write_json(run_dir / receipt_name, receipt)
+    refs = attempt["evidence_refs"]
+    assert isinstance(refs, list)
+    refs[0] = native_ref
+    refs.extend(
+        [
+            reward_ref,
+            {
+                "kind": "verifier-receipt",
+                "path": receipt_name,
+                "sha256": contract._sha256(run_dir / receipt_name),
+            },
+        ]
+    )
+    attempts_path.write_text(json.dumps(attempt) + "\n")
+    analysis = _analysis(spec_path, attempts_path, attempt)
+    metrics = analysis["metrics"]
+    assert isinstance(metrics, list)
+    metrics[0] = {
+        **receipt["primary_metric"],
+        "unit": "ratio",
+        "source_ref": receipt_name,
+        "source_locator": {
+            field: f"/primary_metric/{field}" for field in ("value", "numerator", "denominator")
+        },
+    }
+    _write_json(analysis_path, analysis)
+    return spec_path, attempts_path, analysis_path
+
+
+@pytest.mark.parametrize(("raw_reward", "timeout"), [(1, True), (0, True), (1, False), (0, False)])
+def test_primary_metric_accepts_selected_verifier_reward(
+    tmp_path: Path, raw_reward: int, timeout: bool
+) -> None:
+    spec, _attempts, _analysis_path = _terminalbench_verifier_bundle(
+        tmp_path, raw_reward=raw_reward, timeout=timeout
+    )
+    # The original declared verifier remains bound; the extra receipt owns selection.
+    assert contract.validate_run_bundle(spec)["attempts"] == 1
+
+
+@pytest.mark.parametrize(
+    "name", ["selected-verifier-receipts.json", "attempts.jsonl", "analysis.json"]
+)
+def test_smoke_closeout_never_overwrites_an_existing_output(tmp_path: Path, name: str) -> None:
+    existing = tmp_path / name
+    existing.write_bytes(b"original evidence\n")
+    with pytest.raises(ValueError, match="never overwrite closure"):
+        close_terminalbench_smoke.close_smoke(tmp_path, "a" * 64, write=True)
+    assert existing.read_bytes() == b"original evidence\n"
+    assert list(tmp_path.iterdir()) == [existing]
+
+
+def test_smoke_closeout_rejects_wrong_frozen_spec_before_writing(tmp_path: Path) -> None:
+    spec = tmp_path / "run-spec.json"
+    _write_json(spec, _run_spec())
+    before = spec.read_bytes()
+    with pytest.raises(ValueError, match="Original frozen spec digest mismatch"):
+        close_terminalbench_smoke.close_smoke(tmp_path, "a" * 64, write=True)
+    assert spec.read_bytes() == before
+    assert list(tmp_path.iterdir()) == [spec]
+
+
+def _closeout_publication_inputs(run: Path) -> tuple[dict[str, str], tuple[bytes, ...]]:
+    _terminalbench_verifier_bundle(run, receipt_name=close_terminalbench_smoke._OUTPUTS[0])
+    outputs = tuple((run / name).read_bytes() for name in close_terminalbench_smoke._OUTPUTS)
+    for name in close_terminalbench_smoke._OUTPUTS:
+        (run / name).unlink()
+    captured = {path.name: contract._sha256(path) for path in run.iterdir()}
+    return captured, outputs
+
+
+@pytest.mark.parametrize("write", [False, True])
+@pytest.mark.parametrize(
+    "validator", ["validate_attempts", "validate_analysis", "validate_run_bundle"]
+)
+def test_smoke_closeout_validation_failure_leaves_no_final_outputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, write: bool, validator: str
+) -> None:
+    captured, outputs = _closeout_publication_inputs(tmp_path)
+
+    def fail(path: Path, **_kwargs: object) -> None:
+        staged = path.parent
+        assert all((staged / name).is_file() for name in close_terminalbench_smoke._OUTPUTS)
+        assert all((staged / name).samefile(tmp_path / name) for name in captured)
+        raise ValueError("injected complete validator failure")
+
+    monkeypatch.setattr(contract, validator, fail)
+    with pytest.raises(ValueError, match="injected complete validator failure"):
+        close_terminalbench_smoke._validate_and_publish(tmp_path, captured, outputs, write=write)
+    assert {path.name for path in tmp_path.iterdir()} == set(captured)
+    assert all(contract._sha256(tmp_path / name) == digest for name, digest in captured.items())
+    assert not list(tmp_path.parent.glob(f".{tmp_path.name}-closeout-*"))
+
+
+@pytest.mark.parametrize("write", [False, True])
+def test_smoke_closeout_both_modes_validate_complete_staged_bundle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, write: bool
+) -> None:
+    captured, outputs = _closeout_publication_inputs(tmp_path)
+    validate = contract.validate_run_bundle
+    validated: list[Path] = []
+
+    def checked(path: Path) -> dict[str, object]:
+        assert path.parent != tmp_path
+        assert all((path.parent / name).samefile(tmp_path / name) for name in captured)
+        validated.append(path)
+        return validate(path)
+
+    monkeypatch.setattr(contract, "validate_run_bundle", checked)
+    close_terminalbench_smoke._validate_and_publish(tmp_path, captured, outputs, write=write)
+    assert len(validated) == 1
+    assert not validated[0].exists()
+    assert all((tmp_path / name).exists() is write for name in close_terminalbench_smoke._OUTPUTS)
+    assert all(contract._sha256(tmp_path / name) == digest for name, digest in captured.items())
+    if write:
+        assert validate(tmp_path / "run-spec.json")["attempts"] == 1
+
+
+def test_smoke_closeout_rechecks_original_hashes_after_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured, outputs = _closeout_publication_inputs(tmp_path)
+    validate = contract.validate_run_bundle
+
+    def changed_source(path: Path) -> dict[str, object]:
+        result = validate(path)
+        (tmp_path / "reward.txt").write_text("changed fixture after validation\n")
+        return result
+
+    monkeypatch.setattr(contract, "validate_run_bundle", changed_source)
+    with pytest.raises(ValueError, match="Original evidence changed before publication"):
+        close_terminalbench_smoke._validate_and_publish(tmp_path, captured, outputs, write=True)
+    assert {path.name for path in tmp_path.iterdir()} == set(captured)
+
+
+def test_smoke_closeout_link_failure_is_not_success_or_complete_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured, outputs = _closeout_publication_inputs(tmp_path)
+    link = close_terminalbench_smoke.os.link
+
+    def fail_second_output(source: Path, target: Path) -> None:
+        if target == tmp_path / "attempts.jsonl":
+            raise OSError("injected publication link failure")
+        link(source, target)
+
+    monkeypatch.setattr(close_terminalbench_smoke.os, "link", fail_second_output)
+    with pytest.raises(OSError, match="injected publication link failure"):
+        close_terminalbench_smoke._validate_and_publish(tmp_path, captured, outputs, write=True)
+    assert (tmp_path / close_terminalbench_smoke._OUTPUTS[0]).read_bytes() == outputs[0]
+    assert not (tmp_path / "attempts.jsonl").exists()
+    assert not (tmp_path / "analysis.json").exists()
+    assert all(contract._sha256(tmp_path / name) == digest for name, digest in captured.items())
+
+
+@pytest.mark.parametrize(
+    ("termination", "error"),
+    [
+        ("external_cancellation", "CancelledError"),
+        ("external_verification_required", None),
+        ("natural", "RuntimeError"),
+        ("unknown", None),
+    ],
+)
+def test_native_verifier_metric_rejects_missing_exception_with_abnormal_runtime(
+    tmp_path: Path, termination: str, error: str | None
+) -> None:
+    spec_path, attempts_path, analysis_path = _terminalbench_verifier_bundle(
+        tmp_path, timeout=False
+    )
+    native_path = tmp_path / "native.json"
+    native = contract._load_json_object(native_path)
+    native["agent_result"]["metadata"].update(termination_reason=termination, error_type=error)
+    _write_json(native_path, native)
+    receipt_path = tmp_path / "selected-verifier.json"
+    receipt = contract._load_json_object(receipt_path)
+    receipt["receipts"][0]["raw_result_sha256"] = contract._sha256(native_path)
+    _write_json(receipt_path, receipt)
+    attempt = contract._load_attempts(attempts_path)[0]
+    for ref in attempt["evidence_refs"]:
+        if ref["path"] in (native_path.name, receipt_path.name):
+            ref["sha256"] = contract._sha256(tmp_path / ref["path"])
+    attempts_path.write_text(json.dumps(attempt) + "\n")
+    analysis = contract._load_json_object(analysis_path)
+    analysis.update(
+        evidence_refs=attempt["evidence_refs"], attempts_sha256=contract._sha256(attempts_path)
+    )
+    _write_json(analysis_path, analysis)
+    with pytest.raises(ValueError, match="requires a completed runtime terminal"):
+        contract.validate_analysis(
+            analysis_path, run_spec_path=spec_path, attempts_path=attempts_path
+        )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("raw-digest", "source is not bound"),
+        ("spec-digest", "frozen run and selection rule"),
+        ("wrong-rule", "frozen run and selection rule"),
+        ("unselected", "exactly the selected attempts"),
+        ("repetition-locator", "explicit primary_metric count locators"),
+        ("inflated-counts", "counts do not match"),
+        ("timeout-pass", "selected reward conflicts"),
+        ("internal-hold", "canonical timeout, not an internal delivery hold"),
+        ("timeout-override", "canonical timeout, not an internal delivery hold"),
+        ("null-primary", "supported Terminal-Bench verifier receipt"),
+    ],
+)
+def test_selected_verifier_metric_rejects_unbound_or_invented_counts(
+    tmp_path: Path, mutation: str, message: str
+) -> None:
+    spec_path, attempts_path, analysis_path = _terminalbench_verifier_bundle(tmp_path)
+    receipt_path = tmp_path / "selected-verifier.json"
+    receipt = contract._load_json_object(receipt_path)
+    analysis = contract._load_json_object(analysis_path)
+    metric = analysis["metrics"][0]
+    if mutation == "raw-digest":
+        receipt["receipts"][0]["raw_result_sha256"] = "b" * 64
+    elif mutation == "spec-digest":
+        receipt["run_spec_sha256"] = "b" * 64
+    elif mutation == "wrong-rule":
+        receipt["selection_rule"] = "Post-hoc all timeouts pass."
+    elif mutation == "unselected":
+        receipt["receipts"][0]["attempt_id"] = "unselected-attempt"
+    elif mutation == "repetition-locator":
+        metric["source_locator"]["denominator"] = "/receipts/0/repetition"
+    elif mutation == "inflated-counts":
+        receipt["primary_metric"]["denominator"] = metric["denominator"] = 2
+    elif mutation == "timeout-pass":
+        receipt["receipts"][0]["selected_reward"] = 1
+    elif mutation == "null-primary":
+        metric.update(value="not-measurable", numerator=None, denominator=None, source_locator=None)
+    elif mutation in {"internal-hold", "timeout-override"}:
+        native = contract._load_json_object(tmp_path / "native.json")
+        if mutation == "internal-hold":
+            native["agent_result"]["metadata"]["termination_reason"] = (
+                "external_verification_required"
+            )
+        else:
+            native["config"]["agent_timeout_multiplier"] = 2
+        _write_json(tmp_path / "native.json", native)
+        receipt["receipts"][0]["raw_result_sha256"] = contract._sha256(tmp_path / "native.json")
+    _write_json(receipt_path, receipt)
+    attempt = contract._load_attempts(attempts_path)[0]
+    for ref in attempt["evidence_refs"]:
+        if ref["path"] == receipt_path.name:
+            ref["sha256"] = contract._sha256(receipt_path)
+        elif ref["path"] == "native.json":
+            ref["sha256"] = contract._sha256(tmp_path / "native.json")
+    attempts_path.write_text(json.dumps(attempt) + "\n")
+    analysis["evidence_refs"] = attempt["evidence_refs"]
+    analysis["attempts_sha256"] = contract._sha256(attempts_path)
+    _write_json(analysis_path, analysis)
+    with pytest.raises(ValueError, match=message):
+        contract.validate_analysis(
+            analysis_path, run_spec_path=spec_path, attempts_path=attempts_path
         )
 
 

@@ -1367,23 +1367,39 @@ class RuntimeEventBus:
             self._cleanups.clear()
             self._sinks.clear()
 
+        interruption: BaseException | None = None
         for cleanup_name, callback in cleanups:
             try:
                 callback()
-            except Exception:
-                log.warning("Hook cleanup '%s' failed", cleanup_name, exc_info=True)
+            except BaseException as exc:
+                with self._lock:
+                    self._sink_failure_warned.add((cleanup_name, "cleanup"))
+                log.warning("Hook cleanup '%s' failed: %s", cleanup_name, type(exc).__name__)
+                if not isinstance(exc, Exception) and interruption is None:
+                    interruption = exc
         for sink_name, sink in sinks:
-            self._close_sink(sink_name, sink)
+            try:
+                self._close_sink(sink_name, sink)
+            except BaseException as exc:
+                if interruption is None:
+                    interruption = exc
+        if interruption is not None:
+            raise interruption
 
-    @staticmethod
-    def _close_sink(name: str, sink: HookSink) -> None:
+    def _close_sink(self, name: str, sink: HookSink) -> None:
         close = getattr(sink, "close", None)
         if not callable(close):
             return
         try:
             close()
-        except Exception:
-            log.warning("Hook sink '%s' close failed", name, exc_info=True)
+        except BaseException as exc:
+            # A failed flush/close can lose buffered evidence even when every
+            # retained start/end pair matches. Exporters read this after close.
+            with self._lock:
+                self._sink_failure_warned.add((name, "close"))
+            log.warning("Hook sink '%s' close failed: %s", name, type(exc).__name__)
+            if not isinstance(exc, Exception):
+                raise
 
 
 # Populate _TOOL_EVENTS after RuntimeEvent members are available.
