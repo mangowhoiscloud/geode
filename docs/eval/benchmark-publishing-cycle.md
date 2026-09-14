@@ -81,8 +81,8 @@ If an invalid or aborted attempt is selected for provenance, the primary metric
 must be `not-measurable` with null counts and the decision cannot promote or
 reject.
 Every measured primary metric uses RFC 6901 JSON Pointers to read numerator and
-denominator from one digest-bound `native-result` or registered deterministic
-`measurement` JSON file. `source_locator.value` may be null when the value is
+denominator from one digest-bound `native-result`, registered deterministic
+`measurement`, or supported `verifier-receipt` JSON file. `source_locator.value` may be null when the value is
 the ratio computed from those counts, avoiding a duplicate derived field.
 Its denominator must also equal the run spec's frozen denominator; a
 nonexistent locator, changed source count, or ratio-preserving count inflation
@@ -91,6 +91,17 @@ selected native/verifier/outcome evidence digests. A secondary metric remains di
 `source_locator` null when its evidence is text, CSV, or another non-JSON
 format; when locators are present, they are verified against JSON bytes.
 Promotion and rejection both require explicit authority.
+
+For `terminalbench21.verifier-receipts.v1`, a selected-score summary explicitly
+records `primary_metric` name/value/numerator/denominator, the frozen run-spec
+SHA and exact selection rule, and one receipt per selected attempt. Each row
+binds its native result and raw reward file by path and SHA. The validator
+checks raw reward separately from the selected score, canonical cancellation
+versus an internal delivery hold, and the count summary. Only explicit summary
+locators are accepted; a repetition number is not a denominator. Preserve the
+original declared verifier receipt when adding a normalization receipt, write
+the new receipt before attempts/analysis, and retain observation gaps separately
+from a valid semantic failure. Existing raw results and frozen rules never change.
 
 ```bash
 uv run python scripts/eval/contract.py catalog --check

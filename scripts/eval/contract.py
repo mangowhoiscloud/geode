@@ -217,9 +217,10 @@ def _validate_metric_source(
         if require_authoritative and not unavailable:
             raise ValueError(f"{sidecar_path}: measured metric requires source locators")
         return kind, None
-    if require_authoritative and kind not in {"native-result", "measurement"}:
+    if require_authoritative and kind not in {"native-result", "measurement", "verifier-receipt"}:
         raise ValueError(
-            f"{sidecar_path}: primary metric source must be native-result or measurement evidence"
+            f"{sidecar_path}: primary metric source must be native-result or measurement"
+            " or verifier-receipt evidence"
         )
     source_path = sidecar_path.parent / evidence_path
     source_payload = _strict_json_loads(
@@ -236,6 +237,122 @@ def _validate_metric_source(
         if not _metric_values_match(metric[field], observed):
             raise ValueError(f"{sidecar_path}: metric {field} does not match metric source")
     return kind, source_payload
+
+
+def _validate_verifier_metric_binding(
+    sidecar_path: Path,
+    receipt: object,
+    *,
+    metric: dict[str, Any],
+    run_spec: dict[str, Any],
+    run_spec_sha256: str,
+    selected_rows: list[dict[str, Any]],
+) -> None:
+    """Admit explicit Terminal-Bench selected scores, never a relabeled native result.
+
+    This is the existing verifier-receipt format with a count summary. Raw rewards
+    retain their native authority; the frozen rule owns timeout selection.
+    """
+    label = f"{sidecar_path}: verifier metric"
+    if (
+        not isinstance(receipt, dict)
+        or receipt.get("schema") != "terminalbench21.verifier-receipts.v1"
+    ):
+        raise ValueError(f"{label} requires the supported Terminal-Bench verifier receipt")
+    rule = run_spec["study"]["invalidation_rule"]
+    if (
+        receipt.get("run_id") != run_spec["run_id"]
+        or receipt.get("run_spec_sha256") != run_spec_sha256
+        or receipt.get("selection_rule") != rule
+    ):
+        raise ValueError(f"{label} does not bind the frozen run and selection rule")
+    expected_locator = {
+        field: f"/primary_metric/{field}" for field in ("value", "numerator", "denominator")
+    }
+    summary = receipt.get("primary_metric")
+    if metric["source_locator"] != expected_locator or not isinstance(summary, dict):
+        raise ValueError(f"{label} requires explicit primary_metric count locators")
+    if summary != {field: metric[field] for field in ("name", "value", "numerator", "denominator")}:
+        raise ValueError(f"{label} summary does not match the selected metric")
+    rows = receipt.get("receipts")
+    selected = {row["attempt_id"]: row for row in selected_rows}
+    if (
+        not isinstance(rows, list)
+        or len(rows) != len(selected)
+        or not all(isinstance(row, dict) for row in rows)
+        or {row.get("attempt_id") for row in rows} != set(selected)
+    ):
+        raise ValueError(f"{label} must cover exactly the selected attempts")
+    numerator = 0
+    for row in rows:
+        attempt = selected[row["attempt_id"]]
+        evidence = {(ref["kind"], ref["path"], ref["sha256"]) for ref in attempt["evidence_refs"]}
+        for path_key, hash_key, kind in (
+            ("raw_result", "raw_result_sha256", "native-result"),
+            ("reward_receipt", "reward_receipt_sha256", "verifier-receipt"),
+        ):
+            if (kind, row.get(path_key), row.get(hash_key)) not in evidence:
+                raise ValueError(f"{label} source is not bound to its selected attempt")
+        native = _load_json_object(sidecar_path.parent / row["raw_result"])
+        raw_reward = (native.get("verifier_result") or {}).get("rewards", {}).get("reward")
+        reward_text = (sidecar_path.parent / row["reward_receipt"]).read_text(encoding="utf-8")
+        if (
+            type(raw_reward) not in (int, float)
+            or raw_reward not in (0, 1)
+            or not _metric_values_match(row.get("native_reward"), raw_reward)
+            or float(reward_text.strip()) != raw_reward
+        ):
+            raise ValueError(f"{label} raw reward and canonical verifier disagree")
+        exception = (native.get("exception_info") or {}).get("exception_type")
+        metadata = (native.get("agent_result") or {}).get("metadata", {})
+        if exception == "AgentTimeoutError":
+            # Support the explicitly frozen rule, not arbitrary natural-language policy inference.
+            timeout_rule = (
+                "Outside this hold, canonical agent timeout and protocol-correct semantic zero "
+                "remain valid failures; no replacement."
+            )
+            if timeout_rule not in rule or row.get("selection_reason") != "canonical-agent-timeout":
+                raise ValueError(f"{label} timeout selection is not covered by the frozen rule")
+            config = native.get("config", {})
+            agent = config.get("agent", {})
+            if (
+                config.get("timeout_multiplier") != 1
+                or config.get("agent_timeout_multiplier") is not None
+                or agent.get("override_timeout_sec") is not None
+                or agent.get("max_timeout_sec") is not None
+                or metadata.get("termination_reason") != "external_cancellation"
+                or metadata.get("error_type") != "CancelledError"
+            ):
+                raise ValueError(
+                    f"{label} requires canonical timeout, not an internal delivery hold"
+                )
+            expected = 0
+        elif exception is None and row.get("selection_reason") == "native-verifier":
+            # Keep the catalog CLI independent of runtime imports until this producer is used.
+            from core.agent.loop.models import is_successful_task_termination
+
+            if (
+                not is_successful_task_termination(metadata.get("termination_reason"))
+                or "error_type" not in metadata
+                or metadata["error_type"] is not None
+            ):
+                raise ValueError(f"{label} native verifier requires a completed runtime terminal")
+            expected = int(raw_reward)
+        else:
+            raise ValueError(f"{label} cannot infer a score for this native exception")
+        if (
+            attempt["validity"] != "valid"
+            or row.get("validity") != "valid"
+            or row.get("outcome") != attempt["outcome"]
+            or attempt["outcome"] != ("passed" if expected else "failed")
+            or not _metric_values_match(row.get("selected_reward"), expected)
+        ):
+            raise ValueError(
+                f"{label} selected reward conflicts with validity or native termination"
+            )
+        numerator += expected
+    if summary["numerator"] != numerator or summary["denominator"] != len(rows):
+        raise ValueError(f"{label} counts do not match selected receipt rows")
 
 
 def _validate_measurement_binding(
@@ -612,6 +729,15 @@ def validate_analysis(path: Path, *, run_spec_path: Path, attempts_path: Path) -
             run_id=run_id,
             run_spec_sha256=_sha256(run_spec_path),
             evidence=selected_evidence,
+        )
+    if primary_source is not None and primary_source[0] == "verifier-receipt":
+        _validate_verifier_metric_binding(
+            path,
+            primary_source[1],
+            metric=primary,
+            run_spec=run_spec,
+            run_spec_sha256=_sha256(run_spec_path),
+            selected_rows=selected_rows,
         )
     if primary["unit"] != primary_spec["unit"]:
         raise ValueError(f"{path}: primary metric unit does not match the frozen run spec")

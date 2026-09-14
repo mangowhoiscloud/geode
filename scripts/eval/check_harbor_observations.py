@@ -3,7 +3,8 @@
 
 Expected trial/task/bundle identities must come from the caller's frozen plan.
 The run-spec schema does not own those additional native Harbor identities.
-No database is opened. Matching exported usage is not a proof of all dispatches.
+An optional closed source database is opened immutable/read-only, never migrated.
+Matching retained source rows is not a proof of all physical dispatches.
 """
 
 from __future__ import annotations
@@ -14,7 +15,9 @@ import importlib
 import json
 import math
 import re
+import sqlite3
 from collections import Counter
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -27,6 +30,7 @@ from evals.platforms.harbor import (
     _RECORDING_RECEIPT_SCHEMA,
     _atif_trajectory_from_geode,
     _render_asciicast,
+    _summarize_usage,
 )
 from scripts.eval.contract import _strict_json_loads, validate_run_spec
 
@@ -38,6 +42,10 @@ _PURPOSES = {
     "cognitive_reflection",
     "candidate_judge",
     "text_completion",
+    "context_compaction",
+    "learning_extraction",
+    "memory_dreaming",
+    "context_exhaustion",
     "hosted_search",
 }
 
@@ -189,6 +197,77 @@ def _usage_check(
     }
 
 
+def _reconcile_usage_source(
+    path: Path, usage: dict[str, Any], sessions: set[str], full: dict[str, Any]
+) -> dict[str, Any]:
+    """Compare the complete retained source, not only the exported end IDs.
+
+    A nonempty WAL needs custody-preserving checkpoint/recovery first; immutable
+    reads must never silently ignore it. No credentials or payloads are returned.
+    """
+    from core.observability.event_store import _row_to_event
+    from core.observability.session_timeline import _row_to_session_event
+    from core.observability.trajectory import _session_trajectory_event, _trajectory_event
+
+    _require(path.is_file(), "source database missing")
+    _require(not any(p.is_symlink() for p in (path, *path.parents)), "symlink source rejected")
+    wal = path.with_name(path.name + "-wal")
+    _require(not wal.is_symlink(), "symlink WAL rejected")
+    _require(not wal.exists() or wal.stat().st_size == 0, "uncheckpointed source WAL")
+    before = hashlib.sha256(path.read_bytes()).hexdigest()
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro&immutable=1", uri=True)) as db:
+        db.row_factory = sqlite3.Row
+        _require(db.execute("PRAGMA quick_check").fetchone()[0] == "ok", "source database corrupt")
+        rows = db.execute("SELECT * FROM hook_events ORDER BY occurred_at DESC, id DESC").fetchall()
+        session_rows = db.execute("SELECT * FROM session_events ORDER BY id").fetchall()
+    source_sessions = {row["session_id"] for row in session_rows}
+    _require(source_sessions == sessions, "canonical source session inventory mismatch")
+    source_events = []
+    for ordinal, raw in enumerate(session_rows, 1):
+        event = _row_to_session_event(raw)
+        _require(not event.corrupt_payload, "source session payload hash mismatch")
+        source_events.append(
+            _trajectory_event(
+                _session_trajectory_event(event),
+                ordinal=ordinal,
+                default_session_id="",
+                fallback_occurred_at=full["captured_at"],
+            )
+        )
+    _require(source_events == full["events"], "source/export canonical event mismatch")
+    for row in rows:
+        _require(
+            hashlib.sha256(row["payload_json"].encode()).hexdigest() == row["payload_hash"],
+            "source hook payload hash mismatch",
+        )
+    expected = _summarize_usage([_row_to_event(row) for row in rows])
+    fields = [
+        "scope",
+        "recorded_attempts",
+        "started_events",
+        "terminal_event_count",
+        "call_events",
+        "usage_events",
+        "attempt_pairing_complete",
+        "mapping_anomaly_events",
+    ]
+    for counter in _COUNTERS:
+        fields.extend((counter, f"{counter}_observed_sum", f"{counter}_missing_events"))
+    _require(all(usage.get(k) == expected[k] for k in fields), "source/export usage mismatch")
+    _require(
+        hashlib.sha256(path.read_bytes()).hexdigest() == before, "source changed during validation"
+    )
+    _require(not wal.exists() or wal.stat().st_size == 0, "source WAL appeared during validation")
+    return {
+        "reconciled": True,
+        "database_sha256": before,
+        "hook_rows": len(rows),
+        "session_rows": len(session_rows),
+        "session_count": len(sessions),
+        "scope": "retained-source-rows-to-export; not physical dispatch coverage",
+    }
+
+
 def validate_observations(
     trial_dir: Path,
     *,
@@ -199,6 +278,7 @@ def validate_observations(
     task_name: str,
     task_checksum: str,
     require_uniform_effort: bool = False,
+    source_db: Path | None = None,
 ) -> dict[str, Any]:
     """Validate existing exports, returning only bounded metadata and hashes.
 
@@ -344,6 +424,12 @@ def validate_observations(
         all(row["session_id"] in sessions for row in usage["recorded_attempts"]),
         "usage session absent from canonical trajectory",
     )
+    source_reconciliation = None
+    if source_db is not None:
+        # The database belongs to this exact isolated trial, not a host-wide store.
+        _require(source_db.resolve().is_relative_to(trial_dir.resolve()), "source outside trial")
+        read(source_db)
+        source_reconciliation = _reconcile_usage_source(source_db, usage, sessions, full)
     atif = document("agent/trajectory.json")
     atif_model = _harbor_model("trajectories", "Trajectory")
     expected_atif = _atif_trajectory_from_geode(
@@ -416,10 +502,15 @@ def validate_observations(
         "tool_calls": tools,
         "replay_status": "tool-actions-observed" if tools else "no-tool-action-observed",
         "accounting": accounting,
+        "source_reconciliation": source_reconciliation,
         "timing": timing,
         "limits": [
-            "export agreement only; raw hook payload hashes and physical dispatch coverage "
-            "not independently verified",
+            "physical dispatch coverage is not independently verified",
+            *(
+                []
+                if source_reconciliation
+                else ["export agreement only; raw hook payload hashes unverified"]
+            ),
             "semantic reward does not authorize retries, execution, or publication",
             "resource/time limits, concurrency, retries and auth need separate frozen preflight",
             "caller must bind expected trial/task/bundle identities to its frozen plan",
@@ -438,6 +529,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("trial_dir", type=Path)
     parser.add_argument("--run-spec", required=True, type=Path, dest="run_spec_path")
     parser.add_argument(
+        "--source-db", type=Path, help="closed, checkpointed trial-local source database"
+    )
+    parser.add_argument(
         "--require-uniform-effort",
         action="store_true",
         help="reject missing or different request effort on any recorded root/auxiliary call",
@@ -446,7 +540,15 @@ def main(argv: list[str] | None = None) -> int:
         parser.add_argument(f"--{name}", required=True)
     try:
         report = validate_observations(**vars(parser.parse_args(argv)))
-    except (OSError, ValueError, KeyError, TypeError, ImportError, AttributeError) as error:
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        ImportError,
+        AttributeError,
+        sqlite3.Error,
+    ) as error:
         # Validation exceptions can embed private task/model content. Never print them.
         print(
             json.dumps(

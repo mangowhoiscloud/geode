@@ -49,6 +49,20 @@ functional change.
 
 ### Fixed
 
+- Retain hook sink-close failures for final observation checks instead of
+  reporting complete accounting after a failed flush. Attribute auxiliary
+  calls to compaction, learning, dreaming, or context exhaustion while keeping
+  legacy purpose values readable and request effort unchanged. Optionally
+  reconcile Harbor exports against a closed, digest-checked source database;
+  reject missing or altered canonical events even across consistent projections.
+  A matched export does not establish physical-dispatch or billing coverage.
+- Preserve unknown session-end summaries as null and bind selected Terminal-Bench
+  metrics to verifier receipts and the frozen termination rule. Cancellation,
+  internal holds, or runtime errors cannot become successful completion merely
+  because a native exception is absent; raw verifier rewards remain unchanged.
+- Distinguish no-tool ATIF, receipt-only, and prospectively excluded cells in
+  Terminal-Bench Replay; missing action evidence no longer displays a zero
+  tool-call count or implies the task never ran.
 - Serialize shared session SQLite reads through cursor fetch and connection
   close using the existing write lock. Retain background dreaming failures
   that arrive while finished jobs are pruned, so settling cannot hide them.

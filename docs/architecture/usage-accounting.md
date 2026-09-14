@@ -90,6 +90,13 @@ additional charge. Harbor's cache metric is reads, never reads plus writes.
   event bus makes the combined trajectory scope incomplete, even when the
   parent's retained LLM pairs match. Earlier absent status remains unknown;
   task success and observer health are separate facts.
+- Canonical `session.ended` metrics not supplied by its caller remain null,
+  not zero. Explicit zero and measured values retain their meaning. The
+  terminal transition alone cannot establish duration, rounds, tokens or cost;
+  these optional summaries do not replace durable per-call accounting or
+  establish whole-runtime totals. Earlier terminal zeros are not retroactively
+  reclassified. Legacy seed-generation/hub rollups still coerce missing summary
+  values to zero and must not be treated as complete accounting.
 - Native exports also reconcile known child handles and structured parent
   subagent events against canonical session inventory. A completed child with
   no surviving rows is missing evidence, not a zero-call session; it prevents
@@ -143,9 +150,13 @@ it. Main-loop estimated costs retain the existing injected pricing behavior;
 neither field is a reconciled subscription invoice. Do not sum unlike scopes
 or infer a zero cost from an absent auxiliary estimate.
 
-Learning, compaction, context-exhausted notices, model-switch summaries and
-dreaming share `purpose=text_completion`. Their usage is retained, but this
-field alone cannot separate their live cost or establish which helper ran.
+Activity schema version 9 identifies native text producers through the existing
+`purpose` field: `learning_extraction`, `context_compaction` (also used by the
+shared model-switch summarizer), `context_exhaustion`, and `memory_dreaming`.
+The labels do not change provider requests or recover earlier attribution.
+Legacy and unidentified callers retain `text_completion`; that category alone
+cannot establish which helper ran. A producer label proves only a retained
+attempt, not complete coverage or provider billing.
 
 ## Existing data contracts and publication
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ARTIFACT_COMMIT, DATA_SHA256, DATA_URL, EVIDENCE_URL, OBSERVABILITY_COMMIT, OBSERVABILITY_SHA256, OBSERVABILITY_URL, elapsedSeconds, eventCount, loadObservability, loadReplay, nextFrame, pairFromSearch, statusLabel, timeKst } from "./replay-data";
+import { ARTIFACT_COMMIT, DATA_SHA256, DATA_URL, EVIDENCE_URL, OBSERVABILITY_COMMIT, OBSERVABILITY_SHA256, OBSERVABILITY_URL, elapsedSeconds, emptyReplayMessage, eventCount, loadObservability, loadReplay, nextFrame, pairFromSearch, recordedToolCount, statusLabel, timeKst } from "./replay-data";
 import type { Cell, Observability, Playback, ReplayData } from "./replay-data";
 import styles from "./replay.module.css";
 
@@ -65,14 +65,15 @@ function Arm({ cell, metrics, step, done, playing, ko }: {
       behavior: playing && !matchMedia("(prefers-reduced-motion: reduce)").matches ? "smooth" : "instant",
     });
   }, [cell.cell, step, playing]);
-  const kind = { "atif-derived-private": "ATIF-derived", "receipt-event": "Receipt only", "exclusion-card": "Not executed" }[cell.replay_kind];
+  const kind = { "atif-derived-private": "ATIF-derived", "receipt-event": "Receipt only", "exclusion-card": "Not executed" }[cell.replay_kind] ?? "Unknown evidence";
+  const toolCount = recordedToolCount(cell);
   return (
     <section className={styles.arm} data-arm={cell.arm} aria-label={name}>
       <div className={styles.metadata}>
         <h3>{name}</h3>
         <p className={styles.status}>Cell {cell.cell} / {done ? statusLabel(cell, ko) : (ko ? "기록 재생" : "Evidence playback")}</p>
-        <p>{kind} / {events.length}/{cell.events.length} tool calls</p>
-        <p>{cell.timing ? <>Trial start <time dateTime={cell.timing.started_at ?? undefined}>{timeKst(cell.timing.started_at)}</time></> : (ko ? "실행 전 대칭 제외" : "Prospective symmetric exclusion")}</p>
+        <p>{kind} / {toolCount === null ? (ko ? "도구 호출 수 미확인" : "Tool-call count unknown") : `${events.length}/${toolCount} recorded tool calls`}</p>
+        <p>{cell.timing ? <>Trial start <time dateTime={cell.timing.started_at ?? undefined}>{timeKst(cell.timing.started_at)}</time></> : cell.replay_kind === "exclusion-card" ? (ko ? "실행 전 대칭 제외" : "Prospective symmetric exclusion") : (ko ? "실행 시각 미확인" : "Trial timestamp unknown")}</p>
         <p>Trial wall {elapsedSeconds(cell.wall_seconds)} <span>{ko ? "(전체 trial 경과 시간)" : "(full trial elapsed time)"}</span></p>
         <p>Raw verifier {cell.raw_verifier_reward ?? "n/a"} / selected {cell.selected_reward ?? "n/a"}</p>
       </div>
@@ -84,15 +85,13 @@ function Arm({ cell, metrics, step, done, playing, ko }: {
               <p><time dateTime={event.timestamp_utc}>{timeKst(event.timestamp_utc)}</time></p>
               <p>{event.output_chars.toLocaleString("en-US")} chars / {event.output_lines} lines <span>observation payload</span></p>
             </div>
-          )) : <p className={styles.empty}>{cell.events.length
-            ? (ko ? "재생하면 보존된 tool event가 아래에서부터 표시됩니다." : "Play to reveal preserved tool events from the bottom.")
-            : (ko ? "Terminal 내용을 복원하지 않았습니다. 결과 또는 제외 receipt만 있습니다." : "No terminal reconstruction. Only result or exclusion receipts exist.")}</p>}
+          )) : <p className={styles.empty}>{emptyReplayMessage(cell, ko)}</p>}
         </div>
       </div>
       <Metrics value={metrics} ko={ko} />
       <details className={styles.lineage}>
         <summary>{ko ? "Attempt 계보와 근거" : "Attempt lineage and evidence"}</summary>
-        {cell.lineage.length ? cell.lineage.map(row => <p key={row.attempt_id}>{row.attempt_id}<br />{row.validity} / {row.outcome}</p>) : <p>{ko ? "모델 호출 전 제외" : "Excluded before model calls"}</p>}
+        {cell.lineage.length ? cell.lineage.map(row => <p key={row.attempt_id}>{row.attempt_id}<br />{row.validity} / {row.outcome}</p>) : <p>{cell.replay_kind === "exclusion-card" ? (ko ? "모델 호출 전 제외" : "Excluded before model calls") : (ko ? "Attempt 계보 미확인" : "Attempt lineage unknown")}</p>}
         {cell.trajectory_sha256 && <p>ATIF SHA-256<br /><code>{cell.trajectory_sha256}</code></p>}
       </details>
     </section>

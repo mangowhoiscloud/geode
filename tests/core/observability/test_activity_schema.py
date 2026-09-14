@@ -394,7 +394,18 @@ def test_llm_activity_missing_cache_is_not_observed_zero(usage: dict[str, None])
 
 
 @pytest.mark.parametrize(
-    "purpose", ["agentic_loop", "turn_verification", "cognitive_reflection", "candidate_judge"]
+    "purpose",
+    [
+        "agentic_loop",
+        "turn_verification",
+        "cognitive_reflection",
+        "candidate_judge",
+        "text_completion",
+        "context_compaction",
+        "learning_extraction",
+        "memory_dreaming",
+        "context_exhaustion",
+    ],
 )
 def test_llm_activity_preserves_requested_effort_and_call_purpose(purpose: str) -> None:
     row = map_hook_to_activity(
@@ -407,7 +418,7 @@ def test_llm_activity_preserves_requested_effort_and_call_purpose(purpose: str) 
         },
         run_id="purpose-test",
     )
-    assert row.schema_version == 8
+    assert row.schema_version == 9
     reparsed = TypeAdapter(TypedActivityRow).validate_python(row.model_dump())
     details = reparsed.model_dump()["details"]
     assert (details["purpose"], details["source"], details["effort"]) == (
@@ -419,12 +430,18 @@ def test_llm_activity_preserves_requested_effort_and_call_purpose(purpose: str) 
     assert details["usage"]["cached_input_tokens"] is None
 
 
-def test_legacy_llm_activity_does_not_infer_root_effort_or_purpose() -> None:
+@pytest.mark.parametrize("legacy_purpose", [None, "text_completion"])
+def test_legacy_llm_activity_does_not_infer_root_effort_or_purpose(
+    legacy_purpose: str | None,
+) -> None:
     row = map_hook_to_activity(HookEvent.LLM_CALL_ENDED, {}, run_id="legacy")
     legacy = row.model_dump(exclude_none=True)
-    legacy["schema_version"] = 6
+    legacy["schema_version"] = 6 if legacy_purpose is None else 8
+    if legacy_purpose is not None:
+        legacy["details"]["purpose"] = legacy_purpose
     details = TypeAdapter(TypedActivityRow).validate_python(legacy).model_dump()["details"]
-    assert details["purpose"] is details["source"] is details["effort"] is None
+    assert details["purpose"] == legacy_purpose
+    assert details["source"] is details["effort"] is None
 
 
 @pytest.mark.parametrize(

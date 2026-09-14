@@ -45,7 +45,7 @@
       "authority": "process",
       "path": "docs/eval/benchmark-publishing-cycle.md",
       "summary": "End-to-end workflow from preregistered benchmark scope through evidence preservation, publication, and deployment.",
-      "sha256": "12b50dc45846e4898a65e3a6f9db05c93dd3b19d6e7bb14236e82b780affeb24",
+      "sha256": "fd884ca486676aa503a10079b8dd484d99e5ec45df22efcb253db56339f3829f",
       "triggers": [
         "attempts JSONL",
         "benchmark run",
@@ -516,7 +516,7 @@
       "authority": "suite-profile",
       "path": "docs/eval/terminal-bench-2.md",
       "summary": "GEODE adoption profile for canonical Terminal-Bench 2.1 execution through Harbor, including official-submission and diagnostic comparability boundaries.",
-      "sha256": "29f96f6448ad4a70590290dc9e9c680df4f318a9e05e7e4a00b790b0d806e66f",
+      "sha256": "75f745166ad31781c581a47600a0499d39716e1f8083485853a2c1f5e3cd7b24",
       "triggers": [
         "Harbor",
         "Terminal-Bench 2",

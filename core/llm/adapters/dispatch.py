@@ -56,7 +56,7 @@ import uuid
 from collections.abc import Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from core.hooks.llm_observation import observe_llm_call
 from core.llm import fallback as _retry
@@ -649,6 +649,13 @@ async def complete_text_via_adapters(
     prefer_source: str | None = None,
     hooks: RuntimeEventBus | None = None,
     correlation: Mapping[str, Any] | None = None,
+    purpose: Literal[
+        "text_completion",
+        "context_compaction",
+        "learning_extraction",
+        "memory_dreaming",
+        "context_exhaustion",
+    ] = "text_completion",
 ) -> TextCompletionResult:
     """Route a single-turn text-completion request through the adapter
     registry — strict single-adapter dispatch, no fallback.
@@ -669,6 +676,10 @@ async def complete_text_via_adapters(
     ``effort`` is inherited from the caller. It is applied only to known
     OpenAI reasoning models; other providers/models retain their legacy
     request shape and an unknown effort observation.
+
+    ``purpose`` identifies the producing helper in observations only; it is
+    never forwarded to the provider. Unidentified callers retain the legacy
+    ``text_completion`` category.
     """
     capability = "supports_text_completion"
     adapter = _select_adapter(
@@ -724,7 +735,7 @@ async def complete_text_via_adapters(
                 provider=adapter.provider,
                 adapter=adapter.name,
                 source=adapter.source,
-                purpose="text_completion",
+                purpose=purpose,
                 effort=request_effort,
             )
         except BillingError as exc:
