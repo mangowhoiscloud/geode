@@ -470,6 +470,7 @@ class SubAgentManager:
                 role=task.role,
                 model=task.model or default_model,
                 source=task.source,
+                effort=task.effort,
                 resume=resume,
                 max_total_subagents=None if resume else self._max_total_subagents,
             )
@@ -566,7 +567,7 @@ class SubAgentManager:
                     task.task_id,
                     prompt="Handle the pending parent follow-up.",
                     default_model=default_model,
-                    default_effort=task.effort or default_effort,
+                    default_effort=default_effort,
                 )
 
     def _background_done(
@@ -719,6 +720,7 @@ class SubAgentManager:
                     role=run.role,
                     model=run.model,
                     source=run.source,
+                    effort=run.effort,
                 )
             ],
             parent_session_id=parent_session_id,

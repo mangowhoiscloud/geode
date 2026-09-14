@@ -54,6 +54,8 @@ functional change.
   through OpenAI reasoning-capable auxiliary text/search requests and their
   durable observations. Add an opt-in uniform-effort export check; historical
   missing or different efforts are not relabeled or repaired in place.
+  Retain explicit worker overrides across idle resume in the existing
+  collaboration store; legacy rows continue to inherit the caller's effort.
 - Separate turn-final LLM verification usage from agent execution with the
   version 8 `turn_verification` purpose, preserving unknown historical usage.
   Persist bounded judge timeout reasons and retain native Harbor verification

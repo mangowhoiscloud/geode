@@ -419,7 +419,7 @@
     },
     "SubAgentManager": {
       "constructor_arg_count": 18,
-      "file_loc": 826,
+      "file_loc": 828,
       "method_count": 17,
       "path": "core/agent/sub_agent.py"
     }
@@ -528,7 +528,7 @@
   "packages": {
     "core": {
       "python_files": 415,
-      "python_loc": 126022
+      "python_loc": 126045
     },
     "evals": {
       "python_files": 94,
@@ -540,7 +540,7 @@
     },
     "tests": {
       "python_files": 714,
-      "python_loc": 199624
+      "python_loc": 199723
     }
   },
   "schema_version": 6,

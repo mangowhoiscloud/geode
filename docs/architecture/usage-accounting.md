@@ -71,7 +71,12 @@ additional charge. Harbor's cache metric is reads, never reads plus writes.
   calls on supported OpenAI reasoning models now carry the inherited effort
   through the actual request and observation helper. Other capability backends
   retain their existing policies and unknown effort; no cross-provider effort
-  equivalence is claimed. Earlier `recorded-agentic-loop-attempts-only` exports retain their
+  equivalence is claimed. The direct Responses request path retains its
+  model-switch clamp; for example, an unsupported `max` on GPT-5.5 can become
+  `xhigh`. Its recorded requested effort is not wire-effort proof. Uniform
+  studies must pin a compatible model (here `gpt-5.6-sol`), reject model drift,
+  and retain request-level regression evidence. Earlier
+  `recorded-agentic-loop-attempts-only` exports retain their
   original scope. Pairing describes retained events, not all dispatched
   calls: a lost start/end pair can evade that check. Final-result cost and
   durable token totals have different coverage and are not a reconciled invoice.

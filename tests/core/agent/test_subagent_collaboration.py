@@ -218,6 +218,7 @@ def test_followup_at_terminal_boundary_starts_exactly_one_new_generation(
         else:
             pytest.fail("follow-up generation did not complete")
         assert runner.calls == 2
+        assert terminal.effort == explicit_effort
 
     asyncio.run(scenario())
 
@@ -307,6 +308,47 @@ def test_spawn_and_idle_followup_inherit_tool_context_effort(tmp_path, effort: s
         await manager.wait_for_task("effort-parent", task_id, timeout_s=1)
         assert [request.effort for request in runner.requests] == [effort, effort]
         assert [request.resume for request in runner.requests] == [False, True]
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("explicit_effort", ["", "low"])
+@pytest.mark.parametrize("continuation", ["follow_up", "resume"])
+def test_idle_continuation_restores_only_explicit_effort_after_manager_recreation(
+    tmp_path, explicit_effort: str, continuation: str
+) -> None:
+    async def scenario() -> None:
+        db = tmp_path / "sessions.db"
+        runner = _ControlledRunner()
+        manager = SubAgentManager(
+            runner, action_handlers={}, collaboration_store=CollaborationStore(db)
+        )
+        await manager.aspawn(
+            [SubTask("durable-effort", "inspect", "analyze", effort=explicit_effort)],
+            parent_session_id="parent",
+            default_effort="medium",
+        )
+        await runner.started.wait()
+        runner.release.set()
+        await manager.wait_for_task("parent", "durable-effort", timeout_s=1)
+
+        reopened_store = CollaborationStore(db)
+        reopened = SubAgentManager(runner, action_handlers={}, collaboration_store=reopened_store)
+        if continuation == "follow_up":
+            resumed, triggered = await reopened.afollow_up(
+                "parent", "durable-effort", "continue", default_effort="max"
+            )
+            assert triggered is True
+        else:
+            resumed = await reopened.aresume("parent", "durable-effort", default_effort="max")
+        assert resumed.effort == explicit_effort
+        await reopened.wait_for_task("parent", "durable-effort", timeout_s=1)
+        assert [request.effort for request in runner.requests] == [
+            explicit_effort or "medium",
+            explicit_effort or "max",
+        ]
+        assert [request.resume for request in runner.requests] == [False, True]
+        assert reopened_store.list_runs("parent")[0].effort == explicit_effort
 
     asyncio.run(scenario())
 

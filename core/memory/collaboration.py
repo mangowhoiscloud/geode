@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS collaboration_runs (
     role               TEXT NOT NULL DEFAULT '',
     model              TEXT NOT NULL DEFAULT '',
     source             TEXT NOT NULL DEFAULT '',
+    effort             TEXT NOT NULL DEFAULT '',
     status             TEXT NOT NULL,
     generation         INTEGER NOT NULL DEFAULT 1,
     summary            TEXT NOT NULL DEFAULT '',
@@ -105,6 +106,8 @@ class CollaborationRun:
     owner_id: str
     created_at: float
     updated_at: float
+    # Explicit worker override only; empty inherits the current caller's effort.
+    effort: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         public = asdict(self)
@@ -125,6 +128,16 @@ class CollaborationMessage:
 def ensure_collaboration_schema(conn: sqlite3.Connection) -> None:
     """Create the additive collaboration tables and their bounded indexes."""
     conn.execute(_RUNS_SQL)
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(collaboration_runs)")}
+    if "effort" not in columns:
+        try:
+            conn.execute(
+                "ALTER TABLE collaboration_runs ADD COLUMN effort TEXT NOT NULL DEFAULT ''"
+            )
+        except sqlite3.OperationalError:
+            columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(collaboration_runs)")}
+            if "effort" not in columns:
+                raise
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_collaboration_runs_parent "
         "ON collaboration_runs (parent_session_id, updated_at DESC)"
@@ -160,10 +173,15 @@ class CollaborationStore:
         role: str = "",
         model: str = "",
         source: str = "",
+        effort: str | None = None,
         resume: bool = False,
         max_total_subagents: int | None = None,
     ) -> CollaborationRun:
-        """Create generation one, or reopen a terminal run as N+1."""
+        """Create generation one, or reopen a terminal run as N+1.
+
+        ``effort`` stores only an explicit override. Omission preserves an
+        existing override on resume; an empty string selects caller inheritance.
+        """
         if not task_id or not parent_session_id:
             raise ValueError("task_id and parent_session_id are required")
         now = time.time()
@@ -181,7 +199,7 @@ class CollaborationStore:
                 generation = int(existing["generation"]) + 1
                 conn.execute(
                     """UPDATE collaboration_runs SET
-                           task_type = ?, role = ?, model = ?, source = ?,
+                           task_type = ?, role = ?, model = ?, source = ?, effort = ?,
                            status = 'pending', generation = ?, summary = '', error = '',
                            owner_id = ?, updated_at = ?
                        WHERE task_id = ? AND parent_session_id = ?""",
@@ -190,6 +208,7 @@ class CollaborationStore:
                         role,
                         model,
                         source,
+                        effort if effort is not None else str(existing["effort"]),
                         generation,
                         _OWNER_ID,
                         now,
@@ -210,9 +229,9 @@ class CollaborationStore:
                         raise ValueError(f"Session sub-agent limit reached ({max_total_subagents})")
                 conn.execute(
                     """INSERT INTO collaboration_runs
-                           (task_id, parent_session_id, task_type, role, model, source,
+                           (task_id, parent_session_id, task_type, role, model, source, effort,
                             status, generation, owner_id, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, 'pending', 1, ?, ?, ?)""",
+                       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 1, ?, ?, ?)""",
                     (
                         task_id,
                         parent_session_id,
@@ -220,6 +239,7 @@ class CollaborationStore:
                         role,
                         model,
                         source,
+                        effort or "",
                         _OWNER_ID,
                         now,
                         now,
@@ -513,6 +533,7 @@ class CollaborationStore:
             role=str(row["role"]),
             model=str(row["model"]),
             source=str(row["source"]),
+            effort=str(row["effort"]),
             status=str(row["status"]),
             generation=int(row["generation"]),
             summary=str(row["summary"]),
