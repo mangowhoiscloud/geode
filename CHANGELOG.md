@@ -52,6 +52,7 @@ functional change.
 - Fail the CI merge gate on missing, skipped, cancelled or failed prerequisites,
   including unavailable change detection. Run required Pages checks on every
   main/develop pull request so a code-only green gate cannot mask a site failure.
+  Runtime `GEODE.md` and `.geode/` changes trigger the full code checks.
   The explicit merge command rechecks current head/base and app-bound required
   checks against enforced branch protection before submitting a pinned merge.
 

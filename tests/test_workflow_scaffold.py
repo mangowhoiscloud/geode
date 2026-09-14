@@ -68,6 +68,14 @@ def test_required_pages_checks_have_no_pull_request_path_filter() -> None:
     assert workflow["jobs"]["build"].get("if") is None
 
 
+def test_runtime_markdown_and_skills_trigger_code_verification() -> None:
+    workflow = yaml.safe_load(_read(".github/workflows/ci.yml"))
+    change_steps = workflow["jobs"]["changes"]["steps"]
+    dispatch = next(step for step in change_steps if step.get("id") == "filter")
+    patterns = yaml.safe_load(dispatch["with"]["filters"])["code"]
+    assert {"core/**", "GEODE.md", ".geode/**"} <= set(patterns)
+
+
 def test_evidence_first_workflow_has_required_scaffold_sections() -> None:
     workflow = _read("docs/workflow.md")
 
