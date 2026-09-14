@@ -105,6 +105,12 @@ feature/<name> -> develop -> main
 - Feature PRs merge into `develop` with squash merge.
 - Before `develop -> main`, sync `main -> develop` if main has drift.
 - `develop -> main` is a pass-through merge after gates are satisfied.
+- Merge admission is a separate check, not a side effect of local test success.
+  `uv run python scripts/merge_pr.py --pr <N>` is read-only; only its explicit
+  `--merge` mode may submit the head-pinned merge after rechecking the PR, base,
+  trusted check source and protected-branch settings. Missing, skipped, pending,
+  failed or stale required evidence blocks it. Required checks on `main` and
+  `develop` must be strict and apply to administrators; never bypass them.
 - Post-merge cleanup runs
   `scripts/check_repo_hygiene.py free-merged-worktree` from outside the target
   checkout. It verifies the squash tree by replaying the final PR head onto the

@@ -47,8 +47,19 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- Fail the CI merge gate on missing, skipped, cancelled or failed prerequisites,
+  including unavailable change detection. Run required Pages checks on every
+  main/develop pull request so a code-only green gate cannot mask a site failure.
+  The explicit merge command rechecks current head/base and app-bound required
+  checks against enforced branch protection before submitting a pinned merge.
+
 ### Fixed
 
+- Distinguish a completed negative check from a tool outage in the shared
+  runtime prompt. Required failed or unrun checks cannot establish completion
+  or merge readiness, including persona-off and audit prompt paths.
 - Preserve trial observations across tool exceptions, cancellation and native
   Harbor cleanup/export failures. Durable tool terminals distinguish failure
   from uncertain external effects; failed observers cannot silently certify

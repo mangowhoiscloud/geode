@@ -4,12 +4,68 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 HYGIENE_SCRIPT = ROOT / "scripts" / "check_repo_hygiene.py"
 
 
 def _read(path: str) -> str:
     return (ROOT / path).read_text()
+
+
+@pytest.mark.parametrize(
+    "result", ["success", "failure", "cancelled", "skipped", "neutral", "pending", ""]
+)
+def test_merge_gate_executes_actual_predicate_and_rejects_non_success(result: str) -> None:
+    workflow = yaml.safe_load(_read(".github/workflows/ci.yml"))
+    gate = workflow["jobs"]["gate"]
+    assert gate["if"] == "${{ always() }}"
+    assert set(gate["needs"]) == {"changes", "lint", "typecheck", "test", "security"}
+    needs: dict[str, dict[str, object]] = {key: {"result": "success"} for key in gate["needs"]}
+    needs["changes"]["outputs"] = {"code": "true"}
+    needs["test"]["result"] = result
+    script = gate["steps"][0]["run"]
+    checked = subprocess.run(  # noqa: S603 - execute the tracked gate against synthetic results
+        ["/bin/bash", "-e", "-c", script],
+        env=os.environ | {"GATE_NEEDS": json.dumps(needs)},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert (checked.returncode == 0) is (result == "success"), checked.stderr
+
+
+@pytest.mark.parametrize("missing", ["test", "classification", "all"])
+def test_merge_gate_rejects_absent_evidence(missing: str) -> None:
+    gate = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]["gate"]
+    needs: dict[str, dict[str, object]] = {key: {"result": "success"} for key in gate["needs"]}
+    needs["changes"]["outputs"] = {"code": "false"}
+    if missing == "classification":
+        del needs["changes"]["outputs"]
+    elif missing == "all":
+        needs.clear()
+    else:
+        del needs[missing]
+    checked = subprocess.run(  # noqa: S603 - execute the tracked gate against synthetic results
+        ["/bin/bash", "-e", "-c", gate["steps"][0]["run"]],
+        env=os.environ | {"GATE_NEEDS": json.dumps(needs)},
+        capture_output=True,
+        check=False,
+    )
+    assert checked.returncode != 0
+
+
+def test_required_pages_checks_have_no_pull_request_path_filter() -> None:
+    workflow = yaml.safe_load(_read(".github/workflows/pages.yml"))
+    # PyYAML's YAML 1.1 loader resolves the unquoted Actions key 'on' as True.
+    trigger = workflow.get("on", workflow.get(True))["pull_request"]
+    assert set(trigger["branches"]) == {"main", "develop"}
+    assert "paths" not in trigger and "paths-ignore" not in trigger
+    assert "ready_for_review" in trigger["types"]
+    assert workflow["jobs"]["lint"].get("if") is None
+    assert workflow["jobs"]["build"].get("if") is None
 
 
 def test_evidence_first_workflow_has_required_scaffold_sections() -> None:
@@ -109,7 +165,7 @@ def test_worktree_free_contract_is_shared_by_every_entrypoint() -> None:
         ROOT / ".agents/skills/geode-gitflow/SKILL.md"
     ).resolve()
     assert "gh pr merge --delete-branch" in gitflow
-    assert "gh api --method PUT repos/mangowhoiscloud/geode/pulls/" in gitflow
+    assert "uv run python scripts/merge_pr.py --pr <PR#> --merge" in gitflow
 
 
 def _run(cwd: Path, *argv: str, check: bool = True) -> subprocess.CompletedProcess[str]:

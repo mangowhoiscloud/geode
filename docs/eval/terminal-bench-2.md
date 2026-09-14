@@ -222,6 +222,39 @@ paired-comparison or public-release authority by passing that gate.
    also validate the publication manifest and privacy scans; verify remote
    read-back after uploading the admitted bytes.
 
+## Error-driven candidate ratchet
+
+An engineering candidate advances only after the previous acceptance checks
+and the regression for the observed failure pass on the exact new source.
+This is not best-of-N selection over benchmark rewards.
+
+| Observation | Next action | Evidence and authority |
+|---|---|---|
+| Required test, instrumentation or export fails | Pause new paid cells; diagnose and repair the smallest responsible surface | Preserve the failed log, attempt and partial exports; add the reproducer to the required checks |
+| CI is absent, pending, failed or belongs to an older head | Keep the candidate unmerged and unadmitted | Bind passing checks to current source, base and source bundle; do not replace the failed receipt |
+| All required engineering checks pass | Admit only the declared next preflight stage | This does not authorize paid calls, publication or score promotion |
+| Frozen install, oracle, auth, resource and paid-smoke gates pass | Permit the next preregistered cell | Exact model route, effort, task limits, source/spec hashes and observability scope remain fixed |
+| Official verifier reports a valid zero, including a canonical timeout | Close the cell with reward zero | Never rerun it to manufacture a pass |
+| Infrastructure or evidence collection invalidates a trial | Stop expansion; retain the invalid lineage | Replacement needs a prospective rule and remaining cap; the observability-remeasurement draft grants zero replacements |
+
+Each fix creates a new candidate revision and source bundle. A change after a
+study freeze starts a separate run or prospectively declared phase; do not pool
+its attempts into the earlier fixed-runtime cohort. Record failure class,
+changed surface, expected effect, parent identity and digest references through
+the existing run-spec, attempt and analysis contracts. The analysis identifies
+the last accepted candidate and the failed checks; it does not rewrite raw
+trajectory or reward evidence. Preserve null cache counters as unknown, even
+when an otherwise valid task passed.
+
+The current remeasurement draft targets 281 previously selected GEODE cells
+with incomplete cache or Replay observations. Its gate evaluates observation
+coverage, not higher task reward: one fresh attempt per cell, concurrency one,
+zero Harbor retries and zero automatic infrastructure replacements. Historical
+Codex data is a reference, not a fresh paired control. A corrected runtime and
+new prompt hashes are treatment changes even when task/model/resource limits
+match. Missing auxiliary-call accounting remains an explicit coverage limit,
+not a whole-runtime cache-performance claim.
+
 ## 2026-09-13 full-runtime G-code development gate
 
 The separate `terminalbench21-sol-max-reflexion-ratchet-r3-20260913` run

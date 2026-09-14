@@ -33,15 +33,9 @@ on:
       - ".yamllint.yaml"
       - ".github/workflows/pages.yml"
   pull_request:
-    paths:
-      - "site/**"
-      - "CHANGELOG.md"
-      - "docs/self-improving/**"
-      - "docs/audits/**"
-      - "evals/petri/judge_dims/**"
-      - ".pymarkdown.json"
-      - ".yamllint.yaml"
-      - ".github/workflows/pages.yml"
+    # Required checks must also exist for PRs without site changes.
+    branches: [main, develop]
+    types: [opened, reopened, synchronize, ready_for_review]
   schedule:
     # 09:00 KST = 00:00 UTC. Daily safety-net rebuild.
     - cron: "0 0 * * *"
@@ -53,7 +47,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'publish' }}
   cancel-in-progress: false
 
 jobs:
