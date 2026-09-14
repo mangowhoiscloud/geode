@@ -212,7 +212,9 @@ def validate_snapshot(
         and workflows["total_count"] == len(workflows["workflow_runs"]),
         "workflow enumeration is incomplete",
     )
-    selected = native_checks["checks"]
+    # gh also returns same-head push checks; native event identity scopes the
+    # PR evidence without hiding a PR check whose workflow proof is missing.
+    selected = [row for row in native_checks["checks"] if row["event"] == "pull_request"]
     _require(
         len(selected) == len(REQUIRED_CHECKS)
         and {row["name"] for row in selected} == set(REQUIRED_CHECKS),
@@ -312,7 +314,7 @@ def _snapshot(number: int, receipt: dict[str, Any] | None = None) -> dict[str, A
             REPOSITORY,
             "--required",
             "--json",
-            "name,state,link",
+            "name,state,link,event",
             "--jq",
             "{checks: .}",
         ]
