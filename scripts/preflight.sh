@@ -13,7 +13,7 @@
 #   scripts/preflight.sh --fast     # skip the full test suite and site build
 #
 # Exit code is the number of failed gates, so `scripts/preflight.sh && gh pr create`
-# is safe — no exit-code absorber (CLAUDE.md CANNOT: never `gate | tail`).
+# is safe — preserve gate exits (docs/workflow.md, Contract checks).
 
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 1

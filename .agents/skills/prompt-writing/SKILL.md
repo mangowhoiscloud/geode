@@ -26,8 +26,12 @@ Prefer declarative clauses:
 - `Scope: short conversational answers only.`
 - `Tool loop: inactive.`
 
-This follows GEODE's Fable-style prompt direction: describe the operating
-surface and desired behavior without roleplay framing.
+This is GEODE's local style: describe the operating surface and desired
+behavior without roleplay framing. It is not a vendor prohibition on role
+prompts. Claude's [official guidance](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices)
+uses clear instructions and descriptive XML boundaries, and also permits role
+framing. Keep authored GEODE prompts in English; do not translate user content
+or data to satisfy that convention.
 
 ## Workflow
 

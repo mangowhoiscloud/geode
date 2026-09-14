@@ -33,17 +33,17 @@ $ python3 scripts/check_docs_links.py --quiet      # broken 만 출력 (CI 적�
 ### 특이 처리
 
 - **`/geode/` deploy basepath 정규화** — `/geode/docs/foo` 도 source-side `/docs/foo` 와 매칭
-- **Build-time copy 인지** — `.github/workflows/pages.yml` 의 `docs/petri-bundle/` → `site/out/petri-bundle/` copy step 알기 때문에 `/petri-bundle/` 가 source 에 없어도 OK
+- **Build-time copy 인지** — `.github/workflows/pages.yml` 의 `docs/self-improving/petri-bundle/` → `site/out/petri-bundle/` copy step 알기 때문에 `/petri-bundle/` 가 source 에 없어도 OK
 - **`${...}` 보간 + relative URL** → `unresolved` 로 분리 (broken 아님)
 - **스킴 스킵** — `mailto:`, `tel:`, `javascript:`, `data:`, `blob:`
-- **`requests` 미설치 시** `--http` 옵션 자동 비활성
+- **`requests` 미설치 시** 명시한 `--http`는 실패한다. 검사를 생략하고 성공으로 표시하거나 성공 receipt를 쓰지 않는다.
 
 ### Exit codes — CI guard 가능
 
 | Code | 의미 |
 |---|---|
 | 0 | broken 없음 |
-| 1 | 1+ broken 발견 |
+| 1 | 1+ broken 발견 또는 명시한 HTTP 검사의 의존성 부재 |
 | 2 | argparse / IO 에러 |
 
 ## Workflow — 새 페이지 또는 cross-link 수정 후
