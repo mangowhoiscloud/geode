@@ -160,6 +160,7 @@ async def _invoke(
     purpose: str,
     adapter: _Adapter,
     registry: MiddlewareRegistry,
+    effort: str | None = None,
 ) -> Any:
     module = _reflection if purpose == "cognitive_reflection" else candidate_sampling
 
@@ -175,6 +176,7 @@ async def _invoke(
             [{"content": "private tool content"}],
             model="gpt-5.6-sol",
             max_tokens=333,
+            effort=effort,
             provider="openai",
             source="subscription",
             middleware_registry=registry,
@@ -186,6 +188,7 @@ async def _invoke(
         ["private candidate 0", "private candidate 1"],
         model="gpt-5.6-sol",
         max_tokens=333,
+        effort=effort,
         provider="openai",
         source="subscription",
         middleware_registry=registry,
@@ -200,6 +203,8 @@ def test_completed_auxiliary_dispatch_survives_interpretation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, purpose: str, outcome: str, cache: int | None
 ) -> None:
     registry, hooks, store = _registry(tmp_path)
+    from core.config import settings
+
     adapter = _Adapter(_result(purpose, outcome, cache))
     try:
         result = asyncio.run(_invoke(monkeypatch, purpose, adapter, registry))
@@ -212,7 +217,7 @@ def test_completed_auxiliary_dispatch_survives_interpretation(
         assert (end.session_id, end.turn_id, end.step_id) == tuple(_CORRELATION.values())
         assert end.payload["success"] is True
         assert end.payload["purpose"] == purpose
-        assert end.payload["effort"] == adapter.requests[0].effort == "medium"
+        assert end.payload["effort"] == adapter.requests[0].effort == settings.agentic_effort
         assert end.payload["source"] == "subscription"
         assert adapter.requests[0].thinking_budget == 0
         assert adapter.requests[0].max_tokens == 333
@@ -233,6 +238,29 @@ def test_completed_auxiliary_dispatch_survives_interpretation(
         else:
             assert result.winner_index == (1 if outcome == "success" else 0)
             assert bool(result.judge_error) is (outcome != "success")
+    finally:
+        hooks.close()
+
+
+@pytest.mark.parametrize("purpose", ["cognitive_reflection", "candidate_judge"])
+@pytest.mark.parametrize("effort", ["low", "max"])
+def test_auxiliary_owned_effort_reaches_request_and_observation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, purpose: str, effort: str
+) -> None:
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "agentic_effort", "high")
+    registry, hooks, store = _registry(tmp_path)
+    adapter = _Adapter(_result(purpose, "success"))
+    try:
+        asyncio.run(_invoke(monkeypatch, purpose, adapter, registry, effort))
+        assert [request.effort for request in adapter.requests] == [effort]
+        starts = store.read(event_filter=HookEvent.LLM_CALL_STARTED.value)
+        ends = store.read(event_filter=HookEvent.LLM_CALL_ENDED.value)
+        assert len(starts) == len(ends) == 1
+        assert starts[0].llm_attempt_id == ends[0].llm_attempt_id
+        assert ends[0].payload["effort"] == effort
+        assert settings.agentic_effort == "high"
     finally:
         hooks.close()
 

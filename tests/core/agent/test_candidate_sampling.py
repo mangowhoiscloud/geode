@@ -332,8 +332,10 @@ def test_best_of_winner_maps_through_failed_candidates(
     assert block["winner_task_id"] == manager.dispatched[2].task_id
 
 
+@pytest.mark.parametrize("effort", ["low", "max"])
 def test_best_of_judge_inherits_tool_context_route(
     monkeypatch: pytest.MonkeyPatch,
+    effort: str,
 ) -> None:
     """When no judge_model is pinned, the judge call must carry the
     ToolContext's live model + provider + source (Codex MCP MED)."""
@@ -350,6 +352,7 @@ def test_best_of_judge_inherits_tool_context_route(
         seen["model"] = model
         seen["provider"] = kwargs.get("provider")
         seen["source"] = kwargs.get("source")
+        seen["effort"] = kwargs.get("effort")
         seen["correlation"] = kwargs.get("correlation")
         return CandidateVerdict(0, "ok")
 
@@ -359,6 +362,7 @@ def test_best_of_judge_inherits_tool_context_route(
         model="claude-opus-4-8",
         provider="anthropic",
         source="oauth",
+        effort=effort,
         session_id="s",
         turn_id="t",
         step_id="step-2",
@@ -379,7 +383,12 @@ def test_best_of_judge_inherits_tool_context_route(
     assert correlation["session_generation"] == 3
     assert correlation["verify_attempt"] == 1
     assert correlation["llm_call_id"] == ""
-    assert seen == {"model": "claude-opus-4-8", "provider": "anthropic", "source": "oauth"}
+    assert seen == {
+        "model": "claude-opus-4-8",
+        "provider": "anthropic",
+        "source": "oauth",
+        "effort": effort,
+    }
 
 
 def test_candidate_text_prefers_text_keys_over_dict_repr() -> None:

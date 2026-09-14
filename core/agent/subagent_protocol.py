@@ -161,6 +161,7 @@ class SubagentProtocol:
         task: SubTask,
         *,
         default_model: str = "",
+        default_effort: str = "",
         emit_activity: bool = False,
         resume: bool = False,
     ) -> WorkerRequest:
@@ -189,12 +190,7 @@ class SubagentProtocol:
                 role, [definition["name"] for definition in load_all_tool_definitions()]
             )
 
-        difficulty = getattr(task, "difficulty", "medium")
-        effort = {"low": "low", "medium": "medium", "high": "high"}.get(
-            difficulty, settings.agentic_effort
-        )
-        if task.effort:
-            effort = task.effort
+        effort = task.effort or default_effort or settings.agentic_effort
 
         agent = self.resolve_agent(task)
         agent_name = ""

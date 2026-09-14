@@ -901,6 +901,7 @@ class CLIPoller:
     ) -> dict[str, Any]:
         """Run a short conversational turn without the AgenticLoop harness."""
         self._propagate_contextvars()
+        from core.config import settings
         from core.llm.adapters.dispatch import complete_text_via_adapters
         from core.llm.adapters.registry import normalize_registry_provider
         from core.server.ipc_server.fast_chat import fast_chat_system_prompt
@@ -922,6 +923,7 @@ class CLIPoller:
             text,
             system=fast_chat_system_prompt(),
             model=model,
+            effort=getattr(loop, "_effort", "") or settings.agentic_effort,
             max_tokens=512,
             prefer_provider=provider,
             prefer_source=source,

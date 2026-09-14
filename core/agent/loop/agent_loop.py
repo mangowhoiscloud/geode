@@ -561,6 +561,7 @@ class AgenticLoop:
             tool_results,
             model=reflection_model,
             max_tokens=settings.cognitive_reflection_max_tokens,
+            effort=self._effort,
             provider=reflection_provider,
             source=reflection_source,
             policy_sources=self._policy_sources,

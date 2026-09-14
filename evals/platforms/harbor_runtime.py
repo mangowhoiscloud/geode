@@ -308,7 +308,10 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
                 "verify_mode": self.verify_mode,
                 "required_tools": ["run_bash"],
                 "profile_scope": "fresh task container only; allow_dangerous=true",
-                "effort_scope": "root setting; native worker difficulty and wrap-up policies apply",
+                "effort_scope": (
+                    "root and auxiliary OpenAI calls inherit the owning loop effort; "
+                    "explicit worker overrides remain distinct and require observed-call validation"
+                ),
                 "agent_timeout_sec": self.agent_timeout_sec,
                 "uv_version": _UV_VERSION,
                 "python_version": _PYTHON_VERSION,
@@ -384,7 +387,7 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
             model=str(self.model_name).removeprefix("geode/"),
             provider=self.provider,
             source=self.source,
-            effort=None,  # Root, worker and wrap-up effort differ; no per-step inference.
+            effort=None,  # ATIF tool steps are not LLM calls; do not infer per-step effort.
             version=self.source_revision,
             metrics={
                 "input_tokens": None,

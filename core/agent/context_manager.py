@@ -43,6 +43,7 @@ class ContextWindowManager:
         hook_registry: HookRegistry | None = None,
         quiet: bool,
         session_id_provider: Callable[[], str | None] | None = None,
+        effort_provider: Callable[[], str] | None = None,
     ) -> None:
         self._hooks = hooks
         self._hook_registry = hook_registry
@@ -51,6 +52,7 @@ class ContextWindowManager:
         # compaction resolves it at call time — without it the primary overflow
         # path never persists context_artifacts (writer-reader parity).
         self._session_id_provider = session_id_provider
+        self._effort_provider = effort_provider
 
     def maybe_prune_messages(self, messages: list[dict[str, Any]]) -> None:
         """Prune old messages when conversation exceeds 5 rounds (10 msgs).
@@ -300,6 +302,7 @@ class ContextWindowManager:
                     messages,
                     provider=provider,
                     model=model,
+                    effort=self._effort_provider() if self._effort_provider else None,
                     keep_recent=keep_recent,
                     policy=strategy.get("policy"),
                     session_id=session_id,

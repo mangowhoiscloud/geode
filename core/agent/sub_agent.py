@@ -207,6 +207,7 @@ class SubAgentManager:
         on_progress: Callable[[SubResult], None] | None = None,
         on_activity: Callable[[dict[str, Any]], None] | None = None,
         default_model: str = "",
+        default_effort: str = "",
         resume: bool = False,
         count_toward_cap: bool = True,
         durable_run: CollaborationRun | None = None,
@@ -335,6 +336,7 @@ class SubAgentManager:
                 fn_or_request = self._protocol.build_worker_request(
                     task,
                     default_model=default_model,
+                    default_effort=default_effort,
                     emit_activity=on_activity is not None,
                     resume=resume,
                 )
@@ -451,6 +453,7 @@ class SubAgentManager:
         on_progress: Callable[[SubResult], None] | None = None,
         on_activity: Callable[[dict[str, Any]], None] | None = None,
         default_model: str = "",
+        default_effort: str = "",
         resume: bool = False,
     ) -> list[CollaborationRun]:
         """Schedule depth-one tasks and return their durable handles immediately."""
@@ -467,6 +470,7 @@ class SubAgentManager:
                 role=task.role,
                 model=task.model or default_model,
                 source=task.source,
+                effort=task.effort,
                 resume=resume,
                 max_total_subagents=None if resume else self._max_total_subagents,
             )
@@ -478,6 +482,7 @@ class SubAgentManager:
                     on_progress=on_progress,
                     on_activity=on_activity,
                     default_model=default_model,
+                    default_effort=default_effort,
                     resume=resume,
                 ),
                 name=f"subagent:{task.task_id}:g{run.generation}",
@@ -497,6 +502,7 @@ class SubAgentManager:
         on_progress: Callable[[SubResult], None] | None,
         on_activity: Callable[[dict[str, Any]], None] | None,
         default_model: str,
+        default_effort: str,
         resume: bool,
     ) -> None:
         if not self._collaboration.mark_running(run.parent_session_id, run.task_id, run.generation):
@@ -512,6 +518,7 @@ class SubAgentManager:
                 on_progress=on_progress,
                 on_activity=on_activity,
                 default_model=default_model,
+                default_effort=default_effort,
                 resume=resume,
                 count_toward_cap=False,
                 durable_run=run,
@@ -560,6 +567,7 @@ class SubAgentManager:
                     task.task_id,
                     prompt="Handle the pending parent follow-up.",
                     default_model=default_model,
+                    default_effort=default_effort,
                 )
 
     def _background_done(
@@ -667,6 +675,7 @@ class SubAgentManager:
         message: str,
         *,
         default_model: str = "",
+        default_effort: str = "",
     ) -> tuple[CollaborationRun, bool]:
         run = self._collaboration.get_run(parent_session_id, task_id)
         if run is None:
@@ -684,6 +693,7 @@ class SubAgentManager:
             task_id,
             prompt=message,
             default_model=default_model,
+            default_effort=default_effort,
         )
         return resumed, True
 
@@ -694,6 +704,7 @@ class SubAgentManager:
         *,
         prompt: str = "Continue from the saved checkpoint.",
         default_model: str = "",
+        default_effort: str = "",
     ) -> CollaborationRun:
         run = self._collaboration.get_run(parent_session_id, task_id)
         if run is None:
@@ -709,10 +720,12 @@ class SubAgentManager:
                     role=run.role,
                     model=run.model,
                     source=run.source,
+                    effort=run.effort,
                 )
             ],
             parent_session_id=parent_session_id,
             default_model=default_model or run.model,
+            default_effort=default_effort,
             resume=True,
         )
         return resumed[0]

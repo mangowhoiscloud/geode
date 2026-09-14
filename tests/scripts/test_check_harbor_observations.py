@@ -307,6 +307,21 @@ def test_missing_cache_is_null_not_zero_or_collection_failure(trial, model_bound
     assert result["full_runtime_expansion_ready"] is False
 
 
+@pytest.mark.parametrize("effort", ["max", "medium", None])
+def test_uniform_effort_gate_checks_auxiliary_calls(trial, model_boundary, effort):
+    root = trial["trial_dir"]
+    usage = json.loads((root / "agent/runtime-result.json").read_text())["usage"]
+    usage["recorded_attempts"][0].update(purpose="cognitive_reflection", effort=effort)
+    _replace_usage(root, usage)
+    report = gate.validate_observations(**trial)
+    assert report["accounting"]["uniform_requested_effort"] is (effort == "max")
+    if effort == "max":
+        assert gate.validate_observations(**trial, require_uniform_effort=True)["observation_valid"]
+    else:
+        with pytest.raises(ValueError, match="frozen reasoning effort"):
+            gate.validate_observations(**trial, require_uniform_effort=True)
+
+
 @pytest.mark.parametrize(
     "mutation", ["empty", "counter", "duplicate", "degraded", "whole", "snapshot"]
 )

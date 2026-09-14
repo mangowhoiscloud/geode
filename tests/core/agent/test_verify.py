@@ -855,8 +855,10 @@ def test_pre_verify_strengthening_is_monotone(
         assert observed_passed == [False]
 
 
+@pytest.mark.parametrize("effort", ["low", "max"])
 def test_final_hook_payloads_include_verify_payload(
     monkeypatch: pytest.MonkeyPatch,
+    effort: str,
 ) -> None:
     """SESSION_ENDED and TURN_COMPLETED payloads carry the final verify
     result when verify/reflection is enabled."""
@@ -877,6 +879,7 @@ def test_final_hook_payloads_include_verify_payload(
         _provider="openai-codex",
         _session_id="s-final",
         _parent_session_id="",
+        _effort=effort,
         _new_adapter=None,
         _last_emitted_session_id="",
     )
@@ -892,6 +895,7 @@ def test_final_hook_payloads_include_verify_payload(
 
     assert session_ended["turn_verify"] is verify_payload
     assert turn_completed["turn_verify"] is verify_payload
+    assert turn_completed["effort"] == effort
 
 
 def test_verify_continuation_results_merge_before_final_persistence() -> None:

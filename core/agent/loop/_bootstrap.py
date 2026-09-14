@@ -201,6 +201,7 @@ def initialize_runtime(
         hook_registry=loop._hook_registry,
         quiet=quiet,
         session_id_provider=lambda: loop._session_id or None,
+        effort_provider=lambda: loop._effort,
     )
 
     from core.agent.convergence import ConvergenceDetector

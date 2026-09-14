@@ -490,11 +490,11 @@ class WebSearchCapable(Protocol):
     # command (PR-WEB-SEARCH-MODEL-HINT, 2026-06-12). Anthropic adapters
     # honour it when the model is in the documented
     # ``web_search_20260209`` support set and escalate to
-    # ANTHROPIC_PRIMARY otherwise; non-Anthropic adapters currently keep
-    # their provider primary (their backend's per-model web_search
-    # support matrix is unverified — doc-before-behaviour, CLAUDE.md §4d).
+    # ANTHROPIC_PRIMARY otherwise. OpenAI adapters honour the hint and use
+    # their route's primary only when empty; other adapters keep their
+    # provider primary (their per-model search support is unverified).
     async def aweb_search(
-        self, query: str, *, max_results: int = 5, model: str = ""
+        self, query: str, *, max_results: int = 5, model: str = "", effort: str | None = None
     ) -> WebSearchResult: ...
 
 
@@ -549,6 +549,7 @@ class TextCompletionCapable(Protocol):
         system: str = "",
         model: str = "",
         max_tokens: int = 1024,
+        effort: str | None = None,
     ) -> TextCompletionResult: ...
 
 

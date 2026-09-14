@@ -60,6 +60,7 @@ from typing import TYPE_CHECKING, Any
 
 from core.hooks.llm_observation import observe_llm_call
 from core.llm import fallback as _retry
+from core.llm.adapters._openai_common import get_openai_model_spec
 from core.llm.adapters.base import (
     TextCompletionResult,
     WebSearchResult,
@@ -405,7 +406,7 @@ def _error_with_cause(exc: BaseException) -> str:
 
 
 async def _call_aweb_search(
-    adapter: Any, query: str, *, max_results: int, model: str
+    adapter: Any, query: str, *, max_results: int, model: str, effort: str | None = None
 ) -> WebSearchResult:
     """Invoke ``adapter.aweb_search`` forwarding the ``model`` hint only
     when the adapter's signature accepts it.
@@ -419,6 +420,9 @@ async def _call_aweb_search(
     """
     import inspect
 
+    # Preserve legacy call signatures only when no effort was requested.
+    # An explicit unsupported keyword must fail, never be silently dropped.
+    effort_kwargs = {"effort": effort} if effort is not None else {}
     try:
         params = inspect.signature(adapter.aweb_search).parameters
         accepts_model = "model" in params or any(
@@ -428,14 +432,16 @@ async def _call_aweb_search(
         accepts_model = False
     if accepts_model:
         result: WebSearchResult = await adapter.aweb_search(
-            query, max_results=max_results, model=model
+            query, max_results=max_results, model=model, **effort_kwargs
         )
         return result
     log.debug(
         "web_search: adapter %s predates the model-hint signature — calling without it",
         getattr(adapter, "name", repr(adapter)),
     )
-    legacy_result: WebSearchResult = await adapter.aweb_search(query, max_results=max_results)
+    legacy_result: WebSearchResult = await adapter.aweb_search(
+        query, max_results=max_results, **effort_kwargs
+    )
     return legacy_result
 
 
@@ -451,6 +457,7 @@ async def web_search_via_adapters(
     prefer_provider: str | None = None,
     prefer_source: str | None = None,
     model: str = "",
+    effort: str | None = None,
     hooks: RuntimeEventBus | None = None,
     correlation: Mapping[str, Any] | None = None,
 ) -> WebSearchResult:
@@ -466,7 +473,12 @@ async def web_search_via_adapters(
     as a routing HINT (PR-WEB-SEARCH-MODEL-HINT, 2026-06-12): Anthropic
     adapters honour it when the model is in the documented
     ``web_search_20260209`` support set and escalate to ANTHROPIC_PRIMARY
-    otherwise; other providers keep their provider primary.
+    otherwise; OpenAI adapters honour it or use their route's primary when
+    empty. Other providers keep their provider primary.
+
+    ``effort`` is the caller's inherited effort, not a cross-provider force
+    policy. Only a known OpenAI reasoning model receives it; other routes keep
+    their existing request shape and unknown effort observation.
     """
     capability = "supports_web_search"
     adapter = _select_adapter(
@@ -482,6 +494,17 @@ async def web_search_via_adapters(
             f"Registered adapters: {_registered_adapter_summary()}. " + _SOURCE_SWITCH_HINT
         )
 
+    if effort is not None and adapter.provider == "openai" and not model:
+        from core.config import CODEX_PRIMARY, OPENAI_PRIMARY
+
+        model = CODEX_PRIMARY if adapter.source == "subscription" else OPENAI_PRIMARY
+    request_effort = (
+        effort
+        if adapter.provider == "openai"
+        and get_openai_model_spec(model).reasoning_effort_values is not None
+        else None
+    )
+
     # Same-adapter retry on connection-class transients ONLY — see the
     # retry-policy section above. The loop exits via ``break`` (success) or
     # ``raise``; ``continue`` happens at most _CONNECTION_TRANSIENT_RETRIES
@@ -491,7 +514,9 @@ async def web_search_via_adapters(
         t0 = time.monotonic()
         try:
             result: WebSearchResult = await observe_llm_call(
-                lambda: _call_aweb_search(adapter, query, max_results=max_results, model=model),
+                lambda: _call_aweb_search(
+                    adapter, query, max_results=max_results, model=model, effort=request_effort
+                ),
                 hooks=hooks,
                 correlation={
                     **(correlation or {}),
@@ -503,6 +528,7 @@ async def web_search_via_adapters(
                 adapter=adapter.name,
                 source=adapter.source,
                 purpose="hosted_search",
+                effort=request_effort,
             )
         except BillingError as exc:
             elapsed_ms = (time.monotonic() - t0) * 1000
@@ -617,6 +643,7 @@ async def complete_text_via_adapters(
     system: str = "",
     model: str = "",
     max_tokens: int = 1024,
+    effort: str | None = None,
     model_by_provider: dict[str, str] | None = None,
     prefer_provider: str | None = None,
     prefer_source: str | None = None,
@@ -638,6 +665,10 @@ async def complete_text_via_adapters(
     :class:`core.tools.base.ToolContext` for tool-dispatch callers. Hook /
     compaction callers outside the tool flow must pass an explicit route
     or a concrete model; dispatch will not scan provider order.
+
+    ``effort`` is inherited from the caller. It is applied only to known
+    OpenAI reasoning models; other providers/models retain their legacy
+    request shape and an unknown effort observation.
     """
     capability = "supports_text_completion"
     adapter = _select_adapter(
@@ -655,6 +686,17 @@ async def complete_text_via_adapters(
 
     overrides = model_by_provider or {}
     chosen_model = overrides.get(adapter.provider, model)
+    if effort is not None and adapter.provider == "openai" and not chosen_model:
+        from core.config import CODEX_PRIMARY, OPENAI_PRIMARY
+
+        chosen_model = CODEX_PRIMARY if adapter.source == "subscription" else OPENAI_PRIMARY
+    request_effort = (
+        effort
+        if adapter.provider == "openai"
+        and get_openai_model_spec(chosen_model).reasoning_effort_values is not None
+        else None
+    )
+    effort_kwargs = {"effort": request_effort} if request_effort is not None else {}
     # Same-adapter retry on connection-class transients ONLY — mirrors
     # web_search_via_adapters. Compaction / learning-extraction callers have
     # no app-level outer retry (unlike AgenticLoop's ``acomplete``), so the
@@ -666,7 +708,11 @@ async def complete_text_via_adapters(
         try:
             result: TextCompletionResult = await observe_llm_call(
                 lambda: adapter.acomplete_text(
-                    prompt, system=system, model=chosen_model, max_tokens=max_tokens
+                    prompt,
+                    system=system,
+                    model=chosen_model,
+                    max_tokens=max_tokens,
+                    **effort_kwargs,
                 ),
                 hooks=hooks,
                 correlation={
@@ -679,6 +725,7 @@ async def complete_text_via_adapters(
                 adapter=adapter.name,
                 source=adapter.source,
                 purpose="text_completion",
+                effort=request_effort,
             )
         except BillingError as exc:
             elapsed_ms = (time.monotonic() - t0) * 1000

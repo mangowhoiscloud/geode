@@ -526,6 +526,7 @@ def _final_hook_payloads(
         "turn_id": getattr(loop, "_turn_id", ""),
         "model": loop.model,
         "provider": loop._provider,
+        "effort": loop._effort,
         "user_input": user_input,
         "text": result.text[:500] if result.text else "",
         "rounds": result.rounds,
