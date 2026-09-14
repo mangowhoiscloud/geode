@@ -49,6 +49,9 @@ functional change.
 
 ### Fixed
 
+- Serialize shared session SQLite reads through cursor fetch and connection
+  close using the existing write lock. Retain background dreaming failures
+  that arrive while finished jobs are pruned, so settling cannot hide them.
 - Preserve the owning loop's reasoning effort across reflection, candidate
   judging, worker delegation/resumption and wrap-up. Carry inherited effort
   through OpenAI reasoning-capable auxiliary text/search requests and their
