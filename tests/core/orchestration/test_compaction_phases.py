@@ -349,6 +349,7 @@ def test_compaction_uses_safe_boundary(monkeypatch: pytest.MonkeyPatch):
         model: str,
         *,
         max_tokens: int,
+        **_observation: Any,
     ) -> str | None:
         return "SUMMARY"
 
@@ -395,6 +396,7 @@ def test_compaction_marker_and_preamble_shape(monkeypatch: pytest.MonkeyPatch):
         model: str,
         *,
         max_tokens: int,
+        **_observation: Any,
     ) -> str | None:
         return "TEST SUMMARY"
 
@@ -422,6 +424,7 @@ def test_compaction_persists_summary_artifact(monkeypatch: pytest.MonkeyPatch, t
         model: str,
         *,
         max_tokens: int,
+        **_observation: Any,
     ) -> str | None:
         return "TEST SUMMARY WITH CONTEXT"
 
@@ -461,6 +464,7 @@ def test_compaction_persistence_failure_is_no_op(monkeypatch: pytest.MonkeyPatch
         model: str,
         *,
         max_tokens: int,
+        **_observation: Any,
     ) -> str | None:
         return "UNPERSISTED SUMMARY"
 
@@ -493,6 +497,7 @@ def test_summary_failure_no_op(monkeypatch: pytest.MonkeyPatch):
         model: str,
         *,
         max_tokens: int,
+        **_observation: Any,
     ) -> str | None:
         return None
 

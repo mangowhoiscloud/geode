@@ -58,6 +58,18 @@ functional change.
 
 ### Fixed
 
+- Retain auxiliary LLM attempt usage from cognitive reflection, candidate
+  selection, text completion and hosted search using the existing durable
+  event stream. Activity schema version 7 adds purpose, credential source and
+  requested effort without inventing missing legacy values. Session-bound
+  pairing prevents borrowing another session's terminal event. A read-only
+  Harbor artifact check reconciles frozen identities, native/canonical
+  projections and reconstructed recording hashes before any expansion claim;
+  unknown provider fields and unproven whole-runtime coverage remain blocked.
+  Worker tools and loops share their observation bus, and session terminals
+  retain sink health. Native finalization drains admitted Dreaming work within
+  the original agent deadline before exporting; unfinished or failed cleanup
+  cannot certify a complete source snapshot.
 - Distinguish a completed negative check from a tool outage in the shared
   runtime prompt. Required failed or unrun checks cannot establish completion
   or merge readiness, including persona-off and audit prompt paths.

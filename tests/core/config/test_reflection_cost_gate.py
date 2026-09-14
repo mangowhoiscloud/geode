@@ -60,6 +60,7 @@ class _Recorder:
     def __init__(self) -> None:
         self.calls: list[int] = []  # round_count at each call
         self.policy_sources: list[PolicySourceBundle | None] = []
+        self.correlations: list[dict[str, Any]] = []
 
     async def fake_reflect_async(
         self,
@@ -71,9 +72,11 @@ class _Recorder:
         provider: str | None = None,
         source: str | None = None,
         policy_sources: PolicySourceBundle | None = None,
+        correlation: dict[str, Any] | None = None,
     ) -> None:
         self.calls.append(state.round_count)
         self.policy_sources.append(policy_sources)
+        self.correlations.append(dict(correlation or {}))
 
 
 @pytest.fixture
@@ -116,6 +119,11 @@ def _maybe_reflect_runner(
         _source = "api_key"
         _new_adapter = object()
         _policy_sources = EMPTY_POLICY_SOURCES
+        _current_step_snapshot = None
+        _session_id = "reflection-cost-gate"
+        _turn_id = ""
+        _session_generation = 1
+        _verify_attempt = 0
 
     bound = AgenticLoop._maybe_reflect.__get__(_StubSelf(), _StubSelf)
     asyncio.run(bound([]))
@@ -132,6 +140,23 @@ def test_interval_one_runs_every_round(
         _maybe_reflect_runner(state, monkeypatch, _stub_reflect_async, interval=1)
     assert _stub_reflect_async.calls == [1, 2, 3, 4, 5]
     assert all(sources is EMPTY_POLICY_SOURCES for sources in _stub_reflect_async.policy_sources)
+    assert (
+        _stub_reflect_async.correlations
+        == [
+            {
+                "session_id": "reflection-cost-gate",
+                "turn_id": "",
+                "run_id": "",
+                "step_id": "",
+                "session_generation": 1,
+                "verify_attempt": 0,
+                "tool_call_id": "",
+                "llm_call_id": "",
+                "llm_attempt_id": "",
+            }
+        ]
+        * 5
+    )
 
 
 def test_interval_three_runs_rounds_one_four_seven(

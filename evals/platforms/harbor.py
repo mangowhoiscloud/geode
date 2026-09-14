@@ -147,6 +147,7 @@ def _usage_event_metadata(event: Any) -> dict[str, Any]:
     source_id = getattr(event, "id", None)
     occurred_at = getattr(event, "occurred_at", None)
     payload_hash = getattr(event, "payload_hash", None)
+    purpose = payload.get("purpose")
     return {
         "session_id": identifier(getattr(event, "session_id", None)),
         "llm_call_id": identifier(getattr(event, "llm_call_id", None)),
@@ -165,6 +166,19 @@ def _usage_event_metadata(event: Any) -> dict[str, Any]:
         "model": identifier(payload.get("model")),
         "provider": identifier(payload.get("provider")),
         "adapter": identifier(payload.get("adapter")),
+        "purpose": purpose
+        if isinstance(purpose, str)
+        and purpose
+        in {
+            "agentic_loop",
+            "cognitive_reflection",
+            "candidate_judge",
+            "text_completion",
+            "hosted_search",
+        }
+        else None,
+        "source": identifier(payload.get("source"), 80),
+        "effort": identifier(payload.get("effort"), 32),
         "error_type": identifier(payload.get("error_type"), 128),
         "usage": counters,
     }
@@ -201,26 +215,26 @@ def _summarize_usage(events: list[Any], *, known_sink_failure: bool = False) -> 
     usages = [e.payload.get("usage") for e in calls]
     recorded = [u for u in usages if isinstance(u, dict)]
     started = [e for e in events if e.action == "llm.call.started"]
-    start_ids = [e.llm_attempt_id for e in started]
-    end_ids = [e.llm_attempt_id for e in calls]
+    start_ids = [(getattr(e, "session_id", None), e.llm_attempt_id) for e in started]
+    end_ids = [(getattr(e, "session_id", None), e.llm_attempt_id) for e in calls]
     paired = (
         bool(start_ids)
-        and all(start_ids)
-        and all(end_ids)
+        and all(session and attempt for session, attempt in start_ids + end_ids)
         and len(set(start_ids)) == len(start_ids)
         and len(set(end_ids)) == len(end_ids)
         and set(start_ids) == set(end_ids)
     )
     complete = paired and len(recorded) == len(calls) and not degraded
     result: dict[str, Any] = {
-        "scope": "recorded-agentic-loop-attempts-only",
+        "scope": "recorded-runtime-llm-attempts-only",
         "whole_runtime_complete": False,
         "observation_status": "degraded" if degraded else "no_known_faults",
         "known_sink_failure": known_sink_failure,
         "mapping_anomaly_events": mapping_anomalies,
         "limitation": (
-            "cognitive reflection, hosted search and auxiliary text calls are not fully observed; "
-            "turn-final judge calls share loop accounting"
+            "whole-runtime producer coverage and background-writer quiescence require "
+            "separate verification; paired retained events alone cannot establish either; "
+            "turn-final judge calls share loop accounting; legacy call purpose remains unknown"
         ),
         "call_events": len(calls),
         "terminal_event_count": len(calls),

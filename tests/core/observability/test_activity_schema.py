@@ -393,6 +393,46 @@ def test_llm_activity_missing_cache_is_not_observed_zero(usage: dict[str, None])
     assert payload["cache_write_tokens"] is None
 
 
+@pytest.mark.parametrize("purpose", ["agentic_loop", "cognitive_reflection", "candidate_judge"])
+def test_llm_activity_preserves_requested_effort_and_call_purpose(purpose: str) -> None:
+    row = map_hook_to_activity(
+        HookEvent.LLM_CALL_ENDED,
+        {
+            "purpose": purpose,
+            "source": "subscription",
+            "effort": "medium",
+            "usage": {"input_tokens": 0, "cached_input_tokens": None},
+        },
+        run_id="purpose-test",
+    )
+    assert row.schema_version == 7
+    reparsed = TypeAdapter(TypedActivityRow).validate_python(row.model_dump())
+    details = reparsed.model_dump()["details"]
+    assert (details["purpose"], details["source"], details["effort"]) == (
+        purpose,
+        "subscription",
+        "medium",
+    )
+    assert details["usage"]["input_tokens"] == 0
+    assert details["usage"]["cached_input_tokens"] is None
+
+
+def test_legacy_llm_activity_does_not_infer_root_effort_or_purpose() -> None:
+    row = map_hook_to_activity(HookEvent.LLM_CALL_ENDED, {}, run_id="legacy")
+    legacy = row.model_dump(exclude_none=True)
+    legacy["schema_version"] = 6
+    details = TypeAdapter(TypedActivityRow).validate_python(legacy).model_dump()["details"]
+    assert details["purpose"] is details["source"] is details["effort"] is None
+
+
+@pytest.mark.parametrize(
+    "field,value", [("purpose", "unknown"), ("effort", "max /private"), ("source", "a@b.com")]
+)
+def test_llm_activity_rejects_invalid_purpose_route_metadata(field: str, value: str) -> None:
+    row = map_hook_to_activity(HookEvent.LLM_CALL_ENDED, {field: value}, run_id="invalid")
+    assert isinstance(row, GenericActivityRow)
+
+
 def test_k2_raw_user_content_never_persists_to_timeline() -> None:
     """Privacy contract: raw ``user_input`` strings, cognitive-state
     snapshots, and full tool results must NOT appear in the row details —

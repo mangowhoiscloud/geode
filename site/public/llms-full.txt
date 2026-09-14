@@ -3367,7 +3367,11 @@ GEODE의 관측성은 목적별 저장소를 사용합니다. query/filter/aggre
 
 UI는 입력·출력과 캐시 읽기·쓰기 수를 구분합니다. OpenAI의 입력에는 캐시가 포함되지만 Anthropic의 일반 입력·캐시 읽기·생성은 분리돼 있습니다. cache\_hit\_rate는 읽기 / (읽기 + 생성) 비율이지 프롬프트 전체의 캐시 적중률이 아닙니다. API 단가 추정은 구독 계정 청구액이 아닙니다.
 
-Durable 호출 기록은 명시적인 0과 미보고 값을 구분합니다. Harbor는 정확한 session과 attempt ID로 시작·종료를 결합하며, 불완전한 합계는 null, 복구된 부분합은 observed\_sum으로 남깁니다. 범위는 recorded-agentic-loop-attempts-only이고 whole\_runtime\_complete=false입니다. Reflection·judge·hosted search·text 호출 전체의 회계로 확대 해석하지 않습니다.
+Durable 호출 기록은 명시적인 0과 미보고 값을 구분합니다. Harbor는 session과 attempt ID로 시작·종료를 결합하며, 불완전한 합계는 null, 관측된 부분합은 observed\_sum으로 남깁니다. 새 기록은 action loop뿐 아니라 연결된 reflection·judge·hosted search·text 호출에 purpose, credential source, requested effort를 남깁니다. 범위는 recorded-runtime-llm-attempts-only이며 whole\_runtime\_complete=false입니다. 과거 loop-only 기록의 범위나 누락값은 바꾸지 않습니다.
+
+Native Harbor 실행은 종료 시 새 background 작업을 막고, 이미 시작한 Dreaming 작업은 원래 agent deadline 안에서만 마무리합니다. 기한 이후의 정리 시간에는 새 모델 실행을 허용하지 않습니다. worker와 background 작업을 정리한 뒤 각 세션의 관측 상태와 canonical trajectory를 내보냅니다. 저장 장애, 미종료 작업, 불완전한 export는 관측 검증을 통과할 수 없습니다.
+
+읽기 전용 검증기는 동결된 실행·task·source 식별자, 호출 합계, session 종료 상태, ATIF와 derived replay의 해시를 대조합니다. 필수 cache 값의 부재와 관측 파일의 손상은 별도 판정합니다. 이 결과만으로 다음 실행을 승인하지는 않습니다. 자원·timeout·재시도·인증 preflight와 해당 runtime의 호출 생산자 및 종료 경로 검증이 함께 필요하며, 검증 실패가 task verifier의 원래 reward를 바꾸지는 않습니다.
 
 Legacy 월별 원장과 일부 UI 합산은 필드 부재를 끝까지 보존하지 않습니다. 과거 캐시 0은 미사용 증거가 아니며, 기록 범위는 벤치마크의 성공률 분모와도 다릅니다. 보정 자료는 원본 결과를 덮어쓰지 않고 별도 증거로 연결합니다.
 
@@ -7171,8 +7175,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 581 |
-| 테스트 Python 파일 | 709 |
+| 프로덕션 Python 파일 | 582 |
+| 테스트 Python 파일 | 713 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |

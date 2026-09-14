@@ -519,35 +519,11 @@ def _run_agentic(
     # the model and only fail at execution time as "Unknown tool").
     allowed_tool_names = set(bound_tool_plan.tool_names) | set(transient_handlers)
 
-    # 3. Build ToolExecutor (auto_approve=True for sub-agents)
-    from core.agent.tool_executor import ToolExecutor
-    from core.wiring.bootstrap import build_middleware_registry
-
-    executor = ToolExecutor(
-        bound_tool_plan=bound_tool_plan,
-        transient_handlers=transient_handlers,
-        auto_approve=True,  # Sub-agents skip HITL prompts
-        # PR-SUBAGENT-ROLES (2026-07-02) — enforce the parent's denied set
-        # on the EXISTING executor rail, not only via handler filtering.
-        # ``run_bash`` and collaboration tools are special-cased in
-        # ``ToolExecutor.aexecute`` BEFORE handler lookup, so removing them
-        # from the handler dict is theater (same finding as the headless
-        # denylist, PR-EXEC-HARDENING). This is what makes a role
-        # allowlist (e.g. repo_researcher without run_bash) actually hold.
-        denied_tools=(
-            frozenset(request.denied_tools) | SUBAGENT_CONTROL_TOOLS | profile.denied_tools
-        ),
-        allowed_tools=frozenset(allowed_tool_names),
-        interactive_approval=False,
-        middleware_registry=(
-            build_middleware_registry()
-            if middleware_builder is None
-            else middleware_builder(policy_sources=policy_sources)
-        ),
-    )
-
+    # Construct the executor below only after its shared event owner exists.
     # 5. Build AgenticLoop
     from core.agent.loop import AgenticLoop, AgenticLoopConfig
+    from core.agent.tool_executor import ToolExecutor
+    from core.wiring.bootstrap import build_middleware_registry
 
     # S2-wire (2026-05-18): propagate AgentDefinition.system_prompt into the
     # spawned loop so AgentDefinition-driven sub-agents (seed_generator etc.)
@@ -591,10 +567,27 @@ def _run_agentic(
             if not task.cancelling():
                 task.cancel("Worker cancelled by SIGTERM")
 
-        if handle_sigterm:
-            event_loop.add_signal_handler(signal.SIGTERM, _cancel_worker)
         loop: AgenticLoop | None = None
         try:
+            if handle_sigterm:
+                event_loop.add_signal_handler(signal.SIGTERM, _cancel_worker)
+            executor = ToolExecutor(
+                bound_tool_plan=bound_tool_plan,
+                transient_handlers=transient_handlers,
+                auto_approve=True,
+                # Keep denial on the executor rail: special tools bypass handler lookup.
+                denied_tools=(
+                    frozenset(request.denied_tools) | SUBAGENT_CONTROL_TOOLS | profile.denied_tools
+                ),
+                allowed_tools=frozenset(allowed_tool_names),
+                interactive_approval=False,
+                hooks=worker_hooks,
+                middleware_registry=(
+                    build_middleware_registry(events=worker_hooks)
+                    if middleware_builder is None
+                    else middleware_builder(events=worker_hooks, policy_sources=policy_sources)
+                ),
+            )
             loop = AgenticLoop(
                 conversation,
                 executor,
@@ -759,7 +752,11 @@ def _run_agentic(
                     event_loop.remove_signal_handler(signal.SIGTERM)
                     signal.signal(signal.SIGTERM, previous_sigterm)
 
-    return run_process_coroutine(_execute_worker())
+    try:
+        return run_process_coroutine(_execute_worker())
+    finally:
+        if worker_hooks is not None and not worker_hooks.closed:
+            worker_hooks.close()
 
 
 # PR-DEFECT-AB (2026-05-24) — propagate AgenticLoop failures past the

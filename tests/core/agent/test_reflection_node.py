@@ -20,6 +20,7 @@ from core.agent.cognitive_state import CognitiveState
 from core.agent.loop import _reflection
 from core.agent.loop._reflection import REFLECTION_TOOL_NAME
 from core.config.policy_source import EMPTY_POLICY_SOURCES, PolicySourceBundle
+from core.hooks import HookCorrelation
 
 # ---------------------------------------------------------------------------
 # Pure-function invariants (no LLM)
@@ -302,6 +303,7 @@ def test_maybe_reflect_inherits_loop_model_provider_source(
         provider: str | None = None,
         source: str | None = None,
         policy_sources: PolicySourceBundle | None = None,
+        correlation: dict[str, Any] | None = None,
     ) -> None:
         captured.update(
             model=model,
@@ -309,6 +311,7 @@ def test_maybe_reflect_inherits_loop_model_provider_source(
             provider=provider,
             source=source,
             policy_sources=policy_sources,
+            correlation=correlation,
         )
 
     monkeypatch.setattr(_reflection, "reflect_async", _fake_reflect_async)
@@ -332,6 +335,9 @@ def test_maybe_reflect_inherits_loop_model_provider_source(
             _source = "api_key"
             _new_adapter = _Adapter()
             _policy_sources = EMPTY_POLICY_SOURCES
+            _current_step_snapshot = SimpleNamespace(
+                correlation=HookCorrelation(session_id="s", turn_id="t", step_id="t:step-2")
+            )
 
         bound = AgenticLoop._maybe_reflect.__get__(_StubSelf(), _StubSelf)
         asyncio.run(bound([]))
@@ -342,6 +348,11 @@ def test_maybe_reflect_inherits_loop_model_provider_source(
         object.__setattr__(settings, "cognitive_reflection_interval", old_interval)
 
     assert captured.pop("policy_sources") is EMPTY_POLICY_SOURCES
+    correlation = captured.pop("correlation")
+    assert correlation["session_id"] == "s"
+    assert correlation["turn_id"] == "t"
+    assert correlation["step_id"] == "t:step-2"
+    assert correlation["llm_call_id"] == ""
     assert captured == {
         "model": "gpt-5.5",
         "max_tokens": 321,
@@ -369,12 +380,14 @@ def test_maybe_reflect_configured_model_stays_explicit(
         provider: str | None = None,
         source: str | None = None,
         policy_sources: PolicySourceBundle | None = None,
+        correlation: dict[str, Any] | None = None,
     ) -> None:
         captured.update(
             model=model,
             provider=provider,
             source=source,
             policy_sources=policy_sources,
+            correlation=correlation,
         )
 
     monkeypatch.setattr(_reflection, "reflect_async", _fake_reflect_async)
@@ -393,6 +406,11 @@ def test_maybe_reflect_configured_model_stays_explicit(
             _source = "subscription"
             _new_adapter = object()
             _policy_sources = EMPTY_POLICY_SOURCES
+            _current_step_snapshot = None
+            _session_id = "s-fallback"
+            _turn_id = "t-fallback"
+            _session_generation = 2
+            _verify_attempt = 1
 
         bound = AgenticLoop._maybe_reflect.__get__(_StubSelf(), _StubSelf)
         asyncio.run(bound([]))
@@ -402,6 +420,12 @@ def test_maybe_reflect_configured_model_stays_explicit(
         object.__setattr__(settings, "cognitive_reflection_interval", old_interval)
 
     assert captured.pop("policy_sources") is EMPTY_POLICY_SOURCES
+    correlation = captured.pop("correlation")
+    assert correlation["session_id"] == "s-fallback"
+    assert correlation["turn_id"] == "t-fallback"
+    assert correlation["step_id"] == ""
+    assert correlation["session_generation"] == 2
+    assert correlation["verify_attempt"] == 1
     assert captured == {
         "model": "claude-haiku-4-5-20251001",
         "provider": None,

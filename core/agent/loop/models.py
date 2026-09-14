@@ -8,12 +8,13 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from core.hooks import HookCorrelation
+    from core.hooks import HookCorrelation, RuntimeEventBus
     from core.llm.token_tracker import LLMUsage
     from core.tools.plan import BoundToolPlan
 
@@ -174,7 +175,12 @@ _EXHAUSTED_SYSTEM = (
 )
 
 
-async def _context_exhausted_message(user_input: str) -> str:
+async def _context_exhausted_message(
+    user_input: str,
+    *,
+    hooks: RuntimeEventBus | None = None,
+    correlation: Mapping[str, Any] | None = None,
+) -> str:
     """Generate context-exhausted message in the user's language via lightweight LLM call.
 
     PR-EXTRACT-LEARNING-MODELS-ADAPTER (2026-05-28) — dispatches through
@@ -213,6 +219,8 @@ async def _context_exhausted_message(user_input: str) -> str:
             max_tokens=150,
             prefer_provider=provider,
             prefer_source=source,
+            hooks=hooks,
+            correlation=correlation,
         )
     except BillingError:
         log.debug("Exhausted message: adapter credit exhausted — static fallback")

@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     # exists solely so mypy / IDEs can resolve the annotations.
     from core.hooks import MiddlewareRegistry, RuntimeEventBus
     from core.memory.context import ContextAssembler
+    from core.memory.dreaming import DreamingService
     from core.memory.organization import MonoLakeOrganizationMemory
     from core.memory.port import SessionStorePort
     from core.memory.project import ProjectMemory
@@ -251,6 +252,7 @@ def build_hooks(
     feature_hook_registrar: Callable[[HookSystem], None] | None = None,
     user_profile: FileBasedUserProfile | None = None,
     hooks: HookSystem | None = None,
+    dreaming_service: DreamingService | None = None,
 ) -> tuple[HookSystem, HookEventStore, Any]:
     """Build HookSystem with bounded SQLite persistence and metrics."""
     from core.observability.hook_persistence import HookPersistenceSink
@@ -435,7 +437,7 @@ def build_hooks(
     def _reg_llm_extract() -> None:
         from core.hooks.llm_extract_learning import make_llm_extract_handler
 
-        name, handler = make_llm_extract_handler(profile_provider=lambda: user_profile)
+        name, handler = make_llm_extract_handler(profile_provider=lambda: user_profile, hooks=hooks)
         hooks.register(
             HookEvent.TURN_COMPLETED,
             handler,
@@ -449,7 +451,7 @@ def build_hooks(
     def _reg_turn_dreaming() -> None:
         from core.memory.dreaming import make_dreaming_handler
 
-        name, handler = make_dreaming_handler()
+        name, handler = make_dreaming_handler(hooks=hooks, service=dreaming_service)
         hooks.register(
             HookEvent.TURN_COMPLETED,
             handler,

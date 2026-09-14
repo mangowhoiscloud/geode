@@ -295,7 +295,7 @@ def test_thin_observer_persists_missing_zero_and_positive_cache(
 
 
 def test_recorded_attempts_keep_only_numeric_allowlist_and_source_links() -> None:
-    start = SimpleNamespace(action="llm.call.started", llm_attempt_id="c:1")
+    start = SimpleNamespace(action="llm.call.started", session_id="s", llm_attempt_id="c:1")
     terminal = SimpleNamespace(
         action="llm.call.ended",
         session_id="s",
@@ -308,6 +308,9 @@ def test_recorded_attempts_keep_only_numeric_allowlist_and_source_links() -> Non
             "model": "gpt-5.6-sol",
             "provider": "openai",
             "adapter": "codex_oauth",
+            "purpose": "cognitive_reflection",
+            "source": "subscription",
+            "effort": "medium",
             "error_type": None,
             "response_id": "private-response",
             "arguments": {"private": True},
@@ -337,6 +340,9 @@ def test_recorded_attempts_keep_only_numeric_allowlist_and_source_links() -> Non
             "model": "gpt-5.6-sol",
             "provider": "openai",
             "adapter": "codex_oauth",
+            "purpose": "cognitive_reflection",
+            "source": "subscription",
+            "effort": "medium",
             "error_type": None,
             "usage": {
                 "input_tokens": 0,
@@ -359,6 +365,23 @@ def test_recorded_attempts_keep_only_numeric_allowlist_and_source_links() -> Non
     assert open_call["attempt_pairing_complete"] is False
 
 
+def test_usage_pairing_cannot_borrow_another_sessions_terminal() -> None:
+    start = SimpleNamespace(action="llm.call.started", session_id="a", llm_attempt_id="c:1")
+    end = SimpleNamespace(
+        action="llm.call.ended",
+        session_id="b",
+        llm_attempt_id="c:1",
+        payload={"usage": {"input_tokens": 0}},
+    )
+    mismatched = _summarize_usage([start, end])
+    assert mismatched["attempt_pairing_complete"] is False
+    assert mismatched["input_tokens"] is None
+    end.session_id = "a"
+    assert _summarize_usage([start, end])["input_tokens"] == 0
+    start.session_id = end.session_id = None
+    assert _summarize_usage([start, end])["attempt_pairing_complete"] is False
+
+
 def test_recorded_attempts_reject_malformed_metadata_without_invented_zero() -> None:
     event = SimpleNamespace(
         action="llm.call.ended",
@@ -369,6 +392,9 @@ def test_recorded_attempts_reject_malformed_metadata_without_invented_zero() -> 
         payload={
             "model": "x" * 257,
             "provider": "private provider text",
+            "purpose": ["private"],
+            "effort": "private effort text",
+            "source": "/private/source",
             "error_type": "private failure text",
             "usage": {
                 "input_tokens": False,
@@ -387,6 +413,7 @@ def test_recorded_attempts_reject_malformed_metadata_without_invented_zero() -> 
         is None
     )
     assert attempt["model"] is attempt["provider"] is attempt["error_type"] is None
+    assert attempt["purpose"] is attempt["effort"] is attempt["source"] is None
     assert attempt["usage"] == {
         "input_tokens": None,
         "output_tokens": None,
@@ -546,7 +573,7 @@ def test_thin_observer_preserves_canonical_evidence_when_atif_export_fails(
     for name in ("geode-trajectory.json", "geode-trajectory.private.json"):
         trajectory = json.loads((agent.logs_dir / name).read_text())
         assert trajectory["runtime_event_refs"]
-        assert trajectory["outcome"]["usage"]["scope"] == "recorded-agentic-loop-attempts-only"
+        assert trajectory["outcome"]["usage"]["scope"] == "recorded-runtime-llm-attempts-only"
 
 
 @pytest.mark.parametrize("phase", ["session_error", "hooks", "export"])

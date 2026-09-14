@@ -182,6 +182,7 @@ class ToolCallProcessor:
             tool_plan_generation=(step.tool_plan_generation if step is not None else 0),
             bound_tool_plan=(step.bound_tool_plan if step is not None else None),
             agent_loop=self._agent_loop,
+            hooks=self._hooks,
             batch_cost_approved=batch_cost_approved,
         )
 

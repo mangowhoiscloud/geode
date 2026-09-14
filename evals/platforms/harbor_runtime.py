@@ -21,7 +21,7 @@ import sqlite3
 import tarfile
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -408,6 +408,7 @@ async def _finalize_native(
     succeeded: bool,
     metadata: dict[str, Any],
     event_loop: asyncio.AbstractEventLoop | None,
+    execution_deadline: float | None = None,
 ) -> BaseException | None:
     """Recover existing exports independently; never replace an execution error."""
     from core.memory.atomic_write import atomic_write_json
@@ -416,6 +417,12 @@ async def _finalize_native(
 
     errors: list[dict[str, str]] = []
     first_error: BaseException | None = None
+    finalization_started = time.monotonic()
+    finalization_deadline = (
+        execution_deadline if execution_deadline is not None else finalization_started
+    ) + _FINALIZE_SECONDS
+    if not succeeded:
+        finalization_deadline = min(finalization_deadline, finalization_started + _FINALIZE_SECONDS)
 
     def record_error(stage: str, error: BaseException) -> None:
         nonlocal first_error
@@ -433,6 +440,13 @@ async def _finalize_native(
             yield
         except BaseException as error:
             record_error(name, error)
+
+    dreaming = runtime.dreaming_service if runtime is not None else None
+    if dreaming is not None:
+        with stage("background_admission"):
+            dreaming.stop_admission()
+            if not succeeded:
+                dreaming.cancel()
 
     if executor is not None and loop is not None:
         with stage("children"):
@@ -458,6 +472,16 @@ async def _finalize_native(
                     for child in manager.list_collaboration_runs(loop._session_id)
                 ):
                     raise RuntimeError("child shutdown incomplete")
+    if dreaming is not None:
+        if succeeded and execution_deadline is not None:
+            # Agent budget ending switches to cancellation, not a new execution window.
+            with stage("background_settle"), suppress(TimeoutError):
+                await dreaming.settle(deadline=execution_deadline)
+        with stage("background_drain"):
+            await dreaming.aclose(deadline=finalization_deadline)
+    metadata["background_lifecycle_policy"] = (
+        "admitted-jobs-within-agent-deadline-then-cancellation-only-grace"
+    )
     if loop is not None:
         with stage("session_end"):
             if succeeded:
@@ -470,7 +494,7 @@ async def _finalize_native(
             services.close()
     if runtime is not None:
         with stage("runtime_shutdown"):
-            runtime.shutdown()
+            runtime.shutdown(background_timeout_s=0)
 
     events: list[Any] = []
     reader = None
@@ -638,6 +662,8 @@ async def _run_native(args: argparse.Namespace) -> int:
         ):
             raise RuntimeError("runtime model/credential isolation preflight failed")
         runtime = build_runtime()
+        if runtime.dreaming_service is not None:
+            runtime.dreaming_service.set_deadline(started + args.timeout)
         services = build_shared_services(
             mcp_manager=runtime.mcp_manager,
             skill_registry=runtime.skill_registry,
@@ -705,6 +731,7 @@ async def _run_native(args: argparse.Namespace) -> int:
                     "score_authority": "Harbor task verifier, not this runtime receipt",
                 },
                 event_loop=event_loop if signal_installed else None,
+                execution_deadline=started + args.timeout,
             )
             finalizer_returned = True
         except BaseException as exc:

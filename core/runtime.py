@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from core.config.policy_source import PolicySourceBundle
     from core.extensions import ExtensionDecision
     from core.memory.context import ContextAssembler
+    from core.memory.dreaming import DreamingService
     from core.memory.organization import MonoLakeOrganizationMemory
     from core.memory.project import ProjectMemory
     from core.observability.run_event import RunEventSinkProvider
@@ -109,6 +110,7 @@ class RuntimeLifecycleConfig:
     hook_metrics: LatencyMetrics
     trigger_manager: TriggerManager | None = None
     scheduler_service: Any | None = None
+    dreaming_service: DreamingService | None = None
 
 
 @dataclass
@@ -198,6 +200,7 @@ class GeodeRuntime:
         self.hook_metrics = lifecycle.hook_metrics
         self.trigger_manager = lifecycle.trigger_manager
         self.scheduler_service = lifecycle.scheduler_service
+        self.dreaming_service = lifecycle.dreaming_service
         self.mcp_manager = integration.mcp_manager
         self.skill_registry = integration.skill_registry
         self.policy_sources = integration.policy_sources
@@ -382,6 +385,7 @@ class GeodeRuntime:
             lifecycle=RuntimeLifecycleConfig(
                 config_watcher=core["config_watcher"],
                 hook_metrics=core["hook_metrics"],
+                dreaming_service=core["dreaming_service"],
                 **scheduling,
             ),
             integration=RuntimeIntegrationConfig(
@@ -427,6 +431,10 @@ class GeodeRuntime:
         user_profile: Any,
     ) -> dict[str, Any]:
         """Stage 1: Build core infrastructure (hooks, auth, LLM, lanes)."""
+        from core.memory.dreaming import DreamingService
+
+        hooks = RuntimeEventBus()
+        dreaming_service = DreamingService(hooks=hooks)
         hooks, event_store, hook_metrics = bootstrap.build_hooks(
             session_key=session_key,
             run_id=run_id,
@@ -434,6 +442,8 @@ class GeodeRuntime:
             activity_sink_provider=activity_sink_provider,
             feature_hook_registrar=feature_hook_registrar,
             user_profile=user_profile,
+            hooks=hooks,
+            dreaming_service=dreaming_service,
         )
         hook_registry = HookRegistry(events=hooks)
         middleware_registry = (
@@ -456,6 +466,7 @@ class GeodeRuntime:
         lane_queue = infra.build_default_lanes()
         return {
             "hooks": hooks,
+            "dreaming_service": dreaming_service,
             "hook_registry": hook_registry,
             "middleware_registry": middleware_registry,
             "event_store": event_store,
@@ -654,11 +665,17 @@ class GeodeRuntime:
 
         return health
 
-    def shutdown(self) -> None:
+    def shutdown(self, *, background_timeout_s: float = 5.0) -> None:
         """Clean shutdown of background components."""
         if self._shutdown:
             return
         self._shutdown = True
+        background_error: BaseException | None = None
+        if self.dreaming_service is not None:
+            try:
+                self.dreaming_service.close(timeout_s=background_timeout_s)
+            except BaseException as exc:
+                background_error = exc
         try:
             self.config_watcher.stop()
         except Exception:
@@ -680,3 +697,6 @@ class GeodeRuntime:
             except Exception:
                 log.warning("MCP manager shutdown failed", exc_info=True)
         self.hooks.close()
+        if background_error is not None:
+            self._shutdown = False  # A failed join must not become a successful idempotent retry.
+            raise background_error

@@ -40,12 +40,16 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 
 from core.orchestration.context_budget import (
     ContextBudgetPolicy,
     resolve_context_budget_policy,
 )
+
+if TYPE_CHECKING:
+    from core.hooks.system import RuntimeEventBus
 
 log = logging.getLogger(__name__)
 
@@ -86,6 +90,8 @@ async def compact_conversation(
     session_id: str | None = None,
     session_manager: Any | None = None,
     trigger: str = "compact",
+    hooks: RuntimeEventBus | None = None,
+    correlation: Mapping[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], bool]:
     """Compact conversation via 4-phase pipeline.
 
@@ -130,6 +136,8 @@ async def compact_conversation(
             provider,
             model,
             max_tokens=summary_tokens,
+            hooks=hooks,
+            correlation={**(correlation or {}), "session_id": session_id or ""},
         )
         if summary:
             break
@@ -558,6 +566,8 @@ async def _call_summarize(
     model: str,
     *,
     max_tokens: int,
+    hooks: RuntimeEventBus | None = None,
+    correlation: Mapping[str, Any] | None = None,
 ) -> str | None:
     """Call the LLM to generate a conversation summary.
 
@@ -591,6 +601,8 @@ async def _call_summarize(
             max_tokens=max_tokens,
             prefer_provider=canonical,
             prefer_source=source,
+            hooks=hooks,
+            correlation=correlation,
         )
     except BillingError:
         log.warning(

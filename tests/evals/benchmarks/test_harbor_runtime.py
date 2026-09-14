@@ -57,6 +57,7 @@ def test_usage_projects_partial_evidence_without_fabricating_totals() -> None:
     def event(cache: int | None, call: str) -> SimpleNamespace:
         return SimpleNamespace(
             action="llm.call.ended",
+            session_id="usage-session",
             llm_call_id=call,
             llm_attempt_id=call + ":attempt-1",
             payload={
@@ -71,7 +72,11 @@ def test_usage_projects_partial_evidence_without_fabricating_totals() -> None:
 
     def paired(*calls: SimpleNamespace) -> list[SimpleNamespace]:
         return [
-            SimpleNamespace(action="llm.call.started", llm_attempt_id=c.llm_attempt_id)
+            SimpleNamespace(
+                action="llm.call.started",
+                session_id="usage-session",
+                llm_attempt_id=c.llm_attempt_id,
+            )
             for c in calls
         ] + list(calls)
 
@@ -88,6 +93,7 @@ def test_usage_projects_partial_evidence_without_fabricating_totals() -> None:
     assert _summarize_usage([])["input_tokens"] is None
     failed = SimpleNamespace(
         action="llm.call.ended",
+        session_id="usage-session",
         llm_attempt_id="c:attempt-1",
         payload={"error_type": "TimeoutError"},
     )
@@ -318,6 +324,8 @@ def native_trial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNames
     )
     executor = SimpleNamespace(_sub_agent_manager=None, _session_scope_denial=lambda name: None)
     runtime = MagicMock()
+    runtime.dreaming_service.settle = AsyncMock()
+    runtime.dreaming_service.aclose = AsyncMock()
     runtime.event_store.db_path = tmp_path / "never-opened.db"
     services = MagicMock()
     services.create_session.return_value = (executor, loop)
@@ -332,9 +340,12 @@ def native_trial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNames
     monkeypatch.setattr("core.wiring.runtime.build_runtime", runtime_builder)
     monkeypatch.setattr("core.wiring.runtime.build_shared_services", services_builder)
     events = [
-        SimpleNamespace(action="llm.call.started", llm_attempt_id="fake-attempt"),
+        SimpleNamespace(
+            action="llm.call.started", session_id="fake-session", llm_attempt_id="fake-attempt"
+        ),
         SimpleNamespace(
             action="llm.call.ended",
+            session_id="fake-session",
             llm_attempt_id="fake-attempt",
             payload={
                 "usage": {
@@ -406,6 +417,57 @@ def native_trial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNames
         export_trajectory=export_trajectory,
         events=events,
     )
+
+
+@pytest.mark.parametrize("success", [False, True])
+def test_native_dreaming_uses_existing_deadlines_and_drains_before_session_end(
+    native_trial: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, success: bool
+) -> None:
+    trial = native_trial
+    now = [100.0]
+    monkeypatch.setattr(harbor_runtime.time, "monotonic", lambda: now[0])
+    order: list[str] = []
+    primary = ValueError("synthetic primary")
+    if not success:
+        trial.loop.arun.side_effect = primary
+    dreaming = trial.runtime.dreaming_service
+    dreaming.stop_admission.side_effect = lambda: order.append("stop_admission")
+    dreaming.cancel.side_effect = lambda: order.append("cancel")
+
+    async def settle(*, deadline: float) -> None:
+        order.append("settle")
+        assert deadline == 100 + trial.args.timeout
+
+    async def close(*, deadline: float) -> None:
+        order.append("drain")
+        expected = (100 + trial.args.timeout if success else 100) + harbor_runtime._FINALIZE_SECONDS
+        assert deadline == expected
+        assert deadline - now[0] == expected - 107
+
+    async def child_wait(*_args, **_kwargs):
+        now[0] += 7  # Child cleanup consumes the same existing grace, not a fresh stage budget.
+
+    manager = MagicMock()
+    manager.list_collaboration_runs.return_value = [SimpleNamespace(task_id="child", status="done")]
+    manager.wait_for_task = AsyncMock(side_effect=child_wait)
+    trial.executor._sub_agent_manager = manager
+    dreaming.settle.side_effect = settle
+    dreaming.aclose.side_effect = close
+    trial.loop.amark_session_completed.side_effect = lambda: order.append("session_end")
+    trial.loop.amark_session_error.side_effect = lambda: order.append("session_end")
+    trial.services.close.side_effect = lambda: order.append("services_close")
+    if success:
+        assert asyncio.run(_run_native(trial.args)) == 0
+    else:
+        with pytest.raises(ValueError) as caught:
+            asyncio.run(_run_native(trial.args))
+        assert caught.value is primary
+    assert order == (
+        ["stop_admission", "settle", "drain", "session_end", "services_close"]
+        if success
+        else ["stop_admission", "cancel", "drain", "session_end", "services_close"]
+    )
+    trial.runtime.shutdown.assert_called_once_with(background_timeout_s=0)
 
 
 @pytest.mark.parametrize(
@@ -492,6 +554,7 @@ def test_native_bootstrap_failure_still_records_receipt(
     "failure_stage",
     [
         "child_wait",
+        "background_drain",
         "session_end",
         "services_close",
         "runtime_shutdown",
@@ -529,6 +592,8 @@ def test_native_failure_matrix_preserves_primary_and_other_exports(
         manager.list_collaboration_runs.return_value = children
         manager.wait_for_task = AsyncMock(side_effect=[secondary, children[1]])
         trial.executor._sub_agent_manager = manager
+    elif failure_stage == "background_drain":
+        trial.runtime.dreaming_service.aclose.side_effect = secondary
     elif failure_stage in {"session_end", "interrupted_finalization"}:
         if failure_stage == "interrupted_finalization":
             secondary = asyncio.CancelledError("private second cancellation")
@@ -588,6 +653,7 @@ def test_native_failure_matrix_preserves_primary_and_other_exports(
         assert result["usage"]["input_tokens_observed_sum"] == 10
         if failure_stage in {
             "child_wait",
+            "background_drain",
             "session_end",
             "services_close",
             "runtime_shutdown",
@@ -645,7 +711,7 @@ def test_native_rejects_degraded_observation_without_discarding_exports(
     trial = native_trial
     trial.runtime.hooks.has_sink_failures = health_source == "before_close"
     if health_source == "during_close":
-        trial.runtime.shutdown.side_effect = lambda: setattr(
+        trial.runtime.shutdown.side_effect = lambda **_kwargs: setattr(
             trial.runtime.hooks, "has_sink_failures", True
         )
     if health_source == "mapping_anomaly":

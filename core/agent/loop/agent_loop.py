@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 from collections.abc import Mapping, Set
+from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
 from core.agent.conversation import ConversationContext
@@ -544,6 +545,17 @@ class AgenticLoop:
         active_middleware = getattr(self, "_middleware_registry", None)
         if active_middleware is not None:
             reflection_kwargs["middleware_registry"] = active_middleware
+        snapshot = self._current_step_snapshot
+        reflection_kwargs["correlation"] = asdict(
+            snapshot.correlation
+            if snapshot is not None
+            else HookCorrelation(
+                session_id=self._session_id,
+                turn_id=self._turn_id,
+                session_generation=self._session_generation,
+                verify_attempt=self._verify_attempt,
+            )
+        )
         await reflect_async(
             self.cognitive_state,
             tool_results,

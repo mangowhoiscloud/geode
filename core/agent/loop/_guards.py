@@ -923,7 +923,11 @@ async def _finalize_context_exhausted(
     result = _terminal_result(
         loop,
         TerminationReason.CONTEXT_EXHAUSTED,
-        await _context_exhausted_message(user_input),
+        await _context_exhausted_message(
+            user_input,
+            hooks=loop._hooks,
+            correlation={"session_id": loop._session_id, "turn_id": loop._turn_id},
+        ),
         rounds=round_idx + 1,
         error=True,
         tool_calls=loop._tool_processor.tool_log,

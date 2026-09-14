@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, cast, runtime_checkable
 
 if TYPE_CHECKING:
+    from core.hooks.system import RuntimeEventBus
     from core.tools.plan import BoundToolPlan
 
 # Valid values for tool metadata fields.
@@ -135,6 +136,7 @@ class ToolContext:
     tool_plan_generation: int = 0
     bound_tool_plan: BoundToolPlan | None = field(default=None, repr=False, compare=False)
     agent_loop: Any | None = field(default=None, repr=False, compare=False)
+    hooks: RuntimeEventBus | None = field(default=None, repr=False, compare=False)
     # Effective request metadata is written by ToolExecutor after trusted and
     # public request transforms. ToolCallProcessor consumes it for persistence,
     # privacy classification, and result offload decisions.

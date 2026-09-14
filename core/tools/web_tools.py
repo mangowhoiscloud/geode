@@ -233,6 +233,11 @@ async def _execute_web_search(kwargs: dict[str, Any]) -> dict[str, Any]:
             prefer_provider=prefer_provider,
             prefer_source=prefer_source,
             model=session_model,
+            hooks=getattr(ctx, "hooks", None),
+            correlation={
+                key: getattr(ctx, key, "")
+                for key in ("session_id", "turn_id", "step_id", "tool_call_id")
+            },
         )
     except BillingError as exc:
         return tool_error(

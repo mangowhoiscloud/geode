@@ -270,7 +270,17 @@ def _record_terminal_timeline(loop: AgenticLoop, *, status: str) -> None:
     if timeline is None:
         return
     try:
-        timeline.record_session_end(status=status)
+        hooks = getattr(loop, "_hooks", None)
+        timeline.record_session_end(
+            status=status,
+            runtime_observation_status=(
+                "unavailable"
+                if hooks is None or getattr(hooks, "closed", False) is True
+                else "degraded"
+                if getattr(hooks, "has_sink_failures", None) is not False
+                else "no_known_faults"
+            ),
+        )
     except Exception:
         log.debug("Session timeline terminal recording failed", exc_info=True)
 

@@ -617,6 +617,115 @@ def test_run_agentic_shares_one_bound_plan_with_executor_and_loop(
     assert captured == {"executor_bound": bound, "loop_bound": bound}
 
 
+@pytest.mark.parametrize("purpose", ["cognitive_reflection", "candidate_selection"])
+@pytest.mark.parametrize("native_builder", [False, True])
+def test_worker_uses_one_event_bus_through_auxiliary_dispatch(
+    monkeypatch: pytest.MonkeyPatch, purpose: str, native_builder: bool
+) -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    from core.agent.worker import _run_agentic
+    from core.hooks import HookEvent, HookSystem
+    from core.llm.adapters.base import AdapterCallRequest, AdapterCallResult, UsageSummary
+    from core.wiring.runtime import build_middleware_registry
+
+    hooks = HookSystem()
+    rows = []
+    hooks.register_prefix("LLM_CALL", lambda event, data: rows.append((event, dict(data))))
+    monkeypatch.setattr("core.wiring.bootstrap.build_worker_hooks", lambda **kwargs: hooks)
+    adapter = SimpleNamespace(
+        name="codex-oauth",
+        provider="openai",
+        source="subscription",
+        acomplete=AsyncMock(
+            return_value=AdapterCallResult(
+                text="observation",
+                stop_reason="completed",
+                usage=UsageSummary(
+                    input_tokens=10, output_tokens=2, cached_input_tokens_present=True
+                ),
+            )
+        ),
+    )
+
+    def fake_loop(conversation, executor, **kwargs):
+        assert executor._hooks is kwargs["hooks"] is hooks
+        assert executor.middleware_registry._events is hooks
+        loop = MagicMock()
+
+        async def run(_prompt):
+            await executor.middleware_registry.call_llm(
+                adapter,
+                AdapterCallRequest(model="gpt-5.6-sol", messages=()),
+                correlation={"session_id": "worker-observation"},
+                purpose=purpose,
+            )
+            return AgenticResult(text="done", termination_reason="natural")
+
+        loop.arun = run
+        loop.amark_session_completed = AsyncMock()
+        return loop
+
+    monkeypatch.setattr("core.agent.loop.AgenticLoop", fake_loop)
+    result = _run_agentic(
+        WorkerRequest(
+            task_id="worker-observation",
+            model="gpt-5.6-sol",
+            provider="openai",
+            source="subscription",
+        ),
+        _empty_tool_plan_builder,
+        middleware_builder=build_middleware_registry if native_builder else None,
+    )
+    assert result.success and hooks.closed
+    assert [event for event, _data in rows] == [
+        HookEvent.LLM_CALL_STARTED,
+        HookEvent.LLM_CALL_ENDED,
+    ]
+    assert rows[1][1]["purpose"] == purpose
+    assert rows[1][1]["session_id"] == "worker-observation"
+    assert rows[1][1]["usage"]["cached_input_tokens"] == 0
+    assert adapter.acomplete.await_count == 1
+
+
+@pytest.mark.parametrize("stage", ["middleware", "executor", "loop", "runner"])
+def test_worker_closes_event_owner_when_setup_fails(
+    monkeypatch: pytest.MonkeyPatch, stage: str
+) -> None:
+    from core.agent.worker import _run_agentic
+    from core.hooks import HookSystem, MiddlewareRegistry
+
+    hooks = HookSystem()
+    failure = RuntimeError("setup failed")
+    monkeypatch.setattr("core.wiring.bootstrap.build_worker_hooks", lambda **kwargs: hooks)
+
+    def fail(*args, **kwargs):
+        if stage == "runner":
+            args[0].close()
+        raise failure
+
+    def middleware_builder(*, events, policy_sources):
+        if stage == "middleware":
+            raise failure
+        return MiddlewareRegistry(events=events)
+
+    if stage == "executor":
+        monkeypatch.setattr("core.agent.tool_executor.ToolExecutor", fail)
+    if stage == "loop":
+        monkeypatch.setattr("core.agent.loop.AgenticLoop", fail)
+    if stage == "runner":
+        monkeypatch.setattr("core.agent.worker.run_process_coroutine", fail)
+    with pytest.raises(RuntimeError) as caught:
+        _run_agentic(
+            WorkerRequest(task_id="worker-setup"),
+            _empty_tool_plan_builder,
+            middleware_builder=middleware_builder,
+        )
+    assert caught.value is failure
+    assert hooks.closed
+
+
 def test_worker_toolkit_filter_blocks_special_route_before_side_effect(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
