@@ -151,18 +151,29 @@ def test_call_llm_signature_accepts_model_override() -> None:
     assert param.kind == inspect.Parameter.KEYWORD_ONLY
 
 
-def test_call_llm_disables_action_tools_for_auxiliary_calls() -> None:
+@pytest.mark.parametrize("effort", ["low", "max"])
+@pytest.mark.parametrize("wrap_up", ["none", "rounds", "time"])
+@pytest.mark.parametrize("judge", [False, True])
+def test_call_llm_disables_action_tools_for_auxiliary_calls(
+    monkeypatch: pytest.MonkeyPatch, effort: str, wrap_up: str, judge: bool
+) -> None:
     """Planner and judge calls can request text-only execution without
     inheriting the main agent's tool surface."""
     import asyncio
+    import time
     from dataclasses import replace
 
     from core.agent.conversation import ConversationContext
     from core.agent.loop.agent_loop import AgenticLoop
     from core.agent.tool_executor import ToolExecutor
+    from core.config import settings
     from core.hooks import LlmCallRequest, MiddlewareRegistry
     from core.llm.adapters.base import AdapterCallResult, ToolSpec, UsageSummary
     from core.llm.adapters.registry import bootstrap_builtins
+    from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
+
+    monkeypatch.setattr(settings, "judge_model", "")
+    monkeypatch.setattr(settings, "agentic_effort", "high")
 
     captured: dict[str, Any] = {}
 
@@ -173,7 +184,7 @@ def test_call_llm_disables_action_tools_for_auxiliary_calls() -> None:
         async def acomplete(self, request: Any) -> AdapterCallResult:
             captured["request"] = request
             return AdapterCallResult(
-                text='{"ok": true}',
+                text='{"passed": true, "score": 1, "reason": "ok"}',
                 usage=UsageSummary(),
                 stop_reason="completed",
             )
@@ -200,25 +211,43 @@ def test_call_llm_disables_action_tools_for_auxiliary_calls() -> None:
             source="codex-oauth",
             disable_settings_drift=True,
             allowed_tool_names={"read_file"},
+            effort=effort,
+            max_rounds=1 if wrap_up == "rounds" else 0,
+            time_budget_s=60 if wrap_up == "time" else 0,
+            max_tokens=8192,
+            thinking_budget=1024,
         ),
         model="gpt-5.6-luna",
         provider="openai",
         quiet=True,
     )
     loop._new_adapter = CaptureAdapter()
+    loop._loop_start_time = time.monotonic() - 50
+    loop._verify_root_user_input = "Complete the requested task"
 
-    asyncio.run(
-        loop._call_llm(
-            "Auxiliary call",
-            [{"role": "user", "content": "Return JSON."}],
-            allow_tools=False,
+    if judge:
+        from core.agent.verify import _verify_llm_judge_async
+
+        verdict = asyncio.run(_verify_llm_judge_async(_make_result(), loop=loop))
+        assert verdict.passed is True
+    else:
+        asyncio.run(
+            loop._call_llm(
+                "Auxiliary call",
+                [{"role": "user", "content": "Return JSON."}],
+                allow_tools=False,
+            )
         )
-    )
 
     request = captured["request"]
     assert not request.tools
     assert request.tool_choice == {"type": "none"}
     assert request.allowed_tool_names == frozenset({"read_file"})
+    assert request.effort == loop._effort == effort
+    assert request.thinking_budget == (1024 if wrap_up == "none" else 0)
+    wrap_up_tokens = max(4096, min(8192, MODEL_CONTEXT_WINDOW[loop.model] // 200))
+    assert request.max_tokens == (8192 if wrap_up == "none" else wrap_up_tokens)
+    assert loop._time_budget_s == (60 if wrap_up == "time" else 0)
 
 
 # -- LLM judge wiring -------------------------------------------------
@@ -239,10 +268,12 @@ def test_verify_llm_judge_calls_loop_call_llm(monkeypatch: pytest.MonkeyPatch) -
         *,
         model: str | None = None,
         allow_tools: bool = True,
+        purpose: str = "agentic_loop",
     ) -> SimpleNamespace:
         captured["model"] = model or ""
         captured["system"] = system
         captured["allow_tools"] = allow_tools
+        captured["purpose"] = purpose
         return SimpleNamespace(text='{"passed": true, "score": 0.92, "reason": "ok"}')
 
     loop = SimpleNamespace(
@@ -258,6 +289,7 @@ def test_verify_llm_judge_calls_loop_call_llm(monkeypatch: pytest.MonkeyPatch) -
     assert vr.score == pytest.approx(0.92)
     assert captured["model"] == "claude-haiku-4-5-20251001"
     assert captured["allow_tools"] is False
+    assert captured["purpose"] == "turn_verification"
     assert "verifier" in captured["system"].lower()
 
 
@@ -492,6 +524,7 @@ def test_verify_turn_async_timeout_is_unavailable(
     assert vr.rubric_misses == ("verification_error",)
     assert vr.mode is VerifyMode.LLM_JUDGE
     assert vr.effective_mode is VerifyMode.LLM_JUDGE
+    assert vr.to_payload()["reason"] == "judge_timeout"
 
 
 def test_verify_turn_async_off_mode_returns_pass(
@@ -1258,6 +1291,7 @@ def test_reflexion_timeout_is_unavailable_not_pass(monkeypatch) -> None:
     )
     assert not verdict.passed and not verdict.should_retry
     assert verdict.rubric_misses == ("verification_error",)
+    assert verdict.to_payload()["reason"] == "judge_timeout"
 
 
 def test_reflexion_cannot_override_structural_failure(monkeypatch) -> None:
@@ -1299,6 +1333,7 @@ def test_judge_does_not_call_after_time_budget_or_without_task(monkeypatch, mode
             verify_turn_async(_make_result(text="A plausible complete answer"), loop=loop)
         )
         assert not verdict.passed and not verdict.should_retry
+        assert verdict.reason == ("verification_time_budget_exhausted" if task else "")
     call.assert_not_awaited()
 
 

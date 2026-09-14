@@ -105,12 +105,11 @@ class OpenAIPaygAdapter:
         return self._clients.get(lambda: build_async_openai_client(api_key))
 
     async def aweb_search(
-        self, query: str, *, max_results: int = 5, model: str = ""
+        self, query: str, *, max_results: int = 5, model: str = "", effort: str | None = None
     ) -> WebSearchResult:
-        # ``model`` hint intentionally unused — OpenAI's per-model hosted
-        # web_search support matrix is unverified (doc-before-behaviour,
-        # CLAUDE.md §4d); OPENAI_PRIMARY stays the search model.
-        del model
+        # Responses web search accepts the selected model and its reasoning
+        # effort together; keep the same model as the calling session.
+        # ref: https://developers.openai.com/api/docs/guides/tools-web-search
         from core.config import OPENAI_PRIMARY
         from core.llm.adapters._capability_impls import openai_web_search
 
@@ -118,8 +117,9 @@ class OpenAIPaygAdapter:
             self._get_client(),
             query=query,
             max_results=max_results,
-            model=OPENAI_PRIMARY,
+            model=model or OPENAI_PRIMARY,
             adapter_name=self.name,
+            effort=effort,
         )
 
     async def acomplete_text(
@@ -129,6 +129,7 @@ class OpenAIPaygAdapter:
         system: str = "",
         model: str = "",
         max_tokens: int = 1024,
+        effort: str | None = None,
     ) -> TextCompletionResult:
         """Single-turn text completion via the OpenAI Responses API.
 
@@ -148,6 +149,7 @@ class OpenAIPaygAdapter:
             system=system,
             model=model or OPENAI_PRIMARY,
             max_tokens=max_tokens,
+            effort=effort,
         )
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:

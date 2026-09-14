@@ -393,7 +393,9 @@ def test_llm_activity_missing_cache_is_not_observed_zero(usage: dict[str, None])
     assert payload["cache_write_tokens"] is None
 
 
-@pytest.mark.parametrize("purpose", ["agentic_loop", "cognitive_reflection", "candidate_judge"])
+@pytest.mark.parametrize(
+    "purpose", ["agentic_loop", "turn_verification", "cognitive_reflection", "candidate_judge"]
+)
 def test_llm_activity_preserves_requested_effort_and_call_purpose(purpose: str) -> None:
     row = map_hook_to_activity(
         HookEvent.LLM_CALL_ENDED,
@@ -405,7 +407,7 @@ def test_llm_activity_preserves_requested_effort_and_call_purpose(purpose: str) 
         },
         run_id="purpose-test",
     )
-    assert row.schema_version == 7
+    assert row.schema_version == 8
     reparsed = TypeAdapter(TypedActivityRow).validate_python(row.model_dump())
     details = reparsed.model_dump()["details"]
     assert (details["purpose"], details["source"], details["effort"]) == (

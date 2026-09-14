@@ -308,6 +308,7 @@ async def reflect_async(
     *,
     model: str,
     max_tokens: int,
+    effort: str | None = None,
     provider: str | None = None,
     source: str | None = None,
     middleware_registry: Any | None = None,
@@ -413,6 +414,7 @@ async def reflect_async(
                 tool_choice="auto",
                 max_tokens=max_tokens,
                 temperature=_settings.temperature_reflection,
+                effort=effort if effort is not None else _settings.agentic_effort,
             )
             if middleware_registry is None:
                 from core.hooks import MiddlewareRegistry

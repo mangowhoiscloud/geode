@@ -48,6 +48,7 @@ def test_tool_context_carries_llm_identity_fields() -> None:
     assert ctx.source == ""
     assert ctx.model == ""
     assert ctx.adapter_name == ""
+    assert ctx.effort == ""
 
     fields = {f.name for f in dataclasses.fields(ToolContext)}
     assert {"provider", "source", "model", "adapter_name"}.issubset(fields), (
@@ -189,15 +190,18 @@ def test_select_adapter_returns_none_when_no_capable_registered(
 
 
 @pytest.mark.parametrize("tool_name", ["general_web_search", "web_search"])
+@pytest.mark.parametrize("effort", ["", "max"])
 def test_web_search_names_share_routed_dispatch(
-    tool_name: str, monkeypatch: pytest.MonkeyPatch
+    tool_name: str, monkeypatch: pytest.MonkeyPatch, effort: str
 ) -> None:
+    from core.config import settings
     from core.hooks import HookSystem
     from core.llm.adapters.base import WebSearchResult
     from core.tools.base import ToolContext
     from core.tools.web_search import WebSearchTool
     from core.tools.web_tools import GeneralWebSearchTool
 
+    monkeypatch.setattr(settings, "agentic_effort", "low")
     dispatch = AsyncMock(
         return_value=WebSearchResult(
             query="current releases",
@@ -219,6 +223,7 @@ def test_web_search_names_share_routed_dispatch(
         provider="anthropic",
         source="subscription",
         model="claude-opus-4-7",
+        effort=effort,
     )
 
     result = asyncio.run(
@@ -231,6 +236,7 @@ def test_web_search_names_share_routed_dispatch(
         prefer_provider="anthropic",
         prefer_source="subscription",
         model="claude-opus-4-7",
+        effort=effort or "low",
         hooks=context.hooks,
         correlation={
             "session_id": "session-web",
@@ -323,9 +329,14 @@ def test_processor_init_accepts_provider_source_adapter() -> None:
     )
 
 
-def test_processor_builds_tool_context_for_each_dispatch() -> None:
+@pytest.mark.parametrize("effort", ["low", "max"])
+def test_processor_builds_tool_context_for_each_dispatch(effort: str) -> None:
     """The processor's fallback context preserves its resolved route."""
+    from types import SimpleNamespace
+
     from core.agent.tool_executor.processor import ToolCallProcessor
+
+    owner = SimpleNamespace(_effort=effort)
 
     processor = ToolCallProcessor(
         executor=MagicMock(),
@@ -335,6 +346,7 @@ def test_processor_builds_tool_context_for_each_dispatch() -> None:
         source="subscription",
         model="claude-opus-4-7",
         adapter_name="anthropic-subscription-test",
+        agent_loop=owner,
     )
 
     context = processor._new_tool_context("call-1")
@@ -344,6 +356,10 @@ def test_processor_builds_tool_context_for_each_dispatch() -> None:
     assert context.source == "subscription"
     assert context.model == "claude-opus-4-7"
     assert context.adapter_name == "anthropic-subscription-test"
+    assert context.effort == effort
+    owner._effort = "high"
+    assert processor._new_tool_context("call-2").effort == "high"
+    assert context.effort == effort
 
 
 # ---------------------------------------------------------------------------

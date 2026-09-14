@@ -43,6 +43,7 @@ import logging
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
+from core.config import settings
 from core.orchestration.context_budget import (
     ContextBudgetPolicy,
     resolve_context_budget_policy,
@@ -85,6 +86,7 @@ async def compact_conversation(
     provider: str,
     model: str,
     *,
+    effort: str | None = None,
     keep_recent: int = 10,
     policy: ContextBudgetPolicy | None = None,
     session_id: str | None = None,
@@ -135,6 +137,7 @@ async def compact_conversation(
             summary_input,
             provider,
             model,
+            effort=effort,
             max_tokens=summary_tokens,
             hooks=hooks,
             correlation={**(correlation or {}), "session_id": session_id or ""},
@@ -566,6 +569,7 @@ async def _call_summarize(
     model: str,
     *,
     max_tokens: int,
+    effort: str | None = None,
     hooks: RuntimeEventBus | None = None,
     correlation: Mapping[str, Any] | None = None,
 ) -> str | None:
@@ -598,6 +602,7 @@ async def _call_summarize(
             conversation_text,
             system=_COMPACTION_PROMPT,
             model=model,
+            effort=effort or settings.agentic_effort,
             max_tokens=max_tokens,
             prefer_provider=canonical,
             prefer_source=source,

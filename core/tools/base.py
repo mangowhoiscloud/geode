@@ -132,6 +132,8 @@ class ToolContext:
     source: str = ""
     model: str = ""
     adapter_name: str = ""
+    # Caller-selected effort from the owning loop; empty means no owner.
+    effort: str = ""
     tool_plan_hash: str = ""
     tool_plan_generation: int = 0
     bound_tool_plan: BoundToolPlan | None = field(default=None, repr=False, compare=False)

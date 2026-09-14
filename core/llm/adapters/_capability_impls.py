@@ -29,6 +29,23 @@ def _field(value: object, name: str, default: object = None) -> Any:
     return value.get(name, default) if isinstance(value, Mapping) else getattr(value, name, default)
 
 
+def openai_effort_kwargs(model: str, effort: str | None) -> dict[str, Any]:
+    """Serialize an explicit supported effort without the model-switch clamp.
+
+    Uses the same grounded model registry as the Responses request builder.
+    GPT-5.6 Sol max: https://developers.openai.com/api/docs/models/gpt-5.6-sol
+    Codex: openai/codex codex-rs/models-manager/models.json.
+    """
+    if effort is None:
+        return {}
+    from core.llm.adapters._openai_common import get_openai_model_spec
+
+    supported = get_openai_model_spec(model).reasoning_effort_values
+    if supported is None or effort not in supported:
+        raise ValueError(f"Reasoning effort {effort!r} is unsupported for {model!r}")
+    return {"reasoning": {"effort": effort}}
+
+
 def openai_web_search_urls(
     items: Sequence[object],
 ) -> tuple[tuple[str, ...], tuple[str, ...], bool]:
@@ -169,7 +186,13 @@ async def anthropic_complete_text(
 
 
 async def openai_web_search(
-    client: Any, *, query: str, max_results: int, model: str, adapter_name: str
+    client: Any,
+    *,
+    query: str,
+    max_results: int,
+    model: str,
+    adapter_name: str,
+    effort: str | None = None,
 ) -> WebSearchResult:
     """OpenAI PAYG Responses API ``web_search`` hosted tool.
 
@@ -188,6 +211,7 @@ async def openai_web_search(
             f"Search the web for: {query}. Return up to {max_results} relevant "
             "results with titles, URLs, and brief summaries."
         ),
+        **openai_effort_kwargs(model, effort),
     )
     output = getattr(response, "output", []) or []
     text_parts: list[str] = []
@@ -225,6 +249,7 @@ async def openai_responses_complete_text(
     system: str,
     model: str,
     max_tokens: int,
+    effort: str | None = None,
 ) -> TextCompletionResult:
     """Single-turn OpenAI Responses API call — preferred over Chat
     Completions for OpenAI PAYG (and Codex backend if/when it supports
@@ -237,6 +262,7 @@ async def openai_responses_complete_text(
         "model": model,
         "input": prompt,
         "max_output_tokens": max_tokens,
+        **openai_effort_kwargs(model, effort),
     }
     if system:
         kwargs["instructions"] = system
@@ -334,6 +360,7 @@ __all__ = [
     "anthropic_web_search",
     "glm_web_search",
     "openai_chat_complete_text",
+    "openai_effort_kwargs",
     "openai_responses_complete_text",
     "openai_web_search",
     "openai_web_search_urls",

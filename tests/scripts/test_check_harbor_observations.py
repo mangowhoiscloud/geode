@@ -307,6 +307,21 @@ def test_missing_cache_is_null_not_zero_or_collection_failure(trial, model_bound
     assert result["full_runtime_expansion_ready"] is False
 
 
+@pytest.mark.parametrize("effort", ["max", "medium", None])
+def test_uniform_effort_gate_checks_auxiliary_calls(trial, model_boundary, effort):
+    root = trial["trial_dir"]
+    usage = json.loads((root / "agent/runtime-result.json").read_text())["usage"]
+    usage["recorded_attempts"][0].update(purpose="cognitive_reflection", effort=effort)
+    _replace_usage(root, usage)
+    report = gate.validate_observations(**trial)
+    assert report["accounting"]["uniform_requested_effort"] is (effort == "max")
+    if effort == "max":
+        assert gate.validate_observations(**trial, require_uniform_effort=True)["observation_valid"]
+    else:
+        with pytest.raises(ValueError, match="frozen reasoning effort"):
+            gate.validate_observations(**trial, require_uniform_effort=True)
+
+
 @pytest.mark.parametrize(
     "mutation", ["empty", "counter", "duplicate", "degraded", "whole", "snapshot"]
 )
@@ -431,14 +446,17 @@ def test_absent_cache_key_is_export_loss_not_provider_null(trial, model_boundary
         gate.validate_observations(**trial)
 
 
-def test_reflection_medium_does_not_inherit_root_max(trial, model_boundary):
+@pytest.mark.parametrize(
+    ("purpose", "effort"), [("cognitive_reflection", "medium"), ("turn_verification", "max")]
+)
+def test_observed_call_purpose_and_effort_are_retained(trial, model_boundary, purpose, effort):
     root = trial["trial_dir"]
     usage = json.loads((root / "agent/runtime-result.json").read_text())["usage"]
-    usage["recorded_attempts"][0].update(purpose="cognitive_reflection", effort="medium")
+    usage["recorded_attempts"][0].update(purpose=purpose, effort=effort)
     _replace_usage(root, usage)
     report = gate.validate_observations(**trial)
-    assert report["accounting"]["observed_efforts"] == {"medium": 1}
-    assert report["accounting"]["purposes"] == {"cognitive_reflection": 1}
+    assert report["accounting"]["observed_efforts"] == {effort: 1}
+    assert report["accounting"]["purposes"] == {purpose: 1}
 
 
 def test_legacy_missing_metadata_is_unknown_not_root_default(trial, model_boundary):
@@ -449,6 +467,7 @@ def test_legacy_missing_metadata_is_unknown_not_root_default(trial, model_bounda
     _replace_usage(root, usage)
     report = gate.validate_observations(**trial)
     assert report["accounting"]["unknown_metadata_attempts"] == 1
+    assert report["accounting"]["purposes"] == {"unknown": 1}
     assert report["accounting"]["observed_efforts"] == {"unknown": 1}
 
 

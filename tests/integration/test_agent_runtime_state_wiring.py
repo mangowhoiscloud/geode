@@ -58,6 +58,7 @@ def _fake_loop(
     adapter_name: str = "anthropic-payg",
     provider: str = "anthropic",
     model: str = "claude-sonnet-4-6",
+    effort: str = "max",
 ) -> Any:
     """Mock AgenticLoop with only the fields ``_final_hook_payloads`` reads."""
     return SimpleNamespace(
@@ -65,6 +66,7 @@ def _fake_loop(
         _provider=provider,
         _session_id=session_id,
         _parent_session_id=parent_session_id,
+        _effort=effort,
         _new_adapter=SimpleNamespace(name=adapter_name),
     )
 
@@ -125,10 +127,12 @@ class TestSessionEndedPayloadEnrichment:
             _provider="y",
             _session_id="s-bare",
             _parent_session_id="",
+            _effort="low",
             _last_emitted_session_id="",
         )
-        session_ended, _turn, _metrics = _final_hook_payloads(loop, _ok_result(), "hi")
+        session_ended, turn_completed, _metrics = _final_hook_payloads(loop, _ok_result(), "hi")
         assert session_ended["adapter_type"] == ""
+        assert turn_completed["effort"] == "low"
 
 
 class TestSubagentCompletedPayloadEnrichment:

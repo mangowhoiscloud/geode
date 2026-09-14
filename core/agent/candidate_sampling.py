@@ -167,6 +167,7 @@ async def judge_candidates(
     provider: str | None = None,
     source: str | None = None,
     max_tokens: int = 512,
+    effort: str | None = None,
     middleware_registry: Any | None = None,
     correlation: Mapping[str, Any] | None = None,
 ) -> CandidateVerdict:
@@ -216,6 +217,7 @@ async def judge_candidates(
                 tool_choice="auto",
                 max_tokens=max_tokens,
                 temperature=_settings.temperature_reflection,
+                effort=effort if effort is not None else _settings.agentic_effort,
             )
             if middleware_registry is None:
                 from core.hooks import MiddlewareRegistry

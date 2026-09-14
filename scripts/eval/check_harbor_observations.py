@@ -34,6 +34,7 @@ _COUNTERS = ("input_tokens", "output_tokens", "cached_input_tokens", "cache_writ
 _SCOPE_BLOCKER = "whole-runtime producer coverage not established"
 _PURPOSES = {
     "agentic_loop",
+    "turn_verification",
     "cognitive_reflection",
     "candidate_judge",
     "text_completion",
@@ -197,6 +198,7 @@ def validate_observations(
     trial_name: str,
     task_name: str,
     task_checksum: str,
+    require_uniform_effort: bool = False,
 ) -> dict[str, Any]:
     """Validate existing exports, returning only bounded metadata and hashes.
 
@@ -293,6 +295,13 @@ def validate_observations(
         "unsupported whole-runtime Harbor totals",
     )
     accounting = _usage_check(usage, model, started, finished)
+    uniform_effort = (
+        accounting["observed_efforts"] == {model["reasoning"]: accounting["attempts"]}
+        and accounting["unknown_metadata_attempts"] == 0
+    )
+    if require_uniform_effort:
+        _require(uniform_effort, "recorded calls do not all match the frozen reasoning effort")
+    accounting["uniform_requested_effort"] = uniform_effort
     full = document("agent/geode-trajectory.private.json")
     digest = document("agent/geode-trajectory.json")
     for trajectory in (full, digest):
@@ -428,6 +437,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("trial_dir", type=Path)
     parser.add_argument("--run-spec", required=True, type=Path, dest="run_spec_path")
+    parser.add_argument(
+        "--require-uniform-effort",
+        action="store_true",
+        help="reject missing or different request effort on any recorded root/auxiliary call",
+    )
     for name in ("run-spec-sha256", "source-sha256", "trial-name", "task-name", "task-checksum"):
         parser.add_argument(f"--{name}", required=True)
     try:

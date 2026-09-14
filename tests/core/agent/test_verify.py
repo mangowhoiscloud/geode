@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import os
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -423,6 +424,51 @@ def test_lifecycle_off_mode_skips_verify_payload(monkeypatch: pytest.MonkeyPatch
         assert current_session_metrics().verify_fail_count == 0
 
 
+@pytest.mark.parametrize(
+    ("reason", "error_type"),
+    [
+        ("judge_timeout", "judge_timeout"),
+        ("verification_time_budget_exhausted", "verification_time_budget_exhausted"),
+        ("", "verification_error"),
+        ("private judge prose", "verification_error"),
+    ],
+)
+def test_verification_failure_persists_only_system_error_codes(
+    tmp_path: Path, reason: str, error_type: str
+) -> None:
+    from core.agent.loop import _lifecycle
+    from core.hooks import HookSystem
+    from core.observability.event_store import HookEventStore
+    from core.observability.hook_persistence import HookPersistenceSink
+
+    store = HookEventStore(tmp_path / "events.db")
+    hooks = HookSystem()
+    hooks.register_sink(HookPersistenceSink(store, session_key="verify", run_id="verify"))
+    loop = SimpleNamespace(_session_id="verify", _hooks=hooks)
+    verdict = VerifyResult(
+        passed=False,
+        mode=VerifyMode.REFLEXION,
+        score=0.0,
+        rubric_misses=("verification_error",),
+        should_retry=False,
+        reason=reason,
+    )
+    try:
+        with session_metrics_scope(session_id="verify"):
+            payload = _lifecycle._finalize_verify_outcome(loop, _make_result(), verdict)
+            assert payload is not None
+            assert payload["rubric_misses"] == ["verification_error"]
+            assert not payload["passed"] and not payload["should_retry"]
+            asyncio.run(_lifecycle._emit_verify_runtime_event(loop, payload))
+        rows = store.read()
+        assert len(rows) == 1
+        assert rows[0].action == "turn.verify.failed"
+        assert rows[0].payload["error_type"] == error_type
+        assert "private judge prose" not in str(rows[0].payload)
+    finally:
+        hooks.close()
+
+
 def test_finalizers_run_verify_before_lifecycle_hooks() -> None:
     """Reflection verification runs at the task-completion boundary before terminal
     lifecycle hooks are emitted."""
@@ -809,8 +855,10 @@ def test_pre_verify_strengthening_is_monotone(
         assert observed_passed == [False]
 
 
+@pytest.mark.parametrize("effort", ["low", "max"])
 def test_final_hook_payloads_include_verify_payload(
     monkeypatch: pytest.MonkeyPatch,
+    effort: str,
 ) -> None:
     """SESSION_ENDED and TURN_COMPLETED payloads carry the final verify
     result when verify/reflection is enabled."""
@@ -831,6 +879,7 @@ def test_final_hook_payloads_include_verify_payload(
         _provider="openai-codex",
         _session_id="s-final",
         _parent_session_id="",
+        _effort=effort,
         _new_adapter=None,
         _last_emitted_session_id="",
     )
@@ -846,6 +895,7 @@ def test_final_hook_payloads_include_verify_payload(
 
     assert session_ended["turn_verify"] is verify_payload
     assert turn_completed["turn_verify"] is verify_payload
+    assert turn_completed["effort"] == effort
 
 
 def test_verify_continuation_results_merge_before_final_persistence() -> None:

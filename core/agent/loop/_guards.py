@@ -925,6 +925,7 @@ async def _finalize_context_exhausted(
         TerminationReason.CONTEXT_EXHAUSTED,
         await _context_exhausted_message(
             user_input,
+            effort=loop._effort,
             hooks=loop._hooks,
             correlation={"session_id": loop._session_id, "turn_id": loop._turn_id},
         ),

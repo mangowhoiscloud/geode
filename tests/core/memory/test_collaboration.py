@@ -6,7 +6,7 @@ import time
 from types import SimpleNamespace
 
 import pytest
-from core.memory.collaboration import CollaborationStore
+from core.memory.collaboration import CollaborationStore, ensure_collaboration_schema
 
 
 def _read_and_ack(store: CollaborationStore, recipient: str):
@@ -15,7 +15,10 @@ def _read_and_ack(store: CollaborationStore, recipient: str):
     return messages
 
 
-def test_collaboration_store_preserves_control_without_duplicating_rollout(tmp_path) -> None:
+@pytest.mark.parametrize("effort", [None, "", "low"])
+def test_collaboration_store_preserves_control_without_duplicating_rollout(
+    tmp_path, effort
+) -> None:
     db = tmp_path / "sessions.db"
     store = CollaborationStore(db)
     run = store.begin_run(
@@ -24,8 +27,11 @@ def test_collaboration_store_preserves_control_without_duplicating_rollout(tmp_p
         task_type="analyze",
         role="reviewer",
         model="gpt-test",
+        effort=effort,
     )
     assert run.generation == 1
+    assert run.effort == (effort or "")
+    assert run.to_dict()["effort"] == (effort or "")
     assert store.mark_running("parent-1", "child-1", 1)
 
     store.append_message_if_active(
@@ -71,6 +77,57 @@ def test_collaboration_store_preserves_control_without_duplicating_rollout(tmp_p
     )
     assert resumed.generation == 2
     assert resumed.status == "pending"
+    assert resumed.effort == (effort or "")
+    assert CollaborationStore(db).list_runs("parent-1")[0].effort == (effort or "")
+
+
+def test_resume_can_explicitly_clear_effort_override(tmp_path) -> None:
+    store = CollaborationStore(tmp_path / "sessions.db")
+    store.begin_run(task_id="child", parent_session_id="parent", task_type="analyze", effort="low")
+    store.finish_run(parent_session_id="parent", task_id="child", generation=1, status="completed")
+    resumed = store.begin_run(
+        task_id="child", parent_session_id="parent", task_type="analyze", resume=True, effort=""
+    )
+    assert resumed.effort == ""
+
+
+def test_legacy_collaboration_effort_migration_is_additive_and_idempotent(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            """CREATE TABLE collaboration_runs (
+                task_id TEXT PRIMARY KEY, parent_session_id TEXT NOT NULL,
+                task_type TEXT NOT NULL DEFAULT '', role TEXT NOT NULL DEFAULT '',
+                model TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 1,
+                summary TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '',
+                owner_id TEXT NOT NULL, created_at REAL NOT NULL, updated_at REAL NOT NULL
+            )"""
+        )
+        now = time.time()
+        conn.execute(
+            """INSERT INTO collaboration_runs
+                (task_id, parent_session_id, task_type, model, status, owner_id,
+                 created_at, updated_at)
+                VALUES ('legacy-child', 'parent', 'analyze', 'original-model',
+                        'completed', 'old-owner', ?, ?)""",
+            (now, now),
+        )
+        ensure_collaboration_schema(conn)
+        ensure_collaboration_schema(conn)
+        columns = [row[1] for row in conn.execute("PRAGMA table_info(collaboration_runs)")]
+        assert columns.count("effort") == 1
+        assert conn.execute("SELECT effort FROM collaboration_runs").fetchone() == ("",)
+
+    store = CollaborationStore(db)
+    run = store.get_run("parent", "legacy-child")
+    assert run is not None
+    assert (run.model, run.effort, run.generation, run.created_at) == ("original-model", "", 1, now)
+    resumed = store.begin_run(
+        task_id="legacy-child", parent_session_id="parent", task_type="analyze", resume=True
+    )
+    assert resumed.effort == ""
+    assert resumed.generation == 2
 
 
 def test_stale_runtime_is_interrupted_once_and_notified(tmp_path) -> None:

@@ -203,7 +203,6 @@ async def _prepare_request(
         # wrap-up: minimal budget (0.5% of window, floor 4096)
         adaptive_max_tokens = max(4096, min(loop.max_tokens, ctx_window // 200))
         adaptive_thinking = 0
-        adaptive_effort = "low"
 
     # config-driven temperature (1.0 default)
     loop_temperature = _settings.temperature_agent_loop
@@ -346,6 +345,7 @@ async def call_llm(
     model: str | None = None,
     response_schema: dict[str, Any] | None = None,
     allow_tools: bool = True,
+    purpose: str = "agentic_loop",
 ) -> AgenticResponse | None:
     """Multi-provider LLM call via :class:`LLMAdapter` (P1 Gateway pattern).
 
@@ -407,7 +407,7 @@ async def call_llm(
                 adapter=getattr(active_adapter, "name", "<unknown>"),
                 source=getattr(active_adapter, "source", None),
                 effort=active_request.effort,
-                purpose="agentic_loop",
+                purpose=purpose,
                 cost_estimator=calculate_cost,
             )
 

@@ -184,7 +184,7 @@
         "has_default": true,
         "implementation": "ContextVar",
         "lifetime": "one AgenticLoop session",
-        "line": 97,
+        "line": 98,
         "owner": "core.agent.loop",
         "path": "core/llm/adapters/dispatch.py",
         "resetter": "core.llm.adapters.dispatch.end_session_adapter_tracking",
@@ -409,7 +409,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 12,
-      "file_loc": 1157,
+      "file_loc": 1160,
       "method_count": 39,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -419,7 +419,7 @@
     },
     "SubAgentManager": {
       "constructor_arg_count": 18,
-      "file_loc": 815,
+      "file_loc": 828,
       "method_count": 17,
       "path": "core/agent/sub_agent.py"
     }
@@ -528,19 +528,19 @@
   "packages": {
     "core": {
       "python_files": 415,
-      "python_loc": 125872
+      "python_loc": 126045
     },
     "evals": {
       "python_files": 94,
-      "python_loc": 31680
+      "python_loc": 31687
     },
     "evolve": {
       "python_files": 73,
       "python_loc": 32014
     },
     "tests": {
-      "python_files": 713,
-      "python_loc": 198929
+      "python_files": 714,
+      "python_loc": 199716
     }
   },
   "schema_version": 6,

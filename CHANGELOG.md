@@ -47,6 +47,21 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve the owning loop's reasoning effort across reflection, candidate
+  judging, worker delegation/resumption and wrap-up. Carry inherited effort
+  through OpenAI reasoning-capable auxiliary text/search requests and their
+  durable observations. Add an opt-in uniform-effort export check; historical
+  missing or different efforts are not relabeled or repaired in place.
+  Retain explicit worker overrides across idle resume in the existing
+  collaboration store; legacy rows continue to inherit the caller's effort.
+- Separate turn-final LLM verification usage from agent execution with the
+  version 8 `turn_verification` purpose, preserving unknown historical usage.
+  Persist bounded judge timeout reasons and retain native Harbor verification
+  holds without a synthetic runtime exception; delivery and expansion gates
+  remain closed while verification or observation is incomplete.
+
 ## [1.0.29] - 2026-09-14
 
 ### Infrastructure

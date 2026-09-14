@@ -16,7 +16,9 @@ tool_use/tool_result pair gets compacted without splitting the pair.
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from core.orchestration import compaction
@@ -45,6 +47,25 @@ def _make_tool_result_msg(tool_id: str, body: str = "ok") -> dict[str, Any]:
 
 def _make_text_msg(role: str, text: str) -> dict[str, Any]:
     return {"role": role, "content": text}
+
+
+@pytest.mark.parametrize("effort", [None, "max"])
+def test_compaction_forwards_owned_effort_to_summary(
+    monkeypatch: pytest.MonkeyPatch, effort: str | None
+) -> None:
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "agentic_effort", "low")
+    dispatch = AsyncMock(return_value=SimpleNamespace(text="summary"))
+    monkeypatch.setattr("core.llm.adapters.dispatch.complete_text_via_adapters", dispatch)
+    messages = [_make_text_msg("user" if i % 2 == 0 else "assistant", f"m{i}") for i in range(14)]
+    _messages, compacted = asyncio.run(
+        compact_conversation(messages, "openai", "gpt-5.6-sol", effort=effort, keep_recent=4)
+    )
+    assert compacted
+    dispatch.assert_awaited_once()
+    assert dispatch.await_args.kwargs["effort"] == (effort or "low")
+    assert settings.agentic_effort == "low"
 
 
 # ── Phase 1: boundary ───────────────────────────────────────────────

@@ -274,6 +274,7 @@ class CodexOAuthAdapter:
         system: str = "",
         model: str = "",
         max_tokens: int = 1024,
+        effort: str | None = None,
     ) -> TextCompletionResult:
         """Single-turn text completion via the Codex subscription Responses
         endpoint.
@@ -284,15 +285,18 @@ class CodexOAuthAdapter:
         ``max_output_tokens``, and streaming aggregation.
         """
         from core.config import CODEX_PRIMARY
+        from core.llm.adapters._capability_impls import openai_effort_kwargs
 
-        result = await self.acomplete(
-            AdapterCallRequest(
-                model=model or CODEX_PRIMARY,
-                messages=(Message(role="user", content=prompt),),
-                system_prompt=system,
-                max_tokens=max_tokens,
-            )
+        request = AdapterCallRequest(
+            model=model or CODEX_PRIMARY,
+            messages=(Message(role="user", content=prompt),),
+            system_prompt=system,
+            max_tokens=max_tokens,
         )
+        if effort is not None:
+            openai_effort_kwargs(request.model, effort)
+            request = replace(request, effort=effort)
+        result = await self.acomplete(request)
         return TextCompletionResult(
             text=result.text,
             usage=result.usage,
@@ -302,7 +306,7 @@ class CodexOAuthAdapter:
         )
 
     async def aweb_search(
-        self, query: str, *, max_results: int = 5, model: str = ""
+        self, query: str, *, max_results: int = 5, model: str = "", effort: str | None = None
     ) -> WebSearchResult:
         """Codex-subscription web_search via Responses API ``web_search``
         hosted tool.
@@ -328,10 +332,14 @@ class CodexOAuthAdapter:
         even though the real issue is the call shape mismatch.
         """
         from core.config import CODEX_PRIMARY
-        from core.llm.adapters._capability_impls import openai_web_search_urls
+        from core.llm.adapters._capability_impls import (
+            openai_effort_kwargs,
+            openai_web_search_urls,
+        )
 
         search_model = model or CODEX_PRIMARY
         self._require_model_allowed(search_model)
+        reasoning_kwargs = openai_effort_kwargs(search_model, effort)
         client = self._get_client()
         text_parts: list[str] = []
         source_urls: list[str] = []
@@ -367,6 +375,7 @@ class CodexOAuthAdapter:
             "tools": [{"type": "web_search"}],
             "include": ["web_search_call.action.sources"],
             "store": False,
+            **reasoning_kwargs,
         }
         async with client.responses.stream(**kwargs) as stream:
             async for event in stream:

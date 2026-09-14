@@ -396,6 +396,7 @@ def _try_inline_compact_for_model_switch(
                 loop.context.messages,
                 provider=provider,
                 model=target_model,
+                effort=loop._effort,
                 keep_recent=keep_recent,
                 policy=policy,
                 session_id=getattr(loop, "_session_id", None) or None,

@@ -132,7 +132,9 @@ class TestContextWindowManager:
 
     def test_check_context_overflow_awaits_compaction_inside_running_loop(self) -> None:
         """Compaction should be awaited, not driven via run_until_complete."""
-        mgr = self._make_mgr()
+        owner = SimpleNamespace(effort="low")
+        mgr = ContextWindowManager(hooks=None, quiet=True, effort_provider=lambda: owner.effort)
+        owner.effort = "max"
         messages: list[dict[str, Any]] = [
             {"role": "user", "content": "old"},
             {"role": "assistant", "content": "old reply"},
@@ -167,6 +169,7 @@ class TestContextWindowManager:
         asyncio.run(_run())
 
         compact.assert_awaited_once()
+        assert compact.await_args.kwargs["effort"] == "max"
         assert messages == compacted
 
     def test_soft_pre_compact_can_defer(self) -> None:

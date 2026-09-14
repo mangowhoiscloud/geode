@@ -170,7 +170,13 @@ This candidate is not interchangeable with the historical one-tool control.
 
 The entry point requires a container-local home, explicit subscription routing,
 an absolute required model policy, and no API-key environment variables.
-Root effort, worker-difficulty settings and auxiliary defaults are distinct.
+New action, reflection, candidate judge and worker requests inherit the owning
+loop's effort; wrap-up no longer forces a lower value. OpenAI reasoning-capable
+text/search helpers receive that inherited value on the actual provider request.
+Explicit worker overrides still take precedence outside the frozen experiment.
+Uniform-effort studies must verify every retained call, not infer uniformity
+from `[agentic].effort` or from ATIF tool steps. This changes the treatment;
+historical auxiliary defaults remain unchanged in the old evidence.
 The fresh task-container profile permits dangerous tools so the native shell
 is available; this does not change host policy or bypass worker-role toolkits.
 The adapter's `verify_mode` option defaults to `rule_based`; freeze `reflexion`
@@ -318,6 +324,13 @@ hashes, and reconciles the existing usage projections. Invoke it with
 plan rather than inferred from a successful result. It does not reopen a
 session database or create a second raw store.
 
+For a prospectively frozen uniform-effort study, add `--require-uniform-effort`.
+The checker rejects missing request metadata or any root/auxiliary effort that
+differs from the spec's `reproduction.model.reasoning`. Its
+`accounting.uniform_requested_effort` field describes retained calls only;
+wire-level regression tests and the producer inventory are still required.
+Neither that check nor a provider accepting `max` measures its internal compute.
+
 `observation_valid` and `cache_complete` answer different questions. Missing
 required evidence fails validation; intact exports with absent provider cache
 fields remain incomplete for cache comparison. Neither grants full-runtime
@@ -355,6 +368,28 @@ remains false, and the standalone export checker never grants execution.
 The agent deadline applies to already-admitted background work as well; final
 cleanup grace cannot purchase extra model execution. Freeze the lifecycle
 policy on the new revision rather than silently changing an old run.
+
+### Why remeasure these missing observations
+
+The immediate target is diagnosable execution, not a higher historical score:
+34 selected cells lack useful behavior/Replay and 247 have partial cache data.
+Repair the responsible runtime boundary, then bind one fresh attempt's request
+metadata, result, verifier and trace to its revision. Preserve the old absence.
+Only validated new evidence moves on to the artifact repository, Replay and film.
+
+The user's [Atria AI video](https://www.youtube.com/watch?v=5c5ojBJUznU) is linked
+from Hyundai's [official Data Flywheel account](https://www.hyundai.news/eu/articles/press-releases/ai-powered-data-flywheel.html).
+That account describes hard-example selection, event evidence collection,
+common data structures and revalidation of existing performance. The Special
+Event Recorder captures significant events; further AI-driven collection enhancements are
+described as exploratory. The video's spoken words and timestamps were not
+recovered, so the written source is the evidence for these points.
+
+Our application is narrower: select a failed or unobservable attempt, retain
+its evidence, fix one cause and remeasure under a new frozen revision. A passing
+diagnostic is not a held-out improvement estimate; regression checks and a fresh
+paired control answer different questions. GEODE harness repair is not Atria
+model retraining, and a new trace is not a reconstruction of missing history.
 
 ## 2026-09-13 full-runtime G-code development gate
 

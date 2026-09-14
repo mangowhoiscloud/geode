@@ -12,7 +12,7 @@ import logging
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
-from core.config import CONTEXT_BLOCK_MAX_CHARS
+from core.config import CONTEXT_BLOCK_MAX_CHARS, settings
 
 if TYPE_CHECKING:
     import httpx
@@ -233,6 +233,7 @@ async def _execute_web_search(kwargs: dict[str, Any]) -> dict[str, Any]:
             prefer_provider=prefer_provider,
             prefer_source=prefer_source,
             model=session_model,
+            effort=getattr(ctx, "effort", "") or settings.agentic_effort,
             hooks=getattr(ctx, "hooks", None),
             correlation={
                 key: getattr(ctx, key, "")
