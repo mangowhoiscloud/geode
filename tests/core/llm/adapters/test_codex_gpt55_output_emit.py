@@ -25,9 +25,9 @@ only available knob, and ``"none"`` is the floor of that knob.
 These tests pin:
 
 1. ``SubTask.effort`` field exists with empty-string default
-   (back-compat — preserves the legacy difficulty path).
+   (inherits the caller's effort, then the configured default).
 2. ``SubagentProtocol.build_worker_request`` honours ``SubTask.effort`` when set,
-   overriding both ``task.difficulty`` and ``settings.agentic_effort``.
+   overriding both caller effort and ``settings.agentic_effort``.
 3. The ranker's voter SubTasks set ``effort="none"`` so the codex-oauth
    adapter forwards ``reasoning.effort="none"`` to the gpt-5.5 backend
    and gpt-5.5 emits the verdict directly without encrypted reasoning.
@@ -43,6 +43,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
 from core.agent.sub_agent import SubAgentManager, SubTask
 from core.orchestration.isolated_execution import IsolatedRunner
 from evals.seed_generation.agents.ranker import Ranker
@@ -53,10 +54,8 @@ from evals.seed_generation.tournament import MatchPlan
 def test_subtask_has_effort_field_empty_default() -> None:
     """Back-compat: SubTask exposes ``effort`` and defaults to empty string.
 
-    Empty string is the sentinel that means "fall back to the legacy
-    ``task.difficulty`` → ``_DIFFICULTY_TO_EFFORT`` →
-    ``settings.agentic_effort`` resolution chain". Callers that don't
-    care about per-task reasoning depth still get the global default.
+    Empty string means inherit the caller's effort, or the configured
+    ``settings.agentic_effort`` when no caller effort is supplied.
     """
     task = SubTask(task_id="t1", description="x", task_type="analyze")
     assert task.effort == ""
@@ -68,16 +67,11 @@ def test_subtask_effort_field_accepts_none() -> None:
     assert task.effort == "none"
 
 
-def test_build_worker_request_uses_task_effort_when_set() -> None:
-    """``SubTask.effort`` wins over ``settings.agentic_effort``.
+def test_build_worker_request_uses_task_effort_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The voter's explicit ``none`` wins over caller and configured effort."""
+    from core.config import settings
 
-    Pre-fix the only effort knob was the global
-    ``settings.agentic_effort`` (default ``"high"``) routed through
-    ``_DIFFICULTY_TO_EFFORT["medium"]``. The ranker had no way to
-    surface "this is a classification, run cheap" — so vote tasks
-    inherited the global default and gpt-5.5 burned the entire
-    output budget on reasoning.
-    """
+    monkeypatch.setattr(settings, "agentic_effort", "high")
     mgr = SubAgentManager(IsolatedRunner(), timeout_s=60)
     task = SubTask(
         task_id="vote-m000-openai.subscription",
@@ -85,38 +79,29 @@ def test_build_worker_request_uses_task_effort_when_set() -> None:
         task_type="vote",
         effort="none",
     )
-    req = mgr._protocol.build_worker_request(task)
+    req = mgr._protocol.build_worker_request(task, default_effort="max")
     assert req.effort == "none", (
         "WorkerRequest must inherit SubTask.effort='none' — otherwise the "
-        "codex-oauth adapter forwards reasoning.effort=medium and gpt-5.5 "
+        "codex-oauth adapter inherits caller/configured effort and gpt-5.5 "
         "reproduces the smoke 20/21 empty-text failure mode."
     )
 
 
-def test_build_worker_request_falls_back_when_effort_empty() -> None:
-    """Empty ``effort`` preserves the legacy difficulty/settings path.
+@pytest.mark.parametrize(
+    "configured, caller, expected",
+    [("high", "", "high"), ("low", "", "low"), ("low", "max", "max"), ("high", "none", "none")],
+)
+def test_build_worker_request_falls_back_when_effort_empty(
+    monkeypatch: pytest.MonkeyPatch, configured: str, caller: str, expected: str
+) -> None:
+    """Empty task effort inherits its caller before the configured fallback."""
+    from core.config import settings
 
-    This is the back-compat guard — callers that don't care about
-    per-task effort (the common case) still inherit
-    ``settings.agentic_effort`` via ``_DIFFICULTY_TO_EFFORT``.
-    """
+    monkeypatch.setattr(settings, "agentic_effort", configured)
     mgr = SubAgentManager(IsolatedRunner(), timeout_s=60)
     task = SubTask(task_id="t1", description="x", task_type="analyze")
-    req = mgr._protocol.build_worker_request(task)
-    # Legacy path: ``difficulty`` defaults to "medium" via the
-    # ``getattr(task, "difficulty", "medium")`` fallback at
-    # ``core/agent/sub_agent.py:719``, so
-    # ``_DIFFICULTY_TO_EFFORT["medium"]`` resolves to ``"medium"``.
-    # PIN the exact value — a previous tautological form
-    # (``req.effort != "low" or req.effort in {low,medium,high}``)
-    # was True for any non-empty string and would not catch a
-    # regression that changed default SubTask semantics.
-    assert req.effort == "medium", (
-        f"Default SubTask (no effort, no difficulty) must resolve to "
-        f"_DIFFICULTY_TO_EFFORT['medium']='medium' — got {req.effort!r}. "
-        f"If this changed, the ranker voter pathway's effort='none' "
-        f"override (Sprint G) may also have drifted."
-    )
+    req = mgr._protocol.build_worker_request(task, default_effort=caller)
+    assert req.effort == expected
 
 
 def test_ranker_voter_subtasks_pin_effort_none() -> None:
