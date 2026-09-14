@@ -345,6 +345,7 @@ async def call_llm(
     model: str | None = None,
     response_schema: dict[str, Any] | None = None,
     allow_tools: bool = True,
+    purpose: str = "agentic_loop",
 ) -> AgenticResponse | None:
     """Multi-provider LLM call via :class:`LLMAdapter` (P1 Gateway pattern).
 
@@ -406,7 +407,7 @@ async def call_llm(
                 adapter=getattr(active_adapter, "name", "<unknown>"),
                 source=getattr(active_adapter, "source", None),
                 effort=active_request.effort,
-                purpose="agentic_loop",
+                purpose=purpose,
                 cost_estimator=calculate_cost,
             )
 

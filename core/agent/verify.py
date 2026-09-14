@@ -642,10 +642,9 @@ async def _verify_llm_judge_async(
 
     Judge token usage is recorded via the loop's ``_track_usage_async``
     helper after a non-``None`` response so judge cost surfaces in the
-    session's TokenTracker (Codex MCP MEDIUM #4 fix, 2026-05-23). Cost
-    is currently aggregated into the same TokenTracker that handles the
-    action loop — per-phase tagging (``phase="judge"``) is a follow-up
-    that needs adapter-level API extension.
+    session's TokenTracker (Codex MCP MEDIUM #4 fix, 2026-05-23). Durable
+    adapter events identify these calls as ``purpose=turn_verification``;
+    the legacy TokenTracker still aggregates them with action-loop usage.
     """
     if loop is None:
         return _verification_error(mode)
@@ -669,7 +668,7 @@ async def _verify_llm_judge_async(
         if budget > 0 and started > 0:
             timeout = min(timeout, budget - (time.monotonic() - started))
         if timeout <= 0:
-            return _verification_error(mode)
+            return _verification_error(mode, reason="verification_time_budget_exhausted")
         response = await asyncio.wait_for(
             loop._call_llm(
                 _REFLEXION_SYSTEM_PROMPT
@@ -678,6 +677,7 @@ async def _verify_llm_judge_async(
                 _judge_messages(result, loop=loop, prompt=prompt),
                 model=judge_model,
                 allow_tools=False,
+                purpose="turn_verification",
             ),
             timeout=timeout,
         )
@@ -697,6 +697,9 @@ async def _verify_llm_judge_async(
         if not structural.passed and verdict.passed:
             return replace(structural, mode=mode, effective_mode=mode)
         return verdict
+    except TimeoutError:
+        log.warning("LLM judge (async) timed out; applying %s unavailable policy", mode)
+        return _verification_error(mode, reason="judge_timeout")
     except Exception:
         log.warning(
             "LLM judge (async) call failed; applying %s unavailable policy",
@@ -768,7 +771,7 @@ async def verify_turn_async(result: AgenticResult, *, loop: Any | None = None) -
         return _verification_error(mode)
 
 
-def _verification_error(mode: VerifyMode) -> VerifyResult:
+def _verification_error(mode: VerifyMode, *, reason: str = "") -> VerifyResult:
     """An internal check failure supplies neither success nor a repair signal.
 
     The zero score belongs to this structural check, not to a benchmark
@@ -781,6 +784,7 @@ def _verification_error(mode: VerifyMode) -> VerifyResult:
         score=0.0,
         rubric_misses=("verification_error",),
         should_retry=False,
+        reason=reason,
         ts=time.monotonic(),
     )
 

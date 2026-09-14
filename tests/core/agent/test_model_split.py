@@ -268,10 +268,12 @@ def test_verify_llm_judge_calls_loop_call_llm(monkeypatch: pytest.MonkeyPatch) -
         *,
         model: str | None = None,
         allow_tools: bool = True,
+        purpose: str = "agentic_loop",
     ) -> SimpleNamespace:
         captured["model"] = model or ""
         captured["system"] = system
         captured["allow_tools"] = allow_tools
+        captured["purpose"] = purpose
         return SimpleNamespace(text='{"passed": true, "score": 0.92, "reason": "ok"}')
 
     loop = SimpleNamespace(
@@ -287,6 +289,7 @@ def test_verify_llm_judge_calls_loop_call_llm(monkeypatch: pytest.MonkeyPatch) -
     assert vr.score == pytest.approx(0.92)
     assert captured["model"] == "claude-haiku-4-5-20251001"
     assert captured["allow_tools"] is False
+    assert captured["purpose"] == "turn_verification"
     assert "verifier" in captured["system"].lower()
 
 
@@ -521,6 +524,7 @@ def test_verify_turn_async_timeout_is_unavailable(
     assert vr.rubric_misses == ("verification_error",)
     assert vr.mode is VerifyMode.LLM_JUDGE
     assert vr.effective_mode is VerifyMode.LLM_JUDGE
+    assert vr.to_payload()["reason"] == "judge_timeout"
 
 
 def test_verify_turn_async_off_mode_returns_pass(
@@ -1287,6 +1291,7 @@ def test_reflexion_timeout_is_unavailable_not_pass(monkeypatch) -> None:
     )
     assert not verdict.passed and not verdict.should_retry
     assert verdict.rubric_misses == ("verification_error",)
+    assert verdict.to_payload()["reason"] == "judge_timeout"
 
 
 def test_reflexion_cannot_override_structural_failure(monkeypatch) -> None:
@@ -1328,6 +1333,7 @@ def test_judge_does_not_call_after_time_budget_or_without_task(monkeypatch, mode
             verify_turn_async(_make_result(text="A plausible complete answer"), loop=loop)
         )
         assert not verdict.passed and not verdict.should_retry
+        assert verdict.reason == ("verification_time_budget_exhausted" if task else "")
     call.assert_not_awaited()
 
 

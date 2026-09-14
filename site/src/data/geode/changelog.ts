@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": "### Fixed\n\n- Preserve the owning loop's reasoning effort across reflection, candidate\n  judging, worker delegation/resumption and wrap-up. Carry inherited effort\n  through OpenAI reasoning-capable auxiliary text/search requests and their\n  durable observations. Add an opt-in uniform-effort export check; historical\n  missing or different efforts are not relabeled or repaired in place."
+    "body": "### Fixed\n\n- Preserve the owning loop's reasoning effort across reflection, candidate\n  judging, worker delegation/resumption and wrap-up. Carry inherited effort\n  through OpenAI reasoning-capable auxiliary text/search requests and their\n  durable observations. Add an opt-in uniform-effort export check; historical\n  missing or different efforts are not relabeled or repaired in place.\n- Separate turn-final LLM verification usage from agent execution with the\n  version 8 `turn_verification` purpose, preserving unknown historical usage.\n  Persist bounded judge timeout reasons and retain native Harbor verification\n  holds without a synthetic runtime exception; delivery and expansion gates\n  remain closed while verification or observation is incomplete."
   },
   {
     "version": "1.0.29",

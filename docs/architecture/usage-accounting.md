@@ -37,9 +37,15 @@ additional charge. Harbor's cache metric is reads, never reads plus writes.
   worker calls inherit the owning loop's effort; explicit worker overrides
   remain distinct. Wrap-up retains that effort rather than forcing `low`.
   Earlier reflection `medium` defaults remain part of their original evidence.
-  Worker overrides apply to the current request and queued continuation. The
-  existing durable collaboration record does not retain effort; an idle resumed
-  worker inherits its caller's current effort, not a recovered historical override.
+  Explicit worker overrides are retained by the existing collaboration record
+  across queued and idle continuation. Legacy records have no recovered effort;
+  like new workers without an override, they inherit their current caller's effort.
+- Activity schema version 8 labels turn-final LLM judge and Reflexion calls
+  `purpose=turn_verification`. They still use the existing loop accounting
+  seam; do not count them twice. Version 7 could label these calls
+  `agentic_loop`, so that label alone cannot split historical action and
+  verification consumption. `candidate_judge` remains candidate selection,
+  not turn-final verification.
 - A completed Codex response rejected for empty visible output retains its
   known usage on that failed attempt. An identical retry gets another attempt
   ID and is counted separately, not substituted for the failed consumption.
@@ -86,6 +92,14 @@ additional charge. Harbor's cache metric is reads, never reads plus writes.
 - Cancellation does not itself decide evaluation validity. A canonical
   verifier-scored timeout may be a valid failed task; host-budget or auth
   interruption may be invalid. Apply the frozen suite rule.
+- Turn verification persists the bounded error codes `judge_timeout` and
+  `verification_time_budget_exhausted` on `turn.verify.failed`. Other
+  verification infrastructure errors keep `verification_error`; judge prose
+  is not copied into the durable error class. Unavailable verification remains
+  a delivery hold with no automatic retry. Native Harbor exports retain
+  `external_verification_required` and exit 1 without replacing that hold
+  with a synthetic `RuntimeError`. This does not turn it into a success or a
+  canonical Harbor timeout, and it does not recover cancelled provider usage.
 
 ## Cost and ratios
 
