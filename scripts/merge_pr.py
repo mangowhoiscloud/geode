@@ -100,6 +100,7 @@ def validate_snapshot(
     protection: dict[str, Any],
     checks: dict[str, Any],
     view: dict[str, Any],
+    native_checks: dict[str, Any],
 ) -> dict[str, Any]:
     """Pure admission predicate; job success never overrides missing server policy."""
     identity = _identity(pr)
@@ -144,10 +145,24 @@ def validate_snapshot(
         type(checks["total_count"]) is int and checks["total_count"] == len(runs),
         "check enumeration is incomplete",
     )
+    selected = native_checks["checks"]
+    _require(
+        len(selected) == len(REQUIRED_CHECKS)
+        and {row["name"] for row in selected} == set(REQUIRED_CHECKS),
+        "current required checks are missing or ambiguous",
+    )
     admitted = {}
     for name in REQUIRED_CHECKS:
-        matching = [row for row in runs if row.get("name") == name]
-        rolled = [row for row in view["statusCheckRollup"] if row.get("name") == name]
+        chosen = next(row for row in selected if row["name"] == name)
+        _require(chosen["state"] == "SUCCESS", "current required check is not successful")
+        matching = [
+            row for row in runs if row.get("name") == name and row["details_url"] == chosen["link"]
+        ]
+        rolled = [
+            row
+            for row in view["statusCheckRollup"]
+            if row.get("name") == name and row["detailsUrl"] == chosen["link"]
+        ]
         _require(len(matching) == len(rolled) == 1, "required check missing or ambiguous")
         run, current = matching[0], rolled[0]
         _require(
@@ -194,7 +209,23 @@ def _snapshot(number: int, receipt: dict[str, Any] | None = None) -> dict[str, A
             "headRefOid,baseRefName,baseRefOid,mergeable,mergeStateStatus,statusCheckRollup",
         ]
     )
-    return validate_snapshot(pr, base, protection, checks, view)
+    # Native gh resolves superseded workflow runs. Bind its selection back to
+    # exact REST/rollup records; never choose whichever duplicate passed.
+    required = _gh(
+        [
+            "pr",
+            "checks",
+            str(number),
+            "--repo",
+            REPOSITORY,
+            "--required",
+            "--json",
+            "name,state,link",
+            "--jq",
+            "{checks: .}",
+        ]
+    )
+    return validate_snapshot(pr, base, protection, checks, view, required)
 
 
 def main(argv: list[str] | None = None) -> int:

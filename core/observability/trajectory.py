@@ -581,6 +581,8 @@ def trajectory_from_sessions(
         terminal_payload = session_rows[-1].payload
         if int(terminal_payload.get("record_failures", 0) or 0) > 0:
             incompleteness.append(f"session {session_id} reports canonical write failures")
+        if terminal_payload.get("runtime_observation_status") in {"degraded", "unavailable"}:
+            incompleteness.append(f"session {session_id} reports incomplete runtime observation")
     automatic_runtime_refs = _runtime_event_references(
         Path(runtime_event_db_path) if runtime_event_db_path is not None else store.db_path,
         ordered_session_ids,
@@ -719,6 +721,7 @@ def _digest_private_event_payload(
             "completion_tokens",
             "record_failures",
             "projection_failed",
+            "runtime_observation_status",
         },
         "turn.completed": {
             "termination_reason",

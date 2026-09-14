@@ -344,6 +344,29 @@ def test_digest_trajectory_preserves_plan_control_fields(tmp_path):
     assert len(plan_event["payload"]["_omitted_payload_sha256"]) == 64
 
 
+@pytest.mark.parametrize("health", ["no_known_faults", "degraded", "unavailable"])
+def test_child_observer_health_survives_canonical_export(tmp_path, health):
+    from core.observability.session_timeline import SessionTimeline
+
+    db = tmp_path / "sessions.db"
+    for session in ("parent", "child"):
+        timeline = SessionTimeline(session, db_path=db)
+        timeline.record_session_start()
+        timeline.record_session_end(
+            runtime_observation_status=health if session == "child" else "no_known_faults"
+        )
+    for policy in ("full", "digest"):
+        trajectory = trajectory_from_sessions(
+            ("parent", "child"),
+            trajectory_id="parent-with-worker",
+            source={"harness": "test", "session": "parent"},
+            db_path=db,
+            content_policy=policy,
+        )
+        assert trajectory["integrity"]["scope_complete"] is (health == "no_known_faults")
+        assert trajectory["events"][-1]["payload"]["runtime_observation_status"] == health
+
+
 def test_trajectory_marks_orphaned_tool_event_incomplete():
     trajectory = build_trajectory(
         trajectory_id="traj-orphan",

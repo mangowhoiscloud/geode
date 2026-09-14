@@ -31,6 +31,10 @@ additional charge. Harbor's cache metric is reads, never reads plus writes.
   omitted input/output/cache/reasoning detail. Activity schema version 6
   preserves these unknowns in durable `llm.call.ended` payloads. Earlier
   input/output/reasoning zeros do not establish provider-reported presence.
+- Activity schema version 7 adds call `purpose`, credential `source`, and
+  requested `effort`. Missing legacy fields remain null. Request effort is not
+  proof of the provider's internal compute. Root configuration does not label
+  auxiliary calls: reflection keeps its existing `medium` request default.
 - A completed Codex response rejected for empty visible output retains its
   known usage on that failed attempt. An identical retry gets another attempt
   ID and is counted separately, not substituted for the failed consumption.
@@ -46,13 +50,32 @@ additional charge. Harbor's cache metric is reads, never reads plus writes.
   mapping anomalies, including loss of both members of a typed pair. Scoped
   totals then stay null even if the remaining pairs match. `no_known_faults`
   is not proof against hard process death, retention loss or unobserved calls.
-- The Harbor scope is `recorded-agentic-loop-attempts-only`, explicitly
+- The Harbor scope is `recorded-runtime-llm-attempts-only`, explicitly
   `whole_runtime_complete=false`. Turn-final verification/reflexion calls
   already use the loop accounting seam and must not be added a second time.
-  Cognitive reflection, hosted search and auxiliary text/compaction paths
-  are not fully covered. Pairing describes retained events, not all dispatched
+  Cognitive reflection and candidate selection use the shared adapter-terminal
+  observation path; parsing a declined or malformed response does not erase
+  its usage. Native text/compaction, learning extraction and hosted search
+  pass their event bus explicitly to the same observation helper. Capability
+  calls without an exposed request effort keep that field unknown; it is not
+  inferred from the root's setting. Earlier `recorded-agentic-loop-attempts-only` exports retain their
+  original scope. Pairing describes retained events, not all dispatched
   calls: a lost start/end pair can evade that check. Final-result cost and
   durable token totals have different coverage and are not a reconciled invoice.
+- Full-runtime coverage additionally requires the native producer inventory
+  and background-writer shutdown checks. Wiring one callback does not prove
+  its worker received the event bus or finished before the source snapshot.
+  IPC fast-chat and external capability consumers without an event bus remain
+  outside this native Harbor measurement scope.
+- Each new canonical `session.ended` carries its own
+  `runtime_observation_status`. Known child-sink failure or a missing child
+  event bus makes the combined trajectory scope incomplete, even when the
+  parent's retained LLM pairs match. Earlier absent status remains unknown;
+  task success and observer health are separate facts.
+- Native exports also reconcile known child handles and structured parent
+  subagent events against canonical session inventory. A completed child with
+  no surviving rows is missing evidence, not a zero-call session; it prevents
+  a complete source snapshot even when the root's records look healthy.
 - Cancellation does not itself decide evaluation validity. A canonical
   verifier-scored timeout may be a valid failed task; host-budget or auth
   interruption may be invalid. Apply the frozen suite rule.
@@ -89,6 +112,15 @@ input convention, aggregate cached-input coverage is `sum(cached_input_tokens)
 excludes a call from complete-case cache ratios; it does not contribute zero.
 State that population and its missing-call count next to any comparison.
 
+New auxiliary observation rows keep cost unknown unless the adapter reports
+it. Main-loop estimated costs retain the existing injected pricing behavior;
+neither field is a reconciled subscription invoice. Do not sum unlike scopes
+or infer a zero cost from an absent auxiliary estimate.
+
+Learning, compaction, context-exhausted notices, model-switch summaries and
+dreaming share `purpose=text_completion`. Their usage is retained, but this
+field alone cannot separate their live cost or establish which helper ran.
+
 ## Existing data contracts and publication
 
 Use the typed owners above and the existing
@@ -113,13 +145,20 @@ trajectory. Raw usage remains private until exact-byte review under the
 Harbor's existing `usage` object also carries `recorded_attempts`: numeric
 projections of retained canonical `llm.call.ended` events. Each row binds the
 session/call/attempt IDs, source event ID and payload hash to the reported
-counters. `occurred_at` uses Unix seconds in UTC; model/provider/adapter and
-error class are bounded metadata. Missing values remain null, duplicate
+counters. `occurred_at` uses Unix seconds in UTC; model/provider/adapter,
+purpose/source/requested effort and error class are bounded metadata.
+Missing values remain null, duplicate
 terminals remain visible, and missing terminal events are not synthesized.
 This list excludes prompts, tool content, responses and provider reasoning.
 It is not another raw store or a whole-runtime billing ledger; publication
 still requires exact-byte privacy review. Consumers can show recorded cache
 values and their source without reopening the original session database.
+
+An observed attempt is an invocation of the adapter completion method, not
+necessarily one wire request: internal SDK or provider retries can remain
+inside that invocation. Middleware short-circuits are not provider usage.
+Neither source labels nor complete start/end pairing prove an invoice or
+exhaustive whole-runtime coverage.
 
 The canonical session JSON can retain `tool.called`/`tool.completed` timestamps
 even when an ATIF or public Replay projection omits duration fields. Join by

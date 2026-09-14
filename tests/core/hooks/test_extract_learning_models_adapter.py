@@ -24,6 +24,7 @@ async contexts so the migration is signature-only at the boundary.
 
 from __future__ import annotations
 
+import ast
 import inspect
 from pathlib import Path
 
@@ -120,14 +121,18 @@ def test_context_exhausted_call_sites_are_awaited() -> None:
     src = (
         Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "_guards.py"
     ).read_text(encoding="utf-8")
-    total = src.count("_context_exhausted_message(user_input)")
-    awaited = src.count("await _context_exhausted_message(user_input)")
-    assert total >= 1, "expected at least one _context_exhausted_message call site"
-    assert awaited == total, (
-        f"every _context_exhausted_message call must be awaited — "
-        f"{total - awaited} un-awaited call(s) would embed a coroutine into "
-        "AgenticResult.text (visible UI bug)."
-    )
+    tree = ast.parse(src)
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_context_exhausted_message"
+    ]
+    awaited = [node.value for node in ast.walk(tree) if isinstance(node, ast.Await)]
+    assert calls, "expected at least one _context_exhausted_message call site"
+    assert all(call in awaited for call in calls)
+    assert all({"hooks", "correlation"} <= {kw.arg for kw in call.keywords} for call in calls)
 
 
 def test_context_exhausted_dispatch_uses_settings_model_route() -> None:

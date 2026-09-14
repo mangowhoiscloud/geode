@@ -11,15 +11,22 @@ may not enforce the schema server-side) can't poison state.
 from __future__ import annotations
 
 import asyncio
-import inspect
+from collections.abc import Iterator
+from dataclasses import asdict
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import create_autospec
 
 import pytest
 from core.agent.cognitive_state import CognitiveState
-from core.agent.loop import _reflection
+from core.agent.conversation import ConversationContext
+from core.agent.loop import AgenticLoop, AgenticLoopConfig, _reflection
 from core.agent.loop._reflection import REFLECTION_TOOL_NAME
-from core.config.policy_source import EMPTY_POLICY_SOURCES, PolicySourceBundle
+from core.agent.tool_executor import ToolExecutor
+from core.config import settings
+from core.config.policy_source import EMPTY_POLICY_SOURCES
+from core.hooks import HookCorrelation, HookEvent, HookSystem
+from core.llm.agentic_response import AgenticResponse, ToolUseBlock
 
 # ---------------------------------------------------------------------------
 # Pure-function invariants (no LLM)
@@ -255,158 +262,140 @@ def test_toml_map_carries_cognitive_reflection_keys() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_agentic_loop_has_maybe_reflect() -> None:
-    """The AgenticLoop must own the toggle check, not _reflection.py —
-    so the LLM module stays pure. Pin the wiring."""
-    from core.agent.loop.agent_loop import AgenticLoop
-
-    assert hasattr(AgenticLoop, "_maybe_reflect")
-    src = inspect.getsource(AgenticLoop._maybe_reflect)
-    assert "cognitive_reflection_enabled" in src
-    assert "reflect_async" in src
-
-
-def test_finished_cognitive_tool_round_calls_maybe_reflect() -> None:
-    """The reflection node must fire between ``record_round`` and
-    the REFLECT hook event — otherwise downstream listeners see the
-    deterministic snapshot, not the LLM-derived belief update."""
-    from core.agent.loop.agent_loop import AgenticLoop
-
-    act_source = inspect.getsource(AgenticLoop._run_cognitive_act_observe_cycle)
-    finish_source = inspect.getsource(AgenticLoop._finish_cognitive_tool_round)
-    assert "self.cognitive_state.record_round(" in act_source
-    assert act_source.index("self.cognitive_state.record_round(") < act_source.index(
-        "AgenticLoop._finish_cognitive_tool_round("
+@pytest.fixture
+def reflection_loop(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[AgenticLoop, HookSystem]]:
+    # Constructor state and temporary persistence come from the real runtime.
+    for key, value in {
+        "cognitive_reflection_enabled": True,
+        "cognitive_reflection_interval": 1,
+        "cognitive_reflection_adaptive": False,
+        "cognitive_reflection_model": "",
+        "cognitive_reflection_max_tokens": 321,
+    }.items():
+        monkeypatch.setattr(settings, key, value)
+    hooks = HookSystem()
+    loop = AgenticLoop(
+        ConversationContext(),
+        ToolExecutor(
+            action_handlers={"list_subjects": lambda **_kwargs: {"items": []}}, hooks=hooks
+        ),
+        config=AgenticLoopConfig(source="subscription", session_id="s"),
+        model="gpt-5.5",
+        provider="openai-codex",
+        hooks=hooks,
+        quiet=True,
     )
-    assert finish_source.index("self._maybe_reflect(") < finish_source.index(
-        "HookEvent.COGNITIVE_REFLECT"
-    )
+    try:
+        yield loop, hooks
+    finally:
+        hooks.close()
+
+
+@pytest.fixture
+def reflection_call(monkeypatch: pytest.MonkeyPatch) -> Any:
+    call = create_autospec(_reflection.reflect_async, return_value=None)
+    monkeypatch.setattr(_reflection, "reflect_async", call)
+    return call
+
+
+def test_finished_cognitive_tool_round_calls_maybe_reflect(
+    reflection_loop: tuple[AgenticLoop, HookSystem], reflection_call: Any
+) -> None:
+    """Reflection sees the recorded round; hooks see its updated beliefs."""
+    loop, hooks = reflection_loop
+    observed: list[tuple[str, int, float | None]] = []
+
+    def record(event: HookEvent, data: dict[str, Any]) -> None:
+        state = data["cognitive_state"]
+        observed.append((event.value, state["round_count"], state["confidence"]))
+
+    for event in (
+        HookEvent.COGNITIVE_ACT,
+        HookEvent.COGNITIVE_OBSERVE,
+        HookEvent.COGNITIVE_REFLECT,
+        HookEvent.COGNITIVE_UPDATE_MEMORY,
+    ):
+        hooks.subscribe(event, record)
+
+    def reflect(state: CognitiveState, *_args: Any, **_kwargs: Any) -> None:
+        observed.append(("reflection", state.round_count, state.confidence))
+        state.confidence = 0.75
+
+    reflection_call.side_effect = reflect
+    response = AgenticResponse(content=[ToolUseBlock(id="tool-1", name="list_subjects")])
+    results = asyncio.run(loop._run_cognitive_act_observe_cycle(response, 0))
+    assert len(results) == 1
+    reflection_call.assert_awaited_once()
+    assert observed == [
+        (HookEvent.COGNITIVE_ACT.value, 0, None),
+        (HookEvent.COGNITIVE_OBSERVE.value, 0, None),
+        ("reflection", 1, None),
+        (HookEvent.COGNITIVE_REFLECT.value, 1, 0.75),
+        (HookEvent.COGNITIVE_UPDATE_MEMORY.value, 1, 0.75),
+    ]
 
 
 def test_maybe_reflect_inherits_loop_model_provider_source(
     monkeypatch: pytest.MonkeyPatch,
+    reflection_loop: tuple[AgenticLoop, HookSystem],
+    reflection_call: Any,
 ) -> None:
-    """Empty ``cognitive_reflection_model`` means reflection follows the
-    active AgenticLoop route, including subscription/PAYG source."""
-    from core.agent.loop.agent_loop import AgenticLoop
-    from core.config import settings
+    loop, _hooks = reflection_loop
+    loop.cognitive_state.record_round(action="synthetic", observation="synthetic")
+    # The actual adapter's route wins over a stale loop source value.
+    monkeypatch.setattr(loop, "_source", "payg")
+    loop._turn_id = "t"
+    loop._open_step_snapshot(round_idx=0, model=loop.model, allow_tools=True)
+    snapshot = loop._open_step_snapshot(round_idx=1, model=loop.model, allow_tools=True)
 
-    captured: dict[str, Any] = {}
+    asyncio.run(loop._maybe_reflect([]))
 
-    async def _fake_reflect_async(
-        _state: CognitiveState,
-        _tool_results: list[dict[str, Any]],
-        *,
-        model: str,
-        max_tokens: int,
-        provider: str | None = None,
-        source: str | None = None,
-        policy_sources: PolicySourceBundle | None = None,
-    ) -> None:
-        captured.update(
-            model=model,
-            max_tokens=max_tokens,
-            provider=provider,
-            source=source,
-            policy_sources=policy_sources,
-        )
-
-    monkeypatch.setattr(_reflection, "reflect_async", _fake_reflect_async)
-    old_model = getattr(settings, "cognitive_reflection_model", "")
-    old_tokens = getattr(settings, "cognitive_reflection_max_tokens", 512)
-    old_enabled = getattr(settings, "cognitive_reflection_enabled", True)
-    old_interval = getattr(settings, "cognitive_reflection_interval", 1)
-    try:
-        object.__setattr__(settings, "cognitive_reflection_enabled", True)
-        object.__setattr__(settings, "cognitive_reflection_interval", 1)
-        object.__setattr__(settings, "cognitive_reflection_model", "")
-        object.__setattr__(settings, "cognitive_reflection_max_tokens", 321)
-
-        class _Adapter:
-            source = "subscription"
-
-        class _StubSelf:
-            cognitive_state = CognitiveState(round_count=1)
-            model = "gpt-5.5"
-            _provider = "openai-codex"
-            _source = "api_key"
-            _new_adapter = _Adapter()
-            _policy_sources = EMPTY_POLICY_SOURCES
-
-        bound = AgenticLoop._maybe_reflect.__get__(_StubSelf(), _StubSelf)
-        asyncio.run(bound([]))
-    finally:
-        object.__setattr__(settings, "cognitive_reflection_model", old_model)
-        object.__setattr__(settings, "cognitive_reflection_max_tokens", old_tokens)
-        object.__setattr__(settings, "cognitive_reflection_enabled", old_enabled)
-        object.__setattr__(settings, "cognitive_reflection_interval", old_interval)
-
-    assert captured.pop("policy_sources") is EMPTY_POLICY_SOURCES
-    assert captured == {
-        "model": "gpt-5.5",
-        "max_tokens": 321,
-        "provider": "openai-codex",
-        "source": "subscription",
-    }
+    reflection_call.assert_awaited_once_with(
+        loop.cognitive_state,
+        [],
+        model="gpt-5.5",
+        max_tokens=321,
+        provider="openai-codex",
+        source="subscription",
+        policy_sources=EMPTY_POLICY_SOURCES,
+        middleware_registry=loop.executor.middleware_registry,
+        correlation=asdict(snapshot.correlation),
+    )
+    assert snapshot.correlation.session_id == "s"
+    assert snapshot.correlation.turn_id == "t"
+    assert snapshot.correlation.step_id == "t:step-2"
+    assert snapshot.correlation.llm_call_id == ""
 
 
 def test_maybe_reflect_configured_model_stays_explicit(
     monkeypatch: pytest.MonkeyPatch,
+    reflection_loop: tuple[AgenticLoop, HookSystem],
+    reflection_call: Any,
 ) -> None:
-    """A configured reflection model remains an override and lets
-    ``reflect_async`` resolve provider/source from that model."""
-    from core.agent.loop.agent_loop import AgenticLoop
-    from core.config import settings
+    loop, _hooks = reflection_loop
+    monkeypatch.setattr(settings, "cognitive_reflection_model", "claude-haiku-4-5-20251001")
+    loop.cognitive_state.record_round(action="synthetic", observation="synthetic")
+    loop._turn_id = "t-fallback"
+    loop._session_generation = 2
+    loop._verify_attempt = 1
 
-    captured: dict[str, Any] = {}
+    asyncio.run(loop._maybe_reflect([]))
 
-    async def _fake_reflect_async(
-        _state: CognitiveState,
-        _tool_results: list[dict[str, Any]],
-        *,
-        model: str,
-        max_tokens: int,
-        provider: str | None = None,
-        source: str | None = None,
-        policy_sources: PolicySourceBundle | None = None,
-    ) -> None:
-        captured.update(
-            model=model,
-            provider=provider,
-            source=source,
-            policy_sources=policy_sources,
-        )
-
-    monkeypatch.setattr(_reflection, "reflect_async", _fake_reflect_async)
-    old_model = getattr(settings, "cognitive_reflection_model", "")
-    old_enabled = getattr(settings, "cognitive_reflection_enabled", True)
-    old_interval = getattr(settings, "cognitive_reflection_interval", 1)
-    try:
-        object.__setattr__(settings, "cognitive_reflection_enabled", True)
-        object.__setattr__(settings, "cognitive_reflection_interval", 1)
-        object.__setattr__(settings, "cognitive_reflection_model", "claude-haiku-4-5-20251001")
-
-        class _StubSelf:
-            cognitive_state = CognitiveState(round_count=1)
-            model = "gpt-5.5"
-            _provider = "openai-codex"
-            _source = "subscription"
-            _new_adapter = object()
-            _policy_sources = EMPTY_POLICY_SOURCES
-
-        bound = AgenticLoop._maybe_reflect.__get__(_StubSelf(), _StubSelf)
-        asyncio.run(bound([]))
-    finally:
-        object.__setattr__(settings, "cognitive_reflection_model", old_model)
-        object.__setattr__(settings, "cognitive_reflection_enabled", old_enabled)
-        object.__setattr__(settings, "cognitive_reflection_interval", old_interval)
-
-    assert captured.pop("policy_sources") is EMPTY_POLICY_SOURCES
-    assert captured == {
-        "model": "claude-haiku-4-5-20251001",
-        "provider": None,
-        "source": None,
-    }
+    reflection_call.assert_awaited_once_with(
+        loop.cognitive_state,
+        [],
+        model="claude-haiku-4-5-20251001",
+        max_tokens=321,
+        provider=None,
+        source=None,
+        policy_sources=EMPTY_POLICY_SOURCES,
+        middleware_registry=loop.executor.middleware_registry,
+        correlation=asdict(
+            HookCorrelation(
+                session_id="s", turn_id="t-fallback", session_generation=2, verify_attempt=1
+            )
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -27,6 +27,7 @@ incompatible with extended/adaptive thinking across models).
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -167,6 +168,7 @@ async def judge_candidates(
     source: str | None = None,
     max_tokens: int = 512,
     middleware_registry: Any | None = None,
+    correlation: Mapping[str, Any] | None = None,
 ) -> CandidateVerdict:
     """Pick the best of *candidates* with one judge LLM call.
 
@@ -221,7 +223,9 @@ async def judge_candidates(
                 active_middleware = MiddlewareRegistry()
             else:
                 active_middleware = middleware_registry
-            return await active_middleware.call_llm(adapter, req)
+            return await active_middleware.call_llm(
+                adapter, req, correlation=correlation, purpose="candidate_judge"
+            )
 
         response, _used_model = await call_with_failover([model], _do_call)
     except Exception as exc:

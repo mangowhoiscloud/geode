@@ -160,7 +160,7 @@ class ActivityRowBase(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: int = 6
+    schema_version: int = 7
     """Row-schema version (PR-OBS-CONTRACT, 2026-06-13). Bump when a
     field is added/renamed/retyped on any row class so JSONL re-readers
     can branch on shape instead of guessing from key presence.
@@ -172,7 +172,10 @@ class ActivityRowBase(BaseModel):
     correlation.
     v4 (OpenRouter live acceptance, 2026-09-03): completed LLM calls retain
     bounded usage, charge, and serving-route evidence.
-    v5: completed LLM calls may retain bounded serialized-image receipts."""
+    v5: completed LLM calls may retain bounded serialized-image receipts.
+    v6: explicit counter presence and tool terminal outcomes.
+    v7: physical LLM attempts retain purpose, source and requested effort;
+    old rows read those fields as unknown, not inferred from the root model."""
 
     ts: float
     run_id: str
@@ -291,6 +294,18 @@ class LLMCallEndedDetails(LifecycleCompletedDetails):
     model: str | None = None
     provider: str | None = None
     adapter: str | None = None
+    purpose: (
+        Literal[
+            "agentic_loop",
+            "cognitive_reflection",
+            "candidate_judge",
+            "text_completion",
+            "hosted_search",
+        ]
+        | None
+    ) = None
+    source: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_-]{0,79}$")
+    effort: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_-]{0,31}$")
     error_type: str | None = None
     usage: LLMCallUsageDetails | None = None
     cost_usd: float | None = Field(default=None, ge=0)

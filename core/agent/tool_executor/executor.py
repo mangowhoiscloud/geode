@@ -10,6 +10,7 @@ import threading
 import time
 from collections.abc import Awaitable, Callable, Mapping, Set
 from contextvars import copy_context
+from dataclasses import asdict
 from functools import partial
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, cast
@@ -2081,6 +2082,7 @@ class ToolExecutor:
             provider=judge_provider,
             source=judge_source,
             middleware_registry=self._middleware_registry,
+            correlation=asdict(self._tool_correlation(context)),
         )
         winner = successful[verdict.winner_index]
         block: dict[str, Any] = {
