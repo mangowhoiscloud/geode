@@ -47,6 +47,14 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **CI-gated GitFlow synchronization.** The merge guard accepts an exact ordered
+  develop/main two-parent sync when strict ancestry blocks the canonical head,
+  and binds required checks to the newest PR workflow run instead of rejecting
+  unrelated push/scheduled checks. Strict protection, administrator enforcement,
+  successful required checks and pre-merge head/base revalidation remain required.
+
 ## [1.0.29] - 2026-09-14
 
 ### Infrastructure

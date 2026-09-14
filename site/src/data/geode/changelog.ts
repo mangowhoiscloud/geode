@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Fixed\n\n- **CI-gated GitFlow synchronization.** The merge guard accepts an exact ordered\n  develop/main two-parent sync when strict ancestry blocks the canonical head,\n  and binds required checks to the newest PR workflow run instead of rejecting\n  unrelated push/scheduled checks. Strict protection, administrator enforcement,\n  successful required checks and pre-merge head/base revalidation remain required."
   },
   {
     "version": "1.0.29",
