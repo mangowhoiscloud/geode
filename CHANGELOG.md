@@ -70,6 +70,10 @@ functional change.
   retain sink health. Native finalization drains admitted Dreaming work within
   the original agent deadline before exporting; unfinished or failed cleanup
   cannot certify a complete source snapshot.
+  Known child handles and structured parent subagent events must also match
+  canonical session inventory; an entirely missing child cannot hide behind
+  a healthy root export. Workers require the real async session lifecycle;
+  missing methods no longer silently pass through a test-double fallback.
 - Distinguish a completed negative check from a tool outage in the shared
   runtime prompt. Required failed or unrun checks cannot establish completion
   or merge readiness, including persona-off and audit prompt paths.

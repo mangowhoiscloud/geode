@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import inspect
 import json
 import logging
 import os
@@ -57,20 +56,6 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 WORKER_DIR = GLOBAL_WORKERS_DIR  # P2 — was `Path.home() / ".geode" / "workers"`
-
-
-async def _close_worker_session(loop: Any, *, success: bool) -> None:
-    """Prefer async public lifecycle, retaining simple test/legacy doubles."""
-    suffix = "completed" if success else "error"
-    async_close = getattr(loop, f"amark_session_{suffix}", None)
-    if callable(async_close):
-        outcome = async_close()
-        if inspect.isawaitable(outcome):
-            await outcome
-            return
-    sync_close = getattr(loop, f"mark_session_{suffix}", None)
-    if callable(sync_close):
-        sync_close()
 
 
 @dataclass
@@ -710,9 +695,9 @@ def _run_agentic(
             if getattr(agentic_result, "error", None) or not is_successful_task_termination(
                 getattr(agentic_result, "termination_reason", "")
             ):
-                await _close_worker_session(loop, success=False)
+                await loop.amark_session_error()
             else:
-                await _close_worker_session(loop, success=True)
+                await loop.amark_session_completed()
             success, summary, text = _resolve_worker_outcome(agentic_result)
 
             # PR-SEEDGEN-TOKENS (2026-05-30) — surface the sub-agent's per-arun
@@ -741,7 +726,7 @@ def _run_agentic(
             return result
         except BaseException:
             if loop is not None:
-                await _close_worker_session(loop, success=False)
+                await loop.amark_session_error()
             raise
         finally:
             try:

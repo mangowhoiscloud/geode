@@ -72,6 +72,10 @@ additional charge. Harbor's cache metric is reads, never reads plus writes.
   event bus makes the combined trajectory scope incomplete, even when the
   parent's retained LLM pairs match. Earlier absent status remains unknown;
   task success and observer health are separate facts.
+- Native exports also reconcile known child handles and structured parent
+  subagent events against canonical session inventory. A completed child with
+  no surviving rows is missing evidence, not a zero-call session; it prevents
+  a complete source snapshot even when the root's records look healthy.
 - Cancellation does not itself decide evaluation validity. A canonical
   verifier-scored timeout may be a valid failed task; host-budget or auth
   interruption may be invalid. Apply the frozen suite rule.

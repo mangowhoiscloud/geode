@@ -254,7 +254,7 @@ def test_finalized_true_is_insufficient_when_export_missing(trial, model_boundar
 
 
 @pytest.mark.parametrize(
-    "mutation", ["cast", "receipt", "atif", "canonical", "digest", "identity", "stale", "naive"]
+    "mutation", ["cast", "receipt", "atif", "digest", "identity", "stale", "naive"]
 )
 def test_altered_or_stale_projection_is_rejected(trial, model_boundary, mutation):
     root = trial["trial_dir"]
@@ -265,10 +265,6 @@ def test_altered_or_stale_projection_is_rejected(trial, model_boundary, mutation
         _rewrite(agent / "recording.receipt.json", lambda p: p["source"].update(sha256="e" * 64))
     elif mutation == "atif":
         _rewrite(agent / "trajectory.json", lambda p: p["steps"][1].update(message="altered"))
-    elif mutation == "canonical":
-        _rewrite(
-            agent / "geode-trajectory.private.json", lambda p: p["integrity"].update(record_count=0)
-        )
     elif mutation == "digest":
         _rewrite(
             agent / "geode-trajectory.json",
@@ -352,17 +348,14 @@ def test_no_tool_action_is_reported_without_inventing_trace(trial, model_boundar
     assert result["replay_status"] == "no-tool-action-observed"
 
 
-def test_canonical_validator_is_called_not_stubbed(trial, model_boundary, monkeypatch):
-    calls = []
-    original = gate.verify_trajectory_integrity
-
-    def verify(value):
-        calls.append(value["trajectory_id"])
-        return original(value)
-
-    monkeypatch.setattr(gate, "verify_trajectory_integrity", verify)
-    gate.validate_observations(**trial)
-    assert calls == ["harbor-session-1", "harbor-session-1"]
+@pytest.mark.parametrize("name", ["geode-trajectory.private.json", "geode-trajectory.json"])
+def test_each_canonical_projection_rejects_false_integrity(trial, model_boundary, name):
+    _rewrite(
+        trial["trial_dir"] / "agent" / name,
+        lambda value: value["integrity"].update(record_count=0),
+    )
+    with pytest.raises(ValueError, match="record_count does not match events"):
+        gate.validate_observations(**trial)
 
 
 def test_cli_never_reports_expansion_green_or_prints_private_error(trial, model_boundary, capsys):

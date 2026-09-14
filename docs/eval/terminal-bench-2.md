@@ -275,7 +275,7 @@ live. An uninstrumented enabled path blocks a whole-runtime study.
 | --- | --- | --- |
 | Frozen experiment → trial | Source bundle, task digest, image/platform, Harbor version, route, resource/time limits, reset and attempt cap match the prospective spec | Pause; do not silently change the environment or reuse the previous source bundle |
 | Adapter dispatch → durable usage | Identified starts/ends, observed counter presence, retained failed/cancelled attempts, no known sink/mapping failure, bounded purpose/source/requested effort | Pause; null is not zero and surviving pairs do not prove omitted producers |
-| Native finalization → source snapshot | Successful shutdown/read/export stages, complete source snapshot, canonical integrity recomputed from retained events | Preserve partial outputs; a false or missing receipt never establishes no execution |
+| Native finalization → source snapshot | Successful shutdown/read/export stages; known child handles and structured parent subagent events reconciled with canonical session inventory; integrity recomputed | Preserve partial outputs; missing child rows or a false/missing receipt never establish no execution |
 | Canonical trajectory → host Replay | Matching session/call identity, validated ATIF, paired tool actions/results, cast bytes and source/output receipt hashes | A true `runtime-finalized.json` alone cannot pass: host ATIF/cast generation happens later |
 | Private source → public derivative | Exact-byte privacy review, declared redactions/omissions and source-bound content/count reconciliation | Withhold publication; never fill omitted action text or provider reasoning with invented content |
 

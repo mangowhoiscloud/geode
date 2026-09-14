@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from core.agent.loop import AgenticLoop
 from core.agent.loop.models import AgenticResult
 from core.agent.worker import (
     _FAILURE_TERMINATION_REASONS,
@@ -291,7 +292,7 @@ def test_sigterm_cancels_turn_closes_error_session_and_flushes_hooks(
     async def close_session() -> None:
         lifecycle.append("session_error")
 
-    loop = MagicMock()
+    loop = MagicMock(spec=AgenticLoop)
     loop.arun = run_until_signal
     loop.amark_session_error = AsyncMock(side_effect=close_session)
     loop.amark_session_completed = AsyncMock(side_effect=close_completed)
@@ -488,7 +489,7 @@ class TestSubAgentReasoningWiring:
 
         def _fake_loop(*args, **kwargs):
             captured.update(kwargs)
-            mock_loop = MagicMock()
+            mock_loop = MagicMock(spec=AgenticLoop)
             # PR-DEFECT-AB (2026-05-24): _resolve_worker_outcome now reads
             # ``.error`` + ``.termination_reason`` off the loop's return,
             # so the stub must be a real AgenticResult (or close enough)
@@ -564,7 +565,7 @@ def test_reviewer_prompt_reaches_worker_assembly_and_read_only_executor(
                 assert result["denied"] is True
             return AgenticResult(text='{"findings": []}', termination_reason="natural")
 
-        loop = MagicMock()
+        loop = MagicMock(spec=AgenticLoop)
         loop.arun = AsyncMock(side_effect=review)
         return loop
 
@@ -597,7 +598,7 @@ def test_run_agentic_shares_one_bound_plan_with_executor_and_loop(
 
     def fake_loop(*args, **_kwargs):
         captured["loop_bound"] = args[1]._bound_tool_plan
-        loop = MagicMock()
+        loop = MagicMock(spec=AgenticLoop)
         loop.arun = AsyncMock(return_value=AgenticResult(text="ok", termination_reason="unknown"))
         return loop
 
@@ -652,7 +653,7 @@ def test_worker_uses_one_event_bus_through_auxiliary_dispatch(
     def fake_loop(conversation, executor, **kwargs):
         assert executor._hooks is kwargs["hooks"] is hooks
         assert executor.middleware_registry._events is hooks
-        loop = MagicMock()
+        loop = MagicMock(spec=AgenticLoop)
 
         async def run(_prompt):
             await executor.middleware_registry.call_llm(
@@ -758,7 +759,7 @@ def test_worker_toolkit_filter_blocks_special_route_before_side_effect(
     def fake_loop(_conversation, loop_executor, **_kwargs):
         nonlocal executor
         executor = loop_executor
-        loop = MagicMock()
+        loop = MagicMock(spec=AgenticLoop)
         loop.arun = AsyncMock(side_effect=fake_arun)
         return loop
 
@@ -966,21 +967,12 @@ class TestSchemaAwareRetryWiring:
     retry helper. With no schema, no retry. With a schema and a passing
     first attempt, no retry."""
 
-    def _patch_bootstrap(self, monkeypatch, tmp_path, side_effect_seq):
-        from unittest.mock import AsyncMock, MagicMock, patch
-
-        mock_loop = MagicMock()
-        mock_loop.arun = AsyncMock(side_effect=side_effect_seq)
-
-        monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
-        return mock_loop, patch, MagicMock
-
     def test_retry_fires_once_when_schema_set_and_first_is_empty(
         self, monkeypatch, tmp_path
     ) -> None:
         from unittest.mock import AsyncMock, MagicMock, patch
 
-        mock_loop = MagicMock()
+        mock_loop = MagicMock(spec=AgenticLoop)
         mock_loop.arun = AsyncMock(
             side_effect=[
                 AgenticResult(text="", termination_reason="unknown"),
@@ -1015,7 +1007,7 @@ class TestSchemaAwareRetryWiring:
     def test_no_retry_when_first_attempt_passes(self, monkeypatch, tmp_path) -> None:
         from unittest.mock import AsyncMock, MagicMock, patch
 
-        mock_loop = MagicMock()
+        mock_loop = MagicMock(spec=AgenticLoop)
         mock_loop.arun = AsyncMock(
             return_value=AgenticResult(
                 text='{"candidate_id": "c1", "score": 0.7}',
@@ -1048,7 +1040,7 @@ class TestSchemaAwareRetryWiring:
         problem, not ours."""
         from unittest.mock import AsyncMock, MagicMock, patch
 
-        mock_loop = MagicMock()
+        mock_loop = MagicMock(spec=AgenticLoop)
         mock_loop.arun = AsyncMock(
             return_value=AgenticResult(text="", termination_reason="unknown")
         )
@@ -1080,7 +1072,7 @@ class TestSchemaAwareRetryWiring:
         contract is the same prompt."""
         from unittest.mock import AsyncMock, MagicMock, patch
 
-        mock_loop = MagicMock()
+        mock_loop = MagicMock(spec=AgenticLoop)
         mock_loop.arun = AsyncMock(
             return_value=AgenticResult(text="", termination_reason="unknown")
         )
@@ -1120,7 +1112,7 @@ class TestSchemaAwareRetryWiring:
         """
         from unittest.mock import AsyncMock, MagicMock, patch
 
-        mock_loop = MagicMock()
+        mock_loop = MagicMock(spec=AgenticLoop)
         mock_loop.arun = AsyncMock(
             return_value=AgenticResult(
                 text="non-JSON body",
@@ -1159,7 +1151,7 @@ class TestSchemaAwareRetryWiring:
         async def _slow_arun(_prompt: str) -> AgenticResult:
             return AgenticResult(text="", termination_reason="unknown")
 
-        mock_loop = MagicMock()
+        mock_loop = MagicMock(spec=AgenticLoop)
         mock_loop.arun = AsyncMock(side_effect=_slow_arun)
 
         # Fake the wall-clock so ``time.time() - started`` looks like
@@ -1215,7 +1207,7 @@ class TestSchemaAwareRetryWiring:
                 termination_reason="unknown",
             )
 
-        mock_loop = MagicMock()
+        mock_loop = MagicMock(spec=AgenticLoop)
         mock_loop.arun = AsyncMock(side_effect=_capture_arun)
 
         monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)

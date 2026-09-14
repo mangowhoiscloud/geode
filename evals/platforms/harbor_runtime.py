@@ -413,6 +413,7 @@ async def _finalize_native(
     """Recover existing exports independently; never replace an execution error."""
     from core.memory.atomic_write import atomic_write_json
     from core.observability.event_store import HookEventStore
+    from core.observability.session_timeline import SessionEventKind
     from core.observability.trajectory import export_trajectory, trajectory_from_sessions
 
     errors: list[dict[str, str]] = []
@@ -448,11 +449,13 @@ async def _finalize_native(
             if not succeeded:
                 dreaming.cancel()
 
+    expected_child_sessions: set[str] = set()
     if executor is not None and loop is not None:
         with stage("children"):
             manager = executor._sub_agent_manager
             if manager is not None:
                 children = manager.list_collaboration_runs(loop._session_id)
+                expected_child_sessions.update(child.task_id for child in children)
                 for child in children:
                     with stage("child_interrupt"):
                         manager.interrupt_task(loop._session_id, child.task_id)
@@ -506,6 +509,47 @@ async def _finalize_native(
         if reader is not None:
             with stage("usage_reader_close"):
                 reader.close()
+
+    sessions: list[str] = []
+    session_id = metadata["geode_session_id"]
+    if runtime is not None:
+        with (
+            stage("session_inventory"),
+            sqlite3.connect(runtime.event_store.db_path) as connection,
+        ):
+            sessions = [
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT DISTINCT session_id FROM session_events ORDER BY session_id"
+                )
+            ]
+            if session_id:
+                # Foreground delegates have no durable collaboration handle. Their
+                # parent-authored lifecycle rows carry the same task_id passed to
+                # WorkerRequest and AgenticLoopConfig.session_id, not model prose.
+                for row in connection.execute(
+                    "SELECT payload_json FROM session_events "
+                    "WHERE session_id = ? AND kind IN (?, ?)",
+                    (
+                        session_id,
+                        SessionEventKind.SUBAGENT_STARTED.value,
+                        SessionEventKind.SUBAGENT_STOPPED.value,
+                    ),
+                ):
+                    payload = json.loads(row[0])
+                    task_id = payload.get("task_id") if isinstance(payload, dict) else None
+                    if not isinstance(task_id, str) or not task_id:
+                        raise ValueError("canonical child lifecycle identity is invalid")
+                    expected_child_sessions.add(task_id)
+        missing_children = expected_child_sessions.difference(sessions)
+        if missing_children:
+            record_error("child_session_inventory", RuntimeError("child canonical history missing"))
+        # Keep absent expected identities so the existing trajectory reader also
+        # reports their missing canonical rows instead of silently dropping them.
+        sessions.extend(sorted(missing_children))
+        if session_id and session_id not in sessions:
+            sessions.append(session_id)
+
     snapshot_complete = runtime is not None and loop is not None and not errors
     usage = _summarize_usage([])
     with stage("usage_summary"):
@@ -524,23 +568,8 @@ async def _finalize_native(
             usage[field] = None
     metadata.update(usage=usage, finalization_errors=errors)
 
-    sessions: list[str] = []
     canonical_scope_complete = True
     if runtime is not None:
-        with (
-            stage("session_inventory"),
-            sqlite3.connect(runtime.event_store.db_path) as connection,
-        ):
-            sessions = [
-                str(row[0])
-                for row in connection.execute(
-                    "SELECT DISTINCT session_id FROM session_events ORDER BY session_id"
-                )
-            ]
-        # A failed inventory must not prevent exporting the known root session.
-        session_id = metadata["geode_session_id"]
-        if session_id and session_id not in sessions:
-            sessions.append(session_id)
         for policy, name in (
             ("digest", "geode-trajectory.json"),
             ("full", "geode-trajectory.private.json"),
