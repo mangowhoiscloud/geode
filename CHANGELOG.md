@@ -49,13 +49,7 @@ functional change.
 
 ### Infrastructure
 
-- Fail the CI merge gate on missing, skipped, cancelled or failed prerequisites,
-  including unavailable change detection. Run required Pages checks on every
-  main/develop pull request so a code-only green gate cannot mask a site failure.
-  Runtime `GEODE.md` and `.geode/` changes trigger the full code checks.
-  The explicit merge command rechecks current head/base and app-bound required
-  checks against enforced branch protection before submitting a pinned merge.
-  Resolve superseded CI runs through GitHub CLI's current required-check view,
+- Resolve superseded CI runs through GitHub CLI's current required-check view,
   then bind exact check IDs to the app, head and PR; never fall back to an older
   success when the selected check is pending or failed.
 
@@ -77,6 +71,25 @@ functional change.
   canonical session inventory; an entirely missing child cannot hide behind
   a healthy root export. Workers require the real async session lifecycle;
   missing methods no longer silently pass through a test-double fallback.
+
+## [1.0.29] - 2026-09-14
+
+### Infrastructure
+
+- Fail the CI merge gate on missing, skipped, cancelled or failed prerequisites,
+  including unavailable change detection. Run required Pages checks on every
+  main/develop pull request so a code-only green gate cannot mask a site failure.
+  Runtime `GEODE.md` and `.geode/` changes trigger the full code checks.
+  The explicit merge command rechecks current head/base and app-bound required
+  checks against enforced branch protection before submitting a pinned merge.
+
+### Fixed
+
+- Keep model-specific facts out of the SOUL's static reference table; route
+  detailed model guidance through the existing bundled `geode-context` skill.
+  Dynamic model cards retain exact catalog context limits and distinguish API
+  rate estimates from account access and billing evidence. Model defaults,
+  authentication and fallback policy are unchanged.
 - Distinguish a completed negative check from a tool outage in the shared
   runtime prompt. Required failed or unrun checks cannot establish completion
   or merge readiness, including persona-off and audit prompt paths.
