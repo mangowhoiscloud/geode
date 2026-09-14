@@ -12,6 +12,12 @@ from scripts import merge_pr
 
 
 def _evidence(head: str = "a" * 40, base: str = "b" * 40) -> dict[str, Any]:
+    workflow_ids = {path: index for index, path in enumerate(merge_pr.REQUIRED_WORKFLOWS, 1)}
+    owners = {
+        name: workflow_ids[path]
+        for path, names in merge_pr.REQUIRED_WORKFLOWS.items()
+        for name in names
+    }
     runs = [
         {
             "id": index,
@@ -20,12 +26,14 @@ def _evidence(head: str = "a" * 40, base: str = "b" * 40) -> dict[str, Any]:
             "conclusion": "success",
             "app": {"id": merge_pr.CHECK_APP_ID},
             "head_sha": head,
-            "details_url": f"https://github.com/{merge_pr.REPOSITORY}/actions/runs/1/job/{index}",
+            "check_suite": {"id": owners[name] + 1000},
+            "details_url": f"https://github.com/{merge_pr.REPOSITORY}/actions/runs/{owners[name]}/job/{index}",
         }
         for index, name in enumerate(merge_pr.REQUIRED_CHECKS, 100)
     ]
-    return {
+    data = {
         "pr": {
+            "number": 3319,
             "state": "open",
             "draft": False,
             "merged": False,
@@ -36,6 +44,8 @@ def _evidence(head: str = "a" * 40, base: str = "b" * 40) -> dict[str, Any]:
             "base": {"ref": "develop", "sha": base, "repo": {"full_name": merge_pr.REPOSITORY}},
         },
         "base": {"commit": {"sha": base}},
+        "main": {"commit": {"sha": "f" * 40}},
+        "commit": {"sha": head, "parents": [{"sha": base}]},
         "protection": {
             "required_status_checks": {
                 "strict": True,
@@ -74,6 +84,41 @@ def _evidence(head: str = "a" * 40, base: str = "b" * 40) -> dict[str, Any]:
             ],
         },
     }
+    workflows = [
+        {
+            "id": index,
+            "workflow_id": index + 10,
+            "check_suite_id": index + 1000,
+            "run_number": 1,
+            "path": path,
+            "event": "pull_request",
+            "status": "completed",
+            "conclusion": "success",
+            "repository": {"full_name": merge_pr.REPOSITORY},
+            "head_repository": {"full_name": merge_pr.REPOSITORY},
+            "head_sha": head,
+            "head_branch": "codex/topic",
+            "pull_requests": [
+                {
+                    "number": 3319,
+                    "head": copy.deepcopy(data["pr"]["head"]),
+                    "base": copy.deepcopy(data["pr"]["base"]),
+                }
+            ],
+        }
+        for path, index in workflow_ids.items()
+    ]
+    data["workflows"] = {"total_count": len(workflows), "workflow_runs": workflows}
+    return data
+
+
+def _retarget(data: dict[str, Any], head: str, base: str = "develop") -> None:
+    data["pr"]["head"]["ref"], data["pr"]["base"]["ref"] = head, base
+    data["view"]["baseRefName"] = base
+    for run in data["workflows"]["workflow_runs"]:
+        run["head_branch"] = head
+        run["pull_requests"][0]["head"]["ref"] = head
+        run["pull_requests"][0]["base"]["ref"] = base
 
 
 class _GitHub:
@@ -121,8 +166,17 @@ class _GitHub:
             return copy.deepcopy(self.current["pr"])
         if endpoint.endswith("/protection"):
             return copy.deepcopy(self.current["protection"])
+        if endpoint.endswith("/branches/main") and self.current["pr"]["head"]["ref"].startswith(
+            merge_pr.SYNC_BRANCH_PREFIX
+        ):
+            return copy.deepcopy(self.current["main"])
         if "/branches/" in endpoint:
             return copy.deepcopy(self.current["base"])
+        if "/actions/runs?" in endpoint:
+            assert "event=pull_request&head_sha=" in endpoint
+            return copy.deepcopy(self.current["workflows"])
+        if endpoint.endswith(f"/commits/{self.current['pr']['head']['sha']}"):
+            return copy.deepcopy(self.current["commit"])
         assert endpoint.endswith("/check-runs?filter=latest&per_page=100")
         return copy.deepcopy(self.current["checks"])
 
@@ -184,7 +238,7 @@ def test_native_current_check_selection_never_falls_back_to_old_success(
     data["view"]["statusCheckRollup"][0]["conclusion"] = old_state
     current = old | {
         "id": 1000,
-        "details_url": f"https://github.com/{merge_pr.REPOSITORY}/actions/runs/2/job/1000",
+        "details_url": f"https://github.com/{merge_pr.REPOSITORY}/actions/runs/1/job/1000",
         "status": "completed"
         if current_state in {"SUCCESS", "FAILURE", "SKIPPED", "CANCELLED"}
         else current_state.lower(),
@@ -352,12 +406,169 @@ def test_second_snapshot_drift_never_merges(monkeypatch, drift: str) -> None:
 @pytest.mark.parametrize("head,base", [("main", "develop"), ("develop", "main")])
 def test_canonical_promotion_uses_merge_method(monkeypatch, head: str, base: str) -> None:
     data = _evidence()
-    data["pr"]["head"]["ref"], data["pr"]["base"]["ref"] = head, base
-    data["view"]["baseRefName"] = base
+    _retarget(data, head, base)
     github = _GitHub(data)
     monkeypatch.setattr(merge_pr, "_gh", github)
     assert merge_pr.main(["--pr", "3319", "--merge"]) == 0
     assert "merge_method=merge" in github.mutations[0]
+
+
+@pytest.mark.parametrize(
+    "shape", ["exact", "swapped", "stale_main", "stale_develop", "single", "extra", "wrong_head"]
+)
+def test_sync_requires_exact_current_ordered_parents(monkeypatch, capsys, shape: str) -> None:
+    data = _evidence()
+    _retarget(data, "sync/main-into-develop-topic")
+    parents = ["b" * 40, "f" * 40]
+    if shape == "swapped":
+        parents.reverse()
+    elif shape == "stale_main":
+        parents[1] = "e" * 40
+    elif shape == "stale_develop":
+        parents[0] = "e" * 40
+    elif shape == "single":
+        parents.pop()
+    elif shape == "extra":
+        parents.append("e" * 40)
+    elif shape == "wrong_head":
+        data["commit"]["sha"] = "e" * 40
+    data["commit"]["parents"] = [{"sha": parent} for parent in parents]
+    github = _GitHub(data)
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == (0 if shape == "exact" else 1)
+    receipt = json.loads(capsys.readouterr().out)
+    if shape == "exact":
+        assert receipt["main_sha"] == "f" * 40
+        assert "merge_method=merge" in github.mutations[0]
+    else:
+        assert github.mutations == []
+
+
+def test_sync_main_tip_drift_between_snapshots_never_merges(monkeypatch) -> None:
+    first = _evidence()
+    _retarget(first, "sync/main-into-develop-topic")
+    first["commit"]["parents"].append({"sha": "f" * 40})
+    second = copy.deepcopy(first)
+    second["main"]["commit"]["sha"] = "e" * 40
+    github = _GitHub(first, second)
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == 1
+    assert github.mutations == []
+
+
+def test_unrelated_check_suites_do_not_hide_current_pr_evidence(monkeypatch) -> None:
+    data = _evidence()
+    for index, row in enumerate(copy.deepcopy(data["checks"]["check_runs"]), 200):
+        row.update(id=index, check_suite={"id": 9999}, conclusion="failure")
+        row["details_url"] = f"https://github.com/{merge_pr.REPOSITORY}/actions/runs/99/job/{index}"
+        data["checks"]["check_runs"].append(row)
+        data["view"]["statusCheckRollup"].append(
+            {
+                "name": row["name"],
+                "detailsUrl": row["details_url"],
+                "status": "COMPLETED",
+                "conclusion": "FAILURE",
+            }
+        )
+    data["checks"]["total_count"] = len(data["checks"]["check_runs"])
+    github = _GitHub(data)
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == 0
+    assert len(github.mutations) == 1
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "missing",
+        "truncated",
+        "push",
+        "schedule",
+        "foreign_repo",
+        "foreign_head_repo",
+        "wrong_head",
+        "wrong_branch",
+        "wrong_pr",
+        "stale_base",
+        "wrong_suite",
+        "wrong_url",
+        "pending",
+        "failed",
+        "wrong_path",
+        "duplicate_workflow",
+        "invalid_workflow_id",
+        "split_workflow",
+    ],
+)
+def test_selected_workflow_requires_complete_pr_provenance(monkeypatch, capsys, defect) -> None:
+    data = _evidence()
+    evidence = data["workflows"]
+    runs = evidence["workflow_runs"]
+    run = runs[0]
+    if defect == "missing":
+        runs.pop(0)
+    elif defect == "truncated":
+        evidence["total_count"] += 1
+    elif defect in {"push", "schedule"}:
+        run["event"] = defect
+    elif defect in {"foreign_repo", "foreign_head_repo"}:
+        run["repository" if defect == "foreign_repo" else "head_repository"]["full_name"] = "x/y"
+    elif defect == "wrong_head":
+        run["head_sha"] = "e" * 40
+    elif defect == "wrong_branch":
+        run["head_branch"] = "main"
+    elif defect == "wrong_pr":
+        run["pull_requests"][0]["number"] += 1
+    elif defect == "stale_base":
+        run["pull_requests"][0]["base"]["sha"] = "e" * 40
+    elif defect == "wrong_suite":
+        data["checks"]["check_runs"][0]["check_suite"]["id"] += 1
+    elif defect == "wrong_url":
+        wrong = f"https://github.com/{merge_pr.REPOSITORY}/actions/runs/99/job/100"
+        data["checks"]["check_runs"][0]["details_url"] = wrong
+        data["view"]["statusCheckRollup"][0]["detailsUrl"] = wrong
+        data["required"]["checks"][0]["link"] = wrong
+    elif defect in {"pending", "failed"}:
+        old = copy.deepcopy(run)
+        old.update(id=500, check_suite_id=1500)
+        runs.append(old)
+        run.update(
+            status="queued" if defect == "pending" else "completed",
+            conclusion=None if defect == "pending" else "failure",
+        )
+    elif defect == "wrong_path":
+        run["path"] = ".github/workflows/untrusted.yml"
+    elif defect == "duplicate_workflow":
+        runs.append(copy.deepcopy(run))
+    elif defect == "invalid_workflow_id":
+        run["workflow_id"] = True
+    elif defect == "split_workflow":
+        split = copy.deepcopy(run)
+        split.update(id=500, check_suite_id=1500)
+        runs.append(split)
+        link = f"https://github.com/{merge_pr.REPOSITORY}/actions/runs/500/job/100"
+        data["checks"]["check_runs"][0].update(details_url=link, check_suite={"id": 1500})
+        data["view"]["statusCheckRollup"][0]["detailsUrl"] = link
+        data["required"]["checks"][0]["link"] = link
+    if defect != "truncated":
+        evidence["total_count"] = len(runs)
+    github = _GitHub(data)
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == 1
+    assert json.loads(capsys.readouterr().out)["decision"] == "blocked"
+    assert github.mutations == []
+
+
+def test_native_selection_is_authority_not_workflow_run_order(monkeypatch) -> None:
+    data = _evidence()
+    run = data["workflows"]["workflow_runs"][0]
+    unselected = copy.deepcopy(run)
+    unselected.update(id=999, check_suite_id=1999, run_number=999, conclusion="failure")
+    data["workflows"]["workflow_runs"].append(unselected)
+    data["workflows"]["total_count"] += 1
+    github = _GitHub(data)
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == 0
 
 
 @pytest.mark.parametrize("failure", ["response", "readback"])

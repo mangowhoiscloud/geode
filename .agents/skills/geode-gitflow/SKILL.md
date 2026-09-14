@@ -15,7 +15,7 @@ this skill owns the GitFlow procedure. Read `AGENTS.md` for repository guardrail
 | Transaction | Base and head | Merge method |
 |---|---|---|
 | Feature, fix, or release preparation | fetched `origin/develop` → topic branch → `develop` | squash |
-| Canonical pre-sync | current `main` → `develop`, or the trusted conflict-resolution head below | merge |
+| Canonical pre-sync | current `main` → `develop`, or the trusted sync head below | merge |
 | Promotion | `develop` → `main` | merge |
 
 Never push directly to `main` or `develop`. Promotion can batch verified
@@ -121,9 +121,9 @@ On failure, inspect `gh run view <run-id> --log-failed`, fix the actual cause,
 verify affected behavior, push the scoped fix, and wait for the new head's CI.
 Do not delete tests or suppress a security finding merely to get green.
 
-The read-only merge guard checks the current head and base, all required
-GitHub Actions checks (app 15368), and server protection: strict up-to-date
-checks, administrator enforcement and no force-push/deletion bypass. It rejects
+The read-only merge guard checks the current head and base, current PR-linked
+required GitHub Actions evidence (app 15368), and server protection: strict
+up-to-date checks, administrator enforcement and no force-push/deletion bypass. It rejects
 missing or ambiguous evidence rather than interpreting an empty list as green.
 Pages Render lint and Build are required alongside CI and both install-smoke
 platforms; Deploy is intentionally not a PR check. A green CI Gate alone is
@@ -138,9 +138,9 @@ uv run python scripts/merge_pr.py --pr <PR#> --merge
 ```
 
 The guard chooses squash for ordinary feature-to-develop PRs and merge for
-canonical main/develop synchronization. Conflict-resolved roadmap syncs still
-need the graph-trust procedure below and must not fall back to an unguarded
-merge if the guard refuses their shape. Record its merge SHA and receipt.
+canonical main/develop synchronization, including trusted sync branches.
+For those branches, it enforces the graph-trust proof below against live remote
+tips. A refusal never permits an unguarded merge. Record its merge SHA and receipt.
 A changed head or base requires fresh verification. Never use
 `--admin` to bypass gates or `gh pr merge --delete-branch` inside a linked
 worktree: GitHub CLI may switch that checkout while deleting the local branch.
@@ -174,15 +174,16 @@ specific blocker instead of repeating mutations or treating absence as success.
 ### Deliberate main-to-develop pre-sync
 
 Before every `develop -> main` promotion, fetch both protected branches and
-compare content and ancestry. If main has commits not in develop and the sync is
-conflict-free, open a CI-gated PR directly from the current `main` head to
-`develop`. Do not put a fast-forwarded copy of main behind a trusted sync prefix.
+compare content and ancestry. If main has commits not in develop, use a CI-gated
+PR from the current `main` head to `develop` when mergeable under strict
+up-to-date protection. Do not put a copied or fast-forwarded main head behind
+a trusted sync prefix.
 
-If conflicts require a separate worktree, create
+If conflicts or strict ancestry block that canonical head, create
 `sync/main-into-develop-<task>` from current `origin/develop` and explicitly merge
-current `origin/main`. Its head must have exactly two parents, in this order:
-current `origin/develop`, current `origin/main`. Immediately before merge,
-fetch and rerun the trust resolver from that sync worktree:
+current `origin/main` in an owned worktree. Its head must have exactly two
+parents, in this order: current `origin/develop`, current `origin/main`.
+Immediately before merge, fetch and rerun the trust resolver from that sync worktree:
 
 ```bash
 git fetch origin
@@ -194,9 +195,15 @@ uv run python scripts/resolve_architecture_roadmap_trust.py \
 ```
 
 For a direct-main sync, use `--head-ref main` and the current canonical main SHA.
-The resolver must pass for that exact head. If either tip invalidates the trust
-proof, reconstruct from the new tips and rerun CI; an earlier green is stale.
-After sync, promote current develop through a separate CI-gated merge PR.
+The resolver must pass for that exact head. For a prefixed sync, the merge guard
+rechecks the same parent proof against live remote tips before its head-pinned request.
+If either tip invalidates the trust proof, reconstruct from the new tips and
+rerun CI; an earlier green is stale. Strict protection, administrator enforcement,
+and required CI success remain mandatory. After sync, promote current develop
+through a separate CI-gated merge PR.
+
+Serialize protected-branch integrations: GitHub pins the PR head, not the
+non-target main tip. A fresh parent proof does not make that final window atomic.
 
 ## Release Flow
 

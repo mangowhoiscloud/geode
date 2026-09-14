@@ -7029,7 +7029,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1559 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1560 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -7422,12 +7422,12 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/release-pypi-lifecycl
 
 ## 릴리스 흐름
 
-평소에는 feature가 develop으로 머지됩니다. 릴리스는 릴리스 준비용 topic 브랜치가 버전 스탬프와 CHANGELOG 정리를 싣고 develop에 먼저 머지된 뒤, develop이 main으로 그대로 통과합니다. 승격 직전에는 두 원격 브랜치를 fetch하고 내용을 비교합니다. main에 고유 커밋이 있고 충돌이 없으면 현재 main head에서 develop로 직접 CI-gated PR을 엽니다. 충돌 해결이 필요할 때만 현재 develop에서 `sync/main-into-develop-*` 브랜치를 만들고 현재 main을 명시적 merge commit으로 병합합니다. 이 sync head는 두 원격 tip을 정확한 부모로 가져야 하며 merge 직전에 trust resolver를 다시 통과해야 합니다. 자동 backmerge workflow는 없습니다.
+평소에는 feature가 develop으로 머지됩니다. 릴리스는 릴리스 준비용 topic 브랜치가 버전 스탬프와 CHANGELOG 정리를 싣고 develop에 먼저 머지된 뒤, develop이 main으로 그대로 통과합니다. 승격 직전에는 두 원격 브랜치를 fetch하고 내용을 비교합니다. main에 고유 커밋이 있고 strict 최신 상태 조건을 충족해 머지할 수 있으면 현재 main head에서 develop로 직접 CI-gated PR을 엽니다. 충돌이나 strict ancestry 조건이 이를 막으면 현재 develop에서 `sync/main-into-develop-*` 브랜치를 만들고 현재 main을 명시적 merge commit으로 병합합니다. 복사나 fast-forward로 만든 sync head는 허용하지 않습니다. 부모는 현재 develop, 현재 main 순서로 정확히 두 개여야 합니다. merge 직전에 trust resolver를 다시 실행하고, merge guard가 같은 부모 검증을 실제 원격 tip에 적용합니다. strict 보호, 관리자 적용, 현재 PR에 연결된 필수 Actions 검사 성공은 유지합니다. 자동 backmerge workflow는 없습니다.
 
 ```
 # 1. CHANGELOG [Unreleased] → [X.Y.Z] - YYYY-MM-DD; 빈 [Unreleased] 유지
 # 2. 다섯 위치 동시 bump (CHANGELOG / pyproject / CLAUDE.md / README.md / README.ko.md)
-# 3. main drift: clean이면 main → develop PR, 충돌 시에만 sync/main-into-develop-*
+# 3. main drift: strict 조건 충족 시 main → develop, 충돌·ancestry 차단 시 trusted sync
 # 4. topic → develop → main: 각 PR의 실제 head에서 필수 CI green 확인
 #    PR 본문은 Summary / Why / Changes / Verification 유지
 # 5. 패키지 배포는 main 머지로 자동 발화하지 않음. 아래 워크플로우를 수동 dispatch
@@ -7469,7 +7469,8 @@ geode serve &
 
 -   `.github/workflows/release.yml`. 수동 검증 + 배포 파이프라인.
 -   `.github/workflows/install-smoke.yml`. macOS와 Ubuntu의 설치 회귀.
--   `scripts/resolve_architecture_roadmap_trust.py`. 충돌 해결형 main → develop sync의 정확한 부모·출처 검증.
+-   `scripts/resolve_architecture_roadmap_trust.py`. trusted main → develop sync의 정확한 부모·출처 검증.
+-   `scripts/merge_pr.py`. 실제 원격 tip, 현재 PR의 필수 CI, 보호 설정을 재확인한 뒤 head를 고정해 머지.
 -   `docs/workflow.md`. pre-sync와 GitFlow 운영 정본.
 -   `scripts/verify_public_distribution.py`. GitHub·PyPI 공개 배포 일치 검증.
 -   `docs/architecture/immutable-distribution-lifecycle.md`. wheel·state·workspace 경계와 frontier 비교 근거.

@@ -10,20 +10,33 @@ import shutil
 import subprocess
 from typing import Any
 
+from scripts.resolve_architecture_roadmap_trust import (
+    SYNC_BRANCH_PREFIX,
+    RoadmapTrustError,
+    require_sync_parents,
+)
+
 REPOSITORY = "mangowhoiscloud/geode"
 CHECK_APP_ID = 15368
-REQUIRED_CHECKS = (
-    "Detect changes",
-    "Lint & Format",
-    "Type Check",
-    "Test",
-    "Security Scan",
-    "Gate",
-    "ubuntu-latest — install / update / uninstall",
-    "macos-latest — install / update / uninstall",
-    "Render lint (markdown + YAML + JSON)",
-    "Build (Next.js static export)",
-)
+REQUIRED_WORKFLOWS = {
+    ".github/workflows/ci.yml": (
+        "Detect changes",
+        "Lint & Format",
+        "Type Check",
+        "Test",
+        "Security Scan",
+        "Gate",
+    ),
+    ".github/workflows/install-smoke.yml": (
+        "ubuntu-latest — install / update / uninstall",
+        "macos-latest — install / update / uninstall",
+    ),
+    ".github/workflows/pages.yml": (
+        "Render lint (markdown + YAML + JSON)",
+        "Build (Next.js static export)",
+    ),
+}
+REQUIRED_CHECKS = tuple(name for names in REQUIRED_WORKFLOWS.values() for name in names)
 
 
 class MergeGuardError(ValueError):
@@ -74,7 +87,9 @@ def _identity(pr: dict[str, Any]) -> dict[str, Any]:
         "fork or repository mismatch",
     )
     flow = (head["ref"], base["ref"])
-    if flow in {("main", "develop"), ("develop", "main")}:
+    if flow in {("main", "develop"), ("develop", "main")} or (
+        base["ref"] == "develop" and head["ref"].startswith(SYNC_BRANCH_PREFIX)
+    ):
         method = "merge"
     else:
         _require(
@@ -94,6 +109,38 @@ def _identity(pr: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _validate_workflow(pr: dict[str, Any], run: dict[str, Any], path: str) -> None:
+    _require(
+        run["path"] == path
+        and run["event"] == "pull_request"
+        and run["repository"]["full_name"] == run["head_repository"]["full_name"] == REPOSITORY
+        and run["head_sha"] == pr["head"]["sha"]
+        and run["head_branch"] == pr["head"]["ref"],
+        "workflow path, event, repository or head mismatch",
+    )
+    linked = [row for row in run["pull_requests"] if row["number"] == pr["number"]]
+    _require(
+        len(linked) == 1
+        and all(
+            linked[0][side][key] == pr[side][key]
+            for side in ("head", "base")
+            for key in ("sha", "ref")
+        ),
+        "workflow PR association is stale or missing",
+    )
+    _require(
+        run["status"] == "completed" and run["conclusion"] == "success",
+        "selected PR workflow is not successful",
+    )
+    _require(
+        all(
+            type(run[key]) is int and run[key] > 0
+            for key in ("id", "workflow_id", "check_suite_id")
+        ),
+        "invalid workflow run or suite identity",
+    )
+
+
 def validate_snapshot(
     pr: dict[str, Any],
     base: dict[str, Any],
@@ -101,9 +148,24 @@ def validate_snapshot(
     checks: dict[str, Any],
     view: dict[str, Any],
     native_checks: dict[str, Any],
+    workflows: dict[str, Any],
+    sync: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Pure admission predicate; job success never overrides missing server policy."""
     identity = _identity(pr)
+    if identity["head_ref"].startswith(SYNC_BRANCH_PREFIX):
+        if sync is None:
+            raise MergeGuardError("sync graph evidence is missing")
+        _require(_sha(sync["sha"]) == identity["head_sha"], "sync head changed")
+        identity["main_sha"] = _sha(sync["main_sha"])
+        try:
+            require_sync_parents(
+                tuple(_sha(parent["sha"]) for parent in sync["parents"]),
+                identity["base_sha"],
+                identity["main_sha"],
+            )
+        except RoadmapTrustError as exc:
+            raise MergeGuardError(str(exc)) from exc
     _require(
         pr["mergeable"] is True and pr["mergeable_state"] == "clean", "PR mergeability is not clean"
     )
@@ -145,6 +207,11 @@ def validate_snapshot(
         type(checks["total_count"]) is int and checks["total_count"] == len(runs),
         "check enumeration is incomplete",
     )
+    _require(
+        type(workflows["total_count"]) is int
+        and workflows["total_count"] == len(workflows["workflow_runs"]),
+        "workflow enumeration is incomplete",
+    )
     selected = native_checks["checks"]
     _require(
         len(selected) == len(REQUIRED_CHECKS)
@@ -152,6 +219,7 @@ def validate_snapshot(
         "current required checks are missing or ambiguous",
     )
     admitted = {}
+    admitted_workflows: dict[str, int] = {}
     for name in REQUIRED_CHECKS:
         chosen = next(row for row in selected if row["name"] == name)
         _require(chosen["state"] == "SUCCESS", "current required check is not successful")
@@ -165,6 +233,22 @@ def validate_snapshot(
         ]
         _require(len(matching) == len(rolled) == 1, "required check missing or ambiguous")
         run, current = matching[0], rolled[0]
+        matched_workflows = [
+            row
+            for row in workflows["workflow_runs"]
+            if row["check_suite_id"] == run["check_suite"]["id"]
+            and chosen["link"]
+            == f"https://github.com/{REPOSITORY}/actions/runs/{row['id']}/job/{run['id']}"
+        ]
+        _require(len(matched_workflows) == 1, "selected check workflow is missing or ambiguous")
+        workflow = matched_workflows[0]
+        path = next(path for path, names in REQUIRED_WORKFLOWS.items() if name in names)
+        _validate_workflow(pr, workflow, path)
+        _require(
+            path not in admitted_workflows or admitted_workflows[path] == workflow["id"],
+            "required jobs span different workflow runs",
+        )
+        admitted_workflows[path] = workflow["id"]
         _require(
             type(run["app"]["id"]) is int
             and run["app"]["id"] == CHECK_APP_ID
@@ -183,11 +267,16 @@ def validate_snapshot(
             and run["id"] > 0
             and current["detailsUrl"] == run["details_url"]
             and isinstance(run["details_url"], str)
-            and run["details_url"].startswith(f"https://github.com/{REPOSITORY}/actions/runs/"),
+            and run["details_url"]
+            == (f"https://github.com/{REPOSITORY}/actions/runs/{workflow['id']}/job/{run['id']}"),
             "current PR check-run association is unverified",
         )
         admitted[name] = run["id"]
-    return identity | {"checks": admitted, "decision": "ready"}
+    return identity | {
+        "checks": admitted,
+        "workflow_runs": admitted_workflows,
+        "decision": "ready",
+    }
 
 
 def _snapshot(number: int, receipt: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -198,6 +287,9 @@ def _snapshot(number: int, receipt: dict[str, Any] | None = None) -> dict[str, A
     base = _api(f"branches/{identity['base_ref']}")
     protection = _api(f"branches/{identity['base_ref']}/protection")
     checks = _api(f"commits/{identity['head_sha']}/check-runs?filter=latest&per_page=100")
+    workflows = _api(
+        f"actions/runs?event=pull_request&head_sha={identity['head_sha']}&per_page=100"
+    )
     view = _gh(
         [
             "pr",
@@ -225,7 +317,11 @@ def _snapshot(number: int, receipt: dict[str, Any] | None = None) -> dict[str, A
             "{checks: .}",
         ]
     )
-    return validate_snapshot(pr, base, protection, checks, view, required)
+    sync = None
+    if identity["head_ref"].startswith(SYNC_BRANCH_PREFIX):
+        sync = _api(f"commits/{identity['head_sha']}")
+        sync["main_sha"] = _api("branches/main")["commit"]["sha"]
+    return validate_snapshot(pr, base, protection, checks, view, required, workflows, sync)
 
 
 def main(argv: list[str] | None = None) -> int:

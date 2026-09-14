@@ -303,13 +303,14 @@ Claude Code compatible scaffold.
   `origin/main`, targets `main`, and is followed by a CI-gated
   `main -> develop` sync PR. Other main-maintained tracking documents use their
   own dedicated `origin/main` worktree under the repository's tracking rules.
-- **Clean syncs use the canonical head**: when `main -> develop` is
-  conflict-free, open the PR directly from the current `main` head. Do not put
-  a fast-forwarded copy of `main` behind the trusted sync-branch prefix.
-- **Trusted sync branch naming**: a conflict-resolved roadmap sync branch must
-  start with `sync/main-into-develop-`. Its head must be the exact two-parent
-  merge of the current `origin/develop` and `origin/main` tips, in that order,
-  and the trust resolver must pass again immediately before merge.
+- **Canonical sync first**: use the current `main` head for `main -> develop`
+  when it is mergeable under strict up-to-date protection. Do not put a copied
+  or fast-forwarded `main` head behind the trusted sync-branch prefix.
+- **Trusted sync branch naming**: when conflicts or strict ancestry block the
+  canonical head, use `sync/main-into-develop-`. Its head must be the exact
+  two-parent merge of current `origin/develop` and `origin/main`, in that order.
+  Rerun the trust resolver immediately before merge; `scripts/merge_pr.py`
+  rechecks the same proof against live remote tips without weakening protection.
 - **No branch switching inside a worktree**: never use `git checkout` to reuse
   a checkout for another branch. Allocate or enter the correct worktree instead.
 - **Fetch before allocating branches**: run `git fetch origin` before creating

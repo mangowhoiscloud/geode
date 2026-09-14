@@ -91,30 +91,31 @@ feature/<name> -> develop -> main
   fetched `origin/develop` tip.
 - A roadmap tracking-only `DONE` branch starts from `origin/main`, targets
   `main`, and is followed by a CI-gated `main -> develop` sync.
-- A conflict-free sync uses the current `main` head directly as the PR head;
-  do not wrap it in a prefixed branch that would merely fast-forward.
-- When that sync needs conflict resolution, its branch name must start with
-  `sync/main-into-develop-` and its head must be the exact two-parent merge of
-  the current `refs/remotes/origin/develop` and
-  `refs/remotes/origin/main` tips, in that order. Immediately before merge,
-  fetch both refs and rerun `scripts/resolve_architecture_roadmap_trust.py`
-  with `--require-trust main`; if either tip moved, rebuild the sync head and
-  rerun CI. GitHub does not bind this operator check to the merge or emit a PR
-  event when unrelated `main` moves, so the maintainer must run it immediately
-  before merging and treat any elapsed window as unverified.
+- Use the current `main` head directly when the sync is mergeable under strict
+  up-to-date protection; do not wrap a copied or fast-forwarded main head in a
+  trusted sync branch.
+- When conflicts or strict ancestry block that canonical head, create
+  `sync/main-into-develop-*` from current `origin/develop` and merge current
+  `origin/main`. Its head must have exactly those two parents, in that order.
+  Immediately before merge, fetch both refs and rerun
+  `scripts/resolve_architecture_roadmap_trust.py` with `--require-trust main`.
+  `scripts/merge_pr.py` enforces the same parent proof against live remote tips
+  before its head-pinned merge request. If either tip moved, rebuild the sync
+  head and rerun CI; an earlier green no longer proves the current graph.
 - Feature PRs merge into `develop` with squash merge.
 - Before `develop -> main`, sync `main -> develop` if main has drift.
 - `develop -> main` is a pass-through merge after gates are satisfied.
 - Merge admission is a separate check, not a side effect of local test success.
   `uv run python scripts/merge_pr.py --pr <N>` is read-only; only its explicit
   `--merge` mode may submit the head-pinned merge after rechecking the PR, base,
-  trusted check source and protected-branch settings. Missing, skipped, pending,
-  failed or stale required evidence blocks it. Required checks on `main` and
-  `develop` must be strict and apply to administrators; never bypass them.
+  current PR-linked Actions evidence and protected-branch settings. Missing,
+  skipped, pending, failed, ambiguous or stale required evidence blocks it.
+  Required checks on `main` and `develop` must be strict and apply to
+  administrators; never bypass them.
   Repeated runs can coexist on one head (for example, Draft → Ready). The
   command uses GitHub CLI's current required-check selection and binds its
-  exact links to REST check IDs, app/head and PR rollup evidence. Superseded
-  runs remain in history; an older success cannot replace a current failure.
+  exact links to REST check IDs, app/head, PR workflow/suite and rollup evidence.
+  Superseded runs remain in history; an older success cannot replace a current failure.
 - Post-merge cleanup runs
   `scripts/check_repo_hygiene.py free-merged-worktree` from outside the target
   checkout. It verifies the squash tree by replaying the final PR head onto the
