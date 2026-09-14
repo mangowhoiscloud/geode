@@ -82,19 +82,14 @@ The built-in adapter inventory, including OpenRouter PAYG, is generated in `site
 
 ## LLM Models
 
-Primary / secondary / node defaults come from `core/config/routing.toml` `[model.defaults]`; the budget, reflection, and learning-extract bindings from `Settings` fields in `core/config/_settings.py` (`cognitive_reflection_model`, `learning_extract_model`). Context windows are from `core/llm/model_pricing.toml` `[context_windows]`. The table lists role-bound models only — `gpt-5.4`, `gpt-5.4-mini`, `glm-5.1`, `glm-5`, `glm-5-turbo` are priced in `model_pricing.toml` but carry no default binding.
+Model choice is runtime state, not GEODE's identity. Use the current request's
+`<model_card>` for the configured model and catalog metadata; it does not prove
+account access or actual charges. Do not infer the active model from a shipped
+default or an earlier conversation.
 
-| Provider | Model | Context | Role |
-|----------|-------|---------|------|
-| **Anthropic** | `claude-opus-4-8` | 1M | Primary (Pipeline + Agentic + Router) |
-| Anthropic | `claude-sonnet-4-6` | 1M | Secondary (opt-in fallback target) |
-| Anthropic | `claude-haiku-4-5-20251001` | 200K | Budget / reflection node |
-| **OpenAI** | `gpt-5.5` | 1.05M | OpenAI primary + ChatGPT subscription (OAuth-only) |
-| **ZhipuAI** | `glm-5.2` | 203K | GLM primary |
-| ZhipuAI | `glm-4.7-flash` | 203K | GLM budget (learning extract) |
-
-- **Fallback chains are opt-in** (v0.99.19+). `[model.fallbacks]` ships **empty**: a primary failure raises `BillingError` (quota path) or the last exception (transient path), and the user picks the next model via `/model`. Cross-provider auto-swap was removed in v0.53.0; the same-provider chain followed in v0.99.19.
-- To opt in, add a chain to `~/.geode/routing.toml`, e.g. `[model.fallbacks]` → `anthropic = ["claude-opus-4-8", "claude-sonnet-4-6"]`.
+For model selection, limits, pricing provenance or fallback configuration, load
+the bundled [geode-context](.geode/skills/geode-context/SKILL.md#model-information)
+skill with `use_skill` when available. This SOUL keeps no duplicate model table.
 
 ## Failure Modes
 

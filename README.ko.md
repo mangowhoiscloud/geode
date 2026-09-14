@@ -31,7 +31,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v1.0.28 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.29 — Autonomous Agent Runtime + Evaluation Substrate
 
 자율적인 도구 작업을 수행하는 범용 에이전트 런타임입니다. 자연어로
 요청하면 GEODE가 계획을 세우고 도구를 호출한 뒤 결과를 보고합니다. 짧은
@@ -53,12 +53,13 @@ loop는 scaffold 후보를 변이시키고 증거 기반 안전성 게이트로 
 
 ## 하나의 배포판, 세 가지 경계
 
-v1.0.28은 cache read/write 수치를 터미널까지 전달하고, 오류 처리 중 원래
-실패를 보존하며, 선택적 Reflexion이 기록된 관측을 바탕으로 제한된 수정을
-수행하도록 합니다. [공식 가이드](https://mangowhoiscloud.github.io/geode/docs)는
-런타임·평가·실험 루프의 작업 경로를 나눕니다.
-[사용량 회계](docs/architecture/usage-accounting.md)의 범위 한계를 확인하세요.
-API 비용 추정치는 구독 청구액이 아닙니다.
+v1.0.29는 런타임·Harbor 회계에서 완료되지 않은 호출의 증거를 보존하고,
+병합 전에 CI·설치 스모크·Pages 검증을 요구합니다.
+[런타임 SOUL](GEODE.md)은 행동 지침을 유지하고, 요청별 모델 카드는 카탈로그
+메타데이터를 전달합니다. 상세 안내는 번들 `geode-context` 스킬에서 읽습니다.
+[프롬프트 조립](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-system)과
+[사용량 회계](docs/architecture/usage-accounting.md)의 범위를 확인하세요.
+카탈로그 API 요금은 구독 청구액이나 계정 접근 가능 여부의 증거가 아닙니다.
 
 `geode-agent` wheel은 네 개 명령을 함께 배포하지만, 설치된 패키지를 쓰기
 가능한 작업공간으로 사용하지 않습니다.

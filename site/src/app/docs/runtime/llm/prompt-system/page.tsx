@@ -19,6 +19,14 @@ export default function Page() {
               템플릿(버전 관리되고 해시로 핀 고정), 그리고 호출 직전의 레이어
               조립(정적/동적 분리)입니다.
             </p>
+            <p>
+              <code>GEODE.md</code>는 런타임의 SOUL 원본이며 wheel에는{" "}
+              <code>core/GEODE.md</code>로 포함됩니다. 기본 조립 경로는 이 파일의
+              Identity, Voice &amp; Conduct, Operating Principles, RUNTIME CANNOT
+              네 섹션을 G1으로 추출합니다. 별도 <code>ContextAssembler</code>는
+              명시적 호출자에게 전체 SOUL을 제공하지만, 전체 파일을 기본 루프
+              프롬프트에 넣지는 않습니다.
+            </p>
 
             <h2>템플릿: 마크다운이 SoT</h2>
             <p>
@@ -26,8 +34,9 @@ export default function Page() {
               파일에 삽니다. 각 파일은 <code>&lt;system&gt;</code>,{" "}
               <code>&lt;user&gt;</code>, <code>&lt;agentic_suffix&gt;</code> 같은
               XML 형태 섹션 태그로 나뉘고, <code>core/llm/prompts/__init__.py</code>의{" "}
-              <code>_load_template</code>이 파싱합니다. 현재 살아 있는 템플릿은
-              <code>router.md</code> 하나입니다.
+              <code>_load_template</code>이 파싱합니다. 기본 루프는{" "}
+              <code>router.md</code>, 선택적 적대적 리뷰는{" "}
+              <code>reviewer.md</code>를 사용합니다.
             </p>
             <table>
               <thead>
@@ -35,6 +44,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>router.md</code></td><td><code>ROUTER_SYSTEM</code>, <code>AGENTIC_SUFFIX</code></td><td>메인 에이전트 시스템 프롬프트와 agentic 접미사</td></tr>
+                <tr><td><code>reviewer.md</code></td><td><code>REVIEWER_SYSTEM</code></td><td>선택적 읽기 전용 적대적 리뷰</td></tr>
               </tbody>
             </table>
             <p>
@@ -45,12 +55,12 @@ export default function Page() {
               copyright.
             </p>
 
-            <h2>드리프트 감지: 4개의 핀</h2>
+            <h2>드리프트 감지: 해시 핀</h2>
             <p>
               import 시점에 각 상수의 sha256[:12] 해시를 계산해{" "}
-              <code>PROMPT_VERSIONS</code>에 노출합니다. 핀은 정확히 넷입니다.{" "}
+              <code>PROMPT_VERSIONS</code>에 노출합니다. 핀 대상은{" "}
               <code>ROUTER_SYSTEM</code>, <code>AGENTIC_SUFFIX</code>,{" "}
-              <code>COMMENTARY_SYSTEM</code>, <code>COMMENTARY_USER</code>.{" "}
+              <code>REVIEWER_SYSTEM</code>입니다.{" "}
               <code>verify_prompt_integrity()</code>가 라이브 해시를{" "}
               <code>_PINNED_HASHES</code>와 비교하고, CI가 이 함수를 게이트로
               씁니다. 프롬프트를 바꾸면 핀을 다시 박아야 하므로, 모든 프롬프트
@@ -60,10 +70,10 @@ export default function Page() {
             </p>
             <p>
               <code>core/llm/prompt_assembler.py</code>는 이제 작은
-              스텁입니다. 스킬은 별도 주입 경로 없이{" "}
+              수식 출력 포맷 헬퍼입니다. 스킬 메타데이터는{" "}
               <code>core/agent/loop/_context.py</code>의{" "}
               <code>{"{skill_context}"}</code> 블록 한 곳으로만 프롬프트에
-              들어갑니다.
+              들어갑니다. 본문은 <code>use_skill</code>로 필요할 때 읽습니다.
             </p>
 
             <h2>레이어 조립: build_system_prompt</h2>
@@ -80,7 +90,7 @@ export default function Page() {
               <tbody>
                 <tr>
                   <td>정적 prefix</td>
-                  <td><code>&lt;agent_baseline&gt;</code> (항상), <code>&lt;agent_identity&gt;</code> (기본 ON), 스타일 가이드와 휴리스틱 정책 append</td>
+                  <td>router 또는 wrapper 베이스, 수식 출력 규칙, <code>AGENTIC_SUFFIX</code>. 일반 모드에서는 <code>&lt;agent_identity&gt;</code> (기본 ON), 선택된 스타일·휴리스틱 정책 추가</td>
                   <td>턴 간 불변. 캐시 적중 대상</td>
                 </tr>
                 <tr>
@@ -90,6 +100,14 @@ export default function Page() {
                 </tr>
               </tbody>
             </table>
+            <p>
+              <code>&lt;model_card&gt;</code>는 현재 설정된 모델 ID와 카탈로그의
+              정확한 컨텍스트 한도, API 참고 요금을 전달합니다. 남은 컨텍스트
+              예산, 계정 사용 권한, 실제 청구액의 증거는 아닙니다. SOUL에는
+              중복 모델 표를 두지 않으며, 상세 선택·요금 출처·폴백 설정은
+              기존 번들 스킬 <code>geode-context</code>를 필요할 때 읽습니다.
+              계정 접근을 확인하는 실호출은 명시적 승인이 필요합니다.
+            </p>
             <p>
               <code>PROMPT_CACHE_BOUNDARY</code> 값은 <code>&lt;dynamic_context&gt;</code>
               여는 태그입니다. 프로바이더 캐싱은 이 태그 앞의 prefix를 정적
@@ -107,17 +125,22 @@ export default function Page() {
                 <tr>
                   <td>Persona 주입(기본 ON)</td>
                   <td><code>GEODE_PERSONA=off</code>로 옵트아웃</td>
-                  <td>&quot;You are GEODE&quot; 정체성 + Voice/Operating/RUNTIME CANNOT 주입이 기본. off로 끄면 베이스 모델을 얇게 감싼 상태</td>
+                  <td>GEODE.md의 네 행동 섹션을 <code>&lt;agent_identity&gt;</code>로 주입합니다. off는 G1만 생략하며 공유 베이스와 도구 사용 규칙은 유지합니다</td>
                 </tr>
                 <tr>
                   <td>Audit-mode strip</td>
                   <td><code>GEODE_AUDIT_UNRESTRICTED=1</code></td>
-                  <td>GEODE 고유 레이어(정체성, 기억, 사용자 컨텍스트)를 전부 벗기고 model_card와 날짜, 호출자 suffix만 남깁니다. persona는 강제 OFF</td>
+                  <td>G1·기억·사용자 컨텍스트를 생략합니다. wrapper 또는 generic 베이스, 수식 출력 규칙과 <code>AGENTIC_SUFFIX</code>는 유지합니다. 동적 영역에는 모델이 있으면 model_card, 프로바이더 정책에 따라 날짜, 호출자 suffix가 들어갑니다</td>
                 </tr>
                 <tr>
                   <td>Wrapper override</td>
                   <td><code>GEODE_WRAPPER_OVERRIDE</code> env / audit-mode SoT 파일</td>
                   <td>자기개선 루프가 변이시킨 스캐폴드를 정적 베이스로 삼습니다. 없으면 generic prefix로 폴백해 타깃이 항상 베이스 스캐폴드를 입습니다</td>
+                </tr>
+                <tr>
+                  <td>명시적 에이전트 프롬프트</td>
+                  <td><code>AgenticLoopConfig.system_prompt_override</code></td>
+                  <td>기본 조립 본문을 대체하므로 G1과 model_card가 없을 수 있습니다. 스킬 메타데이터, <code>AGENTIC_SUFFIX</code>, 호출자 suffix는 별도로 결합합니다. 카드가 없으면 모델을 추측하지 않습니다</td>
                 </tr>
               </tbody>
             </table>
@@ -178,6 +201,15 @@ export default function Page() {
               (version-controlled and hash-pinned), and layer assembly right
               before the call (static/dynamic split).
             </p>
+            <p>
+              <code>GEODE.md</code> is the runtime SOUL source, included in the
+              wheel as <code>core/GEODE.md</code>. Default assembly extracts four
+              sections into G1: Identity, Voice &amp; Conduct, Operating
+              Principles, and RUNTIME CANNOT. The separate{" "}
+              <code>ContextAssembler</code> exposes the full SOUL to explicit
+              callers; it does not put the entire file into the default loop
+              prompt.
+            </p>
 
             <h2>Templates: markdown is the source of truth</h2>
             <p>
@@ -186,8 +218,9 @@ export default function Page() {
               section tags (<code>&lt;system&gt;</code>, <code>&lt;user&gt;</code>,{" "}
               <code>&lt;agentic_suffix&gt;</code>) parsed by{" "}
               <code>_load_template</code> in{" "}
-              <code>core/llm/prompts/__init__.py</code>. The live template is
-              <code>router.md</code>.
+              <code>core/llm/prompts/__init__.py</code>. The default loop uses{" "}
+              <code>router.md</code>; opt-in adversarial review uses{" "}
+              <code>reviewer.md</code>.
             </p>
             <table>
               <thead>
@@ -195,6 +228,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>router.md</code></td><td><code>ROUTER_SYSTEM</code>, <code>AGENTIC_SUFFIX</code></td><td>The main agent system prompt and the agentic suffix</td></tr>
+                <tr><td><code>reviewer.md</code></td><td><code>REVIEWER_SYSTEM</code></td><td>Opt-in read-only adversarial review</td></tr>
               </tbody>
             </table>
             <p>
@@ -206,12 +240,12 @@ export default function Page() {
               copyright.
             </p>
 
-            <h2>Drift detection: four pins</h2>
+            <h2>Drift detection: hash pins</h2>
             <p>
               At import time each constant&apos;s sha256[:12] hash is computed
-              and exposed as <code>PROMPT_VERSIONS</code>. There are exactly four
-              pins: <code>ROUTER_SYSTEM</code>, <code>AGENTIC_SUFFIX</code>,{" "}
-              <code>COMMENTARY_SYSTEM</code>, <code>COMMENTARY_USER</code>.{" "}
+              and exposed as <code>PROMPT_VERSIONS</code>. The pinned constants
+              are <code>ROUTER_SYSTEM</code>, <code>AGENTIC_SUFFIX</code>,{" "}
+              <code>REVIEWER_SYSTEM</code>.{" "}
               <code>verify_prompt_integrity()</code> compares live hashes against{" "}
               <code>_PINNED_HASHES</code>, and CI uses it as a gate. Changing a
               prompt requires re-pinning, which turns every prompt change into a
@@ -219,10 +253,11 @@ export default function Page() {
               <a href="/geode/docs/runtime/llm/prompt-hashing">Prompt hashing</a>.
             </p>
             <p>
-              <code>core/llm/prompt_assembler.py</code> is now a small stub.
-              Skills enter the prompt through exactly one route: the{" "}
+              <code>core/llm/prompt_assembler.py</code> is a math-output formatting
+              helper. Skill metadata enters the prompt through one route: the{" "}
               <code>{"{skill_context}"}</code> block substituted in{" "}
-              <code>core/agent/loop/_context.py</code>.
+              <code>core/agent/loop/_context.py</code>. Bodies load on demand
+              through <code>use_skill</code>.
             </p>
 
             <h2>Layer assembly: build_system_prompt</h2>
@@ -240,7 +275,7 @@ export default function Page() {
               <tbody>
                 <tr>
                   <td>Static prefix</td>
-                  <td><code>&lt;agent_baseline&gt;</code> (always), <code>&lt;agent_identity&gt;</code> (default on), style-guide and heuristics policy appends</td>
+                  <td>Router or wrapper base, math-output rules, and <code>AGENTIC_SUFFIX</code>. Normal mode adds <code>&lt;agent_identity&gt;</code> (default on) and selected style/heuristic policies</td>
                   <td>Stable across turns; cache-eligible</td>
                 </tr>
                 <tr>
@@ -250,6 +285,15 @@ export default function Page() {
                 </tr>
               </tbody>
             </table>
+            <p>
+              <code>&lt;model_card&gt;</code> carries the configured model ID,
+              exact catalog context limit, and reference API rates. It does not
+              establish the remaining context budget, account entitlement, or
+              actual charges. The SOUL keeps no duplicate model table; load the
+              existing bundled <code>geode-context</code> skill for selection,
+              pricing provenance, and fallback configuration when needed. Live
+              account-access probes require explicit approval.
+            </p>
             <p>
               <code>PROMPT_CACHE_BOUNDARY</code> is the opening
               <code>&lt;dynamic_context&gt;</code> tag. Provider caching treats
@@ -266,17 +310,22 @@ export default function Page() {
                 <tr>
                   <td>Persona (default on)</td>
                   <td><code>GEODE_PERSONA=off</code> to opt out</td>
-                  <td>Injects the &quot;You are GEODE&quot; identity plus Voice/Operating/RUNTIME CANNOT by default. Opt out for a thin wrapper around the base model</td>
+                  <td>Injects GEODE.md&apos;s four behavioral sections as <code>&lt;agent_identity&gt;</code>. Opting out omits G1, not the shared base or tool-use rules</td>
                 </tr>
                 <tr>
                   <td>Audit-mode strip</td>
                   <td><code>GEODE_AUDIT_UNRESTRICTED=1</code></td>
-                  <td>Strips every GEODE-specific layer (identity, memory, user context), leaving model_card, the date, and the caller&apos;s suffix. Forces persona OFF</td>
+                  <td>Omits G1, memory, and user context. Retains the wrapper or generic base, math-output rules, and <code>AGENTIC_SUFFIX</code>. Dynamic context carries model_card when a model is supplied, a provider-gated date, and the caller&apos;s suffix</td>
                 </tr>
                 <tr>
                   <td>Wrapper override</td>
                   <td><code>GEODE_WRAPPER_OVERRIDE</code> env / the audit-mode SoT file</td>
                   <td>The scaffold mutated by the self-improving loop becomes the static base; falls back to a generic prefix so the target always carries a base scaffold</td>
+                </tr>
+                <tr>
+                  <td>Explicit agent prompt</td>
+                  <td><code>AgenticLoopConfig.system_prompt_override</code></td>
+                  <td>Replaces default assembly, so G1 and model_card may be absent. Skill metadata, <code>AGENTIC_SUFFIX</code>, and the caller&apos;s suffix are composed separately. A missing card is not permission to guess the model</td>
                 </tr>
               </tbody>
             </table>
