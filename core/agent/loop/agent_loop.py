@@ -1104,6 +1104,7 @@ class AgenticLoop:
         model: str | None = None,
         response_schema: dict[str, Any] | None = None,
         allow_tools: bool = True,
+        purpose: str = "agentic_loop",
     ) -> AgenticResponse | None:
         """Assemble and dispatch one provider request."""
         return await _provider_call.call_llm(
@@ -1114,6 +1115,7 @@ class AgenticLoop:
             model=model,
             response_schema=response_schema,
             allow_tools=allow_tools,
+            purpose=purpose,
         )
 
     # ------------------------------------------------------------------

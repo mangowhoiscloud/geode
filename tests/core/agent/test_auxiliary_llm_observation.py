@@ -76,6 +76,85 @@ def _registry(tmp_path: Path) -> tuple[MiddlewareRegistry, HookSystem, HookEvent
     return MiddlewareRegistry(events=hooks), hooks, store
 
 
+@pytest.mark.parametrize("mode", ["llm_judge", "reflexion"])
+@pytest.mark.parametrize("timeout", [False, True])
+def test_turn_verification_dispatch_keeps_purpose_usage_and_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str, timeout: bool
+) -> None:
+    from core.agent.conversation import ConversationContext
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig
+    from core.agent.loop.models import AgenticResult
+    from core.agent.tool_executor import ToolExecutor
+    from core.agent.verify import verify_turn_async
+    from core.config import settings
+    from core.llm.adapters.registry import bootstrap_builtins
+    from evals.platforms.harbor import _summarize_usage
+
+    registry, hooks, store = _registry(tmp_path)
+    bootstrap_builtins()
+    monkeypatch.setenv("GEODE_VERIFY_MODE", mode)
+    monkeypatch.setattr(settings, "judge_model", "gpt-5.6-sol")
+    monkeypatch.setattr("core.agent.verify._JUDGE_CALL_TIMEOUT_S", 0.01)
+    adapter = _Adapter(
+        AdapterCallResult(
+            text='{"passed":true,"score":1,"reason":"ok","reflection":'
+            '{"observation":"checked","lesson":"retain","next_check":"done"}}',
+            usage=UsageSummary(input_tokens=10, output_tokens=2, cached_input_tokens=4),
+            stop_reason="completed",
+        )
+    )
+    loop = AgenticLoop(
+        ConversationContext(),
+        ToolExecutor(middleware_registry=registry),
+        hooks=hooks,
+        config=AgenticLoopConfig(source="codex-oauth", effort="max", disable_settings_drift=True),
+        model="gpt-5.6-sol",
+        provider="openai",
+        quiet=True,
+    )
+    loop._new_adapter = adapter
+    loop._session_id = "synthetic-session"
+    loop._verify_root_user_input = "Complete the synthetic task"
+
+    async def run():
+        await loop._call_llm("Task", [{"role": "user", "content": "Work"}])
+        if timeout:
+
+            async def slow(request):
+                adapter.requests.append(request)
+                await asyncio.Event().wait()
+
+            monkeypatch.setattr(adapter, "acomplete", slow)
+        return await verify_turn_async(
+            AgenticResult(text="Candidate", termination_reason="natural"), loop=loop
+        )
+
+    try:
+        verdict = asyncio.run(run())
+        starts = list(reversed(store.read(event_filter=HookEvent.LLM_CALL_STARTED.value)))
+        ends = list(reversed(store.read(event_filter=HookEvent.LLM_CALL_ENDED.value)))
+        assert len(starts) == len(ends) == len(adapter.requests) == 2
+        assert [end.payload["purpose"] for end in ends] == ["agentic_loop", "turn_verification"]
+        assert starts[1].llm_attempt_id == ends[1].llm_attempt_id
+        assert ends[1].payload["effort"] == adapter.requests[1].effort == "max"
+        assert ends[1].payload["model"] == adapter.requests[1].model == "gpt-5.6-sol"
+        assert not adapter.requests[1].tools
+        usage = _summarize_usage([*starts, *ends])
+        assert usage["recorded_attempts"][1]["purpose"] == "turn_verification"
+        assert verdict.passed is not timeout
+        if timeout:
+            assert ends[1].payload["error_type"] == "CancelledError"
+            assert ends[1].payload["usage"] is None
+            assert usage["input_tokens"] is None
+            assert usage["cached_input_tokens_observed_sum"] == 4
+            assert verdict.reason == "judge_timeout" and not verdict.should_retry
+            assert verdict.rubric_misses == ("verification_error",)
+        else:
+            assert usage["cached_input_tokens"] == 8
+    finally:
+        hooks.close()
+
+
 async def _invoke(
     monkeypatch: pytest.MonkeyPatch,
     purpose: str,

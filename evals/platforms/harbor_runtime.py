@@ -718,7 +718,10 @@ async def _run_native(args: argparse.Namespace) -> int:
             execution_started = True
             result = await loop.arun(Path(args.instruction).read_text())
         outcome = str(result.termination_reason)
-        if result.error:
+        if result.error and not (
+            result.termination_reason == TerminationReason.EXTERNAL_VERIFICATION_REQUIRED
+            and result.error == TerminationReason.EXTERNAL_VERIFICATION_REQUIRED
+        ):
             raise RuntimeError("native runtime reported an execution error")
         succeeded = is_successful_task_termination(result.termination_reason)
         if result.termination_reason in {

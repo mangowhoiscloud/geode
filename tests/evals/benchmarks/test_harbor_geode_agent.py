@@ -294,7 +294,8 @@ def test_thin_observer_persists_missing_zero_and_positive_cache(
     assert atif["final_metrics"]["total_cached_tokens"] == cache
 
 
-def test_recorded_attempts_keep_only_numeric_allowlist_and_source_links() -> None:
+@pytest.mark.parametrize("purpose", ["cognitive_reflection", "turn_verification"])
+def test_recorded_attempts_keep_only_numeric_allowlist_and_source_links(purpose: str) -> None:
     start = SimpleNamespace(action="llm.call.started", session_id="s", llm_attempt_id="c:1")
     terminal = SimpleNamespace(
         action="llm.call.ended",
@@ -308,7 +309,7 @@ def test_recorded_attempts_keep_only_numeric_allowlist_and_source_links() -> Non
             "model": "gpt-5.6-sol",
             "provider": "openai",
             "adapter": "codex_oauth",
-            "purpose": "cognitive_reflection",
+            "purpose": purpose,
             "source": "subscription",
             "effort": "medium",
             "error_type": None,
@@ -340,7 +341,7 @@ def test_recorded_attempts_keep_only_numeric_allowlist_and_source_links() -> Non
             "model": "gpt-5.6-sol",
             "provider": "openai",
             "adapter": "codex_oauth",
-            "purpose": "cognitive_reflection",
+            "purpose": purpose,
             "source": "subscription",
             "effort": "medium",
             "error_type": None,

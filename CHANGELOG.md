@@ -55,6 +55,11 @@ functional change.
 
 ### Fixed
 
+- Separate turn-final LLM verification usage from agent execution with the
+  version 8 `turn_verification` purpose, preserving unknown historical usage.
+  Persist bounded judge timeout reasons and retain native Harbor verification
+  holds without a synthetic runtime exception; delivery and expansion gates
+  remain closed while verification or observation is incomplete.
 - **CI-gated GitFlow synchronization.** Accept an exact ordered develop/main
   two-parent sync when strict ancestry blocks the canonical head. Validate the
   native-selected checks within their PR workflow scope, suite and job;

@@ -160,7 +160,7 @@ class ActivityRowBase(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: int = 7
+    schema_version: int = 8
     """Row-schema version (PR-OBS-CONTRACT, 2026-06-13). Bump when a
     field is added/renamed/retyped on any row class so JSONL re-readers
     can branch on shape instead of guessing from key presence.
@@ -175,7 +175,8 @@ class ActivityRowBase(BaseModel):
     v5: completed LLM calls may retain bounded serialized-image receipts.
     v6: explicit counter presence and tool terminal outcomes.
     v7: physical LLM attempts retain purpose, source and requested effort;
-    old rows read those fields as unknown, not inferred from the root model."""
+    old rows read those fields as unknown, not inferred from the root model.
+    v8: turn-final verification has its own bounded call purpose."""
 
     ts: float
     run_id: str
@@ -297,6 +298,7 @@ class LLMCallEndedDetails(LifecycleCompletedDetails):
     purpose: (
         Literal[
             "agentic_loop",
+            "turn_verification",
             "cognitive_reflection",
             "candidate_judge",
             "text_completion",
