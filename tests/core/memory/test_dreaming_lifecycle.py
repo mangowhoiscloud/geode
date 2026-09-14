@@ -8,13 +8,13 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from core.hooks import HookEvent, HookSystem
 from core.hooks.llm_observation import observe_llm_call
 from core.llm.adapters.base import UsageSummary
-from core.memory.dreaming import DreamingService, DreamResult, make_dreaming_handler
+from core.memory.dreaming import DreamingService, DreamResult, _DreamJob, make_dreaming_handler
 from core.memory.session_manager import SessionManager
 from core.observability.event_store import HookEventStore
 from core.observability.hook_persistence import HookPersistenceSink
@@ -170,6 +170,28 @@ def test_dead_worker_failure_remains_visible_after_a_later_job(
     assert "private" not in str(caught.value)
     with pytest.raises(RuntimeError, match=expected):
         owner.close(timeout_s=0)
+
+
+def test_failure_during_finished_job_check_is_not_dropped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = DreamingService()
+    prior = _DreamJob(thread=Mock(spec=threading.Thread))
+
+    def finish_with_error() -> bool:
+        prior.error_type = "InterfaceError"
+        return False
+
+    prior.thread.is_alive.side_effect = finish_with_error
+    owner._jobs.append(prior)
+    monkeypatch.setattr(
+        DreamingService, "dream_session", AsyncMock(return_value=DreamResult(None, "next", False))
+    )
+    thread = owner.dream_session_background("next")
+    thread.join(1)
+    assert not thread.is_alive()
+    with pytest.raises(RuntimeError, match="InterfaceError"):
+        owner.close()
 
 
 def test_failed_thread_start_does_not_leave_an_unjoinable_job(

@@ -332,7 +332,8 @@ class DreamingService:
             self._jobs = [
                 prior
                 for prior in self._jobs
-                if prior.error_type or (prior.thread and prior.thread.is_alive())
+                # A stopped thread has published its final error before this read.
+                if (prior.thread and prior.thread.is_alive()) or prior.error_type
             ]
             self._jobs.append(job)
             try:

@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
+from functools import partial
 from pathlib import Path
+from typing import Any
+from unittest.mock import Mock
 
 import pytest
 from core.memory.session_manager import SessionManager, SessionMeta
@@ -34,6 +38,52 @@ def _make_meta(
         round_count=kwargs.get("round_count", 3),  # type: ignore[arg-type]
         message_count=kwargs.get("message_count", 10),  # type: ignore[arg-type]
     )
+
+
+@pytest.mark.parametrize(
+    ("method", "args", "kwargs"),
+    [
+        ("get", ("s1",), {}),
+        ("list_sessions", (), {}),
+        ("list_sessions", (), {"status": "active"}),
+        ("get_messages", ("s1",), {}),
+        ("count_messages", ("s1",), {}),
+        ("search_messages", ("context",), {}),
+        ("list_context_artifacts", (), {}),
+        ("search_context_artifacts", ("context",), {}),
+        ("close", (), {}),
+    ],
+)
+def test_reads_and_close_hold_connection_lock_through_fetch(
+    mgr: SessionManager,
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> None:
+    """Guard the entire execute/fetch lifetime, not merely connection creation."""
+    mgr.upsert(_make_meta())
+    mgr.upsert_messages("s1", [{"role": "user", "content": "context", "seq": 0}])
+    mgr.upsert_context_artifact(session_id="s1", kind="dream", content="context")
+    connection = mgr._conn
+
+    def locked_call(function: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        assert mgr._lock.locked(), "shared connection operation is not serialized"
+        return function(*args, **kwargs)
+
+    def execute(*args: Any, **kwargs: Any) -> Mock:
+        cursor = locked_call(connection.execute, *args, **kwargs)
+        wrapped = Mock(wraps=cursor)
+        for name in ("fetchone", "fetchall"):
+            getattr(wrapped, name).side_effect = partial(locked_call, getattr(cursor, name))
+        return wrapped
+
+    wrapped = Mock(wraps=connection)
+    wrapped.execute.side_effect = execute
+    wrapped.close.side_effect = partial(locked_call, connection.close)
+    with monkeypatch.context() as patch:
+        patch.setattr(mgr, "_conn", wrapped)
+        getattr(mgr, method)(*args, **kwargs)
 
 
 class TestSessionManagerCRUD:
