@@ -45,7 +45,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from core.agent.loop import _model_switching
-from core.agent.system_prompt import _build_model_card
+from core.agent.system_prompt import _build_model_card, build_system_prompt
 
 
 @pytest.fixture(autouse=True)
@@ -95,6 +95,37 @@ def test_model_card_for_anthropic_model() -> None:
     assert "<model_card>" in card
     assert "claude-opus-4-7" in card
     assert "anthropic" in card.lower()
+
+
+@pytest.mark.parametrize("model", ["gpt-6-astra", "claude-fable-5", "glm-5.2", "unknown-model"])
+@pytest.mark.parametrize("audit", [False, True])
+def test_model_card_preserves_catalog_evidence_in_dynamic_context(
+    monkeypatch: pytest.MonkeyPatch, model: str, audit: bool
+) -> None:
+    from core.llm.token_tracker import MODEL_CONTEXT_WINDOW, MODEL_PRICING
+
+    monkeypatch.setenv("GEODE_AUDIT_UNRESTRICTED", "1" if audit else "0")
+    prompt = build_system_prompt(model)
+    card = _build_model_card(model)
+    assert card in prompt.split("<dynamic_context>", 1)[1]
+    assert prompt.count("<model_card>") == 1
+    assert model in card
+
+    context = MODEL_CONTEXT_WINDOW.get(model)
+    if context is None:
+        assert "context window:" not in card
+    else:
+        assert f"Catalog context window: {context:,} tokens." in card
+    pricing = MODEL_PRICING.get(model)
+    if pricing is None:
+        assert "Catalog API rates:" not in card
+    else:
+        assert (
+            f"Catalog API rates: ${pricing.input * 1_000_000:.2f} input / "
+            f"${pricing.output * 1_000_000:.2f} output per 1M tokens"
+        ) in card
+        assert "not account billing" in card
+    assert "not proof of account access" in card
 
 
 def test_model_card_does_not_carry_assertion_overhead() -> None:

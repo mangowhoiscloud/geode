@@ -47,8 +47,67 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- Resolve superseded CI runs through GitHub CLI's current required-check view,
+  then bind exact check IDs to the app, head and PR; never fall back to an older
+  success when the selected check is pending or failed.
+
 ### Fixed
 
+- **CI-gated GitFlow synchronization.** Accept an exact ordered develop/main
+  two-parent sync when strict ancestry blocks the canonical head. Validate the
+  native-selected checks within their PR workflow scope, suite and job;
+  same-head push checks cannot create ambiguous PR evidence. Preserve
+  strict protection, administrator enforcement and head/base revalidation.
+- Retain auxiliary LLM attempt usage from cognitive reflection, candidate
+  selection, text completion and hosted search using the existing durable
+  event stream. Activity schema version 7 adds purpose, credential source and
+  requested effort without inventing missing legacy values. Session-bound
+  pairing prevents borrowing another session's terminal event. A read-only
+  Harbor artifact check reconciles frozen identities, native/canonical
+  projections and reconstructed recording hashes before any expansion claim;
+  unknown provider fields and unproven whole-runtime coverage remain blocked.
+  Worker tools and loops share their observation bus, and session terminals
+  retain sink health. Native finalization drains admitted Dreaming work within
+  the original agent deadline before exporting; unfinished or failed cleanup
+  cannot certify a complete source snapshot.
+  Known child handles and structured parent subagent events must also match
+  canonical session inventory; an entirely missing child cannot hide behind
+  a healthy root export. Workers require the real async session lifecycle;
+  missing methods no longer silently pass through a test-double fallback.
+
+## [1.0.29] - 2026-09-14
+
+### Infrastructure
+
+- Fail the CI merge gate on missing, skipped, cancelled or failed prerequisites,
+  including unavailable change detection. Run required Pages checks on every
+  main/develop pull request so a code-only green gate cannot mask a site failure.
+  Runtime `GEODE.md` and `.geode/` changes trigger the full code checks.
+  The explicit merge command rechecks current head/base and app-bound required
+  checks against enforced branch protection before submitting a pinned merge.
+
+### Fixed
+
+- Keep model-specific facts out of the SOUL's static reference table; route
+  detailed model guidance through the existing bundled `geode-context` skill.
+  Dynamic model cards retain exact catalog context limits and distinguish API
+  rate estimates from account access and billing evidence. Model defaults,
+  authentication and fallback policy are unchanged.
+- Distinguish a completed negative check from a tool outage in the shared
+  runtime prompt. Required failed or unrun checks cannot establish completion
+  or merge readiness, including persona-off and audit prompt paths.
+- Preserve trial observations across tool exceptions, cancellation and native
+  Harbor cleanup/export failures. Durable tool terminals distinguish failure
+  from uncertain external effects; failed observers cannot silently certify
+  complete usage from the remaining event pairs. Known completed empty-output
+  attempts retain their usage, and missing input/output/reasoning counters stay
+  unknown instead of becoming zero. Harbor's existing usage export includes
+  numeric per-attempt counters with source IDs and hashes for traceable Replay
+  accounting. Activity rows use schema version 6;
+  historical records, benchmark scores and whole-runtime accounting limits
+  remain unchanged.
 - Ground Reflexion verification in bounded observations instead of response
   length, keyword overlap or recovered tool-error vetoes. LLM verification
   failures remain unavailable rather than falling back to structural success.

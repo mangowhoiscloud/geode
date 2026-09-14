@@ -231,3 +231,45 @@ def test_provider_cache_presence_preserves_missing_and_zero(
     assert result.usage.cached_input_tokens_present is (read is not None)
     assert result.usage.cache_write_tokens_present is (write is not None)
     assert (result.usage.input_tokens, result.usage.output_tokens) == (100, 20)
+
+
+@pytest.mark.parametrize("provider", ["chat", "codex", "anthropic"])
+@pytest.mark.parametrize(
+    "counts", [None, (None, None, None), (0, 0, 0), (100, 20, 3), (100, None, 0)]
+)
+def test_provider_counter_presence_preserves_missing_and_zero(
+    provider: str, counts: tuple[int | None, int | None, int | None] | None
+) -> None:
+    from core.llm.adapters._anthropic_common import translate_response
+    from core.llm.adapters._openai_common import translate_chat_response, translate_codex_response
+
+    input_key, output_key = (
+        ("prompt_tokens", "completion_tokens")
+        if provider == "chat"
+        else ("input_tokens", "output_tokens")
+    )
+    reasoning_key = "thinking_tokens" if provider == "anthropic" else "reasoning_tokens"
+    detail_key = "completion_tokens_details" if provider == "chat" else "output_tokens_details"
+    usage = None
+    if counts is not None:
+        usage = SimpleNamespace(
+            **{
+                input_key: counts[0],
+                output_key: counts[1],
+                detail_key: SimpleNamespace(**{reasoning_key: counts[2]}),
+            }
+        )
+    response = SimpleNamespace(content=[], choices=[], output=[], usage=usage)
+    translator = {
+        "chat": translate_chat_response,
+        "codex": translate_codex_response,
+        "anthropic": translate_response,
+    }[provider]
+    result = translator(response)
+    for key, value in zip(
+        ("input_tokens", "output_tokens", "reasoning_tokens"),
+        counts if counts is not None else (None, None, None),
+        strict=True,
+    ):
+        assert getattr(result.usage, key) == (value or 0)
+        assert getattr(result.usage, f"{key}_present") is (value is not None)

@@ -401,16 +401,22 @@ def test_status_tolerates_partial_jsonl_row(
 # ---------------------------------------------------------------------------
 
 
-def test_seed_generator_contract_requires_tags_field() -> None:
+def test_seed_generator_contract_requires_tags_field(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """The seed_generator product contract
     must require BOTH the co-scientist canonical ``target_dims`` field and
     a Petri-compatible ``tags`` field so a mixed pool (seed_generation
     survivors + Petri seeds) keeps dim attribution
     readable by both consumers."""
-    from core.paths import get_project_root
-
+    monkeypatch.chdir(tmp_path)
+    # This is a source contract, not the operator workspace cached by the runtime.
     contract = (
-        get_project_root() / "evals" / "seed_generation" / "agents" / "generator.md"
+        Path(__file__).resolve().parents[3]
+        / "evals"
+        / "seed_generation"
+        / "agents"
+        / "generator.md"
     ).read_text(encoding="utf-8")
     assert "`target_dims`" in contract
     assert "`tags`" in contract

@@ -350,16 +350,35 @@ def test_best_of_judge_inherits_tool_context_route(
         seen["model"] = model
         seen["provider"] = kwargs.get("provider")
         seen["source"] = kwargs.get("source")
+        seen["correlation"] = kwargs.get("correlation")
         return CandidateVerdict(0, "ok")
 
     monkeypatch.setattr(cs, "judge_candidates", _fake_judge)
 
-    live_route = SimpleNamespace(model="claude-opus-4-8", provider="anthropic", source="oauth")
+    live_route = SimpleNamespace(
+        model="claude-opus-4-8",
+        provider="anthropic",
+        source="oauth",
+        session_id="s",
+        turn_id="t",
+        step_id="step-2",
+        session_generation=3,
+        verify_attempt=1,
+        tool_call_id="tool-2",
+    )
     asyncio.run(
         executor._aexecute_delegate(
             {"task_description": "solve X", "best_of": 2}, context=live_route
         )
     )
+    correlation = seen.pop("correlation")
+    assert correlation["session_id"] == "s"
+    assert correlation["turn_id"] == "t"
+    assert correlation["step_id"] == "step-2"
+    assert correlation["tool_call_id"] == "tool-2"
+    assert correlation["session_generation"] == 3
+    assert correlation["verify_attempt"] == 1
+    assert correlation["llm_call_id"] == ""
     assert seen == {"model": "claude-opus-4-8", "provider": "anthropic", "source": "oauth"}
 
 

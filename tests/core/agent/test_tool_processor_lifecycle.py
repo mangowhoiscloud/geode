@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -19,7 +20,14 @@ from core.hooks import (
     HookName,
     HookRegistry,
     HookSystem,
+    MiddlewareRegistry,
 )
+from core.hooks.middleware import NextCallAlreadyUsedError
+from core.observability.activity import LifecycleCompletedDetails, ToolExecEndedRow
+from core.observability.activity_registry import map_hook_to_activity
+from core.observability.event_store import HookEventStore
+from core.observability.hook_persistence import HookPersistenceSink
+from core.tools.base import ToolContext
 
 
 def _processor(
@@ -70,6 +78,289 @@ def _capture_events(hooks: HookSystem) -> list[HookEvent]:
     events: list[HookEvent] = []
     hooks.register_sink(lambda dispatch: events.append(dispatch.event), name="capture")
     return events
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        "success",
+        "error",
+        "raised",
+        "cancelled",
+        "pre_cancelled",
+        "blocked",
+        "short",
+        "timeout",
+        "uncertain",
+        "deferred",
+    ],
+)
+def test_executor_terminal_pair_survives_real_persistence(tmp_path: Path, outcome: str) -> None:
+    async def scenario() -> None:
+        hooks = HookSystem()
+        store = HookEventStore(tmp_path / "tool-events.db")
+        hooks.register_sink(
+            HookPersistenceSink(store, session_key="synthetic", run_id="run-tool"),
+            name="persistence",
+        )
+        entered = asyncio.Event()
+        original_error = NextCallAlreadyUsedError("private original exception")
+        registry = HookRegistry(events=hooks)
+        middleware = MiddlewareRegistry(events=hooks)
+        if outcome == "blocked":
+            registry.register(
+                HookName.PRE_TOOL_USE,
+                lambda _invocation: HookDecision(action=HookAction.BLOCK, reason="policy"),
+                name="block",
+            )
+
+        class ExecutionMiddleware:
+            async def tool_execution(self, request, next_call):
+                if outcome == "short":
+                    return {"short": True}
+                result = await next_call(request)
+                # Ordinary post-dispatch errors preserve the downstream result;
+                # this contract error deliberately propagates without replay.
+                if outcome == "raised":
+                    raise original_error
+                return result
+
+        middleware.register_tool_execution(ExecutionMiddleware(), name="synthetic")
+
+        async def handler(**_kwargs):
+            entered.set()
+            if outcome == "cancelled":
+                await asyncio.Event().wait()
+            if outcome == "error":
+                return {"error": "private error result", "error_type": "synthetic_failure"}
+            if outcome == "timeout":
+                return {"error": "private timeout result", "timeout": True}
+            if outcome == "uncertain":
+                return {"error": "private uncertain result", "outcome_uncertain": True}
+            if outcome == "deferred":
+                return {"external_execution": "deferred"}
+            return {"content": "private successful result"}
+
+        executor = ToolExecutor(
+            action_handlers={"read_file": handler},
+            hooks=hooks,
+            hook_registry=registry,
+            middleware_registry=middleware,
+        )
+        cancellation = asyncio.Event()
+        if outcome == "pre_cancelled":
+            cancellation.set()
+        context = ToolContext(
+            session_id="session-tool",
+            turn_id="turn-tool",
+            step_id="step-tool",
+            tool_call_id="call-tool",
+            cancellation=cancellation,
+        )
+        try:
+            task = asyncio.create_task(
+                executor.aexecute("read_file", {"path": "private input path"}, context=context)
+            )
+            if outcome == "cancelled":
+                await entered.wait()
+                task.cancel("private cancellation reason")
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+                assert task.cancelled()
+            elif outcome == "raised":
+                with pytest.raises(RuntimeError) as caught:
+                    await task
+                assert caught.value is original_error
+            else:
+                await task
+
+            rows = list(reversed(store.read()))
+            tool_rows = [row for row in rows if row.action.startswith("tool.exec.")]
+            if outcome in {"blocked", "pre_cancelled", "short"}:
+                assert not entered.is_set()
+                assert tool_rows == []
+                return
+
+            assert [row.action for row in tool_rows] == ["tool.exec.started", "tool.exec.ended"]
+            assert all(row.session_id == "session-tool" for row in tool_rows)
+            assert all(row.turn_id == "turn-tool" for row in tool_rows)
+            assert all(row.step_id == "step-tool" for row in tool_rows)
+            assert all(row.tool_call_id == "call-tool" for row in tool_rows)
+            ended = tool_rows[-1]
+            assert ended.status == ("ok" if outcome in {"success", "deferred"} else "failed")
+            assert ended.payload["success"] is (outcome in {"success", "deferred"})
+            assert ended.payload["tool_name"] == "read_file"
+            assert ended.payload["executed"] is (
+                None
+                if outcome in {"raised", "cancelled", "timeout", "uncertain", "deferred"}
+                else True
+            )
+            assert (
+                ended.payload["terminal_status"]
+                == {
+                    "success": "completed",
+                    "error": "failed",
+                    "raised": "failed",
+                    "cancelled": "cancelled",
+                    "timeout": "failed",
+                    "uncertain": "failed",
+                    "deferred": "completed",
+                }[outcome]
+            )
+            assert (
+                ended.payload["error_type"]
+                == {
+                    "success": None,
+                    "error": "synthetic_failure",
+                    "raised": "NextCallAlreadyUsedError",
+                    "cancelled": "CancelledError",
+                    "timeout": None,
+                    "uncertain": None,
+                    "deferred": None,
+                }[outcome]
+            )
+            assert ended.payload["duration_ms"] >= 0
+            assert "private" not in str([row.payload for row in rows])
+        finally:
+            hooks.close()
+            store.close()
+
+    asyncio.run(scenario())
+
+
+def test_gated_tool_terminal_precedes_approval_observer_cancellation(tmp_path: Path) -> None:
+    hooks = HookSystem()
+    store = HookEventStore(tmp_path / "approval-events.db")
+    hooks.register_sink(
+        HookPersistenceSink(store, session_key="synthetic", run_id="run-tool"),
+        name="persistence",
+    )
+    cancellation = asyncio.CancelledError("private approval observer cancellation")
+    handler = AsyncMock(return_value={"saved": True})
+
+    def cancel_executed_approval(_event, payload):
+        if payload["state"] == "executed":
+            raise cancellation
+
+    hooks.register(HookEvent.APPROVAL_TRANSITION, cancel_executed_approval, name="cancel-approval")
+    executor = ToolExecutor(
+        action_handlers={"memory_save": handler},
+        approval_callback=lambda *_args: "y",
+        hooks=hooks,
+    )
+    try:
+        with pytest.raises(asyncio.CancelledError) as caught:
+            asyncio.run(
+                executor.aexecute(
+                    "memory_save",
+                    {"key": "synthetic", "content": "private input"},
+                    context=ToolContext(session_id="s-tool", tool_call_id="c-tool"),
+                )
+            )
+        assert caught.value is cancellation
+        handler.assert_awaited_once()
+        rows = [
+            row
+            for row in reversed(store.read(tool_call_id="c-tool"))
+            if row.action.startswith("tool.exec.")
+        ]
+        assert [row.action for row in rows] == ["tool.exec.started", "tool.exec.ended"]
+        assert rows[-1].status == "ok"
+        assert rows[-1].payload["success"] is True
+        assert rows[-1].payload["executed"] is True
+        assert rows[-1].payload["terminal_status"] == "completed"
+        assert rows[-1].payload["error_type"] is None
+        assert "private" not in str([row.payload for row in rows])
+    finally:
+        hooks.close()
+        store.close()
+
+
+@pytest.mark.parametrize("observer_event", [HookEvent.TOOL_EXEC_ENDED, HookEvent.TOOL_EXEC_FAILED])
+def test_failure_observer_cancellation_preserves_original_exception(
+    tmp_path: Path,
+    observer_event: HookEvent,
+) -> None:
+    original_error = NextCallAlreadyUsedError("original failure")
+    hooks = HookSystem()
+    store = HookEventStore(tmp_path / "observer-events.db")
+    hooks.register_sink(
+        HookPersistenceSink(store, session_key="synthetic", run_id="run-tool"),
+        name="persistence",
+    )
+    middleware = MiddlewareRegistry(events=hooks)
+
+    class RaiseAfterDispatch:
+        async def tool_execution(self, request, next_call):
+            await next_call(request)
+            raise original_error
+
+    async def cancel_observer(_event, _payload):
+        raise asyncio.CancelledError("observer cancelled")
+
+    middleware.register_tool_execution(RaiseAfterDispatch(), name="raise-after-dispatch")
+    hooks.register(observer_event, cancel_observer, name="cancel-observer")
+    executor = ToolExecutor(
+        action_handlers={"read_file": lambda **_kwargs: {"ok": True}},
+        hooks=hooks,
+        middleware_registry=middleware,
+    )
+    try:
+        with pytest.raises(RuntimeError) as caught:
+            asyncio.run(
+                executor.aexecute(
+                    "read_file", {}, context=ToolContext(session_id="s-tool", tool_call_id="c-tool")
+                )
+            )
+        assert caught.value is original_error
+        rows = [
+            row
+            for row in reversed(store.read(tool_call_id="c-tool"))
+            if row.action.startswith("tool.exec.")
+        ]
+        assert [row.action for row in rows] == ["tool.exec.started", "tool.exec.ended"]
+        assert rows[-1].payload["success"] is False
+        assert rows[-1].payload["error_type"] == "NextCallAlreadyUsedError"
+        assert rows[-1].status == "failed"
+        assert "observer cancelled" not in str(rows[-1].payload)
+    finally:
+        hooks.close()
+        store.close()
+
+
+@pytest.mark.parametrize("terminal_status", [None, {}, []])
+def test_tool_terminal_legacy_mapper_keeps_missing_distinct_and_drops_private_fields(
+    terminal_status: object,
+) -> None:
+    row = map_hook_to_activity(
+        HookEvent.TOOL_EXEC_ENDED,
+        {
+            "tool_call_id": "legacy-call",
+            "has_error": True,
+            "terminal_status": terminal_status,
+            "error_type": "private error text with spaces",
+            "tool_input": {"secret": "private input"},
+            "result": {"error": "private result"},
+        },
+        run_id="legacy-run",
+    )
+    assert isinstance(row, ToolExecEndedRow)
+    assert row.details.success is False
+    assert row.details.executed is None
+    assert row.details.terminal_status is None
+    assert row.details.error_type is None
+    assert "private" not in row.model_dump_json()
+    restored = ToolExecEndedRow.model_validate(
+        {**row.model_dump(), "schema_version": 5, "details": {"duration_ms": 1.0, "success": True}}
+    )
+    assert restored.schema_version == 5
+    assert restored.details.executed is None
+    assert restored.details.terminal_status is None
+    constructed = ToolExecEndedRow.model_validate(
+        {**row.model_dump(), "details": LifecycleCompletedDetails(duration_ms=1.0)}
+    )
+    assert constructed.details.success is True
+    assert constructed.details.executed is None
 
 
 def test_public_block_never_emits_execution_started() -> None:

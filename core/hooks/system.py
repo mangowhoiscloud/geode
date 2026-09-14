@@ -469,6 +469,16 @@ class RuntimeEventBus:
     def extension_decisions(self) -> tuple[ExtensionDecision, ...]:
         return self._extension_decisions
 
+    @property
+    def has_sink_failures(self) -> bool:
+        """Whether any sink failure is known; not a count of lost events.
+
+        Retained after close so final exporters can reject complete accounting.
+        Absence of a known failure does not establish all-runtime coverage.
+        """
+        with self._lock:
+            return bool(self._sink_failure_warned)
+
     def set_extension_decisions(self, decisions: tuple[ExtensionDecision, ...]) -> None:
         self._extension_decisions = decisions
 
@@ -1041,6 +1051,7 @@ class RuntimeEventBus:
         blocked = False
         block_reason = ""
         blocked_by = ""
+        interruption: BaseException | None = None
 
         for hook in hooks:
             try:
@@ -1080,6 +1091,19 @@ class RuntimeEventBus:
                         error=str(exc),
                     )
                 )
+            except BaseException as exc:
+                # A cancelled observer still owes the synchronous sinks one
+                # dispatch. This classifies the handler, not the model/tool.
+                results.append(
+                    HookResult(
+                        success=False,
+                        event=event,
+                        handler_name=hook.name,
+                        error=type(exc).__name__,
+                    )
+                )
+                interruption = exc
+                break
 
         dispatch = HookDispatch(
             event=event,
@@ -1092,12 +1116,24 @@ class RuntimeEventBus:
             block_reason=block_reason,
             blocked_by=blocked_by,
         )
-        self._notify_sinks(dispatch)
+        try:
+            self._notify_sinks(dispatch)
+        except BaseException as sink_error:
+            if interruption is None:
+                raise
+            log.warning(
+                "Hook sink interrupted while preserving %s (%s)",
+                type(interruption).__name__,
+                type(sink_error).__name__,
+            )
+        if interruption is not None:
+            raise interruption
         return dispatch
 
     def _notify_sinks(self, dispatch: HookDispatch) -> None:
         with self._lock:
             sinks = list(self._sinks.items())
+        interruption: BaseException | None = None
         for sink_name, sink in sinks:
             try:
                 ret = sink(dispatch)
@@ -1105,23 +1141,29 @@ class RuntimeEventBus:
                     if inspect.iscoroutine(ret):
                         ret.close()
                     raise TypeError(f"Hook sink {sink_name!r} must be synchronous")
-            except Exception as exc:
+            except BaseException as exc:
                 warning_key = (sink_name, dispatch.event.value)
-                if warning_key not in self._sink_failure_warned:
+                with self._lock:
+                    first_failure = warning_key not in self._sink_failure_warned
                     self._sink_failure_warned.add(warning_key)
+                if first_failure:
                     log.warning(
                         "Hook sink '%s' failed on %s (suppressing repeats): %s",
                         sink_name,
                         dispatch.event.value,
-                        exc,
+                        type(exc).__name__,
                     )
                 else:
                     log.debug(
                         "Hook sink '%s' failed on %s: %s",
                         sink_name,
                         dispatch.event.value,
-                        exc,
+                        type(exc).__name__,
                     )
+                if not isinstance(exc, Exception) and interruption is None:
+                    interruption = exc
+        if interruption is not None:
+            raise interruption
 
     @staticmethod
     def _filter_by_matcher(

@@ -254,10 +254,10 @@ def build_system_prompt(
 
     Two flags govern what gets stripped:
 
-    - ``GEODE_AUDIT_UNRESTRICTED=1`` (audit-mode, G3): strip every
-      GEODE-specific layer — identity, memory, user_context — leaving
-      only model_card + provider-gated current_date + the caller's
-      ``system_suffix``.
+    - ``GEODE_AUDIT_UNRESTRICTED=1`` (audit-mode, G3): omit identity,
+      memory and user_context. Keep the wrapper/generic base, math rules,
+      AGENTIC_SUFFIX, model_card and provider-gated current_date; the loop
+      adds the caller's ``system_suffix`` separately.
       Petri auditor controls the scenario's identity end-to-end.
     - ``GEODE_PERSONA`` (G10): inject GEODE identity (G1). Default ON so
       the declared soul + runtime guardrails ship; set ``=off`` for a thin
@@ -408,8 +408,8 @@ def _build_date_context() -> str:
 def _build_model_card(model: str) -> str:
     """Build a model card string for system prompt injection.
 
-    Reads from MODEL_PRICING and MODEL_CONTEXT_WINDOW so the LLM
-    can answer model-related questions directly without tool calls.
+    Reads configured model metadata from MODEL_PRICING and
+    MODEL_CONTEXT_WINDOW, not account entitlement or billing evidence.
 
     G8 (2026-05-12) — ``lru_cache(maxsize=8)``. The card is a pure
     function of ``model`` (provider lookup + pricing table + fallback
@@ -442,17 +442,16 @@ def _build_model_card(model: str) -> str:
         ]
 
         if ctx_window:
-            if ctx_window < 1_000_000:
-                ctx_str = f"{ctx_window // 1000}K"
-            else:
-                ctx_str = f"{ctx_window / 1_000_000:.0f}M"
-            parts.append(f"Context window: {ctx_str} tokens.")
+            parts.append(f"Catalog context window: {ctx_window:,} tokens.")
 
         if pricing:
             # pricing.input/output are per-token; multiply back for per-1M display
             in_per_m = pricing.input * 1_000_000
             out_per_m = pricing.output * 1_000_000
-            parts.append(f"Cost: ${in_per_m:.2f} input / ${out_per_m:.2f} output per 1M tokens.")
+            parts.append(
+                f"Catalog API rates: ${in_per_m:.2f} input / ${out_per_m:.2f} output "
+                "per 1M tokens (reference estimate, not account billing)."
+            )
 
         # Fallback chain
         from core.config import (
@@ -471,8 +470,9 @@ def _build_model_card(model: str) -> str:
             parts.append(f"Fallback chain: {' -> '.join(chain)}.")
 
         parts.append(
-            "For model-related questions, answer directly from this context. "
-            "Do NOT call check_status for model info."
+            "This is configured-model metadata, not proof of account access or backend identity. "
+            "Answer configured-model questions from this context; verify current provider "
+            "availability or pricing when requested. Live probes require explicit approval."
         )
 
         # GAP-17 — OpenAI / Codex tendency to emit HTML as a single

@@ -10,6 +10,7 @@ from dataclasses import replace
 from typing import Any
 
 from core.hooks import HookEvent, LlmCallRequest
+from core.hooks.llm_observation import observe_llm_call
 from core.llm.adapters.base import AdapterCallRequest, EmptyModelOutputError
 from core.llm.adapters.translation import agentic_response_from_adapter_result
 from core.llm.agentic_response import AgenticResponse
@@ -393,114 +394,22 @@ async def call_llm(
         )
 
         async def terminal(effective: LlmCallRequest) -> Any:
-            import time as _llm_call_time
+            from core.llm.token_tracker import calculate_cost
 
-            from core.hooks.dispatch import fire_hook_async
-
-            started_at = _llm_call_time.monotonic()
             active_adapter = effective.adapter
             active_request = effective.request
-            active_name = getattr(active_adapter, "name", "<unknown>")
-            active_provider = getattr(active_adapter, "provider", effective_provider)
-            await fire_hook_async(
-                loop._hooks,
-                HookEvent.LLM_CALL_STARTED,
-                {
-                    **attempt_correlation,
-                    "model": active_request.model,
-                    "provider": active_provider,
-                    "adapter": active_name,
-                },
+            return await observe_llm_call(
+                lambda: active_adapter.acomplete(active_request),
+                hooks=loop._hooks,
+                correlation=effective.correlation,
+                model=active_request.model,
+                provider=getattr(active_adapter, "provider", effective_provider),
+                adapter=getattr(active_adapter, "name", "<unknown>"),
+                source=getattr(active_adapter, "source", None),
+                effort=active_request.effort,
+                purpose="agentic_loop",
+                cost_estimator=calculate_cost,
             )
-            try:
-                attempt_result = await active_adapter.acomplete(active_request)
-            except BaseException as exc:
-                await fire_hook_async(
-                    loop._hooks,
-                    HookEvent.LLM_CALL_ENDED,
-                    {
-                        **attempt_correlation,
-                        "model": active_request.model,
-                        "provider": active_provider,
-                        "adapter": active_name,
-                        "latency_ms": (_llm_call_time.monotonic() - started_at) * 1_000,
-                        "error": type(exc).__name__,
-                        "error_type": type(exc).__name__,
-                    },
-                )
-                raise
-
-            usage = getattr(attempt_result, "usage", None)
-            input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
-            output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
-            cached_input_tokens = int(getattr(usage, "cached_input_tokens", 0) or 0)
-            reasoning_tokens = int(getattr(usage, "reasoning_tokens", 0) or 0)
-            cache_write_tokens = int(getattr(usage, "cache_write_tokens", 0) or 0)
-            reported_cost = getattr(usage, "reported_cost_usd", None)
-            try:
-                from core.llm.token_tracker import calculate_cost
-
-                cost_usd = (
-                    float(reported_cost)
-                    if reported_cost is not None
-                    else float(
-                        calculate_cost(
-                            active_request.model,
-                            input_tokens,
-                            output_tokens,
-                            cache_creation_tokens=cache_write_tokens,
-                            cache_read_tokens=cached_input_tokens,
-                        )
-                    )
-                )
-            except Exception:
-                log.warning(
-                    "calculate_cost failed for model=%s — recording cost_usd=0.0 "
-                    "(cost limiter will under-count this call)",
-                    active_request.model,
-                    exc_info=True,
-                )
-                cost_usd = 0.0
-            route_evidence = {
-                key: value
-                for key, value in {
-                    "response_id": getattr(attempt_result, "response_id", ""),
-                    "response_model": getattr(attempt_result, "response_model", ""),
-                    "response_provider": getattr(attempt_result, "response_provider", ""),
-                    "routing_strategy": getattr(attempt_result, "routing_strategy", ""),
-                    "routing_attempt": getattr(attempt_result, "routing_attempt", 0),
-                    "request_image_receipt": getattr(attempt_result, "request_image_receipt", None),
-                }.items()
-                if value
-            }
-            await fire_hook_async(
-                loop._hooks,
-                HookEvent.LLM_CALL_ENDED,
-                {
-                    **attempt_correlation,
-                    "model": active_request.model,
-                    "provider": active_provider,
-                    "adapter": active_name,
-                    "latency_ms": (_llm_call_time.monotonic() - started_at) * 1_000,
-                    "error": None,
-                    "usage": {
-                        "input_tokens": input_tokens,
-                        "output_tokens": output_tokens,
-                        "cached_input_tokens": cached_input_tokens
-                        if getattr(usage, "cached_input_tokens_present", False)
-                        or cached_input_tokens > 0
-                        else None,
-                        "reasoning_tokens": reasoning_tokens,
-                        "cache_write_tokens": cache_write_tokens
-                        if getattr(usage, "cache_write_tokens_present", False)
-                        or cache_write_tokens > 0
-                        else None,
-                    },
-                    "cost_usd": cost_usd,
-                    **route_evidence,
-                },
-            )
-            return attempt_result
 
         return await loop._middleware_registry.llm_execution(current, terminal)
 

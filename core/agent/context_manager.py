@@ -304,6 +304,8 @@ class ContextWindowManager:
                     policy=strategy.get("policy"),
                     session_id=session_id,
                     trigger=strategy.get("trigger", "overflow"),
+                    hooks=self._hooks,
+                    correlation=dataclasses.asdict(correlation),
                 )
                 if did_compact:
                     original_count = len(messages)

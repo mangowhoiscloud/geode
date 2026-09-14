@@ -10,6 +10,7 @@ import threading
 import time
 from collections.abc import Awaitable, Callable, Mapping, Set
 from contextvars import copy_context
+from dataclasses import asdict
 from functools import partial
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, cast
@@ -1143,33 +1144,91 @@ class ToolExecutor:
             from core.hooks.dispatch import fire_hook_async
             from core.hooks.system import RuntimeEvent
 
-            if record is not None:
-                self._approval.record_transition(
-                    record,
-                    "executed" if terminal_started else "skipped",
-                    f"exception:{type(exc).__name__}",
+            try:
+                if terminal_started:
+                    await fire_hook_async(
+                        self._hooks,
+                        RuntimeEvent.TOOL_EXEC_ENDED,
+                        {
+                            **event_correlation,
+                            "tool_name": tool_name,
+                            "duration_ms": (time.monotonic() - started_at) * 1_000,
+                            "success": False,
+                            "has_error": True,
+                            "terminal_status": (
+                                "cancelled" if isinstance(exc, asyncio.CancelledError) else "failed"
+                            ),
+                            "error_type": type(exc).__name__,
+                            # A dispatched operation may outlive its cancelled awaiter.
+                            "executed": None,
+                        },
+                    )
+                if record is not None:
+                    self._approval.record_transition(
+                        record,
+                        "executed" if terminal_started else "skipped",
+                        f"exception:{type(exc).__name__}",
+                    )
+                await fire_hook_async(
+                    self._hooks,
+                    RuntimeEvent.TOOL_EXEC_FAILED,
+                    {
+                        **event_correlation,
+                        "tool_name": tool_name,
+                        "tool_input": event_tool_input,
+                        "duration_ms": (time.monotonic() - started_at) * 1_000,
+                        "error": (
+                            PERSONAL_DATA_ERROR_OMITTED if contains_personal_data else str(exc)
+                        ),
+                        "error_type": type(exc).__name__,
+                        "recoverable": False,
+                        "executed": terminal_started,
+                    },
                 )
-            await fire_hook_async(
-                self._hooks,
-                RuntimeEvent.TOOL_EXEC_FAILED,
-                {
-                    **event_correlation,
-                    "tool_name": tool_name,
-                    "tool_input": event_tool_input,
-                    "duration_ms": (time.monotonic() - started_at) * 1_000,
-                    "error": (PERSONAL_DATA_ERROR_OMITTED if contains_personal_data else str(exc)),
-                    "error_type": type(exc).__name__,
-                    "recoverable": False,
-                    "executed": terminal_started,
-                },
-            )
+            except BaseException as observer_error:
+                # Cleanup must not replace the original tool failure/cancellation.
+                log.warning(
+                    "Tool failure observation failed for %s (%s)",
+                    tool_name,
+                    type(observer_error).__name__,
+                )
             raise
 
         if receipt_replay_result is not None:
             result = receipt_replay_result
 
+        from core.hooks.dispatch import fire_hook_async
+        from core.hooks.system import RuntimeEvent
+
+        has_error = bool(result.get("error"))
+        # Record the invocation outcome before post-dispatch approval observers
+        # can interrupt the awaiter; their cancellation is not a tool failure.
+        if terminal_started and receipt_replay_result is None:
+            await fire_hook_async(
+                self._hooks,
+                RuntimeEvent.TOOL_EXEC_ENDED,
+                {
+                    **event_correlation,
+                    "tool_name": tool_name,
+                    "tool_input": event_tool_input,
+                    "duration_ms": (time.monotonic() - started_at) * 1_000,
+                    "success": not has_error,
+                    "has_error": has_error,
+                    "terminal_status": "failed" if has_error else "completed",
+                    "error_type": result.get("error_type") if has_error else None,
+                    "result": (
+                        personal_data_omitted(tool_name) if contains_personal_data else result
+                    ),
+                    "executed": (
+                        None
+                        if result.get("timeout")
+                        or result.get("outcome_uncertain")
+                        or result.get("external_execution") == "deferred"
+                        else True
+                    ),
+                },
+            )
         if record is not None:
-            has_error = isinstance(result, dict) and bool(result.get("error"))
             self._approval.record_transition(
                 record,
                 "executed" if terminal_started else "skipped",
@@ -1181,23 +1240,6 @@ class ToolExecutor:
         if receipt_replay_result is not None:
             return result
 
-        from core.hooks.dispatch import fire_hook_async
-        from core.hooks.system import RuntimeEvent
-
-        has_error = bool(result.get("error"))
-        await fire_hook_async(
-            self._hooks,
-            RuntimeEvent.TOOL_EXEC_ENDED,
-            {
-                **event_correlation,
-                "tool_name": tool_name,
-                "tool_input": event_tool_input,
-                "duration_ms": (time.monotonic() - started_at) * 1_000,
-                "has_error": has_error,
-                "result": (personal_data_omitted(tool_name) if contains_personal_data else result),
-                "executed": terminal_started,
-            },
-        )
         if has_error:
             await fire_hook_async(
                 self._hooks,
@@ -2040,6 +2082,7 @@ class ToolExecutor:
             provider=judge_provider,
             source=judge_source,
             middleware_registry=self._middleware_registry,
+            correlation=asdict(self._tool_correlation(context)),
         )
         winner = successful[verdict.winner_index]
         block: dict[str, Any] = {

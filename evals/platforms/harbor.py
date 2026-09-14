@@ -8,7 +8,9 @@ import importlib
 import importlib.metadata
 import json
 import logging
+import math
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -117,28 +119,131 @@ def _agent_time_budget(value: float | None) -> float:
     return budget
 
 
-def _summarize_usage(events: list[Any]) -> dict[str, Any]:
+def _usage_event_metadata(event: Any) -> dict[str, Any]:
+    """Allowlisted numeric terminal evidence, never raw provider/tool payloads."""
+    payload = event.payload
+    usage = payload.get("usage")
+    usage = usage if isinstance(usage, dict) else {}
+
+    def identifier(value: Any, limit: int = 256) -> str | None:
+        return (
+            value
+            if isinstance(value, str)
+            and len(value) <= limit
+            and not re.match(r"^[A-Za-z]:[/\\]", value)
+            and re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.:/-]*", value)
+            else None
+        )
+
+    counters = {
+        name: value
+        if isinstance(value := usage.get(name), int) and not isinstance(value, bool) and value >= 0
+        else None
+        for name in ("input_tokens", "output_tokens", "cached_input_tokens", "cache_write_tokens")
+    }
+    reasoning = usage.get("reasoning_tokens")
+    if isinstance(reasoning, int) and not isinstance(reasoning, bool) and reasoning >= 0:
+        counters["reasoning_tokens"] = reasoning
+    source_id = getattr(event, "id", None)
+    occurred_at = getattr(event, "occurred_at", None)
+    payload_hash = getattr(event, "payload_hash", None)
+    purpose = payload.get("purpose")
+    return {
+        "session_id": identifier(getattr(event, "session_id", None)),
+        "llm_call_id": identifier(getattr(event, "llm_call_id", None)),
+        "llm_attempt_id": identifier(getattr(event, "llm_attempt_id", None)),
+        "source_event_id": source_id
+        if isinstance(source_id, int) and not isinstance(source_id, bool) and source_id >= 0
+        else None,
+        "occurred_at": occurred_at
+        if isinstance(occurred_at, int | float)
+        and not isinstance(occurred_at, bool)
+        and math.isfinite(occurred_at)
+        else None,
+        "source_payload_hash": payload_hash
+        if isinstance(payload_hash, str) and re.fullmatch(r"[a-f0-9]{64}", payload_hash)
+        else None,
+        "model": identifier(payload.get("model")),
+        "provider": identifier(payload.get("provider")),
+        "adapter": identifier(payload.get("adapter")),
+        "purpose": purpose
+        if isinstance(purpose, str)
+        and purpose
+        in {
+            "agentic_loop",
+            "cognitive_reflection",
+            "candidate_judge",
+            "text_completion",
+            "hosted_search",
+        }
+        else None,
+        "source": identifier(payload.get("source"), 80),
+        "effort": identifier(payload.get("effort"), 32),
+        "error_type": identifier(payload.get("error_type"), 128),
+        "usage": counters,
+    }
+
+
+def _summarize_usage(events: list[Any], *, known_sink_failure: bool = False) -> dict[str, Any]:
     """Project existing durable events, preserving unknowns and attempt IDs."""
+    mapping_anomalies = 0
+    for event in events:
+        payload = getattr(event, "payload", {})
+        is_call_event = getattr(event, "event", "") in {
+            "llm_call_started",
+            "llm_call_ended",
+            "llm_call_start",
+            "llm_call_end",
+        } or event.action in {
+            "llm.call.started",
+            "llm.call.ended",
+            "hook.llm_call_started",
+            "hook.llm_call_ended",
+        }
+        if (
+            is_call_event
+            and isinstance(payload, dict)
+            and (
+                payload.get("_generic_projection")
+                or "_mapping_error_type" in payload
+                or "_fallback_reason" in payload
+            )
+        ):
+            mapping_anomalies += 1
+    degraded = known_sink_failure or mapping_anomalies > 0
     calls = [e for e in events if e.action == "llm.call.ended"]
     usages = [e.payload.get("usage") for e in calls]
     recorded = [u for u in usages if isinstance(u, dict)]
     started = [e for e in events if e.action == "llm.call.started"]
-    start_ids = [e.llm_attempt_id for e in started]
-    end_ids = [e.llm_attempt_id for e in calls]
+    start_ids = [(getattr(e, "session_id", None), e.llm_attempt_id) for e in started]
+    end_ids = [(getattr(e, "session_id", None), e.llm_attempt_id) for e in calls]
     paired = (
         bool(start_ids)
-        and all(start_ids)
-        and all(end_ids)
+        and all(session and attempt for session, attempt in start_ids + end_ids)
         and len(set(start_ids)) == len(start_ids)
         and len(set(end_ids)) == len(end_ids)
         and set(start_ids) == set(end_ids)
     )
-    complete = paired and len(recorded) == len(calls)
+    complete = paired and len(recorded) == len(calls) and not degraded
     result: dict[str, Any] = {
-        "scope": "recorded-agentic-loop-attempts-only",
+        "scope": "recorded-runtime-llm-attempts-only",
         "whole_runtime_complete": False,
-        "limitation": "reflection, judging, hosted search and text calls are not fully observed",
+        "observation_status": "degraded" if degraded else "no_known_faults",
+        "known_sink_failure": known_sink_failure,
+        "mapping_anomaly_events": mapping_anomalies,
+        "limitation": (
+            "whole-runtime producer coverage and background-writer quiescence require "
+            "separate verification; paired retained events alone cannot establish either; "
+            "turn-final judge calls share loop accounting; legacy call purpose remains unknown"
+        ),
         "call_events": len(calls),
+        "terminal_event_count": len(calls),
+        "recorded_attempts_scope": (
+            "canonical-llm-ended-events-only; duplicates retained; "
+            "no synthetic missing starts or ends"
+        ),
+        "recorded_attempts": [_usage_event_metadata(event) for event in calls],
+        "recorded_attempts_timestamp_unit": "unix-seconds-utc",
         "started_events": len(started),
         "usage_events": len(recorded),
         "attempt_pairing_complete": paired,
@@ -689,7 +794,7 @@ class GeodeHarborAgent(HarborBaseAgent):
                 events.extend(batch)
         finally:
             store.close()
-        usage = _summarize_usage(events)
+        usage = _summarize_usage(events, known_sink_failure=loop._hooks.has_sink_failures)
         context.n_input_tokens = usage["input_tokens"]
         context.n_cache_tokens = usage["cached_input_tokens"]
         context.n_output_tokens = usage["output_tokens"]

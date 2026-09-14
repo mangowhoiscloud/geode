@@ -53,3 +53,24 @@ def test_authored_prompt_within_char_budget() -> None:
         f"authored prompt grew to {combined} chars (> {_AUTHORED_PROMPT_CHAR_CEILING}). "
         "Trim it or raise the ceiling deliberately."
     )
+
+
+def test_suffix_distinguishes_failed_checks_from_tool_outages() -> None:
+    """Protect the authored contract, not a claim of live model compliance."""
+    completion = AGENTIC_SUFFIX.split("## Completion criteria\n", 1)[1].split("\n## ", 1)[0]
+    completion = " ".join(completion.split())
+    for clause in (
+        "Do not claim completion, merge, or publish while a required check fails or remains unrun.",
+        "Passing checks alone does not authorize merge or publication.",
+        "Preserve the original failure receipt separately from rerun results.",
+        "rerun the same required checks without weakening acceptance criteria.",
+        "targeted pytest passes but required CI fails",
+        "report partial verification; do not merge.",
+    ):
+        assert clause in completion
+    grounding = AGENTIC_SUFFIX.split("## Grounding & Citation (CRITICAL)\n", 1)[1]
+    assert "A completed check reporting failure is evidence, not a tool outage" in grounding
+    assert "For a tool outage, try an available authorized alternative" in grounding
+    assert '"[Unverified]"' in grounding
+    execution = AGENTIC_SUFFIX.split("## Agentic execution\n", 1)[1].split("\n## ", 1)[0]
+    assert "If a tool fails, try an alternative approach or explain the issue." not in execution

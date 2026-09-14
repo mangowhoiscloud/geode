@@ -263,6 +263,7 @@ class CodexOAuthAdapter:
                     f"dump={dump_path or '<dump failed>'}",
                     mark_recovered=lambda: _mark_empty_text_recovered(dump_path),
                     mark_actionable=lambda: _mark_empty_text_actionable(dump_path),
+                    completed_result=result,
                 )
         return result
 
@@ -396,11 +397,13 @@ class CodexOAuthAdapter:
             source_urls.extend(final_sources)
             citation_urls.extend(final_citations)
             search_activated = search_activated or final_activated
+        completed = translate_codex_response(final)
         if not text_parts:
-            raise RuntimeError(
+            raise EmptyModelOutputError(
                 "codex-oauth web_search: empty output_text — Codex backend "
                 "may have rejected the web_search tool for this account. "
-                "Try /login source payg to use openai-payg instead."
+                "Try /login source payg to use openai-payg instead.",
+                completed_result=completed,
             )
         return WebSearchResult(
             query=query,
@@ -411,6 +414,7 @@ class CodexOAuthAdapter:
             retrieval_exposed=search_activated,
             model=search_model,
             adapter_name=self.name,
+            usage=completed.usage,
         )
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:

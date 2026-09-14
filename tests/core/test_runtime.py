@@ -379,6 +379,19 @@ class TestRuntimeNewComponents:
         assert runtime.hooks.closed is True
         assert runtime.event_store.closed is True
 
+    def test_shutdown_does_not_certify_an_unjoined_dream_worker(self, tmp_path: Path):
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
+        error = TimeoutError("synthetic unjoined worker")
+        with patch.object(runtime.dreaming_service, "close", side_effect=[error, None]) as close:
+            with pytest.raises(TimeoutError) as caught:
+                runtime.shutdown(background_timeout_s=0)
+            assert caught.value is error
+            assert runtime.hooks.closed is True
+            assert runtime._shutdown is False
+            runtime.shutdown(background_timeout_s=0)
+            assert close.call_count == 2
+            assert runtime._shutdown is True
+
 
 class TestGetHealth:
     def test_get_health_has_all_components(self, tmp_path: Path):

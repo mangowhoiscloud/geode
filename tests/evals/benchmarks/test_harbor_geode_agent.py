@@ -13,6 +13,7 @@ from evals.platforms.harbor import (
     HarborExecTool,
     _agent_time_budget,
     _atif_trajectory_from_geode,
+    _summarize_usage,
 )
 
 
@@ -152,6 +153,7 @@ def _observed_agent(
     cache: int | None,
     failure: BaseException | None = None,
     leave_call_open: bool = False,
+    include_lost_pair: bool = False,
 ) -> tuple[GeodeHarborAgent, list[Any]]:
     """Exercise real thin-loop wiring and SQLite, never a provider call."""
     from core.agent.loop import AgenticLoop
@@ -206,6 +208,8 @@ def _observed_agent(
                 },
             )
 
+        if include_lost_pair:
+            await emit(loop._session_id, "c-lost", cache)
         await emit(loop._session_id, "c-1", cache)
         # A different concurrent trial may use the same canonical database.
         await emit("another-session", "other-call", 999)
@@ -274,6 +278,13 @@ def test_thin_observer_persists_missing_zero_and_positive_cache(
         rows = store.read(session_id=loops[0]._session_id, event_filter="llm_call_ended")
         assert len(rows) == 1
         assert rows[0].payload["usage"]["cached_input_tokens"] == cache
+        attempt = context.metadata["usage"]["recorded_attempts"][0]
+        assert attempt["source_event_id"] == rows[0].id
+        assert attempt["source_payload_hash"] == rows[0].payload_hash
+        assert attempt["occurred_at"] == rows[0].occurred_at
+        assert attempt["llm_attempt_id"] == rows[0].llm_attempt_id
+        assert attempt["session_id"] == loops[0]._session_id
+        assert attempt["usage"]["cached_input_tokens"] == cache
     finally:
         store.close()
     trajectory = json.loads((agent.logs_dir / "geode-trajectory.json").read_text())
@@ -281,6 +292,234 @@ def test_thin_observer_persists_missing_zero_and_positive_cache(
     assert trajectory["runtime_event_refs"]
     atif = json.loads((agent.logs_dir / "trajectory.json").read_text())
     assert atif["final_metrics"]["total_cached_tokens"] == cache
+
+
+def test_recorded_attempts_keep_only_numeric_allowlist_and_source_links() -> None:
+    start = SimpleNamespace(action="llm.call.started", session_id="s", llm_attempt_id="c:1")
+    terminal = SimpleNamespace(
+        action="llm.call.ended",
+        session_id="s",
+        llm_call_id="c",
+        llm_attempt_id="c:1",
+        id=9,
+        occurred_at=0.0,
+        payload_hash="a" * 64,
+        payload={
+            "model": "gpt-5.6-sol",
+            "provider": "openai",
+            "adapter": "codex_oauth",
+            "purpose": "cognitive_reflection",
+            "source": "subscription",
+            "effort": "medium",
+            "error_type": None,
+            "response_id": "private-response",
+            "arguments": {"private": True},
+            "result": "private output",
+            "thinking": "private reasoning",
+            "usage": {
+                "input_tokens": 0,
+                "output_tokens": 5,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": None,
+                "reasoning_tokens": 3,
+                "raw": "private usage",
+            },
+        },
+    )
+    summary = _summarize_usage([start, terminal])
+    assert summary["terminal_event_count"] == summary["call_events"] == 1
+    assert summary["recorded_attempts_timestamp_unit"] == "unix-seconds-utc"
+    assert summary["recorded_attempts"] == [
+        {
+            "session_id": "s",
+            "llm_call_id": "c",
+            "llm_attempt_id": "c:1",
+            "source_event_id": 9,
+            "occurred_at": 0.0,
+            "source_payload_hash": "a" * 64,
+            "model": "gpt-5.6-sol",
+            "provider": "openai",
+            "adapter": "codex_oauth",
+            "purpose": "cognitive_reflection",
+            "source": "subscription",
+            "effort": "medium",
+            "error_type": None,
+            "usage": {
+                "input_tokens": 0,
+                "output_tokens": 5,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": None,
+                "reasoning_tokens": 3,
+            },
+        }
+    ]
+    assert "private" not in json.dumps(summary)
+    assert json.loads(json.dumps(summary, allow_nan=False)) == summary
+    duplicate = _summarize_usage([start, terminal, terminal])
+    assert len(duplicate["recorded_attempts"]) == duplicate["terminal_event_count"] == 2
+    assert duplicate["attempt_pairing_complete"] is False
+    assert duplicate["input_tokens"] is None
+    open_call = _summarize_usage([start])
+    assert open_call["recorded_attempts"] == []
+    assert open_call["terminal_event_count"] == 0
+    assert open_call["attempt_pairing_complete"] is False
+
+
+def test_usage_pairing_cannot_borrow_another_sessions_terminal() -> None:
+    start = SimpleNamespace(action="llm.call.started", session_id="a", llm_attempt_id="c:1")
+    end = SimpleNamespace(
+        action="llm.call.ended",
+        session_id="b",
+        llm_attempt_id="c:1",
+        payload={"usage": {"input_tokens": 0}},
+    )
+    mismatched = _summarize_usage([start, end])
+    assert mismatched["attempt_pairing_complete"] is False
+    assert mismatched["input_tokens"] is None
+    end.session_id = "a"
+    assert _summarize_usage([start, end])["input_tokens"] == 0
+    start.session_id = end.session_id = None
+    assert _summarize_usage([start, end])["attempt_pairing_complete"] is False
+
+
+def test_recorded_attempts_reject_malformed_metadata_without_invented_zero() -> None:
+    event = SimpleNamespace(
+        action="llm.call.ended",
+        llm_attempt_id="c:1",
+        id=True,
+        occurred_at=float("nan"),
+        payload_hash="private",
+        payload={
+            "model": "x" * 257,
+            "provider": "private provider text",
+            "purpose": ["private"],
+            "effort": "private effort text",
+            "source": "/private/source",
+            "error_type": "private failure text",
+            "usage": {
+                "input_tokens": False,
+                "output_tokens": -1,
+                "cached_input_tokens": 0,
+                "reasoning_tokens": None,
+            },
+        },
+    )
+    summary = _summarize_usage([event])
+    attempt = summary["recorded_attempts"][0]
+    assert (
+        attempt["source_event_id"]
+        is attempt["occurred_at"]
+        is attempt["source_payload_hash"]
+        is None
+    )
+    assert attempt["model"] is attempt["provider"] is attempt["error_type"] is None
+    assert attempt["purpose"] is attempt["effort"] is attempt["source"] is None
+    assert attempt["usage"] == {
+        "input_tokens": None,
+        "output_tokens": None,
+        "cached_input_tokens": 0,
+        "cache_write_tokens": None,
+    }
+    assert "private" not in json.dumps(summary, allow_nan=False)
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["C:/Users/user/private/config", "C:\\Users\\user\\private\\config", "/srv/private/config"],
+)
+def test_recorded_attempts_do_not_treat_absolute_paths_as_identifiers(path: str) -> None:
+    event = SimpleNamespace(
+        action="llm.call.ended",
+        session_id=path,
+        llm_call_id=path,
+        llm_attempt_id=path,
+        payload={"model": path, "provider": path, "adapter": path, "error_type": path},
+    )
+    attempt = _summarize_usage([event])["recorded_attempts"][0]
+    for field in (
+        "session_id",
+        "llm_call_id",
+        "llm_attempt_id",
+        "model",
+        "provider",
+        "adapter",
+        "error_type",
+    ):
+        assert attempt[field] is None
+    assert "private" not in json.dumps(attempt)
+
+
+def test_thin_observer_lost_start_and_end_cannot_fake_complete_accounting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.observability.event_store import HookEventStore
+
+    agent, loops = _observed_agent(tmp_path, monkeypatch, cache=4, include_lost_pair=True)
+    append = HookEventStore.append
+
+    def fail_lost_pair(store, event):
+        if event.llm_call_id == "c-lost":
+            raise OSError("private write failure")
+        return append(store, event)
+
+    monkeypatch.setattr(HookEventStore, "append", fail_lost_pair)
+    context = SimpleNamespace()
+    asyncio.run(agent.run("Inspect the task.", _Environment(), context))
+    usage = context.metadata["usage"]
+    assert usage["attempt_pairing_complete"] is True
+    assert usage["call_events"] == usage["started_events"] == 1
+    assert usage["known_sink_failure"] is True
+    assert loops[0]._hooks.has_sink_failures is True
+    assert usage["observation_status"] == "degraded"
+    assert usage["mapping_anomaly_events"] == 0
+    assert usage["input_tokens"] is context.n_input_tokens is None
+    assert usage["cached_input_tokens"] is context.n_cache_tokens is None
+    assert usage["input_tokens_observed_sum"] == 10
+    assert usage["cached_input_tokens_observed_sum"] == 4
+    assert usage["whole_runtime_complete"] is False
+    trajectory = json.loads((agent.logs_dir / "geode-trajectory.json").read_text())
+    assert trajectory["outcome"]["usage"] == usage
+
+
+@pytest.mark.parametrize("fallback", ["registry", "sink"])
+def test_thin_observer_both_mapping_fallbacks_degrade_accounting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fallback: str
+) -> None:
+    from core.hooks import HookEvent
+    from core.observability import activity_registry
+
+    agent, _loops = _observed_agent(tmp_path, monkeypatch, cache=4, include_lost_pair=True)
+    if fallback == "sink":
+        mapper = activity_registry.map_hook_to_activity
+
+        def fail_mapping(event, data, *, run_id):
+            if data.get("llm_call_id") == "c-lost":
+                raise ValueError("private mapping failure")
+            return mapper(event, data, run_id=run_id)
+
+        monkeypatch.setattr(activity_registry, "map_hook_to_activity", fail_mapping)
+    else:
+        for event in (HookEvent.LLM_CALL_STARTED, HookEvent.LLM_CALL_ENDED):
+            builder = activity_registry.HOOK_EVENT_TO_ROW_BUILDER[event]
+
+            def fail_builder(data, run_id, delegate=builder):
+                if data.get("llm_call_id") == "c-lost":
+                    raise ValueError("private mapping failure")
+                return delegate(data, run_id)
+
+            monkeypatch.setitem(activity_registry.HOOK_EVENT_TO_ROW_BUILDER, event, fail_builder)
+
+    context = SimpleNamespace()
+    asyncio.run(agent.run("Inspect the task.", _Environment(), context))
+    usage = context.metadata["usage"]
+    assert usage["attempt_pairing_complete"] is True
+    assert usage["known_sink_failure"] is False
+    assert usage["mapping_anomaly_events"] == 2
+    assert usage["observation_status"] == "degraded"
+    assert usage["input_tokens"] is context.n_input_tokens is None
+    assert usage["input_tokens_observed_sum"] == 10
+    assert usage["whole_runtime_complete"] is False
+    assert "private mapping failure" not in str(context.metadata)
 
 
 @pytest.mark.parametrize("failure", [TimeoutError(), asyncio.CancelledError()])
@@ -334,7 +573,7 @@ def test_thin_observer_preserves_canonical_evidence_when_atif_export_fails(
     for name in ("geode-trajectory.json", "geode-trajectory.private.json"):
         trajectory = json.loads((agent.logs_dir / name).read_text())
         assert trajectory["runtime_event_refs"]
-        assert trajectory["outcome"]["usage"]["scope"] == "recorded-agentic-loop-attempts-only"
+        assert trajectory["outcome"]["usage"]["scope"] == "recorded-runtime-llm-attempts-only"
 
 
 @pytest.mark.parametrize("phase", ["session_error", "hooks", "export"])

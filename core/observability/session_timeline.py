@@ -27,7 +27,7 @@ from enum import StrEnum
 from hashlib import sha256
 from itertools import islice
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from core.observability.redaction import redact_and_bound_text, redact_secrets
 from core.tools.computer_observation import sanitize_computer_payload
@@ -761,6 +761,8 @@ class SessionTimeline:
         rounds: int = 0,
         prompt_tokens: int = 0,
         completion_tokens: int = 0,
+        runtime_observation_status: Literal["no_known_faults", "degraded", "unavailable"]
+        | None = None,
     ) -> None:
         self._record(
             SessionEventKind.SESSION_ENDED,
@@ -773,6 +775,11 @@ class SessionTimeline:
                 "completion_tokens": completion_tokens,
                 "record_failures": self._record_failures,
                 "projection_failed": self._projection_failed,
+                **(
+                    {"runtime_observation_status": runtime_observation_status}
+                    if runtime_observation_status is not None
+                    else {}
+                ),
             },
         )
 

@@ -64,18 +64,23 @@ def _require_direct_head(
         )
 
 
-def _require_exact_sync_head(head_sha: str, *, repo_root: Path) -> None:
-    expected = (
-        _commit_sha(REMOTE_DEVELOP_REF, repo_root=repo_root),
-        _commit_sha(REMOTE_MAIN_REF, repo_root=repo_root),
-    )
-    actual = _commit_parents(head_sha, repo_root=repo_root)
+def require_sync_parents(actual: tuple[str, ...], develop_sha: str, main_sha: str) -> None:
+    """Share the ordered canonical-parent proof with local CI and remote admission."""
+    expected = (develop_sha, main_sha)
     if actual != expected:
         raise RoadmapTrustError(
             "trusted sync HEAD must merge exact current "
             f"{REMOTE_DEVELOP_REF} + {REMOTE_MAIN_REF} parents; "
             f"expected={' '.join(expected)} actual={' '.join(actual) or '<none>'}"
         )
+
+
+def _require_exact_sync_head(head_sha: str, *, repo_root: Path) -> None:
+    require_sync_parents(
+        _commit_parents(head_sha, repo_root=repo_root),
+        _commit_sha(REMOTE_DEVELOP_REF, repo_root=repo_root),
+        _commit_sha(REMOTE_MAIN_REF, repo_root=repo_root),
+    )
 
 
 def resolve_trusted_ref(

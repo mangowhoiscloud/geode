@@ -430,7 +430,8 @@ class TestAgenticLoopFailover:
         assert second.system_prompt == first.system_prompt
         assert tuple(second.messages[: len(first.messages)]) == tuple(first.messages)
 
-    def test_llm_call_ended_carries_complete_usage(self) -> None:
+    @pytest.mark.parametrize("allow_tools", [True, False])
+    def test_llm_call_ended_carries_complete_usage(self, allow_tools: bool) -> None:
         from core.hooks import HookEvent, HookSystem
         from core.llm.adapters.base import AdapterCallResult, UsageSummary
 
@@ -443,7 +444,7 @@ class TestAgenticLoopFailover:
         )
         loop = self._make_loop()
         loop._hooks = hooks
-        self._install_acomplete_stub(
+        adapter = self._install_acomplete_stub(
             loop,
             AdapterCallResult(
                 text="done",
@@ -464,9 +465,14 @@ class TestAgenticLoopFailover:
             ),
         )
 
-        asyncio.run(loop._call_llm("system", [{"role": "user", "content": "go"}]))
+        asyncio.run(
+            loop._call_llm("system", [{"role": "user", "content": "go"}], allow_tools=allow_tools)
+        )
 
+        assert len(observed) == adapter.acomplete.call_count == 1
         ended = observed[-1]
+        assert ended["purpose"] == "agentic_loop"
+        assert ended["effort"] == adapter.acomplete.call_args.args[0].effort
         assert ended["usage"] == {
             "input_tokens": 100,
             "output_tokens": 20,
@@ -569,6 +575,66 @@ class TestAgenticLoopFailover:
         assert durable["usage"]["cached_input_tokens"] == cache
         assert durable["usage"]["cache_write_tokens"] is None
 
+    @pytest.mark.parametrize("key", ["input_tokens", "output_tokens", "reasoning_tokens"])
+    @pytest.mark.parametrize(
+        ("count", "present", "expected"), [(0, False, None), (0, True, 0), (7, False, 7)]
+    )
+    def test_llm_counter_presence_reaches_durable_activity(
+        self, key: str, count: int, present: bool, expected: int | None
+    ) -> None:
+        from dataclasses import replace
+
+        from core.hooks import HookEvent, HookSystem
+        from core.llm.adapters.base import AdapterCallResult, UsageSummary
+        from core.observability.activity_registry import map_hook_to_activity
+
+        observed: list[dict[str, Any]] = []
+        hooks = HookSystem()
+        hooks.register(
+            HookEvent.LLM_CALL_ENDED,
+            lambda _event, data: observed.append(dict(data)),
+            name="counter-presence",
+        )
+        loop = self._make_loop()
+        loop._hooks = hooks
+        usage = replace(UsageSummary(), **{key: count, f"{key}_present": present})
+        self._install_acomplete_stub(
+            loop, AdapterCallResult(text="done", usage=usage, stop_reason="end_turn")
+        )
+        try:
+            asyncio.run(loop._call_llm("system", [{"role": "user", "content": "go"}]))
+            row = map_hook_to_activity(HookEvent.LLM_CALL_ENDED, observed[0], run_id="counter-test")
+            assert row.model_dump(mode="json")["details"]["usage"][key] == expected
+            assert observed[0]["cost_usd"] is None
+        finally:
+            hooks.close()
+
+    def test_reported_zero_cost_survives_missing_counters(self) -> None:
+        from core.hooks.llm_observation import _completed_attempt_payload
+        from core.llm.adapters.base import AdapterCallResult, UsageSummary
+
+        result = AdapterCallResult(
+            text="done", usage=UsageSummary(reported_cost_usd=0), stop_reason="end_turn"
+        )
+        payload = _completed_attempt_payload(result, "unknown-model")
+        assert payload["cost_usd"] == 0
+        assert all(value is None for value in payload["usage"].values())
+
+    def test_cost_estimation_failure_remains_unknown(self) -> None:
+        from core.hooks.llm_observation import _completed_attempt_payload
+        from core.llm.adapters.base import AdapterCallResult, UsageSummary
+
+        result = AdapterCallResult(
+            text="done", usage=UsageSummary(input_tokens=2, output_tokens=1), stop_reason="end_turn"
+        )
+        with patch(
+            "core.llm.token_tracker.calculate_cost", side_effect=ValueError("bad price")
+        ) as estimator:
+            assert (
+                _completed_attempt_payload(result, "model", cost_estimator=estimator)["cost_usd"]
+                is None
+            )
+
     def test_call_llm_returns_none_on_chain_exhaustion(self) -> None:
         """When ``acomplete`` raises, ``_call_llm`` returns None with an
         error message."""
@@ -625,6 +691,26 @@ class TestAgenticLoopFailover:
             asyncio.run(loop._call_llm("system", [{"role": "user", "content": "go"}]))
 
         assert exc_info.value is billing
+
+    def test_failed_call_preserves_primary_error_when_observer_cancels(self) -> None:
+        from core.hooks import HookEvent, HookSystem
+        from core.llm.errors import BillingError
+
+        async def cancel_observer(_event: HookEvent, _data: dict[str, Any]) -> None:
+            raise asyncio.CancelledError("observer cancellation")
+
+        hooks = HookSystem()
+        hooks.register(HookEvent.LLM_CALL_ENDED, cancel_observer, name="cancel-observer")
+        loop = self._make_loop()
+        loop._hooks = hooks
+        expected = BillingError("primary failure")
+        self._install_acomplete_stub(loop, expected)
+        try:
+            with pytest.raises(BillingError) as caught:
+                asyncio.run(loop._call_llm("system", [{"role": "user", "content": "go"}]))
+            assert caught.value is expected
+        finally:
+            hooks.close()
 
     def test_call_llm_uses_active_routing_source_for_raw_billing(self) -> None:
         from core.config.policy_source import PolicySourcePaths

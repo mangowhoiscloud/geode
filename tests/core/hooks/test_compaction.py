@@ -74,7 +74,7 @@ class TestCompactConversation:
         """Test full compaction flow with mocked LLM call."""
         msgs = [{"role": "user", "content": f"message {i}"} for i in range(20)]
 
-        async def mock_summarize(text, provider, model, *, max_tokens):
+        async def mock_summarize(text, provider, model, *, max_tokens, **_observation):
             return "Summary of conversation about messages 0-9."
 
         monkeypatch.setattr(
@@ -98,7 +98,7 @@ class TestCompactConversation:
         """If summarization fails, return original messages."""
         msgs = [{"role": "user", "content": f"msg {i}"} for i in range(20)]
 
-        async def mock_fail(text, provider, model, *, max_tokens):
+        async def mock_fail(text, provider, model, *, max_tokens, **_observation):
             return None
 
         monkeypatch.setattr(

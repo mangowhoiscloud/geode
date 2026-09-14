@@ -52,10 +52,13 @@ import asyncio
 import dataclasses
 import logging
 import time
+import uuid
+from collections.abc import Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from core.hooks.llm_observation import observe_llm_call
 from core.llm import fallback as _retry
 from core.llm.adapters.base import (
     TextCompletionResult,
@@ -63,6 +66,9 @@ from core.llm.adapters.base import (
 )
 from core.llm.adapters.registry import list_adapters, normalize_registry_provider
 from core.llm.errors import BillingError, is_billing_fatal
+
+if TYPE_CHECKING:
+    from core.hooks.system import RuntimeEventBus
 
 _CONNECTION_TRANSIENT_ERROR_NAMES = _retry.CONNECTION_TRANSIENT_ERROR_NAMES
 _cause_chain = _retry.exception_chain
@@ -445,6 +451,8 @@ async def web_search_via_adapters(
     prefer_provider: str | None = None,
     prefer_source: str | None = None,
     model: str = "",
+    hooks: RuntimeEventBus | None = None,
+    correlation: Mapping[str, Any] | None = None,
 ) -> WebSearchResult:
     """Route a web-search request through the adapter registry, strictly
     using one adapter (no fallback chain).
@@ -478,11 +486,23 @@ async def web_search_via_adapters(
     # retry-policy section above. The loop exits via ``break`` (success) or
     # ``raise``; ``continue`` happens at most _CONNECTION_TRANSIENT_RETRIES
     # times because the final iteration cannot satisfy the retry guard.
+    call_id = f"llm-{uuid.uuid4().hex}"
     for try_no in range(_CONNECTION_TRANSIENT_RETRIES + 1):
         t0 = time.monotonic()
         try:
-            result: WebSearchResult = await _call_aweb_search(
-                adapter, query, max_results=max_results, model=model
+            result: WebSearchResult = await observe_llm_call(
+                lambda: _call_aweb_search(adapter, query, max_results=max_results, model=model),
+                hooks=hooks,
+                correlation={
+                    **(correlation or {}),
+                    "llm_call_id": call_id,
+                    "llm_attempt_id": f"{call_id}:attempt-{try_no + 1}",
+                },
+                model=model,
+                provider=adapter.provider,
+                adapter=adapter.name,
+                source=adapter.source,
+                purpose="hosted_search",
             )
         except BillingError as exc:
             elapsed_ms = (time.monotonic() - t0) * 1000
@@ -600,6 +620,8 @@ async def complete_text_via_adapters(
     model_by_provider: dict[str, str] | None = None,
     prefer_provider: str | None = None,
     prefer_source: str | None = None,
+    hooks: RuntimeEventBus | None = None,
+    correlation: Mapping[str, Any] | None = None,
 ) -> TextCompletionResult:
     """Route a single-turn text-completion request through the adapter
     registry — strict single-adapter dispatch, no fallback.
@@ -638,11 +660,25 @@ async def complete_text_via_adapters(
     # no app-level outer retry (unlike AgenticLoop's ``acomplete``), so the
     # same broken-pooled-connection failure mode applies here (serve.log
     # 2026-06-10 22:51 — reflection calls insta-failed twice, then succeeded).
+    call_id = f"llm-{uuid.uuid4().hex}"
     for try_no in range(_CONNECTION_TRANSIENT_RETRIES + 1):
         t0 = time.monotonic()
         try:
-            result: TextCompletionResult = await adapter.acomplete_text(
-                prompt, system=system, model=chosen_model, max_tokens=max_tokens
+            result: TextCompletionResult = await observe_llm_call(
+                lambda: adapter.acomplete_text(
+                    prompt, system=system, model=chosen_model, max_tokens=max_tokens
+                ),
+                hooks=hooks,
+                correlation={
+                    **(correlation or {}),
+                    "llm_call_id": call_id,
+                    "llm_attempt_id": f"{call_id}:attempt-{try_no + 1}",
+                },
+                model=chosen_model,
+                provider=adapter.provider,
+                adapter=adapter.name,
+                source=adapter.source,
+                purpose="text_completion",
             )
         except BillingError as exc:
             elapsed_ms = (time.monotonic() - t0) * 1000

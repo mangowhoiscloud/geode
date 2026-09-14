@@ -14,6 +14,7 @@ malformed payload — never a routine destination.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -104,6 +105,7 @@ from core.observability.activity import (
     SubAgentStartedRow,
     ToolApprovalDetails,
     ToolApprovalRequestedRow,
+    ToolExecEndedDetails,
     ToolExecEndedRow,
     ToolExecFailedRow,
     ToolExecStartedRow,
@@ -218,6 +220,37 @@ def _lifecycle_completed(
     return _build
 
 
+def _tool_exec_ended(data: dict[str, Any], run_id: str) -> ActivityRowBase:
+    identifier = str(data.get("tool_call_id") or data.get("session_id") or "")
+    if not identifier:
+        _warn_missing_identifier("ToolExecEndedRow", "tool_call_id")
+    actor_id = str(data.get("session_id") or "agent")
+    error_type = data.get("error_type")
+    if not isinstance(error_type, str) or not re.fullmatch(
+        r"[A-Za-z_][A-Za-z0-9_.:-]{0,127}", error_type
+    ):
+        error_type = None
+    status = data.get("terminal_status")
+    if not isinstance(status, str):
+        status = None
+    return ToolExecEndedRow(
+        ts=time.time(),
+        run_id=run_id,
+        actor_type="agent",
+        actor_id=actor_id,
+        entity_id=identifier or actor_id,
+        task_id=str(data["task_id"]) if data.get("task_id") else None,
+        details=ToolExecEndedDetails(
+            duration_ms=float(data.get("duration_ms", 0.0) or 0.0),
+            success=bool(data.get("success", not bool(data.get("has_error")))),
+            tool_name=str(data.get("tool_name") or "")[:256],
+            executed=data["executed"] if isinstance(data.get("executed"), bool) else None,
+            terminal_status=status if status in {"completed", "failed", "cancelled"} else None,
+            error_type=error_type,
+        ),
+    )
+
+
 def _llm_call_ended(data: dict[str, Any], run_id: str) -> ActivityRowBase:
     """Project one LLM attempt without retaining raw provider error text."""
     identifier = str(
@@ -228,22 +261,14 @@ def _llm_call_ended(data: dict[str, Any], run_id: str) -> ActivityRowBase:
     usage = None
     if isinstance(raw_usage, Mapping):
         usage = LLMCallUsageDetails(
-            cached_input_tokens=(
-                int(raw_usage["cached_input_tokens"])
-                if raw_usage.get("cached_input_tokens") is not None
-                else None
-            ),
-            cache_write_tokens=(
-                int(raw_usage["cache_write_tokens"])
-                if raw_usage.get("cache_write_tokens") is not None
-                else None
-            ),
             **{
-                key: int(raw_usage.get(key, 0) or 0)
+                key: int(raw_usage[key]) if raw_usage.get(key) is not None else None
                 for key in (
                     "input_tokens",
                     "output_tokens",
+                    "cached_input_tokens",
                     "reasoning_tokens",
+                    "cache_write_tokens",
                 )
             },
         )
@@ -274,6 +299,9 @@ def _llm_call_ended(data: dict[str, Any], run_id: str) -> ActivityRowBase:
             model=_text("model"),
             provider=_text("provider"),
             adapter=_text("adapter"),
+            purpose=data.get("purpose"),
+            source=_text("source"),
+            effort=_text("effort"),
             error_type=_text("error_type") or ("provider_error" if error else None),
             usage=usage,
             cost_usd=float(cost) if cost is not None else None,
@@ -385,9 +413,7 @@ HOOK_EVENT_TO_ROW_BUILDER: dict[HookEvent, Callable[[dict[str, Any], str], Activ
         SubAgentCompletedRow, actor_type_default="agent"
     ),
     HookEvent.LLM_CALL_ENDED: _llm_call_ended,
-    HookEvent.TOOL_EXEC_ENDED: _lifecycle_completed(
-        ToolExecEndedRow, actor_type_default="agent", identifier_key="tool_call_id"
-    ),
+    HookEvent.TOOL_EXEC_ENDED: _tool_exec_ended,
     HookEvent.TOOL_RECOVERY_SUCCEEDED: _lifecycle_completed(
         ToolRecoverySucceededRow, actor_type_default="agent", identifier_key="tool_call_id"
     ),

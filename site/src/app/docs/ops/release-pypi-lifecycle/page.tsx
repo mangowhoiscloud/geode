@@ -64,16 +64,21 @@ export default function Page() {
               릴리스 준비용 topic 브랜치가 버전 스탬프와 CHANGELOG 정리를
               싣고 develop에 먼저 머지된 뒤, develop이 main으로 그대로
               통과합니다. 승격 직전에는 두 원격 브랜치를 fetch하고 내용을
-              비교합니다. main에 고유 커밋이 있고 충돌이 없으면 현재 main
-              head에서 develop로 직접 CI-gated PR을 엽니다. 충돌 해결이 필요할
-              때만 현재 develop에서 <code>sync/main-into-develop-*</code> 브랜치를
-              만들고 현재 main을 명시적 merge commit으로 병합합니다. 이 sync
-              head는 두 원격 tip을 정확한 부모로 가져야 하며 merge 직전에 trust
-              resolver를 다시 통과해야 합니다. 자동 backmerge workflow는 없습니다.
+              비교합니다. main에 고유 커밋이 있고 strict 최신 상태 조건을
+              충족해 머지할 수 있으면 현재 main head에서 develop로 직접
+              CI-gated PR을 엽니다. 충돌이나 strict ancestry 조건이 이를 막으면
+              현재 develop에서 <code>sync/main-into-develop-*</code> 브랜치를
+              만들고 현재 main을 명시적 merge commit으로 병합합니다. 복사나
+              fast-forward로 만든 sync head는 허용하지 않습니다. 부모는 현재
+              develop, 현재 main 순서로 정확히 두 개여야 합니다. merge 직전에
+              trust resolver를 다시 실행하고, merge guard가 같은 부모 검증을
+              실제 원격 tip에 적용합니다. strict 보호, 관리자 적용, 현재 PR에
+              연결된 필수 Actions 검사 성공은 유지합니다. 자동 backmerge
+              workflow는 없습니다.
             </p>
             <pre>{`# 1. CHANGELOG [Unreleased] → [X.Y.Z] - YYYY-MM-DD; 빈 [Unreleased] 유지
 # 2. 다섯 위치 동시 bump (CHANGELOG / pyproject / CLAUDE.md / README.md / README.ko.md)
-# 3. main drift: clean이면 main → develop PR, 충돌 시에만 sync/main-into-develop-*
+# 3. main drift: strict 조건 충족 시 main → develop, 충돌·ancestry 차단 시 trusted sync
 # 4. topic → develop → main: 각 PR의 실제 head에서 필수 CI green 확인
 #    PR 본문은 Summary / Why / Changes / Verification 유지
 # 5. 패키지 배포는 main 머지로 자동 발화하지 않음. 아래 워크플로우를 수동 dispatch`}</pre>
@@ -137,7 +142,8 @@ geode serve &`}</pre>
             <ul>
               <li><code>.github/workflows/release.yml</code>. 수동 검증 + 배포 파이프라인.</li>
               <li><code>.github/workflows/install-smoke.yml</code>. macOS와 Ubuntu의 설치 회귀.</li>
-              <li><code>scripts/resolve_architecture_roadmap_trust.py</code>. 충돌 해결형 main → develop sync의 정확한 부모·출처 검증.</li>
+              <li><code>scripts/resolve_architecture_roadmap_trust.py</code>. trusted main → develop sync의 정확한 부모·출처 검증.</li>
+              <li><code>scripts/merge_pr.py</code>. 실제 원격 tip, 현재 PR의 필수 CI, 보호 설정을 재확인한 뒤 head를 고정해 머지.</li>
               <li><code>docs/workflow.md</code>. pre-sync와 GitFlow 운영 정본.</li>
               <li><code>scripts/verify_public_distribution.py</code>. GitHub·PyPI 공개 배포 일치 검증.</li>
               <li><code>docs/architecture/immutable-distribution-lifecycle.md</code>. wheel·state·workspace 경계와 frontier 비교 근거.</li>
@@ -199,17 +205,21 @@ geode serve &`}</pre>
               CHANGELOG cleanup, merges into develop first, and develop then
               passes straight through to main. Immediately before promotion,
               fetch and compare both remote branches. If main contains unique
-              commits and the sync is conflict-free, open a CI-gated PR
-              directly from the current main head to develop. Only when conflict
-              resolution is required, create <code>sync/main-into-develop-*</code>
-              from current develop and merge current main in an explicit merge
-              commit. That sync head must have the two current remote tips as its
-              exact parents and rerun the trust resolver immediately before merge.
+              commits and is mergeable under strict up-to-date protection, open
+              a CI-gated PR directly from the current main head to develop. If
+              conflicts or strict ancestry block that head, create{" "}
+              <code>sync/main-into-develop-*</code> from current develop and merge
+              current main in an explicit merge commit. A copied or fast-forwarded
+              sync head is forbidden. Its exact two parents must be current
+              develop, then current main. Rerun the trust resolver immediately
+              before merge; the merge guard enforces the same parent proof against
+              live remote tips. Strict protection, administrator enforcement, and
+              successful current PR-linked required Actions checks remain mandatory.
               There is no automatic backmerge workflow.
             </p>
             <pre>{`# 1. CHANGELOG [Unreleased] → [X.Y.Z] - YYYY-MM-DD; retain an empty [Unreleased]
 # 2. bump all five locations (CHANGELOG / pyproject / CLAUDE.md / README.md / README.ko.md)
-# 3. main drift: main → develop PR if clean; sync/main-into-develop-* only on conflict
+# 3. main drift: main → develop if strict-ready; trusted sync on conflict/ancestry block
 # 4. topic → develop → main: require green CI on each actual PR head
 #    retain Summary / Why / Changes / Verification in every PR body
 # 5. package publishing does NOT fire on the main merge. dispatch the
@@ -278,7 +288,8 @@ geode serve &`}</pre>
             <ul>
               <li><code>.github/workflows/release.yml</code>. The manual validate + publish pipeline.</li>
               <li><code>.github/workflows/install-smoke.yml</code>. Install regression on macOS and Ubuntu.</li>
-              <li><code>scripts/resolve_architecture_roadmap_trust.py</code>. Exact-parent and source validation for conflict-resolved main → develop syncs.</li>
+              <li><code>scripts/resolve_architecture_roadmap_trust.py</code>. Exact-parent and source validation for trusted main → develop syncs.</li>
+              <li><code>scripts/merge_pr.py</code>. Rechecks live remote tips, current PR required CI, and protection before a head-pinned merge.</li>
               <li><code>docs/workflow.md</code>. Canonical pre-sync and GitFlow procedure.</li>
               <li><code>scripts/verify_public_distribution.py</code>. Public GitHub/PyPI parity verification.</li>
               <li><code>docs/architecture/immutable-distribution-lifecycle.md</code>. Frontier evidence and the wheel/state/workspace boundary.</li>

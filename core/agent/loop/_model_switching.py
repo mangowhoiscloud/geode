@@ -400,6 +400,8 @@ def _try_inline_compact_for_model_switch(
                 policy=policy,
                 session_id=getattr(loop, "_session_id", None) or None,
                 trigger="model_switch",
+                hooks=loop._hooks,
+                correlation={"turn_id": loop._turn_id},
             )
         )
         if did_compact:
