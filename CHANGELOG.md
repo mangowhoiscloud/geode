@@ -55,6 +55,9 @@ functional change.
   Runtime `GEODE.md` and `.geode/` changes trigger the full code checks.
   The explicit merge command rechecks current head/base and app-bound required
   checks against enforced branch protection before submitting a pinned merge.
+  Resolve superseded CI runs through GitHub CLI's current required-check view,
+  then bind exact check IDs to the app, head and PR; never fall back to an older
+  success when the selected check is pending or failed.
 
 ### Fixed
 
