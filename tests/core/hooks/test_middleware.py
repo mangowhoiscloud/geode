@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import pytest
 from core.hooks import (
+    HookSystem,
     InvalidMiddlewareResultError,
     LlmCallRequest,
     MiddlewareRegistry,
@@ -193,6 +194,40 @@ async def test_request_transforms_preserve_physical_correlation() -> None:
     assert tool.context is context
     assert tool.correlation == correlation
     assert llm.correlation == correlation
+
+
+@_async_test
+async def test_tool_middleware_cannot_drop_the_physical_observer() -> None:
+    class Context:
+        def __init__(self, hooks: HookSystem) -> None:
+            self.hooks: HookSystem | None = hooks
+
+    class DropObserver:
+        async def tool_request(self, request: ToolCallRequest) -> ToolCallRequest:
+            request.context.hooks = None
+            return request
+
+        async def tool_execution(self, request: ToolCallRequest, next_call: Any) -> dict[str, Any]:
+            request.context.hooks = None
+            return await next_call(request)
+
+    hooks = HookSystem()
+    context = Context(hooks)
+    request_registry = MiddlewareRegistry()
+    request_registry.register_tool_request(DropObserver())
+    execution_registry = MiddlewareRegistry()
+    execution_registry.register_tool_execution(DropObserver())
+    try:
+        with pytest.raises(InvalidMiddlewareResultError, match="physical correlation"):
+            await request_registry.tool_request(ToolCallRequest("demo", context=context))
+        with pytest.raises(InvalidMiddlewareResultError, match="tool_execution"):
+            await execution_registry.tool_execution(
+                ToolCallRequest("demo", context=context),
+                lambda _request: pytest.fail("observer-less tool reached the terminal"),
+            )
+        assert context.hooks is hooks
+    finally:
+        hooks.close()
 
 
 @_async_test

@@ -21,6 +21,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
+from core.hooks.llm_observation import observe_llm_call
 from core.hooks.system import RuntimeEvent, RuntimeEventBus
 from core.llm.adapters.base import (
     AdapterCallRequest,
@@ -437,6 +438,7 @@ class MiddlewareRegistry:
         request: AdapterCallRequest,
         *,
         correlation: Mapping[str, Any] | None = None,
+        purpose: str | None = None,
     ) -> AdapterCallResult:
         """Run both LLM join points around one ``adapter.acomplete`` call."""
         transformed = await self.llm_request(
@@ -448,6 +450,18 @@ class MiddlewareRegistry:
         )
 
         async def execute(current: LlmCallRequest) -> AdapterCallResult:
+            if purpose is not None:
+                return await observe_llm_call(
+                    lambda: current.adapter.acomplete(current.request),
+                    hooks=self._events,
+                    correlation=current.correlation,
+                    model=current.request.model,
+                    provider=getattr(current.adapter, "provider", "<unknown>"),
+                    adapter=getattr(current.adapter, "name", "<unknown>"),
+                    source=getattr(current.adapter, "source", None),
+                    effort=current.request.effort,
+                    purpose=purpose,
+                )
             return await current.adapter.acomplete(current.request)
 
         return await self.llm_execution(transformed, execute)
@@ -757,6 +771,7 @@ def _clone_llm_request(request: LlmCallRequest) -> LlmCallRequest:
 
 
 _PHYSICAL_CONTEXT_FIELDS = (
+    "hooks",
     "session_id",
     "turn_id",
     "step_id",

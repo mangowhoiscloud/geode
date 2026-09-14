@@ -614,3 +614,20 @@ def test_error_transition_closes_durable_session_with_error_status() -> None:
     asyncio.run(mark_session_error_async(loop))
 
     assert captured["status"] == "error"
+    assert captured["runtime_observation_status"] == "unavailable"
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_terminal_timeline_records_its_own_bus_health(tmp_path: Path, failed: bool) -> None:
+    from core.agent.loop._lifecycle import _record_terminal_timeline
+
+    timeline = SessionTimeline("worker", db_path=tmp_path / "sessions.db")
+    loop = SimpleNamespace(
+        _timeline=timeline, _hooks=SimpleNamespace(closed=False, has_sink_failures=failed)
+    )
+    _record_terminal_timeline(loop, status="completed")
+    [terminal] = SessionEventStore(timeline.db_path).read("worker")
+    assert terminal.status == "completed"  # Observation does not rewrite task success.
+    assert terminal.payload["runtime_observation_status"] == (
+        "degraded" if failed else "no_known_faults"
+    )

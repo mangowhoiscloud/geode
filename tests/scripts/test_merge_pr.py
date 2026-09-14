@@ -61,6 +61,12 @@ def _evidence(head: str = "a" * 40, base: str = "b" * 40) -> dict[str, Any]:
             "required_pull_request_reviews": {"required_approving_review_count": 0},
         },
         "checks": {"total_count": len(runs), "check_runs": runs},
+        "required": {
+            "checks": [
+                {"name": row["name"], "state": "SUCCESS", "link": row["details_url"]}
+                for row in runs
+            ]
+        },
         "view": {
             "headRefOid": head,
             "baseRefOid": base,
@@ -125,6 +131,16 @@ class _GitHub:
         self.readback_failure = False
 
     def __call__(self, arguments: list[str]) -> dict[str, Any]:
+        if arguments[:2] == ["pr", "checks"]:
+            assert arguments[arguments.index("--repo") + 1] == merge_pr.REPOSITORY
+            assert arguments[-5:] == [
+                "--required",
+                "--json",
+                "name,state,link",
+                "--jq",
+                "{checks: .}",
+            ]
+            return copy.deepcopy(self.current["required"])
         if arguments[:2] == ["pr", "view"]:
             assert arguments[arguments.index("--repo") + 1] == merge_pr.REPOSITORY
             return copy.deepcopy(self.current["view"])
@@ -202,6 +218,73 @@ def test_non_success_never_merges(monkeypatch, capsys, status, conclusion) -> No
     receipt = json.loads(capsys.readouterr().out)
     assert receipt["decision"] == "blocked"
     assert receipt["head_sha"] == "a" * 40 and receipt["base_sha"] == "b" * 40
+    assert github.mutations == []
+
+
+@pytest.mark.parametrize(
+    "old_state,current_state",
+    [("SKIPPED", "SUCCESS"), ("FAILURE", "SUCCESS")]
+    + [
+        ("SUCCESS", state)
+        for state in ("SUCCESS", "FAILURE", "SKIPPED", "CANCELLED", "IN_PROGRESS", "QUEUED")
+    ],
+)
+def test_native_current_check_selection_never_falls_back_to_old_success(
+    monkeypatch, capsys, old_state: str, current_state: str
+) -> None:
+    data = _evidence()
+    old = data["checks"]["check_runs"][0]
+    old["conclusion"] = old_state.lower()
+    data["view"]["statusCheckRollup"][0]["conclusion"] = old_state
+    current = old | {
+        "id": 1000,
+        "details_url": f"https://github.com/{merge_pr.REPOSITORY}/actions/runs/1/job/1000",
+        "status": "completed"
+        if current_state in {"SUCCESS", "FAILURE", "SKIPPED", "CANCELLED"}
+        else current_state.lower(),
+        "conclusion": current_state.lower()
+        if current_state in {"SUCCESS", "FAILURE", "SKIPPED", "CANCELLED"}
+        else None,
+    }
+    data["checks"]["check_runs"].append(current)
+    data["checks"]["total_count"] += 1
+    data["view"]["statusCheckRollup"].append(
+        {
+            "name": current["name"],
+            "status": current["status"].upper(),
+            "conclusion": current_state if current["conclusion"] else None,
+            "detailsUrl": current["details_url"],
+        }
+    )
+    data["required"]["checks"][0].update(state=current_state, link=current["details_url"])
+    github = _GitHub(data)
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == (0 if current_state == "SUCCESS" else 1)
+    receipt = json.loads(capsys.readouterr().out)
+    if current_state == "SUCCESS":
+        assert receipt["checks"][current["name"]] == 1000
+        assert len(github.mutations) == 1
+    else:
+        assert receipt["decision"] == "blocked"
+        assert github.mutations == []
+
+
+@pytest.mark.parametrize("defect", ["missing", "duplicate", "unbound_link", "unknown_name"])
+def test_native_selection_requires_exact_complete_binding(monkeypatch, capsys, defect: str) -> None:
+    data = _evidence()
+    selected = data["required"]["checks"]
+    if defect == "missing":
+        selected.pop()
+    elif defect == "duplicate":
+        selected.append(selected[0].copy())
+    elif defect == "unbound_link":
+        selected[0]["link"] += "0"
+    else:
+        selected[0]["name"] = "untrusted check"
+    github = _GitHub(data)
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == 1
+    assert json.loads(capsys.readouterr().out)["decision"] == "blocked"
     assert github.mutations == []
 
 
@@ -409,16 +492,15 @@ def test_unrelated_check_suites_do_not_hide_current_pr_evidence(monkeypatch) -> 
         "stale_base",
         "wrong_suite",
         "wrong_url",
-        "pending_newer",
-        "failed_newer",
-        "missing_newer_job",
-        "tied_number",
-        "workflow_id_changed",
+        "pending",
+        "failed",
+        "wrong_path",
+        "duplicate_workflow",
+        "invalid_workflow_id",
+        "split_workflow",
     ],
 )
-def test_workflow_provenance_or_newer_execution_blocks_old_green(
-    monkeypatch, capsys, defect
-) -> None:
+def test_selected_workflow_requires_complete_pr_provenance(monkeypatch, capsys, defect) -> None:
     data = _evidence()
     evidence = data["workflows"]
     runs = evidence["workflow_runs"]
@@ -445,18 +527,29 @@ def test_workflow_provenance_or_newer_execution_blocks_old_green(
         wrong = f"https://github.com/{merge_pr.REPOSITORY}/actions/runs/99/job/100"
         data["checks"]["check_runs"][0]["details_url"] = wrong
         data["view"]["statusCheckRollup"][0]["detailsUrl"] = wrong
-    else:
-        newer = copy.deepcopy(run)
-        newer.update(id=500, check_suite_id=1500, run_number=2)
-        if defect == "pending_newer":
-            newer.update(status="queued", conclusion=None)
-        elif defect == "failed_newer":
-            newer["conclusion"] = "failure"
-        elif defect == "tied_number":
-            newer["run_number"] = 1
-        elif defect == "workflow_id_changed":
-            newer["workflow_id"] += 1
-        runs.append(newer)
+        data["required"]["checks"][0]["link"] = wrong
+    elif defect in {"pending", "failed"}:
+        old = copy.deepcopy(run)
+        old.update(id=500, check_suite_id=1500)
+        runs.append(old)
+        run.update(
+            status="queued" if defect == "pending" else "completed",
+            conclusion=None if defect == "pending" else "failure",
+        )
+    elif defect == "wrong_path":
+        run["path"] = ".github/workflows/untrusted.yml"
+    elif defect == "duplicate_workflow":
+        runs.append(copy.deepcopy(run))
+    elif defect == "invalid_workflow_id":
+        run["workflow_id"] = True
+    elif defect == "split_workflow":
+        split = copy.deepcopy(run)
+        split.update(id=500, check_suite_id=1500)
+        runs.append(split)
+        link = f"https://github.com/{merge_pr.REPOSITORY}/actions/runs/500/job/100"
+        data["checks"]["check_runs"][0].update(details_url=link, check_suite={"id": 1500})
+        data["view"]["statusCheckRollup"][0]["detailsUrl"] = link
+        data["required"]["checks"][0]["link"] = link
     if defect != "truncated":
         evidence["total_count"] = len(runs)
     github = _GitHub(data)
@@ -466,13 +559,12 @@ def test_workflow_provenance_or_newer_execution_blocks_old_green(
     assert github.mutations == []
 
 
-def test_newest_workflow_uses_run_number_not_run_id(monkeypatch) -> None:
+def test_native_selection_is_authority_not_workflow_run_order(monkeypatch) -> None:
     data = _evidence()
     run = data["workflows"]["workflow_runs"][0]
-    older = copy.deepcopy(run)
-    older.update(id=999, conclusion="failure")
-    run["run_number"] = 2
-    data["workflows"]["workflow_runs"].append(older)
+    unselected = copy.deepcopy(run)
+    unselected.update(id=999, check_suite_id=1999, run_number=999, conclusion="failure")
+    data["workflows"]["workflow_runs"].append(unselected)
     data["workflows"]["total_count"] += 1
     github = _GitHub(data)
     monkeypatch.setattr(merge_pr, "_gh", github)

@@ -7,6 +7,7 @@ import json
 import os
 import signal
 import tarfile
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -57,6 +58,7 @@ def test_usage_projects_partial_evidence_without_fabricating_totals() -> None:
     def event(cache: int | None, call: str) -> SimpleNamespace:
         return SimpleNamespace(
             action="llm.call.ended",
+            session_id="usage-session",
             llm_call_id=call,
             llm_attempt_id=call + ":attempt-1",
             payload={
@@ -71,7 +73,11 @@ def test_usage_projects_partial_evidence_without_fabricating_totals() -> None:
 
     def paired(*calls: SimpleNamespace) -> list[SimpleNamespace]:
         return [
-            SimpleNamespace(action="llm.call.started", llm_attempt_id=c.llm_attempt_id)
+            SimpleNamespace(
+                action="llm.call.started",
+                session_id="usage-session",
+                llm_attempt_id=c.llm_attempt_id,
+            )
             for c in calls
         ] + list(calls)
 
@@ -88,6 +94,7 @@ def test_usage_projects_partial_evidence_without_fabricating_totals() -> None:
     assert _summarize_usage([])["input_tokens"] is None
     failed = SimpleNamespace(
         action="llm.call.ended",
+        session_id="usage-session",
         llm_attempt_id="c:attempt-1",
         payload={"error_type": "TimeoutError"},
     )
@@ -196,9 +203,11 @@ def test_runtime_config_pins_role_models_and_absolute_policy(
 
     def fake_loop(_conversation, executor, **_kwargs):
         executors.append(executor)
-        loop = MagicMock()
-        loop.arun = AsyncMock(return_value=AgenticResult(text="ok", termination_reason="unknown"))
-        return loop
+        return SimpleNamespace(
+            arun=AsyncMock(return_value=AgenticResult(text="ok", termination_reason="unknown")),
+            amark_session_completed=AsyncMock(),
+            amark_session_error=AsyncMock(),
+        )
 
     monkeypatch.setattr("core.agent.loop.AgenticLoop", fake_loop)
     bound, transient = compose_tool_plan()
@@ -279,12 +288,18 @@ def test_installed_agent_uses_harbor_lifecycle_and_classifies_timeout(tmp_path: 
 
 
 @pytest.fixture
-def native_trial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
-    """Fake native boundaries: no runtime, database, credentials, tools or LLMs."""
+def native_trial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
+    """Fake execution boundaries; real evidence stores/projections only in tmp_path."""
+    import sqlite3
+
     from core.agent.loop.models import TerminationReason
     from core.agent.verify import VerifyMode
+    from core.hooks import HookEvent, HookSystem
     from core.memory.atomic_write import atomic_write_json
-    from core.observability.trajectory import build_trajectory, export_trajectory
+    from core.observability.event_store import HookEventStore
+    from core.observability.hook_persistence import HookPersistenceSink
+    from core.observability.session_timeline import SessionTimeline
+    from core.observability.trajectory import export_trajectory, trajectory_from_sessions
 
     monkeypatch.setattr(harbor_runtime, "_LOGS", str(tmp_path))
     real_is_file = Path.is_file
@@ -307,18 +322,37 @@ def native_trial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNames
         "core.config.load_model_policy", lambda: SimpleNamespace(allowlist=[settings.model])
     )
     monkeypatch.setattr("core.agent.verify.get_verify_mode", lambda: VerifyMode.RULE_BASED)
+    db_path = tmp_path / "sessions.db"
+
+    def record_session(session_id: str, *, closed: bool = True) -> SessionTimeline:
+        timeline = SessionTimeline(
+            session_id, db_path=db_path, projection_path=tmp_path / f"{session_id}.events.jsonl"
+        )
+        timeline.record_session_start(model=settings.model, provider="openai")
+        timeline.bind_turn(f"{session_id}:turn-1")
+        if closed:
+            timeline.record_session_end()
+        return timeline
+
+    root_timeline = record_session("fake-root", closed=False)
     loop = SimpleNamespace(
         _session_id="fake-root",
         _tools=[{"name": "run_bash", "description": "test", "input_schema": {}}],
         arun=AsyncMock(
             return_value=SimpleNamespace(termination_reason=TerminationReason.NATURAL, error=None)
         ),
-        amark_session_completed=AsyncMock(),
-        amark_session_error=AsyncMock(),
+        amark_session_completed=AsyncMock(side_effect=root_timeline.record_session_end),
+        amark_session_error=AsyncMock(
+            side_effect=lambda: root_timeline.record_session_end(status="error")
+        ),
     )
     executor = SimpleNamespace(_sub_agent_manager=None, _session_scope_denial=lambda name: None)
     runtime = MagicMock()
-    runtime.event_store.db_path = tmp_path / "never-opened.db"
+    runtime.hooks = SimpleNamespace(has_sink_failures=False)
+    runtime.dreaming_service.settle = AsyncMock()
+    runtime.dreaming_service.aclose = AsyncMock()
+    runtime.event_store = HookEventStore(db_path)
+    runtime.shutdown.side_effect = lambda **_kwargs: runtime.event_store.close()
     services = MagicMock()
     services.create_session.return_value = (executor, loop)
 
@@ -331,45 +365,43 @@ def native_trial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNames
     services_builder = MagicMock(return_value=services)
     monkeypatch.setattr("core.wiring.runtime.build_runtime", runtime_builder)
     monkeypatch.setattr("core.wiring.runtime.build_shared_services", services_builder)
-    events = [
-        SimpleNamespace(action="llm.call.started", llm_attempt_id="fake-attempt"),
-        SimpleNamespace(
-            action="llm.call.ended",
-            llm_attempt_id="fake-attempt",
-            payload={
-                "usage": {
-                    "input_tokens": 10,
-                    "output_tokens": 2,
-                    "cached_input_tokens": 0,
-                    "cache_write_tokens": None,
-                }
+    recording_hooks = HookSystem()
+    recording_hooks.register_sink(
+        HookPersistenceSink(runtime.event_store, session_key="fake-root", run_id="fake-run")
+    )
+    call_metadata = {
+        "session_id": "fake-root",
+        "llm_call_id": "fake-call",
+        "llm_attempt_id": "fake-attempt",
+        "model": settings.model,
+        "provider": "openai",
+        "adapter": "codex-oauth",
+        "purpose": "agentic_loop",
+    }
+    recording_hooks.trigger(HookEvent.LLM_CALL_STARTED, call_metadata)
+    recording_hooks.trigger(
+        HookEvent.LLM_CALL_ENDED,
+        {
+            **call_metadata,
+            "latency_ms": 1,
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": None,
             },
-        ),
-    ]
-    reader = MagicMock()
-    reader.read.side_effect = [events, []]
+        },
+    )
+    events = runtime.event_store.read()
+    evidence_reader = HookEventStore(db_path)
+    reader = MagicMock(spec=HookEventStore, wraps=evidence_reader)
     monkeypatch.setattr(
         "core.observability.event_store.HookEventStore", MagicMock(return_value=reader)
     )
-    connection = MagicMock()
-    connection.__enter__.return_value.execute.return_value = [("fake-root",)]
-    connect = MagicMock(return_value=connection)
-    monkeypatch.setattr(harbor_runtime.sqlite3, "connect", connect)
-
-    def trajectory_from_sessions(sessions, **kwargs):
-        assert sessions == ["fake-root"]
-        return build_trajectory(
-            trajectory_id=kwargs["trajectory_id"],
-            source=kwargs["source"],
-            events=[
-                {"kind": "session.started", "session_id": "fake-root", "payload": {}},
-                {"kind": "session.ended", "session_id": "fake-root", "payload": {}},
-            ],
-            outcome=kwargs["outcome"],
-            provenance=kwargs["provenance"],
-            privacy=kwargs["privacy"],
-        )
-
+    connect = MagicMock(wraps=sqlite3.connect)
+    # Limit inventory failure injection to the adapter; canonical readers still
+    # use real sqlite3 and can recover the known root after this boundary fails.
+    monkeypatch.setattr(harbor_runtime, "sqlite3", SimpleNamespace(connect=connect))
     trajectory_builder = MagicMock(side_effect=trajectory_from_sessions)
     exporter = MagicMock(side_effect=export_trajectory)
     writer = MagicMock(side_effect=atomic_write_json)
@@ -388,7 +420,7 @@ def native_trial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNames
         revision="a" * 40,
         verify_mode="rule_based",
     )
-    return SimpleNamespace(
+    yield SimpleNamespace(
         path=tmp_path,
         args=args,
         runtime=runtime,
@@ -405,7 +437,74 @@ def native_trial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNames
         atomic_write_json=atomic_write_json,
         export_trajectory=export_trajectory,
         events=events,
+        record_session=record_session,
+        root_timeline=root_timeline,
+        recording_hooks=recording_hooks,
+        call_metadata=call_metadata,
     )
+    evidence_reader.close()
+    recording_hooks.close()
+
+
+@pytest.mark.parametrize("success", [False, True])
+def test_native_dreaming_uses_existing_deadlines_and_drains_before_session_end(
+    native_trial: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, success: bool
+) -> None:
+    trial = native_trial
+    now = [100.0]
+    monkeypatch.setattr(harbor_runtime.time, "monotonic", lambda: now[0])
+    order: list[str] = []
+    primary = ValueError("synthetic primary")
+    if not success:
+        trial.loop.arun.side_effect = primary
+    dreaming = trial.runtime.dreaming_service
+    dreaming.stop_admission.side_effect = lambda: order.append("stop_admission")
+    dreaming.cancel.side_effect = lambda: order.append("cancel")
+
+    async def settle(*, deadline: float) -> None:
+        order.append("settle")
+        assert deadline == 100 + trial.args.timeout
+
+    async def close(*, deadline: float) -> None:
+        order.append("drain")
+        expected = (100 + trial.args.timeout if success else 100) + harbor_runtime._FINALIZE_SECONDS
+        assert deadline == expected
+        assert deadline - now[0] == expected - 107
+
+    async def child_wait(*_args, **_kwargs):
+        now[0] += 7  # Child cleanup consumes the same existing grace, not a fresh stage budget.
+
+    manager = MagicMock()
+    manager.list_collaboration_runs.return_value = [SimpleNamespace(task_id="child", status="done")]
+    trial.record_session("child")
+    manager.wait_for_task = AsyncMock(side_effect=child_wait)
+    trial.executor._sub_agent_manager = manager
+    dreaming.settle.side_effect = settle
+    dreaming.aclose.side_effect = close
+
+    def mark_completed() -> None:
+        order.append("session_end")
+        trial.root_timeline.record_session_end()
+
+    def mark_error() -> None:
+        order.append("session_end")
+        trial.root_timeline.record_session_end(status="error")
+
+    trial.loop.amark_session_completed.side_effect = mark_completed
+    trial.loop.amark_session_error.side_effect = mark_error
+    trial.services.close.side_effect = lambda: order.append("services_close")
+    if success:
+        assert asyncio.run(_run_native(trial.args)) == 0
+    else:
+        with pytest.raises(ValueError) as caught:
+            asyncio.run(_run_native(trial.args))
+        assert caught.value is primary
+    assert order == (
+        ["stop_admission", "settle", "drain", "session_end", "services_close"]
+        if success
+        else ["stop_admission", "cancel", "drain", "session_end", "services_close"]
+    )
+    trial.runtime.shutdown.assert_called_once_with(background_timeout_s=0)
 
 
 @pytest.mark.parametrize(
@@ -427,7 +526,7 @@ def test_native_finalizes_success_timeout_and_cancel(
     if outcome == "canonical_timeout":
         trial.loop.arun.return_value.termination_reason = TerminationReason.TIME_BUDGET_EXPIRED
     if outcome == "no_calls":
-        trial.reader.read.side_effect = [[]]
+        assert trial.runtime.event_store.clear() == 2
     if outcome in {"cancel", "error"}:
         with pytest.raises(type(primary)) as caught:
             asyncio.run(_run_native(trial.args))
@@ -444,7 +543,8 @@ def test_native_finalizes_success_timeout_and_cancel(
     assert trial.exporter.call_count == 2
     trial.services.close.assert_called_once()
     trial.runtime.shutdown.assert_called_once()
-    assert not (trial.path / "never-opened.db").exists()
+    assert trial.runtime.event_store.db_path == trial.path / "sessions.db"
+    assert trial.runtime.event_store.db_path.is_file()
     assert "private failure" not in json.dumps(result)
 
 
@@ -492,6 +592,7 @@ def test_native_bootstrap_failure_still_records_receipt(
     "failure_stage",
     [
         "child_wait",
+        "background_drain",
         "session_end",
         "services_close",
         "runtime_shutdown",
@@ -529,6 +630,10 @@ def test_native_failure_matrix_preserves_primary_and_other_exports(
         manager.list_collaboration_runs.return_value = children
         manager.wait_for_task = AsyncMock(side_effect=[secondary, children[1]])
         trial.executor._sub_agent_manager = manager
+        for child in children:
+            trial.record_session(child.task_id)
+    elif failure_stage == "background_drain":
+        trial.runtime.dreaming_service.aclose.side_effect = secondary
     elif failure_stage in {"session_end", "interrupted_finalization"}:
         if failure_stage == "interrupted_finalization":
             secondary = asyncio.CancelledError("private second cancellation")
@@ -573,9 +678,10 @@ def test_native_failure_matrix_preserves_primary_and_other_exports(
         assert caught.value is expected_error
     receipt = json.loads((trial.path / "runtime-finalized.json").read_text())
     assert receipt["exports_complete"] is False
-    assert receipt["finalization_errors"] == [
-        {"stage": expected_stage, "error_type": type(secondary).__name__}
-    ]
+    expected_errors = [{"stage": expected_stage, "error_type": type(secondary).__name__}]
+    if failure_stage in {"session_end", "interrupted_finalization"}:
+        expected_errors.append({"stage": "trajectory_scope", "error_type": "RuntimeError"})
+    assert receipt["finalization_errors"] == expected_errors
     assert trial.exporter.call_count == 2
     trial.services.close.assert_called_once()
     trial.runtime.shutdown.assert_called_once()
@@ -588,6 +694,7 @@ def test_native_failure_matrix_preserves_primary_and_other_exports(
         assert result["usage"]["input_tokens_observed_sum"] == 10
         if failure_stage in {
             "child_wait",
+            "background_drain",
             "session_end",
             "services_close",
             "runtime_shutdown",
@@ -598,6 +705,11 @@ def test_native_failure_matrix_preserves_primary_and_other_exports(
             assert result["usage"]["source_snapshot_complete"] is False
             full = json.loads((trial.path / "geode-trajectory.private.json").read_text())
             assert full["integrity"]["scope_complete"] is False
+            if failure_stage in {"session_end", "interrupted_finalization"}:
+                assert (
+                    "session fake-root has no terminal event"
+                    in full["integrity"]["scope_incompleteness"]
+                )
     for path in trial.path.glob("*.json"):
         assert "private primary" not in path.read_text()
         assert "private secondary" not in path.read_text()
@@ -640,22 +752,23 @@ def test_host_stop_error_does_not_mask_execution_failure(
 
 @pytest.mark.parametrize("health_source", ["before_close", "during_close", "mapping_anomaly"])
 def test_native_rejects_degraded_observation_without_discarding_exports(
-    native_trial: SimpleNamespace, health_source: str
+    native_trial: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, health_source: str
 ) -> None:
+    from core.hooks import HookEvent
+
     trial = native_trial
     trial.runtime.hooks.has_sink_failures = health_source == "before_close"
     if health_source == "during_close":
-        trial.runtime.shutdown.side_effect = lambda: setattr(
+        trial.runtime.shutdown.side_effect = lambda **_kwargs: setattr(
             trial.runtime.hooks, "has_sink_failures", True
         )
     if health_source == "mapping_anomaly":
-        trial.events.append(
-            SimpleNamespace(
-                action="hook.llm_call_ended",
-                event="llm_call_ended",
-                payload={"_mapping_error_type": "ValueError"},
+        with monkeypatch.context() as patcher:
+            patcher.setattr(
+                "core.observability.activity_registry.map_hook_to_activity",
+                MagicMock(side_effect=ValueError("synthetic mapping failure")),
             )
-        )
+            trial.recording_hooks.trigger(HookEvent.LLM_CALL_ENDED, trial.call_metadata)
     with pytest.raises(RuntimeError, match="native observation degraded"):
         asyncio.run(_run_native(trial.args))
     result = json.loads((trial.path / "runtime-result.json").read_text())
@@ -731,7 +844,8 @@ def test_native_second_task_cancel_during_finalization_preserves_first_cancel(
     receipt = json.loads((trial.path / "runtime-finalized.json").read_text())
     assert receipt["exports_complete"] is False
     assert receipt["finalization_errors"] == [
-        {"stage": "session_end", "error_type": "CancelledError"}
+        {"stage": "session_end", "error_type": "CancelledError"},
+        {"stage": "trajectory_scope", "error_type": "RuntimeError"},
     ]
     assert trial.exporter.call_count == 2
 
@@ -809,17 +923,10 @@ def test_native_incomplete_canonical_scope_never_gets_complete_receipt(
     primary = {"timeout": TimeoutError(), "cancel": asyncio.CancelledError()}.get(primary_kind)
     if primary:
         trial.loop.arun.side_effect = primary
-    build = trial.trajectory_builder.side_effect
-
-    def incomplete(sessions, **kwargs):
-        trajectory = build(sessions, **kwargs)
-        integrity = trajectory["integrity"]
-        integrity.update(complete=False, scope_complete=False, replay_complete=False)
-        integrity["scope_incompleteness"] = ["canonical terminal recording failed"]
-        integrity["incompleteness"] = ["canonical terminal recording failed"]
-        return trajectory
-
-    trial.trajectory_builder.side_effect = incomplete
+    # Simulate an acknowledged close with no retained terminal row. The real
+    # canonical reader, not a fabricated integrity dict, must reject the scope.
+    trial.loop.amark_session_completed.side_effect = None
+    trial.loop.amark_session_error.side_effect = None
     if primary_kind == "timeout":
         assert asyncio.run(_run_native(trial.args)) == 124
     else:
@@ -834,29 +941,109 @@ def test_native_incomplete_canonical_scope_never_gets_complete_receipt(
     ]
     assert trial.exporter.call_count == 2
     for name in ("geode-trajectory.json", "geode-trajectory.private.json"):
-        assert json.loads((trial.path / name).read_text())["integrity"]["scope_complete"] is False
+        integrity = json.loads((trial.path / name).read_text())["integrity"]
+        assert integrity["scope_complete"] is False
+        assert "session fake-root has no terminal event" in integrity["scope_incompleteness"]
 
 
 def test_native_reduced_replay_does_not_invalidate_complete_canonical_scope(
     native_trial: SimpleNamespace,
 ) -> None:
     trial = native_trial
-    build = trial.trajectory_builder.side_effect
-
-    def reduced(sessions, **kwargs):
-        trajectory = build(sessions, **kwargs)
-        if kwargs["content_policy"] == "digest":
-            integrity = trajectory["integrity"]
-            integrity.update(complete=False, replay_complete=False)
-            integrity["replay_incompleteness"] = ["content intentionally reduced"]
-            integrity["incompleteness"] = ["content intentionally reduced"]
-        return trajectory
-
-    trial.trajectory_builder.side_effect = reduced
+    trial.root_timeline.record_user_message("Fixture benchmark instruction")
     assert asyncio.run(_run_native(trial.args)) == 0
     assert (
         json.loads((trial.path / "runtime-finalized.json").read_text())["exports_complete"] is True
     )
+    digest = json.loads((trial.path / "geode-trajectory.json").read_text())
+    full = json.loads((trial.path / "geode-trajectory.private.json").read_text())
+    assert digest["integrity"]["scope_complete"] is True
+    assert digest["integrity"]["replay_complete"] is False
+    assert full["integrity"]["scope_complete"] is True
+    assert full["integrity"]["replay_complete"] is True
+
+
+@pytest.mark.parametrize("authority", ["durable", "foreground"])
+@pytest.mark.parametrize("primary_kind", ["success", "timeout", "cancel", "error"])
+def test_native_missing_expected_child_invalidates_source_snapshot(
+    native_trial: SimpleNamespace, authority: str, primary_kind: str
+) -> None:
+    trial = native_trial
+    child = SimpleNamespace(task_id="known-child", status="completed")
+    if authority == "durable":
+        manager = MagicMock()
+        manager.list_collaboration_runs.return_value = [child]
+        manager.wait_for_task = AsyncMock(return_value=child)
+        trial.executor._sub_agent_manager = manager
+    else:
+        trial.root_timeline.record_subagent_start(child.task_id)
+    primary = {
+        "timeout": TimeoutError("private timeout"),
+        "cancel": asyncio.CancelledError("private cancellation"),
+        "error": ValueError("private execution error"),
+    }.get(primary_kind)
+    if primary is not None:
+        trial.loop.arun.side_effect = primary
+    if primary_kind == "timeout":
+        assert asyncio.run(_run_native(trial.args)) == 124
+    else:
+        with pytest.raises(type(primary) if primary else RuntimeError) as caught:
+            asyncio.run(_run_native(trial.args))
+        if primary is not None:
+            assert caught.value is primary
+    result = json.loads((trial.path / "runtime-result.json").read_text())
+    receipt = json.loads((trial.path / "runtime-finalized.json").read_text())
+    assert receipt["exports_complete"] is False
+    assert {"stage": "child_session_inventory", "error_type": "RuntimeError"} in receipt[
+        "finalization_errors"
+    ]
+    assert result["usage"]["source_snapshot_complete"] is False
+    assert result["usage"]["input_tokens_observed_sum"] == 10
+    for field in ("input_tokens", "output_tokens", "cached_input_tokens", "cache_write_tokens"):
+        assert result["usage"][field] is None
+    for call in trial.trajectory_builder.call_args_list:
+        assert call.args[0] == ["fake-root", "known-child"]
+    for name in ("geode-trajectory.json", "geode-trajectory.private.json"):
+        trajectory = json.loads((trial.path / name).read_text())
+        assert trajectory["integrity"]["scope_complete"] is False
+        assert (
+            "session known-child has no canonical events"
+            in trajectory["integrity"]["scope_incompleteness"]
+        )
+        assert "private execution error" not in json.dumps(trajectory)
+    assert trial.runtime.event_store.db_path == trial.path / "sessions.db"
+    assert trial.runtime.event_store.db_path.is_file()
+
+
+@pytest.mark.parametrize("authority", ["durable", "foreground", "both"])
+def test_native_expected_child_with_canonical_rows_remains_complete_and_unique(
+    native_trial: SimpleNamespace, authority: str
+) -> None:
+    trial = native_trial
+    trial.record_session("known-child")
+    if authority in {"durable", "both"}:
+        child = SimpleNamespace(task_id="known-child", status="completed")
+        manager = MagicMock()
+        manager.list_collaboration_runs.return_value = [child]
+        manager.wait_for_task = AsyncMock(return_value=child)
+        trial.executor._sub_agent_manager = manager
+    if authority in {"foreground", "both"}:
+        # Start and stop are two declarations of the same child, not two sessions.
+        trial.root_timeline.record_subagent_start("known-child")
+        trial.root_timeline.record_subagent_complete("known-child", "completed")
+    assert asyncio.run(_run_native(trial.args)) == 0
+    result = json.loads((trial.path / "runtime-result.json").read_text())
+    receipt = json.loads((trial.path / "runtime-finalized.json").read_text())
+    assert receipt["exports_complete"] is True
+    assert receipt["finalization_errors"] == []
+    assert result["usage"]["source_snapshot_complete"] is True
+    assert result["usage"]["input_tokens"] == 10
+    assert result["usage"]["whole_runtime_complete"] is False
+    for call in trial.trajectory_builder.call_args_list:
+        assert sorted(call.args[0]) == ["fake-root", "known-child"]
+        assert len(call.args[0]) == 2
+    assert trial.runtime.event_store.db_path == trial.path / "sessions.db"
+    assert trial.runtime.event_store.db_path.is_file()
 
 
 @pytest.mark.parametrize("stop_fails", [False, True])

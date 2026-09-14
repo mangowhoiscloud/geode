@@ -112,6 +112,10 @@ feature/<name> -> develop -> main
   skipped, pending, failed, ambiguous or stale required evidence blocks it.
   Required checks on `main` and `develop` must be strict and apply to
   administrators; never bypass them.
+  Repeated runs can coexist on one head (for example, Draft → Ready). The
+  command uses GitHub CLI's current required-check selection and binds its
+  exact links to REST check IDs, app/head, PR workflow/suite and rollup evidence.
+  Superseded runs remain in history; an older success cannot replace a current failure.
 - Post-merge cleanup runs
   `scripts/check_repo_hygiene.py free-merged-worktree` from outside the target
   checkout. It verifies the squash tree by replaying the final PR head onto the

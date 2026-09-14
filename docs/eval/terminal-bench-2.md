@@ -255,6 +255,107 @@ new prompt hashes are treatment changes even when task/model/resource limits
 match. Missing auxiliary-call accounting remains an explicit coverage limit,
 not a whole-runtime cache-performance claim.
 
+### Observation admission for the fresh missing-data study
+
+The admission unit is one new attempt with an immutable source/spec identity,
+not a historical cell repaired in place. A green unit test means the tested
+code path is protected; only a fresh native trial and validated exports count
+as newly collected data. No current video or historical ledger is silently
+reclassified by a runtime patch.
+
+Before any model call, the frozen run spec must identify root action,
+turn-final verifier, cognitive reflection, candidate selection, learning/text
+completion, hosted search and worker paths. For each path, bind the active or
+conditional configuration, actual model/source/effort policy, observation
+owner and regression evidence. A conditional path is not disabled merely to
+make accounting look complete; a path not exercised in smoke remains untested
+live. An uninstrumented enabled path blocks a whole-runtime study.
+
+| Boundary | Required check before expansion | Missing or failed evidence |
+| --- | --- | --- |
+| Frozen experiment → trial | Source bundle, task digest, image/platform, Harbor version, route, resource/time limits, reset and attempt cap match the prospective spec | Pause; do not silently change the environment or reuse the previous source bundle |
+| Adapter dispatch → durable usage | Identified starts/ends, observed counter presence, retained failed/cancelled attempts, no known sink/mapping failure, bounded purpose/source/requested effort | Pause; null is not zero and surviving pairs do not prove omitted producers |
+| Native finalization → source snapshot | Successful shutdown/read/export stages; known child handles and structured parent subagent events reconciled with canonical session inventory; integrity recomputed | Preserve partial outputs; missing child rows or a false/missing receipt never establish no execution |
+| Canonical trajectory → host Replay | Matching session/call identity, validated ATIF, paired tool actions/results, cast bytes and source/output receipt hashes | A true `runtime-finalized.json` alone cannot pass: host ATIF/cast generation happens later |
+| Private source → public derivative | Exact-byte privacy review, declared redactions/omissions and source-bound content/count reconciliation | Withhold publication; never fill omitted action text or provider reasoning with invented content |
+
+For cache-read comparison on this OpenAI route, require reported input,
+output and cached-input fields on every admitted completed call. An explicit
+zero passes the presence check. A provider-unreported field and a dropped
+export field are different diagnoses, but either prevents a complete cache
+claim. Unsupported cache-write detail may remain null; it is not invented as
+zero or required as evidence of a cache hit. An interrupted stream without
+final usage remains unknown even when its cancellation receipt is complete.
+
+Report separate coverage denominators, not a single "recovery percentage":
+
+| Question | Historical baseline | Fresh evidence denominator |
+| --- | --- | --- |
+| Does the missing Replay have new behavior evidence? | 34/435 selected GEODE cells: 28 empty agent directories and six zero-action ATIF records | Newly validated traces / 34 targeted cells; text-only/no-action attempts remain explicitly no-action |
+| Are formerly partial cache observations now complete? | 247/401 usage-bearing cells; 648/4,709 retained usage events lack cache detail | Fully observed new attempts / 247 targets, plus reported/total completed calls within each attempt |
+| What fraction of selected historical cells is targeted? | Disjoint union 281/435 across 83 tasks; ten excluded GEODE cells remain excluded | Executed, validated, unresolved and not-yet-run counts / the frozen 281 targets |
+| Is the entire runtime observed? | Historical and current scoped exports do not establish it | Declared active/conditional producer coverage and source/export reconciliation, not just cache-bearing calls |
+
+The 154 historically complete-cache cells are not extra recovered cells; the
+435/435 available phase timestamp records are not a new runtime improvement.
+Keep old scores and the six unresolved native invalid cells separate from
+these accounting denominators. A valid verifier zero or canonical timeout
+retains its score even if collection pauses the *next* attempt. Observation
+failure is not permission to retry a semantic zero or discard its lineage.
+
+Resume only after diagnosing the failed boundary, retaining its reproducer,
+passing previous plus new checks on the new source, and freezing a successor
+run or declared phase. Gate receipts are evidence, not independent authority
+to launch, merge, publish or exceed the one-attempt/zero-replacement cap.
+
+The read-only [`check_harbor_observations.py`](../../scripts/eval/check_harbor_observations.py)
+checks a closed fresh trial against its canonical run-spec SHA, source bundle
+SHA, task checksum and trial identity. It validates native result and ATIF
+models, regenerates the cast from the retained trajectory, checks the receipt
+hashes, and reconciles the existing usage projections. Invoke it with
+`trial_dir`, `--run-spec`, `--run-spec-sha256`, `--source-sha256`,
+`--trial-name`, `--task-name`, and `--task-checksum`, all taken from the frozen
+plan rather than inferred from a successful result. It does not reopen a
+session database or create a second raw store.
+
+`observation_valid` and `cache_complete` answer different questions. Missing
+required evidence fails validation; intact exports with absent provider cache
+fields remain incomplete for cache comparison. Neither grants full-runtime
+expansion. Resource allocation, timeout/retry policy, auth and container/oracle
+preflight remain separate admission requirements. Export agreement also cannot
+prove that a producer lost neither side of an entire call pair.
+
+Freeze this finite native producer inventory with the candidate's existing
+evidence references; for each row, distinguish enabled/conditional, covered by
+a deterministic failure test, and actually exercised by the live smoke.
+Zero observed calls do not establish that a conditional path was tested.
+
+| Producer in this native profile | Observation owner | Activation |
+|---|---|---|
+| Root/worker action and turn-final verifier | `_provider_call` shared terminal | Action or verification request; count once |
+| Root/worker cognitive reflection | Middleware terminal | Reflection policy |
+| Parent candidate selection | Middleware terminal | Multiple successful delegated candidates |
+| Root/worker hosted search | Capability dispatch with the tool's event bus | Model-selected search |
+| Root learning extraction | Capability dispatch with root event bus | Full turn-completed hook |
+| Root/worker context-exhausted text | Capability dispatch with loop event bus | Context-limit termination |
+| Root/worker compaction and model-switch summary | Capability dispatch with owning loop event bus | Context/model-switch policy |
+| Root dreaming | Runtime-owned background service and capability dispatch | Full turn-completed hook; absent from minimal worker hooks |
+
+Text helpers share `purpose=text_completion`. The numeric usage projection
+cannot independently attribute their live calls to learning, compaction,
+context exhaustion, model-switch summary or dreaming. Retain those per-producer
+live coverage claims as unproven unless another source-bound receipt identifies
+the producer; deterministic wiring tests alone do not establish live exercise.
+
+The run-local ratchet may admit only the *next declared collection cell* after
+this code-bound inventory, current preflight, writer shutdown and intact
+input/output/cache-read observations pass together. This bounded collection
+decision is not whole-runtime billing assurance: `whole_runtime_complete`
+remains false, and the standalone export checker never grants execution.
+The agent deadline applies to already-admitted background work as well; final
+cleanup grace cannot purchase extra model execution. Freeze the lifecycle
+policy on the new revision rather than silently changing an old run.
+
 ## 2026-09-13 full-runtime G-code development gate
 
 The separate `terminalbench21-sol-max-reflexion-ratchet-r3-20260913` run

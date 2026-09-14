@@ -446,6 +446,8 @@ class WebSearchResult:
     search_activated: bool = False
     retrieval_exposed: bool = False
     model: str = ""
+    # Optional for external capability adapters; no reported usage is not zero.
+    usage: UsageSummary | None = None
 
 
 @dataclass(frozen=True)

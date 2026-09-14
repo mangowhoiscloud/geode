@@ -10,6 +10,7 @@ from dataclasses import replace
 from typing import Any
 
 from core.hooks import HookEvent, LlmCallRequest
+from core.hooks.llm_observation import observe_llm_call
 from core.llm.adapters.base import AdapterCallRequest, EmptyModelOutputError
 from core.llm.adapters.translation import agentic_response_from_adapter_result
 from core.llm.agentic_response import AgenticResponse
@@ -18,61 +19,6 @@ from core.tools.plan import BoundToolPlan
 from . import _context
 
 log = logging.getLogger(__name__)
-
-
-def _completed_attempt_payload(result: Any, model: str) -> dict[str, Any]:
-    """Project only completed-response accounting and bounded route evidence."""
-    if result is None:
-        return {}
-    usage = getattr(result, "usage", None)
-    counters: dict[str, int | None] = {}
-    for key in (
-        "input_tokens",
-        "output_tokens",
-        "cached_input_tokens",
-        "reasoning_tokens",
-        "cache_write_tokens",
-    ):
-        count = int(getattr(usage, key, 0) or 0)
-        counters[key] = count if getattr(usage, f"{key}_present", False) or count > 0 else None
-    reported_cost = getattr(usage, "reported_cost_usd", None)
-    input_tokens, output_tokens = counters["input_tokens"], counters["output_tokens"]
-    cost_usd = None
-    try:
-        from core.llm.token_tracker import calculate_cost
-
-        if reported_cost is not None:
-            cost_usd = float(reported_cost)
-        elif input_tokens is not None and output_tokens is not None:
-            cost_usd = float(
-                calculate_cost(
-                    model,
-                    input_tokens,
-                    output_tokens,
-                    cache_creation_tokens=counters["cache_write_tokens"] or 0,
-                    cache_read_tokens=counters["cached_input_tokens"] or 0,
-                )
-            )
-    except Exception:
-        log.warning(
-            "calculate_cost failed for model=%s; cost remains unknown", model, exc_info=True
-        )
-    return {
-        "usage": counters,
-        "cost_usd": cost_usd,
-        **{
-            key: value
-            for key in (
-                "response_id",
-                "response_model",
-                "response_provider",
-                "routing_strategy",
-                "routing_attempt",
-                "request_image_receipt",
-            )
-            if (value := getattr(result, key, None))
-        },
-    }
 
 
 def _validate_bound_request_rewrite(
@@ -448,62 +394,22 @@ async def call_llm(
         )
 
         async def terminal(effective: LlmCallRequest) -> Any:
-            import time as _llm_call_time
+            from core.llm.token_tracker import calculate_cost
 
-            from core.hooks.dispatch import fire_hook_async
-
-            started_at = _llm_call_time.monotonic()
             active_adapter = effective.adapter
             active_request = effective.request
-            active_name = getattr(active_adapter, "name", "<unknown>")
-            active_provider = getattr(active_adapter, "provider", effective_provider)
-            await fire_hook_async(
-                loop._hooks,
-                HookEvent.LLM_CALL_STARTED,
-                {
-                    **attempt_correlation,
-                    "model": active_request.model,
-                    "provider": active_provider,
-                    "adapter": active_name,
-                },
+            return await observe_llm_call(
+                lambda: active_adapter.acomplete(active_request),
+                hooks=loop._hooks,
+                correlation=effective.correlation,
+                model=active_request.model,
+                provider=getattr(active_adapter, "provider", effective_provider),
+                adapter=getattr(active_adapter, "name", "<unknown>"),
+                source=getattr(active_adapter, "source", None),
+                effort=active_request.effort,
+                purpose="agentic_loop",
+                cost_estimator=calculate_cost,
             )
-            try:
-                attempt_result = await active_adapter.acomplete(active_request)
-            except BaseException as exc:
-                completed = exc.completed_result if isinstance(exc, EmptyModelOutputError) else None
-                try:
-                    await fire_hook_async(
-                        loop._hooks,
-                        HookEvent.LLM_CALL_ENDED,
-                        {
-                            **attempt_correlation,
-                            "model": active_request.model,
-                            "provider": active_provider,
-                            "adapter": active_name,
-                            "latency_ms": (_llm_call_time.monotonic() - started_at) * 1_000,
-                            "error": type(exc).__name__,
-                            "error_type": type(exc).__name__,
-                            **_completed_attempt_payload(completed, active_request.model),
-                        },
-                    )
-                except BaseException:
-                    log.warning("Failed to record LLM failure; preserving original exception")
-                raise
-
-            await fire_hook_async(
-                loop._hooks,
-                HookEvent.LLM_CALL_ENDED,
-                {
-                    **attempt_correlation,
-                    "model": active_request.model,
-                    "provider": active_provider,
-                    "adapter": active_name,
-                    "latency_ms": (_llm_call_time.monotonic() - started_at) * 1_000,
-                    "error": None,
-                    **_completed_attempt_payload(attempt_result, active_request.model),
-                },
-            )
-            return attempt_result
 
         return await loop._middleware_registry.llm_execution(current, terminal)
 

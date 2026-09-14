@@ -13,10 +13,14 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Awaitable, Callable
-from typing import Any
+import weakref
+from collections.abc import Awaitable, Callable, Mapping
+from typing import TYPE_CHECKING, Any
 
 from core.hooks.system import HookEvent
+
+if TYPE_CHECKING:
+    from core.hooks.system import RuntimeEventBus
 
 log = logging.getLogger(__name__)
 
@@ -70,7 +74,12 @@ def _build_context(data: dict[str, Any]) -> str:
     return "\n".join(parts)[:_MAX_CONTEXT_CHARS]
 
 
-async def _call_budget_llm(prompt: str) -> str | None:
+async def _call_budget_llm(
+    prompt: str,
+    *,
+    hooks: RuntimeEventBus | None = None,
+    correlation: Mapping[str, Any] | None = None,
+) -> str | None:
     """Call a budget model for extraction. Returns text or None on failure.
 
     PR-EXTRACT-LEARNING-MODELS-ADAPTER (2026-05-28) — dispatches through
@@ -111,6 +120,8 @@ async def _call_budget_llm(prompt: str) -> str | None:
             prefer_provider=provider,
             prefer_source=source,
             model_by_provider={"glm": settings.learning_extract_model},
+            hooks=hooks,
+            correlation=correlation,
         )
     except BillingError:
         log.debug("LLM extract: adapter credit exhausted")
@@ -156,12 +167,15 @@ def _parse_extractions(text: str) -> list[tuple[str, str]]:
 
 def make_llm_extract_handler(
     profile_provider: Callable[[], Any] | None = None,
+    *,
+    hooks: RuntimeEventBus | None = None,
 ) -> tuple[str, Callable[..., Awaitable[None]]]:
     """Create TURN_COMPLETE handler for LLM-based learning extraction.
 
     Claude Code extractMemories pattern: cursor-based incremental extraction
     with mutual exclusion (skip if main agent wrote to memory this turn).
     """
+    hooks_ref = weakref.ref(hooks) if hooks is not None else None
     turn_count = 0
     session_extractions = 0
     # ``float("-inf")`` so the first call always passes the cooldown gate.
@@ -211,7 +225,11 @@ def make_llm_extract_handler(
             return
 
         prompt = _EXTRACT_PROMPT.format(context=context)
-        llm_output = await _call_budget_llm(prompt)
+        llm_output = await _call_budget_llm(
+            prompt,
+            hooks=hooks_ref() if hooks_ref is not None else None,
+            correlation={key: data[key] for key in ("session_id", "turn_id") if key in data},
+        )
         if not llm_output:
             return
 

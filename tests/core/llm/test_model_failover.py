@@ -430,7 +430,8 @@ class TestAgenticLoopFailover:
         assert second.system_prompt == first.system_prompt
         assert tuple(second.messages[: len(first.messages)]) == tuple(first.messages)
 
-    def test_llm_call_ended_carries_complete_usage(self) -> None:
+    @pytest.mark.parametrize("allow_tools", [True, False])
+    def test_llm_call_ended_carries_complete_usage(self, allow_tools: bool) -> None:
         from core.hooks import HookEvent, HookSystem
         from core.llm.adapters.base import AdapterCallResult, UsageSummary
 
@@ -443,7 +444,7 @@ class TestAgenticLoopFailover:
         )
         loop = self._make_loop()
         loop._hooks = hooks
-        self._install_acomplete_stub(
+        adapter = self._install_acomplete_stub(
             loop,
             AdapterCallResult(
                 text="done",
@@ -464,9 +465,14 @@ class TestAgenticLoopFailover:
             ),
         )
 
-        asyncio.run(loop._call_llm("system", [{"role": "user", "content": "go"}]))
+        asyncio.run(
+            loop._call_llm("system", [{"role": "user", "content": "go"}], allow_tools=allow_tools)
+        )
 
+        assert len(observed) == adapter.acomplete.call_count == 1
         ended = observed[-1]
+        assert ended["purpose"] == "agentic_loop"
+        assert ended["effort"] == adapter.acomplete.call_args.args[0].effort
         assert ended["usage"] == {
             "input_tokens": 100,
             "output_tokens": 20,
@@ -604,7 +610,7 @@ class TestAgenticLoopFailover:
             hooks.close()
 
     def test_reported_zero_cost_survives_missing_counters(self) -> None:
-        from core.agent.loop._provider_call import _completed_attempt_payload
+        from core.hooks.llm_observation import _completed_attempt_payload
         from core.llm.adapters.base import AdapterCallResult, UsageSummary
 
         result = AdapterCallResult(
@@ -615,14 +621,19 @@ class TestAgenticLoopFailover:
         assert all(value is None for value in payload["usage"].values())
 
     def test_cost_estimation_failure_remains_unknown(self) -> None:
-        from core.agent.loop._provider_call import _completed_attempt_payload
+        from core.hooks.llm_observation import _completed_attempt_payload
         from core.llm.adapters.base import AdapterCallResult, UsageSummary
 
         result = AdapterCallResult(
             text="done", usage=UsageSummary(input_tokens=2, output_tokens=1), stop_reason="end_turn"
         )
-        with patch("core.llm.token_tracker.calculate_cost", side_effect=ValueError("bad price")):
-            assert _completed_attempt_payload(result, "model")["cost_usd"] is None
+        with patch(
+            "core.llm.token_tracker.calculate_cost", side_effect=ValueError("bad price")
+        ) as estimator:
+            assert (
+                _completed_attempt_payload(result, "model", cost_estimator=estimator)["cost_usd"]
+                is None
+            )
 
     def test_call_llm_returns_none_on_chain_exhaustion(self) -> None:
         """When ``acomplete`` raises, ``_call_llm`` returns None with an

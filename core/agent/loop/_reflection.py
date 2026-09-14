@@ -52,6 +52,7 @@ established by PR-1).
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 from core.agent.cognitive_state import CognitiveState
@@ -311,6 +312,7 @@ async def reflect_async(
     source: str | None = None,
     middleware_registry: Any | None = None,
     policy_sources: Any | None = None,
+    correlation: Mapping[str, Any] | None = None,
 ) -> None:
     """Run the reflection LLM call and update ``state`` in place.
 
@@ -418,7 +420,9 @@ async def reflect_async(
                 active_middleware = MiddlewareRegistry()
             else:
                 active_middleware = middleware_registry
-            return await active_middleware.call_llm(adapter, req)
+            return await active_middleware.call_llm(
+                adapter, req, correlation=correlation, purpose="cognitive_reflection"
+            )
 
         response, _used_model = await call_with_failover([model], _do_call)
     except Exception:

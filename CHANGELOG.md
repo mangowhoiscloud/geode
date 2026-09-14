@@ -47,13 +47,34 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- Resolve superseded CI runs through GitHub CLI's current required-check view,
+  then bind exact check IDs to the app, head and PR; never fall back to an older
+  success when the selected check is pending or failed.
+
 ### Fixed
 
-- **CI-gated GitFlow synchronization.** The merge guard accepts an exact ordered
-  develop/main two-parent sync when strict ancestry blocks the canonical head,
-  and binds required checks to the newest PR workflow run instead of rejecting
-  unrelated push/scheduled checks. Strict protection, administrator enforcement,
-  successful required checks and pre-merge head/base revalidation remain required.
+- **CI-gated GitFlow synchronization.** Accept an exact ordered develop/main
+  two-parent sync when strict ancestry blocks the canonical head. Validate the
+  native-selected checks against their PR workflow, suite and job, preserving
+  strict protection, administrator enforcement and head/base revalidation.
+- Retain auxiliary LLM attempt usage from cognitive reflection, candidate
+  selection, text completion and hosted search using the existing durable
+  event stream. Activity schema version 7 adds purpose, credential source and
+  requested effort without inventing missing legacy values. Session-bound
+  pairing prevents borrowing another session's terminal event. A read-only
+  Harbor artifact check reconciles frozen identities, native/canonical
+  projections and reconstructed recording hashes before any expansion claim;
+  unknown provider fields and unproven whole-runtime coverage remain blocked.
+  Worker tools and loops share their observation bus, and session terminals
+  retain sink health. Native finalization drains admitted Dreaming work within
+  the original agent deadline before exporting; unfinished or failed cleanup
+  cannot certify a complete source snapshot.
+  Known child handles and structured parent subagent events must also match
+  canonical session inventory; an entirely missing child cannot hide behind
+  a healthy root export. Workers require the real async session lifecycle;
+  missing methods no longer silently pass through a test-double fallback.
 
 ## [1.0.29] - 2026-09-14
 

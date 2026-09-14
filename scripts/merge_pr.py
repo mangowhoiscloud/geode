@@ -109,54 +109,36 @@ def _identity(pr: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _select_workflows(pr: dict[str, Any], evidence: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    runs = evidence["workflow_runs"]
+def _validate_workflow(pr: dict[str, Any], run: dict[str, Any], path: str) -> None:
     _require(
-        type(evidence["total_count"]) is int and evidence["total_count"] == len(runs),
-        "workflow enumeration is incomplete",
+        run["path"] == path
+        and run["event"] == "pull_request"
+        and run["repository"]["full_name"] == run["head_repository"]["full_name"] == REPOSITORY
+        and run["head_sha"] == pr["head"]["sha"]
+        and run["head_branch"] == pr["head"]["ref"],
+        "workflow path, event, repository or head mismatch",
     )
-    selected = {}
-    for path in REQUIRED_WORKFLOWS:
-        candidates = [run for run in runs if run["path"] == path]
-        _require(bool(candidates), "required PR workflow is missing")
-        _require(
-            all(type(run["run_number"]) is int and run["run_number"] > 0 for run in candidates)
-            and len({run["workflow_id"] for run in candidates}) == 1
-            and len({run["run_number"] for run in candidates}) == len(candidates),
-            "workflow identity or ordering is ambiguous",
-        )
-        # Select the newest execution before inspecting success: no old-green fallback.
-        run = max(candidates, key=lambda row: row["run_number"])
-        _require(
-            run["event"] == "pull_request"
-            and run["repository"]["full_name"] == run["head_repository"]["full_name"] == REPOSITORY
-            and run["head_sha"] == pr["head"]["sha"]
-            and run["head_branch"] == pr["head"]["ref"],
-            "workflow event, repository or head mismatch",
-        )
-        linked = [row for row in run["pull_requests"] if row["number"] == pr["number"]]
-        _require(
-            len(linked) == 1
-            and all(
-                linked[0][side][key] == pr[side][key]
-                for side in ("head", "base")
-                for key in ("sha", "ref")
-            ),
-            "workflow PR association is stale or missing",
-        )
-        _require(
-            run["status"] == "completed" and run["conclusion"] == "success",
-            "latest PR workflow is not successful",
-        )
-        _require(
-            all(
-                type(run[key]) is int and run[key] > 0
-                for key in ("id", "workflow_id", "check_suite_id")
-            ),
-            "invalid workflow run or suite identity",
-        )
-        selected[path] = run
-    return selected
+    linked = [row for row in run["pull_requests"] if row["number"] == pr["number"]]
+    _require(
+        len(linked) == 1
+        and all(
+            linked[0][side][key] == pr[side][key]
+            for side in ("head", "base")
+            for key in ("sha", "ref")
+        ),
+        "workflow PR association is stale or missing",
+    )
+    _require(
+        run["status"] == "completed" and run["conclusion"] == "success",
+        "selected PR workflow is not successful",
+    )
+    _require(
+        all(
+            type(run[key]) is int and run[key] > 0
+            for key in ("id", "workflow_id", "check_suite_id")
+        ),
+        "invalid workflow run or suite identity",
+    )
 
 
 def validate_snapshot(
@@ -165,6 +147,7 @@ def validate_snapshot(
     protection: dict[str, Any],
     checks: dict[str, Any],
     view: dict[str, Any],
+    native_checks: dict[str, Any],
     workflows: dict[str, Any],
     sync: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -224,26 +207,48 @@ def validate_snapshot(
         type(checks["total_count"]) is int and checks["total_count"] == len(runs),
         "check enumeration is incomplete",
     )
-    selected = _select_workflows(pr, workflows)
+    _require(
+        type(workflows["total_count"]) is int
+        and workflows["total_count"] == len(workflows["workflow_runs"]),
+        "workflow enumeration is incomplete",
+    )
+    selected = native_checks["checks"]
+    _require(
+        len(selected) == len(REQUIRED_CHECKS)
+        and {row["name"] for row in selected} == set(REQUIRED_CHECKS),
+        "current required checks are missing or ambiguous",
+    )
     admitted = {}
+    admitted_workflows: dict[str, int] = {}
     for name in REQUIRED_CHECKS:
-        workflow = next(
-            selected[path] for path, names in REQUIRED_WORKFLOWS.items() if name in names
-        )
+        chosen = next(row for row in selected if row["name"] == name)
+        _require(chosen["state"] == "SUCCESS", "current required check is not successful")
         matching = [
-            row
-            for row in runs
-            if row.get("name") == name and row["check_suite"]["id"] == workflow["check_suite_id"]
+            row for row in runs if row.get("name") == name and row["details_url"] == chosen["link"]
         ]
-        _require(len(matching) == 1, "required check missing or ambiguous in selected PR workflow")
-        run = matching[0]
         rolled = [
             row
             for row in view["statusCheckRollup"]
-            if row.get("name") == name and row.get("detailsUrl") == run["details_url"]
+            if row.get("name") == name and row["detailsUrl"] == chosen["link"]
         ]
-        _require(len(rolled) == 1, "required PR check missing or ambiguous in rollup")
-        current = rolled[0]
+        _require(len(matching) == len(rolled) == 1, "required check missing or ambiguous")
+        run, current = matching[0], rolled[0]
+        matched_workflows = [
+            row
+            for row in workflows["workflow_runs"]
+            if row["check_suite_id"] == run["check_suite"]["id"]
+            and chosen["link"]
+            == f"https://github.com/{REPOSITORY}/actions/runs/{row['id']}/job/{run['id']}"
+        ]
+        _require(len(matched_workflows) == 1, "selected check workflow is missing or ambiguous")
+        workflow = matched_workflows[0]
+        path = next(path for path, names in REQUIRED_WORKFLOWS.items() if name in names)
+        _validate_workflow(pr, workflow, path)
+        _require(
+            path not in admitted_workflows or admitted_workflows[path] == workflow["id"],
+            "required jobs span different workflow runs",
+        )
+        admitted_workflows[path] = workflow["id"]
         _require(
             type(run["app"]["id"]) is int
             and run["app"]["id"] == CHECK_APP_ID
@@ -269,7 +274,7 @@ def validate_snapshot(
         admitted[name] = run["id"]
     return identity | {
         "checks": admitted,
-        "workflow_runs": {path: run["id"] for path, run in selected.items()},
+        "workflow_runs": admitted_workflows,
         "decision": "ready",
     }
 
@@ -296,11 +301,27 @@ def _snapshot(number: int, receipt: dict[str, Any] | None = None) -> dict[str, A
             "headRefOid,baseRefName,baseRefOid,mergeable,mergeStateStatus,statusCheckRollup",
         ]
     )
+    # Native gh resolves superseded workflow runs. Bind its selection back to
+    # exact REST/rollup records; never choose whichever duplicate passed.
+    required = _gh(
+        [
+            "pr",
+            "checks",
+            str(number),
+            "--repo",
+            REPOSITORY,
+            "--required",
+            "--json",
+            "name,state,link",
+            "--jq",
+            "{checks: .}",
+        ]
+    )
     sync = None
     if identity["head_ref"].startswith(SYNC_BRANCH_PREFIX):
         sync = _api(f"commits/{identity['head_sha']}")
         sync["main_sha"] = _api("branches/main")["commit"]["sha"]
-    return validate_snapshot(pr, base, protection, checks, view, workflows, sync)
+    return validate_snapshot(pr, base, protection, checks, view, required, workflows, sync)
 
 
 def main(argv: list[str] | None = None) -> int:

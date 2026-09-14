@@ -192,6 +192,7 @@ def test_select_adapter_returns_none_when_no_capable_registered(
 def test_web_search_names_share_routed_dispatch(
     tool_name: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from core.hooks import HookSystem
     from core.llm.adapters.base import WebSearchResult
     from core.tools.base import ToolContext
     from core.tools.web_search import WebSearchTool
@@ -210,6 +211,11 @@ def test_web_search_names_share_routed_dispatch(
     monkeypatch.setattr("core.llm.adapters.dispatch.web_search_via_adapters", dispatch)
     tool = GeneralWebSearchTool() if tool_name == "general_web_search" else WebSearchTool()
     context = ToolContext(
+        hooks=HookSystem(),
+        session_id="session-web",
+        turn_id="turn-web",
+        step_id="step-web",
+        tool_call_id="tool-web",
         provider="anthropic",
         source="subscription",
         model="claude-opus-4-7",
@@ -225,6 +231,13 @@ def test_web_search_names_share_routed_dispatch(
         prefer_provider="anthropic",
         prefer_source="subscription",
         model="claude-opus-4-7",
+        hooks=context.hooks,
+        correlation={
+            "session_id": "session-web",
+            "turn_id": "turn-web",
+            "step_id": "step-web",
+            "tool_call_id": "tool-web",
+        },
     )
     assert result["result"] == {
         "query": "current releases",
