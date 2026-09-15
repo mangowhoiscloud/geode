@@ -90,17 +90,92 @@ function GcodeDevelopmentGate({ ko }: { ko: boolean }) {
         ? "관측한 AgenticLoop 호출 87건에는 input 2,264,797, output 58,579, cached-input 946,432 토큰이 기록됐고, 이 세 필드의 누락은 0건입니다. 실제 요청에 이미지를 담았는지도 별도 receipt로 확인했습니다. 이는 기록된 호출 범위의 관측이며, 보조 LLM 호출을 포함한 전체 런타임 비용이나 구독 청구액은 아닙니다."
         : "The 87 recorded AgenticLoop calls contain 2,264,797 input, 58,579 output and 946,432 cached-input tokens, with no missing values in those three fields. Separate receipts confirm image serialization into requests. These observations cover recorded calls, not all auxiliary LLM activity, complete runtime cost or subscription billing."}</p>
       <p><strong>{ko ? "5/5는 개발 조건의 충족이지, repair 효과의 입증은 아닙니다." : "5/5 passes the development gate; it does not prove a repair effect."}</strong>{" "}{ko
-        ? "5회 모두 내부 judge가 첫 후보를 수락해 실제 repair는 발생하지 않았습니다. 후보 선정에 사용한 한 과제이며, 새 baseline·native Codex 대조군이나 held-out 평가는 실행하지 않았습니다. 위 full-suite 결과와 제외 규칙, 기존 replay·영상은 그대로입니다."
-        : "All five judges accepted candidate attempt zero, so no repair occurred. This is one task used for candidate selection, without a fresh baseline, native Codex control or held-out evaluation. The full-suite results, exclusions and existing replay/film remain unchanged."}</p>
+        ? "5회 모두 내부 judge가 첫 후보를 수락해 실제 repair는 발생하지 않았습니다. 후보 선정에 사용한 한 과제이며, 새 baseline·native Codex 대조군이나 held-out 평가는 실행하지 않았습니다. 위 full-suite 결과와 제외 규칙, 기존 원본 Replay는 바뀌지 않았습니다."
+        : "All five judges accepted candidate attempt zero, so no repair occurred. This is one task used for candidate selection, without a fresh baseline, native Codex control or held-out evaluation. The full-suite results, exclusions and original historical replay remain unchanged."}</p>
       <details className="tb-details">
         <summary>{ko ? "소스·원본 보존·공개 범위" : "Source, custody and disclosure"}</summary>
         <p><code>terminalbench21-sol-max-reflexion-ratchet-r3-20260913</code>{ko
-          ? "의 run-spec, attempts, native result, trajectory, verifier receipt, analysis와 녹화는 로컬 private 원본으로 보존했습니다. 문서 공개와 원본 artifact 공개는 다릅니다. 이번 5회의 공개 artifact 패키지와 갱신 영상은 아직 게시하지 않았습니다."
-          : " retains its run spec, attempts, native results, trajectories, verifier receipts, analysis and recordings as local private evidence. Publishing this documentation does not publish those sources. A public artifact package and updated film for these five trials have not been posted."}</p>
+          ? "의 run-spec, attempts, native result, trajectory, verifier receipt, analysis와 녹화는 로컬 private 원본으로 보존했습니다. 이번 5회의 공개 artifact 패키지는 아직 게시하지 않았습니다. 아래 진행 현황은 로컬 갱신 영상과 YouTube 비공개 업로드를 별도로 기록합니다."
+          : " retains its run spec, attempts, native results, trajectories, verifier receipts, analysis and recordings as local private evidence. The public artifact package for these five trials has not been posted. The status below separately records the updated local film and its private YouTube upload."}</p>
         <p>{ko
           ? "중간 후보 c863c71은 감사 중 SQLite SHM 해시가 바뀌어 canonical closure가 보류됐습니다. 해당 admission을 새 해시로 덮어쓰지 않았으며, 별도로 검증을 통과한 마지막 5회와 섞지 않았습니다."
           : "The intermediate c863c71 candidate remains blocked from canonical closure after an audit changed SQLite SHM bytes. Its admission was not rewritten with a new hash, and it was not mixed into the separately validated final five trials."}</p>
         <p><a href={record}>{ko ? "실험 기록·한계·SHA-256" : "Run record, limitations and SHA-256"}</a>{" · "}<a href="https://github.com/mangowhoiscloud/geode/pull/3315">{ko ? "구현과 CI: PR #3315" : "Implementation and CI: PR #3315"}</a></p>
+      </details>
+    </section>
+  );
+}
+
+function ProjectAccounting({ ko }: { ko: boolean }) {
+  const rows = [
+    { ko: "연구·코드·영상 제작·운영 대화", en: "Research, code, film and operator conversations", input: 4216518479, output: 8483918 },
+    { ko: "전체 벤치 측정: 재시도 포함", en: "Fullsuite measurement, including retries", input: 775760448, output: 10083384 },
+    { ko: "사전 비교 측정", en: "Preparatory paired measurement", input: 91780967, output: 1328698 },
+    { ko: "G-code 후보·관측 smoke·canary", en: "G-code candidates, observation smokes and canary", input: 7022880, output: 178458 },
+  ];
+  const totalInput = rows.reduce((sum, row) => sum + row.input, 0);
+  const totalOutput = rows.reduce((sum, row) => sum + row.output, 0);
+  const number = (value: number) => value.toLocaleString("en-US");
+  return (
+    <section aria-labelledby="project-status-accounting">
+      <h2 id="project-status-accounting">{ko ? "2026-09-15 진행 현황과 프로젝트 사용량" : "Project status and usage as of September 15, 2026"}</h2>
+      <p>{ko
+        ? "전체 비교의 결론, 후속 개발 검증, 영상의 공개 상태는 서로 다릅니다. 아래는 2026-09-15 00:40 KST(2026-09-14 15:40 UTC)까지 확인한 기록입니다."
+        : "The full comparison, development follow-ups and film publication have different completion states. This snapshot covers records through September 15, 2026, 00:40 KST (September 14, 15:40 UTC)."}</p>
+      <table>
+        <thead><tr><th scope="col">{ko ? "범위" : "Scope"}</th><th scope="col">{ko ? "확인한 결과와 남은 조건" : "Observed result and remaining conditions"}</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">{ko ? "기존 전체 비교" : "Historical fullsuite"}</th><td>{ko ? "실행은 종료됐습니다. 공통 유효 429쌍은 GEODE 339건·Codex 331건 통과이며, 동결 전체 primary는 여전히 측정 불성립입니다. 공개 artifact 최신 commit은 d277607입니다." : "Execution ended. GEODE passed 339 and Codex 331 of 429 common valid pairs; the frozen full primary remains not measurable. The latest public artifact commit is d277607."}</td></tr>
+          <tr><th scope="row">{ko ? "G-code 개발 검증" : "G-code development gate"}</th><td>{ko ? "별도 후보의 신규 5/5를 검증했습니다. 후보 선정에 사용한 한 과제이며, 새 Codex 대조군이나 전체 suite 개선 결과는 아닙니다." : "A separate candidate passed five fresh trials. This is one development task, not a fresh Codex comparison or a full-suite improvement result."}</td></tr>
+          <tr><th scope="row">{ko ? "최신 관측 smoke" : "Latest observation smoke"}</th><td>{ko ? "modernize-scientific-stack은 600초 한도에서 timeout으로 selected 0/1입니다. 기록된 호출 31건의 requested effort는 모두 max이고, 30건에 usage가 있습니다. 관측 검사는 통과했지만 취소된 1건의 usage는 null이며, cache 완전성과 확장 gate는 통과하지 못했습니다." : "modernize-scientific-stack reached its 600-second timeout: selected 0/1. All 31 recorded calls requested max; 30 report usage. Observation validation passed, but one cancelled call has null usage, and cache completeness and expansion gates did not pass."}</td></tr>
+          <tr><th scope="row">Beyond Pass Rates · v38</th><td>{ko ? "한국어·영어·기존 Replay·별도 후속 5회 Replay를 합친 62분 25초 영상입니다. 원본 Replay를 보존했습니다. 00:31 KST readback에서 YouTube 비공개 업로드와 HD 처리는 완료됐고, 공개 게시와 저작권 검사 완료는 확인되지 않았습니다." : "The 62m25s film joins Korean, English, the preserved historical replay and five separate follow-up replays. The 00:31 KST readback confirmed a private YouTube upload and completed HD processing, not public publication or completed copyright checks."}</td></tr>
+        </tbody>
+      </table>
+      <p>{ko
+        ? "후속 재실행은 과거에 없던 행동을 복원한 것이 아닙니다. 새 실행의 trace를 별도로 보존했으며, 기존 결과와 누락 기록을 덮어쓰지 않았습니다. 공개 Replay의 890셀은 ATIF-derived 835셀·receipt-only 35셀·미실행 20셀로 유지됩니다. 281-cell 재측정 계획을 완료했다고 주장하지 않습니다."
+        : "A follow-up execution does not reconstruct missing historical behavior. Its new trace remains separate without overwriting original results or missing evidence. The 890-cell public replay still comprises 835 ATIF-derived cells, 35 receipt-only cells and 20 unexecuted cells. The 281-cell remeasurement plan is not claimed complete."}</p>
+
+      <h3>{ko ? "제작·운영까지 포함하면 약 51.11억 토큰" : "About 5.111 billion recorded tokens including production and operations"}</h3>
+      <p>{ko
+        ? "이 집계는 벤치 점수나 GEODE 런타임의 비용 지표가 아니라 프로젝트 운영 기록입니다. 본 제작 대화와 연결된 서브에이전트 34개, 벤치 원본의 재시도와 후속 진단을 포함합니다. 선택된 성공 실행만 세지 않았습니다."
+        : "This is project accounting, not a benchmark score or a GEODE runtime cost metric. It includes the production conversation and 34 linked subagents, recorded benchmark retries and follow-up diagnostics, not only selected successful trials."}</p>
+      <table>
+        <caption>{ko ? "입력과 출력의 합계. cached input과 reasoning output은 각각 포함 관계이며 다시 더하지 않습니다." : "Input plus output. Cached input and reasoning output are included subsets, not additional tokens."}</caption>
+        <thead><tr><th scope="col">{ko ? "집계 범위" : "Accounting scope"}</th><th scope="col">Input</th><th scope="col">Output</th><th scope="col">{ko ? "합계" : "Total"}</th></tr></thead>
+        <tbody>{rows.map((row) => <tr key={row.en}><th scope="row">{ko ? row.ko : row.en}</th><td>{number(row.input)}</td><td>{number(row.output)}</td><td>{number(row.input + row.output)}</td></tr>)}</tbody>
+        <tfoot><tr><th scope="row">{ko ? "기록에서 재구성한 합계" : "Reconstructed total"}</th><td>{number(totalInput)}</td><td>{number(totalOutput)}</td><td>{number(totalInput + totalOutput)}</td></tr></tfoot>
+      </table>
+      <p>{ko
+        ? "입력의 최소 96.6%(4,918,372,608 토큰)는 cached input으로 관측됐습니다. 출력은 20,074,458 토큰입니다. 약 51.11억은 고유 문서의 길이나 새로 생성한 텍스트 분량이 아니라, 문맥을 반복해서 입력한 요청별 사용량입니다. 제작·연구·운영 대화가 총량의 82.7%를 차지하지만, 이를 영상 렌더링만의 비용으로 해석하지 않습니다."
+        : "At least 96.6% of input (4,918,372,608 tokens) was observed as cached input; output totals 20,074,458 tokens. The 5.111 billion counts repeated request traffic, not unique documents or newly generated text. Production, research and operator conversations account for 82.7% of the total, not video rendering alone."}</p>
+      <p><strong>{ko ? "실제 결제 총액은 확인하지 않았습니다." : "Actual total payments have not been established."}</strong>{" "}{ko
+        ? "현재 API Standard·short-context 단가를 기록된 사용량에 일괄 적용하면 약 $4,404부터 $4,436까지입니다. 이는 참고 환산액이며, 구독료·크레딧 구매액이나 요청별 실제 API 청구액이 아닙니다. Long-context·Fast 요율, 외부 도구·AWS·세금·누락된 호출은 반영하지 않았습니다."
+        : "Applying current Standard short-context API rates uniformly to recorded usage gives an illustration of $4,404 to $4,436. This is not subscription spending, credit purchases or a request-level API bill. Actual long-context/Fast tiers, external tools, AWS, taxes and missing calls are not included."}{" "}<a href="https://developers.openai.com/api/docs/pricing">{ko ? "API 단가" : "API pricing"}</a>{" · "}<a href="https://developers.openai.com/codex/pricing">{ko ? "구독과 과금 경로" : "Subscription and billing routes"}</a></p>
+      <details className="tb-details">
+        <summary>{ko ? "집계 방식·누락·원본 해시" : "Accounting method, omissions and source hashes"}</summary>
+        <p>{ko ? "최신 관측 smoke" : "Latest observation smoke"}: <code>terminalbench21-sol-max-uniform-observation-smoke-20260914t105552z</code><br />{ko ? "실행 소스" : "Measured source"}: <code>7c0e927da566866658be6f0771c4ae8dd9743960</code>. {ko ? "아래 analysis와 observation check는 로컬 원본의 해시입니다." : "The analysis and observation-check hashes below identify local source evidence."}</p>
+        <p>{ko
+          ? "Codex 누적 카운터는 중복 snapshot을 제외하고 초기화 구간별로 합산했습니다. 본 대화의 초기화 17회와 하위 작업 1회의 초기화를 반영했고, 상속된 세션 기록은 대상 thread ID로 구분했습니다. 벤치는 trial UUID로 중복을 제거하고 job 합계와 공개 복사본을 다시 더하지 않았습니다. GEODE 세션 usage와 native event는 cache 복구·대조에만 사용했습니다."
+          : "Codex cumulative counters are summed by reset epoch after duplicate snapshots are removed: 17 resets in the root conversation and one in a descendant. Session metadata is matched by exact thread ID to exclude inherited records. Benchmark trials are deduplicated by UUID without re-adding job aggregates or publication copies. GEODE session usage and native events recover and reconcile cache fields without adding their I/O twice."}</p>
+        <p>{ko
+          ? "과거 전체·사전 측정·timeout gate의 1,064개 result 위치 중 940개에 수치 usage가 있고, 124개는 누락되거나 읽을 수 없습니다. G-code 보조 호출과 취소된 호출의 일부 사용량, 별도 분기한 peer 작업, 원격·과거 계정의 미보존 기록도 완전하게 포함하지 못했습니다. 따라서 합계는 확인한 범위의 재구성값입니다. Cache 96.6%도 관측된 입력을 분모로 한 하한이며, 전체 계정의 cache hit rate가 아닙니다."
+          : "Of 1,064 historical fullsuite, preparatory and timeout-gate result locations, 940 have numeric usage and 124 are missing or unreadable. Some G-code auxiliary and cancelled-call usage, separately forked peer tasks and absent remote/older-account records are not fully included. The total is a scoped reconstruction. The 96.6% cache figure is a lower bound over observed input, not an account-wide cache hit rate."}</p>
+        <p>{ko
+          ? "환산식은 ((input − cached input) × input 단가 + cached input × cache 단가 + output × output 단가) / 1,000,000입니다. Sol은 $4/$0.40/$20, Astra는 $10/$1/$50을 적용했습니다. 범위는 미기록 cache의 가능한 값만 반영하며, 전체 비용의 불확실성 구간은 아닙니다."
+          : "Illustration: ((input − cached input) × input rate + cached input × cache rate + output × output rate) / 1,000,000. Sol uses $4/$0.40/$20; Astra uses $10/$1/$50. The range reflects possible missing cache values, not an uncertainty interval for all project costs."}</p>
+        <p>{ko
+          ? "재집계 스크립트·결과와 제작 로그는 로컬 private 근거입니다. 공개하지 않은 원본을 이 문서만으로 독립 검증할 수 있다고 주장하지 않습니다. 아래 SHA-256은 이번 확인에 사용한 바이트를 식별합니다. 계정 식별자·본문·provider reasoning·로컬 경로는 옮기지 않았습니다."
+          : "The accounting script, output and production logs remain local private evidence. This page does not make those sources independently reproducible. The SHA-256 values identify the bytes checked; account identifiers, content, provider reasoning and local paths are not published."}</p>
+        <table className="tb-sources"><thead><tr><th scope="col">{ko ? "로컬 근거" : "Local evidence"}</th><th scope="col">SHA-256</th></tr></thead><tbody>
+          <tr><th scope="row">G-code R3 · analysis</th><td><code>c23045215e093e02b09f8843bad71374f25f4e64b6e073ebd93276a917bba48c</code></td></tr>
+          <tr><th scope="row">{ko ? "최신 관측 smoke · analysis" : "Latest observation smoke · analysis"}</th><td><code>6fc9820bb30aa9d374714a54d2a5bec2e6048ce938ae8ba1f58912b44fee4dc1</code></td></tr>
+          <tr><th scope="row">{ko ? "최신 관측 smoke · observation check" : "Latest observation smoke · observation check"}</th><td><code>87990c7d16cec80b9cd42164ecd004c4950a55221c4d1907f68c0b52d4c0f17c</code></td></tr>
+          <tr><th scope="row">{ko ? "프로젝트 집계 보고서" : "Project accounting report"}</th><td><code>9346b4279f71627c780155bfd03d2234413ca1a8043aca7034c1ce1f9ebaf795</code></td></tr>
+          <tr><th scope="row">{ko ? "Codex 재집계 스크립트" : "Codex reconstruction script"}</th><td><code>6c34ffc72e2fc95fab54a748bee5815814c95e84c5376e9143a7f92ff890fed9</code></td></tr>
+          <tr><th scope="row">{ko ? "Codex 재집계 결과" : "Codex reconstructed usage"}</th><td><code>17962bf7bb8dfe6029581ad61c023e74e379cd7e1cdbeb285c3901fa25f4a80d</code></td></tr>
+          <tr><th scope="row">Beyond Pass Rates · v38 MP4</th><td><code>3dfb301a8a3ca0705294ebe3459e74e570fa12ea7409d7a9680059f1f408defb</code></td></tr>
+        </tbody></table>
+        <p><RunLogLink path={`${PAIRED_RUN}/recording/research-v20`} revision={OBSERVABILITY_REVISION} label="Public historical observability · not project-wide billing" /></p>
       </details>
     </section>
   );
@@ -255,6 +330,8 @@ function Study({ ko }: { ko: boolean }) {
       <PairedReplay ko={ko} />
 
       <GcodeDevelopmentGate ko={ko} />
+
+      <ProjectAccounting ko={ko} />
 
       <h2>{ko ? "다음 실험: 점수 확대보다 비교 가능성 복구" : "Next experiment: restore comparability before scaling"}</h2>
       <details className="tb-details">

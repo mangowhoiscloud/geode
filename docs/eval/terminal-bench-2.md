@@ -20,6 +20,49 @@ eval_contracts:
 
 # Terminal-Bench 2.1 — GEODE execution profile
 
+## 2026-09-15 progress and project accounting snapshot
+
+Cutoff: **2026-09-14 15:40 UTC / 2026-09-15 00:40 KST**. The historical
+full-suite execution is closed, but its frozen primary remains **not measurable**.
+The common-valid secondary result remains GEODE **339/429**, native Codex
+**331/429**. The public artifact repository was read back at
+[`d277607f3a179f191ad24b1497c0934beb9d2470`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/d277607f3a179f191ad24b1497c0934beb9d2470/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z).
+Later local evidence has not replaced that public snapshot.
+
+The separate G-code candidate passed five fresh official-verifier trials;
+its scope and limitations are recorded below. The latest uniform-effort
+`modernize-scientific-stack` observation smoke ended at its frozen 600-second
+timeout with **selected 0/1**, despite raw post-timeout verifier reward one.
+Its 31 retained calls all requested `max`; 30 have usage and one cancelled call
+remains null. Observation validation passed, but cache completeness and the
+expansion gate did not. This does not close the 281-cell remeasurement plan.
+
+The local **Beyond Pass Rates v38** film is 3,745.121 seconds (62m25s), joining
+KO, EN, the preserved historical Replay and five separate G-code follow-up
+replays. The retained 00:31 KST YouTube readback confirms private upload and HD
+processing, not public publication or completed copyright checks. Local MP4
+SHA-256: `3dfb301a8a3ca0705294ebe3459e74e570fa12ea7409d7a9680059f1f408defb`.
+Fresh follow-up traces do not fill historical behavior gaps in place.
+
+The [bilingual project accounting section](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench/#project-status-accounting)
+records **5,111,157,232 input-plus-output tokens** reconstructed from the root
+production conversation, 34 linked subagents, historical fullsuite and
+preparatory attempts, G-code candidates and two observation smokes plus a canary.
+This is project operations, not GEODE-only runtime consumption or video
+rendering alone. At least 96.6% of observed input is cached; output is
+20,074,458 tokens. Duplicate cumulative snapshots, cache inputs and reasoning
+outputs are not added a second time.
+
+The current Standard short-context API-price illustration is **$4,404–$4,436**,
+not actual subscription spending or a request-level invoice. Actual pricing
+tiers, external tools, AWS, taxes and missing usage are outside that illustration.
+Historical/preparatory sources have 940 numeric-usage results among 1,064
+result locations, with 124 missing/unreadable; auxiliary and separately forked
+work are not exhaustively accounted for. The private-source reconstruction is
+not a complete all-project ledger. The detail section keeps method, cutoff,
+scope, source hashes and missing-data limits separate from score authority.
+No original run spec, raw result, trajectory or selected reward changed.
+
 ## Historical Sol paired replay
 
 The frozen `terminalbench21-sol-max-fullsuite-paired-20260827t190300z` run
