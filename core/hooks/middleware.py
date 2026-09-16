@@ -21,7 +21,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
-from core.hooks.llm_observation import observe_llm_call
+from core.hooks.llm_observation import observe_llm_call, resolve_llm_correlation
 from core.hooks.system import RuntimeEvent, RuntimeEventBus
 from core.llm.adapters.base import (
     AdapterCallRequest,
@@ -256,7 +256,7 @@ class MiddlewareRegistry:
                     correlation=copy.deepcopy(dict(request.correlation)),
                 )
             except BaseException as exc:
-                await self._record(
+                await self._record_failure(
                     surface="tool_request",
                     registration=registration,
                     outcome="error",
@@ -318,7 +318,7 @@ class MiddlewareRegistry:
                     correlation=copy.deepcopy(dict(request.correlation)),
                 )
             except BaseException as exc:
-                await self._record(
+                await self._record_failure(
                     surface="llm_request",
                     registration=registration,
                     outcome="error",
@@ -441,11 +441,14 @@ class MiddlewareRegistry:
         purpose: str | None = None,
     ) -> AdapterCallResult:
         """Run both LLM join points around one ``adapter.acomplete`` call."""
+        call_correlation = dict(correlation or {})
+        if purpose is not None:
+            call_correlation = resolve_llm_correlation(call_correlation)
         transformed = await self.llm_request(
             LlmCallRequest(
                 adapter=adapter,
                 request=request,
-                correlation=dict(correlation or {}),
+                correlation=call_correlation,
             )
         )
 
@@ -527,7 +530,7 @@ class MiddlewareRegistry:
         except BaseException as exc:
             _restore_physical_context(request.context, before_context)
             _restore_correlation(request.correlation, before_correlation)
-            await self._record(
+            await self._record_failure(
                 surface="tool_execution",
                 registration=registration,
                 outcome="error",
@@ -620,7 +623,7 @@ class MiddlewareRegistry:
                 )
         except BaseException as exc:
             _restore_correlation(request.correlation, before_correlation)
-            await self._record(
+            await self._record_failure(
                 surface="llm_execution",
                 registration=registration,
                 outcome="error",
@@ -726,6 +729,13 @@ class MiddlewareRegistry:
                 registration.name,
                 exc_info=True,
             )
+
+    async def _record_failure(self, **kwargs: Any) -> None:
+        """Record failure telemetry without masking the primary exception."""
+        try:
+            await self._record(**kwargs)
+        except BaseException as exc:
+            log.warning("Middleware failure telemetry interrupted: %s", type(exc).__name__)
 
 
 def _request_hash(request: ToolCallRequest | LlmCallRequest) -> str:

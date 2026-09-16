@@ -217,22 +217,9 @@ def capture_output() -> Generator[StringIO, None, None]:
             console.print("[bold]hello[/bold]")
         text = buf.getvalue()   # contains ANSI-styled text
     """
-    from rich.color import ColorSystem
-
     buf = StringIO()
-    old_file = console._file
-    old_force = console._force_terminal
-    old_color = console._color_system
-    console._file = buf
-    console._force_terminal = True
-    if old_color is None:
-        console._color_system = ColorSystem.TRUECOLOR
-    try:
+    with redirect_console(buf):
         yield buf
-    finally:
-        console._file = old_file
-        console._force_terminal = old_force
-        console._color_system = old_color
 
 
 @contextmanager
@@ -244,18 +231,12 @@ def redirect_console(target: Any) -> Generator[None, None, None]:
 
     Task/thread-safe: operates on the local Console (via the proxy).
     """
-    from rich.color import ColorSystem
-
-    old_file = console._file
-    old_force = console._force_terminal
-    old_color = console._color_system
-    console._file = target
-    console._force_terminal = True
-    if old_color is None:
-        console._color_system = ColorSystem.TRUECOLOR
+    prior = getattr(_ConsoleProxy._local, "console", None)
+    set_thread_console(make_session_console(target, force_terminal=True))
     try:
         yield
     finally:
-        console._file = old_file
-        console._force_terminal = old_force
-        console._color_system = old_color
+        if prior is None:
+            reset_thread_console()
+        else:
+            set_thread_console(prior)

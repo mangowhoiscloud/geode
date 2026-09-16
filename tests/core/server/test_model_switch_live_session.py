@@ -10,8 +10,10 @@ re-points the live loop after a ``/model`` command lands.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from core.server.ipc_server.poller import CLIPoller
@@ -19,6 +21,10 @@ from core.server.ipc_server.poller import CLIPoller
 
 class _FakeLoop:
     def __init__(self) -> None:
+        from core.agent.conversation import ConversationContext
+
+        self.context = ConversationContext()
+        self._hooks = None
         self.model = "claude-opus-4-8"
         self._provider = "anthropic"
         self._tool_processor = type("_TP", (), {"_model": "claude-opus-4-8"})()
@@ -50,10 +56,12 @@ def test_sync_repoints_live_loop_model(poller: CLIPoller, monkeypatch) -> None:
     loop = _FakeLoop()
     monkeypatch.setattr(
         "core.agent.loop._model_switching.adapt_context_for_model",
-        lambda current_loop, target: setattr(current_loop, "adapted_to", target),
+        AsyncMock(
+            side_effect=lambda current_loop, target: setattr(current_loop, "adapted_to", target)
+        ),
     )
     # primary moved: model_before is the old value, settings.model is the new
-    poller._sync_live_loop_to_settings(loop, "claude-opus-4-8", "high")
+    asyncio.run(poller._sync_live_loop_to_settings(loop, "claude-opus-4-8", "high"))
     assert loop.model == "claude-fable-5"
     assert loop._provider == "anthropic"
     assert loop.adapted_to == "claude-fable-5"
@@ -62,7 +70,7 @@ def test_sync_repoints_live_loop_model(poller: CLIPoller, monkeypatch) -> None:
 def test_sync_repoints_effort(poller: CLIPoller, monkeypatch) -> None:
     monkeypatch.setattr("core.config.settings", _FakeSettings(), raising=False)
     loop = _FakeLoop()
-    poller._sync_live_loop_to_settings(loop, "claude-opus-4-8", "high")
+    asyncio.run(poller._sync_live_loop_to_settings(loop, "claude-opus-4-8", "high"))
     assert loop._effort == "xhigh"
 
 
@@ -78,7 +86,11 @@ def test_sync_noop_when_primary_unchanged(poller: CLIPoller, monkeypatch) -> Non
     # settings.model == model_before (= "claude-fable-5" here as the captured
     # pre-command value), so nothing should move.
     loop.model = "claude-fable-5"
-    poller._sync_live_loop_to_settings(loop, model_before="claude-fable-5", effort_before="xhigh")
+    asyncio.run(
+        poller._sync_live_loop_to_settings(
+            loop, model_before="claude-fable-5", effort_before="xhigh"
+        )
+    )
     assert loop.model == "claude-fable-5"  # NOT clobbered back to settings.model
     assert loop.adapted_to is None
 
@@ -91,7 +103,7 @@ def test_sync_noop_when_already_current(poller: CLIPoller, monkeypatch) -> None:
     monkeypatch.setattr("core.config.settings", _SameSettings(), raising=False)
     loop = _FakeLoop()
     # primary "changed" to the value the loop already holds → no re-adapt
-    poller._sync_live_loop_to_settings(loop, "claude-haiku-4-5", "high")
+    asyncio.run(poller._sync_live_loop_to_settings(loop, "claude-haiku-4-5", "high"))
     assert loop.adapted_to is None
     assert loop.model == "claude-opus-4-8"
 
@@ -106,8 +118,10 @@ def test_handle_command_on_server_syncs_after_model(poller: CLIPoller, monkeypat
     assert "model_before" in source
 
 
-def test_sync_survives_apply_failure(poller: CLIPoller, monkeypatch) -> None:
-    """A swap failure must not crash command handling — effort still syncs."""
+def test_sync_reports_apply_failure_without_switching_effort(
+    poller: CLIPoller, monkeypatch
+) -> None:
+    """The command boundary must return an error, not a false model-switch success."""
 
     def _boom(*_a: Any, **_k: Any) -> tuple[str, bool]:
         raise RuntimeError("adapter resolution failed")
@@ -115,5 +129,6 @@ def test_sync_survives_apply_failure(poller: CLIPoller, monkeypatch) -> None:
     monkeypatch.setattr("core.config.settings", _FakeSettings(), raising=False)
     monkeypatch.setattr("core.agent.loop._model_switching._apply_model_update", _boom)
     loop = _FakeLoop()
-    poller._sync_live_loop_to_settings(loop, "claude-opus-4-8", "high")  # must not raise
-    assert loop._effort == "xhigh"  # effort axis still applied
+    with pytest.raises(RuntimeError, match="adapter resolution failed"):
+        asyncio.run(poller._sync_live_loop_to_settings(loop, "claude-opus-4-8", "high"))
+    assert loop._effort == "high"

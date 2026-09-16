@@ -91,6 +91,37 @@ def format_cache_tokens(read_tokens: int, write_tokens: int) -> str:
     return f"cache read {read_tokens:,} / write {write_tokens:,} tok"
 
 
+def format_context_event(
+    action: str,
+    *,
+    original_count: int = 0,
+    new_count: int = 0,
+    status: str = "changed",
+    trigger: str = "overflow",
+    error_type: str = "",
+) -> str:
+    """Describe the reported context operation without inventing token savings."""
+    if action == "exhausted":
+        return "Context exhausted — recovery could not free enough space"
+    operation = "summary" if action == "compact" else "prune" if action == "prune" else "operation"
+    origin = {
+        "manual": "manual",
+        "tool": "requested by tool",
+        "model_switch": "model switch",
+    }.get(trigger, "automatic")
+    if status == "changed":
+        verb = "summarized" if action == "compact" else "pruned"
+        return f"Context {verb} ({origin}): {original_count} → {new_count} messages"
+    if status == "unchanged":
+        return f"Context unchanged ({origin} {operation}): {new_count} messages"
+    if status == "deferred":
+        return f"Context {operation} deferred ({origin}) — history retained"
+    if status == "unsupported":
+        return f"Context {operation} unavailable ({origin}) — history retained"
+    detail = f" ({error_type})" if error_type else ""
+    return f"Context {operation} failed ({origin}) — history retained{detail}"
+
+
 @dataclass
 class _ThinkingRegion:
     start_ts: float
@@ -460,20 +491,18 @@ class EventRenderer:
 
     def _handle_context_event(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
-        action = str(event.get("action", ""))
-        before = int(event.get("before", 0))
-        after = int(event.get("after", 0))
-        removed = int(event.get("removed", before - after))
-        tokens_est = int(event.get("tokens_estimate", removed * 250))
-        if action == "exhausted":
-            self._out.write(f"  {WARN}{GLYPH_CYCLE} Context exhausted{RESET}\n")
-        else:
-            label = "compacted" if action == "compact" else "pruned"
-            tok_str = f", ~{tokens_est // 1000}k tokens freed" if tokens_est >= 1000 else ""
-            self._out.write(
-                f"  {DIM}{GLYPH_CYCLE} Context {label}: {before} {GLYPH_ARROW} {after} messages"
-                f" ({removed} removed{tok_str}){RESET}\n"
-            )
+        text = format_context_event(
+            str(event.get("action", "")),
+            original_count=int(event.get("before", 0)),
+            new_count=int(event.get("after", 0)),
+            status=str(event.get("status", "changed")),
+            trigger=str(event.get("trigger", "overflow")),
+            error_type=str(event.get("error_type", "")),
+        )
+        color = (
+            WARN if event.get("status") == "failed" or event.get("action") == "exhausted" else DIM
+        )
+        self._out.write(f"  {color}{GLYPH_CYCLE} {text}{RESET}\n")
         self._out.flush()
 
     def _handle_subagent_dispatch(self, event: dict[str, Any]) -> None:

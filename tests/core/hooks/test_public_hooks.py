@@ -19,6 +19,8 @@ from core.hooks import (
     HookName,
     HookRegistry,
     InvalidHookPayloadError,
+    RuntimeEvent,
+    RuntimeEventBus,
     public_hook_schema,
 )
 from jsonschema import Draft202012Validator
@@ -56,6 +58,117 @@ def test_unknown_hook_name_is_rejected() -> None:
 
     with pytest.raises(ValueError):
         registry.register(cast(HookName, "LLMCallStart"), lambda _invocation: None)
+
+
+def test_pre_verify_strengthen_requires_a_concrete_miss() -> None:
+    registry = HookRegistry()
+    registry.register(
+        HookName.PRE_VERIFY,
+        lambda _invocation: HookDecision(
+            action=HookAction.STRENGTHEN,
+            instruction="Require independent evidence.",
+        ),
+    )
+
+    outcome = asyncio.run(
+        registry.invoke(
+            HookName.PRE_VERIFY,
+            payload={
+                "candidate_summary": "candidate",
+                "rounds": 1,
+                "tool_call_count": 0,
+                "termination_reason": "completed",
+            },
+        )
+    )
+    assert outcome.decisions == ()
+    assert "additional miss" in outcome.handler_errors[0]
+
+
+@pytest.mark.parametrize(
+    ("hook", "payload"),
+    [
+        (HookName.USER_PROMPT_SUBMIT, {"user_input": "hello"}),
+        (
+            HookName.PERMISSION_REQUEST,
+            {"tool_name": "run_bash", "safety_level": "write", "detail": "test"},
+        ),
+        (
+            HookName.POST_VERIFY,
+            {
+                "passed": False,
+                "mode": "strict",
+                "score": 0.0,
+                "rubric_misses": ["test"],
+                "termination_reason": "end_turn",
+                "rounds": 1,
+                "tool_call_count": 0,
+                "candidate_summary": "candidate",
+            },
+        ),
+        (
+            HookName.STOP,
+            {
+                "passed": False,
+                "mode": "strict",
+                "score": 0.0,
+                "rubric_misses": ["test"],
+                "termination_reason": "end_turn",
+                "rounds": 1,
+                "tool_call_count": 0,
+                "candidate_summary": "candidate",
+                "policy_action": "escalate",
+                "evidence_refs": [],
+            },
+        ),
+    ],
+)
+def test_observer_returning_none_has_no_decision(hook: HookName, payload: dict[str, Any]) -> None:
+    events = RuntimeEventBus()
+    recorded: list[dict[str, Any]] = []
+    events.subscribe(RuntimeEvent.EXTENSION_INVOKED, lambda _event, data: recorded.append(data))
+    registry = HookRegistry(events=events)
+    registry.register(hook, lambda _invocation: None, name="first", priority=10)
+    registry.register(hook, lambda _invocation: None, name="second", priority=20)
+
+    outcome = asyncio.run(registry.invoke(hook, payload=payload))
+
+    assert outcome.decisions == outcome.decision_sources == outcome.handler_errors == ()
+    assert [record["extension"] for record in recorded] == ["first", "second"]
+    assert all(record["status"] == "ok" for record in recorded)
+
+
+@pytest.mark.parametrize("interrupt_audit", [False, True])
+def test_cancelled_handler_is_not_a_success_and_preserves_original(interrupt_audit: bool) -> None:
+    events = RuntimeEventBus()
+    recorded: list[dict[str, Any]] = []
+    tail: list[str] = []
+    original = asyncio.CancelledError("private cancellation reason")
+
+    def observe(_event: RuntimeEvent, data: dict[str, Any]) -> None:
+        recorded.append(data)
+        if interrupt_audit:
+            raise asyncio.CancelledError("private audit cancellation")
+
+    async def cancelled(_invocation: HookInvocation) -> None:
+        raise original
+
+    events.subscribe(RuntimeEvent.EXTENSION_INVOKED, observe)
+    registry = HookRegistry(events=events)
+    registry.register(HookName.USER_PROMPT_SUBMIT, cancelled, name="cancelled", priority=10)
+    registry.register(
+        HookName.USER_PROMPT_SUBMIT, lambda _invocation: tail.append("not-run"), priority=20
+    )
+
+    with pytest.raises(asyncio.CancelledError) as raised:
+        asyncio.run(registry.invoke(HookName.USER_PROMPT_SUBMIT, payload={"user_input": "hello"}))
+
+    assert raised.value is original
+    assert tail == []
+    assert len(recorded) == 1
+    assert recorded[0]["status"] == "error"
+    assert recorded[0]["reason"] == "CancelledError"
+    assert "private" not in str(recorded)
 
 
 @_async_test

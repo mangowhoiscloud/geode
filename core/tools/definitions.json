@@ -1917,9 +1917,9 @@
   },
   {
     "name": "manage_context",
-    "description": "Manage the conversation's context window. action=status reports token usage, compact compresses history, clear fully resets it. Use when the user says 'compact', 'clear/reset context', or asks how many tokens are used. clear is destructive — it needs force=true to skip the confirmation.",
+    "description": "Manage the conversation's context window. status reports estimated token usage; compact requests a model-generated summary; prune explicitly discards older history; clear fully resets it. Use when the user requests context management. Summarization can use the active model's allowance or API credits. clear needs force=true to confirm deletion. Results distinguish changed, unchanged, deferred, failed, and unsupported operations.",
     "category": "model",
-    "cost_tier": "free",
+    "cost_tier": "cheap",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1927,14 +1927,15 @@
           "type": "string",
           "enum": [
             "compact",
+            "prune",
             "clear",
             "status"
           ],
-          "description": "compact: compress conversation, clear: full reset, status: check current token usage"
+          "description": "compact: summarize history with the active model; prune: explicitly retain only the recent safe tool boundary; clear: full reset; status: inspect estimated token usage"
         },
         "force": {
           "type": "boolean",
-          "description": "If true, executes without confirmation (applies to clear). Default: false."
+          "description": "Confirm clear. For compatibility, compact with force=true is an explicit prune alias. Default: false."
         }
       },
       "required": [

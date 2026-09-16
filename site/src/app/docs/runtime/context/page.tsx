@@ -96,13 +96,14 @@ export default function Page() {
                 수준에서만 클라이언트가 비상 정리(prune)를 수행합니다.
               </li>
               <li>
-                <strong>OpenAI / GLM</strong>. 서버 측 압축이 없어 클라이언트가
-                3단계 압력 대응을 순차 실행합니다. (1) 값싼 도구 압축 — 오래된
+                <strong>OpenAI / GLM</strong>. GEODE의 현재 연결은 텍스트 요약
+                경로를 사용합니다. (1) 값싼 도구 압축 — 오래된
                 관측 마스킹(<code>mask_stale_observations</code>)과 큰 도구
                 결과 요약(<code>summarize_tool_results</code>, LLM 호출 없음),
                 (2) 구조화 LLM 압축(<code>compact_conversation</code>),
-                (3) 압축으로 부족하거나 실패하면 적응형
-                정리(<code>adaptive_prune</code>).
+                (3) 명시적인 hard 경계에서 압축으로 부족하거나 실패하면
+                적응형 정리(<code>adaptive_prune</code>). 경고 수준의 요약·저장
+                실패는 메시지 삭제로 전환하지 않습니다.
               </li>
             </ul>
             <ul>
@@ -113,9 +114,11 @@ export default function Page() {
                 요약 후 필요하면 압축을 강제합니다.
               </li>
               <li>
-                전략 선택은 <code>CONTEXT_OVERFLOW_ACTION</code> 훅 핸들러에
-                위임되고, 등록된 핸들러가 없으면 해석된 policy가 폴백입니다.
-                임계 상태에서는 <code>CONTEXT_CRITICAL</code> 훅이 발화합니다.
+                전략 선택은 <code>ContextWindowManager</code>의 domain
+                policy가 소유합니다. <code>PreCompact</code>는 soft 압축을
+                유예할 수 있고, <code>PostCompact</code>는 성공한 교체 뒤에
+                실행됩니다. <code>CONTEXT_CRITICAL</code>은 관측 이벤트이며,
+                과거 <code>CONTEXT_OVERFLOW_ACTION</code>은 제어에 쓰지 않습니다.
               </li>
               <li>
                 정리 후에도 임계 상태면 루프는{" "}
@@ -135,6 +138,14 @@ export default function Page() {
               <code>core/llm/token_tracker.py</code>의{" "}
               <code>MODEL_CONTEXT_WINDOW</code>가 SoT입니다
               (<code>core/llm/model_pricing.toml</code>이 뒷받침).
+            </p>
+            <p>
+              메시지가 30개를 넘었다는 이유만으로 이력을 버리지 않습니다.
+              토큰 압력 검사는 모델 요청 전에 수행하며, 별도의{" "}
+              <code>ConversationContext.max_turns</code> 보존 한도는 유지합니다.
+              압축 경계에 걸친 병렬 도구 결과는 대응하는 앞선 호출과 함께
+              보존합니다. 요약이나 저장이 실패한 soft 압축은 입력 이력을
+              유지하지만, 앞서 수행한 관측 마스킹까지 되돌리지는 않습니다.
             </p>
 
             <h2>대형 도구 결과: 오프로드</h2>
@@ -198,7 +209,7 @@ export default function Page() {
                 <tr>
                   <td>긴 세션에서 <code>context_exhausted</code> 종료</td>
                   <td>압축 후에도 히스토리가 임계 상태</td>
-                  <td>새 세션을 열거나 <code>/compact</code>로 미리 압축합니다</td>
+                  <td>새 세션을 열거나 <code>/compact</code>로 현재 세션을 요약합니다. <code>--prune</code>일 때만 명시적으로 이력을 정리합니다</td>
                 </tr>
                 <tr>
                   <td>도구 결과가 요약으로만 보임</td>
@@ -306,14 +317,16 @@ export default function Page() {
                 prune.
               </li>
               <li>
-                <strong>OpenAI / GLM</strong>. No server-side compaction, so the
-                client runs a three-stage escalation under pressure.
+                <strong>OpenAI / GLM</strong>. GEODE currently uses text-summary
+                compaction for these adapter routes.
                 (1) Cheap tool compression — mask stale observations
                 (<code>mask_stale_observations</code>) and summarize large tool
                 results (<code>summarize_tool_results</code>), no LLM call;
                 (2) structured LLM compaction (<code>compact_conversation</code>);
-                (3) adaptive prune (<code>adaptive_prune</code>) when compaction
-                is not enough or fails.
+                (3) adaptive prune (<code>adaptive_prune</code>) only at an explicit
+                hard boundary. A failed
+                warning-level summary or artifact write does not fall through
+                to message deletion.
               </li>
             </ul>
             <ul>
@@ -325,10 +338,11 @@ export default function Page() {
                 compacting if needed.
               </li>
               <li>
-                Strategy resolution is delegated to a{" "}
-                <code>CONTEXT_OVERFLOW_ACTION</code> hook handler; when none is
-                registered, the resolved policy is the fallback. A{" "}
-                <code>CONTEXT_CRITICAL</code> hook fires on critical pressure.
+                <code>ContextWindowManager</code> owns strategy resolution through
+                its domain policy. <code>PreCompact</code> may defer soft
+                compaction; <code>PostCompact</code> follows successful replacement.
+                <code>CONTEXT_CRITICAL</code> is an observation, and the legacy
+                <code>CONTEXT_OVERFLOW_ACTION</code> is not a control path.
               </li>
               <li>
                 If the context is still critical after pruning, the loop returns{" "}
@@ -350,6 +364,14 @@ export default function Page() {
               context windows come from <code>MODEL_CONTEXT_WINDOW</code> in{" "}
               <code>core/llm/token_tracker.py</code>, backed by{" "}
               <code>core/llm/model_pricing.toml</code>.
+            </p>
+            <p>
+              Crossing 30 messages alone does not discard history. Token-pressure
+              checks run before model requests; the separate{" "}
+              <code>ConversationContext.max_turns</code> retention limit remains.
+              Parallel tool results crossing the compaction cut retain their
+              preceding calls. Failed soft summarization or persistence keeps
+              its input messages, without rolling back earlier observation masking.
             </p>
 
             <h2>Large tool results: offload</h2>
@@ -421,7 +443,7 @@ export default function Page() {
                 <tr>
                   <td>Long sessions end with <code>context_exhausted</code></td>
                   <td>History remains critical even after compaction</td>
-                  <td>Start a fresh session, or compact early with <code>/compact</code></td>
+                  <td>Start a fresh session, or summarize the current session with <code>/compact</code>. Add <code>--prune</code> only when explicitly requesting lossful history reduction</td>
                 </tr>
                 <tr>
                   <td>A tool result shows up only as a summary</td>

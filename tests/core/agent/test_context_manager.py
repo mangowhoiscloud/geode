@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from core.agent.context_manager import ContextWindowManager
 from core.agent.loop import _ContextExhaustedError
 from core.hooks import HookAction, HookDecision, HookName, HookRegistry
@@ -18,29 +19,33 @@ class TestContextWindowManager:
     def _make_mgr(self, *, quiet: bool = True) -> ContextWindowManager:
         return ContextWindowManager(hooks=None, quiet=quiet)
 
-    # -- maybe_prune_messages --
-
-    def test_no_prune_under_threshold(self) -> None:
-        mgr = self._make_mgr()
-        msgs: list[dict[str, Any]] = [{"role": "user", "content": f"m{i}"} for i in range(10)]
-        mgr.maybe_prune_messages(msgs)
-        assert len(msgs) == 10
-
-    def test_no_prune_at_threshold(self) -> None:
-        mgr = self._make_mgr()
-        msgs: list[dict[str, Any]] = [{"role": "user", "content": f"m{i}"} for i in range(30)]
-        mgr.maybe_prune_messages(msgs)
-        assert len(msgs) == 30
-
-    def test_prune_above_threshold(self) -> None:
-        mgr = self._make_mgr()
-        msgs: list[dict[str, Any]] = [{"role": "user", "content": "first"}]
-        for i in range(1, 32):
-            role = "assistant" if i % 2 else "user"
-            msgs.append({"role": role, "content": f"m{i}"})
-        mgr.maybe_prune_messages(msgs)
-        assert msgs[0]["content"] == "first"
-        assert "(earlier rounds omitted)" in str(msgs[1]["content"])
+    @pytest.mark.parametrize("hard", [False, True])
+    @pytest.mark.parametrize("raises", [False, True])
+    def test_failed_compaction_prunes_only_at_hard_boundary(self, hard: bool, raises: bool) -> None:
+        registry = HookRegistry()
+        post = MagicMock(return_value=None)
+        registry.register(HookName.POST_COMPACT, post)
+        mgr = ContextWindowManager(hooks=None, hook_registry=registry, quiet=True)
+        original = [
+            {"role": "assistant" if i % 2 else "user", "content": f"m{i}"} for i in range(20)
+        ]
+        messages = list(original)
+        compact = AsyncMock(
+            side_effect=OSError("disk full") if raises else None,
+            return_value=(messages, False),
+        )
+        with patch("core.orchestration.compaction.compact_conversation", compact):
+            asyncio.run(
+                mgr._apply_overflow_strategy(
+                    {"strategy": "compact", "hard": hard, "trigger": "test"},
+                    messages,
+                    SimpleNamespace(compact_keep_recent=4),
+                    "gpt-5.6-sol",
+                    "openai",
+                )
+            )
+        assert messages == ([original[0], *original[-4:]] if hard else original)
+        post.assert_not_called()
 
     # -- repair_messages --
 

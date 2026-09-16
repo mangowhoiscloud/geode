@@ -79,7 +79,15 @@ from .login import (
 )
 from .mcp import _mcp_add, cmd_mcp
 from .model import _apply_model, _interactive_model_picker, cmd_model
-from .session import cmd_apply, cmd_clear, cmd_cognitive, cmd_compact, cmd_context, cmd_resume
+from .session import (
+    cmd_apply,
+    cmd_clear,
+    cmd_cognitive,
+    cmd_compact,
+    cmd_compact_async,
+    cmd_context,
+    cmd_resume,
+)
 from .skills import _skills_add, cmd_skill_invoke, cmd_skills
 from .tasks import cmd_tasks
 from .trigger import cmd_trigger
@@ -115,6 +123,7 @@ __all__ = [
     "cmd_clear",
     "cmd_cognitive",
     "cmd_compact",
+    "cmd_compact_async",
     "cmd_context",
     "cmd_cost",
     "cmd_goal",

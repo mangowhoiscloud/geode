@@ -9,7 +9,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 from core.agent.cognitive_state_ctx import get_turn_id
 from core.hooks import (
@@ -22,11 +22,19 @@ from core.hooks import (
 )
 from core.orchestration.context_budget import (
     ABSOLUTE_TOKEN_CEILING,
-    PRUNE_ACTIVATION_MESSAGE_COUNT,
     resolve_context_budget_policy,
 )
 
 log = logging.getLogger(__name__)
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ContextOperationResult:
+    action: Literal["compact", "prune", "none"]
+    status: Literal["changed", "unchanged", "deferred", "failed", "unsupported"]
+    original_count: int
+    new_count: int
+    error_type: str = ""
 
 
 class ContextWindowManager:
@@ -44,6 +52,7 @@ class ContextWindowManager:
         quiet: bool,
         session_id_provider: Callable[[], str | None] | None = None,
         effort_provider: Callable[[], str] | None = None,
+        source_provider: Callable[[], str] | None = None,
     ) -> None:
         self._hooks = hooks
         self._hook_registry = hook_registry
@@ -53,49 +62,40 @@ class ContextWindowManager:
         # path never persists context_artifacts (writer-reader parity).
         self._session_id_provider = session_id_provider
         self._effort_provider = effort_provider
+        self._source_provider = source_provider
 
-    def maybe_prune_messages(self, messages: list[dict[str, Any]]) -> None:
-        """Prune old messages when conversation exceeds 5 rounds (10 msgs).
+    async def compact(
+        self,
+        messages: list[dict[str, Any]],
+        model: str,
+        provider: str,
+        *,
+        prune: bool = False,
+        keep_recent: int | None = None,
+        trigger: str = "manual",
+        commit: Callable[[], None] | None = None,
+    ) -> ContextOperationResult:
+        """Run explicit summary or lossful pruning through the same runtime owner."""
+        from core.config import settings
 
-        Keeps first user message + bridge + recent messages for context budget.
-        Ensures:
-        1. user/assistant alternation is preserved
-        2. No orphaned tool_result messages (each tool_result must follow
-           an assistant message containing the matching tool_use block)
-        """
-        if len(messages) <= PRUNE_ACTIVATION_MESSAGE_COUNT:
-            return
-        first = messages[0]
-        # Walk backward to find a safe cut point:
-        # - Must be a "user" role message
-        # - Must NOT be a tool_result message (those need a preceding tool_use)
-        safe_cut = None
-        for candidate in range(-4, -(len(messages)), -1):
-            idx = len(messages) + candidate
-            if idx <= 0:
-                break
-            msg = messages[idx]
-            if msg["role"] != "user":
-                continue
-            content = msg.get("content")
-            if isinstance(content, list) and any(
-                isinstance(b, dict) and b.get("type") == "tool_result" for b in content
-            ):
-                continue  # Skip — orphaned tool_result after pruning
-            safe_cut = candidate
-            break
-
-        if safe_cut is None:
-            return
-
-        recent = messages[safe_cut:]
-        bridge: dict[str, Any] = {
-            "role": "assistant",
-            "content": [{"type": "text", "text": "(earlier rounds omitted)"}],
-        }
-        messages.clear()
-        messages.extend([first, bridge, *recent])
-        log.debug("Pruned messages: kept first + bridge + %d recent", len(recent))
+        policy = resolve_context_budget_policy(model)
+        return await self._apply_overflow_strategy(
+            {
+                "strategy": "prune" if prune else "compact",
+                "keep_recent": keep_recent
+                if keep_recent is not None
+                else policy.resolve_keep_recent(settings.compact_keep_recent),
+                "policy": policy,
+                "trigger": trigger,
+                "hard": prune,
+                "notify": False,
+            },
+            messages,
+            settings,
+            model,
+            provider,
+            commit=commit,
+        )
 
     async def check_context_overflow(
         self,
@@ -109,7 +109,7 @@ class ContextWindowManager:
         Strategy by provider:
         - Anthropic: server-side compaction handles warning-level pressure.
           Client only intervenes at the policy critical threshold.
-        - OpenAI/GLM: no server-side compaction. Client triggers LLM-based
+        - OpenAI/GLM: GEODE uses client-side text compaction. It triggers LLM-based
           compaction at warning pressure and emergency prune at critical pressure.
 
         The policy also carries the absolute ceiling that avoids large-context
@@ -260,16 +260,51 @@ class ContextWindowManager:
         settings: Any,
         model: str,
         provider: str,
-    ) -> None:
+        *,
+        commit: Callable[[], None] | None = None,
+    ) -> ContextOperationResult:
         """Execute the overflow strategy (prune or compact)."""
         from core.orchestration.context_monitor import prune_oldest_messages
 
         action = strategy.get("strategy", "none")
         keep_recent = strategy.get("keep_recent", settings.compact_keep_recent)
+        original_count = len(messages)
+        trigger = strategy.get("trigger", "overflow")
+
+        def replace_messages(replacement: list[dict[str, Any]]) -> None:
+            original = list(messages)
+            messages[:] = replacement
+            try:
+                if commit is not None:
+                    commit()
+            except BaseException:
+                messages[:] = original
+                raise
+
+        def finish(
+            action: Literal["compact", "prune", "none"],
+            status: Literal["changed", "unchanged", "deferred", "failed", "unsupported"],
+            error_type: str = "",
+        ) -> ContextOperationResult:
+            result = ContextOperationResult(
+                action, status, original_count, len(messages), error_type
+            )
+            if action != "none" and strategy.get("notify", True):
+                self._notify_context_event(
+                    action,
+                    original_count=original_count,
+                    new_count=len(messages),
+                    status=status,
+                    trigger=trigger,
+                    error_type=error_type,
+                )
+            return result
 
         if action == "compact":
             from core.orchestration.compaction import compact_conversation
 
+            if provider == "anthropic":
+                return finish("compact", "unsupported")
             try:
                 session_id = self._session_id_provider() if self._session_id_provider else None
                 correlation = HookCorrelation(
@@ -297,12 +332,13 @@ class ContextWindowManager:
                     )
                     if deferred and not strategy.get("hard", False):
                         log.info("Soft context compaction deferred by PreCompact")
-                        return
+                        return finish("compact", "deferred")
                 new_msgs, did_compact = await compact_conversation(
                     messages,
                     provider=provider,
                     model=model,
                     effort=self._effort_provider() if self._effort_provider else None,
+                    source=self._source_provider() if self._source_provider else None,
                     keep_recent=keep_recent,
                     policy=strategy.get("policy"),
                     session_id=session_id,
@@ -311,14 +347,7 @@ class ContextWindowManager:
                     correlation=dataclasses.asdict(correlation),
                 )
                 if did_compact:
-                    original_count = len(messages)
-                    messages.clear()
-                    messages.extend(new_msgs)
-                    self._notify_context_event(
-                        "compact",
-                        original_count=original_count,
-                        new_count=len(new_msgs),
-                    )
+                    replace_messages(new_msgs)
                     if self._hook_registry is not None:
                         await self._hook_registry.invoke(
                             HookName.POST_COMPACT,
@@ -333,31 +362,40 @@ class ContextWindowManager:
                             },
                             correlation=correlation,
                         )
-                    return
-            except Exception:
-                log.warning("Client compaction failed — falling back to prune", exc_info=True)
-            # Fall through to prune on failure
+                    return finish("compact", "changed")
+            except Exception as exc:
+                log.warning("Client compaction failed", exc_info=True)
+                if not strategy.get("hard", False):
+                    return finish("compact", "failed", type(exc).__name__)
+            # Soft maintenance must not turn a failed summary or durable write
+            # into irreversible history loss. Only an explicit hard boundary
+            # permits the emergency prune fallback.
+            if not strategy.get("hard", False):
+                return finish("compact", "unchanged")
             action = "prune"
 
         if action == "prune":
-            pruned = prune_oldest_messages(messages, keep_recent=keep_recent)
-            original_count = len(messages)
-            if len(pruned) < original_count:
-                from core.orchestration.compaction import repair_tool_pairs
+            # Expand the retained tail to keep parallel call/result pairs intact.
+            from core.orchestration.compaction import find_safe_boundary, repair_tool_pairs
 
-                messages.clear()
-                messages.extend(repair_tool_pairs(pruned))
+            boundary = find_safe_boundary(messages, keep_recent=keep_recent)
+            keep_recent = len(messages) - boundary
+            pruned = prune_oldest_messages(messages, keep_recent=keep_recent)
+            if len(pruned) < original_count:
+                try:
+                    replace_messages(repair_tool_pairs(pruned))
+                except Exception as exc:
+                    log.warning("Context prune commit failed", exc_info=True)
+                    return finish("prune", "failed", type(exc).__name__)
                 log.info(
                     "Emergency pruned: %d → %d messages (keep_recent=%d)",
                     original_count,
                     len(pruned),
                     keep_recent,
                 )
-                self._notify_context_event(
-                    "prune",
-                    original_count=original_count,
-                    new_count=len(pruned),
-                )
+                return finish("prune", "changed")
+            return finish("prune", "unchanged")
+        return finish("none", "unchanged")
 
     async def aggressive_context_recovery(
         self,
@@ -430,6 +468,9 @@ class ContextWindowManager:
         *,
         original_count: int,
         new_count: int,
+        status: str = "changed",
+        trigger: str = "overflow",
+        error_type: str = "",
     ) -> None:
         """Notify user of automatic context compression via UI."""
         if self._quiet:
@@ -437,7 +478,14 @@ class ContextWindowManager:
         try:
             from core.ui.agentic_ui import render_context_event
 
-            render_context_event(event_type, original_count=original_count, new_count=new_count)
+            render_context_event(
+                event_type,
+                original_count=original_count,
+                new_count=new_count,
+                status=status,
+                trigger=trigger,
+                error_type=error_type,
+            )
         except Exception:
             log.debug("Context event notification failed", exc_info=True)
 

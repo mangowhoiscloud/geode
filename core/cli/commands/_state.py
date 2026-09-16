@@ -360,7 +360,9 @@ def show_help(command_registry: _Any = None) -> None:
     console.print("  [label]/context[/label]            — Show assembled context tiers")
     console.print("  [label]/apply[/label]              — Manage job applications")
     console.print("  [label]/tasks[/label]              — Show task list")
-    console.print("  [label]/compact[/label]            — Compact conversation context")
+    console.print(
+        "  [label]/compact[/label]            — Summarize context; --prune discards older history"
+    )
     console.print("  [label]/clear[/label]              — Clear conversation history")
     console.print("  [label]/help[/label]               — Show this help")
     console.print("  [label]/quit[/label]               — Exit GEODE")

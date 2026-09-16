@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+from core.agent.context_manager import ContextWindowManager
+from core.agent.conversation import ConversationContext
 from core.orchestration.context_monitor import (
     adaptive_prune,
     estimate_message_tokens,
@@ -148,11 +153,14 @@ class TestUsagePctUncapped:
 
 
 class TestCmdCompact:
-    def _make_ctx(self, messages: list[dict[str, Any]]) -> MagicMock:
-        ctx = MagicMock()
-        ctx.messages = messages
-        ctx._sanitize_tool_pairs = MagicMock()
-        return ctx
+    def _make_loop(self, messages: list[dict[str, Any]]) -> SimpleNamespace:
+        return SimpleNamespace(
+            context=ConversationContext(messages=messages),
+            model="gpt-5.6-sol",
+            _provider="openai",
+            _ctx_mgr=ContextWindowManager(hooks=None, quiet=True),
+            _checkpoint=None,
+        )
 
     def test_compact_empty(self):
         from core.cli.commands import cmd_compact, set_conversation_context
@@ -161,30 +169,76 @@ class TestCmdCompact:
         cmd_compact("")  # should not raise
 
     def test_compact_normal(self):
-        from core.cli.commands import cmd_compact, set_conversation_context
+        from core.cli.commands import cmd_compact
 
-        msgs = _build_conversation(10, tool_result_size=500)
-        ctx = self._make_ctx(msgs)
-        set_conversation_context(ctx)
+        loop = self._make_loop(_build_conversation(10, tool_result_size=500))
+        with patch(
+            "core.orchestration.compaction._call_summarize", AsyncMock(return_value="SUMMARY")
+        ):
+            result = cmd_compact("", agentic_ref=loop)
 
-        with patch("core.config.settings") as mock_settings:
-            mock_settings.model = "glm-5"
-            cmd_compact("")
+        assert result.status == "changed"
+        assert result.action == "compact"
+        assert loop.context.messages[0]["content"] == "[Conversation Summary]\nSUMMARY"
 
-        ctx._sanitize_tool_pairs.assert_called_once()
+    @pytest.mark.parametrize("flag", ["--prune", "--hard"])
+    def test_compact_explicit_prune(self, flag: str):
+        from core.cli.commands import cmd_compact
 
-    def test_compact_hard(self):
-        from core.cli.commands import cmd_compact, set_conversation_context
+        loop = self._make_loop(_build_conversation(10, tool_result_size=500))
+        with patch("core.orchestration.compaction._call_summarize", AsyncMock()) as summarize:
+            result = cmd_compact(flag, agentic_ref=loop)
 
-        msgs = _build_conversation(10, tool_result_size=500)
-        ctx = self._make_ctx(msgs)
-        set_conversation_context(ctx)
+        assert result.action == "prune"
+        assert result.status == "changed"
+        assert loop.context.messages[0]["content"] == "initial question"
+        assert len(loop.context.messages) == 3
+        assert loop.context.messages[1]["content"][0]["id"] == "tool_9"
+        assert loop.context.messages[2]["content"][0]["tool_use_id"] == "tool_9"
+        summarize.assert_not_called()
 
-        with patch("core.config.settings") as mock_settings:
-            mock_settings.model = "glm-5"
-            cmd_compact("--hard")
+    @pytest.mark.parametrize("flag", ["", "--prune"])
+    def test_compact_failed_checkpoint_restores_history(self, flag: str):
+        from core.cli.commands import cmd_compact
+        from core.hooks import HookName, HookRegistry
 
-        assert len(ctx.messages) == 2
+        original = _build_conversation(10)
+        loop = self._make_loop(list(original))
+        loop._session_id = "s1"
+        loop._checkpoint = SimpleNamespace(
+            load=MagicMock(return_value=SimpleNamespace(user_input="request", round_idx=4))
+        )
+        loop._save_checkpoint = MagicMock(return_value=False)
+        registry = HookRegistry()
+        post = MagicMock(return_value=None)
+        registry.register(HookName.POST_COMPACT, post)
+        loop._ctx_mgr = ContextWindowManager(hooks=None, hook_registry=registry, quiet=True)
+        with patch(
+            "core.orchestration.compaction._call_summarize", AsyncMock(return_value="SUMMARY")
+        ):
+            result = cmd_compact(flag, agentic_ref=loop)
+
+        assert result.status == "failed"
+        assert result.error_type == "RuntimeError"
+        assert loop.context.messages == original
+        loop._save_checkpoint.assert_called_once_with("request", round_idx=4, strict_messages=True)
+        post.assert_not_called()
+
+    def test_async_dispatch_awaits_compaction_on_current_loop(self):
+        from core.agent.context_manager import ContextOperationResult
+        from core.cli.dispatcher import _handle_command_async
+
+        async def check() -> None:
+            current = asyncio.get_running_loop()
+
+            async def compact(*args: Any, **kwargs: Any) -> ContextOperationResult:
+                assert asyncio.get_running_loop() is current
+                return ContextOperationResult("compact", "unchanged", 1, 1)
+
+            with patch("core.cli.commands.cmd_compact_async", compact):
+                assert await _handle_command_async("/compact", "", False) == (False, False, None)
+
+        asyncio.run(check())
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +403,7 @@ class TestManageContextHandler:
         handlers = _build_context_handlers()
         with patch("core.config.settings") as mock_settings:
             mock_settings.model = "claude-opus-4-6"
-            result = handlers["manage_context"](action="status")
+            result = asyncio.run(handlers["manage_context"](action="status"))
 
         assert result["status"] == "ok"
         assert result["messages"] == 2
@@ -363,7 +417,7 @@ class TestManageContextHandler:
         set_conversation_context(ctx)
 
         handlers = _build_context_handlers()
-        result = handlers["manage_context"](action="clear", force=False)
+        result = asyncio.run(handlers["manage_context"](action="clear", force=False))
         assert result["status"] == "confirmation_needed"
         ctx.clear.assert_not_called()
 
@@ -376,7 +430,7 @@ class TestManageContextHandler:
         set_conversation_context(ctx)
 
         handlers = _build_context_handlers()
-        result = handlers["manage_context"](action="clear", force=True)
+        result = asyncio.run(handlers["manage_context"](action="clear", force=True))
         assert result["status"] == "ok"
         ctx.clear.assert_called_once()
 
@@ -386,8 +440,38 @@ class TestManageContextHandler:
 
         set_conversation_context(None)
         handlers = _build_context_handlers()
-        result = handlers["manage_context"](action="status")
+        result = asyncio.run(handlers["manage_context"](action="status"))
         assert "error" in result
+
+    @pytest.mark.parametrize(
+        "action,force", [("compact", False), ("prune", False), ("compact", True)]
+    )
+    def test_compaction_updates_active_turn_not_the_session_copy(self, action: str, force: bool):
+        from core.cli.tool_handlers import _build_context_handlers
+        from core.tools.base import ToolContext
+
+        original = _build_conversation(10)
+        active = list(original)
+        ctx = ConversationContext(messages=list(original))
+        loop = SimpleNamespace(
+            context=ctx,
+            model="gpt-5.6-sol",
+            _provider="openai",
+            _turn_state=SimpleNamespace(messages=active),
+            _ctx_mgr=ContextWindowManager(hooks=None, quiet=True),
+        )
+        handler = _build_context_handlers()["manage_context"]
+        with patch(
+            "core.orchestration.compaction._call_summarize", AsyncMock(return_value="SUMMARY")
+        ):
+            result = asyncio.run(
+                handler(action=action, force=force, _tool_context=ToolContext(agent_loop=loop))
+            )
+
+        assert result["status"] == "changed"
+        assert result["action"] == ("prune" if action == "prune" or force else "compact")
+        assert active != original
+        assert ctx.messages == original
 
 
 # ---------------------------------------------------------------------------

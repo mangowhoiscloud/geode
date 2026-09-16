@@ -9,7 +9,7 @@ from core.ui.agentic_ui._state import (
     _ipc_writer_local,
     get_session_meter,
 )
-from core.ui.event_renderer import _fmt_tokens, format_cache_tokens
+from core.ui.event_renderer import _fmt_tokens, format_cache_tokens, format_context_event
 
 
 def render_tool_call(tool_name: str, tool_input: dict[str, Any]) -> None:
@@ -353,13 +353,13 @@ def render_context_event(
     *,
     original_count: int = 0,
     new_count: int = 0,
+    status: str = "changed",
+    trigger: str = "overflow",
+    error_type: str = "",
 ) -> None:
     """Render context compression notification with detail."""
     from core.ui import agentic_ui as _pkg
 
-    removed = original_count - new_count
-    # Rough estimate: ~250 tokens per message on average
-    tokens_est = removed * 250
     writer = getattr(_ipc_writer_local, "writer", None)
     if writer is not None:
         writer.send_event(
@@ -367,18 +367,21 @@ def render_context_event(
             action=event_type,
             before=original_count,
             after=new_count,
-            removed=removed,
-            tokens_estimate=tokens_est,
+            status=status,
+            trigger=trigger,
+            error_type=error_type,
         )
         return
-    if event_type == "exhausted":
-        _pkg.console.print(
-            "  [warning]⟳ Context exhausted — pruning could not free enough space[/warning]"
-        )
-        return
-    label = "compacted" if event_type == "compact" else "pruned"
-    tok_str = f", ~{tokens_est // 1000}k tokens freed" if tokens_est >= 1000 else ""
+    text = format_context_event(
+        event_type,
+        original_count=original_count,
+        new_count=new_count,
+        status=status,
+        trigger=trigger,
+        error_type=error_type,
+    )
     _pkg.console.print(
-        f"  [dim]⟳ Context {label}: {original_count} → {new_count} messages"
-        f" ({removed} removed{tok_str})[/dim]"
+        f"  ⟳ {text}",
+        markup=False,
+        style="warning" if status == "failed" or event_type == "exhausted" else "dim",
     )

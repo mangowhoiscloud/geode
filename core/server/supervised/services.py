@@ -584,6 +584,10 @@ def build_shared_services(
     tool_handlers = {**bound_tool_plan.handlers, **transient_tool_handlers}
 
     # Build hooks if not provided
+    from core.hooks import HookRegistry
+
+    if hook_registry is None:
+        hook_registry = HookRegistry(events=hook_system)
     if owns_hook_system:
         from core.wiring.bootstrap import build_hooks
 
@@ -595,14 +599,11 @@ def build_shared_services(
             feature_hook_registrar=feature_hook_registrar,
             user_profile=user_profile,
             hooks=hook_system,
+            hook_registry=hook_registry,
         )
     elif feature_hook_registrar is not None:
         feature_hook_registrar(hook_system)
 
-    from core.hooks import HookRegistry
-
-    if hook_registry is None:
-        hook_registry = HookRegistry(events=hook_system)
     from core.config.policy_source import EMPTY_POLICY_SOURCES
 
     if policy_sources is None:

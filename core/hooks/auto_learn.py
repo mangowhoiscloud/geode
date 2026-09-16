@@ -18,6 +18,7 @@ from collections import Counter
 from collections.abc import Callable
 from typing import Any
 
+from core.hooks.public import HookInvocation, HookName, HookRegistry
 from core.hooks.system import HookEvent
 
 log = logging.getLogger(__name__)
@@ -169,6 +170,8 @@ def detect_patterns(
 
 def make_auto_learn_handler(
     profile_provider: Callable[[], Any] | None = None,
+    *,
+    hook_registry: HookRegistry | None = None,
 ) -> tuple[str, Callable[..., None]]:
     """Create a TURN_COMPLETE handler that auto-learns user patterns.
 
@@ -178,19 +181,19 @@ def make_auto_learn_handler(
 
     Returns (handler_name, handler_fn) for hook registration.
     """
-    # Per-session state (resets on process restart).
-    #
-    # ``last_learn_ts = float("-inf")`` so the first call always passes the
-    # cooldown gate, regardless of how recently the process started. The
-    # previous init ``0.0`` assumed ``time.monotonic()`` was already past
-    # ``_COOLDOWN_S`` — true for long-lived servers, false for short-lived
-    # pytest-xdist worker processes that the ``load`` distribution strategy
-    # spins up fresh. That mismatch produced flaky failures in
-    # ``tests/core/hooks/test_auto_learn.py::TestAutoLearnHandler`` on PR #1220
-    # (2026-05-17, same commit, two CI runs — one PASS, one FAIL).
-    session_count = 0
-    last_learn_ts: float = float("-inf")
-    tool_counter: Counter[str] = Counter()
+    # The shared handler keeps independent budgets until durable SessionEnd.
+    session_counts: dict[str, int] = {}
+    last_learn_timestamps: dict[str, float] = {}
+    tool_counters: dict[str, Counter[str]] = {}
+
+    def _on_session_end(invocation: HookInvocation) -> None:
+        session_id = invocation.correlation.session_id
+        session_counts.pop(session_id, None)
+        last_learn_timestamps.pop(session_id, None)
+        tool_counters.pop(session_id, None)
+
+    if hook_registry is not None:
+        hook_registry.register(HookName.SESSION_END, _on_session_end, name="auto_learn_cleanup")
 
     def _get_profile() -> Any:
         if profile_provider is not None:
@@ -198,7 +201,10 @@ def make_auto_learn_handler(
         return None
 
     def _on_turn_complete(event: HookEvent, data: dict[str, Any]) -> None:
-        nonlocal session_count, last_learn_ts
+        session_id = str(data.get("session_id", ""))
+        session_count = session_counts.get(session_id, 0)
+        last_learn_ts = last_learn_timestamps.get(session_id, float("-inf"))
+        tool_counter = tool_counters.setdefault(session_id, Counter())
 
         if session_count >= _MAX_PER_SESSION:
             return
@@ -233,7 +239,8 @@ def make_auto_learn_handler(
                 saved = profile.add_learned_pattern(pattern_with_why, category)
                 if saved:
                     session_count += 1
-                    last_learn_ts = now
+                    session_counts[session_id] = session_count
+                    last_learn_timestamps[session_id] = now
                     log.debug("auto-learn: saved [%s] %s", category, pattern_text[:60])
             except Exception:
                 # PR-OBS-CONTRACT — losing a learned pattern is a user-

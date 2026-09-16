@@ -282,8 +282,11 @@ def test_personal_data_classification_cannot_be_downgraded_by_rewrite() -> None:
     safe_handler.assert_not_called()
 
 
-def test_headless_hook_permission_request_fails_closed_without_console() -> None:
+@pytest.mark.parametrize("with_observer", [False, True])
+def test_headless_hook_permission_request_fails_closed_without_console(with_observer: bool) -> None:
     registry = HookRegistry()
+    if with_observer:
+        registry.register(HookName.PERMISSION_REQUEST, lambda _invocation: None)
     registry.register(
         HookName.PRE_TOOL_USE,
         lambda _invocation: HookDecision(action=HookAction.REQUEST_PERMISSION),
@@ -514,3 +517,42 @@ def test_subagent_public_projection_pairs_start_and_stop() -> None:
     ]
     assert observed[0][1]["child_session_key"]
     assert observed[1][1]["success"] is True
+
+
+@pytest.mark.parametrize("interrupt_stop", [False, True])
+def test_subagent_cancellation_pairs_start_and_stop(interrupt_stop: bool) -> None:
+    observed: list[HookName] = []
+    registry = HookRegistry()
+    registry.register(HookName.SUBAGENT_START, lambda invocation: observed.append(invocation.name))
+
+    async def observe_stop(invocation: Any) -> None:
+        observed.append(invocation.name)
+        if interrupt_stop:
+            raise asyncio.CancelledError("observer cancellation")
+
+    registry.register(HookName.SUBAGENT_STOP, observe_stop)
+
+    entered = asyncio.Event()
+
+    async def never_finishes(*_args: Any, **_kwargs: Any) -> Any:
+        entered.set()
+        await asyncio.Event().wait()
+
+    manager = SubAgentManager(
+        SimpleNamespace(arun=never_finishes),
+        task_handler=lambda *_args, **_kwargs: {},
+        hook_registry=registry,
+        collaboration_store=SimpleNamespace(),
+    )
+
+    async def run() -> None:
+        pending = asyncio.create_task(
+            manager.adelegate([SubTask("child-cancel", "Cancel", "analysis", {})])
+        )
+        await asyncio.wait_for(entered.wait(), 2)
+        pending.cancel("parent cancellation")
+        with pytest.raises(asyncio.CancelledError, match="parent cancellation"):
+            await pending
+
+    asyncio.run(run())
+    assert observed == [HookName.SUBAGENT_START, HookName.SUBAGENT_STOP]

@@ -16,9 +16,10 @@ mirroring the pattern used by ``core/ui/agentic_ui``.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
+    from core.agent.context_manager import ContextOperationResult
     from core.memory.session_checkpoint import SessionState
 
 log = logging.getLogger(__name__)
@@ -418,58 +419,59 @@ def cmd_context(args: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def cmd_compact(args: str) -> None:
-    """Compact conversation context to fit within model budget.
-
-    /compact         -> compact to current model's policy budget
-    /compact --hard  -> keep only last 1 turn
-    """
+async def cmd_compact_async(args: str, *, agentic_ref: Any = None) -> ContextOperationResult:
+    """Summarize the active session, or explicitly prune with --prune/--hard."""
+    from core.agent.context_manager import ContextOperationResult
     from core.cli import commands as _pkg
-    from core.config import settings
-    from core.orchestration.context_monitor import (
-        adaptive_prune,
-        check_context,
-        summarize_tool_results,
-    )
+    from core.ui.event_renderer import format_context_event
 
-    ctx = _pkg.get_conversation_context()
+    flags = set(args.split())
+    if flags - {"--prune", "--hard"}:
+        raise ValueError("Usage: /compact [--prune | --hard]")
+    prune = bool(flags)
+    action: Literal["compact", "prune"] = "prune" if prune else "compact"
+    loop = agentic_ref
+    ctx = loop.context if loop is not None else _pkg.get_conversation_context()
+    count = len(ctx.messages) if ctx is not None else 0
     if ctx is None or not ctx.messages:
-        _pkg.console.print("  [muted]Nothing to compact.[/muted]")
-        _pkg.console.print()
-        return
-
-    before = check_context(ctx.messages, settings.model)
-    _pkg.console.print()
-    _pkg.console.print(
-        f"  [label]Before:[/label] {before.estimated_tokens:,} tokens "
-        f"({before.usage_pct:.0f}% of {settings.model} "
-        f"{before.context_window:,})"
-    )
-
-    hard = "--hard" in args
-    if hard:
-        last_pair = ctx.messages[-2:] if len(ctx.messages) >= 2 else list(ctx.messages)
-        ctx.messages.clear()
-        ctx.messages.extend(last_pair)
+        result = ContextOperationResult(action, "unchanged", count, count)
+    elif loop is None:
+        result = ContextOperationResult(action, "unsupported", count, count, "runtime_unavailable")
     else:
-        summarize_tool_results(ctx.messages, before.policy or before.context_window)
-        compacted = adaptive_prune(ctx.messages, before.policy or before.context_window)
-        ctx.messages.clear()
-        ctx.messages.extend(compacted)
 
-    ctx._sanitize_tool_pairs()
+        def commit() -> None:
+            previous = loop._checkpoint.load(loop._session_id)
+            if previous is None or not loop._save_checkpoint(
+                previous.user_input, round_idx=previous.round_idx, strict_messages=True
+            ):
+                raise RuntimeError("Manual context checkpoint failed")
 
-    after = check_context(ctx.messages, settings.model)
-    _pkg.console.print(
-        f"  [label]After:[/label]  {after.estimated_tokens:,} tokens "
-        f"({after.usage_pct:.0f}% of {settings.model} "
-        f"{after.context_window:,})"
+        result = await loop._ctx_mgr.compact(
+            ctx.messages,
+            loop.model,
+            loop._provider,
+            prune=prune,
+            keep_recent=2 if prune else None,
+            trigger="manual",
+            commit=commit if loop._checkpoint is not None else None,
+        )
+    text = format_context_event(
+        result.action,
+        original_count=result.original_count,
+        new_count=result.new_count,
+        status=result.status,
+        trigger="manual",
+        error_type=result.error_type,
     )
-    _pkg.console.print(
-        f"  [success]Compacted[/success]  "
-        f"{before.estimated_tokens:,} → {after.estimated_tokens:,} tokens"
-    )
-    _pkg.console.print()
+    _pkg.console.print(f"  {text}", markup=False)
+    return result
+
+
+def cmd_compact(args: str, *, agentic_ref: Any = None) -> ContextOperationResult:
+    """Synchronous process-boundary wrapper; async runtimes await the async entry."""
+    from core.async_runtime import run_process_coroutine
+
+    return run_process_coroutine(cmd_compact_async(args, agentic_ref=agentic_ref))
 
 
 # ---------------------------------------------------------------------------

@@ -434,6 +434,7 @@ class GeodeRuntime:
         from core.memory.dreaming import DreamingService
 
         hooks = RuntimeEventBus()
+        hook_registry = HookRegistry(events=hooks)
         dreaming_service = DreamingService(hooks=hooks)
         hooks, event_store, hook_metrics = bootstrap.build_hooks(
             session_key=session_key,
@@ -443,9 +444,9 @@ class GeodeRuntime:
             feature_hook_registrar=feature_hook_registrar,
             user_profile=user_profile,
             hooks=hooks,
+            hook_registry=hook_registry,
             dreaming_service=dreaming_service,
         )
-        hook_registry = HookRegistry(events=hooks)
         middleware_registry = (
             bootstrap.build_middleware_registry(events=hooks)
             if middleware_builder is None

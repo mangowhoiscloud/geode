@@ -8,10 +8,15 @@ import weakref
 from pathlib import Path
 
 import pytest
+from core.agent.tool_executor import ToolExecutor
 from core.hooks import (
     DuplicateHookRegistrationError,
+    HookAction,
+    HookDecision,
     HookDispatch,
     HookEvent,
+    HookName,
+    HookRegistry,
     HookSystem,
 )
 
@@ -72,6 +77,83 @@ def test_observer_top_level_mutation_does_not_bleed_to_later_handlers() -> None:
 
     assert [_emitted(d) for d in observed] == [{"session_id": "s-1"}]
     assert original == {"session_id": "s-1"}
+
+
+def test_nested_observer_payload_isolated_from_source_handlers_and_sinks() -> None:
+    hooks = HookSystem()
+    seen: list[str] = []
+    sink_seen: list[str] = []
+
+    def mutate(_event: HookEvent, data: dict) -> None:
+        data["tool_input"]["path"] = "changed"
+
+    hooks.register(HookEvent.TOOL_EXEC_STARTED, mutate, name="mutate", priority=1)
+    hooks.register(
+        HookEvent.TOOL_EXEC_STARTED,
+        lambda _event, data: seen.append(data["tool_input"]["path"]),
+        name="observe",
+        priority=2,
+    )
+    hooks.register_sink(
+        lambda dispatch: sink_seen.append(dispatch.data["tool_input"]["path"]),
+        name="sink",
+    )
+    original = {"tool_name": "probe", "tool_input": {"path": "approved"}}
+    hooks.trigger(HookEvent.TOOL_EXEC_STARTED, original)
+
+    assert original["tool_input"]["path"] == "approved"
+    assert seen == ["approved"]
+    assert sink_seen == ["approved"]
+
+    async def run_async() -> None:
+        async def async_mutate(_event: HookEvent, data: dict) -> None:
+            data["tool_input"]["path"] = "async-changed"
+
+        hooks.clear(HookEvent.TOOL_EXEC_STARTED)
+        hooks.register(HookEvent.TOOL_EXEC_STARTED, async_mutate, name="async-mutate", priority=1)
+        hooks.register(
+            HookEvent.TOOL_EXEC_STARTED,
+            lambda _event, data: seen.append(data["tool_input"]["path"]),
+            name="async-observe",
+            priority=2,
+        )
+        await hooks.trigger_async(HookEvent.TOOL_EXEC_STARTED, original)
+
+    asyncio.run(run_async())
+    assert original["tool_input"]["path"] == "approved"
+    assert seen == ["approved", "approved"]
+
+
+def test_runtime_observer_cannot_change_approved_tool_arguments() -> None:
+    events = HookSystem()
+    public_hooks = HookRegistry(events=events)
+    admitted: list[str] = []
+    dispatched: list[str] = []
+
+    def admit(invocation) -> HookDecision:
+        admitted.append(invocation.payload["arguments"]["value"])
+        return HookDecision(action=HookAction.CONTINUE)
+
+    def mutate(_event: HookEvent, data: dict) -> None:
+        data["tool_input"]["value"] = "observer-changed"
+
+    async def probe(**kwargs: str) -> dict[str, str]:
+        dispatched.append(kwargs["value"])
+        return {"seen": kwargs["value"]}
+
+    public_hooks.register(HookName.PRE_TOOL_USE, admit)
+    events.register(HookEvent.TOOL_EXEC_STARTED, mutate, name="observer")
+    executor = ToolExecutor(
+        action_handlers={"local_probe": probe},
+        hooks=events,
+        hook_registry=public_hooks,
+        interactive_approval=False,
+    )
+    result = asyncio.run(executor.aexecute("local_probe", {"value": "approved"}))
+
+    assert admitted == ["approved"]
+    assert dispatched == ["approved"]
+    assert result == {"seen": "approved"}
 
 
 def test_overlapping_name_collision_with_different_handlers_fails_loud() -> None:

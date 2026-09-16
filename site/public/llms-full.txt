@@ -993,14 +993,16 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/context.md
 퍼센트는 _유효 프롬프트 예산_(`effective_prompt_budget_tokens` = 윈도에서 출력 예비분 약 20K를 뺀 값) 기준입니다. 실제 대응은 프로바이더에 따라 갈립니다.
 
 -   **Anthropic**. 경고 수준 압력은 서버 측 context management가 처리하므로 클라이언트는 개입하지 않습니다. 임계 수준에서만 클라이언트가 비상 정리(prune)를 수행합니다.
--   **OpenAI / GLM**. 서버 측 압축이 없어 클라이언트가 3단계 압력 대응을 순차 실행합니다. (1) 값싼 도구 압축 — 오래된 관측 마스킹(`mask_stale_observations`)과 큰 도구 결과 요약(`summarize_tool_results`, LLM 호출 없음), (2) 구조화 LLM 압축(`compact_conversation`), (3) 압축으로 부족하거나 실패하면 적응형 정리(`adaptive_prune`).
+-   **OpenAI / GLM**. GEODE의 현재 연결은 텍스트 요약 경로를 사용합니다. (1) 값싼 도구 압축 — 오래된 관측 마스킹(`mask_stale_observations`)과 큰 도구 결과 요약(`summarize_tool_results`, LLM 호출 없음), (2) 구조화 LLM 압축(`compact_conversation`), (3) 명시적인 hard 경계에서 압축으로 부족하거나 실패하면 적응형 정리(`adaptive_prune`). 경고 수준의 요약·저장 실패는 메시지 삭제로 전환하지 않습니다.
 
 -   컨텍스트 윈도가 200K를 넘는 모델에는 별도로 절대 200K 토큰 천장(`absolute_ceiling_tokens`)이 걸립니다. 퍼센트 임계와 무관하게 rate-limit 풀 분리를 피하려는 조치로, 도구 결과 요약 후 필요하면 압축을 강제합니다.
--   전략 선택은 `CONTEXT_OVERFLOW_ACTION` 훅 핸들러에 위임되고, 등록된 핸들러가 없으면 해석된 policy가 폴백입니다. 임계 상태에서는 `CONTEXT_CRITICAL` 훅이 발화합니다.
+-   전략 선택은 `ContextWindowManager`의 domain policy가 소유합니다. `PreCompact`는 soft 압축을 유예할 수 있고, `PostCompact`는 성공한 교체 뒤에 실행됩니다. `CONTEXT_CRITICAL`은 관측 이벤트이며, 과거 `CONTEXT_OVERFLOW_ACTION`은 제어에 쓰지 않습니다.
 -   정리 후에도 임계 상태면 루프는 `context_exhausted`로 종료하고, 사용자 언어에 맞춘 안내문을 생성해 돌려줍니다 (`core/agent/loop/models.py`).
 -   API가 400으로 컨텍스트 오버플로를 알리면 공격적 복구를 시도한 뒤 재시도하고, 실패하면 역시 `context_exhausted`입니다.
 
 압축 장비는 `core/orchestration/compaction.py`와 `core/orchestration/context_monitor.py`에 있고, 티어 경계와 임계 상수는 `core/orchestration/context_budget.py`가 SoT입니다. 모델별 컨텍스트 윈도 값은 `core/llm/token_tracker.py`의 `MODEL_CONTEXT_WINDOW`가 SoT입니다 (`core/llm/model_pricing.toml`이 뒷받침).
+
+메시지가 30개를 넘었다는 이유만으로 이력을 버리지 않습니다. 토큰 압력 검사는 모델 요청 전에 수행하며, 별도의 `ConversationContext.max_turns` 보존 한도는 유지합니다. 압축 경계에 걸친 병렬 도구 결과는 대응하는 앞선 호출과 함께 보존합니다. 요약이나 저장이 실패한 soft 압축은 입력 이력을 유지하지만, 앞서 수행한 관측 마스킹까지 되돌리지는 않습니다.
 
 ## 대형 도구 결과: 오프로드
 
@@ -1022,7 +1024,7 @@ MCP의 `CallToolResult`는 호환성을 위해 같은 값을 `content`와 `struc
 
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
-| 긴 세션에서 `context_exhausted` 종료 | 압축 후에도 히스토리가 임계 상태 | 새 세션을 열거나 `/compact`로 미리 압축합니다 |
+| 긴 세션에서 `context_exhausted` 종료 | 압축 후에도 히스토리가 임계 상태 | 새 세션을 열거나 `/compact`로 현재 세션을 요약합니다. `--prune`일 때만 명시적으로 이력을 정리합니다 |
 | 도구 결과가 요약으로만 보임 | 15,000 토큰 임계값을 넘어 오프로드됨 | 정상 동작입니다. `recall_tool_result(ref_id)`로 원본을 조회합니다 |
 | 캐시 적중률이 갑자기 하락 | 히스토리 앞부분을 변형하는 커스텀 주입 | 턴별 메타데이터는 시스템 동적 영역에 두고, 대화에는 실제 turn만 append합니다 |
 
@@ -1266,7 +1268,7 @@ GEODE는 확장 표면을 권한별로 나눕니다. 외부 통합이 의존할 
 | `PostVerify` | `passed, mode, score, rubric_misses, termination_reason, rounds, tool_call_count, candidate_summary` | accept · revise · escalate |
 | `Stop` | `PostVerify fields + policy_action, evidence_refs` | finalize · continue |
 
-이 allowlist 밖의 action과 payload 필드는 거부됩니다. 실패한 내장 검증을 외부 훅이 pass로 뒤집을 수도 없습니다. `rewrite`는 비어 있지 않은 `updates`, `PostVerify.revise`와`Stop.continue`는 비어 있지 않은 `instruction`이 필요합니다.
+훅별 schema에 없는 필드와 허용되지 않은 action은 거부됩니다. 선택 필드는 아래 runtime schema에서 확인합니다. 실패한 내장 검증을 외부 훅이 pass로 뒤집을 수도 없습니다. `rewrite`는 비어 있지 않은 `updates`, `PostVerify.revise`와`Stop.continue`는 비어 있지 않은 `instruction`이 필요합니다.
 
 ## 공통 envelope와 제한
 
@@ -1277,7 +1279,9 @@ GEODE는 확장 표면을 권한별로 나눕니다. 외부 통합이 의존할 
 | payload 상한 | 문자열 4,096자, JSON 32 KiB, collection 64개, depth 8 |
 | decision 상한 | reason 1,024자, instruction 4,096자, evidence reference 32개 |
 | 기본 timeout | handler별 10초. sync handler는 event loop 밖에서 실행 |
-| 오류 | 현재 handler 오류를 기록하고 다음 handler를 계속 실행 |
+| 결정 없음 | `None`은 `ok`로 감사하되 결정은 추가하지 않음. 묵시적 continue나 권한 허용이 아님 |
+| 오류·취소 | 일반 오류는 기록 후 다음 handler 실행. 취소는 `error`와 예외 타입명만 감사한 뒤 원본을 다시 전파 |
+| 검증 강화 | `PreVerify.strengthen`은 `additional_misses`가 필요. 지시문만 있는 결정은 오류로 기록하고 적용하지 않음 |
 
 각 hook의 Draft 2020-12 JSON Schema는 런타임에서 직접 조회합니다. 문서 표와 직렬화 계약이 다르면 런타임 schema가 정본입니다.
 
@@ -1310,6 +1314,8 @@ print(schema["properties"]["decision"])
 
 현재 `RuntimeEvent`는 57개의 내부 관측 이벤트를 가집니다. `HookEvent`/`HookSystem`은 기존 통합을 위한 타입 별칭이며, 새 코드는 `RuntimeEvent`/`RuntimeEventBus`를 사용합니다.
 
+관측자는 중첩 데이터까지 격리된 복사본을 받으므로 승인된 tool 인자나 다음 관측자의 입력을 바꾸지 못합니다. 학습 상태 정리는 durable `SessionEnd`에 연결하며, 과거 turn-end 이벤트로 공유 offload 파일을 삭제하지 않습니다.
+
 | 저장소 | 동작 |
 | --- | --- |
 | SQLite activity store | 운영 이벤트의 정본. 공개 훅과 미들웨어 호출도 `extension.invoked` 행으로 저장 |
@@ -1320,13 +1326,17 @@ print(schema["properties"]["decision"])
 ## 도구 경계 순서
 
 ```
-tool_request → schema validation → PreToolUse → revalidation
-→ hard deny / policy → PermissionRequest
+original policy → tool_request → policy + schema validation
+→ PreToolUse → policy + schema revalidation → PermissionRequest / approval
 → pending-call checkpoint → effect admission → terminal executor 1회 호출
-→ TOOL_EXEC_ENDED or TOOL_EXEC_FAILED → PostToolUse → receipt commit
+→ TOOL_EXEC_ENDED → PostToolUse → receipt commit
 ```
 
-여기서 1회는 승인된 한 요청의 프로세스 내부 호출 횟수입니다. 외부 효과의 exactly-once를 뜻하지 않습니다. 변경·통신·관리 도구는 별도의 durable admission receipt로 같은 logical operation의 중복을 억제합니다. receipt에는 PostToolUse까지 끝난 결과를 저장하며, 완료 여부가 불명확하면 자동 재실행하지 않습니다.
+위 순서는 새 실행이 결과를 반환하는 경로입니다. 오류 결과는 호환용`TOOL_EXEC_FAILED`도 알리지만 이중 저장하지 않습니다. admission 거부, 완료 receipt 재생, 전파되는 예외·취소에는`PostToolUse`를 실행하지 않습니다.
+
+승인이 필요한 요청은 headless에서도 `PermissionRequest`를 거칩니다. 훅의 결정이 없거나 `ask`이면 허용된 사람 확인으로 넘기며, 확인할 수 없으면 거부합니다.
+
+여기서 1회는 승인된 한 요청의 프로세스 내부 호출 횟수입니다. 외부 효과의 exactly-once를 뜻하지 않습니다. 변경·통신·관리 도구는 별도의 durable admission receipt로 같은 logical operation의 중복을 억제합니다. receipt에는 PostToolUse까지 끝난 결과를 저장하며, 완료 여부가 불명확하면 자동 재실행하지 않습니다. `PostToolUse.executed`는 terminal dispatch 진입 여부이지 효과의 성공이 아닙니다. `has_error`와 결과를 별도로 읽으며, post-hook은 완료된 효과를 되돌리지 못합니다.
 
 ## 다음
 
@@ -5195,7 +5205,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/guides/register-hook.md
 
 ## 1\. 공개 훅 등록
 
-`HookRegistry`는 13개의 `HookName`만 받습니다. 같은 훅 안에서 이름은 고유해야 하고 낮은 priority가 먼저 실행됩니다. handler는 `HookDecision` 또는 `None`을 반환합니다.
+`HookRegistry`는 13개의 `HookName`만 받습니다. 같은 훅 안에서 이름은 고유해야 하고 낮은 priority가 먼저 실행됩니다. handler는 `HookDecision` 또는 `None`을 반환합니다. `None`은 정상 실행으로 감사하지만 결정을 추가하지 않아 소유자의 기본 처리를 유지합니다. 취소는 `error`와 예외 타입명만 감사한 뒤 그대로 전파합니다.
 
 ```
 from core.hooks import HookAction, HookDecision, HookName
@@ -5217,7 +5227,7 @@ hook_registry.register(
 )
 ```
 
-rewrite는 payload의 실제 필드명을 사용합니다. 도구 인자를 바꾸려면 `updates={"arguments": {...}}`를 반환하며, GEODE가 변경된 요청을 다시 스키마 검증한 뒤 정책과 승인을 수행합니다.
+rewrite는 payload의 실제 필드명을 사용합니다. 도구 인자를 바꾸려면 `updates={"arguments": {...}}`를 반환하며, GEODE가 원래 요청과 middleware·공개 훅 변형 후마다 정책을 검사하고, 변경된 요청의 스키마와 최종 승인을 확인합니다. 권한 요청은 headless에서도`PermissionRequest`를 거치며, 훅이 결정하지 않고 사람에게도 확인할 수 없으면 거부합니다.
 
 ### 파일시스템 RuntimeEvent 훅은 매니페스트를 먼저 읽습니다
 
@@ -5263,7 +5273,7 @@ middleware_registry.register_llm_execution(
 | `tool_execution` | 300초 | `next_call` 전 실패는 전파; 실행 완료 뒤 wrapper 실패는 완료 결과 보존 |
 | `llm_execution` | 900초 | `next_call` 전 실패는 전파; provider 완료 뒤 wrapper 실패는 결과를 보존해 재과금 방지 |
 
-실행 미들웨어의 실패를 보고 같은 tool/provider 호출을 임의로 재시도하지 마세요. downstream 호출이 끝난 뒤 발생한 wrapper 오류는 런타임이 완료 결과를 보존합니다. `llm_request`가 cache-sensitive prefix를 바꾸려면 등록 시 `allow_cache_invalidation=True`와 요청 metadata의`cache_invalidation_reason`이 둘 다 필요합니다.
+실행 미들웨어의 실패를 보고 같은 tool/provider 호출을 임의로 재시도하지 마세요. downstream 호출이 끝난 뒤 발생한 wrapper 오류는 런타임이 완료 결과를 보존합니다. 취소는 완료 후에도 성공으로 바꾸지 않고 전파합니다.`llm_request`가 cache-sensitive prefix를 바꾸려면 등록 시 `allow_cache_invalidation=True`와 요청 metadata의`cache_invalidation_reason`이 둘 다 필요합니다.
 
 ## 3\. 내부 런타임 이벤트 구독
 
@@ -7084,7 +7094,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1562 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1564 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -7244,7 +7254,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 582 |
+| 프로덕션 Python 파일 | 581 |
 | 테스트 Python 파일 | 714 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |

@@ -366,6 +366,30 @@ class SubAgentManager:
                 else:
                     # Thread mode — legacy callable + SubTask arg.
                     isolation = await self._runner.arun(fn_or_request, args=(task,), config=config)
+            except asyncio.CancelledError:
+                # Foreground cancellation owns the child terminal edge. The
+                # background wrapper supplies this edge in its own finally,
+                # so avoid duplicate SubagentStop projections there.
+                if durable_run is None:
+                    try:
+                        await self._announcements.emit_stop(
+                            task,
+                            SubResult(
+                                task_id=task.task_id,
+                                description=task.description,
+                                success=False,
+                                error="Interrupted by parent",
+                            ),
+                            record,
+                            generation=1,
+                            interrupted=True,
+                        )
+                    except BaseException as observer_error:
+                        log.warning(
+                            "SubagentStop observation failed during cancellation (%s)",
+                            type(observer_error).__name__,
+                        )
+                raise
             except Exception as exc:
                 log.warning("adelegate: arun raised for %s — %s", task.task_id, exc)
                 isolation = IsolationResult(

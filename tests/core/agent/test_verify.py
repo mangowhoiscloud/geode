@@ -524,13 +524,19 @@ def test_post_verify_failure_cannot_be_accepted(
     assert follow_up == ""
 
 
+@pytest.mark.parametrize("with_observers", [False, True])
 def test_empty_post_verify_policy_escalates_non_retryable_failure(
     monkeypatch: pytest.MonkeyPatch,
+    with_observers: bool,
 ) -> None:
     from core.agent.loop import _lifecycle
 
+    registry = HookRegistry()
+    if with_observers:
+        registry.register(HookName.POST_VERIFY, lambda _invocation: None)
+        registry.register(HookName.STOP, lambda _invocation: None)
     loop = SimpleNamespace(
-        _hook_registry=HookRegistry(),
+        _hook_registry=registry,
         _session_id="",
         _turn_id="t-1",
         _verify_root_turn_id="t-1",

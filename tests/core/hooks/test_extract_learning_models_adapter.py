@@ -29,7 +29,7 @@ import asyncio
 import inspect
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -105,6 +105,51 @@ def test_extract_dispatch_uses_learning_extract_model_route() -> None:
     assert "prefer_provider=provider" in src
     assert "prefer_source=source" in src
     assert "provider_order" not in src
+
+
+def test_extract_session_cursor_and_quota_do_not_bleed_between_sessions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.hooks import HookEvent
+    from core.hooks.llm_extract_learning import (
+        _MAX_PER_SESSION,
+        make_llm_extract_handler,
+    )
+
+    profile = MagicMock()
+    profile.add_learned_pattern.return_value = True
+
+    async def extract(*args: object, **kwargs: object) -> str:
+        return "[preference] Keep responses concise. Why: explicit user preference"
+
+    monkeypatch.setattr("core.hooks.llm_extract_learning._call_budget_llm", extract)
+    ticks = iter(range(0, 31 * (_MAX_PER_SESSION + 2), 31))
+    monkeypatch.setattr(
+        "core.hooks.llm_extract_learning.time", SimpleNamespace(monotonic=lambda: next(ticks))
+    )
+    _name, handler = make_llm_extract_handler(lambda: profile)
+
+    async def run() -> None:
+        for index in range(_MAX_PER_SESSION):
+            await handler(
+                HookEvent.TURN_COMPLETED,
+                {
+                    "session_id": "session-a",
+                    "user_input": f"preference {index} " + "x" * 50,
+                    "text": "context " + "y" * 50,
+                },
+            )
+        await handler(
+            HookEvent.TURN_COMPLETED,
+            {
+                "session_id": "session-b",
+                "user_input": "new session preference " + "z" * 50,
+                "text": "context " + "q" * 50,
+            },
+        )
+
+    asyncio.run(run())
+    assert profile.add_learned_pattern.call_count == _MAX_PER_SESSION + 1
 
 
 # ---------------------------------------------------------------------------

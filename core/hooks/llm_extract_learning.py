@@ -17,6 +17,7 @@ import weakref
 from collections.abc import Awaitable, Callable, Mapping
 from typing import TYPE_CHECKING, Any
 
+from core.hooks.public import HookInvocation, HookName, HookRegistry
 from core.hooks.system import HookEvent
 
 if TYPE_CHECKING:
@@ -172,6 +173,7 @@ def make_llm_extract_handler(
     profile_provider: Callable[[], Any] | None = None,
     *,
     hooks: RuntimeEventBus | None = None,
+    hook_registry: HookRegistry | None = None,
 ) -> tuple[str, Callable[..., Awaitable[None]]]:
     """Create TURN_COMPLETE handler for LLM-based learning extraction.
 
@@ -179,18 +181,33 @@ def make_llm_extract_handler(
     with mutual exclusion (skip if main agent wrote to memory this turn).
     """
     hooks_ref = weakref.ref(hooks) if hooks is not None else None
-    turn_count = 0
-    session_extractions = 0
+    turn_counts: dict[str, int] = {}
+    session_extractions_by_session: dict[str, int] = {}
     # ``float("-inf")`` so the first call always passes the cooldown gate.
     # Mirrors the auto_learn fix — fresh xdist worker processes have small
     # ``time.monotonic()`` values that would otherwise trip the cooldown.
-    last_extract_ts: float = float("-inf")
-    _seen_inputs: set[int] = set()  # hash of already-extracted user inputs
+    last_extract_timestamps: dict[str, float] = {}
+    seen_inputs_by_session: dict[str, set[int]] = {}
+
+    def _on_session_end(invocation: HookInvocation) -> None:
+        session_id = invocation.correlation.session_id
+        turn_counts.pop(session_id, None)
+        session_extractions_by_session.pop(session_id, None)
+        last_extract_timestamps.pop(session_id, None)
+        seen_inputs_by_session.pop(session_id, None)
+
+    if hook_registry is not None:
+        hook_registry.register(
+            HookName.SESSION_END, _on_session_end, name="learning_extract_cleanup"
+        )
 
     async def _on_turn_complete(event: HookEvent, data: dict[str, Any]) -> None:
-        nonlocal turn_count, session_extractions, last_extract_ts
-
-        turn_count += 1
+        session_id = str(data.get("session_id", ""))
+        turn_count = turn_counts.get(session_id, 0) + 1
+        turn_counts[session_id] = turn_count
+        session_extractions = session_extractions_by_session.get(session_id, 0)
+        last_extract_ts = last_extract_timestamps.get(session_id, float("-inf"))
+        seen_inputs = seen_inputs_by_session.setdefault(session_id, set())
 
         # Fire every N turns
         if turn_count % _TURN_INTERVAL != 0:
@@ -215,7 +232,7 @@ def make_llm_extract_handler(
         # Cursor-based: skip if we already extracted from this user input
         user_input = data.get("user_input", "")
         input_hash = hash(user_input)
-        if input_hash in _seen_inputs:
+        if input_hash in seen_inputs:
             log.debug("LLM extract: skipping — already extracted from this input")
             return
 
@@ -238,15 +255,18 @@ def make_llm_extract_handler(
             return
 
         # Mark as seen regardless of extraction result
-        _seen_inputs.add(input_hash)
+        seen_inputs.add(input_hash)
 
         extractions = _parse_extractions(llm_output)
         for pattern_text, category in extractions:
+            if session_extractions >= _MAX_PER_SESSION:
+                break
             try:
                 saved = profile.add_learned_pattern(pattern_text, category)
                 if saved:
                     session_extractions += 1
-                    last_extract_ts = now
+                    session_extractions_by_session[session_id] = session_extractions
+                    last_extract_timestamps[session_id] = now
                     log.info(
                         "LLM extract: [%s] %s",
                         category,

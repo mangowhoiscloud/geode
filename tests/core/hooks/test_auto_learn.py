@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections import Counter
+from itertools import count
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
+from core.hooks import HookCorrelation, HookName, HookRegistry, HookSystem
 from core.hooks.auto_learn import (
     _MAX_PER_SESSION,
     _TOOL_USAGE_THRESHOLD,
@@ -220,6 +225,31 @@ class TestAutoLearnHandler:
         # Both attempted, neither counted toward session cap
         assert mock_profile.add_learned_pattern.call_count == 2
 
+    def test_session_quota_does_not_bleed_between_sessions(self):
+        mock_profile = self._make_mock_profile()
+        _, handler = make_auto_learn_handler(lambda: mock_profile)
+
+        with patch("core.hooks.auto_learn._COOLDOWN_S", 0):
+            for i in range(_MAX_PER_SESSION):
+                handler(
+                    HookEvent.TURN_COMPLETED,
+                    {
+                        "session_id": "session-a",
+                        "user_input": f"I am developer number {i} at company",
+                        "tool_calls": [],
+                    },
+                )
+            handler(
+                HookEvent.TURN_COMPLETED,
+                {
+                    "session_id": "session-b",
+                    "user_input": "I prefer concise answers always",
+                    "tool_calls": [],
+                },
+            )
+
+        assert mock_profile.add_learned_pattern.call_count == _MAX_PER_SESSION + 1
+
     def test_exception_in_profile_is_swallowed(self):
         mock_profile = self._make_mock_profile()
         mock_profile.add_learned_pattern.side_effect = OSError("disk full")
@@ -235,13 +265,87 @@ class TestHookRegistration:
     def test_auto_learn_registered_in_build_hooks(self, tmp_path):
         from core.wiring.bootstrap import build_hooks
 
+        registry = HookRegistry()
         hooks, _, _ = build_hooks(
             session_key="test",
             run_id="test-run",
             log_dir=tmp_path,
+            hook_registry=registry,
         )
 
         all_hooks = hooks.list_hooks()
         assert "turn_auto_learn" in all_hooks.get("turn_completed", [])
         assert "turn_auto_memory" not in all_hooks.get("turn_completed", [])
+        assert registry.list_hooks()["SessionEnd"] == [
+            "auto_learn_cleanup",
+            "learning_extract_cleanup",
+        ]
         hooks.close()
+
+
+@pytest.mark.parametrize("extract_with_llm", [False, True])
+def test_learning_state_cleanup_requires_matching_durable_session_end(
+    monkeypatch: pytest.MonkeyPatch, extract_with_llm: bool
+) -> None:
+    from core.hooks.llm_extract_learning import make_llm_extract_handler
+
+    profile = MagicMock()
+    profile.add_learned_pattern.return_value = True
+    registry = HookRegistry()
+    bus = HookSystem()
+    if extract_with_llm:
+
+        async def extract(*args: object, **kwargs: object) -> str:
+            return "\n".join(
+                f"[preference] Keep answer {index} concise. Why: explicit preference"
+                for index in range(3)
+            )
+
+        ticks = count(step=31)
+        monkeypatch.setattr("core.hooks.llm_extract_learning._call_budget_llm", extract)
+        monkeypatch.setattr(
+            "core.hooks.llm_extract_learning.time",
+            SimpleNamespace(monotonic=lambda: next(ticks)),
+        )
+        name, handler = make_llm_extract_handler(lambda: profile, hook_registry=registry)
+    else:
+        monkeypatch.setattr("core.hooks.auto_learn._COOLDOWN_S", 0)
+        name, handler = make_auto_learn_handler(lambda: profile, hook_registry=registry)
+    bus.register(HookEvent.TURN_COMPLETED, handler, name=name)
+
+    async def turn(session_id: str, index: int = 0) -> None:
+        await bus.emit_async(
+            HookEvent.TURN_COMPLETED,
+            {
+                "session_id": session_id,
+                "user_input": f"I prefer concise answers for project number {index}",
+                "text": "Keep the response focused on verified behavior and limitations.",
+            },
+        )
+
+    async def run() -> None:
+        for session_id in ("a", "b"):
+            for index in range(_MAX_PER_SESSION):
+                await turn(session_id, index)
+        # Three-item LLM responses must not overshoot the ten-pattern budget.
+        assert profile.add_learned_pattern.call_count == 2 * _MAX_PER_SESSION
+        await bus.emit_async(HookEvent.SESSION_ENDED, {"session_id": "a"})
+        await turn("a")
+        await turn("b")
+        assert profile.add_learned_pattern.call_count == 2 * _MAX_PER_SESSION
+        outcome = await registry.invoke(
+            HookName.SESSION_END,
+            payload={"reason": "completed", "status": "completed"},
+            correlation=HookCorrelation(session_id="a"),
+        )
+        assert not outcome.handler_errors
+        await turn("a")
+        await turn("b")
+        assert profile.add_learned_pattern.call_count == 2 * _MAX_PER_SESSION + (
+            3 if extract_with_llm else 1
+        )
+
+    try:
+        asyncio.run(run())
+    finally:
+        bus.close()

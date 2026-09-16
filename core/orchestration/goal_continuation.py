@@ -110,7 +110,7 @@ class GoalContinuationHost:
                 )
                 loop.restore_from_checkpoint(state)
                 if state.model and state.model != loop.model:
-                    await loop.update_model_async(state.model)
+                    await loop.update_model_async(state.model, reason="resume")
                 result = await loop.acontinue_goal(trigger="serve_idle")
             latest = self._goals.get(current.session_id)
             self._remember(latest or current)

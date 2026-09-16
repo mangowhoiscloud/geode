@@ -202,6 +202,7 @@ def initialize_runtime(
         quiet=quiet,
         session_id_provider=lambda: loop._session_id or None,
         effort_provider=lambda: loop._effort,
+        source_provider=lambda: loop._source,
     )
 
     from core.agent.convergence import ConvergenceDetector

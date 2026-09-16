@@ -24,6 +24,7 @@ Then read only the sections that match the change:
 |---|---|
 | ownership, layers, or abstraction level | [§1 Architecture](../../../docs/architecture/naming-conventions.md#1-architecture-and-dependency-direction) and [§6 Imports](../../../docs/architecture/naming-conventions.md#6-imports-and-dependencies) |
 | package, file, function, class, tool, event, or React naming | [§2 Packages, files, and symbols](../../../docs/architecture/naming-conventions.md#2-packages-files-and-symbols) |
+| public hooks, middleware, or runtime events | [Hook contracts](../../../docs/architecture/hook-system.md#contract-ownership-and-naming): canonical names, decision authority, callers, and regression checks |
 | Python data form, typing, construction, or lifecycle | [§3 Python typing and class design](../../../docs/architecture/naming-conventions.md#3-python-typing-and-class-design) |
 | persisted data, schema identity, or writer/reader compatibility | [§4 Data, schemas, and persistence](../../../docs/architecture/naming-conventions.md#4-data-schemas-and-persistence) |
 | errors, logging, redaction, or trust boundaries | [§5 Errors, logging, and trust boundaries](../../../docs/architecture/naming-conventions.md#5-errors-logging-and-trust-boundaries) |

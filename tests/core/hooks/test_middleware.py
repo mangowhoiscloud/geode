@@ -13,6 +13,7 @@ from core.hooks import (
     LlmCallRequest,
     MiddlewareRegistry,
     NextCallAlreadyUsedError,
+    RuntimeEvent,
     ToolCallRequest,
 )
 from core.llm.adapters.base import (
@@ -422,6 +423,30 @@ async def test_cancellation_identity_is_preserved() -> None:
 
 
 @_async_test
+async def test_failure_audit_cancellation_does_not_replace_primary_error() -> None:
+    primary = asyncio.CancelledError("primary")
+    audit = asyncio.CancelledError("audit")
+
+    class _CancelledAudit:
+        async def emit_async(self, *_args: Any) -> None:
+            raise audit
+
+    class _PassThrough:
+        async def tool_execution(self, request: ToolCallRequest, next_call: Any) -> dict[str, Any]:
+            return await next_call(request)
+
+    registry = MiddlewareRegistry(events=_CancelledAudit())
+    registry.register_tool_execution(_PassThrough())
+
+    async def terminal(_request: ToolCallRequest) -> dict[str, Any]:
+        raise primary
+
+    with pytest.raises(asyncio.CancelledError) as caught:
+        await registry.tool_execution(ToolCallRequest("probe"), terminal)
+    assert caught.value is primary
+
+
+@_async_test
 async def test_cancellation_after_next_call_is_not_converted_to_success() -> None:
     async def assert_cancelled(awaitable: Awaitable[Any], entered: asyncio.Event) -> None:
         task = asyncio.create_task(awaitable)
@@ -480,6 +505,31 @@ async def test_call_llm_runs_request_and_execution_join_points() -> None:
 
     assert adapter.requests[0].model == "changed"
     assert result.text == "[changed]"
+
+
+@_async_test
+async def test_auxiliary_call_identity_spans_middleware_and_dispatch() -> None:
+    events = HookSystem()
+    rows: list[dict[str, Any]] = []
+    for event in (
+        RuntimeEvent.EXTENSION_INVOKED,
+        RuntimeEvent.LLM_CALL_STARTED,
+        RuntimeEvent.LLM_CALL_ENDED,
+    ):
+        events.subscribe(event, lambda _event, data: rows.append(data))
+    registry = MiddlewareRegistry(events=events)
+    registry.register_llm_request(_LlmRequest(), name="request")
+    registry.register_llm_execution(_LlmExecution(), name="execution")
+    adapter = _Adapter()
+    await registry.call_llm(
+        cast(LLMAdapter, adapter),
+        AdapterCallRequest(model="original", messages=()),
+        purpose="cognitive_reflection",
+    )
+    assert len(adapter.requests) == 1
+    assert len(rows) == 4
+    assert len({row["llm_call_id"] for row in rows}) == 1
+    assert all(row["llm_call_id"] and row["llm_attempt_id"] for row in rows)
 
 
 @_async_test

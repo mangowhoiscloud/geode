@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
 from core.mcp.config_catalog import MCPConfigCatalog
@@ -18,17 +17,15 @@ ADAPTER_ONLY_MCP_SERVERS: frozenset[str] = frozenset({"google-calendar", "caldav
 _EMPTY_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
 _MCP_TOOL_DESCRIPTION_NOTES: dict[str, str] = {
     "read_multiple_files": (
-        "For exact file-copy or text-conversion work, do not infer source EOF from "
-        "combined display separators. GEODE tracks local source EOF metadata after "
-        "successful reads and preserves it for same-name writes when possible."
+        "For exact file-copy or text-conversion work, preserve the source content "
+        "exactly; do not infer or alter EOF from combined display separators."
     ),
     "read_text_file": (
         "For whole-file reads, omit head and tail. Do not pass head and tail together."
     ),
     "write_file": (
         "Use the server schema's path argument when it is present; GEODE also accepts "
-        "file_path as a compatibility alias for path and preserves cached source EOF "
-        "for same-name text writes when possible."
+        "file_path as a compatibility alias for path."
     ),
 }
 
@@ -70,65 +67,13 @@ def normalise_mcp_tool_args(
 
 
 class MCPTraceStore:
-    """Own hook emission and the bounded read/write compatibility cache."""
+    """Own hook emission for MCP lifecycle observations."""
 
     def __init__(self, event_sink: Callable[[Any, dict[str, Any]], None]) -> None:
         self.event_sink = event_sink
-        self.text_read_cache: dict[tuple[str, str], str] = {}
 
     def fire(self, event: Any, data: dict[str, Any]) -> None:
         self.event_sink(event, data)
-
-    def record_text_read(
-        self,
-        *,
-        server_name: str,
-        tool_name: str,
-        args: dict[str, Any],
-        result: dict[str, Any],
-    ) -> None:
-        if result.get("isError") or result.get("error"):
-            return
-        paths: list[str] = []
-        if tool_name in {"read_file", "read_text_file"} and isinstance(args.get("path"), str):
-            paths.append(args["path"])
-        elif tool_name == "read_multiple_files" and isinstance(args.get("paths"), list):
-            paths.extend(path for path in args["paths"] if isinstance(path, str))
-        else:
-            return
-        fallback = _result_text(result)
-        for path in paths:
-            text = _read_local_text(path)
-            if text is None and len(paths) == 1 and tool_name in {"read_file", "read_text_file"}:
-                text = fallback
-            if text is not None:
-                self.text_read_cache[(server_name, Path(path).name)] = text
-
-    def normalise_text_write(
-        self, *, server_name: str, tool_name: str, args: dict[str, Any]
-    ) -> dict[str, Any]:
-        if tool_name != "write_file":
-            return args
-        content = args.get("content")
-        path = args.get("path") or args.get("file_path")
-        if not isinstance(content, str) or not isinstance(path, str) or not content.endswith("\n"):
-            return args
-        source = self.text_read_cache.get((server_name, Path(path).name))
-        candidate = content[:-1]
-        if (
-            source is None
-            or source.endswith("\n")
-            or candidate
-            not in {
-                source,
-                source.upper(),
-                source.lower(),
-            }
-        ):
-            return args
-        normalised = dict(args)
-        normalised["content"] = candidate
-        return normalised
 
 
 class MCPToolDiscovery:
@@ -216,9 +161,6 @@ class MCPToolInvoker:
             normalised_args = normalise_mcp_tool_args(
                 tool_name=tool_name, args=args, raw_tool=raw_tool
             )
-            normalised_args = self.trace.normalise_text_write(
-                server_name=server_name, tool_name=tool_name, args=normalised_args
-            )
             try:
                 result = await client.acall_tool(tool_name, normalised_args)
                 died_mid_call = (
@@ -244,12 +186,6 @@ class MCPToolInvoker:
                     )
                 log.info("MCP server '%s' respawned mid-call; retrying %s", server_name, tool_name)
                 result = await fresh.acall_tool(tool_name, normalised_args)
-            self.trace.record_text_read(
-                server_name=server_name,
-                tool_name=tool_name,
-                args=normalised_args,
-                result=result,
-            )
             return result
         except Exception as exc:
             log.error("MCP async tool call failed: %s/%s: %s", server_name, tool_name, exc)
@@ -270,24 +206,3 @@ def _raw_tool(client: StdioMCPClient, tool_name: str) -> dict[str, Any] | None:
         log.debug("MCP tool schema lookup failed: %s", tool_name, exc_info=True)
         return None
     return next((tool for tool in tools if tool.get("name") == tool_name), None)
-
-
-def _result_text(result: dict[str, Any]) -> str | None:
-    content = result.get("content")
-    if not isinstance(content, list):
-        return None
-    for item in content:
-        if not isinstance(item, dict):
-            continue
-        text = item.get("text")
-        if isinstance(text, str):
-            return text
-    return None
-
-
-def _read_local_text(path: str) -> str | None:
-    try:
-        file_path = Path(path)
-        return file_path.read_text(encoding="utf-8") if file_path.is_file() else None
-    except (OSError, UnicodeDecodeError):
-        return None

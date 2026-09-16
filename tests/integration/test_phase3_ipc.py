@@ -295,7 +295,7 @@ class TestCLIPoller:
 
         services = MagicMock(lane_queue=AsyncLaneQueue())
         poller = CLIPoller(services, socket_path=_test_sock())
-        poller._handle_command_on_server = MagicMock(
+        poller._handle_command_on_server = AsyncMock(
             side_effect=lambda *_args: observed.append(admitted) or {"status": "ok"}
         )
         loop = MagicMock(_session_id="s-machine")
@@ -326,7 +326,7 @@ class TestCLIPoller:
         poller = CLIPoller(services, socket_path=_test_sock())
         restored: list[str] = []
 
-        def restore(msg: dict[str, Any], _loop: Any, _conversation: Any) -> dict[str, Any]:
+        async def restore(msg: dict[str, Any], _loop: Any, _conversation: Any) -> dict[str, Any]:
             restored.append(str(msg["session_id"]))
             return {"type": "resumed", "session_id": msg["session_id"]}
 

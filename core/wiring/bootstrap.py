@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     # annotations (``from __future__ import annotations``).  Each class
     # is imported lazily inside its build_* function below; this block
     # exists solely so mypy / IDEs can resolve the annotations.
-    from core.hooks import MiddlewareRegistry, RuntimeEventBus
+    from core.hooks import HookRegistry, MiddlewareRegistry, RuntimeEventBus
     from core.memory.context import ContextAssembler
     from core.memory.dreaming import DreamingService
     from core.memory.organization import MonoLakeOrganizationMemory
@@ -252,6 +252,7 @@ def build_hooks(
     feature_hook_registrar: Callable[[HookSystem], None] | None = None,
     user_profile: FileBasedUserProfile | None = None,
     hooks: HookSystem | None = None,
+    hook_registry: HookRegistry | None = None,
     dreaming_service: DreamingService | None = None,
 ) -> tuple[HookSystem, HookEventStore, Any]:
     """Build HookSystem with bounded SQLite persistence and metrics."""
@@ -384,20 +385,6 @@ def build_hooks(
 
     _register_plugin("cognitive_state_store", _reg_cognitive_state_store)
 
-    # Context overflow action handler (CONTEXT_OVERFLOW_ACTION -> strategy recommendation)
-    def _reg_context_action() -> None:
-        from core.hooks.context_action import make_context_action_handler
-
-        handler_name, handler_fn = make_context_action_handler()
-        hooks.register(
-            HookEvent.CONTEXT_OVERFLOW_ACTION,
-            handler_fn,
-            name=handler_name,
-            priority=50,
-        )
-
-    _register_plugin("context_action_hook", _reg_context_action)
-
     # C2: Journal auto-record hooks (subagent lifecycle -> runs.jsonl)
     def _reg_journal() -> None:
         from core.memory.journal_hooks import make_journal_handlers
@@ -423,7 +410,9 @@ def build_hooks(
     def _reg_auto_learn() -> None:
         from core.hooks.auto_learn import make_auto_learn_handler
 
-        name, handler = make_auto_learn_handler(profile_provider=lambda: user_profile)
+        name, handler = make_auto_learn_handler(
+            profile_provider=lambda: user_profile, hook_registry=hook_registry
+        )
         hooks.register(
             HookEvent.TURN_COMPLETED,
             handler,
@@ -437,7 +426,9 @@ def build_hooks(
     def _reg_llm_extract() -> None:
         from core.hooks.llm_extract_learning import make_llm_extract_handler
 
-        name, handler = make_llm_extract_handler(profile_provider=lambda: user_profile, hooks=hooks)
+        name, handler = make_llm_extract_handler(
+            profile_provider=lambda: user_profile, hooks=hooks, hook_registry=hook_registry
+        )
         hooks.register(
             HookEvent.TURN_COMPLETED,
             handler,
@@ -858,7 +849,7 @@ def build_tool_offload(
     session_id: str,
     hooks: HookSystem | None = None,
 ) -> Any:
-    """Build P0 tool result offload store and wire cleanup on SESSION_END."""
+    """Build the shared tool result offload store with TTL-based retention."""
     from core.config import settings
     from core.orchestration.tool_offload import ToolResultOffloadStore
 
@@ -870,22 +861,9 @@ def build_tool_offload(
         threshold=settings.tool_offload_threshold,
         ttl_hours=settings.tool_offload_ttl_hours,
     )
-    if hooks:
-
-        def _cleanup_offload(_event: Any, _data: Any) -> None:
-            store.cleanup_session()
-
-        # The serve daemon may build offload twice on one bus (runtime bootstrap,
-        # then supervised services with its own session store). The last store's
-        # cleanup hook replaces the earlier one instead of crashing the daemon
-        # (EX_CONFIG regression after the hook-lifecycle unification, #2593).
-        hooks.register(
-            HookEvent.SESSION_ENDED,
-            _cleanup_offload,
-            name="tool_offload_cleanup",
-            priority=95,
-            replace=True,
-        )
+    # Offload files are session-owned and expire on recall/TTL. Do not attach
+    # destructive cleanup to shared legacy SESSION_ENDED: it is also emitted
+    # for turn finalization and carries no ownership guarantee.
     log.info(
         "Tool offload enabled: threshold=%d tokens, ttl=%.1fh",
         store.threshold,
