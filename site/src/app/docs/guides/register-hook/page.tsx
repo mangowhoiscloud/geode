@@ -26,7 +26,9 @@ export default function Page() {
               <code>HookRegistry</code>는 13개의 <code>HookName</code>만
               받습니다. 같은 훅 안에서 이름은 고유해야 하고 낮은 priority가 먼저
               실행됩니다. handler는 <code>HookDecision</code> 또는{" "}
-              <code>None</code>을 반환합니다.
+              <code>None</code>을 반환합니다. <code>None</code>은 정상 실행으로
+              감사하지만 결정을 추가하지 않아 소유자의 기본 처리를 유지합니다.
+              취소는 <code>error</code>와 예외 타입명만 감사한 뒤 그대로 전파합니다.
             </p>
             <pre>{`from core.hooks import HookAction, HookDecision, HookName
 
@@ -48,7 +50,10 @@ hook_registry.register(
             <p>
               rewrite는 payload의 실제 필드명을 사용합니다. 도구 인자를 바꾸려면{" "}
               <code>{`updates={"arguments": {...}}`}</code>를 반환하며, GEODE가
-              변경된 요청을 다시 스키마 검증한 뒤 정책과 승인을 수행합니다.
+              원래 요청과 middleware·공개 훅 변형 후마다 정책을 검사하고, 변경된
+              요청의 스키마와 최종 승인을 확인합니다. 권한 요청은 headless에서도
+              <code>PermissionRequest</code>를 거치며, 훅이 결정하지 않고 사람에게도
+              확인할 수 없으면 거부합니다.
             </p>
 
             <h3>파일시스템 RuntimeEvent 훅은 매니페스트를 먼저 읽습니다</h3>
@@ -112,7 +117,8 @@ middleware_registry.register_llm_execution(
             <p>
               실행 미들웨어의 실패를 보고 같은 tool/provider 호출을 임의로 재시도하지
               마세요. downstream 호출이 끝난 뒤 발생한 wrapper 오류는 런타임이 완료
-              결과를 보존합니다. <code>llm_request</code>가 cache-sensitive prefix를
+              결과를 보존합니다. 취소는 완료 후에도 성공으로 바꾸지 않고 전파합니다.
+              <code>llm_request</code>가 cache-sensitive prefix를
               바꾸려면 등록 시 <code>allow_cache_invalidation=True</code>와 요청 metadata의
               <code>cache_invalidation_reason</code>이 둘 다 필요합니다.
             </p>
@@ -176,7 +182,10 @@ events.subscribe(
               <code>HookRegistry</code> accepts only the thirteen{" "}
               <code>HookName</code> values. Names are unique within one hook,
               lower priority runs first, and handlers return{" "}
-              <code>HookDecision</code> or <code>None</code>.
+              <code>HookDecision</code> or <code>None</code>. A <code>None</code>{" "}
+              return is audited as successful execution but adds no decision,
+              preserving the owner&apos;s fallback. Cancellation is audited as{" "}
+              <code>error</code> with its type name only, then re-raised unchanged.
             </p>
             <pre>{`from core.hooks import HookAction, HookDecision, HookName
 
@@ -198,7 +207,11 @@ hook_registry.register(
             <p>
               A rewrite uses actual payload field names. To replace tool
               arguments, return <code>{`updates={"arguments": {...}}`}</code>.
-              GEODE revalidates the effective request before policy and approval.
+              GEODE checks policy on the original request and after middleware
+              and public-hook rewrites, then revalidates the effective request before
+              final approval. Permission requests reach <code>PermissionRequest</code> even
+              when headless; without a hook decision or available human prompt,
+              they are denied.
             </p>
 
             <h3>Filesystem RuntimeEvent hooks are manifest-first</h3>
@@ -265,7 +278,8 @@ middleware_registry.register_llm_execution(
             <p>
               Do not blindly retry a tool or provider call after an execution
               middleware error. The runtime preserves a completed downstream result
-              when the wrapper fails afterward. Changing a cache-sensitive prefix in
+              when the wrapper fails afterward. Cancellation still propagates after
+              completion; it is not converted to success. Changing a cache-sensitive prefix in
               <code>llm_request</code> requires both
               <code>allow_cache_invalidation=True</code> at registration and a
               <code>cache_invalidation_reason</code> in request metadata.

@@ -19,13 +19,15 @@ class _Loop:
         self.model = "current-model"
         self.restored: Any = None
         self.updated_model = ""
+        self.update_reason = ""
         self.trigger = ""
 
     def restore_from_checkpoint(self, state: Any) -> None:
         self.restored = state
 
-    async def update_model_async(self, model: str) -> None:
+    async def update_model_async(self, model: str, *, reason: str = "") -> None:
         self.updated_model = model
+        self.update_reason = reason
 
     async def acontinue_goal(self, *, trigger: str) -> Any:
         self.trigger = trigger
@@ -90,6 +92,7 @@ def test_restart_host_restores_once_and_waits_for_state_change(tmp_path: Path) -
     ] == [("user", "original request")]
     assert loop.restored.session_id == "s-gw-test"
     assert loop.updated_model == "persisted-model"
+    assert loop.update_reason == "resume"
     assert loop.trigger == "serve_idle"
 
     assert asyncio.run(host.continue_next_if_idle()) is None

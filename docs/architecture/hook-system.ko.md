@@ -18,6 +18,36 @@ domain service다. checkpoint를 노출하지만 네 번째 extension 표면은 
 [`../plans/2026-07-30-hook-taxonomy-fold.md`](../plans/2026-07-30-hook-taxonomy-fold.md),
 영속성 정책은 [`event-persistence.md`](event-persistence.md)에 있다.
 
+## 계약 소유자와 명명 규격
+
+이름 표기는 [명명 규약](naming-conventions.md#25-constants-tools-and-events),
+확장 동작은 이 문서가 소유한다. Python enum member와 wire name은
+서로 다른 식별자이며 교환 가능한 alias가 아니다.
+
+| 계약 | 코드 소유자 | 명명 / API | 회귀검사 경계 |
+|---|---|---|---|
+| 공개 결정 | [public.py](../../core/hooks/public.py) | `HookName.PRE_TOOL_USE` → `PreToolUse`; `HookAction.ADD_CONTEXT` → `add_context` | [Schema·결정·dispatch](../../tests/core/hooks/test_public_hooks.py) |
+| 도구 승인·결과 | [executor.py](../../core/agent/tool_executor/executor.py), [approval.py](../../core/agent/approval.py) | `PreToolUse`, `PermissionRequest`, `PostToolUse` | [실제 runtime 연결](../../tests/core/hooks/test_public_hook_wiring.py) |
+| 신뢰된 변형·wrapper | [middleware.py](../../core/hooks/middleware.py) | `register_tool_request`, `register_tool_execution`와 LLM 대응 메서드 | [합성·단일 호출](../../tests/core/hooks/test_middleware.py) |
+| 관측 | [system.py](../../core/hooks/system.py) | `RuntimeEvent.TOOL_EXEC_STARTED` → `tool_exec_started`; `subscribe` / `emit` | [Subscriber lifecycle](../../tests/core/hooks/test_hook_system_lifecycle.py) |
+
+Schema 통과만으로 runtime 연결, 승인 통제, telemetry 영속화를 입증하지
+않는다. 변경된 입력 생산자와 소비자를 함께 검사한다.
+
+### 경계별 회귀검사
+
+| 경계 | 보장할 동작 | 회귀검사 |
+|---|---|---|
+| 관측 → 실행 | subscriber마다 중첩 데이터까지 복사한다. 관측자가 승인된 tool 인자, 다음 subscriber 또는 저장할 이벤트를 바꿀 수 없다. | [이벤트 격리](../../tests/core/hooks/test_hook_system_lifecycle.py) |
+| 모델 전환 → compaction | `ContextWindowManager`의 공통 경로를 사용한다. `PreCompact` defer와 commit 이후 `PostCompact`를 우회하지 않는다. | [모델 전환](../../tests/core/agent/test_model_switch_guard.py) |
+| 취소 → 감사 | foreground 자식 취소도 `SubagentStop`을 한 번 알린다. hook/middleware 감사 실패가 원래 취소를 덮어쓰지 않는다. | [자식 연결](../../tests/core/hooks/test_public_hook_wiring.py), [middleware](../../tests/core/hooks/test_middleware.py) |
+| 공유 handler → 세션 상태 | 학습 한도·cooldown·tool 횟수·입력 cursor는 세션별로 관리하고 해당 durable `SessionEnd`에서만 정리한다. 과거 turn-end 이벤트는 공유 offload 파일을 삭제하지 않는다. | [학습 수명](../../tests/core/hooks/test_auto_learn.py), [offload 수명](../../tests/core/wiring/test_tool_offload_rewire.py) |
+| MCP trace → 본문 | trace는 로컬 파일을 읽거나 write 본문을 수정하지 않는다. schema 인자 alias는 본문 처리와 별개다. | [MCP 호출](../../tests/core/mcp/test_mcp_lifecycle.py) |
+
+offload는 기존 TTL을 유지한다. recall에서 만료 파일을 거부·삭제하고 store는
+명시적인 만료 파일 정리 메서드도 제공한다. 주기적인 디스크 청소나 새로운
+사용자별 접근 통제를 구현한 것은 아니다.
+
 ## 공개 hook
 
 `HookRegistry`는 아래 `HookName`만 받으며 wildcard 등록을 제공하지 않는다.
@@ -27,10 +57,10 @@ handler는 priority 순서로 실행되고 rewrite는 앞 결과를 다음 입�
 | Hook | 경계 | 허용 결정 |
 |---|---|---|
 | `UserPromptSubmit` | user input admission 전 | continue, rewrite, block |
-| `PreToolUse` | `tool_request` 후, policy/approval 전 | continue, rewrite, block, request permission |
-| `PermissionRequest` | 실제 사람에게 묻기 직전 | allow, deny, ask |
-| `PostToolUse` | 결과 생성 후 model context 반영 전 | continue, add context, block |
-| `PreCompact` | runtime-owned compaction 직전 | continue, rewrite, soft defer |
+| `PreToolUse` | 요청 변형·admission 검사 후, 최종 policy/approval 전 | continue, rewrite, block, request_permission |
+| `PermissionRequest` | headless 실행을 포함한 권한 결정; 사람에게 묻기는 fallback | allow, deny, ask |
+| `PostToolUse` | 결과 생성 후 model context 반영 전 | continue, add_context, block |
+| `PreCompact` | runtime-owned compaction 직전 | continue, rewrite, defer |
 | `PostCompact` | compacted state commit 후 | continue |
 | `SessionStart` | durable create/resume 성공 후 | continue |
 | `SessionEnd` | durable terminal state 성공 후 | continue |
@@ -38,7 +68,7 @@ handler는 priority 순서로 실행되고 rewrite는 앞 결과를 다음 입�
 | `SubagentStop` | terminal child result 확정 후 | continue |
 | `PreVerify` | built-in verifier 전 | continue, strengthen |
 | `PostVerify` | immutable verifier 결과 후 | accept, revise, escalate |
-| `Stop` | 최종 전달 직전 | finalize, bounded continue |
+| `Stop` | 최종 전달 직전 | finalize, continue |
 
 현재 호출은 버전이 고정된 `geode.public-hook.v2` envelope를 쓴다. 기존 v1
 schema는 호환성을 위해 그대로 조회할 수 있다.
@@ -62,6 +92,11 @@ Schema로 최초 입력과 rewrite 후 입력을 모두 검증한다. raw provid
 실행해 blocking extension이 AgenticLoop event loop를 멈추지 못하게 하고,
 비동기 handler는 직접 취소한다. timeout된 동기 thread가 자체 작업을 나중에
 끝낼 수 있으므로 side effect가 있는 extension은 여전히 idempotent해야 한다.
+
+`None` 반환은 결정 없음이다. handler 감사 상태는 `ok`이지만 귀속된 결정을
+추가하지 않고 domain owner의 기본 처리를 유지한다. 묵시적인 `continue`나
+권한 허용이 아니다. 취소는 `error` 상태와 예외 타입명만 reason으로 감사한 뒤
+원래 취소를 다시 전파한다. 감사 메타데이터는 제어 결정을 대신하지 않는다.
 
 ### Verification과 외부 loop
 
@@ -117,7 +152,11 @@ candidate -> PreVerify -> built-in verifier -> PostVerify -> Stop -> persist/del
                                                 +-- revise ---+
 ```
 
-`PreVerify`는 검증 요구를 추가만 할 수 있다. `PostVerify`는 immutable한
+`PreVerify`는 검증 요구를 추가만 할 수 있다. `strengthen`에는 비어 있지 않은
+`additional_misses`가 필요하다. instruction만 있는 결정은 검증 강화로
+수용하지 않고 `handler_errors`에 남긴다. 잘못된 결정은 기존의 오류 기록 후
+계속 진행 정책을 따르며, 그 자체로 finalization을 차단하지 않는다.
+`PostVerify`는 immutable한
 built-in 결과를 받아 pass 수용·증거 강화, 명시적 지시가 있는 bounded
 revision, 외부 판단 escalation을 선택한다.
 
@@ -161,12 +200,12 @@ provider billing을 재실행하지 않는다.
 도구 경로:
 
 ```text
-tool_request transform
-  -> schema validation
+원래 요청 policy 검사
+  -> tool_request transform
+  -> policy 재검사 + schema validation
   -> PreToolUse
-  -> schema revalidation
-  -> hard policy
-  -> PermissionRequest / approval
+  -> policy 재검사 + schema revalidation
+  -> PermissionRequest / approval (필요할 때)
   -> tool_execution onion
   -> TOOL_EXEC_STARTED
   -> terminal executor 1회 호출
@@ -177,7 +216,12 @@ tool_request transform
 execution middleware는 이미 승인된 tool name/arguments를 바꿀 수 없다.
 personal-data 분류는 request rewrite를 가로질러 단조적으로 유지되므로
 rename으로 consent나 retention policy를 낮출 수 없다. short-circuit는
-`TOOL_EXEC_STARTED`를 발화하지 않는다.
+`TOOL_EXEC_STARTED`를 발화하지 않는다. `PostToolUse.executed`는 terminal
+dispatch에 진입했다는 뜻이지 side effect 성공을 뜻하지 않는다. `has_error`와
+결과를 별도로 읽어야 하며, post-hook은 이미 완료된 효과를 되돌릴 수 없다.
+위 순서는 새 실행이 결과를 반환하는 경로다. 오류 결과는 호환용
+`TOOL_EXEC_FAILED`도 알리지만 이중 저장하지 않는다. admission 거부, 완료
+receipt 재생, 전파되는 예외·취소에는 `PostToolUse`를 실행하지 않는다.
 
 LLM 경로:
 
@@ -191,6 +235,9 @@ assembled AdapterCallRequest
 main loop, reflection, candidate sampling, API mutation을 포함한다.
 cache-sensitive한 prompt/messages/tools 변경은 등록 capability와 명시적인
 cache-invalidation reason을 모두 요구한다.
+보조 호출은 request middleware 진입 전에 누락된 `llm_call_id`와
+`llm_attempt_id`를 부여한다. extension 감사와 실제 호출 이벤트가 같은
+식별자를 사용하며, 호출자가 이미 지정한 식별자는 유지한다.
 
 ## Runtime event
 
@@ -205,6 +252,8 @@ cache-invalidation reason을 모두 요구한다.
 legacy feedback/interceptor method도 source compatibility를 위해 남지만
 production control path는 더 이상 호출하지 않는다. 새 제어는 공개 hook,
 trusted middleware, 또는 상태를 소유한 domain service에 둔다.
+소비자가 없던 context-action feedback handler는 제거했다. 과거 이벤트 값은
+읽을 수 있지만 활성 제어 subscriber로 사용하지 않는다.
 
 내부 `SESSION_STARTED/ENDED`의 과거 행 의미는 old reader를 위해 유지한다.
 공개 `SessionStart/End`는 durable session lifetime이며 매 turn 경계를
@@ -281,3 +330,12 @@ process마다 한 pair를 공유한다.
 `RuntimeEventBus.close()`는 새 등록을 막고 subscriber를 비운 뒤 cleanup과
 sink를 역순으로 닫는다. SQLite 연결은 각 연산 후 닫히며 close는
 idempotent하다.
+
+## 참고 범위
+
+- [Codex hooks](https://learn.chatgpt.com/docs/hooks): 공개 checkpoint 이름과
+  정상 무출력 handler를 참고한다. 동시성이나 보안 경계의 동등성을 뜻하지 않는다.
+- [Dioxus agent guide](https://github.com/DioxusLabs/dioxus/blob/ada3b67c73c1c5484dd2e8408cb21c470b200423/AGENTS.md):
+  계약 복제 없이 작업에서 소유 문서로 안내한다.
+- [Furiosa kernel-authoring skill](https://github.com/furiosa-ai/furiosa-opt/blob/9b9cf0fdc78df00cdc430eae725a5ad9084a735e/skills/furiosa-opt-kernel-authoring/SKILL.md):
+  짧은 실행 지침에서 단일 상세 계약으로 연결하고 검증의 의미를 구분한다.

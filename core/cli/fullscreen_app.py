@@ -36,7 +36,7 @@ from prompt_toolkit.widgets import Frame
 from core import __version__
 from core.time_format import format_elapsed
 from core.ui import spinner_glyph
-from core.ui.event_renderer import format_cache_tokens
+from core.ui.event_renderer import format_cache_tokens, format_context_event
 from core.ui.geodi_art import geodi_pixel_lines
 from core.ui.mascot import _spec_lines
 
@@ -673,6 +673,21 @@ class FullscreenThinCli:
 
     def _on_event(self, event: dict[str, Any]) -> None:
         etype = str(event.get("type", ""))
+        if etype == "context_event":
+            text = format_context_event(
+                str(event.get("action", "")),
+                original_count=int(event.get("before", 0)),
+                new_count=int(event.get("after", 0)),
+                status=str(event.get("status", "changed")),
+                trigger=str(event.get("trigger", "overflow")),
+                error_type=str(event.get("error_type", "")),
+            )
+            self._append_event(
+                "Context",
+                text,
+                error=event.get("status") == "failed" or event.get("action") == "exhausted",
+            )
+            return
         if etype == "progress_plan":
             plan = event.get("plan", [])
             if isinstance(plan, list):

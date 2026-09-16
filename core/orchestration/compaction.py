@@ -1,6 +1,6 @@
 """Client-side conversation compaction — Hermes Phase 3 4-phase pipeline.
 
-For providers without server-side compaction (OpenAI, GLM, etc.) this
+For GEODE adapters using text compaction (OpenAI, GLM, etc.), this
 module compresses the head of the message list into an LLM-generated
 summary while preserving the tail verbatim for continuity. Anthropic
 has server-side compaction (``compact_20260112``) and short-circuits
@@ -13,8 +13,8 @@ for this PR):
 
 1. **boundary** — find the cut index that won't split a
    ``tool_use`` / ``tool_result`` pair. Starts at
-   ``len(messages) - keep_recent`` and walks backwards while the
-   tail's first message would orphan a tool_result from the head.
+   ``len(messages) - keep_recent`` and expands the retained tail to
+   include the preceding calls of all retained results.
 2. **orphan_tool_result** — defensive cleanup for the edge case
    where the boundary algorithm hit index 0 (entire history fits
    in tail but the head has tool_uses with no matching results, or
@@ -86,6 +86,7 @@ async def compact_conversation(
     provider: str,
     model: str,
     *,
+    source: str | None = None,
     effort: str | None = None,
     keep_recent: int = 10,
     policy: ContextBudgetPolicy | None = None,
@@ -99,7 +100,8 @@ async def compact_conversation(
 
     Returns ``(new_messages, did_compact)``. Anthropic uses server-side
     compaction so this is a no-op for that provider; non-Anthropic
-    providers run the full pipeline.
+    providers run the full pipeline. Failures propagate without replacing
+    the input; only confirmed context overflow retries with smaller input.
     """
     if provider == "anthropic":
         log.debug("Skipping client compaction — Anthropic uses server-side compaction")
@@ -123,7 +125,10 @@ async def compact_conversation(
     to_keep = repair_tool_pairs(strip_orphan_tool_results(to_keep))
 
     # Phase 3 — summarize the head
-    summary = None
+    from core.llm.errors import classify_llm_error
+    from core.llm.fallback import exception_chain
+
+    summary = ""
     for attempt in range(resolved_policy.summary_overflow_retries + 1):
         summary_input = _build_summary_input(
             to_summarize,
@@ -133,27 +138,40 @@ async def compact_conversation(
         if not summary_input.strip():
             return messages, False
         summary_tokens = resolved_policy.summary_output_tokens()
-        summary = await _call_summarize(
-            summary_input,
-            provider,
-            model,
-            effort=effort,
-            max_tokens=summary_tokens,
-            hooks=hooks,
-            correlation={**(correlation or {}), "session_id": session_id or ""},
-        )
-        if summary:
-            break
-        log.info(
-            "Compaction summary attempt %d/%d failed; retrying with smaller input",
-            attempt + 1,
-            resolved_policy.summary_overflow_retries + 1,
-        )
-    if not summary:
-        log.warning("Compaction summary generation failed — keeping original messages")
-        return messages, False
+        try:
+            summary = await _call_summarize(
+                summary_input,
+                provider,
+                model,
+                source=source,
+                effort=effort,
+                max_tokens=summary_tokens,
+                hooks=hooks,
+                correlation={**(correlation or {}), "session_id": session_id or ""},
+            )
+        except Exception as exc:
+            error_types = {
+                classify_llm_error(link)[0]
+                for link in exception_chain(exc)
+                if isinstance(link, Exception)
+            }
+            if (
+                attempt >= resolved_policy.summary_overflow_retries
+                or "context_overflow" not in error_types
+                or "billing" in error_types
+            ):
+                raise
+            log.info(
+                "Compaction summary exceeded context (%d/%d); retrying with smaller input",
+                attempt + 1,
+                resolved_policy.summary_overflow_retries + 1,
+            )
+            continue
+        if not summary or not summary.strip():
+            raise ValueError("Compaction summary was empty")
+        break
     if session_id:
-        persisted = _persist_compaction_summary(
+        _persist_compaction_summary(
             session_id=session_id,
             session_manager=session_manager,
             summary=summary,
@@ -165,9 +183,6 @@ async def compact_conversation(
             original_message_count=len(messages),
             summarized_message_count=len(to_summarize),
         )
-        if not persisted:
-            log.warning("Compaction summary was not persisted — keeping original messages")
-            return messages, False
 
     # Phase 4 — carry forward
     new_messages = repair_tool_pairs(_carry_forward(summary, to_keep))
@@ -196,15 +211,14 @@ def _persist_compaction_summary(
     trigger: str,
     original_message_count: int,
     summarized_message_count: int,
-) -> bool:
-    try:
-        manager = session_manager
-        owns_manager = False
-        if manager is None:
-            from core.memory.session_manager import SessionManager
+) -> None:
+    manager = session_manager
+    owns_manager = manager is None
+    if manager is None:
+        from core.memory.session_manager import SessionManager
 
-            manager = SessionManager()
-            owns_manager = True
+        manager = SessionManager()
+    try:
         manager.upsert_context_artifact(
             session_id=session_id,
             kind="compaction_summary",
@@ -219,12 +233,9 @@ def _persist_compaction_summary(
                 "summarized_message_count": summarized_message_count,
             },
         )
+    finally:
         if owns_manager:
             manager.close()
-        return True
-    except Exception:
-        log.warning("Failed to persist compaction summary artifact", exc_info=True)
-        return False
 
 
 def _message_seq(message: dict[str, Any]) -> int | None:
@@ -238,29 +249,31 @@ def _message_seq(message: dict[str, Any]) -> int | None:
 def find_safe_boundary(messages: list[dict[str, Any]], *, keep_recent: int) -> int:
     """Return a cut index that won't split a ``tool_use`` / ``tool_result`` pair.
 
-    Starts at ``max(0, len(messages) - keep_recent)`` and walks
-    backwards while the boundary message is a ``tool_result`` whose
-    parent ``tool_use`` lives in the *previous* message. Each
-    backward step pulls the corresponding ``tool_use`` into the tail
-    so the pair stays together.
-
-    Stops moving when the boundary hits 0 — the caller is expected to
-    handle the entire-history-is-tool-pairs edge case via phase 2.
+    Retained results pull their preceding calls into the tail, including
+    non-adjacent results from parallel calls. Newly retained messages can
+    extend the boundary further. Orphan results do not move the cut.
     """
     if len(messages) <= keep_recent:
         return 0
+
+    call_positions: dict[str, int] = {}
+    result_parents: dict[int, int] = {}
+    for index, message in enumerate(messages):
+        parents = [
+            call_positions[call_id]
+            for call_id in _extract_tool_result_ids(message)
+            if call_id in call_positions
+        ]
+        if parents:
+            result_parents[index] = min(parents)
+        for call_id in _extract_tool_use_ids(message):
+            call_positions[call_id] = index
+
     boundary = len(messages) - keep_recent
-    while boundary > 0:
-        cur = messages[boundary]
-        prev = messages[boundary - 1]
-        cur_result_ids = _extract_tool_result_ids(cur)
-        if not cur_result_ids:
+    for index in range(len(messages) - 1, -1, -1):
+        if index < boundary:
             break
-        prev_use_ids = _extract_tool_use_ids(prev)
-        if cur_result_ids & prev_use_ids:
-            boundary -= 1
-            continue
-        break
+        boundary = min(boundary, result_parents.get(index, boundary))
     return boundary
 
 
@@ -451,7 +464,7 @@ def _truncate_middle(text: str, *, max_chars: int, head_chars: int, tail_chars: 
     return (
         text[:head_chars]
         + f"\n...[truncated {len(text) - head_chars - tail_chars:,} chars]...\n"
-        + text[-tail_chars:]
+        + (text[-tail_chars:] if tail_chars else "")
     )
 
 
@@ -569,10 +582,11 @@ async def _call_summarize(
     model: str,
     *,
     max_tokens: int,
+    source: str | None = None,
     effort: str | None = None,
     hooks: RuntimeEventBus | None = None,
     correlation: Mapping[str, Any] | None = None,
-) -> str | None:
+) -> str:
     """Call the LLM to generate a conversation summary.
 
     PR-ADAPTER-PATTERN-UNIFICATION (2026-05-28) — formerly fanned out to
@@ -582,12 +596,7 @@ async def _call_summarize(
     the requested provider's exact configured source. There is no
     cross-provider fallback.
     """
-    from core.llm.adapters.dispatch import (
-        AdapterDispatchError,
-        AdapterUnavailableError,
-        complete_text_via_adapters,
-    )
-    from core.llm.errors import BillingError
+    from core.llm.adapters.dispatch import complete_text_via_adapters
 
     # Map legacy provider key to the registry-canonical provider name.
     canonical = {"zhipuai": "glm"}.get(provider, provider)
@@ -595,48 +604,19 @@ async def _call_summarize(
     from core.llm.adapters.registry import normalize_registry_provider
 
     canonical = normalize_registry_provider(canonical)
-    source = infer_source(canonical)
-
-    try:
-        result = await complete_text_via_adapters(
-            conversation_text,
-            purpose="context_compaction",
-            system=_COMPACTION_PROMPT,
-            model=model,
-            effort=effort or settings.agentic_effort,
-            max_tokens=max_tokens,
-            prefer_provider=canonical,
-            prefer_source=source,
-            hooks=hooks,
-            correlation=correlation,
-        )
-    except BillingError:
-        log.warning(
-            "Compaction summarization: adapter credit exhausted "
-            "(provider=%s model=%s) — see dispatch.ADAPTER_DISPATCH_ATTEMPT log for adapter name",
-            provider,
-            model,
-        )
-        return None
-    except AdapterUnavailableError:
-        log.warning(
-            "Compaction summarization: no text-completion-capable adapter "
-            "registered (provider=%s model=%s)",
-            provider,
-            model,
-        )
-        return None
-    except AdapterDispatchError:
-        log.warning(
-            "Compaction summarization: single attempt transient failure (provider=%s model=%s)",
-            provider,
-            model,
-        )
-        return None
-    except Exception:
-        log.exception("Compaction summarization failed for provider=%s", provider)
-        return None
-    return result.text or None
+    result = await complete_text_via_adapters(
+        conversation_text,
+        purpose="context_compaction",
+        system=_COMPACTION_PROMPT,
+        model=model,
+        effort=effort or settings.agentic_effort,
+        max_tokens=max_tokens,
+        prefer_provider=canonical,
+        prefer_source=source if source is not None else infer_source(canonical),
+        hooks=hooks,
+        correlation=correlation,
+    )
+    return result.text
 
 
 # ── Phase 4: carry-forward ──────────────────────────────────────────

@@ -16,6 +16,91 @@ from unittest.mock import MagicMock
 import pytest
 
 
+@pytest.mark.parametrize(
+    "action,status,trigger,expected",
+    [
+        ("compact", "changed", "warning", "Context summarized (automatic): 30 → 8 messages"),
+        (
+            "compact",
+            "changed",
+            "model_switch",
+            "Context summarized (model switch): 30 → 8 messages",
+        ),
+        ("prune", "changed", "manual", "Context pruned (manual): 30 → 8 messages"),
+        ("compact", "unchanged", "manual", "Context unchanged (manual summary): 8 messages"),
+        (
+            "compact",
+            "deferred",
+            "warning",
+            "Context summary deferred (automatic) — history retained",
+        ),
+        (
+            "compact",
+            "failed",
+            "tool",
+            "Context summary failed (requested by tool) — history retained",
+        ),
+        (
+            "compact",
+            "unsupported",
+            "manual",
+            "Context summary unavailable (manual) — history retained",
+        ),
+    ],
+)
+def test_context_operation_ui_parity(action: str, status: str, trigger: str, expected: str) -> None:
+    from core.cli.fullscreen_app import FullscreenThinCli
+    from core.ui.event_renderer import EventRenderer, format_context_event
+
+    event = {
+        "type": "context_event",
+        "action": action,
+        "status": status,
+        "trigger": trigger,
+        "before": 30,
+        "after": 8,
+    }
+    assert (
+        format_context_event(action, original_count=30, new_count=8, status=status, trigger=trigger)
+        == expected
+    )
+    renderer = EventRenderer()
+    renderer._out = io.StringIO()
+    renderer.on_event(event)
+    assert expected in renderer._out.getvalue()
+    assert "tokens freed" not in renderer._out.getvalue()
+    app = FullscreenThinCli(MagicMock())
+    app._on_event(event)
+    assert expected in "\n".join(app.state.transcript)
+
+
+def test_context_event_emits_outcome_without_fabricated_tokens() -> None:
+    from core.ui.agentic_ui import _ipc_writer_local, render_context_event
+
+    writer = MagicMock()
+    _ipc_writer_local.writer = writer
+    try:
+        render_context_event(
+            "compact",
+            original_count=30,
+            new_count=30,
+            status="failed",
+            trigger="manual",
+            error_type="billing",
+        )
+    finally:
+        _ipc_writer_local.writer = None
+    writer.send_event.assert_called_once_with(
+        "context_event",
+        action="compact",
+        before=30,
+        after=30,
+        status="failed",
+        trigger="manual",
+        error_type="billing",
+    )
+
+
 class TestAgenticLoopEmitters:
     """Test emit_* functions from agentic_ui.py send IPC events."""
 

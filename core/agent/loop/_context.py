@@ -44,11 +44,6 @@ def notify_context_event(
     )
 
 
-def maybe_prune_messages(loop: AgenticLoop, messages: list[dict[str, Any]]) -> None:
-    """Prune old messages. Delegates to ContextWindowManager."""
-    loop._ctx_mgr.maybe_prune_messages(messages)
-
-
 async def check_context_overflow(
     loop: AgenticLoop, system: str, messages: list[dict[str, Any]]
 ) -> None:

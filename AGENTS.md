@@ -42,6 +42,7 @@ sandboxing remain separate. The shared-file pattern follows the
 | Ordinary development | [Evidence-first workflow](docs/workflow.md) and `.agents/skills/geode-workflow/` |
 | Branches, PRs, merge, cleanup | `.agents/skills/geode-gitflow/`; `.github/PULL_REQUEST_TEMPLATE.md` |
 | Abstraction, naming, types, schemas, tests, compatibility | [Naming conventions](docs/architecture/naming-conventions.md) and `.agents/skills/geode-code-conventions/` |
+| Public hooks, middleware, runtime events | [Hook contracts](docs/architecture/hook-system.md) and `.agents/skills/geode-code-conventions/`; distinguish decisions, trusted transforms, and observation |
 | Architecture/extensibility program | [Extensibility roadmap](docs/architecture/extensibility-roadmap.md), the single execution SOT for GAP IDs, order, status, acceptance, and closure evidence |
 | Package ownership | [Package classification](docs/architecture/package-classification.md) |
 | Coding-agent state, recovery, workspace/process limits | [Coding runtime authority](docs/architecture/coding-runtime-authority.md) before adding a record or store |
@@ -73,7 +74,7 @@ must trace every affected boundary; this table is routing, not an API census.
 | `core/tools/` | Handler in its category module → `registry.py` registration → `definitions.json` schema; deferred loading is adapter-owned (`core/llm/tool_defer.py`) |
 | `core/mcp/` | `manager.py` delegates config, connections, invocation/trace, and lifecycle to concrete owners; client tools use raw server names, not external-host `mcp__geode__*` names |
 | `core/memory/` | `context.py` assembles Identity/Profile/Org/Project/Session; `goals.py` owns explicit persistent objectives, not advisory Plan or automatic Plan-and-Execute |
-| `core/hooks/` | `system.py` owns events and trigger/interceptor behavior; trace registration through bootstrap |
+| `core/hooks/` | `public.py` owns bounded hook decisions; `middleware.py` owns trusted transforms/execution wrappers; `system.py` owns runtime observation; trace registration through bootstrap |
 | `core/wiring/` | Bootstrap, explicit service injection, serve, shutdown, and request-local binding/reset |
 | `core/server/` | CLI↔daemon IPC, capability negotiation, and lifecycle |
 | `core/skills/` | `skills.py`: bundled → global-user → project discovery; `use_skill` loads a selected body on demand, not trigger-based automatic injection |
@@ -86,7 +87,7 @@ must trace every affected boundary; this table is routing, not an API census.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 582 production Python files,
+The current snapshot records 581 production Python files,
 714 test Python files,
 86 tool definitions, and
 57 `RuntimeEvent` members.

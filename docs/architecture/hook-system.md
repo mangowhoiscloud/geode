@@ -21,6 +21,36 @@ The design record and measured migration map live in
 Persistence policy is documented in
 [`event-persistence.md`](event-persistence.md).
 
+## Contract ownership and naming
+
+[Naming conventions](naming-conventions.md#25-constants-tools-and-events) own
+the spelling rules; this document owns extension behavior. Python enum members
+and wire names are separate identities, not interchangeable aliases.
+
+| Contract | Code owner | Naming / API | Regression boundary |
+|---|---|---|---|
+| Public decisions | [public.py](../../core/hooks/public.py) | `HookName.PRE_TOOL_USE` → `PreToolUse`; `HookAction.ADD_CONTEXT` → `add_context` | [Schema, decisions, dispatch](../../tests/core/hooks/test_public_hooks.py) |
+| Tool admission/result | [executor.py](../../core/agent/tool_executor/executor.py), [approval.py](../../core/agent/approval.py) | `PreToolUse`, `PermissionRequest`, `PostToolUse` | [Runtime wiring](../../tests/core/hooks/test_public_hook_wiring.py) |
+| Trusted transforms/wrappers | [middleware.py](../../core/hooks/middleware.py) | `register_tool_request`, `register_tool_execution`, and LLM counterparts | [Composition and single invocation](../../tests/core/hooks/test_middleware.py) |
+| Observation | [system.py](../../core/hooks/system.py) | `RuntimeEvent.TOOL_EXEC_STARTED` → `tool_exec_started`; `subscribe` / `emit` | [Subscriber lifecycle](../../tests/core/hooks/test_hook_system_lifecycle.py) |
+
+Schema acceptance alone does not prove runtime wiring, permission enforcement,
+or durable telemetry. Test the affected producer and consumer together.
+
+### Boundary regression checks
+
+| Boundary | Required behavior | Regression evidence |
+|---|---|---|
+| Observation → execution | Each subscriber receives a deep snapshot; nested edits cannot change admitted tool arguments, later subscribers, or persisted event data. | [Event isolation](../../tests/core/hooks/test_hook_system_lifecycle.py) |
+| Model switch → compaction | Use `ContextWindowManager`, including `PreCompact` defer and `PostCompact` after commit; no direct summary bypass. | [Model-switch compaction](../../tests/core/agent/test_model_switch_guard.py) |
+| Cancellation → audit | Foreground child cancellation emits one `SubagentStop`; hook/middleware audit failure cannot replace the original interruption. | [Child wiring](../../tests/core/hooks/test_public_hook_wiring.py), [middleware](../../tests/core/hooks/test_middleware.py) |
+| Shared handler → session state | Learning quotas, cooldowns, tool counts and input cursors are keyed by session; only matching durable `SessionEnd` clears them. Legacy turn-end events do not delete shared offload files. | [Learning lifecycle](../../tests/core/hooks/test_auto_learn.py), [offload lifetime](../../tests/core/wiring/test_tool_offload_rewire.py) |
+| MCP trace → content | Tracing never reads local files or modifies write content. Schema argument aliases remain separate from content. | [MCP invocation](../../tests/core/mcp/test_mcp_lifecycle.py) |
+
+Offload retention remains TTL-based: recall rejects and removes an expired file;
+the store also exposes explicit expired-file cleanup. This is not a periodic
+disk sweeper or a new per-user authorization boundary.
+
 ## Public hooks
 
 `HookRegistry` accepts only these `HookName` values. It has no wildcard
@@ -30,10 +60,10 @@ order, and a block or denial stops the chain.
 | Hook | Boundary | Allowed decisions |
 |---|---|---|
 | `UserPromptSubmit` | Before user-input admission | continue, rewrite, block |
-| `PreToolUse` | After `tool_request`, before policy/approval | continue, rewrite, block, request permission |
-| `PermissionRequest` | Immediately before a real human prompt | allow, deny, ask |
-| `PostToolUse` | After a result, before model context | continue, add context, block |
-| `PreCompact` | Before runtime-owned compaction | continue, rewrite, soft defer |
+| `PreToolUse` | After request transforms and admission checks, before final policy/approval | continue, rewrite, block, request_permission |
+| `PermissionRequest` | Permission decision, including headless execution; human prompt is fallback | allow, deny, ask |
+| `PostToolUse` | After a result, before model context | continue, add_context, block |
+| `PreCompact` | Before runtime-owned compaction | continue, rewrite, defer |
 | `PostCompact` | After the compacted state commits | continue |
 | `SessionStart` | After durable create/resume succeeds | continue |
 | `SessionEnd` | After durable terminal state succeeds | continue |
@@ -41,7 +71,7 @@ order, and a block or denial stops the chain.
 | `SubagentStop` | After the terminal child result is fixed | continue |
 | `PreVerify` | Before the built-in verifier | continue, strengthen |
 | `PostVerify` | After immutable verifier output | accept, revise, escalate |
-| `Stop` | Immediately before final delivery | finalize, bounded continue |
+| `Stop` | Immediately before final delivery | finalize, continue |
 
 Current invocations use the versioned `geode.public-hook.v2` envelope. The
 unchanged v1 schema remains available for compatibility:
@@ -66,6 +96,12 @@ an isolated worker thread so blocking extension code cannot freeze the
 AgenticLoop event loop; async handlers remain directly cancellable. A timed-out
 sync thread may finish its own work later, so side-effecting extensions must
 still be idempotent.
+
+Returning `None` means no decision: the handler is audited as `ok`, adds no
+attributed decision, and leaves the domain owner's fallback intact. It is not
+an implicit `continue` or permission grant. Cancellation is audited as `error`
+with only its exception type as the reason, then the original cancellation is
+re-raised. Audit metadata never substitutes for a control decision.
 
 ### Verification and external loops
 
@@ -121,7 +157,11 @@ candidate -> PreVerify -> built-in verifier -> PostVerify -> Stop -> persist/del
                                                 +-- revise ---+
 ```
 
-`PreVerify` may only add requirements. `PostVerify` receives the immutable
+`PreVerify` may only add requirements: `strengthen` must contain non-empty
+`additional_misses`. An instruction alone is invalid and is reported in
+`handler_errors`, not silently accepted as stronger verification. Invalid
+decisions retain the registry's existing error-and-continue policy; they do
+not themselves block finalization. `PostVerify` receives the immutable
 built-in result and can:
 
 - accept a passing result or strengthen its evidence;
@@ -171,12 +211,12 @@ or rebilling a provider call.
 The tool path is:
 
 ```text
-tool_request transforms
-  -> schema validation
+original request policy checks
+  -> tool_request transforms
+  -> policy recheck + schema validation
   -> PreToolUse
-  -> schema revalidation
-  -> hard policy
-  -> PermissionRequest / approval
+  -> policy recheck + schema revalidation
+  -> PermissionRequest / approval (when required)
   -> tool_execution onion
   -> TOOL_EXEC_STARTED
   -> one terminal executor invocation
@@ -187,7 +227,13 @@ tool_request transforms
 Execution middleware cannot change the already-approved tool name or
 arguments. Personal-data classification is monotone across request rewrites:
 renaming cannot downgrade consent or retention policy. A short-circuit does
-not emit `TOOL_EXEC_STARTED`.
+not emit `TOOL_EXEC_STARTED`. `PostToolUse.executed` means the terminal dispatch
+was entered, not that its side effect succeeded; read `has_error` and the result
+separately. A post-hook cannot undo a completed effect.
+The sequence shows a new execution returning a result. Error results also emit
+compatibility `TOOL_EXEC_FAILED`, without duplicate persistence. Admission
+denials, completed-receipt replay, and propagated exceptions/cancellation skip
+`PostToolUse`.
 
 The LLM path is:
 
@@ -201,6 +247,9 @@ assembled AdapterCallRequest
 It covers the main loop, reflection, candidate sampling, and API mutation.
 Changing cache-sensitive prompt/messages/tools fields requires both a
 registration capability and an explicit cache-invalidation reason.
+Auxiliary calls allocate missing `llm_call_id` and `llm_attempt_id` before
+request middleware so extension audit and call lifecycle records share the
+same identity. Existing caller-provided IDs remain authoritative.
 
 ## Runtime events
 
@@ -215,6 +264,8 @@ identity aliases during migration. The legacy feedback/interceptor methods
 also remain for source compatibility, but production control paths no longer
 call them. New control belongs to a public hook, trusted middleware, or the
 owning domain service.
+The unused context-action feedback handler is removed; the legacy event value
+remains readable without an active control subscriber.
 
 Internal `SESSION_STARTED/ENDED` rows retain their historical meaning for old
 readers. Public `SessionStart/End` represent durable session lifetime and are
@@ -294,3 +345,12 @@ workers share one registry pair per process.
 `RuntimeEventBus.close()` blocks new registrations, clears subscribers, runs
 cleanup callbacks in reverse order, and closes sinks. SQLite connections are
 closed after each operation; close is idempotent.
+
+## Reference boundaries
+
+- [Codex hooks](https://learn.chatgpt.com/docs/hooks): public checkpoint names
+  and successful no-output handlers; not concurrency or security-boundary parity.
+- [Dioxus agent guide](https://github.com/DioxusLabs/dioxus/blob/ada3b67c73c1c5484dd2e8408cb21c470b200423/AGENTS.md):
+  task-to-owner navigation, not duplicated contracts.
+- [Furiosa kernel-authoring skill](https://github.com/furiosa-ai/furiosa-opt/blob/9b9cf0fdc78df00cdc430eae725a5ad9084a735e/skills/furiosa-opt-kernel-authoring/SKILL.md):
+  short execution guidance linked to one detailed contract; distinct evidence grades.

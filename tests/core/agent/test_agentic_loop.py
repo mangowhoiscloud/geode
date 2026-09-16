@@ -2139,94 +2139,47 @@ def _txt(text: str) -> dict[str, Any]:
     return {"type": "text", "text": text}
 
 
-class TestMessagePruning:
-    """Tests for _maybe_prune_messages — must never create orphaned tool_results."""
+class TestContextRetention:
+    def test_turn_preparation_keeps_long_token_cheap_history(self) -> None:
+        from core.agent.loop import _phases
 
-    def _make_loop(self) -> AgenticLoop:
-        ctx = ConversationContext()
-        executor = ToolExecutor(action_handlers={}, auto_approve=True)
-        return AgenticLoop(ctx, executor, quiet=True)
-
-    def test_no_prune_under_threshold(self) -> None:
-        """Messages <= 10 should not be pruned."""
-        loop = self._make_loop()
-        messages: list[dict[str, Any]] = [
-            {"role": "user", "content": "hello"},
-            {"role": "assistant", "content": [_txt("hi")]},
+        messages = [
+            {"role": "assistant" if i % 2 else "user", "content": f"tiny-{i}"} for i in range(40)
         ]
-        _context.maybe_prune_messages(loop, messages)
-        assert len(messages) == 2
-
-    def test_prune_skips_orphaned_tool_result(self) -> None:
-        """Pruning must not leave a tool_result without matching tool_use."""
-        loop = self._make_loop()
-        messages: list[dict[str, Any]] = [
-            {"role": "user", "content": "q1"},
-            {"role": "assistant", "content": [_tu("t1")]},
-            {"role": "user", "content": [_tr("t1")]},
-            {"role": "assistant", "content": [_txt("done1")]},
-            {"role": "user", "content": "q2"},
-            {"role": "assistant", "content": [_tu("t2", "b")]},
-            {"role": "user", "content": [_tr("t2")]},
-            {"role": "assistant", "content": [_txt("done2")]},
-            {"role": "user", "content": "q3"},
-            {"role": "assistant", "content": [_tu("t3", "c")]},
-            {"role": "user", "content": [_tr("t3")]},
-            {"role": "assistant", "content": [_txt("done3")]},
-            {"role": "user", "content": "q4"},
-        ]
-        _context.maybe_prune_messages(loop, messages)
-        # After pruning, no tool_result should be orphaned
-        for i, msg in enumerate(messages):
-            if msg["role"] != "user":
-                continue
-            content = msg.get("content")
-            if not isinstance(content, list):
-                continue
-            tr_ids = {
-                b["tool_use_id"]
-                for b in content
-                if isinstance(b, dict) and b.get("type") == "tool_result"
-            }
-            if not tr_ids:
-                continue
-            assert i > 0
-            assert messages[i - 1]["role"] == "assistant"
-            prev = messages[i - 1].get("content", [])
-            tu_ids = {
-                b.get("id") for b in prev if isinstance(b, dict) and b.get("type") == "tool_use"
-            }
-            assert tr_ids <= tu_ids, f"Orphaned tool_result at {i}"
-
-    def test_prune_finds_safe_cut(self) -> None:
-        """Pruning should cut at a plain user text message."""
-        loop = self._make_loop()
-        # Build enough messages to exceed prune threshold (30)
-        messages: list[dict[str, Any]] = [
-            {"role": "user", "content": "q1"},
-            {"role": "assistant", "content": [_tu("t1")]},
-            {"role": "user", "content": [_tr("t1")]},
-            {"role": "assistant", "content": [_txt("done1")]},
-        ]
-        # Pad with plain user/assistant pairs to exceed threshold
-        for i in range(14):
-            messages.append({"role": "user", "content": f"pad_q{i}"})
-            messages.append({"role": "assistant", "content": f"pad_a{i}"})
-        messages.extend(
-            [
-                {"role": "user", "content": "q_final"},
-                {"role": "assistant", "content": [_txt("done_final")]},
-                {"role": "user", "content": "q_last"},
-            ]
+        ctx = ConversationContext(messages=list(messages))
+        loop = AgenticLoop(
+            ctx,
+            ToolExecutor(action_handlers={}, auto_approve=True),
+            model="gpt-5.6-sol",
+            provider="openai",
+            quiet=True,
         )
-        assert len(messages) > 30
-        _context.maybe_prune_messages(loop, messages)
-        assert messages[0]["role"] == "user"
-        assert messages[1]["role"] == "assistant"
-        # After pruning, no orphaned tool_result in first user msg
-        content = messages[2].get("content") if len(messages) > 2 else None
-        if isinstance(content, list):
-            assert not any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content)
+
+        async def prepare() -> None:
+            with (
+                patch.object(_guards, "_open_turn", AsyncMock(return_value=None)),
+                patch.object(loop, "_build_system_prompt", return_value="System"),
+                patch.object(loop, "_prepare_task_preflight", return_value=""),
+            ):
+                turn = await _phases.prepare_input(
+                    loop,
+                    "continue",
+                    verify_continuation=None,
+                    goal_continuation=None,
+                    goal_continuation_trigger="active_goal",
+                )
+            assert isinstance(turn, _phases.PreparedTurn)
+            assert turn.messages == messages
+            await loop._ctx_mgr.check_context_overflow(
+                turn.system_prompt,
+                turn.messages,
+                loop.model,
+                loop._provider,
+            )
+            assert turn.messages == messages
+            assert ctx.messages == messages
+
+        asyncio.run(prepare())
 
 
 class TestRepairMessages:

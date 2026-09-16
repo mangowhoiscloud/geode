@@ -221,6 +221,12 @@ base implementation, not used merely to make inheritance possible.
 - Environment variables use the `GEODE_*` namespace.
 - Tool registry names are `snake_case`; tool classes use `<Noun>Tool`,
   `<Verb><Noun>Tool`, or an established source-specific form.
+- Public `HookName` members are `UPPER_SNAKE_CASE` with `PascalCase` wire
+  values (`PRE_TOOL_USE = "PreToolUse"`). `HookAction` members use
+  `UPPER_SNAKE_CASE` with `lower_snake_case` decisions (`ADD_CONTEXT` →
+  `"add_context"`). Public hook names identify decision checkpoints, not events;
+  [hook contracts](hook-system.md#contract-ownership-and-naming) own their
+  allowed actions, payloads, and invocation boundaries.
 - `RuntimeEvent` members are `UPPER_SNAKE_CASE` with `lower_snake_case` wire
   values. Lifecycle pairs use `*_STARTED` / `*_ENDED`; failures use
   `*_FAILED`; state-rich transitions use one event plus a typed payload rather

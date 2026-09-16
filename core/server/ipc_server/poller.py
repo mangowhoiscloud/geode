@@ -26,13 +26,14 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import importlib
+import inspect
 import logging
 import os
 import queue
 import threading
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from core.ipc_protocol import (
     IPC_EVENT_TYPES,
@@ -315,7 +316,8 @@ class CLIPoller:
         *,
         socket_path: Path | None = None,
         scheduler_service: Any = None,
-        command_handler: Callable[..., tuple[bool, bool, Any]] | None = None,
+        command_handler: Callable[..., tuple[bool, bool, Any] | Awaitable[tuple[bool, bool, Any]]]
+        | None = None,
         context_initializer: Callable[[], None] | None = None,
     ) -> None:
         self._services = services
@@ -629,15 +631,15 @@ class CLIPoller:
                 return {"type": "error", "message": str(exc)}
 
         if msg_type == "command":
-            if str(msg.get("cmd") or "").casefold() == "/goal":
+            if str(msg.get("cmd") or "").casefold() in {"/goal", "/compact", "/model"}:
                 lane_queue = self._services.lane_queue
                 if lane_queue is not None:
                     async with lane_queue.acquire_all_async(
                         loop._session_id,
                         ["session", "global"],
                     ):
-                        return await asyncio.to_thread(self._handle_command_on_server, msg, loop)
-            return await asyncio.to_thread(self._handle_command_on_server, msg, loop)
+                        return await self._handle_command_on_server(msg, loop)
+            return await self._handle_command_on_server(msg, loop)
 
         if msg_type == "command_stream":
             try:
@@ -988,7 +990,7 @@ class CLIPoller:
             "summary": summary,
         }
 
-    def _handle_command_on_server(self, msg: dict[str, Any], loop: Any) -> dict[str, Any]:
+    async def _handle_command_on_server(self, msg: dict[str, Any], loop: Any) -> dict[str, Any]:
         """Execute a slash command on the server side.
 
         Captures all console output (with ANSI styling) so it can be
@@ -1033,7 +1035,10 @@ class CLIPoller:
                     "message": "daemon command handler is not configured",
                 }
             with capture_output() as buf:
-                should_break, _verbose, _resume = self._command_handler(
+                from functools import partial
+
+                dispatch = partial(
+                    self._command_handler,
                     cmd,
                     args,
                     False,
@@ -1043,17 +1048,25 @@ class CLIPoller:
                     scheduler_service=self._scheduler_service,
                     agentic_ref=loop,
                 )
-            # /model writes config.toml + the daemon's Settings singleton but
-            # cmd_model does NOT touch the live session's AgenticLoop — its
-            # docstring even says "applies to *new* sessions". So a /model
-            # switch inside an interactive REPL was silently ignored until the
-            # session ended: the thin CLI relays /model here, the singleton
-            # flips, but the loop the next prompt runs on keeps its boot-time
-            # model. Operator-reported "fable 5로 바꿔도 opus-4-8로 동작"
-            # (2026-06-11) — the thin-CLI ↔ daemon model gap. Sync the live
-            # loop here so the switch lands in the SAME session.
-            if cmd == "/model" and loop is not None:
-                self._sync_live_loop_to_settings(loop, model_before, effort_before)
+                if inspect.iscoroutinefunction(self._command_handler):
+                    result = dispatch()
+                else:
+                    sync_dispatch = cast(Callable[[], tuple[bool, bool, Any]], dispatch)
+                    result = await asyncio.to_thread(sync_dispatch)
+                if inspect.isawaitable(result):
+                    result = await result
+                should_break, _verbose, _resume = result
+                # /model writes config.toml + the daemon's Settings singleton but
+                # cmd_model does NOT touch the live session's AgenticLoop — its
+                # docstring even says "applies to *new* sessions". So a /model
+                # switch inside an interactive REPL was silently ignored until the
+                # session ended: the thin CLI relays /model here, the singleton
+                # flips, but the loop the next prompt runs on keeps its boot-time
+                # model. Operator-reported "fable 5로 바꿔도 opus-4-8로 동작"
+                # (2026-06-11) — the thin-CLI ↔ daemon model gap. Sync the live
+                # loop here so the switch lands in the SAME session.
+                if cmd == "/model" and loop is not None:
+                    await self._sync_live_loop_to_settings(loop, model_before, effort_before)
             return {
                 "type": "command_result",
                 "cmd": cmd,
@@ -1070,17 +1083,18 @@ class CLIPoller:
                 "message": str(exc),
             }
 
-    def _sync_live_loop_to_settings(self, loop: Any, model_before: str, effort_before: str) -> None:
+    async def _sync_live_loop_to_settings(
+        self, loop: Any, model_before: str, effort_before: str
+    ) -> None:
         """Re-point the live session loop after a ``/model`` changed the primary.
 
         Called right after a ``/model`` command lands on the daemon. The
         command updated ``settings.model`` (+ ``settings.agentic_effort``)
         but not the AgenticLoop the active session runs on. This mirrors the
         ``client_capability`` adoption path (which only fires once at session
-        start) for the mid-session case, using the same synchronous swap
-        helpers ``update_model_async`` uses internally — model + provider +
-        identity breadcrumb + context-window adapt — minus the async-only
-        ``MODEL_SWITCHED`` hook (telemetry, not behaviour). The effort axis is
+        start) for the mid-session case, awaiting the same ``update_model_async``
+        path on the serving event loop, including compaction and hooks.
+        The effort axis is
         re-pointed directly, matching ``services.create_session``'s
         constructor bridge.
 
@@ -1113,15 +1127,11 @@ class CLIPoller:
         # hasn't already caught up.
         if target and target != model_before and target != getattr(loop, "model", ""):
             try:
-                old_model, changed = _model_switching._apply_model_update(
-                    loop, target, _resolve_provider(target)
-                )
-                if changed:
-                    _model_switching._inject_model_switch_breadcrumb(loop, old_model, target)
-                    _model_switching.adapt_context_for_model(loop, target)
-                    log.info("model command: live session loop synced to %s", target)
+                await _model_switching.update_model_async(loop, target, _resolve_provider(target))
+                log.info("model command: live session loop synced to %s", target)
             except Exception:
                 log.warning("model command: live loop model sync failed", exc_info=True)
+                raise
 
         new_effort = (getattr(settings, "agentic_effort", "") or "").strip()
         if (
@@ -1132,7 +1142,7 @@ class CLIPoller:
             loop._effort = new_effort
             log.info("model command: live session effort synced to %s", new_effort)
 
-    def _handle_resume(
+    async def _handle_resume(
         self,
         msg: dict[str, Any],
         loop: Any,
@@ -1146,13 +1156,13 @@ class CLIPoller:
 
             state = None
             if msg.get("continue"):
-                sessions = cp.list_resumable()
+                sessions = await asyncio.to_thread(cp.list_resumable)
                 if sessions:
                     state = sessions[0]
             else:
                 sid = msg.get("session_id", "")
                 if sid:
-                    state = cp.load(sid)
+                    state = await asyncio.to_thread(cp.load, sid)
             if state is None:
                 return {"type": "resume_error", "message": "No resumable session found"}
 
@@ -1165,7 +1175,7 @@ class CLIPoller:
             # Resume-by-id of a terminal (completed/error) instance takes
             # the explicit reopen edge of the session automaton — the
             # per-turn save() would otherwise warn about an implicit reopen.
-            cp.reopen(state.session_id)
+            await asyncio.to_thread(cp.reopen, state.session_id)
 
             # Restore conversation messages
             conversation.messages.clear()
@@ -1181,9 +1191,7 @@ class CLIPoller:
 
             # Restore model if different
             if state.model and state.model != loop.model:
-                from core.async_runtime import run_process_coroutine
-
-                run_process_coroutine(loop.update_model_async(state.model))
+                await loop.update_model_async(state.model, reason="resume")
 
             log.info(
                 "Session resumed: %s (round=%d, messages=%d)",
@@ -1225,9 +1233,9 @@ class CLIPoller:
         session_id = str(resolved.get("session_id") or "")
         lane_queue = self._services.lane_queue
         if not session_id or lane_queue is None:
-            return await asyncio.to_thread(self._handle_resume, resolved, loop, conversation)
+            return await self._handle_resume(resolved, loop, conversation)
         async with lane_queue.acquire_all_async(session_id, ["session", "global"]):
-            return await asyncio.to_thread(self._handle_resume, resolved, loop, conversation)
+            return await self._handle_resume(resolved, loop, conversation)
 
     def _propagate_contextvars(self) -> None:
         """Set request-local CLI readiness in this thread."""

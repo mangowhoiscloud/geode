@@ -59,7 +59,7 @@ _SECRET_KEYS = frozenset(
 
 
 class HookName(StrEnum):
-    """The complete version-one public hook allowlist."""
+    """Stable public checkpoint names, distinct from internal runtime events."""
 
     USER_PROMPT_SUBMIT = "UserPromptSubmit"
     PRE_TOOL_USE = "PreToolUse"
@@ -347,6 +347,16 @@ _PAYLOAD_SCHEMAS: dict[HookName, dict[str, Any]] = {
 }
 
 
+def _payload_schema(hook: HookName) -> dict[str, Any]:
+    payload = _PAYLOAD_SCHEMAS[hook]
+    return {
+        "type": "object",
+        "properties": {**payload["properties"], "_redacted_fields": _STRING_ARRAY},
+        "required": payload["required"],
+        "additionalProperties": False,
+    }
+
+
 def public_hook_schema(
     hook: HookName,
     *,
@@ -356,7 +366,6 @@ def public_hook_schema(
     resolved = HookName(hook)
     if version not in {_PUBLIC_HOOK_SCHEMA_V1, PUBLIC_HOOK_SCHEMA_VERSION}:
         raise ValueError(f"unsupported public hook schema version: {version}")
-    payload = _PAYLOAD_SCHEMAS[resolved]
     correlation_properties = {
         "session_id": _STRING,
         "turn_id": _STRING,
@@ -384,15 +393,7 @@ def public_hook_schema(
                     "required": list(correlation_properties),
                     "additionalProperties": False,
                 },
-                "payload": {
-                    "type": "object",
-                    "properties": {
-                        **payload["properties"],
-                        "_redacted_fields": _STRING_ARRAY,
-                    },
-                    "required": payload["required"],
-                    "additionalProperties": False,
-                },
+                "payload": _payload_schema(resolved),
                 "decision": {
                     "type": "object",
                     "properties": {
@@ -563,6 +564,7 @@ class HookRegistry:
             started = time.monotonic()
             outcome = "ok"
             reason = ""
+            interruption: BaseException | None = None
             try:
                 # A frozen dataclass does not freeze nested dicts. Give every
                 # handler an isolated payload and reject in-place mutation so
@@ -576,7 +578,7 @@ class HookRegistry:
                         "hook handlers cannot mutate invocation.payload; return REWRITE updates"
                     )
                 if decision is None:
-                    decision = HookDecision()
+                    continue
                 self._validate_decision(resolved, decision)
                 decision = _sanitize_decision(decision)
                 if decision.action is HookAction.REWRITE:
@@ -595,15 +597,29 @@ class HookRegistry:
                 outcome = "error"
                 reason = type(exc).__name__
                 errors.append(f"{handler.name}: {exc}")
+            except BaseException as exc:
+                outcome = "error"
+                reason = type(exc).__name__
+                interruption = exc
+                raise
             finally:
-                await self._record_invocation(
-                    hook=resolved,
-                    extension=handler.name,
-                    outcome=outcome,
-                    reason=reason,
-                    duration_ms=(time.monotonic() - started) * 1_000,
-                    correlation=invocation.correlation,
-                )
+                try:
+                    await self._record_invocation(
+                        hook=resolved,
+                        extension=handler.name,
+                        outcome=outcome,
+                        reason=reason,
+                        duration_ms=(time.monotonic() - started) * 1_000,
+                        correlation=invocation.correlation,
+                    )
+                except BaseException as audit_error:
+                    if interruption is None:
+                        raise
+                    log.warning(
+                        "Public hook audit interrupted while preserving %s (%s)",
+                        type(interruption).__name__,
+                        type(audit_error).__name__,
+                    )
         return HookOutcome(
             invocation=invocation,
             decisions=tuple(decisions),
@@ -642,6 +658,14 @@ class HookRegistry:
         if decision.action is not HookAction.REWRITE and decision.updates:
             raise InvalidHookDecisionError("updates are only allowed for rewrite decisions")
         if (
+            hook is HookName.PRE_VERIFY
+            and decision.action is HookAction.STRENGTHEN
+            and not decision.additional_misses
+        ):
+            raise InvalidHookDecisionError(
+                "PreVerify strengthen requires at least one additional miss"
+            )
+        if (
             hook is HookName.POST_VERIFY
             and decision.action is HookAction.REVISE
             and not decision.instruction.strip()
@@ -659,17 +683,7 @@ class HookRegistry:
         from jsonschema import Draft202012Validator
 
         errors = sorted(
-            Draft202012Validator(
-                {
-                    "type": "object",
-                    "properties": {
-                        **_PAYLOAD_SCHEMAS[hook]["properties"],
-                        "_redacted_fields": _STRING_ARRAY,
-                    },
-                    "required": _PAYLOAD_SCHEMAS[hook]["required"],
-                    "additionalProperties": False,
-                }
-            ).iter_errors(payload),
+            Draft202012Validator(_payload_schema(hook)).iter_errors(payload),
             key=lambda error: tuple(str(part) for part in error.path),
         )
         if errors:

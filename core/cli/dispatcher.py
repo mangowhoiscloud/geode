@@ -29,6 +29,40 @@ from core.ui.console import console
 from core.wiring.startup import check_readiness
 
 
+async def _handle_command_async(
+    cmd: str,
+    args: str,
+    verbose: bool,
+    *,
+    skill_registry: Any = None,
+    mcp_manager: Any = None,
+    command_registry: Any = None,
+    scheduler_service: Any = None,
+    agentic_ref: Any = None,
+) -> tuple[bool, bool, Any]:
+    """Await context summarization on the owning loop; offload sync-only commands."""
+    import asyncio
+
+    if resolve_action(cmd) == "compact":
+        from core.cli.commands import cmd_compact_async
+
+        result = await cmd_compact_async(args, agentic_ref=agentic_ref)
+        if result.status == "failed":
+            raise RuntimeError(f"Context {result.action} failed: {result.error_type}")
+        return False, verbose, None
+    return await asyncio.to_thread(
+        _handle_command,
+        cmd,
+        args,
+        verbose,
+        skill_registry=skill_registry,
+        mcp_manager=mcp_manager,
+        command_registry=command_registry,
+        scheduler_service=scheduler_service,
+        agentic_ref=agentic_ref,
+    )
+
+
 def _handle_command(
     cmd: str,
     args: str,
@@ -172,7 +206,7 @@ def _handle_command(
     elif action == "compact":
         from core.cli.commands import cmd_compact
 
-        cmd_compact(args)
+        cmd_compact(args, agentic_ref=agentic_ref)
     elif action == "clear":
         from core.cli.commands import cmd_clear
 

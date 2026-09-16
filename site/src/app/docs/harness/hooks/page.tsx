@@ -72,7 +72,8 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              이 allowlist 밖의 action과 payload 필드는 거부됩니다. 실패한 내장 검증을
+              훅별 schema에 없는 필드와 허용되지 않은 action은 거부됩니다.
+              선택 필드는 아래 runtime schema에서 확인합니다. 실패한 내장 검증을
               외부 훅이 pass로 뒤집을 수도 없습니다. <code>rewrite</code>는 비어 있지
               않은 <code>updates</code>, <code>PostVerify.revise</code>와
               <code>Stop.continue</code>는 비어 있지 않은 <code>instruction</code>이
@@ -88,7 +89,9 @@ export default function Page() {
                 <tr><td>payload 상한</td><td>문자열 4,096자, JSON 32 KiB, collection 64개, depth 8</td></tr>
                 <tr><td>decision 상한</td><td>reason 1,024자, instruction 4,096자, evidence reference 32개</td></tr>
                 <tr><td>기본 timeout</td><td>handler별 10초. sync handler는 event loop 밖에서 실행</td></tr>
-                <tr><td>오류</td><td>현재 handler 오류를 기록하고 다음 handler를 계속 실행</td></tr>
+                <tr><td>결정 없음</td><td><code>None</code>은 <code>ok</code>로 감사하되 결정은 추가하지 않음. 묵시적 continue나 권한 허용이 아님</td></tr>
+                <tr><td>오류·취소</td><td>일반 오류는 기록 후 다음 handler 실행. 취소는 <code>error</code>와 예외 타입명만 감사한 뒤 원본을 다시 전파</td></tr>
+                <tr><td>검증 강화</td><td><code>PreVerify.strengthen</code>은 <code>additional_misses</code>가 필요. 지시문만 있는 결정은 오류로 기록하고 적용하지 않음</td></tr>
               </tbody>
             </table>
             <p>
@@ -139,6 +142,12 @@ export default function Page() {
               통합을 위한 타입 별칭이며, 새 코드는{" "}
               <code>RuntimeEvent</code>/<code>RuntimeEventBus</code>를 사용합니다.
             </p>
+            <p>
+              관측자는 중첩 데이터까지 격리된 복사본을 받으므로 승인된 tool
+              인자나 다음 관측자의 입력을 바꾸지 못합니다. 학습 상태 정리는
+              durable <code>SessionEnd</code>에 연결하며, 과거 turn-end
+              이벤트로 공유 offload 파일을 삭제하지 않습니다.
+            </p>
             <table>
               <thead><tr><th>저장소</th><th>동작</th></tr></thead>
               <tbody>
@@ -153,16 +162,29 @@ export default function Page() {
             </p>
 
             <h2>도구 경계 순서</h2>
-            <pre>{`tool_request → schema validation → PreToolUse → revalidation
-→ hard deny / policy → PermissionRequest
+            <pre>{`original policy → tool_request → policy + schema validation
+→ PreToolUse → policy + schema revalidation → PermissionRequest / approval
 → pending-call checkpoint → effect admission → terminal executor 1회 호출
-→ TOOL_EXEC_ENDED or TOOL_EXEC_FAILED → PostToolUse → receipt commit`}</pre>
+→ TOOL_EXEC_ENDED → PostToolUse → receipt commit`}</pre>
+            <p>
+              위 순서는 새 실행이 결과를 반환하는 경로입니다. 오류 결과는 호환용
+              <code>TOOL_EXEC_FAILED</code>도 알리지만 이중 저장하지 않습니다.
+              admission 거부, 완료 receipt 재생, 전파되는 예외·취소에는
+              <code>PostToolUse</code>를 실행하지 않습니다.
+            </p>
+            <p>
+              승인이 필요한 요청은 headless에서도 <code>PermissionRequest</code>를
+              거칩니다. 훅의 결정이 없거나 <code>ask</code>이면 허용된 사람 확인으로
+              넘기며, 확인할 수 없으면 거부합니다.
+            </p>
             <p>
               여기서 1회는 승인된 한 요청의 프로세스 내부 호출 횟수입니다.
               외부 효과의 exactly-once를 뜻하지 않습니다. 변경·통신·관리 도구는
               별도의 durable admission receipt로 같은 logical operation의 중복을
               억제합니다. receipt에는 PostToolUse까지 끝난 결과를 저장하며, 완료
-              여부가 불명확하면 자동 재실행하지 않습니다.
+              여부가 불명확하면 자동 재실행하지 않습니다. <code>PostToolUse.executed</code>는
+              terminal dispatch 진입 여부이지 효과의 성공이 아닙니다. <code>has_error</code>와
+              결과를 별도로 읽으며, post-hook은 완료된 효과를 되돌리지 못합니다.
             </p>
 
             <h2>다음</h2>
@@ -211,7 +233,8 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              Fields and actions outside this allowlist are rejected. An external
+              Unknown schema fields and disallowed actions are rejected; consult
+              the runtime schema below for optional fields. An external
               hook also cannot turn a failed built-in verification into a pass.
               <code>rewrite</code> requires non-empty <code>updates</code>, while
               <code>PostVerify.revise</code> and <code>Stop.continue</code> require a
@@ -227,7 +250,9 @@ export default function Page() {
                 <tr><td>Payload bounds</td><td>4,096 characters per string, 32 KiB JSON, 64 collection items, depth 8</td></tr>
                 <tr><td>Decision bounds</td><td>1,024-character reason, 4,096-character instruction, 32 evidence references</td></tr>
                 <tr><td>Default timeout</td><td>10 seconds per handler; synchronous handlers run off the event loop</td></tr>
-                <tr><td>Errors</td><td>Record the current handler error and continue with later handlers</td></tr>
+                <tr><td>No decision</td><td>Audit <code>None</code> as <code>ok</code> without adding a decision; it is not implicit continue or permission</td></tr>
+                <tr><td>Errors and cancellation</td><td>Record ordinary errors and continue; audit cancellation as <code>error</code> with its type name only, then re-raise the original</td></tr>
+                <tr><td>Verification strengthening</td><td><code>PreVerify.strengthen</code> requires <code>additional_misses</code>; an instruction-only decision is recorded as an error and not applied</td></tr>
               </tbody>
             </table>
             <p>
@@ -281,6 +306,12 @@ export default function Page() {
               compatibility type aliases; new code uses{" "}
               <code>RuntimeEvent</code>/<code>RuntimeEventBus</code>.
             </p>
+            <p>
+              Observers receive deep snapshots and cannot alter admitted tool
+              arguments or later observers. Learning-state cleanup follows
+              durable <code>SessionEnd</code>; legacy turn-end events do not
+              delete shared offload files.
+            </p>
             <table>
               <thead><tr><th>Store</th><th>Behavior</th></tr></thead>
               <tbody>
@@ -295,17 +326,30 @@ export default function Page() {
             </p>
 
             <h2>Tool boundary order</h2>
-            <pre>{`tool_request → schema validation → PreToolUse → revalidation
-→ hard deny / policy → PermissionRequest
+            <pre>{`original policy → tool_request → policy + schema validation
+→ PreToolUse → policy + schema revalidation → PermissionRequest / approval
 → pending-call checkpoint → effect admission → one terminal executor invocation
-→ TOOL_EXEC_ENDED or TOOL_EXEC_FAILED → PostToolUse → receipt commit`}</pre>
+→ TOOL_EXEC_ENDED → PostToolUse → receipt commit`}</pre>
+            <p>
+              This is the result-returning path for a new execution. An error
+              result also emits compatibility <code>TOOL_EXEC_FAILED</code> without
+              duplicate persistence. Admission denial, completed-receipt replay,
+              and propagated exceptions or cancellation skip <code>PostToolUse</code>.
+            </p>
+            <p>
+              Requests needing approval reach <code>PermissionRequest</code> even
+              when headless. No decision or <code>ask</code> falls back to an
+              allowed human prompt; if prompting is unavailable, the request is denied.
+            </p>
             <p>
               One invocation describes in-process control flow for an admitted
               request, not external exactly-once. Mutation, communication, and
               administrative tools use a separate durable admission receipt to
               suppress the same logical operation. The receipt stores the
               PostToolUse-final result; an uncertain outcome is not automatically
-              replayed.
+              replayed. <code>PostToolUse.executed</code> means terminal dispatch
+              was entered, not that the effect succeeded. Read <code>has_error</code>{" "}
+              and the result separately; a post-hook cannot undo a completed effect.
             </p>
 
             <h2>Next</h2>
