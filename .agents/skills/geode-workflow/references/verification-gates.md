@@ -77,6 +77,25 @@ verify_prompt_integrity(raise_on_drift=True)
 PY
 ```
 
+## Performance Ratchet
+
+The existing `scripts/check_architecture_performance.py --check` retains its
+three isolated samples, raw measurements, median per metric, and independent
+limits in `docs/architecture/performance-baseline.json`. Invalid individual
+samples fail before aggregation; NaN, infinity, non-positive values and metric
+set drift cannot become a passing measurement.
+
+CI runs the mirrored FTS and checker contract tests before performance
+acceptance. A failed performance step triggers one separate `--diagnose` probe
+with bounded, redacted first-turn profile output. This is unscored evidence,
+not a warm-up, substitute measurement, retry-to-green, or permission to loosen
+the baseline. The original failed step still fails Test and Gate.
+
+SQLite capability probes must not write the durable session schema, commit
+caller work, or cache another connection's authority. Keep the real
+checkpoint/timeline writes and durability settings in the measured path.
+The FTS regression checks these boundaries without a wall-clock assertion.
+
 ## Full Suite
 
 For broad runtime changes, use `scripts/preflight.sh` and inspect its results

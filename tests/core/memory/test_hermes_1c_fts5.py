@@ -239,3 +239,85 @@ def test_delete_message_removes_from_index(sm: object) -> None:
     assert sm._conn.execute("SELECT COUNT(*) FROM messages_fts").fetchone()[0] == 1  # type: ignore[attr-defined]
     sm.delete_messages("s1")  # type: ignore[attr-defined]
     assert sm._conn.execute("SELECT COUNT(*) FROM messages_fts").fetchone()[0] == 0  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("pending_write", [False, True])
+def test_trigram_probe_preserves_main_schema_transaction_and_caller_tables(
+    tmp_path: Path, pending_write: bool
+) -> None:
+    from core.memory.fts_query import has_trigram_support
+
+    conn = sqlite3.connect(tmp_path / "probe.db")
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("CREATE TABLE retained(value TEXT)")
+        conn.execute("CREATE TABLE _geode_trigram_probe(value TEXT)")
+        conn.execute("CREATE TEMP TABLE _geode_trigram_probe(value TEXT)")
+        conn.commit()
+        version = conn.execute("PRAGMA main.schema_version").fetchone()[0]
+        schema = conn.execute("SELECT name, sql FROM main.sqlite_master ORDER BY name").fetchall()
+        if pending_write:
+            conn.execute("INSERT INTO retained VALUES ('pending')")
+        for _ in range(4):
+            assert has_trigram_support(conn) is True
+        assert conn.in_transaction is pending_write
+        assert conn.execute("PRAGMA main.schema_version").fetchone()[0] == version
+        assert (
+            conn.execute("SELECT name, sql FROM main.sqlite_master ORDER BY name").fetchall()
+            == schema
+        )
+        assert conn.execute(
+            "SELECT name FROM sqlite_temp_master WHERE name LIKE '_geode_trigram_probe%'"
+        ).fetchall() == [("_geode_trigram_probe",)]
+        conn.rollback()
+        assert conn.execute("SELECT * FROM retained").fetchall() == []
+    finally:
+        conn.close()
+
+
+def test_trigram_probe_works_with_read_only_main(tmp_path: Path) -> None:
+    from core.memory.fts_query import has_trigram_support
+
+    path = tmp_path / "readonly.db"
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE retained(value TEXT)")
+    conn.close()
+    readonly = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
+    try:
+        assert has_trigram_support(readonly) is True
+        assert readonly.execute("SELECT name FROM sqlite_temp_master").fetchall() == []
+    finally:
+        readonly.close()
+
+
+def test_trigram_probe_does_not_cache_past_connection_authority_changes() -> None:
+    from core.memory.fts_query import has_trigram_support
+
+    def deny_virtual_table(action: int, *_args: object) -> int:
+        return sqlite3.SQLITE_DENY if action == sqlite3.SQLITE_CREATE_VTABLE else sqlite3.SQLITE_OK
+
+    conn = sqlite3.connect(":memory:")
+    try:
+        assert has_trigram_support(conn) is True
+        conn.set_authorizer(deny_virtual_table)
+        assert has_trigram_support(conn) is False
+        conn.set_authorizer(None)
+        assert has_trigram_support(conn) is True
+        assert conn.execute("SELECT name FROM sqlite_temp_master").fetchall() == []
+    finally:
+        conn.close()
+
+
+def test_session_manager_reopen_does_not_rewrite_fts_capability_schema(tmp_path: Path) -> None:
+    from core.memory.session_manager import SessionManager
+
+    path = tmp_path / "sessions.db"
+    versions = []
+    for _ in range(3):
+        manager = SessionManager(db_path=path)
+        try:
+            assert manager._has_trigram is True
+            versions.append(manager._conn.execute("PRAGMA main.schema_version").fetchone()[0])
+        finally:
+            manager.close()
+    assert len(set(versions)) == 1
