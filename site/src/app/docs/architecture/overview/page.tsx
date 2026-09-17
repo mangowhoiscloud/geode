@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
 export const metadata = { title: "The 5-layer stack — GEODE Docs" };
@@ -15,7 +16,9 @@ export default function Page() {
         ko={
           <>
             <figure>
-              <img
+              <Image
+                width={900}
+                height={460}
                 src="/geode/diagrams/five-layer-stack.svg"
                 alt="The GEODE 5-layer stack: SELF-IMPROVING, AGENT, HARNESS, RUNTIME, MODEL, with the components each layer owns"
               />
@@ -167,7 +170,9 @@ export default function Page() {
         en={
           <>
             <figure>
-              <img
+              <Image
+                width={900}
+                height={460}
                 src="/geode/diagrams/five-layer-stack.svg"
                 alt="The GEODE 5-layer stack: SELF-IMPROVING, AGENT, HARNESS, RUNTIME, MODEL, with the components each layer owns"
               />

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
 export const metadata = { title: "The two loops — GEODE Docs" };
@@ -98,7 +99,9 @@ export default function Page() {
               바뀐 스캐폴드는 다음 번 안쪽 루프가 행동하는 방식을 바꿉니다.
             </p>
             <figure>
-              <img
+              <Image
+                width={900}
+                height={412}
                 src="/geode/diagrams/two-loops.svg"
                 alt="바깥쪽 선택 루프(변이, Petri 감사, fitness, margin 게이트, champion chain)와 안쪽 agentic 루프(LLM 호출, 도구 실행, 관찰)가 나란히 있고, 스캐폴드는 안쪽으로 흐르며 트랜스크립트는 바깥쪽 감사로 돌아간다"
               />
@@ -201,7 +204,9 @@ export default function Page() {
               loop behaves next time.
             </p>
             <figure>
-              <img
+              <Image
+                width={900}
+                height={412}
                 src="/geode/diagrams/two-loops.svg"
                 alt="The outer selection loop (mutate, Petri audit, fitness, margin gate, champion chain) beside the inner agentic loop (call LLM, run tools, observe); the scaffold flows into the inner loop and transcripts flow back to the audit"
               />

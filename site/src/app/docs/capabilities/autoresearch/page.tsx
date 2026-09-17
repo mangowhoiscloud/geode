@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
 export const metadata = { title: "Scaffold search — GEODE Docs" };
@@ -30,7 +31,9 @@ export default function Page() {
               <li><a href="/geode/docs/capabilities/seed-pipeline">시나리오 생성</a>은 <code>evals/seed_generation/</code>에서 평가용 seed 코퍼스를 만듭니다. 후보 시스템의 개선과 평가 입력의 생성을 구분해야 합니다.</li>
             </ul>
             <figure>
-              <img
+              <Image
+                width={510}
+                height={627}
                 src="/geode/diagrams/self-improving-cycle.svg"
                 alt="선택 루프 한 사이클. 스캐폴드 한 섹션을 변이하고, 적대적 안전 감사와 fitness 스칼라와 margin 게이트를 거쳐 git champion chain으로 승격하거나 되돌린다"
               />
@@ -143,7 +146,9 @@ export default function Page() {
 
             <h2>승격, 되돌림, champion chain</h2>
             <figure>
-              <img
+              <Image
+                width={900}
+                height={280}
                 src="/geode/diagrams/champion-chain.svg"
                 alt="Git champion chain. 승격된 스캐폴드는 선형 커밋 체인을 늘리고, 거부된 변이는 가지에서 끝난다"
               />
@@ -220,7 +225,9 @@ geode-evolve campaign --n 10 --k 5 --dry-run
               <li><a href="/geode/docs/capabilities/seed-pipeline?lang=en">Scenario generation</a> in <code>evals/seed_generation/</code> builds an evaluation seed corpus. Improving a candidate system and generating its evaluation inputs are distinct activities.</li>
             </ul>
             <figure>
-              <img
+              <Image
+                width={510}
+                height={627}
                 src="/geode/diagrams/self-improving-cycle.svg"
                 alt="One cycle of the selection loop: mutate one scaffold section, adversarial safety audit, fitness scalar, margin gate, then promote into the git champion chain or revert"
               />
@@ -338,7 +345,9 @@ geode-evolve campaign --n 10 --k 5 --dry-run
 
             <h2>Promote, revert, and the champion chain</h2>
             <figure>
-              <img
+              <Image
+                width={900}
+                height={280}
                 src="/geode/diagrams/champion-chain.svg"
                 alt="Git champion chain: promoted scaffolds extend a linear chain of commits; rejected mutations branch off and dead-end"
               />

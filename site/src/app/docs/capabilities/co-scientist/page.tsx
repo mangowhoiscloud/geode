@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
 export const metadata = { title: "Seed Scenario Generation — GEODE Docs" };
@@ -28,7 +29,9 @@ export default function Page() {
               fan-out합니다.
             </p>
             <figure>
-              <img
+              <Image
+                width={760}
+                height={520}
                 src="/geode/diagrams/seed-scenario-generation-cycle.svg"
                 alt="Seed Scenario Generation cycle. target dimension에서 후보 scenario를 만들고, clustering과 critique, pilot audit, Elo tournament, survivor evolution, seed pool, Closed-Loop audit으로 이어진다"
               />
@@ -128,7 +131,9 @@ geode-eval audit-seeds config`}</pre>
               sub-agent per phase, in order.
             </p>
             <figure>
-              <img
+              <Image
+                width={760}
+                height={520}
                 src="/geode/diagrams/seed-scenario-generation-cycle.svg"
                 alt="Seed Scenario Generation cycle: target dimension, candidate scenarios, clustering and critique, pilot audit, Elo tournament, survivor evolution, seed pools, and Closed-Loop audit"
               />

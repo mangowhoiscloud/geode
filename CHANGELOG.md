@@ -49,6 +49,13 @@ functional change.
 
 ### Fixed
 
+- Close static-analysis gaps across production Python, repository scripts,
+  automation, and the public site. Enforce explicit production signatures,
+  zero-warning site lint, workflow/shell checks, and macOS helper type checks;
+  preserve HTTP redirect scheme checks and failed preflight prerequisites rather
+  than reporting false success. Keep historical rendered portfolio content,
+  dependency directions, coverage, complexity, and performance ratchets intact.
+
 - Keep SQLite trigram capability probes in connection-local TEMP tables instead
   of repeatedly creating and dropping FTS shadow tables in the durable session
   database. Preserve caller transactions, existing tables, connection-specific

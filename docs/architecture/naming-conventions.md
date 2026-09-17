@@ -56,6 +56,12 @@ The counts are an audit snapshot, not count ratchets. Do not update them for an
 ordinary file addition. Refresh the snapshot only when re-auditing the
 conventions themselves.
 
+### Subsequent executable audit
+
+The [2026-09-18 layer audit](../audits/2026-09-18-static-analysis.md) records
+full-tree analyzer coverage and the gaps corrected after this historical
+snapshot. Its diagnostic counts are evidence, not replacement budget ceilings.
+
 ## 1. Architecture and dependency direction
 
 ### 1.1 Top-level ownership
@@ -491,3 +497,28 @@ Before finalizing a code change, answer:
 If a decision does not fit this guide, document the exception in the PR and
 update this file only when the exception is intended to become a reusable
 convention.
+
+## 11. Static-analysis entry points
+
+`pyproject.toml` remains the Python lint/type/security authority.
+`ruff-production.toml` extends it only for explicit parameter and return
+annotations in `core/`, `evals/`, and `evolve/`, including special methods.
+It must not replace baseline rules or broaden test exceptions.
+
+Run `scripts/lint_automation.sh` with actionlint 1.7.12 and ShellCheck 0.11.0
+on PATH. The existing required lint job installs those versions, verifies the
+ShellCheck archive checksum, scans all workflows including embedded shell,
+and passes every tracked `.sh` file with NUL-delimited boundaries. Function-scoped
+SC2317/SC2329 directives in preflight document genuine indirect dispatch through
+`run`; they are not blanket disables and have failure-path tests.
+
+Bandit also covers repository Python scripts. The site's `npm run lint`
+rejects warnings; `npm run typecheck` generates Next route types before
+`tsc --noEmit`. Next Image uses the existing unoptimized static-export policy,
+local assets, preserved alt text, and intrinsic dimensions; no image service
+or new runtime dependency is introduced.
+
+Full `scripts/preflight.sh` exits non-zero when mandatory prerequisites are
+missing. `--fast` is explicitly partial (no tests or site checks/build) and
+must never be reported as complete CI. Required GitHub checks on the actual
+PR head remain authoritative.

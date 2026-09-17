@@ -1,45 +1,37 @@
-#!/bin/bash
-# Hook: Stop — progress.md 갱신 + develop→main 격차 리마인드
-# (1) 오늘 커밋이 있는데 progress.md 미갱신이면 리마인드
-# (2) develop이 main보다 앞서 있으면 머지 리마인드
-# Ref: https://rooftopsnow.tistory.com/329 §5.2
-
+#!/usr/bin/env bash
+# Stop hook: advisory progress and GitFlow reminders, never merge authority.
 set -euo pipefail
 
 TODAY=$(date +%Y-%m-%d)
 PROGRESS_FILE="docs/progress.md"
 MESSAGES=()
 
-# --- Check 1: progress.md 갱신 여부 ---
-COMMITS_TODAY=$(git log --since="$TODAY 00:00:00" --oneline 2>/dev/null \
-  | wc -l | tr -d ' ')
-
-if [ "$COMMITS_TODAY" -gt 0 ]; then
-  if [ ! -f "$PROGRESS_FILE" ] || ! grep -q "$TODAY" "$PROGRESS_FILE"; then
-    MESSAGES+=("[progress] 오늘 ${COMMITS_TODAY}건 커밋이 있지만 docs/progress.md에 ${TODAY} 날짜가 없습니다. 세션 종료 전 갱신해주세요.")
+if COMMITS_TODAY=$(git rev-list --count --since="$TODAY 00:00:00" HEAD 2>/dev/null); then
+  if [ "$COMMITS_TODAY" -gt 0 ]; then
+    if [ ! -f "$PROGRESS_FILE" ] || ! grep -q "$TODAY" "$PROGRESS_FILE"; then
+      MESSAGES+=("[progress] 오늘 ${COMMITS_TODAY}건 커밋이 있지만 docs/progress.md에 ${TODAY} 날짜가 없습니다. 세션 종료 전 갱신 여부를 검토해주세요.")
+    fi
   fi
-fi
-
-# --- Check 2: develop→main 격차 감지 ---
-git fetch origin --quiet 2>/dev/null || true
-AHEAD=$(git rev-list --count origin/main..origin/develop 2>/dev/null \
-  || echo "0")
-
-if [ "$AHEAD" -gt 0 ]; then
-  MESSAGES+=("[gitflow] develop이 main보다 ${AHEAD}커밋 앞서 있습니다. develop → main PR + merge를 진행하세요.")
-fi
-
-# --- Output ---
-if [ ${#MESSAGES[@]} -eq 0 ]; then
-  echo '{"continue": true}'
 else
-  MSG=$(printf '%s ' "${MESSAGES[@]}")
-  # JSON 특수문자 이스케이프
-  MSG=$(echo "$MSG" | sed 's/"/\\"/g')
-  cat <<EOF
-{
-  "continue": true,
-  "message": "${MSG}"
-}
-EOF
+  MESSAGES+=("[progress] 커밋 조회 실패로 갱신 필요 여부를 확인하지 못했습니다.")
+fi
+
+if git fetch origin --quiet 2>/dev/null; then
+  if AHEAD=$(git rev-list --count origin/main..origin/develop 2>/dev/null); then
+    if [ "$AHEAD" -gt 0 ]; then
+      MESSAGES+=("[gitflow] develop이 main보다 ${AHEAD}커밋 앞서 있습니다. 커밋 수는 병합 근거가 아닙니다. 콘텐츠 차이, 현재 CI, 작업 권한을 확인한 뒤 승격 여부를 검토해주세요.")
+    fi
+  else
+    MESSAGES+=("[gitflow] 브랜치 조회 실패로 main/develop 격차를 확인하지 못했습니다.")
+  fi
+else
+  MESSAGES+=("[gitflow] 원격 조회 실패로 최신 main/develop 격차를 확인하지 못했습니다.")
+fi
+
+# JSON escaping belongs to the standard encoder, not shell substitutions.
+if [ ${#MESSAGES[@]} -eq 0 ]; then
+  printf '{"continue": true}\n'
+else
+  printf '%s\n' "${MESSAGES[@]}" | python3 -c \
+    'import json, sys; print(json.dumps({"continue": True, "message": sys.stdin.read().rstrip()}, ensure_ascii=False))'
 fi

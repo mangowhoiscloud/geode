@@ -8,7 +8,6 @@ import { HooksSection } from "@/components/geode/sections/hooks";
 import { AgentsTasksSection } from "@/components/geode/sections/agents-tasks";
 import { AutomationSection } from "@/components/geode/sections/automation";
 import { FeedbackSection } from "@/components/geode/sections/feedback";
-import { BootstrapSection } from "@/components/geode/sections/bootstrap";
 import { ContextTiersSection } from "@/components/geode/sections/context-tiers";
 import { GatewaySection } from "@/components/geode/sections/gateway";
 import { MultiLlmSection } from "@/components/geode/sections/multi-llm";

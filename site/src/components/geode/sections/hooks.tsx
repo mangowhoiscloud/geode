@@ -123,9 +123,8 @@ export function HooksSection() {
   const sorted = ev.priorities.map((p, i) => ({ p, i, name: ev.handlers[i], color: ev.handlerColors[i] })).sort((a, b) => a.p - b.p);
   const startX = 80;
   const maxGap = 80;
-  const colPositions = sorted.map((item, idx) => {
+  const colPositions = sorted.map((_, idx) => {
     if (idx === 0) return startX;
-    const gap = Math.min((item.p - sorted[idx - 1].p) * 0.6, maxGap);
     return startX + sorted.slice(0, idx).reduce((acc, _, j) => {
       const g = Math.min((sorted[j + 1]?.p - sorted[j].p) * 0.6, maxGap);
       return acc + colW + (g < 8 ? 8 : g);

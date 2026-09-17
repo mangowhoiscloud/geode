@@ -10,9 +10,9 @@
 #
 # Usage:
 #   scripts/preflight.sh            # everything
-#   scripts/preflight.sh --fast     # skip the full test suite and site build
+#   scripts/preflight.sh --fast     # skip the full test suite and site lint / types / build
 #
-# Exit code is the number of failed gates, so `scripts/preflight.sh && gh pr create`
+# Exit code counts failed gates and missing prerequisites in full mode, so `scripts/preflight.sh && gh pr create`
 # is safe — preserve gate exits (docs/workflow.md, Contract checks).
 
 set -uo pipefail
@@ -40,18 +40,36 @@ run() {
   fi
 }
 
+# Indirect dispatch through run below is covered by tests/scripts/test_preflight.py.
+# shellcheck disable=SC2329
+check_site_types() (
+  # Invoked indirectly by run via "$@"; the following body is reachable.
+  # shellcheck disable=SC2317
+  cd site && npm run lint && npm run typecheck
+)
+
+# Indirect dispatch through run below is covered by tests/scripts/test_preflight.py.
+# shellcheck disable=SC2329
 generate_site_docs() (
+  # Invoked indirectly by run via "$@"; the following body is reachable.
+  # shellcheck disable=SC2317
   cd site && npm run sync-stats && npm run build && npm run export-md
 )
 
 echo "── lint / type / security ──"
 run "ruff check"    uv run ruff check core/ evals/ evolve/ tests/ scripts/
+run "production annotations" uv run ruff check --config ruff-production.toml core/ evals/ evolve/
 run "ruff format"   uv run ruff format --check core/ evals/ evolve/ tests/ scripts/
 run "mypy"          uv run mypy core/ evals/ evolve/ scripts/
-run "bandit"        uv run bandit -r core/ evals/ evolve/ -c pyproject.toml
+run "bandit"        uv run bandit -r core/ evals/ evolve/ scripts/ -c pyproject.toml
+
+run "workflow / shell" scripts/lint_automation.sh
 
 echo "── ratchets / generated artifacts ──"
 run "deptry"                 uv run deptry .
+run "architecture imports"   uv run lint-imports --no-cache
+run "architecture exceptions" uv run python scripts/check_architecture_exceptions.py \
+  --check --base-ref origin/develop
 run "legacy imports"         uv run python scripts/check_legacy_imports.py --base-ref origin/develop
 run "repo hygiene"           uv run python scripts/check_repo_hygiene.py
 run "architecture baseline"  uv run python scripts/architecture_baseline.py --check
@@ -80,6 +98,8 @@ if [ "$FAST" -eq 0 ]; then
     printf '\033[33m··\033[0m pytest \033[33mSKIPPED\033[0m — optional extra missing\n'
     printf '     run: uv sync --extra audit   (CI installs this for the Test job)\n'
     SKIPPED+=("pytest")
+    FAILED=$((FAILED + 1))
+    FAILURES+=("pytest prerequisite: audit extra")
   fi
 
   # llms-full.txt is written by export-docs-md.mjs, which runs AFTER the site
@@ -87,6 +107,7 @@ if [ "$FAST" -eq 0 ]; then
   # file the local checklist never mentioned.
   if [ -d site/node_modules ]; then
     echo "── site generated docs ──"
+    run "site lint / types" check_site_types
     run "site generation" generate_site_docs
     run "public-doc generators" git diff --exit-code -- \
       site/public/llms.txt site/public/llms-full.txt \
@@ -94,7 +115,9 @@ if [ "$FAST" -eq 0 ]; then
   else
     printf '\033[33m··\033[0m site generated docs \033[33mSKIPPED\033[0m — site/node_modules absent\n'
     printf "     run: (cd site && npm ci)\n"
-    SKIPPED+=("site generated docs")
+    SKIPPED+=("site lint / types, site generated docs")
+    FAILED=$((FAILED + 1))
+    FAILURES+=("site prerequisite: node_modules")
   fi
 else
   echo "── tests / site ── skipped (--fast)"
@@ -103,12 +126,15 @@ fi
 echo
 if [ "$FAILED" -ne 0 ]; then
   echo -e "\033[31m$FAILED gate(s) failed:\033[0m ${FAILURES[*]}"
+  if [ ${#SKIPPED[@]} -gt 0 ]; then
+    echo "NOT all ran — missing prerequisites: ${SKIPPED[*]}"
+  fi
 elif [ "$FAST" -eq 1 ] || [ ${#SKIPPED[@]} -gt 0 ]; then
   # --fast skips exactly the gates that fail most often (stale generated docs,
   # the test suite). Saying "passed" here would be the same false green the
   # narrow checklist produced, so name what was not run.
   notrun="${SKIPPED[*]:-}"
-  [ "$FAST" -eq 1 ] && notrun="pytest, site generated docs"
+  [ "$FAST" -eq 1 ] && notrun="pytest, site lint / types, site generated docs"
   echo -e "\033[33mgates passed, but NOT all ran — skipped: ${notrun}\033[0m"
   echo "  report skipped checks and why; required CI must still pass on the actual PR head"
 else

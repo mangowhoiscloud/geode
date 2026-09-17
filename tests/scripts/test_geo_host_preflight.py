@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
+from typing import Any
 
+import httpx
 import pytest
 from scripts.eval import geo_host_preflight
 from scripts.eval.geo_visibility import _validate_host_preflight
@@ -150,3 +153,80 @@ def test_host_preflight_counts_only_per_url_conjunctions(
     assert receipt["checks"]["indexable"] == {"numerator": 1, "denominator": 2}
     assert receipt["checks"]["eligible"] == {"numerator": 0, "denominator": 2}
     assert receipt["status"] == "fail"
+
+
+@pytest.fixture
+def mock_http(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[Callable[[httpx.Request], httpx.Response]], None]:
+    original_client = httpx.Client
+
+    def install(handler: Callable[[httpx.Request], httpx.Response]) -> None:
+        def client(**kwargs: Any) -> httpx.Client:
+            return original_client(transport=httpx.MockTransport(handler), **kwargs)
+
+        monkeypatch.setattr(geo_host_preflight.httpx, "Client", client)
+
+    return install
+
+
+@pytest.mark.parametrize("url", ["http://example.com/", "file:///etc/passwd", "ftp://example.com/"])
+def test_get_rejects_non_https_before_network(url: str, mock_http: Any) -> None:
+    def unexpected(_: httpx.Request) -> httpx.Response:
+        pytest.fail("invalid URL reached the transport")
+
+    mock_http(unexpected)
+    with pytest.raises(ValueError, match="require https"):
+        geo_host_preflight._get(url, 1)
+
+
+def test_get_rejects_redirect_downgrade_before_network(mock_http: Any) -> None:
+    seen: list[str] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(302, headers={"Location": "http://example.com/insecure"})
+
+    mock_http(respond)
+    with pytest.raises(ValueError, match="require https"):
+        geo_host_preflight._get("https://example.com/", 1)
+    assert seen == ["https://example.com/"]
+
+
+def test_get_retains_redirect_identity_error_body_and_repeated_headers(mock_http: Any) -> None:
+    responses: list[httpx.Response] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/":
+            response = httpx.Response(302, headers={"Location": "/missing"})
+        else:
+            response = httpx.Response(
+                404,
+                headers=[
+                    ("Content-Type", "text/html; charset=utf-8"),
+                    ("X-Robots-Tag", "noindex"),
+                    ("X-Robots-Tag", "nofollow"),
+                ],
+                content=b"missing page",
+            )
+        responses.append(response)
+        return response
+
+    mock_http(respond)
+    assert geo_host_preflight._get("https://example.com/", 1) == (
+        404,
+        "https://example.com/missing",
+        "text/html",
+        "noindex, nofollow",
+        b"missing page",
+    )
+    assert all(response.is_closed for response in responses)
+
+
+def test_get_closes_oversized_response(mock_http: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    response = httpx.Response(200, content=b"too large")
+    monkeypatch.setattr(geo_host_preflight, "_MAX_RESPONSE_BYTES", 4)
+    mock_http(lambda _: response)
+    with pytest.raises(ValueError, match="exceeds 4 bytes"):
+        geo_host_preflight._get("https://example.com/", 1)
+    assert response.is_closed

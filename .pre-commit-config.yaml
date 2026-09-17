@@ -76,6 +76,27 @@ repos:
   # Local hooks — use project virtualenv (uv run) for full dependency access
   - repo: local
     hooks:
+      - id: automation-contracts
+        name: workflow and shell contracts
+        entry: scripts/lint_automation.sh
+        language: system
+        pass_filenames: false
+        files: ^(.*\.sh$|\.github/workflows/.*\.ya?ml$)
+
+      - id: production-annotations
+        name: production annotation contract
+        entry: uv run --frozen ruff check --config ruff-production.toml core/ evals/ evolve/
+        language: system
+        pass_filenames: false
+        files: ^(core/|evals/|evolve/|pyproject\.toml$|ruff-production\.toml$)
+
+      - id: architecture-imports
+        name: architecture import contracts
+        entry: uv run --frozen lint-imports --no-cache
+        language: system
+        pass_filenames: false
+        files: ^(core/|evals/|evolve/|pyproject\.toml$)
+
       - id: mypy
         name: mypy type check
         entry: uv run --frozen mypy --no-incremental core/ evals/ evolve/ scripts/
@@ -85,7 +106,7 @@ repos:
 
       - id: bandit
         name: bandit security
-        entry: uv run --frozen bandit -r core/ evals/ evolve/ -c pyproject.toml --quiet
+        entry: uv run --frozen bandit -r core/ evals/ evolve/ scripts/ -c pyproject.toml --quiet
         language: system
         pass_filenames: false
         types: [python]

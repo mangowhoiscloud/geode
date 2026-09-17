@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
 export const metadata = { title: "Serve and gateway — GEODE Docs" };
@@ -23,7 +24,9 @@ export default function Page() {
 
             <h2>동작 구조</h2>
             <figure>
-              <img
+              <Image
+                width={801}
+                height={1033}
                 src="/geode/diagrams/gateway-routing.svg"
                 alt="Gateway routing: transport adapters pass exact binding and mention gates, binding policy supplies tool and budget constraints, LaneQueue serializes the session, AgenticLoop and ToolExecutor enforce the tool surface, and auto-response controls outbound delivery"
               />
@@ -185,7 +188,9 @@ require_mention = true`}</pre>
 
             <h2>How it works</h2>
             <figure>
-              <img
+              <Image
+                width={801}
+                height={1033}
                 src="/geode/diagrams/gateway-routing.svg"
                 alt="Gateway routing: transport adapters pass exact binding and mention gates, binding policy supplies tool and budget constraints, LaneQueue serializes the session, AgenticLoop and ToolExecutor enforce the tool surface, and auto-response controls outbound delivery"
               />

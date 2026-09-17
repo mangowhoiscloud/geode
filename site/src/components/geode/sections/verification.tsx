@@ -1,10 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ScrollReveal } from "../scroll-reveal";
 import { TabBar } from "../ui/tab-bar";
-import { useLocale, t } from "../locale-context";
+import { useLocale } from "../locale-context";
 
 /* ── Pipeline Verification (Output Validation) ── */
 const pipelineLayers = [
@@ -206,7 +207,7 @@ export function VerificationSection() {
       <div className="relative z-10 max-w-5xl mx-auto">
         {/* Geodi focus */}
         <div className="absolute top-8 right-8 opacity-[0.08] pointer-events-none hidden md:block">
-          <img src="/geode/images/geode-focus.png" alt="" width={48} height={48} />
+          <Image src="/geode/images/geode-focus.png" alt="" width={48} height={48} />
         </div>        <ScrollReveal>
           <p className="text-sm font-mono font-bold text-[#34D399]/60 uppercase tracking-[0.25em] mb-3">
             Verification
