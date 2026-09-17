@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
+import pytest
 from core.agent.conversation import ConversationContext
 from core.agent.loop import AgenticLoop, _model_switching
 from core.agent.tool_executor import ToolExecutor
+from core.hooks import HookAction, HookDecision, HookName
 from core.orchestration.context_monitor import (
     check_context,
     summarize_tool_results,
@@ -84,7 +86,7 @@ class TestT1LargeToSmall:
         loop = _make_loop(ctx, model="claude-opus-4-6")
         before = check_context(ctx.messages, "glm-5").estimated_tokens
 
-        _model_switching.adapt_context_for_model(loop, "glm-5")
+        asyncio.run(_model_switching.adapt_context_for_model(loop, "glm-5"))
 
         after = check_context(ctx.messages, "glm-5").estimated_tokens
         assert after < before
@@ -95,7 +97,7 @@ class TestT1LargeToSmall:
         original_count = len(ctx.messages)
 
         loop = _make_loop(ctx, model="claude-opus-4-6")
-        _model_switching.adapt_context_for_model(loop, "glm-5")
+        asyncio.run(_model_switching.adapt_context_for_model(loop, "glm-5"))
 
         after = check_context(ctx.messages, "glm-5")
         assert not after.is_critical
@@ -119,7 +121,7 @@ class TestT2SmallContext:
         original = list(ctx.messages)
 
         loop = _make_loop(ctx, model="claude-opus-4-6")
-        _model_switching.adapt_context_for_model(loop, "glm-5")
+        asyncio.run(_model_switching.adapt_context_for_model(loop, "glm-5"))
 
         # Messages unchanged
         assert ctx.messages == original
@@ -138,7 +140,7 @@ class TestT3HugeContext:
         assert before.usage_pct > 200  # way over
 
         loop = _make_loop(ctx, model="claude-opus-4-6")
-        _model_switching.adapt_context_for_model(loop, "glm-5")
+        asyncio.run(_model_switching.adapt_context_for_model(loop, "glm-5"))
 
         after = check_context(ctx.messages, "glm-5")
         assert after.estimated_tokens < before.estimated_tokens
@@ -160,7 +162,7 @@ class TestT4Upgrade:
         original_count = len(ctx.messages)
 
         loop = _make_loop(ctx, model="glm-5")
-        _model_switching.adapt_context_for_model(loop, "claude-opus-4-6")
+        asyncio.run(_model_switching.adapt_context_for_model(loop, "claude-opus-4-6"))
 
         # No changes — context fits easily in 1M window
         assert len(ctx.messages) == original_count
@@ -176,7 +178,7 @@ class TestT4Upgrade:
         assert not before_small.is_critical
 
         loop = _make_loop(ctx, model="glm-5")
-        _model_switching.adapt_context_for_model(loop, "claude-opus-4-6")
+        asyncio.run(_model_switching.adapt_context_for_model(loop, "claude-opus-4-6"))
 
         after_large = check_context(ctx.messages, "claude-opus-4-6")
         assert ctx.messages == original
@@ -199,7 +201,7 @@ class TestOpenAIBidirectionalSwitch:
         assert before.is_critical
 
         loop = _make_loop(ctx, model="gpt-5.5")
-        _model_switching.adapt_context_for_model(loop, "gpt-5.4-mini")
+        asyncio.run(_model_switching.adapt_context_for_model(loop, "gpt-5.4-mini"))
 
         after = check_context(ctx.messages, "gpt-5.4-mini")
         assert after.estimated_tokens < before.estimated_tokens
@@ -214,7 +216,7 @@ class TestOpenAIBidirectionalSwitch:
         assert before.is_critical
 
         loop = _make_loop(ctx, model="gpt-5.5")
-        _model_switching.adapt_context_for_model(loop, "o4-mini")
+        asyncio.run(_model_switching.adapt_context_for_model(loop, "o4-mini"))
 
         after = check_context(ctx.messages, "o4-mini")
         assert after.estimated_tokens < before.estimated_tokens
@@ -233,7 +235,7 @@ class TestOpenAIBidirectionalSwitch:
         assert not before_large.is_warning
 
         loop = _make_loop(ctx, model="gpt-5.4-mini")
-        _model_switching.adapt_context_for_model(loop, "gpt-5.5")
+        asyncio.run(_model_switching.adapt_context_for_model(loop, "gpt-5.5"))
 
         after_large = check_context(ctx.messages, "gpt-5.5")
         assert ctx.messages == original
@@ -242,12 +244,14 @@ class TestOpenAIBidirectionalSwitch:
 
 
 # ---------------------------------------------------------------------------
-# T6: Pure text (no tool results) — pruning only
+# T6: Unsupported client summary requires explicit pruning, not silent loss
 # ---------------------------------------------------------------------------
 
 
 class TestT6PureText:
-    def test_text_only_pruned(self):
+    def test_text_only_downshift_refused_without_client_summary(self):
+        from core.agent.loop import _ContextExhaustedError
+
         msgs = []
         for i in range(100):
             msgs.append({"role": "user", "content": f"{'y' * 5_000} q{i}"})
@@ -261,12 +265,9 @@ class TestT6PureText:
         ctx.messages = msgs
 
         loop = _make_loop(ctx, model="claude-opus-4-6")
-        _model_switching.adapt_context_for_model(loop, "glm-5")
-
-        after = check_context(ctx.messages, "glm-5")
-        assert after.estimated_tokens < before.estimated_tokens
-        assert not after.is_critical
-        assert ctx.messages[0]["content"].endswith("q0")
+        with pytest.raises(_ContextExhaustedError, match="current model retained"):
+            asyncio.run(_model_switching.adapt_context_for_model(loop, "glm-5"))
+        assert ctx.messages == msgs
 
 
 # ---------------------------------------------------------------------------
@@ -424,6 +425,49 @@ class TestConversationContextWired:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("defer", [False, True])
+def test_model_switch_compaction_uses_public_checkpoints(defer: bool) -> None:
+    ctx = ConversationContext()
+    original = [{"role": "user", "content": "old"}] * 20
+    ctx.messages = list(original)
+    loop = _make_loop(ctx, model="gpt-5.6-luna")
+    compacted = [{"role": "user", "content": "summary"}]
+    observed: list[HookName] = []
+    post_messages: list[list[dict[str, Any]]] = []
+
+    def pre(invocation: Any) -> HookDecision:
+        observed.append(invocation.name)
+        assert invocation.payload["trigger"] == "model_switch"
+        return (
+            HookDecision(action=HookAction.DEFER)
+            if defer
+            else HookDecision(action=HookAction.REWRITE, updates={"keep_recent": 6})
+        )
+
+    def post(invocation: Any) -> None:
+        observed.append(invocation.name)
+        post_messages.append(list(ctx.messages))
+
+    loop._hook_registry.register(HookName.PRE_COMPACT, pre)
+    loop._hook_registry.register(HookName.POST_COMPACT, post)
+    compact = AsyncMock(return_value=(compacted, True))
+    with patch("core.orchestration.compaction.compact_conversation", compact):
+        asyncio.run(
+            loop._ctx_mgr.compact(ctx.messages, loop.model, loop._provider, trigger="model_switch")
+        )
+
+    if defer:
+        compact.assert_not_awaited()
+        assert observed == [HookName.PRE_COMPACT]
+        assert ctx.messages == original
+    else:
+        compact.assert_awaited_once()
+        assert compact.await_args.kwargs["keep_recent"] == 6
+        assert observed == [HookName.PRE_COMPACT, HookName.POST_COMPACT]
+        assert post_messages == [compacted]
+        assert ctx.messages == compacted
+
+
 def _make_loop(ctx: ConversationContext, model: str = "claude-opus-4-6") -> AgenticLoop:
     """Create a minimal AgenticLoop for testing context adaptation.
 
@@ -432,10 +476,54 @@ def _make_loop(ctx: ConversationContext, model: str = "claude-opus-4-6") -> Agen
     ``core.llm.adapters.resolve_for``. ``conftest.py`` already calls
     ``bootstrap_builtins`` so the registry is populated.
     """
+    from core.config import _resolve_provider
+
     executor = ToolExecutor()
     loop = AgenticLoop(
         model=model,
+        provider=_resolve_provider(model),
         context=ctx,
         tool_executor=executor,
     )
     return loop
+
+
+def test_async_downshift_summarizes_on_previous_route_before_switch() -> None:
+    ctx = ConversationContext()
+    ctx.messages = [{"role": "user", "content": "x" * 20_000} for _ in range(40)]
+    loop = _make_loop(ctx, model="gpt-5.6-sol")
+    loop._source = "subscription"
+    loop._effort = "xhigh"
+
+    async def summarize(messages: Any, **kwargs: Any) -> tuple[list[dict[str, Any]], bool]:
+        await asyncio.sleep(0)
+        assert loop.model == "gpt-5.6-sol"
+        assert kwargs["model"] == loop.model
+        assert kwargs["provider"] == loop._provider
+        assert kwargs["source"] == "subscription"
+        assert kwargs["effort"] == "xhigh"
+        return [{"role": "user", "content": "summary"}], True
+
+    summary = AsyncMock(side_effect=summarize)
+    with patch("core.orchestration.compaction.compact_conversation", summary):
+        asyncio.run(loop.update_model_async("o4-mini", provider=loop._provider))
+    summary.assert_awaited_once()
+    assert loop.model == "o4-mini"
+    assert ctx.messages[0]["content"] == "summary"
+
+
+def test_failed_downshift_retains_current_model_and_history() -> None:
+    from core.agent.loop import _ContextExhaustedError
+
+    ctx = ConversationContext()
+    ctx.messages = [{"role": "user", "content": "x" * 900_000}]
+    original = list(ctx.messages)
+    loop = _make_loop(ctx, model="gpt-5.6-sol")
+    summary = AsyncMock(side_effect=OSError("summary unavailable"))
+    with (
+        patch("core.orchestration.compaction.compact_conversation", summary),
+        pytest.raises(_ContextExhaustedError, match="current model retained"),
+    ):
+        asyncio.run(loop.update_model_async("o4-mini", provider=loop._provider))
+    assert loop.model == "gpt-5.6-sol"
+    assert ctx.messages == original

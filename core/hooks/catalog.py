@@ -1,6 +1,7 @@
-"""Persistence and emit-contract metadata for the HookEvent catalog.
+"""Persistence and emit-contract metadata for internal runtime observations.
 
-The event enum remains the public compatibility surface. This module adds the
+Stored event values remain a compatibility contract, separate from HookName.
+This module adds the
 small amount of policy that should not be repeated by every persistence sink:
 retention class, whether a compatibility signal is durable, and the emit-side
 payload contract (:data:`REQUIRED_PAYLOAD_KEYS`) that

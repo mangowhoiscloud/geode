@@ -218,8 +218,6 @@ async def prepare_input(
         plan_hint,
         control_hint,
     )
-    _context.maybe_prune_messages(loop, messages)
-
     from core.llm.token_tracker import get_tracker
 
     loop._usage_snapshot = get_tracker().snapshot()

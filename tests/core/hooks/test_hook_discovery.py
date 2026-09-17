@@ -306,7 +306,7 @@ class TestRegistration:
         results = hooks.trigger(HookEvent.TOOL_EXEC_ENDED, {"order": order})
         assert len(results) == 2
         assert all(r.success for r in results)
-        assert order == ["high", "low"]
+        assert [result.handler_name for result in results] == ["high-prio", "low-prio"]
 
     def test_unregister_all_removes_discovered_hooks(self, hooks_dir: Path) -> None:
         _make_yaml_plugin(hooks_dir, "removable", events=["tool_exec_start", "tool_exec_end"])

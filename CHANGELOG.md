@@ -49,6 +49,29 @@ functional change.
 
 ### Fixed
 
+- Unify automatic, model-switch, manual, and tool-triggered context operations under
+  `ContextWindowManager`. Async downshifts compact on the previous route before switching;
+  `/compact --prune` is the explicit lossful path, and UI/IPC results distinguish changed,
+  unchanged, deferred, failed, and unsupported outcomes. Summary retries now apply only to
+  confirmed context-overflow failures and preserve adapter/source error classes.
+
+- Preserve token-cheap conversation history instead of pruning at 30 messages;
+  keep messages on failed soft compaction and reserve prune fallback for explicit
+  hard recovery. Retain all matching tool calls/results across compaction cuts,
+  including parallel OpenAI results that are not adjacent to their call.
+- Treat public hook handlers returning `None` as observation-only, without
+  fabricated decisions or permission/verification errors. Record interrupted
+  handlers as errors while preserving the original cancellation if audit
+  delivery also fails.
+- Isolate nested runtime-event payloads from observers; preserve cancellation
+  through middleware and sub-agent stop auditing. Route model-switch compaction
+  through the same public checkpoints as overflow compaction, reject ineffective
+  instruction-only `PreVerify` strengthening, and correlate auxiliary LLM
+  middleware with the actual call. Scope learning quotas and cursors to durable
+  sessions, and stop turn-end notifications from deleting shared offload files.
+- Preserve MCP `write_file` content exactly instead of inferring newline changes
+  from cached reads or local files in the trace layer.
+
 - Retain hook sink-close failures for final observation checks instead of
   reporting complete accounting after a failed flush. Attribute auxiliary
   calls to compaction, learning, dreaming, or context exhaustion while keeping
@@ -84,6 +107,11 @@ functional change.
   Persist bounded judge timeout reasons and retain native Harbor verification
   holds without a synthetic runtime exception; delivery and expansion gates
   remain closed while verification or observation is incomplete.
+
+### Removed
+
+- Unused context-action event feedback handler; context policy and
+  `PreCompact`/`PostCompact` remain the supported control path.
 
 ### Infrastructure
 

@@ -15,6 +15,16 @@ from core.llm.adapters.base import EmptyModelOutputError
 log = logging.getLogger(__name__)
 
 
+def resolve_llm_correlation(correlation: Mapping[str, Any]) -> dict[str, Any]:
+    """Allocate missing call/attempt identity before any call join point."""
+    call_id = correlation.get("llm_call_id") or f"llm-{uuid.uuid4().hex}"
+    return {
+        **correlation,
+        "llm_call_id": call_id,
+        "llm_attempt_id": correlation.get("llm_attempt_id") or f"{call_id}:attempt-1",
+    }
+
+
 def _completed_attempt_payload(
     result: Any, model: str, *, cost_estimator: Callable[..., float] | None = None
 ) -> dict[str, Any]:
@@ -90,11 +100,8 @@ async def observe_llm_call[T](
     No request content or returned text is inspected or copied. Without an
     explicit estimator, cost is provider-reported only; missing cost stays unknown.
     """
-    call_id = correlation.get("llm_call_id") or f"llm-{uuid.uuid4().hex}"
     metadata = {
-        **correlation,
-        "llm_call_id": call_id,
-        "llm_attempt_id": correlation.get("llm_attempt_id") or f"{call_id}:attempt-1",
+        **resolve_llm_correlation(correlation),
         "model": model,
         "provider": provider,
         "adapter": adapter,

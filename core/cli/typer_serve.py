@@ -476,13 +476,13 @@ def _serve(  # noqa: PLR0915
     # blocking poll loop from start(), but thin CLI clients still need a socket.
     _cli_poller = None
     try:
-        from core.cli.dispatcher import _handle_command
+        from core.cli.dispatcher import _handle_command_async
         from core.wiring.adapters import build_cli_poller
 
         _cli_poller = build_cli_poller(
             _gw_services,
             scheduler_service=_sched_svc,
-            command_handler=_handle_command,
+            command_handler=_handle_command_async,
             context_initializer=lambda: _set_readiness(check_readiness()),
         )
         _cli_poller.start()

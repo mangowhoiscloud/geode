@@ -10,6 +10,7 @@ MiddlewareRegistry, or the owning domain service.
 from __future__ import annotations
 
 import asyncio
+import copy
 import dataclasses
 import inspect
 import logging
@@ -137,10 +138,9 @@ class RuntimeEvent(Enum):
     MCP_SERVER_CONNECTED = "mcp_server_connected"
     MCP_SERVER_FAILED = "mcp_server_failed"
 
-    # Production hooks (P0) — interceptor + cost enforcement + audit.
-    # TOOL_EXEC_STARTED / TOOL_EXEC_ENDED form the lifecycle pair; FAILED is the
-    # error variant. TOOL_RESULT_TRANSFORM is a separate feedback hook (post
-    # observation, result rewriting).
+    # Tool/turn observations. STARTED/ENDED are the durable lifecycle pair;
+    # FAILED and RESULT_TRANSFORM remain compatibility signals, not control
+    # checkpoints. Public tool decisions belong to HookRegistry.
     USER_INPUT_RECEIVED = "user_input_received"
     TOOL_EXEC_STARTED = "tool_exec_started"
     TOOL_EXEC_ENDED = "tool_exec_ended"
@@ -432,18 +432,18 @@ class HookSubscription:
 
 
 class RuntimeEventBus:
-    """Register and trigger hooks on runtime events.
+    """Subscribe to internal runtime observations; return values do not control execution.
 
-    Hooks execute in priority order (lower number = higher priority).
+    Observers execute in priority order (lower number = higher priority).
 
     Usage:
-        hooks = HookSystem()
+        events = RuntimeEventBus()
 
         def on_start(event, data):
             print(f"Session started: {data.get('session_id')}")
 
-        hooks.register(HookEvent.SESSION_STARTED, on_start, priority=10)
-        results = hooks.trigger(HookEvent.SESSION_STARTED, {"session_id": "demo"})
+        events.subscribe(RuntimeEvent.SESSION_STARTED, on_start, priority=10)
+        results = events.emit(RuntimeEvent.SESSION_STARTED, {"session_id": "demo"})
     """
 
     # Events that support matcher-based tool_name filtering.
@@ -939,7 +939,7 @@ class RuntimeEventBus:
         timeout_s: float = 0,
     ) -> HookDispatch:
         started_at = time.time()
-        working = dict(data) if data is not None else {}
+        working = copy.deepcopy(data) if data is not None else {}
         # Emit-side payload contract (PR-HOOK-TAXONOMY D7) — validated at
         # the dispatch choke point so DIRECT trigger() callers are covered
         # too, not only the core.hooks.dispatch wrappers.
@@ -969,7 +969,7 @@ class RuntimeEventBus:
 
         for hook in hooks:
             try:
-                ret = self._call_handler(hook, event, dict(working), timeout_s=timeout_s)
+                ret = self._call_handler(hook, event, copy.deepcopy(working), timeout_s=timeout_s)
                 result_data = (
                     ret if mode is HookDispatchMode.FEEDBACK and isinstance(ret, dict) else {}
                 )
@@ -1024,7 +1024,7 @@ class RuntimeEventBus:
         timeout_s: float = 0,
     ) -> HookDispatch:
         started_at = time.time()
-        working = dict(data) if data is not None else {}
+        working = copy.deepcopy(data) if data is not None else {}
         # Emit-side payload contract (PR-HOOK-TAXONOMY D7) — validated at
         # the dispatch choke point so DIRECT trigger() callers are covered
         # too, not only the core.hooks.dispatch wrappers.
@@ -1058,7 +1058,7 @@ class RuntimeEventBus:
                 ret = await self._call_handler_async(
                     hook,
                     event,
-                    dict(working),
+                    copy.deepcopy(working),
                     timeout_s=timeout_s,
                 )
                 result_data = (
@@ -1136,7 +1136,9 @@ class RuntimeEventBus:
         interruption: BaseException | None = None
         for sink_name, sink in sinks:
             try:
-                ret = sink(dispatch)
+                # Sinks are observers too: one sink must not mutate the
+                # payload seen by another sink or the canonical dispatch.
+                ret = sink(copy.deepcopy(dispatch))
                 if inspect.isawaitable(ret):
                     if inspect.iscoroutine(ret):
                         ret.close()

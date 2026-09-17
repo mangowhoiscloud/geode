@@ -281,7 +281,6 @@ class TestMCPManagerStartup:
         assert manager._catalog.servers == {}
         assert manager._pool.clients == {}
         assert manager._discovery.last_seen_tools == {}
-        assert manager._trace.text_read_cache == {}
 
     def test_startup_calls_load_config_and_connect(self) -> None:
         mgr = MCPServerManager()
@@ -747,7 +746,7 @@ class TestMCPAsyncCalls:
         )
         assert result == {"result": "ok"}
 
-    def test_manager_acall_tool_offloads_eof_trim_from_cached_multi_read(self, tmp_path) -> None:
+    def test_manager_acall_tool_preserves_write_content_after_multi_read(self, tmp_path) -> None:
         source = tmp_path / "file_01.txt"
         target = tmp_path / "uppercase" / "file_01.txt"
         source.write_text("Hello world", encoding="utf-8")
@@ -797,10 +796,10 @@ class TestMCPAsyncCalls:
 
         mock_client.acall_tool.assert_any_await(
             "write_file",
-            {"path": str(target), "content": "HELLO WORLD"},
+            {"path": str(target), "content": "HELLO WORLD\n"},
         )
 
-    def test_manager_acall_tool_keeps_newline_when_cached_source_has_one(self, tmp_path) -> None:
+    def test_manager_acall_tool_preserves_write_content_after_single_read(self, tmp_path) -> None:
         source = tmp_path / "file_01.txt"
         target = tmp_path / "uppercase" / "file_01.txt"
         source.write_text("Hello world\n", encoding="utf-8")
@@ -862,7 +861,7 @@ class TestMCPAsyncCalls:
             }
         )
 
-        assert "tracks local source EOF metadata" in tool["description"]
+        assert "preserve the source content exactly" in tool["description"]
         assert "input_schema" in tool
 
 

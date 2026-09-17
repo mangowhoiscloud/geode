@@ -5,8 +5,8 @@ Pins:
 1. **boundary** — cut respects tool_use / tool_result pairs.
 2. **orphan_tool_result** — strips tool_result blocks whose
    tool_use_id is absent.
-3. **summarize** — Anthropic short-circuits, low-message no-op,
-   summary-failure no-op all preserved.
+3. **summarize** — Anthropic and low-message no-ops; failures preserve
+   history and propagate, with bounded retries only for context overflow.
 4. **carry_forward** — 4-message preamble shape unchanged.
 
 End-to-end: a conversation whose natural cut lands inside a
@@ -16,11 +16,16 @@ tool_use/tool_result pair gets compacted without splitting the pair.
 from __future__ import annotations
 
 import asyncio
+from itertools import pairwise
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
+import httpx
+import openai
 import pytest
+from core.llm.adapters.dispatch import AdapterDispatchError, AdapterUnavailableError
+from core.llm.errors import BillingError
 from core.orchestration import compaction
 from core.orchestration.compaction import (
     COMPACTION_MARKER,
@@ -166,6 +171,41 @@ def test_boundary_no_walk_when_keep_recent_starts_clean():
     msgs.extend(_make_text_msg("user", f"r{i}") for i in range(8))
     # Natural cut = 15 - 8 = 7 → plain text → no walk.
     assert find_safe_boundary(msgs, keep_recent=8) == 7
+
+
+@pytest.mark.parametrize("keep_recent", [1, 2])
+def test_boundary_keeps_nonadjacent_causal_tool_pair(keep_recent: int) -> None:
+    msgs = [
+        _make_text_msg("user", "older request"),
+        _make_tool_use_msg("tu_delayed"),
+        _make_text_msg("assistant", "waiting for the tool"),
+        _make_tool_result_msg("tu_delayed", "delayed result"),
+    ]
+
+    assert find_safe_boundary(msgs, keep_recent=keep_recent) == 1
+
+
+def test_boundary_expands_for_dependencies_in_newly_retained_messages() -> None:
+    msgs = [
+        _make_text_msg("user", "older request"),
+        _make_tool_use_msg("tu_first"),
+        _make_tool_use_msg("tu_second"),
+        _make_tool_result_msg("tu_first"),
+        _make_tool_result_msg("tu_second"),
+    ]
+
+    assert find_safe_boundary(msgs, keep_recent=1) == 1
+
+
+def test_boundary_does_not_match_a_result_to_a_later_call() -> None:
+    msgs = [
+        _make_text_msg("user", "older request"),
+        _make_tool_result_msg("tu_future"),
+        _make_tool_use_msg("tu_future"),
+        _make_text_msg("user", "continue"),
+    ]
+
+    assert find_safe_boundary(msgs, keep_recent=3) == 1
 
 
 def test_boundary_unmatched_tool_result_no_walk():
@@ -408,6 +448,42 @@ def test_compaction_uses_safe_boundary(monkeypatch: pytest.MonkeyPatch):
     assert "tu_e2e" in tail_result_ids
 
 
+def test_compaction_keeps_all_openai_parallel_call_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    summary = AsyncMock(return_value="SUMMARY")
+    monkeypatch.setattr(compaction, "_call_summarize", summary)
+    msgs = _build_long_conversation(3)
+    tool_batch = [
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {"name": "read_file", "arguments": "{}"},
+                }
+                for call_id in ("call_a", "call_b")
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_a", "content": "RESULT_A"},
+        {"role": "tool", "tool_call_id": "call_b", "content": "RESULT_B"},
+    ]
+    msgs.extend(tool_batch)
+    assert find_safe_boundary(msgs, keep_recent=1) == 6
+
+    new_msgs, did_compact = asyncio.run(
+        compact_conversation(msgs, provider="openai", model="gpt-5", keep_recent=1)
+    )
+
+    assert did_compact
+    assert new_msgs[4:] == tool_batch
+    summary.assert_awaited_once()
+    assert "RESULT_A" not in summary.await_args.args[0]
+    assert "RESULT_B" not in summary.await_args.args[0]
+
+
 def test_compaction_marker_and_preamble_shape(monkeypatch: pytest.MonkeyPatch):
     """Phase 4 carry-forward — exactly 4 preamble messages + tail."""
 
@@ -476,7 +552,10 @@ def test_compaction_persists_summary_artifact(monkeypatch: pytest.MonkeyPatch, t
         mgr.close()
 
 
-def test_compaction_persistence_failure_is_no_op(monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.parametrize("owned_manager", [False, True])
+def test_compaction_persistence_failure_preserves_history_and_closes_owned_manager(
+    monkeypatch: pytest.MonkeyPatch, owned_manager: bool
+):
     """A failed durable artifact write cannot commit the in-memory compaction."""
 
     async def _fake_summarize(
@@ -489,46 +568,128 @@ def test_compaction_persistence_failure_is_no_op(monkeypatch: pytest.MonkeyPatch
     ) -> str | None:
         return "UNPERSISTED SUMMARY"
 
-    class FailingSessionManager:
-        def upsert_context_artifact(self, **kwargs: object) -> None:
-            raise OSError("disk full")
-
+    manager = Mock()
+    manager.upsert_context_artifact.side_effect = OSError("disk full")
+    monkeypatch.setattr("core.memory.session_manager.SessionManager", lambda: manager)
     monkeypatch.setattr(compaction, "_call_summarize", _fake_summarize)
     msgs = _build_long_conversation(20)
-    new_msgs, did = asyncio.run(
+    original = list(msgs)
+    with pytest.raises(OSError, match="disk full"):
+        asyncio.run(
+            compact_conversation(
+                msgs,
+                provider="openai",
+                model="gpt-5",
+                keep_recent=8,
+                session_id="s1",
+                session_manager=None if owned_manager else manager,
+            )
+        )
+    assert msgs == original
+    assert manager.close.call_count == int(owned_manager)
+
+
+@pytest.mark.parametrize("summary", [None, "", "   "])
+def test_empty_summary_fails_once_without_replacing_history(
+    monkeypatch: pytest.MonkeyPatch, summary: str | None
+) -> None:
+    dispatch = AsyncMock(return_value=SimpleNamespace(text=summary))
+    monkeypatch.setattr("core.llm.adapters.dispatch.complete_text_via_adapters", dispatch)
+    msgs = _build_long_conversation(20)
+    original = list(msgs)
+    with pytest.raises(ValueError, match="summary was empty"):
+        asyncio.run(compact_conversation(msgs, "openai", "gpt-5", keep_recent=8))
+    dispatch.assert_awaited_once()
+    assert msgs == original
+
+
+def _wrapped_bad_request(code: str) -> AdapterDispatchError:
+    wrapped = AdapterDispatchError("summary dispatch failed")
+    wrapped.__cause__ = openai.BadRequestError(
+        "invalid request",
+        response=httpx.Response(400, request=httpx.Request("POST", "https://example.test")),
+        body={"error": {"code": code}},
+    )
+    return wrapped
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        BillingError("quota exhausted"),
+        AdapterUnavailableError("no matching adapter"),
+        AdapterDispatchError("connection failed"),
+        _wrapped_bad_request("unsupported_parameter"),
+    ],
+)
+def test_non_overflow_summary_failures_are_not_retried(
+    monkeypatch: pytest.MonkeyPatch, error: Exception
+) -> None:
+    dispatch = AsyncMock(side_effect=error)
+    monkeypatch.setattr("core.llm.adapters.dispatch.complete_text_via_adapters", dispatch)
+    msgs = _build_long_conversation(20)
+    original = list(msgs)
+    with pytest.raises(type(error)) as caught:
+        asyncio.run(compact_conversation(msgs, "openai", "gpt-5", keep_recent=8))
+    assert caught.value is error
+    dispatch.assert_awaited_once()
+    assert msgs == original
+
+
+@pytest.mark.parametrize("recover", [False, True])
+def test_wrapped_context_overflow_retries_bounded_with_smaller_input(
+    monkeypatch: pytest.MonkeyPatch, recover: bool
+) -> None:
+    error = _wrapped_bad_request("context_length_exceeded")
+    policy = compaction.resolve_context_budget_policy("gpt-5")
+    responses = [error] * policy.summary_overflow_retries
+    dispatch = AsyncMock(
+        side_effect=[*responses, SimpleNamespace(text="SUMMARY") if recover else error]
+    )
+    monkeypatch.setattr("core.llm.adapters.dispatch.complete_text_via_adapters", dispatch)
+    msgs = [_make_text_msg("user", "X" * 20_000), *_build_long_conversation(10)]
+    original = list(msgs)
+    if recover:
+        _messages, did = asyncio.run(
+            compact_conversation(msgs, "openai", "gpt-5", source="subscription", keep_recent=8)
+        )
+        assert did
+    else:
+        with pytest.raises(AdapterDispatchError) as caught:
+            asyncio.run(
+                compact_conversation(msgs, "openai", "gpt-5", source="subscription", keep_recent=8)
+            )
+        assert caught.value is error
+    assert msgs == original
+    assert dispatch.await_count == policy.summary_overflow_retries + 1
+    sizes = [len(call.args[0]) for call in dispatch.await_args_list]
+    assert all(left > right for left, right in pairwise(sizes))
+    assert all(call.kwargs["prefer_source"] == "subscription" for call in dispatch.await_args_list)
+
+
+@pytest.mark.parametrize("source", [None, "subscription"])
+def test_summary_source_is_inferred_only_when_not_pinned(
+    monkeypatch: pytest.MonkeyPatch, source: str | None
+) -> None:
+    infer = Mock(return_value="payg")
+    dispatch = AsyncMock(return_value=SimpleNamespace(text="SUMMARY"))
+    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", infer)
+    monkeypatch.setattr("core.llm.adapters.dispatch.complete_text_via_adapters", dispatch)
+    asyncio.run(
         compact_conversation(
-            msgs,
-            provider="openai",
-            model="gpt-5",
-            keep_recent=8,
-            session_id="s1",
-            session_manager=FailingSessionManager(),
+            _build_long_conversation(10), "openai", "gpt-5", source=source, keep_recent=8
         )
     )
-    assert did is False
-    assert new_msgs is msgs
+    assert infer.call_count == int(source is None)
+    assert dispatch.await_args.kwargs["prefer_source"] == (source or "payg")
 
 
-def test_summary_failure_no_op(monkeypatch: pytest.MonkeyPatch):
-    """If the summarizer returns None, the original messages survive."""
-
-    async def _fake_summarize(
-        text: str,
-        provider: str,
-        model: str,
-        *,
-        max_tokens: int,
-        **_observation: Any,
-    ) -> str | None:
-        return None
-
-    monkeypatch.setattr(compaction, "_call_summarize", _fake_summarize)
-    msgs = _build_long_conversation(20)
-    new_msgs, did = asyncio.run(
-        compact_conversation(msgs, provider="openai", model="gpt-5", keep_recent=8)
-    )
-    assert did is False
-    assert new_msgs is msgs
+def test_truncate_middle_with_zero_tail_does_not_append_full_input() -> None:
+    original = "abc" * 1_000
+    truncated = compaction._truncate_middle(original, max_chars=20, head_chars=20, tail_chars=0)
+    assert truncated.startswith(original[:20])
+    assert original not in truncated
+    assert len(truncated) < 100
 
 
 def test_module_exports_stable():
