@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import os
 import statistics
 import subprocess
@@ -27,9 +28,15 @@ class PerformanceBaselineError(ValueError):
 
 
 def _positive_number(value: object, *, label: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float) or value <= 0:
-        raise PerformanceBaselineError(f"{label} must be a positive number")
-    return float(value)
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise PerformanceBaselineError(f"{label} must be a positive finite number")
+    try:
+        number = float(value)
+    except OverflowError as exc:
+        raise PerformanceBaselineError(f"{label} must be a positive finite number") from exc
+    if not math.isfinite(number) or number <= 0:
+        raise PerformanceBaselineError(f"{label} must be a positive finite number")
+    return number
 
 
 def load_baseline(path: Path = BASELINE_PATH) -> dict[str, dict[str, Any]]:
@@ -38,7 +45,11 @@ def load_baseline(path: Path = BASELINE_PATH) -> dict[str, dict[str, Any]]:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise PerformanceBaselineError(f"cannot read performance baseline: {exc}") from exc
-    if not isinstance(raw, dict) or raw.get("schema_version") != SCHEMA_VERSION:
+    if (
+        not isinstance(raw, dict)
+        or type(raw.get("schema_version")) is not int
+        or raw["schema_version"] != SCHEMA_VERSION
+    ):
         raise PerformanceBaselineError(f"schema_version must be integer {SCHEMA_VERSION}")
     metrics = raw.get("metrics")
     if not isinstance(metrics, dict) or not metrics:
@@ -73,12 +84,28 @@ def compare_measurements(
     if unexpected:
         errors.append(f"unexpected metrics: {', '.join(unexpected)}")
     for name in sorted(set(measurements) & set(baseline)):
-        value = measurements[name]
+        try:
+            value = _positive_number(measurements[name], label=name)
+        except PerformanceBaselineError as exc:
+            errors.append(str(exc))
+            continue
         maximum = float(baseline[name]["maximum"])
         if value > maximum:
             unit = baseline[name]["unit"]
             errors.append(f"{name}: {value:.3f} {unit} exceeds {maximum:.3f} {unit}")
     return errors
+
+
+def _validated_measurements(raw: object) -> dict[str, float]:
+    """Reject malformed individual samples before a median can hide them."""
+    if not isinstance(raw, dict) or not raw:
+        raise PerformanceBaselineError("performance sample must be a non-empty object")
+    result: dict[str, float] = {}
+    for name, value in raw.items():
+        if not isinstance(name, str) or not name:
+            raise PerformanceBaselineError("performance metric names must be non-empty strings")
+        result[name] = _positive_number(value, label=name)
+    return result
 
 
 def _median_ms(samples: Sequence[float]) -> float:
@@ -98,7 +125,7 @@ def _minimal_bound_plan() -> Any:
     return bind_tool_plan(plan, {"architecture_noop": noop})
 
 
-async def _measure_async(bound: Any) -> dict[str, float]:
+async def _measure_async(bound: Any, *, profile_first_turn: bool = False) -> dict[str, float]:
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop, AgenticLoopConfig
     from core.agent.tool_executor import ToolExecutor
@@ -141,9 +168,27 @@ async def _measure_async(bound: Any) -> dict[str, float]:
         quiet=True,
     )
     loop._new_adapter = LocalAdapter()
+    # Profiling runs only in a separate diagnostic child, never in scored samples.
+    if profile_first_turn:
+        import cProfile
+
+        profile = cProfile.Profile()
+        profile.enable()
+    else:
+        profile = None
     started = time.perf_counter()
-    turn_result = await loop.arun("Return ok.")
-    first_turn_ms = (time.perf_counter() - started) * 1000.0
+    try:
+        turn_result = await loop.arun("Return ok.")
+    finally:
+        first_turn_ms = (time.perf_counter() - started) * 1000.0
+        if profile is not None:
+            profile.disable()
+            import pstats
+
+            print("First-turn profile: diagnostic only, not acceptance", file=sys.stderr)
+            pstats.Stats(profile, stream=sys.stderr).strip_dirs().sort_stats(
+                "cumulative"
+            ).print_stats(20)
     if turn_result.error is not None or turn_result.text != "ok":
         raise RuntimeError(
             f"local first-turn probe failed: {turn_result.error or turn_result.text}"
@@ -190,7 +235,7 @@ async def _measure_async(bound: Any) -> dict[str, float]:
     }
 
 
-def _measure_probe() -> dict[str, float]:
+def _measure_probe(*, profile_first_turn: bool = False) -> dict[str, float]:
     """Run every no-network probe inside one isolated child process."""
     import_started = time.perf_counter()
     from core.hooks.catalog import EventRetentionClass
@@ -279,11 +324,13 @@ def _measure_probe() -> dict[str, float]:
         "tool_registry_entries": float(len(bound.tool_names) + len(transient)),
         "event_persist_us": statistics.median(persistence_samples) * 1_000_000.0,
     }
-    measurements.update(asyncio.run(_measure_async(_minimal_bound_plan())))
+    measurements.update(
+        asyncio.run(_measure_async(_minimal_bound_plan(), profile_first_turn=profile_first_turn))
+    )
     return measurements
 
 
-def collect_measurements(*, samples: int = 3) -> dict[str, float]:
+def collect_measurements(*, samples: int = 3, diagnostic: bool = False) -> dict[str, float]:
     """Collect medians and emit each isolated probe's diagnostic evidence."""
     if samples < 1:
         raise ValueError("samples must be positive")
@@ -305,7 +352,8 @@ def collect_measurements(*, samples: int = 3) -> dict[str, float]:
                 }
             )
             completed = subprocess.run(  # noqa: S603 -- current interpreter and fixed script
-                [sys.executable, str(Path(__file__).resolve()), "--probe"],
+                [sys.executable, str(Path(__file__).resolve()), "--probe"]
+                + (["--profile-first-turn"] if diagnostic else []),
                 cwd=sample_root,
                 env=env,
                 check=False,
@@ -325,11 +373,12 @@ def collect_measurements(*, samples: int = 3) -> dict[str, float]:
                 )
             completed.check_returncode()
             row = json.loads(completed.stdout)
-            rows.append(row)
+            label = "diagnostic" if diagnostic else "performance"
             print(
-                f"performance sample {index + 1}/{samples}: {json.dumps(row, sort_keys=True)}",
+                f"{label} sample {index + 1}/{samples}: {json.dumps(row, sort_keys=True)}",
                 flush=True,
             )
+            rows.append(_validated_measurements(row))
     names = set(rows[0])
     if any(set(row) != names for row in rows):
         raise RuntimeError("performance probe returned inconsistent metric sets")
@@ -338,7 +387,7 @@ def collect_measurements(*, samples: int = 3) -> dict[str, float]:
 
 def _render(measurements: Mapping[str, float], baseline: Mapping[str, Mapping[str, Any]]) -> str:
     lines = []
-    for name in sorted(measurements):
+    for name in sorted(set(measurements) & set(baseline)):
         unit = baseline[name]["unit"]
         maximum = float(baseline[name]["maximum"])
         lines.append(f"{name}: {measurements[name]:.3f} {unit} (max {maximum:.3f})")
@@ -349,17 +398,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check", action="store_true")
+    mode.add_argument("--diagnose", action="store_true", help="profile one unscored isolated probe")
+    parser.add_argument("--profile-first-turn", action="store_true", help=argparse.SUPPRESS)
     mode.add_argument("--probe", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--samples", type=int, default=3)
     parser.add_argument("--baseline", type=Path, default=BASELINE_PATH)
     args = parser.parse_args(argv)
+    if args.profile_first_turn and not args.probe:
+        parser.error("--profile-first-turn requires internal --probe mode")
     if args.probe:
         if os.environ.get("_GEODE_ARCHITECTURE_PERFORMANCE_PROBE") != "1":
             print("--probe is an internal isolated subprocess mode", file=sys.stderr)
             return 2
-        print(json.dumps(_measure_probe(), sort_keys=True))
+        print(
+            json.dumps(_measure_probe(profile_first_turn=args.profile_first_turn), sort_keys=True)
+        )
         return 0
     try:
+        if args.diagnose:
+            print("Diagnostic only: profiled values are not performance acceptance evidence")
+            collect_measurements(samples=1, diagnostic=True)
+            return 0
         baseline = load_baseline(args.baseline)
         measurements = collect_measurements(samples=args.samples)
         errors = compare_measurements(measurements, baseline)

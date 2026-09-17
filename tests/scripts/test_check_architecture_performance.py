@@ -175,3 +175,108 @@ def test_check_still_fails_over_budget_with_raw_evidence(
     assert 'performance sample 3/3: {"probe_ms": 11.0}' in output.out
     assert "probe_ms: 11.000 ms exceeds 10.000 ms" in output.err
     assert "architecture performance OK" not in output.out
+
+
+@pytest.mark.parametrize(
+    "value", [float("nan"), float("inf"), -float("inf"), 0, -1, True, "1", None]
+)
+@pytest.mark.parametrize("field", ["observed", "maximum"])
+def test_baseline_rejects_non_finite_or_non_positive_values(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    path = tmp_path / "baseline.json"
+    _write_baseline(path)
+    data = json.loads(path.read_text())
+    data["metrics"]["probe_ms"][field] = value
+    path.write_text(json.dumps(data))
+    with pytest.raises(checker.PerformanceBaselineError, match="positive finite"):
+        checker.load_baseline(path)
+
+
+@pytest.mark.parametrize("version", [True, 1.0, "1"])
+def test_baseline_requires_integer_schema_identity(tmp_path: Path, version: object) -> None:
+    path = tmp_path / "baseline.json"
+    _write_baseline(path)
+    data = json.loads(path.read_text())
+    data["schema_version"] = version
+    path.write_text(json.dumps(data))
+    with pytest.raises(checker.PerformanceBaselineError, match="schema_version"):
+        checker.load_baseline(path)
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf"), 0, -1, True])
+def test_compare_rejects_invalid_measurements(value: float) -> None:
+    baseline = {"probe_ms": {"unit": "ms", "observed": 1.0, "maximum": 2.0}}
+    errors = checker.compare_measurements({"probe_ms": value}, baseline)
+    assert errors == ["probe_ms must be a positive finite number"]
+
+
+@pytest.mark.parametrize("row", [{"probe_ms": float("nan")}, {"probe_ms": -1}, {}, [], None])
+def test_invalid_sample_cannot_be_hidden_by_a_passing_median(
+    monkeypatch: pytest.MonkeyPatch,
+    row: object,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path = tmp_path / "baseline.json"
+    _write_baseline(path)
+    samples = iter([{"probe_ms": 1.0}, row, {"probe_ms": 1.0}])
+
+    def run_probe(*_args: Any, **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess([], 0, json.dumps(next(samples)), "")
+
+    monkeypatch.setattr(checker.subprocess, "run", run_probe)
+    assert checker.main(["--check", "--baseline", str(path)]) == 1
+    output = capsys.readouterr()
+    assert "architecture performance OK" not in output.out
+    assert "architecture performance check failed" in output.err
+
+
+def test_check_reports_unexpected_metric_without_rendering_key_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "baseline.json"
+    _write_baseline(path)
+
+    def run_probe(*_args: Any, **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess([], 0, '{"unexpected_ms": 1.0}', "")
+
+    monkeypatch.setattr(checker.subprocess, "run", run_probe)
+    assert checker.main(["--check", "--baseline", str(path)]) == 1
+    output = capsys.readouterr()
+    assert "missing metrics: probe_ms" in output.err
+    assert "unexpected metrics: unexpected_ms" in output.err
+    assert "architecture performance OK" not in output.out
+
+
+@pytest.mark.parametrize("diagnostic", [False, True])
+def test_profile_flag_is_only_used_for_unscored_diagnostics(
+    monkeypatch: pytest.MonkeyPatch, diagnostic: bool, capsys: pytest.CaptureFixture[str]
+) -> None:
+    commands: list[list[str]] = []
+
+    def run_probe(command: list[str], **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, '{"first_turn_ms": 1.0}', "")
+
+    monkeypatch.setattr(checker.subprocess, "run", run_probe)
+    checker.collect_measurements(samples=1, diagnostic=diagnostic)
+    assert ("--profile-first-turn" in commands[0]) is diagnostic
+    assert capsys.readouterr().out.startswith("diagnostic" if diagnostic else "performance")
+
+
+def test_diagnose_never_reports_acceptance_success(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seen: list[dict[str, object]] = []
+
+    def collect(**kwargs: Any) -> dict[str, float]:
+        seen.append(kwargs)
+        return {"first_turn_ms": 9999.0}
+
+    monkeypatch.setattr(checker, "collect_measurements", collect)
+    assert checker.main(["--diagnose"]) == 0
+    assert seen == [{"samples": 1, "diagnostic": True}]
+    output = capsys.readouterr().out
+    assert "Diagnostic only" in output
+    assert "architecture performance OK" not in output

@@ -28,6 +28,7 @@ import contextlib
 import logging
 import re
 import sqlite3
+import uuid
 from collections.abc import Iterable
 
 log = logging.getLogger(__name__)
@@ -93,13 +94,16 @@ def sanitize_fts5_query(raw: str) -> str:
 def has_trigram_support(conn: sqlite3.Connection) -> bool:
     """Probe whether the underlying SQLite build supports ``tokenize='trigram'``.
 
-    Runs a one-shot ``CREATE VIRTUAL TABLE ... USING fts5(... tokenize='trigram')``
-    on a throwaway name and drops it. SQLite ≥ 3.34 has trigram baked
-    in; older builds raise ``sqlite3.OperationalError``. Returns
+    Create and drop a uniquely named virtual table in this connection's TEMP
+    schema. Capability detection must not mutate the durable session schema,
+    generate main-database WAL writes, or commit the caller's transaction.
+    Do not cache across connections: available modules and authorizers can differ.
+    SQLite ≥ 3.34 has trigram baked in; older builds raise
+    ``sqlite3.OperationalError``. Returns
     ``False`` on any exception so the caller can downgrade gracefully
     rather than crash the whole DB init.
     """
-    probe_name = "_geode_trigram_probe"
+    probe_name = f"temp._geode_trigram_probe_{uuid.uuid4().hex}"
     try:
         conn.execute(f"CREATE VIRTUAL TABLE {probe_name} USING fts5(c, tokenize='trigram')")
     except sqlite3.OperationalError as exc:
@@ -109,7 +113,7 @@ def has_trigram_support(conn: sqlite3.Connection) -> bool:
         log.debug("trigram capability probe unexpected error: %s", exc)
         return False
     with contextlib.suppress(Exception):
-        # Best-effort cleanup; leaving the probe table behind is harmless.
+        # Only our unique TEMP object is eligible for cleanup; never a caller table.
         conn.execute(f"DROP TABLE {probe_name}")
     return True
 

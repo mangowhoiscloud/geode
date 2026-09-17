@@ -252,9 +252,18 @@ jobs:
             tests/core/tools/test_tool_plan.py \
             tests/integration/test_architecture_site_inventory.py \
             tests/integration/test_namespace_composition.py
+      - name: Architecture performance contracts
+        if: needs.changes.outputs.code == 'true'
+        run: |
+          uv run pytest -q tests/core/memory/test_hermes_1c_fts5.py \
+            tests/scripts/test_check_architecture_performance.py
       - name: Architecture performance baseline
+        id: architecture_performance
         if: needs.changes.outputs.code == 'true'
         run: uv run python scripts/check_architecture_performance.py --check
+      - name: Architecture performance failure profile
+        if: failure() && steps.architecture_performance.outcome == 'failure'
+        run: uv run python scripts/check_architecture_performance.py --diagnose
       - name: Extension change-surface contracts
         if: needs.changes.outputs.code == 'true'
         run: uv run pytest -q tests/integration/test_extension_change_surfaces.py

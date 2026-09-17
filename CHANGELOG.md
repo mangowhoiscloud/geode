@@ -49,6 +49,16 @@ functional change.
 
 ### Fixed
 
+- Keep SQLite trigram capability probes in connection-local TEMP tables instead
+  of repeatedly creating and dropping FTS shadow tables in the durable session
+  database. Preserve caller transactions, existing tables, connection-specific
+  capability checks, and checkpoint/timeline durability.
+- Harden the architecture performance ratchet against non-finite, non-positive,
+  malformed, or mismatched measurements before aggregation. Run deterministic
+  FTS/checker contracts before the unchanged three-sample limits, and retain a
+  separate bounded first-turn profile after failure without replacing the
+  original failed result or relaxing the baseline.
+
 - Unify automatic, model-switch, manual, and tool-triggered context operations under
   `ContextWindowManager`. Async downshifts compact on the previous route before switching;
   `/compact --prune` is the explicit lossful path, and UI/IPC results distinguish changed,
