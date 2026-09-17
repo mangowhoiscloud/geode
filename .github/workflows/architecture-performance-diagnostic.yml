@@ -6,67 +6,79 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: architecture-ratchet-candidate
+  cancel-in-progress: false
 
 jobs:
-  diagnose:
+  prepare:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.head_ref == 'fix/architecture-performance-ratchet-20260917'
+      github.head_ref == 'fix/architecture-performance-guards-20260917'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
+    env:
+      EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
-      - run: uv sync --extra audit
-      - name: Profile isolated first turn without changing acceptance samples
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+      - name: Inspect owned checkout and apply pinned-source changes
+        shell: bash
         run: |
-          uv run python - <<'PY'
-          import os
-          import subprocess
-          import sys
-          import tempfile
-          from pathlib import Path
-
-          code = '''
-          import cProfile
-          import json
-          import pstats
-          import sys
-          from core.agent.loop import AgenticLoop
-          from scripts import check_architecture_performance as checker
-
-          original = AgenticLoop.arun
-          async def profile_turn(self, *args, **kwargs):
-              profile = cProfile.Profile()
-              profile.enable()
-              try:
-                  return await original(self, *args, **kwargs)
-              finally:
-                  profile.disable()
-                  print("FIRST TURN PROFILE: diagnostic only, not acceptance", file=sys.stderr)
-                  pstats.Stats(profile, stream=sys.stderr).strip_dirs().sort_stats("cumulative").print_stats(45)
-                  print("SELF TIME PROFILE", file=sys.stderr)
-                  pstats.Stats(profile, stream=sys.stderr).strip_dirs().sort_stats("tottime").print_stats(20)
-          AgenticLoop.arun = profile_turn
-          print(json.dumps(checker._measure_probe(), sort_keys=True))
-          '''
-          # This is a separate, unscored process. The original three-sample
-          # wall-clock gate below is unchanged and remains independently required.
-          with tempfile.TemporaryDirectory(prefix="geode-profile-") as temp:
-              root = Path(temp)
-              env = os.environ.copy()
-              env.update({
-                  "PYTHONPATH": str(Path.cwd()),
-                  "CODEX_HOME": str(root / "codex"),
-                  "GEODE_COGNITIVE_REFLECTION_ENABLED": "false",
-                  "GEODE_HOME": str(root / "home"),
-                  "GEODE_STATE_ROOT": str(root / "state"),
-                  "GEODE_VERIFY_MODE": "off",
-                  "_GEODE_ARCHITECTURE_PERFORMANCE_PROBE": "1",
-              })
-              subprocess.run([sys.executable, "-c", code], cwd=root, env=env,
-                             check=True, timeout=120)
-          PY
-      - name: Unchanged three-sample performance acceptance
-        run: uv run python scripts/check_architecture_performance.py --check
+          set -euo pipefail
+          git status --short --branch
+          git worktree list
+          test -z "$(git status --porcelain)"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test ! -e .owner
+          printf 'session=performance-ratchet\ntask_id=architecture-performance-guards-20260917\n' > .owner
+          cp .github/publish-ratchet-3356.py "$RUNNER_TEMP/publish-ratchet-3356.py"
+          python .github/ratchet-3356.py
+          git rm .github/ratchet-3356.py .github/publish-ratchet-3356.py \
+            .github/workflows/architecture-performance-diagnostic.yml
+      - run: uv sync --extra audit
+      - name: Targeted runtime and checker regression tests
+        run: |
+          uv run ruff format core/memory/fts_query.py scripts/check_architecture_performance.py \
+            tests/core/memory/test_hermes_1c_fts5.py tests/scripts/test_check_architecture_performance.py
+          uv run pytest -q -o addopts= tests/core/memory/test_hermes_1c_fts5.py \
+            tests/scripts/test_check_architecture_performance.py
+      - name: Static contracts
+        run: |
+          uv run ruff check core/ evals/ evolve/ tests/ scripts/
+          uv run mypy core/ evals/ evolve/ scripts/
+          uv run lint-imports --no-cache
+      - name: Regenerate canonical architecture and public documentation mirrors
+        run: |
+          uv run python scripts/architecture_baseline.py --update
+          npm --prefix site ci
+          npm --prefix site run sync-stats
+          npm --prefix site run build
+          npm --prefix site run export-md
+          npm --prefix site run test:docs
+          uv run python scripts/check_official_docs.py --check-map
+      - name: Verify staged scope and publish an unreferenced candidate only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add core/memory/fts_query.py scripts/check_architecture_performance.py \
+            tests/core/memory/test_hermes_1c_fts5.py tests/scripts/test_check_architecture_performance.py \
+            .github/workflows/ci.yml .agents/skills/geode-workflow/references/verification-gates.md \
+            CHANGELOG.md AGENTS.md docs/architecture/extensibility-roadmap.md \
+            site/src/data/geode/architecture-baseline.json site/src/data/geode/changelog.ts \
+            site/src/data/geode/sot.ts site/public/llms.txt site/public/llms-full.txt
+          uv run python scripts/check_repo_hygiene.py
+          git diff --cached --check
+          git diff --cached --stat
+          python "$RUNNER_TEMP/publish-ratchet-3356.py"
