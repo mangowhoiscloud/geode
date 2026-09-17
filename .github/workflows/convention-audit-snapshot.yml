@@ -5,7 +5,7 @@ name: Convention audit verification
 on:
   push:
     branches: [fix/convention-static-audit-20260918]
-    paths: [.github/audit-edits.json]
+    paths: [.github/audit-edits.json, .github/workflows/convention-audit-snapshot.yml]
 
 permissions:
   contents: write
@@ -33,6 +33,9 @@ jobs:
           assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip() == os.environ['GITHUB_SHA']
           subprocess.run(['git', 'merge-base', '--is-ancestor', '4bb73b909f2c4abd1332784b1b1fd802832a48eb', 'HEAD'], check=True)
           root = pathlib.Path.cwd()
+          report = pathlib.Path(os.environ['RUNNER_TEMP']) / 'verification'
+          report.mkdir(parents=True, exist_ok=True)
+          (report / 'source.json').write_text(json.dumps({'source_sha': os.environ['GITHUB_SHA']}))
           records = json.loads((root / '.github/audit-edits.json').read_text())
           paths = []
           for name, before, after, mode, edits in records:
@@ -52,7 +55,9 @@ jobs:
           for name in ['.github/audit-edits.json', '.github/workflows/convention-audit-snapshot.yml']:
               (root / name).unlink()
               paths.append(name)
-          subprocess.run(['git', 'add', '--', *paths], check=True)
+          subprocess.run(['git', 'add', '--update'], check=True)
+          added = [name for name in paths if name != '.claude/hooks/check-progress.sh']
+          subprocess.run(['git', 'add', '--', *added], check=True)
           (pathlib.Path(os.environ['RUNNER_TEMP']) / 'audit-paths.json').write_text(json.dumps(paths))
           PY
       - name: Install locked Python environment
