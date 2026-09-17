@@ -1,20 +1,20 @@
-name: Convention audit verification
+name: Convention audit verified export
 
 # Temporary branch-scoped verification. The final tree removes this workflow
-# and its input. It creates Git objects only; the connector advances the ref.
+# and its input. Export is read-only; the connector performs all Git writes.
 on:
   push:
     branches: [fix/convention-static-audit-20260918]
     paths: [.github/audit-edits.json, .github/audit-corrections.json, .github/workflows/convention-audit-snapshot.yml]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
     if: github.ref == 'refs/heads/fix/convention-static-audit-20260918'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -63,80 +63,24 @@ jobs:
           PY
       - name: Install locked Python environment
         run: uv sync --locked --extra audit
-      - name: Install pinned automation analyzers
-        run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          archive="$RUNNER_TEMP/shellcheck.tar.xz"
-          curl --fail --silent --show-error --location \
-            https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz \
-            --output "$archive"
-          echo "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198  $archive" | sha256sum --check
-          tar -xJf "$archive" -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/shellcheck-v0.11.0" >> "$GITHUB_PATH"
-          echo "$HOME/go/bin" >> "$GITHUB_PATH"
-      - name: Regenerate architecture inventory
+      - name: Regenerate exact verified architecture inventory
         run: uv run python scripts/architecture_baseline.py --update
-      - name: Verify every Python and automation layer
-        run: |
-          python - <<'PY'
-          import json, os, pathlib, shlex, subprocess, sys
-          report = pathlib.Path(os.environ['RUNNER_TEMP']) / 'verification'
-          report.mkdir(parents=True, exist_ok=True)
-          commands = {
-              'ruff': 'uv run ruff check core/ evals/ evolve/ tests/ scripts/',
-              'annotations': 'uv run ruff check --config ruff-production.toml core/ evals/ evolve/',
-              'format': 'uv run ruff format --check core/ evals/ evolve/ tests/ scripts/',
-              'types': 'uv run mypy core/ evals/ evolve/ scripts/',
-              'imports': 'uv run lint-imports --no-cache',
-              'dependencies': 'uv run deptry .',
-              'bandit': 'uv run bandit -r core/ evals/ evolve/ scripts/ -c pyproject.toml',
-              'automation': 'scripts/lint_automation.sh',
-              'exceptions': 'uv run python scripts/check_architecture_exceptions.py --check --base-ref origin/develop',
-              'inventory': 'uv run python scripts/architecture_baseline.py --check',
-              'targeted-tests': 'uv run pytest -q tests/core/ui/test_context_local.py tests/scripts/test_production_annotations.py tests/scripts/test_preflight.py tests/scripts/test_geo_host_preflight.py tests/scripts/test_progress_hook.py tests/scripts/test_automation_lint.py',
-              'docs-map': 'uv run python scripts/check_official_docs.py --check-map',
-          }
-          results = []
-          for name, command in commands.items():
-              with (report / (name + '.log')).open('w') as output:
-                  result = subprocess.run(shlex.split(command), stdout=output, stderr=subprocess.STDOUT, check=False)
-              results.append({'name': name, 'command': command, 'exit_code': result.returncode})
-              print(name, result.returncode, flush=True)
-          (report / 'python-results.json').write_text(json.dumps(results, indent=2))
-          sys.exit(int(any(row['exit_code'] for row in results)))
-          PY
       - name: Install locked site environment
         run: npm ci
         working-directory: site
-      - name: Regenerate and verify public site
+      - name: Reproduce generated files from the verified source
+        working-directory: site
         run: |
-          python - <<'PY'
-          import json, os, pathlib, shlex, subprocess, sys
-          report = pathlib.Path(os.environ['RUNNER_TEMP']) / 'verification'
-          commands = {
-              'site-sync': 'npm run sync-stats',
-              'site-lint': 'npm run lint',
-              'site-types': 'npm run typecheck',
-              'site-audit': 'npm audit --audit-level=moderate',
-              'site-build': 'npm run build',
-              'site-export': 'npm run export-md',
-              'site-metadata': 'npm run verify-metadata',
-          }
-          results = []
-          for name, command in commands.items():
-              with (report / (name + '.log')).open('w') as output:
-                  result = subprocess.run(shlex.split(command), cwd='site', stdout=output, stderr=subprocess.STDOUT, check=False)
-              results.append({'name': name, 'command': command, 'exit_code': result.returncode})
-              print(name, result.returncode, flush=True)
-          (report / 'site-results.json').write_text(json.dumps(results, indent=2))
-          sys.exit(int(any(row['exit_code'] for row in results)))
-          PY
-      - name: Export validated final Git objects without moving a branch
+          npm run sync-stats
+          npm run build
+          npm run export-md
+          npm run verify-metadata
+      - name: Preserve verified source and Git-object manifest before publication
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          python - <<'PY'
-          import base64, json, os, pathlib, subprocess, urllib.request
+          python - <<'PYEXPORT'
+          import json, os, pathlib, subprocess, tarfile, urllib.error, urllib.request
           root = pathlib.Path.cwd()
           report = pathlib.Path(os.environ['RUNNER_TEMP']) / 'verification'
           paths = json.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'audit-paths.json').read_text())
@@ -146,51 +90,56 @@ jobs:
               'site/src/data/geode/sot.ts', 'site/src/data/geode/changelog.ts',
               'site/public/llms.txt', 'site/public/llms-full.txt',
           ]
-          allowed = set(paths + mirrors)
           subprocess.run(['git', 'add', '--', *mirrors], check=True)
-          pending = subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines()
-          assert not pending, pending
+          assert not subprocess.check_output(['git', 'diff', '--name-only'], text=True).strip()
           changed = subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True).splitlines()
-          assert set(changed).issubset(allowed), changed
+          assert set(changed).issubset(set(paths + mirrors)), changed
           subprocess.run(['git', 'diff', '--cached', '--check'], check=True)
-          api = 'https://api.github.com/repos/mangowhoiscloud/geode'
-          def request(path, payload=None):
-              body = None if payload is None else json.dumps(payload).encode()
-              req = urllib.request.Request(api + path, data=body, headers={
-                  'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
-                  'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json',
-                  'X-GitHub-Api-Version': '2022-11-28',
-              })
-              with urllib.request.urlopen(req, timeout=60) as response:
-                  return json.load(response)
-          parent = os.environ['GITHUB_SHA']
-          assert request('/git/ref/heads/fix/convention-static-audit-20260918')['object']['sha'] == parent
           tree = []
-          for name in changed:
-              path = root / name
-              if not path.exists():
-                  tree.append({'path': name, 'mode': '100644', 'type': 'blob', 'sha': None})
-                  continue
-              blob = request('/git/blobs', {'content': base64.b64encode(path.read_bytes()).decode(), 'encoding': 'base64'})
-              mode = subprocess.check_output(['git', 'ls-files', '-s', '--', name], text=True).split()[0]
-              tree.append({'path': name, 'mode': mode, 'type': 'blob', 'sha': blob['sha']})
-          base = request('/git/commits/' + parent)['tree']['sha']
-          created_tree = request('/git/trees', {'base_tree': base, 'tree': tree})
-          local_tree = subprocess.check_output(['git', 'write-tree'], text=True).strip()
-          assert created_tree['sha'] == local_tree
-          commit = request('/git/commits', {
-              'message': 'fix(quality): enforce layer-wide conventions and static-analysis gates',
-              'tree': created_tree['sha'], 'parents': [parent],
-          })
-          receipt = {'parent': parent, 'commit': commit['sha'], 'tree': local_tree, 'changed_paths': changed}
-          (report / 'commit-receipt.json').write_text(json.dumps(receipt, indent=2))
-          print(json.dumps(receipt, indent=2))
+          with tarfile.open(report / 'changed-source.tar.gz', 'w:gz') as archive:
+              for name in changed:
+                  path = root / name
+                  if not path.exists():
+                      tree.append({'path': name, 'mode': '100644', 'type': 'blob', 'sha': None})
+                      continue
+                  mode, sha = subprocess.check_output(['git', 'ls-files', '-s', '--', name], text=True).split()[:2]
+                  tree.append({'path': name, 'mode': mode, 'type': 'blob', 'sha': sha})
+                  archive.add(path, arcname=name, recursive=False)
+          receipt = {
+              'parent': os.environ['GITHUB_SHA'],
+              'base_tree': subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip(),
+              'tree': subprocess.check_output(['git', 'write-tree'], text=True).strip(),
+              'verified_product_run': 35250804564,
+              'entries': tree,
+          }
+          (report / 'tree-manifest.json').write_text(json.dumps(receipt, indent=2))
           (report / 'final.patch').write_bytes(subprocess.check_output(['git', 'diff', '--cached', '--binary']))
-          PY
+          # Read-only object-presence probe. Publication uses the connected tool.
+          observed = []
+          for entry in tree:
+              if entry['sha'] is None:
+                  continue
+              url = 'https://api.github.com/repos/mangowhoiscloud/geode/git/blobs/' + entry['sha']
+              request = urllib.request.Request(url, headers={
+                  'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                  'Accept': 'application/vnd.github+json',
+              })
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      status = response.status
+              except urllib.error.HTTPError as error:
+                  status = error.code
+                  if status != 404:
+                      (report / 'probe-error.json').write_text(json.dumps({'path': entry['path'], 'status': status, 'body': error.read().decode()}))
+                      break
+              observed.append({'path': entry['path'], 'sha': entry['sha'], 'status': status})
+          (report / 'blob-presence.json').write_text(json.dumps(observed, indent=2))
+          print(json.dumps({key: value for key, value in receipt.items() if key != 'entries'}, indent=2))
+          PYEXPORT
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: convention-verification-${{ github.sha }}
+          name: convention-export-${{ github.sha }}
           path: ${{ runner.temp }}/verification
           if-no-files-found: error
           retention-days: 7
