@@ -13,8 +13,6 @@ jobs:
     name: Python layer diagnostics
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    env:
-      REPORT_DIR: ${{ runner.temp }}/audit-python
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -26,7 +24,7 @@ jobs:
         run: |
           python - <<'PY'
           import json, os, pathlib, subprocess, sys
-          report = pathlib.Path(os.environ['REPORT_DIR'])
+          report = pathlib.Path(os.environ['RUNNER_TEMP']) / 'audit-python'
           report.mkdir(parents=True)
           commands = {
               'ruff': 'ruff check core/ evals/ evolve/ tests/ scripts/ --output-format json',
@@ -62,7 +60,7 @@ jobs:
         if: always()
         with:
           name: audit-python-${{ github.sha }}
-          path: ${{ env.REPORT_DIR }}
+          path: ${{ runner.temp }}/audit-python
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -77,8 +75,6 @@ jobs:
     name: Site layer diagnostics
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      REPORT_DIR: ${{ runner.temp }}/audit-site
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -94,7 +90,7 @@ jobs:
         run: |
           python - <<'PY'
           import json, os, pathlib, subprocess, sys
-          report = pathlib.Path(os.environ['REPORT_DIR'])
+          report = pathlib.Path(os.environ['RUNNER_TEMP']) / 'audit-site'
           report.mkdir(parents=True)
           commands = {
               'eslint': ['npm', 'run', 'lint', '--', '--max-warnings=0', '--format', 'json'],
@@ -114,7 +110,7 @@ jobs:
         if: always()
         with:
           name: audit-site-${{ github.sha }}
-          path: ${{ env.REPORT_DIR }}
+          path: ${{ runner.temp }}/audit-site
           if-no-files-found: error
           retention-days: 7
 
@@ -122,8 +118,6 @@ jobs:
     name: Workflow and shell diagnostics
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      REPORT_DIR: ${{ runner.temp }}/audit-automation
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -134,7 +128,7 @@ jobs:
         run: |
           python - <<'PY'
           import json, os, pathlib, subprocess, sys
-          report = pathlib.Path(os.environ['REPORT_DIR'])
+          report = pathlib.Path(os.environ['RUNNER_TEMP']) / 'audit-automation'
           report.mkdir(parents=True)
           files = subprocess.check_output(['git', 'ls-files', '-z', '--', '*.sh'], text=True).strip('\0').split('\0')
           commands = {
@@ -154,13 +148,23 @@ jobs:
       - name: Preserve automation binaries
         if: always()
         run: |
-          mkdir -p "$REPORT_DIR/tools"
-          cp "$HOME/go/bin/actionlint" "$REPORT_DIR/tools/actionlint"
-          cp "$(command -v shellcheck)" "$REPORT_DIR/tools/shellcheck"
+          mkdir -p "$RUNNER_TEMP/audit-automation/tools"
+          cp "$HOME/go/bin/actionlint" "$RUNNER_TEMP/audit-automation/tools/actionlint"
+          cp "$(command -v shellcheck)" "$RUNNER_TEMP/audit-automation/tools/shellcheck"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: audit-automation-${{ github.sha }}
-          path: ${{ env.REPORT_DIR }}
+          path: ${{ runner.temp }}/audit-automation
           if-no-files-found: error
           retention-days: 7
+
+  native:
+    name: macOS helper type check
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: swiftc -typecheck scripts/macos/geode_computer_helper.swift
