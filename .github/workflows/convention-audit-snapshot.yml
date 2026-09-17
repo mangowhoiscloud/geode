@@ -56,7 +56,7 @@ jobs:
               (root / name).unlink()
               paths.append(name)
           subprocess.run(['git', 'add', '--update'], check=True)
-          added = [name for name in paths if name != '.claude/hooks/check-progress.sh']
+          added = [name for name in paths if name != '.claude/hooks/check-progress.sh' and (root / name).exists()]
           subprocess.run(['git', 'add', '--', *added], check=True)
           (pathlib.Path(os.environ['RUNNER_TEMP']) / 'audit-paths.json').write_text(json.dumps(paths))
           PY
