@@ -1,4 +1,4 @@
-"""Upload only staged, verified Git objects; never move remote refs."""
+"""Upload verified blobs and print a manifest; never create trees or move refs."""
 from __future__ import annotations
 import base64
 import json
@@ -58,13 +58,10 @@ for path in changed:
         raise RuntimeError(f'Uploaded bytes differ: {path}')
     mode = git('ls-files', '--stage', '--', path).decode().split()[0]
     entries.append({'path': path, 'mode': mode, 'type': 'blob', 'sha': blob['sha']})
-base_tree = git('rev-parse', 'HEAD^{tree}').decode().strip()
-tree = api('git/trees', {'base_tree': base_tree, 'tree': entries})
-if tree['sha'] != git('write-tree').decode().strip():
-    raise RuntimeError('Uploaded tree differs from verified index')
-identity = {'name': 'github-actions[bot]', 'email': '41898282+github-actions[bot]@users.noreply.github.com'}
-commit = api('git/commits', {
-    'message': 'fix: TEMP 기반 FTS 탐지와 성능 회귀 래칫 보강',
-    'tree': tree['sha'], 'parents': [EXPECTED], 'author': identity, 'committer': identity})
-print(json.dumps({'candidate_commit': commit['sha'], 'tree': tree['sha'], 'parent': EXPECTED,
-                  'changed_paths': changed, 'ref_updated': False}, ensure_ascii=False, indent=2))
+# The runner does not have workflow-tree publication authority. Keep that write
+# in the authorized connector; emit only verified object IDs and the exact tree.
+print('VERIFIED_CANDIDATE_MANIFEST')
+print(json.dumps({'parent': EXPECTED,
+                  'base_tree': git('rev-parse', 'HEAD^{tree}').decode().strip(),
+                  'expected_tree': git('write-tree').decode().strip(),
+                  'entries': entries, 'ref_updated': False}, ensure_ascii=False, indent=2))
