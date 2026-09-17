@@ -5,7 +5,7 @@ name: Convention audit verification
 on:
   push:
     branches: [fix/convention-static-audit-20260918]
-    paths: [.github/audit-edits.json, .github/workflows/convention-audit-snapshot.yml]
+    paths: [.github/audit-edits.json, .github/audit-corrections.json, .github/workflows/convention-audit-snapshot.yml]
 
 permissions:
   contents: write
@@ -37,6 +37,7 @@ jobs:
           report.mkdir(parents=True, exist_ok=True)
           (report / 'source.json').write_text(json.dumps({'source_sha': os.environ['GITHUB_SHA']}))
           records = json.loads((root / '.github/audit-edits.json').read_text())
+          records += json.loads((root / '.github/audit-corrections.json').read_text())
           paths = []
           for name, before, after, mode, edits in records:
               path = root / name
@@ -52,7 +53,7 @@ jobs:
               path.write_bytes(data)
               path.chmod(mode & 0o777)
               paths.append(name)
-          for name in ['.github/audit-edits.json', '.github/workflows/convention-audit-snapshot.yml']:
+          for name in ['.github/audit-edits.json', '.github/audit-corrections.json', '.github/workflows/convention-audit-snapshot.yml']:
               (root / name).unlink()
               paths.append(name)
           subprocess.run(['git', 'add', '--update'], check=True)
