@@ -1,0 +1,30 @@
+name: Convention audit source snapshot
+
+# Temporary transport for this audit branch only. Removed before integration.
+# git archive exports committed public source, never runner credentials or state.
+on:
+  push:
+    branches: [fix/convention-static-audit-20260918]
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    name: Capture audit source
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Export exact committed tree
+        run: |
+          git rev-parse HEAD
+          git archive --format=tar HEAD > "$RUNNER_TEMP/geode-source.tar"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: geode-source-${{ github.sha }}
+          path: ${{ runner.temp }}/geode-source.tar
+          if-no-files-found: error
+          retention-days: 1
