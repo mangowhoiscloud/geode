@@ -143,7 +143,7 @@ feature/<name> -> develop -> main
   `scripts/merge_pr.py` enforces the same parent proof against live remote tips
   before its head-pinned merge request. If either tip moved, rebuild the sync
   head and rerun CI; an earlier green no longer proves the current graph.
-- Feature PRs merge into `develop` with squash merge.
+- Feature PRs merge into `develop` with merge commits; preserve reviewed commit history.
 - Before `develop -> main`, sync `main -> develop` if main has drift.
 - `develop -> main` is a pass-through merge after gates are satisfied.
 - Merge admission is a separate check, not a side effect of local test success.
@@ -160,9 +160,9 @@ feature/<name> -> develop -> main
   Superseded runs remain in history; an older success cannot replace a current failure.
 - Post-merge cleanup runs
   `scripts/check_repo_hygiene.py free-merged-worktree` from outside the target
-  checkout. It verifies the squash tree by replaying the final PR head onto the
+  checkout. It verifies the merge tree by replaying the final PR head onto the
   merge parent, plus branch ancestry, remote head, clean state, and owner before
-  removing remote branch, worktree, local squash branch, then pruning.
+  removing remote branch, worktree, local topic branch, then pruning.
 
 ## Minimum Verification
 
