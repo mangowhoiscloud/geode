@@ -352,7 +352,7 @@ def _remote_head(root: Path, branch: str) -> str | None:
 
 
 def free_merged_worktree(*, root: Path, target: Path, pr_number: int, dry_run: bool) -> None:
-    """Verify and remove a feature worktree whose PR was squash-merged."""
+    """Verify and remove a feature worktree whose PR was merged."""
     root = root.resolve()
     target = target.resolve()
     if Path.cwd().resolve().is_relative_to(target):
@@ -402,7 +402,7 @@ def free_merged_worktree(*, root: Path, target: Path, pr_number: int, dry_run: b
         ).stdout.strip()
         merge_tree = _git(root, "rev-parse", f"{merge_oid}^{{tree}}").stdout.strip()
         if replayed_tree != merge_tree:
-            raise CleanupError("squash merge tree differs from replaying its final PR head")
+            raise CleanupError("merge tree differs from replaying its final PR head")
 
         local_oid = _git(root, "rev-parse", branch).stdout.strip()
         ancestry = _git(
