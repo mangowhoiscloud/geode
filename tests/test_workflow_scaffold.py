@@ -237,6 +237,7 @@ def _prepare_repo(
         _run(repo, "git", "add", "base-advance.txt")
         _run(repo, "git", "commit", "-m", "advance base")
         _run(repo, "git", "push", "origin", "develop")
+    # Merge commits are policy; cleanup must prove the exact resulting merge tree.
     _run(repo, "git", "merge", "--no-ff", branch, "-m", "merge feature")
     merge_oid = _run(repo, "git", "rev-parse", "HEAD").stdout.strip()
     _run(repo, "git", "push", "origin", "develop")
