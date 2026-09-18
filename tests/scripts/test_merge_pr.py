@@ -198,7 +198,7 @@ def test_default_is_read_only_and_merge_is_exactly_once(monkeypatch, capsys) -> 
     assert json.loads(capsys.readouterr().out)["decision"] == "merged"
     assert github.reads == 3  # one read-only snapshot plus two fresh pre-merge snapshots
     assert len(github.mutations) == 1
-    assert github.mutations[0][-4:] == ["-f", "merge_method=squash", "-f", f"sha={'a' * 40}"]
+    assert github.mutations[0][-4:] == ["-f", "merge_method=merge", "-f", f"sha={'a' * 40}"]
 
 
 @pytest.mark.parametrize(
