@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
 export const metadata = { title: "Configure Providers — GEODE Docs" };
@@ -124,7 +125,9 @@ export default function Page() {
 4. 전역 ~/.geode/config.toml
 5. 라우팅 기본값 (core/config/routing.toml)`}</pre>
             <figure>
-              <img
+              <Image
+                width={741}
+                height={579}
                 src="/geode/diagrams/model-resolution.svg"
                 alt="Model resolution ladder: CLI argument, env layer, project config.toml, global config.toml, then the routing default; the first layer with a value wins"
               />
@@ -339,7 +342,9 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
 4. global ~/.geode/config.toml
 5. routing default (core/config/routing.toml)`}</pre>
             <figure>
-              <img
+              <Image
+                width={741}
+                height={579}
                 src="/geode/diagrams/model-resolution.svg"
                 alt="Model resolution ladder: CLI argument, env layer, project config.toml, global config.toml, then the routing default; the first layer with a value wins"
               />

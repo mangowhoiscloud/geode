@@ -161,6 +161,9 @@ jobs:
       - name: Lint site source
         run: npm run lint
 
+      - name: Type-check site source
+        run: npm run typecheck
+
       - name: Audit locked site dependencies
         run: npm audit --audit-level=moderate
 
@@ -192,7 +195,7 @@ jobs:
             mkdir -p site/out/self-improving
             cp -R docs/self-improving/. site/out/self-improving/
             echo "self-improving copied to site/out/self-improving/"
-            ls -la site/out/self-improving/ | head -20
+            find site/out/self-improving -maxdepth 1 -print
           else
             echo "docs/self-improving missing — skipping copy"
           fi
@@ -202,7 +205,7 @@ jobs:
             mkdir -p site/out/petri-bundle
             cp -R docs/petri-bundle/. site/out/petri-bundle/
             echo "legacy petri-bundle redirect copied to site/out/petri-bundle/"
-            ls -la site/out/petri-bundle/ | head
+            find site/out/petri-bundle -maxdepth 1 -print
           fi
 
       # Source-level internal link gate (no network, fast). Catches broken

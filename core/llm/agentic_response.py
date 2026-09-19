@@ -15,6 +15,20 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 
+def parse_tool_input(payload: Any) -> dict[str, Any] | None:
+    """Decode a provider tool input; malformed or non-object values are unavailable."""
+    if isinstance(payload, dict):
+        return payload
+    if isinstance(payload, str) and payload.strip():
+        try:
+            parsed = json.loads(payload)
+        except (ValueError, RecursionError):
+            return None
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
 def _cached_tokens_from_usage(usage: Any, *detail_attrs: str) -> int:
     """Return cached token count from the first supported usage detail path."""
     for attr in detail_attrs:

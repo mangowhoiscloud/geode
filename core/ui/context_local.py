@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-from collections.abc import MutableMapping
+from collections.abc import Iterator, MutableMapping
 from contextvars import ContextVar
 from typing import Any, cast
 
@@ -83,7 +83,7 @@ class _ContextLocalDict(MutableMapping[str, Any]):
         del data[key]
         self._local._write(data)
 
-    def __iter__(self):  # type: ignore[no-untyped-def]
+    def __iter__(self) -> Iterator[str]:
         return iter(self._local._read())
 
     def __len__(self) -> int:

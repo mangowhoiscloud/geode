@@ -197,8 +197,9 @@ After implementation:
 3. After the implementation reaches `main`, create a tracking-only worktree and
    branch from current `origin/main`, target its PR to `main`, atomically move
    every row in the closure package to `DONE`, and append one closure-evidence
-   row per GAP. After it merges, sync `main` back to `develop` through a
-   CI-gated `main` → `develop` PR. This is the only origin/main worktree
+   row per GAP. After it merges, incorporate that main history into the next
+   owned feature branch before its CI and integration; do not open a standalone
+   `main` → `develop` sync PR. This is the only origin/main worktree
    exception; it never carries implementation code.
 4. If an implementation PR is abandoned, atomically reconcile every
    `IN_PROGRESS` row in its claimed package back to one shared `READY`, `OPEN`,
@@ -287,11 +288,11 @@ machine-readable artifact is
 | Measure | Current tree |
 |---|---:|
 | Production Python files (`core/` + `evals/` + `evolve/`) | 581 |
-| Test Python files | 714 |
-| `core/` Python LOC | 126,126 |
+| Test Python files | 718 |
+| `core/` Python LOC | 126,154 |
 | `evals/` Python LOC | 31,691 |
 | `evolve/` Python LOC | 32,014 |
-| Test Python LOC | 201,619 |
+| Test Python LOC | 202,090 |
 | Tool definitions / model executions / valid schemas / policies | 86 / 86 / 86 / 86 (exact) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 6 |

@@ -6,14 +6,15 @@
     "dev": "next dev",
     "build": "node scripts/verify-terminal-replay.mjs && next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint --max-warnings=0",
     "sync-stats": "node scripts/sync-stats.mjs",
     "render-diagrams": "node scripts/render-diagrams.mjs",
     "build-layer-graph": "node scripts/build-layer-graph.mjs",
     "export-md": "node scripts/export-docs-md.mjs",
     "test:docs": "node scripts/test-docs-navigation.mjs && node scripts/test-docs-export.mjs",
     "verify-metadata": "node scripts/verify-public-metadata.mjs",
-    "verify-geo": "node scripts/verify-geo-preflight.mjs"
+    "verify-geo": "node scripts/verify-geo-preflight.mjs",
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@astryxdesign/core": "^0.1.4",

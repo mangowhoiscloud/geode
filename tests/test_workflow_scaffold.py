@@ -79,6 +79,21 @@ def test_runtime_markdown_and_skills_trigger_code_verification() -> None:
     assert {"core/**", "GEODE.md", ".geode/**"} <= set(patterns)
 
 
+def test_standalone_sync_rejection_precedes_path_filtering() -> None:
+    steps = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]["changes"]["steps"]
+    reject = steps[0]
+    condition = reject["if"]
+    assert "github.event_name == 'pull_request'" in condition
+    assert "github.base_ref == 'develop'" in condition
+    assert "github.head_ref == 'main'" in condition
+    assert "startsWith(github.head_ref, 'sync/')" in condition
+    checked = subprocess.run(  # noqa: S603 - tracked rejection step, no remote operations
+        ["/bin/bash", "-e", "-c", reject["run"]], capture_output=True, text=True, check=False
+    )
+    assert checked.returncode != 0
+    assert "::error::" in checked.stdout
+
+
 def test_evidence_first_workflow_has_required_scaffold_sections() -> None:
     workflow = _read("docs/workflow.md")
 
@@ -237,8 +252,8 @@ def _prepare_repo(
         _run(repo, "git", "add", "base-advance.txt")
         _run(repo, "git", "commit", "-m", "advance base")
         _run(repo, "git", "push", "origin", "develop")
-    _run(repo, "git", "merge", "--squash", branch)
-    _run(repo, "git", "commit", "-m", "squash feature")
+    # Merge commits are policy; cleanup must prove the exact resulting merge tree.
+    _run(repo, "git", "merge", "--no-ff", branch, "-m", "merge feature")
     merge_oid = _run(repo, "git", "rev-parse", "HEAD").stdout.strip()
     _run(repo, "git", "push", "origin", "develop")
 
@@ -296,7 +311,7 @@ def _run_cleanup(
     )
 
 
-def test_frees_clean_squash_merged_worktree(tmp_path: Path) -> None:
+def test_frees_clean_merge_commit_worktree(tmp_path: Path) -> None:
     repo, target, details = _prepare_repo(tmp_path)
 
     result = _run_cleanup(repo, target, details)
@@ -308,7 +323,7 @@ def test_frees_clean_squash_merged_worktree(tmp_path: Path) -> None:
     assert not _run(repo, "git", "ls-remote", "--heads", "origin", "feature/demo").stdout.strip()
 
 
-def test_frees_squash_merge_after_base_advanced(tmp_path: Path) -> None:
+def test_frees_merge_commit_after_base_advanced(tmp_path: Path) -> None:
     repo, target, details = _prepare_repo(tmp_path, advance_base_before_merge=True)
 
     result = _run_cleanup(repo, target, details)
@@ -323,7 +338,7 @@ def test_refuses_branch_that_advanced_after_merge(tmp_path: Path) -> None:
     result = _run_cleanup(repo, target, details)
 
     assert result.returncode == 1
-    assert "squash merge tree differs from replaying its final PR head" in result.stderr
+    assert "merge tree differs from replaying its final PR head" in result.stderr
     assert target.exists()
     assert _run(repo, "git", "branch", "--list", "feature/demo").stdout.strip()
     assert _run(repo, "git", "ls-remote", "--heads", "origin", "feature/demo").stdout.strip()

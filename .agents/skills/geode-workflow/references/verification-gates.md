@@ -37,6 +37,9 @@ incident logs into every prompt or adding a new ledger.
   under the unchanged-input conditions above.
 
 These are GEODE procedures, not a new framework or mandatory reviewer personas.
+For squash integration, stale merge guards, and uncertain merge receipts, use
+GitFlow's [Don't cases](../../geode-gitflow/SKILL.md#dont-cases); do not duplicate
+the incident policy in runtime prompts.
 The [autoresearch program](https://github.com/karpathy/autoresearch/blob/master/program.md)
 provides the fixed-evaluation and simplicity reference; its reset and unbounded
 loop instructions do not transfer permission to GEODE. For the assumption-check

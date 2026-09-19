@@ -14,13 +14,29 @@ this skill owns the GitFlow procedure. Read `AGENTS.md` for repository guardrail
 
 | Transaction | Base and head | Merge method |
 |---|---|---|
-| Feature, fix, or release preparation | fetched `origin/develop` → topic branch → `develop` | squash |
-| Canonical pre-sync | current `main` → `develop`, or the trusted sync head below | merge |
+| Feature, fix, or release preparation | fetched `origin/develop` → topic branch → `develop` | merge |
+| Main drift | current `main` → the existing topic branch, before its PR merges | local merge commit, then fresh PR CI |
 | Promotion | `develop` → `main` | merge |
 
 Never push directly to `main` or `develop`. Promotion can batch verified
 features; it does not itself authorize a tag, package publication, installation,
 or service restart. `[Unreleased]` may remain on main.
+
+### Don't cases
+
+- **Don't squash or rebase a PR.** Both discard the reviewed head's ancestry.
+  Use a merge commit for feature integration, synchronization, and promotion.
+- **Don't open a separate `main -> develop` or `sync/*` PR.** Include missing
+  main commits in the existing feature branch before integration. CI and the
+  merge guard reject those standalone sync heads.
+- **Don't run an old checkout's merge guard after fetching.** Fetch refreshes
+  remote refs, not local instructions or scripts. Inspect the guard in the
+  owned, current worktree; a stale `main` checkout is not the policy authority.
+- **Don't confuse `--merge` with a method guarantee.** Older guards used that
+  flag only to authorize the write and still sent `merge_method=squash`.
+- **Don't treat green CI or a merged PR as proof of preserved history.** Check
+  the result's ordered parents against the admitted base and head. An uncertain
+  write/readback requires inspection, not retry, cleanup, or a success claim.
 
 ## Worktree Allocation
 
@@ -54,7 +70,8 @@ merged there. It preserves `IN_PROGRESS`; no prospective `IN_DEVELOP` or `DONE`.
 The roadmap-only readiness, claim, registration, reconciliation, and full-ledger
 audit paths use the roadmap's own prerequisites, not an extra implementation
 claim. Tracking-only `DONE` work starts from `origin/main`, targets `main`,
-carries no implementation, and is followed by a CI-gated main-to-develop sync.
+carries no implementation; the next owned feature branch incorporates that
+main history before integration.
 Do not turn an ordinary bug or documentation fix into a new architecture program.
 
 ## Pre-PR Quality Gate
@@ -85,7 +102,7 @@ Group related files when that is clearer than repeating one sentence per file.
 
 Add a GAP Audit table for audit-driven work. Include design choices, compatibility,
 migrations, external sources, or live-test limitations only when relevant.
-Promotion PRs identify included PRs, the pre-sync result, and head-specific CI;
+Promotion PRs identify included PRs, the main-ancestry result, and head-specific CI;
 they link feature evidence instead of copying its whole report. Do not pre-check
 unrun gates, fabricate counts, or attribute work to a tool/model that did not do it.
 
@@ -121,7 +138,13 @@ On failure, inspect `gh run view <run-id> --log-failed`, fix the actual cause,
 verify affected behavior, push the scoped fix, and wait for the new head's CI.
 Do not delete tests or suppress a security finding merely to get green.
 
-The read-only merge guard checks the current head and base, current PR-linked
+The read-only merge guard requires the live repository settings
+`allow_merge_commit=true`, `allow_squash_merge=false`, and
+`allow_rebase_merge=false`. These [GitHub repository settings](https://docs.github.com/en/rest/repos/repos#update-a-repository)
+also reject obsolete squash requests from other checkouts or the UI. Only an
+authorized operator changes them; the guard never repairs server policy itself.
+
+The guard checks the current head and base, current PR-linked
 required GitHub Actions evidence (app 15368), and server protection: strict
 up-to-date checks, administrator enforcement and no force-push/deletion bypass. It rejects
 missing or ambiguous evidence rather than interpreting an empty list as green.
@@ -131,23 +154,25 @@ insufficient when Pages fails.
 
 Once authorized, use the same guard's explicit merge mode. It rereads the
 snapshot immediately before the head-pinned REST request and verifies the
-merged PR afterward:
+merged PR afterward, including exactly two ordered commit parents: the verified
+base SHA, then the PR head SHA. Its receipt retains the returned merge SHA even
+when that readback is unavailable or mismatched; do not retry an uncertain write.
 
 ```bash
 uv run python scripts/merge_pr.py --pr <PR#> --merge
 ```
 
-The guard chooses squash for ordinary feature-to-develop PRs and merge for
-canonical main/develop synchronization, including trusted sync branches.
-For those branches, it enforces the graph-trust proof below against live remote
-tips. A refusal never permits an unguarded merge. Record its merge SHA and receipt.
+The guard chooses merge for feature-to-develop PRs and develop-to-main promotion.
+It requires the current main SHA to be an ancestor of the admitted PR head and
+rechecks that SHA before the write. A refusal never permits an unguarded merge.
+Record its merge SHA and receipt.
 A changed head or base requires fresh verification. Never use
 `--admin` to bypass gates or `gh pr merge --delete-branch` inside a linked
 worktree: GitHub CLI may switch that checkout while deleting the local branch.
 The guarded cleanup below owns branch/worktree deletion.
 
 The server settings are a live prerequisite, not a promise made by this file.
-If protection is removed, weakened or unavailable, stop; do not downgrade the
+If protection or merge-method policy is weakened or unavailable, stop; do not downgrade the
 guard to proceed. An administrator can still change repository policy itself;
 the guard rejects observed policy drift but does not claim tamper-proof hosting.
 
@@ -171,49 +196,44 @@ a missed event. An outage is not a code failure. After confirming a missed
 the event, then verify new runs attached. If checks remain absent, report the
 specific blocker instead of repeating mutations or treating absence as success.
 
-### Deliberate main-to-develop pre-sync
+### Integrate main before feature merge
 
-Before every `develop -> main` promotion, fetch both protected branches and
-compare content and ancestry. If main has commits not in develop, use a CI-gated
-PR from the current `main` head to `develop` when mergeable under strict
-up-to-date protection. Do not put a copied or fast-forwarded main head behind
-a trusted sync prefix.
-
-If conflicts or strict ancestry block that canonical head, create
-`sync/main-into-develop-<task>` from current `origin/develop` and explicitly merge
-current `origin/main` in an owned worktree. Its head must have exactly two
-parents, in this order: current `origin/develop`, current `origin/main`.
-Immediately before merge, fetch and rerun the trust resolver from that sync worktree:
+Fetch before integrating a feature. Check main ancestry in its owned worktree:
 
 ```bash
-git fetch origin
-uv run python scripts/resolve_architecture_roadmap_trust.py \
-  --event-mode pull_request --target-branch develop \
-  --head-ref "sync/main-into-develop-<task>" \
-  --head-repo mangowhoiscloud/geode --repository mangowhoiscloud/geode \
-  --head-sha "$(git rev-parse HEAD)" --require-trust main
+git merge-base --is-ancestor origin/main HEAD
 ```
 
-For a direct-main sync, use `--head-ref main` and the current canonical main SHA.
-The resolver must pass for that exact head. For a prefixed sync, the merge guard
-rechecks the same parent proof against live remote tips before its head-pinned request.
-If either tip invalidates the trust proof, reconstruct from the new tips and
-rerun CI; an earlier green is stale. Strict protection, administrator enforcement,
-and required CI success remain mandatory. After sync, promote current develop
-through a separate CI-gated merge PR.
+Compare actual content too. If main is missing, merge `origin/main` there before
+the feature PR is admitted; resolve conflicts without rewriting history, push
+the synchronization commit, and wait for required CI on that new head. Also
+incorporate current `origin/develop` when strict protection or concurrent
+feature changes require it.
+
+Do not create a separate `main -> develop` or `sync/*` PR. An ancestor-preserving
+feature merge carries both the feature and prior main history into develop.
+The roadmap resolver trusts only canonical main evidence already in that head;
+the ledger validator still checks exact closure rows rather than trusting new
+claims merely because main is an ancestor.
+
+Before `develop -> main`, fetch and confirm main is an ancestor of develop.
+If main moved after feature integration, return to the owned feature/update
+branch, integrate the new tip, and pass fresh CI before promotion. Do not bypass
+that proof or create a standalone synchronization transaction.
 
 Serialize protected-branch integrations: GitHub pins the PR head, not the
-non-target main tip. A fresh parent proof does not make that final window atomic.
+non-target main tip. Rechecking ancestry does not make the last window atomic.
 
 ## Release Flow
 
 Only when a release is requested, create its worktree from `origin/develop`,
 prepare version stamps and promote the changelog under
-[`geode-changelog`](../geode-changelog/SKILL.md), then squash into develop.
-Leave a fresh `[Unreleased]` heading. Perform the canonical pre-sync above and
+[`geode-changelog`](../geode-changelog/SKILL.md), then merge into develop.
+Leave a fresh `[Unreleased]` heading. Incorporate main in the release branch
+before its feature merge, then
 promote develop to main with a merge commit. Release preparation does not bypass
 CI or add an automatic post-release backmerge; main-owned tracking may still
-require its own sync transaction.
+require incorporation into the next owned feature branch.
 
 Tags, GitHub Release, PyPI publication, and installed-version verification follow
 [`geode-distribution`](../geode-distribution/SKILL.md) only when authorized.
@@ -233,7 +253,7 @@ uv run python scripts/check_repo_hygiene.py free-merged-worktree \
 It verifies the merged PR and final head, replays that head onto the merge's
 base to compare the resulting tree, checks local ancestry and remote head,
 requires a clean checkout, and validates `.owner.task_id`. It then removes the
-remote branch, worktree, and squash-only local branch and prunes. The owner
+remote branch, worktree, and local topic branch and prunes. The owner
 record's task-name check is not proof that another active session has released
 the checkout; confirm current session ownership first. Use `--dry-run` when
 inspection is needed. A refusal requires investigation, never manual force.

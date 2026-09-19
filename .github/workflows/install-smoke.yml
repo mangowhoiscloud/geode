@@ -37,6 +37,10 @@ jobs:
 
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
 
+      - name: Type-check macOS computer helper (no GUI execution)
+        if: runner.os == 'macOS'
+        run: swiftc -typecheck scripts/macos/geode_computer_helper.swift
+
       - name: Install dependencies
         run: uv sync --quiet
 

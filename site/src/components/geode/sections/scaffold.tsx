@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState, useRef } from "react";
 import { ScrollReveal } from "../scroll-reveal";
 import { useLocale, t } from "../locale-context";
@@ -278,7 +279,7 @@ export function ScaffoldSection() {
       <div className="max-w-5xl mx-auto">
         {/* Geodi guide */}
         <div className="absolute top-8 right-8 opacity-[0.08] pointer-events-none hidden md:block">
-          <img src="/geode/images/geode-idle.png" alt="" width={48} height={48} />
+          <Image src="/geode/images/geode-idle.png" alt="" width={48} height={48} />
         </div>        <ScrollReveal>
           <p className="text-sm font-mono font-bold text-[#818CF8]/60 uppercase tracking-[0.25em] mb-3">
             Scaffold

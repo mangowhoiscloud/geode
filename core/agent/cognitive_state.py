@@ -38,7 +38,17 @@ later PRs wire the remaining writers.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import isfinite
 from typing import Any
+
+
+def bounded_confidence(value: Any) -> float | None:
+    """Keep unknown/non-finite confidence distinct from a bounded numeric belief."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    if isinstance(value, float) and not isfinite(value):
+        return None
+    return float(max(0.0, min(1.0, value)))
 
 
 @dataclass
@@ -77,10 +87,7 @@ class CognitiveState:
                         values.append(head)
             return values
 
-        confidence: float | None = None
-        raw_confidence = snapshot.get("confidence")
-        if isinstance(raw_confidence, int | float) and not isinstance(raw_confidence, bool):
-            confidence = max(0.0, min(1.0, float(raw_confidence)))
+        confidence = bounded_confidence(snapshot.get("confidence"))
 
         raw_round_count = snapshot.get("round_count")
         round_count = (
