@@ -47,10 +47,6 @@ log = logging.getLogger(__name__)
 
 # Max lines per memory hierarchy section to control context budget
 _MAX_SECTION_LINES = 20
-# Identity carries four GEODE.md sections (Identity + Voice & Conduct +
-# Operating Principles + RUNTIME CANNOT); give it a larger budget than a
-# single memory section so RUNTIME CANNOT is never truncated by the cap.
-_MAX_IDENTITY_LINES = 40
 
 _SYSTEM_PROMPT_TEMPLATE = ROUTER_SYSTEM
 WRAPPER_OVERRIDE_HOOK_READY = True
@@ -202,7 +198,7 @@ def _generic_static_prefix() -> str:
 
     ``.format()`` stays kwarg-free — the template's only placeholder is the
     escaped ``{{skill_context}}``, which this call collapses to
-    ``{skill_context}`` for the later injection in ``loop/_context.py``.
+    ``{skill_context}`` for baseline-local injection in ``build_system_prompt``.
     """
     return _SYSTEM_PROMPT_TEMPLATE.format()
 
@@ -232,6 +228,7 @@ def build_system_prompt(
     *,
     policy_sources: PolicySourceBundle | None = None,
     user_profile: Any = None,
+    skill_context: str | None = None,
 ) -> str:
     """Build the AgenticLoop system prompt.
 
@@ -264,11 +261,16 @@ def build_system_prompt(
       wrapper around the base model. Audit-mode forces OFF regardless.
 
     The baseline is intentionally domain-neutral. Specialized pipelines live
-    outside the core runtime.
+    outside the core runtime. ``skill_context`` substitutes only the authored
+    baseline slot, never literal text in identity or runtime data. ``None``
+    preserves the slot for callers that only inspect the base prompt.
     """
     sources = policy_sources or {}
     wrapper_sources = sources.get("wrapper_sections")
     wrapper_override = _load_wrapper_override(sources=wrapper_sources)
+    static = with_math_output_formatting(wrapper_override or _generic_static_prefix())
+    if skill_context is not None:
+        static = static.replace("{skill_context}", skill_context)
 
     if _audit_mode_active():
         # G3 — minimal prompt for alignment audits.
@@ -284,7 +286,6 @@ def build_system_prompt(
         # domain-neutral base the non-audit branch uses (``_generic_static_
         # prefix``) so the target always carries a GEODE base scaffold; the
         # mutated wrapper layers on top when present.
-        static = with_math_output_formatting(wrapper_override or _generic_static_prefix())
         parts: list[str] = []
         if model:
             mc = _build_model_card(model)
@@ -298,8 +299,6 @@ def build_system_prompt(
         # the dynamic envelope must CLOSE (B1: it had shipped unterminated
         # on every call since the 2026-05-12 XML conversion).
         return static + "\n\n" + AGENTIC_SUFFIX + "\n\n" + dynamic + "\n\n</dynamic_context>"
-
-    static = with_math_output_formatting(wrapper_override or _generic_static_prefix())
 
     # ADR-013 T3 (2026-05-21) — response style guide append to static prompt.
     # policy 가 부재면 static 그대로 (no behavior change). 정책이 있으면
@@ -555,8 +554,8 @@ def _build_identity_context() -> str:
     Reads GEODE.md via OrganizationMemory.get_soul() and injects the
     Identity (who GEODE is) plus the BEHAVIORAL sections (Voice & Conduct +
     Operating Principles + RUNTIME CANNOT — how GEODE sounds, acts, and
-    refuses) into the system prompt, within the ``_MAX_IDENTITY_LINES``
-    budget. Default on (GEODE_PERSONA) so the declared soul + runtime
+    refuses) into the system prompt without silently truncating those authored
+    sections. Default on (GEODE_PERSONA) so the declared soul + runtime
     guardrails actually ship; audit-mode strips it. The numeric Defaults
     section is reference, not identity, so it is deliberately NOT injected
     here (it stays in GEODE.md for the full-soul read + human reference).
@@ -597,9 +596,7 @@ def _build_identity_context() -> str:
         if not extracted_lines:
             return ""
 
-        # Cap at budget
-        capped = extracted_lines[:_MAX_IDENTITY_LINES]
-        return "<agent_identity>\n" + "\n".join(capped) + "\n</agent_identity>"
+        return "<agent_identity>\n" + "\n".join(extracted_lines) + "\n</agent_identity>"
     except Exception:
         log.debug("Failed to build identity context (G1 layer)", exc_info=True)
         return ""

@@ -88,17 +88,8 @@ def build_system_prompt(loop: AgenticLoop) -> str:
             loop._skill_registry,
             _load_skill_catalog_override(sources=loop._policy_sources.get("skill_catalog")),
         )
-    # Skills enter the active prompt path here: the loop-level registry renders
-    # one context block, then ``{skill_context}`` in the system wrapper is
-    # substituted below. The legacy PromptAssembler Phase 2 injection path was
-    # removed; do not add a second skill-injection route.
-    # S2-fix (2026-05-18) — both branches honor the ``{skill_context}``
-    # placeholder so AgentDefinition authors can opt into explicit skill
-    # injection (matching ``_DEFAULT_AGENTS`` semantics). If the override
-    # has no placeholder, the skill block is appended; if it does, the
-    # placeholder is substituted in place. Empty-state marker preserved
-    # for both paths so prompts never ship a literal ``{skill_context}``
-    # token to the LLM.
+    # Substitute only authored baseline text, never identity or runtime data.
+    # Overrides without a slot still append a nonempty skill catalog.
     skill_replacement = skill_ctx or '<available_skills status="empty" />'
     if override:
         if "{skill_context}" in override:
@@ -115,12 +106,12 @@ def build_system_prompt(loop: AgenticLoop) -> str:
         # its authored-static zone (before <dynamic_context>), so memory
         # churn no longer invalidates the cached behaviour rules. Append-
         # ing it again here would duplicate the entire contract block.
-        base = _build_system_prompt(
+        prompt = _build_system_prompt(
             model=loop.model,
             policy_sources=loop._policy_sources,
             user_profile=loop._user_profile,
+            skill_context=skill_replacement,
         )
-        prompt = base.replace("{skill_context}", skill_replacement)
     if loop._system_suffix:
         prompt = inject_runtime_hints(
             prompt, "<session_directives>\n" + loop._system_suffix + "\n</session_directives>"
