@@ -74,6 +74,15 @@ preserve triggers, tools, fork metadata, escaping, truncation and `use_skill`
 guidance without modifying registered skills or loading their bodies. See the
 [catalog regression tests](../tests/core/skills/test_t2_skill_catalog.py).
 
+Tool search does not replace this catalog: skills expose workflow guidance,
+while tool search defers function schemas from the authorized tool plan.
+Codex still separates its bounded [skill metadata renderer](https://github.com/openai/codex/blob/a5290028a2936b91ec9305f6de7780463620ca70/codex-rs/ext/skills/src/render.rs)
+from [registry-backed tool search](https://github.com/openai/codex/blob/a5290028a2936b91ec9305f6de7780463620ca70/codex-rs/core/src/tools/handlers/tool_search.rs).
+Claude Code likewise loads [skill descriptions before bodies](https://code.claude.com/docs/en/skills#control-who-invokes-a-skill).
+Sources checked 2026-09-20. GEODE's current provider/endpoint decisions and
+replay contract live in the [tool protocol guide](../site/src/app/docs/runtime/tools/protocol/page.tsx),
+not another catalog service or development-skill copy.
+
 These contracts are loadable by `core/skills/`. Eight are immutable wheel
 payload; three operator/repository workflows remain project-only. All remain
 reviewable real directories under `.geode/skills/`; same-named development

@@ -528,7 +528,7 @@
   "packages": {
     "core": {
       "python_files": 414,
-      "python_loc": 126139
+      "python_loc": 126205
     },
     "evals": {
       "python_files": 94,
@@ -539,8 +539,8 @@
       "python_loc": 32002
     },
     "tests": {
-      "python_files": 718,
-      "python_loc": 202588
+      "python_files": 719,
+      "python_loc": 202978
     }
   },
   "schema_version": 6,

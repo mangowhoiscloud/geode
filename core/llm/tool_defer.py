@@ -16,7 +16,7 @@ from collections.abc import Iterable
 
 TOOL_DEFER_THRESHOLD = 16
 """Tool count above which deferred loading activates (both vendors cite
-10+ tools as the good-use-case bar; GEODE ships ~60). Below it, defer
+10+ tools as the good-use-case bar). Below it, defer
 adds a search round-trip for no context saving."""
 
 TOOL_SEARCH_ALWAYS_LOADED: frozenset[str] = frozenset(

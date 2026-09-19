@@ -21,6 +21,23 @@ harness (Claude Code /model configures claude-opus-4-8 with xhigh effort).
 
 from __future__ import annotations
 
+# Native Messages tool search for models admitted by GEODE. Dated aliases
+# resolve to these base IDs. Unknown models stay eager until verified.
+# https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool
+# Model compatibility checked 2026-09-20; Opus 4.1 and earlier are unsupported.
+ANTHROPIC_TOOL_SEARCH_MODELS: frozenset[str] = frozenset(
+    {
+        "claude-fable-5",
+        "claude-opus-4-8",
+        "claude-opus-4-7",
+        "claude-opus-4-6",
+        "claude-opus-4-5",
+        "claude-sonnet-4-6",
+        "claude-sonnet-4-5",
+        "claude-haiku-4-5",
+    }
+)
+
 # Models that support server-side context management + compaction beta
 # (compact-2026-01-12). Haiku 4.5 predates the beta and rejects its header
 # with a 400 whose message contains "context" — misclassified as

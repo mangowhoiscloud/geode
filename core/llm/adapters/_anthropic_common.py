@@ -83,7 +83,12 @@ def build_messages(req: AdapterCallRequest) -> list[dict[str, Any]]:
                 }
             )
             continue
-        out.append({"role": m.role, "content": m.content})
+        content = (
+            list(m.anthropic_content)
+            if m.role == "assistant" and m.anthropic_content
+            else m.content
+        )
+        out.append({"role": m.role, "content": content})
     return out
 
 
@@ -338,7 +343,9 @@ def _system_and_messages(req: AdapterCallRequest) -> tuple[Any, list[dict[str, A
     )
 
 
-def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
+def build_create_kwargs(
+    req: AdapterCallRequest, *, base_url: str = "https://api.anthropic.com"
+) -> dict[str, Any]:
     """Build ``messages.create`` kwargs for the Anthropic PAYG adapter."""
     system, messages = _system_and_messages(req)
     kwargs: dict[str, Any] = {
@@ -368,7 +375,7 @@ def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         kwargs["temperature"] = req.temperature
     if req.tools:
         tc = _translate_tool_choice(req.tool_choice)
-        kwargs["tools"] = _shape_tools(req, tc)
+        kwargs["tools"] = _shape_tools(req, tc, base_url=base_url)
         if tc is not None:
             kwargs["tool_choice"] = tc
     if req.stop_sequences:
@@ -379,7 +386,9 @@ def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
     return kwargs
 
 
-def _shape_tools(req: AdapterCallRequest, tc: dict[str, Any] | None) -> list[dict[str, Any]]:
+def _shape_tools(
+    req: AdapterCallRequest, tc: dict[str, Any] | None, *, base_url: str
+) -> list[dict[str, Any]]:
     """Translate + apply hosted tool-search defer on the LIVE adapter path.
 
     Shaping is skipped under a forced single-tool ``tool_choice`` (the
@@ -387,6 +396,7 @@ def _shape_tools(req: AdapterCallRequest, tc: dict[str, Any] | None) -> list[dic
     we do not gamble a 400 on it).
     """
     from core.config import settings as _settings
+    from core.llm.model_capabilities import ANTHROPIC_TOOL_SEARCH_MODELS
     from core.llm.providers.anthropic import apply_tool_search_defer
 
     translated = [translate_tool(t) for t in req.tools]
@@ -395,7 +405,11 @@ def _shape_tools(req: AdapterCallRequest, tc: dict[str, Any] | None) -> list[dic
     return apply_tool_search_defer(
         translated,
         deferred_tool_names=req.deferred_tool_names,
-        enabled=getattr(_settings, "tool_search_defer", True),
+        enabled=(
+            _settings.tool_search_defer
+            and _base_model(req.model) in ANTHROPIC_TOOL_SEARCH_MODELS
+            and base_url.rstrip("/") == "https://api.anthropic.com"
+        ),
     )
 
 
@@ -416,7 +430,9 @@ def _translate_tool_choice(tc: str | dict[str, Any]) -> dict[str, Any] | None:
     return None  # unknown literal — let Anthropic default apply
 
 
-def build_stream_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
+def build_stream_kwargs(
+    req: AdapterCallRequest, *, base_url: str = "https://api.anthropic.com"
+) -> dict[str, Any]:
     """Variant of :func:`build_create_kwargs` for ``messages.stream``.
 
     Streaming does not accept ``thinking`` / ``stop_sequences`` for the
@@ -433,7 +449,7 @@ def build_stream_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         kwargs["temperature"] = req.temperature
     if req.tools:
         tc = _translate_tool_choice(req.tool_choice)
-        kwargs["tools"] = _shape_tools(req, tc)
+        kwargs["tools"] = _shape_tools(req, tc, base_url=base_url)
         if tc is not None:
             kwargs["tool_choice"] = tc
     _maybe_inject_computer_use(kwargs, req)
@@ -446,6 +462,12 @@ def translate_response(response: Any) -> AdapterCallResult:
     """Anthropic SDK Message → :class:`AdapterCallResult`."""
     text_blocks: list[str] = []
     tool_uses: list[dict[str, Any]] = []
+    # SDK serialization retains native blocks/signatures in their original order.
+    # Lightweight legacy response doubles without this surface keep normalized replay.
+    dump = getattr(response, "model_dump", None)
+    anthropic_content = (
+        tuple(dump(mode="json", exclude_none=True)["content"]) if callable(dump) else ()
+    )
     for block in getattr(response, "content", []) or []:
         block_type = getattr(block, "type", None)
         if block_type == "text":
@@ -479,6 +501,7 @@ def translate_response(response: Any) -> AdapterCallResult:
         stop_reason=getattr(response, "stop_reason", "end_turn") or "end_turn",
         tool_uses=tuple(tool_uses),
         raw_response=response,
+        anthropic_content=anthropic_content,
     )
 
 

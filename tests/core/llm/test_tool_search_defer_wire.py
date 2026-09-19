@@ -20,6 +20,9 @@ These tests pin the request-shaping invariants the API enforces with
 
 from __future__ import annotations
 
+from dataclasses import replace
+
+import pytest
 from core.llm.providers.anthropic import (
     _API_ALLOWED_KEYS,
     _TOOL_SEARCH_TOOL,
@@ -202,3 +205,66 @@ def test_live_path_uses_request_membership_not_legacy_global(monkeypatch) -> Non
     assert [tool["name"] for tool in shaped if tool.get("defer_loading")] == [
         tool.name for tool in req.tools
     ]
+
+
+@pytest.mark.parametrize("builder_name", ["build_create_kwargs", "build_stream_kwargs"])
+@pytest.mark.parametrize(
+    ("model", "supported"),
+    [
+        ("claude-fable-5", True),
+        ("claude-haiku-4-5-20251001", True),
+        ("claude-sonnet-4-5-20250929", True),
+        ("claude-opus-4-1", False),
+        ("claude-sonnet-4", False),
+        ("claude-unknown", False),
+    ],
+)
+def test_hosted_search_requires_documented_model(builder_name, model, supported) -> None:
+    from core.llm.adapters import _anthropic_common
+    from core.llm.model_catalog import get_model_catalog_spec
+
+    req = replace(_live_request(TOOL_DEFER_THRESHOLD + 5), model=model)
+    tools = getattr(_anthropic_common, builder_name)(req)["tools"]
+    assert any(tool.get("defer_loading") for tool in tools) is supported
+    assert get_model_catalog_spec(model, provider="anthropic").supports_tool_search is supported
+
+
+@pytest.mark.parametrize("builder_name", ["build_create_kwargs", "build_stream_kwargs"])
+def test_compatible_endpoint_keeps_same_authorized_tools_eager(builder_name) -> None:
+    from core.llm.adapters import _anthropic_common
+
+    req = _live_request(TOOL_DEFER_THRESHOLD + 5)
+    tools = getattr(_anthropic_common, builder_name)(req, base_url="https://proxy.example/v1/")[
+        "tools"
+    ]
+    assert [tool["name"] for tool in tools] == [tool.name for tool in req.tools]
+    assert not any("defer_loading" in tool for tool in tools)
+
+
+def test_cache_marked_tool_stays_eager_and_input_is_unchanged() -> None:
+    tools = _big_toolset()
+    marked = tools[4]
+    marked["cache_control"] = {"type": "ephemeral"}
+    shaped = _apply(tools)
+    assert not any(tool.get("defer_loading") and "cache_control" in tool for tool in shaped)
+    assert next(tool for tool in shaped if tool["name"] == marked["name"]) == marked
+    assert "defer_loading" not in marked
+
+
+@pytest.mark.parametrize(
+    ("base_url", "deferred"),
+    [("https://api.anthropic.com/", True), ("https://proxy.example/", False)],
+)
+def test_adapter_gates_on_actual_client_endpoint(monkeypatch, base_url, deferred) -> None:
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from core.llm.adapters.anthropic_payg import AnthropicPaygAdapter
+
+    create = AsyncMock(return_value=SimpleNamespace(content=[], usage=None))
+    client = SimpleNamespace(base_url=base_url, messages=SimpleNamespace(create=create))
+    adapter = AnthropicPaygAdapter()
+    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    asyncio.run(adapter.acomplete(_live_request(TOOL_DEFER_THRESHOLD + 5)))
+    assert any(tool.get("defer_loading") for tool in create.call_args.kwargs["tools"]) is deferred
