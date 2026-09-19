@@ -14,7 +14,7 @@ this skill owns the GitFlow procedure. Read `AGENTS.md` for repository guardrail
 
 | Transaction | Base and head | Merge method |
 |---|---|---|
-| Feature, fix, or release preparation | fetched `origin/develop` → topic branch → `develop` | squash |
+| Feature, fix, or release preparation | fetched `origin/develop` → topic branch → `develop` | merge |
 | Canonical pre-sync | current `main` → `develop`, or the trusted sync head below | merge |
 | Promotion | `develop` → `main` | merge |
 
@@ -137,7 +137,7 @@ merged PR afterward:
 uv run python scripts/merge_pr.py --pr <PR#> --merge
 ```
 
-The guard chooses squash for ordinary feature-to-develop PRs and merge for
+The guard chooses merge for ordinary feature-to-develop PRs and for
 canonical main/develop synchronization, including trusted sync branches.
 For those branches, it enforces the graph-trust proof below against live remote
 tips. A refusal never permits an unguarded merge. Record its merge SHA and receipt.
@@ -209,7 +209,7 @@ non-target main tip. A fresh parent proof does not make that final window atomic
 
 Only when a release is requested, create its worktree from `origin/develop`,
 prepare version stamps and promote the changelog under
-[`geode-changelog`](../geode-changelog/SKILL.md), then squash into develop.
+[`geode-changelog`](../geode-changelog/SKILL.md), then merge into develop.
 Leave a fresh `[Unreleased]` heading. Perform the canonical pre-sync above and
 promote develop to main with a merge commit. Release preparation does not bypass
 CI or add an automatic post-release backmerge; main-owned tracking may still
@@ -233,7 +233,7 @@ uv run python scripts/check_repo_hygiene.py free-merged-worktree \
 It verifies the merged PR and final head, replays that head onto the merge's
 base to compare the resulting tree, checks local ancestry and remote head,
 requires a clean checkout, and validates `.owner.task_id`. It then removes the
-remote branch, worktree, and squash-only local branch and prunes. The owner
+remote branch, worktree, and local topic branch and prunes. The owner
 record's task-name check is not proof that another active session has released
 the checkout; confirm current session ownership first. Use `--dry-run` when
 inspection is needed. A refusal requires investigation, never manual force.

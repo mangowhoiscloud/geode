@@ -98,7 +98,7 @@ def _identity(pr: dict[str, Any]) -> dict[str, Any]:
             and not head["ref"].startswith("sync/"),
             "unsupported protected-branch flow",
         )
-        method = "squash"
+        method = "merge"
     return {
         "head_ref": head["ref"],
         "head_sha": _sha(head["sha"]),

@@ -38,20 +38,6 @@ const subAgentDetails = [
     descEn: "IsolatedRunner spawns a product-composed worker process. SIGKILL guaranteed on crash. Full isolation compared to thread mode." },
 ];
 
-/* ── Task DAG nodes ── */
-const taskNodes = [
-  { id: "router", label: "Router", color: "#4ECDC4", col: 0 },
-  { id: "signals", label: "Signals", color: "#F5C542", col: 1 },
-  { id: "analyst_gm", label: "Game\nMech", color: "#818CF8", col: 2, row: 0 },
-  { id: "analyst_pe", label: "Player\nExp", color: "#818CF8", col: 2, row: 1 },
-  { id: "analyst_gp", label: "Growth", color: "#818CF8", col: 2, row: 2 },
-  { id: "analyst_d", label: "Discovery", color: "#818CF8", col: 2, row: 3 },
-  { id: "evaluators", label: "Evaluators", color: "#C084FC", col: 3 },
-  { id: "scoring", label: "Scoring\n+composite scoring", color: "#F5C542", col: 4 },
-  { id: "verify", label: "Verify\n+Cross", color: "#34D399", col: 5 },
-  { id: "synthesis", label: "Synthesis\n+Report", color: "#F4B8C8", col: 6 },
-];
-
 /* ── Tabs ── */
 type Tab = "subagent" | "taskgraph" | "plan";
 

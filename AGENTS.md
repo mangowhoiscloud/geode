@@ -88,7 +88,7 @@ The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
 The current snapshot records 581 production Python files,
-714 test Python files,
+718 test Python files,
 86 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->
@@ -142,7 +142,7 @@ do not turn an incident-specific fix into an unconditional rule for every task.
    and generated mirrors through their owner commands. Do not hand-maintain
    parallel metrics or bump a version without an authorized release.
 8. **Integrate through GitFlow.** No direct push to protected branches.
-   Feature → develop is squash; develop → main is merge after canonical
+   Feature → develop is merge; develop → main is merge after canonical
    main → develop synchronization. Verify content with `git diff A B --stat`,
    not commit counts alone. Use current main directly if mergeable; otherwise
    `sync/main-into-develop-*` must be the exact two-parent merge of current

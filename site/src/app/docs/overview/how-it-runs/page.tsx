@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
 export const metadata = { title: "How GEODE runs a task — GEODE Docs" };
@@ -45,7 +46,9 @@ export default function Page() {
 
             <h2>데몬 안에서 일어나는 일</h2>
             <figure>
-              <img
+              <Image
+                width={508}
+                height={490}
                 src="/geode/diagrams/request-flow.svg"
                 alt="Request flow: thin CLI over the Unix socket to the daemon's CLIPoller, through the lanes into AgenticLoop and its tools, with events streaming back over the same socket"
               />
@@ -181,7 +184,9 @@ export default function Page() {
 
             <h2>Inside the daemon</h2>
             <figure>
-              <img
+              <Image
+                width={508}
+                height={490}
                 src="/geode/diagrams/request-flow.svg"
                 alt="Request flow: thin CLI over the Unix socket to the daemon's CLIPoller, through the lanes into AgenticLoop and its tools, with events streaming back over the same socket"
               />

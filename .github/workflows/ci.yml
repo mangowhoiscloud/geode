@@ -40,6 +40,7 @@ jobs:
               - '.agents/**'
               - '.geode/**'
               - '.claude/skills/geode-eval'
+              - '.claude/hooks/**'
               - 'AGENTS.md'
               - 'GEODE.md'
               - 'CHANGELOG.md'
@@ -56,6 +57,7 @@ jobs:
               - 'site/public/llms-full.txt'
               - 'state/autoresearch/**'
               - 'pyproject.toml'
+              - 'ruff-production.toml'
               - 'uv.lock'
               - '.github/workflows/**'
             docs:
@@ -91,8 +93,26 @@ jobs:
             tests/integration/test_render_lint_config.py
       - if: needs.changes.outputs.code == 'true'
         run: uv run ruff check core/ evals/ evolve/ tests/ scripts/
+      - name: Production annotation contract
+        if: needs.changes.outputs.code == 'true'
+        run: uv run ruff check --config ruff-production.toml core/ evals/ evolve/
       - if: needs.changes.outputs.code == 'true'
         run: uv run ruff format --check core/ evals/ evolve/ tests/ scripts/
+      - name: Install pinned automation analyzers
+        if: needs.changes.outputs.code == 'true'
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          archive="$RUNNER_TEMP/shellcheck.tar.xz"
+          curl --fail --silent --show-error --location \
+            https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz \
+            --output "$archive"
+          echo "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198  $archive" | sha256sum --check
+          tar -xJf "$archive" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/shellcheck-v0.11.0" >> "$GITHUB_PATH"
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+      - name: Workflow and shell contracts
+        if: needs.changes.outputs.code == 'true'
+        run: scripts/lint_automation.sh
       - name: Dependency drift (deptry)
         if: needs.changes.outputs.code == 'true'
         run: uv run deptry .
@@ -317,7 +337,7 @@ jobs:
             -r "$RUNNER_TEMP/geode-runtime-requirements.txt" \
             --no-deps --disable-pip --progress-spinner=off
       - if: needs.changes.outputs.code == 'true'
-        run: uv run bandit -r core/ evals/ evolve/ -c pyproject.toml
+        run: uv run bandit -r core/ evals/ evolve/ scripts/ -c pyproject.toml
 
   gate:
     name: Gate

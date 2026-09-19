@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
 export const metadata = { title: "Seed pipeline — GEODE Docs" };
@@ -43,7 +44,9 @@ export default function Page() {
               갑니다.
             </p>
             <figure>
-              <img
+              <Image
+                width={760}
+                height={620}
                 src="/geode/diagrams/seed-pipeline-run.svg"
                 alt="Seed pipeline 런 흐름. geode-eval audit-seeds가 picker, cost preview와 confirm, pre-flight를 지나 9-역할 파이프라인으로 들어가고, frontier-band 생존자 선택을 거쳐 cycle-input 풀과 번들로 나뉘며, meta-review priors가 다음 런의 picker로 되돌아간다"
               />
@@ -138,7 +141,9 @@ frontier_reward = 1 - 2 * abs(norm - 0.5)`}</pre>
               <code>geode-eval audit-seeds resume</code> continues from checkpoints.
             </p>
             <figure>
-              <img
+              <Image
+                width={760}
+                height={620}
                 src="/geode/diagrams/seed-pipeline-run.svg"
                 alt="Seed pipeline run flow: geode-eval audit-seeds passes picker, cost preview and confirm, pre-flight, enters the nine-role pipeline, then frontier-band survivor selection splits into the cycle-input pool and the published bundle, with meta-review priors looping back to the picker"
               />

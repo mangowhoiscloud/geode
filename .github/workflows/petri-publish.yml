@@ -49,6 +49,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
 
@@ -69,13 +71,17 @@ jobs:
         # hygiene ratchet already enforces the count floor; this surfaces
         # the specific name(s) for the PR reviewer.
         if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-          base="origin/${{ github.base_ref }}"
+          git fetch --no-tags origin "refs/heads/$PR_BASE_REF:refs/remotes/origin/$PR_BASE_REF"
+          base="origin/$PR_BASE_REF"
           missing=$(git diff --name-only --diff-filter=D "${base}"...HEAD \
-            -- 'docs/self-improving/petri-bundle/logs/*.eval' 'docs/self-improving/petri-bundle/assets/**' || true)
+            -- 'docs/self-improving/petri-bundle/logs/*.eval' 'docs/self-improving/petri-bundle/assets/**')
           if [ -n "${missing}" ]; then
             echo "::warning::Petri bundle files removed vs ${base}:"
-            echo "${missing}" | sed 's/^/::warning:: - /'
+            while IFS= read -r path; do
+              printf '::warning:: - %s\n' "$path"
+            done <<< "$missing"
           fi

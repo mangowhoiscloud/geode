@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { ScrollReveal } from "../scroll-reveal";
 
 /* ── PSM 6-Weight Components ── */

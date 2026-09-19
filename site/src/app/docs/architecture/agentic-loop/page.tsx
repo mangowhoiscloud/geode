@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
 export const metadata = { title: "The inner agentic loop — GEODE Docs" };
@@ -69,7 +70,9 @@ export default function Page() {
               checkpoint anchor 없는 동일 ID 재진입은 거부합니다.
             </p>
             <figure>
-              <img
+              <Image
+                width={720}
+                height={672}
                 src="/geode/diagrams/agentic-loop.svg"
                 alt="AgenticLoop turn cycle: round-entry guards, context-overflow check, LLM call, tool execution, and the early-termination paths"
               />
@@ -243,7 +246,9 @@ export default function Page() {
               is rejected.
             </p>
             <figure>
-              <img
+              <Image
+                width={720}
+                height={672}
                 src="/geode/diagrams/agentic-loop.svg"
                 alt="AgenticLoop turn cycle: round-entry guards, context-overflow check, LLM call, tool execution, and the early-termination paths"
               />

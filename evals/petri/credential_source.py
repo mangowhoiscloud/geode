@@ -94,7 +94,7 @@ class CredentialResolutionError(RuntimeError):
         allowed: list[str],
         *,
         subscription_only: bool = False,
-    ):
+    ) -> None:
         self.provider = provider
         self.allowed = allowed
         self.subscription_only = subscription_only

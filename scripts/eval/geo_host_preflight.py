@@ -8,15 +8,15 @@ import hashlib
 import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from email.message import Message
 from html.parser import HTMLParser
 from importlib import import_module
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError
 from urllib.parse import urljoin, urlsplit
-from urllib.request import Request, urlopen
 from urllib.robotparser import RobotFileParser
 
+import httpx
 from scripts.eval.geo_visibility import _write_exclusive
 
 _element_tree = import_module("defusedxml.ElementTree")
@@ -52,36 +52,37 @@ def _digest(urls: list[str]) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
+def _require_https(request: httpx.Request) -> None:
+    # Request hooks also run before each redirect reaches the transport.
+    if request.url.scheme != "https":
+        raise ValueError("GEO public-host requests require https")
+
+
 def _get(url: str, timeout: float) -> tuple[int, str, str, str, bytes]:
     if urlsplit(url).scheme != "https":
         raise ValueError("GEO public-host requests require https")
-    request = Request(  # noqa: S310 -- scheme is restricted above
-        url, headers={"User-Agent": "GEODE-GEO-Preflight/1.0"}
-    )
-    try:
-        with urlopen(request, timeout=timeout) as response:  # noqa: S310 -- frozen https origin
-            body = response.read(_MAX_RESPONSE_BYTES + 1)
-            if len(body) > _MAX_RESPONSE_BYTES:
+    with (
+        httpx.Client(
+            timeout=timeout,
+            follow_redirects=True,
+            event_hooks={"request": [_require_https]},
+        ) as client,
+        client.stream("GET", url, headers={"User-Agent": "GEODE-GEO-Preflight/1.0"}) as response,
+    ):
+        body = bytearray()
+        for chunk in response.iter_bytes(chunk_size=64 * 1024):
+            if len(body) + len(chunk) > _MAX_RESPONSE_BYTES:
                 raise ValueError(f"GEO public-host response exceeds {_MAX_RESPONSE_BYTES} bytes")
-            return (
-                int(response.status),
-                str(response.geturl()),
-                str(response.headers.get_content_type()),
-                ", ".join(response.headers.get_all("X-Robots-Tag", [])),
-                body,
-            )
-    except HTTPError as exc:
-        body = exc.read(_MAX_RESPONSE_BYTES + 1)
-        if len(body) > _MAX_RESPONSE_BYTES:
-            raise ValueError(
-                f"GEO public-host response exceeds {_MAX_RESPONSE_BYTES} bytes"
-            ) from exc
+            body.extend(chunk)
+        content_type = Message()
+        content_type["Content-Type"] = response.headers.get("Content-Type", "text/plain")
+        # Preserve non-2xx responses as evidence rather than discarding their bodies.
         return (
-            int(exc.code),
-            str(exc.geturl()),
-            str(exc.headers.get_content_type()),
-            ", ".join(exc.headers.get_all("X-Robots-Tag", [])),
-            body,
+            response.status_code,
+            str(response.url),
+            content_type.get_content_type(),
+            ", ".join(response.headers.get_list("X-Robots-Tag")),
+            bytes(body),
         )
 
 
