@@ -142,11 +142,12 @@ do not turn an incident-specific fix into an unconditional rule for every task.
    and generated mirrors through their owner commands. Do not hand-maintain
    parallel metrics or bump a version without an authorized release.
 8. **Integrate through GitFlow.** No direct push to protected branches.
-   Feature → develop is merge; develop → main is merge after canonical
-   main → develop synchronization. Verify content with `git diff A B --stat`,
-   not commit counts alone. Use current main directly if mergeable; otherwise
-   `sync/main-into-develop-*` must be the exact two-parent merge of current
-   develop then main. `scripts/merge_pr.py` rechecks live tips, exact PR-head
+   Feature → develop and develop → main both use merge commits. Incorporate
+   missing main history into the feature branch before its CI and merge; never
+   open a standalone main → develop sync PR. Never squash/rebase PRs; follow GitFlow's
+   [Don't cases](.agents/skills/geode-gitflow/SKILL.md#dont-cases).
+   Verify content with `git diff A B --stat`,
+   not commit counts alone. `scripts/merge_pr.py` rechecks main ancestry, exact PR-head
    required CI, and trust before merge. Missing/stale checks never prove green;
    local success is not remote CI success.
 9. **Clean up with proof.** After an owned feature PR merges, run

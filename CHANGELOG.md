@@ -53,6 +53,12 @@ functional change.
   routes, reject non-finite cognitive confidence during reflection and restore,
   and isolate final-verifier output schemas from task-specific output contracts.
 
+- Require merge-only GitHub repository settings before PR integration and verify
+  the resulting commit's exact base/head parents before reporting success.
+  Retain the returned merge SHA on uncertain readback; never retry that write.
+  Reject standalone main-to-develop sync PRs and require current main ancestry
+  in the feature head before integration instead.
+
 - Close static-analysis gaps across production Python, repository scripts,
   automation, and the public site. Enforce explicit production signatures,
   zero-warning site lint, workflow/shell checks, and macOS helper type checks;

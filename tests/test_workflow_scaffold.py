@@ -79,6 +79,21 @@ def test_runtime_markdown_and_skills_trigger_code_verification() -> None:
     assert {"core/**", "GEODE.md", ".geode/**"} <= set(patterns)
 
 
+def test_standalone_sync_rejection_precedes_path_filtering() -> None:
+    steps = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]["changes"]["steps"]
+    reject = steps[0]
+    condition = reject["if"]
+    assert "github.event_name == 'pull_request'" in condition
+    assert "github.base_ref == 'develop'" in condition
+    assert "github.head_ref == 'main'" in condition
+    assert "startsWith(github.head_ref, 'sync/')" in condition
+    checked = subprocess.run(  # noqa: S603 - tracked rejection step, no remote operations
+        ["/bin/bash", "-e", "-c", reject["run"]], capture_output=True, text=True, check=False
+    )
+    assert checked.returncode != 0
+    assert "::error::" in checked.stdout
+
+
 def test_evidence_first_workflow_has_required_scaffold_sections() -> None:
     workflow = _read("docs/workflow.md")
 

@@ -45,7 +45,14 @@ def _evidence(head: str = "a" * 40, base: str = "b" * 40) -> dict[str, Any]:
         },
         "base": {"commit": {"sha": base}},
         "main": {"commit": {"sha": "f" * 40}},
-        "commit": {"sha": head, "parents": [{"sha": base}]},
+        "comparison": {"base_commit": {"sha": "f" * 40}, "merge_base_commit": {"sha": "f" * 40}},
+        "merge_commit": {"sha": "d" * 40, "parents": [{"sha": base}, {"sha": head}]},
+        "repository": {
+            "full_name": merge_pr.REPOSITORY,
+            "allow_merge_commit": True,
+            "allow_squash_merge": False,
+            "allow_rebase_merge": False,
+        },
         "protection": {
             "required_status_checks": {
                 "strict": True,
@@ -120,6 +127,13 @@ def _evidence(head: str = "a" * 40, base: str = "b" * 40) -> dict[str, Any]:
 def _retarget(data: dict[str, Any], head: str, base: str = "develop") -> None:
     data["pr"]["head"]["ref"], data["pr"]["base"]["ref"] = head, base
     data["view"]["baseRefName"] = base
+    if base == "main":
+        main_sha = data["pr"]["base"]["sha"]
+        data["main"]["commit"]["sha"] = main_sha
+        data["comparison"] = {
+            "base_commit": {"sha": main_sha},
+            "merge_base_commit": {"sha": main_sha},
+        }
     for run in data["workflows"]["workflow_runs"]:
         run["head_branch"] = head
         run["pull_requests"][0]["head"]["ref"] = head
@@ -151,6 +165,9 @@ class _GitHub:
             return copy.deepcopy(self.current["view"])
         assert arguments[:2] == ["api", "--method"]
         method, endpoint = arguments[2:4]
+        if endpoint == f"repos/{merge_pr.REPOSITORY}":
+            assert method == "GET"
+            return copy.deepcopy(self.current["repository"])
         assert endpoint.startswith(f"repos/{merge_pr.REPOSITORY}/")
         if method == "PUT":
             assert endpoint.endswith("/pulls/3319/merge")
@@ -171,17 +188,19 @@ class _GitHub:
             return copy.deepcopy(self.current["pr"])
         if endpoint.endswith("/protection"):
             return copy.deepcopy(self.current["protection"])
-        if endpoint.endswith("/branches/main") and self.current["pr"]["head"]["ref"].startswith(
-            merge_pr.SYNC_BRANCH_PREFIX
-        ):
+        if endpoint.endswith("/branches/main"):
             return copy.deepcopy(self.current["main"])
         if "/branches/" in endpoint:
             return copy.deepcopy(self.current["base"])
         if "/actions/runs?" in endpoint:
             assert "event=pull_request&head_sha=" in endpoint
             return copy.deepcopy(self.current["workflows"])
-        if endpoint.endswith(f"/commits/{self.current['pr']['head']['sha']}"):
-            return copy.deepcopy(self.current["commit"])
+        if endpoint.endswith(f"/commits/{'d' * 40}"):
+            return copy.deepcopy(self.current["merge_commit"])
+        if "/compare/" in endpoint:
+            main_sha = self.current["main"]["commit"]["sha"]
+            assert endpoint.endswith(f"/compare/{main_sha}...{self.current['pr']['head']['sha']}")
+            return copy.deepcopy(self.current["comparison"])
         assert endpoint.endswith("/check-runs?filter=latest&per_page=100")
         return copy.deepcopy(self.current["checks"])
 
@@ -195,10 +214,69 @@ def test_default_is_read_only_and_merge_is_exactly_once(monkeypatch, capsys) -> 
     assert len(receipt["checks"]) == 10
     assert github.mutations == []
     assert merge_pr.main(["--pr", "3319", "--merge"]) == 0
-    assert json.loads(capsys.readouterr().out)["decision"] == "merged"
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt["decision"] == "merged"
+    assert receipt["merge_parents"] == ["b" * 40, "a" * 40]
     assert github.reads == 3  # one read-only snapshot plus two fresh pre-merge snapshots
     assert len(github.mutations) == 1
     assert github.mutations[0][-4:] == ["-f", "merge_method=merge", "-f", f"sha={'a' * 40}"]
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("allow_merge_commit", False),
+        ("allow_merge_commit", 1),
+        ("allow_squash_merge", True),
+        ("allow_squash_merge", None),
+        ("allow_rebase_merge", True),
+        ("allow_rebase_merge", 0),
+        ("full_name", "external/repo"),
+    ],
+)
+def test_repository_merge_policy_drift_never_merges(monkeypatch, capsys, field, value) -> None:
+    first, second = _evidence(), _evidence()
+    second["repository"][field] = value
+    github = _GitHub(first, second)
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == 1
+    assert json.loads(capsys.readouterr().out)["decision"] == "blocked"
+    assert github.reads == 2 and github.mutations == []
+
+
+def test_missing_repository_policy_is_not_inferred(monkeypatch, capsys) -> None:
+    data = _evidence()
+    data["repository"].pop("allow_squash_merge")
+    github = _GitHub(data)
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == 1
+    assert json.loads(capsys.readouterr().out)["decision"] == "blocked"
+    assert github.mutations == []
+
+
+@pytest.mark.parametrize("defect", ["squash", "rebase", "swapped", "extra", "sha", "missing"])
+def test_merge_graph_mismatch_is_not_success_or_retried(monkeypatch, capsys, defect) -> None:
+    data = _evidence()
+    commit = data["merge_commit"]
+    if defect == "squash":
+        commit["parents"].pop()
+    elif defect == "rebase":
+        commit["parents"] = [{"sha": "e" * 40}]
+    elif defect == "swapped":
+        commit["parents"].reverse()
+    elif defect == "extra":
+        commit["parents"].append({"sha": "e" * 40})
+    elif defect == "sha":
+        commit["sha"] = "e" * 40
+    else:
+        commit.pop("parents")
+    github = _GitHub(data)
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == 1
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt["decision"] == "merge_outcome_unknown"
+    assert receipt["merge_sha"] == "d" * 40
+    assert len(github.mutations) == 1
 
 
 @pytest.mark.parametrize(
@@ -415,54 +493,45 @@ def test_second_snapshot_drift_never_merges(monkeypatch, drift: str) -> None:
     assert github.mutations == []
 
 
-@pytest.mark.parametrize("head,base", [("main", "develop"), ("develop", "main")])
-def test_canonical_promotion_uses_merge_method(monkeypatch, head: str, base: str) -> None:
+def test_canonical_promotion_uses_merge_method(monkeypatch) -> None:
     data = _evidence()
-    _retarget(data, head, base)
+    _retarget(data, "develop", "main")
     github = _GitHub(data)
     monkeypatch.setattr(merge_pr, "_gh", github)
     assert merge_pr.main(["--pr", "3319", "--merge"]) == 0
     assert "merge_method=merge" in github.mutations[0]
 
 
-@pytest.mark.parametrize(
-    "shape", ["exact", "swapped", "stale_main", "stale_develop", "single", "extra", "wrong_head"]
-)
-def test_sync_requires_exact_current_ordered_parents(monkeypatch, capsys, shape: str) -> None:
+@pytest.mark.parametrize("head", ["main", "sync/main-into-develop-topic", "sync/other"])
+def test_standalone_sync_prs_never_merge(monkeypatch, capsys, head: str) -> None:
     data = _evidence()
-    _retarget(data, "sync/main-into-develop-topic")
-    parents = ["b" * 40, "f" * 40]
-    if shape == "swapped":
-        parents.reverse()
-    elif shape == "stale_main":
-        parents[1] = "e" * 40
-    elif shape == "stale_develop":
-        parents[0] = "e" * 40
-    elif shape == "single":
-        parents.pop()
-    elif shape == "extra":
-        parents.append("e" * 40)
-    elif shape == "wrong_head":
-        data["commit"]["sha"] = "e" * 40
-    data["commit"]["parents"] = [{"sha": parent} for parent in parents]
+    _retarget(data, head)
     github = _GitHub(data)
     monkeypatch.setattr(merge_pr, "_gh", github)
-    assert merge_pr.main(["--pr", "3319", "--merge"]) == (0 if shape == "exact" else 1)
-    receipt = json.loads(capsys.readouterr().out)
-    if shape == "exact":
-        assert receipt["main_sha"] == "f" * 40
-        assert "merge_method=merge" in github.mutations[0]
-    else:
-        assert github.mutations == []
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == 1
+    assert json.loads(capsys.readouterr().out)["decision"] == "blocked"
+    assert github.mutations == []
 
 
-def test_sync_main_tip_drift_between_snapshots_never_merges(monkeypatch) -> None:
+def test_main_tip_drift_between_snapshots_never_merges(monkeypatch) -> None:
     first = _evidence()
-    _retarget(first, "sync/main-into-develop-topic")
-    first["commit"]["parents"].append({"sha": "f" * 40})
     second = copy.deepcopy(first)
     second["main"]["commit"]["sha"] = "e" * 40
+    second["comparison"] = {
+        "base_commit": {"sha": "e" * 40},
+        "merge_base_commit": {"sha": "e" * 40},
+    }
     github = _GitHub(first, second)
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == 1
+    assert github.mutations == []
+
+
+@pytest.mark.parametrize("field", ["base_commit", "merge_base_commit"])
+def test_missing_main_ancestry_never_merges(monkeypatch, field: str) -> None:
+    data = _evidence()
+    data["comparison"][field]["sha"] = "e" * 40
+    github = _GitHub(data)
     monkeypatch.setattr(merge_pr, "_gh", github)
     assert merge_pr.main(["--pr", "3319", "--merge"]) == 1
     assert github.mutations == []

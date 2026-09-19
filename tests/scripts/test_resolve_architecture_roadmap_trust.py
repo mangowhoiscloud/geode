@@ -50,11 +50,11 @@ def graph(tmp_path: Path) -> Graph:
     return Graph(root=root, develop=develop, main=main, sync=sync, tree=tree)
 
 
-def _resolve_sync(repo: Path, head_sha: str, **overrides: str) -> str | None:
+def _resolve_feature(repo: Path, head_sha: str, **overrides: str) -> str | None:
     values = {
         "event_mode": "pull_request",
         "target_branch": "develop",
-        "head_ref": "sync/main-into-develop-test",
+        "head_ref": "codex/feature",
         "head_repo": "mangowhoiscloud/geode",
         "repository": "mangowhoiscloud/geode",
         "head_sha": head_sha,
@@ -63,7 +63,7 @@ def _resolve_sync(repo: Path, head_sha: str, **overrides: str) -> str | None:
     return resolver.resolve_trusted_ref(repo_root=repo, **values)
 
 
-def test_exact_two_parent_sync_uses_fully_qualified_refs(
+def test_feature_main_ancestry_uses_fully_qualified_refs(
     tmp_path: Path,
     graph: Graph,
 ) -> None:
@@ -71,50 +71,42 @@ def test_exact_two_parent_sync_uses_fully_qualified_refs(
     _git(tmp_path, "update-ref", "refs/tags/origin/main", forged_main)
 
     assert _git(tmp_path, "rev-parse", "origin/main") == forged_main
-    assert _resolve_sync(tmp_path, graph.sync) == resolver.REMOTE_MAIN_REF
+    feature_head = _commit(tmp_path, graph.tree, "feature after sync", graph.sync)
+    assert _resolve_feature(tmp_path, feature_head) == resolver.REMOTE_MAIN_REF
 
 
-@pytest.mark.parametrize("shape", ["stale", "swapped", "extra", "single"])
-def test_sync_rejects_every_non_exact_parent_shape(
+@pytest.mark.parametrize("head_ref", ["main", "sync/main-into-develop-test", "sync/other"])
+def test_standalone_sync_prs_are_rejected_even_with_valid_ancestry(
     tmp_path: Path,
     graph: Graph,
-    shape: str,
+    head_ref: str,
 ) -> None:
-    candidates = {
-        "stale": _commit(tmp_path, graph.tree, "stale", graph.develop, graph.root),
-        "swapped": _commit(tmp_path, graph.tree, "swapped", graph.main, graph.develop),
-        "extra": _commit(
-            tmp_path,
-            graph.tree,
-            "extra",
-            graph.develop,
-            graph.main,
-            graph.root,
-        ),
-        "single": _commit(tmp_path, graph.tree, "single", graph.develop),
-    }
-
-    with pytest.raises(resolver.RoadmapTrustError, match="exact current"):
-        _resolve_sync(tmp_path, candidates[shape])
+    with pytest.raises(resolver.RoadmapTrustError, match="standalone"):
+        _resolve_feature(tmp_path, graph.sync, head_ref=head_ref)
 
 
-def test_fork_and_non_sync_branches_receive_no_trust(tmp_path: Path, graph: Graph) -> None:
+def test_fork_receives_no_trust(tmp_path: Path, graph: Graph) -> None:
     assert (
-        _resolve_sync(
+        _resolve_feature(
             tmp_path,
             graph.sync,
             head_repo="untrusted/geode",
         )
         is None
     )
-    assert (
-        _resolve_sync(
-            tmp_path,
-            graph.sync,
-            head_ref="feature/not-a-sync",
-        )
-        is None
-    )
+
+
+@pytest.mark.parametrize("head", ["missing", "stale", "invalid"])
+def test_feature_requires_current_main_ancestry(tmp_path: Path, graph: Graph, head: str) -> None:
+    head_sha = graph.develop
+    if head == "stale":
+        head_sha = graph.sync
+        new_main = _commit(tmp_path, graph.tree, "new main", graph.main)
+        _git(tmp_path, "update-ref", resolver.REMOTE_MAIN_REF, new_main)
+    elif head == "invalid":
+        head_sha = "not-a-sha"
+    with pytest.raises(resolver.RoadmapTrustError):
+        _resolve_feature(tmp_path, head_sha)
 
 
 def test_direct_canonical_branches_must_match_current_remote_tips(
@@ -128,29 +120,21 @@ def test_direct_canonical_branches_must_match_current_remote_tips(
         "repo_root": tmp_path,
     }
 
-    assert (
-        resolver.resolve_trusted_ref(
-            target_branch="develop",
-            head_ref="main",
-            head_sha=graph.main,
-            **common,
-        )
-        == resolver.REMOTE_MAIN_REF
-    )
+    _git(tmp_path, "update-ref", resolver.REMOTE_DEVELOP_REF, graph.sync)
     assert (
         resolver.resolve_trusted_ref(
             target_branch="main",
             head_ref="develop",
-            head_sha=graph.develop,
+            head_sha=graph.sync,
             **common,
         )
         == resolver.REMOTE_DEVELOP_REF
     )
     with pytest.raises(resolver.RoadmapTrustError, match="is stale"):
         resolver.resolve_trusted_ref(
-            target_branch="develop",
-            head_ref="main",
-            head_sha=graph.root,
+            target_branch="main",
+            head_ref="develop",
+            head_sha=graph.develop,
             **common,
         )
 

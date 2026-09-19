@@ -10,12 +10,6 @@ import shutil
 import subprocess
 from typing import Any
 
-from scripts.resolve_architecture_roadmap_trust import (
-    SYNC_BRANCH_PREFIX,
-    RoadmapTrustError,
-    require_sync_parents,
-)
-
 REPOSITORY = "mangowhoiscloud/geode"
 CHECK_APP_ID = 15368
 REQUIRED_WORKFLOWS = {
@@ -73,7 +67,7 @@ def _gh(arguments: list[str]) -> dict[str, Any]:
 
 def _api(path: str, *, fields: tuple[str, ...] = ()) -> dict[str, Any]:
     method = "PUT" if fields else "GET"
-    return _gh(["api", "--method", method, f"repos/{REPOSITORY}/{path}", *fields])
+    return _gh(["api", "--method", method, f"repos/{REPOSITORY}/{path}".rstrip("/"), *fields])
 
 
 def _identity(pr: dict[str, Any]) -> dict[str, Any]:
@@ -87,24 +81,21 @@ def _identity(pr: dict[str, Any]) -> dict[str, Any]:
         "fork or repository mismatch",
     )
     flow = (head["ref"], base["ref"])
-    if flow in {("main", "develop"), ("develop", "main")} or (
-        base["ref"] == "develop" and head["ref"].startswith(SYNC_BRANCH_PREFIX)
-    ):
-        method = "merge"
-    else:
-        _require(
+    _require(
+        flow == ("develop", "main")
+        or (
             base["ref"] == "develop"
             and head["ref"] not in {"main", "develop"}
-            and not head["ref"].startswith("sync/"),
-            "unsupported protected-branch flow",
-        )
-        method = "merge"
+            and not head["ref"].startswith("sync/")
+        ),
+        "unsupported protected-branch flow; integrate main in the feature branch, not a sync PR",
+    )
     return {
         "head_ref": head["ref"],
         "head_sha": _sha(head["sha"]),
         "base_ref": base["ref"],
         "base_sha": _sha(base["sha"]),
-        "method": method,
+        "method": "merge",
         "test_merge_sha": _sha(pr["merge_commit_sha"]),
     }
 
@@ -149,23 +140,25 @@ def validate_snapshot(
     view: dict[str, Any],
     native_checks: dict[str, Any],
     workflows: dict[str, Any],
-    sync: dict[str, Any] | None = None,
+    repository: dict[str, Any],
+    main: dict[str, Any],
+    comparison: dict[str, Any],
 ) -> dict[str, Any]:
     """Pure admission predicate; job success never overrides missing server policy."""
     identity = _identity(pr)
-    if identity["head_ref"].startswith(SYNC_BRANCH_PREFIX):
-        if sync is None:
-            raise MergeGuardError("sync graph evidence is missing")
-        _require(_sha(sync["sha"]) == identity["head_sha"], "sync head changed")
-        identity["main_sha"] = _sha(sync["main_sha"])
-        try:
-            require_sync_parents(
-                tuple(_sha(parent["sha"]) for parent in sync["parents"]),
-                identity["base_sha"],
-                identity["main_sha"],
-            )
-        except RoadmapTrustError as exc:
-            raise MergeGuardError(str(exc)) from exc
+    _require(
+        repository["full_name"] == REPOSITORY
+        and repository["allow_merge_commit"] is True
+        and repository["allow_squash_merge"] is False
+        and repository["allow_rebase_merge"] is False,
+        "repository must allow merge commits only; squash and rebase must be disabled",
+    )
+    identity["main_sha"] = _sha(main["commit"]["sha"])
+    _require(
+        _sha(comparison["base_commit"]["sha"]) == identity["main_sha"]
+        and _sha(comparison["merge_base_commit"]["sha"]) == identity["main_sha"],
+        "PR head must contain current main; merge main into the feature branch and rerun CI",
+    )
     _require(
         pr["mergeable"] is True and pr["mergeable_state"] == "clean", "PR mergeability is not clean"
     )
@@ -286,6 +279,7 @@ def _snapshot(number: int, receipt: dict[str, Any] | None = None) -> dict[str, A
     identity = _identity(pr)
     if receipt is not None:
         receipt.update(identity)  # Identity remains inspectable even when later admission fails.
+    repository = _api("")
     base = _api(f"branches/{identity['base_ref']}")
     protection = _api(f"branches/{identity['base_ref']}/protection")
     checks = _api(f"commits/{identity['head_sha']}/check-runs?filter=latest&per_page=100")
@@ -319,11 +313,12 @@ def _snapshot(number: int, receipt: dict[str, Any] | None = None) -> dict[str, A
             "{checks: .}",
         ]
     )
-    sync = None
-    if identity["head_ref"].startswith(SYNC_BRANCH_PREFIX):
-        sync = _api(f"commits/{identity['head_sha']}")
-        sync["main_sha"] = _api("branches/main")["commit"]["sha"]
-    return validate_snapshot(pr, base, protection, checks, view, required, workflows, sync)
+    main = _api("branches/main")
+    main_sha = _sha(main["commit"]["sha"])
+    comparison = _api(f"compare/{main_sha}...{identity['head_sha']}")
+    return validate_snapshot(
+        pr, base, protection, checks, view, required, workflows, repository, main, comparison
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -364,6 +359,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             _require(result.get("merged") is True, "GitHub did not confirm a merge")
             merged_sha = _sha(result["sha"])
+            receipt["merge_sha"] = merged_sha
             after = _api(f"pulls/{args.pr}")
             _require(
                 after["merged"] is True
@@ -373,7 +369,14 @@ def main(argv: list[str] | None = None) -> int:
                 and after["merge_commit_sha"] == merged_sha,
                 "merge readback is unverified",
             )
-            receipt.update(decision="merged", merge_sha=merged_sha)
+            commit = _api(f"commits/{merged_sha}")
+            parents = [_sha(parent["sha"]) for parent in commit["parents"]]
+            _require(
+                _sha(commit["sha"]) == merged_sha
+                and parents == [receipt["base_sha"], receipt["head_sha"]],
+                "merged commit must preserve the verified base and PR head as ordered parents",
+            )
+            receipt.update(decision="merged", merge_parents=parents)
     except (MergeGuardError, KeyError, TypeError, AttributeError) as exc:
         if receipt["decision"] != "merge_outcome_unknown":
             receipt["decision"] = "blocked"

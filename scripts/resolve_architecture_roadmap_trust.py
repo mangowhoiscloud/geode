@@ -19,7 +19,6 @@ from scripts.git_command import GitExecutableNotFoundError, run_git
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REMOTE_MAIN_REF = "refs/remotes/origin/main"
 REMOTE_DEVELOP_REF = "refs/remotes/origin/develop"
-SYNC_BRANCH_PREFIX = "sync/main-into-develop-"
 FULL_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 
@@ -36,17 +35,15 @@ def _commit_sha(ref: str, *, repo_root: Path) -> str:
     return sha
 
 
-def _commit_parents(head_sha: str, *, repo_root: Path) -> tuple[str, ...]:
+def _require_main_ancestor(head_sha: str, *, repo_root: Path) -> None:
     if FULL_SHA_PATTERN.fullmatch(head_sha) is None:
         raise RoadmapTrustError("pull-request head SHA must be exactly 40 lowercase hex characters")
-    process = run_git(
-        ["show", "-s", "--format=%P", f"{head_sha}^{{commit}}"],
-        cwd=repo_root,
-    )
+    main_sha = _commit_sha(REMOTE_MAIN_REF, repo_root=repo_root)
+    process = run_git(["merge-base", "--is-ancestor", main_sha, head_sha], cwd=repo_root)
     if process.returncode != 0:
-        detail = process.stderr.strip() or f"git show exited {process.returncode}"
-        raise RoadmapTrustError(f"cannot inspect pull-request head {head_sha}: {detail}")
-    return tuple(process.stdout.strip().split())
+        raise RoadmapTrustError(
+            "PR head must contain current main; merge it into the feature branch before integration"
+        )
 
 
 def _require_direct_head(
@@ -62,25 +59,6 @@ def _require_direct_head(
         raise RoadmapTrustError(
             f"direct branch head {head_sha} is stale; current {canonical_ref} is {expected}"
         )
-
-
-def require_sync_parents(actual: tuple[str, ...], develop_sha: str, main_sha: str) -> None:
-    """Share the ordered canonical-parent proof with local CI and remote admission."""
-    expected = (develop_sha, main_sha)
-    if actual != expected:
-        raise RoadmapTrustError(
-            "trusted sync HEAD must merge exact current "
-            f"{REMOTE_DEVELOP_REF} + {REMOTE_MAIN_REF} parents; "
-            f"expected={' '.join(expected)} actual={' '.join(actual) or '<none>'}"
-        )
-
-
-def _require_exact_sync_head(head_sha: str, *, repo_root: Path) -> None:
-    require_sync_parents(
-        _commit_parents(head_sha, repo_root=repo_root),
-        _commit_sha(REMOTE_DEVELOP_REF, repo_root=repo_root),
-        _commit_sha(REMOTE_MAIN_REF, repo_root=repo_root),
-    )
 
 
 def resolve_trusted_ref(
@@ -105,14 +83,16 @@ def resolve_trusted_ref(
     if not repository or head_repo != repository:
         return None
 
-    if target_branch == "develop" and head_ref == "main":
-        _require_direct_head(head_sha, REMOTE_MAIN_REF, repo_root=repo_root)
-        return REMOTE_MAIN_REF
-    if target_branch == "develop" and head_ref.startswith(SYNC_BRANCH_PREFIX):
-        _require_exact_sync_head(head_sha, repo_root=repo_root)
+    if target_branch == "develop":
+        if head_ref in {"main", "develop", ""} or head_ref.startswith("sync/"):
+            raise RoadmapTrustError(
+                "standalone main-to-develop sync PRs are prohibited; use the feature branch"
+            )
+        _require_main_ancestor(head_sha, repo_root=repo_root)
         return REMOTE_MAIN_REF
     if target_branch == "main" and head_ref == "develop":
         _require_direct_head(head_sha, REMOTE_DEVELOP_REF, repo_root=repo_root)
+        _require_main_ancestor(head_sha, repo_root=repo_root)
         return REMOTE_DEVELOP_REF
     return None
 

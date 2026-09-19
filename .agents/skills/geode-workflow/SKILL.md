@@ -51,8 +51,8 @@ that do not affect the task.
   package without a prior claim, but does not authorize implementing it.
 - Within the architecture/extensibility program, use `origin/main` only for a
   tracking-only roadmap `DONE` worktree after release. Its PR targets `main`,
-  carries no implementation code, and is followed by a CI-gated
-  `main -> develop` sync.
+  carries no implementation code. The next owned feature branch incorporates
+  the resulting main history before CI and integration; no standalone sync PR.
 - Do not mark unsupported provider behaviour as supported without grounding.
 - Do not add ad hoc observability strings when the capability/evidence
   vocabulary should be extended.
