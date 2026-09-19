@@ -49,6 +49,26 @@ The fixed rules are:
 
 ## Authority matrix
 
+### Worker admission and failure boundary (Unreleased)
+
+The legacy callback path in `SubAgentManager` binds the handler signature before
+invoking it once. An internal exception becomes an unsuccessful isolated result
+and `SUBAGENT_FAILED`, not a successful JSON string containing an error. The
+worker thread's sub-agent context is cleared on both return and exception.
+
+`WorkerRequest.isolation` accepts only the existing empty/shared-workspace mode.
+Nonempty values such as `worktree` or `container` fail before runtime execution;
+the field does not provision a sandbox. The subprocess launcher preserves
+`GEODE_PERSONA` and serializes the effective audit state, including an explicit
+context-local false overriding an inherited true environment value. Named agent
+prompt overrides retain their existing separate assembly path.
+
+Regression owners: [delegation](../../tests/core/agent/test_agentic_loop.py),
+[worker admission](../../tests/core/agent/test_worker.py), and
+[spawn-to-prompt modes](../../tests/core/orchestration/test_subprocess_env_whitelist.py).
+
+### Persistence and recovery
+
 `None` below is an intentional contract, not an unimplemented recovery path.
 
 | Surface | Durability | Recovery | Migration | Compatibility | Redaction | Failure | Rollback |

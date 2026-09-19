@@ -93,6 +93,37 @@ def test_provider_composition_is_explicit_and_attributed() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    "model", ["openrouter/openai/gpt-6-astra", "openrouter/anthropic/claude-fable-5"]
+)
+def test_chat_route_does_not_inherit_native_search_from_model_name(model: str) -> None:
+    from core.llm.adapters._openai_common import build_chat_completion_kwargs
+    from core.llm.model_catalog import get_model_catalog_spec
+    from core.llm.tool_defer import TOOL_DEFER_THRESHOLD
+
+    specs = tuple(
+        ToolSpec(name=f"tool_{i}", description="tool", input_schema={"type": "object"})
+        for i in range(TOOL_DEFER_THRESHOLD + 5)
+    )
+    req = AdapterCallRequest(
+        model=model,
+        messages=(Message(role="user", content="hi"),),
+        tools=specs,
+        deferred_tool_names=tuple(tool.name for tool in specs),
+    )
+    kwargs = build_chat_completion_kwargs(
+        req,
+        model=to_openrouter_model_id(model),
+        provider="openrouter",
+        adapter_name="openrouter-payg",
+    )
+    assert [tool["function"]["name"] for tool in kwargs["tools"]] == [s.name for s in specs]
+    assert all(
+        tool["type"] == "function" and "defer_loading" not in tool for tool in kwargs["tools"]
+    )
+    assert not get_model_catalog_spec(model, provider="openrouter").supports_tool_search
+
+
 class _Completions:
     def __init__(self, response: Any) -> None:
         self.response = response

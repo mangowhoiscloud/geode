@@ -32,6 +32,74 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from core.agent.loop.models import TerminationReason
+
+
+@pytest.mark.parametrize("reason", [*TerminationReason, "future_terminal", None])
+def test_final_turn_hooks_only_enrich_deliverable_outcomes(monkeypatch, reason):
+    from core.agent.loop._lifecycle import _final_hook_payloads
+    from core.agent.loop.models import AgenticResult
+    from core.hooks.llm_extract_learning import make_llm_extract_handler
+    from core.hooks.system import RuntimeEvent, RuntimeEventBus
+    from core.memory.dreaming import make_dreaming_handler
+
+    extract = AsyncMock(return_value="[correction] Preserve zero quantities. Why: zero is valid.")
+    profile = MagicMock()
+    dream_service = MagicMock()
+    monkeypatch.setattr("core.hooks.llm_extract_learning._call_budget_llm", extract)
+    loop = SimpleNamespace(
+        model="test-model", _provider="openai", _session_id="test-session", _effort="high"
+    )
+    result = AgenticResult(
+        text="The verifier rejected this answer; preserve zero quantities on the next attempt.",
+        rounds=3,
+        termination_reason=reason,
+    )
+    _session, payload, _metrics = _final_hook_payloads(
+        loop, result, "Do not drop zero quantities.", verify_payload={"passed": False}
+    )
+    bus = RuntimeEventBus()
+    for name, handler in (
+        make_llm_extract_handler(profile_provider=lambda: profile),
+        make_dreaming_handler(service=dream_service),
+    ):
+        bus.register(RuntimeEvent.TURN_COMPLETED, handler, name=name)
+    try:
+        dispatched = asyncio.run(bus.emit_async(RuntimeEvent.TURN_COMPLETED, payload))
+        assert len(dispatched) == 2
+        assert all(item.success for item in dispatched)
+        if reason in {"natural", "forced_text", "actionable_partial"}:
+            extract.assert_awaited_once()
+            profile.add_learned_pattern.assert_called_once()
+            dream_service.dream_session_background.assert_called_once_with(
+                "test-session", provider="openai", model="test-model", effort="high"
+            )
+        else:
+            extract.assert_not_awaited()
+            profile.add_learned_pattern.assert_not_called()
+            dream_service.dream_session_background.assert_not_called()
+    finally:
+        bus.close()
+
+
+def test_skipped_extraction_does_not_consume_input_cursor(monkeypatch):
+    from core.hooks.llm_extract_learning import make_llm_extract_handler
+    from core.hooks.system import RuntimeEvent
+
+    extract = AsyncMock(return_value="[correction] Preserve zero quantities. Why: zero is valid.")
+    profile = MagicMock()
+    monkeypatch.setattr("core.hooks.llm_extract_learning._call_budget_llm", extract)
+    _name, handler = make_llm_extract_handler(profile_provider=lambda: profile)
+    data = {
+        "user_input": "Do not drop zero quantities when transforming inventory records.",
+        "text": "The requested output must preserve zero quantities.",
+    }
+    asyncio.run(handler(RuntimeEvent.TURN_COMPLETED, data))
+    extract.assert_not_awaited()
+    asyncio.run(handler(RuntimeEvent.TURN_COMPLETED, {**data, "termination_reason": "natural"}))
+    extract.assert_awaited_once()
+    profile.add_learned_pattern.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # llm_extract_learning — async + adapter dispatch + no direct SDK imports
@@ -69,7 +137,12 @@ def test_extract_handler_preserves_turn_effort(
     dispatch = AsyncMock(return_value=SimpleNamespace(text="NONE"))
     monkeypatch.setattr("core.llm.adapters.dispatch.complete_text_via_adapters", dispatch)
     _name, handler = make_llm_extract_handler(lambda: SimpleNamespace())
-    asyncio.run(handler(HookEvent.TURN_COMPLETED, {"user_input": "context" * 10, "effort": effort}))
+    asyncio.run(
+        handler(
+            HookEvent.TURN_COMPLETED,
+            {"user_input": "context" * 10, "effort": effort, "termination_reason": "natural"},
+        )
+    )
     dispatch.assert_awaited_once()
     assert dispatch.await_args.kwargs["effort"] == (effort or "low")
     assert settings.agentic_effort == "low"
@@ -135,6 +208,7 @@ def test_extract_session_cursor_and_quota_do_not_bleed_between_sessions(
                 HookEvent.TURN_COMPLETED,
                 {
                     "session_id": "session-a",
+                    "termination_reason": "natural",
                     "user_input": f"preference {index} " + "x" * 50,
                     "text": "context " + "y" * 50,
                 },
@@ -143,6 +217,7 @@ def test_extract_session_cursor_and_quota_do_not_bleed_between_sessions(
             HookEvent.TURN_COMPLETED,
             {
                 "session_id": "session-b",
+                "termination_reason": "natural",
                 "user_input": "new session preference " + "z" * 50,
                 "text": "context " + "q" * 50,
             },

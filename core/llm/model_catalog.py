@@ -9,11 +9,13 @@ instead of copying fallback context windows into adapters.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from core.config.routing_manifest import resolve_provider
 from core.llm.adapters._openai_common import get_openai_model_spec
 from core.llm.adapters.base import ModelSpec
+from core.llm.model_capabilities import ANTHROPIC_TOOL_SEARCH_MODELS
 from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
 DEFAULT_UNKNOWN_CONTEXT_WINDOW = 200_000
@@ -55,6 +57,7 @@ def get_model_catalog_spec(model_id: str, provider: str | None = None) -> ModelC
     supports_tool_search = False
     if normalized == "anthropic":
         supports_thinking = model_id.startswith("claude-")
+        supports_tool_search = re.sub(r"-\d{8}$", "", model_id) in ANTHROPIC_TOOL_SEARCH_MODELS
     elif normalized == "openai":
         openai_spec = get_openai_model_spec(model_id)
         supports_thinking = openai_spec.reasoning_effort_values is not None

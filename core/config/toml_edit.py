@@ -16,6 +16,8 @@ One home now; both call surfaces import from here.
 from __future__ import annotations
 
 import os
+import re
+from collections.abc import Mapping
 from pathlib import Path
 
 from core.paths import GLOBAL_CONFIG_TOML
@@ -53,11 +55,15 @@ def toml_escape(value: str) -> str:
     return "".join(out)
 
 
-def splice_toml_section(text: str, section: str, updates: dict[str, str]) -> str:
+def _toml_literal(value: str | float) -> str:
+    return f'"{toml_escape(value)}"' if isinstance(value, str) else str(value)
+
+
+def splice_toml_section(text: str, section: str, updates: Mapping[str, str | float]) -> str:
     """Return ``text`` with ``[section]`` carrying every ``updates`` entry.
 
-    String values are written as ``key = "value"`` (escaped). An empty-string
-    value (``key == ""``) signals "delete this key": the matching line is dropped
+    Strings are escaped and quoted; numeric budgets remain TOML numbers. An empty-string
+    value (``value == ""``) signals "delete this key": the matching line is dropped
     rather than replaced, and a fresh section never picks up a delete request.
     If the section is missing it is appended; existing keys are replaced in
     place; new keys are inserted at the end of the section block.
@@ -66,7 +72,7 @@ def splice_toml_section(text: str, section: str, updates: dict[str, str]) -> str
     lines = text.splitlines(keepends=False)
     header_idx = -1
     for i, line in enumerate(lines):
-        if line.strip() == header:
+        if re.fullmatch(rf"{re.escape(header)}\s*(?:#.*)?", line.strip()):
             header_idx = i
             break
     if header_idx == -1:
@@ -75,14 +81,14 @@ def splice_toml_section(text: str, section: str, updates: dict[str, str]) -> str
             return text
         block = [header]
         for key, val in materialised.items():
-            block.append(f'{key} = "{toml_escape(val)}"')
+            block.append(f"{key} = {_toml_literal(val)}")
         suffix = "" if text.endswith("\n") or text == "" else "\n"
         sep = "\n" if text and not text.endswith("\n\n") else ""
         return text + suffix + sep + "\n".join(block) + "\n"
     end_idx = len(lines)
     for j in range(header_idx + 1, len(lines)):
         stripped = lines[j].strip()
-        if stripped.startswith("[") and stripped.endswith("]"):
+        if re.fullmatch(r"\[.*\]\s*(?:#.*)?", stripped):
             end_idx = j
             break
     remaining = dict(updates)
@@ -104,8 +110,8 @@ def splice_toml_section(text: str, section: str, updates: dict[str, str]) -> str
         val = remaining.pop(matched_key)
         if val == "":
             continue
-        keep_lines.append(f'{matched_key} = "{toml_escape(val)}"')
-    new_kv_lines = [f'{key} = "{toml_escape(val)}"' for key, val in remaining.items() if val != ""]
+        keep_lines.append(f"{matched_key} = {_toml_literal(val)}")
+    new_kv_lines = [f"{key} = {_toml_literal(val)}" for key, val in remaining.items() if val != ""]
     insert_at_keep = len(keep_lines)
     while insert_at_keep > 0 and keep_lines[insert_at_keep - 1].strip() == "":
         insert_at_keep -= 1

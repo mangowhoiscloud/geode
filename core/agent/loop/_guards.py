@@ -977,6 +977,8 @@ def _tool_round_assistant_message(loop: Any, response: AgenticResponse) -> dict[
         message["codex_reasoning_items"] = reasoning_items
     if output_items:
         message["codex_output_items"] = output_items
+    if response.anthropic_content:
+        message["anthropic_content"] = response.anthropic_content
     if phase:
         message["phase"] = phase
     processor = getattr(loop, "_tool_processor", None)

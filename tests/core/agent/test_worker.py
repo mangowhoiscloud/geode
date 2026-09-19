@@ -7,7 +7,9 @@ import os
 import signal
 import subprocess
 import sys
+from io import StringIO
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from core.agent.loop import AgenticLoop
@@ -91,6 +93,16 @@ class TestWorkerRequest:
         assert restored.effort == "max"
         assert restored.thinking_budget == 8192
         assert restored.time_budget_s == 180.0
+
+    @pytest.mark.parametrize("isolation", ["worktree", "container"])
+    def test_unsupported_isolation_rejected_at_construction(self, isolation: str) -> None:
+        with pytest.raises(ValueError, match="workspace isolation is not supported"):
+            WorkerRequest(task_id="isolated", isolation=isolation)
+
+    @pytest.mark.parametrize("isolation", ["worktree", "container"])
+    def test_unsupported_isolation_rejected_from_wire(self, isolation: str) -> None:
+        with pytest.raises(ValueError, match="workspace isolation is not supported"):
+            WorkerRequest.from_dict({"task_id": "isolated", "isolation": isolation})
 
     def test_reasoning_depth_defaults(self) -> None:
         """Defaults preserved when fields omitted from dict."""
@@ -191,6 +203,27 @@ class TestWorkerResult:
 
 class TestWorkerSubprocess:
     """Test the worker as an actual subprocess (stdin/stdout JSON protocol)."""
+
+    def test_unsupported_isolation_never_starts_runtime(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from core.agent import worker
+
+        run = Mock(return_value=WorkerResult(task_id="isolated", success=True))
+        monkeypatch.setattr(worker, "_run_agentic", run)
+        monkeypatch.setattr(worker, "WORKER_DIR", tmp_path)
+        monkeypatch.setattr(
+            "core.observability.logging_config.configure_logging", lambda *_args, **_kwargs: None
+        )
+        monkeypatch.setattr(
+            sys, "stdin", StringIO(json.dumps({"task_id": "isolated", "isolation": "worktree"}))
+        )
+        worker.main(_empty_tool_plan_builder)
+        run.assert_not_called()
+        result = json.loads(capsys.readouterr().out)
+        assert result["task_id"] == "isolated"
+        assert result["success"] is False
+        assert "workspace isolation is not supported" in result["error"]
 
     def test_protocol_module_rejects_direct_execution(self) -> None:
         proc = subprocess.run(  # noqa: S603

@@ -1551,10 +1551,9 @@ class TestSubAgentManager:
         results = asyncio.run(manager.adelegate(tasks))
 
         assert len(results) == 1
-        # The exception is caught by _execute_subtask and returned as error dict.
-        # IsolatedRunner sees a successful return value (the error dict).
-        # The error content is in the output.
-        assert results[0].output.get("error") is not None
+        assert results[0].success is False
+        assert results[0].error == "task handler failed"
+        assert results[0].output == {}
 
     def test_delegate_no_handler(self) -> None:
         runner = IsolatedRunner()
@@ -1563,7 +1562,9 @@ class TestSubAgentManager:
         results = asyncio.run(manager.adelegate(tasks))
 
         assert len(results) == 1
-        assert results[0].success is True  # IsolationResult is success, but output has error
+        assert results[0].success is False
+        assert results[0].error == "No task handler configured"
+        assert results[0].output == {}
 
 
 # ---------------------------------------------------------------------------
@@ -1607,22 +1608,55 @@ class TestSubAgentManagerAdelegate:
         assert results[0].task_id == "t1"
         assert results[0].success is True
 
-    def test_adelegate_handler_failure(self) -> None:
+    @pytest.mark.parametrize("error_type", [ValueError, TypeError])
+    def test_adelegate_handler_failure(self, error_type: type[Exception]) -> None:
         import asyncio
 
         from core.orchestration.isolated_execution import IsolatedRunner
 
         runner = IsolatedRunner()
 
-        def handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
-            raise ValueError("task handler failed")
+        calls = 0
+
+        def handler(task_type: str, args: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+            nonlocal calls
+            calls += 1
+            raise error_type("task handler failed")
 
         manager = SubAgentManager(runner, task_handler=handler, timeout_s=10)
         tasks = [SubTask("t1", "Failing task", "analyze", {})]
         results = asyncio.run(manager.adelegate(tasks))
 
         assert len(results) == 1
-        assert results[0].output.get("error") is not None
+        assert calls == 1
+        assert results[0].success is False
+        assert results[0].error == "task handler failed"
+        assert results[0].output == {}
+
+    @pytest.mark.parametrize("invalid_signature", [False, True])
+    def test_adelegate_rejects_unbindable_handler_before_execution(
+        self, monkeypatch: pytest.MonkeyPatch, invalid_signature: bool
+    ) -> None:
+        calls = 0
+
+        def handler(task_type: str) -> dict[str, Any]:
+            nonlocal calls
+            calls += 1
+            return {"ok": True}
+
+        def uninspectable_handler(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            return handler(str(args[0]))
+
+        monkeypatch.setattr(uninspectable_handler, "__signature__", "unavailable", raising=False)
+        manager = SubAgentManager(
+            IsolatedRunner(),
+            task_handler=uninspectable_handler if invalid_signature else handler,
+            timeout_s=10,
+        )
+        results = asyncio.run(manager.adelegate([SubTask("t1", "Rejected", "analyze", {})]))
+        assert calls == 0
+        assert results[0].success is False
+        assert results[0].error
 
     def test_adelegate_fans_out_in_parallel(self) -> None:
         """Async fan-out must launch tasks concurrently via gather.
@@ -1723,6 +1757,7 @@ class TestSubAgentOrchestration:
 
         hooks.register(HookEvent.SUBAGENT_STARTED, collector, name="test_enter")
         hooks.register(HookEvent.SUBAGENT_FAILED, collector, name="test_error")
+        hooks.register(HookEvent.SUBAGENT_COMPLETED, collector, name="test_complete")
 
         def failing_handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
             raise RuntimeError("boom")
@@ -1733,10 +1768,14 @@ class TestSubAgentOrchestration:
         results = asyncio.run(manager.adelegate(tasks))
 
         assert len(results) == 1
-        # Error is caught by _execute_subtask → returned as dict → IsolationResult is success
-        # The output contains {"error": "boom"}
+        assert results[0].success is False
+        assert results[0].error == "boom"
         enter_events = [e for e in events_log if e[0] == HookEvent.SUBAGENT_STARTED]
         assert len(enter_events) == 1
+        failed_events = [e for e in events_log if e[0] == HookEvent.SUBAGENT_FAILED]
+        assert len(failed_events) == 1
+        assert failed_events[0][1]["task_id"] == "t1"
+        assert not any(e[0] == HookEvent.SUBAGENT_COMPLETED for e in events_log)
 
     def test_no_hooks_no_error(self, handler: Any) -> None:
         """Verify delegate works without hooks (hooks=None)."""
@@ -2233,20 +2272,33 @@ class TestSubAgentSessionIsolation:
         key = build_subagent_session_key("demo", "t1")
         assert key == "subject:demo:pipeline:subagent:t1"
 
-    def test_subagent_context_threadlocal(self) -> None:
+    @pytest.mark.parametrize("fails", [False, True])
+    def test_subagent_context_threadlocal(self, fails: bool) -> None:
         """Verify thread-local context is set during handler execution and cleared after."""
+        from concurrent.futures import ThreadPoolExecutor
+
         from core.agent.sub_agent import SubAgentManager, SubTask, get_subagent_context
 
         captured: list[tuple[bool, str]] = []
 
         def handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
             captured.append(get_subagent_context())
+            if fails:
+                raise ValueError("fixture failure")
             return {"ok": True}
 
         runner = IsolatedRunner()
         manager = SubAgentManager(runner, handler, timeout_s=10)
-        tasks = [SubTask("t1", "Test task", "analyze", {"subject_id": "demo"})]
-        asyncio.run(manager.adelegate(tasks))
+        task = SubTask("t1", "Test task", "analyze", {"subject_id": "demo"})
+        # Reuse the worker thread: checking only the parent misses leaked worker state.
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(manager._execute_subtask, task)
+            if fails:
+                with pytest.raises(ValueError, match="fixture failure"):
+                    future.result()
+            else:
+                future.result()
+            assert pool.submit(get_subagent_context).result() == (False, "")
 
         # Handler should have received (True, child_key)
         assert len(captured) == 1

@@ -51,6 +51,16 @@ Offload retention remains TTL-based: recall rejects and removes an expired file;
 the store also exposes explicit expired-file cleanup. This is not a periodic
 disk sweeper or a new per-user authorization boundary.
 
+Automatic LLM learning extraction and dreaming consume `TURN_COMPLETED` only
+when the existing termination classifier admits a deliverable outcome:
+`natural`, `forced_text`, or `actionable_partial`. Other, missing, and unknown
+reasons return before extraction cursors, quotas, or model calls. This is not a
+verifier-pass gate: a rejected candidate can still teach a useful lesson.
+Explicit `DreamingService.dream_session()` remains available for deliberate
+analysis of failed evidence. The producer-to-consumer contract is tested in
+[learning extraction](../../tests/core/hooks/test_extract_learning_models_adapter.py)
+and [explicit dreaming](../../tests/core/memory/test_context_artifacts_dreaming.py).
+
 ## Public hooks
 
 `HookRegistry` accepts only these `HookName` values. It has no wildcard

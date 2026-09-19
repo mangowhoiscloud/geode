@@ -1081,6 +1081,8 @@ GEODE의 기억은 다섯 계층으로 나뉩니다. 위로 갈수록 안정적�
 
 ## 기억 수명주기: 증거 기반 소멸
 
+Unreleased: 턴 종료 후 자동 LLM 학습·dreaming은 전달 가능한 종료 (`natural`, `forced_text`, `actionable_partial`)에만 실행됩니다. 취소·인프라 오류·알 수 없는 종료에서는 추가 호출을 하지 않습니다. 검증 실패를 학습에서 제외하는 규칙은 아닙니다. 실패 증거를 분석하는 명시적`dream_session()` 호출도 유지됩니다.
+
 프로젝트 기억은 증거를 기준으로 정리됩니다. `geode memory-lifecycle`(`core/cli/commands/memory_lifecycle.py`)는 두 가지를 합니다. (1) 소멸 — `resolution.guard_test`가 아직 트리에 존재하는 항목은 `.geode/memory/_archive/`로 아카이빙하고(주입에서 제외), 가드 테스트가 사라진 항목은 다시 떠오릅니다(WARNING). 시간 기반 소멸은 없습니다. (2) 승격 제안 — dreaming이 남긴 `context_artifacts`(`dream`)와 활성 항목을 클러스터링해, 서로 다른 세션 3개 이상에 걸친 클러스터를 `.geode/memory/_proposals/` 아래 HITL 제안 파일로 씁니다. 규칙은 블라스트 반경이 크므로 절대 자동 기록하지 않습니다. 기본은 dry-run이고, `--apply`가 파일을 옮기고 제안을 쓰며 `MEMORY_PROMOTION_PROPOSED` 훅을 발화합니다.
 
 ## sessions.jsonl: 런 메트릭
@@ -1185,16 +1187,33 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/tools/protocol.md
 
 ## Deferred loading
 
-모든 도구 스키마를 모든 호출에 실으면 턴마다 input 토큰을 크게 태웁니다. 프로바이더 어댑터가 `core/llm/tool_defer.py`의 공통 정책을 읽고, 공식 `defer_loading` 필드와 호스티드 tool\_search 도구로 카탈로그를 나눕니다.
+도구 검색은 레지스트리를 대체하지 않습니다. 실행 가능한 도구를 권한 정책으로 걸러 `ToolPlan`에 고정한 뒤, 어댑터가 해당 요청의 지연 로딩 대상과 모델·API 지원 조건을 확인합니다. 지원 경로에서는 전체 정의를 서버에 보내되 모델의 초기 컨텍스트에는 일부만 싣습니다. 정의를 네트워크 요청에서 생략한다는 뜻은 아닙니다.
 
 | 조건 | 동작 |
 | --- | --- |
 | 도구 수가 `TOOL_DEFER_THRESHOLD`(16) 이하 | 전부 즉시 로드 |
-| 임계값 초과 | 호스티드 `tool_search`를 추가하고, core set만 즉시 싣고, 나머지는 `defer_loading=True`로 표시해 검색 후 로드 |
+| 임계값 초과 + 지원 모델·API + 설정 활성화 | 검색 도구를 추가하고 정책상 지연 가능한 도구만 검색 후 로드; core set과 네이티브 도구는 즉시 로드 |
+| 미지원 경로 또는 검색 비활성화 | 동일한 허용 도구 집합을 즉시 로드. 검색 실패를 이유로 권한 범위를 넓히지 않음 |
 
-즉시 로드 core set은 `TOOL_SEARCH_ALWAYS_LOADED`입니다. 기억, 노트, 파일 읽기, 웹 탐색, 상태 확인처럼 검색 왕복을 치르면 손해인 고빈도 도구가 여기에 남고, 나머지는 에이전트가 `tool_search`로 찾아 그때 가져옵니다.
+즉시 로드 core set은 `TOOL_SEARCH_ALWAYS_LOADED`입니다. 기억, 노트, 파일 읽기, 웹 탐색, 상태 확인처럼 검색 왕복을 치르면 손해인 고빈도 도구가 여기에 남습니다. 이 정책은 도구 계획을 만들 때 적용하며, 어댑터가 별도 목록으로 다시 선택하지 않습니다.
 
 따라서 도구가 deferred loading 뒤로 밀렸다는 말은 모든 도구가 보이지 않는다는 뜻이 아닙니다. `read_document`, `grep_files`처럼 핵심 읽기 도구는 항상 적재됩니다. 이런 도구가 반복 호출된다면 모델이 더 많은 근거 파일을 읽겠다고 판단했을 가능성이 큽니다.
+
+### 프로바이더별 경계
+
+2026-09-20 공식 계약 점검 기준입니다. 아래 Anthropic 경계·이력 보강은 Unreleased 변경이며 실제 계정 호출은 별도 검증입니다.
+
+| GEODE 경로 | 도구 노출 방식 |
+| --- | --- |
+| Anthropic Messages | 공식 endpoint와 검증된 모델 집합에서 regex 검색. 구형·미확인 모델과 호환 프록시는 즉시 로드. cache breakpoint가 붙은 도구는 지연하지 않음. |
+| OpenAI Responses | 모델 capability gate 뒤 호스티드 검색. 검색 호출·결과와 발견된 function call의 순서를 다음 요청에 보존. |
+| Codex 구독 Responses | 기존 검증된 경로와 별도 `tool_search_defer_codex` 설정 유지. OpenAI API 문서만으로 계정 접근 가능성을 단정하지 않음. |
+| OpenRouter Chat Completions | 즉시 로드. OpenRouter 자체의 검색 beta는 Responses·Messages 전용이므로 현재 경로에는 보내지 않음. |
+| GLM 직접 / Coding Plan | 즉시 로드. 함수 호출·MCP discovery 지원을 native schema 검색 지원으로 간주하지 않음. |
+
+Anthropic의 `server_tool_use`와 검색 결과는 assistant 이력으로 보존하며 로컬 실행기에 넘기지 않습니다. 실제로 발견된`tool_use`에만 실행 결과를 반환합니다. 스킬은 별도로 짧은 metadata를 먼저 보여주고 `use_skill`로 지침 본문을 읽습니다. [스킬 카탈로그](https://mangowhoiscloud.github.io/geode/docs/runtime/skills.md)는 함수 스키마 검색과 다른 책임입니다.
+
+근거: [OpenAI tool search](https://developers.openai.com/api/docs/guides/tools-tool-search), [Anthropic tool search](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool), [OpenRouter tool search](https://openrouter.ai/docs/guides/features/server-tools/tool-search), [Claude Code endpoint 정책](https://code.claude.com/docs/en/mcp#configure-tool-search).
 
 ## 툴킷: 서브에이전트 도구 번들
 
@@ -6180,6 +6199,8 @@ static prefix           턴 사이 불변, 캐시 적중
 
 `GEODE_AUDIT_UNRESTRICTED=1`이면 G1, 메모리와 사용자 컨텍스트를 생략합니다. wrapper 또는 generic 베이스, 수식 출력 규칙과 `AGENTIC_SUFFIX`는 유지합니다. 동적 영역에는 모델 인자가 있으면 model\_card, 프로바이더 정책에 따라 날짜, 호출자의 system\_suffix가 들어갑니다. 근거는 측정 결과입니다. Petri의 auditor는 시나리오의 정체성을 끝까지 통제해야 하는데, GEODE 프리앰블이 트랜스크립트를 오염시켰습니다. 플래그는 `geode-eval audit`의`--unrestricted`가 inspect 서브프로세스 앞에서 설정합니다.
 
+Unreleased: 위임 worker에도 `GEODE_PERSONA`와 호출 시점의 실제 audit 상태가 전달됩니다. 프로세스 환경값보다 우선한 요청별 audit 설정도 유지하며, 명시적 에이전트 override의 조립 경로는 바꾸지 않습니다.
+
 ## wrapper override: 변이된 스캐폴드 주입
 
 자기개선 루프가 진화시키는 것이 바로 이 static 영역의 wrapper 스캐폴드입니다. 런타임 조립부는 `core/config/runtime_policy_sources.py`의 정책 후보를 빌더에 전달합니다. 기본 후보의 해석은 다음과 같습니다.
@@ -6196,6 +6217,8 @@ audit-mode에서도 override가 시스템 프롬프트의 베이스가 됩니다
 ## program.md 계약: mutator의 프롬프트
 
 변이를 제안하는 mutator 에이전트의 시스템 프롬프트는 패키지와 함께 출하되는 `evolve/scaffold_search/program.md`입니다. 러너 (`evolve/scaffold_search/loop/mutate/runner.py`)가 매 호출 디스크에서 읽고, 단일 변이로 범위를 좁히는 계약을 뒤에 붙입니다. 파일을 못 읽으면 크게 실패합니다. 교체가 필요하면 훅 핸들러가 `program_md` 본문을 공급하는 단일 제어 지점을 씁니다.
+
+Unreleased: 응답 파싱과 직접 `apply_mutation()` 호출은 같은 활성 종류 목록을 검사합니다. 폐기된 `retrieval`, 읽기 전용 종류와 알 수 없는 종류는 정책을 읽거나 쓰기 전에 거절합니다. 과거 증거 읽기와 rollback 경로는 별개로 유지합니다.
 
 ## 실패 모드
 
@@ -7098,7 +7121,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1566 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1567 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -7259,7 +7282,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 581 |
-| 테스트 Python 파일 | 718 |
+| 테스트 Python 파일 | 719 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |

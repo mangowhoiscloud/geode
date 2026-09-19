@@ -609,8 +609,8 @@ _ANTHROPIC_NATIVE_TOOLS: list[dict[str, Any]] = [
 # tool_reference blocks server-side, preserving the prompt-cache prefix.
 # ref: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool
 #   - ``defer_loading`` is an official tool-definition field
-#   - model support: Opus 4.0+ / Sonnet 4.0+ / Haiku 4.5+ / Fable 5
-#     (covers every model GEODE routes to this adapter)
+#   - model/endpoint admission belongs to the adapter; the supported model
+#     set lives in core.llm.model_capabilities
 #   - constraints: at least one tool must stay non-deferred; the search
 #     tool itself must never carry defer_loading
 _TOOL_SEARCH_TOOL: dict[str, Any] = {
@@ -652,7 +652,13 @@ def apply_tool_search_defer(
     shaped: list[dict[str, Any]] = []
     deferred_count = 0
     for tool in api_tools:
-        if tool.get("type") or tool.get("name", "") not in deferred_tool_names:
+        if (
+            tool.get("type")
+            or "cache_control" in tool
+            or tool.get("name", "") not in deferred_tool_names
+        ):
+            # A deferred definition with cache_control is an API 400. Keep
+            # that breakpoint's tool eager without moving or dropping it.
             shaped.append(tool)
             continue
         deferred_tool = dict(tool)

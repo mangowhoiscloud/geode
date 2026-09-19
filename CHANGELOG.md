@@ -49,6 +49,24 @@ functional change.
 
 ### Fixed
 
+- Gate Anthropic hosted tool search on documented model support and the actual
+  official endpoint; keep cache-marked tools eager. Preserve native discovery
+  history through subsequent requests and session persistence without treating
+  server-side search as a local tool call. OpenRouter and GLM Chat Completions
+  retain their existing eager, permission-filtered tool surface.
+- Preserve sub-agent handler failures as failed results and lifecycle events;
+  bind callback signatures before invocation so an internal `TypeError` never
+  repeats work. Reject unsupported worker workspace isolation before execution,
+  and carry effective audit/persona settings across worker process boundaries.
+- Limit automatic LLM learning and dreaming to deliverable turn terminations
+  without suppressing learning from verifier-rejected candidates or explicit
+  session dreaming. Keep skill-catalog overrides on the shared XML renderer so
+  triggers, usage guidance, escaping, and truncation remain consistent.
+- Validate GLM Coding Plan subscription/provider/account identity before client
+  creation. Escape persisted model settings, atomically update the exact TOML
+  budget key across commented section boundaries, and reject retired or
+  reader-only scaffold mutation kinds before policy I/O.
+
 - Normalize JSON-string candidate-judge tool inputs across OpenAI and Anthropic
   routes, reject non-finite cognitive confidence during reflection and restore,
   and isolate final-verifier output schemas from task-specific output contracts.

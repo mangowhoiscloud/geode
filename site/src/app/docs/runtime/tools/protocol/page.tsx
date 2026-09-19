@@ -8,8 +8,8 @@ export default function Page() {
       slug="runtime/tools/protocol"
       title="Tools and toolsets"
       titleKo="도구와 툴셋"
-      summary="The tool registry and deferred loading. A few tools load up front, the rest are fetched on demand."
-      summaryKo="도구 레지스트리와 deferred loading입니다. 일부 도구는 미리 로드하고, 나머지는 필요할 때 가져옵니다."
+      summary="Tool ownership, provider-aware discovery, and execution permissions."
+      summaryKo="도구의 소유자, 프로바이더별 검색 지원, 실행 권한을 구분합니다."
     >
       <Bi
         ko={
@@ -33,10 +33,11 @@ export default function Page() {
 
             <h2>Deferred loading</h2>
             <p>
-              모든 도구 스키마를 모든 호출에 실으면 턴마다 input 토큰을 크게
-              태웁니다. 프로바이더 어댑터가 <code>core/llm/tool_defer.py</code>의
-              공통 정책을 읽고, 공식 <code>defer_loading</code> 필드와 호스티드
-              tool_search 도구로 카탈로그를 나눕니다.
+              도구 검색은 레지스트리를 대체하지 않습니다. 실행 가능한 도구를
+              권한 정책으로 걸러 <code>ToolPlan</code>에 고정한 뒤, 어댑터가
+              해당 요청의 지연 로딩 대상과 모델·API 지원 조건을 확인합니다.
+              지원 경로에서는 전체 정의를 서버에 보내되 모델의 초기 컨텍스트에는
+              일부만 싣습니다. 정의를 네트워크 요청에서 생략한다는 뜻은 아닙니다.
             </p>
             <table>
               <thead>
@@ -48,16 +49,20 @@ export default function Page() {
                   <td>전부 즉시 로드</td>
                 </tr>
                 <tr>
-                  <td>임계값 초과</td>
-                  <td>호스티드 <code>tool_search</code>를 추가하고, core set만 즉시 싣고, 나머지는 <code>defer_loading=True</code>로 표시해 검색 후 로드</td>
+                  <td>임계값 초과 + 지원 모델·API + 설정 활성화</td>
+                  <td>검색 도구를 추가하고 정책상 지연 가능한 도구만 검색 후 로드; core set과 네이티브 도구는 즉시 로드</td>
+                </tr>
+                <tr>
+                  <td>미지원 경로 또는 검색 비활성화</td>
+                  <td>동일한 허용 도구 집합을 즉시 로드. 검색 실패를 이유로 권한 범위를 넓히지 않음</td>
                 </tr>
               </tbody>
             </table>
             <p>
               즉시 로드 core set은 <code>TOOL_SEARCH_ALWAYS_LOADED</code>입니다.
               기억, 노트, 파일 읽기, 웹 탐색, 상태 확인처럼 검색 왕복을 치르면
-              손해인 고빈도 도구가 여기에 남고, 나머지는 에이전트가{" "}
-              <code>tool_search</code>로 찾아 그때 가져옵니다.
+              손해인 고빈도 도구가 여기에 남습니다. 이 정책은 도구 계획을
+              만들 때 적용하며, 어댑터가 별도 목록으로 다시 선택하지 않습니다.
             </p>
             <p>
               따라서 도구가 deferred loading 뒤로 밀렸다는 말은 모든 도구가 보이지
@@ -65,6 +70,33 @@ export default function Page() {
               <code>grep_files</code>처럼 핵심 읽기 도구는 항상 적재됩니다.
               이런 도구가 반복 호출된다면 모델이 더 많은 근거 파일을 읽겠다고
               판단했을 가능성이 큽니다.
+            </p>
+
+            <h3>프로바이더별 경계</h3>
+            <p>2026-09-20 공식 계약 점검 기준입니다. 아래 Anthropic 경계·이력 보강은 Unreleased 변경이며 실제 계정 호출은 별도 검증입니다.</p>
+            <table>
+              <thead><tr><th>GEODE 경로</th><th>도구 노출 방식</th></tr></thead>
+              <tbody>
+                <tr><td>Anthropic Messages</td><td>공식 endpoint와 검증된 모델 집합에서 regex 검색. 구형·미확인 모델과 호환 프록시는 즉시 로드. cache breakpoint가 붙은 도구는 지연하지 않음.</td></tr>
+                <tr><td>OpenAI Responses</td><td>모델 capability gate 뒤 호스티드 검색. 검색 호출·결과와 발견된 function call의 순서를 다음 요청에 보존.</td></tr>
+                <tr><td>Codex 구독 Responses</td><td>기존 검증된 경로와 별도 <code>tool_search_defer_codex</code> 설정 유지. OpenAI API 문서만으로 계정 접근 가능성을 단정하지 않음.</td></tr>
+                <tr><td>OpenRouter Chat Completions</td><td>즉시 로드. OpenRouter 자체의 검색 beta는 Responses·Messages 전용이므로 현재 경로에는 보내지 않음.</td></tr>
+                <tr><td>GLM 직접 / Coding Plan</td><td>즉시 로드. 함수 호출·MCP discovery 지원을 native schema 검색 지원으로 간주하지 않음.</td></tr>
+              </tbody>
+            </table>
+            <p>
+              Anthropic의 <code>server_tool_use</code>와 검색 결과는 assistant
+              이력으로 보존하며 로컬 실행기에 넘기지 않습니다. 실제로 발견된
+              <code>tool_use</code>에만 실행 결과를 반환합니다. 스킬은 별도로
+              짧은 metadata를 먼저 보여주고 <code>use_skill</code>로 지침 본문을
+              읽습니다. <a href="/geode/docs/runtime/skills">스킬 카탈로그</a>는
+              함수 스키마 검색과 다른 책임입니다.
+            </p>
+            <p>
+              근거: <a href="https://developers.openai.com/api/docs/guides/tools-tool-search">OpenAI tool search</a>,{" "}
+              <a href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool">Anthropic tool search</a>,{" "}
+              <a href="https://openrouter.ai/docs/guides/features/server-tools/tool-search">OpenRouter tool search</a>,{" "}
+              <a href="https://code.claude.com/docs/en/mcp#configure-tool-search">Claude Code endpoint 정책</a>.
             </p>
 
             <h2>툴킷: 서브에이전트 도구 번들</h2>
@@ -176,11 +208,12 @@ export default function Page() {
 
             <h2>Deferred loading</h2>
             <p>
-              Shipping every tool schema on every call burns a large chunk of
-              input tokens per turn. Provider adapters read the shared policy in{" "}
-              <code>core/llm/tool_defer.py</code> and split the catalog with the
-              official <code>defer_loading</code> field plus the hosted
-              tool_search tool.
+              Tool search does not replace the registry. Permissions filter the
+              executable set before <code>ToolPlan</code> freezes its definitions
+              and deferred membership. The adapter then checks model and API
+              support. Supported hosted-search paths still send the complete
+              definitions to the server; only initial model-context loading is
+              deferred, not transmission of the definitions.
             </p>
             <table>
               <thead>
@@ -192,23 +225,54 @@ export default function Page() {
                   <td>Everything loads eagerly</td>
                 </tr>
                 <tr>
-                  <td>Above the threshold</td>
-                  <td>Adds hosted <code>tool_search</code>, keeps the core set eager, and marks the rest <code>defer_loading=True</code> to be loaded after a search</td>
+                  <td>Above threshold + supported model/API + enabled setting</td>
+                  <td>Add search and defer only eligible definitions; core and native tools stay eager</td>
+                </tr>
+                <tr>
+                  <td>Unsupported route or disabled search</td>
+                  <td>Load the same authorized set eagerly. A search failure never widens permissions</td>
                 </tr>
               </tbody>
             </table>
             <p>
               The eager core set is <code>TOOL_SEARCH_ALWAYS_LOADED</code>:
               high-frequency memory, note, file-read, web, and status tools
-              where paying a search round-trip would be wasteful. The agent
-              discovers everything else through <code>tool_search</code> and
-              loads it on demand.
+              where paying a search round-trip would be wasteful. Composition
+              applies this policy once; adapters consume the request snapshot
+              rather than selecting from a second registry.
             </p>
             <p>
               Deferred does not mean invisible across the board. Core read tools
               such as <code>read_document</code> and <code>grep_files</code> stay
               eager. Repeated calls to those tools usually mean the model chose
               to gather more evidence, not that the tool cap hid a better tool.
+            </p>
+
+            <h3>Provider boundaries</h3>
+            <p>Official contracts checked 2026-09-20. The Anthropic admission and replay corrections below are Unreleased; account-level acceptance requires a separate live check.</p>
+            <table>
+              <thead><tr><th>GEODE route</th><th>Discovery behavior</th></tr></thead>
+              <tbody>
+                <tr><td>Anthropic Messages</td><td>Regex search on the official endpoint and verified model set. Older/unknown models and compatible proxies stay eager, as do tools carrying cache breakpoints.</td></tr>
+                <tr><td>OpenAI Responses</td><td>Hosted search behind the model capability gate. Search calls, results, and discovered function calls replay in order.</td></tr>
+                <tr><td>Codex subscription Responses</td><td>Retains the previously verified path and separate <code>tool_search_defer_codex</code> switch. Platform documentation alone does not establish account access.</td></tr>
+                <tr><td>OpenRouter Chat Completions</td><td>Eager. OpenRouter offers search in beta on Responses and Messages, not on the endpoint GEODE currently uses.</td></tr>
+                <tr><td>GLM direct / Coding Plan</td><td>Eager. Function calling and MCP discovery do not establish native deferred-schema search support.</td></tr>
+              </tbody>
+            </table>
+            <p>
+              Anthropic <code>server_tool_use</code> and search results remain
+              assistant history, not local executor requests. Only discovered
+              <code>tool_use</code> calls receive application results. Skills
+              separately expose short metadata and load instructions through
+              <code>use_skill</code>; the <a href="/geode/docs/runtime/skills">skill catalog</a>{" "}
+              is not a function-schema search service.
+            </p>
+            <p>
+              Sources: <a href="https://developers.openai.com/api/docs/guides/tools-tool-search">OpenAI tool search</a>,{" "}
+              <a href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool">Anthropic tool search</a>,{" "}
+              <a href="https://openrouter.ai/docs/guides/features/server-tools/tool-search">OpenRouter tool search</a>,{" "}
+              <a href="https://code.claude.com/docs/en/mcp#configure-tool-search">Claude Code endpoint policy</a>.
             </p>
 
             <h2>Toolkits: sub-agent tool bundles</h2>

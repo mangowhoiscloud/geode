@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import AsyncMock
 
 from core.memory.context import ContextAssembler
 from core.memory.dreaming import DREAM_ARTIFACT_KIND, DreamingService
@@ -53,6 +54,25 @@ def test_dreaming_writes_fallback_artifact(tmp_path):
         artifacts = mgr.list_context_artifacts(session_id="s1", kinds=(DREAM_ARTIFACT_KIND,))
         assert len(artifacts) == 1
         assert "Durable Facts" in artifacts[0].content
+    finally:
+        mgr.close()
+
+
+def test_explicit_dreaming_keeps_llm_synthesis_available(tmp_path, monkeypatch):
+    mgr = SessionManager(tmp_path / "sessions.db")
+    try:
+        mgr.upsert_messages(
+            "s1", [{"role": "user", "content": "Preserve failed-task lessons.", "seq": 0}]
+        )
+        service = DreamingService(session_manager=mgr)
+        synthesize = AsyncMock(return_value="## Durable Facts\n- Zero quantities are valid.")
+        monkeypatch.setattr(service, "_call_dream_llm", synthesize)
+        result = asyncio.run(service.dream_session("s1", model="test-model"))
+        synthesize.assert_awaited_once()
+        assert result.did_dream is True
+        artifacts = mgr.list_context_artifacts(session_id="s1", kinds=(DREAM_ARTIFACT_KIND,))
+        assert len(artifacts) == 1
+        assert artifacts[0].content == result.content == synthesize.return_value
     finally:
         mgr.close()
 
