@@ -55,11 +55,12 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
-from core.agent.cognitive_state import CognitiveState
+from core.agent.cognitive_state import CognitiveState, bounded_confidence
 from core.config import _resolve_provider
 from core.llm.adapters import resolve_for
 from core.llm.adapters.base import AdapterCallRequest, Message, ToolSpec
 from core.llm.adapters.registry import normalize_registry_provider
+from core.llm.agentic_response import parse_tool_input
 from core.llm.router import call_with_failover
 
 log = logging.getLogger(__name__)
@@ -189,7 +190,7 @@ def _extract_reflection_input(result: Any) -> dict[str, Any] | None:
     if isinstance(tool_uses, tuple | list):
         for entry in tool_uses:
             if isinstance(entry, dict) and entry.get("name") == REFLECTION_TOOL_NAME:
-                payload = _coerce_reflection_payload(entry.get("input"))
+                payload = parse_tool_input(entry.get("input"))
                 if payload is not None:
                     return payload
     # Legacy shape: ``AgenticResponse.content: list[ToolUseBlock]``.
@@ -197,25 +198,9 @@ def _extract_reflection_input(result: Any) -> dict[str, Any] | None:
         if getattr(block, "type", None) == "tool_use" and getattr(block, "name", "") == (
             REFLECTION_TOOL_NAME
         ):
-            payload = _coerce_reflection_payload(getattr(block, "input", None))
+            payload = parse_tool_input(getattr(block, "input", None))
             if payload is not None:
                 return payload
-    return None
-
-
-def _coerce_reflection_payload(payload: Any) -> dict[str, Any] | None:
-    """Normalize a tool_use ``input`` to a dict (parses raw JSON strings)."""
-    if isinstance(payload, dict):
-        return payload
-    if isinstance(payload, str) and payload.strip():
-        import json
-
-        try:
-            parsed = json.loads(payload)
-        except json.JSONDecodeError:
-            return None
-        if isinstance(parsed, dict):
-            return parsed
     return None
 
 
@@ -239,13 +224,9 @@ def _apply_reflection(state: CognitiveState, parsed: dict[str, Any]) -> None:
                     cleaned.append(head[:120])
         state.hypotheses = cleaned
 
-    confidence_raw = parsed.get("confidence")
-    # ``bool`` is an ``int`` subclass — exclude explicitly so
-    # ``True``/``False`` doesn't collapse to ``1.0``/``0.0`` and
-    # mute a real confidence signal (Codex MCP review of PR-5
-    # caught the same anti-pattern in the mutator schema).
-    if isinstance(confidence_raw, int | float) and not isinstance(confidence_raw, bool):
-        state.confidence = max(0.0, min(1.0, float(confidence_raw)))
+    confidence = bounded_confidence(parsed.get("confidence"))
+    if confidence is not None:
+        state.confidence = confidence
 
     hint_raw = parsed.get("next_action_hint")
     if isinstance(hint_raw, str):

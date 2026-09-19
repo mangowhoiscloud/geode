@@ -141,6 +141,14 @@ def test_apply_reflection_clamps_confidence() -> None:
     assert state.confidence == 0.0
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_nonfinite_confidence_stays_unknown(value: float) -> None:
+    assert CognitiveState.from_snapshot({"confidence": value}).confidence is None
+    state = CognitiveState(confidence=0.4)
+    _reflection._apply_reflection(state, {"confidence": value})
+    assert state.confidence == 0.4
+
+
 def test_apply_reflection_rejects_bool_confidence() -> None:
     """``bool`` is an ``int`` subclass — must be excluded so the LLM
     can't accidentally collapse confidence to 0/1 by returning

@@ -49,6 +49,10 @@ functional change.
 
 ### Fixed
 
+- Normalize JSON-string candidate-judge tool inputs across OpenAI and Anthropic
+  routes, reject non-finite cognitive confidence during reflection and restore,
+  and isolate final-verifier output schemas from task-specific output contracts.
+
 - Close static-analysis gaps across production Python, repository scripts,
   automation, and the public site. Enforce explicit production signatures,
   zero-warning site lint, workflow/shell checks, and macOS helper type checks;

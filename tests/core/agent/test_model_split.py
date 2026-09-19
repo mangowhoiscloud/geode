@@ -153,14 +153,16 @@ def test_call_llm_signature_accepts_model_override() -> None:
 
 @pytest.mark.parametrize("effort", ["low", "max"])
 @pytest.mark.parametrize("wrap_up", ["none", "rounds", "time"])
-@pytest.mark.parametrize("judge", [False, True])
+@pytest.mark.parametrize("judge", [None, VerifyMode.LLM_JUDGE, VerifyMode.REFLEXION])
 def test_call_llm_disables_action_tools_for_auxiliary_calls(
-    monkeypatch: pytest.MonkeyPatch, effort: str, wrap_up: str, judge: bool
+    monkeypatch: pytest.MonkeyPatch, effort: str, wrap_up: str, judge: VerifyMode | None
 ) -> None:
     """Planner and judge calls can request text-only execution without
     inheriting the main agent's tool surface."""
     import asyncio
+    import json
     import time
+    from copy import deepcopy
     from dataclasses import replace
 
     from core.agent.conversation import ConversationContext
@@ -183,8 +185,15 @@ def test_call_llm_disables_action_tools_for_auxiliary_calls(
 
         async def acomplete(self, request: Any) -> AdapterCallResult:
             captured["request"] = request
+            payload = {"passed": True, "score": 1, "reason": "ok"}
+            if judge is VerifyMode.REFLEXION:
+                payload["reflection"] = {
+                    "observation": "The requested artifact was checked.",
+                    "lesson": "Keep the verified contents.",
+                    "next_check": "Read the saved artifact if it changes.",
+                }
             return AdapterCallResult(
-                text='{"passed": true, "score": 1, "reason": "ok"}',
+                text=json.dumps(payload),
                 usage=UsageSummary(),
                 stop_reason="completed",
             )
@@ -224,11 +233,13 @@ def test_call_llm_disables_action_tools_for_auxiliary_calls(
     loop._new_adapter = CaptureAdapter()
     loop._loop_start_time = time.monotonic() - 50
     loop._verify_root_user_input = "Complete the requested task"
+    task_schema = {"type": "object", "properties": {"task_answer": {"type": "string"}}}
+    loop._response_schema = deepcopy(task_schema)
 
     if judge:
         from core.agent.verify import _verify_llm_judge_async
 
-        verdict = asyncio.run(_verify_llm_judge_async(_make_result(), loop=loop))
+        verdict = asyncio.run(_verify_llm_judge_async(_make_result(), loop=loop, mode=judge))
         assert verdict.passed is True
     else:
         asyncio.run(
@@ -240,6 +251,22 @@ def test_call_llm_disables_action_tools_for_auxiliary_calls(
         )
 
     request = captured["request"]
+    if judge:
+        from jsonschema import Draft202012Validator
+
+        fields = {"passed", "score", "reason"}
+        if judge is VerifyMode.REFLEXION:
+            fields.add("reflection")
+            feedback = request.response_schema["properties"]["reflection"]
+            assert feedback["required"] == ["observation", "lesson", "next_check"]
+            assert feedback["additionalProperties"] is False
+        assert set(request.response_schema["properties"]) == fields
+        assert set(request.response_schema["required"]) == fields
+        assert request.response_schema["additionalProperties"] is False
+        Draft202012Validator.check_schema(request.response_schema)
+    else:
+        assert request.response_schema == task_schema
+    assert loop._response_schema == task_schema
     assert not request.tools
     assert request.tool_choice == {"type": "none"}
     assert request.allowed_tool_names == frozenset({"read_file"})
@@ -267,6 +294,7 @@ def test_verify_llm_judge_calls_loop_call_llm(monkeypatch: pytest.MonkeyPatch) -
         messages: list,
         *,
         model: str | None = None,
+        response_schema: dict[str, Any] | None = None,
         allow_tools: bool = True,
         purpose: str = "agentic_loop",
     ) -> SimpleNamespace:
@@ -274,6 +302,7 @@ def test_verify_llm_judge_calls_loop_call_llm(monkeypatch: pytest.MonkeyPatch) -
         captured["system"] = system
         captured["allow_tools"] = allow_tools
         captured["purpose"] = purpose
+        captured["response_schema"] = response_schema
         return SimpleNamespace(text='{"passed": true, "score": 0.92, "reason": "ok"}')
 
     loop = SimpleNamespace(

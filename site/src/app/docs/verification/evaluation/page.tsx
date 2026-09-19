@@ -78,6 +78,12 @@ function EvaluationGuide({ ko }: { ko: boolean }) {
           ? "잘못된 JSON, 필드 타입, 점수와 judge 호출 실패는 verification_error로 기록합니다. passed=false, score=0, should_retry=false이며, rule_based 성공으로 대체하지 않습니다. 이 0은 검토 오류를 나타내는 내부 값이지 벤치마크 reward가 아닙니다."
           : "Malformed JSON, invalid fields or scores, and unavailable judge calls produce verification_error: passed=false, score=0, should_retry=false. Neither LLM mode falls back to structural success. This zero describes an internal verification error, not benchmark reward."}
       </p>
+      <p>{ko
+        ? "최종 judge는 작업 결과의 출력 스키마를 물려받지 않습니다. llm_judge는 passed / score / reason을, reflexion은 여기에 observation / lesson / next_check를 담은 reflection을 요구합니다. CognitiveState의 confidence는 별도의 작업 진행 판단이며 verifier 점수가 아닙니다. NaN과 무한대는 신뢰도로 받아들이지 않고, 복원 시에는 미상으로 두며 갱신 시에는 이전 값을 유지합니다."
+        : "Final judges own their output schema instead of inheriting the task's schema. llm_judge requires passed / score / reason; reflexion also requires reflection with observation / lesson / next_check. CognitiveState confidence is a separate progress belief, not a verifier score. NaN and infinity are rejected: restore leaves confidence unknown, and updates retain the previous value."}</p>
+      <p>{ko
+        ? "best-of-N 후보 선택은 성공한 후보 사이의 상대 평가입니다. 공급자가 도구 입력을 객체 또는 JSON 문자열로 반환하더라도 동일하게 해석합니다. 잘못된 입력이나 선택 실패는 judge_error를 남기고 첫 성공 후보로 돌아가므로, 이 대체 선택을 검증 성공으로 해석하지 않습니다."
+        : "Best-of-N selection ranks successful candidates relatively. Tool inputs returned as objects or JSON strings are decoded consistently. Invalid inputs or selection failures retain judge_error and fall back to the first successful candidate; that fallback is not a verification pass."}</p>
       <p>
         <code>reflexion</code>{ko
           ? "도 opt-in 모드입니다. 원래 요청, 후보, 제한된 최근 tool 결과와 이미 관찰한 이미지를 검토하고 observation / lesson / next_check를 남깁니다. 짧은 응답이나 복구한 tool 오류만으로 후보를 탈락시키지 않습니다. 최초 예산 안에서 최대 두 번 수정합니다. 남은 시간이 전체의 3분의 1(최대 300초) 이하이면 다음 모델 호출에서 첫 후보 검토를 요청합니다. 진행 중인 호출을 이 시점에 강제 중단하지는 않습니다. Judge usage는 기존 TokenTracker에 기록합니다. 최종 벤치 점수는 여전히 외부 verifier가 판정합니다."
