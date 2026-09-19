@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import threading
@@ -826,9 +827,6 @@ class SubAgentManager:
         _subagent_context.child_session_key = child_key
         try:
             return self._execute_with_handler(task)
-        except Exception as exc:
-            log.error("SubTask %s failed: %s", task.task_id, exc, exc_info=True)
-            return json.dumps({"error": str(exc)})
         finally:
             _subagent_context.is_subagent = False
             _subagent_context.child_session_key = ""
@@ -836,16 +834,15 @@ class SubAgentManager:
     def _execute_with_handler(self, task: SubTask) -> str:
         """Legacy path: simple task_handler function call."""
         if self._task_handler is None:
-            return json.dumps({"error": "No task handler configured"})
-        agent_context = self._protocol.resolve_agent(task)
+            raise RuntimeError("No task handler configured")
+        kwargs = {"agent_context": self._protocol.resolve_agent(task)}
+        signature = inspect.signature(self._task_handler)
         try:
-            result: dict[str, Any] = self._task_handler(
-                task.task_type,
-                task.args,
-                agent_context=agent_context,
-            )
+            signature.bind(task.task_type, task.args, **kwargs)
         except TypeError:
-            result = self._task_handler(task.task_type, task.args)
+            kwargs = {}
+            signature.bind(task.task_type, task.args)
+        result: dict[str, Any] = self._task_handler(task.task_type, task.args, **kwargs)
         return json.dumps(result, default=str)
 
 

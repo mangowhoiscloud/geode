@@ -48,6 +48,15 @@ offload는 기존 TTL을 유지한다. recall에서 만료 파일을 거부·삭
 명시적인 만료 파일 정리 메서드도 제공한다. 주기적인 디스크 청소나 새로운
 사용자별 접근 통제를 구현한 것은 아니다.
 
+자동 LLM 학습 추출과 dreaming은 `TURN_COMPLETED`의 종료 종류가 기존 분류에서
+전달 가능한 `natural`, `forced_text`, `actionable_partial`일 때만 실행한다.
+다른 종류·누락·알 수 없는 값은 입력 cursor·quota 변경과 모델 호출 전에 반환한다.
+verifier 통과 여부를 조건으로 삼지는 않으므로, 거절된 후보의 실패에서도 배울 수 있다.
+실패 증거를 의도적으로 분석하는 `DreamingService.dream_session()` 직접 호출은 유지한다.
+생산자와 소비자를 연결하는 회귀검사는
+[학습 추출](../../tests/core/hooks/test_extract_learning_models_adapter.py)과
+[명시적 dreaming](../../tests/core/memory/test_context_artifacts_dreaming.py)에 있다.
+
 ## 공개 hook
 
 `HookRegistry`는 아래 `HookName`만 받으며 wildcard 등록을 제공하지 않는다.

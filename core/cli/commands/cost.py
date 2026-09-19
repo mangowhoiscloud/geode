@@ -204,44 +204,9 @@ def _get_cost_budget() -> float:
 
 def _set_cost_budget(amount: float) -> None:
     """Write monthly budget to .geode/config.toml."""
+    from core.config.toml_edit import splice_toml_section
+    from core.memory.atomic_write import atomic_write_text
+
     config_path = PROJECT_CONFIG_TOML
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-
-    lines: list[str] = []
-    found_section = False
-    found_key = False
-
-    if config_path.exists():
-        raw = config_path.read_text(encoding="utf-8")
-        in_cost_section = False
-        for line in raw.splitlines():
-            if line.strip() == "[cost]":
-                in_cost_section = True
-                found_section = True
-                lines.append(line)
-                continue
-            if in_cost_section and line.strip().startswith("monthly_budget"):
-                lines.append(f"monthly_budget = {amount}")
-                found_key = True
-                in_cost_section = False
-                continue
-            if in_cost_section and line.strip().startswith("["):
-                # New section — insert before it
-                if not found_key:
-                    lines.append(f"monthly_budget = {amount}")
-                    found_key = True
-                in_cost_section = False
-            lines.append(line)
-
-        if found_section and not found_key:
-            lines.append(f"monthly_budget = {amount}")
-    else:
-        lines = []
-
-    if not found_section:
-        if lines:
-            lines.append("")
-        lines.append("[cost]")
-        lines.append(f"monthly_budget = {amount}")
-
-    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    raw = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
+    atomic_write_text(config_path, splice_toml_section(raw, "cost", {"monthly_budget": amount}))

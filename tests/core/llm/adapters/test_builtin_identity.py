@@ -14,7 +14,13 @@ v0.99.44 — Follow-up F adds the two GLM adapters (PAYG + Coding Plan).
 
 from __future__ import annotations
 
+from dataclasses import replace
+from unittest.mock import Mock
+
 import pytest
+from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
+from core.auth.rotation import ProfileRotator
+from core.config import GLM_PRIMARY
 from core.llm.adapters.anthropic_payg import AnthropicPaygAdapter
 from core.llm.adapters.base import (
     AdapterBillingType,
@@ -25,9 +31,11 @@ from core.llm.adapters.base import (
     StreamingCapable,
 )
 from core.llm.adapters.codex_oauth import CodexOAuthAdapter
-from core.llm.adapters.glm_coding_plan import GlmCodingPlanAdapter
+from core.llm.adapters.glm_coding_plan import GlmCodingPlanAdapter, _resolve_coding_plan_endpoint
 from core.llm.adapters.glm_payg import GlmPaygAdapter
 from core.llm.adapters.openai_payg import OpenAIPaygAdapter
+from core.llm.strategies.plan_registry import PlanRegistry
+from core.llm.strategies.plans import GLM_CODING_TIERS, PlanKind
 
 
 @pytest.mark.parametrize(
@@ -108,3 +116,64 @@ def test_list_models_returns_specs() -> None:
             assert m.context_tokens == context_window_for(m.id), (
                 f"{cls.__name__}.{m.id} must derive context_tokens from model_catalog"
             )
+
+
+@pytest.mark.parametrize(
+    ("plan_provider", "plan_kind", "profile_provider", "accepted"),
+    [
+        ("glm-coding", PlanKind.SUBSCRIPTION, "glm-coding", True),
+        ("glm", PlanKind.PAYG, "glm", False),
+        ("glm-coding", PlanKind.PAYG, "glm-coding", False),
+        ("glm", PlanKind.SUBSCRIPTION, "glm", False),
+        ("openai-codex", PlanKind.SUBSCRIPTION, "openai-codex", False),
+        ("unknown", PlanKind.SUBSCRIPTION, "unknown", False),
+        ("glm-coding", PlanKind.SUBSCRIPTION, "glm", False),
+    ],
+)
+def test_coding_plan_route_preserves_subscription_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    plan_provider: str,
+    plan_kind: PlanKind,
+    profile_provider: str,
+    accepted: bool,
+) -> None:
+    from core.llm.adapters import glm_coding_plan
+    from core.llm.strategies import plan_registry, provider_routing_policy
+    from core.wiring import container
+
+    plan = replace(GLM_CODING_TIERS["pro"], provider=plan_provider, kind=plan_kind)
+    endpoint = "https://example.invalid/operator-configured-endpoint"
+    profile = AuthProfile(
+        name="synthetic-profile",
+        provider=profile_provider,
+        credential_type=CredentialType.API_KEY,
+        key="synthetic-key",
+        plan_id=plan.id,
+        base_url_override=endpoint,
+    )
+    store = ProfileStore()
+    store.add(profile)
+    registry = PlanRegistry()
+    registry.add(plan)
+    registry.set_routing(GLM_PRIMARY, [plan.id])
+    monkeypatch.setattr(container, "get_profile_store", lambda: store)
+    monkeypatch.setattr(container, "get_profile_rotator", lambda: ProfileRotator(store))
+    monkeypatch.setattr(plan_registry, "get_plan_registry", lambda: registry)
+    monkeypatch.setattr(provider_routing_policy, "_load_provider_routing_override", lambda **kw: {})
+    build_client = Mock(return_value=object())
+    monkeypatch.setattr(glm_coding_plan, "build_async_openai_client", build_client)
+
+    adapter = GlmCodingPlanAdapter()
+    if accepted:
+        assert _resolve_coding_plan_endpoint() == (profile.key, endpoint)
+        assert adapter.detect_credential() is not None
+        assert adapter.test_environment().ok
+        assert adapter._get_client() is build_client.return_value
+        build_client.assert_called_once_with(profile.key, base_url=endpoint)
+    else:
+        assert _resolve_coding_plan_endpoint() == ("", "")
+        assert adapter.detect_credential() is None
+        assert not adapter.test_environment().ok
+        with pytest.raises(RuntimeError, match="no GLM Coding Plan profile registered"):
+            adapter._get_client()
+        build_client.assert_not_called()

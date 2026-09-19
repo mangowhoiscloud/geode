@@ -319,6 +319,7 @@ def test_learning_state_cleanup_requires_matching_durable_session_end(
             {
                 "session_id": session_id,
                 "user_input": f"I prefer concise answers for project number {index}",
+                "termination_reason": "natural",
                 "text": "Keep the response focused on verified behavior and limitations.",
             },
         )

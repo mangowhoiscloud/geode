@@ -484,6 +484,12 @@ def make_dreaming_handler(
     hooks_ref = weakref.ref(hooks) if hooks is not None else None
 
     def _on_turn_completed(_event: Any, data: dict[str, Any]) -> None:
+        # Avoid importing the loop while composing memory services.
+        from core.agent.loop.models import is_successful_task_termination
+
+        if not is_successful_task_termination(data.get("termination_reason")):
+            return
+
         session_id = data.get("session_id")
         if not isinstance(session_id, str) or not session_id:
             return

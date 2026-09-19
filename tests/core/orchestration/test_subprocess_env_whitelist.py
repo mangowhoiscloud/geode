@@ -11,7 +11,19 @@ These tests pin:
 
 from __future__ import annotations
 
-from core.orchestration.isolated_execution import IsolatedRunner
+import asyncio
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import pytest
+from core.agent.loop._context import build_system_prompt
+from core.agent.worker import WorkerRequest
+from core.orchestration.isolated_execution import IsolatedRunner, IsolationConfig
+from core.runtime_audit import (
+    reset_runtime_audit_active,
+    runtime_audit_active,
+    set_runtime_audit_active,
+)
 
 
 def test_geode_operator_knobs_preserved() -> None:
@@ -49,3 +61,77 @@ def test_dangerous_envs_excluded() -> None:
     }
     leaked = forbidden & IsolatedRunner._SUBPROCESS_ENV_WHITELIST
     assert not leaked, f"sensitive envs must not enter the whitelist: {sorted(leaked)}"
+
+
+@pytest.mark.parametrize(
+    "persona,audit_env,audit_context,agent_prompt,expected_identity,expected_audit",
+    [
+        (None, None, None, "", True, False),
+        ("off", None, None, "", False, False),
+        ("on", "1", None, "", False, True),
+        ("on", "0", True, "", False, True),
+        ("on", "1", False, "", True, False),
+        ("on", None, None, "ROLE_ONLY", False, False),
+    ],
+    ids=["default", "persona-off", "audit-env", "context-on", "context-off", "named-override"],
+)
+def test_prompt_mode_survives_worker_spawn(
+    monkeypatch: pytest.MonkeyPatch,
+    persona: str | None,
+    audit_env: str | None,
+    audit_context: bool | None,
+    agent_prompt: str,
+    expected_identity: bool,
+    expected_audit: bool,
+) -> None:
+    # Exercise the actual spawn boundary without starting a worker or model.
+    request = WorkerRequest(task_id="prompt-mode", agent_system_prompt=agent_prompt)
+    runner = IsolatedRunner(worker_module="core.worker")
+    config = IsolationConfig(session_id=request.task_id, post_to_main=False)
+    parent_env = {}
+    if persona is not None:
+        parent_env["GEODE_PERSONA"] = persona
+    if audit_env is not None:
+        parent_env["GEODE_AUDIT_UNRESTRICTED"] = audit_env
+    token = set_runtime_audit_active(audit_context)
+    try:
+        with (
+            patch.dict("os.environ", parent_env, clear=True),
+            patch("asyncio.create_subprocess_exec", side_effect=OSError("test spawn")) as spawn,
+        ):
+            assert runtime_audit_active() is expected_audit
+            result = asyncio.run(runner.arun(request, config=config))
+        assert result.success is False
+        assert "test spawn" in (result.error or "")
+        spawn.assert_awaited_once()
+        worker_env = spawn.call_args.kwargs["env"]
+    finally:
+        reset_runtime_audit_active(token)
+
+    # A new process starts without the parent's ContextVar. Read only the
+    # captured env and the real default identity; exclude operator memory.
+    for name in (
+        "_build_geode_memory_context",
+        "_build_learning_context",
+        "_build_project_memory_context",
+        "_build_user_context",
+    ):
+        monkeypatch.setattr(f"core.agent.system_prompt.{name}", lambda *_args: "")
+    loop = SimpleNamespace(
+        _system_prompt_override=request.agent_system_prompt or None,
+        _skill_registry=None,
+        _policy_sources={},
+        _user_profile=None,
+        _system_suffix="",
+        model="",
+    )
+    token = set_runtime_audit_active(None)
+    try:
+        with patch.dict("os.environ", worker_env, clear=True):
+            assert runtime_audit_active() is expected_audit
+            prompt = build_system_prompt(loop)
+    finally:
+        reset_runtime_audit_active(token)
+    assert ("<agent_identity>" in prompt) is expected_identity
+    if agent_prompt:
+        assert agent_prompt in prompt

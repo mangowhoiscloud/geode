@@ -1081,6 +1081,8 @@ GEODE의 기억은 다섯 계층으로 나뉩니다. 위로 갈수록 안정적�
 
 ## 기억 수명주기: 증거 기반 소멸
 
+Unreleased: 턴 종료 후 자동 LLM 학습·dreaming은 전달 가능한 종료 (`natural`, `forced_text`, `actionable_partial`)에만 실행됩니다. 취소·인프라 오류·알 수 없는 종료에서는 추가 호출을 하지 않습니다. 검증 실패를 학습에서 제외하는 규칙은 아닙니다. 실패 증거를 분석하는 명시적`dream_session()` 호출도 유지됩니다.
+
 프로젝트 기억은 증거를 기준으로 정리됩니다. `geode memory-lifecycle`(`core/cli/commands/memory_lifecycle.py`)는 두 가지를 합니다. (1) 소멸 — `resolution.guard_test`가 아직 트리에 존재하는 항목은 `.geode/memory/_archive/`로 아카이빙하고(주입에서 제외), 가드 테스트가 사라진 항목은 다시 떠오릅니다(WARNING). 시간 기반 소멸은 없습니다. (2) 승격 제안 — dreaming이 남긴 `context_artifacts`(`dream`)와 활성 항목을 클러스터링해, 서로 다른 세션 3개 이상에 걸친 클러스터를 `.geode/memory/_proposals/` 아래 HITL 제안 파일로 씁니다. 규칙은 블라스트 반경이 크므로 절대 자동 기록하지 않습니다. 기본은 dry-run이고, `--apply`가 파일을 옮기고 제안을 쓰며 `MEMORY_PROMOTION_PROPOSED` 훅을 발화합니다.
 
 ## sessions.jsonl: 런 메트릭
@@ -6180,6 +6182,8 @@ static prefix           턴 사이 불변, 캐시 적중
 
 `GEODE_AUDIT_UNRESTRICTED=1`이면 G1, 메모리와 사용자 컨텍스트를 생략합니다. wrapper 또는 generic 베이스, 수식 출력 규칙과 `AGENTIC_SUFFIX`는 유지합니다. 동적 영역에는 모델 인자가 있으면 model\_card, 프로바이더 정책에 따라 날짜, 호출자의 system\_suffix가 들어갑니다. 근거는 측정 결과입니다. Petri의 auditor는 시나리오의 정체성을 끝까지 통제해야 하는데, GEODE 프리앰블이 트랜스크립트를 오염시켰습니다. 플래그는 `geode-eval audit`의`--unrestricted`가 inspect 서브프로세스 앞에서 설정합니다.
 
+Unreleased: 위임 worker에도 `GEODE_PERSONA`와 호출 시점의 실제 audit 상태가 전달됩니다. 프로세스 환경값보다 우선한 요청별 audit 설정도 유지하며, 명시적 에이전트 override의 조립 경로는 바꾸지 않습니다.
+
 ## wrapper override: 변이된 스캐폴드 주입
 
 자기개선 루프가 진화시키는 것이 바로 이 static 영역의 wrapper 스캐폴드입니다. 런타임 조립부는 `core/config/runtime_policy_sources.py`의 정책 후보를 빌더에 전달합니다. 기본 후보의 해석은 다음과 같습니다.
@@ -6196,6 +6200,8 @@ audit-mode에서도 override가 시스템 프롬프트의 베이스가 됩니다
 ## program.md 계약: mutator의 프롬프트
 
 변이를 제안하는 mutator 에이전트의 시스템 프롬프트는 패키지와 함께 출하되는 `evolve/scaffold_search/program.md`입니다. 러너 (`evolve/scaffold_search/loop/mutate/runner.py`)가 매 호출 디스크에서 읽고, 단일 변이로 범위를 좁히는 계약을 뒤에 붙입니다. 파일을 못 읽으면 크게 실패합니다. 교체가 필요하면 훅 핸들러가 `program_md` 본문을 공급하는 단일 제어 지점을 씁니다.
+
+Unreleased: 응답 파싱과 직접 `apply_mutation()` 호출은 같은 활성 종류 목록을 검사합니다. 폐기된 `retrieval`, 읽기 전용 종류와 알 수 없는 종류는 정책을 읽거나 쓰기 전에 거절합니다. 과거 증거 읽기와 rollback 경로는 별개로 유지합니다.
 
 ## 실패 모드
 
@@ -7098,7 +7104,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1566 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1567 KB — fetch the Markdown twin above for the complete page)
 
 ---
 

@@ -185,6 +185,51 @@ def test_apply_xml_escapes_special_chars() -> None:
     assert "&amp;" in out
 
 
+def test_catalog_policy_preserves_metadata_and_usage_without_mutating_registry() -> None:
+    from defusedxml import ElementTree
+
+    skill = SkillDefinition(
+        name='fixture & "quoted"',
+        description="Original",
+        triggers=["csv & <rows>"],
+        tools=["read & write"],
+        context_fork=True,
+    )
+    reg = SkillRegistry()
+    reg.register(skill)
+    before = skill.model_dump()
+    text = 'Changed & <injected>text</injected> "quoted"'
+    root = ElementTree.fromstring(
+        apply_skill_catalog_policy(
+            reg, {skill.name: {"description": text, "user_invocable": False}}
+        )
+    )
+    rendered = root.find("skill")
+    assert rendered is not None
+    assert rendered.attrib == {
+        "name": skill.name,
+        "user_invocable": "false",
+        "tools": "read & write",
+        "triggers": "csv & <rows>",
+        "context": "fork",
+    }
+    assert rendered.text == text
+    assert list(rendered) == []
+    assert root.findtext("usage") == (
+        "Call the use_skill tool with a skill name to load its full instructions before applying it."
+    )
+    assert skill.model_dump() == before
+    assert reg.get(skill.name) is skill
+
+
+@pytest.mark.parametrize("max_chars", [5, 10000])
+def test_unknown_catalog_policy_preserves_default_rendering(max_chars: int) -> None:
+    reg = _make_registry(("fixture", "Original", True))
+    assert apply_skill_catalog_policy(
+        reg, {"unknown": {"description": "ignored"}}, max_chars=max_chars
+    ) == reg.get_context_block(max_chars=max_chars)
+
+
 # Wiring ----------------------------------------------------------------------
 
 
