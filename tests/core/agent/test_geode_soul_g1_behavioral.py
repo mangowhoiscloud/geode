@@ -55,3 +55,24 @@ def test_cross_reference_blockquotes_stripped() -> None:
     out = _build_identity_context()
     assert "see `CLAUDE.md`" not in out
     assert "development-time guardrails" not in out
+
+
+def test_long_identity_keeps_later_runtime_constraints(monkeypatch: pytest.MonkeyPatch) -> None:
+    soul = "\n".join(
+        [
+            "## Identity",
+            *[f"Authored rule {index}" for index in range(45)],
+            "## RUNTIME CANNOT",
+            "Never claim an unverified operation succeeded.",
+            "## Defaults",
+            "Reference only",
+        ]
+    )
+    monkeypatch.setattr(MonoLakeOrganizationMemory, "get_soul", lambda _self: soul)
+
+    identity = _build_identity_context()
+
+    assert "Authored rule 44" in identity
+    assert "## RUNTIME CANNOT" in identity
+    assert "Never claim an unverified operation succeeded." in identity
+    assert "Reference only" not in identity
