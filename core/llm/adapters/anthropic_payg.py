@@ -93,7 +93,9 @@ class AnthropicPaygAdapter:
         lane_key = f"anthropic-payg:{req.model}"
         async with acquire_anthropic_api_lane_async(lane_key):
             try:
-                response = await client.messages.create(**build_create_kwargs(req))
+                response = await client.messages.create(
+                    **build_create_kwargs(req, base_url=str(client.base_url))
+                )
             except Exception as exc:
                 self._last_error = exc
                 log.warning(
@@ -148,7 +150,9 @@ class AnthropicPaygAdapter:
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         client = self._get_client()
-        async with client.messages.stream(**build_stream_kwargs(req)) as stream:
+        async with client.messages.stream(
+            **build_stream_kwargs(req, base_url=str(client.base_url))
+        ) as stream:
             async for text_chunk in stream.text_stream:
                 yield StreamEvent(kind="text", payload={"text": text_chunk})
             final = await stream.get_final_message()

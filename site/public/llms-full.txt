@@ -1187,16 +1187,33 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/tools/protocol.md
 
 ## Deferred loading
 
-모든 도구 스키마를 모든 호출에 실으면 턴마다 input 토큰을 크게 태웁니다. 프로바이더 어댑터가 `core/llm/tool_defer.py`의 공통 정책을 읽고, 공식 `defer_loading` 필드와 호스티드 tool\_search 도구로 카탈로그를 나눕니다.
+도구 검색은 레지스트리를 대체하지 않습니다. 실행 가능한 도구를 권한 정책으로 걸러 `ToolPlan`에 고정한 뒤, 어댑터가 해당 요청의 지연 로딩 대상과 모델·API 지원 조건을 확인합니다. 지원 경로에서는 전체 정의를 서버에 보내되 모델의 초기 컨텍스트에는 일부만 싣습니다. 정의를 네트워크 요청에서 생략한다는 뜻은 아닙니다.
 
 | 조건 | 동작 |
 | --- | --- |
 | 도구 수가 `TOOL_DEFER_THRESHOLD`(16) 이하 | 전부 즉시 로드 |
-| 임계값 초과 | 호스티드 `tool_search`를 추가하고, core set만 즉시 싣고, 나머지는 `defer_loading=True`로 표시해 검색 후 로드 |
+| 임계값 초과 + 지원 모델·API + 설정 활성화 | 검색 도구를 추가하고 정책상 지연 가능한 도구만 검색 후 로드; core set과 네이티브 도구는 즉시 로드 |
+| 미지원 경로 또는 검색 비활성화 | 동일한 허용 도구 집합을 즉시 로드. 검색 실패를 이유로 권한 범위를 넓히지 않음 |
 
-즉시 로드 core set은 `TOOL_SEARCH_ALWAYS_LOADED`입니다. 기억, 노트, 파일 읽기, 웹 탐색, 상태 확인처럼 검색 왕복을 치르면 손해인 고빈도 도구가 여기에 남고, 나머지는 에이전트가 `tool_search`로 찾아 그때 가져옵니다.
+즉시 로드 core set은 `TOOL_SEARCH_ALWAYS_LOADED`입니다. 기억, 노트, 파일 읽기, 웹 탐색, 상태 확인처럼 검색 왕복을 치르면 손해인 고빈도 도구가 여기에 남습니다. 이 정책은 도구 계획을 만들 때 적용하며, 어댑터가 별도 목록으로 다시 선택하지 않습니다.
 
 따라서 도구가 deferred loading 뒤로 밀렸다는 말은 모든 도구가 보이지 않는다는 뜻이 아닙니다. `read_document`, `grep_files`처럼 핵심 읽기 도구는 항상 적재됩니다. 이런 도구가 반복 호출된다면 모델이 더 많은 근거 파일을 읽겠다고 판단했을 가능성이 큽니다.
+
+### 프로바이더별 경계
+
+2026-09-20 공식 계약 점검 기준입니다. 아래 Anthropic 경계·이력 보강은 Unreleased 변경이며 실제 계정 호출은 별도 검증입니다.
+
+| GEODE 경로 | 도구 노출 방식 |
+| --- | --- |
+| Anthropic Messages | 공식 endpoint와 검증된 모델 집합에서 regex 검색. 구형·미확인 모델과 호환 프록시는 즉시 로드. cache breakpoint가 붙은 도구는 지연하지 않음. |
+| OpenAI Responses | 모델 capability gate 뒤 호스티드 검색. 검색 호출·결과와 발견된 function call의 순서를 다음 요청에 보존. |
+| Codex 구독 Responses | 기존 검증된 경로와 별도 `tool_search_defer_codex` 설정 유지. OpenAI API 문서만으로 계정 접근 가능성을 단정하지 않음. |
+| OpenRouter Chat Completions | 즉시 로드. OpenRouter 자체의 검색 beta는 Responses·Messages 전용이므로 현재 경로에는 보내지 않음. |
+| GLM 직접 / Coding Plan | 즉시 로드. 함수 호출·MCP discovery 지원을 native schema 검색 지원으로 간주하지 않음. |
+
+Anthropic의 `server_tool_use`와 검색 결과는 assistant 이력으로 보존하며 로컬 실행기에 넘기지 않습니다. 실제로 발견된`tool_use`에만 실행 결과를 반환합니다. 스킬은 별도로 짧은 metadata를 먼저 보여주고 `use_skill`로 지침 본문을 읽습니다. [스킬 카탈로그](https://mangowhoiscloud.github.io/geode/docs/runtime/skills.md)는 함수 스키마 검색과 다른 책임입니다.
+
+근거: [OpenAI tool search](https://developers.openai.com/api/docs/guides/tools-tool-search), [Anthropic tool search](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool), [OpenRouter tool search](https://openrouter.ai/docs/guides/features/server-tools/tool-search), [Claude Code endpoint 정책](https://code.claude.com/docs/en/mcp#configure-tool-search).
 
 ## 툴킷: 서브에이전트 도구 번들
 

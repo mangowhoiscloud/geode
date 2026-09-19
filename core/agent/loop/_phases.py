@@ -614,6 +614,8 @@ async def process_tool_calls(
             assistant_message["codex_reasoning_items"] = response.codex_reasoning_items
         if getattr(response, "codex_output_items", None):
             assistant_message["codex_output_items"] = response.codex_output_items
+        if response.anthropic_content:
+            assistant_message["anthropic_content"] = response.anthropic_content
         if phase := getattr(response, "assistant_phase", ""):
             assistant_message["phase"] = phase
         turn.messages.append(assistant_message)

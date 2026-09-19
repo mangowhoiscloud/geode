@@ -104,6 +104,9 @@ class Message:
     # Empty string = no phase (skip the field on output dict).
     # Codex adapter is the only producer; other adapters leave empty.
     phase: str = ""
+    # Opaque Messages API content belongs only to its original assistant turn.
+    # Other providers consume the normalized ``content`` instead.
+    anthropic_content: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -270,6 +273,8 @@ class AdapterCallResult:
     # Optional adapter-owned, bounded receipt of serialized request images.
     # None means unavailable, not an observed zero. No raw request content.
     request_image_receipt: dict[str, Any] | None = None
+    # Full ordered Messages API blocks, including signed thinking and server tools.
+    anthropic_content: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)

@@ -127,6 +127,8 @@ class AgenticResponse:
     # next ``EasyInputMessageParam.phase``. Empty string for non-Codex
     # adapters and for Codex responses with no phase set.
     assistant_phase: str = ""
+    # Provider-native replay is separate from executable TextBlock/ToolUseBlock content.
+    anthropic_content: list[dict[str, Any]] | None = None
 
     @property
     def text(self) -> str:

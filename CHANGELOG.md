@@ -49,6 +49,11 @@ functional change.
 
 ### Fixed
 
+- Gate Anthropic hosted tool search on documented model support and the actual
+  official endpoint; keep cache-marked tools eager. Preserve native discovery
+  history through subsequent requests and session persistence without treating
+  server-side search as a local tool call. OpenRouter and GLM Chat Completions
+  retain their existing eager, permission-filtered tool surface.
 - Preserve sub-agent handler failures as failed results and lifecycle events;
   bind callback signatures before invocation so an internal `TypeError` never
   repeats work. Reject unsupported worker workspace isolation before execution,

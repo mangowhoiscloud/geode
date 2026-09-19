@@ -80,6 +80,7 @@ def build_adapter_request(
         # A2 BLOCKER 3).
         reasoning_items: tuple[dict[str, Any], ...] = ()
         output_items: tuple[dict[str, Any], ...] = ()
+        anthropic_content: tuple[dict[str, Any], ...] = ()
         phase: str = ""
         if role == "assistant":
             raw = m.get("codex_reasoning_items")
@@ -88,6 +89,9 @@ def build_adapter_request(
             raw_output = m.get("codex_output_items")
             if isinstance(raw_output, list):
                 output_items = tuple(item for item in raw_output if isinstance(item, dict))
+            raw_content = m.get("anthropic_content")
+            if isinstance(raw_content, list):
+                anthropic_content = tuple(item for item in raw_content if isinstance(item, dict))
             # PR-CODEX-MULTITURN-PHASE-PRESERVE (Sprint H follow-up,
             # 2026-05-26) — forward the per-message phase attribution
             # the AgenticLoop persisted from a prior Codex response so
@@ -105,6 +109,7 @@ def build_adapter_request(
                 codex_reasoning_items=reasoning_items,
                 codex_output_items=output_items,
                 phase=phase,
+                anthropic_content=anthropic_content,
             )
         )
     if isinstance(tools, BoundToolPlan):
@@ -224,6 +229,11 @@ def agentic_response_from_adapter_result(result: AdapterCallResult) -> AgenticRe
         codex_output_items=codex_output_items,
         reasoning_summaries=reasoning_summaries,
         assistant_phase=result.assistant_phase,
+        anthropic_content=(
+            [dict(block) for block in result.anthropic_content]
+            if result.anthropic_content
+            else None
+        ),
     )
 
 
