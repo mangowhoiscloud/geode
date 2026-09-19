@@ -133,6 +133,40 @@ class SkillDefinition(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _render_skill_context(skills: list[SkillDefinition], max_chars: int) -> str:
+    """Render Tier 1 metadata without loading skill bodies."""
+    if not skills:
+        return ""
+
+    lines: list[str] = ["<available_skills>"]
+    total = 0
+    for skill in sorted(skills, key=lambda s: s.name):
+        attrs = [
+            f'name="{escape(skill.name, quote=True)}"',
+            f'user_invocable="{str(skill.user_invocable).lower()}"',
+        ]
+        if skill.tools:
+            attrs.append(f'tools="{escape(", ".join(skill.tools), quote=True)}"')
+        if skill.triggers:
+            attrs.append(f'triggers="{escape(", ".join(skill.triggers[:8]), quote=True)}"')
+        if skill.context_fork:
+            attrs.append('context="fork"')
+        desc = escape(skill.description[:200])
+        line = f"  <skill {' '.join(attrs)}>{desc}</skill>"
+        if total + len(line) > max_chars:
+            remaining = len(skills) - (len(lines) - 1)
+            lines.append(f'  <truncated remaining="{remaining}" />')
+            break
+        lines.append(line)
+        total += len(line)
+    lines.append(
+        "  <usage>Call the use_skill tool with a skill name to load its full"
+        " instructions before applying it.</usage>"
+    )
+    lines.append("</available_skills>")
+    return "\n".join(lines)
+
+
 class SkillRegistry:
     """In-memory registry for loaded skill definitions.
 
@@ -177,37 +211,7 @@ class SkillRegistry:
         Only name + description (not body). Progressive Disclosure:
         body is loaded on-demand when skill is invoked.
         """
-        if not self._skills:
-            return ""
-
-        lines: list[str] = ["<available_skills>"]
-        total = 0
-        for skill in sorted(self._skills.values(), key=lambda s: s.name):
-            attrs = [
-                f'name="{escape(skill.name, quote=True)}"',
-                f'user_invocable="{str(skill.user_invocable).lower()}"',
-            ]
-            if skill.tools:
-                attrs.append(f'tools="{escape(", ".join(skill.tools), quote=True)}"')
-            if skill.triggers:
-                attrs.append(f'triggers="{escape(", ".join(skill.triggers[:8]), quote=True)}"')
-            if skill.context_fork:
-                attrs.append('context="fork"')
-            desc = escape(skill.description[:200])
-            line = f"  <skill {' '.join(attrs)}>{desc}</skill>"
-            if total + len(line) > max_chars:
-                remaining = len(self._skills) - (len(lines) - 1)
-                lines.append(f'  <truncated remaining="{remaining}" />')
-                break
-            lines.append(line)
-            total += len(line)
-        lines.append(
-            "  <usage>Call the use_skill tool with a skill name to load its full"
-            " instructions before applying it.</usage>"
-        )
-        lines.append("</available_skills>")
-
-        return "\n".join(lines)
+        return _render_skill_context(list(self._skills.values()), max_chars)
 
     def __len__(self) -> int:
         return len(self._skills)

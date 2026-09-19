@@ -26,6 +26,7 @@ from typing import Any
 
 from core.config import CONTEXT_BLOCK_MAX_CHARS
 from core.hooks import HookEvent, HookSystem
+from core.runtime_audit import AUDIT_MODE_ENV_VAR, runtime_audit_active
 
 log = logging.getLogger(__name__)
 
@@ -194,6 +195,7 @@ class IsolatedRunner:
         "GEODE_STATE_ROOT",
         "GEODE_CONFIG_PATH",
         "GEODE_DATA_DIR",
+        "GEODE_PERSONA",
         "GEODE_VERIFY_MODE",
         "GEODE_JUDGE_MODEL",
         "GEODE_VERIFY_MIN_TEXT_CHARS",
@@ -505,6 +507,8 @@ class IsolatedRunner:
                 return slot_error
             acquired = True
             safe_env = {k: v for k, v in os.environ.items() if k in self._SUBPROCESS_ENV_WHITELIST}
+            # Serialize the effective audit mode; ContextVars do not cross processes.
+            safe_env[AUDIT_MODE_ENV_VAR] = "1" if runtime_audit_active() else "0"
             # Forward the EFFECTIVE skip-permissions (per-session ContextVar OR
             # daemon-wide env) so a write-capable sub-agent under
             # --dangerously-skip-permissions also bypasses HITL in the worker

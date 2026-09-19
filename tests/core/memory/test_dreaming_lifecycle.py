@@ -36,7 +36,13 @@ def test_dreaming_hook_keeps_each_turn_effort_across_threads(
             manager.upsert_messages(session_id, [{"role": "user", "content": "context", "seq": 0}])
             handler(
                 HookEvent.TURN_COMPLETED,
-                {"session_id": session_id, "rounds": 1, "model": "gpt-5.6-sol", "effort": effort},
+                {
+                    "session_id": session_id,
+                    "rounds": 1,
+                    "model": "gpt-5.6-sol",
+                    "effort": effort,
+                    "termination_reason": "natural",
+                },
             )
         asyncio.run(owner.settle(deadline=time.monotonic() + 2))
         assert {

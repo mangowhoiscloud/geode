@@ -284,7 +284,13 @@ def test_native_text_consumers_emit_usage_before_discarding_text(
         _name, handler = make_llm_extract_handler(lambda: profile, hooks=hooks)
         asyncio.run(
             handler(
-                HookEvent.TURN_COMPLETED, {**correlation, "user_input": "z" * 60, "effort": "max"}
+                HookEvent.TURN_COMPLETED,
+                {
+                    **correlation,
+                    "user_input": "z" * 60,
+                    "effort": "max",
+                    "termination_reason": "natural",
+                },
             )
         )
     elif consumer == "exhausted":

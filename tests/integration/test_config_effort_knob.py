@@ -15,10 +15,26 @@ import inspect
 import tomllib
 from pathlib import Path
 
+import pytest
 from core.config.env_io import upsert_config_toml
 
 
 class TestUpsertConfigToml:
+    @pytest.mark.parametrize("value", ['model"quoted', "model\\path", "model\nline\ttab"])
+    @pytest.mark.parametrize("existing", [False, True])
+    def test_string_value_round_trips(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: str, existing: bool
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        config_path = tmp_path / ".geode" / "config.toml"
+        if existing:
+            config_path.parent.mkdir()
+            config_path.write_text('[llm]\nprimary_model = "old"\n')
+
+        upsert_config_toml("llm", "primary_model", value)
+
+        assert tomllib.loads(config_path.read_text()) == {"llm": {"primary_model": value}}
+
     def test_creates_file_with_section(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
         upsert_config_toml("agentic", "effort", "max")

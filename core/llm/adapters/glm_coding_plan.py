@@ -229,19 +229,29 @@ def _resolve_coding_plan_endpoint(
     """Return ``(api_key, base_url)`` for the registered Coding Plan, else
     ``("", "")``.
 
-    Walks :func:`core.llm.strategies.plan_registry.resolve_routing` for the
-    ``glm-coding-*`` Plan (the same path :func:`core.llm.providers.glm._resolve_glm_endpoint`
-    uses). If no Plan is bound, returns empty strings so the adapter
-    refuses rather than silently falling back to PAYG.
+    Validates the PlanRegistry selection against this adapter's provider/source
+    before detection, diagnostics, or client creation can consume it.
     """
     try:
         from core.config import GLM_PRIMARY
+        from core.llm.registry import get_provider_spec
         from core.llm.strategies.plan_registry import resolve_routing
+        from core.llm.strategies.plans import PlanKind
 
         # Probe the live GLM default (glm-5.2 now), not a hardcoded glm-5.1.
         target = resolve_routing(GLM_PRIMARY, sources=routing_sources)
-        if target is not None and target.profile.key:
-            return target.profile.key, target.base_url
+        if target is None or not target.profile.key:
+            return "", ""
+        spec = get_provider_spec(target.plan.provider)
+        if (
+            target.plan.kind is not PlanKind.SUBSCRIPTION
+            or spec is None
+            or spec.profile.provider != "glm"
+            or spec.credential.source != SOURCE_SUBSCRIPTION
+            or target.profile.provider != spec.credential.account_provider
+        ):
+            return "", ""
+        return target.profile.key, target.base_url
     except Exception:
         log.debug("glm-coding-plan: ProfileStore lookup failed", exc_info=True)
     return "", ""

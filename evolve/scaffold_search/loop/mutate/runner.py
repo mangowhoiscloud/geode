@@ -870,6 +870,16 @@ def _reject_hyperparam_mutation() -> None:
     )
 
 
+def _validate_mutable_kind(target_kind: str) -> None:
+    """Reject retired and reader-only kinds before any mutation policy I/O."""
+    from evolve.scaffold_search.loop.mutate.policies import TARGET_KINDS
+
+    if target_kind == "hyperparam":
+        _reject_hyperparam_mutation()
+    if target_kind not in TARGET_KINDS:
+        raise ValueError(f"target_kind {target_kind!r} is not one of {TARGET_KINDS!r}")
+
+
 def parse_mutation(raw: str) -> Mutation:
     """Extract a :class:`Mutation` from the LLM's raw response.
 
@@ -943,22 +953,11 @@ def parse_mutation(raw: str) -> Mutation:
     # ``prompt`` keeps the legacy wrapper-sections behaviour so older
     # mutation rows replay unchanged. Unknown kinds raise ValueError so
     # the loop fails closed (caught and logged by SelfImprovingLoopRunner).
-    from evolve.scaffold_search.loop.mutate.policies import TARGET_KINDS
-
     kind_raw = payload.get("target_kind", "prompt")
     if not isinstance(kind_raw, str):
         raise ValueError(f"target_kind must be a string, got {type(kind_raw).__name__}")
     target_kind = kind_raw.strip() or "prompt"
-    # PR-DROP-HYPERPARAM-MUTATION (2026-05-31) — ``hyperparam`` is dropped
-    # from TARGET_KINDS so the generic guard below already fails closed; this
-    # dedicated branch wins first so the mutator gets the *specific* reason
-    # (measurement params fixed + reflection_depth axis exhausted) rather than
-    # the generic enumeration. apply_mutation applies the same gate (boundary
-    # completeness, CLAUDE.md → Wiring Verification → Conditional Read Parity).
-    if target_kind == "hyperparam":
-        _reject_hyperparam_mutation()
-    if target_kind not in TARGET_KINDS:
-        raise ValueError(f"target_kind {target_kind!r} is not one of {TARGET_KINDS!r}")
+    _validate_mutable_kind(target_kind)
     _validate_decomposition_target(target_kind, target_section.strip())
     mutation_id_raw = payload.get("mutation_id")
     # Mutation has a default_factory; pass only when the LLM supplied one.
@@ -1017,6 +1016,7 @@ def apply_mutation(
         write_wrapper_prompt_sections,
     )
 
+    _validate_mutable_kind(mutation.target_kind)
     if mutation.target_kind == "prompt":
         sections = (
             dict(current_sections)
@@ -1028,19 +1028,7 @@ def apply_mutation(
         write_wrapper_prompt_sections(sections)
         return sections, previous_value
 
-    # PR-DROP-HYPERPARAM-MUTATION (2026-05-31) — second-layer rejection.
-    # parse_mutation already rejects at LLM-response time, but the apply path
-    # is reached from other entrypoints (manual ``apply_mutation`` calls in
-    # tests / slash / re-runs of a parsed mutation), so a ``Mutation``
-    # constructed outside ``parse_mutation`` cannot rely on the first gate.
-    # Defensive depth (CLAUDE.md → Wiring Verification → Conditional Read
-    # Parity). ``hyperparam`` is no longer mutable — reject before any write.
-    if mutation.target_kind == "hyperparam":
-        _reject_hyperparam_mutation()
-
-    # PR-6 policy kinds — tool_policy / decomposition / retrieval /
-    # reflection. ``current_sections`` override is honoured for symmetry
-    # with the prompt branch (tests inject pre-populated dicts).
+    # Active policy kinds preserve the caller's optional section snapshot.
     sections = (
         dict(current_sections)
         if current_sections is not None

@@ -68,6 +68,12 @@ Claude Code alias.
 
 ## Runtime Skills
 
+The default catalog and policy-overridden catalog use one Tier 1 XML renderer.
+Overrides change only description and user-invocable metadata on copies; they
+preserve triggers, tools, fork metadata, escaping, truncation and `use_skill`
+guidance without modifying registered skills or loading their bodies. See the
+[catalog regression tests](../tests/core/skills/test_t2_skill_catalog.py).
+
 These contracts are loadable by `core/skills/`. Eight are immutable wheel
 payload; three operator/repository workflows remain project-only. All remain
 reviewable real directories under `.geode/skills/`; same-named development
