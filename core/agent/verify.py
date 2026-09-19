@@ -590,6 +590,30 @@ def _parse_judge_payload(raw: str, *, reflection: bool = False) -> tuple[bool, f
 _JUDGE_CALL_TIMEOUT_S: float = 120.0
 
 
+def _judge_response_schema(mode: VerifyMode) -> dict[str, Any]:
+    """Own the verifier output contract, independent of the task's output schema."""
+    properties: dict[str, Any] = {
+        "passed": {"type": "boolean"},
+        "score": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "reason": {"type": "string"},
+    }
+    if mode is VerifyMode.REFLEXION:
+        fields = ("observation", "lesson", "next_check")
+        properties["reflection"] = {
+            "type": "object",
+            "properties": {name: {"type": "string", "minLength": 1} for name in fields},
+            "required": list(fields),
+            "additionalProperties": False,
+        }
+    return {
+        "title": "TurnVerification",
+        "type": "object",
+        "properties": properties,
+        "required": list(properties),
+        "additionalProperties": False,
+    }
+
+
 def _build_judge_result_from_response(
     response: Any, result: AgenticResult, *, mode: VerifyMode = VerifyMode.LLM_JUDGE
 ) -> VerifyResult:
@@ -676,6 +700,7 @@ async def _verify_llm_judge_async(
                 else _LLM_JUDGE_SYSTEM_PROMPT,
                 _judge_messages(result, loop=loop, prompt=prompt),
                 model=judge_model,
+                response_schema=_judge_response_schema(mode),
                 allow_tools=False,
                 purpose="turn_verification",
             ),

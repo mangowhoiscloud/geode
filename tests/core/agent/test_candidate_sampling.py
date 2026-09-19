@@ -53,7 +53,7 @@ def test_max_best_of_within_lens_count() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _judge_response(payload: dict[str, Any] | None) -> SimpleNamespace:
+def _judge_response(payload: dict[str, Any] | str | None) -> SimpleNamespace:
     tool_uses = () if payload is None else ({"name": "select_candidate", "input": payload},)
     return SimpleNamespace(tool_uses=tool_uses)
 
@@ -96,6 +96,30 @@ def test_judge_decline_falls_back_observably(monkeypatch: pytest.MonkeyPatch) ->
     verdict = asyncio.run(judge_candidates("t", ["a", "b"], model="m"))
     assert verdict.winner_index == 0
     assert "declined" in verdict.judge_error
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ('{"winner_index": 1, "reason": "supported"}', CandidateVerdict(1, "supported")),
+        ("[]", None),
+        ("null", None),
+        ("{broken", None),
+        ('{"winner_index":' + "9" * 5000 + "}", None),
+        ("[" * 1500 + "]" * 1500, None),
+        ('{"winner_index": true}', None),
+    ],
+)
+def test_judge_provider_json_input(
+    monkeypatch: pytest.MonkeyPatch, payload: str, expected: CandidateVerdict | None
+) -> None:
+    _patch_judge_dispatch(monkeypatch, _judge_response(payload))
+    verdict = asyncio.run(judge_candidates("t", ["a", "b"], model="m"))
+    if expected is None:
+        assert verdict.winner_index == 0
+        assert verdict.judge_error
+    else:
+        assert verdict == expected
 
 
 def test_judge_out_of_range_index_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -49,6 +49,10 @@ functional change.
 
 ### Fixed
 
+- Normalize JSON-string candidate-judge tool inputs across OpenAI and Anthropic
+  routes, reject non-finite cognitive confidence during reflection and restore,
+  and isolate final-verifier output schemas from task-specific output contracts.
+
 - Require merge-only GitHub repository settings before PR integration and verify
   the resulting commit's exact base/head parents before reporting success.
   Retain the returned merge SHA on uncertain readback; never retry that write.

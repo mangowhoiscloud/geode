@@ -35,6 +35,7 @@ from core.config import _resolve_provider
 from core.llm.adapters import resolve_for
 from core.llm.adapters.base import AdapterCallRequest, Message, ToolSpec
 from core.llm.adapters.registry import normalize_registry_provider
+from core.llm.agentic_response import parse_tool_input
 from core.llm.router import call_with_failover
 
 log = logging.getLogger(__name__)
@@ -132,8 +133,8 @@ def _extract_verdict_input(result: Any) -> dict[str, Any] | None:
     if isinstance(tool_uses, tuple | list):
         for entry in tool_uses:
             if isinstance(entry, dict) and entry.get("name") == _JUDGE_TOOL_NAME:
-                payload = entry.get("input")
-                if isinstance(payload, dict):
+                payload = parse_tool_input(entry.get("input"))
+                if payload is not None:
                     return payload
     return None
 
