@@ -70,6 +70,26 @@ def test_agentic_suffix_present_with_override() -> None:
     assert AGENTIC_SUFFIX in prompt
 
 
+def test_skill_slot_does_not_replace_literal_context_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    from core.agent import system_prompt
+
+    monkeypatch.setenv("GEODE_PERSONA", "on")
+    monkeypatch.setenv("GEODE_AUDIT_UNRESTRICTED", "0")
+    monkeypatch.setattr(system_prompt, "_generic_static_prefix", lambda: "Skills: {skill_context}")
+    monkeypatch.setattr(
+        system_prompt, "_build_identity_context", lambda: "Identity literal: {skill_context}"
+    )
+    monkeypatch.setattr(
+        system_prompt, "_build_user_context", lambda _profile: "User literal: {skill_context}"
+    )
+
+    prompt = build_system_prompt(_make_loop())
+
+    assert 'Skills: <available_skills status="empty" />' in prompt
+    assert "Identity literal: {skill_context}" in prompt
+    assert "User literal: {skill_context}" in prompt
+
+
 @pytest.mark.parametrize(
     "mode", ["default", "persona_off", "audit", "wrapper", "audit_wrapper", "agent_definition"]
 )

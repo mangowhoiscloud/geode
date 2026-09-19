@@ -49,6 +49,10 @@ functional change.
 
 ### Fixed
 
+- Substitute skill-catalog placeholders only inside the authored prompt baseline,
+  preserving literal profile and identity data in runtime requests and diagnostic
+  dumps. Keep all four selected GEODE identity sections instead of silently
+  dropping later runtime constraints at a 40-line boundary.
 - Gate Anthropic hosted tool search on documented model support and the actual
   official endpoint; keep cache-marked tools eager. Preserve native discovery
   history through subsequent requests and session persistence without treating

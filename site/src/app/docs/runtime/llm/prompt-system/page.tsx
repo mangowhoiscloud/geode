@@ -23,7 +23,8 @@ export default function Page() {
               <code>GEODE.md</code>는 런타임의 SOUL 원본이며 wheel에는{" "}
               <code>core/GEODE.md</code>로 포함됩니다. 기본 조립 경로는 이 파일의
               Identity, Voice &amp; Conduct, Operating Principles, RUNTIME CANNOT
-              네 섹션을 G1으로 추출합니다. 별도 <code>ContextAssembler</code>는
+              네 섹션을 G1으로 추출하며, 뒤쪽 규칙이 잘리지 않도록 선택된 본문을
+              모두 유지합니다. 별도 <code>ContextAssembler</code>는
               명시적 호출자에게 전체 SOUL을 제공하지만, 전체 파일을 기본 루프
               프롬프트에 넣지는 않습니다.
             </p>
@@ -70,10 +71,11 @@ export default function Page() {
             </p>
             <p>
               <code>core/llm/prompt_assembler.py</code>는 이제 작은
-              수식 출력 포맷 헬퍼입니다. 스킬 메타데이터는{" "}
-              <code>core/agent/loop/_context.py</code>의{" "}
-              <code>{"{skill_context}"}</code> 블록 한 곳으로만 프롬프트에
-              들어갑니다. 본문은 <code>use_skill</code>로 필요할 때 읽습니다.
+              수식 출력 포맷 헬퍼입니다. 루프는 스킬 메타데이터를 공통 조립기에
+              전달하며, 작성된 베이스의 <code>{"{skill_context}"}</code> 슬롯만
+              치환합니다. 프로필·메모리·정체성 데이터에 같은 문자열이 있어도
+              바꾸지 않습니다. 진단용 프롬프트 덤프도 이 경계를 따릅니다.
+              스킬 본문은 <code>use_skill</code>로 필요할 때 읽습니다.
             </p>
 
             <h2>레이어 조립: build_system_prompt</h2>
@@ -205,7 +207,8 @@ export default function Page() {
               <code>GEODE.md</code> is the runtime SOUL source, included in the
               wheel as <code>core/GEODE.md</code>. Default assembly extracts four
               sections into G1: Identity, Voice &amp; Conduct, Operating
-              Principles, and RUNTIME CANNOT. The separate{" "}
+              Principles, and RUNTIME CANNOT. All selected body text is retained
+              so later constraints are not silently truncated. The separate{" "}
               <code>ContextAssembler</code> exposes the full SOUL to explicit
               callers; it does not put the entire file into the default loop
               prompt.
@@ -254,9 +257,11 @@ export default function Page() {
             </p>
             <p>
               <code>core/llm/prompt_assembler.py</code> is a math-output formatting
-              helper. Skill metadata enters the prompt through one route: the{" "}
-              <code>{"{skill_context}"}</code> block substituted in{" "}
-              <code>core/agent/loop/_context.py</code>. Bodies load on demand
+              helper. The loop passes skill metadata to the shared builder,
+              which substitutes only the authored baseline&apos;s{" "}
+              <code>{"{skill_context}"}</code> slot. Matching literal text in
+              profile, memory, or identity data stays unchanged. Diagnostic
+              prompt dumps use the same boundary. Skill bodies load on demand
               through <code>use_skill</code>.
             </p>
 

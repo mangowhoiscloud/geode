@@ -13,8 +13,8 @@ Fidelity contract (mirrors ``core/agent/loop/_context.build_system_prompt``):
 
 * base = ``core.agent.system_prompt.build_system_prompt(model)`` with the
   surface pinned through ``GEODE_SURFACE_TYPE``;
-* the ``{skill_context}`` placeholder collapses to the same empty-state
-  marker the loop uses when no skill registry is attached;
+* only the baseline's ``{skill_context}`` slot receives the empty-state
+  marker used by the loop; identity and runtime data are not substituted;
 * ``AGENTIC_SUFFIX`` rides inside the base's static zone since
   PR-PROMPT-P2A (no loop-level append on the default path).
 
@@ -82,15 +82,14 @@ def assemble_full_prompt(
             model=model,
             policy_sources=policy_sources,
             user_profile=profile,
+            skill_context=SKILL_EMPTY_MARKER,
         )
     finally:
         if previous_surface is None:
             os.environ.pop("GEODE_SURFACE_TYPE", None)
         else:
             os.environ["GEODE_SURFACE_TYPE"] = previous_surface
-    # PR-PROMPT-P2A — the base now carries AGENTIC_SUFFIX in its static
-    # zone (before <dynamic_context>); appending again would duplicate it.
-    return base.replace("{skill_context}", SKILL_EMPTY_MARKER)
+    return base
 
 
 def analyze_prompt(prompt: str) -> tuple[tuple[str, ...], tuple[str, ...]]:

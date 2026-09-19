@@ -53,6 +53,21 @@ def test_surface_pin_reaches_platform_hint() -> None:
     assert "surface='slack'" in slack_prompt
 
 
+def test_dump_preserves_literal_context_data(monkeypatch) -> None:
+    from core.agent import system_prompt
+
+    monkeypatch.setenv("GEODE_AUDIT_UNRESTRICTED", "0")
+    monkeypatch.setattr(system_prompt, "_generic_static_prefix", lambda: "Skills: {skill_context}")
+    monkeypatch.setattr(
+        system_prompt, "_build_user_context", lambda _profile: "User literal: {skill_context}"
+    )
+
+    prompt = assemble_full_prompt("claude-opus-4-8", "cli")
+
+    assert f"Skills: {SKILL_EMPTY_MARKER}" in prompt
+    assert "User literal: {skill_context}" in prompt
+
+
 def test_surface_env_is_restored() -> None:
     import os
 
