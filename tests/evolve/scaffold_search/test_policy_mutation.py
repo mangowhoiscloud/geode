@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from evolve.scaffold_search.loop.mutate import policies as _policies_mod
@@ -321,6 +322,35 @@ def test_apply_mutation_retrieval_is_rejected_post_s0d() -> None:
     # 보존돼 있어서 직접 호출은 가능 (path constant preservation).
     path = policy_path("retrieval")  # dict 매핑은 보존 — 미래 복원용
     assert path.name == "retrieval.json"
+
+
+@pytest.mark.parametrize(
+    "target_kind", ["retrieval", "bogus_kind", *sorted(_policies_mod._READER_ONLY_KINDS)]
+)
+@pytest.mark.parametrize("current_sections", [None, {}])
+def test_apply_mutation_rejects_non_mutable_kind_before_policy_io(
+    monkeypatch: pytest.MonkeyPatch,
+    target_kind: str,
+    current_sections: dict[str, str] | None,
+) -> None:
+    loader = Mock(return_value={})
+    writer = Mock()
+    monkeypatch.setattr(_policies_mod, "load_policy_for_mutation", loader)
+    monkeypatch.setattr(_policies_mod, "write_policy", writer)
+
+    with pytest.raises(ValueError, match=r"target_kind .* is not one of"):
+        apply_mutation(
+            Mutation(
+                target_section="section",
+                new_value="new value",
+                rationale="bypass parsing",
+                target_kind=target_kind,
+            ),
+            current_sections=current_sections,
+        )
+
+    loader.assert_not_called()
+    writer.assert_not_called()
 
 
 def test_apply_mutation_reflection_writes_to_reflection_file(

@@ -202,6 +202,12 @@ def make_llm_extract_handler(
         )
 
     async def _on_turn_complete(event: HookEvent, data: dict[str, Any]) -> None:
+        # Avoid importing the loop during hook registration at bootstrap.
+        from core.agent.loop.models import is_successful_task_termination
+
+        if not is_successful_task_termination(data.get("termination_reason")):
+            return
+
         session_id = str(data.get("session_id", ""))
         turn_count = turn_counts.get(session_id, 0) + 1
         turn_counts[session_id] = turn_count

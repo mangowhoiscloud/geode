@@ -83,7 +83,7 @@ class WorkerRequest:
     time_budget_s: float = 0.0  # 0 = inherit parent's budget
     thinking_budget: int = 0  # 0 = disabled; >0 = thinking tokens per call (legacy)
     effort: str = "high"  # "low" | "medium" | "high" | "max" | "xhigh" (v0.56.0)
-    isolation: str = ""  # Reserved for Phase 3: "worktree" etc.
+    isolation: str = ""  # Legacy field; only the shared-workspace default is supported.
     # Agent context (S2-wire, 2026-05-18):
     # When ``agent_name`` is non-empty the parent has resolved an
     # AgentDefinition (``.claude/agents/<agent_name>.md``) and pre-
@@ -147,6 +147,10 @@ class WorkerRequest:
     # ever populated it, only ``from_dict`` echoed its missing-default
     # — and a dual-SoT trap for the next reader (see
     # PR-CLEANUP-WORKER-REQUEST-RUN-DIR, 2026-05-25). Removed.
+
+    def __post_init__(self) -> None:
+        if self.isolation != "":
+            raise ValueError("Worker workspace isolation is not supported; omit isolation")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

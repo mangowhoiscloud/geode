@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import tomllib
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -172,6 +174,63 @@ class TestBudgetBar:
 
 
 class TestBudgetPersistence:
+    @pytest.mark.parametrize("cost_header", ["[cost]", "[cost] # display budget"])
+    def test_budget_insert_respects_commented_section_boundaries(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cost_header: str
+    ) -> None:
+        from core.cli.commands import _set_cost_budget
+
+        monkeypatch.chdir(tmp_path)
+        config = tmp_path / ".geode" / "config.toml"
+        config.parent.mkdir()
+        config.write_text(f"{cost_header}\n[other] # keep\nmonthly_budget = 900.0\n")
+
+        _set_cost_budget(75.0)
+
+        assert tomllib.loads(config.read_text()) == {
+            "cost": {"monthly_budget": 75.0},
+            "other": {"monthly_budget": 900.0},
+        }
+
+    def test_budget_update_preserves_prefix_keys_and_other_sections(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from core.cli.commands import _set_cost_budget
+
+        monkeypatch.chdir(tmp_path)
+        config = tmp_path / ".geode" / "config.toml"
+        config.parent.mkdir()
+        config.write_text(
+            "[cost]\nmonthly_budget_alert = true\nmonthly_budget = 20.0\n"
+            '[llm]\nprimary_model = "keep"\n'
+        )
+
+        _set_cost_budget(75.0)
+
+        assert tomllib.loads(config.read_text()) == {
+            "cost": {"monthly_budget_alert": True, "monthly_budget": 75.0},
+            "llm": {"primary_model": "keep"},
+        }
+
+    def test_budget_replace_failure_preserves_existing_config(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from core.cli.commands import _set_cost_budget
+
+        monkeypatch.chdir(tmp_path)
+        config = tmp_path / ".geode" / "config.toml"
+        config.parent.mkdir()
+        original = "[cost]\nmonthly_budget = 20.0\n"
+        config.write_text(original)
+        with (
+            patch("core.memory.atomic_write.os.replace", side_effect=OSError("replace failed")),
+            pytest.raises(OSError, match="replace failed"),
+        ):
+            _set_cost_budget(75.0)
+
+        assert config.read_text() == original
+        assert sorted(path.name for path in config.parent.iterdir()) == ["config.toml"]
+
     def test_get_budget_no_file(self, tmp_path, monkeypatch):
         from core.cli.commands import _get_cost_budget
 

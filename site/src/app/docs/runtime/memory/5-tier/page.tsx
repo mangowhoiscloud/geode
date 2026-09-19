@@ -109,6 +109,13 @@ export default function Page() {
 
             <h2>기억 수명주기: 증거 기반 소멸</h2>
             <p>
+              Unreleased: 턴 종료 후 자동 LLM 학습·dreaming은 전달 가능한 종료
+              (<code>natural</code>, <code>forced_text</code>, <code>actionable_partial</code>)에만
+              실행됩니다. 취소·인프라 오류·알 수 없는 종료에서는 추가 호출을 하지 않습니다.
+              검증 실패를 학습에서 제외하는 규칙은 아닙니다. 실패 증거를 분석하는 명시적
+              <code>dream_session()</code> 호출도 유지됩니다.
+            </p>
+            <p>
               프로젝트 기억은 증거를 기준으로 정리됩니다.{" "}
               <code>geode memory-lifecycle</code>
               (<code>core/cli/commands/memory_lifecycle.py</code>)는 두 가지를
@@ -263,6 +270,14 @@ export default function Page() {
             </p>
 
             <h2>Memory lifecycle: evidence-based decay</h2>
+            <p>
+              Unreleased: automatic post-turn LLM learning and dreaming run only for
+              deliverable terminations (<code>natural</code>, <code>forced_text</code>,
+              {" "}<code>actionable_partial</code>). Cancellation, infrastructure errors,
+              and unknown terminations do not trigger extra calls. This is not a
+              verifier-pass filter; explicit <code>dream_session()</code> calls can
+              still analyze failed evidence.
+            </p>
             <p>
               Project memory is pruned by evidence, not time.{" "}
               <code>geode memory-lifecycle</code>

@@ -58,6 +58,11 @@ export default function Page() {
               설정합니다.
             </p>
 
+            <p>
+              Unreleased: 위임 worker에도 <code>GEODE_PERSONA</code>와 호출 시점의
+              실제 audit 상태가 전달됩니다. 프로세스 환경값보다 우선한 요청별
+              audit 설정도 유지하며, 명시적 에이전트 override의 조립 경로는 바꾸지 않습니다.
+            </p>
             <h2>wrapper override: 변이된 스캐폴드 주입</h2>
             <p>
               자기개선 루프가 진화시키는 것이 바로 이 static 영역의 wrapper
@@ -111,6 +116,12 @@ export default function Page() {
               붙입니다. 파일을 못 읽으면 크게 실패합니다.
               교체가 필요하면 훅 핸들러가 <code>program_md</code> 본문을
               공급하는 단일 제어 지점을 씁니다.
+            </p>
+            <p>
+              Unreleased: 응답 파싱과 직접 <code>apply_mutation()</code> 호출은
+              같은 활성 종류 목록을 검사합니다. 폐기된 <code>retrieval</code>,
+              읽기 전용 종류와 알 수 없는 종류는 정책을 읽거나 쓰기 전에 거절합니다.
+              과거 증거 읽기와 rollback 경로는 별개로 유지합니다.
             </p>
 
             <h2>실패 모드</h2>
@@ -191,6 +202,12 @@ export default function Page() {
               <code>--unrestricted</code> before the inspect subprocess.
             </p>
 
+            <p>
+              Unreleased: delegated workers inherit <code>GEODE_PERSONA</code> and
+              the effective audit state at spawn, including request-local overrides
+              of the process environment. Explicit agent overrides keep their
+              separate assembly path.
+            </p>
             <h2>The wrapper override: injecting the mutated scaffold</h2>
             <p>
               The wrapper scaffold in the static region is exactly what the
@@ -250,6 +267,12 @@ export default function Page() {
               runner fails loud. The single programmatic control point is a
               hook handler supplying a
               replacement <code>program_md</code> body.
+            </p>
+            <p>
+              Unreleased: response parsing and direct <code>apply_mutation()</code>
+              calls check the same active-kind list. Retired <code>retrieval</code>,
+              reader-only, and unknown kinds are rejected before policy I/O.
+              Historical reads and rollback remain separate and supported.
             </p>
 
             <h2>Failure modes</h2>

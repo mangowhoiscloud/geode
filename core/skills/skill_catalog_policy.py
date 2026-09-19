@@ -41,7 +41,6 @@ from __future__ import annotations
 
 import json
 import logging
-from html import escape
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -50,6 +49,7 @@ from core.config.policy_source import (
     PolicySourcePaths,
     select_policy_source,
 )
+from core.skills.skills import _render_skill_context
 
 if TYPE_CHECKING:
     from core.skills.skills import SkillRegistry
@@ -171,35 +171,17 @@ def apply_skill_catalog_policy(
     if not policy:
         return registry.get_context_block(max_chars=max_chars)
 
-    skills = sorted(registry._skills.values(), key=lambda s: s.name)
-    if not skills:
-        return ""
-
-    lines: list[str] = ["<available_skills>"]
-    total = 0
-    for skill in skills:
-        override = policy.get(skill.name, {})
-        effective_invocable = override.get(_FIELD_USER_INVOCABLE, skill.user_invocable)
-        effective_description = override.get(_FIELD_DESCRIPTION, skill.description)
-        attrs = [
-            f'name="{escape(skill.name, quote=True)}"',
-            f'user_invocable="{str(effective_invocable).lower()}"',
-        ]
-        if skill.tools:
-            attrs.append(f'tools="{escape(", ".join(skill.tools), quote=True)}"')
-        if skill.context_fork:
-            attrs.append('context="fork"')
-        desc = escape(effective_description[:200])
-        line = f"  <skill {' '.join(attrs)}>{desc}</skill>"
-        if total + len(line) > max_chars:
-            remaining = len(skills) - (len(lines) - 1)
-            lines.append(f'  <truncated remaining="{remaining}" />')
-            break
-        lines.append(line)
-        total += len(line)
-    lines.append("</available_skills>")
-
-    return "\n".join(lines)
+    skills = [
+        skill.model_copy(
+            update={
+                key: value
+                for key, value in policy.get(skill.name, {}).items()
+                if key in _ALL_FIELDS
+            }
+        )
+        for skill in registry._skills.values()
+    ]
+    return _render_skill_context(skills, max_chars)
 
 
 __all__ = ["apply_skill_catalog_policy"]

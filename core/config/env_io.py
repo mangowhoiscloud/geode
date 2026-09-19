@@ -167,13 +167,14 @@ def upsert_config_toml(section: str, key: str, value: str, *, scope: str = "proj
 
     Section headings use ``[section.subsection]`` notation per TOML.
     """
+    from core.config.toml_edit import toml_escape
     from core.paths import GLOBAL_CONFIG_TOML, PROJECT_CONFIG_TOML
 
     # P2 (v0.95.x) — was literal `Path(".geode") / "config.toml"`
     config_path = GLOBAL_CONFIG_TOML if scope == "global" else PROJECT_CONFIG_TOML
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
-    target_line = f'{key} = "{value}"'
+    target_line = f'{key} = "{toml_escape(value)}"'
     section_heading = f"[{section}]"
 
     raw = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
