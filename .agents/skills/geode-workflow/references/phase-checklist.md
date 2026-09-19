@@ -33,7 +33,8 @@ local `develop` ref moved with fetch. Main-maintained tracking work instead
 uses a dedicated `origin/main` worktree. Read
 [GitFlow allocation](../../geode-gitflow/SKILL.md#worktree-allocation) and the
 roadmap's §0.3 for exact exceptions; its tracking-only `DONE` PR targets `main`
-after release, then syncs back through a CI-gated `main -> develop` PR.
+after release; the next owned feature branch incorporates main before its CI
+and integration. Do not open a standalone `main -> develop` sync PR.
 
 ## Phase 1: GAP Audit
 

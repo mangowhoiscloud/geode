@@ -98,8 +98,8 @@ merge. After it merges, the roadmap's narrow, explicitly authorized
 reconciliation PR atomically records `IN_DEVELOP` for the whole package; a
 main-based tracking PR atomically records `DONE` plus per-GAP closure evidence
 after release. That tracking worktree starts from current `origin/main`, its PR
-targets `main`, and its merge is followed by a CI-gated `main -> develop` sync
-PR. Detailed subsystem docs continue to own behavior contracts, but they do
+targets `main`; the next owned feature branch incorporates that main history
+before integration. Detailed subsystem docs continue to own behavior contracts, but they do
 not independently claim program completion or reorder the roadmap. Untracked
 architecture scope discovered during implementation is registered as an
 `OPEN` package in a separate roadmap-only GAP-registration PR; registration
@@ -128,23 +128,20 @@ feature/<name> -> develop -> main
 - Feature branches and develop-targeted roadmap branches start from the
   fetched `origin/develop` tip.
 - A roadmap tracking-only `DONE` branch starts from `origin/main`, targets
-  `main`, and is followed by a CI-gated `main -> develop` sync.
+  `main`, and reaches develop through the next owned feature branch.
 - Other main-maintained tracking documents use their dedicated `origin/main`
   worktree. Read [GitFlow allocation](../.agents/skills/geode-gitflow/SKILL.md#worktree-allocation)
   and the roadmap's §0.3 for the exact tracking/program exceptions.
-- Use the current `main` head directly when the sync is mergeable under strict
-  up-to-date protection; do not wrap a copied or fast-forwarded main head in a
-  trusted sync branch.
-- When conflicts or strict ancestry block that canonical head, create
-  `sync/main-into-develop-*` from current `origin/develop` and merge current
-  `origin/main`. Its head must have exactly those two parents, in that order.
-  Immediately before merge, fetch both refs and rerun
-  `scripts/resolve_architecture_roadmap_trust.py` with `--require-trust main`.
-  `scripts/merge_pr.py` enforces the same parent proof against live remote tips
-  before its head-pinned merge request. If either tip moved, rebuild the sync
-  head and rerun CI; an earlier green no longer proves the current graph.
+- Before feature integration, include any missing `origin/main` history in
+  the existing feature branch with a merge commit, then push and verify that
+  head's CI. Do not create a separate `main -> develop` or `sync/*` PR.
+  The merge guard checks current main ancestry; the roadmap resolver grants
+  canonical-main evidence only to same-repository feature heads containing it.
 - Feature PRs merge into `develop` with merge commits; preserve reviewed commit history.
-- Before `develop -> main`, sync `main -> develop` if main has drift.
+  Squash/rebase integration is prohibited. GitFlow owns the
+  [Don't cases and recovery boundary](../.agents/skills/geode-gitflow/SKILL.md#dont-cases).
+- Before `develop -> main`, verify main is an ancestor of develop. If main
+  moved, incorporate it through the feature branch and fresh CI first.
 - `develop -> main` is a pass-through merge after gates are satisfied.
 - Merge admission is a separate check, not a side effect of local test success.
   `uv run python scripts/merge_pr.py --pr <N>` is read-only; only its explicit
@@ -152,7 +149,9 @@ feature/<name> -> develop -> main
   current PR-linked Actions evidence and protected-branch settings. Missing,
   skipped, pending, failed, ambiguous or stale required evidence blocks it.
   Required checks on `main` and `develop` must be strict and apply to
-  administrators; never bypass them.
+  administrators; never bypass them. The guard also requires merge-only server
+  settings and verifies the result's ordered base/head parents before reporting
+  success. Fetching does not update a stale checkout's guard or instructions.
   Repeated runs can coexist on one head (for example, Draft → Ready). The
   command scopes GitHub CLI's current required-check selection by its explicit
   `pull_request` event (excluding same-head push runs), then binds its
