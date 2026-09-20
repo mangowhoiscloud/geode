@@ -122,3 +122,70 @@ def test_required_policy_checks_resolved_default_model(
     with pytest.raises(ValueError, match="disallowed by the required model policy"):
         asyncio.run(_request(adapter, method, ""))
     client.assert_not_called()
+
+
+@pytest.mark.parametrize("method", ["acomplete", "astream", "aweb_search", "acomplete_text"])
+@pytest.mark.parametrize("model", ["gpt-5.4", "gpt-5.4-mini", "gpt-5.2", "gpt-5.3-codex"])
+def test_retired_subscription_model_rejected_before_credentials(
+    monkeypatch: pytest.MonkeyPatch, method: str, model: str
+) -> None:
+    from core.llm.errors import ModelSourceUnavailableError
+
+    monkeypatch.setattr(settings, "model_policy_path", "")
+    adapter = CodexOAuthAdapter()
+    client = Mock(side_effect=_ClientBoundaryError)
+    monkeypatch.setattr(adapter, "_get_client", client)
+    with pytest.raises(ModelSourceUnavailableError, match=f"{model} is .*subscription"):
+        asyncio.run(_request(adapter, method, model))
+    client.assert_not_called()
+
+
+def test_retired_subscription_list_does_not_advertise_user_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import core.config as cfg
+
+    monkeypatch.setattr(settings, "model_policy_path", "")
+    monkeypatch.setattr(cfg, "CODEX_PRIMARY", "gpt-5.4")
+    monkeypatch.setattr(cfg, "CODEX_FALLBACK_CHAIN", ["gpt-5.2", "gpt-5.5", "gpt-5.6-sol"])
+    assert [model.id for model in CodexOAuthAdapter().list_models()] == ["gpt-5.5", "gpt-5.6-sol"]
+    assert cfg.CODEX_PRIMARY == "gpt-5.4"  # no automatic config migration
+
+
+@pytest.mark.parametrize("model", ["gpt-5.4", "gpt-5.4-mini", "gpt-5.2", "gpt-5.3-codex"])
+def test_platform_models_still_reach_the_existing_client_boundary(
+    monkeypatch: pytest.MonkeyPatch, model: str
+) -> None:
+    from core.llm.adapters.openai_payg import OpenAIPaygAdapter
+
+    adapter = OpenAIPaygAdapter()
+    client = Mock(side_effect=_ClientBoundaryError)
+    monkeypatch.setattr(adapter, "_get_client", client)
+    request = AdapterCallRequest(model=model, messages=[Message(role="user", content="probe")])
+    with pytest.raises(_ClientBoundaryError):
+        asyncio.run(adapter.acomplete(request))
+    client.assert_called_once_with()
+
+
+@pytest.mark.parametrize("policy_name", ["interactive", "auxiliary", "provider"])
+def test_retirement_is_terminal_even_with_opted_in_fallback_chain(
+    monkeypatch: pytest.MonkeyPatch, policy_name: str
+) -> None:
+    from core.llm import fallback
+    from core.llm.errors import ModelSourceUnavailableError
+
+    monkeypatch.setattr(settings, "model_policy_path", "")
+    adapter = CodexOAuthAdapter()
+    client = Mock(side_effect=_ClientBoundaryError)
+    monkeypatch.setattr(adapter, "_get_client", client)
+    attempted: list[str] = []
+
+    async def call(model: str) -> None:
+        attempted.append(model)
+        await _request(adapter, "acomplete", model)
+
+    policy = getattr(fallback, f"{policy_name}_retry_policy")(max_attempts=2, base_delay_s=0)
+    with pytest.raises(ModelSourceUnavailableError):
+        asyncio.run(fallback.run_with_retry_policy(["gpt-5.4", "gpt-5.6-sol"], call, policy=policy))
+    assert attempted == ["gpt-5.4"]
+    client.assert_not_called()

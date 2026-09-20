@@ -61,14 +61,14 @@ _OPENAI_PICKER_MODELS: tuple[ModelProfile, ...] = (
     # Officially announced for API and ChatGPT plans; account access is
     # rollout-gated independently of this model capability row.
     ModelProfile("gpt-6-astra", "openai", "GPT-6 Astra", "$$$$"),
-    # GPT-5.6 is dual-lane. The bare gpt-5.6 Platform alias stays off the
-    # picker because it aliases Sol on the API and is absent from Codex.
+    # GPT-5.6 is dual-lane. Omit the bare alias to avoid a duplicate Sol row;
+    # the alias is documented for Codex too, not a Platform-only model.
     ModelProfile("gpt-5.6-sol", "openai", "GPT-5.6 Sol", "$$"),
     ModelProfile("gpt-5.6-terra", "openai", "GPT-5.6 Terra", "$$"),
     ModelProfile("gpt-5.6-luna", "openai", "GPT-5.6 Luna", "$"),
-    # GPT-5.5 is subscription-only, but still belongs to the OpenAI family.
+    # GPT-5.5 remains dual-lane on 2026-09-20; Codex retires it on 2026-10-14.
     ModelProfile("gpt-5.5", "openai", "GPT-5.5", "$$"),
-    # GPT-5.4 and Mini are dual-lane.
+    # Platform choices; the subscription picker filters ended/deprecated IDs.
     ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),
     ModelProfile("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$"),
     # One-release management compatibility for persisted installations.
@@ -95,7 +95,9 @@ def _glm_label(model_id: str) -> str:
     return _GLM_LABELS.get(model_id, model_id)
 
 
-def get_model_profiles(*, configured_model_ids: Iterable[str] = ()) -> list[ModelProfile]:
+def get_model_profiles(
+    *, configured_model_ids: Iterable[str] = (), openai_source: str | None = None
+) -> list[ModelProfile]:
     """The /model picker model list, built fresh per call (H11-tail).
 
     Pre-PR this was a boot-frozen module-level list, so the routing-constant
@@ -108,7 +110,9 @@ def get_model_profiles(*, configured_model_ids: Iterable[str] = ()) -> list[Mode
     persisted model outside the curated catalog is retained as one deduplicated
     management row, so opening the picker and pressing Enter cannot silently
     replace an existing selection. ``OPENAI_PRIMARY`` receives the same
-    treatment because it is an operator-owned routing default.
+    treatment because it is an operator-owned routing default. Retired
+    subscription models are not offered; an active retired selection stays as
+    a labelled, unavailable management row so Enter cannot silently replace it.
     """
     from core.config import (
         ANTHROPIC_BUDGET,
@@ -117,6 +121,10 @@ def get_model_profiles(*, configured_model_ids: Iterable[str] = ()) -> list[Mode
         OPENAI_PRIMARY,
         _resolve_provider,
     )
+    from core.llm.model_catalog import model_source_unavailable_reason
+
+    if openai_source is None:
+        openai_source = _selected_openai_source()
 
     anthropic_profiles = [
         # Fable 5 — Anthropic's most capable widely released model ($10/$50,
@@ -129,10 +137,21 @@ def get_model_profiles(*, configured_model_ids: Iterable[str] = ()) -> list[Mode
         ModelProfile(ANTHROPIC_SECONDARY, "anthropic", "Sonnet 4.6", "$$"),
         ModelProfile(ANTHROPIC_BUDGET, "anthropic", "Haiku 4.5", "$"),
     ]
+    anthropic_profiles = [
+        profile
+        for profile in anthropic_profiles
+        if not model_source_unavailable_reason(profile.id, provider="anthropic", source="payg")
+    ]
     openai_profiles = [
         # Version-pinned current surface. Dual-lane rows use provider=openai;
         # infer_source selects OAuth subscription versus PAYG at call time.
-        *_OPENAI_PICKER_MODELS,
+        *(
+            profile
+            for profile in _OPENAI_PICKER_MODELS
+            if not model_source_unavailable_reason(
+                profile.id, provider="openai", source=openai_source or ""
+            )
+        ),
     ]
     openrouter_profiles = list(_OPENROUTER_PICKER_MODELS)
     glm_profiles = [
@@ -149,16 +168,29 @@ def get_model_profiles(*, configured_model_ids: Iterable[str] = ()) -> list[Mode
         for profile in (*anthropic_profiles, *openai_profiles, *openrouter_profiles, *glm_profiles)
     }
     configured_profiles: list[ModelProfile] = []
-    for raw_model_id in (OPENAI_PRIMARY, *configured_model_ids):
+    for raw_model_id in (
+        OPENAI_PRIMARY,
+        ANTHROPIC_SECONDARY,
+        ANTHROPIC_BUDGET,
+        *configured_model_ids,
+    ):
         model_id = raw_model_id.strip()
         if not model_id or model_id in existing_ids:
             continue
         existing_ids.add(model_id)
+        provider = _resolve_provider(model_id)
+        source = "payg" if provider == "anthropic" else openai_source or ""
+        reason = model_source_unavailable_reason(model_id, provider=provider, source=source)
+        source_label = "Anthropic API" if provider == "anthropic" else "subscription"
         configured_profiles.append(
             ModelProfile(
                 model_id,
-                _resolve_provider(model_id),
-                f"{model_id} (Configured)",
+                provider,
+                (
+                    f"{model_id} (Unavailable on {source_label})"
+                    if reason
+                    else f"{model_id} (Configured)"
+                ),
                 "$$",
             )
         )
@@ -390,13 +422,43 @@ def _get_profile_store() -> ProfileStore:
     return ensure_profile_store()
 
 
-def model_available(model_id: str) -> bool:
+def _selected_openai_source() -> str | None:
+    """Read the same source choice as adapter dispatch, without changing it."""
+    from core.llm.adapters._source_inference import infer_source
+
+    try:
+        return infer_source("openai")
+    except RuntimeError:
+        # A disabled provider is handled by the credential availability path.
+        return None
+
+
+def model_unavailable_reason(model_id: str, *, source: str | None = None) -> str | None:
+    """Explain source retirement separately from missing credentials."""
+    from core.config import _resolve_provider
+    from core.llm.model_catalog import model_source_unavailable_reason, normalize_model_provider
+
+    provider = _resolve_provider(model_id)
+    if provider == "anthropic":
+        return model_source_unavailable_reason(model_id, provider=provider, source="payg")
+    if normalize_model_provider(provider) != "openai":
+        return None
+    return model_source_unavailable_reason(
+        model_id,
+        provider=provider,
+        source=source if source is not None else _selected_openai_source() or "",
+    )
+
+
+def model_available(model_id: str, *, source: str | None = None) -> bool:
     """Return True if `model_id` has a usable credential route.
 
     Mirrors what ``AgenticLoop`` would resolve at the next LLM call:
-    delegates to ``resolve_routing(model_id)`` (which walks per-model
+    by default delegates to ``resolve_routing(model_id)`` (which walks per-model
     routing → equivalence-class scan → single-provider fallback → PAYG
-    synthesis) and treats a non-None ``RoutingTarget`` as "available".
+    synthesis) and treats a non-None ``RoutingTarget`` as "available". An
+    explicit role source instead checks that concrete adapter's credential
+    detector; an OAuth plan cannot satisfy a PAYG pin (or vice versa).
 
     Used by the ``/model`` picker (M5) to flag entries whose provider
     has no authenticated profile yet — so the user sees *why* a model
@@ -407,6 +469,18 @@ def model_available(model_id: str) -> bool:
     try:
         from core.llm.strategies.plan_registry import resolve_routing
 
+        if model_unavailable_reason(model_id, source=source) is not None:
+            return False
+        if source is not None:
+            from core.config import _resolve_provider
+            from core.llm.adapters.base import CredentialDetectionCapable
+            from core.llm.adapters.registry import normalize_registry_provider, resolve_for
+
+            adapter = resolve_for(normalize_registry_provider(_resolve_provider(model_id)), source)
+            return (
+                isinstance(adapter, CredentialDetectionCapable)
+                and adapter.detect_credential() is not None
+            )
         return resolve_routing(model_id, sources=None) is not None
     except Exception:
         return False

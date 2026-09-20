@@ -92,13 +92,12 @@ class TestModelProfileLabels:
 
     def test_gpt_5_4_mini_is_not_labelled_codex(self) -> None:
         # Pre-0.50 the UI showed "Codex (Plus)" for gpt-5.4-mini even though
-        # its canonical provider family is "openai". Credential source, not
-        # this label, selects the subscription or PAYG backend for dual-lane
-        # models.
-        for profile in get_model_profiles():
+        # its canonical provider family is "openai". Subscription retirement
+        # does not rename or hide the model's still-valid Platform API row.
+        for profile in get_model_profiles(openai_source="payg"):
             if profile.id == "gpt-5.4-mini":
-                assert "Codex" not in profile.provider, (
-                    "gpt-5.4-mini is dual-lane and must keep the openai family label"
+                assert profile.provider == "openai", (
+                    "gpt-5.4-mini must keep the openai family label on Platform API"
                 )
                 return
         raise AssertionError("gpt-5.4-mini missing from the model picker list")

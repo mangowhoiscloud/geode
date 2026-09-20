@@ -156,7 +156,9 @@ class OpenRouterPaygAdapter:
                 type(exc).__name__,
             )
             raise
-        result = translate_chat_response(response)
+        result = translate_chat_response(
+            response, provider=self.provider, adapter_name=self.name, model=model
+        )
         response_provider, routing_strategy, routing_attempt = _route_fields(response)
         return replace(
             result,

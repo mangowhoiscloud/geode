@@ -69,20 +69,16 @@ glm = []
 "o4-" = "openai"
 "o4-mini" = "openai"  # bare ``o4-mini`` — same special-case
 
-# Codex-only models — OAuth-only path (chatgpt.com/backend-api/codex). The
-# resolver checks this list before the prefix table so gpt-5.5 routes to
-# openai-codex rather than openai. Membership means "the Platform API
-# does NOT serve this id" — dual-lane models stay OFF this list so the
-# gpt- prefix routes them to the openai family and the operator's
-# credential source (oauth ↔ api_key) picks the backend per call.
-#
-# gpt-5.6-{sol,terra,luna} are deliberately NOT listed: dual-lane.
-# Platform API GA 2026-07-09 (developers.openai.com/api/docs/models) AND
-# Codex slugs in openai/codex codex-rs/models-manager/models.json (ctx7,
-# 2026-07-13). The bare "gpt-5.6" Platform alias is likewise absent from
-# the Codex models.json — Platform-only id, prefix-routed to openai.
+# Optional legacy routing aliases, checked before the prefix table. These
+# do not grant model availability or force a credential source. GPT-5.5 and
+# GPT-5.5 Pro have documented Platform API endpoints, so neither is Codex-only.
+# The bare gpt-5.6 alias is documented in Codex as well as the Platform API.
+# Source-specific retirements are enforced by core.llm.model_catalog and the
+# subscription adapter, not by changing the provider family or billing source.
+# Verified 2026-09-20: https://learn.chatgpt.com/docs/models and
+# https://developers.openai.com/api/docs/models/gpt-5.5-pro .
 [routing]
-codex_only_models = ["gpt-5.5", "gpt-5.5-pro"]
+codex_only_models = []
 # Suffix-based codex matches — *-codex, *-codex-max, *-codex-mini.
 codex_suffixes = ["-codex", "-codex-max", "-codex-mini"]
 # Fallback provider when no rule matches (preserves legacy "openai" default).

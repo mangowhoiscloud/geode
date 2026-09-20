@@ -14,8 +14,8 @@ carried a ``function_call`` with no matching ``function_call_output``
 and the Codex backend rejected with ``"No tool output found for
 function call call_XXXX"`` 400.
 
-The fix gates the translation on ``has_tool_uses``: presence of
-``tool_uses`` always wins, regardless of provider string.
+The fix gates ordinary continuation on ``has_tool_uses``. Provider refusal
+or content filtering takes precedence and must not execute partial calls.
 
 Symptom reproduction was direct from the operator's serve log:
 
@@ -108,9 +108,11 @@ def test_translate_stop_reason_anthropic_end_turn_no_tool_uses_is_end_turn() -> 
     assert _translate_stop_reason("end_turn", has_tool_uses=False) == "end_turn"
 
 
-def test_translate_stop_reason_unknown_provider_string_without_tool_uses_is_end_turn() -> None:
-    """Anything not recognised + no tool_uses → conservative end_turn."""
-    assert _translate_stop_reason("something_weird", has_tool_uses=False) == "end_turn"
+def test_translate_stop_reason_unknown_provider_string_is_preserved_without_continuation() -> None:
+    """Unknown terminal reasons must not be relabelled as ordinary completion."""
+    stop = _translate_stop_reason("something_weird", has_tool_uses=False)
+    assert stop == "something_weird"
+    assert stop != "tool_use"
     assert _translate_stop_reason("", has_tool_uses=False) == "end_turn"
 
 

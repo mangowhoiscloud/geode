@@ -14,6 +14,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import core.config
+import pytest
 
 
 def test_agent_definition_model_omission_remains_inherited_during_reload() -> None:
@@ -77,14 +78,23 @@ def test_openai_default_override_does_not_duplicate_fixed_picker_rows() -> None:
     ]
 
 
-def test_openai_default_override_outside_surface_remains_manageable() -> None:
-    """An active supported override must stay visible so /model can anchor it."""
+@pytest.mark.parametrize(
+    "source,expected_label",
+    [
+        ("payg", "gpt-5.2 (Configured)"),
+        ("subscription", "gpt-5.2 (Unavailable on subscription)"),
+    ],
+)
+def test_openai_default_override_outside_surface_remains_manageable(
+    source: str, expected_label: str
+) -> None:
+    """A live override stays one management row, labelled for its selected source."""
     from core.cli.commands._state import get_model_profiles
 
     with patch.object(core.config, "OPENAI_PRIMARY", "gpt-5.2"):
-        profiles = get_model_profiles()
+        profiles = get_model_profiles(openai_source=source)
 
     matches = [profile for profile in profiles if profile.id == "gpt-5.2"]
     assert len(matches) == 1
     assert matches[0].provider == "openai"
-    assert matches[0].label == "gpt-5.2 (Configured)"
+    assert matches[0].label == expected_label

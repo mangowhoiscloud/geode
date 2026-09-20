@@ -21,7 +21,7 @@ import inspect
 from unittest.mock import patch
 
 import pytest
-from core.agent.loop import _guards, _model_switching, _phases
+from core.agent.loop import _guards, _model_switching, _phases, _response
 from core.agent.loop.agent_loop import AgenticLoop
 
 # ---------------------------------------------------------------------------
@@ -129,6 +129,39 @@ def test_prompt_dirty_triggers_rebuild_even_without_drift() -> None:
     result = _call_helper(stub, "ORIGINAL", None)
     assert result == "REBUILT_PROMPT"
     assert stub.build_calls == 1
+
+
+@pytest.mark.parametrize("changed", [False, True])
+def test_tool_graph_refresh_discards_only_stale_preflight_hint(changed: bool) -> None:
+    from core.agent import capability_graph
+    from core.llm.providers import anthropic
+
+    stub = _StubLoop()
+    stub._tools = [{"name": "computer"}]
+    stub._mcp_manager = None
+    stub._tool_registry = None
+    stub._allowed_tool_names = None
+    stub._bound_tool_plan = None
+    stub._policy_sources = {}
+    stub._capability_graph = {"visible_tools": ["computer"]}
+    stub._preflight_hint = "<geode_task_preflight>recommend computer</geode_task_preflight>"
+    new_graph = {"visible_tools": ["web_fetch"]} if changed else stub._capability_graph
+    original_prompt = "ORIGINAL\n" + stub._preflight_hint
+
+    with (
+        patch.object(_response, "get_agentic_tools", return_value=[{"name": "web_fetch"}]),
+        patch.object(capability_graph, "build_capability_graph", return_value=new_graph),
+        patch.object(anthropic, "is_computer_use_enabled", return_value=False),
+    ):
+        _response.refresh_tools(stub)
+    result = _call_helper(stub, original_prompt, None)
+
+    if changed:
+        assert result == "REBUILT_PROMPT"
+        assert stub._preflight_hint == ""
+    else:
+        assert result == original_prompt
+        assert "recommend computer" in stub._preflight_hint
 
 
 def test_advisory_plan_progress_rebuilds_prompt_without_model_drift() -> None:

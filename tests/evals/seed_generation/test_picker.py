@@ -111,6 +111,59 @@ def test_infer_provider_openai_models() -> None:
     assert infer_provider("gpt-5.3-codex") == "openai"
 
 
+@pytest.mark.parametrize("source", ["openai-codex", "api_key"])
+def test_retired_source_binding_rejects_without_model_or_payg_fallback(source: str) -> None:
+    from core.llm.errors import ModelSourceUnavailableError
+
+    manifest = _make_manifest()
+    manifest.roles["generator"] = SeedRoleSpec(
+        default_model="gpt-5.5", allowed_models=["gpt-5.5", "gpt-5.4"]
+    )
+    overrides = {"generator": {"model": "gpt-5.4", "source": source}}
+    if source == "openai-codex":
+        with pytest.raises(ModelSourceUnavailableError, match=r"gpt-5\.4.*subscription"):
+            pick_bindings(manifest, overrides=overrides, auto_probe=False)
+    else:
+        result = pick_bindings(manifest, overrides=overrides, auto_probe=False)
+        assert result.bindings["generator"].model == "gpt-5.4"
+        assert result.bindings["generator"].source == "api_key"
+
+
+def test_retired_subscription_voter_rejected() -> None:
+    from core.llm.errors import ModelSourceUnavailableError
+
+    manifest = _make_manifest()
+    manifest.judge_panel.voters[1] = VoterSpec(
+        model="gpt-5.4", provider="openai", source="openai-codex"
+    )
+    with pytest.raises(ModelSourceUnavailableError, match=r"gpt-5\.4.*subscription"):
+        pick_bindings(manifest, overrides={}, auto_probe=False)
+
+
+@pytest.mark.parametrize("custom_host", [False, True])
+def test_anthropic_seed_binding_uses_configured_endpoint_lifecycle(
+    monkeypatch: pytest.MonkeyPatch, custom_host: bool
+) -> None:
+    from core.llm.errors import ModelSourceUnavailableError
+
+    monkeypatch.setenv(
+        "ANTHROPIC_BASE_URL",
+        "https://gateway.example.test" if custom_host else "https://api.anthropic.com",
+    )
+    manifest = _make_manifest()
+    manifest.roles["generator"] = SeedRoleSpec(
+        default_model="claude-opus-4-7", allowed_models=["claude-opus-4-7", "claude-opus-4-1"]
+    )
+    overrides = {"generator": {"model": "claude-opus-4-1", "source": "api_key"}}
+    if custom_host:
+        result = pick_bindings(manifest, overrides=overrides, auto_probe=False)
+        assert result.bindings["generator"].model == "claude-opus-4-1"
+        assert result.bindings["generator"].source == "api_key"
+    else:
+        with pytest.raises(ModelSourceUnavailableError, match="Anthropic API"):
+            pick_bindings(manifest, overrides=overrides, auto_probe=False)
+
+
 def test_infer_provider_drops_legacy_o1_o3_prefixes() -> None:
     """CSP-10 (2026-05-22) — Codex CLI's current surface is the gpt-5.x
     family. Legacy ``o1-`` / ``o3-`` reasoning models are no longer

@@ -87,8 +87,16 @@ class AnthropicPaygAdapter:
             )
         return self._clients.get(lambda: build_async_anthropic_client(api_key))
 
+    def _require_model_allowed(self, model: str, *, base_url: str) -> None:
+        from core.llm.model_catalog import require_model_source_available
+
+        require_model_source_available(
+            model, provider=self.provider, source=self.source, base_url=base_url
+        )
+
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         client = self._get_client()
+        self._require_model_allowed(req.model, base_url=str(client.base_url))
         # The API-key path has its own concurrency lane.
         lane_key = f"anthropic-payg:{req.model}"
         async with acquire_anthropic_api_lane_async(lane_key):
@@ -120,11 +128,19 @@ class AnthropicPaygAdapter:
             resolve_web_search_model,
         )
 
+        # The actual (possibly cached) SDK endpoint owns the lifecycle policy;
+        # do not project Anthropic API retirements onto a custom host.
+        client = self._get_client()
+        # Reject before web-search capability routing can replace the choice.
+        if model:
+            self._require_model_allowed(model, base_url=str(client.base_url))
+        search_model = resolve_web_search_model(model)
+        self._require_model_allowed(search_model, base_url=str(client.base_url))
         return await anthropic_web_search(
-            self._get_client(),
+            client,
             query=query,
             max_results=max_results,
-            model=resolve_web_search_model(model),
+            model=search_model,
             adapter_name=self.name,
         )
 
@@ -140,16 +156,20 @@ class AnthropicPaygAdapter:
         from core.config import ANTHROPIC_PRIMARY
         from core.llm.adapters._capability_impls import anthropic_complete_text
 
+        completion_model = model or ANTHROPIC_PRIMARY
+        client = self._get_client()
+        self._require_model_allowed(completion_model, base_url=str(client.base_url))
         return await anthropic_complete_text(
-            self._get_client(),
+            client,
             prompt=prompt,
             system=system,
-            model=model or ANTHROPIC_PRIMARY,
+            model=completion_model,
             max_tokens=max_tokens,
         )
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         client = self._get_client()
+        self._require_model_allowed(req.model, base_url=str(client.base_url))
         async with client.messages.stream(
             **build_stream_kwargs(req, base_url=str(client.base_url))
         ) as stream:
@@ -186,13 +206,15 @@ class AnthropicPaygAdapter:
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import ANTHROPIC_FALLBACK_CHAIN, ANTHROPIC_PRIMARY
-        from core.llm.model_catalog import model_spec_for_adapter
+        from core.llm.model_catalog import model_source_unavailable_reason, model_spec_for_adapter
 
         ids = [ANTHROPIC_PRIMARY, *ANTHROPIC_FALLBACK_CHAIN]
         seen: set[str] = set()
         models: list[ModelSpec] = []
         for mid in ids:
-            if mid in seen:
+            if mid in seen or model_source_unavailable_reason(
+                mid, provider=self.provider, source=self.source
+            ):
                 continue
             seen.add(mid)
             models.append(model_spec_for_adapter(mid, provider=self.provider))

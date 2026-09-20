@@ -40,10 +40,15 @@ from core.llm.adapters.base import (
     ToolSpec,
     UsageSummary,
 )
+from core.llm.agentic_response import parse_chat_reasoning_replay
+from core.llm.errors import LLMRequestValidationError
 from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 from core.tools.plan import thaw_tool_schema
 
 log = logging.getLogger(__name__)
+
+# These routes may select a different upstream model on every call.
+_OPENROUTER_DYNAMIC_MODELS = frozenset({"openrouter/auto", "openrouter/free"})
 
 # ---------------------------------------------------------------------------
 # Cross-adapter spec constants — verified 2026-05-24 against public docs
@@ -167,9 +172,9 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
     # tiers (fetched 2026-07-13). Codex-backend acceptance of the three full
     # slugs is artifact-verified: openai/codex
     # codex-rs/models-manager/models.json defines gpt-5.6-{sol,terra,luna}
-    # (ctx7 /openai/codex, 2026-07-13). Bare "gpt-5.6" is the documented
-    # Platform-API alias for sol and is NOT in the Codex models.json —
-    # Platform-only id. Computer-use GA membership is handled separately
+    # (ctx7 /openai/codex, 2026-07-13). The bare "gpt-5.6" alias is also
+    # documented in Codex; route availability remains source-specific.
+    # Computer-use GA membership is handled separately
     # (see _OPENAI_COMPUTER_USE_GA_MODELS).
     "gpt-5.6": OpenAIModelSpec(
         model_id="gpt-5.6",
@@ -533,7 +538,9 @@ def translate_tool_for_codex(tool: ToolSpec) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def build_messages(req: AdapterCallRequest) -> list[dict[str, Any]]:
+def build_messages(
+    req: AdapterCallRequest, *, provider: str = "", adapter_name: str = "", model: str = ""
+) -> list[dict[str, Any]]:
     """Translate :class:`Message` list → OpenAI Chat Completions ``messages``.
 
     Handles three content shapes per message:
@@ -566,7 +573,16 @@ def build_messages(req: AdapterCallRequest) -> list[dict[str, Any]]:
             )
             continue
         if m.role == "assistant":
-            out.append(_convert_assistant_msg_to_chat(m.content))
+            assistant = _convert_assistant_msg_to_chat(m.content)
+            replay = parse_chat_reasoning_replay(m.chat_reasoning)
+            if (
+                replay is not None
+                and not (provider == "openrouter" and model in _OPENROUTER_DYNAMIC_MODELS)
+                and (replay["provider"], replay["source"], replay["model"])
+                == (provider, adapter_name, model)
+            ):
+                assistant.update(replay["fields"])
+            out.append(assistant)
             continue
         if m.role == "user":
             out.extend(_convert_user_msg_to_chat(m.content))
@@ -588,7 +604,7 @@ def build_chat_completion_kwargs(
 
     kwargs: dict[str, Any] = {
         "model": model,
-        "messages": build_messages(req),
+        "messages": build_messages(req, provider=provider, adapter_name=adapter_name, model=model),
         "max_tokens": req.max_tokens,
     }
     if req.temperature is not None:
@@ -1132,12 +1148,24 @@ def _stringify(content: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
-def translate_chat_response(response: Any) -> AdapterCallResult:
+def translate_chat_response(
+    response: Any, *, provider: str = "", adapter_name: str = "", model: str = ""
+) -> AdapterCallResult:
     """OpenAI ``ChatCompletion`` → :class:`AdapterCallResult`."""
     choice = response.choices[0] if response.choices else None
     message = getattr(choice, "message", None) if choice else None
     text = getattr(message, "content", "") or "" if message else ""
     tool_calls = getattr(message, "tool_calls", None) if message else None
+    reasoning_fields = {
+        key: value
+        for key in ("reasoning_content", "reasoning", "reasoning_details")
+        if (value := getattr(message, key, None)) is not None
+    }
+    chat_reasoning = parse_chat_reasoning_replay(
+        {"provider": provider, "source": adapter_name, "model": model, "fields": reasoning_fields}
+    )
+    if provider == "openrouter" and model in _OPENROUTER_DYNAMIC_MODELS:
+        chat_reasoning = None
     tool_uses: list[dict[str, Any]] = []
     if tool_calls:
         for tc in tool_calls:
@@ -1188,6 +1216,7 @@ def translate_chat_response(response: Any) -> AdapterCallResult:
         raw_response=response,
         response_id=str(getattr(response, "id", "") or ""),
         response_model=str(getattr(response, "model", "") or ""),
+        chat_reasoning=chat_reasoning,
     )
 
 
@@ -1831,6 +1860,10 @@ def build_responses_kwargs(
     # non-compatible schemas (still forwards the shape as a strong hint,
     # but server treats it as informational rather than gated).
     if req.response_schema is not None:
+        if req.response_schema.get("type") != "object" or "anyOf" in req.response_schema:
+            raise LLMRequestValidationError(
+                "OpenAI response_schema requires an object root without anyOf"
+            )
         schema_name = str(req.response_schema.get("title") or "response")
         kwargs["text"] = {
             "format": {
@@ -1844,60 +1877,60 @@ def build_responses_kwargs(
 
 
 def _is_openai_strict_compatible(schema: Any) -> bool:
-    """Check whether ``schema`` satisfies OpenAI's strict Structured Outputs subset.
+    """Conservatively classify OpenAI's documented strict schema subset.
 
-    Provider-specific (OpenAI Responses API only). Do NOT reuse from
-    other adapters without verifying the target API's subset rules —
-    Anthropic Structured Outputs (Claude API) shares the
-    ``additionalProperties: false`` constraint but DIVERGES on:
-
-    - ``required`` completeness: OpenAI requires every property key to
-      appear in ``required``; Anthropic allows up to 24 optional
-      properties.
-    - ``oneOf``: OpenAI supports; Anthropic does not.
-    - Numerical / string constraints (``minimum`` / ``maxLength`` …):
-      OpenAI supports; Anthropic does not.
-
-    Codex OAuth hits the OpenAI Responses API, so this helper enforces
-    OpenAI's stricter rule set. Per OpenAI docs (ctx7 `/websites/
-    developers_openai_api`, responses-vs-chat-completions guide),
-    ``strict: True`` requires every ``type: "object"`` subschema:
-
-    - sets ``additionalProperties: false`` (typed-additional or True is rejected)
-    - lists ALL declared property keys in ``required``
-
-    Plus array ``items`` and nested objects must satisfy the same recursively.
-    ``oneOf`` / ``anyOf`` / ``allOf`` branches must each be strict-compatible.
-
-    Returns ``True`` when the schema is safe to send with ``strict: True``;
-    ``False`` when ``strict: False`` should be used instead. This keeps
-    legacy GEODE schemas (designed for additive-output tolerance) from
-    causing 400 rejections while still forwarding the schema shape as a
-    server hint.
+    Nested anyOf and recursive $defs are supported; root unions and unsupported
+    composition are not. Additive legacy object schemas retain non-strict mode.
+    This is a compatibility classifier, not a general JSON Schema validator.
     """
-    if not isinstance(schema, dict):
-        return True
-    schema_type = schema.get("type")
-    if schema_type == "object":
-        if schema.get("additionalProperties") is not False:
-            return False
-        properties = schema.get("properties") or {}
-        required = set(schema.get("required") or [])
-        if set(properties.keys()) != required:
-            return False
-        for prop_schema in properties.values():
-            if not _is_openai_strict_compatible(prop_schema):
-                return False
-    if "items" in schema and not _is_openai_strict_compatible(schema["items"]):
+    if not isinstance(schema, dict) or schema.get("type") != "object" or "anyOf" in schema:
         return False
-    for combinator_key in ("oneOf", "anyOf", "allOf"):
-        # Combinators are accepted only when every branch is strict-compatible.
-        branches = schema.get(combinator_key)
-        if isinstance(branches, list):
-            for branch in branches:
-                if not _is_openai_strict_compatible(branch):
+
+    def compatible(node: Any) -> bool:
+        if not isinstance(node, dict):
+            return False
+        if {
+            "allOf",
+            "oneOf",
+            "not",
+            "dependentRequired",
+            "dependentSchemas",
+            "if",
+            "then",
+            "else",
+        } & node.keys():
+            return False
+        kind = node.get("type")
+        is_object = kind == "object" or (isinstance(kind, list) and "object" in kind)
+        if is_object or "properties" in node:
+            properties = node.get("properties", {})
+            required = node.get("required", [])
+            if (
+                node.get("additionalProperties") is not False
+                or not isinstance(properties, dict)
+                or not isinstance(required, list)
+                or not all(isinstance(key, str) for key in required)
+                or set(properties) != set(required)
+            ):
+                return False
+            if not all(compatible(value) for value in properties.values()):
+                return False
+        if "items" in node and not compatible(node["items"]):
+            return False
+        if "anyOf" in node:
+            branches = node["anyOf"]
+            if not isinstance(branches, list) or not branches or not all(map(compatible, branches)):
+                return False
+        for key in ("$defs", "definitions"):
+            if key in node:
+                definitions = node[key]
+                if not isinstance(definitions, dict) or not all(
+                    map(compatible, definitions.values())
+                ):
                     return False
-    return True
+        return True
+
+    return compatible(schema)
 
 
 def translate_responses_tool_choice(tc: str | dict[str, Any]) -> str | dict[str, Any]:

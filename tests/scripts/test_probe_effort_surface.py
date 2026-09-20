@@ -4,17 +4,36 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from scripts.probes.probe_effort_surface import (
     _acomplete_with_runtime_retry,
     visible_effort_surface,
 )
 
 
-def test_visible_effort_surface_matches_picker() -> None:
+@pytest.mark.parametrize("source,expected_count", [("subscription", 51), ("payg", 66)])
+def test_visible_effort_surface_matches_picker(
+    monkeypatch: pytest.MonkeyPatch, source: str, expected_count: int
+) -> None:
+    from core.cli.commands._state import get_model_profiles
+    from core.cli.effort_picker import supported_efforts
+
+    monkeypatch.setattr("core.cli.commands._state._selected_openai_source", lambda: source)
     surface = visible_effort_surface()
 
-    assert len(surface) == 66
+    assert len(surface) == expected_count
     assert len(surface) == len(set(surface))
+    assert surface == tuple(
+        (profile.id, profile.provider, effort)
+        for profile in get_model_profiles(openai_source=source)
+        for effort in supported_efforts(profile.id, profile.provider)
+    )
+    retired_subscription_ids = {"gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"}
+    surface_models = {model for model, _, _ in surface}
+    if source == "subscription":
+        assert retired_subscription_ids.isdisjoint(surface_models)
+    else:
+        assert retired_subscription_ids <= surface_models
     assert ("gpt-6-astra", "openai", "low") in surface
     assert ("gpt-6-astra", "openai", "max") in surface
     assert ("gpt-5.6-sol", "openai", "max") in surface

@@ -128,8 +128,8 @@ class RoutingRules(BaseModel):
 
     - ``prefixes``: model-id prefix → provider mapping. First match wins.
     - ``codex_only_models``: bare model ids that route to ``openai-codex``
-      regardless of the prefix table (gpt-5.5 etc. are OAuth-only per
-      OpenAI's Codex models page).
+      regardless of the prefix table. This legacy route alias does not
+      establish model availability or override the credential source.
     - ``codex_suffixes``: suffix match for ``*-codex`` / ``*-codex-max``
       / ``*-codex-mini`` ids.
     - ``fallback_provider``: last-resort when no executable rule matches.
@@ -366,7 +366,7 @@ def resolve_provider(model: str, manifest: RoutingManifest | None = None) -> str
 
     Mirrors the legacy :func:`core.config._resolve_provider` behaviour:
 
-    1. Codex-only models match first (e.g. gpt-5.5 → openai-codex).
+    1. Explicit Codex-only model entries match first (currently empty).
     2. Codex suffixes (``*-codex`` etc.) → openai-codex.
     3. Prefix table — first matching executable provider prefix wins.
     4. Fallback provider (``openai`` by default).

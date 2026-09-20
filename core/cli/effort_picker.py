@@ -146,10 +146,10 @@ _MODEL_DESCRIPTIONS: dict[str, str] = {
     "gpt-5.6-sol": "GPT-5.6 Sol · frontier tier, max-effort capable · API + subscription",
     "gpt-5.6-terra": "GPT-5.6 Terra · balanced intelligence/cost · API + subscription",
     "gpt-5.6-luna": "GPT-5.6 Luna · efficient high-volume tier · API + subscription",
-    "gpt-5.5": "GPT-5.5 via ChatGPT subscription · subscription-routed",
-    "gpt-5.4": "GPT-5.4 · balanced reasoning · API + subscription",
-    "gpt-5.4-mini": "GPT-5.4 Mini · cheap + fast · API + subscription",
-    "gpt-5.3-codex": "GPT-5.3 Codex · deprecated compatibility row",
+    "gpt-5.5": "GPT-5.5 · API + subscription (Codex retirement: 2026-10-14)",
+    "gpt-5.4": "GPT-5.4 · Platform API · retired from ChatGPT subscription",
+    "gpt-5.4-mini": "GPT-5.4 Mini · Platform API · retired from ChatGPT subscription",
+    "gpt-5.3-codex": "GPT-5.3 Codex · Platform API · deprecated for ChatGPT subscription",
     # OpenRouter
     "openrouter/openrouter/free": "Dynamic free-model route · smoke tests only",
     "openrouter/openrouter/auto": "Dynamic model route · variable provider and cost",
@@ -314,8 +314,8 @@ def _render(
     """Render the picker. Returns lines written so the caller can rewind.
 
     Tuple shape: ``(model_id, provider, label, cost, available, forced_method)``.
-    ``available`` (M5) toggles a ``(login required)`` suffix and dims
-    the row when no credential route exists. ``forced_method`` (M2)
+    ``available`` (M5) toggles an ``(unavailable)`` suffix and dims
+    the row for missing credentials or source retirement. ``forced_method`` (M2)
     is ``None`` when ``settings.forced_login_method[provider]`` is at
     its default; non-None values surface a ``(forced: <method>)``
     badge so a user who pinned the PAYG escape hatch sees the
@@ -373,7 +373,7 @@ def _render(
         default_check = " ✔" if is_initial else "  "
         index = f"{i + 1}."
         desc = model_description(mid)
-        avail_suffix = "" if available else "  \033[2m(login required)\033[0m"
+        avail_suffix = "" if available else "  \033[2m(unavailable)\033[0m"
         forced_suffix = f"  \033[2m(forced: {forced_method})\033[0m" if forced_method else ""
         suffixes = f"{avail_suffix}{forced_suffix}"
         if i == cursor:
@@ -470,6 +470,7 @@ def pick_model_and_effort(
     initial_role: str = "primary",
     role_initial_models: dict[str, str] | None = None,
     role_has_effort: dict[str, bool] | None = None,
+    role_model_availability: dict[str, dict[str, bool]] | None = None,
 ) -> PickerResult:
     """Run the interactive picker.
 
@@ -543,8 +544,18 @@ def pick_model_and_effort(
     staged_picks: dict[str, str] = {}
     initial_for_render = role_initial_models.get(role_names[role_cursor], current_model)
     show_effort = role_has_effort.get(role_names[role_cursor], True)
+
+    # Source eligibility can differ per role (e.g. subscription primary and
+    # explicitly PAYG mutator). Keep one stable row order; only admission dims.
+    def profiles_for_role() -> list[tuple[str, str, str, str, bool, str | None]]:
+        availability = (role_model_availability or {}).get(role_names[role_cursor], {})
+        return [
+            (mid, prov, label, cost, availability.get(mid, available), forced)
+            for mid, prov, label, cost, available, forced in profiles
+        ]
+
     line_count = _render(
-        profiles,
+        profiles_for_role(),
         cursor,
         effort_per_model,
         initial_for_render,
@@ -573,7 +584,7 @@ def pick_model_and_effort(
                 role=role_names[role_cursor],
             )
         if key == _KEY_ENTER:
-            chosen_mid, chosen_prov, _label, _cost, available, _forced = profiles[cursor]
+            chosen_mid, chosen_prov, _label, _cost, available, _forced = profiles_for_role()[cursor]
             if not available:
                 # M5 — block the selection so the caller can render a
                 # "Login first" hint. Treat as cancellation so settings
@@ -606,7 +617,9 @@ def pick_model_and_effort(
             # can be set in one picker session (Enter-only closed after
             # a single pick). The tab strip's per-role marker updates
             # immediately via role_initial_models; Esc discards.
-            staged_mid, _prov, _label, _cost, staged_available, _forced = profiles[cursor]
+            staged_mid, _prov, _label, _cost, staged_available, _forced = profiles_for_role()[
+                cursor
+            ]
             if staged_available:
                 staged_role = role_names[role_cursor]
                 staged_picks[staged_role] = staged_mid
@@ -645,7 +658,7 @@ def pick_model_and_effort(
         initial_for_render = role_initial_models.get(role_names[role_cursor], current_model)
         show_effort = role_has_effort.get(role_names[role_cursor], True)
         line_count = _render(
-            profiles,
+            profiles_for_role(),
             cursor,
             effort_per_model,
             initial_for_render,

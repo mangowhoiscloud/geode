@@ -38,8 +38,13 @@ def test_to_inspect_model_uses_oauth_when_token_present() -> None:
 
     with patch("evals.petri.adapters.openai_codex_oauth.is_available", return_value=True):
         assert to_inspect_model("gpt-5.5") == "openai-codex/gpt-5.5"
-        assert to_inspect_model("gpt-5.4-mini") == "openai-codex/gpt-5.4-mini"
-        assert to_inspect_model("gpt-5.3-codex") == "openai-codex/gpt-5.3-codex"
+        assert to_inspect_model("gpt-5.6-luna") == "openai-codex/gpt-5.6-luna"
+        from core.llm.errors import ModelSourceUnavailableError
+
+        with pytest.raises(ModelSourceUnavailableError, match="retired on 2026-08-31"):
+            to_inspect_model("gpt-5.4-mini")
+        with pytest.raises(ModelSourceUnavailableError, match="deprecated"):
+            to_inspect_model("gpt-5.3-codex")
 
 
 def test_to_inspect_model_falls_back_to_per_token_without_token(

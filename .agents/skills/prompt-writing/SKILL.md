@@ -45,6 +45,32 @@ or data to satisfy that convention.
 6. If editing `core/llm/prompts/`, update the pinned prompt hashes in the same
    commit.
 
+## Assembly and model contracts
+
+- Trace the authored text through assembly, context reduction, and the actual
+  adapter request. A loader test alone does not prove the model receives it.
+- Keep common conduct in the shared suffix and task procedures in the relevant
+  skill. Avoid duplicate provider rankings, remembered model tables, or capability
+  claims not supplied by the active runtime. Missing context is not permission
+  to assume CLI access, a sandbox, or account entitlement.
+- Separate instructions from observations with descriptive XML boundaries;
+  escape interpolated data leaves, not trusted authored markup. XML is formatting,
+  not an authorization or prompt-injection defense by itself. Preserve admitted
+  skill guidance until the next request can consume it.
+- Verify each changed mode (normal, persona-off, audit, override) and provider
+  contract at its actual entry point. Check role placement, refusal semantics,
+  structured-output admission, and replay fields when those boundaries change.
+  Use the [model-onboarding skill](../model-onboarding/SKILL.md) for source-specific
+  lifecycle and parameter support; do not silently substitute another billing route.
+- State the desired result, evidence requirements, and stopping boundary concisely.
+  Remove obsolete prohibitions before adding instructions. Use complete sentences;
+  neither verbosity nor terse fragments demonstrate correctness.
+
+Recheck the model-specific [Astra prompting guidance](https://developers.openai.com/api/docs/guides/latest-model/gpt-6-astra#prompting-best-practices)
+and [Fable prompting guidance](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5)
+when compatibility is in scope. Apply supported contracts, not every example
+prompt verbatim. Offline shape tests do not establish live model compliance.
+
 ## Good Pattern
 
 ```text

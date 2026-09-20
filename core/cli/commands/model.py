@@ -22,6 +22,7 @@ from core.cli.commands._state import (
     forced_login_method_for,
     get_model_profiles,
     model_available,
+    model_unavailable_reason,
     role_by_name,
 )
 
@@ -128,6 +129,12 @@ def _apply_model(
     from core.config.env_io import upsert_config_toml
 
     role_def = role_by_name(role)
+    reason = model_unavailable_reason(selected.id, source=_openai_source_for_role(role_def))
+    if reason is not None:
+        _pkg.console.print(f"  [warning]{reason}[/warning]")
+        _pkg.console.print()
+        return
+
     # PR-PICKER-ROLE-SCOPE (2026-06-12) — non-primary roles are
     # daemon-global: their READERS consult the GLOBAL config only
     # (`_read_toml_value` → GLOBAL_CONFIG_TOML; the self-improving
@@ -297,6 +304,35 @@ def _ensure_profiles_hydrated() -> None:
         ensure_profile_store()
 
 
+def _openai_source_for_role(role: AgentRole) -> str | None:
+    """Honor an independently pinned mutator source; None uses runtime inference."""
+    if role.settings_field:
+        return None
+    source = _read_toml_value(role.toml_section, "source")
+    return {"api_key": "payg", "openai-codex": "subscription"}.get(source)
+
+
+def _model_available_for_role(model_id: str, role: AgentRole) -> bool:
+    source = _openai_source_for_role(role)
+    return model_available(model_id) if source is None else model_available(model_id, source=source)
+
+
+def _picker_profiles(role_initial_models: dict[str, str]) -> list[ModelProfile]:
+    # One shared list spans every tab. A role explicitly pinned to PAYG must
+    # retain its API-valid choices even when the primary uses a subscription.
+    source = "payg" if any(_openai_source_for_role(r) == "payg" for r in AGENT_ROLES) else None
+    return get_model_profiles(
+        configured_model_ids=role_initial_models.values(), openai_source=source
+    )
+
+
+def _role_model_availability(model_profiles: list[ModelProfile]) -> dict[str, dict[str, bool]]:
+    return {
+        role.name: {p.id: _model_available_for_role(p.id, role) for p in model_profiles}
+        for role in AGENT_ROLES
+    }
+
+
 def _interactive_model_picker() -> None:
     """Two-axis interactive picker — model (↑↓) + effort level (←→).
 
@@ -318,7 +354,7 @@ def _interactive_model_picker() -> None:
 
     _ensure_profiles_hydrated()
     role_initial_models = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
-    model_profiles = get_model_profiles(configured_model_ids=role_initial_models.values())
+    model_profiles = _picker_profiles(role_initial_models)
     profiles = [
         (
             p.id,
@@ -341,6 +377,7 @@ def _interactive_model_picker() -> None:
         initial_role="primary",
         role_initial_models=role_initial_models,
         role_has_effort=role_has_effort,
+        role_model_availability=_role_model_availability(model_profiles),
     )
     if result.cancelled:
         # M5 — surface the "login first" path explicitly when the user
@@ -349,10 +386,16 @@ def _interactive_model_picker() -> None:
         # case; if the cursor still points at an unavailable entry we
         # assume the latter.
         _pkg.console.print("  [muted]Cancelled[/muted]")
-        _pkg.console.print(
-            "  [muted]Tip: run `/login` to add credentials for any model "
-            "marked (login required).[/muted]"
+        reason = model_unavailable_reason(
+            result.model_id, source=_openai_source_for_role(role_by_name(result.role))
         )
+        if reason:
+            _pkg.console.print(f"  [warning]{reason}[/warning]")
+        else:
+            _pkg.console.print(
+                "  [muted]Unavailable models need a supported source/model pair and "
+                "usable credentials. Run `/login` to manage credentials.[/muted]"
+            )
         _pkg.console.print()
         return
 
@@ -395,7 +438,7 @@ def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
 
     _ensure_profiles_hydrated()
     role_initial_models = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
-    model_profiles = get_model_profiles(configured_model_ids=role_initial_models.values())
+    model_profiles = _picker_profiles(role_initial_models)
     profiles = [
         (
             p.id,
@@ -419,9 +462,15 @@ def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
         initial_role=role_def.name,
         role_initial_models=role_initial_models,
         role_has_effort=role_has_effort,
+        role_model_availability=_role_model_availability(model_profiles),
     )
     if result.cancelled:
         _pkg.console.print("  [muted]Cancelled[/muted]")
+        reason = model_unavailable_reason(
+            result.model_id, source=_openai_source_for_role(role_by_name(result.role))
+        )
+        if reason:
+            _pkg.console.print(f"  [warning]{reason}[/warning]")
         _pkg.console.print()
         return
     _apply_picker_result(result, model_profiles)
@@ -474,6 +523,7 @@ def cmd_model(args: str) -> None:
             role_name = first
             arg = rest.strip()
     role_def = role_by_name(role_name)
+    role_source = _openai_source_for_role(role_def)
 
     # ``/model global`` with no model — the interactive picker applies to the
     # project scope, so global needs an explicit model id/number.
@@ -496,13 +546,22 @@ def cmd_model(args: str) -> None:
             # marks all of them in one render — matches the
             # multi-tab picker's "Primary / Reflection" semantics.
             role_currents = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
-            model_profiles = get_model_profiles(configured_model_ids=role_currents.values())
+            model_profiles = get_model_profiles(
+                configured_model_ids=role_currents.values(), openai_source=role_source
+            )
             for i, p in enumerate(model_profiles, 1):
                 role_marks = " ".join(
                     f"{r.label[0]}←" for r in AGENT_ROLES if role_currents[r.name] == p.id
                 )
                 marker = f"  [muted]{role_marks}[/muted]" if role_marks else ""
-                avail = "" if model_available(p.id) else "  [muted](login required)[/muted]"
+                reason = model_unavailable_reason(p.id, source=role_source)
+                avail = (
+                    "  [warning](unavailable on selected source)[/warning]"
+                    if reason
+                    else ""
+                    if _model_available_for_role(p.id, role_def)
+                    else "  [muted](login required)[/muted]"
+                )
                 forced = forced_login_method_for(p.provider)
                 forced_suffix = f"  [muted](forced: {forced})[/muted]" if forced else ""
                 _pkg.console.print(
@@ -526,8 +585,16 @@ def cmd_model(args: str) -> None:
     # Resolve by number or name
     selected: ModelProfile | None = None
 
+    reason = None if arg.isdigit() else model_unavailable_reason(arg, source=role_source)
+    if reason is not None:
+        _pkg.console.print(f"  [warning]{reason}[/warning]")
+        _pkg.console.print()
+        return
+
     role_currents = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
-    model_profiles = get_model_profiles(configured_model_ids=role_currents.values())
+    model_profiles = get_model_profiles(
+        configured_model_ids=role_currents.values(), openai_source=role_source
+    )
     if arg.isdigit():
         idx = int(arg) - 1
         if 0 <= idx < len(model_profiles):
@@ -568,7 +635,13 @@ def cmd_model(args: str) -> None:
         _pkg.console.print()
         return
 
-    if not model_available(selected.id):
+    reason = model_unavailable_reason(selected.id, source=role_source)
+    if reason is not None:
+        _pkg.console.print(f"  [warning]{reason}[/warning]")
+        _pkg.console.print()
+        return
+
+    if not _model_available_for_role(selected.id, role_def):
         # M5 — explicit /model <name> can still trip the credential
         # path. Surface the "login required" hint *before* applying so
         # the user doesn't see settings flip then immediately get the

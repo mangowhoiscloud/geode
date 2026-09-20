@@ -59,9 +59,56 @@ def test_to_inspect_model_empty_raises() -> None:
         to_inspect_model("")
 
 
+@pytest.mark.parametrize("model", ["gpt-5.4", "gpt-5.4-mini", "gpt-5.2", "gpt-5.3-codex"])
+def test_retired_codex_source_rejected_without_rewriting_platform_identity(
+    monkeypatch: pytest.MonkeyPatch, model: str
+) -> None:
+    from core.llm.errors import ModelSourceUnavailableError
+
+    with pytest.raises(ModelSourceUnavailableError, match="subscription"):
+        to_inspect_model(f"openai-codex/{model}")
+    assert to_inspect_model(f"openai/{model}") == f"openai/{model}"
+
+    monkeypatch.setattr(
+        "evals.petri.credential_source.resolve_credential_source",
+        lambda *args, **kwargs: "openai-codex",
+    )
+    with pytest.raises(ModelSourceUnavailableError, match="subscription"):
+        to_inspect_model(model, source="openai-codex")
+
+
 # ---------------------------------------------------------------------------
 # to_inspect_target — always geode/<base>
 # ---------------------------------------------------------------------------
+
+
+def test_retired_anthropic_api_model_rejected_without_claiming_partner_retirement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.llm.errors import ModelSourceUnavailableError
+
+    monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
+    with pytest.raises(ModelSourceUnavailableError, match="Anthropic API"):
+        to_inspect_model("anthropic/claude-opus-4-1-20250805")
+    partner_id = "openrouter/anthropic/claude-opus-4.1"
+    assert to_inspect_model(partner_id) == partner_id
+    monkeypatch.setattr(
+        "evals.petri.credential_source.resolve_credential_source", lambda *args, **kwargs: "api_key"
+    )
+    with pytest.raises(ModelSourceUnavailableError, match="Anthropic API"):
+        to_inspect_model("claude-opus-4-1", source="api_key")
+
+
+def test_custom_anthropic_endpoint_retains_explicit_petri_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://gateway.example.test")
+    raw_model = "anthropic/claude-opus-4-1-20250805"
+    assert to_inspect_model(raw_model) == raw_model
+    monkeypatch.setattr(
+        "evals.petri.credential_source.resolve_credential_source", lambda *args, **kwargs: "api_key"
+    )
+    assert to_inspect_model("claude-opus-4-1", source="api_key") == "anthropic/claude-opus-4-1"
 
 
 def test_to_inspect_target_auto_prefixes() -> None:

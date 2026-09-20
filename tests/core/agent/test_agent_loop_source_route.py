@@ -95,8 +95,11 @@ def test_unregistered_pair_hard_fails() -> None:
         _make_loop(source="payg")
 
 
+@pytest.mark.parametrize(
+    "model,expected_provider", [("gpt-5.5", "openai"), ("gpt-5.3-codex", "openai-codex")]
+)
 def test_runtime_model_switch_re_resolves_path_b_adapter(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, model: str, expected_provider: str
 ) -> None:
     """PR-MAINPATH-4 (2026-05-24) — ``/model`` between providers must
     re-resolve ``_new_adapter``. PR-MAINPATH-67 (2026-05-24) deleted
@@ -119,12 +122,13 @@ def test_runtime_model_switch_re_resolves_path_b_adapter(
     assert loop._new_adapter is not None
     assert loop._new_adapter.name == "anthropic-payg"
 
-    # Switch to an OpenAI model — ``_apply_model_update`` resolves
-    # ``provider`` via ``_resolve_provider("gpt-5.5")`` →
-    # ``openai-codex``. The Path-B helper normalises to ``openai``
-    # internally; with the pinned payg source we end up on ``openai-payg``.
-    _apply_model_update(loop, "gpt-5.5")
+    # GPT-5.5 has a Platform API offering and uses the openai family.
+    # The legacy -codex suffix still exercises provider-alias normalization.
+    # Both resolve to openai-payg with the pinned source inference here.
+    _apply_model_update(loop, model)
 
-    assert loop._provider == "openai-codex"
+    assert loop.model == model
+    assert loop._provider == expected_provider
+    assert loop._source == "payg"
     assert loop._new_adapter is not None
     assert loop._new_adapter.name == "openai-payg"
