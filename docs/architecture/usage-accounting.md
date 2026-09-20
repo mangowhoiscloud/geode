@@ -83,8 +83,9 @@ additional charge. Harbor's cache metric is reads, never reads plus writes.
 - Full-runtime coverage additionally requires the native producer inventory
   and background-writer shutdown checks. Wiring one callback does not prove
   its worker received the event bus or finished before the source snapshot.
-  IPC fast-chat and external capability consumers without an event bus remain
-  outside this native Harbor measurement scope.
+  External capability consumers without an event bus remain outside this native
+  Harbor measurement scope. IPC prompts now use the regular loop; the retired
+  fast-chat bypass does not establish coverage for earlier runs.
 - Each new canonical `session.ended` carries its own
   `runtime_observation_status`. Known child-sink failure or a missing child
   event bus makes the combined trajectory scope incomplete, even when the
@@ -213,13 +214,58 @@ and label it supplementary reexecution in Replay.
 
 Run the changed boundary's existing tests: `test_cache_cost_accounting.py`,
 `test_cache_hit_rate.py`, `test_agentic_loop.py -k track_usage`,
-`test_agentic_ui.py`, `test_fullscreen_app.py`, `test_fast_chat.py`,
+`test_agentic_ui.py`, `test_fullscreen_app.py`, `test_prompt_accounting.py`,
 `test_cost_command.py`, and `test_harbor_geode_agent.py`. Provider presence,
 positive/zero/unknown counts, per-turn reset, and primary-error preservation
 must remain distinct cases. Deterministic checks require no live request.
 
-Remaining scope limits: opt-in fast-chat forwards counters but does not
-record tracker/ledger usage and emits a zero cost placeholder (not free
-execution); monthly/daily/history rollups do not show cache totals. These
+Remaining scope limits: monthly/daily/history rollups do not show cache totals. These
 legacy views and incomplete whole-runtime accounting must not be advertised
 as complete billing or benchmark coverage.
+
+## Retired IPC fast-chat bypass
+
+`GEODE_FAST_CHAT` is no longer read. Short conversational prompts use the same
+`AgenticLoop.arun()` path as other IPC prompts, with the configured identity,
+conversation, tools and verification. This can increase latency and token use
+relative to the removed compact text-only prompt; it is not a free-call mode.
+The private router, separate prompt and `fast_chat_start` UI event are removed.
+The IPC envelope version is unchanged: clients already ignore unknown events.
+
+The omission began in [#2558](https://github.com/mangowhoiscloud/geode/pull/2558):
+the early return preceded the loop's conversation, lifecycle and tracker
+updates, and emitted UI tokens with literal `cost=0`. Making the route opt-in
+did not repair it. [#3311](https://github.com/mangowhoiscloud/geode/pull/3311)
+added cache counters to that UI event, but not durable accounting. The later
+shared adapter observer also needed an event bus and correlation; this caller
+passed neither. Tests replaced the whole dispatcher and checked visible
+counters, so they could not detect the missing records.
+
+The replacement regression enters through the IPC prompt handler and the real
+loop, faking only provider completion. It checks retained conversation, durable
+call identity and cache presence, tracker cost and UI counters even when the
+retired environment variable is set. UI output alone is not accounting proof.
+This fixes the future IPC path, not missing historical usage or legacy rollups.
+
+### Research grounding (2026-09-20)
+
+The pinned [Codex Responses parser](https://github.com/openai/codex/blob/dad1db87bb5ad4b92af6b0f58502d12453681f81/codex-rs/codex-api/src/sse/responses.rs)
+passes completed usage to the [turn consumer](https://github.com/openai/codex/blob/dad1db87bb5ad4b92af6b0f58502d12453681f81/codex-rs/core/src/session/turn.rs)
+and [session accumulator](https://github.com/openai/codex/blob/dad1db87bb5ad4b92af6b0f58502d12453681f81/codex-rs/core/src/session/mod.rs).
+Borrow that shared ownership, not its field-defaulting behavior: this pin can
+default absent cache detail to zero. GEODE retains its stricter presence flags.
+This is a pinned implementation comparison, not a current Codex-wide audit.
+
+The provider caching contracts above were rechecked: OpenAI input includes
+cached categories; Anthropic ordinary input excludes them. Their totals need
+different formulas. OpenAI's [Chat Completions streaming contract](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)
+also warns that interruption can lose the final usage chunk. That is not proof
+of zero consumption, nor a statement that every Responses or Anthropic stream
+has the same event layout.
+
+Keep the existing adapter-terminal observer as the common call seam, with
+session/attempt identity and the caller's event bus. Preserve known usage on a
+failed result and unknown usage on interruption; never let an observer failure
+mask the original error. Test changed entry paths through the durable consumer,
+not only the common helper or UI. Do not double-count calls already recorded
+by the loop or infer whole-runtime coverage from paired retained events.

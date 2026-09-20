@@ -15,11 +15,13 @@ export default function Page() {
         ko={
           <>
             <p>
-              비용의 SoT는 하나입니다. LLM 호출마다 한 줄씩 쌓이는 append-only
-              ledger <code>~/.geode/usage/YYYY-MM.jsonl</code>
-              (<code>core/llm/usage_store.py</code>)입니다. <code>/cost</code>와{" "}
-              <code>geode history</code>는 이 파일을 다르게 집계해 보여주는 두
-              화면입니다.
+              월간 사용량은 append-only ledger{" "}
+              <code>~/.geode/usage/YYYY-MM.jsonl</code>
+              (<code>core/llm/usage_store.py</code>)에 기록됩니다. 이는 모든
+              호출을 빠짐없이 담은 청구서가 아닙니다. <code>/cost</code>는
+              세션 tracker와 월간 기록을, <code>geode history</code>는 월간
+              기록을 보여줍니다. 호출별 누락 여부는 durable 호출 이벤트와
+              별도로 확인해야 합니다.
             </p>
 
             <h2>ledger 스키마</h2>
@@ -32,13 +34,30 @@ export default function Page() {
  "in": 1284, "out": 482, "cost": 0.0127,
  "session": "s-...", "cache_w": 0, "cache_r": 28104, "think": 1872}`}</pre>
             <p>
-              기록 주체는 둘입니다. 일반 실행은 AgenticLoop 경계의
-              TokenTracker가 호출마다 적습니다. Petri 감사는 inspect_ai가
+              일반 실행에서 사용량이 있는 응답은 AgenticLoop 경계의
+              TokenTracker가 기록합니다. 실패한 시도와 보조 호출까지 모두
+              포함한다는 뜻은 아닙니다. Petri 감사는 inspect_ai가
               프로바이더를 직접 호출해 GEODE의 tracker를 우회하므로, 감사 종료 후{" "}
               <code>core/audit/eval_to_jsonl.py</code>가 (model, role) 단위로{" "}
               <code>source: &quot;petri_eval&quot;</code> 행을 보태 judge와
               auditor 비용까지 ledger에 합류시킵니다. 단가는{" "}
               <code>core/llm/model_pricing.toml</code>이 SoT입니다.
+            </p>
+
+            <h2>짧은 대화도 같은 기록 경로</h2>
+            <p>
+              IPC fast-chat 우회 경로는 제거됐습니다. 기존{" "}
+              <code>GEODE_FAST_CHAT</code> 설정은 더 이상 읽지 않으며, 짧은
+              질문도 일반 AgenticLoop의 대화 이력·호출 관측·사용량 기록을
+              거칩니다. 일반 컨텍스트·도구·검증을 사용하므로 이전의 축약
+              경로보다 시간과 토큰이 늘 수 있습니다. 과거 누락 기록은
+              소급 복구되지 않습니다.
+            </p>
+            <p>
+              캐시 미수신과 명시적 0은 다릅니다. Durable 호출 이벤트는 이
+              차이를 보존하지만 기존 JSONL과 월간·일별·history 집계는
+              캐시 누락과 총계를 완전히 표현하지 못합니다. 제공자 보고 비용과
+              모델 단가 추정, 구독 청구액도 서로 구분해야 합니다.
             </p>
 
             <h2>/cost: 세션 대시보드</h2>
@@ -93,8 +112,8 @@ jq -c 'select(.source == "petri_eval")' ~/.geode/usage/$(date +%Y-%m).jsonl`}</p
               <tbody>
                 <tr>
                   <td>비용이 0으로만 보임</td>
-                  <td>구독 OAuth와 CLI 레인은 토큰당 과금이 아님</td>
-                  <td>정상입니다. PAYG 키 경로만 달러 비용이 쌓입니다. 사용량 자체는 토큰 칼럼으로 봅니다.</td>
+                  <td>제공자 보고값, 단가 추정 또는 누락된 기록을 확인해야 함</td>
+                  <td>0만으로 무료 실행이나 구독 청구액을 판단하지 않습니다. 모델 단가와 호출별 usage 존재 여부를 확인합니다.</td>
                 </tr>
                 <tr>
                   <td>감사 비용이 history에 안 보임</td>
@@ -120,10 +139,12 @@ jq -c 'select(.source == "petri_eval")' ~/.geode/usage/$(date +%Y-%m).jsonl`}</p
         en={
           <>
             <p>
-              Cost has one source of truth: the append-only ledger at{" "}
-              <code>~/.geode/usage/YYYY-MM.jsonl</code>, one line per LLM call
-              (<code>core/llm/usage_store.py</code>). <code>/cost</code> and{" "}
-              <code>geode history</code> are two views over the same file.
+              Monthly usage is stored in the append-only ledger at{" "}
+              <code>~/.geode/usage/YYYY-MM.jsonl</code>
+              (<code>core/llm/usage_store.py</code>). It is not a complete invoice
+              of every call. <code>/cost</code> combines the session tracker and
+              monthly records; <code>geode history</code> reads monthly records.
+              Check durable call events separately for observation gaps.
             </p>
 
             <h2>Ledger schema</h2>
@@ -136,13 +157,31 @@ jq -c 'select(.source == "petri_eval")' ~/.geode/usage/$(date +%Y-%m).jsonl`}</p
  "in": 1284, "out": 482, "cost": 0.0127,
  "session": "s-...", "cache_w": 0, "cache_r": 28104, "think": 1872}`}</pre>
             <p>
-              Two writers feed it. Normal runs are recorded per call by the
-              TokenTracker at the AgenticLoop seam. Petri audits bypass
+              Normal responses with usage are recorded by TokenTracker at the
+              AgenticLoop seam; this does not include every failed attempt or
+              auxiliary call. Petri audits bypass
               GEODE&apos;s tracker (inspect_ai calls providers natively), so{" "}
               <code>core/audit/eval_to_jsonl.py</code> appends{" "}
               <code>source: &quot;petri_eval&quot;</code> rows per (model, role)
               after an audit, bringing judge and auditor cost into the same
               ledger. Prices come from <code>core/llm/model_pricing.toml</code>.
+            </p>
+
+            <h2>One recording path for short conversations</h2>
+            <p>
+              The IPC fast-chat bypass has been removed. The old{" "}
+              <code>GEODE_FAST_CHAT</code> setting is no longer read. Short
+              prompts use the normal AgenticLoop conversation, call observation
+              and usage path. Normal context, tools and verification can consume
+              more time and tokens than the removed compact route. Earlier
+              missing records are not retroactively recovered.
+            </p>
+            <p>
+              Missing cache usage is not explicit zero. Durable call events
+              preserve that distinction; legacy JSONL and monthly/daily/history
+              views do not fully represent cache absence and totals. Provider
+              reported cost, model-price estimates and subscription invoices
+              are different authorities.
             </p>
 
             <h2>/cost: the session dashboard</h2>
@@ -195,8 +234,8 @@ jq -c 'select(.source == "petri_eval")' ~/.geode/usage/$(date +%Y-%m).jsonl`}</p
               <tbody>
                 <tr>
                   <td>Costs show as zero</td>
-                  <td>Subscription OAuth and CLI lanes are not metered per token</td>
-                  <td>Expected. Only PAYG key paths accumulate dollar cost; read the token columns for usage.</td>
+                  <td>Check provider reports, model-price estimates and missing records</td>
+                  <td>Zero alone proves neither free execution nor a subscription invoice. Check model prices and the presence of per-call usage.</td>
                 </tr>
                 <tr>
                   <td>Audit cost missing from history</td>

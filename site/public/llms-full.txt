@@ -3307,7 +3307,7 @@ OpenAI/GLM  80%   클라이언트 LLM 기반 compaction
 URL: https://mangowhoiscloud.github.io/geode/docs/ops/cost
 Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/cost.md
 
-비용의 SoT는 하나입니다. LLM 호출마다 한 줄씩 쌓이는 append-only ledger `~/.geode/usage/YYYY-MM.jsonl`(`core/llm/usage_store.py`)입니다. `/cost`와 `geode history`는 이 파일을 다르게 집계해 보여주는 두 화면입니다.
+월간 사용량은 append-only ledger `~/.geode/usage/YYYY-MM.jsonl`(`core/llm/usage_store.py`)에 기록됩니다. 이는 모든 호출을 빠짐없이 담은 청구서가 아닙니다. `/cost`는 세션 tracker와 월간 기록을, `geode history`는 월간 기록을 보여줍니다. 호출별 누락 여부는 durable 호출 이벤트와 별도로 확인해야 합니다.
 
 ## ledger 스키마
 
@@ -3320,7 +3320,13 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/cost.md
  "session": "s-...", "cache_w": 0, "cache_r": 28104, "think": 1872}
 ```
 
-기록 주체는 둘입니다. 일반 실행은 AgenticLoop 경계의 TokenTracker가 호출마다 적습니다. Petri 감사는 inspect\_ai가 프로바이더를 직접 호출해 GEODE의 tracker를 우회하므로, 감사 종료 후 `core/audit/eval_to_jsonl.py`가 (model, role) 단위로 `source: "petri_eval"` 행을 보태 judge와 auditor 비용까지 ledger에 합류시킵니다. 단가는 `core/llm/model_pricing.toml`이 SoT입니다.
+일반 실행에서 사용량이 있는 응답은 AgenticLoop 경계의 TokenTracker가 기록합니다. 실패한 시도와 보조 호출까지 모두 포함한다는 뜻은 아닙니다. Petri 감사는 inspect\_ai가 프로바이더를 직접 호출해 GEODE의 tracker를 우회하므로, 감사 종료 후 `core/audit/eval_to_jsonl.py`가 (model, role) 단위로 `source: "petri_eval"` 행을 보태 judge와 auditor 비용까지 ledger에 합류시킵니다. 단가는 `core/llm/model_pricing.toml`이 SoT입니다.
+
+## 짧은 대화도 같은 기록 경로
+
+IPC fast-chat 우회 경로는 제거됐습니다. 기존 `GEODE_FAST_CHAT` 설정은 더 이상 읽지 않으며, 짧은 질문도 일반 AgenticLoop의 대화 이력·호출 관측·사용량 기록을 거칩니다. 일반 컨텍스트·도구·검증을 사용하므로 이전의 축약 경로보다 시간과 토큰이 늘 수 있습니다. 과거 누락 기록은 소급 복구되지 않습니다.
+
+캐시 미수신과 명시적 0은 다릅니다. Durable 호출 이벤트는 이 차이를 보존하지만 기존 JSONL과 월간·일별·history 집계는 캐시 누락과 총계를 완전히 표현하지 못합니다. 제공자 보고 비용과 모델 단가 추정, 구독 청구액도 서로 구분해야 합니다.
 
 ## /cost: 세션 대시보드
 
@@ -3365,7 +3371,7 @@ jq -c 'select(.source == "petri_eval")' ~/.geode/usage/$(date +%Y-%m).jsonl
 
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
-| 비용이 0으로만 보임 | 구독 OAuth와 CLI 레인은 토큰당 과금이 아님 | 정상입니다. PAYG 키 경로만 달러 비용이 쌓입니다. 사용량 자체는 토큰 칼럼으로 봅니다. |
+| 비용이 0으로만 보임 | 제공자 보고값, 단가 추정 또는 누락된 기록을 확인해야 함 | 0만으로 무료 실행이나 구독 청구액을 판단하지 않습니다. 모델 단가와 호출별 usage 존재 여부를 확인합니다. |
 | 감사 비용이 history에 안 보임 | petri\_eval 추출 전이거나 다른 달 파일 | `geode history -m`으로 해당 월을 보고, `source` 필드로 필터합니다. |
 | 예산 경고가 안 뜸 | `cost_limit_usd`가 0 | 0은 무제한입니다. 양수로 설정해야 80% 경고와 종료 가드가 켜집니다. |
 
@@ -7121,7 +7127,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1567 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1568 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -7281,7 +7287,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 581 |
+| 프로덕션 Python 파일 | 580 |
 | 테스트 Python 파일 | 719 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |

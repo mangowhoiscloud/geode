@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+
+- Retire the opt-in IPC fast-chat bypass and its separate prompt/status event.
+  `GEODE_FAST_CHAT` no longer changes routing: short conversational prompts use
+  the normal agent loop, preserving conversation, lifecycle and usage/cache
+  accounting instead of emitting display-only counters with a zero cost
+  placeholder. Normal context, tools and verification may use more time/tokens;
+  this does not reconstruct missing historical usage.
+
 ### Fixed
 
 - Substitute skill-catalog placeholders only inside the authored prompt baseline,

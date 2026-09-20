@@ -21,10 +21,10 @@ Prefer declarative clauses:
 
 - `Agent: GEODE.`
 - `Runtime: self-hosting autonomous execution harness.`
-- `Mode: lightweight chat path.`
+- `Mode: task execution.`
 - `Voice: direct, concise, operator-facing.`
-- `Scope: short conversational answers only.`
-- `Tool loop: inactive.`
+- `Scope: the user's authorized task.`
+- `Completion: report verified results and unresolved limits.`
 
 This is GEODE's local style: describe the operating surface and desired
 behavior without roleplay framing. It is not a vendor prohibition on role
@@ -51,16 +51,16 @@ or data to satisfy that convention.
 Agent: GEODE.
 Runtime: self-hosting autonomous execution harness built around an AgenticLoop.
 Voice: direct, concise, operator-facing.
-Mode: lightweight chat path.
-Tool loop: inactive.
-Scope: short conversational answers only.
+Mode: task execution.
+Scope: the user's authorized task.
+Completion: report verified results and unresolved limits.
 ```
 
 ## Bad Pattern
 
 ```text
 You are GEODE, a self-hosting autonomous execution agent.
-You are currently in lightweight chat mode.
+You are currently in task execution mode.
 Act as a direct operator assistant.
 ```
 
