@@ -798,19 +798,6 @@ class CLIPoller:
                 return True
         return False
 
-    @classmethod
-    def _requires_agentic_prompt(cls, loop: Any) -> bool:
-        """Keep managed goal/plan/control state on the full AgenticLoop path."""
-        if cls._has_active_control_workflow(loop):
-            return True
-        metrics = getattr(loop, "_session_metrics", None)
-        plan = getattr(metrics, "active_plan", None)
-        if plan is not None and not bool(getattr(plan, "done", False)):
-            return True
-        goal_store = getattr(loop, "_goal_store", None)
-        goal = goal_store.get(loop._session_id) if goal_store is not None else None
-        return str(getattr(goal, "status", "")) in {"active", "paused"}
-
     async def _run_prompt_streaming_async(
         self,
         text: str | Callable[[], str],
@@ -843,11 +830,6 @@ class CLIPoller:
             _ipc_writer_local.writer = writer
 
         async def _run_admitted() -> dict[str, Any]:
-            if isinstance(text, str):
-                from core.server.ipc_server.fast_chat import should_use_fast_chat
-
-                if should_use_fast_chat(text) and not self._requires_agentic_prompt(loop):
-                    return await self._run_fast_chat_async(text, loop, client)
             old_quiet = getattr(loop, "_quiet", True)
             old_op_quiet = getattr(loop, "_op_logger", None)
             old_suppress_verify = getattr(loop, "_suppress_public_verify", False)
@@ -894,68 +876,6 @@ class CLIPoller:
                 reset_thread_console()
                 _ipc_writer_local.writer = None
         return response
-
-    async def _run_fast_chat_async(
-        self,
-        text: str,
-        loop: Any,
-        client: _AsyncClientEndpoint | None,
-    ) -> dict[str, Any]:
-        """Run a short conversational turn without the AgenticLoop harness."""
-        self._propagate_contextvars()
-        from core.config import settings
-        from core.llm.adapters.dispatch import complete_text_via_adapters
-        from core.llm.adapters.registry import normalize_registry_provider
-        from core.server.ipc_server.fast_chat import fast_chat_system_prompt
-
-        model = str(getattr(loop, "model", "") or "")
-        provider_raw = str(getattr(loop, "_provider", "") or "")
-        provider = normalize_registry_provider(provider_raw) if provider_raw else None
-        source = str(getattr(loop, "_source", "") or "") or None
-        if client is not None:
-            await client.send_json_async(
-                {
-                    "type": "fast_chat_start",
-                    "model": model,
-                    "provider": provider or "",
-                    "source": source or "",
-                }
-            )
-        result = await complete_text_via_adapters(
-            text,
-            system=fast_chat_system_prompt(),
-            model=model,
-            effort=getattr(loop, "_effort", "") or settings.agentic_effort,
-            max_tokens=512,
-            prefer_provider=provider,
-            prefer_source=source,
-        )
-        if client is not None:
-            await client.send_json_async(
-                {
-                    "type": "tokens",
-                    "model": model,
-                    "input": result.usage.input_tokens,
-                    "output": result.usage.output_tokens,
-                    "cache_read_tokens": result.usage.cached_input_tokens,
-                    "cache_write_tokens": result.usage.cache_write_tokens,
-                    "cost": 0,
-                }
-            )
-            await client.drain_pending_sends()
-        return {
-            "type": "result",
-            "text": result.text,
-            "rounds": 0,
-            "tool_calls": [],
-            "termination": "fast_chat",
-            "model": model,
-            "summary": "fast_chat",
-            "fast_path": "simple_chat",
-            "adapter": result.adapter_name,
-            "adapter_provider": result.adapter_provider,
-            "adapter_source": result.adapter_source,
-        }
 
     def _build_prompt_result(self, loop: Any, result: Any) -> dict[str, Any]:
         """Build final IPC result payload from an AgenticResult-like object."""

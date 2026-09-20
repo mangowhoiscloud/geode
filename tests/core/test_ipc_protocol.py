@@ -78,7 +78,6 @@ def test_public_event_vocabulary_is_exact() -> None:
     assert IPC_EVENT_TYPES == (
         "tool_start",
         "tool_end",
-        "fast_chat_start",
         "tokens",
         "round_start",
         "thinking_start",
