@@ -160,7 +160,7 @@ class ActivityRowBase(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: int = 9
+    schema_version: int = 10
     """Row-schema version (PR-OBS-CONTRACT, 2026-06-13). Bump when a
     field is added/renamed/retyped on any row class so JSONL re-readers
     can branch on shape instead of guessing from key presence.
@@ -177,7 +177,8 @@ class ActivityRowBase(BaseModel):
     v7: physical LLM attempts retain purpose, source and requested effort;
     old rows read those fields as unknown, not inferred from the root model.
     v8: turn-final verification has its own bounded call purpose.
-    v9: native text helpers retain their producer-specific call purpose."""
+    v9: native text helpers retain their producer-specific call purpose.
+    v10: nested classification/extraction calls retain structured_decision purpose."""
 
     ts: float
     run_id: str
@@ -302,6 +303,7 @@ class LLMCallEndedDetails(LifecycleCompletedDetails):
             "turn_verification",
             "cognitive_reflection",
             "candidate_judge",
+            "structured_decision",
             "text_completion",
             "context_compaction",
             "learning_extraction",

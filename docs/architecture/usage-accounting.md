@@ -159,6 +159,21 @@ Legacy and unidentified callers retain `text_completion`; that category alone
 cannot establish which helper ran. A producer label proves only a retained
 attempt, not complete coverage or provider billing.
 
+Activity schema version 10 adds `structured_decision` for nested classification
+and extraction calls. The caller passes its event bus and session, turn and
+tool-call correlation to `observe_llm_call`; `HookPersistenceSink` retains the
+terminal purpose and usage before caller-side semantic validation. Explicit
+zero, positive and missing counters remain distinct; an interrupted call without
+a completed response retains unknown usage. Harbor's recorded-attempt projection
+and observation validator preserve the same purpose. This label does not add a
+legacy tracker charge or establish root execution or native-verifier success.
+
+The opt-in [Jev handoff diagnostic](../eval/typesafe-decision-handoff.md#provider-observability-and-billing-reconciliation)
+uses the existing response ID for provider correlation and an explicitly sourced
+input-only tariff in USD and US cents. Output tokens remain observed usage even
+when their rate is zero. Derived tariff value, account-credit consumption and
+actual cash billing are separate authorities; missing provider charge stays null.
+
 ## Existing data contracts and publication
 
 Use the typed owners above and the existing

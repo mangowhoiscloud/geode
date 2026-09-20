@@ -400,6 +400,7 @@ def test_llm_activity_missing_cache_is_not_observed_zero(usage: dict[str, None])
         "turn_verification",
         "cognitive_reflection",
         "candidate_judge",
+        "structured_decision",
         "text_completion",
         "context_compaction",
         "learning_extraction",
@@ -418,7 +419,7 @@ def test_llm_activity_preserves_requested_effort_and_call_purpose(purpose: str) 
         },
         run_id="purpose-test",
     )
-    assert row.schema_version == 9
+    assert row.schema_version == 10
     reparsed = TypeAdapter(TypedActivityRow).validate_python(row.model_dump())
     details = reparsed.model_dump()["details"]
     assert (details["purpose"], details["source"], details["effort"]) == (
@@ -430,16 +431,29 @@ def test_llm_activity_preserves_requested_effort_and_call_purpose(purpose: str) 
     assert details["usage"]["cached_input_tokens"] is None
 
 
-@pytest.mark.parametrize("legacy_purpose", [None, "text_completion"])
+def test_exported_activity_json_schema_includes_structured_decision() -> None:
+    schema = TypeAdapter(TypedActivityRow).json_schema()
+    details = schema["$defs"]["LLMCallEndedDetails"]
+    assert "structured_decision" in details["properties"]["purpose"]["anyOf"][0]["enum"]
+    assert schema["$defs"]["LLMCallEndedRow"]["properties"]["schema_version"]["default"] == 10
+
+
+@pytest.mark.parametrize(
+    ("schema_version", "legacy_purpose"),
+    [(6, None), (8, "text_completion"), (9, "learning_extraction")],
+)
 def test_legacy_llm_activity_does_not_infer_root_effort_or_purpose(
+    schema_version: int,
     legacy_purpose: str | None,
 ) -> None:
     row = map_hook_to_activity(HookEvent.LLM_CALL_ENDED, {}, run_id="legacy")
     legacy = row.model_dump(exclude_none=True)
-    legacy["schema_version"] = 6 if legacy_purpose is None else 8
+    legacy["schema_version"] = schema_version
     if legacy_purpose is not None:
         legacy["details"]["purpose"] = legacy_purpose
-    details = TypeAdapter(TypedActivityRow).validate_python(legacy).model_dump()["details"]
+    reparsed = TypeAdapter(TypedActivityRow).validate_python(legacy)
+    assert reparsed.schema_version == schema_version
+    details = reparsed.model_dump()["details"]
     assert details["purpose"] == legacy_purpose
     assert details["source"] is details["effort"] is None
 

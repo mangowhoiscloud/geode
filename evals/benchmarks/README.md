@@ -8,6 +8,12 @@ runtime to an external execution platform. They are separate roles here.
 
 It covers:
 
+- `decision_handoff`: an opt-in, five-task comparison of Astra and Jev decision
+  helpers whose source-bound data returns to the same Astra root AgenticLoop.
+  The root continues with read-only status tools; native mechanical verification
+  and an independent fixture oracle remain separate. See the
+  [pilot contract](../../docs/eval/typesafe-decision-handoff.md). Implemented locally
+  and under verification; no live A/B evidence or default-provider adoption yet.
 - `skill_attribution`: a run-spec-bound paired contract whose only treatment
   difference is target-skill availability, plus a fresh-process subscription
   runner that rejects answer-key leakage, uses target-specific output/tool

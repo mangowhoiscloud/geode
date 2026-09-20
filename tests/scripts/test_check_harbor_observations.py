@@ -581,6 +581,7 @@ def test_absent_cache_key_is_export_loss_not_provider_null(trial, model_boundary
     [
         ("cognitive_reflection", "medium"),
         ("turn_verification", "max"),
+        ("structured_decision", "medium"),
         ("context_compaction", "max"),
         ("learning_extraction", "max"),
         ("memory_dreaming", "max"),
