@@ -22,6 +22,7 @@ from core.llm.adapters.base import (
     ToolSpec,
     UsageSummary,
 )
+from core.llm.agentic_response import normalize_stop_details
 
 # Computer-use display dims live in the harness module (single SoT) so the
 # injected tool DEFINITION and the local executor never drift.
@@ -213,12 +214,8 @@ def _merge_beta(kwargs: dict[str, Any], *betas: str) -> None:
 
 
 def _maybe_inject_context_management(kwargs: dict[str, Any]) -> None:
-    """Server-side context editing for supporting models.
-
-    Live-verified on the Anthropic Messages API 2026-07-29 (probe B1: merged
-    beta tokens, trigger from ``resolve_context_budget_policy``). Haiku 4.5
-    rejects the compact beta, hence the model gate.
-    """
+    """Context editing and compaction have separate provider capability gates."""
+    from core.llm.model_capabilities import ANTHROPIC_COMPACTION_MODELS
     from core.llm.providers.anthropic import _CONTEXT_MGMT_MODELS
 
     model = _base_model(str(kwargs.get("model", "")))
@@ -230,14 +227,17 @@ def _maybe_inject_context_management(kwargs: dict[str, Any]) -> None:
     trigger = resolve_context_budget_policy(
         model, context_window=MODEL_CONTEXT_WINDOW.get(model)
     ).anthropic_compact_trigger_tokens
-    _merge_beta(kwargs, "context-management-2025-06-27", "compact-2026-01-12")
+    _merge_beta(kwargs, "context-management-2025-06-27")
     body = dict(kwargs.get("extra_body") or {})
-    body["context_management"] = {
-        "edits": [
-            {"type": "clear_tool_uses_20250919", "keep": {"type": "tool_uses", "value": 5}},
-            {"type": "compact_20260112", "trigger": {"type": "input_tokens", "value": trigger}},
-        ]
-    }
+    edits: list[dict[str, Any]] = [
+        {"type": "clear_tool_uses_20250919", "keep": {"type": "tool_uses", "value": 5}}
+    ]
+    if model in ANTHROPIC_COMPACTION_MODELS:
+        _merge_beta(kwargs, "compact-2026-01-12")
+        edits.append(
+            {"type": "compact_20260112", "trigger": {"type": "input_tokens", "value": trigger}}
+        )
+    body["context_management"] = {"edits": edits}
     kwargs["extra_body"] = body
 
 
@@ -499,6 +499,11 @@ def translate_response(response: Any) -> AdapterCallResult:
             cache_write_tokens_present=cache_write_tokens is not None,
         ),
         stop_reason=getattr(response, "stop_reason", "end_turn") or "end_turn",
+        stop_details=(
+            normalize_stop_details(getattr(response, "stop_details", None))
+            if getattr(response, "stop_reason", None) == "refusal"
+            else None
+        ),
         tool_uses=tuple(tool_uses),
         raw_response=response,
         anthropic_content=anthropic_content,

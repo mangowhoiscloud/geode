@@ -18,9 +18,8 @@ pattern with surface labels that match the GEODE entry-points.
 1. ``$GEODE_SURFACE_TYPE`` env var (operator override) — useful when
    running ad-hoc CLI inside a containerised env that misidentifies
    itself.
-2. ContextVar (entry-point-set; Phase 2.5 will wire this). Currently
-   unset by default → falls through to step 3.
-3. ``"cli"`` default — the most common interactive case.
+2. ContextVar (explicit request-local binding).
+3. Unbound surface — no platform hint. Session mode must not be guessed.
 
 Missing / unknown surface → no hint block appended (graceful no-op).
 
@@ -86,8 +85,8 @@ PLATFORM_HINTS: dict[str, str] = {
     SURFACE_CLI: (
         "Surface: GEODE interactive CLI in a developer's "
         "terminal. Output is rendered with Rich markdown. Long code blocks "
-        "are fine; the user can scroll. Tools include filesystem and shell "
-        "access via the local repo's working directory."
+        "are fine; the user can scroll. Available tools and permissions come "
+        "from the active session, not this surface label."
     ),
     SURFACE_SERVE_REPL: (
         "Surface: persistent ``geode serve`` REPL. "
@@ -108,11 +107,9 @@ PLATFORM_HINTS: dict[str, str] = {
         "non-interactive flags."
     ),
     SURFACE_WORKTREE: (
-        "Surface: sandboxed git worktree. Treat the "
-        "checkout as ephemeral — anything not committed and pushed before "
-        "exit is lost. Filesystem changes outside the worktree are not "
-        "permitted. Coordinate with the parent session via the worktree's "
-        "``.owner`` file when in doubt about ownership."
+        "Surface: git worktree. Preserve unrelated changes and inspect the "
+        "worktree's ``.owner`` file when ownership is unclear. This label does "
+        "not establish sandbox boundaries or authorize commits, pushes, or cleanup."
     ),
     SURFACE_MCP_REMOTE: (
         "Surface: remote MCP server. The caller may be another "
@@ -130,9 +127,8 @@ _current_surface: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 def set_current_surface(surface: str | None) -> contextvars.Token[str | None]:
     """Bind the surface to the current ContextVar scope. Returns the reset token.
 
-    Entry-points (Phase 2.5 follow-up) call this once at startup so every
-    LLM call inside that process sees the right surface in
-    :func:`get_current_surface`. Passing ``None`` clears the binding.
+    Callers must reset the returned token when the request ends. Passing
+    ``None`` clears the binding; no surface is inferred from the process.
     """
     return _current_surface.set(surface)
 
@@ -145,7 +141,7 @@ def get_current_surface() -> str:
     1. ``$GEODE_SURFACE_TYPE`` (operator override) — if it's a recognised
        surface name, use it. Unknown values log DEBUG and fall through.
     2. :data:`_current_surface` ContextVar — entry-point-set value.
-    3. ``"cli"`` default — the most common interactive case.
+    3. Empty string — omit guidance when the surface is unknown.
     """
     override = os.environ.get(GEODE_SURFACE_TYPE_ENV)
     if override:
@@ -160,7 +156,7 @@ def get_current_surface() -> str:
     ctx_val = _current_surface.get()
     if ctx_val and ctx_val in VALID_SURFACES:
         return ctx_val
-    return SURFACE_CLI
+    return ""
 
 
 def render_platform_hint(surface: str | None = None) -> str:

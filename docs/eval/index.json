@@ -45,7 +45,7 @@
       "authority": "process",
       "path": "docs/eval/benchmark-publishing-cycle.md",
       "summary": "End-to-end workflow from preregistered benchmark scope through evidence preservation, publication, and deployment.",
-      "sha256": "fd884ca486676aa503a10079b8dd484d99e5ec45df22efcb253db56339f3829f",
+      "sha256": "0b51c6a442560789ecbe212122fa74a16495aa17f75d84b995954cf122cf508d",
       "triggers": [
         "attempts JSONL",
         "benchmark run",

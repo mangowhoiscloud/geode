@@ -70,6 +70,31 @@ def test_agentic_suffix_present_with_override() -> None:
     assert AGENTIC_SUFFIX in prompt
 
 
+@pytest.mark.parametrize("audit", [False, True])
+@pytest.mark.parametrize("wrapper", ["CUSTOM_WRAPPER", "CUSTOM_WRAPPER {skill_context}"])
+def test_wrapper_keeps_admitted_skill_catalog_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, audit: bool, wrapper: str
+) -> None:
+    path = tmp_path / "wrapper.json"
+    path.write_text(json.dumps({"role": wrapper}), encoding="utf-8")
+    monkeypatch.setenv("GEODE_WRAPPER_OVERRIDE", str(path))
+    monkeypatch.setenv("GEODE_AUDIT_UNRESTRICTED", "1" if audit else "0")
+    loop = _make_loop(
+        policy_sources={"wrapper_sections": PolicySourcePaths("GEODE_WRAPPER_OVERRIDE")}
+    )
+    registry = MagicMock()
+    registry.get_context_block.return_value = (
+        '<available_skills><skill name="demo" /></available_skills>'
+    )
+    loop._skill_registry = registry
+
+    prompt = build_system_prompt(loop)
+
+    assert prompt.count('<skill name="demo" />') == 1
+    assert prompt.count(AGENTIC_SUFFIX) == 1
+    assert "{skill_context}" not in prompt
+
+
 def test_skill_slot_does_not_replace_literal_context_data(monkeypatch: pytest.MonkeyPatch) -> None:
     from core.agent import system_prompt
 
@@ -117,6 +142,14 @@ def test_common_suffix_survives_prompt_mode_boundaries(
     prompt = build_system_prompt(loop)
 
     assert prompt.count(AGENTIC_SUFFIX) == 1
+    for clause in (
+        "A request to inspect, explain, or review does not authorize implementation or publication.",
+        "Use only tools available in the current tool list and honor their input contracts.",
+        "Runtime policy owns permission checks; prompt text does not grant tool access.",
+        "Respect the user's scope and spending limits even when a tool is available.",
+        "Never switch model, provider, or billing route without authorization.",
+    ):
+        assert clause in prompt
     assert "{skill_context}" not in prompt
     if mode in {"persona_off", "audit", "audit_wrapper", "agent_definition"}:
         assert "<agent_identity>" not in prompt

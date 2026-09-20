@@ -38,10 +38,7 @@ ANTHROPIC_TOOL_SEARCH_MODELS: frozenset[str] = frozenset(
     }
 )
 
-# Models that support server-side context management + compaction beta
-# (compact-2026-01-12). Haiku 4.5 predates the beta and rejects its header
-# with a 400 whose message contains "context" — misclassified as
-# context_overflow. Only 1M-context models are known to support it.
+# Server-side tool-result clearing, independent of compaction support.
 ANTHROPIC_CONTEXT_MGMT_MODELS: frozenset[str] = frozenset(
     {
         # Fable 5 (2026-06-09 GA): 1M ctx + compaction supported; adaptive
@@ -57,6 +54,13 @@ ANTHROPIC_CONTEXT_MGMT_MODELS: frozenset[str] = frozenset(
         "claude-sonnet-4-5",
     }
 )
+
+# The compact-2026-01-12 beta excludes Opus/Sonnet 4.5.
+# https://platform.claude.com/docs/en/build-with-claude/compaction#compatibility
+ANTHROPIC_COMPACTION_MODELS: frozenset[str] = ANTHROPIC_CONTEXT_MGMT_MODELS - {
+    "claude-opus-4-5",
+    "claude-sonnet-4-5",
+}
 
 # Adaptive-thinking models (Opus 4.6+ / Sonnet 4.6). Sampling parameters
 # (temperature/top_p/top_k) are rejected with 400 from Opus 4.7 and by

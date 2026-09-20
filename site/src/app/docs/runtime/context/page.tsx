@@ -89,11 +89,20 @@ export default function Page() {
               예비분 약 20K를 뺀 값) 기준입니다. 실제 대응은 프로바이더에 따라
               갈립니다.
             </p>
+            <p>
+              압력 추정에는 재전송할 native reasoning/output도 포함합니다.
+              일반 메시지와 중복 metadata를 두 번 더하지 않고, 가능한 제공자별
+              표현 중 가장 큰 값을 사용합니다. 암호화된 payload의 문자 수는
+              보수적인 크기 추정치이며 실제 보고 토큰이나 달러 청구액이 아닙니다.
+            </p>
             <ul>
               <li>
                 <strong>Anthropic</strong>. 경고 수준 압력은 서버 측 context
                 management가 처리하므로 클라이언트는 개입하지 않습니다. 임계
                 수준에서만 클라이언트가 비상 정리(prune)를 수행합니다.
+                Tool-result clearing과 서버 압축의 지원 목록은 별개입니다.
+                Opus 4.5·Sonnet 4.5에는 clearing만 보내며, 지원되지 않는
+                compaction beta header/edit는 보내지 않습니다.
               </li>
               <li>
                 <strong>OpenAI / GLM</strong>. GEODE의 현재 연결은 텍스트 요약
@@ -146,6 +155,14 @@ export default function Page() {
               압축 경계에 걸친 병렬 도구 결과는 대응하는 앞선 호출과 함께
               보존합니다. 요약이나 저장이 실패한 soft 압축은 입력 이력을
               유지하지만, 앞서 수행한 관측 마스킹까지 되돌리지는 않습니다.
+            </p>
+            <p>
+              Unreleased: 마지막 assistant 도구 호출 묶음의 <code>use_skill</code>
+              결과는 다음 모델 요청 전에 요약하지 않습니다. hard 정리도
+              그 묶음의 호출·결과를 함께 남깁니다. 이전 스킬 결과를 생략할
+              때는 <code>use_skill</code> 재호출 안내를 남기며, 보존된 입력이
+              여전히 한도를 넘으면 기존 <code>context_exhausted</code> 경계를
+              따릅니다. 이 보호는 컨텍스트 예산을 늘리지 않습니다.
             </p>
 
             <h2>대형 도구 결과: 오프로드</h2>
@@ -309,12 +326,21 @@ export default function Page() {
               minus a ~20K output reserve), not the raw window. The response
               itself is provider-aware.
             </p>
+            <p>
+              Pressure estimates include native reasoning/output replay, using
+              the largest possible provider representation without recounting
+              normalized content or persistence metadata. Opaque payload size
+              is a conservative estimate, not reported tokens or a dollar bill.
+            </p>
             <ul>
               <li>
                 <strong>Anthropic</strong>. Warning-level pressure is handled by
                 server-side context management, so the client stays out. Only at
                 critical pressure does the client step in with an emergency
                 prune.
+                Tool-result clearing and server compaction have separate
+                capability lists. Opus 4.5 and Sonnet 4.5 receive clearing only,
+                without unsupported compaction beta headers or edits.
               </li>
               <li>
                 <strong>OpenAI / GLM</strong>. GEODE currently uses text-summary
@@ -372,6 +398,15 @@ export default function Page() {
               Parallel tool results crossing the compaction cut retain their
               preceding calls. Failed soft summarization or persistence keeps
               its input messages, without rolling back earlier observation masking.
+            </p>
+            <p>
+              Unreleased: <code>use_skill</code> results from the latest assistant
+              tool batch are not summarized before the next model request. Hard
+              pruning also retains that batch&apos;s calls and results together.
+              Omitted older skill results carry a reload instruction. If the
+              preserved input still exceeds the limit, the existing
+              <code>context_exhausted</code> boundary applies; this protection does
+              not increase the context budget.
             </p>
 
             <h2>Large tool results: offload</h2>

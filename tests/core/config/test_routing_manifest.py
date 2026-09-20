@@ -87,7 +87,7 @@ def test_default_manifest_fallback_chains_empty() -> None:
 def test_default_manifest_routing_rules() -> None:
     manifest = load_routing_manifest()
     assert manifest.routing.prefixes.get("claude-") == "anthropic"
-    assert "gpt-5.5" in manifest.routing.codex_only_models
+    assert manifest.routing.codex_only_models == []
     assert manifest.routing.fallback_provider == "openai"
 
 
@@ -119,8 +119,8 @@ def test_default_manifest_credentials_env_vars() -> None:
         ("glm-5.1", "glm"),
         ("openrouter/anthropic/claude-sonnet-4", "openrouter"),
         ("openrouter/openrouter/free", "openrouter"),
-        ("gpt-5.5", "openai-codex"),  # codex_only_models hits first
-        ("gpt-5.5-pro", "openai-codex"),
+        ("gpt-5.5", "openai"),  # documented Platform API support
+        ("gpt-5.5-pro", "openai"),
         ("gpt-5.4", "openai"),  # gpt- prefix
         ("gpt-5.3-codex", "openai-codex"),  # codex suffix
         ("o3-mini", "openai"),

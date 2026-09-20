@@ -499,6 +499,8 @@ def pick_bindings(
         manifest = load_manifest()
     if overrides is None:
         overrides = load_user_overrides()
+    from core.llm.model_catalog import require_model_source_available
+
     petri_sources = _load_petri_sources()
 
     bindings: dict[str, RoleBinding] = {}
@@ -521,6 +523,9 @@ def pick_bindings(
             role_name, override.get("source"), provider, petri_sources
         )
         source = _resolve_source(provider, hint=source_hint, auto_probe=auto_probe)
+        require_model_source_available(
+            model, provider=provider, source=binding_to_adapter_source(source)
+        )
         bindings[role_name] = RoleBinding(
             role=role_name,
             model=model,
@@ -540,6 +545,11 @@ def pick_bindings(
     voters: list[VoterBinding] = []
     for voter in voter_specs:
         resolved_source = _resolve_voter_source(voter, auto_probe=auto_probe)
+        require_model_source_available(
+            voter.model,
+            provider=voter.provider,
+            source=binding_to_adapter_source(resolved_source),
+        )
         voters.append(
             VoterBinding(
                 model=voter.model,

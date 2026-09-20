@@ -139,13 +139,17 @@ class GlmPaygAdapter:
                 type(exc).__name__,
             )
             raise
-        return translate_chat_response(response)
+        return translate_chat_response(
+            response, provider=self.provider, adapter_name=self.name, model=req.model
+        )
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         client = self._get_client()
         kwargs: dict[str, Any] = {
             "model": req.model,
-            "messages": build_messages(req),
+            "messages": build_messages(
+                req, provider=self.provider, adapter_name=self.name, model=req.model
+            ),
             "max_tokens": req.max_tokens,
             "stream": True,
         }

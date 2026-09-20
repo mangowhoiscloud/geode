@@ -15,6 +15,9 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from core.llm.adapters._openai_common import build_codex_input
+from core.llm.adapters.base import AdapterCallRequest, Message
+from core.llm.agentic_response import parse_chat_reasoning_replay
 from core.orchestration.context_budget import (
     ABSOLUTE_TOKEN_CEILING as _ABSOLUTE_TOKEN_CEILING,
 )
@@ -57,36 +60,96 @@ class ContextMetrics:
     policy: ContextBudgetPolicy | None = None
 
 
-def estimate_message_tokens(messages: list[dict[str, Any]]) -> int:
-    """Estimate token count for a list of messages.
+def _estimate_content_chars(content: Any) -> int:
+    """Apply the existing text/block heuristic, including its image policy."""
+    total_chars = 0
+    if isinstance(content, str):
+        total_chars += len(content)
+    elif isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict):
+                # tool_use, tool_result, text blocks
+                text = block.get("text", "") or block.get("content", "")
+                if isinstance(text, str):
+                    total_chars += len(text)
+                elif isinstance(text, list):
+                    # Nested content (tool_result with list content)
+                    for sub in text:
+                        if isinstance(sub, dict):
+                            total_chars += len(sub.get("text", ""))
+                        elif isinstance(sub, str):
+                            total_chars += len(sub)
+                # Add overhead for block metadata (type, id, name, etc.)
+                total_chars += len(json.dumps(block, default=str)) - len(str(text))
+            elif isinstance(block, str):
+                total_chars += len(block)
+    return total_chars
 
-    Uses the policy-owned chars/token heuristic.
-    Tool-use content (JSON) tends to be slightly more tokens per char,
-    so this is an approximation that slightly underestimates.
+
+def estimate_message_tokens(messages: list[dict[str, Any]]) -> int:
+    """Estimate token count with the policy-owned chars/token heuristic.
+
+    Replay can replace normalized content, not just extend it. Before route
+    selection, budget the largest possible per-message representation rather
+    than adding mutually exclusive providers or duplicate sidecars together.
+    Opaque/encrypted payload characters are a conservative size proxy, not a
+    provider token count, decoded-reasoning expansion, or billable usage.
     """
     total_chars = 0
     for msg in messages:
         content = msg.get("content", "")
-        if isinstance(content, str):
-            total_chars += len(content)
-        elif isinstance(content, list):
-            for block in content:
-                if isinstance(block, dict):
-                    # tool_use, tool_result, text blocks
-                    text = block.get("text", "") or block.get("content", "")
-                    if isinstance(text, str):
-                        total_chars += len(text)
-                    elif isinstance(text, list):
-                        # Nested content (tool_result with list content)
-                        for sub in text:
-                            if isinstance(sub, dict):
-                                total_chars += len(sub.get("text", ""))
-                            elif isinstance(sub, str):
-                                total_chars += len(sub)
-                    # Add overhead for block metadata (type, id, name, etc.)
-                    total_chars += len(json.dumps(block, default=str)) - len(str(text))
-                elif isinstance(block, str):
-                    total_chars += len(block)
+        content_chars = _estimate_content_chars(content)
+        message_chars = content_chars
+        if msg.get("role") == "assistant":
+            replay = parse_chat_reasoning_replay(msg.get("chat_reasoning"))
+            if replay is not None:
+                message_chars += len(json.dumps(replay["fields"], ensure_ascii=False, default=str))
+            # Mirror translation.build_adapter_request's assistant/list/dict
+            # boundary; persisted metadata is not another wire payload.
+            native = msg.get("anthropic_content")
+            if isinstance(native, list):
+                blocks = [item for item in native if isinstance(item, dict)]
+                message_chars = max(message_chars, _estimate_content_chars(blocks))
+            raw_output = msg.get("codex_output_items")
+            raw_reasoning = msg.get("codex_reasoning_items")
+            output = (
+                [item for item in raw_output if isinstance(item, dict)]
+                if isinstance(raw_output, list)
+                else []
+            )
+            reasoning = (
+                [
+                    item
+                    for item in raw_reasoning
+                    if isinstance(item, dict) and item.get("encrypted_content")
+                ]
+                if isinstance(raw_reasoning, list)
+                else []
+            )
+            if output or reasoning:
+                # Reuse the wire owner for full-output preference, legacy
+                # encrypted replay, metadata stripping and the replay opt-out.
+                # Platform retains item ids, so it bounds Codex's id-stripped
+                # representation without guessing the selected source.
+                wire = build_codex_input(
+                    AdapterCallRequest(
+                        model="",
+                        messages=(
+                            Message(
+                                role="assistant",
+                                content=content,
+                                codex_output_items=tuple(output),
+                                codex_reasoning_items=tuple(reasoning),
+                                phase=msg.get("phase", "")
+                                if isinstance(msg.get("phase", ""), str)
+                                else "",
+                            ),
+                        ),
+                    ),
+                    backend="platform",
+                )
+                message_chars = max(message_chars, _estimate_content_chars(wire))
+        total_chars += message_chars
     return max(total_chars // CHARS_PER_TOKEN, 1)
 
 
@@ -271,6 +334,11 @@ def _summarize_tool_result(tool_name: str, tool_args: str, tool_content: Any) ->
         action = args.get("action") or tool_name
         target = args.get("target") or args.get("query") or ""
         return f"[{tool_name}] {action} {target}".strip()
+    if tool_name == "use_skill":
+        return (
+            f"[use_skill] instructions omitted for {json.dumps(args.get('name', ''))}; "
+            "call use_skill again before applying this skill."
+        )
 
     preview_args = " ".join(f"{k}={str(v)[:40]}" for k, v in list(args.items())[:2])
     suffix = f" {preview_args}" if preview_args else ""
@@ -338,6 +406,8 @@ def summarize_tool_results(
     threshold = policy.tool_summary_threshold_tokens
     summarized = 0
     call_index = _assistant_tool_call_index(messages)
+    latest_assistant = next((m for m in reversed(messages) if m.get("role") == "assistant"), {})
+    pending_calls = _assistant_tool_call_index([latest_assistant])
     seen_tool_result_hashes: dict[str, str] = {}
 
     for msg in messages:
@@ -359,6 +429,12 @@ def summarize_tool_results(
             tool_args = ""
             if isinstance(tool_call_id, str) and tool_call_id in call_index:
                 tool_name, tool_args = call_index[tool_call_id]
+            if (
+                tool_name == "use_skill"
+                and isinstance(tool_call_id, str)
+                and tool_call_id in pending_calls
+            ):
+                continue  # The model has not read this instruction body yet.
             rendered = json.dumps(content, sort_keys=True, ensure_ascii=False, default=str)
             if rendered in seen_tool_result_hashes:
                 msg["content"] = (
@@ -395,6 +471,12 @@ def summarize_tool_results(
                     if isinstance(tool_use_id, str)
                     else ("unknown", "")
                 )
+                if (
+                    tool_name == "use_skill"
+                    and isinstance(tool_use_id, str)
+                    and tool_use_id in pending_calls
+                ):
+                    continue
                 rendered = json.dumps(inner, sort_keys=True, ensure_ascii=False, default=str)
                 if rendered in seen_tool_result_hashes:
                     block["content"] = (
@@ -428,11 +510,16 @@ def adaptive_prune(
 
     Strategy:
     1. Always keep the first message (initial context)
-    2. Always keep the last 2 messages (most recent exchange)
+    2. Keep the last 2 messages and their complete causal tool batch
     3. Add middle messages from newest to oldest until budget is reached
     4. Budget is the resolved policy's warning-token budget.
     """
     if len(messages) <= 3:
+        return list(messages)
+    from core.orchestration.compaction import find_safe_boundary
+
+    boundary = find_safe_boundary(messages, keep_recent=2)
+    if boundary == 0:
         return list(messages)
 
     policy = (
@@ -442,8 +529,8 @@ def adaptive_prune(
     )
     budget = policy.prune_budget_tokens
     first = messages[0]
-    recent = messages[-2:]
-    middle = messages[1:-2]
+    recent = messages[boundary:]
+    middle = messages[1:boundary]
 
     base_tokens = estimate_message_tokens([first]) + estimate_message_tokens(recent)
     if base_tokens >= budget:
@@ -503,6 +590,7 @@ def mask_stale_observations(
     cutoff_idx = assistant_indices[-keep_recent_rounds]
 
     masked = 0
+    call_index = _assistant_tool_call_index(messages)
     for i, msg in enumerate(messages):
         if i >= cutoff_idx:
             break  # only process messages before cutoff
@@ -519,7 +607,17 @@ def mask_stale_observations(
             if isinstance(inner, str) and (inner.startswith("[masked:") or len(inner) < 200):
                 continue
             estimated = len(json.dumps(block, default=str)) // CHARS_PER_TOKEN
-            block["content"] = f"[masked: {estimated:,} tokens, use recall_tool_result if needed]"
+            tool_use_id = block.get("tool_use_id")
+            tool_name, tool_args = (
+                call_index.get(tool_use_id, ("unknown", ""))
+                if isinstance(tool_use_id, str)
+                else ("unknown", "")
+            )
+            block["content"] = (
+                _compact_tool_content(tool_name, tool_args, inner)
+                if tool_name == "use_skill"
+                else f"[masked: {estimated:,} tokens, use recall_tool_result if needed]"
+            )
             masked += 1
 
     if masked:

@@ -49,11 +49,12 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              <code>AGENTIC_SUFFIX</code>는 항상-on 운영 규칙을 담습니다. 완료
-              기준, 도구 선택 매트릭스, Grounding &amp; Citation(도구 출력은
-              데이터지 지시가 아님 포함), Answering discipline(미인식 개체
-              선검색, 정쟁 토픽 even-handedness), Source fidelity &amp;
-              copyright.
+              <code>ROUTER_SYSTEM</code>은 응답 서술을,
+              <code>AGENTIC_SUFFIX</code>는 요청 범위·완료·실패·증거·도구 사용의 공통
+              계약을 담습니다. 도구 선택은 고정된 업체 순위가 아니라 현재
+              도구와 출처에 따릅니다. 상세 조사 절차는 필요할 때
+              <code>deep-researcher</code> 스킬로 읽습니다. 로컬 검증 성공은
+              원격 CI 성공이나 배포 권한을 대신하지 않습니다.
             </p>
 
             <h2>드리프트 감지: 해시 핀</h2>
@@ -75,7 +76,23 @@ export default function Page() {
               전달하며, 작성된 베이스의 <code>{"{skill_context}"}</code> 슬롯만
               치환합니다. 프로필·메모리·정체성 데이터에 같은 문자열이 있어도
               바꾸지 않습니다. 진단용 프롬프트 덤프도 이 경계를 따릅니다.
+              wrapper에 슬롯이 없으면 카탈로그를 덧붙입니다.
               스킬 본문은 <code>use_skill</code>로 필요할 때 읽습니다.
+            </p>
+
+            <h2>주입 경계와 현재 상태</h2>
+            <p>
+              Unreleased: 프로필·프로젝트 기억·학습·저장 규칙의 데이터는
+              XML 문자로 이스케이프합니다. 후보 평가와 reflection도 작업·상태·관측을
+              별도 데이터 영역으로 전달합니다. 태그는 내용의 경계를 표현할 뿐,
+              권한 검사나 프롬프트 주입 방어의 성공을 보장하지 않습니다.
+            </p>
+            <p>
+              실행 표면이 바인딩되지 않으면 CLI라고 추측하지 않고 플랫폼
+              힌트를 생략합니다. 명시된 표면도 사용 가능한 도구나 샌드박스
+              권한을 보증하지 않습니다. 모델·도구 그래프가 바뀌면 이전
+              preflight 힌트를 무효화하고 시스템 프롬프트를 다시 조립합니다.
+              필수 검증 조건은 별도 상태로 유지됩니다.
             </p>
 
             <h2>레이어 조립: build_system_prompt</h2>
@@ -235,12 +252,13 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              <code>AGENTIC_SUFFIX</code> carries the always-on operating
-              rules: completion criteria, the tool-selection matrix, Grounding
-              &amp; Citation (including that tool output is data, not
-              instructions), Answering discipline (search unknown entities,
-              even-handedness on contested topics), and Source fidelity &amp;
-              copyright.
+              <code>ROUTER_SYSTEM</code> owns response style;
+              <code>AGENTIC_SUFFIX</code> owns shared task scope, completion, failure,
+              evidence, and tool-use contracts. Tool selection follows current
+              availability and source authority, not a fixed provider ranking.
+              Detailed research procedures load through <code>deep-researcher</code>
+              when needed. Local verification does not establish remote CI
+              success or authorize publication.
             </p>
 
             <h2>Drift detection: hash pins</h2>
@@ -262,7 +280,24 @@ export default function Page() {
               <code>{"{skill_context}"}</code> slot. Matching literal text in
               profile, memory, or identity data stays unchanged. Diagnostic
               prompt dumps use the same boundary. Skill bodies load on demand
-              through <code>use_skill</code>.
+              through <code>use_skill</code>. Wrappers without the slot receive
+              the catalog as an appended block.
+            </p>
+
+            <h2>Injection boundaries and current state</h2>
+            <p>
+              Unreleased: profile, project-memory, learning, and stored-rule
+              data are XML-escaped. Candidate selection and reflection also
+              separate task, state, and observations into data regions. Tags
+              express content boundaries; they do not enforce authorization
+              or establish resistance to prompt injection.
+            </p>
+            <p>
+              An unbound execution surface omits the platform hint instead of
+              assuming CLI access. Even an explicit surface does not establish
+              tool or sandbox permissions. Changing the model/tool graph clears
+              the old preflight hint and rebuilds the system prompt; required
+              verification conditions remain in their separate state.
             </p>
 
             <h2>Layer assembly: build_system_prompt</h2>

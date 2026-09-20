@@ -42,7 +42,7 @@ export default function Page() {
                 <tr>
                   <td>OpenAI / Codex</td>
                   <td><code>gpt-5.5</code></td>
-                  <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> 접두사. 단 <code>gpt-5.5</code>, <code>gpt-5.5-pro</code>와 <code>-codex</code> 계열 접미사는 Codex OAuth 백엔드로만 라우팅. <code>gpt-6-astra</code>, <code>gpt-5.6-sol/terra/luna</code>, <code>gpt-5.4</code> 계열은 듀얼 레인 — 로그인 상태(API 키 ↔ 구독 OAuth)가 백엔드를 결정. Astra의 실제 접근은 OpenAI 계정별 rollout에 따름</td>
+                  <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> 접두사. <code>-codex</code> 접미사는 Codex OAuth로 라우팅하며, 다른 모델은 선택된 API 키 또는 구독 소스를 따릅니다. 모델별 지원·퇴역은 소스마다 다르고, 카탈로그 등록은 계정 접근 증거가 아닙니다.</td>
                   <td>ChatGPT 구독 OAuth(<code>~/.codex/auth.json</code>) 또는 <code>OPENAI_API_KEY</code></td>
                 </tr>
                 <tr>
@@ -74,6 +74,23 @@ export default function Page() {
               경로이므로 고정 모델 공식 평가에 사용하지 않습니다.
             </p>
 
+            <h2>소스별 모델 지원 종료</h2>
+            <p>
+              Unreleased, 2026-09-20 기준: Codex의 ChatGPT 로그인 경로에서
+              <code>gpt-5.2</code>·<code>gpt-5.3-codex</code>는 폐기되었고,
+              <code>gpt-5.4</code>·<code>gpt-5.4-mini</code>는 8월 31일 지원이
+              끝났습니다. 이 경로의 선택·요청은 차단하지만 유효한 API 사용과
+              과거 요금·평가 기록은 보존합니다. <code>gpt-5.5</code>의 구독
+              퇴역 예정일은 10월 14일이므로 아직 퇴역 처리하지 않습니다.
+              근거는 <a href="https://learn.chatgpt.com/docs/models#deprecated-codex-models">공식 Codex 모델 안내</a>입니다.
+            </p>
+            <p>
+              Anthropic 공식 API에서도 지원이 끝난 Opus 4.1·Opus 4·Sonnet 4와
+              이전 세대를 네트워크 요청 전에 거절합니다. 현재 지원되는 4.5 이상
+              모델은 유지하며, 이 퇴역 일정을 OpenRouter 등 다른 운영사의 경로에
+              일괄 적용하지 않으며 실제 클라이언트의 endpoint를 확인합니다. <a href="https://platform.claude.com/docs/en/about-claude/model-deprecations">공식 모델 수명주기</a>를
+              2026-09-21에 확인했으며, 계정별 실제 접근 권한은 별도 검증 대상입니다.
+            </p>
             <h2>키와 설정이 사는 곳</h2>
             <p>역할이 파일별로 분리되어 있습니다. 키와 프로필은 로컬 비밀 파일, 동작은 config.toml에 둡니다.</p>
             <table>
@@ -211,9 +228,9 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
                   <td>Coding Plan 엔드포인트(<code>api.z.ai/api/coding/paas/v4</code>)와 PAYG(<code>api.z.ai/api/paas/v4</code>)는 다릅니다. 어느 쪽으로 나가는지 확인합니다.</td>
                 </tr>
                 <tr>
-                  <td><code>gpt-5.5</code>가 API 키로 안 됨</td>
-                  <td>codex 전용 모델</td>
-                  <td><code>gpt-5.5</code>와 <code>gpt-5.5-pro</code>는 ChatGPT 구독 OAuth 레인으로만 라우팅됩니다(<code>gpt-5.6</code>와 <code>gpt-5.4</code> 계열은 API 키와 구독 양쪽에서 동작). <code>/login openai</code>로 로그인합니다.</td>
+                  <td>저장된 구독 모델을 선택할 수 없음</td>
+                  <td>해당 소스에서 지원이 종료되었거나 폐기됨</td>
+                  <td>현재 지원되는 모델을 명시적으로 다시 선택합니다. GEODE는 다른 모델이나 PAYG로 자동 전환하지 않습니다. API 지원과 구독 지원은 별개입니다.</td>
                 </tr>
               </tbody>
             </table>
@@ -256,7 +273,7 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
                 <tr>
                   <td>OpenAI / Codex</td>
                   <td><code>gpt-5.5</code></td>
-                  <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> prefixes. Exception: <code>gpt-5.5</code>, <code>gpt-5.5-pro</code>, and <code>-codex</code> suffixed models route only to the Codex OAuth backend. <code>gpt-6-astra</code>, <code>gpt-5.6-sol/terra/luna</code>, and the <code>gpt-5.4</code> family are dual-lane — login state (API key ↔ subscription OAuth) picks the backend. Astra access remains account-rollout gated by OpenAI</td>
+                  <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> prefixes. The <code>-codex</code> suffix routes to Codex OAuth; other models follow the selected API-key or subscription source. Support and retirement are source-specific; catalog presence does not establish account access.</td>
                   <td>ChatGPT subscription OAuth (<code>~/.codex/auth.json</code>) or <code>OPENAI_API_KEY</code></td>
                 </tr>
                 <tr>
@@ -290,6 +307,26 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               evaluation targets.
             </p>
 
+            <h2>Source-specific model retirement</h2>
+            <p>
+              Unreleased, checked 2026-09-20: on the ChatGPT-sign-in Codex route,
+              <code>gpt-5.2</code> and <code>gpt-5.3-codex</code> are deprecated;
+              <code>gpt-5.4</code> and <code>gpt-5.4-mini</code> retired on August 31.
+              GEODE blocks selection and requests on that source while retaining
+              valid API routes and historical pricing/evaluation records.
+              <code>gpt-5.5</code> is scheduled to retire on October 14, so it is
+              not retired yet. See the <a href="https://learn.chatgpt.com/docs/models#deprecated-codex-models">official Codex model guidance</a>.
+            </p>
+            <p>
+              The official Anthropic API similarly rejects confirmed retired Opus
+              4.1, Opus 4, Sonnet 4, and older families before network submission.
+              Active 4.5+ models remain available. These dates do not govern
+              independently operated routes such as OpenRouter; admission checks
+              the actual client endpoint. The{" "}
+              <a href="https://platform.claude.com/docs/en/about-claude/model-deprecations">official model lifecycle</a>{" "}
+              was checked on 2026-09-21; account entitlement still requires its
+              own verification.
+            </p>
             <h2>Where keys and settings live</h2>
             <p>Roles are split by file. Keys and profiles live in local secret files; behavior lives in config.toml.</p>
             <table>
@@ -432,9 +469,9 @@ geode about                   # the EFFECTIVE model + provider`}</pre>
                   <td>The Coding Plan endpoint (<code>api.z.ai/api/coding/paas/v4</code>) and PAYG (<code>api.z.ai/api/paas/v4</code>) differ. Check which one your traffic uses.</td>
                 </tr>
                 <tr>
-                  <td><code>gpt-5.5</code> fails on an API key</td>
-                  <td>Codex-only model</td>
-                  <td><code>gpt-5.5</code> and <code>gpt-5.5-pro</code> route only through the ChatGPT subscription OAuth lane (the <code>gpt-5.6</code> and <code>gpt-5.4</code> families work on both API-key and subscription routes). Log in with <code>/login openai</code>.</td>
+                  <td>A saved subscription model is unavailable</td>
+                  <td>Support on that source ended or was deprecated</td>
+                  <td>Explicitly choose a currently supported model. GEODE does not switch models or move to PAYG automatically. API and subscription support are separate contracts.</td>
                 </tr>
               </tbody>
             </table>

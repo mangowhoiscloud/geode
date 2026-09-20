@@ -39,7 +39,7 @@ def test_agentic_suffix_carries_llms_txt_heuristic() -> None:
     assert "/llms.txt" in AGENTIC_SUFFIX
     assert "llms-full.txt" in AGENTIC_SUFFIX
     # The heuristic must instruct ORDER (index first), not just mention the file.
-    assert "FIRST" in AGENTIC_SUFFIX
+    assert "first when available" in AGENTIC_SUFFIX
     # PR-LLMS-TXT-TOOL — step 1 is the dedicated tool, not a raw web_fetch.
     assert "llms_txt_index" in AGENTIC_SUFFIX
 

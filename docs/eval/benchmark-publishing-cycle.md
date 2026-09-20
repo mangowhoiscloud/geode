@@ -235,10 +235,11 @@ Use the normal GEODE GitFlow:
 feature/<benchmark-cycle> -> develop -> main
 ```
 
-Feature PRs squash into `develop`. Before promoting `develop -> main`, sync
-`main -> develop` if `main` has progressed. The final `develop -> main` PR uses
-a merge commit. After main merge, watch the Pages workflow and verify the live
-URL with `curl`.
+Follow the [GitFlow owner](../../.agents/skills/geode-gitflow/SKILL.md): both
+feature integration and promotion use merge commits. Incorporate missing main
+history in the feature branch before its CI; never open a standalone
+`main -> develop` sync PR. After main merge, watch the Pages workflow and verify
+the live URL with `curl`.
 
 ## Verification Checklist
 
