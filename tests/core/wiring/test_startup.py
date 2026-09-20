@@ -661,12 +661,9 @@ class TestResolveProvider:
     def test_openai(self):
         from core.config import _resolve_provider
 
-        # v0.53.0 — OPENAI_PRIMARY = "gpt-5.5" is OAuth-only per
-        # developers.openai.com/codex/models, so it routes to openai-codex
-        # by canonical mapping. Pre-fix returned "openai" which misled the
-        # router; v0.52.4 equivalence-class scan corrected at runtime, but
-        # the static map is now honest about the constraint.
-        assert _resolve_provider(OPENAI_PRIMARY) == "openai-codex"
+        # Model family and credential source are separate: GPT-5.5 also has
+        # documented Platform API support. The operator selects the source.
+        assert _resolve_provider(OPENAI_PRIMARY) == "openai"
         assert _resolve_provider("gpt-5.4") == "openai"
         assert _resolve_provider("gpt-5.4-mini") == "openai"
         assert _resolve_provider("gpt-4.1") == "openai"

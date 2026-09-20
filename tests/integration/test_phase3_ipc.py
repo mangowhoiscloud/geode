@@ -12,7 +12,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, cast
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -605,8 +605,7 @@ class TestCLIChannelIntegration:
             client = IPCClient(socket_path=sock_path)
             client.connect()
 
-            with patch("core.server.ipc_server.fast_chat.should_use_fast_chat", return_value=False):
-                result = client.send_prompt("do something")
+            result = client.send_prompt("do something")
             assert result["type"] == "error"
             assert "API key" in result["message"]
             mock_loop.run.assert_not_called()
@@ -671,10 +670,9 @@ class TestCLIChannelIntegration:
             client = IPCClient(socket_path=sock_path)
             client.connect()
 
-            with patch("core.server.ipc_server.fast_chat.should_use_fast_chat", return_value=False):
-                client.send_prompt("first")
-                client.send_prompt("second")
-                client.send_prompt("third")
+            client.send_prompt("first")
+            client.send_prompt("second")
+            client.send_prompt("third")
 
             assert mock_loop.arun.await_count == 3
             mock_loop.run.assert_not_called()
@@ -949,8 +947,7 @@ class TestCLIChannelIntegration:
                 assert client.connect()
             time.sleep(0.05)  # let daemon process client_capability
 
-            with patch("core.server.ipc_server.fast_chat.should_use_fast_chat", return_value=False):
-                client.send_prompt("hello")
+            client.send_prompt("hello")
             assert captured.get("is_terminal") is False
             assert captured.get("width") == 80
             client.close()

@@ -9,10 +9,63 @@ from __future__ import annotations
 
 import json
 import logging
+from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypedDict
 
 log = logging.getLogger(__name__)
+
+
+class ChatReasoningReplay(TypedDict):
+    """Private native chat fields, scoped to the producing adapter and model."""
+
+    provider: str
+    source: str
+    model: str
+    fields: dict[str, Any]
+
+
+def parse_chat_reasoning_replay(value: Any) -> ChatReasoningReplay | None:
+    """Validate persisted replay without partially editing a signed block sequence."""
+    if not isinstance(value, dict):
+        return None
+    if any(
+        not isinstance(value.get(key), str) or not value[key]
+        for key in ("provider", "source", "model")
+    ):
+        return None
+    fields = value.get("fields")
+    if not isinstance(fields, dict) or not fields:
+        return None
+    for key, item in fields.items():
+        if key in {"reasoning", "reasoning_content"}:
+            if not isinstance(item, str):
+                return None
+        elif key == "reasoning_details":
+            if not isinstance(item, list) or not all(isinstance(part, dict) for part in item):
+                return None
+        else:
+            return None
+    return ChatReasoningReplay(
+        provider=value["provider"],
+        source=value["source"],
+        model=value["model"],
+        fields=deepcopy(fields),
+    )
+
+
+def normalize_stop_details(value: Any) -> dict[str, Any] | None:
+    """Keep bounded refusal classification, never arbitrary provider text/metadata."""
+    if value is None:
+        return None
+    category = (
+        value.get("category") if isinstance(value, dict) else getattr(value, "category", None)
+    )
+    categories = {"cyber", "bio", "frontier_llm", "reasoning_extraction", "general_harms"}
+    return {
+        "type": "refusal",
+        "category": category if isinstance(category, str) and category in categories else None,
+    }
 
 
 def parse_tool_input(payload: Any) -> dict[str, Any] | None:
@@ -97,11 +150,9 @@ class AgenticResponse:
     """
 
     content: list[TextBlock | ToolUseBlock] = field(default_factory=list)
-    stop_reason: str = "end_turn"  # "end_turn" / "tool_use" / "refusal" (Fable 5, Opus 4.7+)
-    # PR-FABLE5 (2026-06-11) — refusal metadata. Fable 5's safety
-    # classifiers return stop_reason="refusal" as HTTP 200 with a
-    # stop_details.category ("cyber"/"bio"/"reasoning_extraction"/null).
-    # ref: https://platform.claude.com/docs/en/about-claude/models/migration-guide
+    # Normalized completion/tool/refusal plus preserved provider terminal reasons.
+    stop_reason: str = "end_turn"
+    # Bounded refusal category; missing metadata is distinct from a null category.
     stop_details: dict[str, Any] | None = None
     usage: ResponseUsage = field(default_factory=ResponseUsage)
     codex_reasoning_items: list[dict[str, Any]] | None = None
@@ -129,6 +180,7 @@ class AgenticResponse:
     assistant_phase: str = ""
     # Provider-native replay is separate from executable TextBlock/ToolUseBlock content.
     anthropic_content: list[dict[str, Any]] | None = None
+    chat_reasoning: ChatReasoningReplay | None = None
 
     @property
     def text(self) -> str:
@@ -231,17 +283,16 @@ def normalize_anthropic(response: Any) -> AgenticResponse:
             cache_read_tokens=cache_read,
         )
 
-    raw_stop_details = getattr(response, "stop_details", None)
-    if raw_stop_details is not None and not isinstance(raw_stop_details, dict):
-        dump = getattr(raw_stop_details, "model_dump", None)
-        raw_stop_details = dump() if callable(dump) else {"raw": str(raw_stop_details)}
-
     return AgenticResponse(
-        content=blocks,
+        content=[] if response.stop_reason == "refusal" else blocks,
         stop_reason=response.stop_reason,
         usage=usage,
         reasoning_summaries=reasoning_summaries or None,
-        stop_details=raw_stop_details,
+        stop_details=(
+            normalize_stop_details(getattr(response, "stop_details", None))
+            if response.stop_reason == "refusal"
+            else None
+        ),
     )
 
 

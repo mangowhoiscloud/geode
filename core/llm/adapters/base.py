@@ -20,6 +20,7 @@ from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
+from core.llm.agentic_response import ChatReasoningReplay
 from core.llm.registry import (
     CONCRETE_SOURCES,
     SOURCE_ADAPTER,
@@ -107,6 +108,7 @@ class Message:
     # Opaque Messages API content belongs only to its original assistant turn.
     # Other providers consume the normalized ``content`` instead.
     anthropic_content: tuple[dict[str, Any], ...] = ()
+    chat_reasoning: ChatReasoningReplay | None = None
 
 
 @dataclass(frozen=True)
@@ -275,6 +277,8 @@ class AdapterCallResult:
     request_image_receipt: dict[str, Any] | None = None
     # Full ordered Messages API blocks, including signed thinking and server tools.
     anthropic_content: tuple[dict[str, Any], ...] = ()
+    chat_reasoning: ChatReasoningReplay | None = None
+    stop_details: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

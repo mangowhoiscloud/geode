@@ -39,12 +39,10 @@ def test_model_guidance_omitted_for_unknown_model(monkeypatch: pytest.MonkeyPatc
     assert "<model_guidance" not in prompt
 
 
-def test_unknown_env_surface_falls_through_to_cli_block(monkeypatch: pytest.MonkeyPatch):
+def test_unknown_env_surface_does_not_invent_cli_block(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv(GEODE_SURFACE_TYPE_ENV, "telegram")
     prompt = system_prompt.build_system_prompt(model="claude-opus-4-7")
-    # Unknown env value → fall-through to default "cli", which is mapped → block appears.
-    assert "<platform_hint surface='cli'>" in prompt
-    assert "<platform_hint surface='telegram'>" not in prompt
+    assert "<platform_hint" not in prompt
 
 
 def test_audit_mode_strips_both_blocks(monkeypatch: pytest.MonkeyPatch):
@@ -55,15 +53,16 @@ def test_audit_mode_strips_both_blocks(monkeypatch: pytest.MonkeyPatch):
     assert "<model_guidance" not in prompt, "Petri audit mode must not leak family hints"
 
 
-def test_default_cli_surface_when_env_unset():
+def test_unbound_surface_has_no_platform_hint():
     prompt = system_prompt.build_system_prompt(model="claude-opus-4-7")
-    assert "<platform_hint surface='cli'>" in prompt
+    assert "<platform_hint" not in prompt
 
 
-def test_order_model_guidance_before_platform_hint():
+def test_order_model_guidance_before_platform_hint(monkeypatch: pytest.MonkeyPatch):
     """The dynamic section appends in order: model_card → model_guidance →
     platform_hint → date. Pin that order so future re-arrangements
     surface in tests."""
+    monkeypatch.setenv(GEODE_SURFACE_TYPE_ENV, SURFACE_SLACK)
     prompt = system_prompt.build_system_prompt(model="claude-opus-4-7")
     mg = prompt.find("<model_guidance")
     ph = prompt.find("<platform_hint")

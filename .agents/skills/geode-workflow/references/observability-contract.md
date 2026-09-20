@@ -9,6 +9,14 @@ and trace its real producer/reader pair. Preserve units, denominator, scope,
 zero versus missing, and cost authority; generic event parity does not prove
 accounting completeness.
 
+For a new or changed LLM entry path, trace admission → adapter terminal →
+durable call record, then identify its tracker/UI consumers or documented
+exclusions. Reuse the existing observation seam and pass its event bus and
+session correlation explicitly; rendering token counters is not persistence.
+Exercise the real entry and runtime with only the provider
+boundary faked, including opt-in branches, missing/zero/positive usage, and
+failure/cancellation. Do not mock away the accounting seam being checked.
+
 ## Required Surfaces
 
 | Surface | Requirement |

@@ -121,7 +121,9 @@ class CodexOAuthAdapter:
 
     def _require_model_allowed(self, model: str) -> None:
         from core.config import is_model_allowed
+        from core.llm.model_catalog import require_model_source_available
 
+        require_model_source_available(model, provider=self.provider, source=self.source)
         if self._model_policy is not None and not is_model_allowed(model, self._model_policy):
             raise ValueError("Codex request model is disallowed by the required model policy")
 
@@ -464,13 +466,15 @@ class CodexOAuthAdapter:
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import CODEX_FALLBACK_CHAIN, CODEX_PRIMARY
-        from core.llm.model_catalog import model_spec_for_adapter
+        from core.llm.model_catalog import model_source_unavailable_reason, model_spec_for_adapter
 
         ids = [CODEX_PRIMARY, *CODEX_FALLBACK_CHAIN]
         seen: set[str] = set()
         out: list[ModelSpec] = []
         for mid in ids:
-            if mid in seen:
+            if mid in seen or model_source_unavailable_reason(
+                mid, provider=self.provider, source=self.source
+            ):
                 continue
             seen.add(mid)
             out.append(model_spec_for_adapter(mid, provider=self.provider))

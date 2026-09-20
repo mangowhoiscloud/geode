@@ -47,7 +47,39 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+
+- Retire deprecated Codex sign-in model choices (`gpt-5.2`, `gpt-5.3-codex`,
+  `gpt-5.4`, and `gpt-5.4-mini`) from subscription selection and reject explicit
+  requests before credential access. Keep valid API routes and historical
+  pricing/evaluation records; never substitute another model or billing source.
+- Reject confirmed retired models on the official Anthropic API before network
+  submission, including hosted-search requests. Preserve active 4.5+ models and
+  independently operated provider routes.
+
+- Retire the opt-in IPC fast-chat bypass and its separate prompt/status event.
+  `GEODE_FAST_CHAT` no longer changes routing: short conversational prompts use
+  the normal agent loop, preserving conversation, lifecycle and usage/cache
+  accounting instead of emitting display-only counters with a zero cost
+  placeholder. Normal context, tools and verification may use more time/tokens;
+  this does not reconstruct missing historical usage.
+
 ### Fixed
+
+- Preserve provider refusal/stop semantics through adapter translation and
+  source/model-scoped Chat Completions reasoning replay through tool rounds and
+  session resume. Separate Anthropic context-editing and compaction admission,
+  and validate OpenAI strict output schemas before sending them.
+- Include native replay payloads in conservative context-pressure estimates
+  without double-counting normalized content or changing signed payloads.
+  These estimates remain separate from provider usage and billing.
+- Preserve fresh skill bodies through context reduction, append skill metadata
+  when a wrapper lacks its slot, escape stored prompt data, and invalidate stale
+  model-switch/preflight hints. Unknown surfaces no longer imply CLI access.
+- Simplify shared prompt conduct around authorized action, proportional checks,
+  and evidence-backed reporting. Candidate judging and reflection separate data
+  from instructions; prompt text no longer claims universal cost guards or a
+  fixed provider/tool ranking. Existing permissions and budgets remain authoritative.
 
 - Substitute skill-catalog placeholders only inside the authored prompt baseline,
   preserving literal profile and identity data in runtime requests and diagnostic

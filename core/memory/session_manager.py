@@ -442,6 +442,10 @@ def _extract_message_fields(msg: dict[str, Any]) -> dict[str, Any]:
         items = msg.get(key)
         if isinstance(items, (list, tuple)) and items:
             sidecar[key] = list(items)
+    from core.llm.agentic_response import parse_chat_reasoning_replay
+
+    if replay := parse_chat_reasoning_replay(msg.get("chat_reasoning")):
+        sidecar["chat_reasoning"] = replay
 
     merged_metadata: dict[str, Any] | list[Any] | None
     if sidecar:
@@ -1110,6 +1114,7 @@ class SessionManager:
                 "codex_reasoning_items",
                 "codex_output_items",
                 "anthropic_content",
+                "chat_reasoning",
             ):
                 if sidecar_key in metadata:
                     msg[sidecar_key] = metadata[sidecar_key]

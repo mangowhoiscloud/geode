@@ -199,7 +199,6 @@ class EventRenderer:
             "thinking_start",
             "thinking_end",
             "tokens",
-            "fast_chat_start",
         }
     )
     _MAX_ACTIVITY_TOOL_LINES = 5
@@ -370,17 +369,6 @@ class EventRenderer:
     def _handle_round_start(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
         self._set_inline_status("Working...")
-
-    def _handle_fast_chat_start(self, event: dict[str, Any]) -> None:
-        model = str(event.get("model", "") or "")
-        provider = str(event.get("provider", "") or "")
-        source = str(event.get("source", "") or "")
-        route = " / ".join(part for part in (provider, source) if part)
-        detail = f" · {route}" if route else ""
-        label = f"Fast chat · {model}{detail}" if model else f"Fast chat{detail}"
-        self._set_inline_status(label)
-        self._append_activity_notice(label)
-        self._render_activity_region()
 
     def _handle_thinking_start(self, event: dict[str, Any]) -> None:
         self._activity_suppressed = self._live_regions

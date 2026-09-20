@@ -99,6 +99,23 @@ export default function Page() {
               <a href="https://code.claude.com/docs/en/mcp#configure-tool-search">Claude Code endpoint 정책</a>.
             </p>
 
+            <h2>응답과 재전송 계약</h2>
+            <p>
+              Unreleased: provider의 refusal은 번역 과정에서도 보존하여 도구
+              실행 전에 종료합니다. 분류된 거절 사유만 남기며 임의의 provider
+              설명을 진단 이벤트로 복사하지 않습니다. 출력 한도·미완료 등의
+              종료 사유도 보존하지만, 이는 해당 사유별 새 자동 재개 정책을
+              구현했다는 뜻은 아닙니다.
+            </p>
+            <p>
+              GLM과 OpenRouter의 Chat Completions reasoning 필드는 기존
+              assistant 이력과 비공개 세션 저장에 보존합니다. 다음 요청은
+              provider·어댑터·모델이 모두 일치할 때만 원본 필드를 재전송합니다.
+              다른 provider의 입력이나 공개 trajectory로 옮기지 않습니다.
+              OpenAI 출력 스키마는 객체 루트와 지원 구문을 확인한 뒤 strict
+              여부를 정하며, 잘못된 루트는 네트워크 호출 전에 거절합니다.
+              모든 provider가 같은 strict 보장을 제공한다는 뜻은 아닙니다.
+            </p>
             <h2>툴킷: 서브에이전트 도구 번들</h2>
             <p>
               서브에이전트는 선언된 도구 번들만 받습니다. 매니페스트는{" "}
@@ -275,6 +292,24 @@ export default function Page() {
               <a href="https://code.claude.com/docs/en/mcp#configure-tool-search">Claude Code endpoint policy</a>.
             </p>
 
+            <h2>Response and replay contracts</h2>
+            <p>
+              Unreleased: provider refusal survives translation and terminates
+              before tool dispatch. Diagnostics retain only bounded refusal
+              classification, not arbitrary provider explanation. Other stop
+              reasons, including output limits and incomplete responses, also
+              survive translation; this does not add an automatic continuation
+              policy for each reason.
+            </p>
+            <p>
+              GLM and OpenRouter Chat Completions reasoning fields remain in
+              existing assistant history and private session storage. Subsequent
+              requests replay them only when provider, adapter, and model match.
+              They are not copied to another provider or public trajectories.
+              OpenAI output schemas are checked for object-root and supported
+              strict syntax; an invalid root fails before a network call. This
+              does not imply identical strict guarantees across providers.
+            </p>
             <h2>Toolkits: sub-agent tool bundles</h2>
             <p>
               A sub-agent receives a declared bundle, not the whole catalog. The

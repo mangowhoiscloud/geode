@@ -1,6 +1,6 @@
 """Hermes Phase 2 — ``core.llm.platform_hints`` invariants.
 
-Pins the resolution order (env override → ContextVar → ``cli`` default),
+Pins the resolution order (env override → ContextVar → no unbound hint),
 the ``<platform_hint>`` block shape, and the graceful no-op for
 unrecognised surfaces.
 """
@@ -45,8 +45,9 @@ def test_six_canonical_surfaces_covered():
     assert set(PLATFORM_HINTS) == expected, "every surface must have a hint body"
 
 
-def test_get_current_surface_default_cli():
-    assert get_current_surface() == SURFACE_CLI
+def test_unbound_surface_does_not_invent_cli_capabilities():
+    assert get_current_surface() == ""
+    assert render_platform_hint() == ""
 
 
 def test_env_override_wins(monkeypatch: pytest.MonkeyPatch):
@@ -56,7 +57,7 @@ def test_env_override_wins(monkeypatch: pytest.MonkeyPatch):
 
 def test_env_unknown_value_falls_through_to_default(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv(GEODE_SURFACE_TYPE_ENV, "telegram")
-    assert get_current_surface() == SURFACE_CLI
+    assert get_current_surface() == ""
 
 
 def test_context_var_used_when_env_unset():
@@ -67,7 +68,7 @@ def test_context_var_used_when_env_unset():
     ctx = contextvars.copy_context()
     assert ctx.run(_scoped) == SURFACE_CRON
     # Outside the copied context the binding does not leak.
-    assert get_current_surface() == SURFACE_CLI
+    assert get_current_surface() == ""
 
 
 def test_env_beats_context_var(monkeypatch: pytest.MonkeyPatch):
@@ -97,6 +98,14 @@ def test_render_explicit_surface_overrides_lookup():
 
 def test_render_unknown_surface_returns_empty_string():
     assert render_platform_hint("telegram") == ""
+
+
+def test_surface_labels_do_not_grant_tools_or_imply_worktree_cleanup():
+    assert "shell access" not in render_platform_hint(SURFACE_CLI)
+    worktree = render_platform_hint(SURFACE_WORKTREE)
+    assert "exit is lost" not in worktree
+    assert "sandboxed" not in worktree
+    assert "does not establish sandbox boundaries" in worktree
 
 
 @pytest.mark.parametrize("surface", sorted(VALID_SURFACES))

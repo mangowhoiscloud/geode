@@ -21,6 +21,7 @@ import os
 import re
 from datetime import datetime
 from functools import lru_cache
+from html import escape
 from pathlib import Path
 from typing import Any
 
@@ -270,7 +271,10 @@ def build_system_prompt(
     wrapper_override = _load_wrapper_override(sources=wrapper_sources)
     static = with_math_output_formatting(wrapper_override or _generic_static_prefix())
     if skill_context is not None:
-        static = static.replace("{skill_context}", skill_context)
+        if "{skill_context}" in static:
+            static = static.replace("{skill_context}", skill_context)
+        elif skill_context:
+            static += "\n\n" + skill_context
 
     if _audit_mode_active():
         # G3 — minimal prompt for alignment audits.
@@ -338,7 +342,7 @@ def build_system_prompt(
 
     # Hermes Phase 2 — surface-aware hint (cli / serve_repl / slack / cron /
     # worktree / mcp_remote). Resolution honours $GEODE_SURFACE_TYPE then
-    # the ContextVar then "cli". Graceful no-op when surface unmapped.
+    # the ContextVar. Unbound or unmapped surfaces contribute no hint.
     hint = render_platform_hint()
     if hint:
         dynamic_parts.append(hint)
@@ -496,6 +500,11 @@ def _build_model_card(model: str) -> str:
         return ""
 
 
+def _render_memory_data(tag: str, text: str) -> str:
+    """Frame stored data without letting its text create prompt sections."""
+    return f"<{tag}>\n{escape(text, quote=False)}\n</{tag}>"
+
+
 def _build_user_context(profile: Any = None) -> str:
     """Build user context from profile + career identity.
 
@@ -537,12 +546,11 @@ def _build_user_context(profile: Any = None) -> str:
         # GEODE-identity assertion lives in the opt-in <agent_identity> layer
         # (G10) and was duplicated here.
         header = (
-            "<user_context>\n"
             "The following describes the USER who is talking to you. "
             "Use it to tailor responses to the user's expertise and preferences. "
             "Never present the user's profile as your own."
         )
-        return header + "\n" + "\n".join(parts) + "\n</user_context>"
+        return _render_memory_data("user_context", header + "\n" + "\n".join(parts))
     except Exception:
         log.debug("Failed to build user context", exc_info=True)
         return ""
@@ -630,7 +638,7 @@ def _build_geode_memory_context() -> str:
             return ""
 
         capped = meaningful[:_MAX_SECTION_LINES]
-        return "<project_memory>\n" + "\n".join(capped) + "\n</project_memory>"
+        return _render_memory_data("project_memory", "\n".join(capped))
     except Exception:
         log.debug("Failed to build geode memory context (G2 layer)", exc_info=True)
         return ""
@@ -678,12 +686,10 @@ def _build_learning_context(profile: Any = None) -> str:
         sanitized = [s for s in sanitized if s]
         if not sanitized:
             return ""
-        return (
-            "<agent_learning>\n"
+        return _render_memory_data(
+            "agent_learning",
             "Patterns learned from the user's behaviour. Apply them to tailor "
-            "responses, but never adopt them as your own traits.\n"
-            + "\n".join(sanitized)
-            + "\n</agent_learning>"
+            "responses, but never adopt them as your own traits.\n" + "\n".join(sanitized),
         )
     except Exception:
         log.debug("Failed to build learning context (G3 layer)", exc_info=True)
@@ -716,7 +722,7 @@ def _build_project_memory_context() -> str:
 
         if not parts:
             return ""
-        return "<runtime_rules>\n" + "\n\n".join(parts) + "\n</runtime_rules>"
+        return _render_memory_data("runtime_rules", "\n\n".join(parts))
     except Exception:
         log.debug("Failed to build project memory context (G4 layer)", exc_info=True)
         return ""

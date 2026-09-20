@@ -52,7 +52,9 @@ __all__ = [
     "LLMConnectionError",
     "LLMInternalServerError",
     "LLMRateLimitError",
+    "LLMRequestValidationError",
     "LLMTimeoutError",
+    "ModelSourceUnavailableError",
     "StreamInterruptedError",
     "UserCancelledError",
     "build_model_action_message",
@@ -115,6 +117,14 @@ _ANTHROPIC_BILLING_TYPES: frozenset[str] = frozenset(
         "billing_error",
     }
 )
+
+
+class LLMRequestValidationError(ValueError):
+    """Invalid local request that retries or model fallback cannot repair."""
+
+
+class ModelSourceUnavailableError(LLMRequestValidationError):
+    """A retired source/model pair requires an explicit operator choice."""
 
 
 class UserCancelledError(Exception):
@@ -280,6 +290,8 @@ def classify_llm_error(exc: Exception) -> tuple[str, str, str]:
     # --- Anthropic SDK errors ---
     if isinstance(exc, BillingError):
         return _ERROR_CLASSIFICATION["billing"]
+    if isinstance(exc, LLMRequestValidationError):
+        return _ERROR_CLASSIFICATION["bad_request"]
     if isinstance(exc, StreamInterruptedError):
         # Raised by the retry boundary (core/llm/fallback.py) when a
         # transient death happened AFTER visible output was surfaced —
@@ -364,6 +376,8 @@ def is_request_fatal(exc: Exception) -> bool:
     treats it as terminal because the retryable_errors filter excludes
     BadRequestError already.
     """
+    if isinstance(exc, LLMRequestValidationError):
+        return True
     # Status check first — only true 400-class shapes qualify.
     status = getattr(exc, "status_code", None)
     if status is None:

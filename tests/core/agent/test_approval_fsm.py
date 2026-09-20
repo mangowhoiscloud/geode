@@ -686,16 +686,15 @@ class TestIPCApprovalRoundTrip:
             poller._stop_event = threading.Event()  # type: ignore[attr-defined]
             poller._propagate_contextvars = lambda: None  # type: ignore[attr-defined]
 
-            with patch("core.server.ipc_server.fast_chat.should_use_fast_chat", return_value=False):
-                handler = asyncio.create_task(poller._handle_client_async(reader, endpoint))
-                reader.feed_data(b'{"type":"prompt","text":"save"}\n')
-                deadline = time.monotonic() + 2.0
-                while not writer.sent("approval_request"):
-                    if time.monotonic() > deadline:
-                        raise AssertionError("approval_request never sent")
-                    await asyncio.sleep(0.01)
-                reader.feed_eof()
-                await asyncio.wait_for(handler, timeout=2.0)
+            handler = asyncio.create_task(poller._handle_client_async(reader, endpoint))
+            reader.feed_data(b'{"type":"prompt","text":"save"}\n')
+            deadline = time.monotonic() + 2.0
+            while not writer.sent("approval_request"):
+                if time.monotonic() > deadline:
+                    raise AssertionError("approval_request never sent")
+                await asyncio.sleep(0.01)
+            reader.feed_eof()
+            await asyncio.wait_for(handler, timeout=2.0)
 
         asyncio.run(scenario())
         assert received["decision"] == "n"
@@ -756,39 +755,38 @@ class TestIPCApprovalRoundTrip:
             poller._stop_event = threading.Event()  # type: ignore[attr-defined]
             poller._propagate_contextvars = lambda: None  # type: ignore[attr-defined]
 
-            with patch("core.server.ipc_server.fast_chat.should_use_fast_chat", return_value=False):
-                handler = asyncio.ensure_future(poller._handle_client_async(reader, endpoint))
-                reader.feed_data(json.dumps({"type": "prompt", "text": "save it"}).encode() + b"\n")
+            handler = asyncio.ensure_future(poller._handle_client_async(reader, endpoint))
+            reader.feed_data(json.dumps({"type": "prompt", "text": "save it"}).encode() + b"\n")
 
-                # Wait for the daemon to emit the approval_request mid-prompt.
-                deadline = time.monotonic() + 5.0
-                while not writer.sent("approval_request"):
-                    if time.monotonic() > deadline:
-                        raise AssertionError("approval_request never sent")
-                    await asyncio.sleep(0.01)
+            # Wait for the daemon to emit the approval_request mid-prompt.
+            deadline = time.monotonic() + 5.0
+            while not writer.sent("approval_request"):
+                if time.monotonic() > deadline:
+                    raise AssertionError("approval_request never sent")
+                await asyncio.sleep(0.01)
 
-                request = writer.sent("approval_request")[0]
-                # The user answers "A" — pre-fix this line was never read until
-                # the prompt (and its 120s timeout denial) had already finished.
-                reader.feed_data(
-                    json.dumps(
-                        {
-                            "type": "approval_response",
-                            "decision": "a",
-                            "approval_id": request["approval_id"],
-                        }
-                    ).encode()
-                    + b"\n"
-                )
+            request = writer.sent("approval_request")[0]
+            # The user answers "A" — pre-fix this line was never read until
+            # the prompt (and its 120s timeout denial) had already finished.
+            reader.feed_data(
+                json.dumps(
+                    {
+                        "type": "approval_response",
+                        "decision": "a",
+                        "approval_id": request["approval_id"],
+                    }
+                ).encode()
+                + b"\n"
+            )
 
-                deadline = time.monotonic() + 5.0
-                while not writer.sent("result"):
-                    if time.monotonic() > deadline:
-                        raise AssertionError("prompt result never returned")
-                    await asyncio.sleep(0.01)
+            deadline = time.monotonic() + 5.0
+            while not writer.sent("result"):
+                if time.monotonic() > deadline:
+                    raise AssertionError("prompt result never returned")
+                await asyncio.sleep(0.01)
 
-                reader.feed_data(json.dumps({"type": "exit"}).encode() + b"\n")
-                await asyncio.wait_for(handler, timeout=5.0)
+            reader.feed_data(json.dumps({"type": "exit"}).encode() + b"\n")
+            await asyncio.wait_for(handler, timeout=5.0)
 
         asyncio.run(asyncio.wait_for(scenario(), timeout=15.0))
         assert received["decision"] == "a", (

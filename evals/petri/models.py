@@ -144,6 +144,16 @@ def to_inspect_model(
     """
     if not geode_id:
         raise AuditModelMappingError("Empty model id")
+    from core.llm.model_catalog import require_model_source_available
+
+    if geode_id.startswith(("openai-codex/", "codex-cli/")):
+        require_model_source_available(
+            geode_id.split("/", 1)[1], provider="openai", source="subscription"
+        )
+    elif geode_id.startswith("anthropic/"):
+        require_model_source_available(
+            geode_id.split("/", 1)[1], provider="anthropic", source="payg"
+        )
     if "/" in geode_id:
         if geode_id.startswith(("claude-code/", "claude-cli/")):
             from core.config.credential_source import CLAUDE_CLI_RETIRED_MESSAGE
@@ -208,6 +218,10 @@ def to_inspect_model(
         override=source_override,
         fallback_to_payg=fallback_to_payg,
     )
+    if source == CredentialSource.OPENAI_CODEX:
+        require_model_source_available(geode_id, provider=provider, source="subscription")
+    elif source == CredentialSource.API_KEY:
+        require_model_source_available(geode_id, provider=provider, source="payg")
 
     if (
         source == CredentialSource.OPENAI_CODEX

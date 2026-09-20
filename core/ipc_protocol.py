@@ -23,7 +23,6 @@ MAX_IPC_MESSAGE_BYTES = 1024 * 1024
 IPC_EVENT_TYPES = (
     "tool_start",
     "tool_end",
-    "fast_chat_start",
     "tokens",
     "round_start",
     "thinking_start",

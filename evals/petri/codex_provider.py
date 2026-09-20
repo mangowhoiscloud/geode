@@ -24,7 +24,7 @@ as the GEODE target).
 
 The provider name is exposed via ``inspect_ai`` model ids of the
 form ``openai-codex/<model>`` — e.g. ``openai-codex/gpt-5.5``,
-``openai-codex/gpt-5.4-mini``. ``evals/petri/models.py`` is
+``openai-codex/gpt-5.6-luna``. ``evals/petri/models.py`` is
 the auto-router: when a Codex OAuth token is available it rewrites
 ``gpt-5.*`` ids to that form; otherwise the legacy
 ``openai/<model>`` (per-token PAYG) path is kept.
@@ -105,6 +105,7 @@ def register() -> None:
 
         def __init__(self, *args: _Any, **kwargs: _Any) -> None:
             from core.config import CODEX_BASE_URL
+            from core.llm.model_catalog import require_model_source_available
             from core.llm.providers.codex import (
                 build_codex_oauth_headers,
                 resolve_codex_token,
@@ -113,6 +114,8 @@ def register() -> None:
                 environment_prerequisite_error,
             )
 
+            model_name = str(kwargs.get("model_name", args[0] if args else ""))
+            require_model_source_available(model_name, provider="openai", source="subscription")
             token = kwargs.get("api_key") or resolve_codex_token()
             if not token:
                 raise environment_prerequisite_error(

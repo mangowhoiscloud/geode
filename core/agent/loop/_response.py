@@ -29,6 +29,7 @@ def refresh_tools(loop: AgenticLoop) -> int:
     Returns number of newly added tools.
     """
     old_count = len(loop._tools)
+    old_graph = getattr(loop, "_capability_graph", None)
     mcp_tool_list = loop._mcp_manager.get_all_tools() if loop._mcp_manager is not None else None
     # PR-PILOT-PETRI-AUDIT-WIRING (2026-06-01) — re-apply the sub-agent
     # toolkit allowlist on rebuild. Pre-fix this path dropped the
@@ -65,7 +66,13 @@ def refresh_tools(loop: AgenticLoop) -> int:
             computer_use_enabled=is_computer_use_enabled(),
         )
     except Exception:
+        loop._capability_graph = None
         log.debug("refresh_tools: capability graph rebuild failed", exc_info=True)
+    if loop._capability_graph != old_graph:
+        # Old routing advice is no longer authoritative. Keep the original
+        # evidence requirements, but omit its hint until the next turn preflight.
+        loop._preflight_hint = ""
+        loop._prompt_dirty = True
     new_count = len(loop._tools)
     return max(0, new_count - old_count)
 

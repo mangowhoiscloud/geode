@@ -214,7 +214,7 @@
         "has_default": true,
         "implementation": "ContextVar",
         "lifetime": "unbound in current production; caller-owned context when explicitly set",
-        "line": 125,
+        "line": 122,
         "owner": "core.llm.platform_hints",
         "path": "core/llm/platform_hints.py",
         "resetter": "caller may reset the set_current_surface token; no production binding exists",
@@ -527,20 +527,20 @@
   },
   "packages": {
     "core": {
-      "python_files": 414,
-      "python_loc": 126192
+      "python_files": 413,
+      "python_loc": 126535
     },
     "evals": {
       "python_files": 94,
-      "python_loc": 31691
+      "python_loc": 31718
     },
     "evolve": {
       "python_files": 73,
       "python_loc": 32002
     },
     "tests": {
-      "python_files": 719,
-      "python_loc": 203034
+      "python_files": 723,
+      "python_loc": 204913
     }
   },
   "schema_version": 6,

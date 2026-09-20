@@ -264,7 +264,7 @@ async def update_model_async(
 
 
 def purge_stale_model_switch_acks(loop: AgenticLoop) -> int:
-    """Remove prior ``Understood. I am now <prev_model>.`` assistant acks.
+    """Remove prior runtime-generated model-switch assistant acknowledgements.
 
     v0.52.8 — added after a production incident where gpt-5.5 (post
     ``/model`` switch from gpt-5.4-mini) silently inherited the prior
@@ -278,8 +278,8 @@ def purge_stale_model_switch_acks(loop: AgenticLoop) -> int:
     too. Previously only ``isinstance(content, str)`` matched, so an
     ack stored as ``[{"type": "text", "text": "Understood. I am now …"}]``
     silently survived. Conservative: only matches the exact
-    ``Understood. I am now `` prefix we ourselves emit, in either
-    representation. Never touches user content.
+    legacy ``Understood. I am now `` and current ``Understood. Current model: ``
+    prefixes in either representation. Never touches user content.
 
     PR-SIL-5THEME C5 (2026-05-23) — D4 X2 telemetry. Returns purged
     count so caller can forward to ``MODEL_SWITCHED`` hook payload.
@@ -289,7 +289,7 @@ def purge_stale_model_switch_acks(loop: AgenticLoop) -> int:
     (이 함수는 caller 가 결과 무시했었음).
     """
     msgs = loop.context.messages
-    prefix = "Understood. I am now "
+    prefixes = ("Understood. I am now ", "Understood. Current model: ")
     kept: list[Any] = []
     purged = 0
     for msg in msgs:
@@ -297,7 +297,7 @@ def purge_stale_model_switch_acks(loop: AgenticLoop) -> int:
             kept.append(msg)
             continue
         content = msg.get("content", "")
-        if isinstance(content, str) and content.startswith(prefix):
+        if isinstance(content, str) and content.startswith(prefixes):
             purged += 1
             continue
         if isinstance(content, list):
@@ -305,7 +305,8 @@ def purge_stale_model_switch_acks(loop: AgenticLoop) -> int:
             # when any text-block begins with our self-emitted prefix.
             text_blocks = [b for b in content if isinstance(b, dict) and b.get("type") == "text"]
             if any(
-                isinstance(b.get("text"), str) and b["text"].startswith(prefix) for b in text_blocks
+                isinstance(b.get("text"), str) and b["text"].startswith(prefixes)
+                for b in text_blocks
             ):
                 purged += 1
                 continue

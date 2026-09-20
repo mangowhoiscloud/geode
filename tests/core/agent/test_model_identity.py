@@ -208,6 +208,33 @@ def test_purge_removes_multiple_stale_acks() -> None:
     assert sum(1 for m in msgs if m["role"] == "user") == 3
 
 
+def test_current_breadcrumb_producer_purges_its_previous_acknowledgement() -> None:
+    from core.agent.conversation import ConversationContext
+
+    stub = MagicMock()
+    stub.context = ConversationContext()
+    stub.context.add_user_message("Synthetic task")
+
+    assert _model_switching._inject_model_switch_breadcrumb(stub, "model-a", "model-b") == 0
+    assert _model_switching._inject_model_switch_breadcrumb(stub, "model-b", "model-c") == 1
+
+    acks = [m["content"] for m in stub.context.messages if m["role"] == "assistant"]
+    assert acks == ["Understood. Current model: model-c."]
+
+
+def test_current_acknowledgement_is_purged_in_block_form() -> None:
+    stub = _make_loop_stub_with_history(
+        [
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Understood. Current model: old."}],
+            }
+        ]
+    )
+    assert _model_switching.purge_stale_model_switch_acks(stub) == 1
+    assert stub.context.messages == []
+
+
 def test_purge_does_not_touch_user_messages() -> None:
     """Even if a user message contains the ack prefix verbatim (extremely
     unlikely), we never touch user content. Only assistant role."""

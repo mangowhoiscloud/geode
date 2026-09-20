@@ -84,12 +84,12 @@ def test_model_picker_offers_gpt56_family() -> None:
     assert "gpt-5.6" not in profiles  # sol alias — redundant picker row
 
 
-def test_model_picker_openai_surface_is_current_and_ordered() -> None:
+def test_model_picker_platform_openai_surface_is_current_and_ordered() -> None:
     from core.cli.commands._state import get_model_profiles
 
     visible = [
         profile.id
-        for profile in get_model_profiles()
+        for profile in get_model_profiles(openai_source="payg")
         if profile.provider in {"openai", "openai-codex"}
     ]
     assert visible == [
