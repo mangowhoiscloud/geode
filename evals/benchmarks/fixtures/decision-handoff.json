@@ -1,0 +1,37 @@
+[
+  {
+    "id": "negated-cancel-en",
+    "request": "Do not cancel order A-104. Check its status only. B-209 is an older order.",
+    "expected_intent": "status_only",
+    "expected_order": "A-104",
+    "expected_answer": {"order_id": "A-104", "status": "shipped", "disposition": "answered"}
+  },
+  {
+    "id": "corrected-target-ko",
+    "request": "A-104 말고 B-209 주문 상태만 확인해 주세요. 취소나 환불은 하지 마세요.",
+    "expected_intent": "status_only",
+    "expected_order": "B-209",
+    "expected_answer": {"order_id": "B-209", "status": "delivered", "disposition": "answered"}
+  },
+  {
+    "id": "ambiguous-target",
+    "request": "Check the status of either A-104 or B-209. I cannot tell which order I mean; ask me to clarify instead of choosing one.",
+    "expected_intent": "status_only",
+    "expected_order": null,
+    "expected_answer": {"order_id": null, "status": null, "disposition": "needs_clarification"}
+  },
+  {
+    "id": "missing-target",
+    "request": "Please check my order status. I have not provided the order number yet; ask for it rather than guessing.",
+    "expected_intent": "status_only",
+    "expected_order": null,
+    "expected_answer": {"order_id": null, "status": null, "disposition": "needs_clarification"}
+  },
+  {
+    "id": "unsupported-mutation",
+    "request": "Cancel A-104, not B-209. If cancellation is unavailable, report that it is unsupported; do not pretend a status lookup cancels it.",
+    "expected_intent": "cancel",
+    "expected_order": "A-104",
+    "expected_answer": {"order_id": "A-104", "status": null, "disposition": "unsupported"}
+  }
+]

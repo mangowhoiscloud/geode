@@ -47,6 +47,19 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- Add an opt-in, five-task Astra/Jev decision-handoff pilot: source-bound
+  classification and extraction return data to the same Astra root AgenticLoop
+  for read-only status lookup and independent fixture verification. Retain native
+  mechanical verification, structured-decision usage in activity schema v10,
+  bounded provider request IDs, HTTP-failure evidence and input-only Jev prices
+  in USD and US cents, separate from actual billing. Check source drift around
+  each arm; preserve observable decision failures separately from incomplete
+  measurements, without token/dollar spending caps or runtime-default changes.
+  Implemented locally and under verification; no live
+  comparison result or mixed-provider Harbor admission is claimed.
+
 ### Removed
 
 - Retire deprecated Codex sign-in model choices (`gpt-5.2`, `gpt-5.3-codex`,

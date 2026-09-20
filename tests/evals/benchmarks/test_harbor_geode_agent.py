@@ -294,7 +294,9 @@ def test_thin_observer_persists_missing_zero_and_positive_cache(
     assert atif["final_metrics"]["total_cached_tokens"] == cache
 
 
-@pytest.mark.parametrize("purpose", ["cognitive_reflection", "turn_verification"])
+@pytest.mark.parametrize(
+    "purpose", ["cognitive_reflection", "turn_verification", "structured_decision"]
+)
 def test_recorded_attempts_keep_only_numeric_allowlist_and_source_links(purpose: str) -> None:
     start = SimpleNamespace(action="llm.call.started", session_id="s", llm_attempt_id="c:1")
     terminal = SimpleNamespace(

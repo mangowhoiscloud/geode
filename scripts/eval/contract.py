@@ -58,6 +58,12 @@ def _strict_json_loads(raw: str, *, label: str) -> object:
     def reject_constant(value: str) -> None:
         raise ValueError(f"{label}: non-finite JSON number is not allowed: {value}")
 
+    def finite_float(value: str) -> float:
+        parsed = float(value)
+        if not math.isfinite(parsed):
+            reject_constant(value)
+        return parsed
+
     def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for key, value in pairs:
@@ -66,7 +72,12 @@ def _strict_json_loads(raw: str, *, label: str) -> object:
             result[key] = value
         return result
 
-    return json.loads(raw, parse_constant=reject_constant, object_pairs_hook=unique_object)
+    return json.loads(
+        raw,
+        parse_float=finite_float,
+        parse_constant=reject_constant,
+        object_pairs_hook=unique_object,
+    )
 
 
 def _load_json_object(path: Path) -> dict[str, Any]:

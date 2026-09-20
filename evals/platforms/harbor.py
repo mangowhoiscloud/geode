@@ -174,6 +174,7 @@ def _usage_event_metadata(event: Any) -> dict[str, Any]:
             "turn_verification",
             "cognitive_reflection",
             "candidate_judge",
+            "structured_decision",
             "text_completion",
             "context_compaction",
             "learning_extraction",
