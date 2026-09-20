@@ -609,7 +609,7 @@
       "authority": "diagnostic",
       "path": "docs/eval/typesafe-decision-handoff.md",
       "summary": "Five-task comparison of source-bound Astra and Jev decisions consumed by the same root AgenticLoop.",
-      "sha256": "35e70f33dc51a0e4b529b8f043874eddaf4ee479a92ae9195d69345a39885e5d",
+      "sha256": "35e1cafb1353e3c019ff82a7e50ac8785fea1351b4d6dd28eedd41ec48ea7521",
       "triggers": [
         "classification",
         "confidence",

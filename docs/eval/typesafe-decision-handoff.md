@@ -10,7 +10,8 @@ eval_triggers: [typesafe, jev, decision-handoff, classification, extraction, con
 
 # Jev decision handoff pilot
 
-Status: implemented locally and under verification; no live A/B evidence yet.
+Status: first five-pair diagnostic executed privately on 2026-09-21 KST;
+artifact publication, Harbor admission and adoption remain unverified.
 This opt-in diagnostic changes an intermediate decision helper, not GEODE's
 default provider, semantic preflight, permission policy, or final verifier.
 The superseded selector-only draft is not the active experiment.
@@ -31,12 +32,12 @@ Do not create another status ledger or silently copy those old settings forward.
 | Stage | Current disposition | Evidence required to advance |
 |---|---|---|
 | Common baseline | Included in main `f084075f6ce3f6b8deb1a320e788677fee9a8ae1`; common fix `618e6d77c98625e794a5fa51f7a5e6076d9fd617` is an ancestor | JSON-string tool input, non-finite confidence and verifier schema fixes remain common to both arms. This pilot does not exercise all three features live. |
-| Local implementation | Under verification; no live A/B result | Independent review; targeted tool, continuation, accounting and runner tests; applicable static/generated gates; clean committed source. No source editing while its run is active. |
-| Five-pair diagnostic | Not run | New private prospective run-spec bound to clean source, fixture, routes and oracle; provider-free preflight; all attempts and failed-call consumption retained. |
-| Outcome analysis | Waiting for diagnostic | Join helper decision → consumed tool result → root action → independent oracle. Report valid failures, invalid observations, denominator, latency and accounting coverage separately; do not decide adoption from five cases. |
+| Local implementation | Offline checks passed; [PR #3374](https://github.com/mangowhoiscloud/geode/pull/3374) awaits required CI | Independent review; targeted tool, continuation, accounting and runner tests; applicable static/generated gates; clean committed source. No source editing while its run is active. |
+| Five-pair diagnostic | Completed on source `58b7c86d650ec592c3bf30046b55d64b6700a3fa`; private run `typesafe-handoff-astra-xhigh-20260920t213023z` | New private prospective run-spec bound to clean source, fixture, routes and oracle; provider-free preflight; all attempts and failed-call consumption retained. |
+| Outcome analysis | Existing digest-bound analysis validator passed; no public artifact release or adoption | Join helper decision → consumed tool result → root action → independent oracle. Report valid failures, invalid observations, denominator, latency and accounting coverage separately; do not decide adoption from five cases. |
 | External evaluation | Candidates only; separate freeze required | Start with Mind2Web selection and CUAVerifierBench completion decisions. Pin revision/split, selection and exclusion rules, input transformation, independent labels, license/access, sample size and metrics before dispatch. ScreenSpot-Pro tests candidate coverage; OSWorld is later integration, not another name for this pilot. |
 | Harbor admission | Four gaps remain in the section below | Scoped two-tool composition, secret transport, mixed-route observation validation and native task/verifier/full export. One paired `corrected-target-ko` trial must prove the path before the five-task extension. |
-| Replay and film | Twenty-scene HTML design exists; no Jev trial footage or final film | Privacy-reviewed real export, native viewer play/pause/seek and capture, source/output hashes, separate clocks; small rendered samples before full KO then EN output. Preserve references followed by a short external-use-cases screen. |
+| Replay and film | Twenty-one-scene local HTML includes the first diagnostic; no Jev trial footage or final film | Privacy-reviewed real export, native viewer play/pause/seek and capture, source/output hashes, separate clocks; small rendered samples before full KO then EN output. Preserve references followed by a short external-use-cases screen. |
 | Integration and publication | Not completed for this feature | Head-specific required CI and merge-commit GitFlow; artifact publication/readback, report-owner update and film delivery are separate receipts. No release/tag/PyPI action follows automatically. |
 
 At every transition, inspect the original source or receipt, perform the smallest
@@ -279,8 +280,14 @@ not full-suite, required remote CI, Harbor admission or live acceptance evidence
   the real AgenticLoop consumes the decision and lookup results before finalization.
 - [Runner tests](../../tests/scripts/test_decision_handoff_pilot.py):
   freeze, accounting and retained attempt/analysis evidence.
-- Live backend acceptance, five paired task outcomes and complete consumption
-  remain unmeasured until an authorized, valid run produces reviewed receipts.
+- The first direct-account run completed five pairs with retained attempt
+  input/output coverage. Its private analysis SHA-256 is
+  `b32d40fc7b778e923655b01103091ec898a9ee53845f7dc3c7e5257c12087ef9`;
+  its prospective run-spec SHA-256 is
+  `1bd9c6be79714d7b5a62fc5a0c7f2a591ee7e0c683405e1cf6aad5c00c79ea40`.
+  These identify local receipts, not publicly retrievable evidence or complete
+  account billing. Published claims must wait for reviewed artifact release and
+  independent readback; do not rerun merely to obtain a publishable success.
 - Harder held-out tasks, another root model, Harbor and default adoption require
   separate decisions. This experiment does not close unrelated billing audits.
 
@@ -329,17 +336,63 @@ subscription/xhigh model, prompt, tool schemas, permissions, timeout/round rules
 and verifier in both arms; only the decision helper changes. This is a new
 diagnostic attempt family, not Terminal-Bench evidence or a repair of old traces.
 
-Four implementation/admission gaps remain: (1) neither Harbor composition
-registers `analyze_request` or the read-only status tool; (2) the native profile
-requires `run_bash` and rejects all `*_API_KEY` environment values, so it cannot
-accept this two-tool/Jev profile unchanged; (3) the observation checker admits
-only the frozen root route, not a separately bound `structured_decision` route;
-(4) the pilot has no Harbor task bundle, native verifier output or private full
-trajectory export. Add an explicitly scoped evaluation composition at the
-existing adapter owner, with secret transport and egress reviewed, rather than
-loosening the native shell profile or creating another provider/replay framework.
-Reuse existing finalization, source-bound tool code and ATIF/cast projection;
-retain actual two-tool definitions and full call/result joins in the export.
+Four implementation/admission gaps remain. Close them at the existing owners;
+these are execution checks, not completed work or another provider/replay framework:
+
+1. **Two-tool composition.** Neither Harbor composition registers this task's
+   tools. Reuse `run_arm`, `StatusLookupTool` and `HandoffReceipt` from the
+   [pilot runner](../../scripts/eval/decision_handoff_pilot.py) through a narrow
+   evaluation owner beside the [decision tool](../../evals/benchmarks/decision_handoff.py).
+   Select that profile explicitly in `GeodeRuntimeHarborAgent.run`; do not import
+   the CLI runner into `core` or broaden `SharedServices.create_session` merely
+   for this task. Preserve the same prompt/schema, exactly two admitted tools,
+   empty policy sources, disabled cognitive reflection and `rule_based` verifier.
+   Record the actual assembly function in `runtime-contract.json`, not the native
+   `build_runtime+build_shared_services` path when it did not run. Extend the
+   [continuation tests](../../tests/scripts/test_decision_handoff_runtime.py) and
+   [adapter tests](../../tests/evals/benchmarks/test_harbor_runtime.py) to reject
+   extra tools/profile drift while preserving the default native shell profile.
+2. **Credentials and termination.** The native profile requires `run_bash` and
+   rejects nonempty `*_API_KEY` environment values; do not relax those defaults.
+   Reuse `GeodeRuntimeHarborAgent.install`'s private-file subscription transport;
+   send a separate TypeSafe-only secret to arm B, never a multi-key host `.env`,
+   command argument, instruction or receipt. Pass it explicitly to the scoped
+   helper; arm A must allocate neither that secret nor its HTTP client. Review
+   egress separately from the two-tool restriction. Preserve `_stop_runtime`'s
+   bounded drain, SIGTERM handling and finalized receipt through the evaluation
+   branch; do not fake runtime/service objects to enter `_finalize_native`.
+   Extend the same adapter/continuation suites for credential absence/redaction,
+   timeout/cancellation, closed writers and retained failure exports.
+3. **Observed-call contract.** In the
+   [observation checker](../../scripts/eval/check_harbor_observations.py),
+   `_usage_check` currently admits only the root route and `validate_observations`
+   requires `reflexion`. Bind expectations to the frozen profile/arm: Astra
+   subscription/xhigh for root and helper A; TypeSafe `jev-1.13.0`/payg only for
+   arm B's `structured_decision`; `rule_based` for this task. Jev's observed
+   `effort=None` means not configured here, not missing root effort. Preserve
+   `response_model` from canonical events in `_usage_event_metadata` or verify it
+   against the digest-bound source; never substitute the requested model. Extend
+   [checker tests](../../tests/scripts/test_check_harbor_observations.py) for wrong
+   purpose/route/served-model, missing root effort and unknown counters. Retain
+   native-profile rejection tests and the whole-runtime coverage limitation;
+   the checker's current exit 2 is not a failed trial or permission to expand.
+4. **Independent reward and full export.** Freeze one task bundle containing the
+   unchanged `corrected-target-ko` request/state and task-owned verifier; keep
+   expected labels out of model input. Reuse `_oracle`'s checks against actual
+   answer, tool/result-consumption joins and lookup evidence, not a stored
+   `passed` flag. The verifier must write native reward output on pass and fail.
+   Export private full and digest trajectories from the same closed canonical
+   evidence, then reuse `populate_context_post_run`, the existing ATIF projector
+   and `write_harbor_recording` with the actual two-tool definitions. Extend
+   task-verifier and adapter/continuation tests for wrong ID, missing consumption,
+   same-batch premature lookup, incomplete evidence and failed exports; a playable
+   replay never replaces the independent reward.
+
+Keep the existing five-task preflight and its denominator unchanged. After these
+offline checks, freeze a new one-pair source/task/profile contract before dispatch;
+retain the original five-pair artifacts. Admit further Harbor tasks only after
+independently checking that pair's native reward, observation validity and private
+full export. Privacy-reviewed viewer playback is a separate replay gate.
 
 These commands are preparation templates, **not executed trial/viewer commands**;
 replace paths with closed, owned, privacy-reviewed artifacts and select the
