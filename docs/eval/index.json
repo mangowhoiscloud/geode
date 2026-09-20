@@ -608,8 +608,8 @@
       "status": "draft",
       "authority": "diagnostic",
       "path": "docs/eval/typesafe-decision-handoff.md",
-      "summary": "Five-task comparison of source-bound Astra and Jev decisions consumed by the same root AgenticLoop.",
-      "sha256": "35e1cafb1353e3c019ff82a7e50ac8785fea1351b4d6dd28eedd41ec48ea7521",
+      "summary": "Source-bound Astra/Jev handoff diagnostics, with a separate root-only control, Harbor task verifier and wrong-helper recovery block.",
+      "sha256": "d4240090649cc85560f98fe97fd8975e268b7a7c31e5030e74c36ebdbc2d603a",
       "triggers": [
         "classification",
         "confidence",

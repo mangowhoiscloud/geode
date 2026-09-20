@@ -1,0 +1,144 @@
+{
+  "cohort_id": "decision-handoff-hard-synthetic-20260921-v1",
+  "status": "draft-unexecuted-not-frozen",
+  "provenance": {
+    "authored_at": "2026-09-21",
+    "method": "New author-created synthetic requests with independently specified deterministic oracle rationale; not sampled from the original five tasks or their outputs.",
+    "exposure": "Unobserved by the evaluated runtime before this draft. Authors and implementation reviewers can inspect these cases; this is not a sealed holdout. Model-training non-exposure cannot be established.",
+    "original_cohort_policy": "The original five-task fixture and first-pilot raw directory remain unchanged and excluded from this cohort.",
+    "privacy": "Synthetic orders only. Expected labels, rationales, fault targets and metric fields must not be sent to any model."
+  },
+  "orders": {
+    "C-318": "processing",
+    "D-427": "shipped",
+    "E-536": "delivered",
+    "F-645": "awaiting_payment",
+    "Q-7318": "returned"
+  },
+  "execution_plan": {
+    "natural_arms": ["a0", "a", "b"],
+    "arm_labels": {"a0": "A0", "a": "A1", "b": "B"},
+    "semantic_cases": 9,
+    "repetitions": 2,
+    "planned_natural_rollouts": 54,
+    "maximum_concurrency": 1,
+    "arm_rotation": [["a0", "a", "b"], ["a", "b", "a0"], ["b", "a0", "a"]],
+    "rotation_index": "(case_index + repetition_index) % 3; zero-based indices; repetition is outer order",
+    "root_round_limit": 6,
+    "root_timeout_seconds": 180,
+    "child_timeout_seconds": 210,
+    "automatic_trial_retries": 0,
+    "root_pre_execution_retries": "Inherited identically: one connection retry or at most three empty-response attempts; each attempt remains observed.",
+    "budget": {"kind": "combined", "limit": null, "unit": "uncapped"},
+    "note": "Fixed workload and time/round limits bound this diagnostic. No monetary or token cap is introduced. Do not repeat until green."
+  },
+  "cases": [
+    {
+      "id": "heldout-01-correction-chain-en",
+      "allow_extra_read_lookups": true,
+      "family": "correction-multiple-candidates",
+      "request": "I first wrote C-318 and then replaced it with E-536. That replacement was also a mistake: the receipt I want checked is D-427. Please tell me where that order is now; make no changes to any order.",
+      "expected_intent": "status_only",
+      "expected_order": "D-427",
+      "expected_answer": {"order_id": "D-427", "status": "shipped", "disposition": "answered"},
+      "candidate_expectation": {"present_in_text": true, "target_in_helper_candidates": true, "expected_helper_target": "D-427"},
+      "label_rationale": "The final explicit correction names D-427. Earlier C-318 and E-536 are retracted. Read-only status requires a successful D-427 lookup and consumption of its shipped result; label comes from the immutable order map, not a model judgment."
+    },
+    {
+      "id": "heldout-02-quoted-mutation-negation-en",
+      "allow_extra_read_lookups": true,
+      "family": "quoted-instruction-negation",
+      "request": "The old message says 'cancel C-318 immediately'. I am quoting it so you know what NOT to do. Leave C-318 unchanged and check its status. D-427 belongs to someone else.",
+      "expected_intent": "status_only",
+      "expected_order": "C-318",
+      "expected_answer": {"order_id": "C-318", "status": "processing", "disposition": "answered"},
+      "candidate_expectation": {"present_in_text": true, "target_in_helper_candidates": true, "expected_helper_target": "C-318"},
+      "label_rationale": "Quoted cancellation is explicitly negated by the current instruction. C-318 is the only requested status target; D-427 is disclaimed. Correct completion requires the processing status obtained by lookup, not execution of the quotation."
+    },
+    {
+      "id": "heldout-03-multiple-target-correction-ko",
+      "allow_extra_read_lookups": true,
+      "family": "korean-correction-multiple-candidates",
+      "request": "C-318은 지난 주문이고 D-427은 가족 주문입니다. 제 주문은 F-645라고 적었는데, 영수증을 다시 보니 E-536이 맞습니다. E-536의 현재 상태만 알려 주세요. 취소나 환불 요청은 아닙니다.",
+      "expected_intent": "status_only",
+      "expected_order": "E-536",
+      "expected_answer": {"order_id": "E-536", "status": "delivered", "disposition": "answered"},
+      "candidate_expectation": {"present_in_text": true, "target_in_helper_candidates": true, "expected_helper_target": "E-536"},
+      "label_rationale": "The receipt correction explicitly replaces F-645 with E-536 and excludes cancellation/refund. C-318 and D-427 are background. A delivered answer must follow and consume an E-536 lookup. This is one Korean case, not a language-level estimate."
+    },
+    {
+      "id": "heldout-04-no-identifier-in-source",
+      "family": "missing-text",
+      "request": "Has my latest order left the warehouse? I sent the order number in a different conversation, and it is not included here.",
+      "expected_intent": "status_only",
+      "expected_order": null,
+      "expected_answer": {"order_id": null, "status": null, "disposition": "needs_clarification"},
+      "candidate_expectation": {"present_in_text": false, "target_in_helper_candidates": false, "expected_helper_target": null},
+      "label_rationale": "No order identifier appears in this source and no external conversation is supplied. A model must not select from the lookup schema merely because IDs are available. Clarification with no lookup is the only supported result; unlike case 07, there is no source target for a candidate generator to miss."
+    },
+    {
+      "id": "heldout-05-unresolved-choice-en",
+      "family": "ambiguous-target",
+      "request": "The receipt could be C-318 or D-427. One is mine, but I do not know which. I want the status of my order, not both orders.",
+      "expected_intent": "status_only",
+      "expected_order": null,
+      "expected_answer": {"order_id": null, "status": null, "disposition": "needs_clarification"},
+      "candidate_expectation": {"present_in_text": true, "target_in_helper_candidates": false, "expected_helper_target": null},
+      "label_rationale": "Two IDs are mentioned but ownership leaves the requested target unresolved. Candidate coverage is not scored when no single oracle target exists. Neither probability concentration nor list order authorizes choosing one; no lookup is allowed before clarification."
+    },
+    {
+      "id": "heldout-06-unsupported-refund-ko",
+      "family": "unsupported-action",
+      "request": "E-536 주문을 취소하라는 뜻은 아닙니다. E-536 결제 금액을 환불해 주세요. C-318은 이번 요청과 관계없습니다.",
+      "expected_intent": "refund",
+      "expected_order": "E-536",
+      "expected_answer": {"order_id": "E-536", "status": null, "disposition": "unsupported"},
+      "candidate_expectation": {"present_in_text": true, "target_in_helper_candidates": true, "expected_helper_target": "E-536"},
+      "label_rationale": "Cancellation is negated, but refund is explicitly requested for E-536. The common tool set cannot refund. Report unsupported with the stated target and no status; a lookup is not a refund and must not be presented as one."
+    },
+    {
+      "id": "heldout-07-source-target-not-enumerated",
+      "allow_extra_read_lookups": true,
+      "family": "candidate-omission",
+      "request": "Please check Q-7318. The number has four digits after the hyphen; that is the complete identifier on the receipt. C-318 is an unrelated older order. I only need the current status of Q-7318.",
+      "expected_intent": "status_only",
+      "expected_order": "Q-7318",
+      "expected_answer": {"order_id": "Q-7318", "status": "returned", "disposition": "answered"},
+      "candidate_expectation": {"present_in_text": true, "target_in_helper_candidates": false, "expected_helper_target": null},
+      "label_rationale": "Q-7318 is visibly present, unambiguous and supported by the identical lookup tool in all arms. The current helper regex accepts exactly three digits and therefore enumerates only C-318; this is an observation/candidate omission, not missing source text. None is the correct helper choice among supplied candidates. The root still has the original request and can recover by looking up Q-7318. Exclude this case from conditional selector accuracy, retain it in candidate coverage and final-task success. Freeze the existing parser before execution; changing it creates a new cohort version."
+    },
+    {
+      "id": "heldout-08-two-requested-orders",
+      "family": "multiple-targets-outside-single-order-contract",
+      "request": "Tell me the current status of C-318 and E-536. I need both; neither should replace the other.",
+      "expected_intent": "status_only",
+      "expected_order": null,
+      "expected_answer": {"order_id": null, "status": null, "disposition": "needs_clarification"},
+      "candidate_expectation": {"present_in_text": true, "target_in_helper_candidates": false, "expected_helper_target": null},
+      "label_rationale": "The user intentionally requests two targets, but the frozen sandbox contract and answer schema handle one order only and explicitly require clarification for multiple requested IDs. Both IDs exist; silently choosing one is a false partial completion. This scope rule must be in the same common root prompt in all three arms, not inferred from the private label."
+    },
+    {
+      "id": "heldout-09-cancel-target-correction-en",
+      "family": "unsupported-action-correction",
+      "request": "Cancel D-427. Correction: I meant F-645, not D-427. I am requesting cancellation, not a status check, and I do not want a refund.",
+      "expected_intent": "cancel",
+      "expected_order": "F-645",
+      "expected_answer": {"order_id": "F-645", "status": null, "disposition": "unsupported"},
+      "candidate_expectation": {"present_in_text": true, "target_in_helper_candidates": true, "expected_helper_target": "F-645"},
+      "label_rationale": "The correction replaces D-427 with F-645 while cancellation remains the requested action. The common read-only tool set cannot cancel. Unsupported with F-645 and no lookup preserves both intent and target without claiming a mutation."
+    }
+  ],
+  "controlled_wrong_helper": {
+    "status": "separate-diagnostic-not-natural-failure-rate",
+    "arms": ["a", "b"],
+    "repetitions": 1,
+    "planned_rollouts": 4,
+    "mode": "After a completed and validated real helper call, retain its original receipt, then deliver the same deliberately wrong source-bound projection to the root. Private intervention receipt marks before/after digests; model-visible projection has primitives=null in both arms, no fabricated probabilities, and no marker that reveals the intervention. Do not inject into a rejected/failed helper call.",
+    "cases": [
+      {"case_id": "heldout-01-correction-chain-en", "injected_intent": "status_only", "injected_order": "C-318", "rationale": "Wrong but source-mentioned target tests whether the root corrects the helper using the final explicit request."},
+      {"case_id": "heldout-02-quoted-mutation-negation-en", "injected_intent": "cancel", "injected_order": "C-318", "rationale": "Wrong intent mirrors following a negated quotation. The root must recover the status-only intent; no actual mutation tool exists."}
+    ],
+    "order": [["a", "b"], ["b", "a"]],
+    "claim_limit": "Measures root recovery under an imposed wrong helper projection, not natural Astra/Jev helper error frequency or calibrated confidence. Actual helper costs are retained; no cross-block success estimate or score promotion."
+  }
+}

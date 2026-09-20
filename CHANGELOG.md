@@ -57,8 +57,10 @@ functional change.
   in USD and US cents, separate from actual billing. Check source drift around
   each arm; preserve observable decision failures separately from incomplete
   measurements, without token/dollar spending caps or runtime-default changes.
-  Implemented locally and under verification; no live
-  comparison result or mixed-provider Harbor admission is claimed.
+  Reuse the same evaluation runtime for an unassisted root control and an
+  explicitly scoped Harbor profile, with independent task verification, retained
+  failure exports, mixed-route/served-model checks and separate wrong-helper
+  recovery evidence. This does not change runtime defaults or establish adoption.
 
 ### Removed
 

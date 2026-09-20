@@ -20,6 +20,7 @@ from core.llm.adapters.base import (
     AdapterCallResult,
     UsageSummary,
 )
+from evals.benchmarks import decision_handoff_runtime as runtime
 from scripts.eval import decision_handoff_pilot as pilot
 
 
@@ -223,11 +224,17 @@ def test_real_root_continues_after_source_bound_decision(arm: str, tmp_path: Pat
     assert len(result["call_accounting"]) == 4
     assert sum(row["usage"]["input_tokens"] for row in result["call_accounting"]) == 50
     assert result["usage"]["attempt_pairing_complete"]
+    assert result["handoff_call_coverage_complete"]
     handoff = json.loads((directory / "handoff.json").read_text())
     root_rows = [row for row in handoff if row["kind"] == "root_request"]
     assert root_rows[0]["tool_result_ids"] == []
     assert "analysis-1" in root_rows[1]["tool_result_ids"]
     assert "lookup-1" in root_rows[2]["tool_result_ids"]
+    assert {row["llm_call_id"] for row in root_rows} == {
+        row["llm_call_id"]
+        for row in result["usage"]["recorded_attempts"]
+        if row["purpose"] == "agentic_loop"
+    }
     trajectory = json.loads((directory / "trajectory.json").read_text())
     assert trajectory["outcome"] == {"scored": False}
     assert trajectory["integrity"]["scope_complete"]
@@ -491,3 +498,313 @@ pilot._run_child(0, "a", Path(sys.argv[1]))
         "geode_home": str(directory / "geode-home"),
         "state_root": str(directory / "state"),
     }
+
+
+@pytest.mark.parametrize("case_id", ["negated-cancel-en", "missing-target", "unsupported-mutation"])
+def test_unassisted_root_uses_same_lookup_without_helper(
+    case_id: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("TYPESAFE_API_KEY")
+
+    def forbidden_client(**_: Any) -> None:
+        raise AssertionError("A0 must not allocate a helper HTTP client")
+
+    monkeypatch.setattr(httpx, "AsyncClient", forbidden_client)
+    case = _case(case_id)
+    root = _Adapter(_root_responses(case)[1:])
+    directory = tmp_path / "a0"
+    directory.mkdir()
+    result = asyncio.run(runtime.run_arm(case, "a0", directory, root_adapter=root))
+    assert result["valid"] and result["passed"], result
+    assert result["oracle"]["component_matches"] is None
+    assert all(row["purpose"] != "structured_decision" for row in result["call_accounting"])
+    assert all(
+        {tool.name for tool in request.tools} == {"lookup_order_status"}
+        for request in root.requests
+    )
+    assert all("analyze_request" not in request.system_prompt for request in root.requests)
+    assert result["tool_definitions"][0]["parameters"] == runtime.StatusLookupTool().parameters
+    handoff = json.loads((directory / "handoff.json").read_text())
+    assert runtime.verify_handoff_result(case, result, handoff)["passed"]
+    assert result["source_snapshot_complete"]
+    assert json.loads((directory / "trajectory.private.json").read_text())["integrity"][
+        "replay_complete"
+    ]
+
+
+def test_task_verifier_recomputes_final_and_consumed_lookup_evidence(tmp_path: Path) -> None:
+    case = _case("negated-cancel-en")
+    directory = tmp_path / "a0"
+    directory.mkdir()
+    result = asyncio.run(
+        runtime.run_arm(case, "a0", directory, root_adapter=_Adapter(_root_responses(case)[1:]))
+    )
+    handoff = json.loads((directory / "handoff.json").read_text())
+    result["oracle"] = {"passed": True}
+    result["final_text"] = json.dumps({**case["expected_answer"], "status": "invented"})
+    assert not runtime.verify_handoff_result(case, result, handoff)["passed"]
+    result["final_text"] = json.dumps(case["expected_answer"])
+    lookup = next(row for row in handoff if row.get("tool") == "lookup_order_status")
+    lookup["result"]["result"]["status"] = "invented"
+    assert not runtime.verify_handoff_result(case, result, handoff)["checks"][
+        "lookup_results_match"
+    ]
+
+
+def test_rejected_lookup_attempt_is_not_a_no_lookup_success(tmp_path: Path) -> None:
+    case = _case("missing-target")
+    directory = tmp_path / "rejected-lookup"
+    directory.mkdir()
+    root = _Adapter(
+        [
+            _response(
+                calls=(_call("lookup_order_status", "invalid-read", {"order_id": "UNKNOWN"}),)
+            ),
+            _response(json.dumps(case["expected_answer"])),
+        ]
+    )
+    result = asyncio.run(runtime.run_arm(case, "a0", directory, root_adapter=root))
+    assert result["valid"] and not result["passed"]
+    assert result["oracle"]["checks"]["answer_matches"]
+    assert not result["oracle"]["checks"]["no_lookup_attempt_when_unneeded"]
+    assert result["oracle"]["lookup_attempt_count"] == 1
+    assert result["oracle"]["rejected_lookup_count"] == 1
+    assert result["oracle"]["extra_lookup_count"] == 0
+    handoff = json.loads((directory / "handoff.json").read_text())
+    assert runtime.verify_handoff_result(case, result, handoff) == result["oracle"]
+
+
+def test_scoped_runtime_rejects_unadmitted_call_purpose(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.agent.loop import _provider_call
+
+    observe = _provider_call.observe_llm_call
+
+    async def unexpected_purpose(*args: Any, **kwargs: Any) -> Any:
+        return await observe(*args, **(kwargs | {"purpose": "memory_dreaming"}))
+
+    monkeypatch.setattr(_provider_call, "observe_llm_call", unexpected_purpose)
+    case = _case("negated-cancel-en")
+    directory = tmp_path / "unexpected-purpose"
+    directory.mkdir()
+    result = asyncio.run(
+        runtime.run_arm(case, "a0", directory, root_adapter=_Adapter(_root_responses(case)[1:]))
+    )
+    assert result["oracle"]["passed"]
+    assert result["usage"]["attempt_pairing_complete"]
+    assert {row["purpose"] for row in result["call_accounting"]} == {"memory_dreaming"}
+    assert not result["valid"] and not result["passed"]
+
+
+@pytest.mark.parametrize("purpose", ["agentic_loop", "structured_decision"])
+def test_complete_missing_call_pair_cannot_hide_consumption(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, purpose: str
+) -> None:
+    from core.observability.event_store import HookEventStore
+
+    original = HookEventStore.read
+
+    def drop_call(self: Any, **kwargs: Any) -> Any:
+        rows = original(self, **kwargs)
+        missing = next(
+            event.llm_call_id
+            for event in rows
+            if event.action == "llm.call.ended" and event.payload.get("purpose") == purpose
+        )
+        return [event for event in rows if event.llm_call_id != missing]
+
+    monkeypatch.setattr(HookEventStore, "read", drop_call)
+    result, _, _, _ = asyncio.run(_run(_case("negated-cancel-en"), "a", tmp_path / "missing-call"))
+    assert result["oracle"]["passed"]
+    assert result["usage"]["attempt_pairing_complete"]
+    assert not result["handoff_call_coverage_complete"]
+    assert result["error_type"] == "incomplete_handoff_call_coverage"
+    assert not result["valid"] and not result["passed"]
+
+
+def test_root_retry_keeps_one_logical_dispatch_and_all_attempts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.agent.loop import _provider_call
+
+    monkeypatch.setattr(_provider_call, "_FAIL_FAST_RETRY_DELAY_S", 0)
+    case = _case("negated-cancel-en")
+    directory = tmp_path / "root-retry"
+    directory.mkdir()
+    root = _Adapter(
+        [httpx.ConnectError("synthetic connection failure"), *_root_responses(case)[1:]]
+    )
+    result = asyncio.run(runtime.run_arm(case, "a0", directory, root_adapter=root))
+    receipt = json.loads((directory / "handoff.json").read_text())
+    requests = [row for row in receipt if row["kind"] == "root_request"]
+    attempts = result["usage"]["recorded_attempts"]
+    assert len(root.requests) == len(attempts) == 3
+    assert len(requests) == len({row["llm_call_id"] for row in attempts}) == 2
+    assert attempts[0]["llm_call_id"] == attempts[1]["llm_call_id"]
+    assert attempts[0]["llm_attempt_id"] != attempts[1]["llm_attempt_id"]
+    assert result["handoff_call_coverage_complete"]
+    assert result["usage"]["attempt_pairing_complete"]
+    # Coverage is complete; the transport attempt's missing usage still invalidates the run.
+    assert not result["valid"] and result["oracle"]["passed"]
+
+
+@pytest.mark.parametrize("allow_recovery", [True, False])
+def test_wrong_read_then_correct_read_requires_explicit_recovery_contract(
+    tmp_path: Path, allow_recovery: bool
+) -> None:
+    cohort = json.loads(
+        (pilot.ROOT / "evals/benchmarks/fixtures/decision-handoff-hard.json").read_text()
+    )
+    case = dict(cohort["cases"][0])
+    assert case["allow_extra_read_lookups"] is True
+    if not allow_recovery:
+        del case["allow_extra_read_lookups"]
+    directory = tmp_path / "read-recovery"
+    directory.mkdir()
+    root = _Adapter(
+        [
+            _response(calls=(_call("lookup_order_status", "wrong-read", {"order_id": "C-318"}),)),
+            _response(
+                calls=(
+                    _call(
+                        "lookup_order_status", "correct-read", {"order_id": case["expected_order"]}
+                    ),
+                )
+            ),
+            _response(json.dumps(case["expected_answer"])),
+        ]
+    )
+    result = asyncio.run(
+        runtime.run_arm(case, "a0", directory, root_adapter=root, orders=cohort["orders"])
+    )
+    assert result["valid"] and result["passed"] is allow_recovery
+    handoff = json.loads((directory / "handoff.json").read_text())
+    verified = runtime.verify_handoff_result(case, result, handoff)
+    assert verified["passed"] is allow_recovery
+    assert verified["checks"]["results_consumed_by_root"]
+    assert verified["extra_lookup_count"] == 1
+    assert verified["wrong_target_lookup_count"] == 1
+    assert verified["recovery_after_wrong_lookup"] is allow_recovery
+    assert verified == result["oracle"]
+
+
+@pytest.mark.parametrize("arm", ["a", "b"])
+@pytest.mark.parametrize("recovered", [True, False])
+def test_controlled_wrong_helper_preserves_real_original_and_consumed_projection(
+    arm: str, recovered: bool, tmp_path: Path
+) -> None:
+    from pydantic import SecretStr
+
+    case = _case("corrected-target-ko")
+    original, body = _decisions(case)
+    root_case = (
+        case
+        if recovered
+        else {
+            **case,
+            "expected_order": "A-104",
+            "expected_answer": {
+                "order_id": "A-104",
+                "status": "shipped",
+                "disposition": "answered",
+            },
+        }
+    )
+    root, helper = _Adapter(_root_responses(root_case)), _Adapter([_response(json.dumps(original))])
+    directory = tmp_path / "injected"
+    directory.mkdir()
+
+    async def run() -> dict[str, Any]:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=body))
+        ) as client:
+            return await runtime.run_arm(
+                case,
+                arm,
+                directory,
+                root_adapter=root,
+                decision_adapter=helper,
+                client=client,
+                api_key=SecretStr("synthetic-test-key"),
+                intervention={"intent": "status_only", "order_id": "A-104"},
+            )
+
+    result = asyncio.run(run())
+    assert result["valid"] and result["passed"] is recovered
+    assert result["oracle"]["component_matches"] is False
+    intervention = json.loads((directory / "intervention.json").read_text())
+    assert len(intervention) == 1 and intervention[0]["delivered"]
+    assert intervention[0]["original_result"]["result"]["target"]["order_id"] == "B-209"
+    assert intervention[0]["projected_result"]["result"]["target"]["order_id"] == "A-104"
+    assert intervention[0]["projected_result"]["result"]["primitives"] is None
+    assert intervention[0]["original_sha256"] != intervention[0]["projected_sha256"]
+    assert (
+        len([row for row in result["call_accounting"] if row["purpose"] == "structured_decision"])
+        == 1
+    )
+    handoff = json.loads((directory / "handoff.json").read_text())
+    observed = next(row for row in handoff if row.get("tool") == "analyze_request")
+    assert observed["result"] == intervention[0]["projected_result"]
+    assert runtime.verify_handoff_result(case, result, handoff)["passed"] is recovered
+
+
+def test_harder_candidate_omission_is_not_missing_text_and_has_no_label_leak(
+    tmp_path: Path,
+) -> None:
+    from evals.benchmarks.decision_handoff import DecisionHandoffTool
+
+    cohort = json.loads(
+        (pilot.ROOT / "evals/benchmarks/fixtures/decision-handoff-hard.json").read_text()
+    )
+    assert len(cohort["cases"]) == 9
+    assert len({case["id"] for case in cohort["cases"]}) == 9
+    assert not (
+        {case["id"] for case in cohort["cases"]}
+        & {case["id"] for case in json.loads(pilot.FIXTURE.read_text())}
+    )
+    case = next(case for case in cohort["cases"] if case["family"] == "candidate-omission")
+    missing = next(case for case in cohort["cases"] if case["family"] == "missing-text")
+    assert case["expected_order"] in case["request"] and missing["expected_order"] is None
+    payload = DecisionHandoffTool(case["request"], "a")._payload()
+    assert set(payload["state"]["order_mentions"]) == {"order_0"}
+    assert payload["state"]["order_mentions"]["order_0"]["order_id"] == "C-318"
+    assert "label_rationale" not in json.dumps(payload)
+    helper = _Adapter([_response('{"intent":"status_only","target":"none"}')])
+    root = _Adapter(_root_responses(case))
+    directory = tmp_path / "omission"
+    directory.mkdir()
+    result = asyncio.run(
+        runtime.run_arm(
+            case,
+            "a",
+            directory,
+            orders=cohort["orders"],
+            decision_adapter=helper,
+            root_adapter=root,
+        )
+    )
+    assert result["valid"] and result["passed"]
+    assert not result["oracle"]["component_matches"]
+    serialized = repr(root.requests) + repr(helper.requests)
+    assert case["label_rationale"] not in serialized
+    assert "candidate_expectation" not in serialized and "expected_answer" not in serialized
+
+
+def test_cancellation_preserves_closed_private_snapshot(tmp_path: Path) -> None:
+    directory = tmp_path / "cancelled"
+    directory.mkdir()
+    result = asyncio.run(
+        runtime.run_arm(
+            _case("negated-cancel-en"),
+            "a0",
+            directory,
+            root_adapter=_Adapter([asyncio.CancelledError("synthetic interruption")]),
+        )
+    )
+    assert not result["valid"] and not result["passed"]
+    assert result["error_type"] == "CancelledError"
+    assert (directory / "runtime-metadata.json").is_file()
+    assert (directory / "trajectory.private.json").is_file()
+    assert (directory / "call-events.json").is_file()
+    assert result["call_accounting"][0]["total_tokens"] is None

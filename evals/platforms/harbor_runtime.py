@@ -59,8 +59,12 @@ _PYTHON_VERSION = "3.12.12"
 _FINALIZE_SECONDS = 20
 
 
-async def _stop_runtime(environment: Any) -> None:
+async def _stop_runtime(
+    environment: Any, *, module: str = "evals.platforms.harbor_runtime"
+) -> None:
     """Wait for export and process exit before Harbor downloads agent logs."""
+    if module not in {"evals.platforms.harbor_runtime", "evals.platforms.harbor_handoff"}:
+        raise ValueError("unknown runtime entry point")
     command = f"""import json, os, signal, time
 from pathlib import Path
 p = Path('{_LOGS}/runtime.pid')
@@ -71,7 +75,7 @@ proc = Path('/proc') / str(pid)
 if pid <= 1:
     raise RuntimeError('invalid runtime process identity')
 try:
-    if b'evals.platforms.harbor_runtime' not in (proc / 'cmdline').read_bytes():
+    if {module.encode()!r} not in (proc / 'cmdline').read_bytes().split(b'\\0'):
         raise RuntimeError('runtime process identity changed')
     os.kill(pid, signal.SIGTERM)
 except (FileNotFoundError, ProcessLookupError):
@@ -368,6 +372,11 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
         context.n_cache_tokens = None
         context.cost_usd = None  # Subscription usage is not a billed API cost.
         context.metadata = value["metadata"]
+        if (
+            context.metadata.get("finalization_errors")
+            or value["usage"].get("source_snapshot_complete") is False
+        ):
+            return  # Retain failure metadata without promoting a partial replay.
         trajectory_path = self.logs_dir / "geode-trajectory.private.json"
         if not trajectory_path.is_file():
             return
