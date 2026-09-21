@@ -59,8 +59,12 @@ _PYTHON_VERSION = "3.12.12"
 _FINALIZE_SECONDS = 20
 
 
-async def _stop_runtime(environment: Any) -> None:
+async def _stop_runtime(
+    environment: Any, *, module: str = "evals.platforms.harbor_runtime"
+) -> None:
     """Wait for export and process exit before Harbor downloads agent logs."""
+    if module not in {"evals.platforms.harbor_runtime", "evals.platforms.harbor_handoff"}:
+        raise ValueError("unknown runtime entry point")
     command = f"""import json, os, signal, time
 from pathlib import Path
 p = Path('{_LOGS}/runtime.pid')
@@ -71,7 +75,7 @@ proc = Path('/proc') / str(pid)
 if pid <= 1:
     raise RuntimeError('invalid runtime process identity')
 try:
-    if b'evals.platforms.harbor_runtime' not in (proc / 'cmdline').read_bytes():
+    if {module.encode()!r} not in (proc / 'cmdline').read_bytes().split(b'\\0'):
         raise RuntimeError('runtime process identity changed')
     os.kill(pid, signal.SIGTERM)
 except (FileNotFoundError, ProcessLookupError):
@@ -208,15 +212,19 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
         await self.exec_as_agent(
             environment, command=f"mkdir -p {credential_dir} && chmod 700 {credential_dir}"
         )
-        await environment.upload_file(auth, home + "/.codex/auth.json")
+        await self._upload_credential(environment, auth, home + "/.codex/auth.json")
+
+    async def _upload_credential(self, environment: Any, source: Path, target: str) -> None:
+        # Compose copies host ownership; an unset task user may still use image USER.
+        result = await self.exec_as_agent(environment, command="id -u")
+        uid = str(result.stdout).strip()
+        if re.fullmatch(r"[0-9]+", uid) is None:
+            raise RuntimeError("unable to resolve container agent uid")
+        await environment.upload_file(source, target)
+        destination = shlex.quote(target)
         await self.exec_as_root(
             environment,
-            command=f"chmod 600 {credential_dir}/auth.json"
-            + (
-                f" && chown {shlex.quote(str(environment.default_user))} {credential_dir}/auth.json"
-                if environment.default_user is not None
-                else ""
-            ),
+            command=f"chmod 600 {destination} && chown {uid} {destination}",
         )
 
     def _classify_exec_error(self, command: str, result: Any) -> Any:
@@ -356,8 +364,11 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
 
     def populate_context_post_run(self, context: Any) -> None:
         # Harbor invokes this after downloading logs, including failed trials.
+        require_handoff_replay = self.name() == "geode-handoff"
         path = self.logs_dir / "runtime-result.json"
         if not path.is_file():
+            if require_handoff_replay:
+                raise ValueError("handoff replay requires runtime-result.json")
             return
         value = json.loads(path.read_text())
         # Reflection, judging, text completion and hosted web search do not
@@ -368,10 +379,22 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
         context.n_cache_tokens = None
         context.cost_usd = None  # Subscription usage is not a billed API cost.
         context.metadata = value["metadata"]
+        if (
+            context.metadata.get("finalization_errors")
+            or value["usage"].get("source_snapshot_complete") is False
+        ):
+            return  # Retain failure metadata without promoting a partial replay.
         trajectory_path = self.logs_dir / "geode-trajectory.private.json"
         if not trajectory_path.is_file():
+            if require_handoff_replay:
+                raise ValueError("handoff replay requires complete canonical content")
             return
         trajectory = json.loads(trajectory_path.read_text())
+        if require_handoff_replay:
+            from core.observability.trajectory import verify_trajectory_integrity
+
+            if not verify_trajectory_integrity(trajectory)["replay_complete"]:
+                raise ValueError("handoff replay requires complete canonical content")
         if not trajectory["integrity"]["scope_complete"]:
             return
         from evals.platforms.harbor import (

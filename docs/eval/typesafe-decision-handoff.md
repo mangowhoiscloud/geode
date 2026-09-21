@@ -4,22 +4,26 @@ eval_family: runtime-decisions
 eval_kind: contract
 eval_status: draft
 eval_authority: diagnostic
-eval_summary: Five-task comparison of source-bound Astra and Jev decisions consumed by the same root AgenticLoop.
+eval_summary: Source-bound Astra/Jev handoff diagnostics, with a separate root-only control, Harbor task verifier and wrong-helper recovery block.
 eval_triggers: [typesafe, jev, decision-handoff, classification, extraction, confidence]
 ---
 
 # Jev decision handoff pilot
 
-Status: first five-pair diagnostic executed privately on 2026-09-21 KST;
-artifact publication, Harbor admission and adoption remain unverified.
+Status: the first five-pair diagnostic and the fresh r6 Harbor comparison
+executed privately. r6 completed 54 valid natural trials and four valid
+wrong-advice interventions; the incomplete r5 primary remains not measurable.
+These authored diagnostics do not establish default adoption or authorize
+publication. See the source-bound evidence and limitations below.
 This opt-in diagnostic changes an intermediate decision helper, not GEODE's
 default provider, semantic preflight, permission policy, or final verifier.
 The superseded selector-only draft is not the active experiment.
 
 The question is whether Jev's source-bound interpretation helps the same root
 model complete a read-only task with different task outcomes, latency, and
-observed consumption. The hypothesis is tested over five synthetic paired tasks,
-not inferred from valid JSON, confident answers, or a fast helper call.
+observed consumption. The original five-pair diagnostic and separately frozen
+three-arm protocol test this question; valid JSON, confident answers or a fast
+helper call do not answer it.
 
 ## Execution order and resumption
 
@@ -32,13 +36,13 @@ Do not create another status ledger or silently copy those old settings forward.
 | Stage | Current disposition | Evidence required to advance |
 |---|---|---|
 | Common baseline | Included in main `f084075f6ce3f6b8deb1a320e788677fee9a8ae1`; common fix `618e6d77c98625e794a5fa51f7a5e6076d9fd617` is an ancestor | JSON-string tool input, non-finite confidence and verifier schema fixes remain common to both arms. This pilot does not exercise all three features live. |
-| Local implementation | Offline checks passed; [PR #3374](https://github.com/mangowhoiscloud/geode/pull/3374) awaits required CI | Independent review; targeted tool, continuation, accounting and runner tests; applicable static/generated gates; clean committed source. No source editing while its run is active. |
+| Local implementation | [PR #3374](https://github.com/mangowhoiscloud/geode/pull/3374) merged to develop as `4a0918287d2690f4905f298bf8fd3ffb9b81c3f3` after required CI | Follow-up root-only/Harbor changes require their own checks and clean source freeze. No source editing while its run is active. |
 | Five-pair diagnostic | Completed on source `58b7c86d650ec592c3bf30046b55d64b6700a3fa`; private run `typesafe-handoff-astra-xhigh-20260920t213023z` | New private prospective run-spec bound to clean source, fixture, routes and oracle; provider-free preflight; all attempts and failed-call consumption retained. |
 | Outcome analysis | Existing digest-bound analysis validator passed; no public artifact release or adoption | Join helper decision → consumed tool result → root action → independent oracle. Report valid failures, invalid observations, denominator, latency and accounting coverage separately; do not decide adoption from five cases. |
 | External evaluation | Candidates only; separate freeze required | Start with Mind2Web selection and CUAVerifierBench completion decisions. Pin revision/split, selection and exclusion rules, input transformation, independent labels, license/access, sample size and metrics before dispatch. ScreenSpot-Pro tests candidate coverage; OSWorld is later integration, not another name for this pilot. |
-| Harbor admission | Four gaps remain in the section below | Scoped two-tool composition, secret transport, mixed-route observation validation and native task/verifier/full export. One paired `corrected-target-ko` trial must prove the path before the five-task extension. |
-| Replay and film | Twenty-one-scene local HTML includes the first diagnostic; no Jev trial footage or final film | Privacy-reviewed real export, native viewer play/pause/seek and capture, source/output hashes, separate clocks; small rendered samples before full KO then EN output. Preserve references followed by a short external-use-cases screen. |
-| Integration and publication | Not completed for this feature | Head-specific required CI and merge-commit GitFlow; artifact publication/readback, report-owner update and film delivery are separate receipts. No release/tag/PyPI action follows automatically. |
+| Harbor execution | r6 admission passed, followed by 54 natural trials and four separate interventions on source `41e02255311c4ff68302cc67a12b21c98791a690` | All 58 planned trials have valid task/usage/replay/cleanup evidence. A0/A1/B each passed 18/18 natural trials; all four interventions were delivered and passed. Do not pool r5 or admission observations into those denominators. |
+| Replay and film | Three r6 admission replays passed actual native-player checks; all 58 natural/injection source replays are retained; final film absent | Preserve canonical/ATIF/cast and privacy-reviewed CFR video hashes. A playable presentation derivative remains distinct from raw PTY and score authority. Each selected natural/injection clip needs its own privacy and playback checks. |
+| Integration and publication | Original pilot merged to develop; follow-up and main promotion remain separate | Head-specific required CI and merge-commit GitFlow; artifact publication/readback, report-owner update and film delivery are separate receipts. No release/tag/PyPI action follows automatically. |
 
 At every transition, inspect the original source or receipt, perform the smallest
 next action, verify the consuming boundary, and update the owner above with the
@@ -62,14 +66,15 @@ Repeat checks when their inputs change, not merely when advancing a stage:
   flag, and an attractive example cannot replace the frozen denominator.
 
 The first diagnostic tests integration, not the causal value of the helper.
-A root-only control, shuffled/wrong-advice ablation, Sol block, calibrated
-threshold or larger held-out study needs its own prospective contract. Existing
-data candidates and previous video sources are retained, not implied to be run.
+The separately frozen three-arm protocol below adds the requested root-only and
+wrong-advice controls. A Sol block, calibrated threshold or external held-out
+study still needs its own prospective contract. Data candidates are not implied
+to have been run.
 
 ## One root, two decision helpers
 
 The [decision tool](../../evals/benchmarks/decision_handoff.py) and
-[root-loop runner](../../scripts/eval/decision_handoff_pilot.py) use the same
+[shared root-loop owner](../../evals/benchmarks/decision_handoff_runtime.py) use the same
 original request, tool schemas, root prompt, fixture and completion checks:
 
 | Stage | A: Astra decision helper | B: Jev decision helper |
@@ -256,11 +261,82 @@ purchased and promotional credits, consume promotional credits first, and make
 the current credit balance visible in the account. Account credit consumption,
 cash purchases and the public-tariff value must remain separate measurements.
 
-Harbor preserves the new purpose in its recorded-attempt projection, but its
-observation validator still requires the frozen root route for every call.
-Adding the purpose does **not** admit mixed Astra/Jev provider runs into Harbor.
-A later Harbor experiment needs its own freeze and native task verifier.
+Harbor preserves the new purpose and observed response model. Its observation
+validator accepts mixed routes only with an explicit handoff arm and frozen
+task-payload digest; the default native profile remains single-route. This
+capability is not live admission, full-runtime usage coverage or a billing receipt.
 See the [usage contract](../architecture/usage-accounting.md).
+
+## Three-arm end-to-end protocol
+
+The follow-up uses the [new nine-case fixture](../../evals/benchmarks/fixtures/decision-handoff-hard.json)
+and the same shared `run_arm`, not a second runtime. It is a fresh authored
+diagnostic, not a sealed holdout, public benchmark or claim of training-data
+non-exposure. The original five-case fixture, denominator and private run remain
+unchanged. No prompt/threshold tuning is allowed after observing this cohort.
+
+| Arm | Root and final verifier | Interpretation stage |
+|---|---|---|
+| A0 (`a0`) | Astra subscription `xhigh`, mechanical `rule_based` plus task-owned semantic oracle | No helper tool or hidden helper request |
+| A1 (`a`) | Same | Existing structured Astra `xhigh` helper |
+| B (`b`) | Same | Direct TypeSafe `jev-1.13.0`, two Choices |
+
+A0 has only the identical read-only lookup tool. A1/B also have
+`analyze_request` and the same analysis-first prompt clause. The original request
+remains visible to the root. Deterministic candidate spans, lookup, permissions
+and final oracle stay in code; Jev supplies semantic data, not execution authority.
+Cognitive reflection, shell/filesystem tools, host memory and external accounts
+are absent from this scoped composition. It is an actual AgenticLoop end-to-end
+task, not a test of default GeodeRuntime services or the entire product.
+
+One separate three-arm `corrected-target-ko` admission precedes **9 cases × 3
+arms × 2 repetitions = 54 natural rollouts**. The independent case count is nine.
+Arm order rotates by `(case_index + repetition_index) % 3`; concurrency is one.
+Root time/round bounds are 180 seconds/six rounds; Harbor execution is 210 seconds
+with separately bounded setup and finalization. No failed trial is rerun and the
+helper makes no HTTP retry. The root retains its shared bounded pre-execution
+connection/empty-response policy described above; count every observed attempt.
+Token/dollar limits remain uncapped. Freeze source, task checksum, container
+digest, routes, input order, oracle, time limits and output destinations first.
+
+Primary: `(B passes - A0 passes) / 18`, equivalent to averaging the two repeats
+within each of nine cases, then averaging paired differences. A1−A0 measures
+the added helper stage; B−A1 measures its replacement. Any invalid/missing cell
+makes the fixed primary metric not measurable; descriptive observations remain
+with explicit denominators. Semantic failures are retained and do not stop the
+remaining workload. Missing usage, source drift or broken evidence stops dispatch.
+
+New status-answer cases allow extra read-only lookups before a final correct,
+observed and consumed answer. Record extra/wrong-target reads and recovery
+separately; do not call a recovered task a semantic failure merely because it
+cost more. Missing/ambiguous/unsupported cases still require no lookup. The
+original five-case oracle keeps its exact lookup-sequence contract.
+
+The four-digit `Q-7318` case deliberately exposes the existing three-digit
+candidate parser's omission. `none` can be correct within supplied choices while
+the full target is missing. Report candidate coverage, conditional selection and
+root recovery separately; do not repair this parser after seeing the result.
+
+The **four-rollout wrong-helper block** uses cases 01/02 and A1/B once each,
+separate from natural errors. After a real valid helper call, trusted middleware
+delivers the same wrong source-bound intent/target in both arms, with
+`primitives=null`. Retain original and injected projections, call usage and
+consumption receipts. This tests error propagation/recovery without fabricating
+probabilities; it does not estimate either helper's natural error rate.
+
+Report final success, honest incomplete/unsupported outcomes, false completion,
+mechanical-verifier false acceptance, extra root calls/lookups, whole-arm elapsed
+time, helper latency and per-route observed input/output/cache counters. Actual
+charges remain unknown; published Jev input tariff and Astra API-equivalent
+estimates are not a combined cash invoice. Partial provider fields stay null.
+No small-sample equality, calibration or adoption claim follows automatically.
+
+Timing has two distinct boundaries. `runtime.elapsed_seconds` covers the shared
+loop, helper, tools and runtime verification, but not setup, trajectory export
+or the independent Harbor verifier. `host_elapsed_seconds` also includes trial
+setup, export, verifier and environment/credential cleanup; it excludes the
+host collector's subsequent accounting/replay audit and final aggregation.
+Neither field measures the complete production-and-audit workflow.
 
 ## Verification and outstanding evidence
 
@@ -288,7 +364,7 @@ not full-suite, required remote CI, Harbor admission or live acceptance evidence
   These identify local receipts, not publicly retrievable evidence or complete
   account billing. Published claims must wait for reviewed artifact release and
   independent readback; do not rerun merely to obtain a publishable success.
-- Harder held-out tasks, another root model, Harbor and default adoption require
+- External held-out tasks, another root model and default adoption require
   separate decisions. This experiment does not close unrelated billing audits.
 
 The separately owned KO/EN report has 92 pages; page 32 is a design reference,
@@ -310,89 +386,220 @@ privately until exact-byte publication approval.
 
 ## Harbor A/B and replay preparation
 
-Checked 2026-09-21; preparation only. The five-task runner above is **not a
-Harbor job**. Its digest-policy trajectory is not a full replay export, and no
-Harbor A/B trial, viewer session or recording has been produced for this pilot.
+Implementation and r5 admission checked 2026-09-21 UTC (2026-09-22 KST).
+The original five-pair diagnostic was not a Harbor job. Its
+digest-policy trajectories, denominator and private receipts remain unchanged;
+the new A0/A1/B profile does not retroactively make them Harbor evidence.
 
-| Surface | Verified availability and boundary |
+The first Harbor admission on source `14d46ad90b4f0c68c9a3c48228d663471786119d`
+stopped during environment construction, before installation or model execution.
+The shared public-agent / offline-verifier policy required Docker's dynamic
+egress support, which the local VM did not advertise. Input/hash preflight had
+not checked the actual environment capability. This is an integration/preflight
+defect, not a model failure or a zero task score; the invalid attempt is retained.
+
+Repair admission requires a separate verifier with a static `no-network`
+baseline. The narrow [Docker integration](../../evals/platforms/harbor_docker.py)
+reuses Harbor's shipped `network_mode: none` Compose overlay for Linux
+single-container static isolation; it does not patch Harbor's installed source,
+claim dynamic policy support, or change the agent's public-network route.
+Custom Compose and changing/allowlisted policies remain outside that static path.
+The provider rejects versions other than `harbor==0.22.0` before construction.
+The audit extra retains its separately locked Harbor dependency; CI exercises
+unsupported-version rejection there and the ten native Docker contracts in an
+isolated 0.22 environment. Skipping an unavailable optional SDK in the base job
+does not replace that supported-version gate.
+Bake the unchanged oracle and its locked dependencies into the verifier image;
+transfer only its declared result inputs, never agent credentials or home state.
+Before any model call, exercise both actual environment paths, prove verifier
+network isolation, execute positive/negative oracle fixtures, and verify teardown
+of both exact environment identities. Freeze that evidence with the new run.
+
+Replay admission is separate from task success. Recompute full-private
+trajectory integrity and require `replay_complete=true` at the producer and
+post-run reader; digest-only scope completeness is insufficient. Preserve
+incomplete exports and failure receipts, but stop further experiment dispatch
+when full content, native ATIF, derived cast, or their digest joins are missing.
+A small new admission must also load the reviewed replay in the supported
+player and exercise play/pause/seek before the larger cohort. Original reduced
+trajectories are not rewritten; new execution does not recover old history.
+
+Reconcile usage rows by durable source-event identity, not the chronological
+or reverse-chronological order returned by different readers. Compare every
+field and retain multiplicity so this normalization cannot hide altered or
+duplicate attempts. The native `Trial.create` factory selects a concrete trial
+class; environment identity observation belongs at actual environment creation,
+not an override on a subclass that the factory does not instantiate. Preserve
+available call usage even when later cleanup or replay admission fails.
+
+Credential transport must resolve the actual agent UID inside the container,
+including when Harbor's task user is unset. Native Compose upload can retain
+the host UID; a default root process being able to read that file does not prove
+correct ownership. Subscription and TypeSafe installation share the same
+owner-only upload path, while the Jev entry-point ownership check stays strict.
+Retain the failure stage and `execution_started=false` for pre-call failures;
+a missing handoff result must not replace that cause with a collector `KeyError`
+or turn an unexecuted arm into a semantic model failure.
+
+### Executed r5 evidence and interruption
+
+Source `6822eac4c2dc15bc428c70706fd00f46843ca5c2` completed three fresh
+`corrected-target-ko` admission arms with native reward 1, valid observations,
+full canonical/ATIF/cast exports and verified teardown. The private admission
+results SHA-256 is
+`24e81704af258ca6504d4d4da71ff5f0106cb2f795736325d137cd2e22a7b358`.
+All three privacy-reviewed CFR videos passed actual Harbor 0.22 Recording-tab
+play/pause/middle/end seek and final-response readability; playback receipt
+SHA-256 is `fdbcee762e7f49848b24cc7e95bd5a021a3d09242e7a6bd187f09e50774f2fa0`.
+The earlier VFR conversion placed a final frame outside the reported playback
+duration. Original ATIF/casts and rejected derivatives were retained; no missing
+execution content was invented. Video length is not runtime latency.
+
+The natural phase then attempted ten of 54 cells: nine valid successes followed
+by a first-call subscription `RateLimitError`. That failed call retains unknown
+usage, not zero; its native reward 0 is not a semantic task-failure score. Export
+and cleanup completed, and its short replay correctly contains no generated
+assistant answer. The collector's outer `AssertionError` masked the retained
+runtime cause. Keep runtime failure, collection failure and replay completeness
+separate. The other 44 cells and injection phase were not dispatched.
+
+The operator authorized one new 54-cell cohort plus four separate interventions
+on 2026-09-22 KST. Freeze them as a new run; do not replace the failed cell,
+pool the old nine successes, or relabel the incomplete r5 primary as measured.
+Neither admission nor successful replay grants performance, adoption or
+publication authority.
+
+### Completed r6 comparison and interpretation
+
+The fresh run uses source `41e02255311c4ff68302cc67a12b21c98791a690` and the
+same preregistered nine-case workload, two repetitions and serial rotated arm
+order. Its 54 natural trials and separate four interventions completed without
+invalid observations, failed recorded calls or trial retries. All 58 full
+canonical/ATIF/cast exports passed admission; the 116 agent/verifier environment
+identities were cleaned up. These are private receipts, not an artifact release.
+
+| Natural cohort, 18 trials per arm | A0: root only | A1: Astra helper | B: Jev helper |
+|---|---:|---:|---:|
+| Task-owned verification | 18/18 | 18/18 | 18/18 |
+| Median runtime work, seconds | 6.228 | 14.367 | 8.793 |
+| Median host trial, seconds | 53.655 | 63.081 | 58.624 |
+| Median helper tool, seconds | N/A | 5.045 | 0.600 |
+| Recorded root / helper calls | 26 / 0 | 44 / 18 | 44 / 18 |
+| Observed input / output tokens | 51,630 / 1,306 | 105,028 / 2,599 | 108,170 / 2,769 |
+| Subscription API-equivalent, USD | 0.468704 | 0.811590 | 0.834274 |
+| Jev input-tariff calculation, US cents | N/A | N/A | 0.0499128 |
+
+The frozen primary is `(18 - 18) / 18 = 0`; the two secondary success deltas
+are also zero. There are nine independent authored cases, not 54 independent
+tasks or a sealed holdout. Equal observed outcomes do not demonstrate population
+equivalence. The median paired runtime difference is B-A1 `-5.439` seconds,
+but B-A0 `+2.427` seconds. Replacing this xhigh LLM helper was faster; adding
+either helper to this root-only workload did not establish a quality benefit.
+The xhigh helper is one pinned configuration, not an optimized low-cost frontier.
+
+The table retains all recorded root and helper consumption. B's root cache-read
+tokens were 21,504 versus A1's 40,960; Jev cache/reasoning fields are unreported,
+not zero. The API-equivalent comparison depends on those observed cache fields
+and is not evidence of a causal price effect or actual cash savings. Actual
+charges remain null. B's 11,884 Jev input tokens yield USD `0.000499128` at the
+pinned tariff; its 1,470 observed output tokens are retained despite free output.
+The scope is recorded root/helper attempts, not complete account or runtime
+billing coverage.
+
+Both helper arms matched the full intent/target label in 14/18 observations.
+The four incomplete projections per arm were followed by correct root actions
+and task completion: conditional recovery 4/4, not 4/18. Correct-helper
+degradation was 0/14. Candidate coverage was 8/12 required-target observations:
+besides the intended four-digit omission in case 07, case 03 exposed a shared
+parser defect. Python's Unicode word boundary omitted `E-536이` and `E-536의`,
+leaving only `none`; the root still read the original request and looked up
+E-536. A concentrated distribution over that sole option is not evidence that
+the intended order was identified. The raw `helper_supplied_candidate_answer_correct`
+field compares a fixture expectation, not feasibility in the actual supplied
+choice set, so its case-03 mismatch must not be reported as a model-only error.
+
+The common parser's Korean-suffix correction was made **after** this frozen
+run. Offline regression evidence for that correction does not turn r6 into a
+live result for the corrected source. The three-digit contract and case-07
+omission remain unchanged; no outcome was replaced or rerun.
+
+The four preselected wrong-advice interventions were all delivered and passed
+(A1 2/2, B 2/2), with no wrong-target/extra lookup, false completion or mechanical
+false acceptance observed. Original helper outputs remain distinct from the
+wrong projections. This demonstrates recovery behavior in these four supplied
+states, not a natural error rate, calibrated probability or general robustness.
+The root retained the original request; its internal reasoning is not observed.
+
+The task-owned oracle is recomputed in a separate offline verifier environment
+using shared oracle code; it is not an independently implemented judge or an
+LLM-as-a-Judge. The only tools are interpretation and synthetic read-only lookup.
+No mutation tool or ACL is exercised, so this cohort cannot establish permission
+enforcement or prevention of real harmful actions. B also exposes native
+probability fields while A1 has `primitives=null`: this is a model/interface
+bundle comparison, not a model-only substitution at identical output content.
+
+Private result identities:
+
+- Natural results SHA-256: `dc3138bbd0681e21f8507c5c3645e586824c0c50301c5a5b41260a1d89bf0d47`.
+- Natural analysis SHA-256: `0263df30dbeb52b27dd87fec74ef17e6bbef956778249c9d7462593c80dfdf4d`.
+- Injection results SHA-256: `5e93357d2b3cced9dc47f7d69518a08a37801bf480efc6760f9beaf954af4184`.
+- Injection analysis SHA-256: `1016de8fbf916e505a91fa76a542834111be304d99a9b7712702a7028279a215`.
+
+Retain the root-only path for this task. The evidence supports evaluating a
+Jev replacement where a decision helper is already necessary; it does not
+justify adding a mandatory helper to every request or changing runtime defaults.
+
+| Surface | Current owner and boundary |
 |---|---|
-| Measurement runner | [Native GEODE adapter](../../evals/platforms/harbor_runtime.py) requires exactly Harbor `0.22.0`; the worktree environment has no Harbor installation. Do not upgrade the frozen runner to obtain a newer viewer. |
-| Installed inspection tool | The existing global uv `geode-agent` environment contains Harbor `0.17.1`, viewer assets and a working `harbor view --help`; its binary is not on the current PATH. It is not an admitted `0.22.0` runner, and browser compatibility remains untested. |
-| Current upstream viewer | Source pin [`71c77fdd119df12eb6ab56e5bc0f29bf62fad338`](https://github.com/harbor-framework/harbor/tree/71c77fdd119df12eb6ab56e5bc0f29bf62fad338), package version `0.23.0`, checked against [official viewer documentation](https://docs.harborframework.com/core-concepts/results/view-job-results). Keep an inspection-only environment separate. |
-| Existing replay tools | [GEODE's projector](../../evals/platforms/harbor.py) produces ATIF v1.7, an asciicast v2 derivative and a hash-bound `recording.receipt.json`. Three offline projection/recording tests passed; this is not a browser or real-trial test. `ffmpeg`/`ffprobe` are available; `agg` and `asciinema` are not on PATH. |
+| Scoped runtime | [Shared `run_arm`](../../evals/benchmarks/decision_handoff_runtime.py) owns the actual AgenticLoop, lookup, consumption receipt and oracle. The original [pilot CLI](../../scripts/eval/decision_handoff_pilot.py) and new [Harbor handoff adapter](../../evals/platforms/harbor_handoff.py) call it. A0 has one tool; A1/B have two. No fake native runtime object or default-service expansion is used. |
+| Source, task and credentials | The handoff adapter inherits [native installation and bounded stop](../../evals/platforms/harbor_runtime.py), pinned to Harbor `0.22.0`. It binds task bytes by SHA, compares the exact instruction, requires fresh GEODE home and rejects prompt templates/extra environment. Subscription auth uses the existing private-file transport; only B receives a private regular TypeSafe key file, removed after reading and during entry-point cleanup. These controls do not by themselves prove egress isolation or safe retained-container custody. |
+| Observed calls | The [checker](../../scripts/eval/check_harbor_observations.py) accepts handoff only with both `--handoff-arm` and `--handoff-case-sha256`. It checks `geode-handoff`, `rule_based`, exact tool sets, frozen identities, requested routes and actual `response_model`. Only B's `structured_decision` may use TypeSafe `jev-1.13.0`/payg with observed `effort="none"`; all other calls require Astra subscription/xhigh. The default native single-route/reflexion contract is unchanged. |
+| Finalization and replay export | Handoff retains execution results, attempts full/digest canonical exports independently, and writes runtime summary/finalization receipts even when a projection fails. A known incomplete source snapshot marks both trajectories incomplete and blocks ATIF. Healthy exports reuse the native post-run consumer and [existing ATIF/cast projector](../../evals/platforms/harbor.py); a cast is not raw screen/PTY footage or score authority. |
 
-Installed source identity: Harbor `cli/view.py` SHA-256
+[Adapter regressions](../../tests/evals/platforms/test_harbor_handoff.py) cover
+task/profile/secret boundaries and failed export preservation;
+[continuation tests](../../tests/scripts/test_decision_handoff_runtime.py) cover
+real loop consumption and oracle outcomes; [checker tests](../../tests/scripts/test_check_harbor_observations.py)
+cover mixed-route rejection, actual response identity, unknown counters and
+unchanged native gates. `handoff_call_coverage_complete` joins each observed
+root logical request ID to its durable attempts and each helper tool invocation
+ID to its structured-decision attempt. Root retries may share one logical ID;
+dropping an entire recorded call pair must still fail this scoped join. This is
+closure for the fixed root/helper profile, not general wire-dispatch coverage.
+The oracle also counts lookup attempts rejected before tool middleware. A
+clarification/unsupported case cannot pass after such an attempt; attempted,
+rejected, extra successful and wrong-target reads remain separate burden fields.
+The checker still returns `whole_runtime_complete=false`
+and CLI exit `2` after healthy exports: its coverage blocker is neither a failed
+task nor permission to expand. `--require-uniform-effort` retains its literal
+all-calls meaning and is unsuitable for B's intentionally mixed effort values.
+
+Historical inspection, not runner admission: the global uv `geode-agent`
+environment contained Harbor `0.17.1` and viewer assets; it cannot replace the
+required `0.22.0` runner. Its inspected `cli/view.py` SHA-256 was
 `94eaf1e35184d39b4a564b6b508e39ee6e8caf805b471c3f7c9aa79318bbb3f3`;
 `viewer/server.py` SHA-256
 `227b84f32f84491c810600b61bf390ab0350f9784a6e8fc8014b958f9292a0f0`.
-No installed VCS revision was available; these hashes pin the inspected bytes.
+No installed VCS revision was available. The separately inspected upstream viewer
+was `0.23.0` at pin [`71c77fdd119df12eb6ab56e5bc0f29bf62fad338`](https://github.com/harbor-framework/harbor/tree/71c77fdd119df12eb6ab56e5bc0f29bf62fad338),
+with [official viewer guidance](https://docs.harborframework.com/core-concepts/results/view-job-results).
+Keep viewer inspection separate from the frozen runner and recheck the actual
+environment before use; those historical source hashes prove neither installation
+readiness nor browser playback.
 
-The smallest future gate is one paired `corrected-target-ko` Harbor task, then
-the frozen five-task workload after admission. Package the unchanged request,
-synthetic state and independent checks using Harbor's [task format](https://docs.harborframework.com/core-concepts/tasks/overview)
-and [task-owned verifier](https://docs.harborframework.com/core-concepts/tasks/verifier).
-Freeze identical image/architecture, reset state, task checksum, root
-subscription/xhigh model, prompt, tool schemas, permissions, timeout/round rules
-and verifier in both arms; only the decision helper changes. This is a new
-diagnostic attempt family, not Terminal-Bench evidence or a repair of old traces.
-
-Four implementation/admission gaps remain. Close them at the existing owners;
-these are execution checks, not completed work or another provider/replay framework:
-
-1. **Two-tool composition.** Neither Harbor composition registers this task's
-   tools. Reuse `run_arm`, `StatusLookupTool` and `HandoffReceipt` from the
-   [pilot runner](../../scripts/eval/decision_handoff_pilot.py) through a narrow
-   evaluation owner beside the [decision tool](../../evals/benchmarks/decision_handoff.py).
-   Select that profile explicitly in `GeodeRuntimeHarborAgent.run`; do not import
-   the CLI runner into `core` or broaden `SharedServices.create_session` merely
-   for this task. Preserve the same prompt/schema, exactly two admitted tools,
-   empty policy sources, disabled cognitive reflection and `rule_based` verifier.
-   Record the actual assembly function in `runtime-contract.json`, not the native
-   `build_runtime+build_shared_services` path when it did not run. Extend the
-   [continuation tests](../../tests/scripts/test_decision_handoff_runtime.py) and
-   [adapter tests](../../tests/evals/benchmarks/test_harbor_runtime.py) to reject
-   extra tools/profile drift while preserving the default native shell profile.
-2. **Credentials and termination.** The native profile requires `run_bash` and
-   rejects nonempty `*_API_KEY` environment values; do not relax those defaults.
-   Reuse `GeodeRuntimeHarborAgent.install`'s private-file subscription transport;
-   send a separate TypeSafe-only secret to arm B, never a multi-key host `.env`,
-   command argument, instruction or receipt. Pass it explicitly to the scoped
-   helper; arm A must allocate neither that secret nor its HTTP client. Review
-   egress separately from the two-tool restriction. Preserve `_stop_runtime`'s
-   bounded drain, SIGTERM handling and finalized receipt through the evaluation
-   branch; do not fake runtime/service objects to enter `_finalize_native`.
-   Extend the same adapter/continuation suites for credential absence/redaction,
-   timeout/cancellation, closed writers and retained failure exports.
-3. **Observed-call contract.** In the
-   [observation checker](../../scripts/eval/check_harbor_observations.py),
-   `_usage_check` currently admits only the root route and `validate_observations`
-   requires `reflexion`. Bind expectations to the frozen profile/arm: Astra
-   subscription/xhigh for root and helper A; TypeSafe `jev-1.13.0`/payg only for
-   arm B's `structured_decision`; `rule_based` for this task. Jev's observed
-   `effort=None` means not configured here, not missing root effort. Preserve
-   `response_model` from canonical events in `_usage_event_metadata` or verify it
-   against the digest-bound source; never substitute the requested model. Extend
-   [checker tests](../../tests/scripts/test_check_harbor_observations.py) for wrong
-   purpose/route/served-model, missing root effort and unknown counters. Retain
-   native-profile rejection tests and the whole-runtime coverage limitation;
-   the checker's current exit 2 is not a failed trial or permission to expand.
-4. **Independent reward and full export.** Freeze one task bundle containing the
-   unchanged `corrected-target-ko` request/state and task-owned verifier; keep
-   expected labels out of model input. Reuse `_oracle`'s checks against actual
-   answer, tool/result-consumption joins and lookup evidence, not a stored
-   `passed` flag. The verifier must write native reward output on pass and fail.
-   Export private full and digest trajectories from the same closed canonical
-   evidence, then reuse `populate_context_post_run`, the existing ATIF projector
-   and `write_harbor_recording` with the actual two-tool definitions. Extend
-   task-verifier and adapter/continuation tests for wrong ID, missing consumption,
-   same-batch premature lookup, incomplete evidence and failed exports; a playable
-   replay never replaces the independent reward.
-
-Keep the existing five-task preflight and its denominator unchanged. After these
-offline checks, freeze a new one-pair source/task/profile contract before dispatch;
-retain the original five-pair artifacts. Admit further Harbor tasks only after
-independently checking that pair's native reward, observation validity and private
-full export. Privacy-reviewed viewer playback is a separate replay gate.
+Each new source's admission gate is **three `corrected-target-ko` arms**, separate
+from both the old five pairs and the [new 54 natural + 4 injected rollouts](#three-arm-end-to-end-protocol).
+Freeze a clean source bundle and identical image/architecture, initial state,
+task checksum, request, oracle, bounds and destinations using Harbor's
+[task format](https://docs.harborframework.com/core-concepts/tasks/overview).
+Its [task-owned verifier](https://docs.harborframework.com/core-concepts/tasks/verifier)
+must check actual answer, consumed result and lookup evidence and write native
+reward on pass and fail; a stored `passed` flag is not independent verification.
+Confirm native reward, observation/source joins and private full export before
+admitting the new cohort. Keep admission and wrong-helper intervention results
+out of the natural cohort's denominator. There are no trial/helper retries;
+the root's bounded connection/empty-response policy remains as documented above,
+not a claim of zero provider retries. This is not Terminal-Bench evidence.
 
 These commands are preparation templates, **not executed trial/viewer commands**;
 replace paths with closed, owned, privacy-reviewed artifacts and select the
@@ -404,8 +611,10 @@ uv run python scripts/eval/check_harbor_observations.py --help
 harbor view /absolute/reviewed/jobs --jobs --host 127.0.0.1 --port 8088 --no-build
 ```
 
-The checker needs frozen run-spec/source hashes and trial/task/checksum identities;
-its current single-route contract cannot certify arm B. Keep originals unchanged:
+The checker needs frozen run-spec/source hashes and trial/task/checksum identities,
+plus the explicit handoff arm and frozen task-payload SHA for this profile.
+An accepted B observation does not certify semantic success or actual billing.
+Keep originals unchanged:
 `--dry-run` only checks cast eligibility; never overwrite historical recordings.
 Harbor's [Recording tab](https://github.com/harbor-framework/harbor/blob/71c77fdd119df12eb6ab56e5bc0f29bf62fad338/apps/viewer/app/routes/trial.tsx#L2829)
 plays `agent/recording.mp4`, not `.cast`; Compare is a result matrix, not synchronized
@@ -419,9 +628,10 @@ record cuts, acceleration and synthetic/clamped timestamps; agg's default idle
 cap is five seconds. A playable cast proves neither full replay completeness nor
 task success. Review exact bytes for private paths, identities, secrets and model
 reasoning before display; pattern redaction alone is insufficient. Native verifier
-results remain score authority. Readiness still requires an admitted runner,
-bounded tool/auth integration, one actual export and a privacy-reviewed viewer
-play/pause/seek check; no install, container, model call or capture occurred here.
+results remain score authority. Replay readiness requires admitted real exports
+and a privacy-reviewed viewer play/pause/seek check, followed by capture and
+source/output hash verification. The r5 receipt covers its three admission
+videos only; implementation and offline fixtures cannot replace new-run checks.
 
 ## Film treatment: a decision is not the completed task
 

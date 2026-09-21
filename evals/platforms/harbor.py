@@ -151,6 +151,7 @@ def _usage_event_metadata(event: Any) -> dict[str, Any]:
     return {
         "session_id": identifier(getattr(event, "session_id", None)),
         "llm_call_id": identifier(getattr(event, "llm_call_id", None)),
+        "tool_call_id": identifier(getattr(event, "tool_call_id", None)),
         "llm_attempt_id": identifier(getattr(event, "llm_attempt_id", None)),
         "source_event_id": source_id
         if isinstance(source_id, int) and not isinstance(source_id, bool) and source_id >= 0
@@ -164,6 +165,7 @@ def _usage_event_metadata(event: Any) -> dict[str, Any]:
         if isinstance(payload_hash, str) and re.fullmatch(r"[a-f0-9]{64}", payload_hash)
         else None,
         "model": identifier(payload.get("model")),
+        "response_model": identifier(payload.get("response_model")),
         "provider": identifier(payload.get("provider")),
         "adapter": identifier(payload.get("adapter")),
         "purpose": purpose

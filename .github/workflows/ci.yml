@@ -302,6 +302,23 @@ jobs:
         # module-level state (cooldown timestamp), producing a flaky
         # FAILURE on develop→main PR #1220 (2026-05-17).
         run: uv run pytest -n auto --dist=loadfile --cov=core --cov=evals --cov=evolve --cov-report=term-missing
+      - name: Native Harbor 0.22 Docker contracts (no containers or model calls)
+        if: needs.changes.outputs.code == 'true'
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+        run: |
+          uv run --isolated --no-project --with harbor==0.22.0 --with pytest==9.0.2 \
+            python -B - <<'PY'
+          import importlib.metadata
+          import os
+          import pytest
+          assert importlib.metadata.version("harbor") == "0.22.0"
+          raise SystemExit(pytest.main([
+              "-q", "-c", "/dev/null", "--rootdir", os.environ["RUNNER_TEMP"],
+              "--noconftest", "--import-mode=importlib", "-p", "no:cacheprovider",
+              "tests/evals/platforms/test_harbor_docker.py",
+          ]))
+          PY
       - name: Build and inspect package artifacts
         if: needs.changes.outputs.code == 'true'
         run: |

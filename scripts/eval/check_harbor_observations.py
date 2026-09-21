@@ -3,6 +3,7 @@
 
 Expected trial/task/bundle identities must come from the caller's frozen plan.
 The run-spec schema does not own those additional native Harbor identities.
+The handoff profile also requires an explicit arm and frozen task payload SHA.
 An optional closed source database is opened immutable/read-only, never migrated.
 Matching retained source rows is not a proof of all physical dispatches.
 """
@@ -26,6 +27,8 @@ from core.observability.trajectory import (
     _digest_private_event_payload,
     verify_trajectory_integrity,
 )
+from evals.benchmarks.decision_handoff import JEV_MODEL, ROOT_MODEL
+from evals.benchmarks.decision_handoff_runtime import handoff_call_coverage_complete
 from evals.platforms.harbor import (
     _RECORDING_RECEIPT_SCHEMA,
     _atif_trajectory_from_geode,
@@ -77,7 +80,12 @@ def _harbor_model(module: str, name: str) -> Any:
 
 
 def _usage_check(
-    usage: dict[str, Any], model: dict[str, Any], started: datetime, finished: datetime
+    usage: dict[str, Any],
+    model: dict[str, Any],
+    started: datetime,
+    finished: datetime,
+    *,
+    handoff_arm: str | None = None,
 ) -> dict[str, Any]:
     _require(usage.get("whole_runtime_complete") is False, "unsupported whole-runtime usage claim")
     _require(usage.get("source_snapshot_complete") is True, "usage source snapshot incomplete")
@@ -130,12 +138,6 @@ def _usage_check(
         _require(
             all(k in row["usage"] for k in _COUNTERS), "usage counter key lost (not provider null)"
         )
-        _require(
-            row["model"] == model["label"]
-            and row["provider"] == model["provider"]
-            and row.get("source") in (None, model["route"]),
-            "recorded attempt model/provider/route mismatch",
-        )
         purpose = row.get("purpose")
         _require(
             purpose is None or (isinstance(purpose, str) and purpose in _PURPOSES),
@@ -161,6 +163,33 @@ def _usage_check(
             ),
             "unrecognized observed effort",
         )
+        if handoff_arm is None:
+            _require(
+                row["model"] == model["label"]
+                and row["provider"] == model["provider"]
+                and row.get("source") in (None, model["route"]),
+                "recorded attempt model/provider/route mismatch",
+            )
+        else:
+            _require(
+                purpose
+                in (
+                    {"agentic_loop"}
+                    if handoff_arm == "a0"
+                    else {"agentic_loop", "structured_decision"}
+                ),
+                "handoff attempt purpose mismatch",
+            )
+            expected_route = (
+                (JEV_MODEL, "typesafe", "payg", "none")
+                if handoff_arm == "b" and purpose == "structured_decision"
+                else (model["label"], model["provider"], model["route"], model["reasoning"])
+            )
+            _require(
+                (row["model"], row["provider"], row.get("source"), effort) == expected_route
+                and row.get("response_model") == expected_route[0],
+                "handoff observed model/provider/route/effort mismatch",
+            )
         efforts[effort or ("not-configured" if purpose == "hosted_search" else "unknown")] += 1
         unknown_metadata += int(
             row.get("source") is None
@@ -242,9 +271,14 @@ def _reconcile_usage_source(
             "source hook payload hash mismatch",
         )
     expected = _summarize_usage([_row_to_event(row) for row in rows])
+    # Producers may traverse the same retained rows in either chronological order.
+    _require(
+        sorted(usage["recorded_attempts"], key=lambda row: row["source_event_id"])
+        == sorted(expected["recorded_attempts"], key=lambda row: row["source_event_id"]),
+        "source/export usage mismatch",
+    )
     fields = [
         "scope",
-        "recorded_attempts",
         "started_events",
         "terminal_event_count",
         "call_events",
@@ -280,6 +314,8 @@ def validate_observations(
     task_checksum: str,
     require_uniform_effort: bool = False,
     source_db: Path | None = None,
+    handoff_arm: str | None = None,
+    handoff_case_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Validate existing exports, returning only bounded metadata and hashes.
 
@@ -288,6 +324,22 @@ def validate_observations(
     Resource/time/retry/auth admission remains owned by the separate frozen preflight.
     """
     captured: dict[Path, bytes] = {}
+    _require(
+        (handoff_arm is None and handoff_case_sha256 is None)
+        or (
+            handoff_arm in ("a0", "a", "b")
+            and isinstance(handoff_case_sha256, str)
+            and re.fullmatch(r"[a-f0-9]{64}", handoff_case_sha256)
+        ),
+        "handoff arm and frozen case SHA must be supplied together",
+    )
+    agent_name = "geode-handoff" if handoff_arm is not None else "geode-runtime"
+    verify_mode = "rule_based" if handoff_arm is not None else "reflexion"
+    handoff_tools = (
+        ["lookup_order_status"]
+        if handoff_arm == "a0"
+        else ["analyze_request", "lookup_order_status"]
+    )
 
     def read(path: Path) -> bytes:
         _require(
@@ -315,6 +367,17 @@ def validate_observations(
     reproduction = spec["reproduction"]
     revision = reproduction["geode"]["revision"]
     model = reproduction["model"]
+    if handoff_arm is not None:
+        _require(
+            model
+            == {
+                "label": ROOT_MODEL,
+                "provider": "openai",
+                "route": "subscription",
+                "reasoning": "xhigh",
+            },
+            "handoff requires the frozen Astra subscription/xhigh root model",
+        )
     _require(reproduction["geode"]["dirty"] is False, "dirty source is not frozen")
     _require(re.fullmatch(r"[a-f0-9]{40}", revision), "invalid source revision")
     _require(re.fullmatch(r"[a-f0-9]{64}", source_sha256), "invalid bundle SHA")
@@ -328,8 +391,7 @@ def validate_observations(
         "native trial/task identity mismatch",
     )
     _require(
-        native["agent_info"]["name"] == "geode-runtime"
-        and native["agent_info"]["version"] == revision,
+        native["agent_info"]["name"] == agent_name and native["agent_info"]["version"] == revision,
         "native agent identity mismatch",
     )
     started, finished = _time(native["started_at"]), _time(native["finished_at"])
@@ -341,9 +403,17 @@ def validate_observations(
         "model": model["label"],
         "source": model["route"],
         "effort": model["reasoning"],
-        "verify_mode": "reflexion",
+        "verify_mode": verify_mode,
         "external_search_loop": False,
     }
+    if handoff_arm is not None:
+        expected.update(
+            runtime="evals.benchmarks.decision_handoff_runtime:run_arm",
+            profile="decision-handoff",
+            arm=handoff_arm,
+            case_sha256=handoff_case_sha256,
+        )
+        _require(contract.get("required_tools") == handoff_tools, "handoff tool contract mismatch")
     _require(all(contract.get(k) == v for k, v in expected.items()), "runtime contract mismatch")
     _require(not contract.get("finalization_errors"), "host finalization failed")
     finalized = document("agent/runtime-finalized.json")
@@ -358,12 +428,27 @@ def validate_observations(
     metadata = runtime["metadata"]
     _require(
         metadata["source_revision"] == revision
-        and metadata["verify_mode"] == "reflexion"
+        and metadata["verify_mode"] == verify_mode
         and metadata["execution_started"] is True
         and metadata["finalization_errors"] == []
         and metadata["error_type"] == finalized.get("error_type"),
         "runtime result/finalization mismatch",
     )
+    if handoff_arm is not None:
+        _require(
+            metadata.get("profile") == "decision-handoff" and metadata.get("arm") == handoff_arm,
+            "handoff runtime profile/arm mismatch",
+        )
+        definitions = runtime.get("tool_definitions")
+        _require(
+            isinstance(definitions, list)
+            and len(definitions) == len(handoff_tools)
+            and all(
+                isinstance(tool, dict) and isinstance(tool.get("name"), str) for tool in definitions
+            )
+            and sorted(tool.get("name", "") for tool in definitions) == sorted(handoff_tools),
+            "handoff runtime tool definitions mismatch",
+        )
     usage = runtime["usage"]
     _require(metadata["usage"] == usage, "runtime usage metadata mismatch")
     context = native["agent_result"]
@@ -375,7 +460,22 @@ def validate_observations(
         ),
         "unsupported whole-runtime Harbor totals",
     )
-    accounting = _usage_check(usage, model, started, finished)
+    accounting = _usage_check(usage, model, started, finished, handoff_arm=handoff_arm)
+    if handoff_arm is not None:
+        handoff = document("agent/handoff-result.json")
+        _require(
+            handoff.get("session_id") == metadata["geode_session_id"]
+            and handoff.get("usage") == usage
+            and handoff.get("handoff_call_coverage_complete") is True,
+            "handoff result call coverage missing/inconsistent",
+        )
+        receipt = json.loads(read(trial_dir / "agent/handoff.json"))
+        _require(
+            isinstance(receipt, list)
+            and all(isinstance(row, dict) for row in receipt)
+            and handoff_call_coverage_complete(receipt, usage["recorded_attempts"]),
+            "handoff dispatch/attempt coverage mismatch",
+        )
     uniform_effort = (
         accounting["observed_efforts"] == {model["reasoning"]: accounting["attempts"]}
         and accounting["unknown_metadata_attempts"] == 0
@@ -396,6 +496,11 @@ def validate_observations(
             _require(
                 started <= _time(event["occurred_at"]) <= finished, "event outside trial interval"
             )
+            if handoff_arm is not None and event["kind"] in {"tool.called", "tool.completed"}:
+                _require(
+                    event["payload"].get("tool") in handoff_tools,
+                    "handoff observed tool outside frozen profile",
+                )
     for key in ("source", "trajectory_id", "runtime_event_refs"):
         _require(full.get(key) == digest.get(key), "canonical full/digest identity mismatch")
     projected = [
@@ -442,9 +547,7 @@ def validate_observations(
         version=revision,
         metrics={},
     )
-    expected_atif["agent"].update(
-        name="geode-runtime", tool_definitions=runtime["tool_definitions"]
-    )
+    expected_atif["agent"].update(name=agent_name, tool_definitions=runtime["tool_definitions"])
     expected_atif["extra"]["configured_root_effort"] = model["reasoning"]
     _require(
         atif_model.model_validate(atif).to_json_dict()
@@ -500,6 +603,11 @@ def validate_observations(
         "trial_name": trial_name,
         "task_name": task_name,
         "task_checksum": task_checksum,
+        **(
+            {"handoff_arm": handoff_arm, "handoff_case_sha256": handoff_case_sha256}
+            if handoff_arm is not None
+            else {}
+        ),
         "tool_calls": tools,
         "replay_status": "tool-actions-observed" if tools else "no-tool-action-observed",
         "accounting": accounting,
@@ -515,7 +623,12 @@ def validate_observations(
             "semantic reward does not authorize retries, execution, or publication",
             "resource/time limits, concurrency, retries and auth need separate frozen preflight",
             "caller must bind expected trial/task/bundle identities to its frozen plan",
-            "model/provider/route checks bind requested adapter identity, not backend served model",
+            (
+                "response-reported model identity does not independently verify backend execution"
+                if handoff_arm is not None
+                else "model/provider/route checks bind requested adapter identity, "
+                "not backend served model"
+            ),
         ],
         "artifact_sha256": {
             str(path.relative_to(trial_dir)): hashlib.sha256(raw).hexdigest()
@@ -536,6 +649,10 @@ def main(argv: list[str] | None = None) -> int:
         "--require-uniform-effort",
         action="store_true",
         help="reject missing or different request effort on any recorded root/auxiliary call",
+    )
+    parser.add_argument("--handoff-arm", choices=("a0", "a", "b"))
+    parser.add_argument(
+        "--handoff-case-sha256", help="task payload SHA from the frozen handoff plan"
     )
     for name in ("run-spec-sha256", "source-sha256", "trial-name", "task-name", "task-checksum"):
         parser.add_argument(f"--{name}", required=True)

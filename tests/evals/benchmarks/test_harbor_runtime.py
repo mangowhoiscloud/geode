@@ -24,6 +24,23 @@ from evals.platforms.harbor_runtime import (
 )
 
 
+@pytest.mark.parametrize("version", [None, "0.8.0", "0.23.0"])
+def test_docker_provider_rejects_unsupported_harbor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version: str | None
+) -> None:
+    from evals.platforms import harbor_docker
+
+    def detected_version(name: str) -> str:
+        assert name == "harbor"
+        if version is None:
+            raise harbor_docker.importlib.metadata.PackageNotFoundError(name)
+        return version
+
+    monkeypatch.setattr(harbor_docker.importlib.metadata, "version", detected_version)
+    with pytest.raises(RuntimeError, match=r"harbor==0\.22\.0"):
+        harbor_docker.GeodeHarborDockerEnvironment(environment_dir=tmp_path)
+
+
 @pytest.mark.parametrize("value", ["1", "true", "0", "false", "${CODEX_FORCE_AUTH_JSON}"])
 def test_native_auth_flag_rejects_harbor_secret_scrubbing_path(value: str) -> None:
     with pytest.raises(ValueError, match=r"process environment, not agent\.env"):
@@ -52,6 +69,36 @@ def test_source_bundle_rejects_mismatch_traversal_and_links(tmp_path: Path) -> N
             _verify_bundle(path, digest)
         with pytest.raises(ValueError, match="mismatch"):
             _verify_bundle(path, "0" * 64)
+
+
+@pytest.mark.parametrize("default_user,uid", [(None, "0"), (None, "1001"), ("task", "1001")])
+def test_credential_upload_uses_actual_agent_uid(
+    tmp_path: Path, default_user: str | None, uid: str
+) -> None:
+    agent = object.__new__(GeodeRuntimeHarborAgent)
+    agent.exec_as_agent = AsyncMock(return_value=SimpleNamespace(stdout=uid + "\n"))
+    agent.exec_as_root = AsyncMock()
+    environment = SimpleNamespace(upload_file=AsyncMock(), default_user=default_user)
+    source = tmp_path / "synthetic.key"
+    target = "/installed-agent/secret key"
+    asyncio.run(agent._upload_credential(environment, source, target))
+    agent.exec_as_agent.assert_awaited_once_with(environment, command="id -u")
+    environment.upload_file.assert_awaited_once_with(source, target)
+    agent.exec_as_root.assert_awaited_once_with(
+        environment, command=f"chmod 600 '{target}' && chown {uid} '{target}'"
+    )
+
+
+@pytest.mark.parametrize("uid", [None, "", "root", "0; echo unsafe", "0\n1"])
+def test_invalid_agent_uid_prevents_credential_upload(tmp_path: Path, uid: str | None) -> None:
+    agent = object.__new__(GeodeRuntimeHarborAgent)
+    agent.exec_as_agent = AsyncMock(return_value=SimpleNamespace(stdout=uid))
+    agent.exec_as_root = AsyncMock()
+    environment = SimpleNamespace(upload_file=AsyncMock())
+    with pytest.raises(RuntimeError, match="container agent uid"):
+        asyncio.run(agent._upload_credential(environment, tmp_path / "key", "/secret"))
+    environment.upload_file.assert_not_awaited()
+    agent.exec_as_root.assert_not_awaited()
 
 
 def test_usage_projects_partial_evidence_without_fabricating_totals() -> None:

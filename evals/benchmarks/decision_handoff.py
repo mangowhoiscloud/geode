@@ -99,7 +99,7 @@ class DecisionHandoffTool:
         self._source_sha256 = hashlib.sha256(request.encode()).hexdigest()
         mentions: dict[str, dict[str, Any]] = {}
         seen: set[str] = set()
-        for match in re.finditer(r"\b[A-Z]-\d{3}\b", request):
+        for match in re.finditer(r"(?<![A-Za-z0-9_])[A-Z]-\d{3}(?![A-Za-z_\d])", request):
             order_id = match.group()
             if order_id not in seen:
                 mentions[f"order_{len(mentions)}"] = {
