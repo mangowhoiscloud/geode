@@ -81,6 +81,10 @@ functional change.
 
 ### Fixed
 
+- Reject incomplete full-content handoff trajectories before replay admission,
+  while retaining failed exports for diagnosis. Support static offline Harbor
+  Docker verification through the native no-network Compose overlay without
+  relaxing network policy or modifying the installed Harbor dependency.
 - Preserve provider refusal/stop semantics through adapter translation and
   source/model-scoped Chat Completions reasoning replay through tool rounds and
   session resume. Separate Anthropic context-editing and compaction admission,

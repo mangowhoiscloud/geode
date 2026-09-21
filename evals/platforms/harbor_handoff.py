@@ -327,6 +327,8 @@ async def _run_handoff(args: argparse.Namespace) -> int:
                     export_trajectory(directory / filename, trajectory)
                     if not integrity["scope_complete"]:
                         raise RuntimeError("incomplete handoff trajectory")
+                    if policy == "full" and not integrity["replay_complete"]:
+                        raise RuntimeError("incomplete handoff replay")
         with stage("runtime_result"):
             atomic_write_json(
                 directory / "runtime-result.json",

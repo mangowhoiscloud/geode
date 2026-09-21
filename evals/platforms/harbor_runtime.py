@@ -360,8 +360,11 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
 
     def populate_context_post_run(self, context: Any) -> None:
         # Harbor invokes this after downloading logs, including failed trials.
+        require_handoff_replay = self.name() == "geode-handoff"
         path = self.logs_dir / "runtime-result.json"
         if not path.is_file():
+            if require_handoff_replay:
+                raise ValueError("handoff replay requires runtime-result.json")
             return
         value = json.loads(path.read_text())
         # Reflection, judging, text completion and hosted web search do not
@@ -379,8 +382,15 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
             return  # Retain failure metadata without promoting a partial replay.
         trajectory_path = self.logs_dir / "geode-trajectory.private.json"
         if not trajectory_path.is_file():
+            if require_handoff_replay:
+                raise ValueError("handoff replay requires complete canonical content")
             return
         trajectory = json.loads(trajectory_path.read_text())
+        if require_handoff_replay:
+            from core.observability.trajectory import verify_trajectory_integrity
+
+            if not verify_trajectory_integrity(trajectory)["replay_complete"]:
+                raise ValueError("handoff replay requires complete canonical content")
         if not trajectory["integrity"]["scope_complete"]:
             return
         from evals.platforms.harbor import (

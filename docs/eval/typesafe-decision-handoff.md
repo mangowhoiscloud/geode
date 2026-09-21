@@ -380,6 +380,34 @@ unverified**. The original five-pair diagnostic was not a Harbor job. Its
 digest-policy trajectories, denominator and private receipts remain unchanged;
 the new A0/A1/B profile does not retroactively make them Harbor evidence.
 
+The first Harbor admission on source `14d46ad90b4f0c68c9a3c48228d663471786119d`
+stopped during environment construction, before installation or model execution.
+The shared public-agent / offline-verifier policy required Docker's dynamic
+egress support, which the local VM did not advertise. Input/hash preflight had
+not checked the actual environment capability. This is an integration/preflight
+defect, not a model failure or a zero task score; the invalid attempt is retained.
+
+Repair admission requires a separate verifier with a static `no-network`
+baseline. The narrow [Docker integration](../../evals/platforms/harbor_docker.py)
+reuses Harbor's shipped `network_mode: none` Compose overlay for Linux
+single-container static isolation; it does not patch Harbor's installed source,
+claim dynamic policy support, or change the agent's public-network route.
+Custom Compose and changing/allowlisted policies remain outside that static path.
+Bake the unchanged oracle and its locked dependencies into the verifier image;
+transfer only its declared result inputs, never agent credentials or home state.
+Before any model call, exercise both actual environment paths, prove verifier
+network isolation, execute positive/negative oracle fixtures, and verify teardown
+of both exact environment identities. Freeze that evidence with the new run.
+
+Replay admission is separate from task success. Recompute full-private
+trajectory integrity and require `replay_complete=true` at the producer and
+post-run reader; digest-only scope completeness is insufficient. Preserve
+incomplete exports and failure receipts, but stop further experiment dispatch
+when full content, native ATIF, derived cast, or their digest joins are missing.
+A small new admission must also load the reviewed replay in the supported
+player and exercise play/pause/seek before the larger cohort. Original reduced
+trajectories are not rewritten; new execution does not recover old history.
+
 | Surface | Current owner and boundary |
 |---|---|
 | Scoped runtime | [Shared `run_arm`](../../evals/benchmarks/decision_handoff_runtime.py) owns the actual AgenticLoop, lookup, consumption receipt and oracle. The original [pilot CLI](../../scripts/eval/decision_handoff_pilot.py) and new [Harbor handoff adapter](../../evals/platforms/harbor_handoff.py) call it. A0 has one tool; A1/B have two. No fake native runtime object or default-service expansion is used. |

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 import subprocess
@@ -10,6 +11,7 @@ import sys
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -242,6 +244,9 @@ def test_real_root_continues_after_source_bound_decision(arm: str, tmp_path: Pat
     assert trajectory["events"][-1]["kind"] == "session.ended"
     assert "synthetic-test-key" not in json.dumps(trajectory)
     assert (directory / "session-events.json").stat().st_size > 0
+    private = json.loads((directory / "trajectory.private.json").read_text())
+    assert private["integrity"]["replay_complete"]
+    assert private["integrity"]["quality"]["tool_pairing"]["paired"] == 2
 
 
 @pytest.mark.parametrize("arm", ["a", "b"])
@@ -808,3 +813,91 @@ def test_cancellation_preserves_closed_private_snapshot(tmp_path: Path) -> None:
     assert (directory / "trajectory.private.json").is_file()
     assert (directory / "call-events.json").is_file()
     assert result["call_accounting"][0]["total_tokens"] is None
+    private = json.loads((directory / "trajectory.private.json").read_text())
+    assert private["integrity"]["replay_complete"]
+    assert private["events"][-1]["kind"] == "session.ended"
+
+
+def test_truncated_private_content_invalidates_replay_without_losing_evidence(
+    tmp_path: Path,
+) -> None:
+    case = _case("negated-cancel-en")
+    case = {**case, "request": case["request"] + "\n" + "x" * 100_001}
+    directory = tmp_path / "truncated"
+    directory.mkdir()
+    responses = _root_responses(case)[1:]
+    result = asyncio.run(runtime.run_arm(case, "a0", directory, root_adapter=_Adapter(responses)))
+    assert result["oracle"]["passed"]
+    assert not result["valid"] and not result["passed"]
+    assert result["error_type"] == "incomplete_replay_evidence"
+    assert result["source_snapshot_complete"] is False
+    private = json.loads((directory / "trajectory.private.json").read_text())
+    assert private["integrity"]["scope_complete"]
+    assert private["integrity"]["replay_complete"] is False
+    assert private["integrity"]["replay_incompleteness"]
+    assert private["events"][-1]["kind"] == "session.ended"
+    for filename in ("trajectory.json", "session-events.json", "call-events.json", "handoff.json"):
+        assert (directory / filename).is_file()
+
+
+@pytest.mark.parametrize("arm", ["a0", "a", "b"])
+def test_real_handoff_preserves_action_replay_through_native_projectors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, arm: str
+) -> None:
+    from core.memory.atomic_write import atomic_write_json
+    from evals.platforms.harbor_handoff import GeodeHandoffHarborAgent
+
+    case = _case("corrected-target-ko")
+    directory = tmp_path / arm
+    if arm == "a0":
+        directory.mkdir()
+        result = asyncio.run(
+            runtime.run_arm(case, arm, directory, root_adapter=_Adapter(_root_responses(case)[1:]))
+        )
+    else:
+        result, *_ = asyncio.run(_run(case, arm, directory))
+    assert result["valid"] and result["source_snapshot_complete"]
+    private_bytes = (directory / "trajectory.private.json").read_bytes()
+    (directory / "geode-trajectory.private.json").write_bytes(private_bytes)
+    atomic_write_json(
+        directory / "runtime-result.json",
+        {
+            "usage": result["usage"],
+            "metadata": {"profile": "decision-handoff", "usage": result["usage"]},
+            "tool_definitions": result["tool_definitions"],
+        },
+    )
+    # Only the optional Harbor SDK validator is outside this offline check.
+    # Canonical producer, integrity gate, ATIF projector and cast writer are real.
+    monkeypatch.setattr("evals.platforms.harbor._write_atif_trajectory", atomic_write_json)
+    agent = object.__new__(GeodeHandoffHarborAgent)
+    agent.logs_dir = directory
+    agent.model_name = runtime.MODEL
+    agent.provider = "openai"
+    agent.source = "subscription"
+    agent.source_revision = "a" * 40
+    agent.effort = "xhigh"
+    agent.populate_context_post_run(SimpleNamespace())
+    assert (directory / "geode-trajectory.private.json").read_bytes() == private_bytes
+    atif_path = directory / "trajectory.json"
+    atif = json.loads(atif_path.read_text())
+    tool_steps = [step for step in atif["steps"] if step.get("tool_calls")]
+    assert len(tool_steps) == (1 if arm == "a0" else 2)
+    assert {step["tool_calls"][0]["function_name"] for step in tool_steps} == {
+        tool["name"] for tool in result["tool_definitions"]
+    }
+    assert all(
+        step["tool_calls"][0]["tool_call_id"] == step["observation"]["results"][0]["source_call_id"]
+        for step in tool_steps
+    )
+    assert atif["steps"][0]["message"] == case["request"]
+    assert atif["steps"][-1]["message"] == result["final_text"]
+    assert atif["extra"]["source_replay_complete"]
+    cast_path = directory / "recording.cast"
+    receipt = json.loads((directory / "recording.receipt.json").read_text())
+    assert receipt["source"]["sha256"] == hashlib.sha256(atif_path.read_bytes()).hexdigest()
+    assert receipt["output"]["sha256"] == hashlib.sha256(cast_path.read_bytes()).hexdigest()
+    assert receipt["timing"]["synthetic_timestamp_count"] == 0
+    assert receipt["timing"]["clamped_timestamp_count"] == 0
+    assert receipt["score_authority"] is False
+    assert receipt["privacy"]["publication_state"] == "private-review-required"

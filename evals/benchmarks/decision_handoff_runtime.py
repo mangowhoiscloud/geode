@@ -663,6 +663,8 @@ async def run_arm(
         )
         if not terminal_complete or trajectory["integrity"]["scope_complete"] is not True:
             error = error or "incomplete_session_evidence"
+        elif private_trajectory["integrity"]["replay_complete"] is not True:
+            error = error or "incomplete_replay_evidence"
     known_sink_failure = hooks.has_sink_failures
     usage = _summarize_usage(events, known_sink_failure=known_sink_failure)
     call_coverage_complete = handoff_call_coverage_complete(
@@ -778,6 +780,7 @@ async def run_arm(
     snapshot_complete = bool(
         terminal_complete
         and trajectory["integrity"]["scope_complete"]
+        and private_trajectory["integrity"]["replay_complete"]
         and not timeline_failure
         and not known_sink_failure
     )

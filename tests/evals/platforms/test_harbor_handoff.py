@@ -261,6 +261,7 @@ def container_trial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNa
         secret=install / "typesafe.key",
         settings=settings,
         export=export_trajectory,
+        timeline=timeline,
     )
 
 
@@ -310,6 +311,77 @@ def test_incomplete_source_invalidates_both_trajectories_and_blocks_atif(
     writer.assert_not_called()
     assert context.metadata["usage"]["source_snapshot_complete"] is False
     assert context.cost_usd is None
+
+
+def test_container_preserves_truncated_replay_but_refuses_export_success(
+    container_trial: SimpleNamespace,
+) -> None:
+    trial = container_trial
+    trial.timeline.bind_turn("test-turn")
+    trial.timeline.record_user_message("x" * 100_001)
+    trial.timeline.record_session_end()
+    assert asyncio.run(_run_handoff(trial.args)) == 1
+    private = json.loads((trial.path / "geode-trajectory.private.json").read_text())
+    assert private["integrity"]["scope_complete"]
+    assert private["integrity"]["replay_complete"] is False
+    receipt = json.loads((trial.path / "runtime-finalized.json").read_text())
+    assert receipt["exports_complete"] is False
+    assert receipt["finalization_errors"] == [
+        {"stage": "trajectory_full", "error_type": "RuntimeError"}
+    ]
+    for filename in ("geode-trajectory.json", "handoff-result.json", "runtime-result.json"):
+        assert (trial.path / filename).is_file()
+
+
+@pytest.mark.parametrize("tampered", [False, True])
+def test_host_checks_full_replay_before_projection(
+    container_trial: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, tampered: bool
+) -> None:
+    from core.observability.trajectory import trajectory_from_sessions
+
+    trial = container_trial
+    assert asyncio.run(_run_handoff(trial.args)) == 0
+    # Include real omitted dialogue while keeping a closed, paired scope.
+    trial.timeline.bind_turn("test-turn")
+    trial.timeline.record_user_message("Check C-318.")
+    trial.timeline.record_session_end()
+    trajectory = trajectory_from_sessions(
+        [trial.result["session_id"]],
+        trajectory_id="incomplete-test",
+        source={"harness": "harbor", "session": trial.result["session_id"]},
+        db_path=Path(trial.result["db_path"]),
+        content_policy="digest",
+    )
+    assert trajectory["integrity"]["scope_complete"]
+    assert not trajectory["integrity"]["replay_complete"]
+    if tampered:
+        trajectory["integrity"]["replay_complete"] = True
+    (trial.path / "geode-trajectory.private.json").write_text(json.dumps(trajectory))
+    writer = MagicMock()
+    monkeypatch.setattr("evals.platforms.harbor._write_atif_trajectory", writer)
+    agent = object.__new__(GeodeHandoffHarborAgent)
+    agent.logs_dir = trial.path
+    context = SimpleNamespace()
+    with pytest.raises(ValueError):
+        agent.populate_context_post_run(context)
+    writer.assert_not_called()
+    assert context.cost_usd is None
+
+
+@pytest.mark.parametrize("missing", ["runtime-result.json", "geode-trajectory.private.json"])
+def test_host_rejects_missing_required_replay_file(
+    container_trial: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, missing: str
+) -> None:
+    trial = container_trial
+    assert asyncio.run(_run_handoff(trial.args)) == 0
+    (trial.path / missing).unlink()
+    writer = MagicMock()
+    monkeypatch.setattr("evals.platforms.harbor._write_atif_trajectory", writer)
+    agent = object.__new__(GeodeHandoffHarborAgent)
+    agent.logs_dir = trial.path
+    with pytest.raises(ValueError, match="handoff replay requires"):
+        agent.populate_context_post_run(SimpleNamespace())
+    writer.assert_not_called()
 
 
 @pytest.mark.parametrize("gate", ["host", "environment", "timeout", "arm"])
