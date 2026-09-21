@@ -416,6 +416,15 @@ class; environment identity observation belongs at actual environment creation,
 not an override on a subclass that the factory does not instantiate. Preserve
 available call usage even when later cleanup or replay admission fails.
 
+Credential transport must resolve the actual agent UID inside the container,
+including when Harbor's task user is unset. Native Compose upload can retain
+the host UID; a default root process being able to read that file does not prove
+correct ownership. Subscription and TypeSafe installation share the same
+owner-only upload path, while the Jev entry-point ownership check stays strict.
+Retain the failure stage and `execution_started=false` for pre-call failures;
+a missing handoff result must not replace that cause with a collector `KeyError`
+or turn an unexecuted arm into a semantic model failure.
+
 | Surface | Current owner and boundary |
 |---|---|
 | Scoped runtime | [Shared `run_arm`](../../evals/benchmarks/decision_handoff_runtime.py) owns the actual AgenticLoop, lookup, consumption receipt and oracle. The original [pilot CLI](../../scripts/eval/decision_handoff_pilot.py) and new [Harbor handoff adapter](../../evals/platforms/harbor_handoff.py) call it. A0 has one tool; A1/B have two. No fake native runtime object or default-service expansion is used. |

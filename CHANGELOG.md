@@ -87,6 +87,10 @@ functional change.
   relaxing network policy or modifying the installed Harbor dependency.
 - Reconcile exported usage against durable event identities independently of
   reader order, without discarding duplicate attempts or counter differences.
+- Assign transported Harbor credentials to the actual container agent UID for
+  both subscription and TypeSafe paths, including image-default users. Keep
+  owner-only permissions and distinguish bootstrap/credential failures from
+  execution without logging secret values.
 - Preserve provider refusal/stop semantics through adapter translation and
   source/model-scoped Chat Completions reasoning replay through tool rounds and
   session resume. Separate Anthropic context-editing and compaction admission,

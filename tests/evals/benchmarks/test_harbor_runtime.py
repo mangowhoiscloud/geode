@@ -54,6 +54,36 @@ def test_source_bundle_rejects_mismatch_traversal_and_links(tmp_path: Path) -> N
             _verify_bundle(path, "0" * 64)
 
 
+@pytest.mark.parametrize("default_user,uid", [(None, "0"), (None, "1001"), ("task", "1001")])
+def test_credential_upload_uses_actual_agent_uid(
+    tmp_path: Path, default_user: str | None, uid: str
+) -> None:
+    agent = object.__new__(GeodeRuntimeHarborAgent)
+    agent.exec_as_agent = AsyncMock(return_value=SimpleNamespace(stdout=uid + "\n"))
+    agent.exec_as_root = AsyncMock()
+    environment = SimpleNamespace(upload_file=AsyncMock(), default_user=default_user)
+    source = tmp_path / "synthetic.key"
+    target = "/installed-agent/secret key"
+    asyncio.run(agent._upload_credential(environment, source, target))
+    agent.exec_as_agent.assert_awaited_once_with(environment, command="id -u")
+    environment.upload_file.assert_awaited_once_with(source, target)
+    agent.exec_as_root.assert_awaited_once_with(
+        environment, command=f"chmod 600 '{target}' && chown {uid} '{target}'"
+    )
+
+
+@pytest.mark.parametrize("uid", [None, "", "root", "0; echo unsafe", "0\n1"])
+def test_invalid_agent_uid_prevents_credential_upload(tmp_path: Path, uid: str | None) -> None:
+    agent = object.__new__(GeodeRuntimeHarborAgent)
+    agent.exec_as_agent = AsyncMock(return_value=SimpleNamespace(stdout=uid))
+    agent.exec_as_root = AsyncMock()
+    environment = SimpleNamespace(upload_file=AsyncMock())
+    with pytest.raises(RuntimeError, match="container agent uid"):
+        asyncio.run(agent._upload_credential(environment, tmp_path / "key", "/secret"))
+    environment.upload_file.assert_not_awaited()
+    agent.exec_as_root.assert_not_awaited()
+
+
 def test_usage_projects_partial_evidence_without_fabricating_totals() -> None:
     def event(cache: int | None, call: str) -> SimpleNamespace:
         return SimpleNamespace(

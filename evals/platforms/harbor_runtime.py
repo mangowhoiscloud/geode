@@ -212,15 +212,19 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
         await self.exec_as_agent(
             environment, command=f"mkdir -p {credential_dir} && chmod 700 {credential_dir}"
         )
-        await environment.upload_file(auth, home + "/.codex/auth.json")
+        await self._upload_credential(environment, auth, home + "/.codex/auth.json")
+
+    async def _upload_credential(self, environment: Any, source: Path, target: str) -> None:
+        # Compose copies host ownership; an unset task user may still use image USER.
+        result = await self.exec_as_agent(environment, command="id -u")
+        uid = str(result.stdout).strip()
+        if re.fullmatch(r"[0-9]+", uid) is None:
+            raise RuntimeError("unable to resolve container agent uid")
+        await environment.upload_file(source, target)
+        destination = shlex.quote(target)
         await self.exec_as_root(
             environment,
-            command=f"chmod 600 {credential_dir}/auth.json"
-            + (
-                f" && chown {shlex.quote(str(environment.default_user))} {credential_dir}/auth.json"
-                if environment.default_user is not None
-                else ""
-            ),
+            command=f"chmod 600 {destination} && chown {uid} {destination}",
         )
 
     def _classify_exec_error(self, command: str, result: Any) -> Any:

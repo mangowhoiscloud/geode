@@ -138,6 +138,7 @@ def test_install_copies_only_b_secret_and_rechecks_frozen_inputs(
         **(host_agent.kwargs | {"arm": "b"}), typesafe_key_file=str(host_agent.secret)
     )
     agent.exec_as_root = AsyncMock()
+    agent.exec_as_agent = AsyncMock(return_value=SimpleNamespace(stdout="1001\n"))
     environment = SimpleNamespace(upload_file=AsyncMock(), default_user="task user")
     asyncio.run(agent.install(environment))
     assert environment.upload_file.await_args_list[0].args == (
@@ -149,7 +150,7 @@ def test_install_copies_only_b_secret_and_rechecks_frozen_inputs(
         f"{harbor_handoff._INSTALL}/typesafe.key",
     )
     command = agent.exec_as_root.await_args.kwargs["command"]
-    assert "chmod 600" in command and "chown 'task user'" in command
+    assert "chmod 600" in command and "chown 1001" in command
     host_agent.secret.chmod(0o640)
     with pytest.raises(ValueError, match="owner-only regular file"):
         asyncio.run(agent.install(environment))
@@ -447,3 +448,6 @@ def test_container_rejects_unsafe_or_unscoped_secret_and_cleans_it(
     assert receipt["execution_started"] is False
     assert receipt["exports_complete"] is False
     assert receipt["error_type"] == "RuntimeError"
+    assert receipt["finalization_errors"] == [
+        {"stage": "credential_load", "error_type": "RuntimeError"}
+    ]

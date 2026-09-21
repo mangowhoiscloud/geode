@@ -95,16 +95,8 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
             info = self.typesafe_key_file.lstat()
             if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
                 raise ValueError("TypeSafe secret must be an owner-only regular file")
-            await environment.upload_file(self.typesafe_key_file, f"{_INSTALL}/typesafe.key")
-            await self.exec_as_root(
-                environment,
-                command=f"chmod 600 {_INSTALL}/typesafe.key"
-                + (
-                    f" && chown {shlex.quote(str(environment.default_user))}"
-                    f" {_INSTALL}/typesafe.key"
-                    if environment.default_user is not None
-                    else ""
-                ),
+            await self._upload_credential(
+                environment, self.typesafe_key_file, f"{_INSTALL}/typesafe.key"
             )
 
     def _classify_exec_error(self, command: str, result: Any) -> Any:
@@ -238,6 +230,7 @@ async def _run_handoff(args: argparse.Namespace) -> int:
         except BaseException as error:
             errors.append({"stage": name, "error_type": type(error).__name__})
 
+    execution_stage = "handoff_bootstrap"
     try:
         value = _task(Path(args.task), args.task_sha256)
         workspace = Path("/workspace")
@@ -255,6 +248,7 @@ async def _run_handoff(args: argparse.Namespace) -> int:
         settings.cognitive_reflection_enabled = False
         settings.cost_limit_usd = 0
         secret = None
+        execution_stage = "credential_load"
         if args.arm == "b":
             info = secret_path.lstat()
             if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
@@ -267,6 +261,7 @@ async def _run_handoff(args: argparse.Namespace) -> int:
             raise RuntimeError("TypeSafe credential leaked into non-Jev arm")
         started = True
         metadata["execution_started"] = True
+        execution_stage = "handoff_execution"
         result = await run_arm(
             value["case"],
             args.arm,
@@ -276,7 +271,7 @@ async def _run_handoff(args: argparse.Namespace) -> int:
             intervention=value["intervention"],
         )
     except BaseException as error:
-        errors.append({"stage": "handoff_execution", "error_type": type(error).__name__})
+        errors.append({"stage": execution_stage, "error_type": type(error).__name__})
         metadata["error_type"] = type(error).__name__
     finally:
         with stage("credential_cleanup"):
