@@ -24,6 +24,23 @@ from evals.platforms.harbor_runtime import (
 )
 
 
+@pytest.mark.parametrize("version", [None, "0.8.0", "0.23.0"])
+def test_docker_provider_rejects_unsupported_harbor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version: str | None
+) -> None:
+    from evals.platforms import harbor_docker
+
+    def detected_version(name: str) -> str:
+        assert name == "harbor"
+        if version is None:
+            raise harbor_docker.importlib.metadata.PackageNotFoundError(name)
+        return version
+
+    monkeypatch.setattr(harbor_docker.importlib.metadata, "version", detected_version)
+    with pytest.raises(RuntimeError, match=r"harbor==0\.22\.0"):
+        harbor_docker.GeodeHarborDockerEnvironment(environment_dir=tmp_path)
+
+
 @pytest.mark.parametrize("value", ["1", "true", "0", "false", "${CODEX_FORCE_AUTH_JSON}"])
 def test_native_auth_flag_rejects_harbor_secret_scrubbing_path(value: str) -> None:
     with pytest.raises(ValueError, match=r"process environment, not agent\.env"):

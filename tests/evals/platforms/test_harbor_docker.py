@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.metadata
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-pytest.importorskip("harbor.environments.docker.docker")
+try:
+    _HARBOR_VERSION = importlib.metadata.version("harbor")
+except importlib.metadata.PackageNotFoundError:
+    _HARBOR_VERSION = None
+if _HARBOR_VERSION != "0.22.0":
+    pytest.skip("native Docker contracts require harbor==0.22.0", allow_module_level=True)
 
 from evals.platforms.harbor_docker import GeodeHarborDockerEnvironment
 from harbor.environments.docker import COMPOSE_NO_NETWORK_PATH

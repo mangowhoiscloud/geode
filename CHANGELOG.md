@@ -84,7 +84,9 @@ functional change.
 - Reject incomplete full-content handoff trajectories before replay admission,
   while retaining failed exports for diagnosis. Support static offline Harbor
   Docker verification through the native no-network Compose overlay without
-  relaxing network policy or modifying the installed Harbor dependency.
+  relaxing network policy or modifying the installed Harbor dependency. Reject
+  unsupported Harbor versions explicitly; run the native 0.22 contracts in an
+  isolated CI environment without changing the audit extra's dependency lock.
 - Reconcile exported usage against durable event identities independently of
   reader order, without discarding duplicate attempts or counter differences.
 - Assign transported Harbor credentials to the actual container agent UID for

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import importlib.metadata
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -53,6 +54,12 @@ class GeodeHarborDockerEnvironment(HarborDockerEnvironment):
         phase_network_policies: Sequence[Any] = (),
         **kwargs: Any,
     ) -> None:
+        try:
+            harbor_version = importlib.metadata.version("harbor")
+        except importlib.metadata.PackageNotFoundError:
+            harbor_version = None
+        if harbor_version != "0.22.0":
+            raise RuntimeError("native GEODE integration is validated only with harbor==0.22.0")
         self._static_no_network = (
             network_policy is not None and network_policy.network_mode == "no-network"
         )

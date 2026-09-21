@@ -10,16 +10,19 @@ eval_triggers: [typesafe, jev, decision-handoff, classification, extraction, con
 
 # Jev decision handoff pilot
 
-Status: first five-pair diagnostic executed privately on 2026-09-21 KST;
-artifact publication, Harbor admission and adoption remain unverified.
+Status: the first five-pair diagnostic and a separate three-arm Harbor admission
+executed privately. The r5 natural cohort stopped after nine valid successes
+and one subscription `RateLimitError`; its primary remains not measurable.
+Publication and adoption remain unverified. See the evidence record below.
 This opt-in diagnostic changes an intermediate decision helper, not GEODE's
 default provider, semantic preflight, permission policy, or final verifier.
 The superseded selector-only draft is not the active experiment.
 
 The question is whether Jev's source-bound interpretation helps the same root
 model complete a read-only task with different task outcomes, latency, and
-observed consumption. The hypothesis is tested over five synthetic paired tasks,
-not inferred from valid JSON, confident answers, or a fast helper call.
+observed consumption. The original five-pair diagnostic and separately frozen
+three-arm protocol test this question; valid JSON, confident answers or a fast
+helper call do not answer it.
 
 ## Execution order and resumption
 
@@ -36,8 +39,8 @@ Do not create another status ledger or silently copy those old settings forward.
 | Five-pair diagnostic | Completed on source `58b7c86d650ec592c3bf30046b55d64b6700a3fa`; private run `typesafe-handoff-astra-xhigh-20260920t213023z` | New private prospective run-spec bound to clean source, fixture, routes and oracle; provider-free preflight; all attempts and failed-call consumption retained. |
 | Outcome analysis | Existing digest-bound analysis validator passed; no public artifact release or adoption | Join helper decision → consumed tool result → root action → independent oracle. Report valid failures, invalid observations, denominator, latency and accounting coverage separately; do not decide adoption from five cases. |
 | External evaluation | Candidates only; separate freeze required | Start with Mind2Web selection and CUAVerifierBench completion decisions. Pin revision/split, selection and exclusion rules, input transformation, independent labels, license/access, sample size and metrics before dispatch. ScreenSpot-Pro tests candidate coverage; OSWorld is later integration, not another name for this pilot. |
-| Harbor admission | Separate A0/A1/B profile implemented; live admission not yet established | Scoped composition, secret transport, mixed-route validation and task-owned verifier/full export. Three `corrected-target-ko` arms must prove the path before the new nine-case cohort. |
-| Replay and film | Twenty-one-scene local HTML includes the first diagnostic; no Jev trial footage or final film | Privacy-reviewed real export, native viewer play/pause/seek and capture, source/output hashes, separate clocks; small rendered samples before full KO then EN output. Preserve references followed by a short external-use-cases screen. |
+| Harbor admission | r5 A0/A1/B passed; natural cohort later stopped on a provider error | Same-source task verification, usage joins, full replay and cleanup passed for all three admission arms. New execution binds its own source and gates; the incomplete r5 cohort is not repaired in place. |
+| Replay and film | Three r5 admission replays passed actual native-player checks; final film absent | Preserve canonical/ATIF/cast and privacy-reviewed CFR video hashes. Play/pause/seek, readable final response and separate clocks passed. Natural and injection footage must identify their own attempts. |
 | Integration and publication | Original pilot merged to develop; follow-up and main promotion remain separate | Head-specific required CI and merge-commit GitFlow; artifact publication/readback, report-owner update and film delivery are separate receipts. No release/tag/PyPI action follows automatically. |
 
 At every transition, inspect the original source or receipt, perform the smallest
@@ -353,7 +356,7 @@ not full-suite, required remote CI, Harbor admission or live acceptance evidence
   These identify local receipts, not publicly retrievable evidence or complete
   account billing. Published claims must wait for reviewed artifact release and
   independent readback; do not rerun merely to obtain a publishable success.
-- Harder held-out tasks, another root model, Harbor and default adoption require
+- External held-out tasks, another root model and default adoption require
   separate decisions. This experiment does not close unrelated billing audits.
 
 The separately owned KO/EN report has 92 pages; page 32 is a design reference,
@@ -375,8 +378,8 @@ privately until exact-byte publication approval.
 
 ## Harbor A/B and replay preparation
 
-Implementation checked 2026-09-21; **live Harbor admission and replay remain
-unverified**. The original five-pair diagnostic was not a Harbor job. Its
+Implementation and r5 admission checked 2026-09-21 UTC (2026-09-22 KST).
+The original five-pair diagnostic was not a Harbor job. Its
 digest-policy trajectories, denominator and private receipts remain unchanged;
 the new A0/A1/B profile does not retroactively make them Harbor evidence.
 
@@ -393,6 +396,11 @@ reuses Harbor's shipped `network_mode: none` Compose overlay for Linux
 single-container static isolation; it does not patch Harbor's installed source,
 claim dynamic policy support, or change the agent's public-network route.
 Custom Compose and changing/allowlisted policies remain outside that static path.
+The provider rejects versions other than `harbor==0.22.0` before construction.
+The audit extra retains its separately locked Harbor dependency; CI exercises
+unsupported-version rejection there and the ten native Docker contracts in an
+isolated 0.22 environment. Skipping an unavailable optional SDK in the base job
+does not replace that supported-version gate.
 Bake the unchanged oracle and its locked dependencies into the verifier image;
 transfer only its declared result inputs, never agent credentials or home state.
 Before any model call, exercise both actual environment paths, prove verifier
@@ -424,6 +432,34 @@ owner-only upload path, while the Jev entry-point ownership check stays strict.
 Retain the failure stage and `execution_started=false` for pre-call failures;
 a missing handoff result must not replace that cause with a collector `KeyError`
 or turn an unexecuted arm into a semantic model failure.
+
+### Executed r5 evidence and interruption
+
+Source `6822eac4c2dc15bc428c70706fd00f46843ca5c2` completed three fresh
+`corrected-target-ko` admission arms with native reward 1, valid observations,
+full canonical/ATIF/cast exports and verified teardown. The private admission
+results SHA-256 is
+`24e81704af258ca6504d4d4da71ff5f0106cb2f795736325d137cd2e22a7b358`.
+All three privacy-reviewed CFR videos passed actual Harbor 0.22 Recording-tab
+play/pause/middle/end seek and final-response readability; playback receipt
+SHA-256 is `fdbcee762e7f49848b24cc7e95bd5a021a3d09242e7a6bd187f09e50774f2fa0`.
+The earlier VFR conversion placed a final frame outside the reported playback
+duration. Original ATIF/casts and rejected derivatives were retained; no missing
+execution content was invented. Video length is not runtime latency.
+
+The natural phase then attempted ten of 54 cells: nine valid successes followed
+by a first-call subscription `RateLimitError`. That failed call retains unknown
+usage, not zero; its native reward 0 is not a semantic task-failure score. Export
+and cleanup completed, and its short replay correctly contains no generated
+assistant answer. The collector's outer `AssertionError` masked the retained
+runtime cause. Keep runtime failure, collection failure and replay completeness
+separate. The other 44 cells and injection phase were not dispatched.
+
+The operator authorized one new 54-cell cohort plus four separate interventions
+on 2026-09-22 KST. Freeze them as a new run; do not replace the failed cell,
+pool the old nine successes, or relabel the incomplete r5 primary as measured.
+Neither admission nor successful replay grants performance, adoption or
+publication authority.
 
 | Surface | Current owner and boundary |
 |---|---|
@@ -463,7 +499,7 @@ Keep viewer inspection separate from the frozen runner and recheck the actual
 environment before use; those historical source hashes prove neither installation
 readiness nor browser playback.
 
-The remaining admission gate is **three `corrected-target-ko` arms**, separate
+Each new source's admission gate is **three `corrected-target-ko` arms**, separate
 from both the old five pairs and the [new 54 natural + 4 injected rollouts](#three-arm-end-to-end-protocol).
 Freeze a clean source bundle and identical image/architecture, initial state,
 task checksum, request, oracle, bounds and destinations using Harbor's
@@ -504,10 +540,10 @@ record cuts, acceleration and synthetic/clamped timestamps; agg's default idle
 cap is five seconds. A playable cast proves neither full replay completeness nor
 task success. Review exact bytes for private paths, identities, secrets and model
 reasoning before display; pattern redaction alone is insufficient. Native verifier
-results remain score authority. Replay readiness still requires admitted real
-exports and a privacy-reviewed viewer play/pause/seek check, followed by capture
-and source/output hash verification. The new Harbor profile's implementation and
-offline fixtures are not receipts for any of those steps.
+results remain score authority. Replay readiness requires admitted real exports
+and a privacy-reviewed viewer play/pause/seek check, followed by capture and
+source/output hash verification. The r5 receipt covers its three admission
+videos only; implementation and offline fixtures cannot replace new-run checks.
 
 ## Film treatment: a decision is not the completed task
 
