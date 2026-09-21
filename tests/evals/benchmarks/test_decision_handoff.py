@@ -94,6 +94,78 @@ def _context(hooks: HookSystem) -> ToolContext:
 
 
 @pytest.mark.parametrize("arm", ["a", "b"])
+@pytest.mark.parametrize(
+    "source,order_ids",
+    [
+        ("주문 E-536이 아니라 F-642의 상태를 알려줘.", ("E-536", "F-642")),
+        ("주문E-536은 E-536의 상태, F-642를 확인해.", ("E-536", "F-642")),
+        ("E-536, (F-642) / E-536.", ("E-536", "F-642")),
+        ("xE-536 XE-536 _E-536 0E-536 E-536x E-536Z E-536_ E-5367", ()),
+        ("E-536 F-6420 G-87 AA-104 a-104", ("E-536",)),
+        ("Q-731８ Q-731٨ Q-７３１８", ()),
+        ("Q-７３１의 상태를 알려줘.", ("Q-７３１",)),
+    ],
+)
+def test_candidate_boundaries_preserve_korean_particles_and_first_source_span(
+    arm: Literal["a", "b"], source: str, order_ids: tuple[str, ...]
+) -> None:
+    mentions = {
+        f"order_{index}": {
+            "order_id": order_id,
+            "start": source.index(order_id),
+            "end": source.index(order_id) + len(order_id),
+        }
+        for index, order_id in enumerate(order_ids)
+    }
+    target = "order_0" if mentions else "none"
+    adapter = _Adapter(_result(json.dumps({"intent": "status_only", "target": target})))
+    body = _body()
+    body["answers"]["target"].update(
+        choice=target,
+        probabilities={key: float(key == target) for key in (*mentions, "none")},
+    )
+    payloads: list[dict[str, Any]] = []
+    hooks = HookSystem()
+
+    async def run() -> dict[str, Any]:
+        def transport(request: httpx.Request) -> httpx.Response:
+            payloads.append(json.loads(request.content))
+            return httpx.Response(200, json=body)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+            tool = (
+                DecisionHandoffTool(source, arm, adapter=adapter)
+                if arm == "a"
+                else DecisionHandoffTool(
+                    source, arm, client=client, api_key=SecretStr("synthetic-test-key")
+                )
+            )
+            return await tool.aexecute(_tool_context=_context(hooks))
+
+    try:
+        output = asyncio.run(run())
+        assert output["result"]["target"] == mentions.get(target)
+        if arm == "a":
+            request = adapter.requests[0]
+            assert request.response_schema is not None
+            assert request.response_schema["properties"]["target"]["enum"] == [*mentions, "none"]
+            content = request.messages[0].content
+            assert isinstance(content, str)
+            payload = json.loads(
+                unescape(content.removeprefix("<decision_input>").removesuffix("</decision_input>"))
+            )
+        else:
+            payload = payloads[0]
+        assert payload["state"]["order_mentions"] == mentions
+        assert payload["questions"]["target"]["criteria"] == {
+            **mentions,
+            "none": "No listed order is targeted, or the target is ambiguous.",
+        }
+    finally:
+        hooks.close()
+
+
+@pytest.mark.parametrize("arm", ["a", "b"])
 def test_handler_returns_source_span_and_persists_actual_call(
     arm: Literal["a", "b"], tmp_path: Path
 ) -> None:

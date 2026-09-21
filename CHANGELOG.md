@@ -81,6 +81,10 @@ functional change.
 
 ### Fixed
 
+- Preserve three-digit source order IDs followed by Korean particles in the
+  experimental decision helper's shared candidate parser, without admitting
+  embedded ASCII identifiers or expanding the ID format. Keep frozen pre-fix
+  measurements distinct from the corrected implementation.
 - Reject incomplete full-content handoff trajectories before replay admission,
   while retaining failed exports for diagnosis. Support static offline Harbor
   Docker verification through the native no-network Compose overlay without

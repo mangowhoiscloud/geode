@@ -10,10 +10,11 @@ eval_triggers: [typesafe, jev, decision-handoff, classification, extraction, con
 
 # Jev decision handoff pilot
 
-Status: the first five-pair diagnostic and a separate three-arm Harbor admission
-executed privately. The r5 natural cohort stopped after nine valid successes
-and one subscription `RateLimitError`; its primary remains not measurable.
-Publication and adoption remain unverified. See the evidence record below.
+Status: the first five-pair diagnostic and the fresh r6 Harbor comparison
+executed privately. r6 completed 54 valid natural trials and four valid
+wrong-advice interventions; the incomplete r5 primary remains not measurable.
+These authored diagnostics do not establish default adoption or authorize
+publication. See the source-bound evidence and limitations below.
 This opt-in diagnostic changes an intermediate decision helper, not GEODE's
 default provider, semantic preflight, permission policy, or final verifier.
 The superseded selector-only draft is not the active experiment.
@@ -39,8 +40,8 @@ Do not create another status ledger or silently copy those old settings forward.
 | Five-pair diagnostic | Completed on source `58b7c86d650ec592c3bf30046b55d64b6700a3fa`; private run `typesafe-handoff-astra-xhigh-20260920t213023z` | New private prospective run-spec bound to clean source, fixture, routes and oracle; provider-free preflight; all attempts and failed-call consumption retained. |
 | Outcome analysis | Existing digest-bound analysis validator passed; no public artifact release or adoption | Join helper decision → consumed tool result → root action → independent oracle. Report valid failures, invalid observations, denominator, latency and accounting coverage separately; do not decide adoption from five cases. |
 | External evaluation | Candidates only; separate freeze required | Start with Mind2Web selection and CUAVerifierBench completion decisions. Pin revision/split, selection and exclusion rules, input transformation, independent labels, license/access, sample size and metrics before dispatch. ScreenSpot-Pro tests candidate coverage; OSWorld is later integration, not another name for this pilot. |
-| Harbor admission | r5 A0/A1/B passed; natural cohort later stopped on a provider error | Same-source task verification, usage joins, full replay and cleanup passed for all three admission arms. New execution binds its own source and gates; the incomplete r5 cohort is not repaired in place. |
-| Replay and film | Three r5 admission replays passed actual native-player checks; final film absent | Preserve canonical/ATIF/cast and privacy-reviewed CFR video hashes. Play/pause/seek, readable final response and separate clocks passed. Natural and injection footage must identify their own attempts. |
+| Harbor execution | r6 admission passed, followed by 54 natural trials and four separate interventions on source `41e02255311c4ff68302cc67a12b21c98791a690` | All 58 planned trials have valid task/usage/replay/cleanup evidence. A0/A1/B each passed 18/18 natural trials; all four interventions were delivered and passed. Do not pool r5 or admission observations into those denominators. |
+| Replay and film | Three r6 admission replays passed actual native-player checks; all 58 natural/injection source replays are retained; final film absent | Preserve canonical/ATIF/cast and privacy-reviewed CFR video hashes. A playable presentation derivative remains distinct from raw PTY and score authority. Each selected natural/injection clip needs its own privacy and playback checks. |
 | Integration and publication | Original pilot merged to develop; follow-up and main promotion remain separate | Head-specific required CI and merge-commit GitFlow; artifact publication/readback, report-owner update and film delivery are separate receipts. No release/tag/PyPI action follows automatically. |
 
 At every transition, inspect the original source or receipt, perform the smallest
@@ -330,6 +331,13 @@ charges remain unknown; published Jev input tariff and Astra API-equivalent
 estimates are not a combined cash invoice. Partial provider fields stay null.
 No small-sample equality, calibration or adoption claim follows automatically.
 
+Timing has two distinct boundaries. `runtime.elapsed_seconds` covers the shared
+loop, helper, tools and runtime verification, but not setup, trajectory export
+or the independent Harbor verifier. `host_elapsed_seconds` also includes trial
+setup, export, verifier and environment/credential cleanup; it excludes the
+host collector's subsequent accounting/replay audit and final aggregation.
+Neither field measures the complete production-and-audit workflow.
+
 ## Verification and outstanding evidence
 
 Local verification on 2026-09-21, before the first live freeze: the five focused
@@ -460,6 +468,86 @@ on 2026-09-22 KST. Freeze them as a new run; do not replace the failed cell,
 pool the old nine successes, or relabel the incomplete r5 primary as measured.
 Neither admission nor successful replay grants performance, adoption or
 publication authority.
+
+### Completed r6 comparison and interpretation
+
+The fresh run uses source `41e02255311c4ff68302cc67a12b21c98791a690` and the
+same preregistered nine-case workload, two repetitions and serial rotated arm
+order. Its 54 natural trials and separate four interventions completed without
+invalid observations, failed recorded calls or trial retries. All 58 full
+canonical/ATIF/cast exports passed admission; the 116 agent/verifier environment
+identities were cleaned up. These are private receipts, not an artifact release.
+
+| Natural cohort, 18 trials per arm | A0: root only | A1: Astra helper | B: Jev helper |
+|---|---:|---:|---:|
+| Task-owned verification | 18/18 | 18/18 | 18/18 |
+| Median runtime work, seconds | 6.228 | 14.367 | 8.793 |
+| Median host trial, seconds | 53.655 | 63.081 | 58.624 |
+| Median helper tool, seconds | N/A | 5.045 | 0.600 |
+| Recorded root / helper calls | 26 / 0 | 44 / 18 | 44 / 18 |
+| Observed input / output tokens | 51,630 / 1,306 | 105,028 / 2,599 | 108,170 / 2,769 |
+| Subscription API-equivalent, USD | 0.468704 | 0.811590 | 0.834274 |
+| Jev input-tariff calculation, US cents | N/A | N/A | 0.0499128 |
+
+The frozen primary is `(18 - 18) / 18 = 0`; the two secondary success deltas
+are also zero. There are nine independent authored cases, not 54 independent
+tasks or a sealed holdout. Equal observed outcomes do not demonstrate population
+equivalence. The median paired runtime difference is B-A1 `-5.439` seconds,
+but B-A0 `+2.427` seconds. Replacing this xhigh LLM helper was faster; adding
+either helper to this root-only workload did not establish a quality benefit.
+The xhigh helper is one pinned configuration, not an optimized low-cost frontier.
+
+The table retains all recorded root and helper consumption. B's root cache-read
+tokens were 21,504 versus A1's 40,960; Jev cache/reasoning fields are unreported,
+not zero. The API-equivalent comparison depends on those observed cache fields
+and is not evidence of a causal price effect or actual cash savings. Actual
+charges remain null. B's 11,884 Jev input tokens yield USD `0.000499128` at the
+pinned tariff; its 1,470 observed output tokens are retained despite free output.
+The scope is recorded root/helper attempts, not complete account or runtime
+billing coverage.
+
+Both helper arms matched the full intent/target label in 14/18 observations.
+The four incomplete projections per arm were followed by correct root actions
+and task completion: conditional recovery 4/4, not 4/18. Correct-helper
+degradation was 0/14. Candidate coverage was 8/12 required-target observations:
+besides the intended four-digit omission in case 07, case 03 exposed a shared
+parser defect. Python's Unicode word boundary omitted `E-536이` and `E-536의`,
+leaving only `none`; the root still read the original request and looked up
+E-536. A concentrated distribution over that sole option is not evidence that
+the intended order was identified. The raw `helper_supplied_candidate_answer_correct`
+field compares a fixture expectation, not feasibility in the actual supplied
+choice set, so its case-03 mismatch must not be reported as a model-only error.
+
+The common parser's Korean-suffix correction was made **after** this frozen
+run. Offline regression evidence for that correction does not turn r6 into a
+live result for the corrected source. The three-digit contract and case-07
+omission remain unchanged; no outcome was replaced or rerun.
+
+The four preselected wrong-advice interventions were all delivered and passed
+(A1 2/2, B 2/2), with no wrong-target/extra lookup, false completion or mechanical
+false acceptance observed. Original helper outputs remain distinct from the
+wrong projections. This demonstrates recovery behavior in these four supplied
+states, not a natural error rate, calibrated probability or general robustness.
+The root retained the original request; its internal reasoning is not observed.
+
+The task-owned oracle is recomputed in a separate offline verifier environment
+using shared oracle code; it is not an independently implemented judge or an
+LLM-as-a-Judge. The only tools are interpretation and synthetic read-only lookup.
+No mutation tool or ACL is exercised, so this cohort cannot establish permission
+enforcement or prevention of real harmful actions. B also exposes native
+probability fields while A1 has `primitives=null`: this is a model/interface
+bundle comparison, not a model-only substitution at identical output content.
+
+Private result identities:
+
+- Natural results SHA-256: `dc3138bbd0681e21f8507c5c3645e586824c0c50301c5a5b41260a1d89bf0d47`.
+- Natural analysis SHA-256: `0263df30dbeb52b27dd87fec74ef17e6bbef956778249c9d7462593c80dfdf4d`.
+- Injection results SHA-256: `5e93357d2b3cced9dc47f7d69518a08a37801bf480efc6760f9beaf954af4184`.
+- Injection analysis SHA-256: `1016de8fbf916e505a91fa76a542834111be304d99a9b7712702a7028279a215`.
+
+Retain the root-only path for this task. The evidence supports evaluating a
+Jev replacement where a decision helper is already necessary; it does not
+justify adding a mandatory helper to every request or changing runtime defaults.
 
 | Surface | Current owner and boundary |
 |---|---|

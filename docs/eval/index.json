@@ -609,7 +609,7 @@
       "authority": "diagnostic",
       "path": "docs/eval/typesafe-decision-handoff.md",
       "summary": "Source-bound Astra/Jev handoff diagnostics, with a separate root-only control, Harbor task verifier and wrong-helper recovery block.",
-      "sha256": "54c876f87d669295f71e64011ea4ab12adaa5af743d9107e79aa89c042e8a6bf",
+      "sha256": "0df0dce079e26839c662fc23106c1eba0d552c22c1b5426c9da0662411080db3",
       "triggers": [
         "classification",
         "confidence",
