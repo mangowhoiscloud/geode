@@ -1,4 +1,4 @@
-"""Offline native export gates; fixture bytes are not actual collection receipts."""
+"""Offline native/handoff export gates; fixtures are not actual collection receipts."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from scripts.eval import check_harbor_observations as gate
 from tests.scripts.test_eval_contract import _run_spec
 
 
+@pytest.mark.parametrize("export_order", ["ascending", "descending"])
 @pytest.mark.parametrize(
     "fault",
     [
@@ -34,10 +35,15 @@ from tests.scripts.test_eval_contract import _run_spec
         "payload-hash",
         "session",
         "wal",
+        "usage-counter",
+        "attempt-counter",
+        "attempt-identity",
+        "attempt-duplicate",
+        "attempt-replaced",
     ],
 )
 def test_source_reconciliation_reads_complete_snapshot_without_mutating(
-    tmp_path: Path, fault: str | None
+    tmp_path: Path, fault: str | None, export_order: str
 ) -> None:
     from core.hooks import HookEvent, HookSystem
     from core.observability.event_store import HookEventStore
@@ -122,6 +128,19 @@ def test_source_reconciliation_reads_complete_snapshot_without_mutating(
         rows if fault != "dropped-pair" else [r for r in rows if r.llm_call_id == "call-0"]
     )
     usage = _summarize_usage(selected_rows)
+    usage["recorded_attempts"].sort(
+        key=lambda row: row["source_event_id"], reverse=export_order == "descending"
+    )
+    if fault == "usage-counter":
+        usage["input_tokens"] += 1
+    if fault == "attempt-counter":
+        usage["recorded_attempts"][0]["usage"]["input_tokens"] += 1
+    if fault == "attempt-identity":
+        usage["recorded_attempts"][0]["source_event_id"] += 100
+    if fault == "attempt-duplicate":
+        usage["recorded_attempts"].append(copy.deepcopy(usage["recorded_attempts"][0]))
+    if fault == "attempt-replaced":
+        usage["recorded_attempts"][1] = copy.deepcopy(usage["recorded_attempts"][0])
     if fault in {"tool-pair", "tool-content"}:
         if fault == "tool-pair":
             full["events"] = [e for e in full["events"] if not e["kind"].startswith("tool.")]
@@ -309,7 +328,15 @@ def trial(tmp_path: Path) -> dict[str, Any]:
     }
 
 
-def _projections(agent: Path, full: dict[str, Any]) -> None:
+def _projections(
+    agent: Path,
+    full: dict[str, Any],
+    *,
+    model: str = "gpt-5.6-sol",
+    agent_name: str = "geode-runtime",
+    effort: str = "max",
+    tool_definitions: list[dict[str, Any]] | None = None,
+) -> None:
     _write(agent / "geode-trajectory.private.json", full)
     digest = build_trajectory(
         trajectory_id=full["trajectory_id"],
@@ -326,15 +353,15 @@ def _projections(agent: Path, full: dict[str, Any]) -> None:
     _write(agent / "geode-trajectory.json", digest)
     atif = _atif_trajectory_from_geode(
         full,
-        model="gpt-5.6-sol",
+        model=model,
         provider="openai",
         source="subscription",
         effort=None,
         version="a" * 40,
         metrics={},
     )
-    atif["agent"].update(name="geode-runtime", tool_definitions=[])
-    atif["extra"]["configured_root_effort"] = "max"
+    atif["agent"].update(name=agent_name, tool_definitions=tool_definitions or [])
+    atif["extra"]["configured_root_effort"] = effort
     _write(agent / "trajectory.json", atif)
     write_harbor_recording(agent / "trajectory.json", overwrite=True)
 
@@ -422,6 +449,8 @@ def _replace_usage(root: Path, usage: dict[str, Any]) -> None:
     _rewrite(root / "result.json", lambda p: p["agent_result"]["metadata"].update(usage=usage))
     for name in ("geode-trajectory.private.json", "geode-trajectory.json"):
         _rewrite(agent / name, lambda p: p["outcome"].update(usage=usage))
+    if (agent / "handoff-result.json").exists():
+        _rewrite(agent / "handoff-result.json", lambda p: p.update(usage=usage))
 
 
 def test_missing_cache_is_null_not_zero_or_collection_failure(trial, model_boundary):
@@ -682,3 +711,324 @@ def test_tool_identity_matches_projectors_session_turn_call_key(
     else:
         with pytest.raises(ValueError, match="ambiguous canonical tool identity"):
             gate.validate_observations(**trial)
+
+
+def _handoff_trial(trial: dict[str, Any], arm: str) -> dict[str, Any]:
+    """Build offline profile evidence through the existing usage/ATIF producers."""
+    root = trial["trial_dir"]
+    agent = root / "agent"
+    model = {
+        "provider": "openai",
+        "label": "gpt-6-astra",
+        "route": "subscription",
+        "reasoning": "xhigh",
+    }
+    _rewrite(trial["run_spec_path"], lambda spec: spec["reproduction"].update(model=model))
+    names = ["lookup_order_status"]
+    if arm != "a0":
+        names.insert(0, "analyze_request")
+    definitions = [{"name": name, "parameters": {}} for name in names]
+    events = []
+    purposes = ["agentic_loop"] + ([] if arm == "a0" else ["structured_decision"])
+    for index, purpose in enumerate(purposes, 1):
+        jev = arm == "b" and purpose == "structured_decision"
+        identity = {
+            "session_id": "session-1",
+            "llm_call_id": f"call-{index}",
+            "llm_attempt_id": f"attempt-{index}",
+            "tool_call_id": "tool-1" if purpose == "structured_decision" else "",
+        }
+        events.extend(
+            [
+                SimpleNamespace(action="llm.call.started", **identity),
+                SimpleNamespace(
+                    action="llm.call.ended",
+                    id=index * 2,
+                    occurred_at=1786233661.0 + index,
+                    payload_hash=hashlib.sha256(str(index).encode()).hexdigest(),
+                    **identity,
+                    payload={
+                        "model": "jev-1.13.0" if jev else model["label"],
+                        "response_model": "jev-1.13.0" if jev else model["label"],
+                        "provider": "typesafe" if jev else "openai",
+                        "adapter": "typesafe-decision-handoff" if jev else "codex_oauth",
+                        "purpose": purpose,
+                        "source": "payg" if jev else "subscription",
+                        "effort": "none" if jev else "xhigh",
+                        "usage": {
+                            "input_tokens": 10,
+                            "output_tokens": 2,
+                            "cached_input_tokens": 0,
+                            "cache_write_tokens": None,
+                        },
+                    },
+                ),
+            ]
+        )
+    usage = _summarize_usage(events)
+    usage["source_snapshot_complete"] = True
+    _write(
+        agent / "handoff-result.json",
+        {
+            "session_id": "session-1",
+            "usage": usage,
+            "handoff_call_coverage_complete": True,
+        },
+    )
+    receipt = [{"kind": "root_request", "llm_call_id": "call-1"}]
+    if arm != "a0":
+        receipt.append({"kind": "tool_result", "tool": "analyze_request", "tool_call_id": "tool-1"})
+    _write(agent / "handoff.json", receipt)
+    runtime = json.loads((agent / "runtime-result.json").read_text())
+    metadata = runtime["metadata"]
+    metadata.update(verify_mode="rule_based", profile="decision-handoff", arm=arm, usage=usage)
+    runtime.update(usage=usage, tool_definitions=definitions)
+    _write(agent / "runtime-result.json", runtime)
+    _rewrite(
+        root / "result.json",
+        lambda value: (
+            value["agent_info"].update(name="geode-handoff"),
+            value["agent_result"].update(metadata=metadata),
+        ),
+    )
+    _rewrite(
+        agent / "runtime-contract.json",
+        lambda contract: contract.update(
+            model=model["label"],
+            effort="xhigh",
+            verify_mode="rule_based",
+            runtime="evals.benchmarks.decision_handoff_runtime:run_arm",
+            profile="decision-handoff",
+            arm=arm,
+            case_sha256="e" * 64,
+            required_tools=names,
+        ),
+    )
+    previous = json.loads((agent / "geode-trajectory.private.json").read_text())
+    for event in previous["events"]:
+        if event["kind"].startswith("tool."):
+            event["payload"]["tool"] = names[0]
+    full = build_trajectory(
+        trajectory_id=previous["trajectory_id"],
+        source=previous["source"],
+        events=previous["events"],
+        outcome=metadata,
+        provenance={"adapter": "evals.platforms.harbor_handoff"},
+        privacy=previous["privacy"],
+        captured_at=previous["captured_at"],
+    )
+    _projections(
+        agent,
+        full,
+        model=model["label"],
+        agent_name="geode-handoff",
+        effort="xhigh",
+        tool_definitions=definitions,
+    )
+    return {
+        **trial,
+        "run_spec_sha256": hashlib.sha256(trial["run_spec_path"].read_bytes()).hexdigest(),
+        "handoff_arm": arm,
+        "handoff_case_sha256": "e" * 64,
+    }
+
+
+@pytest.mark.parametrize("arm", ["a0", "a", "b"])
+def test_explicit_handoff_profile_preserves_scope_blocker(trial, model_boundary, arm):
+    options = _handoff_trial(trial, arm)
+    root = trial["trial_dir"]
+    before = {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
+    report = gate.validate_observations(**options)
+    assert report["observation_valid"] is True
+    assert report["whole_runtime_complete"] is False
+    assert report["full_runtime_expansion_ready"] is False
+    assert gate._SCOPE_BLOCKER in report["blockers"]
+    assert report["handoff_arm"] == arm
+    assert report["handoff_case_sha256"] == "e" * 64
+    accounting = report["accounting"]
+    assert accounting["attempts"] == (1 if arm == "a0" else 2)
+    assert accounting["unknown_metadata_attempts"] == 0
+    assert accounting["uniform_requested_effort"] is (arm != "b")
+    if arm == "b":
+        assert accounting["observed_efforts"] == {"xhigh": 1, "none": 1}
+        with pytest.raises(ValueError, match="frozen reasoning effort"):
+            gate.validate_observations(**options, require_uniform_effort=True)
+    else:
+        assert gate.validate_observations(**options, require_uniform_effort=True)[
+            "observation_valid"
+        ]
+    assert before == {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+
+def test_handoff_is_never_inferred_from_untrusted_artifacts(trial, model_boundary):
+    options = _handoff_trial(trial, "b")
+    del options["handoff_arm"], options["handoff_case_sha256"]
+    with pytest.raises(ValueError, match="native agent identity mismatch"):
+        gate.validate_observations(**options)
+
+
+@pytest.mark.parametrize("kind", ["root_request", "tool_result"])
+def test_handoff_checks_dispatch_receipts_against_observed_calls(trial, model_boundary, kind):
+    options = _handoff_trial(trial, "b")
+    path = trial["trial_dir"] / "agent/handoff.json"
+    rows = json.loads(path.read_text())
+    _write(path, [row for row in rows if row["kind"] != kind])
+    with pytest.raises(ValueError, match="dispatch/attempt coverage mismatch"):
+        gate.validate_observations(**options)
+
+
+@pytest.mark.parametrize(
+    ("arm", "case_sha"),
+    [("b", None), (None, "e" * 64), ("other", "e" * 64), ("a", "bad"), ("a0", "E" * 64)],
+)
+def test_handoff_profile_requires_explicit_arm_and_frozen_case_sha(
+    trial, model_boundary, arm, case_sha
+):
+    with pytest.raises(ValueError, match="supplied together"):
+        gate.validate_observations(**trial, handoff_arm=arm, handoff_case_sha256=case_sha)
+
+
+@pytest.mark.parametrize(
+    ("arm", "index", "field", "value"),
+    [
+        ("a0", 0, "purpose", "structured_decision"),
+        ("a0", 0, "response_model", None),
+        ("a0", 0, "effort", None),
+        ("a", 1, "response_model", "jev-1.13.0"),
+        ("a", 1, "effort", "medium"),
+        ("b", 0, "response_model", "gpt-5.6-sol"),
+        ("b", 0, "source", None),
+        ("b", 0, "effort", "none"),
+        ("b", 0, "purpose", "memory_dreaming"),
+        ("b", 1, "response_model", None),
+        ("b", 1, "response_model", "jev-1.12.0"),
+        ("b", 1, "model", "gpt-6-astra"),
+        ("b", 1, "provider", "openai"),
+        ("b", 1, "source", "subscription"),
+        ("b", 1, "effort", "xhigh"),
+        ("b", 1, "effort", None),
+        ("b", 1, "purpose", "agentic_loop"),
+        ("b", 1, "purpose", None),
+    ],
+)
+def test_handoff_checks_observed_route_response_model_and_effort(
+    trial, model_boundary, arm, index, field, value
+):
+    options = _handoff_trial(trial, arm)
+    root = trial["trial_dir"]
+    usage = json.loads((root / "agent/runtime-result.json").read_text())["usage"]
+    usage["recorded_attempts"][index][field] = value
+    _replace_usage(root, usage)
+    with pytest.raises(ValueError, match="handoff"):
+        gate.validate_observations(**options)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "arm",
+        "case",
+        "profile",
+        "assembly",
+        "required-tools",
+        "extra-definition",
+        "missing-definition",
+        "duplicate-definition",
+        "observed-tool",
+        "runtime-arm",
+        "source",
+        "task",
+        "dirty",
+        "spec-hash",
+        "root-model",
+    ],
+)
+def test_handoff_profile_cannot_bypass_identity_tools_or_freeze(trial, model_boundary, mutation):
+    options = _handoff_trial(trial, "b")
+    root = trial["trial_dir"]
+    agent = root / "agent"
+    contract_edits = {
+        "arm": {"arm": "a"},
+        "case": {"case_sha256": "f" * 64},
+        "profile": {"profile": "native"},
+        "assembly": {"runtime": "core.wiring.runtime:build_runtime"},
+        "required-tools": {
+            "required_tools": ["analyze_request", "lookup_order_status", "run_bash"]
+        },
+        "source": {"source_sha256": "f" * 64},
+    }
+    if mutation in contract_edits:
+        _rewrite(
+            agent / "runtime-contract.json", lambda value: value.update(contract_edits[mutation])
+        )
+    elif mutation.endswith("definition"):
+
+        def alter_definitions(value):
+            definitions = value["tool_definitions"]
+            if mutation == "extra-definition":
+                definitions.append({"name": "run_bash", "parameters": {}})
+            elif mutation == "missing-definition":
+                definitions.pop()
+            else:
+                definitions[1] = copy.deepcopy(definitions[0])
+
+        _rewrite(agent / "runtime-result.json", alter_definitions)
+    elif mutation == "observed-tool":
+        _rewrite(
+            agent / "geode-trajectory.private.json",
+            lambda value: value["events"][2]["payload"].update(tool="run_bash"),
+        )
+    elif mutation == "runtime-arm":
+        _rewrite(agent / "runtime-result.json", lambda value: value["metadata"].update(arm="a"))
+    elif mutation == "task":
+        _rewrite(root / "result.json", lambda value: value.update(task_checksum="f" * 64))
+    elif mutation in {"dirty", "root-model"}:
+
+        def alter_spec(value):
+            if mutation == "dirty":
+                value["reproduction"]["geode"]["dirty"] = True
+            else:
+                value["reproduction"]["model"]["label"] = "gpt-5.6-sol"
+
+        _rewrite(options["run_spec_path"], alter_spec)
+        options["run_spec_sha256"] = hashlib.sha256(
+            options["run_spec_path"].read_bytes()
+        ).hexdigest()
+    else:
+        _rewrite(options["run_spec_path"], lambda value: value.update(run_id="another-run"))
+    with pytest.raises(ValueError):
+        gate.validate_observations(**options)
+
+
+def test_handoff_unknown_counter_is_not_zero_or_expansion_permission(trial, model_boundary):
+    options = _handoff_trial(trial, "b")
+    root = trial["trial_dir"]
+    usage = json.loads((root / "agent/runtime-result.json").read_text())["usage"]
+    usage["recorded_attempts"][1]["usage"]["cached_input_tokens"] = None
+    usage.update(cached_input_tokens=None, cached_input_tokens_missing_events=1)
+    _replace_usage(root, usage)
+    report = gate.validate_observations(**options)
+    assert report["cache_complete"] is False
+    assert report["accounting"]["counters"]["cached_input_tokens"]["total"] is None
+    assert report["accounting"]["counters"]["cached_input_tokens"]["observed_sum"] == 0
+    assert report["whole_runtime_complete"] is False
+
+
+def test_handoff_cli_keeps_exit_two_for_scope_blocker(trial, model_boundary, capsys):
+    options = _handoff_trial(trial, "b")
+    arguments = [str(options["trial_dir"]), "--run-spec", str(options["run_spec_path"])]
+    for name, value in options.items():
+        if name not in {"trial_dir", "run_spec_path"}:
+            arguments.extend(["--" + name.replace("_", "-"), str(value)])
+    assert gate.main(arguments) == 2
+    report = json.loads(capsys.readouterr().out)
+    assert report["observation_valid"] is True
+    assert report["handoff_arm"] == "b"
+    assert report["whole_runtime_complete"] is False
+
+
+@pytest.mark.parametrize("arm", ["a0", "a", "b"])
+def test_real_harbor_handoff_schemas_when_installed(trial, arm):
+    if importlib.util.find_spec("harbor") is None:
+        pytest.skip("optional Harbor SDK not installed; run in the frozen Harbor environment")
+    assert gate.validate_observations(**_handoff_trial(trial, arm))["observation_valid"] is True

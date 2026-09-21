@@ -303,12 +303,14 @@ def test_recorded_attempts_keep_only_numeric_allowlist_and_source_links(purpose:
         action="llm.call.ended",
         session_id="s",
         llm_call_id="c",
+        tool_call_id="tool-1",
         llm_attempt_id="c:1",
         id=9,
         occurred_at=0.0,
         payload_hash="a" * 64,
         payload={
             "model": "gpt-5.6-sol",
+            "response_model": "gpt-5.6-sol-served",
             "provider": "openai",
             "adapter": "codex_oauth",
             "purpose": purpose,
@@ -336,11 +338,13 @@ def test_recorded_attempts_keep_only_numeric_allowlist_and_source_links(purpose:
         {
             "session_id": "s",
             "llm_call_id": "c",
+            "tool_call_id": "tool-1",
             "llm_attempt_id": "c:1",
             "source_event_id": 9,
             "occurred_at": 0.0,
             "source_payload_hash": "a" * 64,
             "model": "gpt-5.6-sol",
+            "response_model": "gpt-5.6-sol-served",
             "provider": "openai",
             "adapter": "codex_oauth",
             "purpose": purpose,
@@ -358,6 +362,12 @@ def test_recorded_attempts_keep_only_numeric_allowlist_and_source_links(purpose:
     ]
     assert "private" not in json.dumps(summary)
     assert json.loads(json.dumps(summary, allow_nan=False)) == summary
+    terminal.payload["response_model"] = "private\ninvalid model"
+    assert _summarize_usage([start, terminal])["recorded_attempts"][0]["response_model"] is None
+    terminal.payload.pop("response_model")
+    assert _summarize_usage([start, terminal])["recorded_attempts"][0]["response_model"] is None
+    terminal.tool_call_id = "private\ninvalid tool ID"
+    assert _summarize_usage([start, terminal])["recorded_attempts"][0]["tool_call_id"] is None
     duplicate = _summarize_usage([start, terminal, terminal])
     assert len(duplicate["recorded_attempts"]) == duplicate["terminal_event_count"] == 2
     assert duplicate["attempt_pairing_complete"] is False

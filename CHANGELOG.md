@@ -57,8 +57,10 @@ functional change.
   in USD and US cents, separate from actual billing. Check source drift around
   each arm; preserve observable decision failures separately from incomplete
   measurements, without token/dollar spending caps or runtime-default changes.
-  Implemented locally and under verification; no live
-  comparison result or mixed-provider Harbor admission is claimed.
+  Reuse the same evaluation runtime for an unassisted root control and an
+  explicitly scoped Harbor profile, with independent task verification, retained
+  failure exports, mixed-route/served-model checks and separate wrong-helper
+  recovery evidence. This does not change runtime defaults or establish adoption.
 
 ### Removed
 
@@ -79,6 +81,22 @@ functional change.
 
 ### Fixed
 
+- Preserve three-digit source order IDs followed by Korean particles in the
+  experimental decision helper's shared candidate parser, without admitting
+  embedded ASCII identifiers or expanding the ID format. Keep frozen pre-fix
+  measurements distinct from the corrected implementation.
+- Reject incomplete full-content handoff trajectories before replay admission,
+  while retaining failed exports for diagnosis. Support static offline Harbor
+  Docker verification through the native no-network Compose overlay without
+  relaxing network policy or modifying the installed Harbor dependency. Reject
+  unsupported Harbor versions explicitly; run the native 0.22 contracts in an
+  isolated CI environment without changing the audit extra's dependency lock.
+- Reconcile exported usage against durable event identities independently of
+  reader order, without discarding duplicate attempts or counter differences.
+- Assign transported Harbor credentials to the actual container agent UID for
+  both subscription and TypeSafe paths, including image-default users. Keep
+  owner-only permissions and distinguish bootstrap/credential failures from
+  execution without logging secret values.
 - Preserve provider refusal/stop semantics through adapter translation and
   source/model-scoped Chat Completions reasoning replay through tool rounds and
   session resume. Separate Anthropic context-editing and compaction admission,
