@@ -80,7 +80,7 @@ assert.equal(matchesDocPath("petri/run", "petri/run"), true);
 // Render the authored body in each language without starting Next or a browser.
 // This checks real href values; a source-string assertion misses conditional links.
 const require = createRequire(import.meta.url);
-for (const slug of ["verification/evaluation", "benchmarks/terminal-bench", "petri/overview", "petri/judge-dimensions", "petri/bundle"]) {
+for (const slug of ["verification/evaluation", "benchmarks/terminal-bench", "petri/overview", "petri/judge-dimensions", "petri/bundle", "explanation/rsi-roadmap"]) {
   const source = readFileSync(new URL(`../src/app/docs/${slug}/page.tsx`, import.meta.url), "utf8");
   const { outputText } = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
@@ -105,6 +105,12 @@ for (const slug of ["verification/evaluation", "benchmarks/terminal-bench", "pet
     };
     new Function("require", "exports", outputText)(bodyRequire, exports);
     const html = renderToStaticMarkup(createElement(exports.default));
+    if (slug === "explanation/rsi-roadmap") {
+      assert.ok(html.includes('href="https://arxiv.org/abs/2609.11873v2"'), "Pin the roadmap's reference version");
+      for (const anchor of ["autonomy-roadmap", "terms", "evidence", "next", "eco2"]) {
+        assert.ok(html.includes(`id="${anchor}"`), `Roadmap section renders in ${locale}: ${anchor}`);
+      }
+    }
     if (slug === "benchmarks/terminal-bench") {
       assert.ok(html.includes("/geode/benchmarks/terminal-bench/replay/"), "Preserve the native replay route");
       assert.ok(html.includes("system_prompt_override"), "Disclose the measured thin-adapter configuration");
