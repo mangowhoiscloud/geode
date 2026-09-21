@@ -20,6 +20,7 @@ export default function Page() {
               한 가지만 책임집니다.
             </p>
 
+            <p>이 페이지의 다섯 계층은 아키텍처 설명 축입니다. <a href="/geode/docs/explanation/rsi-roadmap">RSI 로드맵의 L1–L5</a>와 대응하지 않으며, Self-Improving이라는 계층 이름이 L5 달성을 의미하지 않습니다.</p>
             <h2>다섯 계층</h2>
             <table>
               <thead><tr><th>계층</th><th>OS 비유</th><th>책임</th><th>대표 코드</th></tr></thead>
@@ -90,6 +91,7 @@ export default function Page() {
               the current answer is five. Each layer owns exactly one thing.
             </p>
 
+            <p>These five layers describe architecture, not the <a href="/geode/docs/explanation/rsi-roadmap?lang=en">RSI roadmap&apos;s L1–L5</a>. A layer named Self-Improving does not establish L5 autonomy.</p>
             <h2>The five layers</h2>
             <table>
               <thead><tr><th>Layer</th><th>OS analogue</th><th>Owns</th><th>Representative code</th></tr></thead>
