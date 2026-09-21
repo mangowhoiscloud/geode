@@ -11,7 +11,7 @@
     "trajectory": "core/observability/schemas/trajectory.schema.json",
     "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
   },
-  "document_count": 24,
+  "document_count": 25,
   "documents": [
     {
       "id": "agent-world-comparison",
@@ -599,6 +599,26 @@
       "contracts": [
         "docs/eval/schemas/run-spec.schema.json"
       ]
+    },
+    {
+      "id": "typesafe-decision-handoff",
+      "family": "runtime-decisions",
+      "title": "Jev decision handoff pilot",
+      "kind": "contract",
+      "status": "draft",
+      "authority": "diagnostic",
+      "path": "docs/eval/typesafe-decision-handoff.md",
+      "summary": "Five-task comparison of source-bound Astra and Jev decisions consumed by the same root AgenticLoop.",
+      "sha256": "35e1cafb1353e3c019ff82a7e50ac8785fea1351b4d6dd28eedd41ec48ea7521",
+      "triggers": [
+        "classification",
+        "confidence",
+        "decision-handoff",
+        "extraction",
+        "jev",
+        "typesafe"
+      ],
+      "contracts": []
     }
   ]
 }

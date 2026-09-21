@@ -374,6 +374,7 @@ def test_run_spec_validates_reproduction_hash_and_seed_cardinality(tmp_path: Pat
     [
         ('{"schema_id":"x","schema_id":"y"}', "duplicate JSON key"),
         ('{"value":NaN}', "non-finite JSON number"),
+        ('{"value":1e309}', "non-finite JSON number"),
     ],
 )
 def test_contract_json_rejects_ambiguous_or_non_standard_values(

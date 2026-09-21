@@ -14,8 +14,12 @@ from core.hooks import (
     HookRegistry,
     HookSystem,
 )
+from core.hooks.llm_observation import observe_llm_call
+from core.llm.adapters.base import AdapterCallResult, EmptyModelOutputError, UsageSummary
 from core.observability.event_store import HookEventStore
 from core.observability.hook_persistence import HookPersistenceSink
+from core.observability.record_schema import validate_record
+from evals.platforms.harbor import _summarize_usage
 from evals.run_timeline import (
     RunTimeline,
     current_run_timeline,
@@ -165,7 +169,7 @@ def test_public_extension_audit_uses_sqlite_and_active_timeline_only(
         "step_id": "t-1:step-1",
         "session_generation": 0,
         "verify_attempt": 0,
-        "activity_schema_version": 9,
+        "activity_schema_version": 10,
         "_dispatch_duration_ms": row.payload["_dispatch_duration_ms"],
     }
     assert not (tmp_path / "events.jsonl").exists()
@@ -280,12 +284,160 @@ def test_llm_route_charge_and_usage_survive_durable_projection(tmp_path: Path) -
     assert row.payload["response_provider"] == "OpenInference"
     assert row.payload["routing_strategy"] == "direct"
     assert row.payload["routing_attempt"] == 1
-    assert row.payload["activity_schema_version"] == 9
+    assert row.payload["activity_schema_version"] == 10
     timeline_payload = _read_timeline(tmp_path / "events.jsonl")[0]["payload"]
     assert timeline_payload["response_provider"] == "OpenInference"
     assert timeline_payload["cost_usd"] == 0.00012
-    assert timeline_payload["activity_schema_version"] == 9
+    assert timeline_payload["activity_schema_version"] == 10
     hooks.close()
+
+
+@pytest.mark.parametrize("outcome", ["missing", "zero", "positive", "error", "cancel", "empty"])
+def test_structured_decision_observation_survives_durable_and_export_boundaries(
+    tmp_path: Path, outcome: str
+) -> None:
+    hooks, _store = _wired_hooks(tmp_path)
+    present = outcome in {"zero", "positive", "empty"}
+    count = 7 if outcome in {"positive", "empty"} else 0
+    reported_cost = 0.001 if count else 0.0 if present else None
+    completed = AdapterCallResult(
+        text="private decision output",
+        usage=UsageSummary(
+            input_tokens=count,
+            output_tokens=count,
+            cached_input_tokens=count,
+            cache_write_tokens=count,
+            reasoning_tokens=count,
+            input_tokens_present=present,
+            output_tokens_present=present,
+            cached_input_tokens_present=present,
+            cache_write_tokens_present=present,
+            reasoning_tokens_present=present,
+            reported_cost_usd=reported_cost,
+        ),
+        stop_reason="completed",
+        raw_response={"private": "provider response"},
+    )
+    original = (
+        RuntimeError("private provider error")
+        if outcome == "error"
+        else EmptyModelOutputError("private empty result", completed_result=completed)
+        if outcome == "empty"
+        else None
+    )
+    dispatched = 0
+
+    async def scenario() -> None:
+        entered = asyncio.Event()
+
+        async def provider() -> AdapterCallResult:
+            nonlocal dispatched
+            dispatched += 1
+            entered.set()
+            if outcome == "cancel":
+                await asyncio.Event().wait()
+            if original is not None:
+                raise original
+            return completed
+
+        attempt = observe_llm_call(
+            provider,
+            hooks=hooks,
+            correlation={
+                "session_id": "s-decision",
+                "turn_id": "t-decision",
+                "step_id": "t-decision:step-1",
+                "tool_call_id": "tool-decision",
+            },
+            model="synthetic-decision-model",
+            provider="synthetic",
+            adapter="synthetic-local",
+            purpose="structured_decision",
+            source="payg",
+        )
+        if outcome == "cancel":
+            task = asyncio.create_task(attempt)
+            await entered.wait()
+            task.cancel("private cancellation")
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert task.cancelled()
+        elif original is not None:
+            with pytest.raises(type(original)) as raised:
+                await attempt
+            assert raised.value is original
+        else:
+            assert await attempt is completed
+
+    try:
+        with run_timeline_scope(_timeline(tmp_path)):
+            asyncio.run(scenario())
+    finally:
+        hooks.close()
+
+    # Reopen the real database: in-memory observation alone is not durability.
+    durable = HookEventStore(tmp_path / "events.db")
+    try:
+        starts = durable.read(event_filter=HookEvent.LLM_CALL_STARTED.value)
+        ends = durable.read(event_filter=HookEvent.LLM_CALL_ENDED.value)
+        assert len(starts) == len(ends) == dispatched == 1
+        row = ends[0]
+        assert starts[0].llm_call_id == row.llm_call_id
+        assert starts[0].llm_attempt_id == row.llm_attempt_id
+        assert row.llm_call_id and row.llm_attempt_id
+        assert (row.session_id, row.turn_id, row.step_id, row.tool_call_id) == (
+            "s-decision",
+            "t-decision",
+            "t-decision:step-1",
+            "tool-decision",
+        )
+        payload = row.payload
+        assert payload["purpose"] == "structured_decision"
+        assert payload["source"] == "payg"
+        assert payload["activity_schema_version"] == 10
+        failed = outcome in {"error", "cancel", "empty"}
+        assert row.status == ("failed" if failed else "ok")
+        assert payload["success"] is not failed
+        expected_error = "CancelledError" if outcome == "cancel" else type(original).__name__
+        assert payload["error_type"] == (expected_error if failed else None)
+        expected_usage = (
+            None
+            if outcome in {"error", "cancel"}
+            else dict.fromkeys(
+                (
+                    "input_tokens",
+                    "output_tokens",
+                    "cached_input_tokens",
+                    "cache_write_tokens",
+                    "reasoning_tokens",
+                ),
+                count if present else None,
+            )
+        )
+        assert payload["usage"] == expected_usage
+        assert payload["cost_usd"] == reported_cost
+        assert "private" not in json.dumps(payload)
+        assert "_generic_projection" not in payload
+        exported = _summarize_usage([*starts, *ends])
+        assert exported["attempt_pairing_complete"] is True
+        assert exported["mapping_anomaly_events"] == 0
+        attempt_row = exported["recorded_attempts"][0]
+        assert attempt_row["purpose"] == "structured_decision"
+        assert attempt_row["llm_attempt_id"] == row.llm_attempt_id
+        assert attempt_row["source_payload_hash"] == row.payload_hash
+        assert attempt_row["usage"]["input_tokens"] == (count if present else None)
+    finally:
+        durable.close()
+    mirrors = _read_timeline(tmp_path / "events.jsonl")
+    assert len(mirrors) == 2
+    for mirror in mirrors:
+        validate_record(mirror)
+    terminal = next(row for row in mirrors if row["event"] == HookEvent.LLM_CALL_ENDED.value)
+    assert terminal["payload"]["purpose"] == "structured_decision"
+    assert terminal["payload"]["tool_call_id"] == "tool-decision"
+    assert terminal["payload"]["usage"] == expected_usage
+    assert terminal["payload"]["cost_usd"] == reported_cost
+    assert "private" not in json.dumps(mirrors)
 
 
 @pytest.mark.parametrize("receipt_state", ["missing", "zero", "malformed"])

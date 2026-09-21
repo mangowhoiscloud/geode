@@ -74,6 +74,13 @@ Live model, account, quota, or remote-service calls require explicit user
 approval. Approval belongs in the frozen spec; it does not relax redaction or
 publication gates.
 
+Keep token/cost observation separate from an operator-authorized spending cap.
+Retain failed-call consumption and missing coverage even when no cap is set.
+Public-price estimates, subscription API-equivalent comparisons and reported
+charges are different evidence. For an intermediate classifier or extractor,
+also verify its consumer's subsequent execution; a valid decision object alone
+does not prove the root model completed the task.
+
 ## Preserve Attempt Lineage
 
 Create each row from `docs/eval/eval-attempt.template.json` and append it to

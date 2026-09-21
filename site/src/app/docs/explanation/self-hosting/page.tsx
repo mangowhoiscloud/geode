@@ -15,9 +15,10 @@ export default function Page() {
         ko={
           <>
             <p>
-              GEODE가 자율 에이전트 하네스라고 주장하려면, 그 주장이 어딘가에서
-              검증되어야 합니다. 가장 강한 검증은 그 하네스가 자기 자신을 빌드할
-              수 있는가입니다. self-hosting compiler 개념의 직접 이식입니다.
+              Self-hosting은 자기 저장소의 개발에도 같은 도구와 실행 규율을
+              사용하는 방식입니다. 자신의 코드를 수정할 수 있다는 사실만으로
+              개선 방법 자체가 발전했다고 볼 수는 없습니다. 그 구분은
+              <a href="/geode/docs/explanation/rsi-roadmap">RSI 로드맵</a>에서 다룹니다.
             </p>
 
             <h2>Self-hosting compiler 개념</h2>
@@ -57,8 +58,10 @@ export default function Page() {
             <h2>한계</h2>
             <p>
               빌드 라인의 PR 머지와 릴리스 권한은 운영자 게이트에 남습니다.
-              자기개선 루프의 변이 표면은 스캐폴드(시스템 프롬프트 섹션과
-              behaviour kinds)로 제한됩니다. 주장의 범위는 기본 단위의 공유까지입니다.
+              Scaffold 탐색은 선언된 프롬프트·정책 표면을 수정하고, Crucible은
+              실험 계약에 허용된 후보 변경을 평가합니다. 후보의 KEEP, 다음 실행의
+              계승, 프로덕션 배포는 서로 다른 단계입니다. Self-hosting은 이 중
+              개발 방식에 대한 설명이며 RSI 달성 판정이 아닙니다.
             </p>
 
             <h2>다음</h2>
@@ -71,10 +74,11 @@ export default function Page() {
         en={
           <>
             <p>
-              For GEODE to claim it is an autonomous agent harness, the claim
-              must be testable somewhere. The strongest test is whether the
-              harness can build itself: a direct adaptation of the self-hosting
-              compiler concept.
+              Self-hosting means applying the same tools and execution discipline
+              to development of the tool&apos;s own repository. Editing its own code
+              does not by itself demonstrate a better improvement process. The
+              <a href="/geode/docs/explanation/rsi-roadmap?lang=en"> RSI roadmap</a>
+              makes that distinction explicit.
             </p>
 
             <h2>Self-hosting compilers</h2>
@@ -115,9 +119,11 @@ export default function Page() {
             <h2>Limits</h2>
             <p>
               Operator gates retain authority over PR merges and releases. The
-              self-improving loop&apos;s mutation surface is confined to the scaffold
-              (system prompt sections and behaviour kinds). The claim
-              extends exactly as far as shared primitives.
+              scaffold search changes declared prompt and policy surfaces;
+              Crucible evaluates candidate changes allowed by an experiment contract.
+              A KEEP, inheritance by the next run, and production deployment are
+              distinct stages. Self-hosting describes a development practice,
+              not demonstrated RSI.
             </p>
 
             <h2>Next</h2>

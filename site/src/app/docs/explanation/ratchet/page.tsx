@@ -15,9 +15,11 @@ export default function Page() {
         ko={
           <>
             <p>
-              LLM 시스템에서는 작은 프롬프트 변경 하나가 출력 품질을 조용히
-              침식할 수 있습니다. GEODE는 이를 ratchet으로 막습니다. 전부
-              단방향 잠금장치입니다.
+              GEODE의 ratchet은 선언한 불변조건을 위반한 변경을 차단합니다.
+              프롬프트 해시와 테스트 coverage 같은 검사 대상은 보호하지만,
+              관측하지 않은 모든 작업의 품질까지 보장하지는 않습니다.
+              <a href="/geode/docs/explanation/rsi-roadmap">RSI 로드맵</a>에서도
+              회귀 방지 장치와 개선 성능의 실측을 구분합니다.
             </p>
 
             <h2>Ratchet이란</h2>
@@ -52,18 +54,18 @@ export default function Page() {
             <p>
               출력 측 ratchet(프롬프트 해시)만 있으면 빌드 라인의 회귀를 막지
               못합니다. 빌드 측 ratchet(CI)만 있으면 같은 코드에 다른 프롬프트가
-              실리는 조용한 회귀를 막지 못합니다. 둘이 동시에 있어야 자기일치가
-              보장됩니다. 같은 구조가 자기개선 루프에도 있습니다. margin
+              실리는 의도하지 않은 변경을 감지하지 못합니다. 두 검사는 서로
+              다른 불변조건을 지킵니다. 같은 구조가 후보 탐색에도 있습니다. margin
               게이트를 통과한 변이만 승격되고, 실패한 변이는 되돌려집니다
               (<code>evolve/scaffold_search/gate.py</code>). 게이트는 champion
-              chain을 한 방향으로만 움직이게 하는 ratchet입니다.
+              chain에 채택 기준을 적용하는 ratchet입니다. 평가 밖의 성능은 별도 검증이 필요합니다.
             </p>
 
             <h2>비용</h2>
             <p>
               의도된 변경마다 한 단계를 더 지불합니다. 프롬프트를 고치면 재핀
               커밋, 번들을 정리하면 바닥 조정 PR. 그 대가는 의도하지 않은
-              변경이 출시되지 않는다는 CI 강제 보장입니다.
+              변경 중 선언된 검사로 탐지한 것을 CI에서 차단할 수 있다는 것입니다.
             </p>
 
             <h2>다음</h2>
@@ -77,9 +79,11 @@ export default function Page() {
         en={
           <>
             <p>
-              In LLM systems, one small prompt edit can quietly erode output
-              quality. GEODE blocks this with ratchets. All of them are one-way
-              locks.
+              GEODE ratchets block changes that violate declared invariants.
+              They protect checked properties such as prompt hashes and coverage,
+              not quality on every unobserved task. The
+              <a href="/geode/docs/explanation/rsi-roadmap?lang=en"> RSI roadmap</a>
+              separates regression controls from measured improvement.
             </p>
 
             <h2>What &quot;ratchet&quot; means</h2>
@@ -114,19 +118,19 @@ export default function Page() {
             <p>
               An output-side ratchet alone (prompt hashes) cannot catch
               build-line regressions. A build-side ratchet alone (CI) cannot
-              catch the silent regression of same code, different prompt. Both
-              together guarantee self-consistency. The same shape exists in the
-              self-improving loop: only gate-passing mutations promote, and
+              catch an unintended prompt change with unchanged code. The checks
+              protect different invariants. Candidate search uses the same pattern:
+              only gate-passing mutations promote, and
               failures revert (<code>evolve/scaffold_search/gate.py</code>). The
-              gate is the ratchet that moves the champion chain in one direction
-              only.
+              gate applies an acceptance rule to the champion chain. Performance
+              outside that evaluation still needs a separate test.
             </p>
 
             <h2>The cost</h2>
             <p>
               Every intentional change pays one extra step: fix a prompt, write
               a re-pin commit; prune the bundle, adjust the floor in a PR. In
-              exchange, unintentional changes never ship, enforced by CI.
+              exchange, CI can block violations detected by its declared checks.
             </p>
 
             <h2>Next</h2>

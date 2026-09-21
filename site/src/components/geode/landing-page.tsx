@@ -18,6 +18,7 @@ function LandingContent() {
     { id: "run", label: t(locale, "실행", "Run") },
     { id: "evidence", label: t(locale, "측정", "Evidence") },
     { id: "features", label: t(locale, "기능", "Features") },
+    { id: "roadmap", label: t(locale, "로드맵", "Roadmap") },
     { id: "install", label: t(locale, "설치", "Install") },
   ];
   const navigationLinks = (
@@ -152,6 +153,25 @@ function LandingContent() {
                 <Link className="landing-text-link" href={`/docs/capabilities/outer-loop?lang=${locale}`}>{t(locale, "외부 루프 살펴보기", "Explore the outer loop")}</Link>
               </article>
             </div>
+          </div>
+        </section>
+
+        <section id="roadmap" className="landing-container landing-section" aria-labelledby="roadmap-title">
+          <div className="landing-section-heading">
+            <p className="landing-kicker">Research direction · RSI</p>
+            <h2 id="roadmap-title">{t(locale, "다음 실행에 남는 개선을 검증합니다.", "Test what the next run inherits.")}</h2>
+            <p>{t(locale,
+              "개선 실행(L1)의 검증 경계와 제한형 후보 탐색(L2)을 구현했습니다. 다음 과제는 채택된 변경을 이어받은 실행이 고정 전략보다 더 나은 결과를 만드는지 입증하는 것입니다.",
+              "Improvement-execution controls (L1) and bounded candidate search (L2) are implemented. Next: establish whether runs inheriting accepted changes outperform a fixed-strategy control.",
+            )}</p>
+            <p>{t(locale,
+              "현재 표시는 코드 범위이며 자율성 등급 인증이 아닙니다. 경험 선택(L3), 배포 적응(L4), 개선 메커니즘의 계승(L5)은 각각 별도 증거가 필요합니다.",
+              "These labels describe code scope, not certified autonomy levels. Experience acquisition (L3), deployment adaptation (L4), and recursive inheritance (L5) each need separate evidence.",
+            )}</p>
+          </div>
+          <div className="landing-inline-links">
+            <Link href={`/docs/explanation/rsi-roadmap?lang=${locale}`}>{t(locale, "현재 위치·용어·다음 검증", "Current scope, terms, and next tests")}</Link>
+            <a href="https://arxiv.org/abs/2609.11873v2">{t(locale, "설계 가이드: RSI 백서 v2", "Design guide: RSI whitepaper v2")}</a>
           </div>
         </section>
 

@@ -19,6 +19,9 @@ export default function Page() {
               구체 차용 패턴은 본 docs 안의 챕터별로 명시되며, 이 페이지는 그 출처를 한 곳에 모읍니다.
             </p>
 
+            <h2>RSI 로드맵의 기준 문헌</h2>
+            <p><a href="https://arxiv.org/abs/2609.11873v2">Duan et al., The Last AI Built by Humans: Toward Genuine Recursive Self-Improvement</a> (2026-09-15, v2)를 자율성 범위와 용어를 정렬하는 가이드로 사용합니다. 논문의 인증이나 GEODE에 대한 평가가 아닙니다. <a href="/geode/docs/explanation/rsi-roadmap">현재 구현·코드 근거·다음 검증 조건</a>을 별도로 공개합니다.</p>
+
             <h2>Frontier 에이전트 시스템</h2>
             <table>
               <thead><tr><th>시스템</th><th>출처</th><th>GEODE가 가져온 것</th></tr></thead>
@@ -123,6 +126,9 @@ export default function Page() {
               design and documentation structure. Specific borrowings are cited inside the relevant chapters; this page
               collects the sources in one place.
             </p>
+
+            <h2>Reference for the RSI roadmap</h2>
+            <p><a href="https://arxiv.org/abs/2609.11873v2">Duan et al., The Last AI Built by Humans: Toward Genuine Recursive Self-Improvement</a> (2026-09-15, v2) guides our autonomy scope and terminology. This is not certification or an assessment of GEODE by the paper. See <a href="/geode/docs/explanation/rsi-roadmap?lang=en">implemented scope, source evidence, and next tests</a>.</p>
 
             <h2>Frontier agent systems</h2>
             <table>
