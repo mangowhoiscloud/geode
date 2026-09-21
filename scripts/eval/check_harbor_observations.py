@@ -271,9 +271,14 @@ def _reconcile_usage_source(
             "source hook payload hash mismatch",
         )
     expected = _summarize_usage([_row_to_event(row) for row in rows])
+    # Producers may traverse the same retained rows in either chronological order.
+    _require(
+        sorted(usage["recorded_attempts"], key=lambda row: row["source_event_id"])
+        == sorted(expected["recorded_attempts"], key=lambda row: row["source_event_id"]),
+        "source/export usage mismatch",
+    )
     fields = [
         "scope",
-        "recorded_attempts",
         "started_events",
         "terminal_event_count",
         "call_events",

@@ -408,6 +408,14 @@ A small new admission must also load the reviewed replay in the supported
 player and exercise play/pause/seek before the larger cohort. Original reduced
 trajectories are not rewritten; new execution does not recover old history.
 
+Reconcile usage rows by durable source-event identity, not the chronological
+or reverse-chronological order returned by different readers. Compare every
+field and retain multiplicity so this normalization cannot hide altered or
+duplicate attempts. The native `Trial.create` factory selects a concrete trial
+class; environment identity observation belongs at actual environment creation,
+not an override on a subclass that the factory does not instantiate. Preserve
+available call usage even when later cleanup or replay admission fails.
+
 | Surface | Current owner and boundary |
 |---|---|
 | Scoped runtime | [Shared `run_arm`](../../evals/benchmarks/decision_handoff_runtime.py) owns the actual AgenticLoop, lookup, consumption receipt and oracle. The original [pilot CLI](../../scripts/eval/decision_handoff_pilot.py) and new [Harbor handoff adapter](../../evals/platforms/harbor_handoff.py) call it. A0 has one tool; A1/B have two. No fake native runtime object or default-service expansion is used. |

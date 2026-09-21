@@ -23,6 +23,7 @@ from scripts.eval import check_harbor_observations as gate
 from tests.scripts.test_eval_contract import _run_spec
 
 
+@pytest.mark.parametrize("export_order", ["ascending", "descending"])
 @pytest.mark.parametrize(
     "fault",
     [
@@ -34,10 +35,15 @@ from tests.scripts.test_eval_contract import _run_spec
         "payload-hash",
         "session",
         "wal",
+        "usage-counter",
+        "attempt-counter",
+        "attempt-identity",
+        "attempt-duplicate",
+        "attempt-replaced",
     ],
 )
 def test_source_reconciliation_reads_complete_snapshot_without_mutating(
-    tmp_path: Path, fault: str | None
+    tmp_path: Path, fault: str | None, export_order: str
 ) -> None:
     from core.hooks import HookEvent, HookSystem
     from core.observability.event_store import HookEventStore
@@ -122,6 +128,19 @@ def test_source_reconciliation_reads_complete_snapshot_without_mutating(
         rows if fault != "dropped-pair" else [r for r in rows if r.llm_call_id == "call-0"]
     )
     usage = _summarize_usage(selected_rows)
+    usage["recorded_attempts"].sort(
+        key=lambda row: row["source_event_id"], reverse=export_order == "descending"
+    )
+    if fault == "usage-counter":
+        usage["input_tokens"] += 1
+    if fault == "attempt-counter":
+        usage["recorded_attempts"][0]["usage"]["input_tokens"] += 1
+    if fault == "attempt-identity":
+        usage["recorded_attempts"][0]["source_event_id"] += 100
+    if fault == "attempt-duplicate":
+        usage["recorded_attempts"].append(copy.deepcopy(usage["recorded_attempts"][0]))
+    if fault == "attempt-replaced":
+        usage["recorded_attempts"][1] = copy.deepcopy(usage["recorded_attempts"][0])
     if fault in {"tool-pair", "tool-content"}:
         if fault == "tool-pair":
             full["events"] = [e for e in full["events"] if not e["kind"].startswith("tool.")]
