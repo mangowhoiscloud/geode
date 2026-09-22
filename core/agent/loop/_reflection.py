@@ -1,52 +1,14 @@
-"""Reflection node — LLM-driven belief update after the tool batch.
+"""Bounded, optional belief updates after tool batches.
 
-PR-3 C-2 of the cognitive-loop-uplift sprint
-(``docs/plans/2026-05-21-cognitive-loop-uplift.md``).
+The loop owns reflection cadence. Each admitted call sees a cognitive-state
+snapshot and tool-result excerpts, not the complete conversation. The model
+is asked to invoke ``record_reflection`` with ``tool_choice="auto"``; refusal
+or unavailable output preserves the previous state.
 
-PR-B (2026-05-21) — migrated the reflection call from free-form
-JSON-in-text to Anthropic ``tool_use`` structured output. Pre-PR-B
-the system prompt asked the LLM to "Return ONLY this JSON, no
-prose" but models frequently disobeyed (wrapped in ``"Here is the
-JSON: {...}"``, ``` ```json``` fences, trailing prose, etc.), and
-a 5-stage forgiving parser handled the drift. Codex MCP caught
-parser gaps 3 times during PR-3. The fix is to use the structured-
-output contract every other GEODE provider-aware caller already
-uses: declare a tool with a JSON ``input_schema`` + ``strict:
-True`` opt-in, prefer its invocation via ``tool_choice="auto"``,
-and read the parsed ``input`` dict directly off the
-``ToolUseBlock``. We use ``"auto"`` rather than forced
-``"any"`` / ``{"type": "tool"}`` because both forced shapes are
-incompatible with Anthropic extended/adaptive thinking — only
-``"auto"`` works across every model + thinking regime (Codex MCP
-PR-B review #2). With one tool declared and a strong system
-prompt the LLM still calls the tool on the happy path; rare
-declines fall through to a WARN + keep-previous-state path.
-
-Pre-PR-3 the agentic loop went tool result → next action with no
-explicit belief-update step. ``CognitiveState.hypotheses`` and
-``CognitiveState.confidence`` were declared in PR-2 but never
-populated. Without a reflection step, downstream features (PR-4
-episodic memory, PR-5 causal attribution) have no current-belief
-signal to record against an outcome.
-
-The reflection node runs ONE LLM call after every tool-use round.
-It sees only the cognitive-state snapshot + a compact tool-result
-summary (NOT the full conversation — clean-context discipline) and
-invokes the ``record_reflection`` tool which carries:
-
-  hypotheses[<=5]   — short claims about the task state
-  confidence ∈ [0,1] — overall confidence the goal will be achieved
-  next_action_hint  — short hint pushed into ``state.subgoals``
-
-Settings knobs (see ``core.config._settings``):
-  cognitive_reflection_enabled       (bool, default True)
-  cognitive_reflection_model         (str, default "" = inherit loop)
-  cognitive_reflection_max_tokens    (int, default 512)
-
-Dispatch goes through ``core.llm.router.call_with_failover`` so the
-reflection call shares the same credential rotator + retry path as
-every other provider-aware caller (paperclip-style abstraction
-established by PR-1).
+``ToolSpec`` carries a descriptive JSON schema, not a server-side strict-mode
+guarantee. Parsed fields pass through the local typed, finite-value checks in
+``_apply_reflection`` before a partial state update. Confidence remains a
+self-assessment, not calibrated success probability.
 """
 
 from __future__ import annotations
@@ -78,13 +40,6 @@ _REFLECTION_TOOL: dict[str, Any] = {
         "evolution not history. If the round produced no useful signal, keep "
         "the previous hypotheses and lower confidence."
     ),
-    # PR-B fix-up #1 — ``strict: True`` opts into Anthropic's strict
-    # tool-input validation so a malformed payload is rejected server-
-    # side instead of needing client-side coercion. Codex MCP review
-    # called out that the previous "Anthropic enforces schema" claim
-    # was overstated without this flag. See
-    # https://platform.claude.com/docs/en/agents-and-tools/tool-use/strict-tool-use
-    "strict": True,
     "input_schema": {
         "type": "object",
         "properties": {
@@ -163,7 +118,9 @@ def _build_user_prompt(state: CognitiveState, tool_summary: str) -> str:
         f"Last action: {state.last_action!r}\n"
         f"Last observation: {state.last_observation!r}\n"
         f"Previous hypotheses: {state.hypotheses!r}\n"
-        f"Previous confidence: {state.confidence!r}"
+        f"Previous confidence: {state.confidence!r}\n"
+        f"Confidence observed at round: {state.confidence_observed_round!r} "
+        "(None means unknown; a later round does not refresh this belief)"
     )
     return (
         f"<cognitive_state>{escape(snapshot)}</cognitive_state>\n"
@@ -214,12 +171,9 @@ def _extract_reflection_input(result: Any) -> dict[str, Any] | None:
 def _apply_reflection(state: CognitiveState, parsed: dict[str, Any]) -> None:
     """Update ``state`` in-place with reflection output.
 
-    Schema-typed casts — even though the Anthropic schema validator
-    enforces field types server-side, the dispatcher fork (GLM /
-    OpenAI / Codex) may not. Drop fields with the wrong type
-    silently rather than poisoning the entire state. PR-3 prefers
-    *partial* belief update over complete rejection so a flaky
-    reflection model still moves the needle.
+    Drop invalid fields without overwriting existing values. This local
+    boundary is required on every provider; the request does not promise
+    server-side strict validation.
     """
     hypotheses_raw = parsed.get("hypotheses")
     if isinstance(hypotheses_raw, list):
@@ -234,6 +188,7 @@ def _apply_reflection(state: CognitiveState, parsed: dict[str, Any]) -> None:
     confidence = bounded_confidence(parsed.get("confidence"))
     if confidence is not None:
         state.confidence = confidence
+        state.confidence_observed_round = state.round_count
 
     hint_raw = parsed.get("next_action_hint")
     if isinstance(hint_raw, str):
@@ -305,11 +260,8 @@ async def reflect_async(
 ) -> None:
     """Run the reflection LLM call and update ``state`` in place.
 
-    PR-B (2026-05-21) — uses ``tool_use`` structured output (the
-    ``record_reflection`` tool with ``strict: True`` schema +
-    ``tool_choice="auto"``). The Anthropic API validates the schema
-    server-side when ``strict`` is set, so we read ``input``
-    directly off the returned ``ToolUseBlock``.
+    Requests the ``record_reflection`` tool with ``tool_choice="auto"``.
+    Parse its object or JSON-string input and validate fields locally.
 
     Errors (LLM failure, model declined the tool, schema mismatch
     on a non-Anthropic provider) are logged at WARN and swallowed —
@@ -378,17 +330,7 @@ async def reflect_async(
             # ``"auto"`` on OpenAI/Codex via the shared normaliser.
             from core.config import settings as _settings
 
-            # Step J-b.3 (2026-05-23) — translate the reflection tool
-            # dict (kept as the in-module SoT for policy override
-            # compatibility) into a Path-B :class:`ToolSpec`. The
-            # ``strict: True`` flag the dict carried is intentionally
-            # dropped here: ``ToolSpec`` does not currently surface it
-            # and ``_anthropic_common.translate_tool`` would strip it
-            # anyway. The downstream :func:`_apply_reflection`
-            # isinstance + range checks already enforce the same
-            # contract client-side, so the behaviour degrades from
-            # "server-rejects-malformed" to "client-coerces-silently"
-            # rather than failing open.
+            # Keep the dictionary owner for existing reflection-policy overrides.
             tool_spec = ToolSpec(
                 name=active_tool["name"],
                 description=active_tool["description"],

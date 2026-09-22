@@ -282,6 +282,18 @@ async def _prepare_request(
     }
     bound_request = req
     original_adapter = loop._new_adapter
+    if model is not None and effective_model != loop.model:
+        from core.config import _resolve_provider
+        from core.llm.adapters._source_inference import infer_source
+        from core.llm.adapters.registry import normalize_registry_provider
+
+        target_provider = normalize_registry_provider(_resolve_provider(effective_model))
+        if target_provider != normalize_registry_provider(loop._provider):
+            if allow_tools:
+                raise ValueError("cross-provider model overrides require a text-only call")
+            original_adapter = loop._adapter_registry_snapshot.resolve_for(
+                target_provider, infer_source(target_provider)
+            )
     llm_request = await loop._middleware_registry.llm_request(
         LlmCallRequest(
             adapter=original_adapter,
@@ -349,8 +361,9 @@ async def call_llm(
 ) -> AgenticResponse | None:
     """Multi-provider LLM call via :class:`LLMAdapter` (P1 Gateway pattern).
 
-    Delegates to ``loop._new_adapter.acomplete()`` (provider-specific
-    conversion, retry, failover). Returns a normalized
+    Uses the loop's adapter unless a text-only model override selects another
+    provider, in which case the loop's registry snapshot resolves its route.
+    Returns a normalized
     ``AgenticResponse`` or None on failure. Raises ``UserCancelledError``
     on Ctrl+C (caught by ``arun()``). Optional ``model`` overrides the
     request model for one call without mutating ``loop.model``. Optional
@@ -486,7 +499,7 @@ async def call_llm(
                 continue
             from core.ui.agentic_ui import emit_reasoning_summary
 
-            emit_reasoning_summary(loop._provider, loop.model, summary)
+            emit_reasoning_summary(effective_provider, effective_model, summary)
 
     return response
 

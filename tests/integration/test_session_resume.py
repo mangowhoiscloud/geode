@@ -72,19 +72,22 @@ class TestCmdResume:
         assert len(result.messages) == 2
         assert result.user_input == "analyze Project Atlas"
 
-    def test_cognitive_state_summary_uses_loaded_snapshot(self) -> None:
+    @pytest.mark.parametrize("observed_round", [None, 2, 5, True])
+    def test_cognitive_state_summary_uses_loaded_snapshot(self, observed_round) -> None:
         summary = _format_cognitive_state_summary(
             {
                 "round_count": 4,
                 "confidence": 0.8123,
+                "confidence_observed_round": observed_round,
                 "last_action": "tools: read_file, search_files",
                 "hypotheses": ["h1", "h2"],
             }
         )
 
-        assert (
-            summary
-            == "round=4 | confidence=0.81 | last=tools: read_file, search_files | hypotheses=2"
+        expected_round = "2" if type(observed_round) is int and observed_round == 2 else "unknown"
+        assert summary == (
+            f"round=4 | confidence=0.81 | confidence_round={expected_round} | "
+            "last=tools: read_file, search_files | hypotheses=2"
         )
 
     def test_parse_last_flag(self) -> None:

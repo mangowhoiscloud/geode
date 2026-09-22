@@ -44,6 +44,12 @@ def _task(path: Path, digest: str) -> dict[str, Any]:
         or (value["intervention"] is not None and not isinstance(value["intervention"], dict))
     ):
         raise ValueError("invalid handoff task contract")
+    if value["case"].get("profile") is not None:
+        from evals.benchmarks.decision_handoff_runtime import validate_inbox_case
+
+        validate_inbox_case(value["case"], value["orders"])
+        if value["intervention"] is not None:
+            raise ValueError("inbox does not accept a single-request intervention")
     return value
 
 
@@ -124,6 +130,7 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
                 "source_sha256": self.source_sha256,
                 "runtime": "evals.benchmarks.decision_handoff_runtime:run_arm",
                 "profile": "decision-handoff",
+                "workload_profile": self.task["case"].get("profile", "single-request"),
                 "arm": self.arm,
                 "case_sha256": self.case_sha256,
                 "case_id": self.task["case"]["id"],

@@ -41,8 +41,8 @@ Do not create another status ledger or silently copy those old settings forward.
 | Outcome analysis | Existing digest-bound analysis validator passed; no public artifact release or adoption | Join helper decision → consumed tool result → root action → independent oracle. Report valid failures, invalid observations, denominator, latency and accounting coverage separately; do not decide adoption from five cases. |
 | External evaluation | Candidates only; separate freeze required | Start with Mind2Web selection and CUAVerifierBench completion decisions. Pin revision/split, selection and exclusion rules, input transformation, independent labels, license/access, sample size and metrics before dispatch. ScreenSpot-Pro tests candidate coverage; OSWorld is later integration, not another name for this pilot. |
 | Harbor execution | r6 admission passed, followed by 54 natural trials and four separate interventions on source `41e02255311c4ff68302cc67a12b21c98791a690` | All 58 planned trials have valid task/usage/replay/cleanup evidence. A0/A1/B each passed 18/18 natural trials; all four interventions were delivered and passed. Do not pool r5 or admission observations into those denominators. |
-| Replay and film | Three r6 admission replays passed actual native-player checks; all 58 natural/injection source replays are retained; final film absent | Preserve canonical/ATIF/cast and privacy-reviewed CFR video hashes. A playable presentation derivative remains distinct from raw PTY and score authority. Each selected natural/injection clip needs its own privacy and playback checks. |
-| Integration and publication | Original pilot merged to develop; follow-up and main promotion remain separate | Head-specific required CI and merge-commit GitFlow; artifact publication/readback, report-owner update and film delivery are separate receipts. No release/tag/PyPI action follows automatically. |
+| Replay and film | All 58 natural/injection source replays are retained. Fourteen selected r6 CFR clips passed privacy/frame review and native-player play/pause/mid/end checks; final film remains a separate deliverable | Preserve canonical/ATIF/cast and presentation hashes. The selected clips are not the measurement denominator; a playable derivative is neither raw PTY nor score authority. |
+| Integration and publication | [#3376](https://github.com/mangowhoiscloud/geode/pull/3376) merged to develop as `dcac82dfd09c242d7cc9838ec782a62e808ba27f`; [#3378](https://github.com/mangowhoiscloud/geode/pull/3378) promoted to main as `c4988e89f95f337db7d88baf5678934119243295`. Main CI, Pages and both install-smoke platforms passed; owned feature worktree removed | Artifact publication/readback, report-owner update and film delivery remain separate receipts. No release/tag/PyPI action followed. |
 
 At every transition, inspect the original source or receipt, perform the smallest
 next action, verify the consuming boundary, and update the owner above with the
@@ -72,6 +72,54 @@ study still needs its own prospective contract. Data candidates are not implied
 to have been run.
 
 ## One root, two decision helpers
+
+### Complete-candidate inbox follow-up
+
+The separately authored [inbox fixture](../../evals/benchmarks/fixtures/decision-handoff-inbox.json)
+adds three inboxes of 12 requests and a separate two-request admission inbox.
+It is a prospective diagnostic, not an extension of r6's denominator. Freeze
+new source, tasks, oracle, routes and schedule before inference; retain r6 as-is.
+
+- Compare root-only Astra, Astra with a batched Astra helper, and Astra with a
+  batched Jev helper. All roots use subscription `gpt-6-astra` / `xhigh`;
+  Jev uses the direct `jev-1.13.0` route. All may batch status lookups, so the
+  control is not forced to make a root request for every item.
+- Supply each original request and its complete source-ID candidates. Verify
+  candidate coverage before dispatch, including Korean particles and corrections.
+  Keep fixture gold labels outside provider state. A missing candidate is an
+  admission failure, not an unfavorable model result to discard afterwards.
+- Both helpers answer the same 24 Choice questions in one batch. Give the root
+  the same selected-item projection; retain Jev's native distributions in
+  handoff evidence, not extra root context. No probability threshold grants
+  execution permission. The helper remains advisory.
+- Two repetitions, three arms, three inboxes yield 18 natural trials. The
+  primary delta is `(B fully passed inboxes - A0 fully passed inboxes) / 6`.
+  There are three independent authored tasks, not 18 independent task families.
+  Exclude the three admission trials and previous wrong-advice interventions.
+- Report item correctness, false completion, repeated analysis calls/items,
+  helper-to-final corrections, wrong/duplicate lookups, root/helper calls,
+  runtime and host elapsed time, and recorded token/cache/cost coverage.
+  These are observable actions, not counts of latent internal rethinking.
+  Subscription API-equivalent and input-only Jev tariff estimates are not bills.
+- Reuse the existing AgenticLoop, observer, Harbor isolation, standalone oracle
+  and evidence schema. Fresh public agent and offline verifier containers,
+  serial rotated arm order, 180-second runtime bound, no manual trial reruns.
+  Preserve valid semantic failures; stop on invalid observations or service
+  failures. Incomplete planned cells leave the primary result not measurable.
+
+### Runtime GAP disposition before the follow-up
+
+| Audited boundary | Disposition and check |
+|---|---|
+| Explicit cross-provider `judge_model` | Resolve through the requested provider's adapter without mutating the root route; reject cross-provider tool-bearing calls. Regression: `test_model_split.py`. |
+| Reflection `strict` flag | Remove the unsupported ToolSpec field and server-guarantee claim. Typed, finite client-side validation remains; this is not newly implemented strict decoding. Regression: `test_reflection_node.py`. |
+| Confidence freshness | Persist `confidence_observed_round` through cognitive snapshots, session storage/restore, reflection input and CLI display. Unknown/invalid legacy freshness remains unknown. Regressions: cognitive state, store and session resume. |
+| Bounded judgment context | Keep explicit truncation/omission markers and existing bounds. An omitted observation is not evidence of success; this audit does not establish exhaustive context coverage. |
+| Legacy judgment UI emitters | No production callers found. Preserve exported event/reader compatibility; do not restore an unused execution path or remove a public API for this experiment. |
+
+These fixes and limits do not establish a Jev benefit. The inbox profile measures
+typed-choice delegation, not calibrated probability policy or runtime-wide
+reflection quality; cognitive reflection remains disabled equally in its arms.
 
 The [decision tool](../../evals/benchmarks/decision_handoff.py) and
 [shared root-loop owner](../../evals/benchmarks/decision_handoff_runtime.py) use the same
