@@ -5,7 +5,7 @@ will extend. The plan (docs/plans/2026-05-21-cognitive-loop-uplift.md)
 splits cognitive uplift into 6 PRs; PR-2's scope is intentionally
 narrow:
 
-  C-1  Introduce :class:`CognitiveState` (8 fields). Wire onto
+  C-1  Introduce :class:`CognitiveState`. Wire onto
        :class:`AgenticLoop`. Round-end updater populates 4 fields
        deterministically; the remaining 4 (subgoals / hypotheses /
        confidence) have empty defaults and are PR-3 territory.
@@ -30,10 +30,8 @@ from types import SimpleNamespace
 # ---------------------------------------------------------------------------
 
 
-def test_cognitive_state_has_eight_fields() -> None:
-    """Plan Q4 — exactly 8 fields, no more (over-specifying is plan
-    creep). Pin the contract so a future PR can't quietly add a 9th
-    without an explicit plan amendment."""
+def test_cognitive_state_declares_observation_and_belief_fields() -> None:
+    """Pin runtime state, including the round that produced a confidence value."""
     from dataclasses import fields
 
     from core.agent.cognitive_state import CognitiveState
@@ -45,6 +43,7 @@ def test_cognitive_state_has_eight_fields() -> None:
         "observations",
         "hypotheses",
         "confidence",
+        "confidence_observed_round",
         "last_action",
         "last_observation",
         "round_count",
@@ -67,6 +66,7 @@ def test_cognitive_state_defaults_are_empty() -> None:
     assert s.observations == []
     assert s.hypotheses == []
     assert s.confidence is None
+    assert s.confidence_observed_round is None
     assert s.last_action == ""
     assert s.last_observation == ""
     assert s.round_count == 0
@@ -107,9 +107,9 @@ def test_record_round_caps_observations() -> None:
     assert s.round_count == 35
 
 
-def test_to_snapshot_returns_dict_with_eight_keys() -> None:
+def test_to_snapshot_returns_all_observation_and_belief_fields() -> None:
     """Telemetry payload contract — every cognitive event embeds this
-    snapshot, so the key set must match the field set 1:1 (8 keys)."""
+    snapshot, so the key set must match the field set 1:1."""
     from core.agent.cognitive_state import CognitiveState
 
     snap = CognitiveState(goal="x").to_snapshot()
@@ -119,6 +119,7 @@ def test_to_snapshot_returns_dict_with_eight_keys() -> None:
         "observations",
         "hypotheses",
         "confidence",
+        "confidence_observed_round",
         "last_action",
         "last_observation",
         "round_count",
@@ -155,9 +156,22 @@ def test_from_snapshot_restores_bounded_state() -> None:
     assert len(state.observations) == 32
     assert state.hypotheses == ["h3", "h4", "h5", "h6", "h7"]
     assert state.confidence == 1.0
+    assert state.confidence_observed_round is None
     assert state.last_action == "tools: read"
     assert state.last_observation == "1 tool result(s)"
     assert state.round_count == 4
+
+
+def test_confidence_provenance_round_trip_and_invalid_restore() -> None:
+    from core.agent.cognitive_state import CognitiveState
+
+    state = CognitiveState(confidence=0.7, round_count=4, confidence_observed_round=2)
+    assert CognitiveState.from_snapshot(state.to_snapshot()) == state
+    for invalid in (None, True, -1, 5, 2.5, "2"):
+        snapshot = state.to_snapshot() | {"confidence_observed_round": invalid}
+        assert CognitiveState.from_snapshot(snapshot).confidence_observed_round is None
+    snapshot = state.to_snapshot() | {"confidence": float("nan")}
+    assert CognitiveState.from_snapshot(snapshot).confidence_observed_round is None
 
 
 # ---------------------------------------------------------------------------

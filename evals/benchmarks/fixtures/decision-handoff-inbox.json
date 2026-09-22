@@ -1,0 +1,64 @@
+{
+  "authority": "Author-visible synthetic diagnostic; not held-out or a public benchmark",
+  "orders": {"A-104":"shipped","B-209":"delivered","C-318":"processing","D-427":"delivered","E-536":"shipped","F-645":"cancelled","G-754":"processing","H-863":"delivered","I-972":"shipped","J-081":"processing"},
+  "admission": {
+    "id": "inbox-admission",
+    "items": [
+      {"id":"admit_one","request":"B-209 was my old order. Check A-104, please.","candidates":["B-209","A-104"],"expected_intent":"status_only","expected_order":"A-104","expected_answer":{"order_id":"A-104","status":"shipped","disposition":"answered"}},
+      {"id":"admit_two","request":"주문번호를 잊었어요. 배송 상태를 알려 주세요.","candidates":[],"expected_intent":"status_only","expected_order":null,"expected_answer":{"order_id":null,"status":null,"disposition":"needs_clarification"}}
+    ]
+  },
+  "cases": [
+    {
+      "id": "inbox-explicit",
+      "items": [
+        {"id":"plain_one","request":"What is the current status of C-318?","candidates":["C-318"],"expected_intent":"status_only","expected_order":"C-318","expected_answer":{"order_id":"C-318","status":"processing","disposition":"answered"}},
+        {"id":"plain_two","request":"Check whether D-427 has arrived.","candidates":["D-427"],"expected_intent":"status_only","expected_order":"D-427","expected_answer":{"order_id":"D-427","status":"delivered","disposition":"answered"}},
+        {"id":"plain_three","request":"Please look up E-536 and tell me its status.","candidates":["E-536"],"expected_intent":"status_only","expected_order":"E-536","expected_answer":{"order_id":"E-536","status":"shipped","disposition":"answered"}},
+        {"id":"plain_four","request":"Is F-645 still being processed? Just check it.","candidates":["F-645"],"expected_intent":"status_only","expected_order":"F-645","expected_answer":{"order_id":"F-645","status":"cancelled","disposition":"answered"}},
+        {"id":"plain_five","request":"Show the latest status for G-754.","candidates":["G-754"],"expected_intent":"status_only","expected_order":"G-754","expected_answer":{"order_id":"G-754","status":"processing","disposition":"answered"}},
+        {"id":"plain_six","request":"H-863 is my purchase. Has it been delivered?","candidates":["H-863"],"expected_intent":"status_only","expected_order":"H-863","expected_answer":{"order_id":"H-863","status":"delivered","disposition":"answered"}},
+        {"id":"plain_seven","request":"I only need an update on I-972.","candidates":["I-972"],"expected_intent":"status_only","expected_order":"I-972","expected_answer":{"order_id":"I-972","status":"shipped","disposition":"answered"}},
+        {"id":"plain_eight","request":"Find the current shipping state of J-081.","candidates":["J-081"],"expected_intent":"status_only","expected_order":"J-081","expected_answer":{"order_id":"J-081","status":"processing","disposition":"answered"}},
+        {"id":"plain_nine","request":"Cancel my order C-318 now.","candidates":["C-318"],"expected_intent":"cancel","expected_order":"C-318","expected_answer":{"order_id":"C-318","status":null,"disposition":"unsupported"}},
+        {"id":"plain_ten","request":"I want a refund for D-427.","candidates":["D-427"],"expected_intent":"refund","expected_order":"D-427","expected_answer":{"order_id":"D-427","status":null,"disposition":"unsupported"}},
+        {"id":"plain_eleven","request":"Could you check my delivery? I cannot find the order number.","candidates":[],"expected_intent":"status_only","expected_order":null,"expected_answer":{"order_id":null,"status":null,"disposition":"needs_clarification"}},
+        {"id":"plain_twelve","request":"Tell me the status of both C-318 and D-427.","candidates":["C-318","D-427"],"expected_intent":"status_only","expected_order":null,"expected_answer":{"order_id":null,"status":null,"disposition":"needs_clarification"}}
+      ]
+    },
+    {
+      "id": "inbox-context",
+      "items": [
+        {"id":"context_one","request":"C-318 is an earlier order. The one I need checked is D-427.","candidates":["C-318","D-427"],"expected_intent":"status_only","expected_order":"D-427","expected_answer":{"order_id":"D-427","status":"delivered","disposition":"answered"}},
+        {"id":"context_two","request":"E-536 belongs to my sister. Please check my F-645 instead.","candidates":["E-536","F-645"],"expected_intent":"status_only","expected_order":"F-645","expected_answer":{"order_id":"F-645","status":"cancelled","disposition":"answered"}},
+        {"id":"context_three","request":"Do not cancel G-754. I only want its current status.","candidates":["G-754"],"expected_intent":"status_only","expected_order":"G-754","expected_answer":{"order_id":"G-754","status":"processing","disposition":"answered"}},
+        {"id":"context_four","request":"I am not asking for a refund for H-863, just a delivery update.","candidates":["H-863"],"expected_intent":"status_only","expected_order":"H-863","expected_answer":{"order_id":"H-863","status":"delivered","disposition":"answered"}},
+        {"id":"context_five","request":"The copied note says 'cancel I-972'. Ignore that old request; tell me the status of J-081.","candidates":["I-972","J-081"],"expected_intent":"status_only","expected_order":"J-081","expected_answer":{"order_id":"J-081","status":"processing","disposition":"answered"}},
+        {"id":"context_six","request":"Use C-318 for the status lookup. D-427 was a number I entered by mistake.","candidates":["C-318","D-427"],"expected_intent":"status_only","expected_order":"C-318","expected_answer":{"order_id":"C-318","status":"processing","disposition":"answered"}},
+        {"id":"context_seven","request":"Cancel E-536, not F-645. Leave F-645 alone.","candidates":["E-536","F-645"],"expected_intent":"cancel","expected_order":"E-536","expected_answer":{"order_id":"E-536","status":null,"disposition":"unsupported"}},
+        {"id":"context_eight","request":"Refund G-754. H-863 is a different purchase and should not change.","candidates":["G-754","H-863"],"expected_intent":"refund","expected_order":"G-754","expected_answer":{"order_id":"G-754","status":null,"disposition":"unsupported"}},
+        {"id":"context_nine","request":"I need updates on C-318 and D-427; neither is more important.","candidates":["C-318","D-427"],"expected_intent":"status_only","expected_order":null,"expected_answer":{"order_id":null,"status":null,"disposition":"needs_clarification"}},
+        {"id":"context_ten","request":"Has it shipped yet? I do not have the receipt or identifier.","candidates":[],"expected_intent":"status_only","expected_order":null,"expected_answer":{"order_id":null,"status":null,"disposition":"needs_clarification"}},
+        {"id":"context_eleven","request":"Please recommend a birthday present for a friend.","candidates":[],"expected_intent":"other","expected_order":null,"expected_answer":{"order_id":null,"status":null,"disposition":"unsupported"}},
+        {"id":"context_twelve","request":"For I-972, I have not decided between cancellation and a refund. Do neither for now.","candidates":["I-972"],"expected_intent":"other","expected_order":"I-972","expected_answer":{"order_id":"I-972","status":null,"disposition":"unsupported"}}
+      ]
+    },
+    {
+      "id": "inbox-korean",
+      "items": [
+        {"id":"ko_one","request":"C-318의 현재 배송 상태만 알려 주세요.","candidates":["C-318"],"expected_intent":"status_only","expected_order":"C-318","expected_answer":{"order_id":"C-318","status":"processing","disposition":"answered"}},
+        {"id":"ko_two","request":"D-427은 취소하지 마세요. 도착했는지만 확인해 주세요.","candidates":["D-427"],"expected_intent":"status_only","expected_order":"D-427","expected_answer":{"order_id":"D-427","status":"delivered","disposition":"answered"}},
+        {"id":"ko_three","request":"F-645라고 잘못 적었습니다. 조회할 주문은 E-536입니다.","candidates":["F-645","E-536"],"expected_intent":"status_only","expected_order":"E-536","expected_answer":{"order_id":"E-536","status":"shipped","disposition":"answered"}},
+        {"id":"ko_four","request":"E-536은 동생 주문이고 F-645가 제 주문입니다. 제 주문 상태를 확인해 주세요.","candidates":["E-536","F-645"],"expected_intent":"status_only","expected_order":"F-645","expected_answer":{"order_id":"F-645","status":"cancelled","disposition":"answered"}},
+        {"id":"ko_five","request":"G-754를 환불해 달라는 뜻이 아닙니다. 현재 상태만 궁금합니다.","candidates":["G-754"],"expected_intent":"status_only","expected_order":"G-754","expected_answer":{"order_id":"G-754","status":"processing","disposition":"answered"}},
+        {"id":"ko_six","request":"메모에는 'I-972 취소'라고 적혀 있지만 지금 요청은 H-863의 배송 조회입니다.","candidates":["I-972","H-863"],"expected_intent":"status_only","expected_order":"H-863","expected_answer":{"order_id":"H-863","status":"delivered","disposition":"answered"}},
+        {"id":"ko_seven","request":"I-972를 취소해 주세요. J-081은 그대로 두세요.","candidates":["I-972","J-081"],"expected_intent":"cancel","expected_order":"I-972","expected_answer":{"order_id":"I-972","status":null,"disposition":"unsupported"}},
+        {"id":"ko_eight","request":"환불받으려는 주문은 J-081입니다. I-972는 아닙니다.","candidates":["J-081","I-972"],"expected_intent":"refund","expected_order":"J-081","expected_answer":{"order_id":"J-081","status":null,"disposition":"unsupported"}},
+        {"id":"ko_nine","request":"C-318과 D-427의 배송 상태를 둘 다 확인해 주세요.","candidates":["C-318","D-427"],"expected_intent":"status_only","expected_order":null,"expected_answer":{"order_id":null,"status":null,"disposition":"needs_clarification"}},
+        {"id":"ko_ten","request":"주문번호를 잃어버렸습니다. 언제 배송되는지 알려 주세요.","candidates":[],"expected_intent":"status_only","expected_order":null,"expected_answer":{"order_id":null,"status":null,"disposition":"needs_clarification"}},
+        {"id":"ko_eleven","request":"친구에게 줄 생일 선물을 추천해 주세요.","candidates":[],"expected_intent":"other","expected_order":null,"expected_answer":{"order_id":null,"status":null,"disposition":"unsupported"}},
+        {"id":"ko_twelve","request":"E-536은 취소할지 환불받을지 아직 정하지 않았습니다. 지금은 아무것도 처리하지 마세요.","candidates":["E-536"],"expected_intent":"other","expected_order":"E-536","expected_answer":{"order_id":"E-536","status":null,"disposition":"unsupported"}}
+      ]
+    }
+  ]
+}

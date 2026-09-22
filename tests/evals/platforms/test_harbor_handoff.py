@@ -81,6 +81,25 @@ def test_task_rejects_changed_bytes_and_unrecognized_fields(tmp_path: Path) -> N
         _task(path, hashlib.sha256(path.read_bytes()).hexdigest())
 
 
+def test_inbox_task_admission_requires_complete_candidate_inventory(tmp_path: Path) -> None:
+    from evals.benchmarks.decision_handoff_runtime import inbox_request
+
+    fixture = json.loads(
+        (
+            Path(__file__).parents[3] / "evals/benchmarks/fixtures/decision-handoff-inbox.json"
+        ).read_text()
+    )
+    case = fixture["admission"]
+    case.update(profile="inbox", request=inbox_request(case["items"]))
+    path = tmp_path / "task.json"
+    _, digest = _write_task(path, case=case, orders=fixture["orders"])
+    assert _task(path, digest)["case"]["profile"] == "inbox"
+    case["items"][0]["candidates"].pop()
+    _, digest = _write_task(path, case=case, orders=fixture["orders"])
+    with pytest.raises(ValueError, match="candidate coverage"):
+        _task(path, digest)
+
+
 @pytest.mark.parametrize(
     "override",
     [

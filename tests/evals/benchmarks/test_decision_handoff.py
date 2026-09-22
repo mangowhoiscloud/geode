@@ -293,6 +293,47 @@ def test_rejected_decision_keeps_completed_usage(arm: Literal["a", "b"], fault: 
         hooks.close()
 
 
+@pytest.mark.parametrize("arm", ["a", "b"])
+@pytest.mark.parametrize("fault", ["missing", "outside"])
+def test_inbox_rejects_partial_or_out_of_candidate_helper_results_without_losing_usage(
+    arm: Literal["a", "b"], fault: str
+) -> None:
+    values = {"ticket_intent": "status_only", "ticket_target": "order_0"}
+    body = _body()
+    body["answers"] = {f"ticket_{key}": value for key, value in body["answers"].items()}
+    if fault == "missing":
+        del values["ticket_target"]
+        del body["answers"]["ticket_target"]
+    else:
+        values["ticket_target"] = "order_missing"
+        body["answers"]["ticket_target"]["choice"] = "order_missing"
+    hooks = HookSystem()
+    observed: list[dict[str, Any]] = []
+    hooks.subscribe(HookEvent.LLM_CALL_ENDED, lambda _event, data: observed.append(data))
+
+    async def run() -> dict[str, Any]:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=body))
+        ) as client:
+            tool = DecisionHandoffTool(
+                _SOURCE,
+                arm,
+                requests={"ticket": _SOURCE},
+                adapter=_Adapter(_result(json.dumps(values))) if arm == "a" else None,
+                client=client if arm == "b" else None,
+                api_key=SecretStr("synthetic-test-key") if arm == "b" else None,
+            )
+            return await tool.aexecute(_tool_context=_context(hooks))
+
+    try:
+        output = asyncio.run(run())
+        assert "error" in output and "result" not in output
+        assert len(observed) == 1 and observed[0]["usage"]["input_tokens"] == 300
+        assert observed[0]["error"] is None
+    finally:
+        hooks.close()
+
+
 @pytest.mark.parametrize(
     "status,extra_output,accepted",
     [

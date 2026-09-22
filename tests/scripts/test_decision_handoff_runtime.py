@@ -556,6 +556,300 @@ def test_task_verifier_recomputes_final_and_consumed_lookup_evidence(tmp_path: P
     ]
 
 
+def _inbox_case(index: int | None = None) -> tuple[dict[str, Any], dict[str, str]]:
+    fixture = json.loads(
+        (pilot.ROOT / "evals/benchmarks/fixtures/decision-handoff-inbox.json").read_text()
+    )
+    case = fixture["admission"] if index is None else fixture["cases"][index]
+    case.update(profile="inbox", request=runtime.inbox_request(case["items"]))
+    return case, fixture["orders"]
+
+
+def _inbox_decisions(
+    case: dict[str, Any], *, wrong: bool = False
+) -> tuple[dict[str, str], dict[str, Any]]:
+    values, answers = {}, {}
+    for index, item in enumerate(case["items"]):
+        target = (
+            f"order_{item['candidates'].index(item['expected_order'])}"
+            if item["expected_order"] is not None
+            else "none"
+        )
+        if wrong and index == 0:
+            target = "order_0"  # Admission's correct target is its second mention.
+        for suffix, value, choices in (
+            ("intent", item["expected_intent"], ["status_only", "cancel", "refund", "other"]),
+            ("target", target, [*[f"order_{i}" for i in range(len(item["candidates"]))], "none"]),
+        ):
+            key = item["id"] + "_" + suffix
+            values[key] = value
+            answers[key] = {
+                "type": "choice",
+                "choice": value,
+                "probabilities": {choice: float(choice == value) for choice in choices},
+                "confidence": 1.0,
+            }
+    return values, {
+        "model": pilot.JEV_MODEL,
+        "usage": {"input_tokens": 20, "output_tokens": 2},
+        "answers": answers,
+    }
+
+
+async def _run_inbox(
+    case: dict[str, Any],
+    orders: dict[str, str],
+    arm: str,
+    directory: Path,
+    *,
+    recover: bool = False,
+) -> tuple[dict[str, Any], _Adapter, list[dict[str, Any]]]:
+    directory.mkdir()
+    values, body = _inbox_decisions(case)
+    wrong_values, wrong_body = _inbox_decisions(case, wrong=True)
+    responses = []
+    if arm != "a0":
+        responses.append(_response(calls=(_call("analyze_request", "analysis-1"),)))
+    if recover:
+        responses.extend(
+            [
+                _response(
+                    calls=(
+                        _call(
+                            "lookup_order_status",
+                            "wrong-read",
+                            {"items": [{"id": "admit_one", "order_id": "B-209"}]},
+                        ),
+                    )
+                ),
+                _response(calls=(_call("analyze_request", "analysis-2"),)),
+            ]
+        )
+    responses.extend(
+        [
+            _response(
+                calls=(
+                    _call(
+                        "lookup_order_status",
+                        "lookup-1",
+                        {
+                            "items": [
+                                {"id": item["id"], "order_id": item["expected_order"]}
+                                for item in case["items"]
+                                if item["expected_answer"]["disposition"] == "answered"
+                            ]
+                        },
+                    ),
+                )
+            ),
+            _response(
+                json.dumps(
+                    {
+                        "items": [
+                            {"id": item["id"], **item["expected_answer"]} for item in case["items"]
+                        ]
+                    }
+                )
+            ),
+        ]
+    )
+    root = _Adapter(responses)
+    helper = _Adapter(
+        [
+            _response(json.dumps(value), input_tokens=20)
+            for value in ([wrong_values, values] if recover else [values])
+        ]
+    )
+    replies = iter([wrong_body, body] if recover else [body])
+    payloads = []
+
+    def transport(request: httpx.Request) -> httpx.Response:
+        payloads.append(json.loads(request.content))
+        return httpx.Response(200, json=next(replies))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+        result = await runtime.run_arm(
+            case,
+            arm,
+            directory,
+            orders=orders,
+            root_adapter=root,
+            decision_adapter=helper if arm == "a" else None,
+            client=client,
+        )
+    if arm == "a":
+        from html import unescape
+
+        payloads = [
+            json.loads(
+                unescape(
+                    str(request.messages[0].content)
+                    .removeprefix("<decision_input>")
+                    .removesuffix("</decision_input>")
+                )
+            )
+            for request in helper.requests
+        ]
+    return result, root, payloads
+
+
+@pytest.mark.parametrize("index", [0, 1, 2])
+@pytest.mark.parametrize("arm", ["a0", "a", "b"])
+def test_complete_inbox_uses_one_helper_batch_and_one_lookup_batch(
+    index: int, arm: str, tmp_path: Path
+) -> None:
+    case, orders = _inbox_case(index)
+    result, root, payloads = asyncio.run(_run_inbox(case, orders, arm, tmp_path / "inbox"))
+    assert result["valid"] and result["passed"], result["oracle"]
+    assert result["workload_profile"] == "inbox"
+    assert len(result["oracle"]["items"]) == 12
+    assert result["oracle"]["analysis_call_count"] == (0 if arm == "a0" else 1)
+    assert result["oracle"]["rejudgment_call_count"] == 0
+    assert result["oracle"]["lookup_attempt_count"] == 1
+    assert result["handoff_call_coverage_complete"]
+    assert len(root.requests) == (2 if arm == "a0" else 3)
+    assert len(result["call_accounting"]) == (2 if arm == "a0" else 4)
+    assert all(
+        "Status-only intent means order-status information" in request.system_prompt
+        and "including requests to take no action" in request.system_prompt
+        for request in root.requests
+    )
+    if arm != "a0":
+        assert len(payloads) == 1 and len(payloads[0]["questions"]) == 24
+        assert len(payloads[0]["state"]["items"]) == 12
+        assert "expected_" not in json.dumps(payloads)
+        handoff = json.loads((tmp_path / "inbox/handoff.json").read_text())
+        decision = next(row for row in handoff if row.get("tool") == "analyze_request")
+        assert decision["result"]["result"]["primitives"] is None
+        assert len(decision["native_primitives"] or {}) == (24 if arm == "b" else 0)
+        assert all("probabilities" not in repr(request.messages) for request in root.requests)
+    assert "expected_" not in case["request"]
+    assert (tmp_path / "inbox/trajectory.private.json").is_file()
+
+
+@pytest.mark.parametrize("index,prefix", [(1, "context"), (2, "ko")])
+def test_inbox_semantics_distinguish_order_subject_from_action_and_unrelated_information(
+    index: int, prefix: str
+) -> None:
+    from evals.benchmarks.decision_handoff import DecisionHandoffTool
+
+    case, _ = _inbox_case(index)
+    items = {item["id"]: item for item in case["items"]}
+    unrelated = items[f"{prefix}_eleven"]
+    no_action = items[f"{prefix}_twelve"]
+    assert unrelated["expected_intent"] == no_action["expected_intent"] == "other"
+    assert unrelated["expected_order"] is None
+    assert no_action["expected_order"] == no_action["candidates"][0]
+    assert no_action["expected_answer"] == {
+        "order_id": no_action["expected_order"],
+        "status": None,
+        "disposition": "unsupported",
+    }
+    payload = DecisionHandoffTool(
+        case["request"], "a", requests={key: item["request"] for key, item in items.items()}
+    )._payload()
+    intent = payload["questions"][f"{prefix}_eleven_intent"]["criteria"]["status_only"]
+    target = payload["questions"][f"{prefix}_twelve_target"]
+    assert "order-status information" in intent
+    assert "Unrelated information requests are other" in intent
+    assert "even when no action is requested" in target["instructions"]
+    assert target["criteria"]["none"] == (
+        "No single listed order is the subject of the current request."
+    )
+    assert "expected_" not in json.dumps(payload)
+    legacy = DecisionHandoffTool(no_action["request"], "a")._payload()
+    assert legacy["questions"]["intent"]["criteria"]["status_only"] == (
+        "The request asks only for information or order status, not a mutation."
+    )
+    assert legacy["questions"]["target"]["criteria"]["none"] == (
+        "No listed order is targeted, or the target is ambiguous."
+    )
+
+
+@pytest.mark.parametrize("arm", ["a", "b"])
+def test_inbox_rejudgment_and_wrong_reads_remain_successful_but_counted(
+    arm: str, tmp_path: Path
+) -> None:
+    case, orders = _inbox_case()
+    directory = tmp_path / "recovery"
+    result, root, payloads = asyncio.run(_run_inbox(case, orders, arm, directory, recover=True))
+    assert result["valid"] and result["passed"], result["oracle"]
+    oracle = result["oracle"]
+    assert oracle["rejudgment_call_count"] == 1 and oracle["rejudged_item_count"] == 2
+    assert oracle["wrong_target_lookup_count"] == oracle["extra_lookup_count"] == 1
+    assert oracle["helper_rejudgment_recovery_count"] == 1
+    assert len(root.requests) == 5 and len(payloads) == 2
+    assert len(result["call_accounting"]) == 7
+    assert sum(row["usage"]["input_tokens"] for row in result["call_accounting"]) == 90
+    handoff = json.loads((directory / "handoff.json").read_text())
+    assert runtime.verify_handoff_result(case, result, handoff) == oracle
+    result["final_text"] = json.dumps(
+        {
+            "items": [
+                {"id": item["id"], **item["expected_answer"], "status": "invented"}
+                for item in case["items"]
+            ]
+        }
+    )
+    assert not runtime.verify_handoff_result(case, result, handoff)["passed"]
+
+
+@pytest.mark.parametrize("fault", ["candidate", "source", "label", "duplicate"])
+def test_incomplete_inbox_fails_before_any_model_call(fault: str, tmp_path: Path) -> None:
+    case, orders = _inbox_case()
+    if fault == "candidate":
+        case["items"][0]["candidates"].pop()
+    elif fault == "source":
+        case["request"] += "unfrozen"
+    elif fault == "label":
+        case["items"][0]["expected_answer"]["status"] = "invented"
+    else:
+        case["items"][1]["id"] = case["items"][0]["id"]
+    root = _Adapter([])
+    with pytest.raises(ValueError):
+        asyncio.run(runtime.run_arm(case, "a0", tmp_path, orders=orders, root_adapter=root))
+    assert not root.requests
+
+
+def test_inbox_verifier_runs_standalone_without_runtime_imports(tmp_path: Path) -> None:
+    case, orders = _inbox_case()
+    directory = tmp_path / "standalone"
+    result, _, _ = asyncio.run(_run_inbox(case, orders, "a0", directory))
+    (directory / "case.json").write_text(json.dumps(case))
+    (directory / "result.json").write_text(json.dumps(result))
+    probe = """import json, runpy, sys
+from pathlib import Path
+directory = Path(sys.argv[2])
+verify = runpy.run_path(sys.argv[1])['verify_handoff_result']
+case = json.loads((directory / 'case.json').read_text())
+result = json.loads((directory / 'result.json').read_text())
+handoff = json.loads((directory / 'handoff.json').read_text())
+assert verify(case, result, handoff)['passed']
+result['final_text'] = '{}'
+assert not verify(case, result, handoff)['passed']
+assert not any(name == 'core' or name.startswith('core.') for name in sys.modules)
+assert not any(name == 'evals' or name.startswith('evals.') for name in sys.modules)
+"""
+    subprocess.run(  # noqa: S603
+        [sys.executable, "-I", "-c", probe, str(Path(runtime.__file__).resolve()), str(directory)],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+
+def test_controlled_projection_shares_korean_candidate_boundaries() -> None:
+    projection = runtime._WrongHelperProjection(
+        "E-536이 아니라 F-645의 상태를 알려줘.", {"intent": "status_only", "order_id": "E-536"}
+    )
+    assert projection.projected["target"] == {"order_id": "E-536", "start": 0, "end": 5}
+    with pytest.raises(ValueError, match="listed source span"):
+        runtime._WrongHelperProjection(
+            "Q-7318의 상태", {"intent": "status_only", "order_id": "Q-731"}
+        )
+
+
 def test_rejected_lookup_attempt_is_not_a_no_lookup_success(tmp_path: Path) -> None:
     case = _case("missing-target")
     directory = tmp_path / "rejected-lookup"

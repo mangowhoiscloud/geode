@@ -38,6 +38,13 @@ def _format_cognitive_state_summary(snapshot: dict[str, Any]) -> str:
     confidence = snapshot.get("confidence")
     if isinstance(confidence, int | float) and not isinstance(confidence, bool):
         parts.append(f"confidence={float(confidence):.2f}")
+        observed_round = snapshot.get("confidence_observed_round")
+        known_round = (
+            type(observed_round) is int
+            and type(round_count) is int
+            and 0 <= observed_round <= round_count
+        )
+        parts.append(f"confidence_round={observed_round if known_round else 'unknown'}")
 
     last_action = snapshot.get("last_action")
     if isinstance(last_action, str) and last_action:

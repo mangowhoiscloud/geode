@@ -49,6 +49,7 @@ def test_append_event_updates_latest_and_preserves_event_stream(tmp_path):
 
 
 def test_bootstrap_cognitive_hook_records_to_store(tmp_path, monkeypatch):
+    from core.agent.cognitive_state import CognitiveState
     from core.hooks.system import HookEvent
     from core.wiring.bootstrap import build_hooks
 
@@ -61,16 +62,20 @@ def test_bootstrap_cognitive_hook_records_to_store(tmp_path, monkeypatch):
         log_dir=tmp_path / "logs",
     )
 
+    snapshot = CognitiveState(
+        goal="centralize", round_count=4, confidence=0.7, confidence_observed_round=2
+    ).to_snapshot()
     hooks.trigger(
         HookEvent.COGNITIVE_PLAN,
-        {"session_id": "s1", "cognitive_state": {"goal": "centralize"}},
+        {"session_id": "s1", "cognitive_state": snapshot},
     )
 
     store = CognitiveStateStore(db_path)
     try:
-        assert store.load_latest("s1") == {"goal": "centralize"}
+        assert store.load_latest("s1") == snapshot
         events = store.recent_events("s1")
         assert len(events) == 1
         assert events[0].phase == "cognitive_plan"
+        assert events[0].snapshot["confidence_observed_round"] == 2
     finally:
         store.close()
