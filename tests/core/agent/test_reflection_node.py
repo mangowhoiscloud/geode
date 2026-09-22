@@ -95,9 +95,7 @@ def test_failure_reflection_hint_escapes_unknown_reason() -> None:
 
 
 def test_reflection_tool_schema_declares_required_shape() -> None:
-    """Pin the tool schema. The Anthropic SDK enforces this server-
-    side, so dropping a property or required field would silently
-    change the contract."""
+    """Pin model-facing fields; state updates still validate locally."""
     tool = _reflection._REFLECTION_TOOL
     assert tool["name"] == REFLECTION_TOOL_NAME == "record_reflection"
     schema = tool["input_schema"]
@@ -113,11 +111,8 @@ def test_reflection_tool_schema_declares_required_shape() -> None:
     assert set(schema["required"]) == {"hypotheses", "confidence"}
 
 
-def test_anthropic_adapter_passes_strict_flag_through() -> None:
-    """Codex MCP review #2 catch — ``strict: True`` was being stripped
-    by ``_API_ALLOWED_KEYS`` filter on the Anthropic adapter so the
-    schema flag never reached the API. Pin that ``strict`` is in the
-    allowlist."""
+def test_legacy_anthropic_provider_accepts_strict_key() -> None:
+    """The legacy dictionary path accepts strict; reflection uses ToolSpec instead."""
     from core.llm.providers.anthropic import _API_ALLOWED_KEYS
 
     assert "strict" in _API_ALLOWED_KEYS
@@ -162,6 +157,20 @@ def test_apply_reflection_clamps_confidence() -> None:
     assert state.confidence == 1.0
     _reflection._apply_reflection(state, {"confidence": -0.3})
     assert state.confidence == 0.0
+
+
+def test_confidence_round_changes_only_with_a_valid_reflection() -> None:
+    state = CognitiveState(round_count=2)
+    _reflection._apply_reflection(state, {"confidence": 0.7})
+    state.record_round(action="read_file", observation="changed evidence")
+    _reflection._apply_reflection(state, {"confidence": float("nan")})
+    assert state.confidence == 0.7
+    assert state.confidence_observed_round == 2
+    prompt = _reflection._build_user_prompt(state, "observed result")
+    assert "Round count: 3" in prompt
+    assert "Confidence observed at round: 2" in prompt
+    _reflection._apply_reflection(state, {"confidence": 0.4})
+    assert state.confidence_observed_round == 3
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
@@ -540,7 +549,9 @@ def test_reflect_async_uses_supplied_provider_source(monkeypatch: pytest.MonkeyP
 
 def test_reflect_async_swallows_llm_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """If the LLM raises, the loop must continue with previous state."""
-    state = CognitiveState(hypotheses=["keep"], confidence=0.4)
+    state = CognitiveState(
+        hypotheses=["keep"], confidence=0.4, round_count=3, confidence_observed_round=1
+    )
     _install_reflection_stubs(monkeypatch, adapter=_StubAdapter(raise_exc=RuntimeError("boom")))
 
     asyncio.run(
@@ -550,6 +561,7 @@ def test_reflect_async_swallows_llm_failure(monkeypatch: pytest.MonkeyPatch) -> 
     )
     assert state.hypotheses == ["keep"]
     assert state.confidence == 0.4
+    assert state.confidence_observed_round == 1
 
 
 def test_reflect_async_swallows_response_without_tool_use(
@@ -629,15 +641,10 @@ def test_reflect_async_passes_tool_schema_to_adapter(
 
     tools = adapter.last_kwargs.get("tools")
     assert isinstance(tools, list) and len(tools) == 1
-    # Step J-b.3 (2026-05-23) — ``tools`` is now a tuple of
-    # :class:`~core.llm.adapters.base.ToolSpec` instances, not raw
-    # dicts. The ``strict`` field that the reflection module's
-    # in-source ``_REFLECTION_TOOL`` dict carries is intentionally
-    # dropped at the dict→ToolSpec translation (documented in
-    # ``_reflection.py``); the contract degrades to client-side
-    # coercion via ``_apply_reflection``'s isinstance checks. That
-    # narrowing is a tracked follow-up — see CHANGELOG.
     assert tools[0].name == REFLECTION_TOOL_NAME
+    from core.llm.adapters._anthropic_common import translate_tool
+
+    assert translate_tool(tools[0]) == _reflection._REFLECTION_TOOL
     # PR-B fix-up #2 — ``tool_choice="auto"``. Anthropic docs mark
     # both ``"any"`` and named-tool forcing as incompatible with
     # adaptive/extended thinking, so only ``"auto"`` is safe across

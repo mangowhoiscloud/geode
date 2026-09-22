@@ -280,6 +280,107 @@ def test_call_llm_disables_action_tools_for_auxiliary_calls(
 # -- LLM judge wiring -------------------------------------------------
 
 
+@pytest.mark.parametrize("mode", [VerifyMode.LLM_JUDGE, VerifyMode.REFLEXION])
+@pytest.mark.parametrize("judge_model", ["", "gpt-5.6-sol", "claude-haiku-4-5-20251001"])
+@pytest.mark.parametrize("route_available", [True, False])
+def test_judge_model_routes_without_mutating_action_adapter(
+    monkeypatch: pytest.MonkeyPatch, mode: VerifyMode, judge_model: str, route_available: bool
+) -> None:
+    import asyncio
+    import json
+
+    from core.agent.conversation import ConversationContext
+    from core.agent.loop import AgenticLoop
+    from core.agent.tool_executor import ToolExecutor
+    from core.agent.verify import _verify_llm_judge_async
+    from core.config import settings
+    from core.llm.adapters.base import AdapterCallResult, UsageSummary
+    from core.llm.adapters.registry import bootstrap_builtins
+
+    calls: list[tuple[str, Any]] = []
+    routes: list[tuple[str, str]] = []
+    summaries: list[tuple[str, str, str]] = []
+
+    class CaptureAdapter:
+        def __init__(self, provider: str, source: str) -> None:
+            self.provider = self.name = provider
+            self.source = source
+
+        async def acomplete(self, request: Any) -> AdapterCallResult:
+            calls.append((self.provider, request))
+            return AdapterCallResult(
+                text=json.dumps(
+                    {
+                        "passed": True,
+                        "score": 1,
+                        "reason": "checked",
+                        "reflection": {
+                            "observation": "Output inspected.",
+                            "lesson": "Keep the evidence.",
+                            "next_check": "Check after mutation.",
+                        },
+                    }
+                ),
+                usage=UsageSummary(),
+                stop_reason="completed",
+                reasoning_summaries=("checked",),
+            )
+
+    action_adapter = CaptureAdapter("openai", "subscription")
+    judge_adapter = CaptureAdapter("anthropic", "payg")
+
+    def resolve(provider: str, source: str) -> CaptureAdapter:
+        routes.append((provider, source))
+        if not route_available:
+            raise LookupError("requested judge route unavailable")
+        return judge_adapter
+
+    bootstrap_builtins()
+    loop = AgenticLoop(
+        ConversationContext(),
+        ToolExecutor(),
+        model="gpt-5.6-luna",
+        provider="openai",
+        config=AgenticLoopConfig(source="codex-oauth"),
+        quiet=False,
+    )
+    loop._new_adapter = action_adapter
+    loop._adapter_registry_snapshot = SimpleNamespace(resolve_for=resolve)
+    loop._verify_root_user_input = "Complete the requested task"
+    monkeypatch.setattr(settings, "judge_model", judge_model)
+    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda _: "payg")
+    monkeypatch.setattr(
+        "core.ui.agentic_ui.emit_reasoning_summary", lambda *values: summaries.append(values)
+    )
+    monkeypatch.setattr("core.ui.agentic_ui.render_tokens", lambda *args, **kwargs: None)
+
+    verdict = asyncio.run(_verify_llm_judge_async(_make_result(), loop=loop, mode=mode))
+
+    cross_provider = judge_model.startswith("claude-")
+    assert routes == ([("anthropic", "payg")] if cross_provider else [])
+    assert verdict.passed is (route_available or not cross_provider)
+    if cross_provider and not route_available:
+        assert not calls
+        assert not summaries
+        assert verdict.rubric_misses == ("verification_error",)
+        assert not verdict.should_retry
+    else:
+        provider, request = calls[0]
+        assert provider == ("anthropic" if cross_provider else "openai")
+        assert request.model == (judge_model or loop.model)
+        assert not request.tools
+        assert request.response_schema["title"] == "TurnVerification"
+        assert loop._current_step_snapshot.provider == provider
+        assert loop._current_step_snapshot.source == ("payg" if cross_provider else "subscription")
+        assert summaries == [(provider, judge_model or loop.model, "checked")]
+    assert loop._new_adapter is action_adapter
+    assert loop.model == "gpt-5.6-luna"
+    assert loop._provider == "openai"
+    if cross_provider:
+        with pytest.raises(ValueError, match="text-only"):
+            asyncio.run(loop._call_llm("Task", [], model=judge_model, allow_tools=True))
+
+
 def test_verify_llm_judge_calls_loop_call_llm(monkeypatch: pytest.MonkeyPatch) -> None:
     """When ``loop`` is provided + judge_model set, the judge calls
     ``loop._call_llm`` with the judge model and parses the JSON response."""

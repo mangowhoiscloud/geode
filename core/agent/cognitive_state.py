@@ -1,38 +1,9 @@
-"""CognitiveState — explicit state container for the cognitive loop.
+"""Round observations and optional reflection beliefs outside the transcript.
 
-Pre-PR-2 the agentic loop kept its working state implicit:
-``ConversationContext.messages`` accumulated turn history, but there
-was no named place for *goal*, *subgoals*, *observations*,
-*hypotheses*, or *confidence*. Downstream cognitive features
-(reflection / episodic memory / causal attribution) had nowhere to
-read from.
-
-This module introduces :class:`CognitiveState`, an 8-field dataclass
-attached to :class:`AgenticLoop` and updated deterministically each
-round. Field producers land incrementally across PR-2 → PR-6:
-
-  ============== ====================================== =========
-  field          producer                               PR
-  ============== ====================================== =========
-  goal           user input on session start            PR-2
-  round_count    agentic loop round counter             PR-2
-  last_action    tool-call list of the last round       PR-2
-  last_observation tool-result summary                   PR-2
-  observations   running list of round summaries        PR-2
-  subgoals       reflection node next_action hints      PR-3 (C-2)
-  hypotheses     reflection node output                 PR-3 (C-2)
-  confidence     reflection node output                 PR-3 (C-2)
-  ============== ====================================== =========
-
-The 3-codebase consensus that justified an explicit container:
-
-* OpenClaw ``Session.context.state``
-* Hermes ``AgentMemory``
-* autoresearch ``RunState``
-
-All three keep cognitive state outside the message log so analyzers
-can read it without re-parsing transcript text. PR-2 is the *shape*;
-later PRs wire the remaining writers.
+The loop records actions and observations; reflection updates hypotheses,
+subgoals and self-assessed confidence. ``confidence_observed_round`` identifies
+the last valid confidence update, not the current round or a verified success.
+Legacy snapshots keep unknown provenance as ``None``.
 """
 
 from __future__ import annotations
@@ -68,6 +39,7 @@ class CognitiveState:
     last_action: str = ""
     last_observation: str = ""
     round_count: int = 0
+    confidence_observed_round: int | None = None
 
     @classmethod
     def from_snapshot(cls, snapshot: dict[str, Any] | None) -> CognitiveState:
@@ -96,6 +68,13 @@ class CognitiveState:
             else 0
         )
         round_count = max(round_count, 0)
+        observed_round = snapshot.get("confidence_observed_round")
+        if (
+            confidence is None
+            or type(observed_round) is not int
+            or not 0 <= observed_round <= round_count
+        ):
+            observed_round = None
 
         return cls(
             goal=str(snapshot.get("goal") or ""),
@@ -106,6 +85,7 @@ class CognitiveState:
             last_action=str(snapshot.get("last_action") or ""),
             last_observation=str(snapshot.get("last_observation") or ""),
             round_count=round_count,
+            confidence_observed_round=observed_round,
         )
 
     def record_round(
@@ -154,6 +134,7 @@ class CognitiveState:
             "last_action": self.last_action,
             "last_observation": self.last_observation,
             "round_count": self.round_count,
+            "confidence_observed_round": self.confidence_observed_round,
         }
 
 

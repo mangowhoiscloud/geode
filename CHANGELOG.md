@@ -49,6 +49,10 @@ functional change.
 
 ### Added
 
+- Extend the opt-in decision-handoff diagnostic with complete-candidate inboxes,
+  batched interpretation and lookup, item-level verification, and observable
+  rejudgment/correction/duplicate-lookup counts. Preserve original cohorts and
+  keep recorded consumption separate from actual account charges.
 - Add an opt-in, five-task Astra/Jev decision-handoff pilot: source-bound
   classification and extraction return data to the same Astra root AgenticLoop
   for read-only status lookup and independent fixture verification. Retain native
@@ -81,6 +85,11 @@ functional change.
 
 ### Fixed
 
+- Resolve an explicit cross-provider judge model through the matching adapter
+  without changing the root route or granting tool access. Persist the round
+  of the last valid cognitive confidence update through session restore and
+  display; remove an unsupported reflection strict-mode claim while preserving
+  typed, finite client-side validation.
 - Preserve three-digit source order IDs followed by Korean particles in the
   experimental decision helper's shared candidate parser, without admitting
   embedded ASCII identifiers or expanding the ID format. Keep frozen pre-fix
