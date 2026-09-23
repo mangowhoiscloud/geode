@@ -11,8 +11,10 @@ may not enforce the schema server-side) can't poison state.
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Iterator
 from dataclasses import asdict
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import create_autospec
@@ -25,7 +27,14 @@ from core.agent.loop._reflection import REFLECTION_TOOL_NAME
 from core.agent.tool_executor import ToolExecutor
 from core.config import settings
 from core.config.policy_source import EMPTY_POLICY_SOURCES
-from core.hooks import HookCorrelation, HookEvent, HookSystem
+from core.hooks import HookCorrelation, HookEvent, HookSystem, MiddlewareRegistry
+from core.llm import token_tracker, usage_store
+from core.llm.adapters.base import (
+    AdapterCallRequest,
+    AdapterCallResult,
+    EmptyModelOutputError,
+    UsageSummary,
+)
 from core.llm.agentic_response import AgenticResponse, ToolUseBlock
 
 # ---------------------------------------------------------------------------
@@ -142,6 +151,15 @@ def test_apply_reflection_caps_hypotheses_at_five() -> None:
     assert len(state.hypotheses) == 5
     assert state.hypotheses[0] == "h0"
     assert state.hypotheses[-1] == "h4"
+
+
+@pytest.mark.parametrize("invalid", [[123, None], ["new belief", False]])
+def test_malformed_hypotheses_preserve_prior_beliefs(invalid: list[Any]) -> None:
+    state = CognitiveState(hypotheses=["keep"])
+    _reflection._apply_reflection(state, {"hypotheses": invalid})
+    assert state.hypotheses == ["keep"]
+    _reflection._apply_reflection(state, {"hypotheses": []})
+    assert state.hypotheses == []
 
 
 def test_apply_reflection_truncates_hypotheses_at_120_chars() -> None:
@@ -443,6 +461,47 @@ def test_maybe_reflect_configured_model_stays_explicit(
     )
 
 
+def test_reflection_skips_an_expired_root_budget(
+    reflection_loop: tuple[AgenticLoop, HookSystem], reflection_call: Any
+) -> None:
+    loop, _hooks = reflection_loop
+    loop._time_budget_s = 1.0
+    loop._loop_start_time = time.monotonic() - 2.0
+    loop.cognitive_state.record_round(action="read", observation="result")
+
+    asyncio.run(loop._maybe_reflect([]))
+
+    reflection_call.assert_not_awaited()
+
+
+def test_reflection_cancels_at_the_remaining_root_budget(
+    reflection_loop: tuple[AgenticLoop, HookSystem], reflection_call: Any
+) -> None:
+    loop, _hooks = reflection_loop
+    loop._time_budget_s = 0.1
+    loop.cognitive_state.record_round(action="read", observation="result")
+    cancelled = False
+
+    async def pending(*_args: Any, **_kwargs: Any) -> None:
+        nonlocal cancelled
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled = True
+
+    reflection_call.side_effect = pending
+
+    async def run() -> None:
+        loop._loop_start_time = time.monotonic()
+        await loop._maybe_reflect([])
+
+    asyncio.run(run())
+
+    reflection_call.assert_awaited_once()
+    assert cancelled
+    assert loop.cognitive_state.confidence is None
+
+
 # ---------------------------------------------------------------------------
 # reflect_async — error tolerance + tool_use roundtrip
 # ---------------------------------------------------------------------------
@@ -499,6 +558,183 @@ def _install_reflection_stubs(
     # replaces the legacy ``resolve_agentic_adapter(provider)``.
     monkeypatch.setattr(_reflection, "resolve_for", lambda _p, _src="payg": adapter, raising=False)
     monkeypatch.setattr(_reflection, "_resolve_provider", lambda _m: "anthropic", raising=False)
+
+
+@pytest.fixture
+def reflection_accounting(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> tuple[token_tracker.TokenTracker, usage_store.UsageStore]:
+    tracker = token_tracker.TokenTracker()
+    store = usage_store.UsageStore(tmp_path)
+    monkeypatch.setattr(token_tracker, "get_tracker", lambda: tracker)
+    monkeypatch.setattr(usage_store, "get_usage_store", lambda: store)
+    return tracker, store
+
+
+@pytest.mark.parametrize("payload", [{"hypotheses": ["new"], "confidence": 0.5}, "{broken", None])
+@pytest.mark.parametrize("reported_cost", [0.0, 3.0])
+def test_reflection_accounts_completed_response_before_semantic_validation(
+    monkeypatch: pytest.MonkeyPatch,
+    reflection_accounting: tuple[token_tracker.TokenTracker, usage_store.UsageStore],
+    payload: Any,
+    reported_cost: float,
+) -> None:
+    tracker, store = reflection_accounting
+    response = AdapterCallResult(
+        text="declined" if payload is None else "",
+        stop_reason="end_turn",
+        tool_uses=() if payload is None else ({"name": REFLECTION_TOOL_NAME, "input": payload},),
+        usage=UsageSummary(
+            input_tokens=100,
+            output_tokens=10,
+            cached_input_tokens=60,
+            cache_write_tokens=5,
+            reasoning_tokens=4,
+            reported_cost_usd=reported_cost,
+        ),
+    )
+    _install_reflection_stubs(monkeypatch, adapter=_StubAdapter(response=response))
+    state = CognitiveState(hypotheses=["keep"])
+
+    asyncio.run(_reflection.reflect_async(state, [], model="gpt-5.5", max_tokens=128))
+
+    assert state.hypotheses == (["new"] if isinstance(payload, dict) else ["keep"])
+    calls = tracker.accumulator.calls
+    assert len(calls) == 1
+    assert (calls[0].input_tokens, calls[0].output_tokens) == (100, 10)
+    assert (calls[0].cache_read_tokens, calls[0].cache_creation_tokens) == (60, 5)
+    assert calls[0].thinking_tokens == 4
+    assert tracker.accumulator.total_cost_usd == reported_cost
+    persisted = store.get_recent_records()
+    assert len(persisted) == 1
+    assert (persisted[0].cache_read_tokens, persisted[0].cache_creation_tokens) == (60, 5)
+    assert persisted[0].cost_usd == reported_cost
+
+
+@pytest.mark.parametrize("explicit_zero", [False, True])
+def test_reflection_distinguishes_unreported_usage_from_reported_zero(
+    monkeypatch: pytest.MonkeyPatch,
+    reflection_accounting: tuple[token_tracker.TokenTracker, usage_store.UsageStore],
+    explicit_zero: bool,
+) -> None:
+    tracker, store = reflection_accounting
+    response = AdapterCallResult(
+        text="declined",
+        stop_reason="end_turn",
+        usage=UsageSummary(input_tokens_present=explicit_zero, output_tokens_present=explicit_zero),
+    )
+    _install_reflection_stubs(monkeypatch, adapter=_StubAdapter(response=response))
+
+    asyncio.run(_reflection.reflect_async(CognitiveState(), [], model="gpt-5.5", max_tokens=128))
+
+    assert len(tracker.accumulator.calls) == int(explicit_zero)
+    assert len(store.get_recent_records()) == int(explicit_zero)
+
+
+@pytest.mark.parametrize("failure", ["completed", "interrupted", "cancelled"])
+def test_reflection_failed_attempt_keeps_only_known_completed_usage(
+    monkeypatch: pytest.MonkeyPatch,
+    reflection_accounting: tuple[token_tracker.TokenTracker, usage_store.UsageStore],
+    failure: str,
+) -> None:
+    tracker, store = reflection_accounting
+    response = AdapterCallResult(
+        text="", stop_reason="end_turn", usage=UsageSummary(input_tokens=20, reported_cost_usd=0.25)
+    )
+    completed = failure == "completed"
+    error = {
+        "completed": EmptyModelOutputError("empty", completed_result=response),
+        "interrupted": TimeoutError("interrupted"),
+        "cancelled": asyncio.CancelledError("cancelled"),
+    }[failure]
+    _install_reflection_stubs(monkeypatch, adapter=_StubAdapter(raise_exc=error))
+    state = CognitiveState(hypotheses=["keep"])
+
+    if failure == "cancelled":
+        with pytest.raises(asyncio.CancelledError) as caught:
+            asyncio.run(_reflection.reflect_async(state, [], model="gpt-5.5", max_tokens=128))
+        assert caught.value is error
+    else:
+        asyncio.run(_reflection.reflect_async(state, [], model="gpt-5.5", max_tokens=128))
+
+    assert state.hypotheses == ["keep"]
+    assert len(tracker.accumulator.calls) == int(completed)
+    assert len(store.get_recent_records()) == int(completed)
+    assert tracker.accumulator.total_cost_usd == (0.25 if completed else 0)
+
+
+def test_reflection_middleware_short_circuit_does_not_charge_provider_usage(
+    monkeypatch: pytest.MonkeyPatch,
+    reflection_accounting: tuple[token_tracker.TokenTracker, usage_store.UsageStore],
+) -> None:
+    from core.hooks.middleware import LlmCallRequest, LlmNextCall
+
+    response = AdapterCallResult(
+        text="cached",
+        stop_reason="end_turn",
+        usage=UsageSummary(input_tokens=20, reported_cost_usd=9),
+    )
+
+    class Cached:
+        async def llm_execution(
+            self, request: LlmCallRequest, next_call: LlmNextCall
+        ) -> AdapterCallResult:
+            return response
+
+    middleware = MiddlewareRegistry()
+    middleware.register_llm_execution(Cached())
+    adapter = _StubAdapter(raise_exc=AssertionError("provider must not be called"))
+    _install_reflection_stubs(monkeypatch, adapter=adapter)
+    asyncio.run(
+        _reflection.reflect_async(
+            CognitiveState(), [], model="gpt-5.5", max_tokens=128, middleware_registry=middleware
+        )
+    )
+
+    tracker, store = reflection_accounting
+    assert adapter.last_kwargs == {}
+    assert tracker.accumulator.calls == []
+    assert store.get_recent_records() == []
+
+
+def test_existing_middleware_callers_do_not_gain_a_second_tracker_charge(
+    reflection_accounting: tuple[token_tracker.TokenTracker, usage_store.UsageStore],
+) -> None:
+    response = AdapterCallResult(
+        text="ok", stop_reason="end_turn", usage=UsageSummary(input_tokens=20, reported_cost_usd=1)
+    )
+    asyncio.run(
+        MiddlewareRegistry().call_llm(
+            _StubAdapter(response=response), AdapterCallRequest(model="gpt-5.5", messages=())
+        )
+    )
+    tracker, store = reflection_accounting
+    assert tracker.accumulator.calls == []
+    assert store.get_recent_records() == []
+
+
+def test_tracking_failure_does_not_replace_completed_adapter_error(
+    monkeypatch: pytest.MonkeyPatch,
+    reflection_accounting: tuple[token_tracker.TokenTracker, usage_store.UsageStore],
+) -> None:
+    response = AdapterCallResult(
+        text="", stop_reason="end_turn", usage=UsageSummary(input_tokens=20, reported_cost_usd=1)
+    )
+    error = EmptyModelOutputError("primary", completed_result=response)
+
+    def broken_record(*_args: Any, **_kwargs: Any) -> None:
+        raise ValueError("accounting unavailable")
+
+    monkeypatch.setattr(token_tracker.TokenTracker, "record", broken_record)
+    with pytest.raises(EmptyModelOutputError) as caught:
+        asyncio.run(
+            MiddlewareRegistry().call_llm(
+                _StubAdapter(raise_exc=error),
+                AdapterCallRequest(model="gpt-5.5", messages=()),
+                on_completed=_reflection._record_completed_usage,
+            )
+        )
+    assert caught.value is error
 
 
 def test_reflect_async_uses_supplied_provider_source(monkeypatch: pytest.MonkeyPatch) -> None:

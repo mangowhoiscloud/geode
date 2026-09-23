@@ -109,11 +109,14 @@ Schema로 최초 입력과 rewrite 후 입력을 모두 검증한다. raw provid
 
 ### Verification과 외부 loop
 
-`GEODE_VERIFY_MODE=reflexion`을 설정하면 LLM이 원래 요청, 길이를 제한한
+`GEODE_VERIFY_MODE=llm_judge`를 선택하면 LLM이 원래 요청, 길이를 제한한
 최근 tool 관측, 후보 응답을 함께 검토한다. `observation`, `lesson`,
 `next_check` 피드백은 기존 verification continuation과 checkpoint에
 기록한다. 별도 memory store는 만들지 않는다. 판단이 누락되거나 형식이
-잘못됐거나 timeout되면 두 LLM 모드 모두 pass가 아닌 escalate로 처리한다.
+잘못됐거나 timeout되면 pass가 아닌 escalate로 처리한다. 이전 `reflexion`
+설정은 경고 후 `llm_judge`로 해석하며, 별도 실행 모드로 유지하지 않는다.
+Reflection 피드백은 공통 실행 경로를 사용하며 판단 엔진을 선택하는 설정이 아니다.
+최종 검사의 기본값은 `rule_based`로 유지한다.
 빈 실행과 운영자 조치 필요 상태는 계속 검사한다. 응답 길이, 키워드 일치,
 이미 복구한 tool 오류는 의미 판정을 막지 않는다. Reflexion은 에이전트가 이미
 관찰한 이미지도 제한된 범위에서 다시 볼 수 있지만, 새 파일을 읽지는 않는다.
@@ -130,21 +133,47 @@ Schema로 최초 입력과 rewrite 후 입력을 모두 검증한다. raw provid
 기존 정책에 따라 verification revision은 최대 두 번이다. judge는 설정된
 judge model(없으면 loop model)을 쓰고, 기존 usage 경로에 사용량을 기록한다.
 tool은 호출하지 않으며 남은 loop budget 안에서 최대 120초를 사용한다.
-수정 단계도 최초 실행의 시계를 공유한다. 시간 제한이 있는 Reflexion은 모델 호출
+수정 단계도 최초 실행의 시계를 공유한다. 시간 제한이 있는 LLM 검증은 모델 호출
 사이에 남은 시간을 확인하고, 마지막 3분의 1(최대 300초)에 첫 후보를 요청한다.
 진행 중인 호출이 이 시점을 넘길 수 있으므로 수정 시간 확보를 보장하지는 않는다.
 수정 단계에서는 기존의 최종 종료 구간 전까지 tool을 쓸 수 있다. 세션 예산은
 isolated worker에도 전달되며, 전체 종료 시점은 부모 실행의 취소가 통제한다.
 agent 정의에서 모델을 생략하면 부모의 기본 모델을 상속한다. task나 agent에
 명시한 모델은 그대로 우선한다. 기본값은 기계적 검사만
-수행하는 `rule_based`이다. Reflexion은 모델 호출을 추가하며, 검토 결과가 항상
+수행하는 `rule_based`이다. LLM judge를 선택하면 모델 호출이 추가되며, 검토 결과가 항상
 옳다는 보장은 없다.
+
+인지 reflection은 기존의 기본 활성 설정과 호출 주기를 유지하며, handoff 진입점에서
+강제로 끄지 않는다. 추가 호출은 root 턴의 남은 시간 안에서만 실행한다.
+개인정보 또는 REDACT 도구 결과가 남아 있는 대화에서는 이후 사용자 턴, 최종 텍스트와
+검증 continuation도 보조 reflection에 전달하지 않는다. 최종 LLM judge 역시
+해당 출력을 보내지 않고 `personal_data_omitted` 검증 오류로 남긴다.
+새 사용자 입력만으로 기존 대화가 정제되지는 않으므로 보호 상태를 해제하지 않는다.
+기존 checkpoint guard에 이 상태를 보존하여 재개 후에도 적용한다. 잘못된 hypotheses
+목록은 이전 값을 보존하며, 명시적인 빈 목록만 초기화로 처리한다.
+이 변경은 Jev나 다른 판단 엔진을 선택하거나 모델·effort·인증 경로를 바꾸지 않는다.
+이전 context와 checkpoint는 알려진 개인정보 도구 기록이나 생략 표식이 남아 있으면
+보호 상태를 복원한다. 출처가 모두 사라지고 assistant 본문만 남은 개인정보는
+소급해서 판별할 수 없다. 이 변경은 과거 저장 내용을 정제하거나 안전하다고 인증하지
+않는다. 메시지 삭제만으로 인지 상태까지 정제됐다는 보장이 없어 현재 loop의 보호
+상태는 유지한다.
+
+LLM middleware는 명시적인 요청 `purpose`를 받으며 이를 지우거나 바꿀 수 없다.
+평가 receipt는 인지 reflection과 root 호출을 구분하므로, reflection 요청을
+root가 도구 결과를 소비한 증거로 세지 않는다.
+두 purpose가 같은 논리 호출 ID를 공유해도 검증을 거절한다. 인지 reflection은
+실제 adapter 호출에서 완료된 사용량을 기존 tracker에 기록한다. Middleware가
+호출 없이 반환한 응답은 공급자 사용량으로 세지 않는다. 누락된 사용량과 비용의
+해석 범위는 [회계 계약](usage-accounting.md)을 따른다.
 
 이 기능은 한 태스크 안에서 피드백으로 수정을 유도하는 Reflexion-inspired
 구현이다. 태스크 간 학습이나 weight update는 아니다. 간결한 피드백은
 `turn_verify.reason`에 남고, 수정 hint는 다음 continuation에서 한 번만 읽는다.
 벤치 점수는 여전히 Harbor의 외부 verifier가 판정한다. 신규 측정은 실행 전에
 이 모드를 동결해야 하며, 숨겨진 정답이나 test 내용을 제공하지 않는다.
+Harbor 호스트는 verifier 설정의 유효성을 확인하되 요청한 wire 값을 보존한다.
+Alias 해석은 동결 bundle 내부 runtime의 책임이다. 과거 `reflexion` bundle을
+재현하면서 해당 revision의 다른 알고리즘인 `llm_judge`로 바꾸지 않는다.
 완료된 Codex 호출은 기존 LLM-call event의 `request_image_receipt`에 요청으로
 직렬화한 이미지 수, 인코딩 바이트 수, 이미지와 호출의 digest를 제한된 크기로 남긴다.
 이미지 본문과 URL은 이 receipt에 저장하지 않는다. 완료 응답이 없는 호출처럼

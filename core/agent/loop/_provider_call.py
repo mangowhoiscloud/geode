@@ -136,6 +136,7 @@ async def _prepare_request(
     model: str | None,
     response_schema: dict[str, Any] | None,
     allow_tools: bool,
+    purpose: str = "agentic_loop",
 ) -> tuple[AdapterCallRequest, Any, dict[str, Any], str, str, str, str]:
     """Freeze one request after policy middleware and bind its step."""
     effective_model = model or loop.model
@@ -160,7 +161,7 @@ async def _prepare_request(
         if allow_tools:
             from core.agent.verify import VerifyMode, get_verify_mode
 
-            if get_verify_mode() is VerifyMode.REFLEXION:
+            if get_verify_mode() is VerifyMode.LLM_JUDGE:
                 # First candidate needs time for feedback and repair, not just
                 # a final sentence. Repairs keep tools until the normal cutoff.
                 reserve = min(300.0, loop._time_budget_s / 3)
@@ -299,6 +300,7 @@ async def _prepare_request(
             adapter=original_adapter,
             request=req,
             correlation=correlation,
+            purpose=purpose,
         )
     )
     if step_snapshot.bound_tool_plan is not None and llm_request.adapter is not original_adapter:
@@ -390,6 +392,7 @@ async def call_llm(
         model=model,
         response_schema=response_schema,
         allow_tools=allow_tools,
+        purpose=purpose,
     )
     llm_attempt_number = 0
 
@@ -404,6 +407,7 @@ async def call_llm(
             adapter=adapter,
             request=request,
             correlation=attempt_correlation,
+            purpose=purpose,
         )
 
         async def terminal(effective: LlmCallRequest) -> Any:

@@ -518,6 +518,19 @@ async def test_auxiliary_call_identity_spans_middleware_and_dispatch() -> None:
     ):
         events.subscribe(event, lambda _event, data: rows.append(data))
     registry = MiddlewareRegistry(events=events)
+    purposes = []
+
+    class ObservePurpose:
+        async def llm_request(self, request: LlmCallRequest) -> LlmCallRequest:
+            purposes.append(request.purpose)
+            return request
+
+        async def llm_execution(self, request: LlmCallRequest, next_call: Any) -> AdapterCallResult:
+            purposes.append(request.purpose)
+            return await next_call(request)
+
+    registry.register_llm_request(ObservePurpose(), name="purpose-request")
+    registry.register_llm_execution(ObservePurpose(), name="purpose-execution")
     registry.register_llm_request(_LlmRequest(), name="request")
     registry.register_llm_execution(_LlmExecution(), name="execution")
     adapter = _Adapter()
@@ -527,9 +540,39 @@ async def test_auxiliary_call_identity_spans_middleware_and_dispatch() -> None:
         purpose="cognitive_reflection",
     )
     assert len(adapter.requests) == 1
-    assert len(rows) == 4
+    assert len(rows) == 6
     assert len({row["llm_call_id"] for row in rows}) == 1
     assert all(row["llm_call_id"] and row["llm_attempt_id"] for row in rows)
+    assert purposes == ["cognitive_reflection", "cognitive_reflection"]
+
+
+@pytest.mark.parametrize("surface", ["llm_request", "llm_execution"])
+@pytest.mark.parametrize("replacement", [None, "agentic_loop"])
+def test_llm_middleware_cannot_relabel_dispatch_purpose(
+    surface: str, replacement: str | None
+) -> None:
+    class Relabel:
+        async def llm_request(self, request: LlmCallRequest) -> LlmCallRequest:
+            return replace(request, purpose=replacement)
+
+        async def llm_execution(self, request: LlmCallRequest, next_call: Any) -> AdapterCallResult:
+            return await next_call(replace(request, purpose=replacement))
+
+    registry = MiddlewareRegistry()
+    if surface == "llm_request":
+        registry.register_llm_request(Relabel())
+    else:
+        registry.register_llm_execution(Relabel())
+    adapter = _Adapter()
+    with pytest.raises(InvalidMiddlewareResultError):
+        asyncio.run(
+            registry.call_llm(
+                cast(LLMAdapter, adapter),
+                AdapterCallRequest(model="original", messages=()),
+                purpose="cognitive_reflection",
+            )
+        )
+    assert not adapter.requests
 
 
 @_async_test

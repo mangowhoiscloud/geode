@@ -10,6 +10,39 @@ eval_triggers: [typesafe, jev, decision-handoff, classification, extraction, con
 
 # Jev decision handoff pilot
 
+## Current evidence disposition — 2026-09-22
+
+The r6 results below are **superseded for claims about the revised,
+default-reflection baseline**. Preserve their original source, run specs,
+attempts, analysis, trajectories and replay bytes. Supersession withdraws their
+authority for the new comparison; it does not change historical rewards or
+manufacture invalid attempts.
+
+| Finding or change | Observed impact and disposition |
+|---|---|
+| Korean source-ID candidate omission, fixed before the inbox follow-up | r6 case 03 omitted a candidate in four A1/B projections (two repetitions each). Do not attribute that helper error to the model alone. Case 07's four-digit omission was an explicit old contract limit, not a newly discovered parser defect. |
+| Common reflection lifecycle | Old r6 and inbox admission deliberately disabled cognitive reflection. The current entry points no longer override its default. Retain all old observations as historical diagnostics; do not reuse them as admission or performance evidence for the changed baseline. |
+| Rejected lookup accounting and helper-error bypass | The inbox oracle now counts schema-rejected lookups and rejects a contract-error response followed by a successful retry. Across 64 inspected r6/inbox admission trials, no tool error, rejected lookup or rejudgment was observed; a changed historical score is not established. |
+| Private-data guard, remaining-time bound and malformed reflection state | Regression tests cover these runtime defects. No inspected old handoff trial used private-data tools; do not claim those trials leaked data. New default-reflection runs must freeze the corrected revision and include auxiliary-call coverage. |
+| Reflection accounting and replay admission | Completed cognitive-reflection usage must reach the existing cost guard; root/reflection call IDs cannot overlap. The Harbor host preserves the verifier setting for interpretation by the frozen source bundle. Offline counterexamples establish these defects, not changed historical scores or bills; old cohorts explicitly disabled reflection. |
+| Inbox natural execution | The first attempt stopped during a Docker VM failure before model dispatch: 0 valid, 1 invalid, 17 unattempted. The primary remains not measurable, not a model failure or a completed 18-trial comparison. |
+
+The audit inspected r6 admission (3), natural (54), interventions (4), and inbox
+admission (3) separately. The old natural analysis remains bound to SHA-256
+`0263df30dbeb52b27dd87fec74ef17e6bbef956778249c9d7462593c80dfdf4d`;
+inbox admission to `ffc4972739eb909b0d9c1faa5c54856acac3f465a62bbc9721e23f4fb23653b2`,
+and incomplete inbox natural analysis to
+`65d35a96e84ea5398685b27ebbec5d5092883d642c396851b8a0e7b214b4ab25`.
+Do not overwrite these analyses. The private `analysis-review` disposition
+records supersession separately; old film/replay derivatives cannot establish
+the revised baseline's result either.
+
+Before new inference, obtain the operator's judgment-engine choice (LLM or Jev
+is not yet selected for the revised shared path), restore and admit the execution
+environment, then freeze a new source/spec/lineage. Keep the authorized root
+model and effort unchanged. Offline regressions are not a live rerun, and prior
+engine settings are not permission to choose the new one.
+
 Status: the first five-pair diagnostic and the fresh r6 Harbor comparison
 executed privately. r6 completed 54 valid natural trials and four valid
 wrong-advice interventions; the incomplete r5 primary remains not measurable.
@@ -40,7 +73,7 @@ Do not create another status ledger or silently copy those old settings forward.
 | Five-pair diagnostic | Completed on source `58b7c86d650ec592c3bf30046b55d64b6700a3fa`; private run `typesafe-handoff-astra-xhigh-20260920t213023z` | New private prospective run-spec bound to clean source, fixture, routes and oracle; provider-free preflight; all attempts and failed-call consumption retained. |
 | Outcome analysis | Existing digest-bound analysis validator passed; no public artifact release or adoption | Join helper decision → consumed tool result → root action → independent oracle. Report valid failures, invalid observations, denominator, latency and accounting coverage separately; do not decide adoption from five cases. |
 | External evaluation | Candidates only; separate freeze required | Start with Mind2Web selection and CUAVerifierBench completion decisions. Pin revision/split, selection and exclusion rules, input transformation, independent labels, license/access, sample size and metrics before dispatch. ScreenSpot-Pro tests candidate coverage; OSWorld is later integration, not another name for this pilot. |
-| Harbor execution | r6 admission passed, followed by 54 natural trials and four separate interventions on source `41e02255311c4ff68302cc67a12b21c98791a690` | All 58 planned trials have valid task/usage/replay/cleanup evidence. A0/A1/B each passed 18/18 natural trials; all four interventions were delivered and passed. Do not pool r5 or admission observations into those denominators. |
+| Harbor execution | Historical r6: admission, 54 natural trials and four interventions on source `41e02255311c4ff68302cc67a12b21c98791a690`; superseded for the revised baseline | Original evidence remains: A0/A1/B each passed 18/18, and four interventions passed. New source/spec/admission is required; do not pool old results into a new denominator. |
 | Replay and film | All 58 natural/injection source replays are retained. Fourteen selected r6 CFR clips passed privacy/frame review and native-player play/pause/mid/end checks; final film remains a separate deliverable | Preserve canonical/ATIF/cast and presentation hashes. The selected clips are not the measurement denominator; a playable derivative is neither raw PTY nor score authority. |
 | Integration and publication | [#3376](https://github.com/mangowhoiscloud/geode/pull/3376) merged to develop as `dcac82dfd09c242d7cc9838ec782a62e808ba27f`; [#3378](https://github.com/mangowhoiscloud/geode/pull/3378) promoted to main as `c4988e89f95f337db7d88baf5678934119243295`. Main CI, Pages and both install-smoke platforms passed; owned feature worktree removed | Artifact publication/readback, report-owner update and film delivery remain separate receipts. No release/tag/PyPI action followed. |
 
@@ -119,7 +152,8 @@ new source, tasks, oracle, routes and schedule before inference; retain r6 as-is
 
 These fixes and limits do not establish a Jev benefit. The inbox profile measures
 typed-choice delegation, not calibrated probability policy or runtime-wide
-reflection quality; cognitive reflection remains disabled equally in its arms.
+reflection quality. Its frozen historical admission disabled cognitive reflection
+equally; current entry points retain the existing default-enabled setting.
 
 The [decision tool](../../evals/benchmarks/decision_handoff.py) and
 [shared root-loop owner](../../evals/benchmarks/decision_handoff_runtime.py) use the same
@@ -148,8 +182,9 @@ permission. Confidence describes a distribution, not task-success probability.
 Each arm runs in a fresh child with its own workspace, GEODE home and state
 root, explicit prompt and empty policy-source bundle. No host memory or skill
 catalog is used. Root and helper A remain on the subscription route; there is
-no PAYG fallback. Cognitive reflection is disabled equally in both arms for
-this diagnostic. The existing finalization and native mechanical verifier run;
+no PAYG fallback. The original diagnostic disabled cognitive reflection equally;
+that historical choice is not imposed by the current entry points. The existing
+finalization and native mechanical verifier run;
 the fixture oracle, not that mechanical check, determines semantic correctness.
 
 ## Frozen workload and primary metric
@@ -333,8 +368,9 @@ A0 has only the identical read-only lookup tool. A1/B also have
 `analyze_request` and the same analysis-first prompt clause. The original request
 remains visible to the root. Deterministic candidate spans, lookup, permissions
 and final oracle stay in code; Jev supplies semantic data, not execution authority.
-Cognitive reflection, shell/filesystem tools, host memory and external accounts
-are absent from this scoped composition. It is an actual AgenticLoop end-to-end
+Cognitive reflection was disabled in this historical freeze; shell/filesystem
+tools, host memory and external accounts are absent from the scoped composition.
+It is an actual AgenticLoop end-to-end
 task, not a test of default GeodeRuntime services or the entire product.
 
 One separate three-arm `corrected-target-ko` admission precedes **9 cases × 3
@@ -601,7 +637,7 @@ justify adding a mandatory helper to every request or changing runtime defaults.
 |---|---|
 | Scoped runtime | [Shared `run_arm`](../../evals/benchmarks/decision_handoff_runtime.py) owns the actual AgenticLoop, lookup, consumption receipt and oracle. The original [pilot CLI](../../scripts/eval/decision_handoff_pilot.py) and new [Harbor handoff adapter](../../evals/platforms/harbor_handoff.py) call it. A0 has one tool; A1/B have two. No fake native runtime object or default-service expansion is used. |
 | Source, task and credentials | The handoff adapter inherits [native installation and bounded stop](../../evals/platforms/harbor_runtime.py), pinned to Harbor `0.22.0`. It binds task bytes by SHA, compares the exact instruction, requires fresh GEODE home and rejects prompt templates/extra environment. Subscription auth uses the existing private-file transport; only B receives a private regular TypeSafe key file, removed after reading and during entry-point cleanup. These controls do not by themselves prove egress isolation or safe retained-container custody. |
-| Observed calls | The [checker](../../scripts/eval/check_harbor_observations.py) accepts handoff only with both `--handoff-arm` and `--handoff-case-sha256`. It checks `geode-handoff`, `rule_based`, exact tool sets, frozen identities, requested routes and actual `response_model`. Only B's `structured_decision` may use TypeSafe `jev-1.13.0`/payg with observed `effort="none"`; all other calls require Astra subscription/xhigh. The default native single-route/reflexion contract is unchanged. |
+| Observed calls | The [checker](../../scripts/eval/check_harbor_observations.py) accepts handoff only with both `--handoff-arm` and `--handoff-case-sha256`. It checks `geode-handoff`, `rule_based`, exact tool sets, frozen identities, requested routes and actual `response_model`. Only B's `structured_decision` may use TypeSafe `jev-1.13.0`/payg with observed `effort="none"`; all other calls, including explicit `cognitive_reflection`, require Astra subscription/xhigh. This is an admission constraint, not automatic engine selection. New native `llm_judge` checks pin `--expected-verify-mode llm_judge`; the historical checker default remains `reflexion`. |
 | Finalization and replay export | Handoff retains execution results, attempts full/digest canonical exports independently, and writes runtime summary/finalization receipts even when a projection fails. A known incomplete source snapshot marks both trajectories incomplete and blocks ATIF. Healthy exports reuse the native post-run consumer and [existing ATIF/cast projector](../../evals/platforms/harbor.py); a cast is not raw screen/PTY footage or score authority. |
 
 [Adapter regressions](../../tests/evals/platforms/test_harbor_handoff.py) cover
@@ -611,7 +647,10 @@ real loop consumption and oracle outcomes; [checker tests](../../tests/scripts/t
 cover mixed-route rejection, actual response identity, unknown counters and
 unchanged native gates. `handoff_call_coverage_complete` joins each observed
 root logical request ID to its durable attempts and each helper tool invocation
-ID to its structured-decision attempt. Root retries may share one logical ID;
+ID to its structured-decision attempt. Explicit `reflection_request` receipts
+join cognitive-reflection attempts separately and never establish root tool-result
+consumption. Missing or unknown purpose fails scoped coverage rather than being
+inferred from a tool name. Root retries may share one logical ID;
 dropping an entire recorded call pair must still fail this scoped join. This is
 closure for the fixed root/helper profile, not general wire-dispatch coverage.
 The oracle also counts lookup attempts rejected before tool middleware. A

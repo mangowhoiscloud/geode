@@ -18,6 +18,7 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from core.agent.convergence import ConvergenceDetector
 from core.agent.loop import _lifecycle
 from core.agent.loop.models import TerminationReason
@@ -93,6 +94,7 @@ def _fake_loop() -> SimpleNamespace:
         _total_empty_rounds=0,
         _budget_warned=False,
         _low_confidence_replan_armed=True,
+        _reflection_requires_redaction=False,
         _consecutive_tool_tracker=[],
         _convergence=ConvergenceDetector(),
         _session_id="",
@@ -107,6 +109,7 @@ def test_guard_state_roundtrip():
     src._consecutive_llm_failures = 3
     src._total_empty_rounds = 2
     src._budget_warned = True
+    src._reflection_requires_redaction = True
     src._consecutive_tool_tracker = [("grep_files", "sig-a"), ("read_file", "sig-b")]
     src._convergence.total_consecutive_tool_errors = 2
     src._convergence.recent_errors = ["boom", "boom"]
@@ -122,6 +125,7 @@ def test_guard_state_roundtrip():
     assert dst._consecutive_llm_failures == 3
     assert dst._total_empty_rounds == 2
     assert dst._budget_warned is True
+    assert dst._reflection_requires_redaction is True
     assert dst._consecutive_tool_tracker == [("grep_files", "sig-a"), ("read_file", "sig-b")]
     assert dst._convergence.to_snapshot() == src._convergence.to_snapshot()
 
@@ -181,6 +185,7 @@ def test_apply_guard_state_is_replacement_not_merge():
     dst = _fake_loop()
     dst._consecutive_llm_failures = 4
     dst._budget_warned = True
+    dst._reflection_requires_redaction = True
     dst._consecutive_tool_tracker = [("grep_files", "sig-a")]
     dst._convergence.total_consecutive_tool_errors = 3
 
@@ -188,6 +193,7 @@ def test_apply_guard_state_is_replacement_not_merge():
 
     assert dst._consecutive_llm_failures == 0
     assert dst._budget_warned is False
+    assert dst._reflection_requires_redaction is False
     assert dst._consecutive_tool_tracker == []
     assert dst._convergence.total_consecutive_tool_errors == 0
     assert dst._low_confidence_replan_armed is True  # fresh-loop default
@@ -250,6 +256,7 @@ def test_checkpoint_persists_loop_guards(tmp_path):
         "consecutive_llm_failures": 2,
         "total_empty_rounds": 1,
         "budget_warned": True,
+        "reflection_requires_redaction": True,
         "consecutive_tool_tracker": [["grep_files", "sig-a"]],
         "convergence": ConvergenceDetector().to_snapshot(),
     }
@@ -257,6 +264,44 @@ def test_checkpoint_persists_loop_guards(tmp_path):
     loaded = cp.load("s-guards")
     assert loaded is not None
     assert loaded.loop_guards == guards
+    dst = _fake_loop()
+    _lifecycle.restore_loop_state(dst, loaded)
+    assert dst._reflection_requires_redaction is True
+
+
+@pytest.mark.parametrize(
+    "private_record",
+    [
+        {"type": "tool_use", "name": "gmail_search", "input": {}},
+        {"type": "function_call", "name": "gmail_search", "arguments": "{}"},
+        {"type": "tool_result", "content": '{"_personal_data_omitted": true}'},
+        {"type": "function_call_output", "output": '{"_personal_data_omitted": true}'},
+        {"tool": "gmail_search", "result": {}},
+        {"tool": "public_alias", "result": {"_personal_data_omitted": True}},
+    ],
+)
+@pytest.mark.parametrize("field", ["messages", "tool_log"])
+def test_legacy_restore_keeps_private_evidence_boundary(private_record, field):
+    dst = _fake_loop()
+    state = SessionState(session_id="legacy-private", **{field: [private_record]})
+
+    _lifecycle.restore_loop_state(dst, state)
+
+    assert dst._reflection_requires_redaction is True
+
+
+def test_public_restore_replaces_previous_conversations_private_boundary():
+    dst = _fake_loop()
+    dst._reflection_requires_redaction = True
+    state = SessionState(
+        session_id="legacy-public",
+        messages=[{"role": "assistant", "content": "Ordinary prose is not privacy evidence."}],
+        tool_log=[{"tool": "list_files", "result": {"files": []}}],
+    )
+
+    _lifecycle.restore_loop_state(dst, state)
+
+    assert dst._reflection_requires_redaction is False
 
 
 # ---------------------------------------------------------------------------

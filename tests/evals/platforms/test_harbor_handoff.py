@@ -248,7 +248,7 @@ def container_trial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNa
     for key in list(os.environ):
         if key.endswith("API_KEY"):
             monkeypatch.delenv(key)
-    settings = SimpleNamespace()
+    settings = SimpleNamespace(cognitive_reflection_enabled=True)
     monkeypatch.setattr("core.config.settings", settings)
     db = tmp_path / "sessions.db"
     timeline = SessionTimeline("fake-root", db_path=db, projection_path=tmp_path / "events.jsonl")
@@ -440,7 +440,7 @@ def test_container_b_secret_is_unlinked_before_runtime_and_not_serialized(
     trial.runner.side_effect = run
     assert asyncio.run(_run_handoff(trial.args)) == 0
     assert trial.settings.llm_max_retries == 1
-    assert trial.settings.cognitive_reflection_enabled is False
+    assert trial.settings.cognitive_reflection_enabled is True
     assert trial.settings.cost_limit_usd == 0
     assert not trial.secret.exists()
     for path in trial.path.glob("*.json"):

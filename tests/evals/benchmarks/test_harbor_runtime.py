@@ -200,7 +200,7 @@ def test_runtime_config_pins_role_models_and_absolute_policy(
     agent.logs_dir = tmp_path
     agent.model_name = "gpt-5.6-sol"
     agent.effort = "max"
-    agent.verify_mode = "reflexion"
+    agent.verify_mode = "llm_judge"
     agent.source = "subscription"
     agent.source_revision = "a" * 40
     agent.source_sha256 = "b" * 64
@@ -220,15 +220,15 @@ def test_runtime_config_pins_role_models_and_absolute_policy(
     call = agent.exec_as_agent.call_args.kwargs
     assert "runtime.log 2>&1" in call["command"]
     assert call["env"]["PYTHONFAULTHANDLER"] == "1"
-    assert call["env"]["GEODE_VERIFY_MODE"] == "reflexion"
-    assert "--verify-mode reflexion" in call["command"]
+    assert call["env"]["GEODE_VERIFY_MODE"] == "llm_judge"
+    assert "--verify-mode llm_judge" in call["command"]
     profile_path = tmp_path / "runtime-preferences.toml"
     assert tomllib.loads(profile_path.read_text()) == {"policy": {"allow_dangerous": True}}
     environment.upload_file.assert_any_await(
         profile_path, "/logs/agent/geode-home/user_profile/preferences.toml"
     )
     contract = json.loads((tmp_path / "runtime-contract.json").read_text())
-    assert contract["verify_mode"] == "reflexion"
+    assert contract["verify_mode"] == "llm_judge"
     assert contract["required_tools"] == ["run_bash"]
 
     from core.agent.loop.models import AgenticResult
@@ -315,6 +315,8 @@ def test_installed_agent_uses_harbor_lifecycle_and_classifies_timeout(tmp_path: 
     agent = GeodeRuntimeHarborAgent(**kwargs)
     assert isinstance(agent, BaseInstalledAgent)
     assert agent.verify_mode == "rule_based"
+    assert GeodeRuntimeHarborAgent(**kwargs, verify_mode="reflexion").verify_mode == "reflexion"
+    assert GeodeRuntimeHarborAgent(**kwargs, verify_mode="llm_judge").verify_mode == "llm_judge"
     with pytest.raises(ValueError, match="is not a valid VerifyMode"):
         GeodeRuntimeHarborAgent(**kwargs, verify_mode="reflexionn")
     assert GeodeRuntimeHarborAgent.setup is BaseInstalledAgent.setup

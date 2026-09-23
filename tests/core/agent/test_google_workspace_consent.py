@@ -7,9 +7,13 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
+import pytest
 from core.agent.approval import ApprovalWorkflow
 from core.agent.cognitive_state import CognitiveState
+from core.agent.conversation import ConversationContext
+from core.agent.loop import AgenticLoopConfig, _reflection
 from core.agent.loop.agent_loop import AgenticLoop
 from core.agent.safety import (
     HEADLESS_DENIED_TOOLS,
@@ -18,6 +22,8 @@ from core.agent.safety import (
     _skip_permissions_var,
 )
 from core.agent.sub_agent import SUBAGENT_DENIED_TOOLS
+from core.agent.tool_executor import ToolExecutor
+from core.config import settings
 from core.hooks import HookEvent
 from core.memory.session_checkpoint import SessionCheckpoint, SessionState
 from core.tools.google_capabilities import (
@@ -289,3 +295,96 @@ def test_effective_request_redaction_skips_reflection_after_tool_rewrite() -> No
 
     assert returned == [{"content": "private effective result"}]
     assert loop.reflected is False
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "effective_redaction"), [("gmail_search", False), ("public_alias", True)]
+)
+def test_personal_exposure_protects_later_rounds_and_user_turns(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    tool_name: str,
+    effective_redaction: bool,
+) -> None:
+    """A public batch or final answer must not launder private tool evidence."""
+    private_echo = "private-mail-echo-tail-7d83f3"
+    monkeypatch.setattr(settings, "cognitive_reflection_enabled", True)
+    monkeypatch.setattr(settings, "cognitive_reflection_interval", 1)
+    monkeypatch.setattr(settings, "cognitive_reflection_adaptive", False)
+    reflect = AsyncMock()
+    monkeypatch.setattr(_reflection, "reflect_async", reflect)
+    loop = AgenticLoop(
+        ConversationContext(),
+        ToolExecutor(),
+        config=AgenticLoopConfig(source="payg", session_id="personal-reflection-tail"),
+        model="claude-sonnet-4-6",
+        quiet=True,
+    )
+    monkeypatch.setattr(
+        loop._tool_processor,
+        "process",
+        AsyncMock(return_value=[{"tool_use_id": "t1", "content": private_echo}]),
+    )
+
+    async def run() -> None:
+        await loop._emit_session_start_signals("inspect mail")
+        loop._tool_processor._last_batch_requires_redaction = effective_redaction
+        response = SimpleNamespace(content=[SimpleNamespace(type="tool_use", name=tool_name)])
+        await loop._run_cognitive_act_observe_cycle(response, 0)
+        # Later processing may echo private data even though its tool is public.
+        loop._tool_processor._last_batch_requires_redaction = False
+        response = SimpleNamespace(content=[SimpleNamespace(type="tool_use", name="list_files")])
+        await loop._run_cognitive_act_observe_cycle(response, 1)
+        await loop._record_text_only_round(2, text=private_echo)
+        await loop._maybe_reflect([])
+        reflect.assert_not_awaited()
+        assert private_echo not in json.dumps(loop.cognitive_state.to_snapshot())
+
+        checkpoint = SessionCheckpoint(tmp_path / "sessions")
+        checkpoint.save(
+            SessionState(
+                session_id="personal-reflection-tail",
+                cognitive_state=loop.cognitive_state.to_snapshot(),
+            )
+        )
+        loaded = checkpoint.load("personal-reflection-tail")
+        assert loaded is not None
+        assert private_echo not in json.dumps(loaded.cognitive_state)
+        state_file = tmp_path / "sessions" / "personal-reflection-tail" / "state.json"
+        assert private_echo not in state_file.read_text(encoding="utf-8")
+        assert private_echo.encode() not in (tmp_path / "sessions" / "sessions.db").read_bytes()
+
+        # Normal turn finalization keeps raw conversation context for the root
+        # model; a new user message does not prove that evidence was removed.
+        loop.context.add_tool_result(
+            [{"type": "tool_result", "tool_use_id": "t1", "content": private_echo}]
+        )
+        loop.context.add_assistant_message(private_echo)
+        await loop._emit_session_start_signals("repeat the previous answer")
+        assert private_echo in json.dumps(loop.context.get_messages())
+        await loop._record_text_only_round(3, text=private_echo)
+        reflect.assert_not_awaited()
+        assert loop._reflection_requires_redaction is True
+        assert private_echo not in json.dumps(loop.cognitive_state.to_snapshot())
+
+    asyncio.run(run())
+
+
+def test_reused_conversation_keeps_private_boundary_in_new_loop() -> None:
+    context = ConversationContext()
+    context.add_assistant_message(
+        [{"type": "tool_use", "name": "gmail_search", "id": "mail-1", "input": {}}]
+    )
+    context.add_tool_result(
+        [{"type": "tool_result", "tool_use_id": "mail-1", "content": "private mail"}]
+    )
+
+    loop = AgenticLoop(
+        context,
+        ToolExecutor(),
+        config=AgenticLoopConfig(source="payg"),
+        model="claude-sonnet-4-6",
+        quiet=True,
+    )
+
+    assert loop._reflection_requires_redaction is True
