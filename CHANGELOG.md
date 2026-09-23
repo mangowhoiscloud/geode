@@ -100,6 +100,13 @@ functional change.
 
 ### Fixed
 
+- Preserve verifier failure instructions separately from the replanner's bounded
+  candidate observation. The opt-in LLM/Jev diagnostic can now disclose one frozen
+  candidate fault, retain native/effective output provenance, and check actual
+  feedback consumption and repair without changing runtime defaults or verdicts.
+  Preserve native refusal/incomplete responses and count bounded, accepted
+  negative-judgment holds as valid diagnostic failures rather than invalid trials.
+
 - Keep personal-data reflection suppression across conversation turns, resume
   and final judge, bound cognitive reflection by the root deadline, and preserve
   prior hypotheses when an auxiliary response has invalid list members. Count

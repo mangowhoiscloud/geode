@@ -176,6 +176,9 @@ middleware short-circuits do not incur provider usage. See the
 This is Reflexion-inspired, within-task feedback-conditioned repair, not
 cross-task learning or a weight update. `turn_verify.reason` retains concise
 feedback; the repair hint is consumed once by the next continuation.
+The advisory replanner receives the runtime failure instruction separately from
+its bounded 1,500-character candidate observation. XML-escaped data cannot
+replace those boundaries, and a long candidate cannot truncate the instruction.
 Harbor's external verifier remains benchmark score authority. New measurements
 must freeze this mode before execution, without supplying hidden test answers.
 The Harbor host validates but preserves the requested verifier wire value;

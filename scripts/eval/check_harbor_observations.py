@@ -319,6 +319,8 @@ def _verification_check(
     attempts: list[dict[str, Any]],
     call_events: Any,
     trajectory: dict[str, Any],
+    intervention_spec: dict[str, Any] | None = None,
+    intervention_rows: Any = None,
 ) -> dict[str, int]:
     """Check call provenance and private-receipt consistency, not independent wire text.
 
@@ -390,6 +392,56 @@ def _verification_check(
             and terminal["payload"].get("llm_call_id") == attempt["llm_call_id"],
             "verification native terminal source mismatch",
         )
+    if intervention_spec is not None:
+        _require(
+            isinstance(intervention_rows, list) and len(intervention_rows) == 1,
+            "verification intervention must occur exactly once",
+        )
+        intervention = intervention_rows[0]
+        _require(isinstance(intervention, dict), "verification intervention row malformed")
+        injected_id = intervention.get("llm_call_id")
+        prefix = intervention.get("receipt_prefix_length")
+        native_output = intervention.get("native")
+        effective = intervention.get("effective")
+        _require(
+            injected_id in roots
+            and type(prefix) is int
+            and prefix
+            == next(i + 1 for i, row in enumerate(receipt) if row.get("llm_call_id") == injected_id)
+            and intervention.get("kind") == "controlled-candidate-replacement"
+            and intervention.get("when") == intervention_spec.get("when")
+            and isinstance(native_output, dict)
+            and isinstance(native_output.get("text"), str)
+            and isinstance(native_output.get("tool_uses"), list)
+            and native_output.get("stop_reason") == "completed"
+            and intervention.get("native_sha256") == _json_digest(native_output)
+            and effective == {"text": intervention_spec.get("candidate_output"), "tool_uses": []}
+            and intervention.get("effective_sha256") == _json_digest(effective)
+            and roots[injected_id]["text"] == effective["text"]
+            and roots[injected_id]["tool_uses"] == []
+            and inputs
+            and next(iter(inputs.values()))["candidate_call_id"] == injected_id,
+            "verification intervention source/effective candidate mismatch",
+        )
+        terminal = terminals[observed[injected_id]["source_event_id"]]["payload"]
+        _require(
+            (intervention.get("response_id") or None) == (terminal.get("response_id") or None),
+            "verification intervention native response mismatch",
+        )
+        prior_tools = [row for row in receipt[:prefix] if row["kind"] == "tool_result"]
+        if intervention_spec.get("when") == "before_observation":
+            _require(
+                injected_id == root_ids[0] and not prior_tools, "premature candidate has evidence"
+            )
+        else:
+            _require(
+                intervention_spec.get("when") == "after_observation"
+                and prior_tools
+                and not native_output["tool_uses"],
+                "contradicted candidate has no completed observation",
+            )
+    else:
+        _require(intervention_rows is None, "unfrozen verification intervention")
     user_messages = [
         event["payload"].get("content")
         for event in trajectory["events"]
@@ -841,6 +893,17 @@ def validate_observations(
     _require(projected == digest["events"], "canonical full/digest projection mismatch")
     verification = None
     if verification_engine is not None:
+        intervention_spec = contract.get("verification_intervention")
+        _require(
+            handoff.get("verification_intervention") == intervention_spec,
+            "verification intervention contract/result mismatch",
+        )
+        intervention_path = trial_dir / "agent/intervention.json"
+        intervention_rows = (
+            _strict_json_loads(read(intervention_path).decode(), label="verification intervention")
+            if intervention_path.exists()
+            else None
+        )
         verification = _verification_check(
             document("agent/verification.json"),
             engine=verification_engine,
@@ -850,6 +913,8 @@ def validate_observations(
                 read(trial_dir / "agent/call-events.json").decode(), label="native call events"
             ),
             trajectory=full,
+            intervention_spec=intervention_spec,
+            intervention_rows=intervention_rows,
         )
     # The ATIF projector keys results by this exact triple, not bare call_id.
     for kind in ("tool.called", "tool.completed"):

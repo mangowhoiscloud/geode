@@ -599,7 +599,7 @@ def _inbox_decisions(
 
 @pytest.mark.parametrize("engine", ["llm", "jev"])
 @pytest.mark.parametrize("malformed", [False, True])
-@pytest.mark.parametrize("repair_attempts", [1, 2])
+@pytest.mark.parametrize("repair_attempts", [1, 2, 3])
 def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
     engine: str,
     malformed: bool,
@@ -706,15 +706,20 @@ def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
     result = asyncio.run(execute())
     evidence = json.loads((directory / "verification.json").read_text())
     attempts = [row for row in result["call_accounting"] if row["purpose"] == "turn_verification"]
-    assert len(attempts) == (1 if malformed else repair_attempts + 1), result
+    assert len(attempts) == (1 if malformed else min(repair_attempts + 1, 3)), result
     assert all(row["usage"]["input_tokens"] == 20 for row in attempts)
     assert result["handoff_call_coverage_complete"]
     assert evidence["inputs"][0]["state"]["candidate_output"] == json.dumps(wrong)
     assert "expected_answer" not in json.dumps(evidence["inputs"])
-    assert len(root.requests) == (2 if malformed else 2 + 2 * repair_attempts)
+    assert len(root.requests) == (2 if malformed else 2 + 2 * min(repair_attempts, 2))
     if malformed:
         assert not result["passed"]
         assert result["termination_reason"] == "external_verification_required"
+    elif repair_attempts == 3:
+        assert result["valid"] and not result["passed"], result
+        assert result["error_type"] is None
+        assert result["termination_reason"] == "external_verification_required"
+        assert all(row["verdict"] == "contradicted" for row in evidence["judgments"])
     else:
         assert result["valid"] and result["passed"], result
         assert "<reflection>" in root.requests[-1].system_prompt
@@ -730,6 +735,274 @@ def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
             [{"judge_call_id": row["llm_call_id"], "feedback_sha256": row["feedback_sha256"]}]
             for row in evidence["judgments"][:-1]
         ]
+
+
+def test_pre_dispatch_verification_error_does_not_reuse_prior_negative_verdict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.agent import verify
+
+    monkeypatch.setenv("GEODE_VERIFY_MODE", "llm_judge")
+    case, orders = _inbox_case()
+    answer = {"items": [{"id": item["id"], **item["expected_answer"]} for item in case["items"]]}
+    answer["items"][0]["status"] = "invented"
+    candidate = _response(json.dumps(answer))
+    plan = _response(
+        '{"steps":[{"id":"repair","description":"Check the status",'
+        '"expected_outcome":"Observed status matches"}],"reasoning":"Repair requested"}'
+    )
+    root = _Adapter(
+        [
+            _response(
+                calls=(
+                    _call(
+                        "lookup_order_status",
+                        "lookup-1",
+                        {
+                            "items": [
+                                {"id": item["id"], "order_id": item["expected_order"]}
+                                for item in case["items"]
+                                if item["expected_answer"]["disposition"] == "answered"
+                            ]
+                        },
+                    ),
+                )
+            ),
+            candidate,
+            plan,
+            candidate,
+            plan,
+            candidate,
+        ]
+    )
+    judge = _Adapter([_response('{"verdict":"contradicted"}')] * 2)
+    native_verify = verify.verify_turn_async
+    attempts = 0
+
+    async def verify_until_budget(*args: Any, **kwargs: Any) -> Any:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 3:
+            assert kwargs["loop"]._verify_attempt == kwargs["loop"]._verify_continuation_budget
+            return verify._verification_error(
+                verify.VerifyMode.LLM_JUDGE, reason="verification_time_budget_exhausted"
+            )
+        return await native_verify(*args, **kwargs)
+
+    monkeypatch.setattr(verify, "verify_turn_async", verify_until_budget)
+    directory = tmp_path / "verification-unavailable"
+    directory.mkdir()
+    result = asyncio.run(
+        runtime.run_arm(
+            case,
+            "a0",
+            directory,
+            orders=orders,
+            root_adapter=root,
+            verification_engine="llm",
+            verification_adapter=judge,
+        )
+    )
+    evidence = json.loads((directory / "verification.json").read_text())
+    assert len(judge.requests) == len(evidence["judgments"]) == 2
+    assert all(
+        row["accepted"] and row["verdict"] == "contradicted" for row in evidence["judgments"]
+    )
+    assert attempts == 3
+    assert result["termination_reason"] == "external_verification_required"
+    assert result["native_verify"][-1]["error_type"] == "verification_time_budget_exhausted"
+    assert not result["valid"] and not result["passed"]
+    assert result["error_type"] == "runtime_error"
+
+
+@pytest.mark.parametrize("stop", ["refusal", "content_filter", "incomplete", "length", ""])
+def test_candidate_fault_never_replaces_noncompleted_provider_result(stop: str) -> None:
+    from core.hooks.middleware import LlmCallRequest
+
+    native = replace(_response("Native incomplete/declined output"), stop_reason=stop)
+    comparison = runtime._VerificationComparison(
+        SimpleNamespace(receipts=[]),
+        runtime.HandoffReceipt(arm="a0"),
+        "task",
+        "contract",
+        {"when": "before_observation", "candidate_output": "not the native result"},
+    )
+    call = LlmCallRequest(
+        adapter=_Adapter([]),
+        request=AdapterCallRequest(model=runtime.MODEL, messages=()),
+        purpose="agentic_loop",
+        correlation={"llm_call_id": "root-1"},
+    )
+
+    async def downstream(_call: Any) -> AdapterCallResult:
+        return native
+
+    assert asyncio.run(comparison.llm_execution(call, downstream)) is native
+    assert comparison.interventions == []
+
+
+@pytest.mark.parametrize("engine", ["llm", "jev"])
+@pytest.mark.parametrize("when", ["before_observation", "after_observation"])
+def test_candidate_intervention_retains_native_output_and_closes_real_repair(
+    engine: str, when: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts.eval.check_harbor_observations import _verification_check
+
+    monkeypatch.setenv("GEODE_VERIFY_MODE", "llm_judge")
+    case, orders = _inbox_case()
+    answer = {"items": [{"id": item["id"], **item["expected_answer"]} for item in case["items"]]}
+    candidate = json.loads(json.dumps(answer))
+    if when == "after_observation":
+        candidate["items"][0]["status"] = "cancelled"
+    fault = {"when": when, "candidate_output": json.dumps(candidate)}
+    lookup = _response(
+        calls=(
+            _call(
+                "lookup_order_status",
+                "lookup-1",
+                {
+                    "items": [
+                        {"id": item["id"], "order_id": item["expected_order"]}
+                        for item in case["items"]
+                        if item["expected_answer"]["disposition"] == "answered"
+                    ]
+                },
+            ),
+        ),
+    )
+    native_candidate = replace(
+        _response(json.dumps(answer)),
+        codex_output_items=({"type": "message", "content": [{"text": json.dumps(answer)}]},),
+        response_id="native-candidate-1",
+    )
+    plan = _response(
+        json.dumps(
+            {
+                "steps": [
+                    {
+                        "id": "repair",
+                        "description": "Check observed status",
+                        "expected_outcome": "Answer agrees with observed status",
+                    }
+                ],
+                "reasoning": "The verdict requires an evidence-based correction.",
+            }
+        )
+    )
+    root = _Adapter(
+        [
+            lookup,
+            *([native_candidate] if when == "after_observation" else []),
+            plan,
+            *([lookup] if when == "before_observation" else []),
+            _response(json.dumps(answer)),
+        ]
+    )
+    labels = [
+        "contradicted" if when == "after_observation" else "insufficient_evidence",
+        "supported",
+    ]
+    judge = _Adapter([_response(json.dumps({"verdict": label})) for label in labels])
+    answers = iter(labels)
+
+    def transport(_request: httpx.Request) -> httpx.Response:
+        label = next(answers)
+        return httpx.Response(
+            200,
+            json={
+                "model": runtime.JEV_MODEL,
+                "usage": {"input_tokens": 20, "output_tokens": 2},
+                "answers": {
+                    "verdict": {
+                        "type": "choice",
+                        "choice": label,
+                        "confidence": 1.0,
+                        "probabilities": {
+                            key: float(key == label)
+                            for key in ("supported", "contradicted", "insufficient_evidence")
+                        },
+                    }
+                },
+            },
+        )
+
+    directory = tmp_path / "controlled"
+    directory.mkdir()
+
+    async def execute() -> dict[str, Any]:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+            return await runtime.run_arm(
+                case,
+                "a0",
+                directory,
+                orders=orders,
+                root_adapter=root,
+                verification_engine=engine,
+                verification_adapter=judge if engine == "llm" else None,
+                verification_intervention=fault,
+                client=client,
+            )
+
+    result = asyncio.run(execute())
+    assert result["valid"] and result["passed"], result
+    evidence = json.loads((directory / "verification.json").read_text())
+    interventions = json.loads((directory / "intervention.json").read_text())
+    assert len(interventions) == 1
+    record = interventions[0]
+    assert record["native"]["text"] == (
+        native_candidate.text if when == "after_observation" else ""
+    )
+    assert record["native"]["tool_uses"] == (
+        [] if when == "after_observation" else list(lookup.tool_uses)
+    )
+    assert record["effective"] == {"text": fault["candidate_output"], "tool_uses": []}
+    assert evidence["inputs"][0]["state"]["candidate_output"] == fault["candidate_output"]
+    assert len(evidence["inputs"][0]["state"]["tool_observations"]) == (
+        1 if when == "after_observation" else 0
+    )
+    assert evidence["inputs"][-1]["state"]["candidate_output"] == json.dumps(answer)
+    assert len(evidence["inputs"][-1]["state"]["tool_observations"]) == 1
+    assert [row["verdict"] for row in evidence["judgments"]] == labels
+    consumed = [row for row in evidence["root_requests"] if row["consumed_feedback"]]
+    assert (
+        consumed[0]["consumed_feedback"][0]["judge_call_id"]
+        == evidence["judgments"][0]["llm_call_id"]
+    )
+    # Effective transcript, not the displaced Codex output items, reaches the repair request.
+    replayed = [
+        message
+        for request in root.requests[2:]
+        for message in request.messages
+        if message.role == "assistant" and fault["candidate_output"] in str(message.content)
+    ]
+    assert replayed and all(not message.codex_output_items for message in replayed)
+    source_attempt = next(
+        row
+        for row in result["usage"]["recorded_attempts"]
+        if row["llm_call_id"] == record["llm_call_id"]
+    )
+    assert source_attempt["usage"]["input_tokens"] == 10
+    assert source_attempt["usage"]["output_tokens"] == 2
+    if when == "after_observation":
+        assert record["response_id"] == "native-candidate-1"
+    options = {
+        "engine": engine,
+        "receipt": json.loads((directory / "handoff.json").read_text()),
+        "attempts": result["usage"]["recorded_attempts"],
+        "call_events": json.loads((directory / "call-events.json").read_text()),
+        "trajectory": json.loads((directory / "trajectory.private.json").read_text()),
+        "intervention_spec": fault,
+        "intervention_rows": interventions,
+    }
+    assert _verification_check(evidence, **options)["completed_judgments"] == 2
+    for broken in (
+        [],
+        interventions * 2,
+        [{**record, "native_sha256": "0" * 64}],
+        [{**record, "effective": {"text": "changed", "tool_uses": []}}],
+    ):
+        with pytest.raises(ValueError, match="intervention"):
+            _verification_check(evidence, **(options | {"intervention_rows": broken}))
 
 
 async def _run_inbox(
