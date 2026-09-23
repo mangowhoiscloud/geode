@@ -67,6 +67,7 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
         case_file: str,
         case_sha256: str,
         typesafe_key_file: str | None = None,
+        verification_engine: str | None = None,
         **kwargs: Any,
     ) -> None:
         if kwargs.get("prompt_template_path") or kwargs.get("env") or kwargs.get("extra_env"):
@@ -76,15 +77,20 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
             arm not in {"a0", "a", "b"}
             or str(self.model_name).removeprefix("geode/") != "gpt-6-astra"
             or self.effort != "xhigh"
-            or self.verify_mode != "rule_based"
+            or verification_engine not in {None, "llm", "jev"}
+            or self.verify_mode != ("llm_judge" if verification_engine else "rule_based")
             or self.agent_timeout_sec != 180
-            or (arm == "b") != (typesafe_key_file is not None)
+            or (arm == "b" or verification_engine == "jev") != (typesafe_key_file is not None)
+            or (verification_engine is not None and arm != "a0")
         ):
             raise ValueError("handoff model, arm, verifier or credential scope mismatch")
         self.arm = arm
+        self.verification_engine = verification_engine
         self.case_file = Path(case_file).resolve(strict=True)
         self.case_sha256 = case_sha256
         self.task = _task(self.case_file, case_sha256)
+        if verification_engine is not None and self.task["case"].get("profile") != "inbox":
+            raise ValueError("matched verification requires the complete-candidate inbox")
         if arm == "a0" and self.task["intervention"] is not None:
             raise ValueError("unassisted arm cannot have a helper intervention")
         self.typesafe_key_file = Path(typesafe_key_file) if typesafe_key_file else None
@@ -139,7 +145,12 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
                 "model": "gpt-6-astra",
                 "source": "subscription",
                 "effort": "xhigh",
-                "verify_mode": "rule_based",
+                "verify_mode": self.verify_mode,
+                **(
+                    {"verification_engine": self.verification_engine}
+                    if self.verification_engine
+                    else {}
+                ),
                 "required_tools": names,
                 "agent_timeout_sec": self.agent_timeout_sec,
                 "profile_scope": "fresh task container; no shell or filesystem tool",
@@ -160,6 +171,8 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
             "--timeout",
             str(self.agent_timeout_sec),
         ]
+        if self.verification_engine is not None:
+            arguments.extend(("--verification-engine", self.verification_engine))
         try:
             await self.exec_as_agent(
                 environment,
@@ -194,8 +207,13 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
 
 
 async def _run_handoff(args: argparse.Namespace) -> int:
+    verification_engine = getattr(args, "verification_engine", None)
     if args.timeout != 180 or args.arm not in {"a0", "a", "b"}:
         raise ValueError("handoff execution contract mismatch")
+    if verification_engine not in {None, "llm", "jev"} or (
+        verification_engine and args.arm != "a0"
+    ):
+        raise ValueError("matched verification engine or arm mismatch")
     if not Path("/.dockerenv").is_file() or os.environ.get("GEODE_HOME") != f"{_LOGS}/geode-home":
         raise RuntimeError("container-local handoff entry point only")
     if any(value for key, value in os.environ.items() if key.endswith("API_KEY")):
@@ -220,7 +238,8 @@ async def _run_handoff(args: argparse.Namespace) -> int:
 
     metadata: dict[str, Any] = {
         "source_revision": args.revision,
-        "verify_mode": "rule_based",
+        "verify_mode": "llm_judge" if verification_engine else "rule_based",
+        **({"verification_engine": verification_engine} if verification_engine else {}),
         "profile": "decision-handoff",
         "arm": args.arm,
         "execution_started": False,
@@ -240,10 +259,12 @@ async def _run_handoff(args: argparse.Namespace) -> int:
     execution_stage = "handoff_bootstrap"
     try:
         value = _task(Path(args.task), args.task_sha256)
+        if verification_engine and value["case"].get("profile") != "inbox":
+            raise ValueError("matched verification requires inbox")
         workspace = Path("/workspace")
         workspace.mkdir(exist_ok=True)
         os.chdir(workspace)
-        os.environ["GEODE_VERIFY_MODE"] = "rule_based"
+        os.environ["GEODE_VERIFY_MODE"] = metadata["verify_mode"]
         os.environ["GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR"] = "1"
         logging.disable(logging.CRITICAL)
         from core.config import settings
@@ -255,7 +276,7 @@ async def _run_handoff(args: argparse.Namespace) -> int:
         settings.cost_limit_usd = 0
         secret = None
         execution_stage = "credential_load"
-        if args.arm == "b":
+        if args.arm == "b" or verification_engine == "jev":
             info = secret_path.lstat()
             if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
                 raise RuntimeError("unsafe TypeSafe credential file")
@@ -275,6 +296,7 @@ async def _run_handoff(args: argparse.Namespace) -> int:
             orders=value["orders"],
             api_key=secret,
             intervention=value["intervention"],
+            verification_engine=verification_engine,
         )
     except BaseException as error:
         errors.append({"stage": execution_stage, "error_type": type(error).__name__})
@@ -362,6 +384,7 @@ def main() -> int:
     parser.add_argument("--task-sha256", required=True)
     parser.add_argument("--revision", required=True)
     parser.add_argument("--timeout", type=float, required=True)
+    parser.add_argument("--verification-engine", choices=("llm", "jev"))
     args = parser.parse_args()
     if args.timeout != 180:
         parser.error("the handoff runtime contract requires 180 seconds")

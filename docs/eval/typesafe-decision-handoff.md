@@ -4,13 +4,13 @@ eval_family: runtime-decisions
 eval_kind: contract
 eval_status: draft
 eval_authority: diagnostic
-eval_summary: Source-bound Astra/Jev handoff diagnostics, with a separate root-only control, Harbor task verifier and wrong-helper recovery block.
+eval_summary: Matched LLM/Jev final-verdict diagnostics with shared Astra repair, preserved historical handoff cohorts and an independent Harbor task verifier.
 eval_triggers: [typesafe, jev, decision-handoff, classification, extraction, confidence]
 ---
 
 # Jev decision handoff pilot
 
-## Current evidence disposition — 2026-09-22
+## Current evidence disposition — 2026-09-23
 
 The r6 results below are **superseded for claims about the revised,
 default-reflection baseline**. Preserve their original source, run specs,
@@ -37,11 +37,92 @@ Do not overwrite these analyses. The private `analysis-review` disposition
 records supersession separately; old film/replay derivatives cannot establish
 the revised baseline's result either.
 
-Before new inference, obtain the operator's judgment-engine choice (LLM or Jev
-is not yet selected for the revised shared path), restore and admit the execution
-environment, then freeze a new source/spec/lineage. Keep the authorized root
-model and effort unchanged. Offline regressions are not a live rerun, and prior
-engine settings are not permission to choose the new one.
+The operator selected **both LLM and Jev** for a new paired comparison. This is
+not a default-engine adoption decision. Restore and admit the execution
+environment, then freeze a new source/spec/lineage. Keep subscription
+`gpt-6-astra` / `xhigh` as the root, cognitive-reflection and replan route.
+Offline regressions are not a live rerun; no new cohort result is reported here.
+
+## Current comparison: matched final verdict, shared repair
+
+The comparison changes one decision boundary: final candidate verification.
+Both arms use the inbox root-only tool surface (`a0`), the same full candidate,
+original request, task contract and recorded tool observations. A native
+structured Astra verdict and a TypeSafe `jev-1.13.0` Choice select the same
+three outcomes: `supported`, `contradicted`, `insufficient_evidence`. Fixed
+feedback templates map each outcome into the existing verification/repair
+contract. No probability threshold changes permissions, and Jev's distribution
+does not become GEODE cognitive confidence.
+
+| Producer | Recorded evidence | Consumer and observable consequence |
+|---|---|---|
+| Completed root and read-only lookup | Full candidate, call IDs and tool observations in private `verification.json`; the original judge candidate must match before substitution | Matched judge reads the same semantic state and criteria; gold labels remain outside provider inputs |
+| [Matched verifier](../../evals/benchmarks/decision_verification.py) | Native verdict/distribution, input/question/feedback digests, actual response identity; existing observer records usage and attempt timing | Existing final verifier reads the common pass/hold/repair payload, not a new execution policy |
+| Existing final verifier | Latest failed judgment and its fixed reflection hint | Root system prompt consumes that hint; existing replan and answer correction remain Astra/xhigh |
+| Independent task-owned verifier | Recomputed answer/lookup checks and native Harbor reward | Establishes task success independently of either model's completion verdict |
+
+Cognitive reflection remains enabled by the runtime's existing lifecycle. Its
+hypotheses/confidence update cognitive state and scheduling; they are not the
+final-verifier hint consumed by the root repair prompt. Replacing that entire
+process, or comparing native free-form LLM feedback with Jev's fixed labels,
+would change more than the judgment engine. This diagnostic does neither.
+
+The explicit opt-in is `verification_engine=llm|jev` on the Harbor handoff
+profile, with `arm=a0`, inbox tasks and `GEODE_VERIFY_MODE=llm_judge`. The ordinary
+handoff profile remains unchanged. The existing request middleware selects the
+adapter; the existing observer, tracker and bounded repair loop own execution
+and accounting. The shared [TypeSafe transport](../../evals/benchmarks/typesafe_decision.py)
+is also used by the earlier handoff tool, with no new provider registry or retry
+layer. Malformed completed judgments retain their usage and stop delivery with
+`verification_error`; they are not converted into a confident repair instruction.
+
+### Prospective workload and admission
+
+- Freeze **3 authored inboxes × 2 engines × 2 repetitions = 12 natural E2E
+  trials**, plus two separate admission trials. Rotate engine order. There are
+  three independent authored tasks, not twelve independent task families.
+- Keep the existing 180-second runtime bound and bounded repair continuations;
+  do not add trial retries or change model/effort after an unfavorable outcome.
+  Root transport policy is recorded separately from no added helper retries.
+- Compare independent task success, false completion, valid hold, judge errors,
+  judgment/replan/root/tool calls, actual feedback consumption, latency and
+  observed input/output/cache tokens. Report missing observations as unknown.
+- TypeSafe's published input tariff is **$0.042/M tokens (4.2 US cents/M)**;
+  output price is zero, not necessarily output-token count. The request-local
+  existing tracker uses this tariff. It is an estimate, not account billing.
+  Astra subscription API-equivalent usage is not an incremental invoice either.
+- Require `verification.json` in matched-profile observation admission: bind
+  each judge to its candidate call, complete input, native answer and projected
+  feedback, then link consumption to the latest pending judgment. Dropping or
+  changing that record must fail admission even when other trajectory IDs match.
+  This checks retained private-response consistency plus durable call identity
+  and usage; it does not claim the database independently retained native
+  response text. Unsafe or oversized response text is withheld and delivery held,
+  while its digest and completed usage remain. Any recorded provider error still
+  stops this diagnostic, even if the underlying bounded retry later recovers.
+- Keep same-snapshot supported/contradicted/insufficient-evidence probes separate
+  from natural E2E execution. They test decision behavior under controlled input;
+  natural trajectories may diverge after a judgment and answer a different question.
+- Preselect `inbox-explicit`, repetition 0 for the **LLM | Jev** replay, including
+  failure or hold. Preserve all other attempts. If the pair does not complete,
+  report the missing footage rather than selecting a favorable replacement.
+
+Only completed, admitted runs may replace pending film panels. Show observable
+input → verdict → branch → Astra action → task verifier, not hidden model
+reasoning. The film's table of contents follows problem, decision boundary,
+controlled design, trace/results, limitations and references, with real replay
+at the end. Diagram type follows the claim: sequence for execution, paired
+trace for divergent behavior, and aligned scales for measured comparisons.
+Historical r6 scores remain historical and never fill current-result blanks.
+
+Official contract sources, checked 2026-09-23: [models/pricing](https://docs.typesafe.ai/models),
+[confidence](https://docs.typesafe.ai/confidence),
+[response usage and request IDs](https://docs.typesafe.ai/sdk/python/api/types/responses),
+[model limitations](https://docs.typesafe.ai/model-jaggedness/jev-1.13).
+Confidence describes a returned distribution; this small authored cohort cannot
+establish calibration or general deployment superiority.
+
+## Historical handoff experiments
 
 Status: the first five-pair diagnostic and the fresh r6 Harbor comparison
 executed privately. r6 completed 54 valid natural trials and four valid
@@ -106,7 +187,7 @@ to have been run.
 
 ## One root, two decision helpers
 
-### Complete-candidate inbox follow-up
+### Historical complete-candidate inbox follow-up
 
 The separately authored [inbox fixture](../../evals/benchmarks/fixtures/decision-handoff-inbox.json)
 adds three inboxes of 12 requests and a separate two-request admission inbox.
@@ -674,7 +755,7 @@ Keep viewer inspection separate from the frozen runner and recheck the actual
 environment before use; those historical source hashes prove neither installation
 readiness nor browser playback.
 
-Each new source's admission gate is **three `corrected-target-ko` arms**, separate
+The historical three-arm source's admission gate was **three `corrected-target-ko` arms**, separate
 from both the old five pairs and the [new 54 natural + 4 injected rollouts](#three-arm-end-to-end-protocol).
 Freeze a clean source bundle and identical image/architecture, initial state,
 task checksum, request, oracle, bounds and destinations using Harbor's

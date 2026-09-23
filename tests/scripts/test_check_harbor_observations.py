@@ -13,6 +13,8 @@ from typing import Any
 
 import pytest
 from core.observability.trajectory import _digest_private_event_payload, build_trajectory
+from evals.benchmarks.decision_handoff import JEV_MODEL, ROOT_MODEL
+from evals.benchmarks.decision_handoff_runtime import INBOX_SYSTEM, _json_digest
 from evals.platforms.harbor import (
     _atif_trajectory_from_geode,
     _summarize_usage,
@@ -713,7 +715,13 @@ def test_tool_identity_matches_projectors_session_turn_call_key(
             gate.validate_observations(**trial)
 
 
-def _handoff_trial(trial: dict[str, Any], arm: str, *, reflection: bool = False) -> dict[str, Any]:
+def _handoff_trial(
+    trial: dict[str, Any],
+    arm: str,
+    *,
+    reflection: bool = False,
+    verification_engine: str | None = None,
+) -> dict[str, Any]:
     """Build offline profile evidence through the existing usage/ATIF producers."""
     root = trial["trial_dir"]
     agent = root / "agent"
@@ -732,8 +740,13 @@ def _handoff_trial(trial: dict[str, Any], arm: str, *, reflection: bool = False)
     purposes = ["agentic_loop"] + ([] if arm == "a0" else ["structured_decision"])
     if reflection:
         purposes.append("cognitive_reflection")
+    if verification_engine:
+        purposes.append("agentic_loop")
+        purposes.append("turn_verification")
     for index, purpose in enumerate(purposes, 1):
-        jev = arm == "b" and purpose == "structured_decision"
+        jev = (arm == "b" and purpose == "structured_decision") or (
+            verification_engine == "jev" and purpose == "turn_verification"
+        )
         identity = {
             "session_id": "session-1",
             "llm_call_id": f"call-{index}",
@@ -767,6 +780,14 @@ def _handoff_trial(trial: dict[str, Any], arm: str, *, reflection: bool = False)
                 ),
             ]
         )
+    if verification_engine:
+        for event in events:
+            if event.action == "llm.call.ended":
+                event.payload["llm_call_id"] = event.llm_call_id
+                event.payload["response_id"] = "response-" + event.llm_call_id
+                if event.payload["provider"] == "typesafe":
+                    event.payload["response_provider"] = "typesafe"
+                event.payload_hash = _json_digest(event.payload)
     usage = _summarize_usage(events)
     usage["source_snapshot_complete"] = True
     _write(
@@ -775,17 +796,42 @@ def _handoff_trial(trial: dict[str, Any], arm: str, *, reflection: bool = False)
             "session_id": "session-1",
             "usage": usage,
             "handoff_call_coverage_complete": True,
+            **({"verification_engine": verification_engine} if verification_engine else {}),
         },
     )
     receipt = [{"kind": "root_request", "llm_call_id": "call-1"}]
     if arm != "a0":
         receipt.append({"kind": "tool_result", "tool": "analyze_request", "tool_call_id": "tool-1"})
     if reflection:
-        receipt.append({"kind": "reflection_request", "llm_call_id": f"call-{len(purposes)}"})
+        receipt.append(
+            {
+                "kind": "reflection_request",
+                "llm_call_id": f"call-{purposes.index('cognitive_reflection') + 1}",
+            }
+        )
+    if verification_engine:
+        receipt.extend(
+            [
+                {
+                    "kind": "tool_result",
+                    "tool": "lookup_order_status",
+                    "tool_call_id": "tool-1",
+                    "result": "ok",
+                },
+                {"kind": "root_request", "llm_call_id": f"call-{len(purposes) - 1}"},
+                {
+                    "kind": "verification_request",
+                    "llm_call_id": f"call-{len(purposes)}",
+                    "step_id": "step-judge",
+                },
+            ]
+        )
     _write(agent / "handoff.json", receipt)
     runtime = json.loads((agent / "runtime-result.json").read_text())
     metadata = runtime["metadata"]
     metadata.update(verify_mode="rule_based", profile="decision-handoff", arm=arm, usage=usage)
+    if verification_engine:
+        metadata.update(verify_mode="llm_judge", verification_engine=verification_engine)
     runtime.update(usage=usage, tool_definitions=definitions)
     _write(agent / "runtime-result.json", runtime)
     _rewrite(
@@ -800,12 +846,17 @@ def _handoff_trial(trial: dict[str, Any], arm: str, *, reflection: bool = False)
         lambda contract: contract.update(
             model=model["label"],
             effort="xhigh",
-            verify_mode="rule_based",
+            verify_mode="llm_judge" if verification_engine else "rule_based",
             runtime="evals.benchmarks.decision_handoff_runtime:run_arm",
             profile="decision-handoff",
             arm=arm,
             case_sha256="e" * 64,
             required_tools=names,
+            **(
+                {"verification_engine": verification_engine, "workload_profile": "inbox"}
+                if verification_engine
+                else {}
+            ),
         ),
     )
     previous = json.loads((agent / "geode-trajectory.private.json").read_text())
@@ -829,12 +880,351 @@ def _handoff_trial(trial: dict[str, Any], arm: str, *, reflection: bool = False)
         effort="xhigh",
         tool_definitions=definitions,
     )
+    if verification_engine:
+        from evals.benchmarks.decision_verification import _QUESTIONS, _REFLECTIONS
+
+        judge_id = f"call-{len(purposes)}"
+        candidate_id = f"call-{len(purposes) - 1}"
+        state = {
+            "task_contract": INBOX_SYSTEM,
+            "original_request": "fixture task",
+            "candidate_output": "fixture completion",
+            "tool_observations": [
+                {
+                    "tool_call_id": "tool-1",
+                    "tool": "lookup_order_status",
+                    "input": {"command": "true"},
+                    "result": "ok",
+                }
+            ],
+        }
+        native_answer: dict[str, Any] = (
+            {"verdict": "supported"}
+            if verification_engine == "llm"
+            else {
+                "type": "choice",
+                "choice": "supported",
+                "probabilities": {
+                    "supported": 0.8,
+                    "contradicted": 0.1,
+                    "insufficient_evidence": 0.1,
+                },
+                "confidence": 0.6,
+            }
+        )
+        projected = {"passed": True, "score": 1.0, "reflection": _REFLECTIONS["supported"]}
+        raw_answer = json.dumps(
+            native_answer if verification_engine == "llm" else {"verdict": native_answer}
+        )
+        _write(
+            agent / "verification.json",
+            {
+                "inputs": [
+                    {
+                        "llm_call_id": judge_id,
+                        "candidate_call_id": candidate_id,
+                        "state": state,
+                        "state_sha256": _json_digest(state),
+                        "receipt_prefix_length": len(receipt),
+                    }
+                ],
+                "judgments": [
+                    {
+                        "llm_call_id": judge_id,
+                        "step_id": "step-judge",
+                        "engine": verification_engine,
+                        "model": ROOT_MODEL if verification_engine == "llm" else JEV_MODEL,
+                        "provider": "openai" if verification_engine == "llm" else "typesafe",
+                        "source": "subscription" if verification_engine == "llm" else "payg",
+                        "response_id": "response-" + judge_id,
+                        "response_model": ROOT_MODEL if verification_engine == "llm" else JEV_MODEL,
+                        "response_provider": None if verification_engine == "llm" else "typesafe",
+                        "input_sha256": _json_digest(state),
+                        "source_sha256": _json_digest(state),
+                        "question_sha256": _json_digest(_QUESTIONS),
+                        "raw_answer_sha256": hashlib.sha256(raw_answer.encode()).hexdigest(),
+                        "raw_answer": raw_answer,
+                        "raw_answer_retention": "complete",
+                        "accepted": True,
+                        "verdict": "supported",
+                        "native_answer": native_answer,
+                        "projected_payload": projected,
+                        "feedback_sha256": _json_digest(projected),
+                        "error_type": None,
+                    }
+                ],
+                "root_outputs": [
+                    {
+                        "llm_call_id": "call-1",
+                        "text": "",
+                        "tool_uses": [
+                            {
+                                "id": "tool-1",
+                                "name": "lookup_order_status",
+                                "input": {"command": "true"},
+                            }
+                        ],
+                    },
+                    {"llm_call_id": candidate_id, "text": "fixture completion", "tool_uses": []},
+                ],
+                "root_requests": [
+                    {
+                        "llm_call_id": call_id,
+                        "completed_judgments": 0,
+                        "system_prompt": INBOX_SYSTEM,
+                        "consumed_feedback": [],
+                    }
+                    for call_id in ("call-1", candidate_id)
+                ],
+            },
+        )
+        _write(
+            agent / "call-events.json",
+            [
+                {
+                    "id": event.id,
+                    "payload_hash": event.payload_hash,
+                    "payload": event.payload,
+                    "llm_attempt_id": event.llm_attempt_id,
+                    "action": event.action,
+                }
+                for event in events
+                if event.action == "llm.call.ended"
+            ],
+        )
     return {
         **trial,
         "run_spec_sha256": hashlib.sha256(trial["run_spec_path"].read_bytes()).hexdigest(),
         "handoff_arm": arm,
         "handoff_case_sha256": "e" * 64,
+        **({"verification_engine": verification_engine} if verification_engine else {}),
     }
+
+
+@pytest.mark.parametrize("engine", ["llm", "jev"])
+def test_matched_verifier_is_explicit_and_keeps_root_route(trial, model_boundary, engine):
+    options = _handoff_trial(trial, "a0", reflection=True, verification_engine=engine)
+    report = gate.validate_observations(**options)
+    assert report["accounting"]["purposes"]["turn_verification"] == 1
+    assert report["accounting"]["attempts"] == 4
+    assert "agent/verification.json" in report["artifact_sha256"]
+    assert "agent/call-events.json" in report["artifact_sha256"]
+    assert not report["whole_runtime_complete"]
+    with pytest.raises(ValueError):
+        gate.validate_observations(**(options | {"verification_engine": None}))
+    with pytest.raises(ValueError):
+        gate.validate_observations(
+            **(options | {"verification_engine": "jev" if engine == "llm" else "llm"})
+        )
+
+
+@pytest.mark.parametrize("engine", ["llm", "jev"])
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "missing",
+        "missing_native_events",
+        "source_hash",
+        "input_hash",
+        "question_hash",
+        "candidate_call",
+        "candidate_text",
+        "original_request",
+        "tool_observation",
+        "prefix",
+        "dropped_judgment",
+        "duplicate_judgment",
+        "response_id",
+        "native_answer",
+        "raw_answer",
+        "projected",
+        "feedback_hash",
+        "root_output",
+        "root_request",
+        "consumption",
+        "native_event",
+    ],
+)
+def test_matched_verification_rejects_missing_or_altered_lineage(
+    trial: dict[str, Any], model_boundary: None, engine: str, fault: str
+) -> None:
+    options = _handoff_trial(trial, "a0", reflection=True, verification_engine=engine)
+    agent = trial["trial_dir"] / "agent"
+    path = agent / "verification.json"
+    evidence = json.loads(path.read_text())
+    item, judgment = evidence["inputs"][0], evidence["judgments"][0]
+    if fault == "missing":
+        path.unlink()
+    elif fault == "missing_native_events":
+        (agent / "call-events.json").unlink()
+    elif fault == "native_event":
+        _rewrite(
+            agent / "call-events.json",
+            lambda rows: rows[-1]["payload"].update(response_id="altered"),
+        )
+    else:
+        if fault == "source_hash":
+            item["state_sha256"] = "0" * 64
+        elif fault == "input_hash":
+            judgment["input_sha256"] = "0" * 64
+        elif fault == "question_hash":
+            judgment["question_sha256"] = "0" * 64
+        elif fault == "candidate_call":
+            item["candidate_call_id"] = "call-1"
+        elif fault in {"candidate_text", "original_request", "tool_observation"}:
+            state = item["state"]
+            if fault == "candidate_text":
+                state["candidate_output"] = "invented candidate"
+                evidence["root_outputs"][-1]["text"] = state["candidate_output"]
+            elif fault == "original_request":
+                state["original_request"] = "invented request"
+            else:
+                state["tool_observations"] = []
+            digest = _json_digest(state)
+            item["state_sha256"] = judgment["input_sha256"] = judgment["source_sha256"] = digest
+        elif fault == "prefix":
+            item["receipt_prefix_length"] -= 1
+        elif fault == "dropped_judgment":
+            evidence["judgments"] = []
+        elif fault == "duplicate_judgment":
+            evidence["judgments"].append(copy.deepcopy(judgment))
+        elif fault == "response_id":
+            judgment["response_id"] = "another-response"
+        elif fault == "native_answer":
+            judgment["native_answer"]["verdict" if engine == "llm" else "choice"] = "contradicted"
+        elif fault == "raw_answer":
+            judgment["raw_answer"] = "changed original"
+        elif fault == "projected":
+            judgment["projected_payload"]["reflection"]["lesson"] = "invented lesson"
+            judgment["feedback_sha256"] = _json_digest(judgment["projected_payload"])
+        elif fault == "feedback_hash":
+            judgment["feedback_sha256"] = "0" * 64
+        elif fault == "root_output":
+            evidence["root_outputs"].pop(0)
+        elif fault == "root_request":
+            evidence["root_requests"][0]["completed_judgments"] = 1
+        else:
+            evidence["root_requests"][0]["consumed_feedback"] = [
+                {
+                    "judge_call_id": judgment["llm_call_id"],
+                    "feedback_sha256": judgment["feedback_sha256"],
+                }
+            ]
+        _write(path, evidence)
+    with pytest.raises((ValueError, FileNotFoundError)):
+        gate.validate_observations(**options)
+
+
+@pytest.mark.parametrize("engine", ["llm", "jev"])
+def test_matched_completed_rejection_is_preserved_without_fabricated_repair(
+    trial: dict[str, Any], model_boundary: None, engine: str
+) -> None:
+    options = _handoff_trial(trial, "a0", verification_engine=engine)
+    path = trial["trial_dir"] / "agent/verification.json"
+
+    def reject(evidence: dict[str, Any]) -> None:
+        evidence["judgments"][0].update(
+            accepted=False,
+            error_type="invalid_verifier_response",
+            verdict=None,
+            native_answer=None,
+            projected_payload=None,
+            feedback_sha256=None,
+        )
+
+    _rewrite(path, reject)
+    report = gate.validate_observations(**options)
+    assert report["verification"]["completed_judgments"] == 1
+    _rewrite(path, lambda evidence: evidence["judgments"][0].update(verdict="contradicted"))
+    with pytest.raises(ValueError, match="rejection fabricated"):
+        gate.validate_observations(**options)
+
+
+@pytest.mark.parametrize("altered", [False, True])
+def test_matched_held_candidate_uses_native_digest_not_delivered_message(
+    trial: dict[str, Any], model_boundary: None, altered: bool
+) -> None:
+    options = _handoff_trial(trial, "a0", verification_engine="llm")
+    agent = trial["trial_dir"] / "agent"
+    previous = json.loads((agent / "geode-trajectory.private.json").read_text())
+    event = next(row for row in previous["events"] if row["kind"] == "message.assistant")
+    event["kind"] = "verification.pending"
+    event["payload"] = {
+        "candidate_sha256": "0" * 64
+        if altered
+        else hashlib.sha256(b"fixture completion").hexdigest(),
+        "candidate_bytes": len(b"fixture completion"),
+        "verify_attempt": 0,
+        "root_turn_id": "turn-1",
+    }
+    full = build_trajectory(
+        trajectory_id=previous["trajectory_id"],
+        source=previous["source"],
+        events=previous["events"],
+        outcome=previous["outcome"],
+        provenance=previous["provenance"],
+        privacy=previous["privacy"],
+        captured_at=previous["captured_at"],
+    )
+    _projections(
+        agent,
+        full,
+        model=ROOT_MODEL,
+        agent_name="geode-handoff",
+        effort="xhigh",
+        tool_definitions=[{"name": "lookup_order_status", "parameters": {}}],
+    )
+    if altered:
+        with pytest.raises(ValueError, match="candidate source"):
+            gate.validate_observations(**options)
+    else:
+        assert gate.validate_observations(**options)["observation_valid"]
+
+
+def test_matched_gate_rejects_recovered_attempts_with_repeated_logical_id(
+    trial: dict[str, Any], model_boundary: None
+) -> None:
+    _handoff_trial(trial, "a0", verification_engine="llm")
+    agent = trial["trial_dir"] / "agent"
+    attempts = json.loads((agent / "runtime-result.json").read_text())["usage"]["recorded_attempts"]
+    repeated = dict(attempts[0], llm_attempt_id="recovered-attempt", source_event_id=100)
+    with pytest.raises(ValueError, match="repeated logical calls"):
+        gate._verification_check(
+            json.loads((agent / "verification.json").read_text()),
+            engine="llm",
+            receipt=json.loads((agent / "handoff.json").read_text()),
+            attempts=[*attempts, repeated],
+            call_events=json.loads((agent / "call-events.json").read_text()),
+            trajectory=json.loads((agent / "geode-trajectory.private.json").read_text()),
+        )
+
+
+@pytest.mark.parametrize("retention", ["omitted_sensitive", "omitted_oversize"])
+def test_matched_gate_preserves_explicit_raw_omission_only_for_rejected_completion(
+    trial: dict[str, Any], model_boundary: None, retention: str
+) -> None:
+    options = _handoff_trial(trial, "a0", verification_engine="llm")
+    path = trial["trial_dir"] / "agent/verification.json"
+
+    def omit(evidence: dict[str, Any]) -> None:
+        evidence["judgments"][0].update(
+            accepted=False,
+            error_type="invalid_verifier_response",
+            verdict=None,
+            native_answer=None,
+            projected_payload=None,
+            feedback_sha256=None,
+            raw_answer=None,
+            raw_answer_retention=retention,
+        )
+
+    _rewrite(path, omit)
+    report = gate.validate_observations(**options)
+    assert report["verification"]["omitted_native_answers"] == 1
+    assert any("does not independently retain" in item for item in report["limits"])
+    _rewrite(path, lambda evidence: evidence["judgments"][0].update(accepted=True))
+    with pytest.raises(ValueError, match="omitted answer was admitted"):
+        gate.validate_observations(**options)
 
 
 @pytest.mark.parametrize("arm", ["a0", "a", "b"])

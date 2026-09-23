@@ -11,6 +11,7 @@ import re
 import time
 from collections import Counter
 from collections.abc import Mapping
+from dataclasses import replace
 from decimal import Decimal
 from html import escape
 from pathlib import Path
@@ -382,22 +383,44 @@ class StatusLookupTool:
         }
 
 
+def _is_replan_request(call: Any) -> bool:
+    from core.agent.plan import _REPLAN_SYSTEM_PROMPT, replan_response_schema
+
+    return bool(
+        call.purpose == "agentic_loop"
+        and call.request.system_prompt == _REPLAN_SYSTEM_PROMPT
+        and call.request.response_schema == replan_response_schema()
+        and not call.request.tools
+        and call.request.tool_choice == {"type": "none"}
+    )
+
+
 class HandoffReceipt:
     """Observe call boundaries; inbox trials retain primitives outside root context."""
 
-    def __init__(self, *, arm: str = "a", project_primitives: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        arm: str = "a",
+        project_primitives: bool = False,
+        verification_engine: str | None = None,
+    ) -> None:
         self.rows: list[dict[str, Any]] = []
         self.project_primitives = project_primitives
+        self.verification_engine = verification_engine
         self.tool_names = {"lookup_order_status"}
         if arm != "a0":
             self.tool_names.add("analyze_request")
 
     async def llm_request(self, call: Any) -> Any:
         purpose = call.purpose
+        replan = _is_replan_request(call)
         kind = {
             "agentic_loop": "root_request",
             "cognitive_reflection": "reflection_request",
         }.get(purpose, "unadmitted_request")
+        if purpose == "turn_verification" and self.verification_engine is not None:
+            kind = "verification_request"
         results = []
         for message in call.request.messages:
             if message.role == "tool" and message.tool_use_id:
@@ -416,6 +439,7 @@ class HandoffReceipt:
                 "llm_call_id": call.correlation.get("llm_call_id"),
                 "model": call.request.model,
                 "effort": call.request.effort,
+                **({"request_role": "replan"} if replan else {}),
             }
         )
         if kind == "unadmitted_request":
@@ -440,7 +464,10 @@ class HandoffReceipt:
                 or call.request.tool_choice != "auto"
             ):
                 raise ValueError("reflection tool scope drift")
-        elif {tool.name for tool in call.request.tools} != self.tool_names:
+        elif purpose == "turn_verification":
+            if call.request.tools or call.request.tool_choice != {"type": "none"}:
+                raise ValueError("verification tool scope drift")
+        elif not replan and {tool.name for tool in call.request.tools} != self.tool_names:
             raise ValueError("root tool scope drift")
         return call
 
@@ -477,6 +504,9 @@ def handoff_call_coverage_complete(
     reflection_ids = [
         row.get("llm_call_id") for row in receipt if row.get("kind") == "reflection_request"
     ]
+    verification_ids = [
+        row.get("llm_call_id") for row in receipt if row.get("kind") == "verification_request"
+    ]
     helper_ids = [
         row.get("tool_call_id")
         for row in receipt
@@ -486,33 +516,173 @@ def handoff_call_coverage_complete(
     reflections = [
         row.get("llm_call_id") for row in attempts if row.get("purpose") == "cognitive_reflection"
     ]
+    verifications = [
+        row.get("llm_call_id") for row in attempts if row.get("purpose") == "turn_verification"
+    ]
     helpers = [
         row.get("tool_call_id") for row in attempts if row.get("purpose") == "structured_decision"
     ]
     if (
         not root_ids
         or any(
-            row.get("kind") not in {"root_request", "reflection_request", "tool_result"}
+            row.get("kind")
+            not in {"root_request", "reflection_request", "verification_request", "tool_result"}
             for row in receipt
         )
         or any(
             row.get("purpose")
-            not in {"agentic_loop", "cognitive_reflection", "structured_decision"}
+            not in {
+                "agentic_loop",
+                "cognitive_reflection",
+                "turn_verification",
+                "structured_decision",
+            }
             for row in attempts
         )
         or not all(
             isinstance(value, str) and value
-            for value in (*root_ids, *reflection_ids, *helper_ids, *roots, *reflections, *helpers)
+            for value in (
+                *root_ids,
+                *reflection_ids,
+                *verification_ids,
+                *helper_ids,
+                *roots,
+                *reflections,
+                *verifications,
+                *helpers,
+            )
         )
     ):
         return False
     return (
-        len(root_ids) + len(reflection_ids) == len(set(root_ids) | set(reflection_ids))
+        len(root_ids) + len(reflection_ids) + len(verification_ids)
+        == len(set(root_ids) | set(reflection_ids) | set(verification_ids))
         and set(root_ids) == set(roots)
         and set(reflection_ids) == set(reflections)
+        and set(verification_ids) == set(verifications)
         and len(helper_ids) == len(set(helper_ids))
         and Counter(helpers) == Counter(helper_ids)
     )
+
+
+class _VerificationComparison:
+    """Task-local judge replacement; preserve full evidence and actual repair inputs."""
+
+    def __init__(self, adapter: Any, receipt: HandoffReceipt, request: str, system: str) -> None:
+        self.adapter = adapter
+        self.receipt = receipt
+        self.request = request
+        self.system = system
+        self.roots: list[dict[str, Any]] = []
+        self.inputs: list[dict[str, Any]] = []
+        self.consumptions: list[dict[str, Any]] = []
+
+    async def llm_execution(self, call: Any, next_call: Any) -> Any:
+        result = await next_call(call)
+        if call.purpose == "agentic_loop" and not _is_replan_request(call):
+            self.roots.append(
+                {
+                    "llm_call_id": call.correlation.get("llm_call_id"),
+                    "text": result.text,
+                    "tool_uses": copy.deepcopy(list(result.tool_uses)),
+                }
+            )
+        return result
+
+    async def llm_request(self, call: Any) -> Any:
+        from core.llm.adapters.base import Message
+        from core.observability.redaction import redact_and_bound_text, redact_secrets
+
+        if call.purpose == "agentic_loop" and not _is_replan_request(call):
+            consumed = []
+            # The loop consumes only its latest judge hint, even when templates repeat.
+            for row in self.adapter.receipts[-1:]:
+                payload = row.get("projected_payload")
+                if not row.get("accepted") or not payload or payload["passed"]:
+                    continue
+                feedback = "\n".join(
+                    f"{key}: {redact_and_bound_text(payload['reflection'][key], 400)}"
+                    for key in ("observation", "lesson", "next_check")
+                )
+                if escape(feedback, quote=False) in call.request.system_prompt:
+                    consumed.append(
+                        {
+                            "judge_call_id": row["llm_call_id"],
+                            "feedback_sha256": row["feedback_sha256"],
+                        }
+                    )
+            self.consumptions.append(
+                {
+                    "llm_call_id": call.correlation.get("llm_call_id"),
+                    "completed_judgments": len(self.adapter.receipts),
+                    "system_prompt": call.request.system_prompt,
+                    "consumed_feedback": consumed,
+                }
+            )
+            return call
+        if call.purpose != "turn_verification":
+            return call
+        if not self.roots or self.roots[-1]["tool_uses"]:
+            raise ValueError("verification has no completed text candidate")
+        candidate = self.roots[-1]["text"].strip()
+        expected = (
+            "Candidate output (claim only; compare against the preceding evidence):\n"
+            + redact_and_bound_text(candidate, 2000)
+        )
+        if (
+            not call.request.messages
+            or call.request.messages[-1].content != expected
+            or any(not isinstance(message.content, str) for message in call.request.messages)
+        ):
+            raise ValueError("candidate provenance or text-only verification contract changed")
+        results = {
+            row["tool_call_id"]: row["result"]
+            for row in self.receipt.rows
+            if row["kind"] == "tool_result"
+        }
+        observations = [
+            {
+                "tool_call_id": tool["id"],
+                "tool": tool["name"],
+                "input": tool["input"],
+                "result": results.get(tool["id"]),
+            }
+            for root in self.roots
+            for tool in root["tool_uses"]
+        ]
+        state = {
+            "task_contract": self.system,
+            "original_request": self.request,
+            "candidate_output": candidate,
+            "tool_observations": observations,
+        }
+        encoded = json.dumps(state, ensure_ascii=False, allow_nan=False)
+        if redact_secrets(encoded) != encoded or len(encoded) > 60_000:
+            raise ValueError("unsafe or oversized verification state; no truncation permitted")
+        self.inputs.append(
+            {
+                "llm_call_id": call.correlation.get("llm_call_id"),
+                "candidate_call_id": self.roots[-1]["llm_call_id"],
+                "state": state,
+                "state_sha256": _json_digest(state),
+                "receipt_prefix_length": len(self.receipt.rows),
+            }
+        )
+        request = replace(
+            call.request,
+            model=JEV_MODEL if self.receipt.verification_engine == "jev" else MODEL,
+            effort="none" if self.receipt.verification_engine == "jev" else "xhigh",
+            system_prompt="",
+            messages=(Message("user", encoded),),
+            tool_choice="none",
+            allowed_tool_names=frozenset(),
+            metadata={
+                **call.request.metadata,
+                "cache_invalidation_reason": "frozen matched final-verdict diagnostic",
+                "verification_correlation": dict(call.correlation),
+            },
+        )
+        return replace(call, adapter=self.adapter, request=request)
 
 
 class _WrongHelperProjection:
@@ -873,6 +1043,8 @@ async def run_arm(
     orders: Mapping[str, str] | None = None,
     api_key: SecretStr | None = None,
     intervention: Mapping[str, Any] | None = None,
+    verification_engine: str | None = None,
+    verification_adapter: Any = None,
 ) -> dict[str, Any]:
     # Imports are late so the CLI child isolates cwd/state before loading core.
     from contextlib import AsyncExitStack
@@ -902,6 +1074,19 @@ async def run_arm(
         if orders is None or intervention is not None:
             raise ValueError("inbox requires fixed orders and has no single-request intervention")
         validate_inbox_case(case, orders)
+    if verification_engine is not None:
+        from core.agent.verify import VerifyMode, get_verify_mode
+
+        if (
+            verification_engine not in {"llm", "jev"}
+            or arm != "a0"
+            or not inbox
+            or intervention is not None
+            or get_verify_mode() is not VerifyMode.LLM_JUDGE
+        ):
+            raise ValueError("matched verification requires lookup-only inbox and llm_judge")
+    elif verification_adapter is not None:
+        raise ValueError("verification adapter requires its explicit comparison engine")
     if arm == "a0" and (decision_adapter is not None or intervention is not None):
         raise ValueError("A0 has no helper or helper intervention")
     injection = (
@@ -909,15 +1094,27 @@ async def run_arm(
     )
     bootstrap_builtins(policy_sources=EMPTY_POLICY_SOURCES)
     async with AsyncExitStack() as resources:
+        if verification_engine is not None:
+            from core.llm.pricing_loader import ModelPrice
+            from core.llm.token_tracker import MODEL_PRICING, TokenTracker, _tracker_ctx
+
+            # The pilot injects its sourced tariff; estimates are never provider charges.
+            pricing = {
+                **MODEL_PRICING,
+                JEV_MODEL: ModelPrice(input=float(JEV_INPUT_USD_PER_MILLION / 1_000_000), output=0),
+            }
+            tracker_token = _tracker_ctx.set(TokenTracker(pricing))
+            resources.callback(_tracker_ctx.reset, tracker_token)
         hooks = HookSystem()
         resources.callback(hooks.close)
-        if arm == "b" and client is None:
+        uses_jev = arm == "b" or verification_engine == "jev"
+        if uses_jev and client is None:
             client = httpx.AsyncClient(timeout=30)
             resources.push_async_callback(client.aclose)
         key = api_key
-        if arm == "b" and key is None and os.environ.get("TYPESAFE_API_KEY"):
+        if uses_jev and key is None and os.environ.get("TYPESAFE_API_KEY"):
             key = SecretStr(os.environ["TYPESAFE_API_KEY"])
-        if arm == "b" and not key:
+        if uses_jev and not key:
             raise ValueError("TYPESAFE_API_KEY unavailable")
         lookup = StatusLookupTool(
             orders, item_ids=[item["id"] for item in case["items"]] if inbox else None
@@ -948,7 +1145,9 @@ async def run_arm(
             interactive_approval=False,
             approval_callback=lambda name, _detail, _level, *_rest: "y" if name in names else "n",
         )
-        receipt = HandoffReceipt(arm=arm, project_primitives=inbox)
+        receipt = HandoffReceipt(
+            arm=arm, project_primitives=inbox, verification_engine=verification_engine
+        )
         executor.middleware_registry.register_llm_request(receipt, name="handoff_receipt")
         executor.middleware_registry.register_tool_execution(receipt, name="handoff_receipt")
         if injection is not None:
@@ -978,6 +1177,31 @@ async def run_arm(
                     "in one batch. Consume its result before acting. Repeat only if needed; "
                     "do not bypass an analysis error.\n</task_contract>",
                 )
+        verification = None
+        if verification_engine is not None:
+            from core.llm.adapters import resolve_for
+
+            from evals.benchmarks.decision_verification import MatchedVerifierAdapter
+
+            judge = MatchedVerifierAdapter(
+                "llm" if verification_engine == "llm" else "jev",
+                llm_adapter=(verification_adapter or resolve_for("openai", "subscription"))
+                if verification_engine == "llm"
+                else None,
+                client=client if uses_jev else None,
+                api_key=key if uses_jev else None,
+                receipts=[],
+            )
+            verification = _VerificationComparison(judge, receipt, case["request"], system)
+            executor.middleware_registry.register_llm_request(
+                verification,
+                name="matched_verification",
+                priority=200,
+                allow_cache_invalidation=True,
+            )
+            executor.middleware_registry.register_llm_execution(
+                verification, name="matched_verification"
+            )
         loop = AgenticLoop(
             ConversationContext(),
             executor,
@@ -1073,10 +1297,20 @@ async def run_arm(
         }
         for event in calls
     ]
-    expected_decision_model = JEV_MODEL if arm == "b" else MODEL
     allowed_purposes = {"agentic_loop", "cognitive_reflection"}
     if arm != "a0":
         allowed_purposes.add("structured_decision")
+    if verification_engine is not None:
+        allowed_purposes.add("turn_verification")
+
+    def is_jev(event: Any) -> bool:
+        return bool(
+            (arm == "b" and event.payload.get("purpose") == "structured_decision")
+            or (
+                verification_engine == "jev" and event.payload.get("purpose") == "turn_verification"
+            )
+        )
+
     routes_valid = all(
         event.payload.get("purpose") in allowed_purposes
         and (
@@ -1084,20 +1318,14 @@ async def run_arm(
             event.payload.get("response_model"),
             event.payload.get("provider"),
             event.payload.get("source"),
+            event.payload.get("effort"),
         )
         == (
-            expected_decision_model
-            if event.payload.get("purpose") == "structured_decision"
-            else MODEL,
-            expected_decision_model
-            if event.payload.get("purpose") == "structured_decision"
-            else MODEL,
-            "typesafe"
-            if arm == "b" and event.payload.get("purpose") == "structured_decision"
-            else "openai",
-            "payg"
-            if arm == "b" and event.payload.get("purpose") == "structured_decision"
-            else "subscription",
+            JEV_MODEL if is_jev(event) else MODEL,
+            JEV_MODEL if is_jev(event) else MODEL,
+            "typesafe" if is_jev(event) else "openai",
+            "payg" if is_jev(event) else "subscription",
+            "none" if is_jev(event) else "xhigh",
         )
         for event in calls
     )
@@ -1170,6 +1398,16 @@ async def run_arm(
     _write(directory / "trajectory.json", trajectory)
     _write(directory / "trajectory.private.json", private_trajectory)
     _write(directory / "handoff.json", receipt.rows)
+    if verification is not None:
+        _write(
+            directory / "verification.json",
+            {
+                "inputs": verification.inputs,
+                "judgments": verification.adapter.receipts,
+                "root_requests": verification.consumptions,
+                "root_outputs": verification.roots,
+            },
+        )
     if injection is not None:
         _write(directory / "intervention.json", injection.rows)
     snapshot_complete = bool(
@@ -1193,6 +1431,18 @@ async def run_arm(
         "handoff_call_coverage_complete": call_coverage_complete,
         "workload_profile": "inbox" if inbox else "single-request",
     }
+    if verification_engine is not None:
+        metadata["verification_engine"] = verification_engine
+        metadata["verification_metrics"] = {
+            "judgment_attempts": sum(row["purpose"] == "turn_verification" for row in accounting),
+            "replan_requests": sum(row.get("request_role") == "replan" for row in receipt.rows),
+            "root_requests_consuming_feedback": sum(
+                bool(row["consumed_feedback"]) for row in verification.consumptions
+            )
+            if verification
+            else 0,
+            "tracker_cost_authority": "published-tariff-estimate-not-invoice",
+        }
     _write(directory / "runtime-metadata.json", metadata)
     return {
         **metadata,

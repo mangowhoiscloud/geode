@@ -100,6 +100,38 @@ def test_inbox_task_admission_requires_complete_candidate_inventory(tmp_path: Pa
         _task(path, digest)
 
 
+@pytest.mark.parametrize("engine", ["llm", "jev"])
+def test_matched_verifier_requires_lookup_only_inbox_and_scoped_credential(
+    host_agent: SimpleNamespace, engine: str
+) -> None:
+    from evals.benchmarks.decision_handoff_runtime import inbox_request
+
+    fixture = json.loads(
+        (
+            Path(__file__).parents[3] / "evals/benchmarks/fixtures/decision-handoff-inbox.json"
+        ).read_text()
+    )
+    case = fixture["admission"]
+    case.update(profile="inbox", request=inbox_request(case["items"]))
+    _, digest = _write_task(host_agent.case, case=case, orders=fixture["orders"])
+    kwargs = host_agent.kwargs | {
+        "case_sha256": digest,
+        "verification_engine": engine,
+        "verify_mode": "llm_judge",
+    }
+    if engine == "jev":
+        kwargs["typesafe_key_file"] = str(host_agent.secret)
+    agent = GeodeHandoffHarborAgent(**kwargs)
+    assert agent.verification_engine == engine
+    for override in ({"arm": "a"}, {"verify_mode": "rule_based"}, {"verification_engine": "other"}):
+        with pytest.raises(ValueError):
+            GeodeHandoffHarborAgent(**(kwargs | override))
+    with pytest.raises(ValueError):
+        GeodeHandoffHarborAgent(
+            **(kwargs | {"typesafe_key_file": None if engine == "jev" else str(host_agent.secret)})
+        )
+
+
 @pytest.mark.parametrize(
     "override",
     [
