@@ -56,6 +56,14 @@ functional change.
 
 ### Added
 
+- Add an opt-in matched LLM/Jev final-verdict diagnostic using a shared evidence contract,
+  criteria and fixed repair feedback while preserving Astra root/reflection/replan
+  execution. Retain judgment provenance, malformed-response usage, observed repair
+  consumption and input-only Jev tariff estimates separately from actual billing.
+  Reconcile provider JSON-string and object tool inputs through the existing
+  shared parser without changing retained evidence or accepting malformed inputs.
+  Label shared repair text as verification feedback without attributing
+  code-owned typed-verdict templates to a model.
 - Extend the opt-in decision-handoff diagnostic with complete-candidate inboxes,
   batched interpretation and lookup, item-level verification, and observable
   rejudgment/correction/duplicate-lookup counts. Preserve original cohorts and
