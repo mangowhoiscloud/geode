@@ -60,6 +60,8 @@ functional change.
   criteria and fixed repair feedback while preserving Astra root/reflection/replan
   execution. Retain judgment provenance, malformed-response usage, observed repair
   consumption and input-only Jev tariff estimates separately from actual billing.
+  Reconcile provider JSON-string and object tool inputs through the existing
+  shared parser without changing retained evidence or accepting malformed inputs.
 - Extend the opt-in decision-handoff diagnostic with complete-candidate inboxes,
   batched interpretation and lookup, item-level verification, and observable
   rejudgment/correction/duplicate-lookup counts. Preserve original cohorts and

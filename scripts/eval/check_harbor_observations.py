@@ -24,6 +24,7 @@ from html import escape
 from pathlib import Path
 from typing import Any
 
+from core.llm.agentic_response import parse_tool_input
 from core.observability.trajectory import (
     _digest_private_event_payload,
     verify_trajectory_integrity,
@@ -421,7 +422,8 @@ def _verification_check(
         and {tool["id"] for tool in traced_tools} == tool_calls.keys()
         and all(
             tool["name"] == tool_calls[tool["id"]].get("tool")
-            and tool["input"] == tool_calls[tool["id"]].get("arguments")
+            and (arguments := parse_tool_input(tool["input"])) is not None
+            and _json_digest(arguments) == _json_digest(tool_calls[tool["id"]].get("arguments"))
             for tool in traced_tools
         )
         and all(

@@ -95,6 +95,9 @@ layer. Malformed completed judgments retain their usage and stop delivery with
   each judge to its candidate call, complete input, native answer and projected
   feedback, then link consumption to the latest pending judgment. Dropping or
   changing that record must fail admission even when other trajectory IDs match.
+  Retain raw provider tool inputs, but use the existing tool-input parser when
+  comparing JSON-string or object arguments with canonical execution records;
+  malformed, non-object or semantically different inputs remain inadmissible.
   This checks retained private-response consistency plus durable call identity
   and usage; it does not claim the database independently retained native
   response text. Unsafe or oversized response text is withheld and delivery held,

@@ -1002,6 +1002,49 @@ def _handoff_trial(
 
 
 @pytest.mark.parametrize("engine", ["llm", "jev"])
+@pytest.mark.parametrize(
+    ("raw_input", "accepted"),
+    [
+        pytest.param({"command": "true"}, True, id="object"),
+        pytest.param('{"command":"true"}', True, id="openai-json-string"),
+        pytest.param(' { "command" : "true" } ', True, id="json-whitespace"),
+        pytest.param(None, False, id="missing"),
+        pytest.param("", False, id="empty"),
+        pytest.param("{", False, id="malformed"),
+        pytest.param("[]", False, id="array"),
+        pytest.param("null", False, id="null"),
+        pytest.param("true", False, id="boolean"),
+        pytest.param("7", False, id="number"),
+        pytest.param('"text"', False, id="string"),
+        pytest.param('{"command":"other"}', False, id="different-object"),
+        pytest.param('{"command":NaN}', False, id="nonfinite"),
+        pytest.param({"command": True}, False, id="different-value-type"),
+    ],
+)
+def test_matched_tool_arguments_preserve_raw_evidence_and_require_matching_objects(
+    trial: dict[str, Any], model_boundary: None, engine: str, raw_input: Any, accepted: bool
+) -> None:
+    options = _handoff_trial(trial, "a0", verification_engine=engine)
+    path = trial["trial_dir"] / "agent/verification.json"
+    evidence = json.loads(path.read_text())
+    evidence["root_outputs"][0]["tool_uses"][0]["input"] = raw_input
+    state = evidence["inputs"][0]["state"]
+    state["tool_observations"][0]["input"] = raw_input
+    digest = _json_digest(state)
+    evidence["inputs"][0]["state_sha256"] = digest
+    evidence["judgments"][0].update(input_sha256=digest, source_sha256=digest)
+    _write(path, evidence)
+    original = path.read_bytes()
+
+    if accepted:
+        assert gate.validate_observations(**options)["observation_valid"]
+    else:
+        with pytest.raises(ValueError):
+            gate.validate_observations(**options)
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("engine", ["llm", "jev"])
 def test_matched_verifier_is_explicit_and_keeps_root_route(trial, model_boundary, engine):
     options = _handoff_trial(trial, "a0", reflection=True, verification_engine=engine)
     report = gate.validate_observations(**options)
