@@ -100,6 +100,10 @@ functional change.
 
 ### Fixed
 
+- Validate the complete settings reload before updating the live singleton.
+  Failed environment/TOML field validation, field preparation, or routing
+  refresh preserves the previous Settings values; corrected reloads retain
+  environment-over-TOML precedence and existing references.
 - Keep personal-data reflection suppression across conversation turns, resume
   and final judge, bound cognitive reflection by the root deadline, and preserve
   prior hypotheses when an auxiliary response has invalid list members. Count

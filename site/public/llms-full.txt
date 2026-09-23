@@ -5794,7 +5794,7 @@ geode about                    # 실효 모델 + 마스크 경고 한 줄
 
 ## 리로드 시맨틱
 
-세션 경계에서 `reload_settings_from_disk()`가`.env`, `GEODE_*` env, config.toml을 살아 있는 싱글톤에 다시 읽어 들입니다. 필드 복사가 실패하면 해당 필드명을 적은 경고를 남기므로 반쯤 적용된 리로드가 조용히 지나가지 않습니다. 리로드는`reload_routing_constants()`도 호출해 routing 매니페스트 캐시를 비우고 `core.config`의 라우팅 상수를 다시 묶습니다. 한계도 명시합니다. 모듈 로드 시점에 값을 복사해 간 importer는 부트 시점 복사본을 계속 들고 있으므로, 그 경로까지 갱신하려면 프로세스를 재시작해야 합니다.
+세션 경계에서 `reload_settings_from_disk()`가`.env`, `GEODE_*` env, config.toml을 새 설정 후보로 읽고 검증한 뒤 기존 싱글톤을 갱신합니다. 필드 검증이나 준비, 라우팅 갱신이 실패하면 예외를 전달하고 기존 Settings 값을 유지합니다. 파일을 수정한 다음 다시 리로드하면 같은 객체 참조에 새 값이 적용됩니다. 리로드는`reload_routing_constants()`도 호출해 routing 매니페스트 캐시를 비우고 `core.config`의 라우팅 상수를 다시 묶습니다. 한계도 명시합니다. 모듈 로드 시점에 값을 복사해 간 importer는 부트 시점 복사본을 계속 들고 있으므로, 그 경로까지 갱신하려면 프로세스를 재시작해야 합니다.
 
 ## 데몬과 모델 env 키
 

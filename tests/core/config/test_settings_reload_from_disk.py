@@ -7,17 +7,20 @@ singleton keeps its boot-time snapshot — PR-DRIFT-CUT removed the per-turn
 auto-revert that had been silently masking the gap. ``reload_settings_from_disk``
 gives ``services.py`` an explicit Hermes-style boundary read.
 
-These tests pin three contracts:
+These tests pin the reload contracts:
   1. The function mutates the live singleton in place (identity preserved).
   2. Fresh disk values overlay the stale in-memory snapshot.
   3. Idempotent — repeated calls are safe (no exceptions, settled state).
+  4. Failed preparation preserves the previous settings; a corrected reload recovers.
 """
 
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 
 @pytest.fixture(autouse=True)
@@ -96,6 +99,87 @@ def test_reload_handles_fresh_process_call() -> None:
     reload_settings_from_disk()
     # Field access proves the singleton is valid after the call.
     assert isinstance(settings.model, str)
+
+
+def test_invalid_toml_preserves_live_settings_and_recovers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import core.config as cfg
+    from core.config._settings import Settings
+
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+    toml_path = tmp_path / "config.toml"
+    monkeypatch.setattr(cfg, "GLOBAL_CONFIG_PATH", toml_path)
+    monkeypatch.setattr(cfg, "PROJECT_CONFIG_PATH", tmp_path / "absent.toml")
+    current = Settings(model="previous-model", agentic_effort="low")
+    monkeypatch.setattr(cfg, "_settings_instance", current)
+    before = current.model_dump()
+    before_fields_set = set(current.model_fields_set)
+    routing_calls: list[str] = []
+    monkeypatch.setattr(cfg, "reload_routing_constants", lambda: routing_calls.append("reload"))
+    monkeypatch.setenv("GEODE_MODEL", "new-env-model")
+    toml_path.write_text('[agentic]\neffort = "invalid"\n', encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="agentic_effort"):
+        cfg.reload_settings_from_disk()
+
+    assert cfg.settings is current
+    assert current.model_dump() == before
+    assert current.model_fields_set == before_fields_set
+    assert routing_calls == []
+
+    toml_path.write_text('[llm]\nprimary_model = "toml-model"\n[agentic]\neffort = "high"\n')
+    cfg.reload_settings_from_disk()
+    assert cfg.settings is current
+    assert current.model == "new-env-model"
+    assert "model" in current.model_fields_set
+    assert current.agentic_effort == "high"
+    assert routing_calls == ["reload"]
+
+    monkeypatch.delenv("GEODE_MODEL")
+    cfg.reload_settings_from_disk()
+    assert current.model == "toml-model"
+    assert "model" not in current.model_fields_set
+
+
+def test_invalid_env_preserves_live_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    import core.config as cfg
+    from core.config._settings import Settings
+
+    current = Settings(_env_file=None, model="previous-model", agentic_effort="low")
+    monkeypatch.setattr(cfg, "_settings_instance", current)
+    before = current.model_dump()
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+    monkeypatch.setenv("GEODE_AGENTIC_EFFORT", "invalid")
+
+    with pytest.raises(ValidationError, match="agentic_effort"):
+        cfg.reload_settings_from_disk()
+
+    assert cfg.settings is current
+    assert current.model_dump() == before
+
+
+def test_routing_reload_failure_preserves_live_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    import core.config as cfg
+    from core.config._settings import Settings
+
+    current = Settings(_env_file=None, model="previous-model", agentic_effort="low")
+    monkeypatch.setattr(cfg, "_settings_instance", current)
+    before = current.model_dump()
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+    monkeypatch.setattr(cfg, "_load_toml_config", lambda: {})
+    monkeypatch.setenv("GEODE_MODEL", "new-env-model")
+
+    def fail_routing_reload() -> None:
+        raise ValueError("invalid routing manifest")
+
+    monkeypatch.setattr(cfg, "reload_routing_constants", fail_routing_reload)
+    with pytest.raises(ValueError, match="invalid routing manifest"):
+        cfg.reload_settings_from_disk()
+
+    assert cfg.settings is current
+    assert current.model_dump() == before
 
 
 def test_create_session_bridges_effort_to_loop(monkeypatch: pytest.MonkeyPatch) -> None:
