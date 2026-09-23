@@ -8,6 +8,7 @@ thin one-line delegators.
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import replace
 from hashlib import sha256
@@ -20,6 +21,7 @@ from core.hooks import (
     RuntimeEvent,
 )
 from core.llm.errors import BillingError
+from core.tools.personal_data import requires_durable_redaction
 
 from .models import (
     AgenticResult,
@@ -32,6 +34,32 @@ if TYPE_CHECKING:
     from .agent_loop import AgenticLoop
 
 log = logging.getLogger(__name__)
+
+
+def contains_private_evidence(value: Any) -> bool:
+    """Recognize tool-policy evidence, not private facts in arbitrary prose."""
+    if isinstance(value, list | tuple):
+        return any(contains_private_evidence(item) for item in value)
+    if not isinstance(value, dict):
+        return False
+    if value.get("_personal_data_omitted") is True:
+        return True
+    if requires_durable_redaction(str(value.get("tool", ""))):
+        return True
+    node_type = str(value.get("type", ""))
+    if node_type in {"tool_use", "function_call"} and requires_durable_redaction(
+        str(value.get("name", ""))
+    ):
+        return True
+    if node_type in {"tool_result", "function_call_output"}:
+        raw = value.get("content", value.get("output"))
+        if isinstance(raw, str):
+            try:
+                if contains_private_evidence(json.loads(raw)):
+                    return True
+            except json.JSONDecodeError:
+                pass
+    return any(contains_private_evidence(item) for item in value.values())
 
 
 def collect_guard_state(loop: AgenticLoop) -> dict[str, Any]:
@@ -52,6 +80,9 @@ def collect_guard_state(loop: AgenticLoop) -> dict[str, Any]:
         "total_empty_rounds": loop._total_empty_rounds,
         "budget_warned": bool(getattr(loop, "_budget_warned", False)),
         "low_confidence_replan_armed": bool(getattr(loop, "_low_confidence_replan_armed", True)),
+        "reflection_requires_redaction": bool(
+            getattr(loop, "_reflection_requires_redaction", False)
+        ),
         "consecutive_tool_tracker": [list(sig) for sig in loop._consecutive_tool_tracker],
         "convergence": loop._convergence.to_snapshot(),
         "active_plan": (
@@ -98,6 +129,7 @@ def apply_guard_state(loop: AgenticLoop, data: Any) -> None:
     loop._total_empty_rounds = _as_int(data.get("total_empty_rounds"))
     loop._budget_warned = bool(data.get("budget_warned", False))
     loop._low_confidence_replan_armed = bool(data.get("low_confidence_replan_armed", True))
+    loop._reflection_requires_redaction = data.get("reflection_requires_redaction") is True
     tracker = data.get("consecutive_tool_tracker", [])
     loop._consecutive_tool_tracker = [
         (str(sig[0]), str(sig[1]))
@@ -171,6 +203,11 @@ def restore_loop_state(loop: AgenticLoop, state: Any) -> None:
     loop._pending_verification = dict(getattr(state, "pending_verification", {}) or {})
     loop.cognitive_state = CognitiveState.from_snapshot(state.cognitive_state)
     apply_guard_state(loop, getattr(state, "loop_guards", {}) or {})
+    # Legacy checkpoints lack the guard, and tool redaction does not prove
+    # that later assistant text is free of the same private evidence.
+    loop._reflection_requires_redaction |= contains_private_evidence(
+        [getattr(state, "messages", []), getattr(state, "tool_log", [])]
+    )
 
 
 def save_checkpoint(

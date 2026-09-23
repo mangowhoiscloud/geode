@@ -222,8 +222,11 @@ from `[agentic].effort` or from ATIF tool steps. This changes the treatment;
 historical auxiliary defaults remain unchanged in the old evidence.
 The fresh task-container profile permits dangerous tools so the native shell
 is available; this does not change host policy or bypass worker-role toolkits.
-The adapter's `verify_mode` option defaults to `rule_based`; freeze `reflexion`
-explicitly when evaluating LLM-assisted repair. Mode, judge model and shell
+The adapter's `verify_mode` option defaults to `rule_based`; freeze `llm_judge`
+explicitly when evaluating LLM-assisted repair. Legacy `reflexion` settings
+resolve to that shared path; historical run contracts keep their original bytes.
+For new native observation checks, pass `--expected-verify-mode llm_judge`;
+the checker's historical default remains `reflexion`. Mode, judge model and shell
 admission are checked before inference. GEODE verification supplies runtime
 feedback, not the Harbor task verifier's score authority.
 Native state is preserved under the trial's `agent/geode-home/`; credentials

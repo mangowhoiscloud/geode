@@ -151,6 +151,18 @@ it. Main-loop estimated costs retain the existing injected pricing behavior;
 neither field is a reconciled subscription invoice. Do not sum unlike scopes
 or infer a zero cost from an absent auxiliary estimate.
 
+Cognitive reflection now opts into the existing `TokenTracker` at the actual
+adapter terminal. Completed usage reaches the root cost guard and terminal
+tracker totals once, even when the model declines the reflection tool or its
+payload is malformed. A completed response attached to `EmptyModelOutputError`
+also retains its consumption. Middleware short-circuits and interrupted calls
+without completed usage do not create tracker charges. Explicit provider zero
+is distinct from wholly missing usage. Without a reported charge, the tracker
+still estimates cost from its model catalog, while durable observation cost remains
+provider-reported only; neither is an invoice or whole-runtime reconciliation.
+Existing action-loop and final-judge tracking does not opt into this second
+path and must not be counted twice. Historical tracker omissions are not repaired.
+
 Activity schema version 9 identifies native text producers through the existing
 `purpose` field: `learning_extraction`, `context_compaction` (also used by the
 shared model-switch summarizer), `context_exhaustion`, and `memory_dreaming`.

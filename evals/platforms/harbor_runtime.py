@@ -154,9 +154,11 @@ class GeodeRuntimeHarborAgent(HarborInstalledAgent):
         if harbor_version != "0.22.0":
             raise RuntimeError("native GEODE integration is validated only with harbor==0.22.0")
         super().__init__(*args, **kwargs)
-        from core.agent.verify import VerifyMode
+        from core.agent.verify import resolve_verify_mode
 
-        self.verify_mode = VerifyMode(verify_mode).value
+        resolve_verify_mode(verify_mode)
+        # The frozen bundle owns alias semantics; older bundles distinguish these modes.
+        self.verify_mode = verify_mode.strip().lower()
         self.provider = provider
         self.source = source
         self.effort = effort
@@ -699,7 +701,7 @@ async def _run_native(args: argparse.Namespace) -> int:
         signal_installed = True
         from core.agent.loop.models import TerminationReason, is_successful_task_termination
         from core.agent.session_mode import SessionMode
-        from core.agent.verify import VerifyMode, get_verify_mode
+        from core.agent.verify import get_verify_mode, resolve_verify_mode
         from core.config import load_model_policy, settings
         from core.wiring.runtime import build_runtime, build_shared_services
 
@@ -710,7 +712,7 @@ async def _run_native(args: argparse.Namespace) -> int:
             or load_model_policy().allowlist != [args.model]
             or settings.openai_credential_source != "openai-codex"
             or settings.anthropic_credential_source != "none"
-            or get_verify_mode() != VerifyMode(args.verify_mode)
+            or get_verify_mode() != resolve_verify_mode(args.verify_mode)
             or os.environ.get("GEODE_VERIFY_MODE") != args.verify_mode
             or settings.judge_model != args.model
             or any(value for key, value in os.environ.items() if key.endswith("API_KEY"))

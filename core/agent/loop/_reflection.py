@@ -21,7 +21,13 @@ from typing import Any
 from core.agent.cognitive_state import CognitiveState, bounded_confidence
 from core.config import _resolve_provider
 from core.llm.adapters import resolve_for
-from core.llm.adapters.base import AdapterCallRequest, Message, ToolSpec
+from core.llm.adapters.base import (
+    AdapterCallRequest,
+    AdapterCallResult,
+    Message,
+    ToolSpec,
+    UsageSummary,
+)
 from core.llm.adapters.registry import normalize_registry_provider
 from core.llm.agentic_response import parse_tool_input
 from core.llm.router import call_with_failover
@@ -176,13 +182,12 @@ def _apply_reflection(state: CognitiveState, parsed: dict[str, Any]) -> None:
     server-side strict validation.
     """
     hypotheses_raw = parsed.get("hypotheses")
-    if isinstance(hypotheses_raw, list):
+    if isinstance(hypotheses_raw, list) and all(isinstance(item, str) for item in hypotheses_raw):
         cleaned: list[str] = []
         for item in hypotheses_raw[:5]:
-            if isinstance(item, str):
-                head = item.strip()
-                if head:
-                    cleaned.append(head[:120])
+            head = item.strip()
+            if head:
+                cleaned.append(head[:120])
         state.hypotheses = cleaned
 
     confidence = bounded_confidence(parsed.get("confidence"))
@@ -243,6 +248,36 @@ def synthesize_failure_reflection_hint(rubric_misses: tuple[str, ...]) -> str:
 def synthesize_reflexion_hint(rubric_misses: tuple[str, ...]) -> str:
     """Legacy alias for :func:`synthesize_failure_reflection_hint`."""
     return synthesize_failure_reflection_hint(rubric_misses)
+
+
+def _record_completed_usage(result: AdapterCallResult, request: AdapterCallRequest) -> None:
+    """Add reported reflection usage to the existing runtime budget ledger."""
+    from core.llm.token_tracker import get_tracker
+
+    usage = getattr(result, "usage", None)
+    if not isinstance(usage, UsageSummary) or not (
+        usage.reported_cost_usd is not None
+        or any(
+            getattr(usage, f"{name}_present")
+            for name in (
+                "input_tokens",
+                "output_tokens",
+                "cached_input_tokens",
+                "cache_write_tokens",
+                "reasoning_tokens",
+            )
+        )
+    ):
+        return
+    get_tracker().record(
+        request.model,
+        usage.input_tokens,
+        usage.output_tokens,
+        cache_read_tokens=usage.cached_input_tokens,
+        cache_creation_tokens=usage.cache_write_tokens,
+        thinking_tokens=usage.reasoning_tokens,
+        reported_cost_usd=usage.reported_cost_usd,
+    )
 
 
 async def reflect_async(
@@ -353,7 +388,11 @@ async def reflect_async(
             else:
                 active_middleware = middleware_registry
             return await active_middleware.call_llm(
-                adapter, req, correlation=correlation, purpose="cognitive_reflection"
+                adapter,
+                req,
+                correlation=correlation,
+                purpose="cognitive_reflection",
+                on_completed=_record_completed_usage,
             )
 
         response, _used_model = await call_with_failover([model], _do_call)

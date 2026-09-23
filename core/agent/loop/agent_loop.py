@@ -13,9 +13,11 @@ Supports:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
+import time
 from collections.abc import Mapping, Set
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
@@ -227,6 +229,7 @@ class AgenticLoop:
         # after confidence recovers — prevents a replan storm while
         # confidence stays low.
         self._low_confidence_replan_armed = True
+        self._reflection_requires_redaction = _lifecycle.contains_private_evidence(context.messages)
         # No positive cost_budget → fall back to settings.cost_limit_usd so
         # the config knob (`cost.limit_usd`) reaches the enforced guard 3
         # (80% warn / 100% hard stop), not just the COST_WARNING /
@@ -394,16 +397,23 @@ class AgenticLoop:
         gets one final chance to update beliefs from the terminal text
         snapshot before REFLECT/UPDATE_MEMORY fire. ``last_action`` =
         ``"text-only"``, ``last_observation`` = 80-char head of the text
-        (distinguishes no-action from failed-tool turns).
+        (distinguishes no-action from failed-tool turns). Personal-data
+        exposure suppresses reflection and replaces that excerpt with a marker.
         """
-        head = text.strip().replace("\n", " ")
+        requires_redaction = getattr(self, "_reflection_requires_redaction", False)
+        head = (
+            "(personal-data-derived text omitted)"
+            if requires_redaction
+            else text.strip().replace("\n", " ")
+        )
         if len(head) > 80:
             head = head[:80] + "…"
         self.cognitive_state.record_round(
             action="text-only",
             observation=head or "(empty text)",
         )
-        await self._maybe_reflect([])
+        if not requires_redaction:
+            await self._maybe_reflect([])
         await self._emit_cognitive(HookEvent.COGNITIVE_REFLECT, round=round_idx + 1)
         await self._emit_cognitive(HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1)
 
@@ -466,9 +476,9 @@ class AgenticLoop:
 
         # Raw personal Workspace results stay in the active model turn only.
         # Reflection can use a separately configured provider and persists its
-        # hypotheses, so skip that secondary processing for the whole batch if
-        # any personal-data tool ran.  The deterministic count/tool-name
-        # snapshot above remains available to cognitive listeners.
+        # hypotheses, so skip secondary processing while that context is
+        # retained: a later public tool or answer can echo it across turns.
+        # Deterministic count/tool-name snapshots remain available to listeners.
         personal_tools = sorted(
             name for name in set(tool_names) if requires_durable_redaction(name)
         )
@@ -479,9 +489,12 @@ class AgenticLoop:
                 False,
             )
         ) or bool(personal_tools)
-        if batch_requires_redaction:
+        self._reflection_requires_redaction = (
+            getattr(self, "_reflection_requires_redaction", False) or batch_requires_redaction
+        )
+        if self._reflection_requires_redaction:
             log.info(
-                "reflection skipped for personal-data tool batch: tools=%s",
+                "reflection skipped after personal-data exposure in this context: tools=%s",
                 ",".join(personal_tools) or "effective-request",
             )
         else:
@@ -503,6 +516,8 @@ class AgenticLoop:
         """
         from core.config import settings
 
+        if getattr(self, "_reflection_requires_redaction", False):
+            return
         if not settings.cognitive_reflection_enabled:
             return
         interval = max(1, int(settings.cognitive_reflection_interval))
@@ -556,17 +571,26 @@ class AgenticLoop:
                 verify_attempt=self._verify_attempt,
             )
         )
-        await reflect_async(
-            self.cognitive_state,
-            tool_results,
-            model=reflection_model,
-            max_tokens=settings.cognitive_reflection_max_tokens,
-            effort=self._effort,
-            provider=reflection_provider,
-            source=reflection_source,
-            policy_sources=self._policy_sources,
-            **reflection_kwargs,
-        )
+        remaining = None
+        if self._time_budget_s > 0:
+            remaining = self._time_budget_s - (time.monotonic() - self._loop_start_time)
+            if remaining <= 0:
+                return
+        try:
+            async with asyncio.timeout(remaining):
+                await reflect_async(
+                    self.cognitive_state,
+                    tool_results,
+                    model=reflection_model,
+                    max_tokens=settings.cognitive_reflection_max_tokens,
+                    effort=self._effort,
+                    provider=reflection_provider,
+                    source=reflection_source,
+                    policy_sources=self._policy_sources,
+                    **reflection_kwargs,
+                )
+        except TimeoutError:
+            log.warning("reflection stopped at the root turn's wall-time budget")
 
     async def _emit_session_start_signals(self, user_input: str) -> AgenticResult | None:
         """Emit the turn-start signals. Owns the USER_INPUT_RECEIVED
@@ -580,6 +604,8 @@ class AgenticLoop:
         The public UserPromptSubmit decision runs at the start of ``arun``
         before preflight or decomposition.
         """
+        # A new user message retains the conversation, including prior private
+        # tool evidence. Keep its auxiliary-processing boundary across turns.
         # Internal observation only; public control belongs to HookRegistry.
         if self._hooks:
             await self._hooks.trigger_async(

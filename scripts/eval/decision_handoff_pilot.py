@@ -133,7 +133,6 @@ def _run_child(case_index: int, arm: str, directory: Path) -> None:
     from core.config import settings
 
     settings.llm_max_retries = 1
-    settings.cognitive_reflection_enabled = False
     settings.cost_limit_usd = 0
     case = json.loads(FIXTURE.read_text())[case_index]
     result = asyncio.run(run_arm(case, arm, directory))

@@ -174,9 +174,9 @@ def _usage_check(
             _require(
                 purpose
                 in (
-                    {"agentic_loop"}
+                    {"agentic_loop", "cognitive_reflection"}
                     if handoff_arm == "a0"
-                    else {"agentic_loop", "structured_decision"}
+                    else {"agentic_loop", "cognitive_reflection", "structured_decision"}
                 ),
                 "handoff attempt purpose mismatch",
             )
@@ -316,6 +316,7 @@ def validate_observations(
     source_db: Path | None = None,
     handoff_arm: str | None = None,
     handoff_case_sha256: str | None = None,
+    expected_verify_mode: str | None = None,
 ) -> dict[str, Any]:
     """Validate existing exports, returning only bounded metadata and hashes.
 
@@ -334,7 +335,13 @@ def validate_observations(
         "handoff arm and frozen case SHA must be supplied together",
     )
     agent_name = "geode-handoff" if handoff_arm is not None else "geode-runtime"
-    verify_mode = "rule_based" if handoff_arm is not None else "reflexion"
+    _require(
+        expected_verify_mode in (None, "llm_judge", "reflexion")
+        and (handoff_arm is None or expected_verify_mode is None),
+        "expected verifier is only configurable for the native judgment profile",
+    )
+    # Preserve the frozen historical checker default; new native runs pin llm_judge.
+    verify_mode = "rule_based" if handoff_arm is not None else (expected_verify_mode or "reflexion")
     handoff_tools = (
         ["lookup_order_status"]
         if handoff_arm == "a0"
@@ -651,6 +658,11 @@ def main(argv: list[str] | None = None) -> int:
         help="reject missing or different request effort on any recorded root/auxiliary call",
     )
     parser.add_argument("--handoff-arm", choices=("a0", "a", "b"))
+    parser.add_argument(
+        "--expected-verify-mode",
+        choices=("llm_judge", "reflexion"),
+        help="native profile's frozen verifier; omitted preserves historical reflexion receipts",
+    )
     parser.add_argument(
         "--handoff-case-sha256", help="task payload SHA from the frozen handoff plan"
     )
