@@ -873,6 +873,89 @@ def test_rejected_lookup_attempt_is_not_a_no_lookup_success(tmp_path: Path) -> N
     assert runtime.verify_handoff_result(case, result, handoff) == result["oracle"]
 
 
+@pytest.mark.parametrize("rejection", ["schema", "handler"])
+def test_inbox_counts_rejected_lookup_batches_before_and_inside_middleware(
+    rejection: str, tmp_path: Path
+) -> None:
+    case, orders = _inbox_case()
+    directory = tmp_path / "rejected-inbox-lookup"
+    directory.mkdir()
+    lookup = {"id": "admit_one", "order_id": "A-104"}
+    invalid = (
+        [{"id": "admit_one", "order_id": "UNKNOWN"}] if rejection == "schema" else [lookup, lookup]
+    )
+    root = _Adapter(
+        [
+            _response(calls=(_call("lookup_order_status", "invalid-read", {"items": invalid}),)),
+            _response(calls=(_call("lookup_order_status", "valid-read", {"items": [lookup]}),)),
+            _response(
+                json.dumps(
+                    {
+                        "items": [
+                            {"id": item["id"], **item["expected_answer"]} for item in case["items"]
+                        ]
+                    }
+                )
+            ),
+        ]
+    )
+    result = asyncio.run(runtime.run_arm(case, "a0", directory, orders=orders, root_adapter=root))
+    assert result["valid"] and result["passed"], result["oracle"]
+    assert result["oracle"]["lookup_attempt_count"] == 2
+    assert result["oracle"]["rejected_lookup_count"] == 1
+    assert result["oracle"]["lookup_item_count"] == 1
+    handoff = json.loads((directory / "handoff.json").read_text())
+    assert sum(row.get("tool") == "lookup_order_status" for row in handoff) == (
+        1 if rejection == "schema" else 2
+    )
+    assert runtime.verify_handoff_result(case, result, handoff) == result["oracle"]
+
+
+def test_inbox_cannot_pass_after_bypassing_a_helper_response_error(tmp_path: Path) -> None:
+    case, orders = _inbox_case()
+    directory = tmp_path / "inbox-helper-error"
+    directory.mkdir()
+    values, _ = _inbox_decisions(case)
+    helper = _Adapter([_response("not-json"), _response(json.dumps(values))])
+    root = _Adapter(
+        [
+            _response(calls=(_call("analyze_request", "invalid-analysis"),)),
+            _response(calls=(_call("analyze_request", "valid-analysis"),)),
+            _response(
+                calls=(
+                    _call(
+                        "lookup_order_status",
+                        "lookup-1",
+                        {"items": [{"id": "admit_one", "order_id": "A-104"}]},
+                    ),
+                )
+            ),
+            _response(
+                json.dumps(
+                    {
+                        "items": [
+                            {"id": item["id"], **item["expected_answer"]} for item in case["items"]
+                        ]
+                    }
+                )
+            ),
+        ]
+    )
+    result = asyncio.run(
+        runtime.run_arm(
+            case, "a", directory, orders=orders, root_adapter=root, decision_adapter=helper
+        )
+    )
+    assert result["valid"] and not result["passed"]
+    assert result["error_type"] == "decision_response_rejected"
+    assert result["oracle"]["checks"]["all_items_passed"]
+    assert not result["oracle"]["checks"]["decision_succeeded"]
+    assert result["oracle"]["analysis_call_count"] == 2
+    assert len(result["call_accounting"]) == 6
+    handoff = json.loads((directory / "handoff.json").read_text())
+    assert runtime.verify_handoff_result(case, result, handoff) == result["oracle"]
+
+
 def test_scoped_runtime_rejects_unadmitted_call_purpose(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -893,7 +976,111 @@ def test_scoped_runtime_rejects_unadmitted_call_purpose(
     assert result["oracle"]["passed"]
     assert result["usage"]["attempt_pairing_complete"]
     assert {row["purpose"] for row in result["call_accounting"]} == {"memory_dreaming"}
+    assert not result["handoff_call_coverage_complete"]
     assert not result["valid"] and not result["passed"]
+
+
+@pytest.mark.parametrize("purpose", [None, "memory_dreaming"])
+def test_handoff_does_not_infer_reflection_purpose_from_its_tool_name(
+    purpose: str | None,
+) -> None:
+    from core.agent.loop._reflection import _REFLECTION_TOOL
+    from core.hooks.middleware import LlmCallRequest
+    from core.llm.adapters.base import ToolSpec
+
+    receipt = runtime.HandoffReceipt(arm="a0")
+    call = LlmCallRequest(
+        adapter=_Adapter([]),
+        request=AdapterCallRequest(
+            model=pilot.MODEL,
+            messages=(),
+            effort="xhigh",
+            tools=(ToolSpec(**_REFLECTION_TOOL),),
+            tool_choice="auto",
+        ),
+        purpose=purpose,
+    )
+    with pytest.raises(ValueError, match="purpose is not admitted"):
+        asyncio.run(receipt.llm_request(call))
+    assert receipt.rows[0]["kind"] == "unadmitted_request"
+
+
+@pytest.mark.parametrize("reflection_call_id", ["root", "reflection"])
+def test_handoff_call_ids_are_unique_across_purposes_but_allow_root_retry(
+    reflection_call_id: str,
+) -> None:
+    receipt = [
+        {"kind": "root_request", "llm_call_id": "root"},
+        {"kind": "reflection_request", "llm_call_id": reflection_call_id},
+    ]
+    attempts = [
+        {"purpose": "agentic_loop", "llm_call_id": "root"},
+        {"purpose": "agentic_loop", "llm_call_id": "root"},
+        {"purpose": "cognitive_reflection", "llm_call_id": reflection_call_id},
+    ]
+    assert runtime.handoff_call_coverage_complete(receipt, attempts) is (
+        reflection_call_id != "root"
+    )
+
+
+@pytest.mark.parametrize("fault", [None, "missing_attempt", "route_drift"])
+def test_handoff_observes_configured_reflection_without_treating_it_as_root_consumption(
+    fault: str | None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.agent.loop import _reflection
+    from core.config import settings
+    from core.observability.event_store import HookEventStore
+
+    monkeypatch.setattr(settings, "cognitive_reflection_enabled", True)
+    monkeypatch.setattr(settings, "cognitive_reflection_model", "")
+    monkeypatch.setattr(settings, "cognitive_reflection_adaptive", False)
+    monkeypatch.setattr(settings, "cognitive_reflection_interval", 1)
+    reflection = _Adapter(
+        [
+            _response(
+                calls=(
+                    _call(
+                        "record_reflection",
+                        f"reflection-{index}",
+                        {"hypotheses": ["The status was observed."], "confidence": 0.5},
+                    ),
+                )
+            )
+            for index in range(2)
+        ]
+    )
+    if fault == "route_drift":
+        reflection.source = "payg"
+    monkeypatch.setattr(_reflection, "resolve_for", lambda *_args: reflection)
+    if fault == "missing_attempt":
+        read = HookEventStore.read
+
+        def drop_reflection(self: Any, **kwargs: Any) -> Any:
+            return [
+                event
+                for event in read(self, **kwargs)
+                if event.payload.get("purpose") != "cognitive_reflection"
+            ]
+
+        monkeypatch.setattr(HookEventStore, "read", drop_reflection)
+    case = _case("negated-cancel-en")
+    directory = tmp_path / "reflection"
+    directory.mkdir()
+    result = asyncio.run(
+        runtime.run_arm(case, "a0", directory, root_adapter=_Adapter(_root_responses(case)[1:]))
+    )
+    handoff = json.loads((directory / "handoff.json").read_text())
+    assert sum(row["kind"] == "reflection_request" for row in handoff) == 2
+    assert sum(row["kind"] == "root_request" for row in handoff) == 2
+    assert result["oracle"]["passed"]
+    assert len(reflection.requests) == (0 if fault == "route_drift" else 2)
+    assert result["handoff_call_coverage_complete"] is (fault is None)
+    assert result["valid"] is (fault is None)
+    assert result["passed"] is (fault is None)
+    assert sum(row["purpose"] == "cognitive_reflection" for row in result["call_accounting"]) == (
+        2 if fault is None else 0
+    )
+    assert runtime.verify_handoff_result(case, result, handoff) == result["oracle"]
 
 
 @pytest.mark.parametrize("purpose", ["agentic_loop", "structured_decision"])

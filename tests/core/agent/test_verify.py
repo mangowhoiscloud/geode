@@ -130,6 +130,19 @@ def test_get_verify_mode_llm_judge(monkeypatch: pytest.MonkeyPatch) -> None:
     assert get_verify_mode() is VerifyMode.LLM_JUDGE
 
 
+def test_reflexion_input_is_a_deprecated_alias_not_a_second_algorithm(monkeypatch, caplog) -> None:
+    from core.agent.verify import resolve_verify_mode
+
+    monkeypatch.setenv("GEODE_VERIFY_MODE", "reflexion")
+    assert get_verify_mode() is VerifyMode.LLM_JUDGE
+    assert resolve_verify_mode(" Reflexion ") is VerifyMode.LLM_JUDGE
+    assert "deprecated" in caplog.text
+    # Historical records keep their original label; active input is normalized separately.
+    assert VerifyMode("reflexion") is VerifyMode.REFLEXION
+    with pytest.raises(ValueError):
+        resolve_verify_mode("reflexionn")
+
+
 def test_get_verify_mode_unknown_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
     """Typo → silent fallback to default + warning. Don't crash."""
     monkeypatch.setenv("GEODE_VERIFY_MODE", "bogus_mode")
@@ -250,7 +263,7 @@ def test_off_mode_skips_checks(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_judge_without_loop_is_unavailable(monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
     monkeypatch.setenv("GEODE_VERIFY_MODE", mode)
     vr = verify_turn(_make_result(text="A plausible answer"))
-    assert vr.mode is vr.effective_mode is VerifyMode(mode)
+    assert vr.mode is vr.effective_mode is VerifyMode.LLM_JUDGE
     assert not vr.passed and not vr.should_retry
     assert vr.rubric_misses == ("verification_error",)
 

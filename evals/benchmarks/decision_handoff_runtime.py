@@ -393,15 +393,11 @@ class HandoffReceipt:
             self.tool_names.add("analyze_request")
 
     async def llm_request(self, call: Any) -> Any:
-        if (
-            call.request.model,
-            call.request.effort,
-            call.adapter.provider,
-            call.adapter.source,
-        ) != (MODEL, "xhigh", "openai", "subscription"):
-            raise ValueError("root route drift")
-        if {tool.name for tool in call.request.tools} != self.tool_names:
-            raise ValueError("root tool scope drift")
+        purpose = call.purpose
+        kind = {
+            "agentic_loop": "root_request",
+            "cognitive_reflection": "reflection_request",
+        }.get(purpose, "unadmitted_request")
         results = []
         for message in call.request.messages:
             if message.role == "tool" and message.tool_use_id:
@@ -414,7 +410,7 @@ class HandoffReceipt:
                 )
         self.rows.append(
             {
-                "kind": "root_request",
+                "kind": kind,
                 "tool_result_ids": results,
                 "step_id": call.correlation.get("step_id"),
                 "llm_call_id": call.correlation.get("llm_call_id"),
@@ -422,6 +418,30 @@ class HandoffReceipt:
                 "effort": call.request.effort,
             }
         )
+        if kind == "unadmitted_request":
+            raise ValueError("handoff LLM purpose is not admitted")
+        if (
+            call.request.model,
+            call.request.effort,
+            call.adapter.provider,
+            call.adapter.source,
+        ) != (MODEL, "xhigh", "openai", "subscription"):
+            raise ValueError("root route drift")
+        if purpose == "cognitive_reflection":
+            from core.agent.loop._reflection import _REFLECTION_TOOL
+            from core.tools.plan import thaw_tool_schema
+
+            if (
+                len(call.request.tools) != 1
+                or call.request.tools[0].name != _REFLECTION_TOOL["name"]
+                or thaw_tool_schema(call.request.tools[0].input_schema)
+                != _REFLECTION_TOOL["input_schema"]
+                or call.request.response_schema is not None
+                or call.request.tool_choice != "auto"
+            ):
+                raise ValueError("reflection tool scope drift")
+        elif {tool.name for tool in call.request.tools} != self.tool_names:
+            raise ValueError("root tool scope drift")
         return call
 
     async def tool_execution(self, call: Any, next_call: Any) -> Any:
@@ -454,22 +474,42 @@ def handoff_call_coverage_complete(
 ) -> bool:
     """Join scoped dispatch receipts to attempts; root retries share a logical call."""
     root_ids = [row.get("llm_call_id") for row in receipt if row.get("kind") == "root_request"]
+    reflection_ids = [
+        row.get("llm_call_id") for row in receipt if row.get("kind") == "reflection_request"
+    ]
     helper_ids = [
         row.get("tool_call_id")
         for row in receipt
         if row.get("kind") == "tool_result" and row.get("tool") == "analyze_request"
     ]
     roots = [row.get("llm_call_id") for row in attempts if row.get("purpose") == "agentic_loop"]
+    reflections = [
+        row.get("llm_call_id") for row in attempts if row.get("purpose") == "cognitive_reflection"
+    ]
     helpers = [
         row.get("tool_call_id") for row in attempts if row.get("purpose") == "structured_decision"
     ]
-    if not root_ids or not all(
-        isinstance(value, str) and value for value in (*root_ids, *helper_ids, *roots, *helpers)
+    if (
+        not root_ids
+        or any(
+            row.get("kind") not in {"root_request", "reflection_request", "tool_result"}
+            for row in receipt
+        )
+        or any(
+            row.get("purpose")
+            not in {"agentic_loop", "cognitive_reflection", "structured_decision"}
+            for row in attempts
+        )
+        or not all(
+            isinstance(value, str) and value
+            for value in (*root_ids, *reflection_ids, *helper_ids, *roots, *reflections, *helpers)
+        )
     ):
         return False
     return (
-        len(root_ids) == len(set(root_ids))
+        len(root_ids) + len(reflection_ids) == len(set(root_ids) | set(reflection_ids))
         and set(root_ids) == set(roots)
+        and set(reflection_ids) == set(reflections)
         and len(helper_ids) == len(set(helper_ids))
         and Counter(helpers) == Counter(helper_ids)
     )
@@ -579,10 +619,13 @@ def _inbox_oracle(
     consumed: set[str] = set()
     decisions: list[dict[str, Any]] = []
     lookups: list[tuple[str, dict[str, Any]]] = []
+    successful_lookup_count = 0
     helper_consumed_before_lookup = True
     for row in receipt.rows:
         if row["kind"] == "root_request":
             consumed.update(set(row["tool_result_ids"]) & observed)
+            continue
+        if row["kind"] != "tool_result":
             continue
         call_id = row["tool_call_id"]
         data = row.get("result", {}).get("result", {})
@@ -591,6 +634,9 @@ def _inbox_oracle(
         if row["tool"] == "lookup_order_status":
             helper_consumed_before_lookup &= arm == "a0" or any(
                 decision["call_id"] in consumed for decision in decisions
+            )
+            successful_lookup_count += bool(
+                isinstance(data.get("items"), list) and not row.get("result", {}).get("error")
             )
             lookups.extend((call_id, item) for item in data.get("items", []))
         observed.add(call_id)
@@ -656,7 +702,8 @@ def _inbox_oracle(
         "all_items_passed": all(item["passed"] for item in per_item),
         "root_request_observed": any(row["kind"] == "root_request" for row in receipt.rows),
         "analysis_first": arm == "a0" or (bool(names) and names[0] == "analyze_request"),
-        "decision_succeeded": arm == "a0" or bool(decisions),
+        "decision_succeeded": arm == "a0"
+        or (bool(decisions) and len(decisions) == names.count("analyze_request")),
         "no_other_tools": all(name in receipt.tool_names for name in names),
         "results_consumed_by_root": observed <= consumed,
         "lookup_after_interpretation": helper_consumed_before_lookup,
@@ -677,11 +724,8 @@ def _inbox_oracle(
         "helper_rejudgment_recovery_count": sum(
             item["helper_rejudgment_recovered"] for item in per_item
         ),
-        "rejected_lookup_count": sum(
-            row.get("kind") == "tool_result"
-            and row.get("tool") == "lookup_order_status"
-            and bool(row.get("result", {}).get("error"))
-            for row in receipt.rows
+        "rejected_lookup_count": max(
+            0, names.count("lookup_order_status") - successful_lookup_count
         ),
         "lookup_attempt_count": names.count("lookup_order_status"),
         "lookup_item_count": len(lookups),
@@ -725,7 +769,7 @@ def _oracle(
     for row in receipt.rows:
         if row["kind"] == "root_request":
             consumed.update(set(row["tool_result_ids"]) & observed)
-        else:
+        elif row["kind"] == "tool_result":
             if row["tool"] == "analyze_request":
                 decision = row
             if row["tool"] == "lookup_order_status":
@@ -1030,7 +1074,9 @@ async def run_arm(
         for event in calls
     ]
     expected_decision_model = JEV_MODEL if arm == "b" else MODEL
-    allowed_purposes = {"agentic_loop"} if arm == "a0" else {"agentic_loop", "structured_decision"}
+    allowed_purposes = {"agentic_loop", "cognitive_reflection"}
+    if arm != "a0":
+        allowed_purposes.add("structured_decision")
     routes_valid = all(
         event.payload.get("purpose") in allowed_purposes
         and (

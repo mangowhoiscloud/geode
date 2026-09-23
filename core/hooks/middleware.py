@@ -26,6 +26,7 @@ from core.hooks.system import RuntimeEvent, RuntimeEventBus
 from core.llm.adapters.base import (
     AdapterCallRequest,
     AdapterCallResult,
+    EmptyModelOutputError,
     LLMAdapter,
 )
 from core.observability.redaction import redact_secrets
@@ -64,11 +65,12 @@ class ToolCallRequest:
 
 @dataclass(frozen=True, slots=True)
 class LlmCallRequest:
-    """Adapter identity plus the provider-agnostic request envelope."""
+    """Adapter identity, dispatch purpose and provider-agnostic request envelope."""
 
     adapter: LLMAdapter
     request: AdapterCallRequest
     correlation: Mapping[str, Any] = field(default_factory=dict)
+    purpose: str | None = None
 
     def with_request(self, request: AdapterCallRequest) -> LlmCallRequest:
         return replace(self, request=request)
@@ -348,6 +350,10 @@ class MiddlewareRegistry:
         before_request: LlmCallRequest,
         after_request: LlmCallRequest,
     ) -> None:
+        if before_request.purpose != after_request.purpose:
+            raise InvalidMiddlewareResultError(
+                f"{registration.name} changed the LLM dispatch purpose"
+            )
         before = before_request.request
         after = after_request.request
         cache_sensitive_changed = (
@@ -439,8 +445,13 @@ class MiddlewareRegistry:
         *,
         correlation: Mapping[str, Any] | None = None,
         purpose: str | None = None,
+        on_completed: Callable[[AdapterCallResult, AdapterCallRequest], None] | None = None,
     ) -> AdapterCallResult:
-        """Run both LLM join points around one ``adapter.acomplete`` call."""
+        """Run both LLM join points; notify the caller of completed dispatches.
+
+        The callback also receives known completed output rejected by the
+        adapter, but never middleware short-circuits or unknown interruptions.
+        """
         call_correlation = dict(correlation or {})
         if purpose is not None:
             call_correlation = resolve_llm_correlation(call_correlation)
@@ -449,13 +460,29 @@ class MiddlewareRegistry:
                 adapter=adapter,
                 request=request,
                 correlation=call_correlation,
+                purpose=purpose,
             )
         )
 
         async def execute(current: LlmCallRequest) -> AdapterCallResult:
+            async def complete() -> AdapterCallResult:
+                completed = None
+                try:
+                    completed = await current.adapter.acomplete(current.request)
+                    return completed
+                except EmptyModelOutputError as exc:
+                    completed = exc.completed_result
+                    raise
+                finally:
+                    if completed is not None and on_completed is not None:
+                        try:
+                            on_completed(completed, current.request)
+                        except Exception:
+                            log.warning("Completed LLM callback failed", exc_info=True)
+
             if purpose is not None:
                 return await observe_llm_call(
-                    lambda: current.adapter.acomplete(current.request),
+                    complete,
                     hooks=self._events,
                     correlation=current.correlation,
                     model=current.request.model,
@@ -465,7 +492,7 @@ class MiddlewareRegistry:
                     effort=current.request.effort,
                     purpose=purpose,
                 )
-            return await current.adapter.acomplete(current.request)
+            return await complete()
 
         return await self.llm_execution(transformed, execute)
 
@@ -753,6 +780,8 @@ def _request_hash(request: ToolCallRequest | LlmCallRequest) -> str:
             },
             "request": dataclasses.asdict(request.request),
         }
+        if request.purpose is not None:
+            value["purpose"] = request.purpose
     encoded = json.dumps(
         value,
         ensure_ascii=False,

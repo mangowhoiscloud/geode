@@ -252,7 +252,6 @@ async def _run_handoff(args: argparse.Namespace) -> int:
         from evals.benchmarks.decision_handoff_runtime import run_arm
 
         settings.llm_max_retries = 1
-        settings.cognitive_reflection_enabled = False
         settings.cost_limit_usd = 0
         secret = None
         execution_stage = "credential_load"

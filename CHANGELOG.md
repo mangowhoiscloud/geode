@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- Use one evidence-grounded reflection/repair contract for LLM turn verification;
+  normalize the legacy `reflexion` setting to `llm_judge`. Keep the mechanical
+  default and configured judgment engine unchanged. Handoff entry points no
+  longer disable the existing cognitive-reflection lifecycle.
+
 ### Added
 
 - Extend the opt-in decision-handoff diagnostic with complete-candidate inboxes,
@@ -85,6 +92,18 @@ functional change.
 
 ### Fixed
 
+- Keep personal-data reflection suppression across conversation turns, resume
+  and final judge, bound cognitive reflection by the root deadline, and preserve
+  prior hypotheses when an auxiliary response has invalid list members. Count
+  completed cognitive-reflection token/cache usage and reported cost in the
+  existing tracker, including declined or malformed responses; do not charge
+  middleware short-circuits or invent usage for interrupted calls.
+- Preserve explicit LLM request purpose through middleware and join reflection
+  calls separately in handoff accounting. Count schema-rejected inbox lookups
+  and reject helper-error bypasses rather than reporting a later retry as an
+  error-free success. Supersede affected historical experiment claims without
+  deleting their original evidence. Reject root/reflection call-ID collisions
+  and preserve requested verifier wire values for frozen Harbor source bundles.
 - Resolve an explicit cross-provider judge model through the matching adapter
   without changing the root route or granting tool access. Persist the round
   of the last valid cognitive confidence update through session restore and

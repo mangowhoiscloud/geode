@@ -115,11 +115,14 @@ re-raised. Audit metadata never substitutes for a control decision.
 
 ### Verification and external loops
 
-`GEODE_VERIFY_MODE=reflexion` opts into an LLM assessment of the original
+`GEODE_VERIFY_MODE=llm_judge` selects an LLM assessment of the original
 request, bounded recent tool observations, and candidate output. Its
 `observation`, `lesson`, and `next_check` feedback travels through the existing
 verification continuation and checkpoint, not a second memory store. Missing,
-malformed, or timed-out judgments escalate rather than pass in both LLM modes.
+malformed, or timed-out judgments escalate rather than pass. The legacy
+`reflexion` setting warns and resolves to `llm_judge`; it is no longer a
+separate execution mode. Reflection feedback uses the shared lifecycle rather
+than selecting a judgment engine. The default final check remains `rule_based`.
 Mechanical empty/action-required checks remain; output length, keyword overlap
 and recovered tool errors no longer veto semantic review. Reflexion can reuse
 bounded image evidence already observed by the agent, without new file access.
@@ -137,20 +140,47 @@ The existing policy allows at most two verification revisions. Each judge call
 uses the configured judge model (otherwise the loop model), existing usage
 accounting, no tools, and at most 120 seconds within the remaining loop budget.
 Repairs share the original root-turn clock. Between model calls, bounded
-Reflexion requests its first candidate when the final third (at most 300 seconds)
+LLM verification requests its first candidate when the final third (at most 300 seconds)
 remains. An in-flight call can cross that threshold, so this is headroom policy,
 not guaranteed repair time. Repair tools remain available until the ordinary
 final cutoff. Per-session time budgets reach isolated workers; parent cancellation
 still owns the outer deadline. An agent definition with no model inherits the
 parent/default model; explicit task and agent model overrides remain authoritative.
-The default remains mechanical `rule_based`; enabling Reflexion consumes
+The default remains mechanical `rule_based`; selecting an LLM judge consumes
 additional model calls and does not guarantee a correct verdict.
+
+Cognitive reflection retains its existing default-enabled setting and cadence;
+the handoff entry points no longer force it off. It uses only the root turn's
+remaining time. Personal/redacted tool results suppress auxiliary reflection
+while that conversation context remains, including later user turns, final text
+and verification continuations. The final LLM judge also fails closed with
+`personal_data_omitted` instead of forwarding that output. A new user input does
+not sanitize prior context or clear the guard. The existing checkpoint guard
+state preserves it across resume. Invalid hypothesis lists preserve previous state;
+an explicitly empty list still clears it. These protections neither choose Jev
+nor change the configured LLM, effort, or credential source.
+Legacy context/checkpoints recover the guard from known personal-tool records
+or omission markers. Assistant-only private prose with all such provenance
+removed cannot be identified retrospectively; this change does not certify or
+rewrite old stored conversations. Clearing messages alone does not prove that
+cognitive state is sanitized, so it does not release the current loop's guard.
+
+LLM middleware receives the explicit, immutable request `purpose`; a transform
+cannot erase or replace it. Evaluation receipts distinguish cognitive reflection
+from root calls, so reflection cannot count as the root consuming a tool result.
+The two purposes cannot share one logical call ID. Cognitive reflection records
+completed usage at the actual adapter terminal through the existing tracker;
+middleware short-circuits do not incur provider usage. See the
+[accounting contract](usage-accounting.md) for missing-usage and cost limits.
 
 This is Reflexion-inspired, within-task feedback-conditioned repair, not
 cross-task learning or a weight update. `turn_verify.reason` retains concise
 feedback; the repair hint is consumed once by the next continuation.
 Harbor's external verifier remains benchmark score authority. New measurements
 must freeze this mode before execution, without supplying hidden test answers.
+The Harbor host validates but preserves the requested verifier wire value;
+the frozen bundle's runtime owns alias interpretation. Replaying an old
+`reflexion` bundle must not silently substitute that revision's `llm_judge`.
 Completed Codex calls retain a bounded `request_image_receipt` in the existing
 LLM-call event: serialized image count, encoded bytes, and image/call digests.
 No image bytes or URLs are persisted by this receipt. Missing receipts, including

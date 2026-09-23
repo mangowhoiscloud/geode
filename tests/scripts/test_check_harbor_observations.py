@@ -713,7 +713,7 @@ def test_tool_identity_matches_projectors_session_turn_call_key(
             gate.validate_observations(**trial)
 
 
-def _handoff_trial(trial: dict[str, Any], arm: str) -> dict[str, Any]:
+def _handoff_trial(trial: dict[str, Any], arm: str, *, reflection: bool = False) -> dict[str, Any]:
     """Build offline profile evidence through the existing usage/ATIF producers."""
     root = trial["trial_dir"]
     agent = root / "agent"
@@ -730,6 +730,8 @@ def _handoff_trial(trial: dict[str, Any], arm: str) -> dict[str, Any]:
     definitions = [{"name": name, "parameters": {}} for name in names]
     events = []
     purposes = ["agentic_loop"] + ([] if arm == "a0" else ["structured_decision"])
+    if reflection:
+        purposes.append("cognitive_reflection")
     for index, purpose in enumerate(purposes, 1):
         jev = arm == "b" and purpose == "structured_decision"
         identity = {
@@ -778,6 +780,8 @@ def _handoff_trial(trial: dict[str, Any], arm: str) -> dict[str, Any]:
     receipt = [{"kind": "root_request", "llm_call_id": "call-1"}]
     if arm != "a0":
         receipt.append({"kind": "tool_result", "tool": "analyze_request", "tool_call_id": "tool-1"})
+    if reflection:
+        receipt.append({"kind": "reflection_request", "llm_call_id": f"call-{len(purposes)}"})
     _write(agent / "handoff.json", receipt)
     runtime = json.loads((agent / "runtime-result.json").read_text())
     metadata = runtime["metadata"]
@@ -831,6 +835,38 @@ def _handoff_trial(trial: dict[str, Any], arm: str) -> dict[str, Any]:
         "handoff_arm": arm,
         "handoff_case_sha256": "e" * 64,
     }
+
+
+@pytest.mark.parametrize("arm", ["a0", "a", "b"])
+def test_handoff_reflection_is_accounted_without_relabeling_as_root(trial, model_boundary, arm):
+    options = _handoff_trial(trial, arm, reflection=True)
+    report = gate.validate_observations(**options)
+    assert report["observation_valid"] is True
+    assert report["accounting"]["purposes"]["cognitive_reflection"] == 1
+    assert report["accounting"]["attempts"] == (2 if arm == "a0" else 3)
+    assert report["whole_runtime_complete"] is False
+
+
+def test_native_current_judge_mode_must_match_frozen_expectation(trial, model_boundary):
+    root = trial["trial_dir"]
+    agent = root / "agent"
+    _rewrite(agent / "runtime-contract.json", lambda value: value.update(verify_mode="llm_judge"))
+    _rewrite(
+        agent / "runtime-result.json",
+        lambda value: value["metadata"].update(verify_mode="llm_judge"),
+    )
+    _rewrite(
+        root / "result.json",
+        lambda value: value["agent_result"]["metadata"].update(verify_mode="llm_judge"),
+    )
+    previous = json.loads((agent / "geode-trajectory.private.json").read_text())
+    previous["outcome"]["verify_mode"] = "llm_judge"
+    _projections(agent, previous)
+    with pytest.raises(ValueError, match="runtime contract mismatch"):
+        gate.validate_observations(**trial)
+    assert gate.validate_observations(**trial, expected_verify_mode="llm_judge")[
+        "observation_valid"
+    ]
 
 
 @pytest.mark.parametrize("arm", ["a0", "a", "b"])

@@ -65,6 +65,11 @@ def test_verification_preparation_keeps_root_clock(monkeypatch: pytest.MonkeyPat
         ("reflexion", 1, 29, True, "none"),
         ("rule_based", 0, 299, True, "auto"),
         ("reflexion", 0, 299, False, "none"),
+        ("llm_judge", 0, 600, True, "auto"),
+        ("llm_judge", 0, 299, True, "none"),
+        ("llm_judge", 1, 299, True, "auto"),
+        ("llm_judge", 1, 29, True, "none"),
+        ("llm_judge", 0, 299, False, "none"),
     ],
 )
 def test_first_candidate_reserves_repair_without_disabling_repair_tools(
@@ -94,20 +99,23 @@ def test_first_candidate_reserves_repair_without_disabling_repair_tools(
     )
     assert request.tool_choice == {"type": expected_choice}
     system = request.system_prompt
-    assert ("Total root wall-time budget" in system) is (mode == "reflexion" and allow_tools)
+    assert ("Total root wall-time budget" in system) is (
+        mode in {"llm_judge", "reflexion"} and allow_tools
+    )
     if "Candidate checkpoint" in system:
         assert system.index("Candidate checkpoint") < system.index("</dynamic_context>")
 
 
 @pytest.mark.parametrize("time_budget_s", [900.0, 120.0])
 @pytest.mark.parametrize("attempt", [0, 1])
-def test_reflexion_budget_hint_keeps_ordinary_codex_prefix_stable(
-    monkeypatch: pytest.MonkeyPatch, time_budget_s: float, attempt: int
+@pytest.mark.parametrize("mode", ["llm_judge", "reflexion"])
+def test_verification_budget_hint_keeps_ordinary_codex_prefix_stable(
+    monkeypatch: pytest.MonkeyPatch, time_budget_s: float, attempt: int, mode: str
 ) -> None:
     from core.config import settings
     from core.llm.adapters._openai_common import build_responses_kwargs
 
-    monkeypatch.setenv("GEODE_VERIFY_MODE", "reflexion")
+    monkeypatch.setenv("GEODE_VERIFY_MODE", mode)
     monkeypatch.setattr(settings, "prompt_cache_key_enabled", True)
     monkeypatch.setattr(_provider_call._context, "check_context_overflow", AsyncMock())
     loop = _loop(time_budget_s=time_budget_s)
