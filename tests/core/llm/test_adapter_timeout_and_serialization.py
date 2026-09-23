@@ -27,73 +27,88 @@ B. **Summary SDK object → dict normalisation** — the same incident's
 
 from __future__ import annotations
 
+import asyncio
 import json
-import re
 from types import SimpleNamespace
+
+import httpx
+import pytest
 
 # ---------------------------------------------------------------------------
 # A — every OpenAI-family client builder pins explicit httpx Timeout
 # ---------------------------------------------------------------------------
 
 
-def test_build_async_openai_client_uses_explicit_httpx_client() -> None:
-    """PAYG OpenAI client must own a fresh httpx.AsyncClient with explicit
-    Timeout — otherwise SDK default read-timeout can silently hang
-    ~10 minutes on a stalled stream (operator incident 2026-05-28)."""
-    from core.llm.adapters._openai_common import build_async_openai_client
+@pytest.mark.parametrize("route", ["openai", "glm-payg", "glm-coding-plan"])
+def test_adapter_inherits_transport_policy(monkeypatch: pytest.MonkeyPatch, route: str) -> None:
+    async def check() -> None:
+        from core.config import GLM_PAYG_BASE_URL, settings
+        from core.llm.adapters.glm_coding_plan import GlmCodingPlanAdapter
+        from core.llm.adapters.glm_payg import GlmPaygAdapter
+        from core.llm.adapters.openai_payg import OpenAIPaygAdapter
 
-    client = build_async_openai_client("sk-test-not-real")
-    # The openai SDK exposes the underlying transport via ``._client`` on
-    # the AsyncOpenAI instance. We verify the timeout pin propagated.
-    httpx_client = getattr(client, "_client", None)
-    assert httpx_client is not None, (
-        "build_async_openai_client did not attach a custom http_client; "
-        "SDK default httpx timeout kicks in, recreating the 10-minute "
-        "stall incident."
-    )
-    timeout = httpx_client.timeout
-    assert timeout.read is not None and timeout.read <= 600, (
-        f"httpx read timeout = {timeout.read} (None or > 600s); the SDK "
-        f"will hang past the operator-visible threshold."
-    )
+        monkeypatch.setattr(settings, "openai_api_key", "test-key")
+        monkeypatch.setattr(settings, "zai_api_key", "test-key")
+        monkeypatch.setattr(settings, "llm_read_timeout", 23.0)
+        plan_url = "https://api.z.ai/api/coding/paas/v4"
+        monkeypatch.setattr(
+            "core.llm.adapters.glm_coding_plan._resolve_coding_plan_endpoint",
+            lambda _sources: ("test-plan-key", plan_url),
+        )
+        adapters = {
+            "openai": (OpenAIPaygAdapter, "https://api.openai.com/v1"),
+            "glm-payg": (GlmPaygAdapter, GLM_PAYG_BASE_URL),
+            "glm-coding-plan": (GlmCodingPlanAdapter, plan_url),
+        }
+        adapter_type, expected_url = adapters[route]
+        adapter = adapter_type()
+        async with adapter._get_client() as client:
+            assert isinstance(client._client, httpx.AsyncClient)
+            assert client._client.timeout.read == 23.0
+            assert client.max_retries == 0
+            assert str(client.base_url).rstrip("/") == expected_url.rstrip("/")
 
-
-def test_build_async_codex_client_uses_explicit_httpx_client() -> None:
-    """Codex OAuth client (chatgpt.com/backend-api/codex) — same invariant
-    as PAYG. This is the exact path the operator's spinning hit."""
-    from core.llm.adapters._openai_common import build_async_codex_client
-
-    # Codex client builder requires a non-empty token; pass a dummy.
-    client = build_async_codex_client("dummy-jwt-not-real")
-    httpx_client = getattr(client, "_client", None)
-    assert httpx_client is not None, (
-        "build_async_codex_client did not attach a custom http_client — "
-        "regresses the 2026-05-28 10-minute spin."
-    )
-    timeout = httpx_client.timeout
-    assert timeout.read is not None and timeout.read <= 600
+    asyncio.run(check())
 
 
-def test_openai_payg_adapter_inherits_timeout_via_builder() -> None:
-    """End-to-end pin: instantiating the adapter populates a client that
-    inherits the explicit timeout, even though the adapter never touches
-    httpx directly."""
-    from core.config import settings
-    from core.llm.adapters.openai_payg import OpenAIPaygAdapter
+def test_sdk2_serializes_documented_extension_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def check() -> None:
+        """SDK serialization evidence only; this does not establish API acceptance."""
+        from core.llm.adapters import _openai_common
 
-    # Adapter's _get_client raises when no key — temporarily inject one
-    # so the builder runs.
-    monkeypatched = False
-    if not getattr(settings, "openai_api_key", ""):
-        object.__setattr__(settings, "openai_api_key", "sk-test-not-real")
-        monkeypatched = True
-    try:
-        adapter = OpenAIPaygAdapter()
-        client = adapter._get_client()
-        assert client._client.timeout.read is not None
-    finally:
-        if monkeypatched:
-            object.__setattr__(settings, "openai_api_key", "")
+        requests: list[httpx.Request] = []
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            return httpx.Response(
+                200,
+                json={"id": "resp_mock", "object": "response", "output": [], "model": "gpt-6-sol"},
+            )
+
+        monkeypatch.setattr(
+            _openai_common,
+            "_build_async_httpx_client",
+            lambda: httpx.AsyncClient(transport=httpx.MockTransport(respond)),
+        )
+        async with _openai_common.build_async_openai_client(
+            "test-key", base_url="https://sdk.test/v1"
+        ) as client:
+            response = await client.responses.create(
+                model="gpt-6-sol",
+                input="test",
+                extra_body={"service_tier": "fast", "prompt_cache_options": {"prewarm": True}},
+            )
+        assert response.id == "resp_mock"
+        assert len(requests) == 1
+        assert str(requests[0].url) == "https://sdk.test/v1/responses"
+        body = json.loads(requests[0].content)
+        assert body["model"] == "gpt-6-sol"
+        assert body["service_tier"] == "fast"
+        assert body["prompt_cache_options"] == {"prewarm": True}
+
+    asyncio.run(check())
 
 
 # ---------------------------------------------------------------------------
@@ -195,53 +210,3 @@ def test_translate_codex_response_emits_json_safe_summary() -> None:
         f"summary still carries SDK objects: {summary_list!r}"
     )
     assert summary_list == [{"type": "summary_text", "text": "thinking step"}]
-
-
-# ---------------------------------------------------------------------------
-# Source-level pin — file content guarantees (single point of regression)
-# ---------------------------------------------------------------------------
-
-
-def test_openai_common_documents_timeout_fix() -> None:
-    """Pin the helper name + intent in the source. A future refactor
-    that drops ``_build_async_httpx_client`` would lose the timeout cap
-    and regress the 10-minute spin — this test fails loudly.
-
-    PR-CODEX-NO-KEEPALIVE (2026-05-28) — ``build_async_codex_client``
-    constructs its own inline ``httpx.AsyncClient`` (with
-    ``max_keepalive_connections=0`` to avoid Codex-backend stale-
-    connection failures) instead of delegating to
-    ``_build_async_httpx_client``. The httpx timeout settings still
-    flow through ``settings.llm_*`` so the original 10-minute spin
-    guarantee is preserved — the assertion now checks the timeout-
-    related settings reads inside the codex builder body."""
-    from pathlib import Path
-
-    src = (
-        Path(__file__).resolve().parents[3] / "core" / "llm" / "adapters" / "_openai_common.py"
-    ).read_text(encoding="utf-8")
-    assert "_build_async_httpx_client" in src, (
-        "_openai_common.py no longer defines _build_async_httpx_client — "
-        "OpenAI/Codex/GLM clients lose explicit Timeout pin."
-    )
-    # build_async_openai_client wires via the shared helper.
-    assert re.search(r"def build_async_openai_client.*?http_client", src, re.DOTALL), (
-        "build_async_openai_client lost its http_client= wiring"
-    )
-    # build_async_codex_client now has its own inline httpx client
-    # (PR-CODEX-NO-KEEPALIVE) but still wires it via ``http_client=`` and
-    # still reads the same llm_*_timeout settings the shared helper
-    # uses, so the 10-minute-spin guarantee is preserved.
-    codex_body_match = re.search(r"def build_async_codex_client.*?(?=\n\ndef |\Z)", src, re.DOTALL)
-    assert codex_body_match is not None, "build_async_codex_client missing"
-    codex_src = codex_body_match.group(0)
-    assert "http_client=codex_http_client" in codex_src, (
-        "build_async_codex_client lost its http_client= wiring"
-    )
-    assert "settings.llm_read_timeout" in codex_src, (
-        "build_async_codex_client lost the llm_read_timeout pin — "
-        "the 10-minute-spin guarantee is at risk"
-    )
-    assert "settings.llm_connect_timeout" in codex_src, (
-        "build_async_codex_client lost the llm_connect_timeout pin"
-    )

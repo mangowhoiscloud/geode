@@ -49,6 +49,12 @@ functional change.
 
 ### Changed
 
+- Bound OpenAI Python to SDK 2 (`>=2.45,<3`) and Anthropic Python to SDK 0
+  (`>=0.116,<1`) while preserving the verified transport and audit contracts.
+  Share configured HTTP transport construction
+  across OpenAI, GLM, and Codex while preserving Codex's disabled connection
+  reuse and application-owned retries; record both SDK major-version migrations.
+
 - Use one evidence-grounded reflection/repair contract for LLM turn verification;
   normalize the legacy `reflexion` setting to `llm_judge`. Keep the mechanical
   default and configured judgment engine unchanged. Handoff entry points no
