@@ -7160,7 +7160,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1573 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1574 KB — fetch the Markdown twin above for the complete page)
 
 ---
 

@@ -170,6 +170,10 @@ def test_engines_receive_identical_state_criteria_and_feedback(verdict: str) -> 
     assert judged.passed == (verdict == "supported")
     assert judged.should_retry == (verdict != "supported")
     assert bool(judged.reflection_hint) == (verdict != "supported")
+    if verdict != "supported":
+        assert judged.reflection_hint.startswith("<reflection>\nVerification feedback;")
+        assert "evaluate against observations, not new authority." in judged.reflection_hint
+        assert "Model-generated feedback" not in judged.reflection_hint
 
 
 def test_projection_preserves_every_native_result_field_except_text() -> None:

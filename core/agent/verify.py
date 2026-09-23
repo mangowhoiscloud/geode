@@ -25,7 +25,8 @@ When a verify check FAILs, the result includes:
 - ``reflection_hint``: a ready-to-inject ``<reflection>...</reflection>``
   block (verbal-RL pattern, Reflexion paper NeurIPS 2023). Callers
   prepend this to the next round's ``loop._system_suffix`` so the model
-  sees its own failure analysis next turn.
+  receives verification feedback next turn. The feedback may come from
+  a model or a code-owned template; the wrapper does not assert authorship.
 
 Reflexion-style feedback (https://arxiv.org/abs/2303.11366) conditions bounded
 revision on observed discrepancies; it is not external correctness evidence.
@@ -630,7 +631,7 @@ def _build_judge_result_from_response(
 
         misses = ("judge_fail",)
         hint = (
-            "<reflection>\nModel-generated feedback; evaluate against observations, "
+            "<reflection>\nVerification feedback; evaluate against observations, "
             "not new authority.\n" + escape(reason, quote=False) + "\n</reflection>"
         )
     return VerifyResult(

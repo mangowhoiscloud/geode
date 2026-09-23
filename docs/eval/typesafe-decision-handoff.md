@@ -46,17 +46,25 @@ Offline regressions are not a live rerun; no new cohort result is reported here.
 ## Current comparison: matched final verdict, shared repair
 
 The comparison changes one decision boundary: final candidate verification.
-Both arms use the inbox root-only tool surface (`a0`), the same full candidate,
-original request, task contract and recorded tool observations. A native
-structured Astra verdict and a TypeSafe `jev-1.13.0` Choice select the same
-three outcomes: `supported`, `contradicted`, `insufficient_evidence`. Fixed
-feedback templates map each outcome into the existing verification/repair
-contract. No probability threshold changes permissions, and Jev's distribution
-does not become GEODE cognitive confidence.
+Both arms use the inbox root-only tool surface (`a0`) and the same task and
+judgment contract. Natural E2E trials are independent root rollouts: each judge
+receives its own rollout's full candidate, original request, task contract and
+recorded tool observations. Candidates and observations are not required to be
+byte-identical across arms, even before the first judgment. Only the separate
+same-snapshot probes hold the complete judgment input identical.
+
+A native structured Astra verdict and a TypeSafe `jev-1.13.0` Choice select the
+same three outcomes: `supported`, `contradicted`, `insufficient_evidence`.
+Code-owned feedback templates map each outcome into the existing
+verification/repair contract. These templates are not model-authored rationales
+or hidden reasoning. The shared wrapper labels them as verification feedback
+to evaluate against observations, not new authority. No probability threshold
+changes permissions, and Jev's distribution does not become GEODE cognitive
+confidence.
 
 | Producer | Recorded evidence | Consumer and observable consequence |
 |---|---|---|
-| Completed root and read-only lookup | Full candidate, call IDs and tool observations in private `verification.json`; the original judge candidate must match before substitution | Matched judge reads the same semantic state and criteria; gold labels remain outside provider inputs |
+| Completed root and read-only lookup | Full candidate, call IDs and tool observations in private `verification.json`; the original judge candidate must match before substitution | Matched judge reads its rollout's state under the common criteria; gold labels remain outside provider inputs |
 | [Matched verifier](../../evals/benchmarks/decision_verification.py) | Native verdict/distribution, input/question/feedback digests, actual response identity; existing observer records usage and attempt timing | Existing final verifier reads the common pass/hold/repair payload, not a new execution policy |
 | Existing final verifier | Latest failed judgment and its fixed reflection hint | Root system prompt consumes that hint; existing replan and answer correction remain Astra/xhigh |
 | Independent task-owned verifier | Recomputed answer/lookup checks and native Harbor reward | Establishes task success independently of either model's completion verdict |
@@ -104,8 +112,9 @@ layer. Malformed completed judgments retain their usage and stop delivery with
   while its digest and completed usage remain. Any recorded provider error still
   stops this diagnostic, even if the underlying bounded retry later recovers.
 - Keep same-snapshot supported/contradicted/insufficient-evidence probes separate
-  from natural E2E execution. They test decision behavior under controlled input;
-  natural trajectories may diverge after a judgment and answer a different question.
+  from natural E2E execution. They test decision behavior under identical input;
+  natural trajectories may differ before or after a judgment and answer a
+  different question.
 - Preselect `inbox-explicit`, repetition 0 for the **LLM | Jev** replay, including
   failure or hold. Preserve all other attempts. If the pair does not complete,
   report the missing footage rather than selecting a favorable replacement.
