@@ -36,6 +36,7 @@ def _isolated_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterat
     workspace.mkdir()
     monkeypatch.chdir(workspace)
     monkeypatch.setattr(paths, "GEODE_HOME", tmp_path / "geode-home")
+    monkeypatch.setattr(paths, "resolve_sessions_dir", lambda *_args: tmp_path / "sessions")
     monkeypatch.setattr(usage_store, "_store", usage_store.UsageStore(tmp_path / "usage"))
     monkeypatch.setattr(settings, "cognitive_reflection_enabled", False)
     monkeypatch.setattr(settings, "llm_max_retries", 1)
@@ -594,6 +595,141 @@ def _inbox_decisions(
         "usage": {"input_tokens": 20, "output_tokens": 2},
         "answers": answers,
     }
+
+
+@pytest.mark.parametrize("engine", ["llm", "jev"])
+@pytest.mark.parametrize("malformed", [False, True])
+@pytest.mark.parametrize("repair_attempts", [1, 2])
+def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
+    engine: str,
+    malformed: bool,
+    repair_attempts: int,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GEODE_VERIFY_MODE", "llm_judge")
+    case, orders = _inbox_case()
+    directory = tmp_path / "matched-verdict"
+    directory.mkdir()
+    answer = {"items": [{"id": item["id"], **item["expected_answer"]} for item in case["items"]]}
+    wrong = json.loads(json.dumps(answer))
+    wrong["items"][0]["status"] = "invented"
+    root = _Adapter(
+        [
+            _response(
+                calls=(
+                    _call(
+                        "lookup_order_status",
+                        "lookup-1",
+                        {
+                            "items": [
+                                {"id": item["id"], "order_id": item["expected_order"]}
+                                for item in case["items"]
+                                if item["expected_answer"]["disposition"] == "answered"
+                            ]
+                        },
+                    ),
+                )
+            ),
+            _response(json.dumps(wrong)),
+            *[
+                response
+                for attempt in range(repair_attempts)
+                for response in [
+                    _response(
+                        json.dumps(
+                            {
+                                "steps": [
+                                    {
+                                        "id": "repair",
+                                        "description": "Correct the observed status",
+                                        "expected_outcome": "Answer matches the recorded lookup",
+                                    }
+                                ],
+                                "reasoning": "The verifier requested an evidence-based correction.",
+                            }
+                        )
+                    ),
+                    _response(json.dumps(answer if attempt == repair_attempts - 1 else wrong)),
+                ]
+            ],
+        ]
+    )
+    verdicts = [*["contradicted"] * repair_attempts, "supported"]
+    labels = iter(verdicts)
+    judge = _Adapter(
+        [
+            _response("invalid" if malformed else json.dumps({"verdict": value}), input_tokens=20)
+            for value in verdicts
+        ]
+    )
+    payloads = []
+
+    def transport(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        payloads.append(payload)
+        choice = next(labels)
+        return httpx.Response(
+            200,
+            json={
+                "model": runtime.JEV_MODEL,
+                "usage": {"input_tokens": 20, "output_tokens": 2},
+                "answers": "invalid"
+                if malformed
+                else {
+                    "verdict": {
+                        "type": "choice",
+                        "choice": choice,
+                        "probabilities": {
+                            key: float(key == choice)
+                            for key in ("supported", "contradicted", "insufficient_evidence")
+                        },
+                        "confidence": 1.0,
+                    }
+                },
+            },
+        )
+
+    async def execute() -> dict[str, Any]:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+            return await runtime.run_arm(
+                case,
+                "a0",
+                directory,
+                orders=orders,
+                root_adapter=root,
+                verification_engine=engine,
+                verification_adapter=judge if engine == "llm" else None,
+                client=client,
+            )
+
+    result = asyncio.run(execute())
+    evidence = json.loads((directory / "verification.json").read_text())
+    attempts = [row for row in result["call_accounting"] if row["purpose"] == "turn_verification"]
+    assert len(attempts) == (1 if malformed else repair_attempts + 1), result
+    assert all(row["usage"]["input_tokens"] == 20 for row in attempts)
+    assert result["handoff_call_coverage_complete"]
+    assert evidence["inputs"][0]["state"]["candidate_output"] == json.dumps(wrong)
+    assert "expected_answer" not in json.dumps(evidence["inputs"])
+    assert len(root.requests) == (2 if malformed else 2 + 2 * repair_attempts)
+    if malformed:
+        assert not result["passed"]
+        assert result["termination_reason"] == "external_verification_required"
+    else:
+        assert result["valid"] and result["passed"], result
+        assert "<reflection>" in root.requests[-1].system_prompt
+        assert evidence["inputs"][-1]["state"]["candidate_output"] == json.dumps(answer)
+        assert len(evidence["inputs"][-1]["state"]["tool_observations"]) == 1
+        assert len(evidence["judgments"]) == repair_attempts + 1
+        consumed = [
+            row["consumed_feedback"]
+            for row in evidence["root_requests"]
+            if row["consumed_feedback"]
+        ]
+        assert consumed == [
+            [{"judge_call_id": row["llm_call_id"], "feedback_sha256": row["feedback_sha256"]}]
+            for row in evidence["judgments"][:-1]
+        ]
 
 
 async def _run_inbox(

@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import re
 from collections.abc import Mapping
 from html import escape
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 import httpx
 from core.hooks.llm_observation import observe_llm_call
@@ -18,35 +17,32 @@ from core.llm.adapters.base import (
     AdapterCallResult,
     LLMAdapter,
     Message,
-    UsageSummary,
 )
-from core.observability.redaction import redact_secrets
 from core.tools.base import ToolContext, tool_error
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, SecretStr
+
+from evals.benchmarks.typesafe_decision import (
+    JEV_MODEL as JEV_MODEL,
+)
+from evals.benchmarks.typesafe_decision import (
+    call_typesafe,
+    parse_choice_answers,
+    typesafe_request_id,
+)
 
 ROOT_MODEL = "gpt-6-astra"
-JEV_MODEL = "jev-1.13.0"
 _INTENTS = {
     "status_only": "The request asks only for information or order status, not a mutation.",
     "cancel": "The request explicitly asks to cancel an order, not merely discusses cancellation.",
     "refund": "The request explicitly asks for a refund, not merely discusses refund policy.",
     "other": "No supported intent or no single unambiguous requested intent.",
 }
-_Probability = Annotated[float, Field(strict=True, ge=0, le=1, allow_inf_nan=False)]
 
 
 class _Decision(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     intent: Literal["status_only", "cancel", "refund", "other"]
     target: str
-
-
-class _Choice(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    type: Literal["choice"]
-    choice: str
-    probabilities: dict[str, _Probability]
-    confidence: _Probability
 
 
 def order_mentions(request: str) -> dict[str, dict[str, Any]]:
@@ -63,19 +59,6 @@ def order_mentions(request: str) -> dict[str, dict[str, Any]]:
             }
             seen.add(order_id)
     return mentions
-
-
-def _typesafe_request_id(response: httpx.Response, api_key: SecretStr) -> str:
-    """Retain the documented support join key, never arbitrary header text."""
-    value = response.headers.get("x-typesafe-request-id", "")
-    return (
-        value
-        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", value)
-        and redact_secrets(value) == value
-        and "apikey_" not in value
-        and api_key.get_secret_value() not in value
-        else ""
-    )
 
 
 class DecisionHandoffTool:
@@ -205,49 +188,7 @@ class DecisionHandoffTool:
 
     async def _typesafe_call(self, payload: dict[str, Any]) -> AdapterCallResult:
         assert self._client is not None and self._api_key is not None
-        response = await self._client.post(
-            "https://api.typesafe.ai/v1/systemone",
-            json={"model": JEV_MODEL, **payload},
-            headers={"Authorization": f"Bearer {self._api_key.get_secret_value()}"},
-            follow_redirects=False,
-        )
-        if response.status_code != 200:
-            raise httpx.HTTPStatusError(
-                "TypeSafe request failed", request=response.request, response=response
-            )
-        try:
-            body = response.json()
-        except ValueError:
-            body = None
-        valid_body = isinstance(body, dict)
-        body = body if valid_body else {}
-        raw_usage = body.get("usage")
-        raw_usage = raw_usage if isinstance(raw_usage, dict) else {}
-        counts = {
-            key: value if type(value) is int and value >= 0 else None
-            for key in ("input_tokens", "output_tokens")
-            for value in [raw_usage.get(key)]
-        }
-        model = body.get("model")
-        model = (
-            model
-            if isinstance(model, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,127}", model)
-            else ""
-        )
-        # Observe the completed call before interpreting its decisions or model.
-        return AdapterCallResult(
-            text=json.dumps(body.get("answers")),
-            usage=UsageSummary(
-                input_tokens=counts["input_tokens"] or 0,
-                output_tokens=counts["output_tokens"] or 0,
-                input_tokens_present=counts["input_tokens"] is not None,
-                output_tokens_present=counts["output_tokens"] is not None,
-            ),
-            stop_reason="end_turn" if valid_body else "invalid_response",
-            response_id=_typesafe_request_id(response, self._api_key),
-            response_model=model,
-            response_provider="typesafe",
-        )
+        return await call_typesafe(self._client, self._api_key, payload)
 
     async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
         context = kwargs.pop("_tool_context", None)
@@ -347,22 +288,7 @@ class DecisionHandoffTool:
                 raise ValueError("decision response contains a refusal")
             primitives = None
             if self._arm == "b":
-                answers = json.loads(result.text)
-                if not isinstance(answers, dict) or answers.keys() != payload["questions"].keys():
-                    raise ValueError("decision fields changed")
-                primitives = {}
-                for key, question in payload["questions"].items():
-                    criteria = question["criteria"]
-                    choice = _Choice.model_validate(answers[key])
-                    probabilities = choice.probabilities
-                    if (
-                        probabilities.keys() != criteria.keys()
-                        or choice.choice not in probabilities
-                        or not math.isclose(sum(probabilities.values()), 1.0, abs_tol=1e-5)
-                        or probabilities[choice.choice] != max(probabilities.values())
-                    ):
-                        raise ValueError("invalid choice distribution")
-                    primitives[key] = choice.model_dump()
+                primitives = parse_choice_answers(result.text, payload["questions"])
                 values = {key: answer["choice"] for key, answer in primitives.items()}
             else:
                 values = json.loads(result.text)
@@ -407,7 +333,7 @@ class DecisionHandoffTool:
                 transport = {
                     "provider": "typesafe",
                     "http_status": exc.response.status_code,
-                    "response_id": _typesafe_request_id(exc.response, self._api_key) or None,
+                    "response_id": typesafe_request_id(exc.response, self._api_key) or None,
                 }
             return tool_error(
                 "Request analysis failed",
