@@ -100,6 +100,10 @@ functional change.
 
 ### Fixed
 
+- Bind trajectory runtime-event references to each stored hook schema version
+  and include session and physical-step correlation in the cohort digest.
+  Preserve mixed-version history and pre-v5 tables without rewriting source
+  rows or previously published artifacts.
 - Keep personal-data reflection suppression across conversation turns, resume
   and final judge, bound cognitive reflection by the root deadline, and preserve
   prior hypotheses when an auxiliary response has invalid list members. Count
