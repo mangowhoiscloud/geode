@@ -535,20 +535,22 @@ GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), OpenRouter, GLM 
 
 | 프로바이더 | 기본 모델 | 라우팅 규칙 | 인증 레인 |
 | --- | --- | --- | --- |
-| Anthropic | `claude-opus-4-8` (보조 `claude-sonnet-4-6`, 저비용 `claude-haiku-4-5-20251001`) | `claude-` 접두사 | `ANTHROPIC_API_KEY` |
-| OpenAI / Codex | `gpt-5.5` | `gpt-`, `o3-`, `o4-` 접두사. `-codex` 접미사는 Codex OAuth로 라우팅하며, 다른 모델은 선택된 API 키 또는 구독 소스를 따릅니다. 모델별 지원·퇴역은 소스마다 다르고, 카탈로그 등록은 계정 접근 증거가 아닙니다. | ChatGPT 구독 OAuth(`~/.codex/auth.json`) 또는 `OPENAI_API_KEY` |
+| Anthropic | `claude-opus-5-5` (보조 `claude-sonnet-5`, 저비용 `claude-haiku-4-5-20251001`) | `claude-` 접두사 | `ANTHROPIC_API_KEY` |
+| OpenAI / Codex | `gpt-6-sol` | `gpt-`, `o3-`, `o4-` 접두사. `-codex` 접미사는 기존 provider 별칭으로 해석하며, 실제 API 키 또는 구독 경로는 선택한 자격 소스를 따릅니다. 모델별 지원·퇴역은 소스마다 다르고, 카탈로그 등록은 계정 접근 증거가 아닙니다. | ChatGPT 구독 OAuth(`~/.codex/auth.json`) 또는 `OPENAI_API_KEY` |
 | OpenRouter | `openrouter/openrouter/free`, `openrouter/openrouter/auto` 또는 정확한 catalogue id | `openrouter/<publisher>/<model>`. 외부 namespace 하나를 제거해 OpenRouter에 전달 | `OPENROUTER_API_KEY`. 크레딧 기반 PAYG이며 direct provider와 동치 폴백하지 않습니다. |
-| GLM (ZhipuAI) | `glm-5.2` (무료 티어 `glm-4.7-flash`) | `glm-` 접두사 | `ZAI_API_KEY`. Coding Plan과 PAYG 엔드포인트가 분리되어 있습니다. |
+| GLM (ZhipuAI) | `glm-5.3` (무료 티어 `glm-4.7-flash`) | `glm-` 접두사 | `ZAI_API_KEY`. PAYG API 경로입니다. 현재 Coding Plan 정책에서 GEODE 사용 자격은 확인되지 않아 구독 실행을 차단합니다. |
 
 (프로바이더, 자격 소스) 조합마다 어댑터가 하나씩 등록됩니다 (`core/llm/adapters/`). `geode adapters list`로 현재 등록 상태, API transport, billing, 자격 환경을 확인할 수 있습니다.
 
 OpenRouter는 OpenAI의 별칭이 아니라 별도 inference router입니다. `/login add`로 키를 등록하고 `/model openrouter/anthropic/claude-sonnet-4`처럼 정확한 참조를 선택합니다. 응답의 `usage.cost`가 예산·사용량 기록의 권위이고, 반환 모델·선택 provider·routing attempt는 bounded LLM-call event에 남습니다. `free`/`auto`는 동적 경로이므로 고정 모델 공식 평가에 사용하지 않습니다.
 
+활성 모델과 별칭, 문맥·출력 한도, API 요율은 [2026-09-24 공급자 조사](https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20260924.md)에서 원문 출처와 함께 확인할 수 있습니다. API 달러 요율과 Codex·Coding Plan의 크레딧은 별개이며, 카탈로그 갱신이 실제 계정 수락이나 청구 검증을 뜻하지 않습니다.
+
 ## 소스별 모델 지원 종료
 
-Unreleased, 2026-09-20 기준: Codex의 ChatGPT 로그인 경로에서`gpt-5.2`·`gpt-5.3-codex`는 폐기되었고,`gpt-5.4`·`gpt-5.4-mini`는 8월 31일 지원이 끝났습니다. 이 경로의 선택·요청은 차단하지만 유효한 API 사용과 과거 요금·평가 기록은 보존합니다. `gpt-5.5`의 구독 퇴역 예정일은 10월 14일이므로 아직 퇴역 처리하지 않습니다. 근거는 [공식 Codex 모델 안내](https://learn.chatgpt.com/docs/models#deprecated-codex-models)입니다.
+2026-09-24 확인: Codex의 ChatGPT 로그인 경로에서`gpt-5.2`·`gpt-5.3-codex`는 폐기되었고,`gpt-5.4`·`gpt-5.4-mini`는 8월 31일 지원이 끝났습니다. 이 경로의 선택·요청은 차단하지만 유효한 API 사용과 과거 요금·평가 기록은 보존합니다. `gpt-5.5`의 구독 퇴역 예정일은 10월 14일입니다. 신규 구독 선택지에서는 빼되 기존 명시적 설정을 이미 퇴역한 것으로 처리하지 않습니다. 근거는 [공식 Codex 모델 안내](https://learn.chatgpt.com/docs/models#deprecated-codex-models)입니다.
 
-Anthropic 공식 API에서도 지원이 끝난 Opus 4.1·Opus 4·Sonnet 4와 이전 세대를 네트워크 요청 전에 거절합니다. 현재 지원되는 4.5 이상 모델은 유지하며, 이 퇴역 일정을 OpenRouter 등 다른 운영사의 경로에 일괄 적용하지 않으며 실제 클라이언트의 endpoint를 확인합니다. [공식 모델 수명주기](https://platform.claude.com/docs/en/about-claude/model-deprecations)를 2026-09-21에 확인했으며, 계정별 실제 접근 권한은 별도 검증 대상입니다.
+Anthropic 공식 API에서도 지원이 끝난 Opus 4.1·Opus 4·Sonnet 4와 이전 세대를 네트워크 요청 전에 거절합니다. 현재 지원되는 4.5 이상 모델은 유지하며, 이 퇴역 일정을 OpenRouter 등 다른 운영사의 경로에 일괄 적용하지 않으며 실제 클라이언트의 endpoint를 확인합니다. [공식 모델 수명주기](https://platform.claude.com/docs/en/about-claude/model-deprecations)를 2026-09-24에 확인했으며, 계정별 실제 접근 권한은 별도 검증 대상입니다.
 
 ## 키와 설정이 사는 곳
 
@@ -612,8 +614,8 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
 | 모델을 바꿨는데 그대로 | 상위 레이어(보통 옛 .env 줄 또는 셸 export)가 가림 | `geode config explain model`로 WINNER 레이어를 찾아 그 줄을 고치거나 지웁니다. |
-| 데몬만 옛 모델로 응답 | 데몬 환경에 모델 env가 박제됨 | 데몬은 시작 시 모델 계열 env 키를 버리는 것이 기본입니다. `pkill -f "geode serve"` 후 재시작합니다. 데몬 모델을 env로 일부러 고정하려면 `GEODE_SERVE_KEEP_MODEL_ENV=1`이 탈출구입니다. |
-| GLM 구독인데 미터링 과금 | Coding Plan 키가 PAYG 엔드포인트로 나감 | Coding Plan 엔드포인트(`api.z.ai/api/coding/paas/v4`)와 PAYG(`api.z.ai/api/paas/v4`)는 다릅니다. 어느 쪽으로 나가는지 확인합니다. |
+| 데몬만 옛 모델로 응답 | 데몬 환경에 모델 env가 박제됨 | 데몬은 시작 시 모델 계열 env 키를 버리는 것이 기본입니다. `geode stop`으로 해당 데몬을 종료한 뒤 `geode serve`로 시작합니다. 데몬 모델을 env로 일부러 고정하려면 `GEODE_SERVE_KEEP_MODEL_ENV=1`을 설정합니다. |
+| GLM Coding Plan 실행 차단 | 공식 지원 도구로 사용 범위 제한 | 기존 구독 프로필은 보존합니다. API를 쓰려면 PAYG 소스를 명시적으로 선택합니다. GEODE는 과금 소스를 자동 전환하지 않습니다. |
 | 저장된 구독 모델을 선택할 수 없음 | 해당 소스에서 지원이 종료되었거나 폐기됨 | 현재 지원되는 모델을 명시적으로 다시 선택합니다. GEODE는 다른 모델이나 PAYG로 자동 전환하지 않습니다. API 지원과 구독 지원은 별개입니다. |
 
 ## 설정 레퍼런스
@@ -6166,7 +6168,7 @@ OPENROUTER_API_KEY=sk-or-v1-...
 ZAI_API_KEY={id}.{secret}
 ```
 
-GLM은 엔드포인트가 둘입니다. Coding Plan(구독 과금)과 PAYG(종량 과금)이고, Coding Plan 키를 PAYG 경로에 쓰면 구독 쿼터를 조용히 우회해 종량 과금됩니다.
+GLM은 PAYG API 키 경로를 지원합니다. 2026-09-24 Coding Plan 정책은 공식 지원 도구로 사용을 제한하며 GEODE 사용 자격은 확인되지 않았습니다. 기존 구독 프로필은 보존하되 실행을 차단하고, PAYG로 자동 전환하지 않습니다.
 
 ## 실패 모드
 
@@ -7073,7 +7075,7 @@ status dict 반환 (절대 raise하지 않음) + 히스토리 append
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use.md
 
-컴퓨터 사용은 모델이 스크린샷으로 화면을 보고 클릭, 타이핑, 스크롤을 지시하는 기능입니다. GEODE의 구현은 `core/tools/computer_use.py`의 `ComputerUseHarness` 하나이며 host backend는 pyautogui 또는 macOS helper입니다. Provider-native computer surface는 스크린샷을 해당 provider wire로 돌려주지만, normal function tool인 `computer_use`는 base64를 생략하고 compact observation만 반환합니다. Function-tool 경로의 시각적 좌표 선택은 활성 provider/source에 호환되는 grounding이 있을 때만 `locate`로 수행합니다.
+컴퓨터 사용은 모델이 스크린샷으로 화면을 보고 클릭, 타이핑, 스크롤을 지시하는 기능입니다. GEODE의 구현은 `core/tools/computer_use.py`의 `ComputerUseHarness` 하나이며 host backend는 pyautogui 또는 macOS helper입니다. Provider-native computer surface는 스크린샷을 해당 provider wire로 돌려주지만, normal function tool인 `computer_use`는 base64를 생략하고 compact observation만 반환합니다. 현재 function-tool 경로의 자동 좌표 선택인 `locate`는 모든 provider/source에서 사용할 수 없습니다.
 
 ## 동작 방식
 
@@ -7089,9 +7091,11 @@ native computer ←── screenshot(provider wire) ─────────�
 computer_use ←────── compact observation(base64 omitted) ◄┘
 ```
 
-디스패치 테이블은 프로바이더 중립입니다. Anthropic 어휘 (`left_click`, `triple_click`, `cursor_position`)와 OpenAI 어휘 (`keypress`)를 같은 핸들러로 받습니다. 지원 동작은 `screenshot`, `click`, `double_click`, `type`, `key`, `scroll`, `move`, `drag`, `wait`와 클릭 변형들입니다. 모르는 action은 지원 목록과 함께 오류로 돌아갑니다.
+디스패치 테이블은 프로바이더 중립입니다. Anthropic 어휘 (`left_click`, `triple_click`, `cursor_position`)와 OpenAI 어휘 (`keypress`)를 같은 핸들러로 받습니다. 지원 동작은 `screenshot`, `click`, `double_click`, `type`, `key`, `scroll`, `move`, `drag`, `wait`와 클릭 변형들입니다. 지원하지 않는 action은 실행 전에 오류로 돌아갑니다.
 
-좌표는 타깃 공간과 실제 화면 사이를 양방향 스케일링합니다. 모델은 `display_width_px=1280, display_height_px=800` 기준으로 좌표를 내고, 하네스가 실제 해상도로 변환합니다.
+좌표는 1280×800 스크린샷 공간과 실제 화면 사이를 양방향 스케일링합니다. 기존 Anthropic 도구는 display 필드로 크기를 선언하고, Opus 5.5의 `computer_toolset_20260801`은 스크린샷에서 크기를 읽습니다. 도구 결과에도 toolset 식별자를 보존합니다.
+
+새 toolset은 순차 호출을 요청합니다. 구현되지 않은 `zoom`, `hold_key`, `left_mouse_down`, `left_mouse_up`은 노출하지 않습니다. 좌표·키·대기 시간은 실행 전에 검증하고, 생략된 클릭 좌표는 관측한 커서 위치를 사용합니다. 예상하지 못한 복수 동작 응답은 실행을 차단하되 사용량과 실패 원인을 기록합니다. 프로토콜 회귀 검사는 실제 데스크톱 조작 성공을 뜻하지 않습니다.
 
 ## 구조를 먼저 읽고, 스크린샷은 나중에
 
@@ -7115,7 +7119,7 @@ driver = "helper"
 
 macOS에서는 `geode setup`이 helper를`~/.geode/helpers/computer-use/` 아래에 빌드합니다. wheel 안의 Swift/build source는 읽기 전용이며 생성물은 설치 디렉터리에 기록하지 않습니다.
 
-프로바이더가 native computer surface를 지원하면 그 경로를 쓰고, ChatGPT subscription처럼 native surface를 받지 않는 backend에는 같은 하네스를 normal function tool `computer_use`로 노출합니다. 이 경로는 다른 provider로 몰래 fallback하지 않습니다. OpenAI subscription source에 visual grounding을 별도로 구성하지 않았다면 `capture`는 가능하지만 `locate`는 dependency error로 중단되며, browser DOM·playwriter· `ui_probe` 같은 source-safe 구조 경로를 선택해야 합니다.
+프로바이더가 native computer surface를 지원하면 그 경로를 쓰고, ChatGPT subscription처럼 native surface를 받지 않는 backend에는 같은 하네스를 normal function tool `computer_use`로 노출합니다. 이 경로는 다른 provider로 몰래 fallback하지 않습니다.`capture`는 가능하지만 `locate`는 활성 provider/source를 표시하는 dependency error로 중단됩니다. 미검증 GLM 자동 grounding 경로는 제거했으며, browser DOM·playwriter· `ui_probe` 같은 source-safe 구조 경로를 선택해야 합니다.
 
 ## 안전
 
@@ -7180,7 +7184,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1576 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: size limit exceeded — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -7341,7 +7345,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 589 |
-| 테스트 Python 파일 | 732 |
+| 테스트 Python 파일 | 736 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |

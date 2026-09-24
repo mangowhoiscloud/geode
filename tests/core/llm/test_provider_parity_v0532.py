@@ -150,7 +150,7 @@ def test_gpt_5_5_model_profile_uses_resolver_family() -> None:
     from core.config import _resolve_provider
     from core.llm.adapters.registry import normalize_registry_provider
 
-    profiles = {p.id: p for p in get_model_profiles()}
+    profiles = {p.id: p for p in get_model_profiles(openai_source="payg")}
     assert "gpt-5.5" in profiles, "gpt-5.5 must be in the model picker list"
     assert profiles["gpt-5.5"].provider == normalize_registry_provider(
         _resolve_provider("gpt-5.5")

@@ -72,7 +72,12 @@ def test_subscription_picker_excludes_retired_offerings_but_keeps_disabled_curre
     monkeypatch.setattr(_state, "_selected_openai_source", lambda: "subscription")
     rows = _state.get_model_profiles()
     assert retired not in {row.id for row in rows}
-    assert "gpt-5.5" in {row.id for row in rows}  # October 14 is still future
+    assert "gpt-5.5" not in {row.id for row in rows}  # Not a new subscription choice.
+    # The October 14 retirement is future: retain an explicit saved selection
+    # without treating it as a retired route or silently remapping it.
+    legacy = _state.get_model_profiles(configured_model_ids=("gpt-5.5",))
+    assert len([row for row in legacy if row.id == "gpt-5.5"]) == 1
+    assert _state.model_unavailable_reason("gpt-5.5", source="subscription") is None
 
     configured = _state.get_model_profiles(configured_model_ids=(retired, retired))
     matches = [row for row in configured if row.id == retired]

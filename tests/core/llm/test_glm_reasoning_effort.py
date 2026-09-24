@@ -1,10 +1,4 @@
-"""GLM-5.2 reasoning_effort / thinking control gate (PR-GLM-5.2-FINALIZE).
-
-``build_glm_reasoning_extra_body`` gates the GLM-5.2 reasoning params behind
-``settings.glm_reasoning_effort`` (default empty = send nothing → server
-default, no regression). The param shape is doc-grounded (official z.ai
-chat-completion API ref) but live-unverified (GLM balance 0).
-"""
+"""Model-specific GLM reasoning controls, grounded in the current API contract."""
 
 from __future__ import annotations
 
@@ -32,8 +26,8 @@ class TestGlmReasoningGate:
         xb = build_glm_reasoning_extra_body("glm-5.2")
         assert xb == {"reasoning_effort": "none", "thinking": {"type": "disabled"}}
 
-    def test_only_glm_5_2(self, monkeypatch):
-        # reasoning_effort is GLM-5.2-only — older GLM ids never get the param.
+    def test_older_models_do_not_get_graded_effort(self, monkeypatch):
+        # The documented graded control begins with GLM-5.2.
         from core.config import settings
 
         monkeypatch.setattr(settings, "glm_reasoning_effort", "max", raising=False)
@@ -60,19 +54,17 @@ class TestGlmReasoningGate:
         assert xb["reasoning_effort"] == "high"
 
 
-def test_glm_default_is_5_2():
-    """GLM default flipped to the flagship glm-5.2."""
+def test_glm_default_is_5_3():
+    """The shipped model default follows the September 24 contract."""
     from core.config import GLM_PRIMARY
 
-    assert GLM_PRIMARY == "glm-5.2"
+    assert GLM_PRIMARY == "glm-5.3"
 
 
-def test_glm_5_2_is_default_picker_entry():
-    """The /model picker's GLM default entry is glm-5.2 (labelled GLM-5.2),
-    with glm-5.1 still explicitly selectable."""
-    from core.cli.commands._state import get_model_index
+def test_glm_5_3_leads_picker_without_retiring_active_older_models():
+    from core.cli.commands._state import get_model_profiles
 
-    idx = get_model_index()
-    assert "glm-5.2" in idx
-    assert "glm-5.1" in idx
-    assert idx["glm-5.2"].label == "GLM-5.2"
+    rows = [row for row in get_model_profiles() if row.provider == "glm"]
+    assert rows[0].id == "glm-5.3"
+    assert rows[0].label == "GLM-5.3"
+    assert {"glm-5.2", "glm-5.1"} <= {row.id for row in rows}

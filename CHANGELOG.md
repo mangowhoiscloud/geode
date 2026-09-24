@@ -49,6 +49,22 @@ functional change.
 
 ### Changed
 
+- Refresh Claude Messages contracts for Fable 5.1, Opus 5.5/5, and Sonnet 5
+  through typed model records and one create/stream request builder. Preserve
+  signed thinking, structured output, tool calls, and cache usage in streaming;
+  retain hosted search usage. Validate output/effort/forced-tool limits, including
+  auxiliary text completions, and update hosted web tool versions.
+  Guard unknown computer generations until their native executor is supported.
+
+- Align model selection, login routing and effort controls with the shared
+  provider contracts checked on September 24. Ship Claude Opus 5.5, GPT-6 Sol
+  and GLM-5.3 defaults while preserving explicit configuration; retain saved
+  GLM Coding Plan profiles without inventing local call quotas for token credits.
+  Preserve saved effort when reopening the picker and use each provider's own
+  source for configured-model availability. Use GLM's native reasoning builder
+  when the existing effort probe records its outgoing control.
+  Update bilingual provider and authentication guidance with source-specific
+  availability, current model specifications and pricing evidence.
 - Run Reflection after each tool-result round and once before final delivery.
   Final semantic verification replaces the mechanical-only default; legacy
   cadence controls and `off`/`rule_based`/`reflexion` verifier settings are
@@ -61,6 +77,12 @@ functional change.
 
 ### Added
 
+- Support Claude Opus 5.5's native computer toolset with serial execution,
+  toolset-aware result replay and parameter validation before desktop actions.
+  Withhold unsupported members; report native action errors and preserve
+  legacy computer protocols. Retain billed usage when rejecting invalid
+  responses without replaying actions. Fix horizontal scrolling, native macOS
+  drag and wait deadlines; propagate helper-signing failures.
 - Add credential-gated Jev judgment selection through `/model judgment`, its
   interactive picker and the existing natural-language `switch_model` tool.
   Explicit selection uses TypeSafe System One or OpenRouter's compatible
@@ -117,6 +139,20 @@ functional change.
   details, including the primary-role default. Preserve exact values with JSON
   escaping so judgment-only approval can distinguish a root-model change;
   permission requirements and approval decisions remain unchanged.
+
+- Align OpenAI GPT-6 API and subscription model choices, reasoning controls,
+  and published API output limits; keep subscription-only request restrictions
+  separate and preserve reported token usage from API web search. Normalize
+  both Responses streams through one translator with tool calls, reasoning,
+  usage and replay metadata; reject transport EOF without a terminal response.
+
+- Share the documented GLM request and streaming contracts across completion
+  and text paths, including 5.3 reasoning, tools, and exact output limits.
+  Preserve stream and hosted-search usage, and reject incomplete tool streams.
+  Separate hybrid thinking capability from graded effort controls; reject GLM
+  Coding Plan calls before credentials are read under the supported-tools policy.
+  Remove unverified automatic GLM-5V grounding and its orphaned parser/client
+  chain while retaining explicit provider/source-aware unavailability.
 - Validate the complete settings reload before updating the live singleton.
   Failed environment/TOML field validation, field preparation, or routing
   refresh preserves the previous Settings values; corrected reloads retain

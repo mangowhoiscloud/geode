@@ -24,6 +24,7 @@ import base64
 import io
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -39,6 +40,10 @@ log = logging.getLogger(__name__)
 # Target resolution sent to LLM (smaller = cheaper tokens, matches Anthropic demo)
 TARGET_WIDTH = 1280
 TARGET_HEIGHT = 800
+
+# Both native Anthropic generations share this executor. The GA toolset can
+# withhold unsupported members; its declaration reads this same list.
+UNSUPPORTED_COMPUTER_MEMBERS = ("zoom", "hold_key", "left_mouse_down", "left_mouse_up")
 
 
 _BLOCKED_KEY_COMBOS: tuple[frozenset[str], ...] = (
@@ -381,15 +386,10 @@ class ComputerUseHarness:
         sx, sy = self._scale_to_screen(x, y)
         pag.moveTo(sx, sy)
 
-        scroll_map = {
-            "up": amount,
-            "down": -amount,
-        }
-        clicks = scroll_map.get(direction, -amount)
-        pag.scroll(clicks)
-
         if direction in ("left", "right"):
             pag.hscroll(amount if direction == "right" else -amount)
+        else:
+            pag.scroll(amount if direction == "up" else -amount)
 
         log.info("scroll(%d,%d) direction=%s amount=%d", x, y, direction, amount)
         return self.screenshot()
@@ -590,6 +590,7 @@ class ComputerUseHarness:
             params,
             target_width=self._target_width,
             target_height=self._target_height,
+            timeout_s=max(30.0, params.get("ms", 1000) / 1000 + 10) if action == "wait" else 30.0,
         )
         width = result.get("screen_width")
         height = result.get("screen_height")
@@ -615,6 +616,132 @@ class ComputerUseHarness:
             "display_width_px": self._target_width,
             "display_height_px": self._target_height,
         }
+
+
+def _native_coordinate(value: Any) -> tuple[int, int]:
+    if (
+        not isinstance(value, (list, tuple))
+        or len(value) != 2
+        or any(not isinstance(v, int) or isinstance(v, bool) for v in value)
+        or not 0 <= value[0] < TARGET_WIDTH
+        or not 0 <= value[1] < TARGET_HEIGHT
+    ):
+        raise ValueError("coordinate must be two integers inside the screenshot")
+    return value[0], value[1]
+
+
+async def execute_native_computer_use(
+    harness: ComputerUseHarness, *, action: str = "screenshot", **params: Any
+) -> dict[str, Any]:
+    """Validate and translate native computer parameters before desktop input.
+
+    Anthropic uses coordinate/text/seconds while the harness uses x/y/keys/ms.
+    An omitted optional coordinate means the observed cursor, never (0, 0).
+    OpenAI batches have their own translation and do not enter this function.
+    """
+    try:
+        action = {"mouse_move": "move", "left_click_drag": "drag"}.get(action, action)
+        clicks = {
+            "click",
+            "left_click",
+            "right_click",
+            "middle_click",
+            "double_click",
+            "triple_click",
+        }
+        if action not in clicks | {
+            "screenshot",
+            "cursor_position",
+            "move",
+            "drag",
+            "scroll",
+            "type",
+            "key",
+            "keypress",
+            "wait",
+        }:
+            raise ValueError(f"Unsupported computer action: {action}")
+        if action in clicks | {"drag", "scroll"} and params.get("text"):
+            raise ValueError("Modifier keys on mouse actions are not supported by this driver")
+        repeat = 1
+        shaped: dict[str, Any] = {}
+        if action in {"key", "keypress"}:
+            keys = params.get("text", params.get("keys", params.get("key")))
+            if not isinstance(keys, str) or not keys:
+                raise ValueError("key requires a nonempty text or keys string")
+            repeat = params.get("repeat", 1)
+            if not isinstance(repeat, int) or isinstance(repeat, bool) or not 1 <= repeat <= 100:
+                raise ValueError("key repeat must be an integer from 1 to 100")
+            shaped["keys"] = keys
+        elif action == "type":
+            if not isinstance(params.get("text"), str):
+                raise ValueError("type requires text")
+            shaped["text"] = params["text"]
+        elif action == "wait":
+            duration = params["duration"] if "duration" in params else params.get("ms", 1000) / 1000
+            if (
+                isinstance(duration, bool)
+                or not isinstance(duration, (int, float))
+                or not math.isfinite(duration)
+                or not 0 <= duration <= 300
+            ):
+                raise ValueError("wait duration must be between 0 and 300 seconds")
+            shaped["ms"] = round(duration * 1000)
+        elif action == "scroll":
+            direction = params.get("scroll_direction", params.get("direction", "down"))
+            amount = params.get("scroll_amount", params.get("amount", 3))
+            if direction not in {"up", "down", "left", "right"}:
+                raise ValueError("scroll direction must be up, down, left, or right")
+            if (
+                not isinstance(amount, int)
+                or isinstance(amount, bool)
+                or not 1 <= amount <= 2_147_483_647
+            ):
+                raise ValueError("scroll amount must be a positive 32-bit integer")
+            shaped.update(direction=direction, amount=amount)
+        elif action == "click":
+            button = params.get("button", "left")
+            count = params.get("click_count", 1)
+            if (
+                button not in {"left", "right", "middle"}
+                or not isinstance(count, int)
+                or isinstance(count, bool)
+                or not 1 <= count <= 3
+            ):
+                raise ValueError("click requires a supported button and count from 1 to 3")
+            if "button" in params:
+                shaped["button"] = button
+            if "click_count" in params:
+                shaped["click_count"] = count
+        if action == "drag":
+            start = params.get("start_coordinate", [params.get("start_x"), params.get("start_y")])
+            end = params.get("coordinate", [params.get("end_x"), params.get("end_y")])
+            shaped["start_x"], shaped["start_y"] = _native_coordinate(start)
+            shaped["end_x"], shaped["end_y"] = _native_coordinate(end)
+        elif action in clicks | {"move", "scroll"}:
+            coordinate = params.get("coordinate")
+            if coordinate is None and ("x" in params or "y" in params):
+                coordinate = [params.get("x"), params.get("y")]
+            if coordinate is None:
+                if action == "move":
+                    raise ValueError("mouse move requires a coordinate")
+                cursor_result = await harness.aexecute("cursor_position")
+                if cursor_result.get("error"):
+                    return cursor_result
+                cursor = cursor_result.get("cursor")
+                if cursor is None:
+                    cursor = cursor_result.get("observation", {}).get("cursor", {})
+                    cursor = [cursor.get("x"), cursor.get("y")]
+                coordinate = cursor
+            shaped["x"], shaped["y"] = _native_coordinate(coordinate)
+    except (TypeError, ValueError) as exc:
+        return {"error": str(exc), "error_type": "validation", "action": action}
+    result: dict[str, Any] = {}
+    for _ in range(repeat):
+        result = await harness.aexecute(action, **shaped)
+        if result.get("error"):
+            break
+    return result
 
 
 async def execute_emulated_computer_use(
