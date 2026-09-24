@@ -89,7 +89,8 @@ functional change.
   Withhold unsupported members; report native action errors and preserve
   legacy computer protocols. Retain billed usage when rejecting invalid
   responses without replaying actions. Fix horizontal scrolling, native macOS
-  drag and wait deadlines; propagate helper-signing failures.
+  drag and wait deadlines; propagate helper-signing failures. Require the
+  native helper source and build script in both wheel and source distributions.
 - Add optional positive output-token and action-round limits to the one-tool
   Harbor adapter while preserving its defaults. Wrap-up requests respect a
   caller's smaller output ceiling. Auxiliary and subscription request limits
@@ -378,6 +379,11 @@ functional change.
 
 ### Infrastructure
 
+- Fail the legacy-import ratchet when its Git comparison fails, and compare
+  against the actual PR target or pre-push revision. Reject incomplete base
+  arguments instead of treating them as an empty change set. Require the
+  committed dependency lock for CI, Pages, install-smoke, and Petri validation;
+  retain the release workflow's existing lock freshness check.
 - Skip full Python tests and coverage only when the complete change set contains
   allowlisted documentation and generated public-doc files. Preserve required
   check identities, documentation/roadmap/inventory validation, and full testing
