@@ -56,6 +56,9 @@ def test_astra_catalogue_route_and_picker() -> None:
         "output_per_mtok": 50.0,
         "cached_per_mtok": 1.0,
         "cache_write_per_mtok": 12.5,
+        "long_context_threshold": 272_000,
+        "long_context_input_multiplier": 2.0,
+        "long_context_output_multiplier": 1.5,
     }
     assert data["context_windows"][MODEL] == 1_050_000
     assert (

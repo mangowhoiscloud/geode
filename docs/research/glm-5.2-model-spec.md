@@ -1,3 +1,8 @@
+> Superseded on 2026-09-24: the current Z.AI direct model guide documents 1M
+> context for the plain GLM-5.2 model. The historical conservative guard and
+> missing-cache notes below do not describe current runtime behavior. See
+> [the current provider audit](provider-refresh-20260924-zhipu.md).
+
 # GLM-5.2 — Model Spec & GEODE Exposure Surface
 
 > Grounded in official Zhipu / Z.ai documentation, fetched 2026-06-23. Every
