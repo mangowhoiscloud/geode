@@ -61,6 +61,11 @@ functional change.
 
 ### Added
 
+- Add optional positive output-token and action-round limits to the one-tool
+  Harbor adapter while preserving its defaults. Wrap-up requests respect a
+  caller's smaller output ceiling. Auxiliary and subscription request limits
+  remain distinct from a whole-runtime spending cap; provider V1 validation
+  stays provisional until implementation is complete and its revision is frozen.
 - Add credential-gated Jev judgment selection through `/model judgment`, its
   interactive picker and the existing natural-language `switch_model` tool.
   Explicit selection uses TypeSafe System One or OpenRouter's compatible

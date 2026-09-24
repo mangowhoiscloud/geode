@@ -636,6 +636,8 @@ def _build_loop(
     source: str,
     effort: str,
     timeout: float,
+    max_tokens: int = 32768,
+    max_rounds: int = 0,
 ) -> Any:
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop, AgenticLoopConfig
@@ -667,8 +669,8 @@ def _build_loop(
         config=AgenticLoopConfig(
             source=source,
             effort=effort,
-            max_tokens=32768,
-            max_rounds=0,
+            max_tokens=max_tokens,
+            max_rounds=max_rounds,
             time_budget_s=timeout,
             allowed_tool_names={tool.name},
             force_include_allowed_tools=True,
@@ -720,13 +722,22 @@ class GeodeHarborAgent(HarborBaseAgent):
         source: str = "subscription",
         effort: str = "max",
         agent_timeout_sec: float | None = None,
+        max_tokens: int | None = None,
+        max_rounds: int | None = None,
         **kwargs: Any,
     ) -> None:
+        for name, value in (("max_tokens", max_tokens), ("max_rounds", max_rounds)):
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, int) or value <= 0
+            ):
+                raise ValueError(f"{name} must be a positive integer when supplied")
         super().__init__(logs_dir=logs_dir, model_name=model_name, **kwargs)
         self.provider = provider
         self.source = source
         self.effort = effort
         self.agent_timeout_sec = _agent_time_budget(agent_timeout_sec)
+        self.max_tokens = 32768 if max_tokens is None else max_tokens
+        self.max_rounds = 0 if max_rounds is None else max_rounds
 
     def version(self) -> str:
         return importlib.metadata.version("geode-agent")
@@ -743,6 +754,8 @@ class GeodeHarborAgent(HarborBaseAgent):
             source=self.source,
             effort=self.effort,
             timeout=self.agent_timeout_sec,
+            max_tokens=self.max_tokens,
+            max_rounds=self.max_rounds,
         )
         previous = os.environ.get("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT")
         os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] = "1"
