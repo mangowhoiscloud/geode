@@ -34,7 +34,7 @@
         "has_default": true,
         "implementation": "ContextVar",
         "lifetime": "one AgenticLoop task",
-        "line": 33,
+        "line": 35,
         "owner": "core.agent.loop.AgenticLoop",
         "path": "core/agent/cognitive_state_ctx.py",
         "resetter": "async task teardown; the next arun() rebinds",
@@ -49,7 +49,7 @@
         "has_default": true,
         "implementation": "ContextVar",
         "lifetime": "one AgenticLoop task",
-        "line": 36,
+        "line": 38,
         "owner": "core.agent.loop.AgenticLoop",
         "path": "core/agent/cognitive_state_ctx.py",
         "resetter": "async task teardown; the next arun() rebinds",
@@ -64,7 +64,7 @@
         "has_default": true,
         "implementation": "ContextVar",
         "lifetime": "current turn and idle interval until the next rebind or task exit",
-        "line": 37,
+        "line": 39,
         "owner": "core.agent.loop.AgenticLoop",
         "path": "core/agent/cognitive_state_ctx.py",
         "resetter": "the next turn rebinds; owning task teardown discards the context",
@@ -79,7 +79,7 @@
         "has_default": true,
         "implementation": "ContextVar",
         "lifetime": "one physical tool dispatch",
-        "line": 38,
+        "line": 40,
         "owner": "core.agent.tool_executor.ToolExecutor",
         "path": "core/agent/cognitive_state_ctx.py",
         "resetter": "core.agent.cognitive_state_ctx.reset_tool_call_id",
@@ -94,7 +94,7 @@
         "has_default": true,
         "implementation": "ContextVar",
         "lifetime": "one child AgenticLoop task",
-        "line": 54,
+        "line": 50,
         "owner": "core.agent.loop.AgenticLoop",
         "path": "core/agent/cognitive_state_ctx.py",
         "resetter": "async task teardown; the next arun() rebinds",
@@ -109,7 +109,7 @@
         "has_default": true,
         "implementation": "ContextVar",
         "lifetime": "one child AgenticLoop task",
-        "line": 65,
+        "line": 61,
         "owner": "core.agent.loop.AgenticLoop",
         "path": "core/agent/cognitive_state_ctx.py",
         "resetter": "async task teardown; the next arun() rebinds",
@@ -184,7 +184,7 @@
         "has_default": true,
         "implementation": "ContextVar",
         "lifetime": "one AgenticLoop session",
-        "line": 98,
+        "line": 99,
         "owner": "core.agent.loop",
         "path": "core/llm/adapters/dispatch.py",
         "resetter": "core.llm.adapters.dispatch.end_session_adapter_tracking",
@@ -409,7 +409,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 12,
-      "file_loc": 1145,
+      "file_loc": 1149,
       "method_count": 39,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -528,19 +528,19 @@
   "packages": {
     "core": {
       "python_files": 416,
-      "python_loc": 127299
+      "python_loc": 127613
     },
     "evals": {
       "python_files": 101,
-      "python_loc": 34981
+      "python_loc": 34999
     },
     "evolve": {
       "python_files": 73,
       "python_loc": 32002
     },
     "tests": {
-      "python_files": 734,
-      "python_loc": 214124
+      "python_files": 740,
+      "python_loc": 216328
     }
   },
   "schema_version": 6,

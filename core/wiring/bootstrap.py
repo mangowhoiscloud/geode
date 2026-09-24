@@ -282,6 +282,7 @@ def build_hooks(
     def _reg_agent_runtime_state() -> None:
         from core.observability.agent_runtime_state import (
             accumulate_tokens_and_cost,
+            close_runtime_state,
             record_agent_session_end,
             record_subagent_completed,
         )
@@ -357,6 +358,7 @@ def build_hooks(
             name="agent_runtime_llm_call_ended",
             priority=55,
         )
+        hooks.add_cleanup("agent_runtime_state", close_runtime_state)
 
     _register_plugin("agent_runtime_state", _reg_agent_runtime_state)
 

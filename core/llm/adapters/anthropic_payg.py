@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from core.llm.adapters._anthropic_common import (
@@ -34,6 +34,7 @@ from core.llm.adapters.base import (
     TextCompletionResult,
     WebSearchResult,
 )
+from core.llm.errors import LLMResponseValidationError
 from core.llm.loop_affinity import LoopAffineClientCache
 from core.orchestration.anthropic_api_lane import acquire_anthropic_api_lane_async
 
@@ -104,20 +105,20 @@ class AnthropicPaygAdapter:
                 response = await client.messages.create(
                     **build_create_kwargs(req, base_url=str(client.base_url))
                 )
+                return translate_response(response)
             except Exception as exc:
                 self._last_error = exc
                 log.warning(
-                    "anthropic-payg: messages.create failed model=%s error_type=%s",
+                    "anthropic-payg: completion failed model=%s error_type=%s",
                     req.model,
                     type(exc).__name__,
                 )
                 raise
-        return translate_response(response)
 
     async def aweb_search(
         self, query: str, *, max_results: int = 5, model: str = ""
     ) -> WebSearchResult:
-        """Anthropic ``web_search_20260209`` tool via PAYG endpoint.
+        """Anthropic hosted web search via the PAYG endpoint.
 
         ``model`` is the session's resolved model — honoured when in the
         documented support set, else escalated to ANTHROPIC_PRIMARY
@@ -176,14 +177,31 @@ class AnthropicPaygAdapter:
             async for text_chunk in stream.text_stream:
                 yield StreamEvent(kind="text", payload={"text": text_chunk})
             final = await stream.get_final_message()
+            try:
+                result = translate_response(final)
+            except LLMResponseValidationError as exc:
+                yield StreamEvent(kind="usage", payload=asdict(exc.completed_result.usage))
+                raise
+            for block in result.anthropic_content:
+                if block.get("type") == "thinking":
+                    yield StreamEvent(
+                        kind="thinking",
+                        payload={
+                            "text": block.get("thinking", ""),
+                            "signature": block["signature"],
+                        },
+                    )
+            for tool_use in result.tool_uses:
+                yield StreamEvent(kind="tool_use", payload=tool_use)
+            usage = asdict(result.usage)
+            yield StreamEvent(kind="usage", payload=usage)
             yield StreamEvent(
                 kind="stop",
                 payload={
-                    "stop_reason": getattr(final, "stop_reason", "end_turn") or "end_turn",
-                    "usage": {
-                        "input_tokens": getattr(final.usage, "input_tokens", 0),
-                        "output_tokens": getattr(final.usage, "output_tokens", 0),
-                    },
+                    "stop_reason": result.stop_reason,
+                    "usage": usage,
+                    "anthropic_content": result.anthropic_content,
+                    "stop_details": result.stop_details,
                 },
             )
 
@@ -206,19 +224,16 @@ class AnthropicPaygAdapter:
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import ANTHROPIC_FALLBACK_CHAIN, ANTHROPIC_PRIMARY
-        from core.llm.model_catalog import model_source_unavailable_reason, model_spec_for_adapter
+        from core.llm.model_catalog import model_ids_for_source, model_spec_for_adapter
 
-        ids = [ANTHROPIC_PRIMARY, *ANTHROPIC_FALLBACK_CHAIN]
-        seen: set[str] = set()
-        models: list[ModelSpec] = []
-        for mid in ids:
-            if mid in seen or model_source_unavailable_reason(
-                mid, provider=self.provider, source=self.source
-            ):
-                continue
-            seen.add(mid)
-            models.append(model_spec_for_adapter(mid, provider=self.provider))
-        return models
+        return [
+            model_spec_for_adapter(mid, provider=self.provider)
+            for mid in model_ids_for_source(
+                self.provider,
+                self.source,
+                configured=(ANTHROPIC_PRIMARY, *ANTHROPIC_FALLBACK_CHAIN),
+            )
+        ]
 
     def detect_credential(self) -> CredentialDetection | None:
         from core.config import ANTHROPIC_PRIMARY, settings

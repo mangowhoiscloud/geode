@@ -13,8 +13,11 @@ incrementally. PR-D Phase 1 only does the session-start portion.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
+from unittest.mock import AsyncMock
 
+import pytest
 from core.agent.loop import _guards, _phases
 from core.agent.loop.agent_loop import AgenticLoop
 
@@ -118,22 +121,24 @@ def test_arun_calls_session_start_helper() -> None:
     assert "_try_decompose" not in src
 
 
-def test_arun_surfaces_intercept_result_verbatim() -> None:
-    """If the helper returns an AgenticResult (blocked), ``arun``
-    must return it directly — not wrap it, not log + drop it. Pin
-    the early-exit pattern so a future refactor doesn't accidentally
-    swallow the blocked result."""
-    src = inspect.getsource(AgenticLoop._arun_once)
-    phase_src = inspect.getsource(_phases.prepare_input)
-    open_src = inspect.getsource(_guards._open_turn)
-    assert "intercepted = await loop._emit_session_start_signals(user_input)" in open_src
-    assert (
-        "if intercepted is not None:\n        return cast(AgenticResult, intercepted)" in open_src
+def test_arun_surfaces_intercept_result_verbatim(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise the early return across the actual phase and public-turn boundaries."""
+    from core.agent.conversation import ConversationContext
+    from core.agent.loop import AgenticLoopConfig, AgenticResult
+    from core.agent.tool_executor import ToolExecutor
+
+    loop = AgenticLoop(
+        ConversationContext(),
+        ToolExecutor(action_handlers={}, auto_approve=True),
+        config=AgenticLoopConfig(source="payg"),
+        provider="anthropic",
+        quiet=True,
     )
-    # The exact pattern arun uses:
-    assert "intercepted = await _guards._open_turn(" in phase_src
-    assert "if intercepted is not None:\n        return intercepted" in phase_src
-    assert "if isinstance(prepared, AgenticResult):\n            return prepared" in src
+    blocked = AgenticResult(text="blocked", termination_reason="input_blocked")
+    intercept = AsyncMock(return_value=blocked)
+    monkeypatch.setattr(loop, "_emit_session_start_signals", intercept)
+    assert asyncio.run(loop.arun("blocked input")) is blocked
+    intercept.assert_awaited_once_with("blocked input")
 
 
 def test_arun_no_longer_inlines_session_start_block() -> None:

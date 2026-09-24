@@ -576,7 +576,7 @@ class AgenticLoop:
             self.cognitive_state.goal = user_input
         # Bind CognitiveState/session ids to ContextVars so tool-executor
         # hooks read the live state without coupling to AgenticLoop. Binding
-        # is asyncio-task-scoped; the next arun overwrites idempotently.
+        # is asyncio-task-scoped and restored by the physical turn boundary.
         from core.agent.cognitive_state_ctx import (
             set_cognitive_state,
             set_parent_session_id,
@@ -1000,68 +1000,72 @@ class AgenticLoop:
         _goal_continuation_trigger: str = "active_goal",
     ) -> AgenticResult:
         """Run one physical agent turn through the six explicit phases."""
-        prepared = await _phases.prepare_input(
-            self,
-            user_input,
-            verify_continuation=_verify_continuation,
-            goal_continuation=_goal_continuation,
-            goal_continuation_trigger=_goal_continuation_trigger,
-        )
-        if isinstance(prepared, AgenticResult):
-            return prepared
+        from core.agent.cognitive_state_ctx import preserve_cognitive_context
+        from core.llm.adapters.dispatch import preserve_session_adapter_tracking
 
-        guard_reason: str | None = None
-        round_idx = prepared.turn_state.round_index
-        while True:
+        with preserve_cognitive_context(), preserve_session_adapter_tracking():
+            prepared = await _phases.prepare_input(
+                self,
+                user_input,
+                verify_continuation=_verify_continuation,
+                goal_continuation=_goal_continuation,
+                goal_continuation_trigger=_goal_continuation_trigger,
+            )
+            if isinstance(prepared, AgenticResult):
+                return prepared
+
+            guard_reason: str | None = None
             round_idx = prepared.turn_state.round_index
-            guard_reason = _guards._check_round_guards(self, round_idx)
-            if guard_reason is not None:
-                break
-            is_last_round = self.max_rounds > 0 and round_idx == self.max_rounds - 1
+            while True:
+                round_idx = prepared.turn_state.round_index
+                guard_reason = _guards._check_round_guards(self, round_idx)
+                if guard_reason is not None:
+                    break
+                is_last_round = self.max_rounds > 0 and round_idx == self.max_rounds - 1
 
-            model_call = await _phases.prepare_model_call(self, prepared, round_idx)
-            if isinstance(model_call, AgenticResult):
-                return model_call
+                model_call = await _phases.prepare_model_call(self, prepared, round_idx)
+                if isinstance(model_call, AgenticResult):
+                    return model_call
 
-            provider_result = await _phases.call_provider(
+                provider_result = await _phases.call_provider(
+                    self,
+                    prepared,
+                    model_call,
+                    round_idx,
+                )
+                if provider_result is None:
+                    continue
+                if isinstance(provider_result, AgenticResult):
+                    return provider_result
+
+                tool_result = await _phases.process_tool_calls(
+                    self,
+                    prepared,
+                    provider_result,
+                    round_idx,
+                    is_last_round=is_last_round,
+                    step_snapshot=model_call.step_snapshot,
+                )
+                if isinstance(tool_result, AgenticResult):
+                    return tool_result
+
+                terminal = await _phases.observe_and_compact(
+                    self,
+                    prepared,
+                    provider_result,
+                    tool_result,
+                    round_idx,
+                )
+                if terminal is not None:
+                    return terminal
+
+            return await _phases.assemble_termination(
                 self,
-                prepared,
-                model_call,
-                round_idx,
+                user_input=prepared.user_input,
+                round_idx=round_idx,
+                turn=prepared,
+                guard_reason=guard_reason,
             )
-            if provider_result is None:
-                continue
-            if isinstance(provider_result, AgenticResult):
-                return provider_result
-
-            tool_result = await _phases.process_tool_calls(
-                self,
-                prepared,
-                provider_result,
-                round_idx,
-                is_last_round=is_last_round,
-                step_snapshot=model_call.step_snapshot,
-            )
-            if isinstance(tool_result, AgenticResult):
-                return tool_result
-
-            terminal = await _phases.observe_and_compact(
-                self,
-                prepared,
-                provider_result,
-                tool_result,
-                round_idx,
-            )
-            if terminal is not None:
-                return terminal
-
-        return await _phases.assemble_termination(
-            self,
-            user_input=prepared.user_input,
-            round_idx=round_idx,
-            turn=prepared,
-            guard_reason=guard_reason,
-        )
 
     # ------------------------------------------------------------------
     # Context window — delegate to ``_context``

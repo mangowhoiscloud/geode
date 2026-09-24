@@ -43,10 +43,7 @@ from evals.seed_generation.picker import (
 
 @pytest.fixture(autouse=True)
 def _isolate_voter_overrides(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "evals.seed_generation.picker.GLOBAL_CONFIG_TOML",
-        tmp_path / "config.toml",
-    )
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "config.toml"))
 
 
 def _make_manifest() -> SeedGenerationManifest:
@@ -544,3 +541,17 @@ def test_config_voter_override_wins_over_manifest_default(tmp_path: Path) -> Non
     overridden = pk._load_config_toml_voter_overrides(cfg)
     assert overridden is not None
     assert [v.source for v in overridden] == ["openai-codex", "api_key"]
+
+
+def test_redirected_config_replaces_voter_panel(tmp_path: Path) -> None:
+    (tmp_path / "config.toml").write_text(
+        "[[seed_generation.judge_panel.voters]]\n"
+        'provider = "anthropic"\nmodel = "claude-opus-4-7"\n'
+        'source = "api_key"\neffort = "high"\n'
+    )
+    result = pick_bindings(
+        _make_manifest(), overrides={}, auto_probe=False, enforce_diversity=False
+    )
+    assert [(v.provider, v.model, v.effort) for v in result.voters] == [
+        ("anthropic", "claude-opus-4-7", "high")
+    ]

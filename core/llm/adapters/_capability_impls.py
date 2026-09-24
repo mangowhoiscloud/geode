@@ -99,11 +99,13 @@ async def anthropic_web_search(
     adapter_name: str,
     prepare_kwargs: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> WebSearchResult:
-    """Anthropic native ``web_search_20260209`` tool on the PAYG API."""
+    """Anthropic native ``web_search_20260318`` tool on the PAYG API."""
+    from core.llm.adapters._anthropic_common import translate_response
+
     kwargs: dict[str, Any] = {
         "model": model,
         "max_tokens": 1024,
-        "tools": [{"type": "web_search_20260209", "name": "web_search"}],
+        "tools": [{"type": "web_search_20260318", "name": "web_search"}],
         "messages": [
             {
                 "role": "user",
@@ -145,6 +147,7 @@ async def anthropic_web_search(
         retrieval_exposed=search_activated,
         model=model,
         adapter_name=adapter_name,
+        usage=translate_response(response).usage,
     )
 
 
@@ -158,6 +161,9 @@ async def anthropic_complete_text(
     prepare_kwargs: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> TextCompletionResult:
     """Single-turn Anthropic ``messages.create`` — used by compaction / extraction."""
+    from core.llm.adapters._anthropic_common import translate_response, validate_output_tokens
+
+    validate_output_tokens(model, max_tokens)
     kwargs: dict[str, Any] = {
         "model": model,
         "max_tokens": max_tokens,
@@ -173,8 +179,6 @@ async def anthropic_complete_text(
     for block in getattr(response, "content", []) or []:
         if hasattr(block, "text"):
             text_parts.append(block.text)
-    from core.llm.adapters._anthropic_common import translate_response
-
     return TextCompletionResult(
         text="".join(text_parts),
         usage=translate_response(response).usage,
@@ -345,24 +349,24 @@ __all__ = [
 
 
 def resolve_web_search_model(requested: str) -> str:
-    """Pick the Anthropic model for a ``web_search_20260209`` call.
+    """Pick the Anthropic model for a ``web_search_20260318`` call.
 
     PR-WEB-SEARCH-MODEL-HINT (2026-06-12) — the session's resolved model
     is honoured when it is in the documented support set
-    (``ANTHROPIC_WEB_SEARCH_20260209_MODELS``); anything else (empty hint,
+    (``ANTHROPIC_WEB_SEARCH_MODELS``); anything else (empty hint,
     non-Anthropic model on a mixed lane, unsupported Anthropic model)
     escalates to ``ANTHROPIC_PRIMARY``. Previously the search model was
     hardcoded to ANTHROPIC_PRIMARY regardless of the session model.
     """
     from core.config import ANTHROPIC_PRIMARY
-    from core.llm.model_capabilities import ANTHROPIC_WEB_SEARCH_20260209_MODELS
+    from core.llm.model_capabilities import ANTHROPIC_WEB_SEARCH_MODELS
 
-    if requested in ANTHROPIC_WEB_SEARCH_20260209_MODELS:
+    if requested in ANTHROPIC_WEB_SEARCH_MODELS:
         return requested
     if requested:
         log.info(
             "web_search: session model %r is outside the documented "
-            "web_search_20260209 support set — escalating to %s",
+            "web_search_20260318 support set — escalating to %s",
             requested,
             ANTHROPIC_PRIMARY,
         )
