@@ -6282,17 +6282,19 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-cachin
 
 시스템 프롬프트는 `core/agent/system_prompt.py`의`PROMPT_CACHE_BOUNDARY`마커(`<dynamic_context>` 여는 태그)로 두 쪽이 납니다. 마커 앞은 턴 사이 불변(베이스 스캐폴드, 스타일 가이드, 기본 ON identity), 마커 뒤는 턴마다 변합니다(model card, 날짜, 메모리 레이어, 사용자 컨텍스트).
 
-Anthropic 어댑터(`core/llm/providers/anthropic.py`)가 이 마커에서 시스템 문자열을 갈라 static 블록에`cache_control: {"type": "ephemeral"}`을 붙입니다. dynamic 쪽은 캐시 없이 나갑니다. static이 비어 있으면(audit 모드에서 레이어를 벗긴 경우) 빈 텍스트 블록에 cache\_control을 붙이는 400 오류를 피해 dynamic 쪽을 단일 캐시 블록으로 승격합니다.
+Anthropic 요청 생성기(`core/llm/adapters/_anthropic_common.py`)가 정적 블록에 기본 `cache_control: {"type": "ephemeral", "ttl": "1h"}`을 붙입니다. `prompt_cache_extended_ttl=false`는 5분 TTL을 선택합니다. 동적 블록에는 별도 마커를 붙이지 않지만, 뒤쪽 메시지 마커가 만드는 누적 프리픽스에는 포함됩니다. 정적 영역이 비면 빈 텍스트 오류를 피해 동적 블록에 5분 마커 하나를 사용합니다.
 
 ## 롤링 메시지 breakpoint
 
-Anthropic은 요청당 cache\_control breakpoint를 4개까지 허용합니다. 시스템 블록이 1-2개를 쓰고, 나머지는`apply_messages_cache_control`이 대화 이력의 마지막 메시지들에 붙입니다. 몇 개를 붙일지(0-3)는 cache-policy SoT(`core/llm/cache_policy.py`)가 정하고 기본값은 3입니다. breakpoint가 많을수록 긴 멀티턴 루프의 적중률이 오르지만, 캐시된 블록마다 적중 여부와 무관하게 쓰기 오버헤드가 붙습니다. 짧은 작업이라면 낮추는 쪽이 맞습니다.
+요청 전체의 도구·시스템·메시지 마커는 최대 4개입니다. 정적 시스템 블록이 1개를 사용하고, `apply_messages_cache_control`이 기존 마커를 보존한 뒤 남은 슬롯에서 기본 최대 3개를 추가합니다.`cache-policy`의 `messages_breakpoints`는 추가할 수를 0–3으로 제한합니다. thinking·redacted\_thinking과 빈 텍스트에는 직접 마커를 붙이지 않습니다. 명시적 1시간 마커는 5분 마커보다 앞에 있어야 하며, 잘못된 입력은 호출 전에 거절합니다.
 
-비용 산식은 단가표 기준으로 cache write가 input의 1.25배, cache read가 input의 0.1배입니다 (`core/llm/pricing_loader.py`).
+마커 자체에는 별도 요금이 없습니다. Anthropic 표준 API 요율은 5분 쓰기 1.25배, 1시간 쓰기 2배이며 읽기 할인은 모델별 단가표를 따릅니다. 잦은 적중은 5분 TTL도 무료로 갱신하므로 1시간의 이득은 재사용 간격에 달려 있습니다. GEODE는 응답의 1시간 쓰기량을 비용과 영구 이벤트에 보존합니다. 과거 기록의 TTL 미상은 0으로 바꾸지 않으며, 그 기록의 추정 비용은 기존 5분 요율을 유지합니다.
+
+동적 시스템 내용이 바뀌면 정적 마커까지는 재사용할 수 있지만 뒤쪽 메시지 프리픽스는 달라집니다. 도구 정의, 모델, thinking·effort 변경, 컨텍스트 정리도 영향을 줄 수 있습니다. 이는 새 요청의 정확성을 위한 무효화이며 캐시 적중을 보장하지 않습니다. 공급자가 보유한 캐시는 로컬 SDK 클라이언트를 닫는 동작과 별개의 수명을 가집니다.
 
 ## 대화 이력은 실제 turn만 append
 
-AgenticLoop는 라운드 번호나 날짜를 합성 user message로 만들지 않습니다. 날짜와 runtime rule은 이미 `core/agent/system_prompt.py`의 동적 시스템 영역에 있고, 한 실행 안에서 대화 이력에는 실제 user, assistant, tool turn만 뒤에 붙습니다. 따라서 다음 요청의 메시지열은 이전 요청의 메시지열을 정확한 prefix로 보존합니다.
+AgenticLoop는 라운드 번호나 날짜를 합성 user message로 만들지 않습니다. 날짜와 runtime rule은 이미 `core/agent/system_prompt.py`의 동적 시스템 영역에 있고, 일반적인 대화 라운드는 user, assistant, tool 메시지를 뒤에 붙여 기존 프리픽스를 유지합니다. 컨텍스트 복구나 명시적 제어 전환은 이력을 바꿀 수 있으므로 별도로 확인합니다.
 
 -   턴마다 바뀌는 시스템 정보는 메시지 이력에 중복 주입하지 않습니다.
 -   컨텍스트 정리는 공유 이력을 직접 갱신하고, 그 뒤 adapter request를 조립합니다.
@@ -6304,7 +6306,7 @@ AgenticLoop는 라운드 번호나 날짜를 합성 user message로 만들지 �
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
 | cache\_read가 늘 0 | prefix가 매 호출 변함. static 영역에 턴별 값이 새어 들어간 경우 | 턴마다 변하는 값은 경계 마커 뒤로 옮깁니다. |
-| 짧은 작업의 비용 증가 | breakpoint 쓰기 오버헤드가 적중 이득을 초과 | cache-policy SoT에서 `messages_breakpoints`를 낮춥니다. |
+| 짧은 작업의 비용 증가 | 재사용 전에 TTL 만료 또는 프리픽스 변경 | 안정적인 구간과 재사용 간격을 확인하고 필요한 TTL을 선택합니다. |
 | 400: empty text block에 cache\_control | 빈 static에 breakpoint를 붙이려는 시도 | 어댑터가 dynamic 승격으로 처리합니다. 직접 어댑터를 다룰 때만 해당합니다. |
 
 ## 다음
@@ -6651,7 +6653,7 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 | **Context budget policy** | 모델 window에서 토큰 상한, warning, critical 밴드를 유도하는 단일 SoT | ceiling 200k, warn 50/70/80%, crit 90%, output reserve 20k | `core/orchestration/context_budget.py` |
 | **Message prune policy** | first-user, bridge, 최근 N개만 유지해 히스토리를 예산 안에 고정 | activation at 30 msgs, keep-recent 5/8, floor 3 | `core/orchestration/context_budget.py` |
 | **Deferred tool loading** | 도구가 임계 초과면 스키마를 검색 도구 뒤로 지연시켜 컨텍스트 범람 차단 | TOOL\_DEFER\_THRESHOLD=16, always-loaded set | `core/llm/tool_defer.py` |
-| **Cache breakpoint policy** | trailing cache\_control breakpoint 수를 제한해 캐시 적중과 호출 오버헤드를 교환 | cache-policy.json messages\_breakpoints, 0..3 | `core/llm/cache_policy.py` |
+| **Cache breakpoint policy** | trailing cache\_control breakpoint 수를 제한해 재사용할 프리픽스 위치를 선택 | cache-policy.json messages\_breakpoints, 0..3 | `core/llm/cache_policy.py` |
 | **Append-only conversation history** | 합성 reminder 없이 실제 turn만 append해 프롬프트 cache prefix를 보존 | consecutive AdapterCallRequest prefix test | `core/agent/loop/agent_loop.py` |
 | **System prompt modes** | persona 주입과 audit strip으로 모델이 수렴할 identity를 제어 | GEODE\_PERSONA=off, GEODE\_AUDIT\_UNRESTRICTED=1 | `core/agent/system_prompt.py` |
 | **ToolResultOffloadStore** | 대형 tool result를 디스크로 이관하고 컨텍스트에는 ref만 남김 | threshold 15000 tokens, TOOL\_RESULT\_OFFLOADED hook | `core/orchestration/tool_offload.py` |
@@ -7323,7 +7325,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 589 |
-| 테스트 Python 파일 | 742 |
+| 테스트 Python 파일 | 743 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |

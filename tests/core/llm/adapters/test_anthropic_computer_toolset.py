@@ -234,6 +234,7 @@ def test_rejected_native_batch_keeps_paid_usage_without_retry_or_action(
         "cached_input_tokens": cache,
         "cache_write_tokens": 7,
         "reasoning_tokens": None,
+        "cache_write_1h_tokens": None,
     }
     assert ended[0]["cost_usd"] > 0
     assert "content" not in ended[0]

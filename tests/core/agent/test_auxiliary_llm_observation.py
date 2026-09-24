@@ -228,6 +228,7 @@ def test_completed_auxiliary_dispatch_survives_interpretation(
             "cached_input_tokens": cache,
             "reasoning_tokens": 0,
             "cache_write_tokens": None,
+            "cache_write_1h_tokens": None,
         }
         assert end.payload["cost_usd"] == 0
         assert "private" not in str(end.payload)

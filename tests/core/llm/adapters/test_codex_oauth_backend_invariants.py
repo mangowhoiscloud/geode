@@ -284,7 +284,7 @@ def test_codex_receipt_tracks_post_middleware_wire_and_completed_event(
     assert row.llm_attempt_id == ended[-1]["llm_attempt_id"]
     assert row.payload["request_image_receipt"] == ended[-1].get("request_image_receipt")
     assert row.payload["usage"] == ended[-1].get("usage")
-    assert row.payload["activity_schema_version"] == 10
+    assert row.payload["activity_schema_version"] == 11
     assert "private.png" not in json.dumps(row.payload)
     assert len(images) == 2
     hooks.close()

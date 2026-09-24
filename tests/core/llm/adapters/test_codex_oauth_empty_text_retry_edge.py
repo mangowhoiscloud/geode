@@ -282,6 +282,7 @@ def test_completed_empty_attempt_usage_reaches_sql_once_per_attempt(
                 "cached_input_tokens": 0,
                 "reasoning_tokens": 0,
                 "cache_write_tokens": None,
+                "cache_write_1h_tokens": None,
             }
             assert row.payload["cost_usd"] > 0
             assert "raw_response" not in row.payload

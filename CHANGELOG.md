@@ -157,6 +157,8 @@ functional change.
 
 ### Fixed
 
+- **Anthropic cache lifecycle and TTL accounting.** Cache markers preserve signed thinking replay, reserve existing system/tool/message slots within the four-marker limit, and reject invalid TTL ordering before dispatch. Provider-reported one-hour writes reach runtime cost guards, durable activity schema 11, monthly usage and Harbor attempt metadata; missing historical TTL splits remain unknown. Validate the TTL subset before storing usage even when a provider-reported cost bypasses price estimation.
+
 - Reload gateway bindings atomically after file deletion, replacement or edits
   with older modification times. Invalid reloads retain the last valid routing
   and retry after debounce; explicit empty merged rules revoke bindings. Stop

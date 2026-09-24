@@ -271,6 +271,7 @@ def _llm_call_ended(data: dict[str, Any], run_id: str) -> ActivityRowBase:
                     "cache_write_tokens",
                 )
             },
+            cache_write_1h_tokens=raw_usage.get("cache_write_1h_tokens"),
         )
 
     def _text(key: str) -> str | None:

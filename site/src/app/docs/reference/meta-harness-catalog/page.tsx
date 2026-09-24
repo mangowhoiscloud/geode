@@ -50,8 +50,8 @@ const CONTEXT_ROWS: Row[] = [
   },
   {
     name: "Cache breakpoint policy",
-    ko: "trailing cache_control breakpoint 수를 제한해 캐시 적중과 호출 오버헤드를 교환",
-    en: "Bounds trailing cache_control breakpoints, trading cache hits against per-call overhead",
+    ko: "trailing cache_control breakpoint 수를 제한해 재사용할 프리픽스 위치를 선택",
+    en: "Bounds trailing cache_control breakpoints to select reusable prefix positions",
     control: "cache-policy.json messages_breakpoints, 0..3",
     path: "core/llm/cache_policy.py",
   },
