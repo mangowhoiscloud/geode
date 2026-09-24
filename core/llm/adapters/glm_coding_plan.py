@@ -1,19 +1,8 @@
-"""GlmCodingPlanAdapter — Coding Plan (api/coding/paas/v4) subscription endpoint.
+"""Persisted GLM Coding Plan route, subject to the provider's tool policy.
 
-Layer 3 adapter for the ``glm`` provider, source=subscription. ZhipuAI's
-Coding Plan binds an API key to a subscription that gets routed to the
-``api.z.ai/api/coding/paas/v4`` endpoint (distinct from PAYG's
-``/api/paas/v4``). Calling a Coding Plan key against the PAYG endpoint
-silently bypasses the subscription quota and incurs metered billing —
-that's why the picker / adapter source must be honoured.
-
-The bound Plan API key is resolved via
-:func:`core.llm.providers.glm._resolve_glm_endpoint` which checks the
-GEODE ``ProfileStore`` for a ``glm-coding-*`` Plan registered via
-``/login``. PAYG fallback explicitly excluded — the picker source
-``subscription`` means subscription, not "best effort".
-
-Codex MCP A2 (v0.99.44) Follow-up F.
+As of 2026-09-24 GEODE is absent from Z.AI's supported-tools list. Keep
+credential resolution separate, but reject execution before client creation.
+Existing subscription profiles never fall through to metered API billing.
 """
 
 from __future__ import annotations
@@ -26,8 +15,6 @@ from typing import Any
 from core.config.policy_source import PolicySourcePaths
 from core.llm.adapters._openai_common import (
     build_async_openai_client,
-    build_chat_completion_kwargs,
-    build_messages,
     translate_chat_response,
 )
 from core.llm.adapters.base import (
@@ -37,13 +24,14 @@ from core.llm.adapters.base import (
     AdapterCallResult,
     CredentialDetection,
     EnvironmentReport,
+    Message,
     ModelSpec,
     StreamEvent,
     TextCompletionResult,
     WebSearchResult,
 )
 from core.llm.loop_affinity import LoopAffineClientCache
-from core.llm.providers.glm import build_glm_reasoning_extra_body
+from core.llm.providers.glm import build_glm_chat_kwargs, translate_glm_stream
 
 log = logging.getLogger(__name__)
 
@@ -61,14 +49,8 @@ class GlmCodingPlanAdapter:
     provider: str = "glm"
     source: str = SOURCE_SUBSCRIPTION
     billing_type: AdapterBillingType = AdapterBillingType.SUBSCRIPTION
-    # PR-ADAPTER-PATTERN-UNIFICATION — Coding Plan subscription endpoint
-    # speaks the same Chat Completions wire shape as the PAYG endpoint, so
-    # web_search + text_completion both work. The frontier audit
-    # (2026-05-28) did not directly confirm Coding Plan web_search support,
-    # but z.ai's Coding Plan terms state full PAYG-API parity; we advertise
-    # both capabilities and let exact-route dispatch surface actual
-    # 400 / 1113 errors if support diverges.
-    supports_web_search: bool = True
+    # Subscription search is a distinct MCP server, not PAYG native search.
+    supports_web_search: bool = False
     supports_text_completion: bool = True
     routing_sources: PolicySourcePaths | None = field(default=None, repr=False)
     _last_error: Exception | None = field(default=None, init=False, repr=False)
@@ -79,6 +61,10 @@ class GlmCodingPlanAdapter:
     )
 
     def _get_client(self) -> Any:
+        from core.config import GLM_PRIMARY
+        from core.llm.model_catalog import require_model_source_available
+
+        require_model_source_available(GLM_PRIMARY, provider=self.provider, source=self.source)
         api_key, base_url = _resolve_coding_plan_endpoint(self.routing_sources)
         if not api_key:
             raise RuntimeError(
@@ -89,14 +75,8 @@ class GlmCodingPlanAdapter:
         return self._clients.get(lambda: build_async_openai_client(api_key, base_url=base_url))
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
+        kwargs = build_glm_chat_kwargs(req, adapter_name=self.name, source=self.source)
         client = self._get_client()
-        kwargs = build_chat_completion_kwargs(
-            req,
-            model=req.model,
-            provider="glm",
-            adapter_name=self.name,
-            extra_body=build_glm_reasoning_extra_body(req.model),
-        )
         try:
             response = await client.chat.completions.create(**kwargs)
         except Exception as exc:
@@ -114,18 +94,9 @@ class GlmCodingPlanAdapter:
     async def aweb_search(
         self, query: str, *, max_results: int = 5, model: str = ""
     ) -> WebSearchResult:
-        # ``model`` hint intentionally unused — z.ai's per-model web_search
-        # support matrix is unverified (doc-before-behaviour, CLAUDE.md §4d).
-        del model
-        from core.config import GLM_PRIMARY
-        from core.llm.adapters._capability_impls import glm_web_search
-
-        return await glm_web_search(
-            self._get_client(),
-            query=query,
-            max_results=max_results,
-            model=GLM_PRIMARY,
-            adapter_name=self.name,
+        raise NotImplementedError(
+            "GLM Coding Plan native web search is not supported. Z.AI documents "
+            "subscription search through its separate Web Search MCP server."
         )
 
     async def acomplete_text(
@@ -137,44 +108,38 @@ class GlmCodingPlanAdapter:
         max_tokens: int = 1024,
     ) -> TextCompletionResult:
         from core.config import GLM_PRIMARY
-        from core.llm.adapters._capability_impls import openai_chat_complete_text
 
-        return await openai_chat_complete_text(
-            self._get_client(),
-            prompt=prompt,
-            system=system,
-            model=model or GLM_PRIMARY,
-            max_tokens=max_tokens,
+        result = await self.acomplete(
+            AdapterCallRequest(
+                model=model or GLM_PRIMARY,
+                messages=(Message(role="user", content=prompt),),
+                system_prompt=system,
+                max_tokens=max_tokens,
+                effort="",
+            )
         )
+        return TextCompletionResult(text=result.text, usage=result.usage)
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
+        kwargs = build_glm_chat_kwargs(req, adapter_name=self.name, source=self.source, stream=True)
         client = self._get_client()
-        kwargs: dict[str, Any] = {
-            "model": req.model,
-            "messages": build_messages(
-                req, provider=self.provider, adapter_name=self.name, model=req.model
-            ),
-            "max_tokens": req.max_tokens,
-            "stream": True,
-        }
-        if req.temperature is not None:
-            kwargs["temperature"] = req.temperature
-        _reasoning_xb = build_glm_reasoning_extra_body(req.model)
-        if _reasoning_xb is not None:
-            kwargs["extra_body"] = _reasoning_xb
-        async for chunk in await client.chat.completions.create(**kwargs):
-            choice = chunk.choices[0] if chunk.choices else None
-            if choice is None:
-                continue
-            delta = getattr(choice, "delta", None)
-            text_chunk = getattr(delta, "content", None) if delta else None
-            if text_chunk:
-                yield StreamEvent(kind="text", payload={"text": text_chunk})
-            finish_reason = getattr(choice, "finish_reason", None)
-            if finish_reason is not None:
-                yield StreamEvent(kind="stop", payload={"stop_reason": finish_reason})
+        chunks = await client.chat.completions.create(**kwargs)
+        async for event in translate_glm_stream(chunks):
+            yield event
 
     def test_environment(self) -> EnvironmentReport:
+        from core.config import GLM_PRIMARY
+        from core.llm.model_catalog import model_source_unavailable_reason
+
+        reason = model_source_unavailable_reason(
+            GLM_PRIMARY, provider=self.provider, source=self.source
+        )
+        if reason:
+            return EnvironmentReport(
+                ok=False,
+                checks=(("glm_coding_plan_policy", "unsupported_tool"),),
+                hints=(reason,),
+            )
         api_key, base_url = _resolve_coding_plan_endpoint(self.routing_sources)
         if not api_key:
             return EnvironmentReport(
@@ -195,31 +160,26 @@ class GlmCodingPlanAdapter:
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import GLM_FALLBACK_CHAIN, GLM_PRIMARY
-        from core.llm.model_catalog import model_spec_for_adapter
+        from core.llm.model_catalog import model_ids_for_source, model_spec_for_adapter
 
-        ids = [GLM_PRIMARY, *GLM_FALLBACK_CHAIN]
-        seen: set[str] = set()
-        models: list[ModelSpec] = []
-        for mid in ids:
-            if mid in seen:
-                continue
-            seen.add(mid)
-            models.append(
-                model_spec_for_adapter(
-                    mid,
-                    label=f"{mid} (via Coding Plan)",
-                    provider=self.provider,
-                    supports_tools=True,
-                )
+        return [
+            model_spec_for_adapter(mid, label=f"{mid} (via Coding Plan)", provider=self.provider)
+            for mid in model_ids_for_source(
+                provider=self.provider,
+                source=self.source,
+                configured=(GLM_PRIMARY, *GLM_FALLBACK_CHAIN),
             )
-        return models
+        ]
 
     def detect_credential(self) -> CredentialDetection | None:
+        from core.config import GLM_PRIMARY
+        from core.llm.model_catalog import model_source_unavailable_reason
+
+        if model_source_unavailable_reason(GLM_PRIMARY, provider=self.provider, source=self.source):
+            return None
         api_key, base_url = _resolve_coding_plan_endpoint(self.routing_sources)
         if not api_key:
             return None
-        from core.config import GLM_PRIMARY
-
         return CredentialDetection(
             model=GLM_PRIMARY,
             provider=self.provider,
@@ -242,7 +202,6 @@ def _resolve_coding_plan_endpoint(
         from core.llm.strategies.plan_registry import resolve_routing
         from core.llm.strategies.plans import PlanKind
 
-        # Probe the live GLM default (glm-5.2 now), not a hardcoded glm-5.1.
         target = resolve_routing(GLM_PRIMARY, sources=routing_sources)
         if target is None or not target.profile.key:
             return "", ""

@@ -6,8 +6,7 @@ Layer 3 adapter for the ``glm`` provider, source=payg. Uses
 shape so the adapter reuses :mod:`core.llm.adapters._openai_common`
 helpers (``build_messages`` + ``translate_chat_response``).
 
-Pair with :class:`GlmCodingPlanAdapter` (same provider, subscription
-``api/coding/paas/v4`` endpoint). Codex MCP A2 (v0.99.44) Follow-up F.
+Coding Plan eligibility is a separate product policy from API compatibility.
 """
 
 from __future__ import annotations
@@ -19,8 +18,6 @@ from typing import Any
 
 from core.llm.adapters._openai_common import (
     build_async_openai_client,
-    build_chat_completion_kwargs,
-    build_messages,
     translate_chat_response,
 )
 from core.llm.adapters.base import (
@@ -30,13 +27,14 @@ from core.llm.adapters.base import (
     AdapterCallResult,
     CredentialDetection,
     EnvironmentReport,
+    Message,
     ModelSpec,
     StreamEvent,
     TextCompletionResult,
     WebSearchResult,
 )
 from core.llm.loop_affinity import LoopAffineClientCache
-from core.llm.providers.glm import build_glm_reasoning_extra_body
+from core.llm.providers.glm import build_glm_chat_kwargs, translate_glm_stream
 
 log = logging.getLogger(__name__)
 
@@ -57,10 +55,7 @@ class GlmPaygAdapter:
     provider: str = "glm"
     source: str = SOURCE_PAYG
     billing_type: AdapterBillingType = AdapterBillingType.API
-    # PR-ADAPTER-PATTERN-UNIFICATION — z.ai native web_search Chat Completions
-    # tool works on PAYG. Coding Plan subscription endpoint untested for
-    # web_search (frontier audit 2026-05-28); glm_coding_plan adapter keeps
-    # supports_web_search=False until verified.
+    # PAYG native search and the subscription MCP product are separate routes.
     supports_web_search: bool = True
     supports_text_completion: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
@@ -77,8 +72,7 @@ class GlmPaygAdapter:
         if not api_key:
             raise RuntimeError(
                 "GlmPaygAdapter: ZAI_API_KEY not set. PAYG path requires "
-                "an explicit API key — set ``zai_api_key`` in settings or use "
-                "the glm-coding-plan adapter (subscription endpoint) instead."
+                "an explicit API key — set ``zai_api_key`` in settings."
             )
         return self._clients.get(
             lambda: build_async_openai_client(api_key, base_url=GLM_PAYG_BASE_URL)
@@ -110,25 +104,21 @@ class GlmPaygAdapter:
         max_tokens: int = 1024,
     ) -> TextCompletionResult:
         from core.config import GLM_PRIMARY
-        from core.llm.adapters._capability_impls import openai_chat_complete_text
 
-        return await openai_chat_complete_text(
-            self._get_client(),
-            prompt=prompt,
-            system=system,
-            model=model or GLM_PRIMARY,
-            max_tokens=max_tokens,
+        result = await self.acomplete(
+            AdapterCallRequest(
+                model=model or GLM_PRIMARY,
+                messages=(Message(role="user", content=prompt),),
+                system_prompt=system,
+                max_tokens=max_tokens,
+                effort="",
+            )
         )
+        return TextCompletionResult(text=result.text, usage=result.usage)
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
+        kwargs = build_glm_chat_kwargs(req, adapter_name=self.name, source=self.source)
         client = self._get_client()
-        kwargs = build_chat_completion_kwargs(
-            req,
-            model=req.model,
-            provider="glm",
-            adapter_name=self.name,
-            extra_body=build_glm_reasoning_extra_body(req.model),
-        )
         try:
             response = await client.chat.completions.create(**kwargs)
         except Exception as exc:
@@ -144,31 +134,11 @@ class GlmPaygAdapter:
         )
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
+        kwargs = build_glm_chat_kwargs(req, adapter_name=self.name, source=self.source, stream=True)
         client = self._get_client()
-        kwargs: dict[str, Any] = {
-            "model": req.model,
-            "messages": build_messages(
-                req, provider=self.provider, adapter_name=self.name, model=req.model
-            ),
-            "max_tokens": req.max_tokens,
-            "stream": True,
-        }
-        if req.temperature is not None:
-            kwargs["temperature"] = req.temperature
-        _reasoning_xb = build_glm_reasoning_extra_body(req.model)
-        if _reasoning_xb is not None:
-            kwargs["extra_body"] = _reasoning_xb
-        async for chunk in await client.chat.completions.create(**kwargs):
-            choice = chunk.choices[0] if chunk.choices else None
-            if choice is None:
-                continue
-            delta = getattr(choice, "delta", None)
-            text_chunk = getattr(delta, "content", None) if delta else None
-            if text_chunk:
-                yield StreamEvent(kind="text", payload={"text": text_chunk})
-            finish_reason = getattr(choice, "finish_reason", None)
-            if finish_reason is not None:
-                yield StreamEvent(kind="stop", payload={"stop_reason": finish_reason})
+        chunks = await client.chat.completions.create(**kwargs)
+        async for event in translate_glm_stream(chunks):
+            yield event
 
     def test_environment(self) -> EnvironmentReport:
         from core.config import settings
@@ -177,10 +147,7 @@ class GlmPaygAdapter:
             return EnvironmentReport(
                 ok=False,
                 checks=(("zai_api_key", "missing"),),
-                hints=(
-                    "Set ``ZAI_API_KEY`` in your environment or in ~/.geode/config.toml.",
-                    "Or use glm-coding-plan (Coding Plan subscription).",
-                ),
+                hints=("Set ``ZAI_API_KEY`` in your environment or in ~/.geode/config.toml.",),
             )
         return EnvironmentReport(
             ok=True,
@@ -189,17 +156,16 @@ class GlmPaygAdapter:
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import GLM_FALLBACK_CHAIN, GLM_PRIMARY
-        from core.llm.model_catalog import model_spec_for_adapter
+        from core.llm.model_catalog import model_ids_for_source, model_spec_for_adapter
 
-        ids = [GLM_PRIMARY, *GLM_FALLBACK_CHAIN]
-        seen: set[str] = set()
-        models: list[ModelSpec] = []
-        for mid in ids:
-            if mid in seen:
-                continue
-            seen.add(mid)
-            models.append(model_spec_for_adapter(mid, provider=self.provider))
-        return models
+        return [
+            model_spec_for_adapter(mid, provider=self.provider)
+            for mid in model_ids_for_source(
+                provider=self.provider,
+                source=self.source,
+                configured=(GLM_PRIMARY, *GLM_FALLBACK_CHAIN),
+            )
+        ]
 
     def detect_credential(self) -> CredentialDetection | None:
         from core.config import GLM_PRIMARY, settings
