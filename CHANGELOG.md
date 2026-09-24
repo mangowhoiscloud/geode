@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- Partition the complete pytest collection into four file-preserving CI shards,
+  retaining xdist loadfile scheduling and the existing offline test selection.
+  The required Test check verifies every shard's successful result and disjoint
+  collection coverage before enforcing the unchanged 75% combined branch/line
+  coverage threshold. Documentation-only skips and architecture, Harbor, and
+  installed-package checks remain mandatory under their existing conditions.
+
 ### Changed
 
 - Bound OpenAI Python to SDK 2 (`>=2.45,<3`) and Anthropic Python to SDK 0
@@ -63,6 +72,15 @@ functional change.
   Select the computer protocol from the typed request model and guard unknown
   generations until their native executor is supported.
 
+- Align model selection, login routing and effort controls with the shared
+  provider contracts checked on September 24. Ship Claude Opus 5.5, GPT-6 Sol
+  and GLM-5.3 defaults while preserving explicit configuration; retain saved
+  GLM Coding Plan profiles without inventing local call quotas for token credits.
+  Preserve saved effort when reopening the picker and use each provider's own
+  source for configured-model availability. Use GLM's native reasoning builder
+  when the existing effort probe records its outgoing control.
+  Update bilingual provider and authentication guidance with source-specific
+  availability, current model specifications and pricing evidence.
 - Run Reflection after each tool-result round and once before final delivery.
   Final semantic verification replaces the mechanical-only default; legacy
   cadence controls and `off`/`rule_based`/`reflexion` verifier settings are
@@ -75,6 +93,13 @@ functional change.
 
 ### Added
 
+- Support Claude Opus 5.5's native computer toolset with serial execution,
+  toolset-aware result replay and parameter validation before desktop actions.
+  Withhold unsupported members; report native action errors and preserve
+  legacy computer protocols. Retain billed usage when rejecting invalid
+  responses without replaying actions. Fix horizontal scrolling, native macOS
+  drag and wait deadlines; propagate helper-signing failures. Require the
+  native helper source and build script in both wheel and source distributions.
 - Add optional positive output-token and action-round limits to the one-tool
   Harbor adapter while preserving its defaults. Wrap-up requests respect a
   caller's smaller output ceiling. Auxiliary and subscription request limits
@@ -370,6 +395,11 @@ functional change.
 
 ### Infrastructure
 
+- Fail the legacy-import ratchet when its Git comparison fails, and compare
+  against the actual PR target or pre-push revision. Reject incomplete base
+  arguments instead of treating them as an empty change set. Require the
+  committed dependency lock for CI, Pages, install-smoke, and Petri validation;
+  retain the release workflow's existing lock freshness check.
 - Skip full Python tests and coverage only when the complete change set contains
   allowlisted documentation and generated public-doc files. Preserve required
   check identities, documentation/roadmap/inventory validation, and full testing

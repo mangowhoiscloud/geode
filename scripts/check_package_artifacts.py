@@ -67,6 +67,11 @@ BUNDLED_SKILL_PATHS = {
     ".geode/skills/pdf/scripts/fill_pdf_form_with_annotations.py",
 }
 
+COMPUTER_HELPER_PATHS = {
+    "scripts/macos/build_computer_helper.sh",
+    "scripts/macos/geode_computer_helper.swift",
+}
+
 REQUIRED_WHEEL_PATHS = (
     {
         "core/GEODE.md",
@@ -104,6 +109,7 @@ REQUIRED_WHEEL_PATHS = (
     | SELF_IMPROVING_RUNTIME_PATHS
     | SELF_IMPROVING_STATIC_PATHS
     | BUNDLED_SKILL_PATHS
+    | COMPUTER_HELPER_PATHS
 )
 
 REQUIRED_SDIST_PATHS = (
@@ -124,6 +130,7 @@ REQUIRED_SDIST_PATHS = (
     | SELF_IMPROVING_RUNTIME_PATHS
     | SELF_IMPROVING_STATIC_PATHS
     | BUNDLED_SKILL_PATHS
+    | COMPUTER_HELPER_PATHS
 )
 
 BANNED_COMMON_PARTS = {

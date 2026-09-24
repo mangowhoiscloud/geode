@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/Anthropic-Fable_5-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Fable 5">
   <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z"><img src="https://img.shields.io/badge/OpenAI-GPT--6_Astra_E2E_smoke_1%2F1-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-6 Astra E2E smoke 1/1"></a>
   <img src="https://img.shields.io/badge/OpenRouter-inference_router-6b46c1?style=flat-square" alt="OpenRouter">
-  <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.2-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.2">
+  <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.3-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.3">
 </p>
 
 <p align="center">
@@ -203,9 +203,9 @@ geode                                 # start GEODE
 
 **Plans that work** (per the [official Codex pricing page](https://developers.openai.com/codex/pricing/)): Plus, Pro, Business, Edu, Enterprise.
 
-**Quotas** (OpenAI-published, per 5-hour window): roughly 15–80 messages on
-Plus and up to 1,600 on Pro 20x. Enterprise and Edu limits depend on whether
-the workspace uses flexible credits or legacy per-seat limits.
+**Usage limits** depend on the plan, model, speed and workspace. Check the
+[Codex pricing and credits](https://learn.chatgpt.com/docs/pricing) and your
+account dashboard; token-credit rates are separate from API dollar prices.
 
 **Tier notes**:
 - **[GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra) is rollout-gated.** GEODE recognizes `gpt-6-astra` on both the
@@ -214,9 +214,9 @@ the workspace uses flexible credits or legacy per-seat limits.
   reward 1/1 and no retry or fallback. The
   [immutable E2E smoke](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z)
   proves this account-scoped route, not general account availability.
-- **gpt-5.5 is subscription-only.** GPT-5.6 Sol/Terra/Luna and GPT-5.4 are dual-lane: GEODE uses ChatGPT OAuth when a subscription profile is active and the Platform API when an API-key profile is selected. If you want 5.5, you need ChatGPT.
+- **GPT-6 Astra/Sol/Luna and GPT-5.6 Sol/Terra/Luna have API and Codex routes.** Choose API keys or ChatGPT sign-in explicitly. GPT-5.5 remains an API model; its Codex retirement is scheduled for October 14. GPT-5.4 and GPT-5.3 Codex no longer have supported subscription routes.
 - Existing Codex CLI credentials remain importable, but `codex-cli` is not a GEODE inference backend.
-- **Free / Go** appear on OpenAI's pricing page but aren't listed in the CLI README. Treat them as best-effort; if it works, great, but no promises.
+- Plan inclusion and rollout change independently of model support. A model listed by GEODE does not establish account entitlement.
 
 When the token nears expiry, GEODE refreshes it on its own (120 seconds before, plus a 401 retry). You shouldn't see this happen.
 
@@ -488,7 +488,7 @@ Check which process owns the configured IPC socket and whether it serves another
 <details>
 <summary><strong>The model doesn't seem to use my tools / runs in circles.</strong></summary>
 
-Check `geode model`, some models are better at tool use than others. Default is `claude-opus-4-8` (best). If you're on `gpt-5.5`, set `effort: "high"` in `.geode/config.toml`. Run `tail -f ~/.geode/logs/serve.log` to see what the model is actually doing.
+Check `geode model` for the effective model and `/model` for its supported effort levels. Shipped defaults are Claude Opus 5.5, GPT-6 Sol and GLM-5.3; existing explicit settings remain in effect. Inspect `~/.geode/logs/serve.log` to diagnose requests and failures.
 </details>
 
 <details>

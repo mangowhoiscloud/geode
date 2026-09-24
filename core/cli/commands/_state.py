@@ -45,36 +45,6 @@ class ModelProfile:
 # Every GPT row uses the OpenAI provider family; credential source selects
 # ChatGPT subscription versus PAYG.
 
-# GLM picker rows: id → display label. The live default (GLM_PRIMARY) leads the
-# GLM block and the rest follow, with the default skipped from the tail so an
-# operator override never duplicates a row. A label falls back to the id for an
-# unknown override value.
-_GLM_MODELS: tuple[tuple[str, str], ...] = (
-    ("glm-5.2", "GLM-5.2"),
-    ("glm-5.1", "GLM-5.1"),
-    ("glm-5-turbo", "GLM-5 Turbo"),
-    ("glm-4.7-flash", "GLM-4.7 Flash"),
-)
-_GLM_LABELS: dict[str, str] = dict(_GLM_MODELS)
-
-_OPENAI_PICKER_MODELS: tuple[ModelProfile, ...] = (
-    # Officially announced for API and ChatGPT plans; account access is
-    # rollout-gated independently of this model capability row.
-    ModelProfile("gpt-6-astra", "openai", "GPT-6 Astra", "$$$$"),
-    # GPT-5.6 is dual-lane. Omit the bare alias to avoid a duplicate Sol row;
-    # the alias is documented for Codex too, not a Platform-only model.
-    ModelProfile("gpt-5.6-sol", "openai", "GPT-5.6 Sol", "$$"),
-    ModelProfile("gpt-5.6-terra", "openai", "GPT-5.6 Terra", "$$"),
-    ModelProfile("gpt-5.6-luna", "openai", "GPT-5.6 Luna", "$"),
-    # GPT-5.5 remains dual-lane on 2026-09-20; Codex retires it on 2026-10-14.
-    ModelProfile("gpt-5.5", "openai", "GPT-5.5", "$$"),
-    # Platform choices; the subscription picker filters ended/deprecated IDs.
-    ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),
-    ModelProfile("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$"),
-    # One-release management compatibility for persisted installations.
-    ModelProfile("gpt-5.3-codex", "openai", "GPT-5.3 Codex (Legacy)", "$$"),
-)
-
 _OPENROUTER_PICKER_MODELS: tuple[ModelProfile, ...] = (
     ModelProfile(
         "openrouter/openrouter/free",
@@ -89,10 +59,6 @@ _OPENROUTER_PICKER_MODELS: tuple[ModelProfile, ...] = (
         "var",
     ),
 )
-
-
-def _glm_label(model_id: str) -> str:
-    return _GLM_LABELS.get(model_id, model_id)
 
 
 def get_model_profiles(
@@ -116,52 +82,34 @@ def get_model_profiles(
     """
     from core.config import (
         ANTHROPIC_BUDGET,
+        ANTHROPIC_PRIMARY,
         ANTHROPIC_SECONDARY,
         GLM_PRIMARY,
         OPENAI_PRIMARY,
         _resolve_provider,
     )
-    from core.llm.model_catalog import model_source_unavailable_reason
+    from core.llm.model_catalog import MODEL_OFFERINGS, model_source_unavailable_reason
 
     if openai_source is None:
         openai_source = _selected_openai_source()
 
-    anthropic_profiles = [
-        # Fable 5 — Anthropic's most capable widely released model ($10/$50,
-        # 1M ctx, adaptive-only thinking, refusal stop_reason). GA 2026-06-09.
-        # ref: https://platform.claude.com/docs/en/about-claude/models/overview
-        ModelProfile("claude-fable-5", "anthropic", "Fable 5", "$$$$"),
-        ModelProfile("claude-opus-4-8", "anthropic", "Opus 4.8", "$$$"),
-        ModelProfile("claude-opus-4-7", "anthropic", "Opus 4.7", "$$$"),
-        ModelProfile("claude-opus-4-6", "anthropic", "Opus 4.6", "$$$"),
-        ModelProfile(ANTHROPIC_SECONDARY, "anthropic", "Sonnet 4.6", "$$"),
-        ModelProfile(ANTHROPIC_BUDGET, "anthropic", "Haiku 4.5", "$"),
-    ]
-    anthropic_profiles = [
-        profile
-        for profile in anthropic_profiles
-        if not model_source_unavailable_reason(profile.id, provider="anthropic", source="payg")
-    ]
-    openai_profiles = [
-        # Version-pinned current surface. Dual-lane rows use provider=openai;
-        # infer_source selects OAuth subscription versus PAYG at call time.
-        *(
-            profile
-            for profile in _OPENAI_PICKER_MODELS
-            if not model_source_unavailable_reason(
-                profile.id, provider="openai", source=openai_source or ""
-            )
-        ),
-    ]
+    def active_profiles(provider: str, source: str) -> list[ModelProfile]:
+        return [
+            ModelProfile(entry.id, entry.provider, entry.label, entry.cost)
+            for entry in MODEL_OFFERINGS
+            if entry.provider == provider
+            and source in entry.sources
+            and not model_source_unavailable_reason(entry.id, provider=provider, source=source)
+        ]
+
+    anthropic_profiles = active_profiles("anthropic", "payg")
+    openai_profiles = active_profiles("openai", openai_source or "payg")
     openrouter_profiles = list(_OPENROUTER_PICKER_MODELS)
-    glm_profiles = [
-        # GLM — the live default (GLM_PRIMARY, glm-5.2 as shipped) leads so a
-        # routing.toml reload is reflected mid-session (H11-tail), labelled via
-        # the id→label map; the rest follow with the default skipped so an
-        # operator override of the default never duplicates a row.
-        ModelProfile(GLM_PRIMARY, "glm", _glm_label(GLM_PRIMARY), "$"),
-        *[ModelProfile(mid, "glm", lbl, "$") for mid, lbl in _GLM_MODELS if mid != GLM_PRIMARY],
-    ]
+    glm_profiles = active_profiles("glm", "payg")
+    # Routing defaults are read on every invocation; preserve explicit choices
+    # as management rows even when absent from the current public catalogue.
+    if any(p.id == GLM_PRIMARY for p in glm_profiles):
+        glm_profiles.sort(key=lambda p: p.id != GLM_PRIMARY)
 
     existing_ids = {
         profile.id
@@ -170,6 +118,8 @@ def get_model_profiles(
     configured_profiles: list[ModelProfile] = []
     for raw_model_id in (
         OPENAI_PRIMARY,
+        ANTHROPIC_PRIMARY,
+        GLM_PRIMARY,
         ANTHROPIC_SECONDARY,
         ANTHROPIC_BUDGET,
         *configured_model_ids,
@@ -179,8 +129,10 @@ def get_model_profiles(
             continue
         existing_ids.add(model_id)
         provider = _resolve_provider(model_id)
-        source = "payg" if provider == "anthropic" else openai_source or ""
-        reason = model_source_unavailable_reason(model_id, provider=provider, source=source)
+        reason = model_unavailable_reason(
+            model_id,
+            source=openai_source if provider in {"openai", "openai-codex"} else None,
+        )
         source_label = "Anthropic API" if provider == "anthropic" else "subscription"
         configured_profiles.append(
             ModelProfile(
@@ -441,6 +393,12 @@ def model_unavailable_reason(model_id: str, *, source: str | None = None) -> str
     provider = _resolve_provider(model_id)
     if provider == "anthropic":
         return model_source_unavailable_reason(model_id, provider=provider, source="payg")
+    if normalize_model_provider(provider) == "glm":
+        from core.llm.adapters._source_inference import infer_source
+
+        return model_source_unavailable_reason(
+            model_id, provider="glm", source=source if source is not None else infer_source("glm")
+        )
     if normalize_model_provider(provider) != "openai":
         return None
     return model_source_unavailable_reason(

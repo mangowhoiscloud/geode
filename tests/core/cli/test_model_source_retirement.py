@@ -72,7 +72,12 @@ def test_subscription_picker_excludes_retired_offerings_but_keeps_disabled_curre
     monkeypatch.setattr(_state, "_selected_openai_source", lambda: "subscription")
     rows = _state.get_model_profiles()
     assert retired not in {row.id for row in rows}
-    assert "gpt-5.5" in {row.id for row in rows}  # October 14 is still future
+    assert "gpt-5.5" not in {row.id for row in rows}  # Not a new subscription choice.
+    # The October 14 retirement is future: retain an explicit saved selection
+    # without treating it as a retired route or silently remapping it.
+    legacy = _state.get_model_profiles(configured_model_ids=("gpt-5.5",))
+    assert len([row for row in legacy if row.id == "gpt-5.5"]) == 1
+    assert _state.model_unavailable_reason("gpt-5.5", source="subscription") is None
 
     configured = _state.get_model_profiles(configured_model_ids=(retired, retired))
     matches = [row for row in configured if row.id == retired]
@@ -93,13 +98,28 @@ def test_picker_reloads_source_without_hiding_platform_models(
     assert _state.model_unavailable_reason("gpt-5.4") is None
 
 
+@pytest.mark.parametrize("source", ["payg", "subscription"])
+def test_explicit_picker_source_does_not_read_operator_credentials(
+    monkeypatch: pytest.MonkeyPatch, source: str
+) -> None:
+    reader = Mock(side_effect=AssertionError("Operator credential reader reached"))
+    monkeypatch.setattr("core.auth.codex_cli_oauth.read_codex_cli_credentials", reader)
+
+    rows = _state.get_model_profiles(openai_source=source)
+
+    assert "gpt-6-sol" in {row.id for row in rows}
+    reader.assert_not_called()
+
+
 def test_retired_anthropic_configuration_is_disabled_and_not_replaced(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import core.config as cfg
 
     monkeypatch.setattr(cfg, "ANTHROPIC_SECONDARY", "claude-sonnet-4")
-    rows = _state.get_model_profiles(configured_model_ids=("claude-opus-4-1",))
+    rows = _state.get_model_profiles(
+        configured_model_ids=("claude-opus-4-1",), openai_source="payg"
+    )
     for model_id in ("claude-sonnet-4", "claude-opus-4-1"):
         row = next(row for row in rows if row.id == model_id)
         assert "Unavailable on Anthropic API" in row.label
@@ -116,7 +136,9 @@ def test_custom_anthropic_host_does_not_inherit_official_api_retirement(
     monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://gateway.example.test")
     monkeypatch.setattr(cfg, "ANTHROPIC_SECONDARY", "claude-sonnet-4")
     monkeypatch.setattr(settings, "anthropic_api_key", "offline-key")
-    rows = _state.get_model_profiles(configured_model_ids=("claude-opus-4-1",))
+    rows = _state.get_model_profiles(
+        configured_model_ids=("claude-opus-4-1",), openai_source="payg"
+    )
     for model_id in ("claude-sonnet-4", "claude-opus-4-1"):
         row = next(row for row in rows if row.id == model_id)
         assert "Unavailable" not in row.label
