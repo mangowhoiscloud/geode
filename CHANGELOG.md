@@ -127,6 +127,13 @@ functional change.
 
 ### Fixed
 
+- Release partially constructed runtime resources before propagating the original
+  failure, and retry incomplete shutdown without skipping sibling resources.
+  Delegate the daemon's borrowed scheduler teardown to its runtime owner,
+  including partial gateway startup failures.
+  Restore turn attribution and adapter usage context after success, failure or
+  cancellation, and serialize SDK client publication with credential invalidation.
+
 - Use the shared global config path resolver for Settings, config explanation,
   model-picker reads/writes/confirmation, MCP, gateway reload/watch, seed
   role/voter overrides, and evaluation config migration.
