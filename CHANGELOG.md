@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- Partition the complete pytest collection into four file-preserving CI shards,
+  retaining xdist loadfile scheduling and the existing offline test selection.
+  The required Test check verifies every shard's successful result and disjoint
+  collection coverage before enforcing the unchanged 75% combined branch/line
+  coverage threshold. Documentation-only skips and architecture, Harbor, and
+  installed-package checks remain mandatory under their existing conditions.
+
 ### Changed
 
 - Bound OpenAI Python to SDK 2 (`>=2.45,<3`) and Anthropic Python to SDK 0
