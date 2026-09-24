@@ -13,7 +13,8 @@ Lives next to the concrete Anthropic adapters and holds:
 
 from __future__ import annotations
 
-import re
+import logging
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
 from core.llm.adapters.base import (
@@ -23,6 +24,8 @@ from core.llm.adapters.base import (
     UsageSummary,
 )
 from core.llm.agentic_response import normalize_stop_details
+from core.llm.errors import LLMRequestValidationError
+from core.llm.model_capabilities import anthropic_base_model, get_anthropic_model_spec
 
 # Computer-use display dims live in the harness module (single SoT) so the
 # injected tool DEFINITION and the local executor never drift.
@@ -32,6 +35,8 @@ from core.tools.plan import thaw_tool_schema
 
 if TYPE_CHECKING:
     import anthropic
+
+log = logging.getLogger(__name__)
 
 
 def build_async_anthropic_client(api_key: str) -> anthropic.AsyncAnthropic:
@@ -101,16 +106,7 @@ def translate_tool(tool: ToolSpec) -> dict[str, Any]:
     }
 
 
-# Computer-use tool generation — the (tool type, beta header) pair is
-# MODEL-AWARE. Verified against the Anthropic docs (CANNOT §4d):
-#   https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool
-#   current  (Opus 4.8/4.7/4.6, Sonnet 4.6, Opus 4.5, + future): computer_20251124
-#            + "computer-use-2025-11-24"
-#   legacy   (Sonnet 4.5, Haiku 4.5, deprecated 4.1/4):          computer_20250124
-#            + "computer-use-2025-01-24"
-# Earlier this code shipped a single ``2025-01-24`` header for ALL models — wrong
-# for the default Opus 4.8 (Codex review caught it). The SDK Literal lags
-# ("computer-use-2025-11-24" is sent as a plain string); the docs page is SoT.
+# Native computer generations require an explicit verified model contract.
 _COMPUTER_USE_CURRENT = ("computer_20251124", "computer-use-2025-11-24")
 _COMPUTER_USE_LEGACY = ("computer_20250124", "computer-use-2025-01-24")
 # Both native tool types — used for dedup (either generation counts as present).
@@ -118,20 +114,19 @@ _COMPUTER_USE_TYPES = frozenset({_COMPUTER_USE_CURRENT[0], _COMPUTER_USE_LEGACY[
 
 
 def _computer_use_spec(model: str) -> tuple[str, str]:
-    """Return ``(tool_type, beta_header)`` for the model's computer-use generation.
-
-    Legacy models are an explicit set; every other model (incl. future ones)
-    defaults to the current generation so a new model tracks the newer beta.
-    The dated GEODE id suffix (e.g. ``claude-haiku-4-5-20251001``,
-    ``claude-sonnet-4-5-20250929``) is stripped before the lookup so dated
-    legacy ids are not mistaken for current-gen models.
-    """
-    from core.llm.model_capabilities import ANTHROPIC_COMPUTER_USE_LEGACY_MODELS
-
-    base = re.sub(r"-\d{8}$", "", model)  # strip trailing -YYYYMMDD
-    if base in ANTHROPIC_COMPUTER_USE_LEGACY_MODELS:
-        return _COMPUTER_USE_LEGACY
-    return _COMPUTER_USE_CURRENT
+    """Reject unverified models and protocols before advertising a native tool."""
+    spec = get_anthropic_model_spec(model)
+    if spec is None:
+        raise LLMRequestValidationError(f"Computer use is not verified for {model}")
+    if spec.computer_tool == "computer_toolset_20260801":
+        raise LLMRequestValidationError(
+            f"{model} requires computer_toolset_20260801; native dispatch is not enabled"
+        )
+    return (
+        _COMPUTER_USE_LEGACY
+        if spec.computer_tool == _COMPUTER_USE_LEGACY[0]
+        else _COMPUTER_USE_CURRENT
+    )
 
 
 def anthropic_computer_tool_param(
@@ -187,14 +182,8 @@ def _maybe_inject_computer_use(kwargs: dict[str, Any], req: AdapterCallRequest) 
 
 
 def _base_model(model: str) -> str:
-    """Strip a trailing dated snapshot suffix (``-20250929``).
-
-    Capability sets are keyed on the family id; a dated alias must resolve
-    to the same capabilities (Codex review 2026-07-29 —
-    ``claude-sonnet-4-5-20250929`` silently missed the context-mgmt gate).
-    """
-    head, sep, tail = model.rpartition("-")
-    return head if sep and len(tail) == 8 and tail.isdigit() else model
+    """Use the capability owner's snapshot/alias normalization."""
+    return anthropic_base_model(model)
 
 
 def _merge_beta(kwargs: dict[str, Any], *betas: str) -> None:
@@ -244,10 +233,8 @@ def _maybe_inject_context_management(kwargs: dict[str, Any]) -> None:
 def _inject_native_web_tools(kwargs: dict[str, Any], req: AdapterCallRequest) -> None:
     """Append Anthropic-hosted web_search / web_fetch server tools.
 
-    Live-verified on the Anthropic Messages API 2026-07-29 (probe B2: 200 +
-    ``server_tool_use`` block actually invoked). ``translate_response`` skips
-    server-tool block types, so hosted rounds surface through the model's final
-    text.
+    Hosted rounds surface through final text; their raw native blocks stay
+    available for replay. Current contracts are sourced in the refresh note.
 
     Three gates, all required (Codex review 2026-07-29):
 
@@ -255,19 +242,18 @@ def _inject_native_web_tools(kwargs: dict[str, Any], req: AdapterCallRequest) ->
        The server runs these itself, so an explicit request allowlist is
        checked here before provider translation. GEODE's own
        ``general_web_search`` / ``web_fetch`` handlers stay the default path.
-    2. **Model support** — ``ANTHROPIC_WEB_SEARCH_20260209_MODELS``; the
-       dated ``web_*_20260209`` tags 400 on unlisted models (e.g. the
-       budget-lane haiku).
+    2. **Model support** — the verified model record gates search and fetch
+       independently; the dated dynamic tools are not supported by Haiku.
     3. **Tool surface present** — the caller declared tools; plain text
        completions stay tool-free.
     """
     from core.config import settings
-    from core.llm.model_capabilities import ANTHROPIC_WEB_SEARCH_20260209_MODELS
+    from core.llm.model_capabilities import ANTHROPIC_WEB_SEARCH_MODELS
     from core.llm.providers.anthropic import _ANTHROPIC_NATIVE_TOOLS
 
     if not getattr(settings, "anthropic_native_web_tools", False):
         return
-    if _base_model(str(kwargs.get("model", ""))) not in ANTHROPIC_WEB_SEARCH_20260209_MODELS:
+    if _base_model(str(kwargs.get("model", ""))) not in ANTHROPIC_WEB_SEARCH_MODELS:
         return
     if not req.tools:
         return
@@ -277,7 +263,12 @@ def _inject_native_web_tools(kwargs: dict[str, Any], req: AdapterCallRequest) ->
     # Appended AFTER _shape_tools so hosted server tools are excluded from
     # the defer threshold (they are never deferrable — the server owns them).
     existing = {t.get("name") for t in tools if isinstance(t, dict)}
+    spec = get_anthropic_model_spec(req.model)
     for native in _ANTHROPIC_NATIVE_TOOLS:
+        if native["name"] == "web_fetch" and (spec is None or not spec.dynamic_web_fetch):
+            continue
+        if native["name"] in req.denied_tool_names:
+            continue
         if req.allowed_tool_names is not None and native["name"] not in req.allowed_tool_names:
             continue
         if native["name"] not in existing:
@@ -347,6 +338,8 @@ def build_create_kwargs(
     req: AdapterCallRequest, *, base_url: str = "https://api.anthropic.com"
 ) -> dict[str, Any]:
     """Build ``messages.create`` kwargs for the Anthropic PAYG adapter."""
+    if req.max_tokens < 1:
+        raise LLMRequestValidationError("Anthropic max_tokens must be positive")
     system, messages = _system_and_messages(req)
     kwargs: dict[str, Any] = {
         "model": req.model,
@@ -354,27 +347,63 @@ def build_create_kwargs(
         "messages": messages,
         "max_tokens": req.max_tokens,
     }
-    from core.llm.providers.anthropic import _ADAPTIVE_MODELS, _supports_xhigh_effort
-
-    if req.model in _ADAPTIVE_MODELS:
-        # Adaptive thinking (Opus/Sonnet 4.6+): effort controls depth and
-        # sampling params are rejected — omit temperature. Explicit
-        # ``display: "summarized"`` because Opus 4.7 defaults to "omitted"
-        # (empty thinking blocks → no reasoning trace in the activity feed).
-        kwargs["thinking"] = {"type": "adaptive", "display": "summarized"}
-        effort = req.effort if req.effort != "xhigh" or _supports_xhigh_effort(req.model) else "max"
-        kwargs["output_config"] = {"effort": effort}
+    spec = get_anthropic_model_spec(req.model)
+    if spec is not None and spec.adaptive_thinking:
+        thinking: dict[str, Any] = {"type": "adaptive", "display": "summarized"}
+        if spec.binds_thinking:
+            # GEODE refreshes dynamic system context between turns. Preserve
+            # valid signed blocks and let the API report blocks invalidated by
+            # those edits, rather than failing new accounts with a 400.
+            thinking["block_binding"] = {"prefix_mismatch_behavior": "drop_block"}
+            _merge_beta(kwargs, "thinking-binding-controls-2026-08-01")
+        kwargs["thinking"] = thinking
     elif req.thinking_budget > 0:
-        # Anthropic contract: ``budget_tokens < max_tokens`` and extended
-        # thinking requires temperature=1 — extend max_tokens to preserve
-        # the visible-output budget.
         kwargs["thinking"] = {"type": "enabled", "budget_tokens": req.thinking_budget}
         kwargs["max_tokens"] = req.max_tokens + req.thinking_budget
         kwargs["temperature"] = 1.0
     elif req.temperature is not None:
         kwargs["temperature"] = req.temperature
+    if spec is not None and spec.effort_values:
+        # Match Claude Code: an unsupported level never increases spend.
+        effort = (
+            "high" if req.effort == "xhigh" and "xhigh" not in spec.effort_values else req.effort
+        )
+        if effort not in spec.effort_values:
+            raise LLMRequestValidationError(f"{req.model} does not support effort {req.effort!r}")
+        kwargs["output_config"] = {"effort": effort}
+    if spec is not None and kwargs["max_tokens"] > spec.max_output_tokens:
+        raise LLMRequestValidationError(
+            f"{req.model} requires max_tokens between 1 and {spec.max_output_tokens}, "
+            "including any thinking budget"
+        )
+    if req.response_schema is not None:
+        if spec is None:
+            raise LLMRequestValidationError(f"Structured output is not verified for {req.model}")
+        if req.response_schema.get("type") != "object":
+            raise LLMRequestValidationError("Anthropic response_schema requires an object root")
+        kwargs.setdefault("output_config", {})["format"] = {
+            "type": "json_schema",
+            "schema": deepcopy(req.response_schema),
+        }
+    tc = _translate_tool_choice(req.tool_choice)
+    if (
+        spec is not None
+        and not spec.forced_tool_choice
+        and tc
+        and tc.get("type") in {"any", "tool"}
+    ):
+        raise LLMRequestValidationError(
+            f"{req.model} does not support forced tool_choice; use auto or none"
+        )
+    if (
+        tc
+        and tc.get("type") in {"any", "tool"}
+        and kwargs.get("thinking", {}).get("type") == "enabled"
+    ):
+        raise LLMRequestValidationError(
+            "Manual thinking does not support forced tool_choice; use auto or none"
+        )
     if req.tools:
-        tc = _translate_tool_choice(req.tool_choice)
         kwargs["tools"] = _shape_tools(req, tc, base_url=base_url)
         if tc is not None:
             kwargs["tool_choice"] = tc
@@ -433,33 +462,26 @@ def _translate_tool_choice(tc: str | dict[str, Any]) -> dict[str, Any] | None:
 def build_stream_kwargs(
     req: AdapterCallRequest, *, base_url: str = "https://api.anthropic.com"
 ) -> dict[str, Any]:
-    """Variant of :func:`build_create_kwargs` for ``messages.stream``.
+    """Streaming uses the same Messages contract, including thinking and stops."""
+    return build_create_kwargs(req, base_url=base_url)
 
-    Streaming does not accept ``thinking`` / ``stop_sequences`` for the
-    same models as ``create``, so the kwargs are trimmed.
-    """
-    system, messages = _system_and_messages(req)
-    kwargs: dict[str, Any] = {
-        "model": req.model,
-        "system": system,
-        "messages": messages,
-        "max_tokens": req.max_tokens,
-    }
-    if req.temperature is not None:
-        kwargs["temperature"] = req.temperature
-    if req.tools:
-        tc = _translate_tool_choice(req.tool_choice)
-        kwargs["tools"] = _shape_tools(req, tc, base_url=base_url)
-        if tc is not None:
-            kwargs["tool_choice"] = tc
-    _maybe_inject_computer_use(kwargs, req)
-    _inject_native_web_tools(kwargs, req)
-    _maybe_inject_context_management(kwargs)
-    return kwargs
+
+def report_input_transformations(response: Any) -> None:
+    """Surface provider-confirmed reasoning loss without logging signed content."""
+    transformations = getattr(response, "input_transformations", None) or []
+    for reason in ("prefix_binding_mismatch", "model_binding_mismatch"):
+        count = sum(
+            (entry.get("reason") if isinstance(entry, dict) else getattr(entry, "reason", None))
+            == reason
+            for entry in transformations
+        )
+        if count:
+            log.warning("Anthropic thinking transformations: reason=%s blocks=%d", reason, count)
 
 
 def translate_response(response: Any) -> AdapterCallResult:
     """Anthropic SDK Message → :class:`AdapterCallResult`."""
+    report_input_transformations(response)
     text_blocks: list[str] = []
     tool_uses: list[dict[str, Any]] = []
     # SDK serialization retains native blocks/signatures in their original order.

@@ -49,6 +49,12 @@ functional change.
 
 ### Changed
 
+- Refresh Claude Messages contracts for Fable 5.1, Opus 5.5/5, and Sonnet 5
+  through typed model records and one create/stream request builder. Preserve
+  signed thinking, structured output, tool calls, and cache usage in streaming;
+  validate output/effort/forced-tool limits and update hosted web tool versions.
+  Guard unknown computer generations until their native executor is supported.
+
 - Run Reflection after each tool-result round and once before final delivery.
   Final semantic verification replaces the mechanical-only default; legacy
   cadence controls and `off`/`rule_based`/`reflexion` verifier settings are

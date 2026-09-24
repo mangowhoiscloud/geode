@@ -393,9 +393,9 @@ def test_dispatch_tolerates_legacy_adapter_without_model_kwarg(
 def test_resolve_web_search_model_honours_documented_models() -> None:
     from core.config import ANTHROPIC_PRIMARY
     from core.llm.adapters._capability_impls import resolve_web_search_model
-    from core.llm.model_capabilities import ANTHROPIC_WEB_SEARCH_20260209_MODELS
+    from core.llm.model_capabilities import ANTHROPIC_WEB_SEARCH_MODELS
 
-    for model_id in ANTHROPIC_WEB_SEARCH_20260209_MODELS:
+    for model_id in ANTHROPIC_WEB_SEARCH_MODELS:
         assert resolve_web_search_model(model_id) == model_id
 
     # Outside the documented set (incl. empty / foreign-provider hints) →
