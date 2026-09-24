@@ -12,7 +12,11 @@ CI-gated merges and stable publication. The operator subsequently requested
 E2E and Harbor checks for the new model families through both API and
 subscription routes after all implementation is complete. The operator
 approved a total US$20 paid-validation cap on 2026-09-24; freeze the execution
-matrix and budget before calling models. Record subscription consumption
+matrix and budget before calling models. The subsequent operator instruction
+requires every implementation PR owned by this refresh to pass its exact-head
+CI ratchet and merge into `develop` in dependency order before paid validation.
+Freeze that clean, integrated `develop` revision; a local integration candidate
+is eligible for offline checks only. Record subscription consumption
 separately from API charges. Running services and globally installed tools
 remain outside scope.
 
@@ -40,21 +44,25 @@ remain outside scope.
 | Unit | Scope | Dependency | State |
 |---|---|---|---|
 | P1 | Price/context refresh, typed tariff rules, active offering catalogue | none | PR #3395 merged into develop at `7ea17cceb`; required CI passed |
-| P2 | OpenAI model/effort/output and API/Codex request boundaries | P1 | PR #3397, CI pending |
-| P3 | Claude typed capabilities, thinking, schemas, streaming parity | P2 shared selection helper | local implementation |
-| P4 | GLM request deduplication, exact effort and subscription admission | P2 shared selection helper | local implementation |
+| P2 | OpenAI model/effort/output and API/Codex request boundaries | P1 | PR #3397 merged into develop at `be48160a1`; required CI passed |
+| P3 | Claude typed capabilities, thinking, schemas, streaming parity | P2 shared selection helper | PR #3400; required CI in progress |
+| P4 | GLM request deduplication, exact effort and subscription admission | P2 shared selection helper | PR #3401; required CI in progress |
 | P5 | Native Claude computer toolset and action translation | P3 | local implementation |
 | P6 | CLI/default/config selection and bilingual public documentation | P2–P5 | local implementation and independent review |
-| S1 | Actual event-schema/digest references owned by the event store | audit | PR #3390, CI pending |
-| S2 | Runtime-state DB connection ownership, serialized use and teardown | audit | PR #3393; failed-write rollback and constructor cleanup under local verification |
+| S1 | Actual event-schema/digest references owned by the event store | audit | PR #3390, `c4fc65477` required CI passed; current-base integration pending |
+| S2 | Runtime-state DB connection ownership, serialized use and teardown | audit | PR #3393, `a98fda9a8` required CI passed; current-base integration pending |
 | C1 | Validate complete settings before publishing a reload | audit | PR #3389 merged into develop at `a5b23bdc2`; required CI passed |
-| C2 | One global config path for writer, reader, explanation and watchers | C1 | PR #3396, CI pending |
-| D1 | Bound compatible SDK majors and deduplicate HTTPX construction | independent migration audit | PR #3394, CI pending |
+| C2 | One global config path for writer, reader, explanation and watchers | C1 | PR #3396, `32e8811cb` required CI passed; current-base integration pending |
+| D1 | Bound compatible SDK majors and deduplicate HTTPX construction | independent migration audit | PR #3394, `fb8fdb118` required CI passed; current-base integration pending |
 | D2 | Test current major SDK/evaluation compatibility | D1 | incompatible OpenAI/Inspect import reproduced; migration deferred |
-| E1 | Runtime construction, shutdown outcomes, request context and cache generation ownership | C1 | local implementation; existing error convention extended |
+| E1 | Runtime construction, shutdown outcomes, request context and cache generation ownership | C1 | PR #3403; required CI in progress; existing error convention extended |
 | E2 | Atomic gateway reload and owned watcher/poller lifecycle | C1, C2 | local implementation and independent review |
 | E3 | Shared SDK transport ownership at actual process/thread event-loop teardown | E1 | local implementation and independent review |
-| V1 | New-model API/subscription E2E and Harbor validation | all accepted implementation units | execution matrix in preparation; total US$20 paid cap approved |
+| K2 | Claude cache marker validity and 1-hour write accounting through durable records | P6 | local implementation and independent review; activity schema v11, trajectory v1 unchanged |
+| K1 | OpenAI explicit static prefixes and OpenRouter route/session cache shaping | P6, K2 | local implementation and independent review |
+| V1 bounds | Optional Harbor output/round limits and shared wrap-up cap preservation | runtime owners | local implementation and offline verification |
+| V1 execution | New-model API/subscription E2E, cache and Harbor validation | all implementation PRs merged into develop with required CI | not started; total US$20 paid cap approved |
+| F1 | Repeatable onboarding and audit scaffold in existing contributor skills | completed refactoring and checks | pending; preserve runtime/contributor prompt separation |
 | R1 | Patch release preparation, packaging/docs, develop→main, stable publication | all accepted units | pending |
 
 The implementation workspace holds the combined candidate while changes
@@ -63,6 +71,13 @@ workspace is not itself one oversized PR. Split a unit further when its
 native protocol or persistence contract warrants independent review. The
 architecture roadmap remains authoritative for any existing program GAP;
 ordinary provider maintenance does not create an unrelated program claim.
+
+The table records observed commit-specific evidence, not permission to reuse
+stale checks after a base or head change. Every merge still runs the current
+merge guard. API and Subscription are separate validation routes; unavailable
+Claude or Z.AI subscription admission remains an explicit rejection test, never
+a PAYG substitution. OpenRouter credentials were subsequently supplied for the
+scoped validation process and are not stored in repository artifacts.
 
 ## Verification record
 
