@@ -126,6 +126,10 @@ functional change.
   Coding Plan calls before credentials are read under the supported-tools policy.
   Remove unverified automatic GLM-5V grounding and its orphaned parser/client
   chain while retaining explicit provider/source-aware unavailability.
+- Show the requested `switch_model` role and model hint in CLI/IPC approval
+  details, including the primary-role default. Preserve exact values with JSON
+  escaping so judgment-only approval can distinguish a root-model change;
+  permission requirements and approval decisions remain unchanged.
 - Validate the complete settings reload before updating the live singleton.
   Failed environment/TOML field validation, field preparation, or routing
   refresh preserves the previous Settings values; corrected reloads retain
