@@ -132,7 +132,8 @@ desktop = [
 # Lazy-imported in evals/petri/ so cold-start is unaffected when not
 # installed. See docs/plans/eval-petri-integration.md.
 audit = [
-    "inspect-ai>=0.3.236",
+    # Inspect 0.3.259 imports OpenAI SDK 3 response schemas; keep both SDK 2 providers usable.
+    "inspect-ai>=0.3.236,<0.3.259",
     "inspect-petri>=3.0.11,<4",
     # Keep audit installs on the same MCP protocol range as the runtime; Inspect
     # tasks may expose MCP tools even though the retired Claude CLI bridge is gone.
