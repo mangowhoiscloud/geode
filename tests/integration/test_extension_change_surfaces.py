@@ -201,7 +201,7 @@ def test_mcp_server_is_added_from_only_project_configuration(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr("core.mcp.config_catalog.GLOBAL_CONFIG_TOML", tmp_path / "global.toml")
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "global.toml"))
     monkeypatch.setattr("core.mcp.manager.get_project_root", lambda: tmp_path)
 
     manager = MCPServerManager(

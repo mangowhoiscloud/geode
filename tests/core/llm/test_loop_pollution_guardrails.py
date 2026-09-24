@@ -249,39 +249,6 @@ def test_builtin_adapters_with_get_client_use_loop_affine_cache() -> None:
     assert checked >= 5
 
 
-def test_provider_async_clients_are_per_loop(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Every LIVE provider-level async getter must be loop-affine.
-
-    2026-07-29: the anthropic/openai provider getters were deleted — their
-    only caller was the legacy adapter pair removed in v1.0.4, and
-    Anthropic/OpenAI traffic now builds clients in ``core/llm/adapters``
-    (covered by ``test_builtin_adapters_with_get_client_use_loop_affine_cache``
-    above).
-    GLM's getter is still consumed directly (``core/tools/computer_grounding``)
-    so the provider-level pin survives for it."""
-    from core.llm.providers import glm as glm_provider
-
-    monkeypatch.setattr(
-        glm_provider,
-        "_resolve_glm_endpoint",
-        lambda **_kwargs: ("test-key", "https://e"),
-    )
-
-    getters = [
-        (glm_provider._async_glm_clients, glm_provider._get_async_glm_client),
-    ]
-    for cache, getter in getters:
-        cache.invalidate()
-
-        async def _get(_getter: Any = getter) -> object:
-            return _getter()
-
-        client_a = asyncio.run(_get())
-        client_b = asyncio.run(_get())
-        assert client_a is not client_b, getter.__name__
-        cache.invalidate()
-
-
 # ---------------------------------------------------------------------------
 # 3. Harness wall-clock deadline — hangs resolve as structured timeouts
 # ---------------------------------------------------------------------------
@@ -393,9 +360,9 @@ def test_dispatch_tolerates_legacy_adapter_without_model_kwarg(
 def test_resolve_web_search_model_honours_documented_models() -> None:
     from core.config import ANTHROPIC_PRIMARY
     from core.llm.adapters._capability_impls import resolve_web_search_model
-    from core.llm.model_capabilities import ANTHROPIC_WEB_SEARCH_20260209_MODELS
+    from core.llm.model_capabilities import ANTHROPIC_WEB_SEARCH_MODELS
 
-    for model_id in ANTHROPIC_WEB_SEARCH_20260209_MODELS:
+    for model_id in ANTHROPIC_WEB_SEARCH_MODELS:
         assert resolve_web_search_model(model_id) == model_id
 
     # Outside the documented set (incl. empty / foreign-provider hints) →
@@ -432,7 +399,7 @@ def test_every_web_search_capable_adapter_accepts_model_hint() -> None:
             "(dispatch forwards it unconditionally)"
         )
         checked += 1
-    assert checked >= 5
+    assert checked >= 4  # Coding Plan search is an external MCP product.
 
 
 def test_web_tools_forward_session_model_to_dispatch() -> None:
@@ -533,3 +500,62 @@ def test_web_search_deadline_covers_client_timeout_with_retry() -> None:
         "general_web_search: deadline no longer covers client-timeout x retry "
         "— healthy retries will be killed at the boundary again"
     )
+
+
+def test_invalidate_waits_for_builder_publication_before_dropping_client() -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    cache = LoopAffineClientCache("rotation")
+    entered = threading.Event()
+    release = threading.Event()
+    invalidating = threading.Event()
+    invalidated = threading.Event()
+    old, new = object(), object()
+
+    def build() -> object:
+        entered.set()
+        assert release.wait(5), "test failed to release the SDK constructor"
+        return old
+
+    async def use_cache() -> tuple[object, object]:
+        first = cache.get(build)
+        assert invalidated.wait(5), "invalidation did not finish"
+        return first, cache.get(lambda: new)
+
+    def invalidate() -> None:
+        invalidating.set()
+        cache.invalidate()
+        invalidated.set()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        owner = executor.submit(asyncio.run, use_cache())
+        try:
+            assert entered.wait(5)
+            rotation = executor.submit(invalidate)
+            assert invalidating.wait(5)
+            assert not invalidated.wait(0.05), "invalidation raced unfinished construction"
+        finally:
+            release.set()
+        rotation.result(timeout=5)
+        first, second = owner.result(timeout=5)
+    assert first is old
+    assert second is new
+
+
+def test_failed_builder_leaves_no_entry_and_next_get_recreates() -> None:
+    cache = LoopAffineClientCache("failure")
+    failure = RuntimeError("constructor failed")
+
+    def fail() -> object:
+        raise failure
+
+    async def scenario() -> None:
+        with pytest.raises(RuntimeError) as caught:
+            cache.get(fail)
+        assert caught.value is failure
+        assert cache.bound_loop_count() == 0
+        replacement = object()
+        assert cache.get(lambda: replacement) is replacement
+        assert cache.bound_loop_count() == 1
+
+    asyncio.run(scenario())

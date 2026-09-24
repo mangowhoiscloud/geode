@@ -39,7 +39,7 @@ def test_adapter_model_spec_uses_catalogue_values() -> None:
     spec = model_spec_for_adapter("glm-5.2", provider="glm")
 
     assert spec.context_tokens == 1_000_000  # Current Z.AI model guide, checked 2026-09-24
-    assert spec.supports_thinking is False
+    assert spec.supports_thinking is True
     assert spec.supports_tools is True
 
 

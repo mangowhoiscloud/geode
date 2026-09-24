@@ -49,6 +49,20 @@ functional change.
 
 ### Changed
 
+- Bound OpenAI Python to SDK 2 (`>=2.45,<3`) and Anthropic Python to SDK 0
+  (`>=0.116,<1`) while preserving the verified transport and audit contracts.
+  Share configured HTTP transport construction
+  across OpenAI, GLM, and Codex while preserving Codex's disabled connection
+  reuse and application-owned retries; record both SDK major-version migrations.
+
+- Refresh Claude Messages contracts for Fable 5.1, Opus 5.5/5, and Sonnet 5
+  through typed model records and one create/stream request builder. Preserve
+  signed thinking, structured output, tool calls, and cache usage in streaming;
+  retain hosted search usage. Validate output/effort/forced-tool limits, including
+  auxiliary text completions, and update hosted web tool versions.
+  Select the computer protocol from the typed request model and guard unknown
+  generations until their native executor is supported.
+
 - Run Reflection after each tool-result round and once before final delivery.
   Final semantic verification replaces the mechanical-only default; legacy
   cadence controls and `off`/`rule_based`/`reflexion` verifier settings are
@@ -119,6 +133,39 @@ functional change.
 ### Fixed
 
 - Preserve thin Harbor cognitive-reflection usage by binding its middleware to the existing session event sink.
+
+- Release partially constructed runtime resources before propagating the original
+  failure, and retry incomplete shutdown without skipping sibling resources.
+  Delegate the daemon's borrowed scheduler teardown to its runtime owner,
+  including partial gateway startup failures.
+  Restore turn attribution and adapter usage context after success, failure or
+  cancellation, and serialize SDK client publication with credential invalidation.
+
+- Use the shared global config path resolver for Settings, config explanation,
+  model-picker reads/writes/confirmation, MCP, gateway reload/watch, seed
+  role/voter overrides, and evaluation config migration.
+  `GEODE_CONFIG_TOML` now redirects global picker persistence and migration
+  previews/writes while project writes and overlay precedence remain unchanged.
+
+- Keep oversized-page omission notices stable across documentation build
+  environments while retaining measured sizes in build logs and complete
+  Markdown twins.
+
+- Close runtime-state schema-bootstrap and failed connection candidates
+  deterministically, including interrupted setup while preserving the original
+  control exception. Release the cached SQLite connection during runtime
+  shutdown, and serialize complete reads/writes with cleanup so other active
+  hook bundles can reopen it without losing cumulative records. Roll back
+  failed runtime-state writes before reusing the connection, discard it if
+  rollback fails, and close SessionManager connections when schema initialization
+  fails so a later write cannot commit a failed operation's pending changes.
+  Close the checkpoint metadata connection even when its index write fails,
+  while retaining the existing recoverable checkpoint behavior.
+
+- Bind trajectory runtime-event references to each stored hook schema version
+  and include session and physical-step correlation in the cohort digest.
+  Preserve mixed-version history and pre-v5 tables without rewriting source
+  rows or previously published artifacts.
 - Admit native Astra final-verification calls in decision-handoff observations.
   Preserve requested and actual verifier modes separately, and require a complete
   source-reconciled final-verification boundary for explicitly opted-in current
@@ -130,6 +177,13 @@ functional change.
   both Responses streams through one translator with tool calls, reasoning,
   usage and replay metadata; reject transport EOF without a terminal response.
 
+- Share the documented GLM request and streaming contracts across completion
+  and text paths, including 5.3 reasoning, tools, and exact output limits.
+  Preserve stream and hosted-search usage, and reject incomplete tool streams.
+  Separate hybrid thinking capability from graded effort controls; reject GLM
+  Coding Plan calls before credentials are read under the supported-tools policy.
+  Remove unverified automatic GLM-5V grounding and its orphaned parser/client
+  chain while retaining explicit provider/source-aware unavailability.
 - Show the requested `switch_model` role and model hint in CLI/IPC approval
   details, including the primary-role default. Preserve exact values with JSON
   escaping so judgment-only approval can distinguish a root-model change;

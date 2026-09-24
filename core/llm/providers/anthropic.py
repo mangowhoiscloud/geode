@@ -557,50 +557,23 @@ _API_ALLOWED_KEYS = frozenset(
     {"name", "description", "input_schema", "cache_control", "type", "strict", "defer_loading"}
 )
 
-# Models that support server-side context management + compaction beta.
-# Haiku 4.5 (2025-10-01) predates compact-2026-01-12 and rejects the beta
-# header with a 400 whose message contains "context" — misclassified as
-# context_overflow.  Only 1M-context models are known to support it.
-# Opus 4.8 (claude-opus-4-8) ships with a 1M context window and Claude Code
-# runs it under server-side compaction, so it inherits the same contract.
-# PR-DRIFT-ANCHORS (2026-06-10) — set contents live in the single SoT
-# ``core/llm/model_capabilities.py``; this alias keeps the local name the
-# rest of this module (and its tests) read.
+# Derived from the same verified records used by the adapter and effort picker.
 _CONTEXT_MGMT_MODELS: frozenset[str] = ANTHROPIC_CONTEXT_MGMT_MODELS
-
-# Adaptive thinking models (Opus 4.6+).  Sampling parameters
-# (temperature/top_p/top_k) are rejected with 400 starting from Opus 4.7
-# (https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-7
-# #sampling-parameters-removed) and are also rejected by Opus 4.6 when
-# adaptive thinking is on.  Omit them entirely on these models.
-# Opus 4.8 continues the 4.6+ adaptive-thinking contract (the effort knob —
-# incl. ``xhigh`` — only exists for adaptive models, and this session runs
-# claude-opus-4-8 under adaptive thinking; see _XHIGH_EFFORT_MODELS note).
 _ADAPTIVE_MODELS: frozenset[str] = ANTHROPIC_ADAPTIVE_MODELS
-
-# v0.56.0 R4-mini — Opus 4.7 supports the new ``xhigh`` effort level (one
-# step above ``high``); 4.6 / Sonnet 4.6 reject it with 400. Mirrors
-# Hermes ``anthropic_adapter.py:49-53`` substring-based gate. Anthropic
-# explicitly recommends ``xhigh`` as the starting effort for Opus 4.7
-# coding/agentic workloads (platform.claude.com/docs/en/build-with-claude/
-# effort) — but only the GEODE caller can opt in by setting
-# ``agentic.effort = "xhigh"``; we never auto-upgrade ``high → xhigh``.
-# Opus 4.8 (claude-opus-4-8) accepts ``xhigh`` — confirmed live: Claude Code
-# configures this model with "xhigh effort" by default (the /model selector
-# emits it). ctx7 platform docs only index up to the 4.6/4.7 family pages, so
-# the 4.8-specific acceptance is grounded by the running harness rather than a
-# doc page.
 _XHIGH_EFFORT_MODELS: frozenset[str] = ANTHROPIC_XHIGH_MODELS
 
 
 def _supports_xhigh_effort(model: str) -> bool:
-    """Return True if the model accepts ``output_config.effort = "xhigh"``."""
-    return model in _XHIGH_EFFORT_MODELS
+    """Return whether the verified model accepts xhigh effort."""
+    from core.llm.model_capabilities import get_anthropic_model_spec
+
+    spec = get_anthropic_model_spec(model)
+    return spec is not None and "xhigh" in spec.effort_values
 
 
 _ANTHROPIC_NATIVE_TOOLS: list[dict[str, Any]] = [
-    {"type": "web_search_20260209", "name": "web_search", "allowed_callers": ["direct"]},
-    {"type": "web_fetch_20260209", "name": "web_fetch", "allowed_callers": ["direct"]},
+    {"type": "web_search_20260318", "name": "web_search", "allowed_callers": ["direct"]},
+    {"type": "web_fetch_20260318", "name": "web_fetch", "allowed_callers": ["direct"]},
 ]
 
 # Hosted tool-search tool (PR-TOOL-SEARCH-WIRE, 2026-06-13). Official
@@ -732,10 +705,6 @@ def is_computer_use_enabled() -> bool:
 
 # This module is a low-level utility layer (clients, retry, quota, cache
 # helpers, native-tool shaping) consumed by ``core/llm/adapters``.
-# Context management
-# (``_CONTEXT_MGMT_MODELS``) and native web_search/web_fetch injection
-# (``_ANTHROPIC_NATIVE_TOOLS``) — were live-verified on the Messages API
-# (context-mgmt 200 with merged beta tokens; web_search 200 with a real
-# ``server_tool_use`` round) and now run on the live builders in
-# ``core/llm/adapters/_anthropic_common.py``. This module keeps the constants
-# as the low-level SoT.
+# Context management and native web tools are injected by the builders in
+# ``core/llm/adapters/_anthropic_common.py``. The current documented contracts
+# and offline verification boundary live in the provider refresh research note.

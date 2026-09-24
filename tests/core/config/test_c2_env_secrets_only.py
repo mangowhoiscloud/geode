@@ -120,7 +120,7 @@ def test_credential_source_toml_rows_are_read_back(
 
     global_toml = tmp_path / "config.toml"
     global_toml.write_text('[llm]\nanthropic_credential_source = "subscription"\n')
-    monkeypatch.setattr(config_mod, "GLOBAL_CONFIG_PATH", global_toml)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(global_toml))
     monkeypatch.setattr(config_mod, "PROJECT_CONFIG_PATH", tmp_path / "absent.toml")
     values = _load_toml_config()
     assert values.get("anthropic_credential_source") == "subscription"

@@ -228,9 +228,10 @@ def get_model_catalog_spec(model_id: str, provider: str | None = None) -> ModelC
         supports_thinking = openai_spec.reasoning_effort_values is not None
         supports_tool_search = openai_spec.supports_tool_search
     elif normalized == "glm":
-        # The GLM adapter currently owns the thinking/reasoning toggle policy
-        # separately and does not expose a user-facing effort surface.
-        supports_thinking = False
+        from core.llm.providers.glm import get_glm_model_spec
+
+        glm_spec = get_glm_model_spec(model_id)
+        supports_thinking = glm_spec.supports_thinking if glm_spec is not None else False
 
     return ModelCatalogSpec(
         id=model_id,
