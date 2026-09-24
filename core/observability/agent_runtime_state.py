@@ -34,6 +34,7 @@ import logging
 import sqlite3
 import threading
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -85,7 +86,7 @@ _DB_PATH: Path | None = None
 
 
 def _get_conn() -> sqlite3.Connection | None:
-    """Return the singleton ``sessions.db`` connection, or None on failure.
+    """Return the cached connection while the caller holds ``_LOCK``.
 
     Imports :class:`SessionManager` solely to trigger schema initialization
     (the constructor is the single SoT for both table sets — see PR-COMM-3
@@ -96,24 +97,53 @@ def _get_conn() -> sqlite3.Connection | None:
     """
     global _CONN, _DB_PATH
 
-    with _LOCK:
-        if _CONN is not None:
-            return _CONN
-        try:
-            from core.memory.session_manager import (
-                SessionManager,
-                _get_default_db_path,
-            )
+    if _CONN is not None:
+        return _CONN
+    conn: sqlite3.Connection | None = None
+    try:
+        from core.memory.session_manager import (
+            SessionManager,
+            _get_default_db_path,
+        )
 
-            # Trigger schema bootstrap (idempotent on existing DBs).
-            SessionManager()
-            _DB_PATH = _get_default_db_path()
-            _CONN = sqlite3.connect(str(_DB_PATH), check_same_thread=False)
-            _CONN.execute("PRAGMA journal_mode=WAL")
-            return _CONN
-        except Exception as exc:
-            log.warning("agent_runtime_state: failed to open sessions.db: %s", exc)
-            return None
+        db_path = _DB_PATH or _get_default_db_path()
+        # SessionManager owns schema bootstrap, but this temporary manager is
+        # not the owner of the cached operational connection.
+        SessionManager(db_path=db_path).close()
+        conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        conn.execute("PRAGMA journal_mode=WAL")
+        _CONN = conn
+        _DB_PATH = db_path
+        return conn
+    except Exception as exc:
+        if conn is not None:
+            with contextlib.suppress(sqlite3.Error):
+                conn.close()
+        log.warning("agent_runtime_state: failed to open sessions.db: %s", exc)
+        return None
+
+
+@contextlib.contextmanager
+def _connection() -> Iterator[sqlite3.Connection | None]:
+    """Hold the connection across a complete operation, including shutdown races."""
+    with _LOCK:
+        yield _get_conn()
+
+
+def close_runtime_state() -> None:
+    """Release the cached connection after a runtime's hook producers stop.
+
+    Other live runtimes or explicit readers may lazily reopen it. Closing and
+    complete operations share one lock, so no writer retains a closed handle.
+    """
+    global _CONN, _DB_PATH
+    with _LOCK:
+        try:
+            if _CONN is not None:
+                _CONN.close()
+        finally:
+            _CONN = None
+            _DB_PATH = None
 
 
 def _reset_for_tests(db_path: Path | None = None) -> None:
@@ -122,12 +152,9 @@ def _reset_for_tests(db_path: Path | None = None) -> None:
     Pytest fixtures swap ``_get_default_db_path`` via monkeypatch; this
     helper lets the test then force a fresh connection to the new path.
     """
-    global _CONN, _DB_PATH
+    global _DB_PATH
+    close_runtime_state()
     with _LOCK:
-        if _CONN is not None:
-            with contextlib.suppress(Exception):
-                _CONN.close()
-        _CONN = None
         _DB_PATH = db_path
 
 
@@ -150,12 +177,11 @@ def record_agent_session_end(
     UPSERT only writes identity columns; totals are accumulated separately by
     :func:`accumulate_tokens_and_cost`.
     """
-    conn = _get_conn()
-    if conn is None or not agent_id:
-        return
-    now = time.time()
-    try:
-        with _LOCK:
+    with _connection() as conn:
+        if conn is None or not agent_id:
+            return
+        now = time.time()
+        try:
             conn.execute(
                 """\
                 INSERT INTO agent_runtime_state
@@ -177,8 +203,8 @@ def record_agent_session_end(
                 ),
             )
             conn.commit()
-    except Exception as exc:
-        log.warning("record_agent_session_end(%s) failed: %s", agent_id, exc)
+        except Exception as exc:
+            log.warning("record_agent_session_end(%s) failed: %s", agent_id, exc)
 
 
 def record_subagent_completed(
@@ -196,12 +222,11 @@ def record_subagent_completed(
     only runs for sub-agents); ``component`` comes from the
     ``RunTimeline.component`` SoT at dispatch time.
     """
-    conn = _get_conn()
-    if conn is None or not agent_id:
-        return
-    now = time.time()
-    try:
-        with _LOCK:
+    with _connection() as conn:
+        if conn is None or not agent_id:
+            return
+        now = time.time()
+        try:
             conn.execute(
                 """\
                 INSERT INTO agent_runtime_state
@@ -219,8 +244,8 @@ def record_subagent_completed(
                 (agent_id, component, last_run_id, last_run_status, last_error, now, now),
             )
             conn.commit()
-    except Exception as exc:
-        log.warning("record_subagent_completed(%s) failed: %s", agent_id, exc)
+        except Exception as exc:
+            log.warning("record_subagent_completed(%s) failed: %s", agent_id, exc)
 
 
 def accumulate_tokens_and_cost(
@@ -239,13 +264,12 @@ def accumulate_tokens_and_cost(
     via ``round(cost_usd * 100)`` so the column stays INTEGER (avoids
     float drift on cumulative sums).
     """
-    conn = _get_conn()
-    if conn is None or not agent_id:
-        return
-    cost_cents = round(cost_usd * 100)
-    now = time.time()
-    try:
-        with _LOCK:
+    with _connection() as conn:
+        if conn is None or not agent_id:
+            return
+        cost_cents = round(cost_usd * 100)
+        now = time.time()
+        try:
             conn.execute(
                 """\
                 INSERT INTO agent_runtime_state
@@ -273,8 +297,8 @@ def accumulate_tokens_and_cost(
                 ),
             )
             conn.commit()
-    except Exception as exc:
-        log.warning("accumulate_tokens_and_cost(%s) failed: %s", agent_id, exc)
+        except Exception as exc:
+            log.warning("accumulate_tokens_and_cost(%s) failed: %s", agent_id, exc)
 
 
 def record_run_lineage(
@@ -292,25 +316,24 @@ def record_run_lineage(
     parent has its own ``root_run_id`` we propagate it; otherwise the
     parent IS the root. Top-level runs (no parent) point to themselves.
     """
-    conn = _get_conn()
-    if conn is None or not run_id:
-        return
-    now = time.time()
+    with _connection() as conn:
+        if conn is None or not run_id:
+            return
+        now = time.time()
 
-    if parent_run_id:
+        if parent_run_id:
+            try:
+                row = conn.execute(
+                    "SELECT root_run_id FROM run_lineage WHERE run_id = ?",
+                    (parent_run_id,),
+                ).fetchone()
+                root_run_id = str(row[0]) if row else parent_run_id
+            except Exception:
+                root_run_id = parent_run_id
+        else:
+            root_run_id = run_id
+
         try:
-            row = conn.execute(
-                "SELECT root_run_id FROM run_lineage WHERE run_id = ?",
-                (parent_run_id,),
-            ).fetchone()
-            root_run_id = str(row[0]) if row else parent_run_id
-        except Exception:
-            root_run_id = parent_run_id
-    else:
-        root_run_id = run_id
-
-    try:
-        with _LOCK:
             conn.execute(
                 """\
                 INSERT INTO run_lineage
@@ -333,24 +356,23 @@ def record_run_lineage(
                 ),
             )
             conn.commit()
-    except Exception as exc:
-        log.warning("record_run_lineage(%s) failed: %s", run_id, exc)
+        except Exception as exc:
+            log.warning("record_run_lineage(%s) failed: %s", run_id, exc)
 
 
 def mark_run_ended(run_id: str, status: str) -> None:
     """Flip a ``run_lineage`` row's ``status`` + ``ended_at``."""
-    conn = _get_conn()
-    if conn is None or not run_id:
-        return
-    try:
-        with _LOCK:
+    with _connection() as conn:
+        if conn is None or not run_id:
+            return
+        try:
             conn.execute(
                 "UPDATE run_lineage SET status = ?, ended_at = ? WHERE run_id = ?",
                 (status, time.time(), run_id),
             )
             conn.commit()
-    except Exception as exc:
-        log.warning("mark_run_ended(%s) failed: %s", run_id, exc)
+        except Exception as exc:
+            log.warning("mark_run_ended(%s) failed: %s", run_id, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -360,41 +382,41 @@ def mark_run_ended(run_id: str, status: str) -> None:
 
 def get_agent_runtime_state(agent_id: str) -> AgentRuntimeState | None:
     """Fetch one agent's cumulative state; None if no row exists."""
-    conn = _get_conn()
-    if conn is None or not agent_id:
-        return None
-    try:
-        row = conn.execute(
-            """\
-            SELECT agent_id, agent_kind, component, adapter_type,
-                   last_run_id, last_run_status,
-                   total_input_tokens, total_output_tokens,
-                   total_cached_input_tokens, total_cost_cents,
-                   last_error, created_at, updated_at
-            FROM agent_runtime_state WHERE agent_id = ?
-            """,
-            (agent_id,),
-        ).fetchone()
-    except Exception as exc:
-        log.warning("get_agent_runtime_state(%s) failed: %s", agent_id, exc)
-        return None
-    if row is None:
-        return None
-    return AgentRuntimeState(
-        agent_id=str(row[0]),
-        agent_kind=str(row[1]),
-        component=str(row[2]),
-        adapter_type=str(row[3]),
-        last_run_id=str(row[4]),
-        last_run_status=str(row[5]),
-        total_input_tokens=int(row[6]),
-        total_output_tokens=int(row[7]),
-        total_cached_input_tokens=int(row[8]),
-        total_cost_cents=int(row[9]),
-        last_error=str(row[10]),
-        created_at=float(row[11]),
-        updated_at=float(row[12]),
-    )
+    with _connection() as conn:
+        if conn is None or not agent_id:
+            return None
+        try:
+            row = conn.execute(
+                """\
+                SELECT agent_id, agent_kind, component, adapter_type,
+                       last_run_id, last_run_status,
+                       total_input_tokens, total_output_tokens,
+                       total_cached_input_tokens, total_cost_cents,
+                       last_error, created_at, updated_at
+                FROM agent_runtime_state WHERE agent_id = ?
+                """,
+                (agent_id,),
+            ).fetchone()
+        except Exception as exc:
+            log.warning("get_agent_runtime_state(%s) failed: %s", agent_id, exc)
+            return None
+        if row is None:
+            return None
+        return AgentRuntimeState(
+            agent_id=str(row[0]),
+            agent_kind=str(row[1]),
+            component=str(row[2]),
+            adapter_type=str(row[3]),
+            last_run_id=str(row[4]),
+            last_run_status=str(row[5]),
+            total_input_tokens=int(row[6]),
+            total_output_tokens=int(row[7]),
+            total_cached_input_tokens=int(row[8]),
+            total_cost_cents=int(row[9]),
+            last_error=str(row[10]),
+            created_at=float(row[11]),
+            updated_at=float(row[12]),
+        )
 
 
 def get_retry_chain(run_id: str) -> list[RunLineage]:
@@ -404,63 +426,63 @@ def get_retry_chain(run_id: str) -> list[RunLineage]:
     queries. When the run_id isn't in ``run_lineage`` yet, returns an
     empty list.
     """
-    conn = _get_conn()
-    if conn is None or not run_id:
-        return []
-    try:
-        anchor = conn.execute(
-            "SELECT root_run_id FROM run_lineage WHERE run_id = ?",
-            (run_id,),
-        ).fetchone()
-        if not anchor:
+    with _connection() as conn:
+        if conn is None or not run_id:
             return []
-        root = str(anchor[0])
-        rows = conn.execute(
-            """\
-            SELECT run_id, component, agent_id, parent_run_id, root_run_id,
-                   status, started_at, ended_at, metadata
-            FROM run_lineage
-            WHERE root_run_id = ?
-            ORDER BY started_at ASC
-            """,
-            (root,),
-        ).fetchall()
-    except Exception as exc:
-        log.warning("get_retry_chain(%s) failed: %s", run_id, exc)
-        return []
-    out: list[RunLineage] = []
-    for r in rows:
         try:
-            meta = json.loads(str(r[8]) or "{}")
-        except json.JSONDecodeError:
-            meta = {}
-        out.append(
-            RunLineage(
-                run_id=str(r[0]),
-                component=str(r[1]),
-                agent_id=str(r[2]),
-                parent_run_id=str(r[3]),
-                root_run_id=str(r[4]),
-                status=str(r[5]),
-                started_at=float(r[6]),
-                ended_at=float(r[7]) if r[7] is not None else None,
-                metadata=meta if isinstance(meta, dict) else {},
+            anchor = conn.execute(
+                "SELECT root_run_id FROM run_lineage WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+            if not anchor:
+                return []
+            root = str(anchor[0])
+            rows = conn.execute(
+                """\
+                SELECT run_id, component, agent_id, parent_run_id, root_run_id,
+                       status, started_at, ended_at, metadata
+                FROM run_lineage
+                WHERE root_run_id = ?
+                ORDER BY started_at ASC
+                """,
+                (root,),
+            ).fetchall()
+        except Exception as exc:
+            log.warning("get_retry_chain(%s) failed: %s", run_id, exc)
+            return []
+        out: list[RunLineage] = []
+        for r in rows:
+            try:
+                meta = json.loads(str(r[8]) or "{}")
+            except json.JSONDecodeError:
+                meta = {}
+            out.append(
+                RunLineage(
+                    run_id=str(r[0]),
+                    component=str(r[1]),
+                    agent_id=str(r[2]),
+                    parent_run_id=str(r[3]),
+                    root_run_id=str(r[4]),
+                    status=str(r[5]),
+                    started_at=float(r[6]),
+                    ended_at=float(r[7]) if r[7] is not None else None,
+                    metadata=meta if isinstance(meta, dict) else {},
+                )
             )
-        )
-    return out
+        return out
 
 
 def get_root_run(run_id: str) -> str:
     """Return the root_run_id for a run, or the run_id itself if no row."""
-    conn = _get_conn()
-    if conn is None or not run_id:
-        return run_id
-    try:
-        row = conn.execute(
-            "SELECT root_run_id FROM run_lineage WHERE run_id = ?",
-            (run_id,),
-        ).fetchone()
-    except Exception as exc:
-        log.warning("get_root_run(%s) failed: %s", run_id, exc)
-        return run_id
-    return str(row[0]) if row else run_id
+    with _connection() as conn:
+        if conn is None or not run_id:
+            return run_id
+        try:
+            row = conn.execute(
+                "SELECT root_run_id FROM run_lineage WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+        except Exception as exc:
+            log.warning("get_root_run(%s) failed: %s", run_id, exc)
+            return run_id
+        return str(row[0]) if row else run_id

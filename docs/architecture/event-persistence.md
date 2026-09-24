@@ -148,6 +148,16 @@ A hook dispatch produces at most one durable operational row. Compatibility
 signals may still reach legacy subscribers, but the sink suppresses a duplicate
 when a canonical event already owns the same transition.
 
+The cumulative `agent_runtime_state` and `run_lineage` projection uses the
+existing session database schema. Its temporary schema-bootstrap connection
+closes immediately; failed WAL setup closes the candidate before it can become
+the cached connection. Runtime shutdown reaches the named cleanup through
+`SharedServices.close()` or `GeodeRuntime.shutdown()` and `HookSystem.close()`.
+Connection acquisition, each complete read/write, and cleanup share a lock.
+Closing one hook bundle therefore waits for an in-flight database operation;
+another live bundle can lazily reopen the connection and retain stored totals.
+This resource cleanup does not change conversation recovery or history schemas.
+
 ## Bounds, privacy, and failure semantics
 
 Both SQLite activity payloads and JSONL projections apply secret-pattern

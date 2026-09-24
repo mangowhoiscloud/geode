@@ -100,6 +100,10 @@ functional change.
 
 ### Fixed
 
+- Close runtime-state schema-bootstrap and failed connection candidates
+  deterministically, release the cached SQLite connection during runtime
+  shutdown, and serialize complete reads/writes with cleanup so other active
+  hook bundles can reopen it without losing cumulative records.
 - Keep personal-data reflection suppression across conversation turns, resume
   and final judge, bound cognitive reflection by the root deadline, and preserve
   prior hypotheses when an auxiliary response has invalid list members. Count
