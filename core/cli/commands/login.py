@@ -503,10 +503,7 @@ def _login_add_interactive(_args: str) -> None:
     from core.auth.profiles import AuthProfile, CredentialType
     from core.cli import commands as _pkg
     from core.llm.strategies.plan_registry import get_plan_registry
-    from core.llm.strategies.plans import (
-        GLM_CODING_TIERS,
-        default_plan_for_payg,
-    )
+    from core.llm.strategies.plans import default_plan_for_payg
     from core.wiring.container import ensure_profile_store
 
     if not sys.stdin.isatty():
@@ -520,8 +517,7 @@ def _login_add_interactive(_args: str) -> None:
     kinds = [
         (
             "subscription",
-            "Subscription (GLM Coding Lite/Pro/Max · "
-            "ChatGPT Plus/Pro/Pro Lite/Team/Business/Enterprise/Edu)",
+            "ChatGPT subscription (Codex sign-in)",
         ),
         ("payg", "Pay-as-you-go API key (Anthropic, OpenAI, OpenRouter, GLM PAYG)"),
         ("oauth", "OAuth borrowed (Codex CLI)"),
@@ -542,57 +538,7 @@ def _login_add_interactive(_args: str) -> None:
     store = ensure_profile_store()
 
     if kind_id == "subscription":
-        # Currently only GLM Coding Plan tiers are templated
-        tier_entries = [
-            "GLM Coding Lite  ($6/mo · 80 calls/5h · 3× weight on glm-5.2/5.1)",
-            "GLM Coding Pro   ($30/mo · 240 calls/5h)",
-            "GLM Coding Max   ($80/mo · 600 calls/5h)",
-        ]
-        tier_keys = ["lite", "pro", "max"]
-        tmenu = TerminalMenu(
-            tier_entries,
-            title="\n  Subscription tier?\n",
-            menu_cursor="  > ",
-        )
-        tidx = tmenu.show()
-        if tidx is None:
-            _pkg.console.print("  [muted]Cancelled[/muted]\n")
-            return
-        plan = GLM_CODING_TIERS[tier_keys[tidx]]
-        try:
-            key = _pkg.console.input(f"  [label]{plan.display_name} API key:[/label] ").strip()
-        except (KeyboardInterrupt, EOFError):
-            _pkg.console.print("\n  [muted]Cancelled[/muted]\n")
-            return
-        if not key:
-            _pkg.console.print("  [warning]No key provided.[/warning]\n")
-            return
-        registry.add(plan)
-        registry.set_routing("glm-5.2", [plan.id, *registry.get_routing("glm-5.2")])
-        for m in ("glm-5.1", "glm-5", "glm-5-turbo", "glm-4.7-flash"):
-            registry.set_routing(m, [plan.id, *registry.get_routing(m)])
-        store.add(
-            AuthProfile(
-                name=f"{plan.id}:user",
-                provider=plan.provider,
-                credential_type=CredentialType.API_KEY,
-                key=key,
-                plan_id=plan.id,
-            )
-        )
-        # Reset the GLM client so the next call picks up the new endpoint+key
-        try:
-            from core.llm.adapters.registry import invalidate_provider_clients
-
-            invalidate_provider_clients("glm")
-        except Exception:  # noqa: S110 — best-effort cache invalidation
-            pass
-        _pkg._persist_auth_state()
-        clear_dry_run_opt_in()
-        _pkg.console.print(
-            f"  [success]Registered[/success] {plan.display_name}  "
-            f"[muted]({plan.base_url})[/muted]\n"
-        )
+        _login_oauth("openai")
         return
 
     if kind_id == "payg":
@@ -956,29 +902,20 @@ def _login_use(rest: str) -> None:
     if plan is None:
         _pkg.console.print(f"  [warning]Unknown plan: {plan_id}[/warning]\n")
         return
-    # Pin this plan ahead of any other for a few common models in its provider
-    model_hints = {
-        "glm-coding": ["glm-5.2", "glm-5.1", "glm-5", "glm-5-turbo", "glm-4.7-flash"],
-        "glm": ["glm-5.2", "glm-5.1", "glm-5", "glm-5-turbo"],
-        "openai": [
-            "gpt-6-astra",
-            "gpt-5.6-sol",
-            "gpt-5.6-terra",
-            "gpt-5.6-luna",
-            "gpt-5.5",
-            "gpt-5.4",
-            "gpt-5.4-mini",
-        ],
-        "openai-codex": [
-            "gpt-6-astra",
-            "gpt-5.6-sol",
-            "gpt-5.6-terra",
-            "gpt-5.6-luna",
-            "gpt-5.5",
-        ],
-        "anthropic": ["claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6"],
-    }
-    for model in model_hints.get(plan.provider, []):
+    from core.llm.model_catalog import model_ids_for_source, model_source_unavailable_reason
+    from core.llm.registry import get_provider_spec
+
+    spec = get_provider_spec(plan.provider)
+    if spec is None:
+        _pkg.console.print(f"  [warning]Unknown provider: {plan.provider}[/warning]\n")
+        return
+    reason = model_source_unavailable_reason(
+        spec.profile.default_model(), provider=spec.profile.provider, source=spec.credential.source
+    )
+    if reason:
+        _pkg.console.print(f"  [warning]{reason}[/warning]\n")
+        return
+    for model in model_ids_for_source(spec.profile.provider, spec.credential.source):
         existing = [pid for pid in registry.get_routing(model) if pid != plan.id]
         registry.set_routing(model, [plan.id, *existing])
     _pkg._persist_auth_state()

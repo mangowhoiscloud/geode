@@ -47,7 +47,22 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- Partition the complete pytest collection into four file-preserving CI shards,
+  retaining xdist loadfile scheduling and the existing offline test selection.
+  The required Test check verifies every shard's successful result and disjoint
+  collection coverage before enforcing the unchanged 75% combined branch/line
+  coverage threshold. Documentation-only skips and architecture, Harbor, and
+  installed-package checks remain mandatory under their existing conditions.
+
 ### Changed
+
+- Preserve the static prompt boundary on supported OpenAI Platform requests
+  using developer content breakpoints while retaining implicit history caching.
+  Forward supported upstream cache markers through OpenRouter and retain
+  logical-session affinity across SDK connections using a hashed session ID.
+  Preserve Codex, legacy OpenAI and automatic Z.AI cache contracts.
 
 - Bound OpenAI Python to SDK 2 (`>=2.45,<3`) and Anthropic Python to SDK 0
   (`>=0.116,<1`) while preserving the verified transport and audit contracts.
@@ -63,6 +78,15 @@ functional change.
   Select the computer protocol from the typed request model and guard unknown
   generations until their native executor is supported.
 
+- Align model selection, login routing and effort controls with the shared
+  provider contracts checked on September 24. Ship Claude Opus 5.5, GPT-6 Sol
+  and GLM-5.3 defaults while preserving explicit configuration; retain saved
+  GLM Coding Plan profiles without inventing local call quotas for token credits.
+  Preserve saved effort when reopening the picker and use each provider's own
+  source for configured-model availability. Use GLM's native reasoning builder
+  when the existing effort probe records its outgoing control.
+  Update bilingual provider and authentication guidance with source-specific
+  availability, current model specifications and pricing evidence.
 - Run Reflection after each tool-result round and once before final delivery.
   Final semantic verification replaces the mechanical-only default; legacy
   cadence controls and `off`/`rule_based`/`reflexion` verifier settings are
@@ -75,6 +99,13 @@ functional change.
 
 ### Added
 
+- Support Claude Opus 5.5's native computer toolset with serial execution,
+  toolset-aware result replay and parameter validation before desktop actions.
+  Withhold unsupported members; report native action errors and preserve
+  legacy computer protocols. Retain billed usage when rejecting invalid
+  responses without replaying actions. Fix horizontal scrolling, native macOS
+  drag and wait deadlines; propagate helper-signing failures. Require the
+  native helper source and build script in both wheel and source distributions.
 - Add optional positive output-token and action-round limits to the one-tool
   Harbor adapter while preserving its defaults. Wrap-up requests respect a
   caller's smaller output ceiling. Auxiliary and subscription request limits
@@ -139,6 +170,15 @@ functional change.
   Keep failed connection attempts owned and confirm child exit after forced
   termination before releasing process handles, pipes and scratch directories.
 
+- **Anthropic cache lifecycle and TTL accounting.** Cache markers preserve signed thinking replay, reserve existing system/tool/message slots within the four-marker limit, and reject invalid TTL ordering before dispatch. Provider-reported one-hour writes reach runtime cost guards, durable activity schema 11, monthly usage and Harbor attempt metadata; missing historical TTL splits remain unknown. Validate the TTL subset before storing usage even when a provider-reported cost bypasses price estimation.
+
+- Reload gateway bindings atomically after file deletion, replacement or edits
+  with older modification times. Invalid reloads retain the last valid routing
+  and retry after debounce; explicit empty merged rules revoke bindings. Stop
+  the owned config watcher and remaining pollers even when one poller fails,
+  including interruption or cancellation, then re-raise the original failure.
+  Wake polling sleeps on shutdown; retain ownership and reject restart while a
+  blocked callback prevents the previous watcher thread from stopping.
 - Preserve thin Harbor cognitive-reflection usage by binding its middleware to the existing session event sink.
 
 - Release partially constructed runtime resources before propagating the original
@@ -148,6 +188,18 @@ functional change.
   Restore turn attribution and adapter usage context after success, failure or
   cancellation, and serialize SDK client publication with credential invalidation.
 
+- Close current and retired provider SDK clients on their owning event loop
+  after its work settles. Credential rotation preserves in-flight calls;
+  shutting down one runtime does not close clients shared with another.
+  Preserve original failures and cancellation through bounded cleanup-error
+  reporting, including normal CLI, gateway, worker and dreaming loop exits.
+  Drain generators and SDK clients even when cancelled background work raises
+  a control exception during shutdown, preserving the original failure. Failed
+  client closes remain retryable while their owning event loop is still alive.
+  Keep active client selection separate from cleanup ownership, including after
+  credential invalidation or adapter replacement. Retain IPC worker and socket
+  ownership when shutdown times out, reject restart while stopping, and report
+  terminal cleanup failures to the daemon shutdown owner.
 - Use the shared global config path resolver for Settings, config explanation,
   model-picker reads/writes/confirmation, MCP, gateway reload/watch, seed
   role/voter overrides, and evaluation config migration.
@@ -370,6 +422,11 @@ functional change.
 
 ### Infrastructure
 
+- Fail the legacy-import ratchet when its Git comparison fails, and compare
+  against the actual PR target or pre-push revision. Reject incomplete base
+  arguments instead of treating them as an empty change set. Require the
+  committed dependency lock for CI, Pages, install-smoke, and Petri validation;
+  retain the release workflow's existing lock freshness check.
 - Skip full Python tests and coverage only when the complete change set contains
   allowlisted documentation and generated public-doc files. Preserve required
   check identities, documentation/roadmap/inventory validation, and full testing

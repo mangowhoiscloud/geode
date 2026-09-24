@@ -326,7 +326,7 @@ class CLIPoller:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._stop_event = threading.Event()
         self._ready_event = threading.Event()
-        self._startup_error: BaseException | None = None
+        self._thread_error: BaseException | None = None
         self._thread: threading.Thread | None = None
         self._active_clients: set[_AsyncClientEndpoint] = set()
         self._clients_lock = threading.Lock()
@@ -345,6 +345,8 @@ class CLIPoller:
     def start(self) -> None:
         """Start listening on Unix domain socket."""
         if self._thread is not None and self._thread.is_alive():
+            if self._stop_event.is_set():
+                raise RuntimeError("CLI channel is still stopping; retry after its worker exits")
             return
 
         # Clean up stale socket file
@@ -353,7 +355,7 @@ class CLIPoller:
 
         self._stop_event.clear()
         self._ready_event.clear()
-        self._startup_error = None
+        self._thread_error = None
         self._thread = threading.Thread(
             target=self._run_async_server,
             name="geode-cli-poller",
@@ -362,8 +364,8 @@ class CLIPoller:
         self._thread.start()
         if not self._ready_event.wait(timeout=5.0):
             raise RuntimeError(f"CLI channel failed to start on {self._socket_path}")
-        if self._startup_error is not None:
-            raise RuntimeError("CLI channel startup failed") from self._startup_error
+        if self._thread_error is not None:
+            raise RuntimeError("CLI channel startup failed") from self._thread_error
         log.info("CLI channel listening on %s", self._socket_path)
 
     def stop_accepting(self) -> None:
@@ -374,35 +376,66 @@ class CLIPoller:
         """
         self._stop_event.set()
         self._close_async_server()
-        if self._thread and not self._active_clients:
-            self._thread.join(timeout=5.0)
-            self._thread = None
+        thread = self._thread
+        if thread is not None and not self._active_clients:
+            thread.join(timeout=5.0)
+            if not thread.is_alive():
+                self._thread = None
         log.info("CLI channel stopped accepting new connections")
 
     def stop(self) -> None:
-        """Stop the socket server and clean up all clients."""
+        """Attempt owned cleanup, retaining a live worker and the first failure."""
         self._stop_event.set()
-        self._close_async_server()
+        first_error = self._thread_error
+        thread = self._thread
+        cleanups: list[Callable[[], None]] = [self._close_async_server]
         with self._clients_lock:
-            for client in list(self._active_clients):
-                client.close_threadsafe()
-            self._active_clients.clear()
-        if self._thread:
-            self._thread.join(timeout=5.0)
+            cleanups.extend(client.close_threadsafe for client in self._active_clients)
+        if thread is not None:
+            cleanups.append(lambda: thread.join(timeout=5.0))
+        for cleanup in cleanups:
+            try:
+                cleanup()
+            except BaseException as exc:
+                if first_error is None:
+                    first_error = exc
+                else:
+                    log.warning("Additional CLI shutdown failure (%s)", type(exc).__name__)
+
+        if thread is not None and thread.is_alive():
+            if first_error is None:
+                first_error = TimeoutError(
+                    "CLI channel is still stopping; retry stop after its worker exits"
+                )
+        else:
             self._thread = None
-        if self._socket_path.exists():
-            with contextlib.suppress(OSError):
-                self._socket_path.unlink()
+            with self._clients_lock:
+                self._active_clients.clear()
+            try:
+                self._socket_path.unlink(missing_ok=True)
+            except OSError as exc:
+                if first_error is None:
+                    first_error = exc
+                else:
+                    log.warning("Additional CLI socket cleanup failure (%s)", type(exc).__name__)
+        # The worker can fail while join waits for SDK/loop teardown. Its terminal
+        # error must reach the host even when admission was already stopped.
+        if first_error is None:
+            first_error = self._thread_error
+        if first_error is not None:
+            raise first_error
         log.info("CLI channel stopped")
 
     def _run_async_server(self) -> None:
         """Run the asyncio Unix socket server on the poller thread."""
         try:
-            with asyncio.Runner() as runner:
+            from core.async_runtime import owned_asyncio_runner
+
+            with owned_asyncio_runner() as runner:
                 self._loop = runner.get_loop()
                 runner.run(self._serve_async())
         except BaseException as exc:
-            self._startup_error = exc
+            self._thread_error = exc
             self._ready_event.set()
             if not self._stop_event.is_set():
                 log.warning("CLI async server failed", exc_info=True)

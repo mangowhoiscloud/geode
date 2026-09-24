@@ -479,6 +479,7 @@ class TestAgenticLoopFailover:
             "cached_input_tokens": 40,
             "reasoning_tokens": 8,
             "cache_write_tokens": 10,
+            "cache_write_1h_tokens": None,
         }
         assert ended["cost_usd"] == 0.123
         assert ended["response_id"] == "gen-1"

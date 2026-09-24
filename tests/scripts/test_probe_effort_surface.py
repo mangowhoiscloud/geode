@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from scripts.probes.probe_effort_surface import (
     _acomplete_with_runtime_retry,
+    _wire_effort,
     visible_effort_surface,
 )
 
@@ -74,3 +75,11 @@ def test_measurement_retries_pre_response_transient_once() -> None:
     assert result.text == "EFFORT_OK"
     assert adapter.calls == 2
     assert history[0]["error_category"] == "unknown"
+
+
+@pytest.mark.parametrize(("model", "effort"), [("glm-5.3", "high"), ("glm-5.2", "none")])
+def test_glm_probe_uses_native_reasoning_contract(model: str, effort: str) -> None:
+    from core.llm.adapters.base import AdapterCallRequest
+
+    request = AdapterCallRequest(model=model, messages=(), effort=effort)
+    assert _wire_effort(request, "glm", "payg") == effort

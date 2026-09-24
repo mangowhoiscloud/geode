@@ -1,6 +1,23 @@
 """Package-boundary checks for removed compatibility paths."""
 
+import pytest
 from scripts import check_package_artifacts as artifacts
+
+
+@pytest.mark.parametrize(
+    ("label", "required"),
+    [("wheel", artifacts.REQUIRED_WHEEL_PATHS), ("sdist", artifacts.REQUIRED_SDIST_PATHS)],
+)
+@pytest.mark.parametrize(
+    "missing",
+    ["scripts/macos/build_computer_helper.sh", "scripts/macos/geode_computer_helper.swift"],
+)
+def test_missing_computer_helper_rejects_distribution(
+    label: str, required: set[str], missing: str
+) -> None:
+    assert artifacts._check_required(label, required - {missing}, required) == [
+        f"{label}: missing required path {missing}"
+    ]
 
 
 def test_worker_composition_roots_are_required_in_both_artifacts() -> None:
