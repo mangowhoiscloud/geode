@@ -122,7 +122,7 @@ def test_manual_thinking_rejects_forced_tool_choice_without_disabling_thinking()
         build_create_kwargs(request)
 
 
-@pytest.mark.parametrize("model", ["claude-unknown-future", "claude-opus-5-5"])
+@pytest.mark.parametrize("model", ["claude-unknown-future"])
 def test_unknown_computer_protocol_cannot_be_advertised(model: str) -> None:
     request = AdapterCallRequest(
         model=model, messages=(), executable_tool_names=frozenset({"computer"})

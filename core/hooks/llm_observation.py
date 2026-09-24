@@ -11,6 +11,7 @@ from typing import Any
 from core.hooks.dispatch import fire_hook_async
 from core.hooks.system import HookEvent, RuntimeEventBus
 from core.llm.adapters.base import EmptyModelOutputError
+from core.llm.errors import LLMResponseValidationError
 
 log = logging.getLogger(__name__)
 
@@ -114,7 +115,11 @@ async def observe_llm_call[T](
     try:
         result = await call()
     except BaseException as exc:
-        completed = exc.completed_result if isinstance(exc, EmptyModelOutputError) else None
+        completed = (
+            exc.completed_result
+            if isinstance(exc, (EmptyModelOutputError, LLMResponseValidationError))
+            else None
+        )
         try:
             await fire_hook_async(
                 hooks,

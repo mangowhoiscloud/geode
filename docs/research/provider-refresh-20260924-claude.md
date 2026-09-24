@@ -102,16 +102,19 @@ all reasoning or the prompt cache after those edits. An append-only
 mid-conversation system-message design requires a separate history-owner
 change.
 
-Opus 5.5's native computer toolset is handled in a separate executor change.
-This Messages update rejects that native path before request construction;
-it does not substitute the previous computer generation. Known older models
-retain their documented computer schema and unknown models remain guarded.
+Opus 5.5 uses `computer_toolset_20260801` with raw toolset identity retained
+through response, local dispatch and tool-result replay. GEODE requests serial
+tool calls, validates native coordinates and parameters before desktop input,
+and withholds `zoom`, `hold_key`, `left_mouse_down` and `left_mouse_up`, which
+its local driver does not implement. Known older models retain their documented
+computer schema and unknown models remain guarded.
 
 ## Verification boundary
 
 Offline request/response regressions cover new model controls, shared
 stream/create shaping, signed-block preservation, prefix-drop diagnostics,
-forced-tool rejection, structured JSON, output limits, and unsupported native-computer admission. Streaming preserves
+forced-tool rejection, structured JSON, output limits, native computer translation
+and unsupported-action rejection. Streaming preserves
 final tool calls, signed content, and full usage through the same response owner. Live provider
 acceptance, desktop action outcomes, account availability, subscription
 policy exceptions, and external billing are unverified.

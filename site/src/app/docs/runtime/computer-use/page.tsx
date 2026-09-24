@@ -45,13 +45,22 @@ computer_use ←────── compact observation(base64 omitted) ◄┘`}<
               <code>screenshot</code>, <code>click</code>,{" "}
               <code>double_click</code>, <code>type</code>, <code>key</code>,{" "}
               <code>scroll</code>, <code>move</code>, <code>drag</code>,{" "}
-              <code>wait</code>와 클릭 변형들입니다. 모르는 action은 지원 목록과
-              함께 오류로 돌아갑니다.
+              <code>wait</code>와 클릭 변형들입니다. 지원하지 않는 action은
+              실행 전에 오류로 돌아갑니다.
             </p>
             <p>
-              좌표는 타깃 공간과 실제 화면 사이를 양방향 스케일링합니다. 모델은{" "}
-              <code>display_width_px=1280, display_height_px=800</code> 기준으로
-              좌표를 내고, 하네스가 실제 해상도로 변환합니다.
+              좌표는 1280×800 스크린샷 공간과 실제 화면 사이를 양방향
+              스케일링합니다. 기존 Anthropic 도구는 display 필드로 크기를
+              선언하고, Opus 5.5의 <code>computer_toolset_20260801</code>은
+              스크린샷에서 크기를 읽습니다. 도구 결과에도 toolset 식별자를 보존합니다.
+            </p>
+            <p>
+              새 toolset은 순차 호출을 요청합니다. 구현되지 않은 <code>zoom</code>,{" "}
+              <code>hold_key</code>, <code>left_mouse_down</code>,{" "}
+              <code>left_mouse_up</code>은 노출하지 않습니다. 좌표·키·대기 시간은
+              실행 전에 검증하고, 생략된 클릭 좌표는 관측한 커서 위치를 사용합니다.
+              예상하지 못한 복수 동작 응답은 실행을 차단하되 사용량과 실패 원인을
+              기록합니다. 프로토콜 회귀 검사는 실제 데스크톱 조작 성공을 뜻하지 않습니다.
             </p>
 
             <h2>구조를 먼저 읽고, 스크린샷은 나중에</h2>
@@ -193,14 +202,23 @@ computer_use ←────── compact observation(base64 omitted) ◄┘`}<
               actions: <code>screenshot</code>, <code>click</code>,{" "}
               <code>double_click</code>, <code>type</code>, <code>key</code>,{" "}
               <code>scroll</code>, <code>move</code>, <code>drag</code>,{" "}
-              <code>wait</code>, plus the click variants. Unknown actions return
-              an error with the supported list.
+              <code>wait</code>, plus the click variants. Unsupported actions return
+              an error before execution.
             </p>
             <p>
-              Coordinates scale both ways between the target space and the real
-              screen: the model addresses a{" "}
-              <code>display_width_px=1280, display_height_px=800</code> canvas,
-              and the harness converts to the actual resolution.
+              Coordinates scale between the 1280×800 screenshot space and the real
+              screen. Legacy Anthropic tools declare display fields; Opus 5.5’s{" "}
+              <code>computer_toolset_20260801</code> reads geometry from the screenshots.
+              Tool results retain the toolset identity.
+            </p>
+            <p>
+              The new toolset requests serial calls and withholds unimplemented{" "}
+              <code>zoom</code>, <code>hold_key</code>, <code>left_mouse_down</code> and{" "}
+              <code>left_mouse_up</code> members. Coordinates, keys and wait duration
+              are validated before execution; an omitted click coordinate uses the
+              observed cursor. Unexpected multiple-action responses are rejected
+              while retaining usage and the failure reason. Protocol regressions
+              do not establish successful live desktop actions.
             </p>
 
             <h2>Read structure first, screenshot later</h2>
