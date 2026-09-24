@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from core.auth.profiles import AuthProfile, CredentialType
 from core.llm.registry import (
     PROVIDER_VARIANTS,
@@ -21,6 +23,7 @@ from core.llm.strategies.plans import (
     Plan,
     PlanKind,
     PlanUsage,
+    Quota,
     default_plan_for_payg,
 )
 
@@ -53,7 +56,7 @@ class TestProviderRegistry:
         assert isinstance(codex.credential, CredentialRoute)
         assert isinstance(codex.transport, TransportSpec)
         assert codex.profile.provider == "openai"
-        assert codex.profile.default_model() == "gpt-5.5"
+        assert codex.profile.default_model() == "gpt-6-sol"
         assert codex.credential.account_provider == "openai-codex"
         assert codex.credential.selector == "codex-oauth"
         assert codex.transport.api == "openai-responses"
@@ -66,15 +69,12 @@ class TestGlmCodingTiers:
         for tier in ("lite", "pro", "max"):
             assert tier in GLM_CODING_TIERS
 
-    def test_lite_quota_matches_published_limits(self) -> None:
-        # 5h window, 80 calls (post-2026-02-12 reduction)
-        plan = GLM_CODING_TIERS["lite"]
-        assert plan.quota is not None
-        assert plan.quota.window_s == 18_000
-        assert plan.quota.max_calls == 80
-        assert plan.quota.model_weights["glm-5.1"] == 3.0
-        # glm-5.2 (flagship) carries the same coding-plan quota weight.
-        assert plan.quota.model_weights["glm-5.2"] == 3.0
+    def test_credit_quota_is_not_invented_as_a_local_call_limit(self) -> None:
+        for plan in GLM_CODING_TIERS.values():
+            assert plan.quota is None
+            usage = PlanUsage(plan_id=plan.id, weighted_calls=80.0)
+            assert not usage.is_quota_exhausted(plan)
+            assert usage.remaining_in_window(plan) == -1
 
     def test_subscription_kind(self) -> None:
         for plan in GLM_CODING_TIERS.values():
@@ -112,14 +112,14 @@ class TestPlanRegistry:
 
 
 class TestPlanUsage:
-    def test_quota_unset_means_unlimited(self) -> None:
+    def test_quota_unset_means_no_known_local_limit(self) -> None:
         plan = default_plan_for_payg("openai", "sk-...")
         usage = PlanUsage(plan_id=plan.id)
         assert usage.is_quota_exhausted(plan) is False
         assert usage.remaining_in_window(plan) == -1
 
     def test_quota_exhausted_after_max_calls(self) -> None:
-        plan = GLM_CODING_TIERS["lite"]
+        plan = replace(GLM_CODING_TIERS["lite"], quota=Quota(window_s=18_000, max_calls=80))
         usage = PlanUsage(plan_id=plan.id, weighted_calls=80.0)
         assert usage.is_quota_exhausted(plan) is True
         assert usage.remaining_in_window(plan) == 0
@@ -175,6 +175,10 @@ class TestResolveRouting:
         assert "coding/paas/v4" in target.base_url
 
     def test_quota_models_are_aware_of_weights(self) -> None:
-        plan = GLM_CODING_TIERS["lite"]
+        # Explicit operator metadata remains readable for existing records.
+        plan = replace(
+            GLM_CODING_TIERS["lite"],
+            quota=Quota(window_s=18_000, max_calls=80, model_weights={"glm-5.1": 3.0}),
+        )
         assert plan.quota is not None
         assert plan.quota.model_weights["glm-5.1"] >= 3.0

@@ -4,7 +4,7 @@ Pre-v0.50.0 GEODE collapsed three concepts into a single (provider, key)
 tuple: PAYG API keys, time-boxed subscriptions (GLM Coding Plan, ChatGPT
 Plus), and OAuth borrowed from external CLIs (Codex). This made it
 impossible to express "this key targets the Coding Plan endpoint with an
-80-call/5h quota". Plan adds that missing routing axis; OAuth is only one
+independent quota". Plan adds that missing routing axis; OAuth is only one
 possible acquisition method.
 
 Each Plan binds:
@@ -59,8 +59,8 @@ class Quota:
     """Sliding-window quota metadata for a Plan.
 
     Used to display "used N/M, resets in T" and to drive Phase 6 quota
-    awareness (sub-pacing). model_weights captures z.ai's "GLM-5.1
-    counts as 3× during peak hours" pattern.
+    awareness (sub-pacing). Optional weights are operator-defined; current
+    Z.AI Coding Plan credit quotas are not representable as call counts.
     """
 
     window_s: int  # sliding window length, e.g. 18000 for 5h
@@ -115,8 +115,8 @@ class PlanUsage:
 # Built-in plan templates
 # ---------------------------------------------------------------------------
 
-# These let the CLI offer "you said 'GLM Coding Lite' — here are the values
-# we'll pre-fill" without forcing the user to know the endpoint or quota.
+# Historical plan IDs remain readable for existing auth records. Current
+# admission is provider-owned; these templates do not grant endpoint access.
 
 GLM_CODING_TIERS: dict[str, Plan] = {
     "lite": Plan(
@@ -127,11 +127,7 @@ GLM_CODING_TIERS: dict[str, Plan] = {
         base_url="https://api.z.ai/api/coding/paas/v4",
         subscription_tier="Lite",
         upgrade_url="https://z.ai/subscribe",
-        quota=Quota(
-            window_s=18_000,
-            max_calls=80,
-            model_weights={"glm-5.2": 3.0, "glm-5.1": 3.0, "glm-5-turbo": 3.0, "glm-4.7": 1.0},
-        ),
+        quota=None,  # Current credits are provider-owned, not a local call quota.
     ),
     "pro": Plan(
         id="glm-coding-pro",
@@ -141,11 +137,7 @@ GLM_CODING_TIERS: dict[str, Plan] = {
         base_url="https://api.z.ai/api/coding/paas/v4",
         subscription_tier="Pro",
         upgrade_url="https://z.ai/subscribe",
-        quota=Quota(
-            window_s=18_000,
-            max_calls=240,
-            model_weights={"glm-5.2": 3.0, "glm-5.1": 3.0, "glm-5-turbo": 3.0, "glm-4.7": 1.0},
-        ),
+        quota=None,  # Current credits are provider-owned, not a local call quota.
     ),
     "max": Plan(
         id="glm-coding-max",
@@ -155,11 +147,7 @@ GLM_CODING_TIERS: dict[str, Plan] = {
         base_url="https://api.z.ai/api/coding/paas/v4",
         subscription_tier="Max",
         upgrade_url="https://z.ai/subscribe",
-        quota=Quota(
-            window_s=18_000,
-            max_calls=600,
-            model_weights={"glm-5.2": 3.0, "glm-5.1": 3.0, "glm-5-turbo": 3.0, "glm-4.7": 1.0},
-        ),
+        quota=None,  # Current credits are provider-owned, not a local call quota.
     ),
 }
 
