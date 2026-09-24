@@ -120,6 +120,11 @@ functional change.
   Restore turn attribution and adapter usage context after success, failure or
   cancellation, and serialize SDK client publication with credential invalidation.
 
+- Admit native Astra final-verification calls in decision-handoff observations.
+  Preserve requested and actual verifier modes separately, and require a complete
+  source-reconciled final-verification boundary for explicitly opted-in current
+  comparisons. Keep valid semantic failures distinct from success and preserve
+  historical exports without filling missing verification evidence.
 - Align OpenAI GPT-6 API and subscription model choices, reasoning controls,
   and published API output limits; keep subscription-only request restrictions
   separate and preserve reported token usage from API web search. Normalize
