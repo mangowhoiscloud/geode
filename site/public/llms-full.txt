@@ -5644,7 +5644,7 @@ allowed_tools = ["memory_search", "web_fetch"]
 time_budget_s = 90
 ```
 
-각 규칙은 자체 정책 손잡이를 가집니다. `require_mention`은 GEODE가 멘션됐을 때만 응답하게 하고, `allowed_tools`는 그 채널에서 허용할 도구를 제한하며(빈 리스트는 전체 허용), `time_budget_s`는 메시지당 wall-clock 예산을 지정합니다.`auto_respond=false`는 처리를 계속하고 세션은 저장하되 채널로 최종 텍스트를 보내지 않습니다. 헤드리스 denylist는 바인딩 allowlist보다 항상 우선합니다. 규칙에 없으면 gateway 레벨 기본값으로 떨어집니다. 이 필드들은 `ChannelBinding`(`core/messaging/models.py`)의 dataclass 필드와 일대일로 대응합니다.
+각 규칙은 자체 정책 손잡이를 가집니다. `require_mention`은 GEODE가 멘션됐을 때만 응답하게 하고, `allowed_tools`는 그 채널에서 허용할 도구를 제한하며(빈 리스트는 전체 허용), `time_budget_s`는 메시지당 wall-clock 예산을 지정합니다. 시간 예산은 0 이상의 유한한 수, 횟수 제한은 0 이상의 정수여야 합니다. 숫자 필드에 불리언은 사용할 수 없습니다.`auto_respond=false`는 처리를 계속하고 세션은 저장하되 채널로 최종 텍스트를 보내지 않습니다. 헤드리스 denylist는 바인딩 allowlist보다 항상 우선합니다. 규칙에 없으면 gateway 레벨 기본값으로 떨어집니다. 이 필드들은 `ChannelBinding`(`core/messaging/models.py`)의 dataclass 필드와 일대일로 대응합니다.
 
 ## 2\. 세션 레인으로 라우팅됩니다
 
@@ -5652,7 +5652,7 @@ time_budget_s = 90
 
 ## 3\. 리로드합니다
 
-바인딩은 두 시점에 로드됩니다. serve 부팅 시 한 번 (`core/wiring/adapters.py`에서 `load_bindings_from_config(toml_config)` 호출), 그리고 `config.toml`이 바뀔 때마다입니다. `ConfigWatcher`가 파일 변경을 감지해 `load_bindings_from_config`를 다시 부르므로 serve를 재시작하지 않아도 새 바인딩이 적용됩니다. 리로드 시 기존 바인딩 리스트는 비워지고 config의 규칙으로 다시 채워집니다.
+바인딩은 두 시점에 로드됩니다. serve 부팅 시 한 번 (`core/wiring/adapters.py`에서 `load_bindings_from_config(toml_config)` 호출), 그리고 `config.toml`이 바뀔 때마다입니다. `ConfigWatcher`가 파일 변경을 감지해 `load_bindings_from_config`를 다시 부르므로 serve를 재시작하지 않아도 새 바인딩이 적용됩니다. 파일 삭제나 교체도 감지하며, 전역·프로젝트 설정을 합친 후보를 검증한 뒤 바인딩을 한 번에 교체합니다. 읽기·파싱·검증에 실패하면 기존 바인딩을 유지하고 debounce 이후 재시도합니다. 삭제된 파일의 규칙은 제거되고, 합쳐진 규칙이 빈 배열이면 모든 바인딩을 해제합니다. 함수에 규칙이 없는 설정을 직접 전달하면 기존 바인딩을 유지하고,`rules = []`를 명시하면 해제합니다. 채널 ID가 없는 규칙은 건너뛰지만, 비어 있지 않은 후보의 모든 규칙이 이 사유로 제외되면 실패로 처리합니다. serve 종료 시 감시자도 종료합니다. 실행 중인 콜백 때문에 종료가 지연되면 오류를 보고하고 이전 감시자가 끝날 때까지 중복 시작을 차단합니다. poller 구성과 serve 실행 기본값 변경은 재시작 후 적용됩니다.
 
 ## 확인
 
@@ -7349,7 +7349,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 589 |
-| 테스트 Python 파일 | 740 |
+| 테스트 Python 파일 | 741 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |
