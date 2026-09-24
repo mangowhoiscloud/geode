@@ -125,6 +125,7 @@ def _record_usage(loop: AgenticLoop, response: Any) -> Any | None:
         in_tok,
         out_tok,
         cache_creation_tokens=cache_create,
+        cache_creation_1h_tokens=getattr(response.usage, "cache_creation_1h_tokens", None),
         cache_read_tokens=cache_read,
         thinking_tokens=think_tok,
         reported_cost_usd=reported_cost,

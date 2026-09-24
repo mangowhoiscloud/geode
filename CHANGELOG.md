@@ -135,6 +135,8 @@ functional change.
 
 ### Fixed
 
+- **Anthropic cache lifecycle and TTL accounting.** Cache markers preserve signed thinking replay, reserve existing system/tool/message slots within the four-marker limit, and reject invalid TTL ordering before dispatch. Provider-reported one-hour writes reach runtime cost guards, durable activity schema 11, monthly usage and Harbor attempt metadata; missing historical TTL splits remain unknown.
+
 - Show the requested `switch_model` role and model hint in CLI/IPC approval
   details, including the primary-role default. Preserve exact values with JSON
   escaping so judgment-only approval can distinguish a root-model change;

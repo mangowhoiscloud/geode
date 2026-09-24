@@ -128,8 +128,13 @@ The price catalogue owns exact model aliases and validates finite nonnegative
 rates and positive integer context limits. Above a documented long-context
 threshold, the entire request uses its input/cache and output multipliers;
 the exact threshold remains in the standard tier. These are current standard
-API estimates. Cache-write TTL splits, service tiers, regions and tool fees
-are not retained by the legacy tracker. The 2026-09-24 model and source audit
+API estimates. Known Anthropic 1-hour writes are retained as the optional subset
+`cache_write_1h_tokens` (`cache_creation_1h_tokens` in the loop/tracker and
+`cache_w_1h` in legacy monthly JSONL). The standard 2x input tariff applies to
+that subset; other writes retain the 5-minute tariff. Missing legacy TTL
+splits remain null and use the prior 5-minute estimate, without asserting
+that those writes had a 5-minute TTL. Service tiers, regions and tool fees
+remain outside this estimate. The 2026-09-24 model and source audit
 lives in [the provider inventory](../research/provider-refresh-20260924.md).
 
 `TokenTracker.record()` preserves finite nonnegative `reported_cost_usd`,
@@ -194,6 +199,13 @@ uses the existing response ID for provider correlation and an explicitly sourced
 input-only tariff in USD and US cents. Output tokens remain observed usage even
 when their rate is zero. Derived tariff value, account-credit consumption and
 actual cash billing are separate authorities; missing provider charge stays null.
+
+Activity schema version 11 adds the optional 1-hour write subset to durable
+LLM call usage. Version 10 and earlier rows read it as null; explicit zero is
+preserved. Harbor retains it in each recorded attempt, while its native cache
+metric continues to count reads only. Provider retention is separate from the
+local SDK client lifetime: closing a client does not evict provider prefixes.
+See the [cache lifecycle audit](../research/anthropic-cache-lifecycle-20260924.md).
 
 ## Existing data contracts and publication
 

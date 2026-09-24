@@ -43,6 +43,7 @@ def _completed_attempt_payload(
     ):
         count = int(getattr(usage, key, 0) or 0)
         counters[key] = count if getattr(usage, f"{key}_present", False) or count > 0 else None
+    counters["cache_write_1h_tokens"] = getattr(usage, "cache_write_1h_tokens", None)
     reported_cost = getattr(usage, "reported_cost_usd", None)
     input_tokens, output_tokens = counters["input_tokens"], counters["output_tokens"]
     cost_usd = None
@@ -57,6 +58,11 @@ def _completed_attempt_payload(
                     output_tokens,
                     cache_creation_tokens=counters["cache_write_tokens"] or 0,
                     cache_read_tokens=counters["cached_input_tokens"] or 0,
+                    **(
+                        {"cache_creation_1h_tokens": counters["cache_write_1h_tokens"]}
+                        if counters["cache_write_1h_tokens"] is not None
+                        else {}
+                    ),
                 )
             )
     except Exception:

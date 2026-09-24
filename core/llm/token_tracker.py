@@ -52,6 +52,7 @@ class LLMUsage:
     cache_creation_tokens: int = 0
     cache_read_tokens: int = 0
     cost_usd: float = 0.0
+    cache_creation_1h_tokens: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -66,6 +67,8 @@ class LLMUsage:
             d["cache_creation_tokens"] = self.cache_creation_tokens
         if self.cache_read_tokens:
             d["cache_read_tokens"] = self.cache_read_tokens
+        if self.cache_creation_1h_tokens is not None:
+            d["cache_creation_1h_tokens"] = self.cache_creation_1h_tokens
         return d
 
 
@@ -254,6 +257,7 @@ class TokenTracker:
         output_tokens: int,
         *,
         cache_creation_tokens: int = 0,
+        cache_creation_1h_tokens: int | None = None,
         cache_read_tokens: int = 0,
         thinking_tokens: int = 0,
         reported_cost_usd: float | None = None,
@@ -274,6 +278,7 @@ class TokenTracker:
                 input_tokens,
                 output_tokens,
                 cache_creation_tokens=cache_creation_tokens,
+                cache_creation_1h_tokens=cache_creation_1h_tokens,
                 cache_read_tokens=cache_read_tokens,
             )
         usage = LLMUsage(
@@ -282,6 +287,7 @@ class TokenTracker:
             output_tokens=output_tokens,
             thinking_tokens=thinking_tokens,
             cache_creation_tokens=cache_creation_tokens,
+            cache_creation_1h_tokens=cache_creation_1h_tokens,
             cache_read_tokens=cache_read_tokens,
             cost_usd=cost,
         )
@@ -292,6 +298,7 @@ class TokenTracker:
             output_tokens,
             cost,
             cache_creation_tokens=cache_creation_tokens,
+            cache_creation_1h_tokens=cache_creation_1h_tokens,
             cache_read_tokens=cache_read_tokens,
             thinking_tokens=thinking_tokens,
         )
@@ -304,9 +311,18 @@ class TokenTracker:
         output_tokens: int,
         *,
         cache_creation_tokens: int = 0,
+        cache_creation_1h_tokens: int | None = None,
         cache_read_tokens: int = 0,
     ) -> float:
         """Calculate cost in USD for a single LLM call."""
+        if cache_creation_1h_tokens is not None and (
+            isinstance(cache_creation_1h_tokens, bool)
+            or not isinstance(cache_creation_1h_tokens, int)
+            or not 0 <= cache_creation_1h_tokens <= cache_creation_tokens
+        ):
+            raise ValueError(
+                "cache_creation_1h_tokens must be a nonnegative subset of cache writes"
+            )
         price = self._pricing.get(model)
         if price is None:
             log.warning("Unknown model '%s' — cost tracked as $0.00", model)
@@ -334,6 +350,8 @@ class TokenTracker:
         cost = billable_input * price.input + output_tokens * price.output
         if cache_creation_tokens:
             cost += cache_creation_tokens * price.cache_write
+        if cache_creation_1h_tokens is not None and price.cache_write_1h is not None:
+            cost += cache_creation_1h_tokens * (price.cache_write_1h - price.cache_write)
         if cache_read_tokens:
             cost += cache_read_tokens * price.cache_read
         return cost
@@ -396,6 +414,7 @@ class TokenTracker:
         cost_usd: float,
         *,
         cache_creation_tokens: int = 0,
+        cache_creation_1h_tokens: int | None = None,
         cache_read_tokens: int = 0,
         thinking_tokens: int = 0,
     ) -> None:
@@ -424,6 +443,7 @@ class TokenTracker:
                 cost_usd,
                 session=_current_session_id(),
                 cache_creation_tokens=cache_creation_tokens,
+                cache_creation_1h_tokens=cache_creation_1h_tokens,
                 cache_read_tokens=cache_read_tokens,
                 thinking_tokens=thinking_tokens,
             )
@@ -505,6 +525,8 @@ def calculate_cost(
     output_tokens: int,
     cache_creation_tokens: int = 0,
     cache_read_tokens: int = 0,
+    *,
+    cache_creation_1h_tokens: int | None = None,
 ) -> float:
     """Backward-compatible: delegates to ``get_tracker().calculate_cost()``."""
     return get_tracker().calculate_cost(
@@ -512,6 +534,7 @@ def calculate_cost(
         input_tokens,
         output_tokens,
         cache_creation_tokens=cache_creation_tokens,
+        cache_creation_1h_tokens=cache_creation_1h_tokens,
         cache_read_tokens=cache_read_tokens,
     )
 

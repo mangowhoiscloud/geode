@@ -320,13 +320,9 @@ class Settings(BaseSettings):
     # live call was the gate (PR-NO-FALLBACK rule); reader: _openai_common.py.
     tool_search_defer_codex: bool = True
 
-    # Prompt cache — 1-hour TTL on the stable static system prefix (Anthropic).
-    # GA as of 2026-06 (no beta header) via ``cache_control: {ttl: "1h"}``; the
-    # static prefix (everything before ``<dynamic_context>``) is byte-identical
-    # across every agentic turn, so the 2x write premium amortizes after ~3
-    # cache reads — which any multi-turn loop clears immediately. Kill switch:
-    # set False to fall back to the 5-minute ephemeral default. reader:
-    # core/llm/providers/anthropic.py:_static_system_cache_control
+    # Anthropic static prefix TTL: 1h writes cost 2x input; 5m costs 1.25x.
+    # Frequent cache hits refresh 5m for free. Choose 1h for longer gaps;
+    # False retains the provider's 5m default. Reader: providers/anthropic.py.
     prompt_cache_extended_ttl: bool = True
 
     # Prompt cache — OpenAI ``prompt_cache_key`` cache-routing hint (Responses
