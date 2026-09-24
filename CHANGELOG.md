@@ -61,6 +61,11 @@ functional change.
 
 ### Added
 
+- Extend System One admission to Score and Noul while preserving Choice-only
+  consumers and native usage for completed invalid answers. Add opt-in matched
+  candidate scoring and independent-condition verification diagnostics, with
+  fixed action projections and Harbor primitive/receipt checks. Production
+  candidate selection remains unchanged; new live comparisons require a frozen run.
 - Add credential-gated Jev judgment selection through `/model judgment`, its
   interactive picker and the existing natural-language `switch_model` tool.
   Explicit selection uses TypeSafe System One or OpenRouter's compatible

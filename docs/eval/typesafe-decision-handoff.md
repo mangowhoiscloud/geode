@@ -41,6 +41,70 @@ inventing missing fields or changing their scores. Passing it does not establish
 per-tool-round reflection scheduling, physical-dispatch completeness, or benchmark
 promotion authority; those require their own frozen evidence and checks.
 
+## Three-primitive extension — implementation contract, not a live result
+
+The shared [System One adapter](../../core/llm/adapters/typesafe.py) admits
+Choice, Score and Noul against their requested question shapes. Existing
+Choice-only consumers still reject other answer types. No new model registry,
+retry layer or production candidate selector is introduced.
+
+| Decision boundary | Matched input and output | Code-owned consequence |
+|---|---|---|
+| Choice intent/target helper | Existing complete-source inbox and exact candidate IDs | The same Astra root consumes labels before selecting a tool |
+| [Score candidate diagnostic](../../evals/benchmarks/decision_candidate.py) | One frozen pool of 2–4 complete text/plan candidates and a shared four-level task-fulfillment rubric | Common maximum score selects a candidate; exact ties keep input order. A judge-error fallback is not an admitted selection |
+| Noul matched final verification | Two conditions on the same task/candidate/observations: `has_contradiction` and `missing_evidence` | Code prioritizes contradiction, then missing evidence, then supported. If both conditions hold, both fixed repair hints are retained |
+
+Score's Astra arm returns a bounded numeric level; Jev returns the expected
+level and its distribution. Noul's Astra arm returns two strict booleans; Jev
+returns two probabilities, each projected with `p >= 0.5`. These are different
+native output contracts under a shared task and policy, not a comparison of
+calibrated probabilities. The threshold is a diagnostic rule, not a permission
+grant or a validated deployment threshold. Two conditions may both hold; their
+separate questions do not imply statistical independence.
+
+The Noul profile explicitly sets `verification_primitive=noul` alongside
+`verification_engine=llm|jev` on the existing `a0` inbox path. The Harbor entry
+point and observation checker expose the corresponding `--verification-primitive`
+flag. Omission retains the historical Choice contract. Contract, runtime outcome,
+native answer, boolean projection and feedback digest must agree; changing the
+primitive after execution fails admission.
+
+Score is currently an eval-only request middleware at `candidate_judge`, not a
+Harbor workload runner. Generate read-only candidates once through existing
+workers, freeze their complete text and child lineage, and use the same pool in
+both arms. The runtime's 2,000-character candidate excerpt bound must not hide
+part of a candidate. Workers share a workspace, so do not concurrently mutate
+it while generating candidates. Record generation, selector and root continuation
+costs separately; root consumption and a task-owned oracle remain required.
+The surrounding runtime can retry transport failures. A single-dispatch
+diagnostic must freeze the existing `llm_max_retries=1` setting and verify its
+attempt inventory; a no-retry adapter alone does not establish this property.
+
+### Rejected decisions still have call evidence
+
+The transport completes before typed-answer admission. A malformed Score or
+Noul therefore cannot erase reported input/output tokens, response identity or
+the observed call. Selection/verification rejects the answer; existing middleware
+retains the completed usage. Transport failures without reported usage remain
+unknown. Missing cache fields remain unknown, and an input-tariff estimate is
+not an actual charge.
+
+Keep these four responsibilities distinct when explaining the implementation:
+input admission → typed-answer validation → fixed action policy, with completed
+call accounting retained on both the accepted and rejected branches. Offline
+regressions exercise changed question IDs, invalid probabilities/expected score,
+frozen route/effort/tool constraints and rejected-answer accounting. They do not
+demonstrate that a provider returned those errors during a live experiment.
+
+This extension adds no executed Score/Noul results. Freeze the new source,
+questions, candidate pool, order, limits, oracle and replay pair before live
+admission. Preserve historical Choice artifacts unchanged. Slides may describe
+the verified contract with an offline-regression label; performance and recovery
+claims require new paired real-run evidence.
+
+Primary contracts checked 2026-09-25: [Score](https://docs.typesafe.ai/primitives/score),
+[Noul](https://docs.typesafe.ai/primitives/noul), [API](https://docs.typesafe.ai/api).
+
 ## Current evidence disposition — 2026-09-24
 
 The r6 results below are **superseded for claims about the revised,

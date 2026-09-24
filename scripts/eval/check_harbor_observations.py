@@ -386,6 +386,7 @@ def _verification_check(
     attempts: list[dict[str, Any]],
     call_events: Any,
     trajectory: dict[str, Any],
+    primitive: str = "choice",
     intervention_spec: dict[str, Any] | None = None,
     intervention_rows: Any = None,
 ) -> dict[str, int]:
@@ -394,14 +395,20 @@ def _verification_check(
     This frozen diagnostic rejects repeated logical call IDs, including recovered
     transport attempts. It does not disable the runtime's general retry facility.
     """
+    from core.llm.adapters.typesafe import parse_systemone_answers
     from core.observability.redaction import redact_and_bound_text
     from evals.benchmarks.decision_verification import (
+        _NOUL_QUESTIONS,
         _QUESTIONS,
         _REFLECTIONS,
+        _NoulJudgment,
         _Verdict,
         _VerificationState,
     )
     from evals.benchmarks.typesafe_decision import parse_choice_answers
+
+    _require(primitive in {"choice", "noul"}, "unknown verification primitive")
+    questions = _NOUL_QUESTIONS if primitive == "noul" else _QUESTIONS
 
     def indexed(rows: Any) -> dict[str, dict[str, Any]]:
         _require(isinstance(rows, list), "verification rows missing")
@@ -613,7 +620,8 @@ def _verification_check(
             judgment.get("engine") == engine
             and judgment.get("step_id") == request.get("step_id")
             and judgment.get("input_sha256") == judgment.get("source_sha256") == source_hash
-            and judgment.get("question_sha256") == _json_digest(_QUESTIONS)
+            and judgment.get("question_sha256") == _json_digest(questions)
+            and judgment.get("primitive", "choice") == primitive
             and all(
                 judgment.get(key) == observed[call_id].get(key)
                 for key in ("model", "provider", "source")
@@ -648,14 +656,37 @@ def _verification_check(
                 and all(
                     judgment.get(key) is None
                     for key in ("verdict", "native_answer", "projected_payload", "feedback_sha256")
-                ),
+                )
+                and judgment.get("boolean_projection") is None,
                 "verification rejection fabricated a verdict",
             )
             continue
         _require(judgment.get("accepted") is True, "verification admission missing")
         if not isinstance(raw_answer, str):
             raise ValueError("verification admitted answer has no retained text")
-        if engine == "jev":
+        conditions = None
+        native_answer: dict[str, Any]
+        if primitive == "noul":
+            if engine == "jev":
+                native_answer = parse_systemone_answers(raw_answer, questions)
+                conditions = _NoulJudgment.model_validate(
+                    {key: answer["noul"] >= 0.5 for key, answer in native_answer.items()}
+                )
+            else:
+                conditions = _NoulJudgment.model_validate_json(raw_answer)
+                native_answer = conditions.model_dump()
+            _require(
+                judgment.get("boolean_projection") == conditions.model_dump(),
+                "verification boolean projection mismatch",
+            )
+            verdict = (
+                "contradicted"
+                if conditions.has_contradiction
+                else "insufficient_evidence"
+                if conditions.missing_evidence
+                else "supported"
+            )
+        elif engine == "jev":
             answer = parse_choice_answers(raw_answer, _QUESTIONS)
             verdict = answer["verdict"]["choice"]
             native_answer = answer["verdict"]
@@ -667,6 +698,13 @@ def _verification_check(
             "score": float(verdict == "supported"),
             "reflection": _REFLECTIONS[verdict],
         }
+        if conditions and conditions.has_contradiction and conditions.missing_evidence:
+            projected["reflection"] = {
+                key: _REFLECTIONS["contradicted"][key]
+                + " "
+                + _REFLECTIONS["insufficient_evidence"][key]
+                for key in _REFLECTIONS["contradicted"]
+            }
         _require(
             judgment.get("verdict") == verdict
             and _json_digest(judgment.get("native_answer")) == _json_digest(native_answer)
@@ -738,6 +776,7 @@ def validate_observations(
     expected_verify_mode: str | None = None,
     expected_effective_verify_mode: str | None = None,
     verification_engine: str | None = None,
+    verification_primitive: str = "choice",
 ) -> dict[str, Any]:
     """Validate existing exports, returning only bounded metadata and hashes.
 
@@ -766,7 +805,9 @@ def validate_observations(
     )
     _require(
         verification_engine in (None, "llm", "jev")
-        and (verification_engine is None or handoff_arm == "a0"),
+        and (verification_engine is None or handoff_arm == "a0")
+        and verification_primitive in {"choice", "noul"}
+        and (verification_primitive == "choice" or verification_engine is not None),
         "matched verification requires an explicit lookup-only handoff arm",
     )
     _require(
@@ -858,7 +899,8 @@ def validate_observations(
         )
         _require(contract.get("required_tools") == handoff_tools, "handoff tool contract mismatch")
         _require(
-            contract.get("verification_engine") == verification_engine,
+            contract.get("verification_engine") == verification_engine
+            and contract.get("verification_primitive", "choice") == verification_primitive,
             "handoff verification treatment mismatch",
         )
         if verification_engine is not None:
@@ -887,7 +929,8 @@ def validate_observations(
         _require(
             metadata.get("profile") == "decision-handoff"
             and metadata.get("arm") == handoff_arm
-            and metadata.get("verification_engine") == verification_engine,
+            and metadata.get("verification_engine") == verification_engine
+            and metadata.get("verification_primitive", "choice") == verification_primitive,
             "handoff runtime profile/arm mismatch",
         )
         definitions = runtime.get("tool_definitions")
@@ -929,7 +972,11 @@ def validate_observations(
             "handoff result call coverage missing/inconsistent",
         )
         receipt = json.loads(read(trial_dir / "agent/handoff.json"))
-        _require(handoff.get("verification_engine") == verification_engine, "judge result mismatch")
+        _require(
+            handoff.get("verification_engine") == verification_engine
+            and handoff.get("verification_primitive", "choice") == verification_primitive,
+            "judge result mismatch",
+        )
         _require(
             isinstance(receipt, list)
             and all(isinstance(row, dict) for row in receipt)
@@ -986,6 +1033,7 @@ def validate_observations(
         verification = _verification_check(
             document("agent/verification.json"),
             engine=verification_engine,
+            primitive=verification_primitive,
             receipt=json.loads(captured[trial_dir / "agent/handoff.json"]),
             attempts=usage["recorded_attempts"],
             call_events=_strict_json_loads(
@@ -1157,6 +1205,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--handoff-arm", choices=("a0", "a", "b"))
     parser.add_argument("--verification-engine", choices=("llm", "jev"))
+    parser.add_argument("--verification-primitive", choices=("choice", "noul"), default="choice")
     parser.add_argument(
         "--expected-effective-verify-mode",
         choices=("llm_judge",),

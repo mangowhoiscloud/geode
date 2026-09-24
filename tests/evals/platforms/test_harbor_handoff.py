@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -101,8 +102,9 @@ def test_inbox_task_admission_requires_complete_candidate_inventory(tmp_path: Pa
 
 
 @pytest.mark.parametrize("engine", ["llm", "jev"])
+@pytest.mark.parametrize("primitive", ["choice", "noul"])
 def test_matched_verifier_requires_lookup_only_inbox_and_scoped_credential(
-    host_agent: SimpleNamespace, engine: str
+    host_agent: SimpleNamespace, engine: str, primitive: str
 ) -> None:
     from evals.benchmarks.decision_handoff_runtime import inbox_request
 
@@ -117,12 +119,23 @@ def test_matched_verifier_requires_lookup_only_inbox_and_scoped_credential(
     kwargs = host_agent.kwargs | {
         "case_sha256": digest,
         "verification_engine": engine,
+        "verification_primitive": primitive,
         "verify_mode": "llm_judge",
     }
     if engine == "jev":
         kwargs["typesafe_key_file"] = str(host_agent.secret)
     agent = GeodeHandoffHarborAgent(**kwargs)
     assert agent.verification_engine == engine
+    assert agent.verification_primitive == primitive
+    agent.exec_as_agent = AsyncMock()
+    asyncio.run(agent.run(case["request"], SimpleNamespace(), SimpleNamespace()))
+    contract = json.loads((agent.logs_dir / "runtime-contract.json").read_text())
+    assert contract.get("verification_primitive", "choice") == primitive
+    command = agent.exec_as_agent.await_args.kwargs["command"]
+    assert ("--verification-primitive noul" in command) == (primitive == "noul")
+    assert f"--verification-engine {engine}" in command
+    if primitive == "choice":
+        assert "verification_primitive" not in contract
     for override in ({"arm": "a"}, {"verify_mode": "rule_based"}, {"verification_engine": "other"}):
         with pytest.raises(ValueError):
             GeodeHandoffHarborAgent(**(kwargs | override))
@@ -178,6 +191,8 @@ def test_candidate_intervention_is_frozen_and_requires_the_matched_profile(
         {"verify_mode": "reflexion"},
         {"agent_timeout_sec": 179},
         {"arm": "b"},
+        {"verification_primitive": "noul"},
+        {"verification_primitive": "unknown"},
         {"env": {"UNEXPECTED": "value"}},
         {"extra_env": {"UNEXPECTED": "value"}},
         {"prompt_template_path": "unfrozen.md"},
@@ -365,6 +380,50 @@ def test_container_retains_actual_effective_mode_separately_from_requested(
     metadata = json.loads((trial.path / "runtime-result.json").read_text())["metadata"]
     assert metadata["verify_mode"] == "rule_based"
     assert metadata["effective_verify_mode"] == effective_mode
+    assert "verification_primitive" not in metadata
+
+
+@pytest.mark.parametrize("primitive", ["choice", "noul"])
+def test_container_cli_transfers_primitive_to_runtime_and_metadata(
+    container_trial: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, primitive: str
+) -> None:
+    from evals.benchmarks.decision_handoff_runtime import inbox_request
+
+    trial = container_trial
+    fixture = json.loads(
+        (
+            Path(__file__).parents[3] / "evals/benchmarks/fixtures/decision-handoff-inbox.json"
+        ).read_text()
+    )
+    case = fixture["admission"]
+    case.update(profile="inbox", request=inbox_request(case["items"]))
+    _, digest = _write_task(Path(trial.args.task), case=case, orders=fixture["orders"])
+    argv = [
+        "harbor_handoff",
+        "--arm",
+        "a0",
+        "--task",
+        trial.args.task,
+        "--task-sha256",
+        digest,
+        "--revision",
+        trial.args.revision,
+        "--timeout",
+        "180",
+        "--verification-engine",
+        "llm",
+    ]
+    if primitive == "noul":
+        argv.extend(("--verification-primitive", "noul"))
+    monkeypatch.setattr(sys, "argv", argv)
+    assert harbor_handoff.main() == 0
+    assert trial.runner.await_args.kwargs["verification_engine"] == "llm"
+    assert trial.runner.await_args.kwargs["verification_primitive"] == primitive
+    metadata = json.loads((trial.path / "runtime-result.json").read_text())["metadata"]
+    assert metadata.get("verification_primitive", "choice") == primitive
+    assert metadata["verify_mode"] == "llm_judge"
+    if primitive == "choice":
+        assert "verification_primitive" not in metadata
 
 
 def test_full_export_failure_preserves_digest_result_and_receipt(
@@ -486,7 +545,9 @@ def test_host_rejects_missing_required_replay_file(
     writer.assert_not_called()
 
 
-@pytest.mark.parametrize("gate", ["host", "environment", "timeout", "arm"])
+@pytest.mark.parametrize(
+    "gate", ["host", "environment", "timeout", "arm", "noul_without_engine", "primitive"]
+)
 def test_container_entry_gates_precede_execution(
     container_trial: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, gate: str
 ) -> None:
@@ -497,8 +558,10 @@ def test_container_entry_gates_precede_execution(
         monkeypatch.setenv("TYPESAFE_API_KEY", "synthetic-only")
     elif gate == "timeout":
         trial.args.timeout = 181
-    else:
+    elif gate == "arm":
         trial.args.arm = "other"
+    else:
+        trial.args.verification_primitive = "noul" if gate == "noul_without_engine" else "unknown"
     with pytest.raises((ValueError, RuntimeError)):
         asyncio.run(_run_handoff(trial.args))
     trial.runner.assert_not_awaited()

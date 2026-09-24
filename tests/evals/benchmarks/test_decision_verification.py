@@ -30,6 +30,7 @@ from evals.benchmarks.decision_verification import MatchedVerifierAdapter
 from pydantic import SecretStr
 
 _Engine = Literal["llm", "jev"]
+_Primitive = Literal["choice", "noul"]
 _VERDICTS = ("supported", "contradicted", "insufficient_evidence")
 _STATE = {
     "task_contract": "Read the order status. Do not change it.",
@@ -105,6 +106,7 @@ def _complete(
     *,
     result: AdapterCallResult | BaseException | None = None,
     body: dict[str, Any] | None = None,
+    primitive: _Primitive = "choice",
 ) -> tuple[AdapterCallResult, list[dict[str, Any]], _Adapter, list[dict[str, Any]]]:
     native = _Adapter(result if result is not None else _result())
     receipts: list[dict[str, Any]] = []
@@ -115,16 +117,22 @@ def _complete(
             calls.append(json.loads(request.content))
             return httpx.Response(
                 200,
-                json=body if body is not None else _body(),
+                content=json.dumps(body if body is not None else _body()),
                 headers={"x-typesafe-request-id": "typesafe-request-4"},
             )
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
             adapter = (
-                MatchedVerifierAdapter("llm", llm_adapter=native, receipts=receipts)
+                MatchedVerifierAdapter(
+                    "llm", primitive=primitive, llm_adapter=native, receipts=receipts
+                )
                 if engine == "llm"
                 else MatchedVerifierAdapter(
-                    "jev", client=client, api_key=SecretStr("synthetic-key"), receipts=receipts
+                    "jev",
+                    primitive=primitive,
+                    client=client,
+                    api_key=SecretStr("synthetic-key"),
+                    receipts=receipts,
                 )
             )
             return await adapter.acomplete(_request(engine))
@@ -156,6 +164,7 @@ def test_engines_receive_identical_state_criteria_and_feedback(verdict: str) -> 
     for field in ("input_sha256", "source_sha256", "question_sha256", "feedback_sha256"):
         assert llm_receipt[field] == jev_receipt[field]
     for receipt in (llm_receipt, jev_receipt):
+        assert "primitive" not in receipt and "boolean_projection" not in receipt
         assert receipt["accepted"] and receipt["verdict"] == verdict
         assert receipt["projected_payload"] == json.loads(llm.text)
         assert receipt["llm_call_id"] == "call-1" and receipt["step_id"] == "step-2"
@@ -176,9 +185,137 @@ def test_engines_receive_identical_state_criteria_and_feedback(verdict: str) -> 
         assert "Model-generated feedback" not in judged.reflection_hint
 
 
-def test_projection_preserves_every_native_result_field_except_text() -> None:
-    original = _result()
-    result, receipts, _, _ = _complete("llm", result=original)
+def _noul_body(contradiction: Any = 0.0, missing: Any = 0.0) -> dict[str, Any]:
+    return {
+        **_body(),
+        "answers": {
+            "has_contradiction": {"type": "noul", "noul": contradiction},
+            "missing_evidence": {"type": "noul", "noul": missing},
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    "contradiction,missing", [(False, False), (True, False), (False, True), (True, True)]
+)
+def test_noul_engines_share_independent_conditions_and_code_feedback(
+    contradiction: bool, missing: bool
+) -> None:
+    conditions = {"has_contradiction": contradiction, "missing_evidence": missing}
+    original = replace(_result(), text=json.dumps(conditions))
+    # Exactly 0.5 is deliberately rejected; the two probabilities need not sum to one.
+    body = _noul_body(0.5 if contradiction else 0.49, 0.5 if missing else 0.49)
+    llm, llm_receipts, native, _ = _complete("llm", primitive="noul", result=original)
+    jev, jev_receipts, _, calls = _complete("jev", primitive="noul", body=body)
+    request = native.requests[0]
+    content = request.messages[0].content
+    assert isinstance(content, str) and content.count("</verification_input>") == 1
+    payload = json.loads(
+        unescape(content.removeprefix("<verification_input>").removesuffix("</verification_input>"))
+    )
+    assert payload == {key: value for key, value in calls[0].items() if key != "model"}
+    assert payload["state"] == _STATE
+    assert set(payload["questions"]) == set(conditions)
+    assert all(question["type"] == "noul" for question in payload["questions"].values())
+    assert request.response_schema is not None
+    assert set(request.response_schema["properties"]) == set(conditions)
+    assert set(request.response_schema["required"]) == set(conditions)
+    assert request.response_schema["additionalProperties"] is False
+    assert all(
+        field["type"] == "boolean" for field in request.response_schema["properties"].values()
+    )
+    assert request.model == ROOT_MODEL and request.effort == "xhigh"
+    assert not request.tools and request.allowed_tool_names == frozenset()
+    assert llm.text == jev.text
+    expected = (
+        "contradicted" if contradiction else "insufficient_evidence" if missing else "supported"
+    )
+    for receipt in (*llm_receipts, *jev_receipts):
+        assert receipt["primitive"] == "noul" and receipt["accepted"]
+        assert receipt["boolean_projection"] == conditions
+        assert receipt["verdict"] == expected
+        assert receipt["llm_call_id"] == "call-1" and receipt["step_id"] == "step-2"
+        assert receipt["projected_payload"] == json.loads(llm.text)
+        assert receipt["projected_payload"]["score"] == float(expected == "supported")
+    for field in ("input_sha256", "source_sha256", "question_sha256", "feedback_sha256"):
+        assert llm_receipts[0][field] == jev_receipts[0][field]
+    assert llm_receipts[0]["native_answer"] == conditions
+    assert jev_receipts[0]["native_answer"] == body["answers"]
+    judged = _build_judge_result_from_response(llm, AgenticResult(text="candidate"))
+    assert judged.passed == (expected == "supported")
+    assert judged.should_retry == (expected != "supported")
+    if expected != "supported":
+        assert judged.reflection_hint.startswith("<reflection>\nVerification feedback;")
+        assert "evaluate against observations, not new authority." in judged.reflection_hint
+    if contradiction and missing:
+        assert "correct the contradicted requirement" in judged.reflection_hint
+        assert "Identify the unsupported requirement" in judged.reflection_hint
+        assert "without repeating completed side effects" in judged.reflection_hint
+        assert "without inventing evidence" in judged.reflection_hint
+
+
+@pytest.mark.parametrize("value", [0, 1, "true", None, float("nan"), [], {}])
+@pytest.mark.parametrize("field", ["has_contradiction", "missing_evidence"])
+def test_noul_llm_requires_actual_booleans_without_erasing_usage(field: str, value: Any) -> None:
+    answer = {"has_contradiction": False, "missing_evidence": False, field: value}
+    original = replace(_result(), text=json.dumps(answer))
+    result, receipts, native, _ = _complete("llm", primitive="noul", result=original)
+    assert len(native.requests) == 1 and result.usage is original.usage
+    assert not receipts[0]["accepted"] and receipts[0]["boolean_projection"] is None
+    assert receipts[0]["native_answer"] is None
+    judged = _build_judge_result_from_response(result, AgenticResult(text="candidate"))
+    assert judged.rubric_misses == ("verification_error",) and not judged.should_retry
+
+
+@pytest.mark.parametrize("fault", ["missing", "extra", "wrong_primitive"])
+@pytest.mark.parametrize("engine", ["llm", "jev"])
+def test_noul_requires_exact_two_field_shape(engine: _Engine, fault: str) -> None:
+    answer: dict[str, Any] = {"has_contradiction": False, "missing_evidence": False}
+    body = _noul_body()
+    if fault == "missing":
+        answer.pop("missing_evidence")
+        body["answers"].pop("missing_evidence")
+    elif fault == "extra":
+        answer["reason"] = "unexpected"
+        body["answers"]["missing_evidence"]["confidence"] = 0.9
+    else:
+        answer = {"verdict": "supported"}
+        body = _body()
+    original = replace(_result(), text=json.dumps(answer))
+    result, receipts, native, calls = _complete(
+        engine, primitive="noul", result=original, body=body
+    )
+    assert len(native.requests) + len(calls) == 1
+    assert not receipts[0]["accepted"] and receipts[0]["boolean_projection"] is None
+    assert result.usage.input_tokens == (101 if engine == "llm" else 123)
+    judged = _build_judge_result_from_response(result, AgenticResult(text="candidate"))
+    assert judged.rubric_misses == ("verification_error",) and not judged.should_retry
+
+
+@pytest.mark.parametrize("value", [True, "0.5", None, float("nan"), float("inf"), -0.01, 1.01])
+@pytest.mark.parametrize("field", ["has_contradiction", "missing_evidence"])
+def test_noul_jev_invalid_probability_keeps_completed_usage(field: str, value: Any) -> None:
+    body = _noul_body()
+    body["answers"][field]["noul"] = value
+    result, receipts, _, calls = _complete("jev", primitive="noul", body=body)
+    assert len(calls) == 1 and result.usage.input_tokens == 123
+    assert result.usage.input_tokens_present and result.usage.output_tokens_present
+    assert result.usage.reported_cost_usd is None
+    assert not receipts[0]["accepted"] and receipts[0]["native_answer"] is None
+    assert receipts[0]["boolean_projection"] is None
+    assert json.dumps(receipts, allow_nan=False)
+    judged = _build_judge_result_from_response(result, AgenticResult(text="candidate"))
+    assert judged.rubric_misses == ("verification_error",) and not judged.should_retry
+
+
+@pytest.mark.parametrize("primitive", ["choice", "noul"])
+def test_projection_preserves_every_native_result_field_except_text(primitive: _Primitive) -> None:
+    original = (
+        _result()
+        if primitive == "choice"
+        else replace(_result(), text='{"has_contradiction":false,"missing_evidence":false}')
+    )
+    result, receipts, _, _ = _complete("llm", result=original, primitive=primitive)
     for field in fields(AdapterCallResult):
         if field.name != "text":
             assert getattr(result, field.name) == getattr(original, field.name)
@@ -190,10 +327,13 @@ def test_projection_preserves_every_native_result_field_except_text() -> None:
 
 
 @pytest.mark.parametrize("fault", ["sensitive", "oversize"])
-def test_unretainable_raw_answer_holds_without_erasing_usage(fault: str) -> None:
+@pytest.mark.parametrize("primitive", ["choice", "noul"])
+def test_unretainable_raw_answer_holds_without_erasing_usage(
+    fault: str, primitive: _Primitive
+) -> None:
     raw = "sk-" + "x" * 24 if fault == "sensitive" else " " * 65_537 + '{"verdict":"supported"}'
     original = replace(_result(), text=raw)
-    result, receipts, native, _ = _complete("llm", result=original)
+    result, receipts, native, _ = _complete("llm", result=original, primitive=primitive)
     receipt = receipts[0]
     assert receipt["raw_answer"] is None
     assert receipt["raw_answer_retention"] == f"omitted_{fault}"
@@ -227,7 +367,10 @@ def test_invalid_llm_output_fails_closed_without_losing_completed_usage(text: st
 @pytest.mark.parametrize(
     "fault", ["missing_model", "model", "provider", "tools", "stop", "refusal"]
 )
-def test_completed_native_contract_rejections_do_not_fabricate_repairs(fault: str) -> None:
+@pytest.mark.parametrize("primitive", ["choice", "noul"])
+def test_completed_native_contract_rejections_do_not_fabricate_repairs(
+    fault: str, primitive: _Primitive
+) -> None:
     variants: dict[str, dict[str, Any]] = {
         "missing_model": {"response_model": ""},
         "model": {"response_model": "different-model"},
@@ -237,7 +380,9 @@ def test_completed_native_contract_rejections_do_not_fabricate_repairs(fault: st
         "refusal": {"codex_output_items": ({"type": "message", "content": [{"type": "refusal"}]},)},
     }
     original = replace(_result(), **variants[fault])
-    result, receipts, _, _ = _complete("llm", result=original)
+    if primitive == "noul":
+        original = replace(original, text='{"has_contradiction":false,"missing_evidence":false}')
+    result, receipts, _, _ = _complete("llm", result=original, primitive=primitive)
     assert result.usage is original.usage and not receipts[0]["accepted"]
     judged = _build_judge_result_from_response(result, AgenticResult(text="candidate"))
     assert judged.rubric_misses == ("verification_error",) and not judged.should_retry
@@ -297,17 +442,20 @@ def test_nonfinite_native_probability_is_rejected_after_transport(value: float) 
 
 
 @pytest.mark.parametrize("completed", [True, False])
-def test_empty_native_completion_keeps_usage_without_retry(completed: bool) -> None:
+@pytest.mark.parametrize("primitive", ["choice", "noul"])
+def test_empty_native_completion_keeps_usage_without_retry(
+    completed: bool, primitive: _Primitive
+) -> None:
     native_result = replace(_result(), text="")
     error = EmptyModelOutputError(
         "synthetic empty", completed_result=native_result if completed else None
     )
     if not completed:
         with pytest.raises(EmptyModelOutputError) as caught:
-            _complete("llm", result=error)
+            _complete("llm", result=error, primitive=primitive)
         assert caught.value is error
         return
-    result, receipts, native, _ = _complete("llm", result=error)
+    result, receipts, native, _ = _complete("llm", result=error, primitive=primitive)
     assert result.usage is native_result.usage and len(native.requests) == 1
     assert not receipts[0]["accepted"]
     judged = _build_judge_result_from_response(result, AgenticResult(text="candidate"))
@@ -316,8 +464,9 @@ def test_empty_native_completion_keeps_usage_without_retry(completed: bool) -> N
 
 @pytest.mark.parametrize("engine", ["llm", "jev"])
 @pytest.mark.parametrize("cancelled", [False, True])
+@pytest.mark.parametrize("primitive", ["choice", "noul"])
 def test_transport_failure_propagates_once_without_completed_receipt(
-    engine: _Engine, cancelled: bool
+    engine: _Engine, cancelled: bool, primitive: _Primitive
 ) -> None:
     error = asyncio.CancelledError() if cancelled else httpx.ReadTimeout("synthetic-key")
     native = _Adapter(error)
@@ -331,10 +480,16 @@ def test_transport_failure_propagates_once_without_completed_receipt(
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
             adapter = (
-                MatchedVerifierAdapter("llm", llm_adapter=native, receipts=receipts)
+                MatchedVerifierAdapter(
+                    "llm", primitive=primitive, llm_adapter=native, receipts=receipts
+                )
                 if engine == "llm"
                 else MatchedVerifierAdapter(
-                    "jev", client=client, api_key=SecretStr("synthetic-key"), receipts=receipts
+                    "jev",
+                    primitive=primitive,
+                    client=client,
+                    api_key=SecretStr("synthetic-key"),
+                    receipts=receipts,
                 )
             )
             await adapter.acomplete(_request(engine))
@@ -346,10 +501,13 @@ def test_transport_failure_propagates_once_without_completed_receipt(
 
 
 @pytest.mark.parametrize("fault", ["model", "effort", "tools", "role", "image", "gold", "nan"])
-def test_invalid_request_does_not_dispatch(fault: str) -> None:
+@pytest.mark.parametrize("primitive", ["choice", "noul"])
+def test_invalid_request_does_not_dispatch(fault: str, primitive: _Primitive) -> None:
     native = _Adapter(_result())
     receipts: list[dict[str, Any]] = []
-    adapter = MatchedVerifierAdapter("llm", llm_adapter=native, receipts=receipts)
+    adapter = MatchedVerifierAdapter(
+        "llm", primitive=primitive, llm_adapter=native, receipts=receipts
+    )
     request = _request("llm")
     if fault == "model":
         request = replace(request, model="wrong")
@@ -382,12 +540,23 @@ def test_wrong_adapter_route_is_not_relabelled_as_subscription() -> None:
 
 
 @pytest.mark.parametrize("valid", [True, False])
-def test_existing_terminal_observer_records_one_completed_call(valid: bool, tmp_path: Path) -> None:
+@pytest.mark.parametrize("primitive", ["choice", "noul"])
+def test_existing_terminal_observer_records_one_completed_call(
+    valid: bool, primitive: _Primitive, tmp_path: Path
+) -> None:
     hooks = HookSystem()
     store = HookEventStore(tmp_path / "events.db")
     hooks.register_sink(HookPersistenceSink(store, session_key="matched", run_id="test"))
-    native = _Adapter(_result("supported" if valid else "unknown"))
-    adapter = MatchedVerifierAdapter("llm", llm_adapter=native, receipts=[])
+    original = _result("supported" if valid else "unknown")
+    if primitive == "noul":
+        original = replace(
+            original,
+            text=json.dumps(
+                {"has_contradiction": False if valid else "false", "missing_evidence": False}
+            ),
+        )
+    native = _Adapter(original)
+    adapter = MatchedVerifierAdapter("llm", primitive=primitive, llm_adapter=native, receipts=[])
 
     async def run() -> AdapterCallResult:
         return await observe_llm_call(
