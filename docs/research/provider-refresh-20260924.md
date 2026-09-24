@@ -66,12 +66,18 @@ GPT-6/GPT-5.6/GPT-5.5/GPT-5.4 rows. Exactly 272,000 remains standard.
 GPT-5.6 Sol's promotional standard price must be rechecked after the
 provider's stated period (at least through 2026-11-21).
 
-The legacy tracker does not retain Anthropic cache-write TTL splits,
-service tier, regional surcharges, batch discounts or tool fees. It uses
-the 5-minute Anthropic write estimate. Do not present these totals as an
-invoice or apply a universal fast-mode multiplier. Provider-reported cost
-continues to take precedence when available. Historical records are not
-retroactively rewritten by this catalog change.
+Anthropic's reported one-hour writes are retained as an optional subset of
+total writes through the adapter, runtime accounting and persisted records.
+The existing pricing owner applies the one-hour rate to that subset and the
+five-minute rate to other writes, without counting the subset twice.
+Historical records without a TTL split remain unknown and retain the prior
+five-minute estimate; this does not establish their actual TTL or rewrite
+their stored cost. See [usage accounting](../architecture/usage-accounting.md).
+
+Service tiers, regional surcharges, batch discounts and tool fees remain
+outside these estimates. Do not present the totals as an invoice or apply a
+universal fast-mode multiplier. Provider-reported cost continues to take
+precedence when available, including an explicit zero.
 
 ## Verification and integration
 

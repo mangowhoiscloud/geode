@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- Partition the complete pytest collection into four file-preserving CI shards,
+  retaining xdist loadfile scheduling and the existing offline test selection.
+  The required Test check verifies every shard's successful result and disjoint
+  collection coverage before enforcing the unchanged 75% combined branch/line
+  coverage threshold. Documentation-only skips and architecture, Harbor, and
+  installed-package checks remain mandatory under their existing conditions.
+
 ### Changed
 
 - Preserve the static prompt boundary on supported OpenAI Platform requests
@@ -156,6 +165,13 @@ functional change.
 
 - **Anthropic cache lifecycle and TTL accounting.** Cache markers preserve signed thinking replay, reserve existing system/tool/message slots within the four-marker limit, and reject invalid TTL ordering before dispatch. Provider-reported one-hour writes reach runtime cost guards, durable activity schema 11, monthly usage and Harbor attempt metadata; missing historical TTL splits remain unknown. Validate the TTL subset before storing usage even when a provider-reported cost bypasses price estimation.
 
+- Reload gateway bindings atomically after file deletion, replacement or edits
+  with older modification times. Invalid reloads retain the last valid routing
+  and retry after debounce; explicit empty merged rules revoke bindings. Stop
+  the owned config watcher and remaining pollers even when one poller fails,
+  including interruption or cancellation, then re-raise the original failure.
+  Wake polling sleeps on shutdown; retain ownership and reject restart while a
+  blocked callback prevents the previous watcher thread from stopping.
 - Preserve thin Harbor cognitive-reflection usage by binding its middleware to the existing session event sink.
 
 - Release partially constructed runtime resources before propagating the original
@@ -165,6 +181,18 @@ functional change.
   Restore turn attribution and adapter usage context after success, failure or
   cancellation, and serialize SDK client publication with credential invalidation.
 
+- Close current and retired provider SDK clients on their owning event loop
+  after its work settles. Credential rotation preserves in-flight calls;
+  shutting down one runtime does not close clients shared with another.
+  Preserve original failures and cancellation through bounded cleanup-error
+  reporting, including normal CLI, gateway, worker and dreaming loop exits.
+  Drain generators and SDK clients even when cancelled background work raises
+  a control exception during shutdown, preserving the original failure. Failed
+  client closes remain retryable while their owning event loop is still alive.
+  Keep active client selection separate from cleanup ownership, including after
+  credential invalidation or adapter replacement. Retain IPC worker and socket
+  ownership when shutdown times out, reject restart while stopping, and report
+  terminal cleanup failures to the daemon shutdown owner.
 - Use the shared global config path resolver for Settings, config explanation,
   model-picker reads/writes/confirmation, MCP, gateway reload/watch, seed
   role/voter overrides, and evaluation config migration.

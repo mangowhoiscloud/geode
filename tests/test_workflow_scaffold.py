@@ -16,6 +16,58 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text()
 
 
+@pytest.mark.parametrize("full", ["true", "false", "", "unknown", None, True])
+@pytest.mark.parametrize("result", ["success", "failure", "cancelled", "skipped"])
+def test_test_reducer_requires_all_shards_and_explicit_classification(
+    tmp_path: Path, full: object, result: str
+) -> None:
+    job = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]["test"]
+    needs = {
+        "changes": {"result": "success", "outputs": {"full_tests": full}},
+        "test_shards": {"result": result},
+        "test_contracts": {"result": result},
+    }
+    checked = subprocess.run(  # noqa: S603 - real reducer predicate, synthetic job outcomes
+        ["/bin/bash", "-e", "-c", job["steps"][0]["run"]],
+        env=os.environ
+        | {"TEST_NEEDS": json.dumps(needs), "GITHUB_OUTPUT": str(tmp_path / "output")},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    expected = (full == "true" and result == "success") or (full == "false" and result == "skipped")
+    assert (checked.returncode == 0) is expected, checked.stderr
+
+
+def test_test_shards_preserve_full_coverage_and_contract_checks() -> None:
+    jobs = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]
+    shards = jobs["test_shards"]
+    assert shards["strategy"] == {"fail-fast": False, "matrix": {"shard": [0, 1, 2, 3]}}
+    assert "continue-on-error" not in shards
+    run = next(
+        step["run"] for step in shards["steps"] if step.get("name", "").startswith("Run tests")
+    )
+    for flag in ("-n auto", "--dist=loadfile", "--cov=core", "--cov=evals", "--cov=evolve"):
+        assert flag in run
+    assert "-c pyproject.toml --rootdir=." in run
+    assert "--cov-fail-under=0" in run
+    upload = shards["steps"][-1]
+    assert upload["if"] == "${{ always() }}" and upload["with"]["include-hidden-files"] is True
+    reducer = jobs["test"]["steps"][-1]["run"]
+    assert reducer.index("scripts/ci_test_shards.py") < reducer.index("coverage combine")
+    assert "coverage report --show-missing" in reducer and "--fail-under" not in reducer
+    names = {step.get("name") for step in jobs["test_contracts"]["steps"]}
+    assert {
+        "Architecture behavior contracts",
+        "Architecture performance contracts",
+        "Architecture performance baseline",
+        "Architecture performance failure profile",
+        "Extension change-surface contracts",
+        "Build and inspect package artifacts",
+        "Native Harbor 0.22 Docker contracts (no containers or model calls)",
+    } <= names
+
+
 @pytest.mark.parametrize(
     "result", ["success", "failure", "cancelled", "skipped", "neutral", "pending", ""]
 )

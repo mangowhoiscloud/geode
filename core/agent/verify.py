@@ -845,7 +845,7 @@ def _verify_llm_judge(
     weight: a sync call from inside a running loop is a misuse and now
     returns verification_error with a WARNING,
     instead of hiding the misuse behind a thread bridge. The no-loop
-    case keeps ``asyncio.run`` — that IS the process-edge contract.
+    case uses the owned process-edge runner, including SDK client teardown.
 
     Failures NEVER raise — observability mustn't break the run it observes.
     """
@@ -858,7 +858,9 @@ def _verify_llm_judge(
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            return asyncio.run(_verify_llm_judge_async(result, loop=loop, mode=mode))
+            from core.async_runtime import run_process_coroutine
+
+            return run_process_coroutine(_verify_llm_judge_async(result, loop=loop, mode=mode))
         log.warning(
             "LLM judge: sync verify_turn called from inside a running event "
             "loop — use verify_turn_async; applying %s unavailable policy",
