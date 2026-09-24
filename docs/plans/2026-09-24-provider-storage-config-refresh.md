@@ -8,8 +8,13 @@ model prices/specifications and simple typed adapters. The follow-up extends
 the same inspection to DB, trajectory and configuration ownership, with
 small reviewed PRs accumulated on `develop`, then a versioned GitFlow
 promotion to `main` and a verified release. This authorizes commits, PRs,
-CI-gated merges and stable publication. It does not request live paid model
-calls or changes to running services or installed tools.
+CI-gated merges and stable publication. The operator subsequently requested
+E2E and Harbor checks for the new model families through both API and
+subscription routes after all implementation is complete. The operator
+approved a total US$20 paid-validation cap on 2026-09-24; freeze the execution
+matrix and budget before calling models. Record subscription consumption
+separately from API charges. Running services and globally installed tools
+remain outside scope.
 
 ## Acceptance
 
@@ -46,7 +51,10 @@ calls or changes to running services or installed tools.
 | C2 | One global config path for writer, reader, explanation and watchers | C1 | PR #3396, CI pending |
 | D1 | Bound compatible SDK majors and deduplicate HTTPX construction | independent migration audit | PR #3394, CI pending |
 | D2 | Test current major SDK/evaluation compatibility | D1 | incompatible OpenAI/Inspect import reproduced; migration deferred |
-| E1 | Error and resource lifecycle ownership: construction, failure, cleanup and recreation | integrated provider/storage changes | separate audit and PR requested; existing error convention retained |
+| E1 | Runtime construction, shutdown outcomes, request context and cache generation ownership | C1 | local implementation; existing error convention extended |
+| E2 | Atomic gateway reload and owned watcher/poller lifecycle | C1, C2 | local implementation and independent review |
+| E3 | Shared SDK transport ownership at actual process/thread event-loop teardown | E1 | local implementation and independent review |
+| V1 | New-model API/subscription E2E and Harbor validation | all accepted implementation units | execution matrix in preparation; total US$20 paid cap approved |
 | R1 | Patch release preparation, packaging/docs, develop→main, stable publication | all accepted units | pending |
 
 The implementation workspace holds the combined candidate while changes
@@ -58,7 +66,10 @@ ordinary provider maintenance does not create an unrelated program claim.
 
 ## Verification record
 
-No live inference has been executed. Initial narrow checks found old tests
+No successful live inference has been executed in this maintenance work. A
+broad test invocation accidentally removed the default live-test exclusion;
+one live case failed at adapter dispatch before SDK construction. The
+corrected offline run excluded live tests explicitly. Initial narrow checks found old tests
 pinning retired picker choices and old context/effort contracts. Update
 only assertions whose documented behavior changed and retain route, replay,
 credential-isolation and no-silent-fallback checks. Passing local tests are

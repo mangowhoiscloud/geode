@@ -57,10 +57,7 @@ def test_effort_enum_rejected() -> None:
 
 
 def test_effort_validator_accepts_full_picker_union() -> None:
-    """The validator MUST accept every value the picker can persist to
-    ``[agentic] effort`` — otherwise a valid picker choice bricks the next
-    ``Settings()`` load. Legacy binary values remain readable without being
-    offered as native graded controls."""
+    """Every picker value and persisted legacy effort must remain loadable."""
     from core.cli.effort_picker import supported_efforts
     from core.config._settings import AGENTIC_EFFORTS
     from core.llm.model_catalog import MODEL_OFFERINGS
@@ -70,8 +67,8 @@ def test_effort_validator_accepts_full_picker_union() -> None:
         for model in MODEL_OFFERINGS
         for effort in supported_efforts(model.id, model.provider)
     }
-    assert picker_union <= set(AGENTIC_EFFORTS)
-    assert set(AGENTIC_EFFORTS) - picker_union == {"disabled", "enabled"}
+    legacy_efforts = {"minimal", "disabled", "enabled"}
+    assert set(AGENTIC_EFFORTS) == picker_union | legacy_efforts
     for effort in AGENTIC_EFFORTS:
         assert Settings(agentic_effort=effort).agentic_effort == effort
 

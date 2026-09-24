@@ -61,7 +61,8 @@ functional change.
   and GLM-5.3 defaults while preserving explicit configuration; retain saved
   GLM Coding Plan profiles without inventing local call quotas for token credits.
   Preserve saved effort when reopening the picker and use each provider's own
-  source for configured-model availability.
+  source for configured-model availability. Use GLM's native reasoning builder
+  when the existing effort probe records its outgoing control.
   Update bilingual provider and authentication guidance with source-specific
   availability, current model specifications and pricing evidence.
 - Run Reflection after each tool-result round and once before final delivery.
