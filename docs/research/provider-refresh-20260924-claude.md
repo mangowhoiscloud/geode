@@ -114,7 +114,10 @@ computer schema and unknown models remain guarded.
 Offline request/response regressions cover new model controls, shared
 stream/create shaping, signed-block preservation, prefix-drop diagnostics,
 forced-tool rejection, structured JSON, output limits, native computer translation
-and unsupported-action rejection. Streaming preserves
-final tool calls, signed content, and full usage through the same response owner. Live provider
+and unsupported-action rejection. Auxiliary text completions share output validation
+while retaining server thinking defaults; invalid limits fail before an SDK request.
+Hosted search retains source citations and usage presence, distinguishing missing
+cache usage from known zero. Streaming preserves final tool calls, signed content,
+and full usage through the same response owner. Live provider
 acceptance, desktop action outcomes, account availability, subscription
 policy exceptions, and external billing are unverified.

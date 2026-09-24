@@ -360,12 +360,23 @@ def _system_and_messages(req: AdapterCallRequest) -> tuple[Any, list[dict[str, A
     )
 
 
+def validate_output_tokens(model: str, max_tokens: int) -> None:
+    """Validate the Messages output budget against the published model limit."""
+    if max_tokens < 1:
+        raise LLMRequestValidationError("Anthropic max_tokens must be positive")
+    spec = get_anthropic_model_spec(model)
+    if spec is not None and max_tokens > spec.max_output_tokens:
+        raise LLMRequestValidationError(
+            f"{model} requires max_tokens between 1 and {spec.max_output_tokens}, "
+            "including any thinking budget"
+        )
+
+
 def build_create_kwargs(
     req: AdapterCallRequest, *, base_url: str = "https://api.anthropic.com"
 ) -> dict[str, Any]:
     """Build ``messages.create`` kwargs for the Anthropic PAYG adapter."""
-    if req.max_tokens < 1:
-        raise LLMRequestValidationError("Anthropic max_tokens must be positive")
+    validate_output_tokens(req.model, req.max_tokens)
     system, messages = _system_and_messages(req)
     kwargs: dict[str, Any] = {
         "model": req.model,
@@ -386,6 +397,7 @@ def build_create_kwargs(
     elif req.thinking_budget > 0:
         kwargs["thinking"] = {"type": "enabled", "budget_tokens": req.thinking_budget}
         kwargs["max_tokens"] = req.max_tokens + req.thinking_budget
+        validate_output_tokens(req.model, kwargs["max_tokens"])
         kwargs["temperature"] = 1.0
     elif req.temperature is not None:
         kwargs["temperature"] = req.temperature
@@ -397,11 +409,6 @@ def build_create_kwargs(
         if effort not in spec.effort_values:
             raise LLMRequestValidationError(f"{req.model} does not support effort {req.effort!r}")
         kwargs["output_config"] = {"effort": effort}
-    if spec is not None and kwargs["max_tokens"] > spec.max_output_tokens:
-        raise LLMRequestValidationError(
-            f"{req.model} requires max_tokens between 1 and {spec.max_output_tokens}, "
-            "including any thinking budget"
-        )
     if req.response_schema is not None:
         if spec is None:
             raise LLMRequestValidationError(f"Structured output is not verified for {req.model}")
@@ -585,4 +592,5 @@ __all__ = [
     "build_stream_kwargs",
     "translate_response",
     "translate_tool",
+    "validate_output_tokens",
 ]

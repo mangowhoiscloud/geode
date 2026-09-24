@@ -52,7 +52,8 @@ functional change.
 - Refresh Claude Messages contracts for Fable 5.1, Opus 5.5/5, and Sonnet 5
   through typed model records and one create/stream request builder. Preserve
   signed thinking, structured output, tool calls, and cache usage in streaming;
-  validate output/effort/forced-tool limits and update hosted web tool versions.
+  retain hosted search usage. Validate output/effort/forced-tool limits, including
+  auxiliary text completions, and update hosted web tool versions.
   Guard unknown computer generations until their native executor is supported.
 
 - Run Reflection after each tool-result round and once before final delivery.
@@ -124,6 +125,12 @@ functional change.
   this does not reconstruct missing historical usage.
 
 ### Fixed
+
+- Align OpenAI GPT-6 API and subscription model choices, reasoning controls,
+  and published API output limits; keep subscription-only request restrictions
+  separate and preserve reported token usage from API web search. Normalize
+  both Responses streams through one translator with tool calls, reasoning,
+  usage and replay metadata; reject transport EOF without a terminal response.
 
 - Refresh the 2026-09-24 OpenAI, Claude and Z.AI model tariffs/context limits; honor explicit Claude cache rates and full-request OpenAI long-context tiers. Keep active source choices separate from historical accounting and unavailable subscription routes.
 - Preserve verifier failure instructions separately from the replanner's bounded
