@@ -173,7 +173,7 @@ export default function Page() {
                 <tr><td><code>/fleet</code></td><td></td><td>THIN</td><td>최근 턴의 서브에이전트 fleet 뷰</td><td><code>core/cli/dispatcher.py</code></td></tr>
                 <tr><td><code>/goal [objective|clear]</code></td><td></td><td>DAEMON_RPC</td><td>지속 Goal 조회·생성·empty 전이. 목적 문장은 파싱하지 않고 그대로 저장</td><td><code>core/cli/commands/goal.py</code></td></tr>
                 <tr><td><code>/plan [objective]</code></td><td></td><td>DAEMON_STREAM</td><td>현재 advisory plan 조회 또는 도구가 꺼진 structured planner로 계획 생성. 실행하지 않음</td><td><code>core/server/ipc_server/plan_command.py</code></td></tr>
-                <tr><td><code>/grill &lt;decision&gt;</code></td><td></td><td>DAEMON_STREAM</td><td>의존성 frontier를 따라 의사결정을 압박 검증하는 grilling 스킬</td><td><code>core/cli/commands/skills.py</code></td></tr>
+                <tr><td><code>/grill &lt;decision&gt;</code></td><td></td><td>DAEMON_STREAM</td><td>의존성 frontier를 따라 의사결정을 압박 검증하는 grilling 스킬</td><td><code>core/skills/grilling.py</code></td></tr>
                 <tr><td><code>/quit</code></td><td><code>/exit</code>, <code>/q</code></td><td>daemon</td><td>세션 비용 요약과 함께 종료</td><td><code>core/cli/dispatcher.py</code></td></tr>
                 <tr><td><code>/verbose</code></td><td></td><td>daemon</td><td>verbose 토글</td><td><code>core/cli/dispatcher.py</code></td></tr>
                 <tr><td><code>/schedule</code></td><td><code>/sched</code></td><td>daemon</td><td>예약 자동화 관리</td><td><code>core/cli/commands/schedule.py</code></td></tr>
@@ -421,7 +421,7 @@ export default function Page() {
                 <tr><td><code>/fleet</code></td><td></td><td>THIN</td><td>Show the latest turn&apos;s sub-agent fleet view</td><td><code>core/cli/dispatcher.py</code></td></tr>
                 <tr><td><code>/goal [objective|clear]</code></td><td></td><td>DAEMON_RPC</td><td>Show, create, or transition the persistent Goal to empty; objective text is stored without parsing</td><td><code>core/cli/commands/goal.py</code></td></tr>
                 <tr><td><code>/plan [objective]</code></td><td></td><td>DAEMON_STREAM</td><td>Show the advisory plan or create one with a tool-disabled structured planner; never executes it</td><td><code>core/server/ipc_server/plan_command.py</code></td></tr>
-                <tr><td><code>/grill &lt;decision&gt;</code></td><td></td><td>DAEMON_STREAM</td><td>Stress-test decisions through the dependency-frontier grilling skill</td><td><code>core/cli/commands/skills.py</code></td></tr>
+                <tr><td><code>/grill &lt;decision&gt;</code></td><td></td><td>DAEMON_STREAM</td><td>Stress-test decisions through the dependency-frontier grilling skill</td><td><code>core/skills/grilling.py</code></td></tr>
                 <tr><td><code>/quit</code></td><td><code>/exit</code>, <code>/q</code></td><td>daemon</td><td>Exit with a session cost summary</td><td><code>core/cli/dispatcher.py</code></td></tr>
                 <tr><td><code>/verbose</code></td><td></td><td>daemon</td><td>Toggle verbose mode</td><td><code>core/cli/dispatcher.py</code></td></tr>
                 <tr><td><code>/schedule</code></td><td><code>/sched</code></td><td>daemon</td><td>Manage scheduled automations</td><td><code>core/cli/commands/schedule.py</code></td></tr>

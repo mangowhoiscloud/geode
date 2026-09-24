@@ -6873,7 +6873,7 @@ HITL 승인 프롬프트(`core/cli/ipc_client.py`의 `_handle_approval_request`)
 | `/fleet` |  | THIN | 최근 턴의 서브에이전트 fleet 뷰 | `core/cli/dispatcher.py` |
 | `/goal [objective|clear]` |  | DAEMON\_RPC | 지속 Goal 조회·생성·empty 전이. 목적 문장은 파싱하지 않고 그대로 저장 | `core/cli/commands/goal.py` |
 | `/plan [objective]` |  | DAEMON\_STREAM | 현재 advisory plan 조회 또는 도구가 꺼진 structured planner로 계획 생성. 실행하지 않음 | `core/server/ipc_server/plan_command.py` |
-| `/grill <decision>` |  | DAEMON\_STREAM | 의존성 frontier를 따라 의사결정을 압박 검증하는 grilling 스킬 | `core/cli/commands/skills.py` |
+| `/grill <decision>` |  | DAEMON\_STREAM | 의존성 frontier를 따라 의사결정을 압박 검증하는 grilling 스킬 | `core/skills/grilling.py` |
 | `/quit` | `/exit`, `/q` | daemon | 세션 비용 요약과 함께 종료 | `core/cli/dispatcher.py` |
 | `/verbose` |  | daemon | verbose 토글 | `core/cli/dispatcher.py` |
 | `/schedule` | `/sched` | daemon | 예약 자동화 관리 | `core/cli/commands/schedule.py` |
@@ -7334,7 +7334,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 589 |
+| 프로덕션 Python 파일 | 590 |
 | 테스트 Python 파일 | 744 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |

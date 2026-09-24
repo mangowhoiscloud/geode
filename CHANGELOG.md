@@ -163,6 +163,12 @@ functional change.
 
 ### Fixed
 
+- Keep daemon `/grill` execution independent of CLI initialization by moving
+  skill prompt rendering and grilling invocation to their runtime skill owners.
+  Reuse that renderer for `/geo` while preserving prompt text, session control
+  state, timeline events, and streaming results. Verify dynamically registered
+  daemon handlers cannot import CLI modules, including through dependencies.
+
 - Runtime MCP managers now own their connections and event bindings, including
   notification, calendar and gateway consumers. Another runtime's rollback or
   shutdown cannot close them. Restarted managers close each connection generation;
