@@ -23,15 +23,15 @@ from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
 DEFAULT_UNKNOWN_CONTEXT_WINDOW = 200_000
 
-# Source-specific lifecycle, checked 2026-09-20 against
+# Source-specific lifecycle, checked 2026-09-24 against
 # https://learn.chatgpt.com/docs/models#deprecated-codex-models .
 # This does not retire the same IDs from the Platform API, or rewrite pricing
 # and historical evaluation records. GPT-5.5's 2026-10-14 retirement is future.
 _UNAVAILABLE_CODEX_MODELS: dict[str, tuple[str, str]] = {
-    "gpt-5.4": ("retired on 2026-08-31", "gpt-5.6-terra"),
-    "gpt-5.4-mini": ("retired on 2026-08-31", "gpt-5.6-luna"),
-    "gpt-5.2": ("deprecated", "gpt-5.6-sol"),
-    "gpt-5.3-codex": ("deprecated", "gpt-5.6-sol"),
+    "gpt-5.4": ("retired on 2026-08-31", "gpt-6-sol"),
+    "gpt-5.4-mini": ("retired on 2026-08-31", "gpt-6-luna"),
+    "gpt-5.2": ("deprecated", "gpt-6-sol"),
+    "gpt-5.3-codex": ("deprecated", "gpt-6-sol"),
 }
 # Anthropic-operated API lifecycle, retrieved 2026-09-21 (all listed dates
 # precede the 2026-09-20 audit snapshot). This does not assert partner-hosted
@@ -53,11 +53,89 @@ _UNAVAILABLE_ANTHROPIC_API_MODELS: dict[str, tuple[str, str]] = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class ModelOffering:
+    """Documented active choice shared by picker, adapters and login routing.
+
+    Account entitlement is separate. Historical prices and explicit configured
+    IDs remain available, so deprecation does not rewrite earlier evidence.
+    """
+
+    id: str
+    provider: str
+    label: str
+    cost: str
+    sources: tuple[str, ...]
+
+
+# Checked 2026-09-24; primary evidence in docs/research/provider-refresh-20260924.md.
+# Deprecated IDs and aliases are omitted from new choices, not silently remapped.
+MODEL_OFFERINGS: tuple[ModelOffering, ...] = (
+    ModelOffering("claude-fable-5-1", "anthropic", "Fable 5.1", "$$$$", ("payg",)),
+    ModelOffering("claude-opus-5-5", "anthropic", "Opus 5.5", "$$$", ("payg",)),
+    ModelOffering("claude-opus-5", "anthropic", "Opus 5", "$$$", ("payg",)),
+    ModelOffering("claude-sonnet-5", "anthropic", "Sonnet 5", "$$", ("payg",)),
+    ModelOffering("claude-haiku-4-5-20251001", "anthropic", "Haiku 4.5", "$", ("payg",)),
+    ModelOffering("claude-fable-5", "anthropic", "Fable 5", "$$$", ("payg",)),
+    ModelOffering("claude-opus-4-8", "anthropic", "Opus 4.8", "$$$", ("payg",)),
+    ModelOffering("claude-opus-4-7", "anthropic", "Opus 4.7", "$$$", ("payg",)),
+    ModelOffering("claude-opus-4-6", "anthropic", "Opus 4.6", "$$$", ("payg",)),
+    ModelOffering("claude-opus-4-5", "anthropic", "Opus 4.5", "$$$", ("payg",)),
+    ModelOffering("claude-sonnet-4-6", "anthropic", "Sonnet 4.6", "$$$", ("payg",)),
+    ModelOffering("claude-sonnet-4-5-20250929", "anthropic", "Sonnet 4.5", "$$$", ("payg",)),
+    ModelOffering("gpt-6-astra", "openai", "GPT-6 Astra", "$$$$", ("payg", "subscription")),
+    ModelOffering("gpt-6-sol", "openai", "GPT-6 Sol", "$$", ("payg", "subscription")),
+    ModelOffering("gpt-6-luna", "openai", "GPT-6 Luna", "$", ("payg", "subscription")),
+    ModelOffering("gpt-5.6-sol", "openai", "GPT-5.6 Sol", "$$$", ("payg", "subscription")),
+    ModelOffering("gpt-5.6-terra", "openai", "GPT-5.6 Terra", "$$", ("payg", "subscription")),
+    ModelOffering("gpt-5.6-luna", "openai", "GPT-5.6 Luna", "$", ("payg", "subscription")),
+    ModelOffering("gpt-5.5", "openai", "GPT-5.5", "$$$", ("payg",)),
+    ModelOffering("gpt-5.3-codex", "openai", "GPT-5.3 Codex", "$$", ("payg",)),
+    ModelOffering("gpt-5.4", "openai", "GPT-5.4", "$$", ("payg",)),
+    ModelOffering("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$", ("payg",)),
+    ModelOffering("gpt-5.4-nano", "openai", "GPT-5.4 Nano", "$", ("payg",)),
+    ModelOffering("glm-5.3", "glm", "GLM-5.3", "$", ("payg",)),
+    ModelOffering("glm-5.3-flash", "glm", "GLM-5.3 Flash", "$", ("payg",)),
+    ModelOffering("glm-5.3-flashx", "glm", "GLM-5.3 FlashX", "$", ("payg",)),
+    ModelOffering("glm-5.2", "glm", "GLM-5.2", "$", ("payg",)),
+    ModelOffering("glm-5.1", "glm", "GLM-5.1", "$", ("payg",)),
+    ModelOffering("glm-5", "glm", "GLM-5", "$", ("payg",)),
+    ModelOffering("glm-4.7", "glm", "GLM-4.7", "$", ("payg",)),
+    ModelOffering("glm-4.7-flashx", "glm", "GLM-4.7 FlashX", "$", ("payg",)),
+    ModelOffering("glm-4.7-flash", "glm", "GLM-4.7 Flash", "free*", ("payg",)),
+)
+
+
+def model_ids_for_source(provider: str, source: str) -> tuple[str, ...]:
+    """List active choices for one route, without querying credentials."""
+    normalized = normalize_model_provider(provider)
+    return tuple(
+        entry.id
+        for entry in MODEL_OFFERINGS
+        if entry.provider == normalized
+        and source in entry.sources
+        and model_source_unavailable_reason(entry.id, provider=normalized, source=source) is None
+    )
+
+
 def model_source_unavailable_reason(
     model_id: str, *, provider: str, source: str, base_url: str | None = None
 ) -> str | None:
     """Explain a documented source retirement, not account-level availability."""
     normalized = normalize_model_provider(provider)
+    if source == SOURCE_SUBSCRIPTION and normalized == "anthropic":
+        return (
+            "Claude subscription OAuth is not supported for third-party harnesses. "
+            "Use an Anthropic API key explicitly; GEODE will not switch billing sources. "
+            "https://code.claude.com/docs/en/legal-and-compliance"
+        )
+    if source == SOURCE_SUBSCRIPTION and normalized == "glm":
+        return (
+            "GLM Coding Plan is limited to officially supported tools; GEODE admission "
+            "is not established as of 2026-09-24. Use glm-payg explicitly. "
+            "GEODE will not switch billing sources automatically. "
+            "https://docs.z.ai/devpack/usage-policy"
+        )
     if normalized == "openai" and source == SOURCE_SUBSCRIPTION:
         retired = _UNAVAILABLE_CODEX_MODELS.get(model_id)
         source_label = "Codex with ChatGPT sign-in (subscription)"
@@ -114,7 +192,7 @@ class ModelCatalogSpec:
 
 def normalize_model_provider(provider: str) -> str:
     """Collapse routing-only provider aliases to executable adapter providers."""
-    return "openai" if provider == "openai-codex" else provider
+    return {"openai-codex": "openai", "glm-coding": "glm"}.get(provider, provider)
 
 
 def context_window_for(model_id: str, *, default: int = DEFAULT_UNKNOWN_CONTEXT_WINDOW) -> int:
@@ -176,9 +254,12 @@ def model_spec_for_adapter(
 
 __all__ = [
     "DEFAULT_UNKNOWN_CONTEXT_WINDOW",
+    "MODEL_OFFERINGS",
     "ModelCatalogSpec",
+    "ModelOffering",
     "context_window_for",
     "get_model_catalog_spec",
+    "model_ids_for_source",
     "model_source_unavailable_reason",
     "model_spec_for_adapter",
     "normalize_model_provider",
