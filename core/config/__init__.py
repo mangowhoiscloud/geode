@@ -79,6 +79,8 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "cognitive.reflection_max_tokens": "cognitive_reflection_max_tokens",
     "cognitive.reflection_interval": "cognitive_reflection_interval",
     "cognitive.reflection_adaptive": "cognitive_reflection_adaptive",
+    "judgment.engine": "judgment_engine",
+    "judgment.provider": "jev_provider",
     "output.verbose": "verbose",
     "agentic.thinking_budget": "agentic_thinking_budget",
     "agentic.effort": "agentic_effort",
@@ -145,7 +147,7 @@ _TOML_TO_SETTINGS: dict[str, str] = {
 #: putting a secret in a committed/synced ``config.toml`` is the leak we avoid.
 #: The parity guard (test_toml_settings_map) allows exactly these.
 _TOML_ENV_ONLY_FIELDS: frozenset[str] = frozenset(
-    {"anthropic_api_key", "openai_api_key", "openrouter_api_key", "zai_api_key"}
+    {"anthropic_api_key", "openai_api_key", "openrouter_api_key", "typesafe_api_key", "zai_api_key"}
 )
 
 DEFAULT_CONFIG_TOML = """\

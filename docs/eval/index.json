@@ -11,7 +11,7 @@
     "trajectory": "core/observability/schemas/trajectory.schema.json",
     "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
   },
-  "document_count": 25,
+  "document_count": 26,
   "documents": [
     {
       "id": "agent-world-comparison",
@@ -148,7 +148,7 @@
       "authority": "evidence-storage",
       "path": "docs/eval/external-artifact-repository.md",
       "summary": "Canonical append-only publication and disclosure contract for large GEODE evaluation artifacts.",
-      "sha256": "0524823b0d520313851559319932d36c223c1122e4114574180f0b0bef734307",
+      "sha256": "f906c3f9d8c66a7080a979258fc83b0c734d62e94e2391bdd96403db657436c2",
       "triggers": [
         "artifact repository",
         "eval-artifact",
@@ -246,6 +246,27 @@
       ],
       "contracts": [
         "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
+      "id": "jev-verdict-publication-20260924",
+      "family": "typesafe-decision-handoff",
+      "title": "Jev verdict diagnostics: public evidence",
+      "kind": "ledger",
+      "status": "reference",
+      "authority": "diagnostic",
+      "path": "docs/eval/jev-verdict-publication-20260924.md",
+      "summary": "Reviewed public projections of the retained M4 natural, M5 snapshot and M6 recovery diagnostics; native evidence remains separate from normalized trajectories.",
+      "sha256": "c3bfe8dd88e6b0c58985f2d7d2d0a4a2e580eb261a1fcf6c542033ad96f4b096",
+      "triggers": [
+        "jev",
+        "normalization",
+        "publication",
+        "rollout"
+      ],
+      "contracts": [
+        "docs/eval/external-artifact-repository.md",
+        "docs/eval/typesafe-decision-handoff.md"
       ]
     },
     {
@@ -516,7 +537,7 @@
       "authority": "suite-profile",
       "path": "docs/eval/terminal-bench-2.md",
       "summary": "GEODE adoption profile for canonical Terminal-Bench 2.1 execution through Harbor, including official-submission and diagnostic comparability boundaries.",
-      "sha256": "e4d464dfa8e7bfc387274769e902202e216257c2768168f9f6083710e60863e5",
+      "sha256": "26ea4bec39f7348fb2451b63625b4fa3e3971bccf6c8734044eecf780b94f4aa",
       "triggers": [
         "Harbor",
         "Terminal-Bench 2",
@@ -609,7 +630,7 @@
       "authority": "diagnostic",
       "path": "docs/eval/typesafe-decision-handoff.md",
       "summary": "Matched LLM/Jev final-verdict diagnostics with shared Astra repair, preserved historical handoff cohorts and an independent Harbor task verifier.",
-      "sha256": "ec1b7e9c71b17ee59343588dc0e59e10377b61eb42b256af6fad393aca1cfa53",
+      "sha256": "bb090c762f2ea177de6955c3a672e439a42ef6a4a3e90fee48d7d87aa241c5a3",
       "triggers": [
         "classification",
         "confidence",

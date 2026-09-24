@@ -217,3 +217,16 @@ def test_model_price_defaults() -> None:
     p = ModelPrice(input=1.0, output=2.0)
     assert p.cache_write == 0.0
     assert p.cache_read == 0.0
+
+
+@pytest.mark.parametrize("model", ["jev-1.13.0", "typesafe/jev-1.13"])
+def test_jev_input_only_tariff_and_reported_cost_priority(
+    model: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.llm.token_tracker import TokenTracker
+
+    tracker = TokenTracker()
+    monkeypatch.setattr(TokenTracker, "_persist_usage", lambda *args, **kwargs: None)
+    assert tracker.calculate_cost(model, 1_000_000, 500) == pytest.approx(0.042)
+    usage = tracker.record(model, 1_000_000, 500, reported_cost_usd=0.07)
+    assert usage.cost_usd == pytest.approx(0.07)

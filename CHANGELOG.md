@@ -49,13 +49,24 @@ functional change.
 
 ### Changed
 
-- Use one evidence-grounded reflection/repair contract for LLM turn verification;
-  normalize the legacy `reflexion` setting to `llm_judge`. Keep the mechanical
-  default and configured judgment engine unchanged. Handoff entry points no
-  longer disable the existing cognitive-reflection lifecycle.
+- Run Reflection after each tool-result round and once before final delivery.
+  Final semantic verification replaces the mechanical-only default; legacy
+  cadence controls and `off`/`rule_based`/`reflexion` verifier settings are
+  deprecated compatibility inputs. Privacy, deadline and cost guards remain;
+  an unavailable judgment never becomes a verification pass. This increases
+  judgment calls for configurations that previously skipped them. Native Harbor
+  receipts distinguish the requested verifier label from its effective policy.
 
 ### Added
 
+- Add credential-gated Jev judgment selection through `/model judgment`, its
+  interactive picker and the existing natural-language `switch_model` tool.
+  Explicit selection uses TypeSafe System One or OpenRouter's compatible
+  endpoint without replacing the generative root model or effort. Missing
+  credentials retain LLM judgment; configured request failures do not silently
+  switch providers. Track Jev distributions separately from cognitive confidence,
+  with native usage, provider-reported cost or an input-only tariff estimate.
+  Redact TypeSafe and OpenRouter key formats in runtime and publication paths.
 - Add an opt-in matched LLM/Jev final-verdict diagnostic using a shared evidence contract,
   criteria and fixed repair feedback while preserving Astra root/reflection/replan
   execution. Retain judgment provenance, malformed-response usage, observed repair

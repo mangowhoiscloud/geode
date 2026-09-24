@@ -10,6 +10,14 @@ eval_triggers: [typesafe, jev, decision-handoff, classification, extraction, con
 
 # Jev decision handoff pilot
 
+The official runtime option now requires per-round and final Reflection.
+Current selector/helper profiles therefore retain native Astra final-verification
+calls as well as cognitive calls; they require a new frozen source and cannot
+reuse old call counts as their baseline. The matched verdict profile still owns
+its explicit LLM/Jev injection. Global Jev selection must not overlap that
+experiment-specific owner. Published historical M4/M5/M6 bytes and scores remain
+unchanged; see the [publication record](jev-verdict-publication-20260924.md).
+
 ## Current evidence disposition — 2026-09-24
 
 The r6 results below are **superseded for claims about the revised,

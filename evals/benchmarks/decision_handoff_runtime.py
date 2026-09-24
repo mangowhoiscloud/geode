@@ -440,9 +440,8 @@ class HandoffReceipt:
         kind = {
             "agentic_loop": "root_request",
             "cognitive_reflection": "reflection_request",
+            "turn_verification": "verification_request",
         }.get(purpose, "unadmitted_request")
-        if purpose == "turn_verification" and self.verification_engine is not None:
-            kind = "verification_request"
         results = []
         for message in call.request.messages:
             if message.role == "tool" and message.tool_use_id:
@@ -487,7 +486,13 @@ class HandoffReceipt:
             ):
                 raise ValueError("reflection tool scope drift")
         elif purpose == "turn_verification":
-            if call.request.tools or call.request.tool_choice != {"type": "none"}:
+            from core.agent.verify import _judge_response_schema
+
+            if (
+                call.request.tools
+                or call.request.tool_choice != {"type": "none"}
+                or call.request.response_schema != _judge_response_schema()
+            ):
                 raise ValueError("verification tool scope drift")
         elif not replan and {tool.name for tool in call.request.tools} != self.tool_names:
             raise ValueError("root tool scope drift")
@@ -1136,6 +1141,7 @@ async def run_arm(
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop, AgenticLoopConfig
     from core.agent.tool_executor import ToolExecutor
+    from core.config import settings
     from core.config.policy_source import EMPTY_POLICY_SOURCES
     from core.hooks.system import HookSystem
     from core.llm.adapters.registry import bootstrap_builtins
@@ -1148,6 +1154,8 @@ async def run_arm(
     from evals.benchmarks.decision_handoff import DecisionHandoffTool
     from evals.platforms.harbor import _summarize_usage
 
+    if settings.judgment_engine != "llm":
+        raise ValueError("the frozen comparison owns its engines; global Jev must be disabled")
     if arm not in {"a0", "a", "b"}:
         raise ValueError("unknown arm")
     inbox = case.get("profile") == "inbox"
@@ -1328,14 +1336,18 @@ async def run_arm(
         try:
             result = await asyncio.wait_for(loop.arun(case["request"]), timeout=180)
             judged_hold = bool(
-                verification is not None
-                and result.termination_reason == "external_verification_required"
+                result.termination_reason == "external_verification_required"
                 and loop._session_metrics.last_verify_rubric_misses == ("judge_fail",)
                 and loop._session_metrics.last_verify_should_retry
                 and loop._verify_attempt >= loop._verify_continuation_budget
-                and verification.adapter.receipts
-                and all(row["accepted"] for row in verification.adapter.receipts)
-                and not verification.adapter.receipts[-1]["projected_payload"]["passed"]
+                and (
+                    verification is None
+                    or (
+                        verification.adapter.receipts
+                        and all(row["accepted"] for row in verification.adapter.receipts)
+                        and not verification.adapter.receipts[-1]["projected_payload"]["passed"]
+                    )
+                )
             )
             if result.error and not judged_hold:
                 error = "runtime_error"
@@ -1398,11 +1410,9 @@ async def run_arm(
         }
         for event in calls
     ]
-    allowed_purposes = {"agentic_loop", "cognitive_reflection"}
+    allowed_purposes = {"agentic_loop", "cognitive_reflection", "turn_verification"}
     if arm != "a0":
         allowed_purposes.add("structured_decision")
-    if verification_engine is not None:
-        allowed_purposes.add("turn_verification")
 
     def is_jev(event: Any) -> bool:
         return bool(

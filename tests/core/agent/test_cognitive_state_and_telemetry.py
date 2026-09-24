@@ -276,7 +276,7 @@ def test_text_only_round_also_calls_record_round() -> None:
     # The helper exists and updates round_count + emits REFLECT/UPDATE.
     src = inspect.getsource(AgenticLoop._record_text_only_round)
     assert "self.cognitive_state.record_round(" in src
-    assert "await self._maybe_reflect([])" in src
+    assert "await self._maybe_reflect([])" not in src
     assert "HookEvent.COGNITIVE_REFLECT" in src
     assert "HookEvent.COGNITIVE_UPDATE_MEMORY" in src
 
@@ -289,9 +289,8 @@ def test_text_only_round_also_calls_record_round() -> None:
     )
 
 
-def test_text_only_round_runs_reflection_before_reflect_event() -> None:
-    """Terminal text-only rounds should still pass through the optional
-    reflection node before COGNITIVE_REFLECT listeners read the snapshot."""
+def test_text_only_round_defers_one_semantic_reflection_to_finalization() -> None:
+    """The deterministic terminal snapshot does not duplicate final judgment."""
     from core.agent.cognitive_state import CognitiveState
     from core.agent.loop.agent_loop import AgenticLoop
     from core.hooks import HookEvent
@@ -313,7 +312,7 @@ def test_text_only_round_runs_reflection_before_reflect_event() -> None:
 
     asyncio.run(bound(0, text="final answer"))
 
-    assert calls == ["reflect", "cognitive_reflect", "cognitive_update_memory"]
+    assert calls == ["cognitive_reflect", "cognitive_update_memory"]
     assert stub.cognitive_state.last_action == "text-only"
     assert stub.cognitive_state.last_observation == "final answer"
 

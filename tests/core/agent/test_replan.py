@@ -22,7 +22,7 @@ from core.agent.plan import (
     replan_response_schema,
     should_replan,
 )
-from core.agent.verify import verify_turn
+from core.agent.verify import _verify_rule_based
 from core.config.policy_source import PolicySourcePaths
 from core.observability.session_metrics import current_session_metrics, session_metrics_scope
 from defusedxml.ElementTree import fromstring
@@ -289,9 +289,9 @@ def test_mechanical_verify_does_not_infer_plan_completion_from_keywords() -> Non
     plan = Plan(steps=(PlanStep("s1", "Search", "arxiv paper found"),))
     with session_metrics_scope(session_id="verify-plan"):
         current_session_metrics().set_active_plan(plan)
-        mismatch = verify_turn(_result("unrelated output"))
+        mismatch = _verify_rule_based(_result("unrelated output"))
         assert mismatch.passed and not mismatch.should_retry
-        matched = verify_turn(_result("The arxiv paper was found"))
+        matched = _verify_rule_based(_result("The arxiv paper was found"))
         assert matched.passed and not matched.should_retry
 
 

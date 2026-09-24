@@ -250,6 +250,14 @@ OpenAI, OpenRouter 또는 ZhipuAI GLM을 쓰려면 같은 파일에
 `ZAI_API_KEY=...`를 추가하세요. OpenRouter 모델은
 `/model openrouter/anthropic/claude-sonnet-4`처럼 정확한 참조로 선택합니다.
 
+**Jev 판정 옵션.** 같은 로컬 비밀정보 파일에 `TYPESAFE_API_KEY` 또는
+`OPENROUTER_API_KEY`를 두고 `/model judgment typesafe` 또는
+`/model judgment openrouter`로 활성화합니다. 키만 등록하면 기존 LLM 판정을
+유지합니다. `/model judgment` 선택 화면에서 `llm`으로 돌아갈 수 있으며,
+루트 생성 모델과 추론 노력 설정은 바뀌지 않습니다. Reflection은 도구 결과를
+반영한 매 라운드와 최종 응답 전에 수행합니다. 키 우선순위, 지원하는 증거와
+비용 경계는 [판정 설정 가이드](https://mangowhoiscloud.github.io/geode/docs/config/reference/)에서 확인하세요.
+
 **비용 제어.** 가격은 model과 workload에 따라 달라집니다. provider의 최신
 가격을 확인한 뒤 `~/.geode/config.toml`에 hard cap을 설정하세요.
 

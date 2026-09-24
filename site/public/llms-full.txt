@@ -2198,7 +2198,15 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/verification/evaluation.m
 
 Petri에서는 auditor가 seed에 따라 감사 상황을 탐색하고, target이 응답하며, judge가 transcript를 rubric으로 채점합니다. judge가 과제 환경을 다시 실행해서 정답을 검증하는 구조는 아닙니다. [Petri 공식 설명](https://github.com/meridianlabs-ai/inspect_petri)
 
-`core/agent/verify.py`의 `llm_judge`는 별도의 opt-in 턴 검증 모드입니다. 기본 rule\_based는 빈 실행과 운영자 조치 필요 상태를 검사하며 LLM을 호출하지 않습니다. 내부 self-judge는 Petri의 외부 감사 점수가 아닙니다.
+`core/agent/verify.py`의 `llm_judge`는 기본 최종 의미 검증 경로입니다. 빈 실행·운영자 조치 여부를 코드로 먼저 검사하고, 선택된 LLM 또는 Jev가 완료 근거를 판정합니다. 기존 off·rule\_based·reflexion 설정은 경고와 함께 이 공통 경로로 해석합니다. 내부 판정을 Petri의 외부 감사 점수로 사용하지 않습니다.
+
+### LLM과 Jev 선택
+
+판정 엔진은 기본 LLM입니다. /model judgment에서 Jev를 선택하면 설정된 TypeSafe 또는 OpenRouter 키로 매 라운드와 최종 후보를 판정합니다. 키가 없으면 LLM 경로를 유지하며, 키 등록 자체는 활성화가 아닙니다. 자연어로 판정 엔진 변경을 요청해도 같은 설정 경로를 사용합니다. 주 실행 모델과 effort, 도구 실행 권한은 바뀌지 않습니다.
+
+Jev는 생성 모델 선택기에 들어가지 않습니다. System One 전용 API로 준비된 텍스트 상태와 유한한 선택지를 전달하고, 분류 결과와 분포를 받습니다. 이 분포를 CognitiveState의 confidence나 실행 허가로 바꾸지 않습니다. 이미지가 필수 근거이면 텍스트 전용 판정으로 통과시키지 않으며, 호출 실패도 다른 엔진의 성공으로 대체하지 않습니다.
+
+[TypeSafe System One](https://docs.typesafe.ai/api) · [OpenRouter System One](https://openrouter.ai/docs/guides/community/typesafe-sdk) · [설정 규약](https://mangowhoiscloud.github.io/geode/docs/config/reference.md)
 
 잘못된 JSON, 필드 타입, 점수와 judge 호출 실패는 verification\_error로 기록합니다. passed=false, score=0, should\_retry=false이며, rule\_based 성공으로 대체하지 않습니다. 이 0은 검토 오류를 나타내는 내부 값이지 벤치마크 reward가 아닙니다.
 
@@ -2210,7 +2218,7 @@ best-of-N 후보 선택은 성공한 후보 사이의 상대 평가입니다. �
 
 Reflection은 별도 실행 모드가 아니라 공통 피드백·수정 경로입니다. 판단 엔진 선택과 분리하며, Jev를 자동으로 선택하지 않습니다. LLM judge를 선택하면 원래 요청, 후보, 제한된 최근 tool 결과와 이미 관찰한 이미지를 검토합니다. 짧은 응답이나 복구한 tool 오류만으로 후보를 탈락시키지 않습니다. 최초 예산 안에서 최대 두 번 수정합니다. 남은 시간이 전체의 3분의 1(최대 300초) 이하이면 다음 모델 호출에서 첫 후보 검토를 요청합니다. 진행 중인 호출을 이 시점에 강제 중단하지는 않습니다. Judge usage는 기존 TokenTracker에 기록합니다. 최종 벤치 점수는 여전히 외부 verifier가 판정합니다. [현재 턴 검증 구현](https://github.com/mangowhoiscloud/geode/blob/main/core/agent/verify.py)
 
-인지 reflection은 기본 활성 설정을 유지하고 root 턴의 남은 시간 안에서만 호출합니다. 개인정보나 REDACT 도구 결과가 남아 있는 대화에서는 이후 턴의 최종 답변도 보조 reflection에 전달하지 않으며, 최종 LLM judge는 personal\_data\_omitted 검증 오류로 남깁니다. 새 사용자 입력만으로 보호 상태를 해제하지 않고, 기존 checkpoint guard로 재개 시에도 유지합니다. 잘못된 hypotheses 목록은 기존 상태를 지우지 않습니다. 이 경계는 판단 모델·effort·인증 경로를 바꾸지 않습니다.
+Reflection은 도구 결과를 반영한 매 라운드와 최종 응답 전에 수행합니다. 최종 후보에서는 별도 인지 호출을 중복하지 않고 최종 판정 한 번으로 검토합니다. 개인정보·REDACT 보호, 남은 시간·비용 가드는 유지하며, 건너뛴 검토를 성공으로 기록하지 않습니다. 새 사용자 입력만으로 보호 상태를 해제하지 않고 재개 시에도 유지합니다. 잘못된 hypotheses 목록은 기존 상태를 지우지 않습니다.
 
 완료된 인지 reflection의 토큰·캐시·비용은 기존 tracker와 비용 가드에 한 번 반영합니다. 모델이 도구 호출을 거절하거나 잘못된 응답을 반환해도 관측된 사용량은 남습니다. 실제 공급자를 호출하지 않은 middleware 응답이나 사용량을 받기 전에 중단된 호출을 유료 호출로 만들지는 않습니다. 공급자 보고 비용과 가격표 기반 추정은 실제 청구서와 구분해야 합니다.
 
@@ -5864,14 +5872,20 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 | `replan_enabled` | `replan.enabled` | bool = true | 리플랜 활성화. |
 | `replan_max_attempts` | `replan.max_attempts` | int = 3 | 리플랜 시도 상한. |
 
+### \[judgment\]
+
+`engine = "llm"`이 기본입니다. `engine = "jev"`로 선택하고 TypeSafe 또는 OpenRouter 키가 있을 때 Jev 판정을 사용합니다. `provider = "auto"`는 TypeSafe 키를 먼저 확인하며 `typesafe`나 `openrouter`로 고정할 수 있습니다. 키가 없으면 LLM 경로를 유지합니다. `/model judgment` 선택창과 `/model judgment llm|jev|typesafe|openrouter`가 같은 설정을 저장하며, 상위 환경변수·프로젝트 설정이 가리면 변경을 거부하고 해당 층을 표시합니다.
+
+키는 `TYPESAFE_API_KEY` 또는 `OPENROUTER_API_KEY`로 로컬 `.env`에만 둡니다. 키만 등록해도 Jev가 자동 활성화되지는 않습니다. 요청 실패 시 다른 공급자로 재시도하지 않습니다.
+
 ### \[cognitive\]
 
 | 필드 | toml 키 | 타입 / 기본값 | 용도 |
 | --- | --- | --- | --- |
-| `cognitive_reflection_enabled` | `cognitive.reflection_enabled` | bool = true | 인지 리플렉션 활성화. |
+| `cognitive_reflection_enabled` | `cognitive.reflection_enabled` | bool = true | 퇴역 예정 호환 필드. false도 true로 정규화하며 매 도구 결과 라운드와 최종 응답 전 판정합니다. |
 | `cognitive_reflection_model` | `cognitive.reflection_model` | str = `""` | 비워두면 현재 agentic loop 모델/소스를 상속하고, 값이 있으면 별도 reflection 모델로 사용한다. |
 | `cognitive_reflection_max_tokens` | `cognitive.reflection_max_tokens` | int = 512 | 리플렉션 출력 토큰 상한. |
-| `cognitive_reflection_interval` | `cognitive.reflection_interval` | int = 1 | 몇 라운드마다 리플렉션할지. 1이면 매 라운드. |
+| `cognitive_reflection_interval` | `cognitive.reflection_interval` | int = 1 | 퇴역 예정: 1로 정규화합니다. reflection\_adaptive도 false로 고정합니다. |
 
 ### \[sandbox\]
 
@@ -7160,7 +7174,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1574 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1575 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -7320,8 +7334,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 586 |
-| 테스트 Python 파일 | 729 |
+| 프로덕션 Python 파일 | 589 |
+| 테스트 Python 파일 | 732 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |

@@ -385,7 +385,7 @@ def test_verify_llm_judge_calls_loop_call_llm(monkeypatch: pytest.MonkeyPatch) -
     """When ``loop`` is provided + judge_model set, the judge calls
     ``loop._call_llm`` with the judge model and parses the JSON response."""
     monkeypatch.setenv("GEODE_VERIFY_MODE", "llm_judge")
-    fake_settings = SimpleNamespace(judge_model="claude-haiku-4-5-20251001")
+    fake_settings = SimpleNamespace(judgment_engine="llm", judge_model="claude-haiku-4-5-20251001")
     monkeypatch.setattr("core.config.settings", fake_settings)
 
     captured: dict[str, Any] = {}
@@ -428,7 +428,7 @@ def test_verify_llm_judge_judge_fail_records_misses(
 ) -> None:
     """Judge FAIL response → ``passed=False`` + ``judge_fail`` rubric_miss
     + reflection_hint includes judge's reason."""
-    fake_settings = SimpleNamespace(judge_model="claude-haiku-4-5-20251001")
+    fake_settings = SimpleNamespace(judgment_engine="llm", judge_model="claude-haiku-4-5-20251001")
     monkeypatch.setattr("core.config.settings", fake_settings)
 
     async def _fake_call_llm(
@@ -612,7 +612,7 @@ def test_verify_turn_async_routes_through_judge(
 
     from core.agent.verify import verify_turn_async
 
-    fake_settings = SimpleNamespace(judge_model="claude-haiku-4-5-20251001")
+    fake_settings = SimpleNamespace(judgment_engine="llm", judge_model="claude-haiku-4-5-20251001")
     monkeypatch.setattr("core.config.settings", fake_settings)
     loop = SimpleNamespace(
         _verify_root_user_input="Complete the requested task",
@@ -657,10 +657,10 @@ def test_verify_turn_async_timeout_is_unavailable(
     assert vr.to_payload()["reason"] == "judge_timeout"
 
 
-def test_verify_turn_async_off_mode_returns_pass(
+def test_verify_turn_async_off_alias_is_unavailable_without_judge(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """OFF mode in async path returns passing sentinel without LLM call."""
+    """A legacy OFF value cannot bypass the final semantic gate."""
     import asyncio
 
     monkeypatch.setenv("GEODE_VERIFY_MODE", "off")
@@ -668,8 +668,8 @@ def test_verify_turn_async_off_mode_returns_pass(
     from core.agent.verify import verify_turn_async
 
     vr = asyncio.run(verify_turn_async(_make_result(text="", tool_calls=[]), loop=None))
-    assert vr.passed is True
-    assert vr.mode is VerifyMode.OFF
+    assert not vr.passed and not vr.should_retry
+    assert vr.mode is VerifyMode.LLM_JUDGE
 
 
 # -- Act-model drift (PR-CL-A6 Codex MCP HIGH #1) ----------------------
@@ -743,7 +743,7 @@ def test_judge_usage_recorded(monkeypatch: pytest.MonkeyPatch) -> None:
 
     from core.agent.verify import _verify_llm_judge_async
 
-    fake_settings = SimpleNamespace(judge_model="claude-haiku-4-5-20251001")
+    fake_settings = SimpleNamespace(judgment_engine="llm", judge_model="claude-haiku-4-5-20251001")
     monkeypatch.setattr("core.config.settings", fake_settings)
 
     recorded_responses: list[Any] = []
@@ -779,7 +779,7 @@ def test_judge_usage_track_failure_does_not_break_judge(
 
     from core.agent.verify import _verify_llm_judge_async
 
-    fake_settings = SimpleNamespace(judge_model="claude-haiku-4-5-20251001")
+    fake_settings = SimpleNamespace(judgment_engine="llm", judge_model="claude-haiku-4-5-20251001")
     monkeypatch.setattr("core.config.settings", fake_settings)
 
     async def _fake_call_llm(

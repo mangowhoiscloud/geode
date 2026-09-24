@@ -694,6 +694,7 @@ async def _run_native(args: argparse.Namespace) -> int:
     primary_error: BaseException | None = None
     succeeded = False
     execution_started = False
+    effective_verify_mode: str | None = None
     try:
         task = asyncio.current_task()
         assert task is not None
@@ -705,6 +706,7 @@ async def _run_native(args: argparse.Namespace) -> int:
         from core.config import load_model_policy, settings
         from core.wiring.runtime import build_runtime, build_shared_services
 
+        effective_verify_mode = get_verify_mode().value
         if (
             settings.model != args.model
             or settings.agentic_effort != args.effort
@@ -712,7 +714,7 @@ async def _run_native(args: argparse.Namespace) -> int:
             or load_model_policy().allowlist != [args.model]
             or settings.openai_credential_source != "openai-codex"
             or settings.anthropic_credential_source != "none"
-            or get_verify_mode() != resolve_verify_mode(args.verify_mode)
+            or effective_verify_mode != resolve_verify_mode(args.verify_mode).value
             or os.environ.get("GEODE_VERIFY_MODE") != args.verify_mode
             or settings.judge_model != args.model
             or any(value for key, value in os.environ.items() if key.endswith("API_KEY"))
@@ -788,6 +790,8 @@ async def _run_native(args: argparse.Namespace) -> int:
                     "execution_started": execution_started,
                     "source_revision": args.revision,
                     "verify_mode": args.verify_mode,
+                    # Resolved policy, not proof of a judge call or its success.
+                    "effective_verify_mode": effective_verify_mode,
                     "score_authority": "Harbor task verifier, not this runtime receipt",
                 },
                 event_loop=event_loop if signal_installed else None,
