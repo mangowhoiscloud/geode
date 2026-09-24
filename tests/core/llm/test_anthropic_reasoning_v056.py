@@ -11,7 +11,7 @@ official docs (see ``docs/research/reasoning-depth-audit.md``):
 
   B3: ``xhigh`` effort is accepted by GEODE's enum but is version-
       gated to Opus 4.7+ (4.7 and 4.8). On Opus 4.6 / Sonnet 4.6 it
-      downgrades to ``"max"`` (those models reject ``xhigh`` with 400).
+      clamps to ``"high"`` (those models reject ``xhigh`` with 400).
       Mirrors Hermes ``_supports_xhigh_effort`` substring-based gate.
 
   C2: Signature round-trip on tool-use multi-turn. All three
@@ -33,7 +33,7 @@ from core.llm.providers.anthropic import (
 
 
 class TestXHighEffortGate:
-    """B3 — ``xhigh`` is Opus 4.7+ (4.7 / 4.8); downgrades to ``"max"`` elsewhere."""
+    """B3 — ``xhigh`` is Opus 4.7+ (4.7 / 4.8); clamps to ``"high"`` elsewhere."""
 
     def test_opus_4_8_supports_xhigh(self) -> None:
         assert _supports_xhigh_effort("claude-opus-4-8") is True
@@ -65,55 +65,43 @@ class TestEffortEnumIncludesXHigh:
         # The effort picker resolves the user-supplied effort string against
         # the adaptive-effort tuple; if "xhigh" is missing, the highest tier
         # is unreachable. Assert against the real source of the enum.
-        from core.cli.effort_picker import _ANTHROPIC_ADAPTIVE_EFFORTS
+        from core.cli.effort_picker import supported_efforts
 
-        assert "xhigh" in _ANTHROPIC_ADAPTIVE_EFFORTS, (
-            "_ANTHROPIC_ADAPTIVE_EFFORTS must include 'xhigh' so the adaptive "
-            "effort picker can reach the highest reasoning tier"
-        )
+        assert "xhigh" in supported_efforts("claude-opus-5-5", "anthropic")
 
 
 class TestThinkingDisplaySummarized:
     """C1 — adaptive thinking always carries ``display: "summarized"``.
 
     Without this, Opus 4.7 returns empty thinking blocks (the new default
-    is ``"omitted"``). Validated by inspecting the source — running the
-    adapter requires a real Anthropic client which is out of scope for
-    a unit test."""
+    is ``"omitted"``). Request shaping is verified without a provider call."""
 
     def test_adapter_source_sets_display_summarized(self) -> None:
-        # 2026-07-29: adaptive branch ported from the deleted
-        # ClaudeAgenticAdapter to the LIVE builder module.
-        from core.llm.adapters import _anthropic_common as adapter
+        from core.llm.adapters._anthropic_common import build_create_kwargs
+        from core.llm.adapters.base import AdapterCallRequest
 
-        with open(adapter.__file__, encoding="utf-8") as f:
-            text = f.read()
-        # The adaptive branch must construct thinking_param with display
-        # set to "summarized" (any equivalent indent is fine).
-        assert '"display": "summarized"' in text, (
-            "Anthropic adaptive thinking branch must set "
-            'thinking_param["display"] = "summarized" — Opus 4.7 default '
-            'is "omitted" which silently drops thinking content'
-        )
+        for model in _ADAPTIVE_MODELS:
+            kwargs = build_create_kwargs(AdapterCallRequest(model=model, messages=()))
+            assert kwargs["thinking"]["display"] == "summarized"
 
     def test_adapter_passes_xhigh_effort_through_when_supported(self) -> None:
-        """xhigh stays as xhigh on Opus 4.7."""
-        from core.llm.providers.anthropic import _supports_xhigh_effort
+        from core.llm.adapters._anthropic_common import build_create_kwargs
+        from core.llm.adapters.base import AdapterCallRequest
 
-        # The adapter logic: ``effective_effort = effort if supported
-        # else "max"``. Mirror it here as the contract.
-        effort = "xhigh"
         for model in _XHIGH_EFFORT_MODELS:
-            assert _supports_xhigh_effort(model)
-            assert effort == "xhigh"  # passthrough
+            kwargs = build_create_kwargs(
+                AdapterCallRequest(model=model, messages=(), effort="xhigh")
+            )
+            assert kwargs["output_config"]["effort"] == "xhigh"
 
     def test_adapter_downgrades_xhigh_on_opus_4_6(self) -> None:
-        from core.llm.providers.anthropic import _supports_xhigh_effort
+        from core.llm.adapters._anthropic_common import build_create_kwargs
+        from core.llm.adapters.base import AdapterCallRequest
 
-        effort = "xhigh"
-        model = "claude-opus-4-6"
-        effective = effort if _supports_xhigh_effort(model) else "max"
-        assert effective == "max"
+        kwargs = build_create_kwargs(
+            AdapterCallRequest(model="claude-opus-4-6", messages=(), effort="xhigh")
+        )
+        assert kwargs["output_config"]["effort"] == "high"
 
 
 class TestSignatureRoundTrsubject:

@@ -537,7 +537,7 @@
       "authority": "suite-profile",
       "path": "docs/eval/terminal-bench-2.md",
       "summary": "GEODE adoption profile for canonical Terminal-Bench 2.1 execution through Harbor, including official-submission and diagnostic comparability boundaries.",
-      "sha256": "26ea4bec39f7348fb2451b63625b4fa3e3971bccf6c8734044eecf780b94f4aa",
+      "sha256": "e3a91a56803e134623be6cccccb376206a49eea68d768e0248ccea8ca43958e1",
       "triggers": [
         "Harbor",
         "Terminal-Bench 2",
@@ -630,7 +630,7 @@
       "authority": "diagnostic",
       "path": "docs/eval/typesafe-decision-handoff.md",
       "summary": "Matched LLM/Jev final-verdict diagnostics with shared Astra repair, preserved historical handoff cohorts and an independent Harbor task verifier.",
-      "sha256": "bb090c762f2ea177de6955c3a672e439a42ef6a4a3e90fee48d7d87aa241c5a3",
+      "sha256": "4db46e5e79bfccd4a1a39cdadd5dae9254f5573aff9d82a4b1d94a60337b56e5",
       "triggers": [
         "classification",
         "confidence",

@@ -10,6 +10,7 @@ recovery caches or portable projections, never a second hot-path truth.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import sqlite3
@@ -507,6 +508,15 @@ class SessionManager:
         # Shared connections need the same guard through execute, fetch and close.
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
+        try:
+            self._initialize_schema()
+        except BaseException:
+            with contextlib.suppress(sqlite3.Error):
+                self._conn.close()
+            raise
+
+    def _initialize_schema(self) -> None:
+        """Initialize the owned connection before exposing the manager to callers."""
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(_CREATE_TABLE_SQL)
         # PR-CL-BUDGET — additive ALTER TABLE for handoff columns on legacy

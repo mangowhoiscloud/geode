@@ -18,6 +18,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from core.llm.adapters.base import (
+    EmptyModelOutputError,
     TextCompletionResult,
     WebSearchResult,
 )
@@ -98,11 +99,13 @@ async def anthropic_web_search(
     adapter_name: str,
     prepare_kwargs: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> WebSearchResult:
-    """Anthropic native ``web_search_20260209`` tool on the PAYG API."""
+    """Anthropic native ``web_search_20260318`` tool on the PAYG API."""
+    from core.llm.adapters._anthropic_common import translate_response
+
     kwargs: dict[str, Any] = {
         "model": model,
         "max_tokens": 1024,
-        "tools": [{"type": "web_search_20260209", "name": "web_search"}],
+        "tools": [{"type": "web_search_20260318", "name": "web_search"}],
         "messages": [
             {
                 "role": "user",
@@ -144,6 +147,7 @@ async def anthropic_web_search(
         retrieval_exposed=search_activated,
         model=model,
         adapter_name=adapter_name,
+        usage=translate_response(response).usage,
     )
 
 
@@ -157,6 +161,9 @@ async def anthropic_complete_text(
     prepare_kwargs: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> TextCompletionResult:
     """Single-turn Anthropic ``messages.create`` — used by compaction / extraction."""
+    from core.llm.adapters._anthropic_common import translate_response, validate_output_tokens
+
+    validate_output_tokens(model, max_tokens)
     kwargs: dict[str, Any] = {
         "model": model,
         "max_tokens": max_tokens,
@@ -172,8 +179,6 @@ async def anthropic_complete_text(
     for block in getattr(response, "content", []) or []:
         if hasattr(block, "text"):
             text_parts.append(block.text)
-    from core.llm.adapters._anthropic_common import translate_response
-
     return TextCompletionResult(
         text="".join(text_parts),
         usage=translate_response(response).usage,
@@ -222,8 +227,13 @@ async def openai_web_search(
                     text = getattr(sub, "text", "")
                     if text:
                         text_parts.append(text)
+    from core.llm.adapters._openai_common import translate_codex_response
+
+    completed = translate_codex_response(response)
     if not text_parts:
-        raise RuntimeError("openai_web_search: empty output_text in response")
+        raise EmptyModelOutputError(
+            "openai_web_search: empty output_text in response", completed_result=completed
+        )
     source_urls, citation_urls, search_activated = openai_web_search_urls(output)
     return WebSearchResult(
         query=query,
@@ -234,6 +244,7 @@ async def openai_web_search(
         retrieval_exposed=search_activated,
         model=model,
         adapter_name=adapter_name,
+        usage=completed.usage,
     )
 
 
@@ -251,13 +262,15 @@ async def openai_responses_complete_text(
     max_tokens: int,
     effort: str | None = None,
 ) -> TextCompletionResult:
-    """Single-turn OpenAI Responses API call — preferred over Chat
-    Completions for OpenAI PAYG (and Codex backend if/when it supports
-    text_completion). Responses API is the forward-going surface
-    (per developers.openai.com/api/docs) — Chat Completions stays for
-    GLM-family endpoints (z.ai PAYG / Coding Plan) which don't expose
-    Responses API.
-    """
+    """Single-turn completion on the OpenAI Platform Responses endpoint."""
+    from core.llm.adapters._openai_common import get_openai_model_spec
+    from core.llm.errors import LLMRequestValidationError
+
+    if max_tokens <= 0:
+        raise LLMRequestValidationError("max_tokens must be positive")
+    output_limit = get_openai_model_spec(model).max_output_tokens
+    if output_limit is not None:
+        max_tokens = min(max_tokens, output_limit)
     kwargs: dict[str, Any] = {
         "model": model,
         "input": prompt,
@@ -284,46 +297,6 @@ async def openai_responses_complete_text(
 
 
 # ---------------------------------------------------------------------------
-# OpenAI Chat Completions — kept ONLY for GLM-family endpoints (z.ai PAYG /
-# Coding Plan) which don't expose Responses API. OpenAI proper uses the
-# Responses helper above.
-# ---------------------------------------------------------------------------
-
-
-async def openai_chat_complete_text(
-    client: Any,
-    *,
-    prompt: str,
-    system: str,
-    model: str,
-    max_tokens: int,
-) -> TextCompletionResult:
-    """Single-turn Chat Completions call — used by GLM adapters
-    (``glm-payg`` / ``glm-coding-plan``) whose z.ai endpoint speaks the
-    Chat Completions wire shape only. OpenAI adapters should call
-    :func:`openai_responses_complete_text` instead.
-    """
-    messages: list[dict[str, Any]] = []
-    if system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": prompt})
-    response = await client.chat.completions.create(
-        model=model,
-        messages=messages,
-        max_tokens=max_tokens,
-        timeout=60.0,
-    )
-    choice = response.choices[0] if response.choices else None
-    text = (choice.message.content or "") if choice else ""
-    from core.llm.adapters._openai_common import translate_chat_response
-
-    return TextCompletionResult(
-        text=text,
-        usage=translate_chat_response(response).usage,
-    )
-
-
-# ---------------------------------------------------------------------------
 # GLM — Chat Completions with z.ai native web_search tool
 # ---------------------------------------------------------------------------
 
@@ -331,9 +304,9 @@ async def openai_chat_complete_text(
 async def glm_web_search(
     client: Any, *, query: str, max_results: int, model: str, adapter_name: str
 ) -> WebSearchResult:
-    """GLM (zhipuai/z.ai) native ``web_search`` Chat Completions tool. PAYG
-    endpoint confirmed; Coding Plan subscription endpoint untested (audit
-    2026-05-28)."""
+    """Z.AI's PAYG native search, separate from subscription MCP search."""
+    from core.llm.adapters._openai_common import translate_chat_response
+
     response = await client.chat.completions.create(
         model=model,
         tools=[{"type": "web_search", "web_search": {"enable": True}}],
@@ -348,18 +321,26 @@ async def glm_web_search(
         ],
         timeout=30.0,
     )
-    choice = response.choices[0] if response.choices else None
-    text = (choice.message.content or "") if choice else ""
-    if not text:
-        raise RuntimeError("glm_web_search: empty content in response")
-    return WebSearchResult(query=query, text=text, adapter_name=adapter_name, model=model)
+    completed = translate_chat_response(
+        response, provider="glm", adapter_name=adapter_name, model=model
+    )
+    if not completed.text:
+        raise EmptyModelOutputError(
+            "glm_web_search: empty content in response", completed_result=completed
+        )
+    return WebSearchResult(
+        query=query,
+        text=completed.text,
+        adapter_name=adapter_name,
+        model=model,
+        usage=completed.usage,
+    )
 
 
 __all__ = [
     "anthropic_complete_text",
     "anthropic_web_search",
     "glm_web_search",
-    "openai_chat_complete_text",
     "openai_effort_kwargs",
     "openai_responses_complete_text",
     "openai_web_search",
@@ -368,24 +349,24 @@ __all__ = [
 
 
 def resolve_web_search_model(requested: str) -> str:
-    """Pick the Anthropic model for a ``web_search_20260209`` call.
+    """Pick the Anthropic model for a ``web_search_20260318`` call.
 
     PR-WEB-SEARCH-MODEL-HINT (2026-06-12) — the session's resolved model
     is honoured when it is in the documented support set
-    (``ANTHROPIC_WEB_SEARCH_20260209_MODELS``); anything else (empty hint,
+    (``ANTHROPIC_WEB_SEARCH_MODELS``); anything else (empty hint,
     non-Anthropic model on a mixed lane, unsupported Anthropic model)
     escalates to ``ANTHROPIC_PRIMARY``. Previously the search model was
     hardcoded to ANTHROPIC_PRIMARY regardless of the session model.
     """
     from core.config import ANTHROPIC_PRIMARY
-    from core.llm.model_capabilities import ANTHROPIC_WEB_SEARCH_20260209_MODELS
+    from core.llm.model_capabilities import ANTHROPIC_WEB_SEARCH_MODELS
 
-    if requested in ANTHROPIC_WEB_SEARCH_20260209_MODELS:
+    if requested in ANTHROPIC_WEB_SEARCH_MODELS:
         return requested
     if requested:
         log.info(
             "web_search: session model %r is outside the documented "
-            "web_search_20260209 support set — escalating to %s",
+            "web_search_20260318 support set — escalating to %s",
             requested,
             ANTHROPIC_PRIMARY,
         )

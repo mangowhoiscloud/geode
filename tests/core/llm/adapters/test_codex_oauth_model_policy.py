@@ -148,7 +148,15 @@ def test_retired_subscription_list_does_not_advertise_user_overrides(
     monkeypatch.setattr(settings, "model_policy_path", "")
     monkeypatch.setattr(cfg, "CODEX_PRIMARY", "gpt-5.4")
     monkeypatch.setattr(cfg, "CODEX_FALLBACK_CHAIN", ["gpt-5.2", "gpt-5.5", "gpt-5.6-sol"])
-    assert [model.id for model in CodexOAuthAdapter().list_models()] == ["gpt-5.5", "gpt-5.6-sol"]
+    assert [model.id for model in CodexOAuthAdapter().list_models()] == [
+        "gpt-6-astra",
+        "gpt-6-sol",
+        "gpt-6-luna",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",  # Explicit configuration remains valid until retirement.
+    ]
     assert cfg.CODEX_PRIMARY == "gpt-5.4"  # no automatic config migration
 
 
@@ -189,3 +197,19 @@ def test_retirement_is_terminal_even_with_opted_in_fallback_chain(
         asyncio.run(fallback.run_with_retry_policy(["gpt-5.4", "gpt-5.6-sol"], call, policy=policy))
     assert attempted == ["gpt-5.4"]
     client.assert_not_called()
+
+
+@pytest.mark.parametrize("source", ["payg", "subscription"])
+def test_model_list_retains_deduplicated_configured_ids(
+    monkeypatch: pytest.MonkeyPatch, source: str
+) -> None:
+    import core.config as cfg
+    from core.llm.adapters.openai_payg import OpenAIPaygAdapter
+
+    prefix = "OPENAI" if source == "payg" else "CODEX"
+    monkeypatch.setattr(cfg, f"{prefix}_PRIMARY", "custom-endpoint-model")
+    monkeypatch.setattr(cfg, f"{prefix}_FALLBACK_CHAIN", ["custom-endpoint-model", "gpt-6-sol"])
+    adapter = OpenAIPaygAdapter() if source == "payg" else CodexOAuthAdapter()
+    ids = [model.id for model in adapter.list_models()]
+    assert ids.count("custom-endpoint-model") == ids.count("gpt-6-sol") == 1
+    assert "gpt-6-astra" in ids

@@ -15,7 +15,7 @@ import json
 import logging
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
@@ -565,21 +565,20 @@ class SessionCheckpoint:
         try:
             from core.memory.session_manager import SessionManager, SessionMeta
 
-            mgr = SessionManager(self._dir / "sessions.db")
-            mgr.upsert(
-                SessionMeta(
-                    session_id=state.session_id,
-                    created_at=state.created_at,
-                    updated_at=state.updated_at,
-                    status=state.status,
-                    model=state.model,
-                    provider=state.provider,
-                    user_input=state.user_input,
-                    round_count=state.round_idx,
-                    message_count=message_count,
+            with closing(SessionManager(self._dir / "sessions.db")) as mgr:
+                mgr.upsert(
+                    SessionMeta(
+                        session_id=state.session_id,
+                        created_at=state.created_at,
+                        updated_at=state.updated_at,
+                        status=state.status,
+                        model=state.model,
+                        provider=state.provider,
+                        user_input=state.user_input,
+                        round_count=state.round_idx,
+                        message_count=message_count,
+                    )
                 )
-            )
-            mgr.close()
         except Exception:
             log.debug("Failed to sync session to SQLite index", exc_info=True)
 

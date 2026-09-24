@@ -32,15 +32,15 @@ from typing import Any
 
 from dotenv import dotenv_values
 
-from core.config import _TOML_TO_SETTINGS, GLOBAL_CONFIG_PATH, PROJECT_CONFIG_PATH, _flatten_toml
+from core.config import _TOML_TO_SETTINGS, PROJECT_CONFIG_PATH, _flatten_toml
+from core.config.toml_edit import resolve_config_toml_path
 from core.paths import GLOBAL_ENV_FILE
 
 PROJECT_ENV_FILE = Path(".env")
 
 
 def _global_toml_path() -> Path:
-    env_toml = os.environ.get("GEODE_CONFIG_TOML", "").strip()
-    return Path(env_toml).expanduser() if env_toml else GLOBAL_CONFIG_PATH
+    return resolve_config_toml_path()
 
 
 #: Layer identifiers in precedence order (index 0 = strongest).

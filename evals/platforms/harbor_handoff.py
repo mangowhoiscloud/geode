@@ -256,6 +256,7 @@ async def _run_handoff(args: argparse.Namespace) -> int:
     metadata: dict[str, Any] = {
         "source_revision": args.revision,
         "verify_mode": "llm_judge" if verification_engine else "rule_based",
+        "effective_verify_mode": None,
         **({"verification_engine": verification_engine} if verification_engine else {}),
         "profile": "decision-handoff",
         "arm": args.arm,
@@ -330,6 +331,7 @@ async def _run_handoff(args: argparse.Namespace) -> int:
             metadata.update(
                 geode_session_id=result["session_id"],
                 termination_reason=result["termination_reason"],
+                effective_verify_mode=result["effective_verify_mode"],
                 error_type=result["error_type"],
                 usage=result["usage"],
             )
