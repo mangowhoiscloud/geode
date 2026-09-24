@@ -109,6 +109,9 @@ def test_list_models_returns_specs() -> None:
         GlmCodingPlanAdapter,
     ):
         models = cls().list_models()
+        if cls is GlmCodingPlanAdapter:
+            assert models == []  # The persisted route is not eligible for GEODE.
+            continue
         assert models, f"{cls.__name__}: list_models returned empty list"
         for m in models:
             assert m.id
@@ -138,6 +141,7 @@ def test_coding_plan_route_preserves_subscription_identity(
     accepted: bool,
 ) -> None:
     from core.llm.adapters import glm_coding_plan
+    from core.llm.errors import ModelSourceUnavailableError
     from core.llm.strategies import plan_registry, provider_routing_policy
     from core.wiring import container
 
@@ -164,16 +168,9 @@ def test_coding_plan_route_preserves_subscription_identity(
     monkeypatch.setattr(glm_coding_plan, "build_async_openai_client", build_client)
 
     adapter = GlmCodingPlanAdapter()
-    if accepted:
-        assert _resolve_coding_plan_endpoint() == (profile.key, endpoint)
-        assert adapter.detect_credential() is not None
-        assert adapter.test_environment().ok
-        assert adapter._get_client() is build_client.return_value
-        build_client.assert_called_once_with(profile.key, base_url=endpoint)
-    else:
-        assert _resolve_coding_plan_endpoint() == ("", "")
-        assert adapter.detect_credential() is None
-        assert not adapter.test_environment().ok
-        with pytest.raises(RuntimeError, match="no GLM Coding Plan profile registered"):
-            adapter._get_client()
-        build_client.assert_not_called()
+    assert _resolve_coding_plan_endpoint() == ((profile.key, endpoint) if accepted else ("", ""))
+    assert adapter.detect_credential() is None
+    assert not adapter.test_environment().ok
+    with pytest.raises(ModelSourceUnavailableError, match="GEODE"):
+        adapter._get_client()
+    build_client.assert_not_called()

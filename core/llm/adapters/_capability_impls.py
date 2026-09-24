@@ -297,46 +297,6 @@ async def openai_responses_complete_text(
 
 
 # ---------------------------------------------------------------------------
-# OpenAI Chat Completions — kept ONLY for GLM-family endpoints (z.ai PAYG /
-# Coding Plan) which don't expose Responses API. OpenAI proper uses the
-# Responses helper above.
-# ---------------------------------------------------------------------------
-
-
-async def openai_chat_complete_text(
-    client: Any,
-    *,
-    prompt: str,
-    system: str,
-    model: str,
-    max_tokens: int,
-) -> TextCompletionResult:
-    """Single-turn Chat Completions call — used by GLM adapters
-    (``glm-payg`` / ``glm-coding-plan``) whose z.ai endpoint speaks the
-    Chat Completions wire shape only. OpenAI adapters should call
-    :func:`openai_responses_complete_text` instead.
-    """
-    messages: list[dict[str, Any]] = []
-    if system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": prompt})
-    response = await client.chat.completions.create(
-        model=model,
-        messages=messages,
-        max_tokens=max_tokens,
-        timeout=60.0,
-    )
-    choice = response.choices[0] if response.choices else None
-    text = (choice.message.content or "") if choice else ""
-    from core.llm.adapters._openai_common import translate_chat_response
-
-    return TextCompletionResult(
-        text=text,
-        usage=translate_chat_response(response).usage,
-    )
-
-
-# ---------------------------------------------------------------------------
 # GLM — Chat Completions with z.ai native web_search tool
 # ---------------------------------------------------------------------------
 
@@ -344,9 +304,9 @@ async def openai_chat_complete_text(
 async def glm_web_search(
     client: Any, *, query: str, max_results: int, model: str, adapter_name: str
 ) -> WebSearchResult:
-    """GLM (zhipuai/z.ai) native ``web_search`` Chat Completions tool. PAYG
-    endpoint confirmed; Coding Plan subscription endpoint untested (audit
-    2026-05-28)."""
+    """Z.AI's PAYG native search, separate from subscription MCP search."""
+    from core.llm.adapters._openai_common import translate_chat_response
+
     response = await client.chat.completions.create(
         model=model,
         tools=[{"type": "web_search", "web_search": {"enable": True}}],
@@ -361,18 +321,26 @@ async def glm_web_search(
         ],
         timeout=30.0,
     )
-    choice = response.choices[0] if response.choices else None
-    text = (choice.message.content or "") if choice else ""
-    if not text:
-        raise RuntimeError("glm_web_search: empty content in response")
-    return WebSearchResult(query=query, text=text, adapter_name=adapter_name, model=model)
+    completed = translate_chat_response(
+        response, provider="glm", adapter_name=adapter_name, model=model
+    )
+    if not completed.text:
+        raise EmptyModelOutputError(
+            "glm_web_search: empty content in response", completed_result=completed
+        )
+    return WebSearchResult(
+        query=query,
+        text=completed.text,
+        adapter_name=adapter_name,
+        model=model,
+        usage=completed.usage,
+    )
 
 
 __all__ = [
     "anthropic_complete_text",
     "anthropic_web_search",
     "glm_web_search",
-    "openai_chat_complete_text",
     "openai_effort_kwargs",
     "openai_responses_complete_text",
     "openai_web_search",
