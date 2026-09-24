@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     # is imported lazily inside its build_* function below; this block
     # exists solely so mypy / IDEs can resolve the annotations.
     from core.hooks import HookRegistry, MiddlewareRegistry, RuntimeEventBus
+    from core.mcp.manager import MCPServerManager
     from core.memory.context import ContextAssembler
     from core.memory.dreaming import DreamingService
     from core.memory.organization import MonoLakeOrganizationMemory
@@ -818,11 +819,13 @@ def build_task_graph() -> TaskGraph:
 # ---------------------------------------------------------------------------
 
 
-def build_mcp_manager() -> Any:
-    """Load MCP server config (lazy — no subprocess connections yet)."""
-    from core.mcp.manager import get_mcp_manager
+def build_mcp_manager(*, hooks: RuntimeEventBus | None = None) -> MCPServerManager:
+    """Create a runtime-owned manager; connections remain lazy."""
+    from core.mcp.manager import MCPServerManager
 
-    mgr = get_mcp_manager()
+    # Runtime rollback/shutdown owns this manager; process handlers belong to
+    # the standalone compatibility manager, never to overlapping runtimes.
+    mgr = MCPServerManager(hooks=hooks, process_signals=False)
     mgr.load_config()
     return mgr
 

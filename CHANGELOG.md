@@ -163,6 +163,13 @@ functional change.
 
 ### Fixed
 
+- Runtime MCP managers now own their connections and event bindings, including
+  notification, calendar and gateway consumers. Another runtime's rollback or
+  shutdown cannot close them. Restarted managers close each connection generation;
+  failed closes retain the resource for retry after attempting sibling cleanup.
+  Keep failed connection attempts owned and confirm child exit after forced
+  termination before releasing process handles, pipes and scratch directories.
+
 - **Anthropic cache lifecycle and TTL accounting.** Cache markers preserve signed thinking replay, reserve existing system/tool/message slots within the four-marker limit, and reject invalid TTL ordering before dispatch. Provider-reported one-hour writes reach runtime cost guards, durable activity schema 11, monthly usage and Harbor attempt metadata; missing historical TTL splits remain unknown. Validate the TTL subset before storing usage even when a provider-reported cost bypasses price estimation.
 
 - Reload gateway bindings atomically after file deletion, replacement or edits

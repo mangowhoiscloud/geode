@@ -59,8 +59,8 @@ remain outside scope.
 | E2 | Atomic gateway reload and owned watcher/poller lifecycle | C1, C2 | PR #3410 merged into develop at `1decea9ba`; required CI passed |
 | E3 | Shared SDK transport ownership at actual process/thread event-loop teardown | E1 | PR #3411 merged into develop at `93532f825`; required CI passed |
 | K2 | Claude cache marker validity and 1-hour write accounting through durable records | P6 | PR #3412 merged into develop at `37138a82d`; required CI passed; activity schema v11, trajectory v1 unchanged |
-| K1 | OpenAI explicit static prefixes and OpenRouter route/session cache shaping | P6, K2 | local integration candidate against develop `37138a82d`; remote CI and merge pending |
-| MCP | Preserve connection and subprocess ownership across creation and cleanup failures | existing runtime audit; queued after K1 | local implementation and review at `ff035e30c`; integration and remote CI/merge pending |
+| K1 | OpenAI explicit static prefixes and OpenRouter route/session cache shaping | P6, K2 | PR #3413 merged into develop at `99e897f70`; required CI passed |
+| MCP | Preserve connection and subprocess ownership across creation and cleanup failures | existing runtime audit; queued after K1 | local integration candidate against develop `99e897f70`; remote CI and merge pending |
 | TQ | Strengthen test outcome oracles and remove an identical duplicate | existing quality audit; queued after MCP | local implementation and review at `9c931d302`; integration and remote CI/merge pending |
 | grill ownership | Move daemon skill-prompt builders from CLI to runtime skills owners | existing dependency audit; queued after TQ | local implementation and review at `a344009dd`; integration and remote CI/merge pending |
 | V1 bounds | Optional Harbor output/round limits and shared wrap-up cap preservation | runtime owners | PR #3404 merged into develop at `3e6e5d988` |
@@ -70,7 +70,8 @@ remain outside scope.
 | Compaction | Route-aware context admission, overflow recovery, next-turn task state and public-hook read-only/re-entry/persistence/cancellation contracts | remaining implementation queue | primary-source research and offline counterexamples recorded; implementation pending in a separate PR before V1 execution |
 | V1 execution | New-model API/subscription E2E, cache and Harbor validation | all implementation PRs merged into develop with required CI | not started; total US$20 paid cap approved |
 | F1 | Repeatable onboarding and audit scaffold in existing contributor skills | completed refactoring and checks | pending; preserve runtime/contributor prompt separation |
-| R1 | Patch release preparation, packaging/docs, develop→main, stable publication | all accepted units | pending |
+| Report | Reconcile all session changes with the existing report and update stale or missing content, including OpenRouter and compaction; exclude Jev | Compaction and V1 execution | pending separate feature PR; publication through main Pages |
+| R1 | Patch release preparation, packaging/docs, develop→main, stable publication | all accepted units, including Report | pending |
 
 The implementation workspace holds the combined candidate while changes
 are tested. Integration PRs are assembled in dependency order; the combined
@@ -98,9 +99,13 @@ separate PRs before freezing final V1 inputs. This is a single integration
 queue operated under the existing [GitFlow manual](../../.agents/skills/geode-gitflow/SKILL.md),
 not a change to GitHub protection settings or a new merge-queue service.
 
-At develop `37138a82d`, P6, CI-3, E2, E3 and K2 are also merged. The remaining
-queue is K1 → MCP → TQ → grill ownership → Compaction → V1 → F1 → R1.
-K1 is a local integration candidate; MCP, TQ and grill retain their reviewed
+At develop `99e897f70`, P6, CI-3, E2, E3, K2 and K1 are also merged. The remaining
+queue is MCP → TQ → grill ownership → Compaction → V1 → F1 → R1.
+The separate Report feature follows V1 observations and must precede R1. Review
+all session changes against the report, including OpenRouter; the ACT3 page 34
+update and two added compaction pages do not limit that scope. Jev belongs to a
+separate report. No report content is implemented by this integration.
+MCP, TQ and grill retain their reviewed
 local heads pending ordered integration and exact-head remote CI. The
 operator's September 25 follow-up adds the separate compaction PR immediately
 before V1. Its primary-source research and offline counterexamples are recorded;
