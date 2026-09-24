@@ -58,6 +58,12 @@ functional change.
 
 ### Changed
 
+- Preserve the static prompt boundary on supported OpenAI Platform requests
+  using developer content breakpoints while retaining implicit history caching.
+  Forward supported upstream cache markers through OpenRouter and retain
+  logical-session affinity across SDK connections using a hashed session ID.
+  Preserve Codex, legacy OpenAI and automatic Z.AI cache contracts.
+
 - Bound OpenAI Python to SDK 2 (`>=2.45,<3`) and Anthropic Python to SDK 0
   (`>=0.116,<1`) while preserving the verified transport and audit contracts.
   Share configured HTTP transport construction

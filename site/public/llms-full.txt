@@ -6284,6 +6284,14 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-cachin
 
 Anthropic 요청 생성기(`core/llm/adapters/_anthropic_common.py`)가 정적 블록에 기본 `cache_control: {"type": "ephemeral", "ttl": "1h"}`을 붙입니다. `prompt_cache_extended_ttl=false`는 5분 TTL을 선택합니다. 동적 블록에는 별도 마커를 붙이지 않지만, 뒤쪽 메시지 마커가 만드는 누적 프리픽스에는 포함됩니다. 정적 영역이 비면 빈 텍스트 오류를 피해 동적 블록에 5분 마커 하나를 사용합니다.
 
+## OpenAI·Z.AI·OpenRouter의 경계
+
+OpenAI Platform의 등록된 GPT-5.6·GPT-6 모델은 같은 경계 앞의 정적 문자열을 developer 메시지의 input\_text 블록으로 보내고`prompt_cache_breakpoint`를 붙입니다. 동적 문자열은 그 뒤에 두며, 대화 이력의 자동 캐싱도 유지합니다. Codex 구독 경로와 이전 모델은 기존 instructions 및 캐시 키 계약을 유지합니다. 키가 같다는 사실만으로 적중을 보장하지는 않습니다.
+
+Z.AI는 반복 접두부를 자동으로 캐싱하며 별도 캐시 마커를 보내지 않습니다. OpenRouter의 명시적 Claude·지원 OpenAI 경로에는 해당 마커를 보존합니다. 논리 세션 ID의 해시로 제공자 선택의 연속성을 요청하고, 원래 세션 ID는 보내지 않습니다. 사용자가 설정한 제공자 우선순위는 유지하며, 자동 모델 선택에 특정 제공자 마커를 추측해 넣지 않습니다.
+
+SDK 연결을 닫거나 다시 만들어도 서버의 캐시를 삭제하지 않습니다. 모델·계정·도구 순서·출력 스키마·추론 설정·정리된 이력이 달라지면 공유 접두부도 달라질 수 있습니다. 실제 적중은 반환된 사용량으로 확인하며, 누락된 값과 0을 구분합니다. 정책 근거는 2026-09-24에 확인한 [OpenAI](https://developers.openai.com/api/docs/guides/prompt-caching), [Z.AI](https://docs.z.ai/guides/capabilities/cache), [OpenRouter](https://openrouter.ai/docs/guides/best-practices/prompt-caching)공식 문서입니다.
+
 ## 롤링 메시지 breakpoint
 
 요청 전체의 도구·시스템·메시지 마커는 최대 4개입니다. 정적 시스템 블록이 1개를 사용하고, `apply_messages_cache_control`이 기존 마커를 보존한 뒤 남은 슬롯에서 기본 최대 3개를 추가합니다.`cache-policy`의 `messages_breakpoints`는 추가할 수를 0–3으로 제한합니다. thinking·redacted\_thinking과 빈 텍스트에는 직접 마커를 붙이지 않습니다. 명시적 1시간 마커는 5분 마커보다 앞에 있어야 하며, 잘못된 입력은 호출 전에 거절합니다.
@@ -7325,7 +7333,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 589 |
-| 테스트 Python 파일 | 743 |
+| 테스트 Python 파일 | 744 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |
