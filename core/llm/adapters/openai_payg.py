@@ -31,6 +31,7 @@ from core.llm.adapters._openai_common import (
     build_responses_kwargs,
     openai_computer_tool_param,
     translate_codex_response,
+    translate_responses_stream,
 )
 from core.llm.adapters.base import (
     SOURCE_PAYG,
@@ -58,9 +59,8 @@ class OpenAIPaygAdapter:
     provider: str = "openai"
     source: str = SOURCE_PAYG
     billing_type: AdapterBillingType = AdapterBillingType.API
-    # PR-ADAPTER-PATTERN-UNIFICATION — Responses API web_search hosted tool
-    # works on the PAYG endpoint. The Codex backend subscription endpoint
-    # does not advertise web_search support (frontier audit 2026-05-28).
+    # Responses web search is supported on this API-key route; subscription
+    # support and request shaping remain owned by CodexOAuthAdapter.
     supports_web_search: bool = True
     supports_text_completion: bool = True
     # ComputerUseCapable — the GA ``{type: "computer"}`` tool is injected on the
@@ -137,8 +137,8 @@ class OpenAIPaygAdapter:
         (per developers.openai.com/api/docs) and the same API the Codex
         backend speaks — sharing it here keeps the per-provider request
         shape uniform with the agent loop's main ``acomplete`` path.
-        Chat Completions stays only on GLM adapters where z.ai's
-        OpenAI-compatibility surface lacks Responses support.
+        GLM adapters preserve their documented account-compatible
+        Chat Completions route separately.
         """
         from core.config import OPENAI_PRIMARY
         from core.llm.adapters._capability_impls import openai_responses_complete_text
@@ -186,12 +186,8 @@ class OpenAIPaygAdapter:
         client = self._get_client()
         kwargs = build_responses_kwargs(req, backend="platform", adapter_name=self.name)
         async with client.responses.stream(**kwargs) as stream:
-            async for event in stream:
-                ev_type = getattr(event, "type", "")
-                if ev_type.endswith("output_text.delta"):
-                    yield StreamEvent(kind="text", payload={"text": getattr(event, "delta", "")})
-                elif ev_type == "response.completed":
-                    yield StreamEvent(kind="stop", payload={"stop_reason": "completed"})
+            async for event in translate_responses_stream(stream):
+                yield event
 
     def test_environment(self) -> EnvironmentReport:
         from core.config import settings
@@ -212,17 +208,16 @@ class OpenAIPaygAdapter:
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import OPENAI_FALLBACK_CHAIN, OPENAI_PRIMARY
-        from core.llm.model_catalog import model_spec_for_adapter
+        from core.llm.model_catalog import model_ids_for_source, model_spec_for_adapter
 
-        ids = [OPENAI_PRIMARY, *OPENAI_FALLBACK_CHAIN]
-        seen: set[str] = set()
-        models: list[ModelSpec] = []
-        for mid in ids:
-            if mid in seen:
-                continue
-            seen.add(mid)
-            models.append(model_spec_for_adapter(mid, provider=self.provider))
-        return models
+        return [
+            model_spec_for_adapter(mid, provider=self.provider)
+            for mid in model_ids_for_source(
+                provider=self.provider,
+                source=self.source,
+                configured=(OPENAI_PRIMARY, *OPENAI_FALLBACK_CHAIN),
+            )
+        ]
 
     def detect_credential(self) -> CredentialDetection | None:
         from core.config import OPENAI_PRIMARY, settings
