@@ -96,7 +96,9 @@ class AcmePaygAdapter:
               루프 수명까지 보관되며 교체 횟수에 대한 별도 상한은 없습니다.
               외부에서 루프를 소유한다면 작업 종료 후 루프를 닫기 전에
               <code>core.llm.loop_affinity.drain_current_loop_clients()</code>를
-              await하십시오. 캐시 밖에서 전달한 연결의 정리는 원래 소유자 책임입니다.
+              await하십시오. 종료 실패 연결은 같은 루프가 살아 있는 동안 재시도할 수
+              있도록 보존합니다. 이미 닫힌 루프의 연결을 다른 루프에서 정리하지는
+              않습니다. 캐시 밖에서 전달한 연결의 정리는 원래 소유자 책임입니다.
             </p>
             <pre>{`# acme-geode-adapter/pyproject.toml
 [project.entry-points."geode.llm_adapters"]
@@ -320,7 +322,9 @@ class AcmePaygAdapter:
               clients open. Retired clients remain until loop teardown, without
               a separate rotation-count limit. External loop owners should
               await <code>core.llm.loop_affinity.drain_current_loop_clients()</code>
-              after their work finishes and before closing the loop. Clients
+              after their work finishes and before closing the loop. Failed closes
+              remain retryable while that loop is alive; a closed loop cannot
+              transfer cleanup to another loop. Clients
               supplied outside the cache remain their original owner&apos;s responsibility.
             </p>
             <pre>{`# acme-geode-adapter/pyproject.toml

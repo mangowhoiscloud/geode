@@ -58,6 +58,7 @@ async def drain_current_loop_clients() -> None:
     Never call this for one session or runtime: adapters share clients across
     sessions on the same loop. Borrowed clients passed to capability helpers
     are not registered here. Builders passed to the cache transfer ownership.
+    Failed closes remain owned for a retry while this loop is still alive.
     """
     loop = asyncio.get_running_loop()
     with _OWNERS_LOCK:
@@ -83,6 +84,8 @@ async def drain_current_loop_clients() -> None:
                         break
                 close.result()
             except BaseException as exc:
+                with _OWNERS_LOCK:
+                    _OWNED_CLIENTS.setdefault(loop, {}).setdefault(cache, []).append(client)
                 failure_count += 1
                 if len(failures) < 5:
                     failures.append(exc)

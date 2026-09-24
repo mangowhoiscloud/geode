@@ -176,6 +176,28 @@ def test_all_clients_attempted_and_original_failure_preserved(
         assert len(caught.value.exceptions) == 5
 
 
+def test_failed_client_drain_can_retry_on_the_same_live_loop() -> None:
+    cache = LoopAffineClientCache("retry-cleanup")
+
+    async def work() -> None:
+        failed = cache.get(lambda: Client(fail=True))
+        cache.invalidate()
+        sibling = cache.get(Client)
+        with pytest.raises(ExceptionGroup, match="1 client"):
+            await drain_current_loop_clients()
+        assert [failed.close_count, sibling.close_count] == [1, 1]
+        assert cache.bound_loop_count() == 0
+        replacement = cache.get(Client)
+        assert replacement is not failed and replacement is not sibling
+        failed.fail = False
+        await drain_current_loop_clients()
+        assert [failed.close_count, sibling.close_count, replacement.close_count] == [2, 1, 1]
+        await drain_current_loop_clients()
+        assert [failed.close_count, sibling.close_count, replacement.close_count] == [2, 1, 1]
+
+    asyncio.run(work())
+
+
 @pytest.mark.parametrize("primary", [None, ValueError("work failed"), asyncio.CancelledError()])
 def test_runner_close_failure_preserves_the_original_error(
     primary: BaseException | None, monkeypatch: pytest.MonkeyPatch

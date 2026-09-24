@@ -147,7 +147,8 @@ functional change.
   Preserve original failures and cancellation through bounded cleanup-error
   reporting, including normal CLI, gateway, worker and dreaming loop exits.
   Drain generators and SDK clients even when cancelled background work raises
-  a control exception during shutdown, preserving the original failure.
+  a control exception during shutdown, preserving the original failure. Failed
+  client closes remain retryable while their owning event loop is still alive.
 - Use the shared global config path resolver for Settings, config explanation,
   model-picker reads/writes/confirmation, MCP, gateway reload/watch, seed
   role/voter overrides, and evaluation config migration.
