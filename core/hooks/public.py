@@ -657,6 +657,8 @@ class HookRegistry:
             raise InvalidHookDecisionError("rewrite requires non-empty updates")
         if decision.action is not HookAction.REWRITE and decision.updates:
             raise InvalidHookDecisionError("updates are only allowed for rewrite decisions")
+        if hook is HookName.PRE_COMPACT and set(decision.updates) - {"keep_recent"}:
+            raise InvalidHookDecisionError("PreCompact may only rewrite keep_recent")
         if (
             hook is HookName.PRE_VERIFY
             and decision.action is HookAction.STRENGTHEN

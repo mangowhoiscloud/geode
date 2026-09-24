@@ -163,6 +163,14 @@ functional change.
 
 ### Fixed
 
+- Use the selected model/provider/source and request output reserve for context
+  admission. Treat 200K as soft local maintenance, recover boundedly from actual
+  provider overflow, and avoid duplicate pre-request compaction decisions.
+  Preserve original user input, causal tool pairs and native replay boundaries;
+  reject stale/reentrant replacement and read-only hook rewrites. Exhaustion
+  now returns a truthful local notice without another model call or a universal
+  session-reset claim.
+
 - Runtime MCP managers now own their connections and event bindings, including
   notification, calendar and gateway consumers. Another runtime's rollback or
   shutdown cannot close them. Restarted managers close each connection generation;

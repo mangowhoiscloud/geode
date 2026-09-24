@@ -104,6 +104,13 @@ class OpenAIModelSpec:
     max_output_tokens: int | None = None
     """Published API output limit, including reasoning; unknown is not unlimited."""
 
+    max_input_tokens: int | None = None
+    """Published Platform input cap; absent is unknown, not context minus output."""
+
+    codex_context_window: int | None = None
+    codex_max_context_window: int | None = None
+    """Pinned Codex client defaults/config ceiling, never account entitlement."""
+
     supports_tool_search: bool = False
     """True → model accepts ``{"type": "tool_search"}`` + ``defer_loading``
     on the Responses API ("only gpt-5.4 and later models support
@@ -126,6 +133,9 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("low", "medium", "high", "xhigh", "max"),
         context_window=_catalog_context_window("gpt-6-astra"),
+        max_input_tokens=922_000,
+        codex_context_window=272_000,
+        codex_max_context_window=872_000,
         max_output_tokens=128_000,
         supports_tool_search=True,
         supports_explicit_prompt_cache=True,
@@ -138,6 +148,9 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
         context_window=_catalog_context_window("gpt-6-sol"),
+        max_input_tokens=922_000,
+        codex_context_window=272_000,
+        codex_max_context_window=872_000,
         max_output_tokens=128_000,
         supports_tool_search=True,
         supports_explicit_prompt_cache=True,
@@ -148,6 +161,9 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
         context_window=_catalog_context_window("gpt-6-luna"),
+        max_input_tokens=922_000,
+        codex_context_window=272_000,
+        codex_max_context_window=872_000,
         max_output_tokens=128_000,
         supports_tool_search=True,
         supports_explicit_prompt_cache=True,
@@ -159,6 +175,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("low", "medium", "high", "xhigh"),
         context_window=_catalog_context_window("gpt-5.3-codex"),
+        max_input_tokens=272_000,
         max_output_tokens=128_000,
     ),
     "gpt-5.4": OpenAIModelSpec(
@@ -176,6 +193,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
         context_window=_catalog_context_window("gpt-5.4-mini"),
+        max_input_tokens=272_000,
         max_output_tokens=128_000,
         supports_tool_search=True,
     ),
@@ -185,6 +203,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
         context_window=_catalog_context_window("gpt-5.4-nano"),
+        max_input_tokens=272_000,
         max_output_tokens=128_000,
     ),
     "gpt-5.2": OpenAIModelSpec(
@@ -230,6 +249,9 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
         context_window=_catalog_context_window("gpt-5.6-luna"),
+        max_input_tokens=922_000,
+        codex_context_window=272_000,
+        codex_max_context_window=872_000,
         max_output_tokens=128_000,
         supports_tool_search=True,
         supports_explicit_prompt_cache=True,
@@ -240,6 +262,9 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
         context_window=_catalog_context_window("gpt-5.6-sol"),
+        max_input_tokens=922_000,
+        codex_context_window=272_000,
+        codex_max_context_window=872_000,
         max_output_tokens=128_000,
         supports_tool_search=True,
         supports_explicit_prompt_cache=True,
@@ -250,6 +275,9 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
         context_window=_catalog_context_window("gpt-5.6-terra"),
+        max_input_tokens=922_000,
+        codex_context_window=272_000,
+        codex_max_context_window=872_000,
         max_output_tokens=128_000,
         supports_tool_search=True,
         supports_explicit_prompt_cache=True,
@@ -1779,6 +1807,16 @@ def build_request_image_receipt(resp_input: Any) -> dict[str, Any] | None:
     return receipt
 
 
+def effective_output_tokens(req: AdapterCallRequest, *, backend: str) -> int | None:
+    """Return the transmitted Responses cap; Codex manages output itself."""
+    if backend == "codex":
+        return None
+    if req.max_tokens < 1:
+        raise LLMRequestValidationError("OpenAI max_output_tokens must be positive")
+    spec = get_openai_model_spec(req.model)
+    return min(req.max_tokens, spec.max_output_tokens or req.max_tokens)
+
+
 def build_responses_kwargs(
     req: AdapterCallRequest, *, backend: str, adapter_name: str
 ) -> dict[str, Any]:
@@ -1870,9 +1908,7 @@ def build_responses_kwargs(
         if cache_key:
             kwargs["prompt_cache_key"] = cache_key
     if backend == "platform":
-        if req.max_tokens < 1:
-            raise LLMRequestValidationError("OpenAI max_output_tokens must be positive")
-        kwargs["max_output_tokens"] = min(req.max_tokens, spec.max_output_tokens or req.max_tokens)
+        kwargs["max_output_tokens"] = effective_output_tokens(req, backend=backend)
     if req.stop_sequences:
         # Responses API exposes no ``stop`` parameter (Chat Completions
         # did). Observable drop instead of a silent one — Codex review of

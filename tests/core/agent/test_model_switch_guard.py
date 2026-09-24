@@ -6,12 +6,13 @@ T2: Small context → small model → no adaptation needed
 T3: Huge context → small model → adapts to fit
 T4: Small model → large model (upgrade) → no adaptation
 T5: Escalation path — fallback triggers adaptation
-T6: Pure text (no tool results) → pruning only
+T6: Failed text summary → original history and model retained
 """
 
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -244,12 +245,12 @@ class TestOpenAIBidirectionalSwitch:
 
 
 # ---------------------------------------------------------------------------
-# T6: Unsupported client summary requires explicit pruning, not silent loss
+# T6: Failed client summary must not silently prune history
 # ---------------------------------------------------------------------------
 
 
 class TestT6PureText:
-    def test_text_only_downshift_refused_without_client_summary(self):
+    def test_text_only_downshift_refused_without_client_summary(self, monkeypatch):
         from core.agent.loop import _ContextExhaustedError
 
         msgs = []
@@ -263,11 +264,15 @@ class TestT6PureText:
 
         ctx = ConversationContext()
         ctx.messages = msgs
+        original = deepcopy(msgs)
 
         loop = _make_loop(ctx, model="claude-opus-4-6")
+        summary = AsyncMock(side_effect=RuntimeError("summary unavailable"))
+        monkeypatch.setattr("core.orchestration.compaction._call_summarize", summary)
         with pytest.raises(_ContextExhaustedError, match="current model retained"):
             asyncio.run(_model_switching.adapt_context_for_model(loop, "glm-5"))
-        assert ctx.messages == msgs
+        assert ctx.messages == original
+        summary.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
@@ -527,3 +532,53 @@ def test_failed_downshift_retains_current_model_and_history() -> None:
         asyncio.run(loop.update_model_async("o4-mini", provider=loop._provider))
     assert loop.model == "gpt-5.6-sol"
     assert ctx.messages == original
+
+
+@pytest.mark.parametrize("source,compacts", [("subscription", True), ("payg", False)])
+def test_model_switch_budget_uses_current_openai_source(source: str, compacts: bool) -> None:
+    ctx = ConversationContext()
+    ctx.messages = [{"role": "user", "content": "x" * 800_000}]
+    loop = _make_loop(ctx, model="gpt-5.6-luna")
+    loop._source = source
+    loop._source_explicit = True
+
+    async def summarize(messages: Any, **kwargs: Any) -> tuple[list[dict[str, Any]], bool]:
+        assert loop.model == "gpt-5.6-luna"
+        assert kwargs["model"] == loop.model
+        assert kwargs["provider"] == "openai"
+        assert kwargs["source"] == source
+        assert kwargs["policy"].source == source
+        assert kwargs["policy"].context_window == 272_000
+        return [{"role": "user", "content": "summary"}], True
+
+    summary = AsyncMock(side_effect=summarize)
+    with patch("core.orchestration.compaction.compact_conversation", summary):
+        asyncio.run(loop.update_model_async("gpt-5.6-sol", provider="openai"))
+    assert summary.await_count == int(compacts)
+    assert loop.model == "gpt-5.6-sol"
+    assert loop._source == source
+
+
+def test_explicit_provider_selects_openrouter_budget_but_summarizes_on_current_route() -> None:
+    ctx = ConversationContext()
+    ctx.messages = [{"role": "user", "content": "x" * 800_000}]
+    loop = _make_loop(ctx, model="gpt-5.6-luna")
+    loop._source = "payg"
+    loop._source_explicit = True
+
+    async def summarize(messages: Any, **kwargs: Any) -> tuple[list[dict[str, Any]], bool]:
+        assert loop.model == "gpt-5.6-luna"
+        assert loop._provider == kwargs["provider"] == "openai"
+        assert kwargs["source"] == "payg"
+        policy = kwargs["policy"]
+        assert policy.provider == "openrouter"
+        assert policy.context_window == 200_000
+        assert policy.context_origin == "fallback"
+        return [{"role": "user", "content": "summary"}], True
+
+    summary = AsyncMock(side_effect=summarize)
+    with patch("core.orchestration.compaction.compact_conversation", summary):
+        asyncio.run(loop.update_model_async("gpt-5.6-sol", provider="openrouter"))
+    summary.assert_awaited_once()
+    assert loop._provider == "openrouter"
+    assert loop._source == "payg"

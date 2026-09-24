@@ -15,7 +15,9 @@ import copy
 import logging
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
+
+from core.orchestration.compaction import has_native_compaction, preserve_latest_user_input
 
 log = logging.getLogger(__name__)
 
@@ -51,9 +53,12 @@ class ConversationContext:
     # Public API
     # ------------------------------------------------------------------
 
-    def add_user_message(self, text: str) -> None:
-        """Append a user message and trim if needed."""
-        self.messages.append({"role": "user", "content": text})
+    def add_user_message(self, text: str, *, origin: Literal["user_input"] | None = None) -> None:
+        """Append a message; only actual input producers supply its provenance."""
+        message: dict[str, Any] = {"role": "user", "content": text}
+        if origin is not None:
+            message["metadata"] = {"origin": origin}
+        self.messages.append(message)
         self._trim()
 
     def add_assistant_message(self, content: Any) -> None:
@@ -101,7 +106,7 @@ class ConversationContext:
     # ------------------------------------------------------------------
 
     def _trim(self) -> None:
-        """Keep only the last ``max_turns * 2`` messages.
+        """Keep the last ``max_turns * 2`` messages plus the latest marked input.
 
         Preserves tool_use/tool_result pairs: after slicing, any orphaned
         tool_result blocks (whose tool_use was trimmed away) are removed
@@ -110,7 +115,11 @@ class ConversationContext:
         max_msgs = self.max_turns * 2
         if len(self.messages) <= max_msgs:
             return
+        # The count limit is soft; native replay owns its summary/prefix boundary.
+        if has_native_compaction(self.messages):
+            return
 
+        original = self.messages
         self.messages = self.messages[-max_msgs:]
 
         # Ensure first message is user role (Anthropic API requirement)
@@ -121,6 +130,7 @@ class ConversationContext:
         # A tool_result in a user message must reference a tool_use_id
         # in the immediately preceding assistant message.
         self._sanitize_tool_pairs()
+        self.messages = preserve_latest_user_input(original, self.messages)
 
         log.debug(
             "ConversationContext trimmed to %d messages (%d turns)",

@@ -69,6 +69,7 @@ from .models import (
 )
 
 if TYPE_CHECKING:
+    from core.agent.context_manager import ContextWindowManager
     from core.observability.run_event import RunEventSinkProvider
     from core.tools.plan import BoundToolPlan
     from core.tools.registry import ToolRegistry
@@ -130,7 +131,7 @@ class AgenticLoop:
     _tool_processor: ToolCallProcessor
     _pre_execution_retry_errors: list[str]
     _LLM_RETRY_CAP: int
-    _ctx_mgr: Any
+    _ctx_mgr: ContextWindowManager
     _convergence: Any
     _consecutive_tool_tracker: list[tuple[str, str]]
     _budget_warned: bool
@@ -597,7 +598,7 @@ class AgenticLoop:
         )
 
         # Add user message to conversation context
-        self.context.add_user_message(user_input)
+        self.context.add_user_message(user_input, origin="user_input")
 
         # Durable history: session generation + this turn's user message.
         if self._timeline is not None:
@@ -1024,9 +1025,6 @@ class AgenticLoop:
                 is_last_round = self.max_rounds > 0 and round_idx == self.max_rounds - 1
 
                 model_call = await _phases.prepare_model_call(self, prepared, round_idx)
-                if isinstance(model_call, AgenticResult):
-                    return model_call
-
                 provider_result = await _phases.call_provider(
                     self,
                     prepared,

@@ -253,11 +253,10 @@ def test_text_producer_purpose_survives_durable_projection_without_wire_change(
         hooks.close()
 
 
-@pytest.mark.parametrize("consumer", ["learning", "exhausted", "compaction", "dreaming"])
+@pytest.mark.parametrize("consumer", ["learning", "compaction", "dreaming"])
 def test_native_text_consumers_emit_usage_before_discarding_text(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Any, consumer: str
 ) -> None:
-    from core.agent.loop.models import _context_exhausted_message
     from core.config import settings
     from core.hooks.llm_extract_learning import make_llm_extract_handler
     from core.memory.dreaming import DreamingService
@@ -293,10 +292,6 @@ def test_native_text_consumers_emit_usage_before_discarding_text(
                     "termination_reason": "natural",
                 },
             )
-        )
-    elif consumer == "exhausted":
-        asyncio.run(
-            _context_exhausted_message("input", effort="max", hooks=hooks, correlation=correlation)
         )
     else:
         with closing(SessionManager(tmp_path / "auxiliary.db")) as manager:
@@ -334,7 +329,6 @@ def test_native_text_consumers_emit_usage_before_discarding_text(
         rows[1][1]["purpose"]
         == {
             "learning": "learning_extraction",
-            "exhausted": "context_exhaustion",
             "compaction": "context_compaction",
             "dreaming": "memory_dreaming",
         }[consumer]
@@ -400,3 +394,33 @@ def test_codex_search_retains_final_usage_without_changing_wire(
     assert result_usage.input_tokens_present is present
     assert wire[0]["model"] == "gpt-5.6-sol" and wire[0]["store"] is False
     assert "reasoning" not in wire[0] and "max_output_tokens" not in wire[0]
+
+
+def test_context_exhausted_notice_has_no_model_call_or_usage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.agent.loop.models import _context_exhausted_message
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "model", "gpt-5.6-sol")
+    monkeypatch.setattr(settings, "openai_credential_source", "api_key")
+    call = AsyncMock(
+        return_value=TextCompletionResult(text="Automatically reset.", usage=UsageSummary())
+    )
+    _adapter(monkeypatch, call)
+    hooks, rows = _observations()
+    try:
+        notice = asyncio.run(
+            _context_exhausted_message(
+                "Continue",
+                effort="max",
+                hooks=hooks,
+                correlation={"session_id": "exhausted-session", "turn_id": "terminal-turn"},
+            )
+        )
+        assert "exhausted" in notice.lower()
+        assert "reset" not in notice.lower()
+        call.assert_not_awaited()
+        assert rows == []
+    finally:
+        hooks.close()

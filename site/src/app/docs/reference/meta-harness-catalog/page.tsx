@@ -22,23 +22,23 @@ type Row = {
 const CONTEXT_ROWS: Row[] = [
   {
     name: "ContextWindowManager",
-    ko: "컨텍스트 총량이 임계선을 넘으면 emergency prune과 recovery를 발화",
-    en: "Fires emergency prune and recovery when total context crosses the critical band",
-    control: "CONTEXT_CRITICAL / CONTEXT_OVERFLOW_ACTION hooks",
+    ko: "선택된 요청 경로의 압력과 실제 입력 거절에 제한된 유지보수·복구 적용",
+    en: "Applies bounded maintenance and recovery to selected-request pressure and input rejection",
+    control: "PreCompact keep_recent/defer; CONTEXT_CRITICAL observation",
     path: "core/agent/context_manager.py",
   },
   {
     name: "Context budget policy",
-    ko: "모델 window에서 토큰 상한, warning, critical 밴드를 유도하는 단일 SoT",
-    en: "Single SoT deriving token ceilings and warning/critical bands from the model window",
-    control: "ceiling 200k, warn 50/70/80%, crit 90%, output reserve 20k",
+    ko: "모델·공급자·source·요청 출력 예비분에서 유효 예산과 경고 밴드 도출",
+    en: "Derives planning budgets from model, provider, source and requested output reserve",
+    control: "soft maintenance 200k; warn 50/70/80%; critical 90%; route-aware reserve",
     path: "core/orchestration/context_budget.py",
   },
   {
     name: "Message prune policy",
-    ko: "first-user, bridge, 최근 N개만 유지해 히스토리를 예산 안에 고정",
-    en: "Keeps first-user, bridge, and recent-N messages to hold history under budget",
-    control: "activation at 30 msgs, keep-recent 5/8, floor 3",
+    ko: "인과 도구 쌍·최신 원본 입력·native 상태 보호 아래 명시적 hard 정리",
+    en: "Prunes at explicit hard boundaries while protecting tool pairs, latest original input and native state",
+    control: "token pressure, keep-recent 5/8, floor 3; protected tail can exceed budget",
     path: "core/orchestration/context_budget.py",
   },
   {
@@ -85,9 +85,9 @@ const CONTEXT_ROWS: Row[] = [
   },
   {
     name: "compact_conversation",
-    ko: "server-side compaction이 없는 프로바이더용 4단계 클라이언트 압축",
-    en: "Four-phase client-side compaction for providers without server-side compaction",
-    control: "keep_recent arg, Anthropic no-op (server-side)",
+    ko: "호환 이력의 구조화 요약과 원본 입력·최근 인과 tail 보존",
+    en: "Structured client summaries with original-input and causal-tail preservation",
+    control: "keep_recent; selected source; unknown Claude/native-block guard",
     path: "core/orchestration/compaction.py",
   },
   {

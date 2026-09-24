@@ -2,9 +2,9 @@
 
 For GEODE adapters using text compaction (OpenAI, GLM, etc.), this
 module compresses the head of the message list into an LLM-generated
-summary while preserving the tail verbatim for continuity. Anthropic
-has server-side compaction (``compact_20260112``) and short-circuits
-at the top.
+summary while preserving the tail verbatim for continuity. Known Anthropic
+models can use this path only before a native compaction block enters history;
+automatic native compaction remains the context manager's separate policy.
 
 **4 phases** (Hermes Phase 3, 2026-05-26, absorbing Claude Code's
 tool_use/tool_result boundary + orphan handling — the broader
@@ -41,9 +41,11 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Mapping
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
 from core.config import settings
+from core.llm.model_capabilities import get_anthropic_model_spec
 from core.orchestration.context_budget import (
     ContextBudgetPolicy,
     resolve_context_budget_policy,
@@ -77,8 +79,78 @@ _COMPACTION_PROMPT = (
 COMPACTION_MARKER = (
     "[This conversation was automatically compacted. "
     "Previous context has been summarized above. "
-    "Some details from earlier messages may no longer be available.]"
+    "Some details from earlier messages may no longer be available. "
+    "The summary is historical context; verbatim user inputs below take precedence.]"
 )
+
+
+class StaleCompactionError(RuntimeError):
+    """History changed while its summary was pending; do not prune the new history."""
+
+
+def is_user_input_message(message: dict[str, Any]) -> bool:
+    """Recognize explicit input provenance without treating synthetic user roles as input."""
+    metadata = message.get("metadata")
+    return (
+        message.get("role") == "user"
+        and isinstance(metadata, dict)
+        and metadata.get("origin") == "user_input"
+    )
+
+
+def preserve_latest_user_input(
+    original: list[dict[str, Any]], retained: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Keep the latest marked input once without reversing retained turn order."""
+    latest_index = next(
+        (
+            index
+            for index in range(len(original) - 1, -1, -1)
+            if is_user_input_message(original[index])
+        ),
+        None,
+    )
+    if latest_index is None:
+        return list(retained)
+    latest = original[latest_index]
+    if not any(message is latest for message in retained):
+        earlier_ids = {id(message) for message in original[:latest_index]}
+        insertion = max(
+            (index + 1 for index, message in enumerate(retained) if id(message) in earlier_ids),
+            default=0,
+        )
+        return [*retained[:insertion], latest, *retained[insertion:]]
+    result: list[dict[str, Any]] = []
+    seen = False
+    for message in retained:
+        if message is latest:
+            if seen:
+                continue
+            seen = True
+        result.append(message)
+    return result
+
+
+def has_native_compaction(messages: list[dict[str, Any]]) -> bool:
+    """Guard native blocks, including failed/opaque ones, against text-only replacement."""
+    for message in messages:
+        content = (
+            message.get("anthropic_content") or message.get("content")
+            if message.get("role") == "assistant"
+            else message.get("content")
+        )
+        if isinstance(content, (list, tuple)) and any(
+            isinstance(block, dict) and block.get("type") == "compaction" for block in content
+        ):
+            return True
+    return False
+
+
+def can_compact_conversation(messages: list[dict[str, Any]], *, provider: str, model: str) -> bool:
+    """Whether a text summary can replace this route's effective conversation prefix."""
+    if provider != "anthropic":
+        return True
+    return get_anthropic_model_spec(model) is not None and not has_native_compaction(messages)
 
 
 async def compact_conversation(
@@ -98,13 +170,13 @@ async def compact_conversation(
 ) -> tuple[list[dict[str, Any]], bool]:
     """Compact conversation via 4-phase pipeline.
 
-    Returns ``(new_messages, did_compact)``. Anthropic uses server-side
-    compaction so this is a no-op for that provider; non-Anthropic
-    providers run the full pipeline. Failures propagate without replacing
-    the input; only confirmed context overflow retries with smaller input.
+    Returns ``(new_messages, did_compact)``. Native Anthropic compaction
+    blocks and unknown Anthropic models cannot use this text-only path.
+    Failures propagate without replacing the input; only confirmed context
+    overflow retries with smaller input. Stale candidates publish no artifact.
     """
-    if provider == "anthropic":
-        log.debug("Skipping client compaction — Anthropic uses server-side compaction")
+    if not can_compact_conversation(messages, provider=provider, model=model):
+        log.debug("Skipping client compaction — unsupported model or native history")
         return messages, False
 
     if len(messages) <= keep_recent + 2:
@@ -118,11 +190,8 @@ async def compact_conversation(
         log.debug("compaction boundary at 0 — nothing to summarize")
         return messages, False
 
-    to_summarize = messages[:boundary]
-    to_keep = messages[boundary:]
-
-    # Phase 2 — orphan tool_result cleanup
-    to_keep = repair_tool_pairs(strip_orphan_tool_results(to_keep))
+    snapshot = deepcopy(messages)
+    to_summarize = snapshot[:boundary]
 
     # Phase 3 — summarize the head
     from core.llm.errors import classify_llm_error
@@ -170,6 +239,16 @@ async def compact_conversation(
         if not summary or not summary.strip():
             raise ValueError("Compaction summary was empty")
         break
+    if messages[: len(snapshot)] != snapshot or not can_compact_conversation(
+        messages, provider=provider, model=model
+    ):
+        raise StaleCompactionError("Conversation history changed during compaction")
+
+    # Include messages appended during summarization and their causal tool calls.
+    retained_boundary = find_safe_boundary(messages, keep_recent=len(messages) - boundary)
+    to_keep = preserve_latest_user_input(messages, messages[retained_boundary:])
+    # Phase 2 — repair only after collecting the complete retained tool sequence.
+    to_keep = repair_tool_pairs(strip_orphan_tool_results(to_keep))
     if session_id:
         _persist_compaction_summary(
             session_id=session_id,
@@ -180,7 +259,7 @@ async def compact_conversation(
             provider=provider,
             model=model,
             trigger=trigger,
-            original_message_count=len(messages),
+            original_message_count=len(snapshot),
             summarized_message_count=len(to_summarize),
         )
 
@@ -368,8 +447,8 @@ def repair_tool_pairs(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
 
         missing_anthropic: list[dict[str, Any]] = []
-        content = msg.get("content")
-        if isinstance(content, list):
+        content = msg.get("anthropic_content") or msg.get("content")
+        if isinstance(content, (list, tuple)):
             for block in content:
                 if not isinstance(block, dict) or block.get("type") != "tool_use":
                     continue
@@ -419,8 +498,8 @@ def _extract_tool_use_ids(msg: dict[str, Any]) -> set[str]:
             call_id = call.get("id")
             if isinstance(call_id, str) and call_id:
                 ids.add(call_id)
-    content = msg.get("content")
-    if not isinstance(content, list):
+    content = msg.get("anthropic_content") or msg.get("content")
+    if not isinstance(content, (list, tuple)):
         return ids
     for block in content:
         if isinstance(block, dict) and block.get("type") == "tool_use":
@@ -642,8 +721,13 @@ def _carry_forward(summary: str, to_keep: list[dict[str, Any]]) -> list[dict[str
 
 __all__ = [
     "COMPACTION_MARKER",
+    "StaleCompactionError",
+    "can_compact_conversation",
     "compact_conversation",
     "find_safe_boundary",
+    "has_native_compaction",
+    "is_user_input_message",
+    "preserve_latest_user_input",
     "repair_tool_pairs",
     "strip_orphan_tool_results",
 ]

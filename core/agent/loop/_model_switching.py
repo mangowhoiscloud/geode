@@ -122,47 +122,43 @@ def drift_target_is_healthy(loop: AgenticLoop, target_model: str) -> bool:
         return True
 
 
+def _resolve_model_route(
+    loop: AgenticLoop,
+    model: str,
+    provider: str | None = None,
+) -> tuple[str, str]:
+    """Preserve explicit pins; re-infer only when an inferred provider changes."""
+    new_provider = provider or _resolve_provider(model)
+    source = loop._source
+    if new_provider != loop._provider and not getattr(loop, "_source_explicit", False):
+        from core.llm.adapters._source_inference import infer_source
+
+        source = infer_source(new_provider)
+    return new_provider, source
+
+
 def _apply_model_update(
     loop: AgenticLoop,
     model: str,
     provider: str | None = None,
+    *,
+    source: str | None = None,
 ) -> tuple[str, bool]:
-    """Apply model/provider mutation and return ``(old_model, changed)``."""
+    """Apply the route already checked by adaptation, or resolve a direct update."""
     old_model = loop.model
-    new_provider = provider or _resolve_provider(model)
+    if source is None:
+        new_provider, new_source = _resolve_model_route(loop, model, provider)
+    else:
+        new_provider, new_source = provider or _resolve_provider(model), source
     if new_provider != loop._provider:
-        # PR-MAINPATH-4 (2026-05-24) — re-resolve the Path-B adapter
-        # on a provider change so ``/model`` between providers points
-        # ``loop._new_adapter`` at the new provider's adapter (else the
-        # next ``_call_llm`` would dispatch to the wrong API).
-        #
-        # PR-MODEL-SWITCH-SOURCE (2026-06-12) — the source axis is
-        # RE-INFERRED for the new provider when it was inferred at init.
-        # The previous "stays constant across the switch" rule carried
-        # the OLD provider's source onto the new one: an anthropic
-        # session (source=payg) switched to gpt-5.5 kept payg, routing
-        # through openai-payg's stale API key and 401-ing even though
-        # the operator had just completed /login codex and
-        # infer_source("openai") resolves to subscription (incident
-        # 2026-06-12 02:34, serve.log). An explicit caller-pinned
-        # source still survives the switch.
-        # PR-MAINPATH-67 (2026-05-24) — the legacy ``loop._adapter``
-        # re-resolution was deleted with the rest of the resolver
-        # surface; Path-B is now the sole call path.
-        new_source = loop._source
-        if not getattr(loop, "_source_explicit", False):
-            from core.llm.adapters._source_inference import infer_source
-
-            new_source = infer_source(new_provider)
-            old_source = getattr(loop, "_source", "")
-            if new_source != old_source:
-                log.info(
-                    "AgenticLoop source re-inferred on provider switch: %s (%s) -> %s (%s)",
-                    old_source,
-                    old_model,
-                    new_source,
-                    model,
-                )
+        if new_source != loop._source:
+            log.info(
+                "AgenticLoop source re-inferred on provider switch: %s (%s) -> %s (%s)",
+                loop._source,
+                old_model,
+                new_source,
+                model,
+            )
         from core.llm.adapters.registry import use_registry_snapshot
 
         with use_registry_snapshot(loop._adapter_registry_snapshot):
@@ -229,9 +225,10 @@ async def update_model_async(
     """Async model update path used from ``AgenticLoop.arun``."""
     # Summarize with the current route before selecting the smaller target.
     # Never route maintenance through a new credential source implicitly.
+    target_provider, target_source = _resolve_model_route(loop, model, provider)
     if reason != "resume":
-        await adapt_context_for_model(loop, model)
-    old_model, changed = _apply_model_update(loop, model, provider)
+        await adapt_context_for_model(loop, model, target_provider, source=target_source)
+    old_model, changed = _apply_model_update(loop, model, target_provider, source=target_source)
     if changed:
         from core.ui.agentic_ui import emit_model_switched
 
@@ -316,9 +313,16 @@ def purge_stale_model_switch_acks(loop: AgenticLoop) -> int:
     return purged
 
 
-async def adapt_context_for_model(loop: AgenticLoop, target_model: str) -> None:
-    """Fit a staged history to the target using the previous model's route."""
+async def adapt_context_for_model(
+    loop: AgenticLoop,
+    target_model: str,
+    provider: str | None = None,
+    *,
+    source: str | None = None,
+) -> None:
+    """Fit history to the target budget, summarizing with the previous route."""
     from core.config import settings
+    from core.orchestration.context_budget import resolve_context_budget_policy
     from core.orchestration.context_monitor import (
         check_context,
         summarize_tool_results,
@@ -327,8 +331,15 @@ async def adapt_context_for_model(loop: AgenticLoop, target_model: str) -> None:
     if loop.context.is_empty:
         return
 
+    if source is None:
+        target_provider, target_source = _resolve_model_route(loop, target_model, provider)
+    else:
+        target_provider, target_source = provider or _resolve_provider(target_model), source
+    policy = resolve_context_budget_policy(
+        target_model, provider=target_provider, source=target_source
+    )
     messages = deepcopy(loop.context.messages)
-    metrics = check_context(messages, target_model)
+    metrics = check_context(messages, target_model, policy=policy)
     if not metrics.is_warning:
         return
 
@@ -345,7 +356,7 @@ async def adapt_context_for_model(loop: AgenticLoop, target_model: str) -> None:
     summarize_tool_results(messages, metrics.policy or metrics.context_window)
 
     # Await the previous model while its provider/source/effort are still bound.
-    metrics = check_context(messages, target_model)
+    metrics = check_context(messages, target_model, policy=policy)
     if metrics.is_critical:
         # Apply the summary to the actual owned history so PostCompact observes
         # its committed result. Cheap reduction above remains staged on failure.
@@ -366,7 +377,7 @@ async def adapt_context_for_model(loop: AgenticLoop, target_model: str) -> None:
             loop._provider,
         )
 
-    metrics = check_context(messages, target_model)
+    metrics = check_context(messages, target_model, policy=policy)
     if metrics.is_critical:
         from core.agent.loop import _ContextExhaustedError
 

@@ -124,7 +124,7 @@
         "has_default": true,
         "implementation": "ContextVar",
         "lifetime": "one AgenticLoop task",
-        "line": 22,
+        "line": 24,
         "owner": "core.agent.loop.AgenticLoop",
         "path": "core/agent/conversation.py",
         "resetter": "core.agent.conversation.set_conversation_context(None)",
@@ -409,7 +409,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 12,
-      "file_loc": 1149,
+      "file_loc": 1147,
       "method_count": 39,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -528,7 +528,7 @@
   "packages": {
     "core": {
       "python_files": 416,
-      "python_loc": 127845
+      "python_loc": 128247
     },
     "evals": {
       "python_files": 100,
@@ -539,8 +539,8 @@
       "python_loc": 32002
     },
     "tests": {
-      "python_files": 744,
-      "python_loc": 217655
+      "python_files": 746,
+      "python_loc": 218935
     }
   },
   "schema_version": 6,

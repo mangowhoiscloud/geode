@@ -236,11 +236,10 @@ def _maybe_inject_context_management(kwargs: dict[str, Any]) -> None:
     model = _base_model(str(kwargs.get("model", "")))
     if model not in _CONTEXT_MGMT_MODELS:
         return
-    from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
     from core.orchestration.context_budget import resolve_context_budget_policy
 
     trigger = resolve_context_budget_policy(
-        model, context_window=MODEL_CONTEXT_WINDOW.get(model)
+        model, provider="anthropic", source="payg", output_reserve_tokens=kwargs["max_tokens"]
     ).anthropic_compact_trigger_tokens
     _merge_beta(kwargs, "context-management-2025-06-27")
     body = dict(kwargs.get("extra_body") or {})
@@ -375,17 +374,28 @@ def validate_output_tokens(model: str, max_tokens: int) -> None:
         )
 
 
+def effective_output_tokens(req: AdapterCallRequest) -> int:
+    """Validate and return the actual Messages output cap, including thinking."""
+    validate_output_tokens(req.model, req.max_tokens)
+    spec = get_anthropic_model_spec(req.model)
+    output = req.max_tokens
+    if not (spec is not None and spec.adaptive_thinking) and req.thinking_budget > 0:
+        output += req.thinking_budget
+    validate_output_tokens(req.model, output)
+    return output
+
+
 def build_create_kwargs(
     req: AdapterCallRequest, *, base_url: str = "https://api.anthropic.com"
 ) -> dict[str, Any]:
     """Build ``messages.create`` kwargs for the Anthropic PAYG adapter."""
-    validate_output_tokens(req.model, req.max_tokens)
+    output_tokens = effective_output_tokens(req)
     system, messages = _system_and_messages(req)
     kwargs: dict[str, Any] = {
         "model": req.model,
         "system": system,
         "messages": messages,
-        "max_tokens": req.max_tokens,
+        "max_tokens": output_tokens,
     }
     spec = get_anthropic_model_spec(req.model)
     if spec is not None and spec.adaptive_thinking:
@@ -399,8 +409,6 @@ def build_create_kwargs(
         kwargs["thinking"] = thinking
     elif req.thinking_budget > 0:
         kwargs["thinking"] = {"type": "enabled", "budget_tokens": req.thinking_budget}
-        kwargs["max_tokens"] = req.max_tokens + req.thinking_budget
-        validate_output_tokens(req.model, kwargs["max_tokens"])
         kwargs["temperature"] = 1.0
     elif req.temperature is not None:
         kwargs["temperature"] = req.temperature

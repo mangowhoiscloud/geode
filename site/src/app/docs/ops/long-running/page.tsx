@@ -59,25 +59,33 @@ export default function Page() {
 
             <h2>컨텍스트 오버플로 사다리</h2>
             <p>
-              오버플로 처리는 <code>ContextWindowManager</code>
-              (<code>core/agent/context_manager.py</code>)에 위임되고,
-              프로바이더에 따라 갈립니다.
+              공통 요청 경로는 미들웨어 뒤의 모델·공급자·source·출력 예비분으로
+              예산을 정합니다. 원래 대화에 대한 유지보수는 한 번만 수행하고,
+              최종 적합성 검사는 읽기 전용입니다. 미들웨어가 대화를 교체하면
+              원래 세션을 대신 요약하지 않습니다.
             </p>
-            <pre>{`Anthropic   80%+  서버 사이드 compaction이 처리
-            95%   클라이언트 emergency prune만 개입
-OpenAI/GLM  80%   클라이언트 LLM 기반 compaction
-            95%   emergency prune
-공통        200K  초과 윈도 모델에도 200K 절대 상한
-                  (rate-limit pool 분리) → 도구 결과 요약 + compact`}</pre>
+            <ul>
+              <li>경고: 윈도 티어에 따라 유효 입력 예산의 50%·70%·80%.</li>
+              <li>임계: 유효 입력 예산의 90%.</li>
+              <li>200K: soft 로컬 유지보수 선호이며, 모든 경로의 서버 상한이 아닙니다.</li>
+              <li>실제 입력 거절: 로컬 추정과 별개로 제한된 복구를 시도하고 다음 요청에서 다시 확인합니다.</li>
+            </ul>
             <p>
-              전략 결정은 <code>CONTEXT_OVERFLOW_ACTION</code> 훅 핸들러에
-              위임되고, 핸들러가 없으면 하드코딩된 폴백을 씁니다. prune 후에도
-              critical이면 실행은 <code>context_exhausted</code>로 끝나며,
-              사용자 언어에 맞춘 안내문을 남깁니다
-              (<code>core/agent/loop/models.py</code>). API가 400
-              context-overflow를 돌려준 경우는{" "}
-              <code>aggressive_context_recovery</code> 후 재시도하고, 실패하면
-              같은 이유로 끝납니다.
+              지원되는 Anthropic 모델의 자동 threshold compaction은 유지합니다.
+              지원되지 않는 알려진 모델은 호환 이력에서 클라이언트 요약을 사용할
+              수 있습니다. native compaction 블록이 있는 이력은 일반 텍스트
+              교체나 강제 정리로 손상시키지 않습니다. API의 한도를 구독이나
+              OpenRouter 경로의 허용량으로 가정하지 않습니다.
+            </p>
+            <p>
+              전략은 <code>ContextWindowManager</code>가 소유합니다.
+              <code>PreCompact</code>는 보존 개수와 soft 유예만 결정하고,
+              <code>CONTEXT_CRITICAL</code>은 관측 이벤트입니다.
+              <code>CONTEXT_OVERFLOW_ACTION</code>은 전략을 선택하지 않습니다.
+              복구할 수 없으면 <code>context_exhausted</code>로 끝내고 추가 모델
+              호출 없이 안내합니다. 모든 진입점의 세션 자동 초기화를 뜻하지는
+              않습니다. 이력 보호와 저장 경계는
+              <a href="/geode/docs/runtime/context">컨텍스트 조립</a>을 참고합니다.
             </p>
 
             <h2>도구 결과 오프로딩</h2>
@@ -164,24 +172,35 @@ OpenAI/GLM  80%   클라이언트 LLM 기반 compaction
 
             <h2>The context overflow ladder</h2>
             <p>
-              Overflow handling is delegated to <code>ContextWindowManager</code>
-              (<code>core/agent/context_manager.py</code>) and is
-              provider-aware.
+              Shared request preparation resolves the effective model, provider,
+              source and output reserve after middleware. Caller-history
+              maintenance runs once and the final fit check is read-only.
+              A middleware-owned conversation replacement cannot trigger
+              summarization of the original session.
             </p>
-            <pre>{`Anthropic   80%+  server-side compaction handles it
-            95%   client emergency prune only
-OpenAI/GLM  80%   client LLM-based compaction
-            95%   emergency prune
-All         200K  absolute ceiling even on larger windows
-                  (rate-limit pool separation) → summarize + compact`}</pre>
+            <ul>
+              <li>Warning: 50%, 70% or 80% of the effective input budget by window tier.</li>
+              <li>Critical: 90% of the effective input budget.</li>
+              <li>200K: a soft local maintenance preference, not every route&apos;s server cap.</li>
+              <li>Actual input rejection: bounded recovery independent of the local estimate, then a new request check.</li>
+            </ul>
             <p>
-              Strategy resolution defers to a <code>CONTEXT_OVERFLOW_ACTION</code>{" "}
-              hook handler, with a hardcoded fallback when none is registered.
-              If the context is still critical after pruning, the run ends as{" "}
-              <code>context_exhausted</code> with a language-matched notice
-              (<code>core/agent/loop/models.py</code>). A 400 context-overflow
-              from the API triggers <code>aggressive_context_recovery</code> and
-              a retry; failure ends the same way.
+              Supported Anthropic models retain automatic threshold compaction.
+              Known models without it can use client summaries on compatible
+              histories. Native compaction blocks guard against generic text
+              replacement and pruning. API limits do not establish subscription
+              or OpenRouter route allowances.
+            </p>
+            <p>
+              <code>ContextWindowManager</code> owns strategy selection.
+              <code>PreCompact</code> controls only the retained count and soft
+              deferral; <code>CONTEXT_CRITICAL</code> is observation.
+              <code>CONTEXT_OVERFLOW_ACTION</code> does not select a strategy.
+              Unrecoverable context ends as <code>context_exhausted</code> with a
+              local notice and no additional model call. It does not imply an
+              automatic session reset at every entry point.
+              See <a href="/geode/docs/runtime/context">Context assembly</a> for
+              history protection and persistence boundaries.
             </p>
 
             <h2>Tool-result offloading</h2>

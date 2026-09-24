@@ -621,6 +621,7 @@ _CONTEXT_OVERFLOW_CODES: frozenset[str] = frozenset(
         "context_length_exceeded",  # OpenAI
         "prompt_too_long",  # Anthropic
         "context_window_exceeded",  # GLM / future
+        "1261",  # Z.AI: prompt/history exceeds the model's maximum input length
     }
 )
 
@@ -633,7 +634,9 @@ _CONTEXT_OVERFLOW_RE = re.compile(
     r"context\s+length\s+exceeded|"
     r"context\s+window\s+exceeded|"
     r"maximum\s+context\s+length|"
-    r"prompt\s+is\s+too\s+long|"
+    r"prompt\s+(?:is\s+)?too\s+long|"
+    r"(?:the\s+)?length\s+of\s+(?:the\s+)?history\s+messages\s+"
+    r"exceeds\s+(?:the\s+)?maximum\s+length|"
     # "prompt exceeds the model's context window of 200000 tokens" —
     # tolerate up to 3 natural-language words between "exceeds" and
     # "context" so possessives ("the model's") + adjectives ("the

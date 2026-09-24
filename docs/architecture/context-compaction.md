@@ -1,28 +1,102 @@
 # Conversation Compaction
 
-`ContextWindowManager` owns token-pressure decisions and public compaction
+`ContextWindowManager` owns context maintenance and public compaction
 checkpoints. `core/orchestration/compaction.py` owns the text-summary transform;
-`ContextBudgetPolicy` owns model-derived thresholds. The current provider/source
-selects the summarizer through the existing adapter dispatch. A summary is not
-a verified task result, a tool receipt, or a higher-priority instruction.
+`ContextBudgetPolicy` resolves planning limits for the selected model, provider,
+source and requested output. The selected route also supplies the summarizer.
+A summary is historical context, not a verified task result, tool receipt or
+higher-priority instruction.
 
-## Current contract
+The September 25 changes are Unreleased. The
+[research and counterexample record](../research/context-compaction-recovery-20260925.md)
+separates source evidence, local behavior and unverified provider acceptance.
 
-| Input / owner | Decision and output | Regression |
+## Request admission and recovery
+
+- `ModelCatalogSpec` distinguishes provider catalogue values, bundled client
+  defaults and unknown-route fallbacks. API metadata does not establish a
+  subscription account's limits. OpenRouter endpoint limits are not inferred
+  from a similarly named direct-provider model.
+- The effective prompt budget uses the selected window, known input cap and
+  provider-specific requested output reserve. Codex omits the Platform output
+  parameter; its local reserve is a planning default. The estimator includes
+  system instructions, actual tool schemas and replayed provider content.
+  Opaque bytes and images remain estimates, not server token counts.
+- The retained `absolute_ceiling_tokens=200000` field is a **soft local
+  maintenance preference**, not a universal input cap or rate-limit-pool rule.
+  Crossing it alone does not authorize emergency pruning. The existing
+  model-size warning bands and critical boundary remain separate.
+- The shared root/auxiliary request path resolves the effective route after
+  request middleware and tool allowlists. It performs one mutable maintenance
+  check only if the request retains the caller's conversation. A middleware-owned
+  replacement receives a read-only fit check; failure cannot compact unrelated
+  original history. The final check before adapter execution does not repeat
+  `PreCompact` or summarize another time.
+- A classifier-confirmed provider overflow reaches bounded recovery even when
+  the local estimate is low. Recovery uses an explicit operation outcome;
+  equal message counts do not prove failure. A changed caller-history candidate is retried,
+  and an accepted response clears the consecutive recovery counter. Neither
+  a local estimate nor `changed` proves that the server accepts the next request.
+
+## History, hooks and persistence
+
+| Boundary / owner | Contract | Regression owner |
 |---|---|---|
-| Turn preparation → request preparation | Message count alone does not discard history. Before a model request, the existing token-pressure check selects maintenance or hard recovery. `ConversationContext.max_turns` remains a separate history-retention limit. | [Turn retention](../../tests/core/agent/test_agentic_loop.py) |
-| `ContextWindowManager` → `PreCompact` | Soft compaction can be deferred. Failed/no-op soft compaction preserves the input messages; an explicit hard boundary may still prune. Earlier observation masking is separate and is not rolled back. | [Pressure and failure paths](../../tests/core/agent/test_context_manager.py) |
-| `find_safe_boundary` → summary head / recent tail | Retained results retain their preceding calls, including parallel and non-adjacent results. Newly retained messages can extend the boundary again. Malformed orphan results do not invent a preceding call. | [Boundary and OpenAI parallel results](../../tests/core/orchestration/test_compaction_phases.py) |
-| Tool-result reduction → next model request | The latest assistant batch's `use_skill` bodies survive cheap summarization. Hard pruning reuses `find_safe_boundary`; older omitted skill bodies carry a reload hint. A protected tail can still exceed the budget and cause `context_exhausted`. | [Fresh skill, compact, and hard-prune paths](../../tests/core/agent/test_context_monitor.py), [pressure admission](../../tests/core/agent/test_context_manager.py) |
-| Native replay → pressure estimate | Budget the largest possible assistant representation, including Chat reasoning, Anthropic native blocks, or Responses output. Do not add mutually exclusive provider payloads or persistence metadata twice. Opaque character size is a conservative estimate, not decoded reasoning tokens or billing usage; signed payloads remain intact. | [Wire representation and pressure tests](../../tests/core/agent/test_context_monitor.py), [protected-tail exhaustion](../../tests/core/agent/test_context_manager.py) |
-| Text summarizer → context artifact → message replacement | When a session ID exists, persist the summary artifact before replacing in-memory messages. Summary or persistence failure is surfaced to the context owner, which retains the original list. `PostCompact` follows successful replacement. | [Persistence failure](../../tests/core/orchestration/test_compaction_phases.py), [public checkpoint](../../tests/core/agent/test_context_manager.py) |
+| Request preparation → context owner | Message count alone does not discard history. One physical request has at most one effectful preventive pressure check; direct auxiliary calls retain admission. | [Recovery dispatch](../../tests/core/agent/test_context_recovery.py) |
+| `ContextWindowManager` → `PreCompact` | Only `keep_recent` may be rewritten; identity, counts, trigger and `hard` are read-only. Invalid mixed rewrites are rejected in full and audited. `defer` stops soft summary, not an explicit hard boundary. Earlier observation masking is a separate operation. | [Public hook decisions](../../tests/core/hooks/test_public_hooks.py) |
+| Summary head / recent tail | Preserve causal tool-call/result pairs and the latest explicitly marked original user input. Ordinary synthetic user-role messages do not acquire that provenance. Repeated compaction does not duplicate the retained original. | [Compaction boundaries](../../tests/core/orchestration/test_compaction_phases.py), [input provenance](../../tests/core/agent/test_conversation.py) |
+| Pending summary → candidate | Retain newly appended messages and their causal tail; reject a candidate if its summarized prefix was edited or replaced. The manager prevents nested compaction from committing another summary. | [Compaction phases](../../tests/core/orchestration/test_compaction_phases.py), [context manager](../../tests/core/agent/test_context_manager.py) |
+| Artifact → live replacement → optional caller checkpoint | Persist the summary artifact first when a session ID is available. Replace messages, run the caller's supplied commit callback, then emit `PostCompact`. A failed callback restores the original live list; an already written artifact can remain. | [Persistence failure](../../tests/core/orchestration/test_compaction_phases.py), [context manager](../../tests/core/agent/test_context_manager.py) |
+| Terminal context exhaustion | Keep the common finalizer's history/checkpoint behavior and return a local notice. Do not call another model just to describe failure or claim every entry point resets its session. | [Terminal and checkpoint](../../tests/core/hooks/test_extract_learning_models_adapter.py), [zero auxiliary usage](../../tests/core/llm/test_auxiliary_usage.py) |
 
-The durable summary artifact is not a full replacement-history checkpoint.
-Full conversation recovery still belongs to `SessionCheckpoint`; these stores
-are not one atomic transaction. System instructions continue to be assembled
-separately by `core/agent/system_prompt.py` and are not reconstructed from the
-summary. Provider tool-pair repair remains a compatibility operation, not proof
-that missing tool output was recovered.
+`PostCompact.persisted` reports summary-artifact persistence. It does **not**
+assert that a full replacement-history checkpoint committed. `/compact` supplies
+a strict checkpoint callback when its loop owns a checkpoint. The
+`manage_context` tool and model-switch path do not supply that callback; their
+surrounding turn owns subsequent checkpointing. These stores are not one atomic
+transaction. `PostCompact` failure cannot undo a completed replacement;
+cancellation propagates while preserving whichever state already committed.
+Pruning and cheap masking are separate operations, not hidden `PreCompact` /
+`PostCompact` pairs. Public payload schemas remain v1/v2 compatible; resolved
+route budgets are internal request state, not authority granted to observers.
+
+Fresh `use_skill` output and its causal tool batch remain protected. A protected
+tail can still exceed the budget and end as `context_exhausted`; protection does
+not expand model capacity. System instructions continue to come from
+`core/agent/system_prompt.py`. Tool-pair repair does not reconstruct missing
+results, and a text summary cannot establish semantic fidelity on its own.
+
+## Native and client compaction
+
+Supported Anthropic models retain automatic threshold compaction. For the
+selected Anthropic PAYG route, a successful native compaction block defines the
+active suffix used for estimation without changing stored replay bytes. Empty
+or failed blocks are not successful resets. Native tool-result clearing has a
+separate capability list from threshold compaction.
+
+Known Claude models without threshold compaction, including Haiku 4.5,
+Sonnet 4.5 and Opus 4.5, can use client text compaction. Manual or confirmed-overflow recovery
+on native-capable models can also use it **before a native compaction block is
+present**. Unknown Anthropic models or histories containing native compaction
+blocks are guarded against text replacement and pruning. A generic text prefix
+could be ignored before a threshold block or violate an on-demand block's
+position; silently deleting the block would lose continuity. Signed thinking
+and causal tool pairs remain intact, with existing model-specific binding
+controls retained.
+
+OpenAI Platform, Codex, GLM and OpenRouter continue to use GEODE's client text
+path. Public native endpoints or upstream harness implementations do not mean
+those endpoints are connected in GEODE. This change adds no OpenAI native or
+Anthropic on-demand backend and does not admit unavailable subscription routes.
+
+## Model changes and resume
+
+A model switch resolves the target route's budget before publishing the new
+route. Required summarization still uses the previous model/provider/source.
+Failed or deferred adaptation retains the previous route; a native-history
+guard does not authorize dropping signed state to fit another model.
+Resume restores authoritative checkpoint history without re-summarizing it;
+the next actual request is checked against its current selected route.
 
 ## Codex comparison, pinned 2026-09-17
 
@@ -38,30 +112,6 @@ GEODE regressions, not a comparative model benchmark.
 | [Preserve actual user messages](https://github.com/openai/codex/blob/43354d0f61c1bda3eff26decaf13276bb57039e7/codex-rs/core/src/compact.rs#L554-L580) | Prevent unnecessary early history loss and lost tool-result pairs. GEODE still uses a structured text summary plus recent messages, not Codex's user-message retention format. |
 | [Session-owned replacement history](https://github.com/openai/codex/blob/43354d0f61c1bda3eff26decaf13276bb57039e7/codex-rs/core/src/session/mod.rs#L4006-L4079) | Preserve failed soft compaction instead of falling through to deletion. Crash/resume parity needs a separate full-history checkpoint experiment. |
 
-## Remaining differences
-
-- **Async model downshift:** the switch now awaits compaction on the previous
-  model/provider/source before mutating the target route. A failed or deferred
-  soft operation retains the old model and history; resume restores the
-  checkpoint model without re-summarizing its authoritative history.
-- **Manual commands:** `/compact` and `manage_context(action="compact")` share
-  the async `ContextWindowManager` owner. They report `changed`, `unchanged`,
-  `deferred`, `failed`, or `unsupported`; `/compact --prune` (and legacy
-  `force=true`) is the explicit lossful path. Successful changes are written
-  through the existing strict session checkpoint before `PostCompact` is sent.
-- **Failure classes:** summary dispatch preserves billing, unavailable,
-  transient, empty-output, and persistence failures. Only classifier-confirmed
-  context-overflow causes retry with smaller input; other failures make one
-  bounded attempt and leave history intact.
-- **Native compaction:** the pinned Codex source gates remote V2 by provider
-  capability and requires a completed response containing exactly one
-  [Compaction output](https://github.com/openai/codex/blob/43354d0f61c1bda3eff26decaf13276bb57039e7/codex-rs/core/src/compact_remote_v2.rs#L437-L489).
-  The public [Responses compaction contract](https://developers.openai.com/cookbook/examples/gpt-5/codex_prompting_guide#compaction)
-  also carries opaque encrypted state. Neither establishes that GEODE's
-  subscription backend accepts the same operation. Native support needs an
-  adapter capability, preserved opaque items through request/checkpoint/replay,
-  and an authorized end-to-end probe. Do not substitute text for encrypted state
-  or fall back to a billable provider implicitly.
-
-These differences are not closed by the current text-compaction fixes. No live
-provider call or native-compaction equivalence is claimed here.
+This September 17 comparison remains a historical source snapshot, not a
+claim about current upstream code. The September 25 research record pins the
+newer source and preserves provider/account and test/live-evidence boundaries.

@@ -63,15 +63,14 @@ export default function Page() {
               참고합니다.
             </p>
 
-            <h2>오버플로 처리: 누가 양보하는가</h2>
+            <h2>오버플로 처리: 요청 경로와 복구</h2>
             <p>
-              루프는 매 라운드 진입 시{" "}
-              <code>core/agent/context_manager.py</code>의{" "}
-              <code>ContextWindowManager</code>에 오버플로 점검을 위임합니다.
-              임계값은 <code>core/orchestration/context_budget.py</code>의{" "}
-              <code>resolve_context_budget_policy</code>가 모델의 컨텍스트
-              윈도에 맞춰 계산합니다. 반환된 <code>ContextBudgetPolicy</code>가
-              세 티어 중 하나를 고릅니다.
+              공통 요청 경로는 미들웨어와 도구 허용 목록 적용 뒤의 모델·공급자·
+              source·출력 예비분으로 예산을 정합니다. 요청이 원래 대화를 유지하면
+              <code>ContextWindowManager</code>가 한 번만 유지보수를 수행합니다.
+              미들웨어가 대화를 교체했다면 원래 세션을 대신 요약하지 않습니다.
+              최종 적합성 검사는 읽기 전용이며, 훅이나 요약을 다시 실행하지 않습니다.
+              이 준비 경계는 루트와 보조 모델 호출이 공유합니다.
             </p>
             <table>
               <thead>
@@ -84,85 +83,76 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              퍼센트는 <em>유효 프롬프트 예산</em>
-              (<code>effective_prompt_budget_tokens</code> = 윈도에서 출력
-              예비분 약 20K를 뺀 값) 기준입니다. 실제 대응은 프로바이더에 따라
-              갈립니다.
+              퍼센트의 기준은 윈도에서 요청의 출력 예비분을 빼고, 알려진 입력
+              상한도 적용한 <em>유효 프롬프트 예산</em>입니다. Codex 구독 경로는
+              Platform 출력 매개변수를 보내지 않으므로 로컬 계획용 예비분을 씁니다.
+              카탈로그 값·클라이언트 기본값·미상 경로 폴백은 실제 계정의 서버 허용량과
+              구분합니다. API의 한도를 구독 경로에 그대로 적용하거나 OpenRouter를
+              동명의 직접 공급자 모델로 간주하지 않습니다.
             </p>
             <p>
-              압력 추정에는 재전송할 native reasoning/output도 포함합니다.
-              일반 메시지와 중복 metadata를 두 번 더하지 않고, 가능한 제공자별
-              표현 중 가장 큰 값을 사용합니다. 암호화된 payload의 문자 수는
-              보수적인 크기 추정치이며 실제 보고 토큰이나 달러 청구액이 아닙니다.
+              추정에는 시스템 지침, 실제 도구 스키마, 재전송할 native 내용이
+              포함됩니다. 암호화된 내용과 이미지의 크기는 추정치이며 청구 토큰이
+              아닙니다. 지원되는 Anthropic PAYG 경로에서는 마지막 성공한 native
+              compaction 블록부터 활성 문맥을 추정하되 저장된 재전송 바이트는
+              보존합니다. 비어 있거나 실패한 블록은 성공한 압축으로 보지 않습니다.
             </p>
             <ul>
               <li>
-                <strong>Anthropic</strong>. 경고 수준 압력은 서버 측 context
-                management가 처리하므로 클라이언트는 개입하지 않습니다. 임계
-                수준에서만 클라이언트가 비상 정리(prune)를 수행합니다.
-                Tool-result clearing과 서버 압축의 지원 목록은 별개입니다.
-                Opus 4.5·Sonnet 4.5에는 clearing만 보내며, 지원되지 않는
-                compaction beta header/edit는 보내지 않습니다.
+                <strong>Anthropic</strong>. 지원 모델의 자동 threshold compaction은
+                유지합니다. Tool-result clearing은 별도 지원 목록을 따릅니다.
+                알려진 Haiku·Sonnet·Opus 4.5처럼 threshold compaction이 없는
+                모델은 클라이언트 요약을 사용할 수 있습니다. 수동 압축과 실제
+                오버플로 복구도 알려진 모델의 호환 이력에서 가능하지만, native
+                compaction 블록이 있거나 모델 계약이 미상이면 텍스트 교체와
+                강제 정리를 막습니다. Signed thinking과 도구 호출·결과 쌍을
+                임의로 삭제하지 않습니다.
               </li>
               <li>
-                <strong>OpenAI / GLM</strong>. GEODE의 현재 연결은 텍스트 요약
-                경로를 사용합니다. (1) 값싼 도구 압축 — 오래된
-                관측 마스킹(<code>mask_stale_observations</code>)과 큰 도구
-                결과 요약(<code>summarize_tool_results</code>, LLM 호출 없음),
-                (2) 구조화 LLM 압축(<code>compact_conversation</code>),
-                (3) 명시적인 hard 경계에서 압축으로 부족하거나 실패하면
-                적응형 정리(<code>adaptive_prune</code>). 경고 수준의 요약·저장
-                실패는 메시지 삭제로 전환하지 않습니다.
-              </li>
-            </ul>
-            <ul>
-              <li>
-                컨텍스트 윈도가 200K를 넘는 모델에는 별도로 절대 200K 토큰
-                천장(<code>absolute_ceiling_tokens</code>)이 걸립니다. 퍼센트
-                임계와 무관하게 rate-limit 풀 분리를 피하려는 조치로, 도구 결과
-                요약 후 필요하면 압축을 강제합니다.
+                <strong>OpenAI / Codex / GLM / OpenRouter</strong>. 현재는 GEODE의
+                클라이언트 텍스트 요약 경로입니다. 값싼 관측 마스킹과 도구 결과 축소,
+                구조화 요약, 명시적인 hard 경계의 보호된 정리 순으로 처리합니다.
+                공개 native API가 있다는 사실만으로 GEODE 연결이나 구독 사용
+                권한이 입증되지는 않습니다.
               </li>
               <li>
-                전략 선택은 <code>ContextWindowManager</code>의 domain
-                policy가 소유합니다. <code>PreCompact</code>는 soft 압축을
-                유예할 수 있고, <code>PostCompact</code>는 성공한 교체 뒤에
-                실행됩니다. <code>CONTEXT_CRITICAL</code>은 관측 이벤트이며,
-                과거 <code>CONTEXT_OVERFLOW_ACTION</code>은 제어에 쓰지 않습니다.
-              </li>
-              <li>
-                정리 후에도 임계 상태면 루프는{" "}
-                <code>context_exhausted</code>로 종료하고, 사용자 언어에 맞춘
-                안내문을 생성해 돌려줍니다 (<code>core/agent/loop/models.py</code>).
-              </li>
-              <li>
-                API가 400으로 컨텍스트 오버플로를 알리면 공격적 복구를 시도한 뒤
-                재시도하고, 실패하면 역시 <code>context_exhausted</code>입니다.
+                <strong>200K</strong>는 로컬의 soft 유지보수 선호입니다.
+                모든 공급자의 입력 상한이나 rate-limit 풀 경계가 아니며,
+                이를 넘었다는 이유만으로 이력을 강제 삭제하지 않습니다.
               </li>
             </ul>
             <p>
-              압축 장비는 <code>core/orchestration/compaction.py</code>와{" "}
-              <code>core/orchestration/context_monitor.py</code>에 있고, 티어
-              경계와 임계 상수는 <code>core/orchestration/context_budget.py</code>가
-              SoT입니다. 모델별 컨텍스트 윈도 값은{" "}
-              <code>core/llm/token_tracker.py</code>의{" "}
-              <code>MODEL_CONTEXT_WINDOW</code>가 SoT입니다
-              (<code>core/llm/model_pricing.toml</code>이 뒷받침).
+              전략은 컨텍스트 소유자가 결정합니다. <code>PreCompact</code>는
+              <code>keep_recent</code>만 바꾸거나 soft 요약을 유예할 수 있고,
+              모델·공급자·trigger·hard는 바꿀 수 없습니다.
+              <code>PostCompact</code>는 이력 교체와 호출자가 제공한 체크포인트
+              콜백 뒤에 실행됩니다. <code>persisted</code>는 요약 아티팩트의
+              저장 여부이며, 세션 전체가 원자적으로 저장됐다는 뜻은 아닙니다.
+              관측 훅은 공급자 허용량이나 복구 전략을 결정하지 않습니다.
+            </p>
+            <p>
+              공급자가 입력 초과를 확인하면 로컬 추정이 낮아도 제한된 복구를
+              시도합니다. 메시지 개수가 같아도 내용은 줄어들 수 있으므로 작업
+              결과로 진행 여부를 판단하고, 다음 실제 요청의 수락 여부는 별도로
+              확인합니다. 복구가 불가능하거나 한도를 소진하면
+              <code>context_exhausted</code>로 끝납니다. 안내문은 추가 모델 호출
+              없이 반환하며, 모든 진입점에서 세션이 자동 초기화된다고 주장하지 않습니다.
             </p>
             <p>
               메시지가 30개를 넘었다는 이유만으로 이력을 버리지 않습니다.
-              토큰 압력 검사는 모델 요청 전에 수행하며, 별도의{" "}
-              <code>ConversationContext.max_turns</code> 보존 한도는 유지합니다.
-              압축 경계에 걸친 병렬 도구 결과는 대응하는 앞선 호출과 함께
-              보존합니다. 요약이나 저장이 실패한 soft 압축은 입력 이력을
-              유지하지만, 앞서 수행한 관측 마스킹까지 되돌리지는 않습니다.
+              별도의 <code>ConversationContext.max_turns</code> 한도는 유지합니다.
+              가장 최근의 명시적 원본 사용자 입력, 인과 관계가 있는 도구 쌍,
+              마지막 도구 묶음의 <code>use_skill</code> 결과를 보호합니다.
+              soft 요약·저장이 실패하면 입력을 유지하되 앞선 관측 마스킹까지
+              되돌리지는 않습니다. 보호된 tail이 여전히 한도를 넘으면 종료할 수
+              있으며, 보호가 모델 용량을 늘리지는 않습니다.
             </p>
             <p>
-              Unreleased: 마지막 assistant 도구 호출 묶음의 <code>use_skill</code>
-              결과는 다음 모델 요청 전에 요약하지 않습니다. hard 정리도
-              그 묶음의 호출·결과를 함께 남깁니다. 이전 스킬 결과를 생략할
-              때는 <code>use_skill</code> 재호출 안내를 남기며, 보존된 입력이
-              여전히 한도를 넘으면 기존 <code>context_exhausted</code> 경계를
-              따릅니다. 이 보호는 컨텍스트 예산을 늘리지 않습니다.
+              예산은 <code>core/orchestration/context_budget.py</code>, 경로별
+              모델 정보는 <code>core/llm/model_catalog.py</code>, 변환은
+              <code>core/orchestration/compaction.py</code>가 소유합니다.
+              이 설명의 9월 25일 변경은 Unreleased입니다. 실제 공급자의 요청 수락과
+              사용량은 로컬 회귀 검사와 별도로 검증해야 합니다.
             </p>
 
             <h2>대형 도구 결과: 오프로드</h2>
@@ -300,15 +290,15 @@ export default function Page() {
               <a href="/geode/docs/runtime/llm/prompt-caching">Prompt caching</a>.
             </p>
 
-            <h2>Overflow handling: what yields</h2>
+            <h2>Overflow handling: request routes and recovery</h2>
             <p>
-              At each round entry the loop delegates the overflow check to{" "}
-              <code>ContextWindowManager</code> in{" "}
-              <code>core/agent/context_manager.py</code>. Thresholds are not a
-              fixed 80/95: <code>resolve_context_budget_policy</code> in{" "}
-              <code>core/orchestration/context_budget.py</code> sizes a{" "}
-              <code>ContextBudgetPolicy</code> to the model’s context window and
-              picks one of three tiers.
+              The shared request path resolves the model, provider, source and
+              output reserve after request middleware and tool allowlists.
+              <code>ContextWindowManager</code> performs maintenance once when
+              the request retains the caller&apos;s conversation. A middleware-owned
+              replacement cannot cause the original session to be summarized.
+              The final fit check is read-only: it does not repeat hooks or
+              summarization. Root and auxiliary calls share this boundary.
             </p>
             <table>
               <thead>
@@ -321,92 +311,81 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              The percentages are taken against the <em>effective prompt
-              budget</em> (<code>effective_prompt_budget_tokens</code> = window
-              minus a ~20K output reserve), not the raw window. The response
-              itself is provider-aware.
+              Percentages use the <em>effective prompt budget</em>: the selected
+              window minus the requested output reserve, bounded by a known input
+              cap. Codex omits the Platform output parameter and uses a local
+              planning reserve. Catalogue values, client defaults and unknown-route
+              fallbacks do not establish an account&apos;s server allowance.
+              API limits do not automatically describe subscriptions, and an
+              OpenRouter route is not a same-named direct-provider route.
             </p>
             <p>
-              Pressure estimates include native reasoning/output replay, using
-              the largest possible provider representation without recounting
-              normalized content or persistence metadata. Opaque payload size
-              is a conservative estimate, not reported tokens or a dollar bill.
+              Estimation includes system instructions, actual tool schemas and
+              replayed native content. Opaque content and images remain estimates,
+              not billed tokens. Supported Anthropic PAYG routes estimate active
+              context from the last successful native compaction block while
+              preserving stored replay bytes. Empty or failed blocks are not
+              successful compactions.
             </p>
             <ul>
               <li>
-                <strong>Anthropic</strong>. Warning-level pressure is handled by
-                server-side context management, so the client stays out. Only at
-                critical pressure does the client step in with an emergency
-                prune.
-                Tool-result clearing and server compaction have separate
-                capability lists. Opus 4.5 and Sonnet 4.5 receive clearing only,
-                without unsupported compaction beta headers or edits.
+                <strong>Anthropic</strong>. Automatic threshold compaction remains
+                enabled for supported models. Tool-result clearing has a separate
+                capability list. Known models without threshold compaction,
+                including Haiku 4.5, Sonnet 4.5 and Opus 4.5, can use client summaries.
+                Manual and actual-overflow recovery can also summarize compatible
+                histories on known models. Unknown model contracts or native
+                compaction blocks guard against text replacement and pruning.
+                Signed thinking and causal tool pairs must not be discarded.
               </li>
               <li>
-                <strong>OpenAI / GLM</strong>. GEODE currently uses text-summary
-                compaction for these adapter routes.
-                (1) Cheap tool compression — mask stale observations
-                (<code>mask_stale_observations</code>) and summarize large tool
-                results (<code>summarize_tool_results</code>), no LLM call;
-                (2) structured LLM compaction (<code>compact_conversation</code>);
-                (3) adaptive prune (<code>adaptive_prune</code>) only at an explicit
-                hard boundary. A failed
-                warning-level summary or artifact write does not fall through
-                to message deletion.
-              </li>
-            </ul>
-            <ul>
-              <li>
-                For models whose window exceeds 200K, a separate absolute
-                200K-token ceiling (<code>absolute_ceiling_tokens</code>)
-                applies. Independent of the percentage thresholds, it avoids
-                rate-limit pool separation by summarizing tool results and then
-                compacting if needed.
+                <strong>OpenAI / Codex / GLM / OpenRouter</strong>. Current
+                integration uses GEODE&apos;s client text path: cheap observation
+                masking and tool-result reduction, structured summarization,
+                then protected pruning at explicit hard boundaries.
+                A public native API does not establish GEODE integration or
+                subscription authorization.
               </li>
               <li>
-                <code>ContextWindowManager</code> owns strategy resolution through
-                its domain policy. <code>PreCompact</code> may defer soft
-                compaction; <code>PostCompact</code> follows successful replacement.
-                <code>CONTEXT_CRITICAL</code> is an observation, and the legacy
-                <code>CONTEXT_OVERFLOW_ACTION</code> is not a control path.
-              </li>
-              <li>
-                If the context is still critical after pruning, the loop returns{" "}
-                <code>context_exhausted</code> with a language-matched notice
-                (<code>core/agent/loop/models.py</code>).
-              </li>
-              <li>
-                A 400-class API error flagged as context overflow triggers
-                aggressive recovery and a retry; failure ends in{" "}
-                <code>context_exhausted</code> too.
+                <strong>200K</strong> is a soft local maintenance preference.
+                It is not a universal provider input cap or rate-limit-pool
+                boundary; crossing it alone does not force history deletion.
               </li>
             </ul>
             <p>
-              The compaction machinery lives in{" "}
-              <code>core/orchestration/compaction.py</code> and{" "}
-              <code>core/orchestration/context_monitor.py</code>; the tier
-              boundaries and thresholds are owned by{" "}
-              <code>core/orchestration/context_budget.py</code>. Per-model
-              context windows come from <code>MODEL_CONTEXT_WINDOW</code> in{" "}
-              <code>core/llm/token_tracker.py</code>, backed by{" "}
-              <code>core/llm/model_pricing.toml</code>.
+              The context owner selects the strategy. <code>PreCompact</code>
+              may change only <code>keep_recent</code> or defer soft summarization;
+              model, provider, trigger and hard are read-only.
+              <code>PostCompact</code> follows history replacement and any
+              caller-supplied checkpoint callback. <code>persisted</code> means
+              the summary artifact was stored, not that the whole session committed
+              atomically. Observers do not decide provider allowance or recovery.
             </p>
             <p>
-              Crossing 30 messages alone does not discard history. Token-pressure
-              checks run before model requests; the separate{" "}
-              <code>ConversationContext.max_turns</code> retention limit remains.
-              Parallel tool results crossing the compaction cut retain their
-              preceding calls. Failed soft summarization or persistence keeps
-              its input messages, without rolling back earlier observation masking.
+              A classified provider input overflow starts bounded recovery even
+              when the local estimate is low. Equal message counts can still
+              contain less content, so operation status determines progress.
+              Acceptance of the next actual request is separate evidence.
+              Unrecoverable or exhausted recovery ends as
+              <code>context_exhausted</code>. A local notice uses no additional
+              model call and does not claim every entry point resets its session.
             </p>
             <p>
-              Unreleased: <code>use_skill</code> results from the latest assistant
-              tool batch are not summarized before the next model request. Hard
-              pruning also retains that batch&apos;s calls and results together.
-              Omitted older skill results carry a reload instruction. If the
-              preserved input still exceeds the limit, the existing
-              <code>context_exhausted</code> boundary applies; this protection does
-              not increase the context budget.
+              Thirty messages alone do not discard history; the separate
+              <code>ConversationContext.max_turns</code> limit remains.
+              The latest explicitly marked original user input, causal tool pairs
+              and fresh <code>use_skill</code> output are protected.
+              A failed soft summary or persistence step retains input, without
+              undoing earlier observation masking. The protected tail can still
+              exceed the budget: protection does not expand model capacity.
+            </p>
+            <p>
+              Owners are <code>core/orchestration/context_budget.py</code> for
+              budgets, <code>core/llm/model_catalog.py</code> for route metadata,
+              and <code>core/orchestration/compaction.py</code> for transformation.
+              The September 25 changes described here are Unreleased.
+              Actual provider acceptance and usage require verification separate
+              from local regression tests.
             </p>
 
             <h2>Large tool results: offload</h2>

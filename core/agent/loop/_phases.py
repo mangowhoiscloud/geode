@@ -34,6 +34,8 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+_CONTEXT_RECOVERY_MAX_ATTEMPTS = 2
+
 
 @dataclass(slots=True)
 class PreparedTurn:
@@ -236,7 +238,7 @@ async def prepare_model_call(
     loop: AgenticLoop,
     turn: PreparedTurn,
     round_idx: int,
-) -> PreparedModelCall | AgenticResult:
+) -> PreparedModelCall:
     """Prepare the prompt, context, cognitive event, and call presentation."""
     loop._op_logger.begin_round("AgenticLoop")
     await _guards._maybe_replan_async(
@@ -255,31 +257,6 @@ async def prepare_model_call(
         user_input=turn.user_input,
         round_idx=round_idx,
     )
-
-    try:
-        await _context.check_context_overflow(loop, turn.system_prompt, turn.messages)
-    except _ContextExhaustedError:
-        log.warning("Pre-call context exhausted — attempting aggressive recovery")
-        recovered = await _context.aggressive_context_recovery(
-            loop,
-            turn.system_prompt,
-            turn.messages,
-        )
-        if recovered:
-            _context.notify_context_event(
-                loop,
-                "prune",
-                original_count=len(turn.messages) + recovered,
-                new_count=len(turn.messages),
-            )
-            log.info("Pre-call recovery succeeded — proceeding with pruned context")
-        else:
-            return await _guards._finalize_context_exhausted(
-                loop,
-                turn.user_input,
-                turn.messages,
-                round_idx,
-            )
 
     await loop._emit_cognitive(
         HookEvent.COGNITIVE_PLAN,
@@ -344,26 +321,26 @@ async def call_provider(
         return partial
     except _ContextExhaustedError as exc:
         call.spinner.stop()
-        log.warning("Context exhausted: %s — attempting aggressive recovery", exc)
-        recovered = await _context.aggressive_context_recovery(
-            loop,
-            call.system_prompt,
-            turn.messages,
-        )
-        if recovered:
-            _context.notify_context_event(
+        log.warning("Context request rejected; attempting bounded recovery")
+        if (
+            exc.can_recover_history
+            and turn.turn_state.context_recovery_attempts < _CONTEXT_RECOVERY_MAX_ATTEMPTS
+        ):
+            turn.turn_state.context_recovery_attempts += 1
+            recovered = await _context.aggressive_context_recovery(
                 loop,
-                "prune",
-                original_count=len(turn.messages) + recovered,
-                new_count=len(turn.messages),
+                exc.system_prompt if exc.system_prompt is not None else call.system_prompt,
+                turn.messages,
+                provider_rejected=exc.provider_rejected,
+                policy=exc.policy,
+                tools_tokens=exc.tools_tokens,
             )
-            log.info("Aggressive recovery succeeded — continuing loop")
-            return None
+            if recovered.status == "changed":
+                _context.sync_messages_to_context(loop, turn.messages)
+                loop._save_checkpoint(turn.user_input, round_idx=round_idx)
+                return None
         return await _guards._finalize_context_exhausted(
-            loop,
-            turn.user_input,
-            turn.messages,
-            round_idx,
+            loop, turn.user_input, turn.messages, round_idx
         )
     finally:
         call.spinner.stop()
@@ -371,6 +348,7 @@ async def call_provider(
             call.ipc_writer.send_event("thinking_end")
 
     if response is not None:
+        turn.turn_state.context_recovery_attempts = 0
         return response
 
     adapter_exc = getattr(loop._new_adapter, "_last_error", None)
@@ -392,29 +370,6 @@ async def call_provider(
             _ERROR_CLASSIFICATION["unknown"],
         )
         _, severity, hint = _classification
-        if error_type == "context_overflow":
-            log.warning("Context overflow detected from 400 — attempting recovery")
-            recovered = await _context.aggressive_context_recovery(
-                loop,
-                call.system_prompt,
-                turn.messages,
-            )
-            if recovered:
-                _context.notify_context_event(
-                    loop,
-                    "prune",
-                    original_count=len(turn.messages) + recovered,
-                    new_count=len(turn.messages),
-                )
-                log.info("Context overflow recovery succeeded — retrying LLM call")
-                return None
-            return await _guards._finalize_context_exhausted(
-                loop,
-                turn.user_input,
-                turn.messages,
-                round_idx,
-            )
-
         if error_type in {"auth", "bad_request"}:
             if not loop._quiet:
                 from core.ui.agentic_ui import emit_llm_error
@@ -482,26 +437,6 @@ async def call_provider(
             user_input=turn.user_input,
             round_idx=round_idx + 1,
         )
-
-    if 2 <= loop._consecutive_llm_failures < retry_policy.max_attempts:
-        recovered = await _context.aggressive_context_recovery(
-            loop,
-            call.system_prompt,
-            turn.messages,
-        )
-        if recovered:
-            _context.notify_context_event(
-                loop,
-                "prune",
-                original_count=len(turn.messages) + recovered,
-                new_count=len(turn.messages),
-            )
-            log.info(
-                "Context compacted after %d failures — retrying same model (%s)",
-                loop._consecutive_llm_failures,
-                loop.model,
-            )
-            return None
 
     if loop._consecutive_llm_failures < retry_policy.max_attempts:
         delay = retry_delay_for(
