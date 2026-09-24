@@ -127,7 +127,7 @@ class RetryOutcome[T]:
 
 
 _TERMINAL_ERRORS = frozenset(
-    {"auth", "bad_request", "billing", "context_overflow", "stream_interrupted"}
+    {"auth", "bad_request", "billing", "context_overflow", "invalid_response", "stream_interrupted"}
 )
 _TRANSIENT_ERRORS = frozenset({"connection", "rate_limit", "server", "timeout"})
 _MAX_SERVER_RETRY_AFTER_S = 60.0

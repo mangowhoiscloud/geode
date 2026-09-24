@@ -76,6 +76,12 @@ functional change.
 
 ### Added
 
+- Support Claude Opus 5.5's native computer toolset with serial execution,
+  toolset-aware result replay and parameter validation before desktop actions.
+  Withhold unsupported members; report native action errors and preserve
+  legacy computer protocols. Retain billed usage when rejecting invalid
+  responses without replaying actions. Fix horizontal scrolling, native macOS
+  drag and wait deadlines; propagate helper-signing failures.
 - Add credential-gated Jev judgment selection through `/model judgment`, its
   interactive picker and the existing natural-language `switch_model` tool.
   Explicit selection uses TypeSafe System One or OpenRouter's compatible

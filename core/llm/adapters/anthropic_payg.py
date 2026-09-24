@@ -34,6 +34,7 @@ from core.llm.adapters.base import (
     TextCompletionResult,
     WebSearchResult,
 )
+from core.llm.errors import LLMResponseValidationError
 from core.llm.loop_affinity import LoopAffineClientCache
 from core.orchestration.anthropic_api_lane import acquire_anthropic_api_lane_async
 
@@ -104,15 +105,15 @@ class AnthropicPaygAdapter:
                 response = await client.messages.create(
                     **build_create_kwargs(req, base_url=str(client.base_url))
                 )
+                return translate_response(response)
             except Exception as exc:
                 self._last_error = exc
                 log.warning(
-                    "anthropic-payg: messages.create failed model=%s error_type=%s",
+                    "anthropic-payg: completion failed model=%s error_type=%s",
                     req.model,
                     type(exc).__name__,
                 )
                 raise
-        return translate_response(response)
 
     async def aweb_search(
         self, query: str, *, max_results: int = 5, model: str = ""
@@ -176,7 +177,11 @@ class AnthropicPaygAdapter:
             async for text_chunk in stream.text_stream:
                 yield StreamEvent(kind="text", payload={"text": text_chunk})
             final = await stream.get_final_message()
-            result = translate_response(final)
+            try:
+                result = translate_response(final)
+            except LLMResponseValidationError as exc:
+                yield StreamEvent(kind="usage", payload=asdict(exc.completed_result.usage))
+                raise
             for block in result.anthropic_content:
                 if block.get("type") == "thinking":
                     yield StreamEvent(
