@@ -1,65 +1,84 @@
-# Provider catalogue audit — 2026-09-24
+# Provider contracts checked on 2026-09-24
 
-Scope: GEODE agent-model prices, context limits and source-aware current
-choices. Requests, account entitlement, adapter features and paid acceptance
-remain separate contracts. No live inference or credential inspection ran.
+This audit covers GEODE's general-purpose agent models, API/subscription
+routes, request controls, replay, token accounting and public configuration
+guidance. Specialized audio/image generation, managed-agent products and
+restricted research models are not interchangeable agent-loop backends.
+The provider-specific inventories list the opened primary sources, current
+and legacy models, limits, pricing, lifecycle and upstream comparisons:
 
-## Source inventories
+- [OpenAI API and Codex](provider-refresh-20260924-openai.md)
+- [Claude API and subscription boundary](provider-refresh-20260924-claude.md)
+- [Z.AI API and Coding Plan](provider-refresh-20260924-zhipu.md)
 
-- [OpenAI model/price/API/Codex inventory](provider-refresh-20260924-openai.md)
-- [Z.AI model/price/Coding Plan inventory](provider-refresh-20260924-zhipu.md)
-- [Claude current models](https://platform.claude.com/docs/en/models/overview)
-- [Claude pricing](https://platform.claude.com/docs/en/about-claude/pricing)
-- [Claude lifecycle](https://platform.claude.com/docs/en/about-claude/model-deprecations)
+Public documentation, deterministic request tests, account entitlement and
+live provider acceptance are separate evidence. This refresh has no paid
+inference or account-access test. Published limits are not proof that a
+particular account admits that model.
 
-All primary pages were retrieved on 2026-09-24. Current Claude additions:
+## Runtime ownership
 
-| Model | Context | Output | Input / cached / output USD per million |
-|---|---:|---:|---|
-| claude-fable-5-1 | 1,000,000 | 128,000 | 10 / 0.25 / 50 |
-| claude-opus-5-5 | 1,000,000 | 128,000 | 4 / 0.20 / 20 |
-| claude-opus-5 | 1,000,000 | 128,000 | 5 / 0.50 / 25 |
-| claude-sonnet-5 | 1,000,000 | 128,000 | 2 / 0.20 / 10 |
+| Responsibility | Owner | Consumer and effect |
+|---|---|---|
+| Active model offerings | `core/llm/model_catalog.py::MODEL_OFFERINGS` | Picker, adapter diagnostics and login routing share provider/source rows |
+| API prices and context limits | `core/llm/model_pricing.toml` | Validated `PricingCatalogue` feeds `TokenTracker` and context guards |
+| Provider model controls | `OpenAIModelSpec`, `AnthropicModelSpec`, `GlmModelSpec` | Request builders and effort selection use exact supported controls |
+| Account and transport identity | `ProviderProfile`, `CredentialRoute`, `TransportSpec` | Existing adapter registry composes independent model/auth/protocol contracts |
+| Retired or unavailable source | `model_source_unavailable_reason` | Selection and dispatch reject the exact route with an explicit remedy |
+| Actual usage | Existing adapter response translators | Preserve provider counters and missing-field flags before cost estimation |
 
-Older active models retain their own entries. GLM-5.1, GLM-5 and the GLM-4.7
-family use the published 200,000-token context limit; the former 202,752 value
-had no current first-party basis. See the [GLM-5.1](https://docs.z.ai/guides/llm/glm-5.1),
-[GLM-5](https://docs.z.ai/guides/llm/glm-5) and
-[GLM-4.7](https://docs.z.ai/guides/llm/glm-4.7) specifications. A new model is not grounds to
-claim an older API retired. Source-specific retirement and account admission
-are independent; stored configured model IDs are never automatically remapped.
+These records serve different consumers; they are not another universal
+provider framework. Wire-specific behavior remains with the adapter.
+Equivalent JSON shape does not establish equivalent entitlement, replay,
+capabilities or billing.
 
-## Ownership and accounting
+## Selection and lifecycle
 
-`model_catalog.MODEL_OFFERINGS` owns documented active provider/source rows.
-`model_pricing.toml` owns current standard API rates and context limits.
-`PricingCatalogue` validates rates and keeps GLM provider identity separate
-from its OpenAI-compatible protocol. The existing `TokenTracker` consumes
-these data; no new billing store or registry is added.
+New default choices are `claude-opus-5-5`, `gpt-6-sol` for Platform/Codex,
+and `glm-5.3` for Z.AI PAYG. Explicit config/env/model selections retain
+their precedence. Deprecated models leave new-choice lists, while still
+active older models and explicit configured selections remain distinct.
+Known retired routes fail locally; no model or billing-source substitution
+is performed. Historical prices remain available for existing records.
 
-Anthropic input is disjoint from cached reads/writes; OpenAI and GLM input
-includes cached categories. Explicit Claude cache rates supersede the generic
-10% default where required. OpenAI GPT-6/GPT-5.6/GPT-5.5/GPT-5.4 input above
-272,000 tokens selects the full-request long-context tariff, including cached
-input: 2x input/cache and 1.5x output. Exactly 272,000 remains standard.
-GPT-5.6 Sol's promotional rate must be rechecked after the documented period,
-at least through 2026-11-21.
+Claude remains API-key only in GEODE. Anthropic's published subscription
+OAuth restrictions do not admit a third-party harness. Z.AI Coding Plan
+currently limits use to listed tools; GEODE admission is not established.
+Its saved profiles remain readable, but direct subscription execution and
+unsupported native search claims are disabled. PAYG must be selected
+explicitly. Coding Plan now uses token credits; stale 80/240/600-call quotas
+and model call weights no longer represent provider quota authority.
 
-These are estimates, not subscription invoices. The legacy tracker does not
-retain Anthropic cache-write TTL splits, service tier, region or tool fees;
-its Anthropic write estimate is the 5-minute rate. Provider-reported cost still
-wins when present. Old records and published evaluation bytes are unchanged.
+## Price semantics
 
-## Integration boundary
+Rates are USD per million tokens for standard synchronous API requests.
+They are estimates, not ChatGPT/Coding Plan charges or invoices. OpenAI
+inclusive input is split into ordinary input, cache reads and writes;
+Anthropic reports these as disjoint categories. GLM now has its own price
+section despite using the OpenAI-compatible protocol.
 
-The catalogue precedes separate adapter, UI/default and public-guide PRs.
-A metadata entry does not itself enable a route or mutate operator settings.
-The source-reason helper identifies Claude third-party subscription OAuth as
-unsupported and GLM Coding Plan admission for GEODE as unestablished under
-its current supported-tools policy. Enforcement at all adapter and selection
-entry points is reviewed in the corresponding provider PRs.
+Fable 5.1 and Opus 5.5 require explicit cache-read rates instead of the
+previous universal Anthropic 10% rule. GPT-6 and GPT-5.6 cache-write rates
+are explicit. The published long-context threshold applies to the full
+OpenAI request, including cached input: above 272,000 input tokens, input
+and cache rates double and output rates multiply by 1.5 for the admitted
+GPT-6/GPT-5.6/GPT-5.5/GPT-5.4 rows. Exactly 272,000 remains standard.
+GPT-5.6 Sol's promotional standard price must be rechecked after the
+provider's stated period (at least through 2026-11-21).
 
-Checks target context consumers, distinct provider input denominators,
-explicit cache overrides, the strict long-context boundary, invalid price
-rejection and source-specific lifecycle. These local checks do not establish
-remote CI, paid API acceptance or publication.
+The legacy tracker does not retain Anthropic cache-write TTL splits,
+service tier, regional surcharges, batch discounts or tool fees. It uses
+the 5-minute Anthropic write estimate. Do not present these totals as an
+invoice or apply a universal fast-mode multiplier. Provider-reported cost
+continues to take precedence when available. Historical records are not
+retroactively rewritten by this catalog change.
+
+## Verification and integration
+
+The [execution plan](../plans/2026-09-24-provider-storage-config-refresh.md)
+separates pricing/catalogue, per-provider adapters, native computer actions,
+selection/docs, persistence/config fixes and release preparation into
+reviewable units. Narrow regressions cover tariff thresholds, exact-source
+retirement, configured-selection preservation, supported efforts, output
+limits, stream/non-stream parity and native history. Full CI and release
+receipts are recorded only after they run on the corresponding revision.

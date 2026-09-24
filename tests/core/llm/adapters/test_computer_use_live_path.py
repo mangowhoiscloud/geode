@@ -118,7 +118,8 @@ class TestLivePathInjection:
 
     def test_no_double_inject_if_already_present(self) -> None:
         kwargs: dict = {
-            "tools": [common.anthropic_computer_tool_param(TARGET_WIDTH, TARGET_HEIGHT)]
+            "model": "claude-opus-4-8",
+            "tools": [common.anthropic_computer_tool_param(TARGET_WIDTH, TARGET_HEIGHT)],
         }
         with patch(_ENABLED, return_value=True):
             common._maybe_inject_computer_use(kwargs, _req())
@@ -130,7 +131,8 @@ class TestLivePathInjection:
         """Dedup is by native TYPE, not name — a caller's custom ``computer``
         tool must not block the native ``computer_20251124`` injection."""
         kwargs: dict = {
-            "tools": [{"name": "computer", "description": "custom", "input_schema": {}}]
+            "model": "claude-opus-4-8",
+            "tools": [{"name": "computer", "description": "custom", "input_schema": {}}],
         }
         with patch(_ENABLED, return_value=True):
             common._maybe_inject_computer_use(kwargs, _req())
@@ -138,7 +140,10 @@ class TestLivePathInjection:
         assert "computer-use-2025-11-24" in kwargs["extra_headers"]["anthropic-beta"]
 
     def test_beta_header_merges_not_clobbers(self) -> None:
-        kwargs: dict = {"extra_headers": {"anthropic-beta": "context-management-2025-06-27"}}
+        kwargs: dict = {
+            "model": "claude-opus-4-8",
+            "extra_headers": {"anthropic-beta": "context-management-2025-06-27"},
+        }
         with patch(_ENABLED, return_value=True):
             common._maybe_inject_computer_use(kwargs, _req())
         beta = kwargs["extra_headers"]["anthropic-beta"]
