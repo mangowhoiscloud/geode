@@ -147,6 +147,10 @@ functional change.
   Coding Plan calls before credentials are read under the supported-tools policy.
   Remove unverified automatic GLM-5V grounding and its orphaned parser/client
   chain while retaining explicit provider/source-aware unavailability.
+- Validate the complete settings reload before updating the live singleton.
+  Failed environment/TOML field validation, field preparation, or routing
+  refresh preserves the previous Settings values; corrected reloads retain
+  environment-over-TOML precedence and existing references.
 - Refresh the 2026-09-24 OpenAI, Claude and Z.AI model tariffs/context limits; honor explicit Claude cache rates and full-request OpenAI long-context tiers. Keep active source choices separate from historical accounting and unavailable subscription routes.
 - Preserve verifier failure instructions separately from the replanner's bounded
   candidate observation. The opt-in LLM/Jev diagnostic can now disclose one frozen
