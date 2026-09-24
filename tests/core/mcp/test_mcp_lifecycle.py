@@ -17,6 +17,7 @@ import signal
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from core.extensions import ExtensionPolicy
 from core.hooks import HookEvent
 from core.mcp.manager import (
@@ -381,9 +382,120 @@ class TestMCPManagerShutdown:
 
         assert mgr._lifecycle.shutdown_called is True
 
+    def test_restarted_manager_closes_each_connection_generation(self) -> None:
+        mgr = MCPServerManager()
+        mgr._catalog.servers = {"test": {}}
+        first, second = MagicMock(), MagicMock()
+        with (
+            patch.object(mgr, "_connect_all", return_value=1),
+            patch.object(mgr, "_install_signal_handlers"),
+            patch.object(mgr, "_uninstall_signal_handlers"),
+        ):
+            mgr.startup()
+            mgr._pool.clients["test"] = first
+            mgr.shutdown()
+            mgr.startup()
+            mgr._pool.clients["test"] = second
+            mgr.shutdown()
+            mgr._atexit_cleanup()
+        first.close.assert_called_once()
+        second.close.assert_called_once()
+        assert mgr.connected_count == 0
+
+    @pytest.mark.parametrize("failure_type", [RuntimeError, KeyboardInterrupt, SystemExit])
+    def test_failed_close_attempts_siblings_and_remains_retryable(
+        self, failure_type: type[BaseException]
+    ) -> None:
+        mgr = MCPServerManager()
+        failed, sibling = MagicMock(), MagicMock()
+        failure = failure_type("close failed")
+        failed.close.side_effect = [failure, None]
+        mgr._pool.clients.update(failed=failed, sibling=sibling)
+        with pytest.raises(failure_type) as caught:
+            mgr.shutdown()
+        assert caught.value is failure
+        assert mgr._lifecycle.shutdown_called is False
+        sibling.close.assert_called_once()
+        assert mgr.connected_count == 1
+        mgr.shutdown()
+        assert failed.close.call_count == 2
+        assert mgr.connected_count == 0
+
+    @pytest.mark.parametrize("reconnect", ["lazy", "respawn", "health"])
+    def test_reconnect_retains_client_when_close_fails(self, reconnect: str) -> None:
+        mgr = MCPServerManager()
+        mgr._catalog.servers = {"test": {}}
+        client = MagicMock()
+        client.is_connected.return_value = False
+        failure = RuntimeError("close failed")
+        client.close.side_effect = [failure, None]
+        mgr._pool.clients["test"] = client
+        with pytest.raises(RuntimeError) as caught:
+            if reconnect == "lazy":
+                mgr._get_client("test")
+            elif reconnect == "respawn":
+                mgr._respawn_after_death("test")
+            else:
+                mgr.check_health(auto_restart=True)
+        assert caught.value is failure
+        assert mgr._pool.clients["test"] is client
+        mgr.shutdown()
+        assert client.close.call_count == 2
+        assert mgr.connected_count == 0
+
+    def test_runtime_manager_keeps_process_signals_and_event_owner(self) -> None:
+        from core.hooks import RuntimeEventBus
+        from core.wiring.bootstrap import build_mcp_manager
+
+        first_hooks, second_hooks = RuntimeEventBus(), RuntimeEventBus()
+        with patch.object(MCPServerManager, "load_config", return_value=0):
+            first = build_mcp_manager(hooks=first_hooks)
+            second = build_mcp_manager(hooks=second_hooks)
+        with (
+            patch.object(first, "load_config", return_value=0),
+            patch.object(second, "load_config", return_value=0),
+            patch("signal.signal") as signal_write,
+            patch("atexit.register") as at_exit,
+            patch("core.mcp.manager._fire_mcp_hook") as emit,
+        ):
+            first.startup()
+            second.startup()
+            first._trace.fire(HookEvent.TOOL_EXEC_ENDED, {})
+            assert emit.call_args.args[0] is first_hooks
+            first.shutdown()
+            second._trace.fire(HookEvent.TOOL_EXEC_ENDED, {})
+            assert emit.call_args.args[0] is second_hooks
+            second.shutdown()
+        signal_write.assert_not_called()
+        at_exit.assert_not_called()
+
 
 class TestMCPManagerSignalHandlers:
     """Test signal handler installation/uninstallation."""
+
+    @pytest.mark.parametrize("default_handler", [False, True])
+    def test_failed_cleanup_still_forwards_process_signal(self, default_handler: bool) -> None:
+        mgr = MCPServerManager()
+        previous = signal.SIG_DFL if default_handler else MagicMock()
+        failure = RuntimeError("MCP close failed")
+        with (
+            patch("signal.getsignal", return_value=previous),
+            patch("signal.signal") as install,
+            patch("signal.raise_signal") as raise_signal,
+            patch("atexit.register"),
+            patch.object(mgr, "close_all", side_effect=failure),
+        ):
+            mgr._install_signal_handlers()
+            handler = install.call_args.args[1]
+            with pytest.raises(RuntimeError) as caught:
+                handler(signal.SIGTERM, None)
+            assert caught.value is failure
+            if default_handler:
+                install.assert_called_with(signal.SIGTERM, signal.SIG_DFL)
+                raise_signal.assert_called_once_with(signal.SIGTERM)
+            else:
+                previous.assert_called_once_with(signal.SIGTERM, None)
+                raise_signal.assert_not_called()
 
     def test_signal_handler_installation(self) -> None:
         """Signal handler should be installed in main thread."""
@@ -543,16 +655,16 @@ class TestMCPManagerCloseAll:
         client_b.close.assert_called_once()
         assert len(mgr._pool.clients) == 0
 
-    def test_close_all_tolerates_exceptions(self) -> None:
+    def test_close_all_preserves_failed_client_for_retry(self) -> None:
         mgr = MCPServerManager()
         client = MagicMock()
         client.pid = 300
         client.close.side_effect = RuntimeError("boom")
         mgr._pool.clients = {"failing": client}
 
-        # Should not raise
-        mgr.close_all()
-        assert len(mgr._pool.clients) == 0
+        with pytest.raises(RuntimeError, match="boom"):
+            mgr.close_all()
+        assert mgr._pool.clients == {"failing": client}
 
 
 class TestMCPManagerConnectAll:

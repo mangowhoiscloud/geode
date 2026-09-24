@@ -511,17 +511,13 @@ class GeodeRuntime:
         """Stage 2: Build MCP, skills, readiness, plugins, tool offload."""
         from core.wiring import adapters as adapter_wiring
 
-        mcp_manager = bootstrap.build_mcp_manager()
+        mcp_manager = bootstrap.build_mcp_manager(hooks=hooks)
         with ExitStack() as rollback:
             rollback.callback(_rollback_resource, "MCP manager", mcp_manager.shutdown)
-            from core.mcp.manager import clear_mcp_hooks, set_mcp_hooks
-
-            set_mcp_hooks(hooks)
-            hooks.add_owner_cleanup("mcp_hooks", clear_mcp_hooks)
             skill_registry = bootstrap.build_skill_registry()
             readiness = bootstrap.build_readiness()
             offload_store = bootstrap.build_tool_offload(session_id=session_key, hooks=hooks)
-            notification, calendar = adapter_wiring.build_plugins()
+            notification, calendar = adapter_wiring.build_plugins(mcp_manager=mcp_manager)
             rollback.pop_all()
             return {
                 "mcp_manager": mcp_manager,

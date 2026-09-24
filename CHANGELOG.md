@@ -132,6 +132,11 @@ functional change.
 
 ### Fixed
 
+- Runtime MCP managers now own their connections and event bindings, including
+  notification, calendar and gateway consumers. Another runtime's rollback or
+  shutdown cannot close them. Restarted managers close each connection generation;
+  failed closes retain the resource for retry after attempting sibling cleanup.
+
 - Preserve thin Harbor cognitive-reflection usage by binding its middleware to the existing session event sink.
 
 - Release partially constructed runtime resources before propagating the original

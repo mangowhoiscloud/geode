@@ -57,8 +57,8 @@ class MCPConnectionPool:
         if existing is not None:
             if existing.is_connected():
                 return existing
-            self.clients.pop(server_name, None)
             existing.close()
+            self.clients.pop(server_name, None)
 
         failed_at = self.failed_at.get(server_name)
         if failed_at is not None and time.monotonic() - failed_at < _FAILED_RETRY_COOLDOWN_S:
@@ -239,9 +239,9 @@ class MCPConnectionPool:
             existing = self.clients.get(server_name)
             if existing is not None and existing.is_connected():
                 return existing
-            stale = self.clients.pop(server_name, None)
-            if stale is not None:
-                stale.close()
+            if existing is not None:
+                existing.close()
+                self.clients.pop(server_name, None)
             return (connector or self.get_client)(server_name)
 
     def list_servers(self) -> list[dict[str, Any]]:
@@ -272,9 +272,9 @@ class MCPConnectionPool:
             alive = client.is_connected() if client else False
             if not alive and auto_restart:
                 log.info("MCP server '%s' is down, attempting restart", name)
-                dead = self.clients.pop(name, None)
-                if dead is not None:
-                    dead.close()
+                if client is not None:
+                    client.close()
+                    self.clients.pop(name, None)
                 self.failed_at.pop(name, None)
                 fresh = get_client(name)
                 alive = fresh is not None and fresh.is_connected()
@@ -286,8 +286,16 @@ class MCPConnectionPool:
         return result
 
     def close_all(self) -> None:
-        for name, client in self.clients.items():
-            with contextlib.suppress(Exception):
+        failure: BaseException | None = None
+        for name, client in list(self.clients.items()):
+            try:
                 log.debug("Closing MCP server '%s' (PID %s)", name, client.pid)
                 client.close()
-        self.clients.clear()
+            except BaseException as exc:
+                log.warning("MCP close failed: %s (%s)", name, type(exc).__name__)
+                if failure is None:
+                    failure = exc
+            else:
+                self.clients.pop(name, None)
+        if failure is not None:
+            raise failure

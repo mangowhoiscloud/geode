@@ -6,7 +6,10 @@ Extracted from core.runtime as standalone functions (formerly GeodeRuntime stati
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.mcp.manager import MCPServerManager
 
 from core.wiring.bootstrap import _plugin_status
 
@@ -59,50 +62,30 @@ def build_cli_poller(
     )
 
 
-def _load_mcp_manager_for_plugin(
-    plugin_name: str,
-) -> Any | None:
-    """Load MCP manager config, or mark plugin unavailable and return None."""
-    from core.mcp.manager import get_mcp_manager
-
-    try:
-        manager = get_mcp_manager()
-        manager.load_config()
-        return manager
-    except Exception as exc:
-        _plugin_status[plugin_name] = "unavailable"
-        log.warning("Plugin %s: MCP manager failed (%s)", plugin_name, exc)
-        return None
-
-
-def build_notification_adapter() -> Any | None:
+def build_notification_adapter(*, mcp_manager: MCPServerManager) -> Any:
     """Build a CompositeNotificationAdapter with MCP-backed channels.
 
     Chains Slack + Discord + Telegram adapters. If no messaging MCP servers
-    are available, notification tools fall back to stub responses.
+    are available, notification tools report that the message was not sent.
     """
     from core.mcp.composite_notification import CompositeNotificationAdapter
     from core.mcp.discord_adapter import DiscordNotificationAdapter
     from core.mcp.slack_adapter import SlackNotificationAdapter
     from core.mcp.telegram_adapter import TelegramNotificationAdapter
 
-    manager = _load_mcp_manager_for_plugin("notification_adapter")
-    if manager is None:
-        return None
-
     adapters = [
         # Slack posts directly to the Web API (PR-SLACK-TRANSPORT);
         # Discord/Telegram remain MCP-backed.
         SlackNotificationAdapter(),
-        DiscordNotificationAdapter(manager=manager),
-        TelegramNotificationAdapter(manager=manager),
+        DiscordNotificationAdapter(manager=mcp_manager),
+        TelegramNotificationAdapter(manager=mcp_manager),
     ]
     composite = CompositeNotificationAdapter(adapters)  # type: ignore[arg-type]
     log.info("Notification adapter wired: channels=%s", composite.list_channels())
     return composite
 
 
-def build_calendar_adapter() -> Any:
+def build_calendar_adapter(*, mcp_manager: MCPServerManager) -> Any:
     """Build direct Google OAuth plus MCP-backed calendar sources.
 
     The direct Google adapter is always present and discovers credentials at
@@ -115,14 +98,12 @@ def build_calendar_adapter() -> Any:
     from core.mcp.google_workspace_calendar import GoogleWorkspaceCalendarAdapter
 
     adapters: list[Any] = [GoogleWorkspaceCalendarAdapter()]
-    manager = _load_mcp_manager_for_plugin("calendar_adapter")
-    if manager is not None:
-        adapters.extend(
-            [
-                GoogleCalendarAdapter(manager=manager),
-                AppleCalendarAdapter(manager=manager),
-            ]
-        )
+    adapters.extend(
+        [
+            GoogleCalendarAdapter(manager=mcp_manager),
+            AppleCalendarAdapter(manager=mcp_manager),
+        ]
+    )
     composite = CompositeCalendarAdapter(adapters)
     log.info("Calendar adapter wired; availability will be checked at call time")
     return composite
@@ -218,7 +199,7 @@ def _load_gateway_config() -> tuple[dict[str, Any], list[str]]:
     return ({"gateway": merged_gateway} if merged_gateway else {}), sources
 
 
-def build_gateway(*, notification: Any = None) -> None:
+def build_gateway(*, notification: Any = None, mcp_manager: MCPServerManager | None = None) -> None:
     """Build the channel manager and optional external-channel pollers.
 
     Reads ``[gateway] pollers`` from ``.geode/config.toml`` to determine
@@ -276,7 +257,11 @@ def build_gateway(*, notification: Any = None) -> None:
     try:
         from core.mcp.manager import get_mcp_manager
 
-        mcp = get_mcp_manager(auto_startup=True)
+        if mcp_manager is None:
+            mcp = get_mcp_manager(auto_startup=True)
+        else:
+            mcp = mcp_manager
+            mcp.startup()
         log.info(
             "Gateway MCP: %d/%d servers connected",
             mcp.connected_count,
@@ -346,9 +331,9 @@ def build_gateway(*, notification: Any = None) -> None:
     )
 
 
-def build_plugins() -> tuple[Any | None, Any]:
+def build_plugins(*, mcp_manager: MCPServerManager) -> tuple[Any | None, Any]:
     """Build plugin adapters and return the owned notification/calendar pair."""
-    notification = build_notification_adapter()
-    calendar = build_calendar_adapter()
-    build_gateway(notification=notification)
+    notification = build_notification_adapter(mcp_manager=mcp_manager)
+    calendar = build_calendar_adapter(mcp_manager=mcp_manager)
+    build_gateway(notification=notification, mcp_manager=mcp_manager)
     return notification, calendar

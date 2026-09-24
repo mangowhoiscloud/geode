@@ -100,6 +100,30 @@ class TestGeodeRuntimeCreate:
         runtime = GeodeRuntime.create("Demo Subject", phase="scoring", log_dir=tmp_path)
         assert runtime.session_key == "subject:demo_subject:scoring"
 
+    @pytest.mark.parametrize("failure_during_creation", [False, True])
+    def test_runtime_cleanup_preserves_other_runtime_mcp(
+        self, tmp_path: Path, failure_during_creation: bool
+    ) -> None:
+        from core.wiring import bootstrap
+
+        active = GeodeRuntime.create("active", log_dir=tmp_path / "active")
+        client = MagicMock()
+        active.mcp_manager._pool.clients["test"] = client
+        if failure_during_creation:
+            with (
+                patch.object(bootstrap, "build_skill_registry", side_effect=ValueError("skills")),
+                pytest.raises(ValueError, match="skills"),
+            ):
+                GeodeRuntime.create("failed", log_dir=tmp_path / "failed")
+        else:
+            other = GeodeRuntime.create("other", log_dir=tmp_path / "other")
+            assert other.mcp_manager is not active.mcp_manager
+            other.shutdown()
+        client.close.assert_not_called()
+        assert active.mcp_manager.connected_count == 1
+        active.shutdown()
+        client.close.assert_called_once()
+
     def test_feature_composition_is_explicit_and_identity_preserving(
         self,
         tmp_path: Path,
