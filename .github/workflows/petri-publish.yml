@@ -58,7 +58,7 @@ jobs:
         # `zipfile-zstd` lives in the dev group so the validator can open
         # zstd-compressed .eval archives without pulling the heavy [audit]
         # extra.
-        run: uv sync
+        run: uv sync --locked
 
       - name: Hygiene ratchet (petri delete-protection)
         run: uv run python scripts/check_repo_hygiene.py
