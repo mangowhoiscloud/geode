@@ -98,6 +98,44 @@ def test_close_is_idempotent_and_active_callers_can_reopen(tmp_db: Path) -> None
     assert (state.total_input_tokens, state.total_output_tokens) == (12, 5)
 
 
+@pytest.mark.parametrize("failure", ["statement", "commit", "rollback"])
+def test_failed_write_cannot_leak_into_a_later_commit(tmp_db: Path, failure: str) -> None:
+    ars.record_agent_session_end(agent_id="seed")
+    connection = ars._CONN
+    assert connection is not None
+
+    def authorize(action: int, arg1: str | None, *_args: object) -> int:
+        if action == sqlite3.SQLITE_TRANSACTION and (
+            arg1 == "COMMIT" or (failure == "rollback" and arg1 == "ROLLBACK")
+        ):
+            return sqlite3.SQLITE_DENY
+        return sqlite3.SQLITE_OK
+
+    if failure == "statement":
+        connection.execute(
+            "CREATE TEMP TRIGGER reject_runtime_insert AFTER INSERT ON agent_runtime_state "
+            "WHEN NEW.agent_id = 'failed' BEGIN SELECT RAISE(FAIL, 'injected failure'); END"
+        )
+    else:
+        connection.set_authorizer(authorize)
+
+    ars.accumulate_tokens_and_cost(agent_id="failed", input_tokens=10, output_tokens=2)
+    if failure == "rollback":
+        assert ars._CONN is None
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            connection.execute("SELECT 1")
+    else:
+        assert not connection.in_transaction
+        connection.set_authorizer(None)
+    assert ars.get_agent_runtime_state("failed") is None
+    ars.accumulate_tokens_and_cost(agent_id="later", input_tokens=3, output_tokens=1)
+    with closing(sqlite3.connect(tmp_db)) as reader:
+        assert reader.execute(
+            "SELECT agent_id, total_input_tokens FROM agent_runtime_state "
+            "WHERE agent_id IN ('failed', 'later')"
+        ).fetchall() == [("later", 3)]
+
+
 def test_shutdown_cannot_close_a_writer_connection_mid_operation(
     tmp_db: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

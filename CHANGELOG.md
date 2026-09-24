@@ -116,7 +116,10 @@ functional change.
 - Close runtime-state schema-bootstrap and failed connection candidates
   deterministically, release the cached SQLite connection during runtime
   shutdown, and serialize complete reads/writes with cleanup so other active
-  hook bundles can reopen it without losing cumulative records.
+  hook bundles can reopen it without losing cumulative records. Roll back
+  failed runtime-state writes before reusing the connection, discard it if
+  rollback fails, and close SessionManager connections when schema initialization
+  fails so a later write cannot commit a failed operation's pending changes.
 - Refresh the 2026-09-24 OpenAI, Claude and Z.AI model tariffs/context limits; honor explicit Claude cache rates and full-request OpenAI long-context tiers. Keep active source choices separate from historical accounting and unavailable subscription routes.
 - Preserve verifier failure instructions separately from the replanner's bounded
   candidate observation. The opt-in LLM/Jev diagnostic can now disclose one frozen

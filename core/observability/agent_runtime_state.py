@@ -126,8 +126,22 @@ def _get_conn() -> sqlite3.Connection | None:
 @contextlib.contextmanager
 def _connection() -> Iterator[sqlite3.Connection | None]:
     """Hold the connection across a complete operation, including shutdown races."""
+    global _CONN
     with _LOCK:
-        yield _get_conn()
+        conn = _get_conn()
+        try:
+            yield conn
+        finally:
+            # Writers log and swallow failures. A failed statement or commit
+            # may still leave a transaction open on this shared connection.
+            if conn is not None and conn.in_transaction:
+                try:
+                    conn.rollback()
+                except sqlite3.Error as exc:
+                    log.warning("agent_runtime_state: rollback failed; closing connection: %s", exc)
+                    with contextlib.suppress(sqlite3.Error):
+                        conn.close()
+                    _CONN = None
 
 
 def close_runtime_state() -> None:
