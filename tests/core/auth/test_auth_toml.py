@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import os
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 
+import pytest
 from core.auth.auth_toml import (
     auth_toml_path,
     load_auth_toml,
@@ -17,7 +19,7 @@ from core.llm.strategies.plan_registry import (
     get_plan_registry,
     reset_plan_registry,
 )
-from core.llm.strategies.plans import GLM_CODING_TIERS
+from core.llm.strategies.plans import GLM_CODING_TIERS, Quota
 
 
 def _fresh_path() -> Path:
@@ -37,13 +39,16 @@ def _reset_state() -> None:
 
 
 class TestRoundtrsubject:
-    def test_save_then_load_preserves_plan(self) -> None:
+    @pytest.mark.parametrize(
+        "quota", [None, Quota(window_s=18_000, max_calls=80, model_weights={"glm-5.1": 3.0})]
+    )
+    def test_save_then_load_preserves_plan(self, quota: Quota | None) -> None:
         _reset_state()
         from core.wiring.container import ensure_profile_store
 
         store = ensure_profile_store()
         registry = get_plan_registry()
-        plan = GLM_CODING_TIERS["lite"]
+        plan = replace(GLM_CODING_TIERS["lite"], quota=quota)
         registry.add(plan)
         store.add(
             AuthProfile(
@@ -62,8 +67,9 @@ class TestRoundtrsubject:
         text = path.read_text()
         assert "glm-coding-lite" in text
         assert "zai-test-key" in text
-        assert "[plans.quota]" in text
-        assert "max_calls = 80" in text
+        assert ("[plans.quota]" in text) is (quota is not None)
+        if quota is not None:
+            assert "max_calls = 80" in text
 
         # Reload into a fresh state
         path.chmod(0o644)
@@ -71,7 +77,7 @@ class TestRoundtrsubject:
         load_auth_toml(path=path)
         assert path.stat().st_mode & 0o777 == 0o600
         registry2 = get_plan_registry()
-        assert registry2.get("glm-coding-lite") is not None
+        assert registry2.get("glm-coding-lite") == plan
         assert registry2.get_routing("glm-5.1") == ["glm-coding-lite"]
         store2 = ensure_profile_store()
         prof = next((p for p in store2.list_all() if p.name == "glm-coding-lite:user"), None)

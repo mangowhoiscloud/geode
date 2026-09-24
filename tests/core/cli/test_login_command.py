@@ -160,14 +160,26 @@ class TestSetKeyAndUse:
             )
             assert "Unknown plan" in text
 
-    def test_use_pins_plan_for_provider(self) -> None:
+    def test_use_pins_payg_plan_for_provider(self) -> None:
+        _reset_state()
+        registry = get_plan_registry()
+        plan = default_plan_for_payg("glm", "")
+        registry.add(plan)
+        cmd_login(f"use {plan.id}")
+        for model in ("glm-5.3", "glm-5.2", "glm-5.1"):
+            assert registry.get_routing(model)[0] == plan.id
+
+    def test_use_blocked_subscription_keeps_routing_unchanged(self) -> None:
         _reset_state()
         registry = get_plan_registry()
         plan = GLM_CODING_TIERS["lite"]
         registry.add(plan)
-        cmd_login(f"use {plan.id}")
-        chain = registry.get_routing("glm-5.1")
-        assert chain[0] == plan.id
+        registry.set_routing("glm-5.1", ["existing-plan"])
+        with patch("core.cli.commands._persist_auth_state") as persist:
+            cmd_login(f"use {plan.id}")
+        assert registry.get_routing("glm-5.1") == ["existing-plan"]
+        assert registry.get_routing("glm-5.3") == []
+        persist.assert_not_called()
 
 
 class TestRouteAndQuota:
@@ -191,10 +203,14 @@ class TestRouteAndQuota:
         cmd_login(f"route glm-5.1 {b.id} {a.id}")
         assert registry.get_routing("glm-5.1") == [b.id, a.id]
 
-    def test_quota_shows_subscription_plans(self) -> None:
+    def test_quota_shows_explicit_operator_call_window(self) -> None:
+        from dataclasses import replace
+
+        from core.llm.strategies.plans import Quota
+
         _reset_state()
         registry = get_plan_registry()
-        plan = GLM_CODING_TIERS["lite"]
+        plan = replace(GLM_CODING_TIERS["lite"], quota=Quota(window_s=18000, max_calls=42))
         registry.add(plan)
         with patch("core.cli.commands.console") as mock_console:
             cmd_login("quota")
@@ -202,7 +218,10 @@ class TestRouteAndQuota:
                 str(call.args[0]) for call in mock_console.print.call_args_list if call.args
             )
             assert plan.id in text
-            assert "80" in text  # max_calls
+            assert "42" in text
+
+    def test_builtin_credit_plans_do_not_invent_call_quota(self) -> None:
+        assert all(plan.quota is None for plan in GLM_CODING_TIERS.values())
 
 
 class TestLegacyKeyAlias:

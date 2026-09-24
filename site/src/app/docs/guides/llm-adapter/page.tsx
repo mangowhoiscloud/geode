@@ -78,6 +78,8 @@ export default function Page() {
               await하십시오. 종료 실패 연결은 같은 루프가 살아 있는 동안 재시도할 수
               있도록 보존합니다. 이미 닫힌 루프의 연결을 다른 루프에서 정리하지는
               않습니다. 캐시 밖에서 전달한 연결의 정리는 원래 소유자 책임입니다.
+              IPC 작업 스레드의 종료 대기가 만료되면 소유권을 유지하고 재시작을
+              거부합니다. 최종 정리 오류도 데몬 종료 호출자에게 전달합니다.
             </p>
             <pre>{`# acme-geode-adapter/pyproject.toml
 [project.entry-points."geode.llm_adapters"]
@@ -284,6 +286,9 @@ if isinstance(a, EnvironmentDiagnosticCapable):
               remain retryable while that loop is alive; a closed loop cannot
               transfer cleanup to another loop. Clients
               supplied outside the cache remain their original owner&apos;s responsibility.
+              If an IPC worker exceeds its shutdown wait, its owner retains it
+              and rejects restart. Final cleanup errors reach the daemon shutdown
+              caller.
             </p>
             <pre>{`# acme-geode-adapter/pyproject.toml
 [project.entry-points."geode.llm_adapters"]

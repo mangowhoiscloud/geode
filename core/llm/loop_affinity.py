@@ -1,34 +1,13 @@
-"""Event-loop-affine async client cache — PR-LOOP-POLLUTION-FIX (2026-06-12).
+"""Reuse async SDK clients on their owning loop and close them before loop exit.
 
-httpx ``AsyncClient`` (and the SDK clients wrapping it — ``AsyncAnthropic``,
-``AsyncOpenAI``) binds its connection-pool primitives (asyncio ``Event`` /
-``Lock`` via anyio) to the event loop that first drives them. The httpx
-contract is "one client shared between *tasks*" — tasks of a single loop.
-Reusing the client from a different loop produces one of two failures:
+Each loop entry holds the active selection and all clients still owned, including
+clients retired by credential changes. A separate owner index keeps caches alive
+across adapter registry replacement. Sessions borrow these shared resources;
+only a loop owner drains them after its work and streams have settled.
 
-- ``RuntimeError: <asyncio.locks.Event ...> is bound to a different event
-  loop`` → surfaces as an instant ``APIConnectionError`` (~2-4ms), or
-- an eternal ``await`` on a foreign loop's Event — no exception, no log,
-  a zombie coroutine.
-
-Incident (2026-06-12 00:08, serve daemon): three parallel ``web_search``
-calls each ran on a throwaway ``asyncio.Runner`` loop (sync delegate
-handler residue) while sharing one process-global cached client — one
-insta-failed (recovered by the dispatch retry), two hung forever
-(``sample`` showed two zombie ``asyncio_N`` worker loops in kevent and an
-Anthropic socket stuck in CLOSE_WAIT).
-
-This cache replaces ``self._client`` single-slot caching in adapters:
-one client **per owning event loop**, keyed weakly so a dead loop's entry
-disappears with the loop. The genuinely-multi-loop daemon topology (main
-serve loop + CLIPoller thread loop + gateway turns) then gets one healthy
-client per loop instead of one poisoned client shared across them.
-
-GEODE's process/thread loop owners drain current and retired clients before
-closing their loops. Credential rotation retires clients without interrupting
-in-flight calls. External loop owners can call ``drain_current_loop_clients``
-after their work has settled. Already-closed external loops retain the legacy
-drop-only fallback: async cleanup cannot safely run on another loop.
+Weak loop keys do not guarantee cleanup: client transports can reference their
+loop. Already-closed external loops use a drop-only fallback on the next get;
+async cleanup cannot safely run on a different loop.
 """
 
 from __future__ import annotations
@@ -38,18 +17,33 @@ import logging
 import threading
 import weakref
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any
 
 log = logging.getLogger(__name__)
 
-# Cache selection and resource lifetime differ: registry replacement and
-# credential invalidation must not abandon clients still used by a session.
-# Keep their cache owner alive until its actual event loop is drained.
-# ponytail: retired clients live until loop teardown; add leases if rotation retention grows.
-_OWNED_CLIENTS: weakref.WeakKeyDictionary[
-    asyncio.AbstractEventLoop, dict[LoopAffineClientCache, list[Any]]
+
+@dataclass
+class _LoopClients:
+    active: Any = None
+    # ponytail: retired clients live until loop teardown; add leases if rotation retention grows.
+    owned: list[Any] = field(default_factory=list)
+
+
+# Dict keys retain registration order for close attempts and failure reporting.
+_LOOP_OWNERS: weakref.WeakKeyDictionary[
+    asyncio.AbstractEventLoop, dict[LoopAffineClientCache, None]
 ] = weakref.WeakKeyDictionary()
 _OWNERS_LOCK = threading.Lock()
+
+
+def _discard_closed_loops() -> None:
+    with _OWNERS_LOCK:
+        closed = {loop: _LOOP_OWNERS.pop(loop) for loop in list(_LOOP_OWNERS) if loop.is_closed()}
+    # Never acquire a cache lock while holding the owner-index lock.
+    for loop, owners in closed.items():
+        for cache in owners:
+            cache._take_owned_clients(loop)
 
 
 async def drain_current_loop_clients() -> None:
@@ -62,14 +56,12 @@ async def drain_current_loop_clients() -> None:
     """
     loop = asyncio.get_running_loop()
     with _OWNERS_LOCK:
-        owners = _OWNED_CLIENTS.pop(loop, {})
+        owners = _LOOP_OWNERS.pop(loop, {})
     failures: list[BaseException] = []
     failure_count = 0
     cancellation: asyncio.CancelledError | None = None
-    for cache, clients in owners.items():
-        with cache._lock:
-            cache._by_loop.pop(loop, None)
-        for client in clients:
+    for cache in owners:
+        for client in cache._take_owned_clients(loop):
             try:
                 close = asyncio.create_task(client.close())
                 while not close.done():
@@ -84,8 +76,7 @@ async def drain_current_loop_clients() -> None:
                         break
                 close.result()
             except BaseException as exc:
-                with _OWNERS_LOCK:
-                    _OWNED_CLIENTS.setdefault(loop, {}).setdefault(cache, []).append(client)
+                cache._retain_failed_client(loop, client)
                 failure_count += 1
                 if len(failures) < 5:
                     failures.append(exc)
@@ -102,26 +93,17 @@ async def drain_current_loop_clients() -> None:
 class LoopAffineClientCache:
     """One async SDK client per owning event loop.
 
-    ``get(builder)`` returns the cached client for the *currently running*
-    loop, building (and caching) one via ``builder()`` on first use per
-    loop. Entries are held in a ``WeakKeyDictionary`` keyed by the loop —
-    when a loop is garbage-collected (e.g. a finished ``asyncio.Runner``),
-    its client entry vanishes with it.
-
-    Called without a running loop (sync probe paths), the client is built
-    fresh and NOT cached; that synchronous caller owns its cleanup.
-
-    ``invalidate()`` drops active selections, retaining ownership until loop
-    teardown so in-flight requests can finish using the previous credential.
+    Builders transfer ownership of clients with an async ``close()`` method.
+    ``invalidate()`` retires active selections without closing in-flight clients.
+    Without a running loop, ``get`` builds an uncached client owned by its caller.
     """
 
     def __init__(self, name: str = "") -> None:
         self._name = name
-        self._by_loop: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, Any] = (
+        self._by_loop: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, _LoopClients] = (
             weakref.WeakKeyDictionary()
         )
-        # The cache is touched from multiple threads (main serve loop,
-        # CLIPoller thread, to_thread workers) — guard the dict itself.
+        # Cache state is shared by the main loop and poller threads.
         self._lock = threading.Lock()
 
     def get(self, builder: Callable[[], Any]) -> Any:
@@ -131,30 +113,23 @@ class LoopAffineClientCache:
             log.debug("loop-affine[%s]: no running loop — building uncached client", self._name)
             return builder()
 
+        _discard_closed_loops()
         with self._lock:
-            with _OWNERS_LOCK:
-                for stale_loop in [key for key in _OWNED_CLIENTS if key.is_closed()]:
-                    del _OWNED_CLIENTS[stale_loop]
-            # Sweep closed-loop entries. The WeakKeyDictionary alone is NOT
-            # sufficient cleanup: the cached client's loop-bound transports
-            # can keep a strong reference back to its (closed) loop, so the
-            # weak key never dies and the entry would otherwise persist —
-            # one leaked client per throwaway loop (Codex MCP review
-            # 2026-06-12). The sweep bounds that to "until any next get()".
-            for cached_loop in [k for k in self._by_loop if k.is_closed()]:
-                del self._by_loop[cached_loop]
-            cached = self._by_loop.get(loop)
-            if cached is not None:
-                return cached
+            entry = self._by_loop.get(loop)
+            if entry is not None and entry.active is not None:
+                return entry.active
 
             # Keep construction/publication atomic with credential invalidation.
             # Builders are synchronous SDK constructors; they do not send requests
             # or call back into this cache.
             client = builder()
-            self._by_loop[loop] = client
-            bound = len(self._by_loop)
+            if entry is None:
+                entry = self._by_loop[loop] = _LoopClients()
+            entry.active = client
+            entry.owned.append(client)
+            bound = sum(item.active is not None for item in self._by_loop.values())
             with _OWNERS_LOCK:
-                _OWNED_CLIENTS.setdefault(loop, {}).setdefault(self, []).append(client)
+                _LOOP_OWNERS.setdefault(loop, {})[self] = None
         log.info(
             "loop-affine[%s]: client bound to loop %#x on thread %s (%d loop(s) bound)",
             self._name,
@@ -167,9 +142,24 @@ class LoopAffineClientCache:
     def invalidate(self) -> None:
         """Retire active selections without closing in-flight clients."""
         with self._lock:
-            self._by_loop.clear()
+            for entry in self._by_loop.values():
+                entry.active = None
+
+    def _take_owned_clients(self, loop: asyncio.AbstractEventLoop) -> list[Any]:
+        """Detach this loop's selection and owned clients before cleanup."""
+        with self._lock:
+            entry = self._by_loop.pop(loop, None)
+            return entry.owned if entry is not None else []
+
+    def _retain_failed_client(self, loop: asyncio.AbstractEventLoop, client: Any) -> None:
+        """Keep a failed close retryable without changing the active selection."""
+        with self._lock:
+            entry = self._by_loop.setdefault(loop, _LoopClients())
+            entry.owned.append(client)
+            with _OWNERS_LOCK:
+                _LOOP_OWNERS.setdefault(loop, {})[self] = None
 
     def bound_loop_count(self) -> int:
-        """Number of live loops currently holding a client — observability."""
+        """Number of loops with an active client selection — observability."""
         with self._lock:
-            return len(self._by_loop)
+            return sum(entry.active is not None for entry in self._by_loop.values())

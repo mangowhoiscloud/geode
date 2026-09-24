@@ -13,6 +13,7 @@ Anthropic과 OpenRouter의 내장 실행 경로는 API key뿐입니다.
 | OpenAI | `api_key` | `OPENAI_API_KEY` | OpenAI PAYG adapter |
 | Anthropic | `api_key` / `auto` | `ANTHROPIC_API_KEY` | Anthropic Messages adapter |
 | OpenRouter | `api_key` | `OPENROUTER_API_KEY` | OpenRouter Chat Completions adapter |
+| GLM | `api_key` | `ZAI_API_KEY` | GLM PAYG Chat Completions adapter |
 | 모든 프로바이더 | `none` | 없음 | provider-disabled 오류로 fail closed |
 
 퇴역한 Anthropic 값 `claude-cli`와 `oauth`는 기존 설정에 정확한 migration
@@ -27,6 +28,11 @@ anthropic_credential_source = "api_key"
 `/login anthropic`도 이제 API-key 경로를 설정합니다. 과거 `.eval`,
 trajectory, receipt reader는 예전 source label을 판독하지만 실행 권한으로
 해석하지 않습니다.
+
+GLM Coding Plan은 공식 지원 도구로 제한됩니다.
+[2026-09-24 정책](https://docs.z.ai/devpack/usage-policy)에서 GEODE 사용 자격은
+확인되지 않아 기존 구독 기록은 읽되 실행과 신규 프로필 등록은 차단합니다.
+PAYG는 명시적으로 선택해야 하며 과금 소스가 자동 전환되지 않습니다.
 
 ## Source of truth
 

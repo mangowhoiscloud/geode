@@ -6,6 +6,7 @@ Extracted from core.runtime as standalone functions (formerly GeodeRuntime stati
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from core.wiring.bootstrap import _plugin_status
@@ -168,12 +169,13 @@ def _resolve_slack_bot_user_id() -> str:
     return ""
 
 
-def _load_gateway_config() -> tuple[dict[str, Any], list[str]]:
+def _load_gateway_config(*, strict: bool = False) -> tuple[dict[str, Any], list[str]]:
     """Merge the [gateway] config: global SoT + project overlay.
 
     Returns ``(merged_config, source_labels)``. Scalar keys: project
     overrides global. ``bindings.rules``: global rules first, project
-    rules appended (both active). Either file may be absent.
+    rules appended (both active). Either file may be absent. Strict reloads
+    reject unreadable or malformed sources instead of publishing a partial overlay.
     """
     import tomllib
 
@@ -193,18 +195,32 @@ def _load_gateway_config() -> tuple[dict[str, Any], list[str]]:
         try:
             with open(path, "rb") as fh:
                 raw = tomllib.load(fh)
-        except Exception:
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError):
+            if strict:
+                raise
             log.warning("Gateway config unreadable: %s", path, exc_info=True)
             continue
         gw = raw.get("gateway")
         if not isinstance(gw, dict):
+            if strict and "gateway" in raw:
+                raise ValueError("gateway must be a table")
             continue
         sources.append(f"{label}:{path}")
         for key, value in gw.items():
             if key == "bindings":
+                if strict and not isinstance(value, dict):
+                    raise ValueError("gateway.bindings must be a table")
                 rules = value.get("rules", []) if isinstance(value, dict) else []
+                if strict and not isinstance(rules, list):
+                    raise ValueError("gateway.bindings.rules must be an array of tables")
                 if isinstance(rules, list):
+                    if isinstance(value, dict) and "rules" in value:
+                        merged_gateway["bindings"] = {"rules": []}
                     for rule in rules:
+                        if strict and not isinstance(rule, dict):
+                            raise ValueError("Each binding rule must be a table")
                         if isinstance(rule, dict):
                             rule_key = (
                                 str(rule.get("channel", "")),
@@ -228,6 +244,7 @@ def build_gateway(*, notification: Any = None) -> None:
     """
     from core.config import settings
     from core.messaging.binding import ChannelManager, set_gateway
+    from core.orchestration.hot_reload import ConfigWatcher
 
     if not settings.gateway_enabled:
         set_gateway(ChannelManager())
@@ -254,7 +271,10 @@ def build_gateway(*, notification: Any = None) -> None:
     if not bot_user_id and resolve_bot_token():
         bot_user_id = _resolve_slack_bot_user_id()
 
-    manager = ChannelManager(lane_queue=lane_queue, bot_user_id=bot_user_id)
+    binding_watcher = ConfigWatcher()
+    manager = ChannelManager(
+        lane_queue=lane_queue, bot_user_id=bot_user_id, binding_watcher=binding_watcher
+    )
     poll_interval = settings.gateway_poll_interval_s
 
     # Load config from TOML — root-level SoT (PR-SLACK-TRANSPORT).
@@ -311,31 +331,26 @@ def build_gateway(*, notification: Any = None) -> None:
 
     # Hot-reload bindings on config.toml change
     try:
-        from core.orchestration.hot_reload import ConfigWatcher
 
-        def _reload_bindings(path: Any, mtime: float) -> None:
-            try:
-                reload_config, reload_sources = _load_gateway_config()
-                manager.load_bindings_from_config(reload_config)
-                log.info(
-                    "Gateway bindings reloaded (trigger=%s, sources=%s)",
-                    path,
-                    ", ".join(reload_sources) or "none",
-                )
-            except Exception as reload_exc:
-                log.warning("Gateway binding reload failed: %s", reload_exc)
+        def _reload_bindings(path: Path, mtime: float) -> None:
+            reload_config, reload_sources = _load_gateway_config(strict=True)
+            # This is a complete disk snapshot, so removed rules revoke bindings.
+            reload_config.setdefault("gateway", {}).setdefault("bindings", {"rules": []})
+            manager.load_bindings_from_config(reload_config)
+            log.info(
+                "Gateway bindings reloaded (trigger=%s, sources=%s)",
+                path,
+                ", ".join(reload_sources) or "none",
+            )
 
         from core.config.toml_edit import resolve_config_toml_path
         from core.paths import PROJECT_CONFIG_TOML as _PROJECT_TOML
 
-        _watcher = ConfigWatcher()
         # Watch BOTH paths even when absent at boot — an overlay created
         # (or removed) later must re-merge without a daemon restart.
         for _cfg in (resolve_config_toml_path(), _PROJECT_TOML):
-            _watcher.watch(_cfg, _reload_bindings, name=f"gateway-bindings:{_cfg}")
-        _watcher.start()
-        # Attach to manager to prevent GC (daemon thread lifetime)
-        manager._binding_watcher = _watcher  # type: ignore[attr-defined]
+            binding_watcher.watch(_cfg, _reload_bindings, name=f"gateway-bindings:{_cfg}")
+        binding_watcher.start()
     except Exception as exc:
         _plugin_status["gateway_hot_reload"] = "unavailable"
         log.debug("Gateway binding hot-reload not available: %s", exc)

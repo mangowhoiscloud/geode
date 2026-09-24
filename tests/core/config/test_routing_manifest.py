@@ -63,9 +63,9 @@ def _valid_dict() -> dict[str, Any]:
 def test_default_manifest_loads() -> None:
     manifest = load_routing_manifest()
     assert isinstance(manifest, RoutingManifest)
-    assert manifest.defaults.anthropic == "claude-opus-4-8"
-    assert manifest.defaults.openai == "gpt-5.5"
-    assert manifest.defaults.glm == "glm-5.2"
+    assert manifest.defaults.anthropic == "claude-opus-5-5"
+    assert manifest.defaults.openai == "gpt-6-sol"
+    assert manifest.defaults.glm == "glm-5.3"
 
 
 def test_default_manifest_path_exists() -> None:
@@ -234,8 +234,8 @@ def test_user_override_merges_single_key(tmp_path: Path) -> None:
     manifest = load_routing_manifest(user_path=override)
     assert manifest.credential_env_vars.env_vars.get("openai") == "CUSTOM_OPENAI_API_KEY"
     # Other sections untouched
-    assert manifest.defaults.anthropic == "claude-opus-4-8"
-    assert manifest.defaults.openai == "gpt-5.5"
+    assert manifest.defaults.anthropic == "claude-opus-5-5"
+    assert manifest.defaults.openai == "gpt-6-sol"
 
 
 def test_user_override_paired_default_and_fallback(tmp_path: Path) -> None:
@@ -256,7 +256,7 @@ anthropic = ["claude-sonnet-4-6", "claude-haiku-4-5-20251001"]
     assert manifest.defaults.anthropic == "claude-sonnet-4-6"
     assert manifest.fallbacks.anthropic[0] == "claude-sonnet-4-6"
     # Other providers untouched
-    assert manifest.defaults.openai == "gpt-5.5"
+    assert manifest.defaults.openai == "gpt-6-sol"
 
 
 def test_user_override_merges_nested_section(tmp_path: Path) -> None:
@@ -291,14 +291,14 @@ def test_use_user_override_false_ignores_override(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     manifest = load_routing_manifest(user_path=override, use_user_override=False)
-    assert manifest.defaults.anthropic == "claude-opus-4-8"
+    assert manifest.defaults.anthropic == "claude-opus-5-5"
 
 
 def test_user_override_missing_file_no_op(tmp_path: Path) -> None:
     """A missing user TOML degrades to shipped default — no error."""
     missing = tmp_path / "does_not_exist.toml"
     manifest = load_routing_manifest(user_path=missing)
-    assert manifest.defaults.anthropic == "claude-opus-4-8"
+    assert manifest.defaults.anthropic == "claude-opus-5-5"
 
 
 def test_user_override_malformed_toml_no_op(tmp_path: Path) -> None:
@@ -306,7 +306,7 @@ def test_user_override_malformed_toml_no_op(tmp_path: Path) -> None:
     bad = tmp_path / "routing.toml"
     bad.write_text("this is not toml [[[", encoding="utf-8")
     manifest = load_routing_manifest(user_path=bad)
-    assert manifest.defaults.anthropic == "claude-opus-4-8"
+    assert manifest.defaults.anthropic == "claude-opus-5-5"
 
 
 # ── Merge helper ───────────────────────────────────────────────────────────

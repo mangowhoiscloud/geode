@@ -101,3 +101,56 @@ def test_serve_failure_cleanup_preserves_primary_and_closes_each_owner(
     runtime.mcp_manager.shutdown.assert_called_once()
     runtime.hooks.close.assert_called_once()
     assert runtime._shutdown is (failed_owner in {"poller", "gateway", "admission"})
+
+
+@pytest.mark.parametrize("cleanup_failed", [False, True])
+def test_cli_startup_failure_requires_cleanup_before_gateway_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    cleanup_failed: bool,
+) -> None:
+    runtime, gateway, poller, webhook, services = (MagicMock() for _ in range(5))
+    runtime.scheduler_service.recover_missed_tasks.return_value = []
+    runtime.scheduler_service.job_count = 0
+    runtime.shutdown.return_value = True
+    services.lane_queue.session_lane.active_count = 0
+    gateway.gateway_max_turns = 0
+    gateway.gateway_time_budget_s = 1.0
+    primary = RuntimeError("CLI readiness timed out")
+    poller.start.side_effect = primary
+    if cleanup_failed:
+        poller.stop.side_effect = TimeoutError("CLI worker is still stopping")
+    run = MagicMock(side_effect=lambda coroutine: coroutine.close())
+
+    monkeypatch.setattr(settings, "gateway_enabled", True)
+    monkeypatch.setattr(settings, "webhook_enabled", True)
+    monkeypatch.setattr("core.observability.logging_config.configure_logging", lambda *_: None)
+    monkeypatch.setattr("core.cli.bootstrap.setup_contextvars", lambda **_: None)
+    monkeypatch.setattr(typer_serve, "check_readiness", MagicMock())
+    monkeypatch.setattr("core.memory.session_checkpoint.SessionCheckpoint", MagicMock())
+    monkeypatch.setattr("core.wiring.adapters.get_gateway_manager", lambda: gateway)
+    monkeypatch.setattr("core.wiring.adapters.build_cli_poller", lambda *_, **__: poller)
+    monkeypatch.setattr("core.wiring.adapters.start_gateway_webhook", lambda *_, **__: webhook)
+    monkeypatch.setattr("signal.signal", lambda *_: None)
+    monkeypatch.setattr(typer_serve, "run_process_coroutine", run)
+
+    if cleanup_failed:
+        with pytest.raises(typer.Exit) as caught:
+            typer_serve.run_serve(
+                0.1, runtime_builder=lambda: runtime, services_builder=lambda **_: services
+            )
+        assert caught.value.exit_code == 1
+        assert caught.value.__cause__ is primary
+        gateway.start.assert_not_called()
+        run.assert_not_called()
+        assert "GEODE daemon stopped." not in capsys.readouterr().out
+    else:
+        typer_serve.run_serve(
+            0.1, runtime_builder=lambda: runtime, services_builder=lambda **_: services
+        )
+        gateway.start.assert_called_once()
+        run.assert_called_once()
+        assert "GEODE daemon stopped." in capsys.readouterr().out
+    poller.stop.assert_called_once()
+    webhook.shutdown.assert_called_once()
+    runtime.shutdown.assert_called_once()

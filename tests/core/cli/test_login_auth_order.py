@@ -161,22 +161,27 @@ def test_cmd_login_use_profile_missing_arg(capsys: pytest.CaptureFixture[str]) -
             "openai",
             [
                 "gpt-6-astra",
+                "gpt-6-sol",
+                "gpt-6-luna",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
                 "gpt-5.6-luna",
                 "gpt-5.5",
+                "gpt-5.3-codex",
                 "gpt-5.4",
                 "gpt-5.4-mini",
+                "gpt-5.4-nano",
             ],
         ),
         (
             "openai-codex",
             [
                 "gpt-6-astra",
+                "gpt-6-sol",
+                "gpt-6-luna",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
                 "gpt-5.6-luna",
-                "gpt-5.5",
             ],
         ),
     ],
@@ -188,7 +193,8 @@ def test_cmd_login_use_routes_current_openai_surface(
     from core.cli.commands.login import _login_use
 
     # Subscription retirements do not remove still-valid Platform API rows;
-    # GPT-5.5 is available on both sources at the 2026-09-20 snapshot.
+    # GPT-5.5 remains callable on subscription until October 14, but new plan
+    # activation uses the current selection catalog at the September 24 snapshot.
     registry = MagicMock()
     registry.get.return_value = SimpleNamespace(
         id=f"{provider}-plan",

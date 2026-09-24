@@ -545,16 +545,19 @@ def _serve(
         console.print(f"  [success]CLI channel: {_cli_poller.socket_path}[/success]")
     except Exception as exc:
         log.warning("CLI channel init failed", exc_info=True)
-        if not settings.gateway_enabled:
+        cli_stopped = _shutdown_serve_components(
+            cli_poller=_cli_poller, webhook_server=None, runtime=None
+        )
+        if not settings.gateway_enabled or not cli_stopped:
             shutdown_completed = _shutdown_serve_components(
-                cli_poller=_cli_poller, webhook_server=_webhook_server, runtime=runtime
+                cli_poller=None, webhook_server=_webhook_server, runtime=runtime
             )
             console.print(
                 "  [error]CLI channel failed to start."
-                f"{' Shutdown incomplete.' if not shutdown_completed else ''}[/error]"
+                f"{' Shutdown incomplete.' if not (cli_stopped and shutdown_completed) else ''}"
+                "[/error]"
             )
             raise typer.Exit(1) from exc
-        _shutdown_serve_components(cli_poller=_cli_poller, webhook_server=None, runtime=None)
         _cli_poller = None
 
     # Block until Ctrl+C
