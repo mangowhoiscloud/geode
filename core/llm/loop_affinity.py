@@ -88,8 +88,10 @@ class LoopAffineClientCache:
             if cached is not None:
                 return cached
 
-        client = builder()
-        with self._lock:
+            # Keep construction/publication atomic with credential invalidation.
+            # Builders are synchronous SDK constructors; they do not send requests
+            # or call back into this cache.
+            client = builder()
             self._by_loop[loop] = client
             bound = len(self._by_loop)
         log.info(

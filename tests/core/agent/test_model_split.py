@@ -154,8 +154,13 @@ def test_call_llm_signature_accepts_model_override() -> None:
 @pytest.mark.parametrize("effort", ["low", "max"])
 @pytest.mark.parametrize("wrap_up", ["none", "rounds", "time"])
 @pytest.mark.parametrize("judge", [None, VerifyMode.LLM_JUDGE, VerifyMode.REFLEXION])
+@pytest.mark.parametrize("max_tokens", [2048, 8192])
 def test_call_llm_disables_action_tools_for_auxiliary_calls(
-    monkeypatch: pytest.MonkeyPatch, effort: str, wrap_up: str, judge: VerifyMode | None
+    monkeypatch: pytest.MonkeyPatch,
+    effort: str,
+    wrap_up: str,
+    judge: VerifyMode | None,
+    max_tokens: int,
 ) -> None:
     """Planner and judge calls can request text-only execution without
     inheriting the main agent's tool surface."""
@@ -224,7 +229,7 @@ def test_call_llm_disables_action_tools_for_auxiliary_calls(
             effort=effort,
             max_rounds=1 if wrap_up == "rounds" else 0,
             time_budget_s=60 if wrap_up == "time" else 0,
-            max_tokens=8192,
+            max_tokens=max_tokens,
             thinking_budget=1024,
         ),
         model="gpt-5.6-luna",
@@ -272,8 +277,8 @@ def test_call_llm_disables_action_tools_for_auxiliary_calls(
     assert request.allowed_tool_names == frozenset({"read_file"})
     assert request.effort == loop._effort == effort
     assert request.thinking_budget == (1024 if wrap_up == "none" else 0)
-    wrap_up_tokens = max(4096, min(8192, MODEL_CONTEXT_WINDOW[loop.model] // 200))
-    assert request.max_tokens == (8192 if wrap_up == "none" else wrap_up_tokens)
+    wrap_up_tokens = min(max_tokens, max(4096, MODEL_CONTEXT_WINDOW[loop.model] // 200))
+    assert request.max_tokens == (max_tokens if wrap_up == "none" else wrap_up_tokens)
     assert loop._time_budget_s == (60 if wrap_up == "time" else 0)
 
 

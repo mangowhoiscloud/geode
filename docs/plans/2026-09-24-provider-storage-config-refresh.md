@@ -45,22 +45,23 @@ remain outside scope.
 |---|---|---|---|
 | P1 | Price/context refresh, typed tariff rules, active offering catalogue | none | PR #3395 merged into develop at `7ea17cceb`; required CI passed |
 | P2 | OpenAI model/effort/output and API/Codex request boundaries | P1 | PR #3397 merged into develop at `be48160a1`; required CI passed |
-| P3 | Claude typed capabilities, thinking, schemas, streaming parity | P2 shared selection helper | PR #3400; required CI in progress |
+| P3 | Claude typed capabilities, thinking, schemas, streaming parity | P2 shared selection helper | PR #3400 merged into develop at `1e419af4d` |
 | P4 | GLM request deduplication, exact effort and subscription admission | P2 shared selection helper | PR #3401 merged into develop at `88b2385a4`; required CI passed |
 | P5 | Native Claude computer toolset and action translation | P3 | local implementation |
 | P6 | CLI/default/config selection and bilingual public documentation | P2–P5 | local implementation and independent review |
-| S1 | Actual event-schema/digest references owned by the event store | audit | PR #3390, `c4fc65477` required CI passed; current-base integration pending |
-| S2 | Runtime-state DB connection ownership, serialized use and teardown | audit | PR #3393, `a98fda9a8` required CI passed; current-base integration pending |
+| S1 | Actual event-schema/digest references owned by the event store | audit | PR #3390 merged into develop at `0f3d88fe0` |
+| S2 | Runtime-state DB connection ownership, serialized use and teardown | audit | PR #3393 merged into develop at `e0c982f50` |
 | C1 | Validate complete settings before publishing a reload | audit | PR #3389 merged into develop at `a5b23bdc2`; required CI passed |
-| C2 | One global config path for writer, reader, explanation and watchers | C1 | PR #3396, `32e8811cb` required CI passed; current-base integration pending |
-| D1 | Bound compatible SDK majors and deduplicate HTTPX construction | independent migration audit | PR #3394, `fb8fdb118` required CI passed; current-base integration pending |
+| C2 | One global config path for writer, reader, explanation and watchers | C1 | PR #3396 merged into develop at `3436579dc` |
+| D1 | Bound compatible SDK majors and deduplicate HTTPX construction | independent migration audit | PR #3394 merged into develop at `4b414c63a` |
 | D2 | Test current major SDK/evaluation compatibility | D1 | incompatible OpenAI/Inspect import reproduced; migration deferred |
-| E1 | Runtime construction, shutdown outcomes, request context and cache generation ownership | C1 | PR #3403; required CI in progress; existing error convention extended |
+| E1 | Runtime construction, shutdown outcomes, request context and cache generation ownership | C1 | PR #3403 merged into develop at `f44cdbf5c`; existing error convention extended |
 | E2 | Atomic gateway reload and owned watcher/poller lifecycle | C1, C2 | local implementation and independent review |
 | E3 | Shared SDK transport ownership at actual process/thread event-loop teardown | E1 | local implementation and independent review |
 | K2 | Claude cache marker validity and 1-hour write accounting through durable records | P6 | local implementation and independent review; activity schema v11, trajectory v1 unchanged |
 | K1 | OpenAI explicit static prefixes and OpenRouter route/session cache shaping | P6, K2 | local implementation and independent review |
-| V1 bounds | Optional Harbor output/round limits and shared wrap-up cap preservation | runtime owners | PR #3404; current-base integration pending |
+| V1 bounds | Optional Harbor output/round limits and shared wrap-up cap preservation | runtime owners | PR #3404 merged into develop at `3e6e5d988` |
+| CI-1 | Conservative document-only full-test selection | existing CI gates | PR #3405 merged into develop at `ebeee591d` |
 | V1 execution | New-model API/subscription E2E, cache and Harbor validation | all implementation PRs merged into develop with required CI | not started; total US$20 paid cap approved |
 | F1 | Repeatable onboarding and audit scaffold in existing contributor skills | completed refactoring and checks | pending; preserve runtime/contributor prompt separation |
 | R1 | Patch release preparation, packaging/docs, develop→main, stable publication | all accepted units | pending |
@@ -81,14 +82,14 @@ scoped validation process and are not stored in repository artifacts.
 
 ## Integration queue
 
-After P1/P2/P4/C1 and the concurrent collector change landed, integrate the
-seven already-open PRs first: P3 (#3400) → D1 (#3394) → C2 (#3396) →
-E1 (#3403) → S1 (#3390) → S2 (#3393) → V1 bounds (#3404). Their prerequisites
-are already merged or earlier in this queue. Follow with the unopened units
-P5 → P6 → E2 → E3 → K2 → K1 in dependency order; do not insert those units
-between the open PRs. This is a single integration queue operated under the
-existing [GitFlow manual](../../.agents/skills/geode-gitflow/SKILL.md), not a
-change to GitHub protection settings or a new merge-queue service.
+At develop `ebeee591d` on September 25, the original seven-PR queue is
+merged: P3 (#3400) → D1 (#3394) → C2 (#3396) → E1 (#3403) → S1 (#3390) →
+S2 (#3393) → V1 bounds (#3404). CI-1 (#3405) then added conservative
+document-only full-test selection. Continue with P5 → P6 → E2 → E3 → K2 →
+K1 in dependency order. Keep audit-confirmed CI and runtime defects in small,
+separate PRs before freezing final V1 inputs. This is a single integration
+queue operated under the existing [GitFlow manual](../../.agents/skills/geode-gitflow/SKILL.md),
+not a change to GitHub protection settings or a new merge-queue service.
 
 - Freeze waiting feature heads after their scoped fixes finish. Update only
   the next PR against the fetched develop base; do not refresh all waiting

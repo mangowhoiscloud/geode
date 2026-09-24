@@ -24,7 +24,7 @@ def isolated_layers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     project_toml = tmp_path / "project-config.toml"
     monkeypatch.setattr(explain_mod, "GLOBAL_ENV_FILE", global_env)
     monkeypatch.setattr(explain_mod, "PROJECT_ENV_FILE", project_env)
-    monkeypatch.setattr(explain_mod, "GLOBAL_CONFIG_PATH", global_toml)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(global_toml))
     monkeypatch.setattr(explain_mod, "PROJECT_CONFIG_PATH", project_toml)
     monkeypatch.delenv("GEODE_MODEL", raising=False)
     return {
