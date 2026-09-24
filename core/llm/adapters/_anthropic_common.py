@@ -24,7 +24,7 @@ from core.llm.adapters.base import (
     UsageSummary,
 )
 from core.llm.agentic_response import normalize_stop_details
-from core.llm.errors import LLMRequestValidationError
+from core.llm.errors import LLMRequestValidationError, LLMResponseValidationError
 from core.llm.model_capabilities import anthropic_base_model, get_anthropic_model_spec
 
 # Computer-use display dims live in the harness module (single SoT) so the
@@ -74,27 +74,36 @@ def build_async_anthropic_client(api_key: str) -> anthropic.AsyncAnthropic:
 def build_messages(req: AdapterCallRequest) -> list[dict[str, Any]]:
     """Translate adapter-neutral Message list → Anthropic ``messages`` payload."""
     out: list[dict[str, Any]] = []
+    computer_call_ids: set[str] = set()
     for m in req.messages:
         if m.role == "tool":
-            out.append(
+            content: Any = [
                 {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": m.tool_use_id or "",
-                            "content": m.content if isinstance(m.content, str) else "",
-                        }
-                    ],
+                    "type": "tool_result",
+                    "tool_use_id": m.tool_use_id or "",
+                    "content": m.content,
                 }
+            ]
+        else:
+            content = (
+                list(m.anthropic_content)
+                if m.role == "assistant" and m.anthropic_content
+                else m.content
             )
-            continue
-        content = (
-            list(m.anthropic_content)
-            if m.role == "assistant" and m.anthropic_content
-            else m.content
-        )
-        out.append({"role": m.role, "content": content})
+        if isinstance(content, list):
+            shaped = []
+            for block in content:
+                if isinstance(block, dict):
+                    if block.get("type") == "tool_use" and block.get("toolset_name") == "computer":
+                        computer_call_ids.add(block["id"])
+                    elif (
+                        block.get("type") == "tool_result"
+                        and block.get("tool_use_id") in computer_call_ids
+                    ):
+                        block = {**block, "toolset_name": "computer"}
+                shaped.append(block)
+            content = shaped
+        out.append({"role": "user" if m.role == "tool" else m.role, "content": content})
     return out
 
 
@@ -110,18 +119,19 @@ def translate_tool(tool: ToolSpec) -> dict[str, Any]:
 _COMPUTER_USE_CURRENT = ("computer_20251124", "computer-use-2025-11-24")
 _COMPUTER_USE_LEGACY = ("computer_20250124", "computer-use-2025-01-24")
 # Both native tool types — used for dedup (either generation counts as present).
-_COMPUTER_USE_TYPES = frozenset({_COMPUTER_USE_CURRENT[0], _COMPUTER_USE_LEGACY[0]})
+_COMPUTER_USE_TOOLSET = "computer_toolset_20260801"
+_COMPUTER_USE_TYPES = frozenset(
+    {_COMPUTER_USE_CURRENT[0], _COMPUTER_USE_LEGACY[0], _COMPUTER_USE_TOOLSET}
+)
 
 
 def _computer_use_spec(model: str) -> tuple[str, str]:
-    """Reject unverified models and protocols before advertising a native tool."""
+    """Resolve only verified computer-use generations."""
     spec = get_anthropic_model_spec(model)
     if spec is None:
         raise LLMRequestValidationError(f"Computer use is not verified for {model}")
-    if spec.computer_tool == "computer_toolset_20260801":
-        raise LLMRequestValidationError(
-            f"{model} requires computer_toolset_20260801; native dispatch is not enabled"
-        )
+    if spec.computer_tool == _COMPUTER_USE_TOOLSET:
+        return _COMPUTER_USE_TOOLSET, ""
     return (
         _COMPUTER_USE_LEGACY
         if spec.computer_tool == _COMPUTER_USE_LEGACY[0]
@@ -134,12 +144,16 @@ def anthropic_computer_tool_param(
 ) -> dict[str, Any]:
     """Anthropic computer-use tool definition (ComputerUseCapable).
 
-    ``tool_type`` is the model-aware schema version (``computer_20251124`` /
-    ``computer_20250124``). ``display_number`` (X11) is always omitted: the GA
-    tool infers geometry from the screenshots, and the Phase-E sandbox runs its
-    OWN Xvfb display *inside the container* (the host harness is a thin HTTP
-    client and never targets a display number — ``core.tools.computer_use``).
+    Legacy definitions declare the harness screenshot dimensions. The GA
+    toolset infers geometry from those screenshots and rejects display fields.
     """
+    if tool_type == _COMPUTER_USE_TOOLSET:
+        from core.tools.computer_use import UNSUPPORTED_COMPUTER_MEMBERS
+
+        return {
+            "type": tool_type,
+            "configs": {name: {"enabled": False} for name in UNSUPPORTED_COMPUTER_MEMBERS},
+        }
     return {
         "type": tool_type,
         "name": "computer",
@@ -149,7 +163,7 @@ def anthropic_computer_tool_param(
 
 
 def _maybe_inject_computer_use(kwargs: dict[str, Any], req: AdapterCallRequest) -> None:
-    """Inject the computer-use tool + beta header on the LIVE adapter path.
+    """Inject the model's computer tool, including legacy beta headers.
 
     The tool is type-carrying so it is exempt from tool-search defer. It is
     appended here (not inside ``_shape_tools``) so it also injects when the
@@ -167,6 +181,17 @@ def _maybe_inject_computer_use(kwargs: dict[str, Any], req: AdapterCallRequest) 
         return
     tool_type, beta = _computer_use_spec(req.model)
     tools = list(kwargs.get("tools") or [])
+    if tool_type == _COMPUTER_USE_TOOLSET:
+        # The native toolset replaces the registry's computer schema. The API
+        # rejects a toolset beside any other tool named computer.
+        tools = [t for t in tools if t.get("name") != "computer"]
+        kwargs["tools"] = tools
+        choice = dict(
+            kwargs.get("tool_choice") or _translate_tool_choice(req.tool_choice) or {"type": "auto"}
+        )
+        if choice.get("type") != "none":
+            choice["disable_parallel_tool_use"] = True
+        kwargs["tool_choice"] = choice
     # Dedup by the NATIVE type (either generation), not the name: a caller's
     # custom same-name tool must not suppress native injection, and re-entrancy
     # must not double it.
@@ -178,7 +203,8 @@ def _maybe_inject_computer_use(kwargs: dict[str, Any], req: AdapterCallRequest) 
         )
         kwargs["tools"] = tools
     # Always ensure the model's beta token when the native tool is present.
-    _merge_beta(kwargs, beta)
+    if beta:
+        _merge_beta(kwargs, beta)
 
 
 def _base_model(model: str) -> str:
@@ -502,18 +528,25 @@ def translate_response(response: Any) -> AdapterCallResult:
         if block_type == "text":
             text_blocks.append(getattr(block, "text", ""))
         elif block_type == "tool_use":
+            name = getattr(block, "name", "")
+            tool_input = getattr(block, "input", {})
+            if getattr(block, "toolset_name", None) == "computer":
+                # Execution is normalized; the raw native blocks above remain
+                # intact for signed replay and toolset result correlation.
+                tool_input = {**tool_input, "action": name}
+                name = "computer"
             tool_uses.append(
                 {
                     "id": getattr(block, "id", ""),
-                    "name": getattr(block, "name", ""),
-                    "input": getattr(block, "input", {}),
+                    "name": name,
+                    "input": tool_input,
                 }
             )
     usage = getattr(response, "usage", None)
     output_details = getattr(usage, "output_tokens_details", None) if usage else None
     cached_tokens = getattr(usage, "cache_read_input_tokens", None)
     cache_write_tokens = getattr(usage, "cache_creation_input_tokens", None)
-    return AdapterCallResult(
+    result = AdapterCallResult(
         text="".join(text_blocks),
         usage=UsageSummary(
             input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
@@ -537,6 +570,18 @@ def translate_response(response: Any) -> AdapterCallResult:
         raw_response=response,
         anthropic_content=anthropic_content,
     )
+    if (
+        any(
+            getattr(b, "toolset_name", None) == "computer"
+            for b in getattr(response, "content", []) or []
+        )
+        and len(tool_uses) > 1
+    ):
+        raise LLMResponseValidationError(
+            "Computer toolset returned multiple actions despite disable_parallel_tool_use",
+            completed_result=result,
+        )
+    return result
 
 
 __all__ = [
