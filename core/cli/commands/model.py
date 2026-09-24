@@ -52,7 +52,7 @@ def _current_model_for_role(role: AgentRole) -> str:
 
 
 def _read_toml_value(section: str, key: str) -> str:
-    """Read ``[<section>] <key>`` from ``~/.geode/config.toml``.
+    """Read ``[<section>] <key>`` from the resolved global config TOML.
 
     Returns ``""`` when the file is missing, the section is missing,
     the key is missing, or any parse error occurs — the picker
@@ -62,12 +62,13 @@ def _read_toml_value(section: str, key: str) -> str:
     ``settings_field=""``)."""
     import tomllib
 
-    from core.paths import GLOBAL_CONFIG_TOML
+    from core.config.toml_edit import resolve_config_toml_path
 
-    if not GLOBAL_CONFIG_TOML.is_file():
+    config_path = resolve_config_toml_path()
+    if not config_path.is_file():
         return ""
     try:
-        data = tomllib.loads(GLOBAL_CONFIG_TOML.read_text(encoding="utf-8"))
+        data = tomllib.loads(config_path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError):
         return ""
     cursor: object = data
@@ -135,15 +136,8 @@ def _apply_model(
         _pkg.console.print()
         return
 
-    # PR-PICKER-ROLE-SCOPE (2026-06-12) — non-primary roles are
-    # daemon-global: their READERS consult the GLOBAL config only
-    # (`_read_toml_value` → GLOBAL_CONFIG_TOML; the self-improving
-    # runner's `load_self_improving_loop_config` → GEODE_CONFIG_TOML or
-    # GLOBAL_CONFIG_TOML). The previous default scope="project" wrote a
-    # mutator/reflection pick into the PROJECT toml where neither reader
-    # ever looked — the pick appeared to vanish (picker re-rendered
-    # "(inherits Settings.model)" and the runner kept the old model).
-    # Write-read parity: non-primary always persists to global.
+    # Non-primary picks retain global scope. Global reads and writes share
+    # the GEODE_CONFIG_TOML resolver, including roles without a Settings field.
     if role_def.name != "primary":
         scope = "global"
     old = _current_model_for_role(role_def)
@@ -243,9 +237,10 @@ def _apply_model(
     # hot-swap plumbing is needed there.
 
     role_tag = "" if role_def.name == "primary" else f"  [muted]({role_def.label})[/muted]"
-    from core.paths import GLOBAL_CONFIG_TOML, PROJECT_CONFIG_TOML
+    from core.config.toml_edit import resolve_config_toml_path
+    from core.paths import PROJECT_CONFIG_TOML
 
-    scope_path = str(GLOBAL_CONFIG_TOML) if scope == "global" else str(PROJECT_CONFIG_TOML)
+    scope_path = str(resolve_config_toml_path() if scope == "global" else PROJECT_CONFIG_TOML)
     scope_tag = f"  [muted]· {scope} ({scope_path})[/muted]"
     if not same_model and role_def.has_effort and effort is not None:
         _pkg.console.print(

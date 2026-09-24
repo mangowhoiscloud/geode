@@ -166,6 +166,14 @@ export default function Page() {
               위임 경로로 실행되며, 사람이 없는 headless 세션에서는 denylist가
               먼저 막습니다.
             </p>
+            <p>
+              <code>switch_model</code> 승인 요청에는 JSON으로 인코딩한{" "}
+              <code>role</code>과 <code>model_hint</code>가 표시됩니다. 역할을
+              생략하면 실행 핸들러와 같은 <code>primary</code>가 표시되므로,
+              root 모델 변경과 <code>judgment</code> 전환을 승인 전에 구분할 수
+              있습니다. 이 상세 정보는 기존 승인 정책을 대체하지 않으며,
+              기본 HITL 2에서는 최초 <code>judgment</code> 전환도 승인 대상입니다.
+            </p>
 
             <h2>실패 모드</h2>
             <table>
@@ -361,6 +369,15 @@ export default function Page() {
               <code>run_bash</code>, <code>computer</code>).{" "}
               <code>delegate_task</code> runs through the delegation path and is
               denied up front in headless sessions.
+            </p>
+            <p>
+              A <code>switch_model</code> approval request displays JSON-encoded{" "}
+              <code>role</code> and <code>model_hint</code>. An omitted role is
+              shown as <code>primary</code>, matching the handler default, so
+              the operator can distinguish a root-model change from a{" "}
+              <code>judgment</code> switch before approving. These details do
+              not replace the existing permission policy. Under default HITL 2,
+              the first judgment switch still requires approval.
             </p>
 
             <h2>Failure modes</h2>

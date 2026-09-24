@@ -119,6 +119,15 @@ functional change.
   the owned config watcher and remaining pollers even when one poller fails.
   Wake polling sleeps on shutdown; retain ownership and reject restart while a
   blocked callback prevents the previous watcher thread from stopping.
+- Use the shared global config path resolver for Settings, config explanation,
+  model-picker reads/writes/confirmation, MCP, gateway reload/watch, seed
+  role/voter overrides, and evaluation config migration.
+  `GEODE_CONFIG_TOML` now redirects global picker persistence and migration
+  previews/writes while project writes and overlay precedence remain unchanged.
+- Show the requested `switch_model` role and model hint in CLI/IPC approval
+  details, including the primary-role default. Preserve exact values with JSON
+  escaping so judgment-only approval can distinguish a root-model change;
+  permission requirements and approval decisions remain unchanged.
 - Validate the complete settings reload before updating the live singleton.
   Failed environment/TOML field validation, field preparation, or routing
   refresh preserves the previous Settings values; corrected reloads retain
