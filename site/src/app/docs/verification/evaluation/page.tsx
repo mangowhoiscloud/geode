@@ -75,6 +75,9 @@ function EvaluationGuide({ ko }: { ko: boolean }) {
       </p>
       <h3>{ko ? "LLM과 Jev 선택" : "Choosing LLM or Jev"}</h3>
       <p>{ko
+        ? "Unreleased: 이 선택 기능과 매 라운드·최종 Reflection 정책은 소스 체크아웃 기준이며, 패키지 배포와 구분합니다."
+        : "Unreleased: this selection and the every-round/final Reflection policy describe the source checkout, not a packaged release."}</p>
+      <p>{ko
         ? "판정 엔진은 기본 LLM입니다. /model judgment에서 Jev를 선택하면 설정된 TypeSafe 또는 OpenRouter 키로 매 라운드와 최종 후보를 판정합니다. 키가 없으면 LLM 경로를 유지하며, 키 등록 자체는 활성화가 아닙니다. 자연어로 판정 엔진 변경을 요청해도 같은 설정 경로를 사용합니다. 주 실행 모델과 effort, 도구 실행 권한은 바뀌지 않습니다."
         : "The default judgment engine is LLM. Select Jev with /model judgment to judge rounds and final candidates using the configured TypeSafe or OpenRouter key. Missing credentials retain the LLM route; registering a key alone does not enable Jev. Natural-language engine changes use the same configuration path. Root model, effort and tool permissions remain unchanged."}</p>
       <p>{ko

@@ -250,7 +250,7 @@ Want OpenAI, OpenRouter, or ZhipuAI GLM instead? Add
 `ZAI_API_KEY=...` to the same file. Select an OpenRouter model with an exact
 reference such as `/model openrouter/anthropic/claude-sonnet-4`.
 
-**Optional Jev judgments.** Keep `TYPESAFE_API_KEY` or `OPENROUTER_API_KEY` in
+**Optional Jev judgments (Unreleased, source checkout).** Keep `TYPESAFE_API_KEY` or `OPENROUTER_API_KEY` in
 the same local secret file, then choose `/model judgment typesafe` or
 `/model judgment openrouter`. A key alone does not enable Jev. The picker at
 `/model judgment` also switches back to `llm`; the root generation model and

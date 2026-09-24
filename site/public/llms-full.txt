@@ -2202,6 +2202,8 @@ Petri에서는 auditor가 seed에 따라 감사 상황을 탐색하고, target�
 
 ### LLM과 Jev 선택
 
+Unreleased: 이 선택 기능과 매 라운드·최종 Reflection 정책은 소스 체크아웃 기준이며, 패키지 배포와 구분합니다.
+
 판정 엔진은 기본 LLM입니다. /model judgment에서 Jev를 선택하면 설정된 TypeSafe 또는 OpenRouter 키로 매 라운드와 최종 후보를 판정합니다. 키가 없으면 LLM 경로를 유지하며, 키 등록 자체는 활성화가 아닙니다. 자연어로 판정 엔진 변경을 요청해도 같은 설정 경로를 사용합니다. 주 실행 모델과 effort, 도구 실행 권한은 바뀌지 않습니다.
 
 Jev는 생성 모델 선택기에 들어가지 않습니다. System One 전용 API로 준비된 텍스트 상태와 유한한 선택지를 전달하고, 분류 결과와 분포를 받습니다. 이 분포를 CognitiveState의 confidence나 실행 허가로 바꾸지 않습니다. 이미지가 필수 근거이면 텍스트 전용 판정으로 통과시키지 않으며, 호출 실패도 다른 엔진의 성공으로 대체하지 않습니다.
@@ -5872,7 +5874,9 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 | `replan_enabled` | `replan.enabled` | bool = true | 리플랜 활성화. |
 | `replan_max_attempts` | `replan.max_attempts` | int = 3 | 리플랜 시도 상한. |
 
-### \[judgment\]
+### \[judgment\] · Unreleased
+
+아래 판정 옵션과 상시 Reflection 정책은 소스 체크아웃에 추가된 기능이며 패키지 릴리스는 아직입니다.
 
 `engine = "llm"`이 기본입니다. `engine = "jev"`로 선택하고 TypeSafe 또는 OpenRouter 키가 있을 때 Jev 판정을 사용합니다. `provider = "auto"`는 TypeSafe 키를 먼저 확인하며 `typesafe`나 `openrouter`로 고정할 수 있습니다. 키가 없으면 LLM 경로를 유지합니다. `/model judgment` 선택창과 `/model judgment llm|jev|typesafe|openrouter`가 같은 설정을 저장하며, 상위 환경변수·프로젝트 설정이 가리면 변경을 거부하고 해당 층을 표시합니다.
 

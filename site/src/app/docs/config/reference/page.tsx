@@ -73,7 +73,8 @@ export default function Page() {
               </tbody>
             </table>
 
-            <h3>[judgment]</h3>
+            <h3>[judgment] · Unreleased</h3>
+            <p>아래 판정 옵션과 상시 Reflection 정책은 소스 체크아웃에 추가된 기능이며 패키지 릴리스는 아직입니다.</p>
             <p><code>engine = &quot;llm&quot;</code>이 기본입니다. <code>engine = &quot;jev&quot;</code>로 선택하고 TypeSafe 또는 OpenRouter 키가 있을 때 Jev 판정을 사용합니다. <code>provider = &quot;auto&quot;</code>는 TypeSafe 키를 먼저 확인하며 <code>typesafe</code>나 <code>openrouter</code>로 고정할 수 있습니다. 키가 없으면 LLM 경로를 유지합니다. <code>/model judgment</code> 선택창과 <code>/model judgment llm|jev|typesafe|openrouter</code>가 같은 설정을 저장하며, 상위 환경변수·프로젝트 설정이 가리면 변경을 거부하고 해당 층을 표시합니다.</p>
             <p>키는 <code>TYPESAFE_API_KEY</code> 또는 <code>OPENROUTER_API_KEY</code>로 로컬 <code>.env</code>에만 둡니다. 키만 등록해도 Jev가 자동 활성화되지는 않습니다. 요청 실패 시 다른 공급자로 재시도하지 않습니다.</p>
             <h3>[cognitive]</h3>
@@ -437,7 +438,8 @@ export default function Page() {
               </tbody>
             </table>
 
-            <h3>[judgment]</h3>
+            <h3>[judgment] · Unreleased</h3>
+            <p>The judgment option and required Reflection policy below are available from source; a packaged release is still pending.</p>
             <p><code>engine = &quot;llm&quot;</code> is the default. Selecting <code>engine = &quot;jev&quot;</code> with a TypeSafe or OpenRouter key enables Jev judgments. <code>provider = &quot;auto&quot;</code> prefers the TypeSafe key; use <code>typesafe</code> or <code>openrouter</code> to pin a route. Missing keys retain the LLM route. The <code>/model judgment</code> picker and <code>/model judgment llm|jev|typesafe|openrouter</code> persist the same setting. A masking environment or project setting is reported instead of silently overwritten.</p>
             <p>Keep <code>TYPESAFE_API_KEY</code> or <code>OPENROUTER_API_KEY</code> in the local <code>.env</code>, never in TOML or Git. A key alone does not enable Jev. Request failures never trigger an automatic provider switch.</p>
             <h3>[cognitive]</h3>

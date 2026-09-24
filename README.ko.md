@@ -250,7 +250,7 @@ OpenAI, OpenRouter 또는 ZhipuAI GLM을 쓰려면 같은 파일에
 `ZAI_API_KEY=...`를 추가하세요. OpenRouter 모델은
 `/model openrouter/anthropic/claude-sonnet-4`처럼 정확한 참조로 선택합니다.
 
-**Jev 판정 옵션.** 같은 로컬 비밀정보 파일에 `TYPESAFE_API_KEY` 또는
+**Jev 판정 옵션(Unreleased, 소스 체크아웃).** 같은 로컬 비밀정보 파일에 `TYPESAFE_API_KEY` 또는
 `OPENROUTER_API_KEY`를 두고 `/model judgment typesafe` 또는
 `/model judgment openrouter`로 활성화합니다. 키만 등록하면 기존 LLM 판정을
 유지합니다. `/model judgment` 선택 화면에서 `llm`으로 돌아갈 수 있으며,
