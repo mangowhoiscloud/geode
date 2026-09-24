@@ -121,6 +121,7 @@ class TestPickerPersistence:
         monkeypatch.setenv("GEODE_CONFIG_TOML", f"  {redirected}  ")
         monkeypatch.delenv("GEODE_MODEL", raising=False)
         monkeypatch.setitem(Settings.model_config, "env_file", None)
+        monkeypatch.delitem(cfg.__dict__, "settings", raising=False)
         monkeypatch.setattr(cfg, "_settings_instance", Settings(model="old-runtime"))
         monkeypatch.setattr(cfg, "reload_routing_constants", lambda: None)
         monkeypatch.setattr(commands, "_check_provider_key", lambda _profile: None)
@@ -132,6 +133,7 @@ class TestPickerPersistence:
             id="claude-opus-4-8", provider="anthropic", label="Opus 4.8", cost="$$$"
         )
 
+        assert cfg.settings.model == "old-runtime"
         model_mod._apply_model(target, scope=scope)
 
         destination = redirected if scope == "global" else project
