@@ -47,6 +47,27 @@ removing a row requires reviewing which supported entry point would be lost.
 CI's separate docs filter runs the path check and focused scaffold tests for
 contributor-guide changes without enabling the full runtime suite.
 
+CI's `full_tests` filter defaults every changed path to full Python tests and
+coverage. Its exact allowlist covers `README.md`, `README.ko.md`, `CHANGELOG.md`,
+`CLAUDE.md`, `docs/workflow.md`, `docs/scaffold-skills.md`, this owner document,
+`docs/architecture/extensibility-roadmap.md`, and five generated public surfaces:
+`site/src/data/geode/{sot.ts,changelog.ts,architecture-baseline.json}` and
+`site/public/{llms.txt,llms-full.txt}`. These paths still run documentation
+contracts; roadmap and inventory changes retain their existing lint validators,
+and required Pages checks retain generation, lint, type, and build validation.
+
+The pinned [paths-filter exclusion predicate](https://github.com/dorny/paths-filter/blob/ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d/README.md#usage)
+classifies the complete PR diff against its base. Resolving a document-only
+conflict does not exempt a PR whose remaining diff includes runtime or tests.
+Push events compare their non-zero `before` commit to the pushed revision;
+missing or invalid prior SHAs fail change detection instead of falling back to
+the last commit or the repository's default branch.
+Unknown paths, other Markdown/JSON, runtime guidance, dependencies, and workflows
+remain full-test inputs. Missing or invalid classification cannot pass `Gate`;
+only an explicit `full_tests=false` skips the heavy inner steps of `Test`.
+Both required check names and their workflow remain unchanged. No past CI result
+or coverage data is reused as current-head verification.
+
 ## Reference Patterns
 
 | Reference | Observed docs path | GEODE adoption |
