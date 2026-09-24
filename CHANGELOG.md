@@ -73,7 +73,8 @@ functional change.
   Withhold unsupported members; report native action errors and preserve
   legacy computer protocols. Retain billed usage when rejecting invalid
   responses without replaying actions. Fix horizontal scrolling, native macOS
-  drag and wait deadlines; propagate helper-signing failures.
+  drag and wait deadlines; propagate helper-signing failures. Require the
+  native helper source and build script in both wheel and source distributions.
 - Add credential-gated Jev judgment selection through `/model judgment`, its
   interactive picker and the existing natural-language `switch_model` tool.
   Explicit selection uses TypeSafe System One or OpenRouter's compatible
