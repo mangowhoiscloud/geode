@@ -113,6 +113,12 @@ functional change.
 
 ### Fixed
 
+- Align OpenAI GPT-6 API and subscription model choices, reasoning controls,
+  and published API output limits; keep subscription-only request restrictions
+  separate and preserve reported token usage from API web search. Normalize
+  both Responses streams through one translator with tool calls, reasoning,
+  usage and replay metadata; reject transport EOF without a terminal response.
+
 - Refresh the 2026-09-24 OpenAI, Claude and Z.AI model tariffs/context limits; honor explicit Claude cache rates and full-request OpenAI long-context tiers. Keep active source choices separate from historical accounting and unavailable subscription routes.
 - Preserve verifier failure instructions separately from the replanner's bounded
   candidate observation. The opt-in LLM/Jev diagnostic can now disclose one frozen
