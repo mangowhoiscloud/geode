@@ -119,9 +119,18 @@ additional charge. Harbor's cache metric is reads, never reads plus writes.
 [`ModelPrice`](../../core/llm/pricing_loader.py) stores per-token rates and
 `cache_inclusive_input`. For inclusive input, subtract reads and writes from
 ordinary input before charging each separately. Subtract only categories
-whose configured rate is nonzero; an absent rate retains the existing
-full-input-rate fallback. For disjoint input, retain ordinary input and add
+whose tariff is known, including an explicit zero; an absent rate retains the
+existing full-input-rate fallback. Presence flags distinguish these states,
+while positive rates constructed by legacy callers remain supported. For disjoint input, retain ordinary input and add
 cache categories without subtraction.
+
+The price catalogue owns exact model aliases and validates finite nonnegative
+rates and positive integer context limits. Above a documented long-context
+threshold, the entire request uses its input/cache and output multipliers;
+the exact threshold remains in the standard tier. These are current standard
+API estimates. Cache-write TTL splits, service tiers, regions and tool fees
+are not retained by the legacy tracker. The 2026-09-24 model and source audit
+lives in [the provider inventory](../research/provider-refresh-20260924.md).
 
 `TokenTracker.record()` preserves finite nonnegative `reported_cost_usd`,
 including zero; otherwise it estimates from model prices. Its legacy output

@@ -217,3 +217,68 @@ def test_model_price_defaults() -> None:
     p = ModelPrice(input=1.0, output=2.0)
     assert p.cache_write == 0.0
     assert p.cache_read == 0.0
+
+
+@pytest.mark.parametrize("cached", [0.0, 0.25])
+def test_anthropic_explicit_cached_tariff_overrides_ratio(tmp_path: Path, cached: float) -> None:
+    tariff = tmp_path / "prices.toml"
+    tariff.write_text(
+        '[pricing.anthropic."model"]\ninput_per_mtok = 10\noutput_per_mtok = 50\n'
+        f"cached_per_mtok = {cached}\n",
+        encoding="utf-8",
+    )
+    price = load_pricing_catalogue(tariff).pricing["model"]
+    assert price.cache_read == pytest.approx(cached / 1_000_000)
+    assert price.cache_write == pytest.approx(12.5 / 1_000_000)
+    assert not price.cache_inclusive_input
+
+
+@pytest.mark.parametrize("rate", ["-1", "nan", "inf", "true"])
+def test_invalid_tariff_cannot_enter_runtime(tmp_path: Path, rate: str) -> None:
+    tariff = tmp_path / "prices.toml"
+    tariff.write_text(
+        f'[pricing.glm."model"]\ninput_per_mtok = {rate}\noutput_per_mtok = 1\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="finite non-negative"):
+        load_pricing_catalogue(tariff)
+
+
+def test_current_model_tariffs_are_provider_specific() -> None:
+    prices = load_pricing_catalogue().pricing
+    assert prices["claude-fable-5-1"].cache_read == pytest.approx(0.25e-6)
+    assert prices["claude-opus-5-5"].cache_read == pytest.approx(0.20e-6)
+    assert prices["gpt-6-sol"].input == pytest.approx(2e-6)
+    assert prices["gpt-5.6-sol"].output == pytest.approx(20e-6)
+    assert prices["glm-5.3-flashx"].cache_read == pytest.approx(0.075e-6)
+    assert prices["glm-5.3"].cache_inclusive_input
+
+
+@pytest.mark.parametrize("value", ["0", "-5", "true", "1.5"])
+def test_context_must_be_a_positive_integer(tmp_path: Path, value: str) -> None:
+    tariff = tmp_path / "prices.toml"
+    tariff.write_text(f'[context_windows]\n"model" = {value}\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="not an integer"):
+        load_pricing_catalogue(tariff)
+
+
+def test_malformed_provider_table_is_not_silently_skipped(tmp_path: Path) -> None:
+    tariff = tmp_path / "prices.toml"
+    tariff.write_text('[pricing]\nopenai = "invalid"\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="expected a table"):
+        load_pricing_catalogue(tariff)
+
+
+@pytest.mark.parametrize(
+    "alias,target",
+    [
+        ("gpt-5.6", "gpt-5.6-sol"),
+        ("claude-haiku-4-5", "claude-haiku-4-5-20251001"),
+        ("claude-sonnet-4-5", "claude-sonnet-4-5-20250929"),
+        ("claude-opus-4-5-20251101", "claude-opus-4-5"),
+    ],
+)
+def test_documented_alias_has_exact_price_and_context(alias: str, target: str) -> None:
+    catalogue = load_pricing_catalogue()
+    assert catalogue.pricing[alias] is catalogue.pricing[target]
+    assert catalogue.context_windows[alias] == catalogue.context_windows[target]

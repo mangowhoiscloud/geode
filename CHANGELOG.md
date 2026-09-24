@@ -100,6 +100,7 @@ functional change.
 
 ### Fixed
 
+- Refresh the 2026-09-24 OpenAI, Claude and Z.AI model tariffs/context limits; honor explicit Claude cache rates and full-request OpenAI long-context tiers. Keep active source choices separate from historical accounting and unavailable subscription routes.
 - Keep personal-data reflection suppression across conversation turns, resume
   and final judge, bound cognitive reflection by the root deadline, and preserve
   prior hypotheses when an auxiliary response has invalid list members. Count

@@ -11,6 +11,7 @@ cost path subtract cached from the billable input for those providers only.
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -20,6 +21,45 @@ from core.llm.token_tracker import TokenTracker
 
 def _tracker(price: ModelPrice) -> TokenTracker:
     return TokenTracker(pricing={"m": price})
+
+
+@pytest.mark.parametrize("category", ["cached", "cache_write"])
+def test_explicit_free_cache_differs_from_missing_price(tmp_path: Path, category: str) -> None:
+    from core.llm.pricing_loader import load_pricing_catalogue
+
+    tariff = tmp_path / "prices.toml"
+    tariff.write_text(
+        '[pricing.openai."m"]\ninput_per_mtok = 2\noutput_per_mtok = 10\n'
+        f"{category}_per_mtok = 0\n",
+        encoding="utf-8",
+    )
+    tracker = _tracker(load_pricing_catalogue(tariff).pricing["m"])
+    counters = (
+        {"cache_read_tokens": 1_000_000}
+        if category == "cached"
+        else {"cache_creation_tokens": 1_000_000}
+    )
+    assert tracker.calculate_cost("m", 1_000_000, 0, **counters) == 0
+    unknown = _tracker(ModelPrice(input=2e-6, output=10e-6, cache_inclusive_input=True))
+    assert unknown.calculate_cost("m", 1_000_000, 0, **counters) == 2
+
+
+@pytest.mark.parametrize("input_tokens,multiplier", [(272_000, 1.0), (272_001, 2.0)])
+def test_long_context_tier_uses_full_inclusive_prompt(input_tokens: int, multiplier: float) -> None:
+    from core.llm.pricing_loader import load_pricing_catalogue
+
+    price = load_pricing_catalogue().pricing["gpt-6-sol"]
+    tracker = _tracker(price)
+    actual = tracker.calculate_cost(
+        "m", input_tokens, 1000, cache_read_tokens=200_000, cache_creation_tokens=50_000
+    )
+    output_multiplier = 1.5 if multiplier == 2 else 1.0
+    expected = (
+        ((input_tokens - 250_000) * 2 + 200_000 * 0.2 + 50_000 * 2.5) * multiplier
+        + 1000 * 10 * output_multiplier
+    ) / 1_000_000
+    assert actual == pytest.approx(expected)
+    assert price.input == pytest.approx(2e-6), "Tier selection must not mutate shared prices"
 
 
 class TestInclusiveProviderNoDoubleCount:
