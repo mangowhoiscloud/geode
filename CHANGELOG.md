@@ -49,6 +49,20 @@ functional change.
 
 ### Changed
 
+- Bound OpenAI Python to SDK 2 (`>=2.45,<3`) and Anthropic Python to SDK 0
+  (`>=0.116,<1`) while preserving the verified transport and audit contracts.
+  Share configured HTTP transport construction
+  across OpenAI, GLM, and Codex while preserving Codex's disabled connection
+  reuse and application-owned retries; record both SDK major-version migrations.
+
+- Refresh Claude Messages contracts for Fable 5.1, Opus 5.5/5, and Sonnet 5
+  through typed model records and one create/stream request builder. Preserve
+  signed thinking, structured output, tool calls, and cache usage in streaming;
+  retain hosted search usage. Validate output/effort/forced-tool limits, including
+  auxiliary text completions, and update hosted web tool versions.
+  Select the computer protocol from the typed request model and guard unknown
+  generations until their native executor is supported.
+
 - Run Reflection after each tool-result round and once before final delivery.
   Final semantic verification replaces the mechanical-only default; legacy
   cadence controls and `off`/`rule_based`/`reflexion` verifier settings are
@@ -118,6 +132,11 @@ functional change.
   role/voter overrides, and evaluation config migration.
   `GEODE_CONFIG_TOML` now redirects global picker persistence and migration
   previews/writes while project writes and overlay precedence remain unchanged.
+
+- Keep oversized-page omission notices stable across documentation build
+  environments while retaining measured sizes in build logs and complete
+  Markdown twins.
+
 - Admit native Astra final-verification calls in decision-handoff observations.
   Preserve requested and actual verifier modes separately, and require a complete
   source-reconciled final-verification boundary for explicitly opted-in current
@@ -129,6 +148,13 @@ functional change.
   both Responses streams through one translator with tool calls, reasoning,
   usage and replay metadata; reject transport EOF without a terminal response.
 
+- Share the documented GLM request and streaming contracts across completion
+  and text paths, including 5.3 reasoning, tools, and exact output limits.
+  Preserve stream and hosted-search usage, and reject incomplete tool streams.
+  Separate hybrid thinking capability from graded effort controls; reject GLM
+  Coding Plan calls before credentials are read under the supported-tools policy.
+  Remove unverified automatic GLM-5V grounding and its orphaned parser/client
+  chain while retaining explicit provider/source-aware unavailability.
 - Show the requested `switch_model` role and model hint in CLI/IPC approval
   details, including the primary-role default. Preserve exact values with JSON
   escaping so judgment-only approval can distinguish a root-model change;
