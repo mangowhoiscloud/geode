@@ -32,7 +32,11 @@ def _task(path: Path, digest: str) -> dict[str, Any]:
     value = json.loads(raw)
     if (
         not isinstance(value, dict)
-        or set(value) != {"case", "orders", "intervention"}
+        or set(value)
+        not in (
+            {"case", "orders", "intervention"},
+            {"case", "orders", "intervention", "verification_intervention"},
+        )
         or not isinstance(value["case"], dict)
         or not isinstance(value["case"].get("request"), str)
         or not value["case"]["request"]
@@ -50,6 +54,12 @@ def _task(path: Path, digest: str) -> dict[str, Any]:
         validate_inbox_case(value["case"], value["orders"])
         if value["intervention"] is not None:
             raise ValueError("inbox does not accept a single-request intervention")
+    if "verification_intervention" in value:
+        from evals.benchmarks.decision_handoff_runtime import validate_verification_intervention
+
+        if not isinstance(value["verification_intervention"], dict):
+            raise ValueError("candidate intervention must be an explicit object")
+        validate_verification_intervention(value["verification_intervention"], value["case"])
     return value
 
 
@@ -93,6 +103,8 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
             raise ValueError("matched verification requires the complete-candidate inbox")
         if arm == "a0" and self.task["intervention"] is not None:
             raise ValueError("unassisted arm cannot have a helper intervention")
+        if "verification_intervention" in self.task and verification_engine is None:
+            raise ValueError("candidate intervention requires matched verification")
         self.typesafe_key_file = Path(typesafe_key_file) if typesafe_key_file else None
         if self.typesafe_key_file is not None:
             info = self.typesafe_key_file.lstat()
@@ -141,6 +153,11 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
                 "case_sha256": self.case_sha256,
                 "case_id": self.task["case"]["id"],
                 "intervention": self.task["intervention"],
+                **(
+                    {"verification_intervention": self.task["verification_intervention"]}
+                    if "verification_intervention" in self.task
+                    else {}
+                ),
                 "external_search_loop": False,
                 "model": "gpt-6-astra",
                 "source": "subscription",
@@ -297,6 +314,7 @@ async def _run_handoff(args: argparse.Namespace) -> int:
             api_key=secret,
             intervention=value["intervention"],
             verification_engine=verification_engine,
+            verification_intervention=value.get("verification_intervention"),
         )
     except BaseException as error:
         errors.append({"stage": execution_stage, "error_type": type(error).__name__})

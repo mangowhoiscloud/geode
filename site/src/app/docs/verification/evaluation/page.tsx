@@ -70,9 +70,20 @@ function EvaluationGuide({ ko }: { ko: boolean }) {
       <p>
         <code>core/agent/verify.py</code>{ko ? "의 " : " has a separate "}<code>llm_judge</code>
         {ko
-          ? "는 별도의 opt-in 턴 검증 모드입니다. 기본 rule_based는 빈 실행과 운영자 조치 필요 상태를 검사하며 LLM을 호출하지 않습니다. 내부 self-judge는 Petri의 외부 감사 점수가 아닙니다."
-          : " opt-in turn-verification mode. The default rule_based checks empty execution and operator-action requirements without an LLM call. The internal self-judge is not a Petri audit score."}
+          ? "는 기본 최종 의미 검증 경로입니다. 빈 실행·운영자 조치 여부를 코드로 먼저 검사하고, 선택된 LLM 또는 Jev가 완료 근거를 판정합니다. 기존 off·rule_based·reflexion 설정은 경고와 함께 이 공통 경로로 해석합니다. 내부 판정을 Petri의 외부 감사 점수로 사용하지 않습니다."
+          : " default semantic-verification path. Code first checks empty execution and operator-action requirements; the selected LLM or Jev then judges completion evidence. Legacy off, rule_based and reflexion settings resolve to this shared path with a warning. Internal judgments are not Petri audit scores."}
       </p>
+      <h3>{ko ? "LLM과 Jev 선택" : "Choosing LLM or Jev"}</h3>
+      <p>{ko
+        ? "Unreleased: 이 선택 기능과 매 라운드·최종 Reflection 정책은 소스 체크아웃 기준이며, 패키지 배포와 구분합니다."
+        : "Unreleased: this selection and the every-round/final Reflection policy describe the source checkout, not a packaged release."}</p>
+      <p>{ko
+        ? "판정 엔진은 기본 LLM입니다. /model judgment에서 Jev를 선택하면 설정된 TypeSafe 또는 OpenRouter 키로 매 라운드와 최종 후보를 판정합니다. 키가 없으면 LLM 경로를 유지하며, 키 등록 자체는 활성화가 아닙니다. 자연어로 판정 엔진 변경을 요청해도 같은 설정 경로를 사용합니다. 주 실행 모델과 effort, 도구 실행 권한은 바뀌지 않습니다."
+        : "The default judgment engine is LLM. Select Jev with /model judgment to judge rounds and final candidates using the configured TypeSafe or OpenRouter key. Missing credentials retain the LLM route; registering a key alone does not enable Jev. Natural-language engine changes use the same configuration path. Root model, effort and tool permissions remain unchanged."}</p>
+      <p>{ko
+        ? "Jev는 생성 모델 선택기에 들어가지 않습니다. System One 전용 API로 준비된 텍스트 상태와 유한한 선택지를 전달하고, 분류 결과와 분포를 받습니다. 이 분포를 CognitiveState의 confidence나 실행 허가로 바꾸지 않습니다. 이미지가 필수 근거이면 텍스트 전용 판정으로 통과시키지 않으며, 호출 실패도 다른 엔진의 성공으로 대체하지 않습니다."
+        : "Jev is not a generative-model picker entry. Its dedicated System One API receives prepared text state and finite choices, then returns classifications and distributions. These do not become CognitiveState confidence or execution permission. Required image evidence cannot pass through a text-only review, and a failed call is not replaced with another engine's success."}</p>
+      <p><a href="https://docs.typesafe.ai/api">TypeSafe System One</a>{" · "}<a href="https://openrouter.ai/docs/guides/community/typesafe-sdk">OpenRouter System One</a>{" · "}<a href={docsHref("config/reference")}>{ko ? "설정 규약" : "Configuration contract"}</a></p>
       <p>
         {ko
           ? "잘못된 JSON, 필드 타입, 점수와 judge 호출 실패는 verification_error로 기록합니다. passed=false, score=0, should_retry=false이며, rule_based 성공으로 대체하지 않습니다. 이 0은 검토 오류를 나타내는 내부 값이지 벤치마크 reward가 아닙니다."
@@ -94,8 +105,8 @@ function EvaluationGuide({ ko }: { ko: boolean }) {
         {" "}<a href="https://github.com/mangowhoiscloud/geode/blob/main/core/agent/verify.py">{ko ? "현재 턴 검증 구현" : "Current turn-verification implementation"}</a>
       </p>
       <p>{ko
-        ? "인지 reflection은 기본 활성 설정을 유지하고 root 턴의 남은 시간 안에서만 호출합니다. 개인정보나 REDACT 도구 결과가 남아 있는 대화에서는 이후 턴의 최종 답변도 보조 reflection에 전달하지 않으며, 최종 LLM judge는 personal_data_omitted 검증 오류로 남깁니다. 새 사용자 입력만으로 보호 상태를 해제하지 않고, 기존 checkpoint guard로 재개 시에도 유지합니다. 잘못된 hypotheses 목록은 기존 상태를 지우지 않습니다. 이 경계는 판단 모델·effort·인증 경로를 바꾸지 않습니다."
-        : "Cognitive reflection retains its default-enabled setting and runs within the root turn's remaining time. While personal or REDACT tool results remain in the conversation, later turns' final answers are also withheld from auxiliary reflection; the final LLM judge records personal_data_omitted as a verification error. A new user input does not clear this guard, which persists through the existing checkpoint state on resume. Invalid hypothesis lists do not erase prior state. These boundaries do not change the judgment model, effort, or credential source."}</p>
+        ? "Reflection은 도구 결과를 반영한 매 라운드와 최종 응답 전에 수행합니다. 최종 후보에서는 별도 인지 호출을 중복하지 않고 최종 판정 한 번으로 검토합니다. 개인정보·REDACT 보호, 남은 시간·비용 가드는 유지하며, 건너뛴 검토를 성공으로 기록하지 않습니다. 새 사용자 입력만으로 보호 상태를 해제하지 않고 재개 시에도 유지합니다. 잘못된 hypotheses 목록은 기존 상태를 지우지 않습니다."
+        : "Reflection runs after every tool-result round and before final delivery. The final judgment replaces a duplicate cognitive call for that candidate. Personal-data/REDACT protection, remaining-time and cost guards remain; a skipped review is not success. New input does not clear the privacy guard, which survives resume. Invalid hypothesis lists do not erase prior state."}</p>
       <p>{ko
         ? "완료된 인지 reflection의 토큰·캐시·비용은 기존 tracker와 비용 가드에 한 번 반영합니다. 모델이 도구 호출을 거절하거나 잘못된 응답을 반환해도 관측된 사용량은 남습니다. 실제 공급자를 호출하지 않은 middleware 응답이나 사용량을 받기 전에 중단된 호출을 유료 호출로 만들지는 않습니다. 공급자 보고 비용과 가격표 기반 추정은 실제 청구서와 구분해야 합니다."
         : "Completed cognitive-reflection token, cache and cost usage reaches the existing tracker and cost guard once, even when the model declines the tool or returns malformed feedback. Middleware responses without a provider dispatch and interrupted calls without completed usage do not create charges. Provider-reported cost and catalog estimates remain distinct from an invoice."}</p>

@@ -181,6 +181,28 @@ def _inbox_answer_schema() -> dict[str, Any]:
     }
 
 
+def validate_verification_intervention(value: Mapping[str, Any], case: Mapping[str, Any]) -> None:
+    """Admit a frozen candidate fault, never a substituted judge verdict or observation."""
+    import jsonschema
+    from core.observability.redaction import redact_secrets
+
+    if (
+        set(value) != {"when", "candidate_output"}
+        or value["when"] not in {"before_observation", "after_observation"}
+        or not isinstance(value["candidate_output"], str)
+        or not 1 <= len(value["candidate_output"]) <= 20_000
+        or redact_secrets(value["candidate_output"]) != value["candidate_output"]
+        or "apikey_" in value["candidate_output"]
+        or case.get("profile") != "inbox"
+    ):
+        raise ValueError("invalid verification candidate intervention")
+    candidate = json.loads(value["candidate_output"])
+    json.dumps(candidate, allow_nan=False)
+    jsonschema.validate(candidate, _inbox_answer_schema())
+    if [item["id"] for item in candidate["items"]] != [item["id"] for item in case["items"]]:
+        raise ValueError("intervention must retain the complete ordered inbox")
+
+
 def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -418,9 +440,8 @@ class HandoffReceipt:
         kind = {
             "agentic_loop": "root_request",
             "cognitive_reflection": "reflection_request",
+            "turn_verification": "verification_request",
         }.get(purpose, "unadmitted_request")
-        if purpose == "turn_verification" and self.verification_engine is not None:
-            kind = "verification_request"
         results = []
         for message in call.request.messages:
             if message.role == "tool" and message.tool_use_id:
@@ -465,7 +486,13 @@ class HandoffReceipt:
             ):
                 raise ValueError("reflection tool scope drift")
         elif purpose == "turn_verification":
-            if call.request.tools or call.request.tool_choice != {"type": "none"}:
+            from core.agent.verify import _judge_response_schema
+
+            if (
+                call.request.tools
+                or call.request.tool_choice != {"type": "none"}
+                or call.request.response_schema != _judge_response_schema()
+            ):
                 raise ValueError("verification tool scope drift")
         elif not replan and {tool.name for tool in call.request.tools} != self.tool_names:
             raise ValueError("root tool scope drift")
@@ -568,7 +595,14 @@ def handoff_call_coverage_complete(
 class _VerificationComparison:
     """Task-local judge replacement; preserve full evidence and actual repair inputs."""
 
-    def __init__(self, adapter: Any, receipt: HandoffReceipt, request: str, system: str) -> None:
+    def __init__(
+        self,
+        adapter: Any,
+        receipt: HandoffReceipt,
+        request: str,
+        system: str,
+        intervention: Mapping[str, Any] | None = None,
+    ) -> None:
         self.adapter = adapter
         self.receipt = receipt
         self.request = request
@@ -576,10 +610,63 @@ class _VerificationComparison:
         self.roots: list[dict[str, Any]] = []
         self.inputs: list[dict[str, Any]] = []
         self.consumptions: list[dict[str, Any]] = []
+        self.intervention = intervention
+        self.interventions: list[dict[str, Any]] = []
 
     async def llm_execution(self, call: Any, next_call: Any) -> Any:
         result = await next_call(call)
         if call.purpose == "agentic_loop" and not _is_replan_request(call):
+            observed = any(row["kind"] == "tool_result" for row in self.receipt.rows)
+            fault = self.intervention
+            if (
+                fault
+                and not self.interventions
+                and result.stop_reason == "completed"
+                and (
+                    (fault["when"] == "before_observation" and not self.roots and not observed)
+                    or (fault["when"] == "after_observation" and observed and not result.tool_uses)
+                )
+            ):
+                from core.observability.redaction import redact_secrets
+
+                native = {
+                    "text": result.text,
+                    "tool_uses": copy.deepcopy(list(result.tool_uses)),
+                    "stop_reason": result.stop_reason,
+                    "codex_output_items": copy.deepcopy(list(result.codex_output_items)),
+                    "reasoning_items": copy.deepcopy(list(result.reasoning_items)),
+                    "reasoning_summaries": list(result.reasoning_summaries),
+                    "assistant_phase": result.assistant_phase,
+                }
+                encoded = json.dumps(native, ensure_ascii=False, allow_nan=False)
+                if redact_secrets(encoded) != encoded or "apikey_" in encoded:
+                    raise ValueError("unsafe native intervention evidence")
+                effective = {"text": fault["candidate_output"], "tool_uses": []}
+                self.interventions.append(
+                    {
+                        "kind": "controlled-candidate-replacement",
+                        "when": fault["when"],
+                        "llm_call_id": call.correlation.get("llm_call_id"),
+                        "response_id": result.response_id,
+                        "receipt_prefix_length": len(self.receipt.rows),
+                        "native": native,
+                        "native_sha256": _json_digest(native),
+                        "effective": effective,
+                        "effective_sha256": _json_digest(effective),
+                    }
+                )
+                # The native provider result/usage is retained above and at the call terminal.
+                # Clear native replay items so later root turns see the disclosed candidate.
+                result = replace(
+                    result,
+                    text=fault["candidate_output"],
+                    tool_uses=(),
+                    stop_reason="completed",
+                    codex_output_items=(),
+                    reasoning_items=(),
+                    reasoning_summaries=(),
+                    assistant_phase="final_answer",
+                )
             self.roots.append(
                 {
                     "llm_call_id": call.correlation.get("llm_call_id"),
@@ -1045,6 +1132,7 @@ async def run_arm(
     intervention: Mapping[str, Any] | None = None,
     verification_engine: str | None = None,
     verification_adapter: Any = None,
+    verification_intervention: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     # Imports are late so the CLI child isolates cwd/state before loading core.
     from contextlib import AsyncExitStack
@@ -1053,6 +1141,7 @@ async def run_arm(
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop, AgenticLoopConfig
     from core.agent.tool_executor import ToolExecutor
+    from core.config import settings
     from core.config.policy_source import EMPTY_POLICY_SOURCES
     from core.hooks.system import HookSystem
     from core.llm.adapters.registry import bootstrap_builtins
@@ -1065,6 +1154,8 @@ async def run_arm(
     from evals.benchmarks.decision_handoff import DecisionHandoffTool
     from evals.platforms.harbor import _summarize_usage
 
+    if settings.judgment_engine != "llm":
+        raise ValueError("the frozen comparison owns its engines; global Jev must be disabled")
     if arm not in {"a0", "a", "b"}:
         raise ValueError("unknown arm")
     inbox = case.get("profile") == "inbox"
@@ -1087,6 +1178,10 @@ async def run_arm(
             raise ValueError("matched verification requires lookup-only inbox and llm_judge")
     elif verification_adapter is not None:
         raise ValueError("verification adapter requires its explicit comparison engine")
+    if verification_intervention is not None:
+        if verification_engine is None:
+            raise ValueError("candidate intervention requires matched verification")
+        validate_verification_intervention(verification_intervention, case)
     if arm == "a0" and (decision_adapter is not None or intervention is not None):
         raise ValueError("A0 has no helper or helper intervention")
     injection = (
@@ -1192,7 +1287,9 @@ async def run_arm(
                 api_key=key if uses_jev else None,
                 receipts=[],
             )
-            verification = _VerificationComparison(judge, receipt, case["request"], system)
+            verification = _VerificationComparison(
+                judge, receipt, case["request"], system, verification_intervention
+            )
             executor.middleware_registry.register_llm_request(
                 verification,
                 name="matched_verification",
@@ -1238,10 +1335,26 @@ async def run_arm(
         error = None
         try:
             result = await asyncio.wait_for(loop.arun(case["request"]), timeout=180)
-            if result.error:
+            judged_hold = bool(
+                result.termination_reason == "external_verification_required"
+                and loop._session_metrics.last_verify_rubric_misses == ("judge_fail",)
+                and loop._session_metrics.last_verify_should_retry
+                and loop._verify_attempt >= loop._verify_continuation_budget
+                and (
+                    verification is None
+                    or (
+                        verification.adapter.receipts
+                        and all(row["accepted"] for row in verification.adapter.receipts)
+                        and not verification.adapter.receipts[-1]["projected_payload"]["passed"]
+                    )
+                )
+            )
+            if result.error and not judged_hold:
                 error = "runtime_error"
                 await loop.amark_session_error()
             else:
+                # End this bounded evaluation even when the runtime withholds a candidate.
+                # An observed negative verdict is a semantic outcome, not a missing trial.
                 await loop.amark_session_completed()
         except (Exception, asyncio.CancelledError) as exc:
             error = type(exc).__name__
@@ -1297,11 +1410,9 @@ async def run_arm(
         }
         for event in calls
     ]
-    allowed_purposes = {"agentic_loop", "cognitive_reflection"}
+    allowed_purposes = {"agentic_loop", "cognitive_reflection", "turn_verification"}
     if arm != "a0":
         allowed_purposes.add("structured_decision")
-    if verification_engine is not None:
-        allowed_purposes.add("turn_verification")
 
     def is_jev(event: Any) -> bool:
         return bool(
@@ -1364,6 +1475,11 @@ async def run_arm(
         error = "invalid_decision_result" if invalid else "decision_response_rejected"
     if not call_coverage_complete:
         error = error or "incomplete_handoff_call_coverage"
+    if verification_intervention is not None and (
+        verification is None or len(verification.interventions) != 1
+    ):
+        invalid = True
+        error = error or "incomplete_verification_intervention"
     native_verify = [
         {**event.payload, "action": event.action}
         for event in events
@@ -1410,6 +1526,8 @@ async def run_arm(
         )
     if injection is not None:
         _write(directory / "intervention.json", injection.rows)
+    if verification_intervention is not None and verification is not None:
+        _write(directory / "intervention.json", verification.interventions)
     snapshot_complete = bool(
         terminal_complete
         and trajectory["integrity"]["scope_complete"]
@@ -1433,6 +1551,8 @@ async def run_arm(
     }
     if verification_engine is not None:
         metadata["verification_engine"] = verification_engine
+        if verification_intervention is not None:
+            metadata["verification_intervention"] = dict(verification_intervention)
         metadata["verification_metrics"] = {
             "judgment_attempts": sum(row["purpose"] == "turn_verification" for row in accounting),
             "replan_requests": sum(row.get("request_role") == "replan" for row in receipt.rows),

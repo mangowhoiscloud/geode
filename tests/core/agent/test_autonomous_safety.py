@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Iterator
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from core.agent.conversation import ConversationContext
 from core.agent.loop import AgenticLoop, AgenticLoopConfig, AgenticResult, _response
 from core.agent.tool_executor import ToolExecutor
+from core.llm.adapters.base import AdapterCallRequest, AdapterCallResult, UsageSummary
+from core.llm.agentic_response import AgenticResponse, ResponseUsage, TextBlock
 from core.observability.session_metrics import session_metrics_scope
 
 
@@ -64,6 +68,29 @@ def _make_tool_block(tool_name: str, tool_id: str, tool_input: dict[str, Any]) -
     block.input = tool_input
     block.id = tool_id
     return block
+
+
+def _accepted_verification(
+    observation: str = "The scripted greeting completes the fixture task.",
+) -> AgenticResponse:
+    return AgenticResponse(
+        content=[
+            TextBlock(
+                text=json.dumps(
+                    {
+                        "passed": True,
+                        "score": 1.0,
+                        "reflection": {
+                            "observation": observation,
+                            "lesson": "Retain the observed fixture result.",
+                            "next_check": "No follow-up is required for the fixture task.",
+                        },
+                    }
+                )
+            )
+        ],
+        usage=ResponseUsage(input_tokens=1, output_tokens=1),
+    )
 
 
 def _make_tool_response(
@@ -154,12 +181,15 @@ class TestCostBudgetAutoStop:
 
         response = _make_text_response("Hello world")
         with (
-            patch.object(loop, "_call_llm", return_value=response),
+            patch.object(
+                loop, "_call_llm", side_effect=[response, _accepted_verification()]
+            ) as call_llm,
             patch.object(loop, "_track_usage"),
         ):
             result = asyncio.run(loop.arun("test no budget"))
 
         assert result.termination_reason == "natural"
+        assert call_llm.call_args.kwargs["purpose"] == "turn_verification"
 
     def test_cost_limit_usd_seeds_budget(
         self,
@@ -225,7 +255,9 @@ class TestCostBudgetAutoStop:
         response = _make_text_response("Hello world")
 
         with (
-            patch.object(loop, "_call_llm", return_value=response),
+            patch.object(
+                loop, "_call_llm", side_effect=[response, _accepted_verification()]
+            ) as call_llm,
             patch.object(loop, "_track_usage"),
             patch.dict(
                 "sys.modules",
@@ -235,6 +267,7 @@ class TestCostBudgetAutoStop:
             result = asyncio.run(loop.arun("test under budget"))
 
         assert result.termination_reason == "natural"
+        assert call_llm.call_args.kwargs["purpose"] == "turn_verification"
 
 
 # ---------------------------------------------------------------------------
@@ -337,7 +370,24 @@ class TestDiversityForcing:
         counter = {"n": 0}
 
         async def fake_call_llm(system_prompt: str, messages: list, **kwargs: Any) -> Any:
+            if kwargs.get("purpose") == "turn_verification":
+                assert kwargs["allow_tools"] is False
+                return _accepted_verification("The scripted tool sequence completed.")
             return seq.pop(0) if seq else _make_text_response("Done")
+
+        async def reflect(request: AdapterCallRequest) -> AdapterCallResult:
+            assert [tool.name for tool in request.tools] == ["record_reflection"]
+            return AdapterCallResult(
+                text="",
+                tool_uses=(
+                    {
+                        "name": "record_reflection",
+                        "input": {"hypotheses": ["Tool evidence recorded"], "confidence": 0.5},
+                    },
+                ),
+                usage=UsageSummary(),
+                stop_reason="end_turn",
+            )
 
         def fake_process(response: Any) -> list[dict[str, Any]]:
             results: list[dict[str, Any]] = []
@@ -355,6 +405,10 @@ class TestDiversityForcing:
 
         with (
             patch.object(loop, "_call_llm", side_effect=fake_call_llm),
+            patch(
+                "core.agent.loop._reflection.resolve_for",
+                return_value=SimpleNamespace(acomplete=AsyncMock(side_effect=reflect)),
+            ),
             patch.object(loop, "_track_usage"),
             patch.object(loop._tool_processor, "process", side_effect=fake_process),
             patch("core.ui.agentic_ui.emit_tool_diversity_forced") as mock_emit,

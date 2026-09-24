@@ -10,7 +10,15 @@ eval_triggers: [typesafe, jev, decision-handoff, classification, extraction, con
 
 # Jev decision handoff pilot
 
-## Current evidence disposition — 2026-09-23
+The official runtime option now requires per-round and final Reflection.
+Current selector/helper profiles therefore retain native Astra final-verification
+calls as well as cognitive calls; they require a new frozen source and cannot
+reuse old call counts as their baseline. The matched verdict profile still owns
+its explicit LLM/Jev injection. Global Jev selection must not overlap that
+experiment-specific owner. Published historical M4/M5/M6 bytes and scores remain
+unchanged; see the [publication record](jev-verdict-publication-20260924.md).
+
+## Current evidence disposition — 2026-09-24
 
 The r6 results below are **superseded for claims about the revised,
 default-reflection baseline**. Preserve their original source, run specs,
@@ -41,7 +49,16 @@ The operator selected **both LLM and Jev** for a new paired comparison. This is
 not a default-engine adoption decision. Restore and admit the execution
 environment, then freeze a new source/spec/lineage. Keep subscription
 `gpt-6-astra` / `xhigh` as the root, cognitive-reflection and replan route.
-Offline regressions are not a live rerun; no new cohort result is reported here.
+The subsequent `jev-verdict-20260923-r2` cohort completed on source
+`1c73cb97657dc811264bea338aa5a2ae324f0078`: both engines passed 6/6 natural
+rollouts and 72/72 repeated item observations. All twelve initial judgments
+were `supported`; no root consumed failure feedback and no replan occurred.
+Its separate six same-snapshot calls matched all three supplied labels in both
+engines, but did not execute a repair. These results establish neither natural
+error detection nor recovery. The private independent audit is bound to SHA-256
+`138f7dfff9be329395b6f3f084968e86c48a049e250bc5731dc6eb592201cae1`.
+The original evidence remains immutable; the next diagnostic has its own source,
+specification and attempt lineage.
 
 ## Current comparison: matched final verdict, shared repair
 
@@ -84,7 +101,7 @@ is also used by the earlier handoff tool, with no new provider registry or retry
 layer. Malformed completed judgments retain their usage and stop delivery with
 `verification_error`; they are not converted into a confident repair instruction.
 
-### Prospective workload and admission
+### Natural workload and admission contract
 
 - Freeze **3 authored inboxes × 2 engines × 2 repetitions = 12 natural E2E
   trials**, plus two separate admission trials. Rotate engine order. There are
@@ -133,6 +150,51 @@ Official contract sources, checked 2026-09-23: [models/pricing](https://docs.typ
 [model limitations](https://docs.typesafe.ai/model-jaggedness/jev-1.13).
 Confidence describes a returned distribution; this small authored cohort cannot
 establish calibration or general deployment superiority.
+
+### Controlled recovery follow-up
+
+The next question is whether an actual negative judgment is consumed by Astra,
+changes its work, reaches another judgment, and passes the independent task
+verifier. A first-pass success does not answer that question. The follow-up uses
+two fixed conditions on one authored lookup task, each with both engines:
+
+- **After observation:** replace the first completed text candidate after the
+  real lookup with a contradictory status.
+- **Before observation:** replace the first completed root response with a
+  premature status claim. No proposed tool call from that displaced response
+  executes; the runtime and judge initially have no lookup observation.
+
+This is disclosed candidate fault injection, not an observed natural model error.
+The optional `verification_intervention` task field is accepted only by the
+matched inbox profile. Existing trusted execution middleware retains the native
+text/tool requests, response identity and output digest in private
+`intervention.json`, then passes the frozen effective candidate to the real loop.
+Native replay items are not replayed as if they were the effective candidate.
+The existing call observer retains actual provider usage; verdicts, tool results,
+gold labels and the independent verifier are never replaced. The observation
+checker requires exactly one intervention and binds it to the first judgment.
+
+The live plan is two separate admission trials plus four diagnostic rollouts,
+with unchanged Astra subscription/xhigh, Jev version, tools and execution bounds.
+The first after-observation pair is selected for replay before outcomes are known.
+Source freeze, admission and completed receipts remain prerequisites; this section
+does not report those new trials as executed.
+
+Recovery requires a real negative verdict, consumption of that judgment's feedback
+by a later root call, a subsequent verified candidate, and task-owned success.
+For the missing-observation condition, the candidate text may correctly remain
+the same; the change must be a new consumed lookup observation. A supported
+verdict on an unsupported/contradicted candidate is a valid false acceptance,
+not an infrastructure-invalid attempt. Record failures and holds without retrying
+for a favorable outcome. Report whole-task time, extra calls and observed tokens
+alongside judge latency. Compare engines within each injected condition, not
+against the earlier natural cohort as a causal cost baseline.
+
+Before this follow-up, the replanner's input was corrected: candidate text had
+preceded the failure instruction inside one 1,500-character truncation window.
+Long candidates could remove the instruction. The existing planner now receives
+an escaped instruction field and a separately bounded observation. The natural
+r2 cohort never replanned, so this finding does not invalidate its measurements.
 
 ## Historical handoff experiments
 
