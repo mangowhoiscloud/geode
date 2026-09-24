@@ -108,6 +108,8 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유`}</pre>
               같은 인스턴스를 전달합니다. 다른 런타임의 생성 실패나 종료가
               이 연결을 닫지 않으며, 런타임 manager는 프로세스 신호 핸들러를
               변경하지 않습니다. 종료에 실패한 연결은 재시도를 위해 보존합니다.
+              연결 생성 중 실패해도 같은 소유자가 정리하며, 자식 프로세스의
+              종료를 확인한 뒤 파이프와 작업 디렉터리를 해제합니다.
             </p>
 
             <h2>실패 모드</h2>
@@ -244,6 +246,8 @@ geode serve (daemon)  ←  one GeodeRuntime owns everything`}</pre>
               runtime&apos;s construction failure or shutdown cannot close these
               connections. Runtime managers leave process signal handlers alone;
               failed connection closes remain available for retry.
+              The same owner retains failed connection attempts. Child exit must
+              be confirmed before releasing pipes and the working directory.
             </p>
 
             <h2>Failure modes</h2>

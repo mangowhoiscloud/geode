@@ -136,6 +136,8 @@ functional change.
   notification, calendar and gateway consumers. Another runtime's rollback or
   shutdown cannot close them. Restarted managers close each connection generation;
   failed closes retain the resource for retry after attempting sibling cleanup.
+  Keep failed connection attempts owned and confirm child exit after forced
+  termination before releasing process handles, pipes and scratch directories.
 
 - Preserve thin Harbor cognitive-reflection usage by binding its middleware to the existing session event sink.
 

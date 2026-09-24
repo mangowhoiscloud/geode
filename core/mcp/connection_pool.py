@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import shutil
 import tempfile
@@ -122,26 +121,25 @@ class MCPConnectionPool:
                 return None
         else:
             client = self._client_factory(command=command, args=args, env=env)
+        # Own the client before connection can allocate a subprocess or fail.
+        self.clients[server_name] = client
         try:
             connected = client.connect()
         except Exception as exc:
-            with contextlib.suppress(Exception):
-                client.close()
             self.extension_decisions[server_name] = decision.degraded(
                 f"connection failed: {type(exc).__name__}"
             )
             connected = False
         if connected:
-            self.clients[server_name] = client
             self.connection_epoch += 1
             self.failed_at.pop(server_name, None)
             self._event_sink(HookEvent.MCP_SERVER_CONNECTED, {"server_name": server_name})
             return client
 
-        with contextlib.suppress(Exception):
-            client.close()
         self.failed_at[server_name] = time.monotonic()
         self.extension_decisions[server_name] = decision.degraded("connection failed")
+        client.close()
+        self.clients.pop(server_name, None)
         self._event_sink(
             HookEvent.MCP_SERVER_FAILED,
             {"server_name": server_name, "error": "Connection failed"},

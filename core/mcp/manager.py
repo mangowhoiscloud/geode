@@ -90,7 +90,7 @@ class MCPServerManager:
 
     @property
     def connected_count(self) -> int:
-        return len(self._pool.clients)
+        return sum(1 for client in list(self._pool.clients.values()) if client.is_connected())
 
     def startup(
         self,

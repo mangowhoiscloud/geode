@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -243,7 +244,7 @@ class TestStdioMCPClientLifecycle:
         mock_proc = MagicMock()
         mock_proc.pid = 42
         mock_proc.stdin = MagicMock()
-        mock_proc.wait.side_effect = subprocess.TimeoutExpired(cmd="echo", timeout=5)
+        mock_proc.wait.side_effect = [subprocess.TimeoutExpired(cmd="echo", timeout=5), 0]
         client._process = mock_proc
         client._pid = 42
         client._connected = True
@@ -254,6 +255,44 @@ class TestStdioMCPClientLifecycle:
         mock_proc.kill.assert_called_once()
         assert client._process is None
         assert client.pid is None
+
+    @pytest.mark.parametrize("failure_stage", ["kill", "wait"])
+    def test_close_retains_process_until_reaped(self, tmp_path: Path, failure_stage: str) -> None:
+        import subprocess
+
+        scratch = tmp_path / "server"
+        scratch.mkdir()
+        client = StdioMCPClient(
+            command="fixture", working_dir=str(scratch), cleanup_working_dir=True
+        )
+        process = MagicMock()
+        failure = OSError("cleanup failed")
+        process.wait.side_effect = [subprocess.TimeoutExpired("fixture", 5), failure]
+        if failure_stage == "kill":
+            process.kill.side_effect = failure
+        client._process, client._pid = process, 42
+        with pytest.raises(OSError) as caught:
+            client.close()
+        assert caught.value is failure
+        assert client._process is process and client.pid == 42
+        assert scratch.exists()
+        process.kill.side_effect = None
+        process.wait.side_effect = None
+        client.close()
+        assert client._process is None and client.pid is None
+        assert not scratch.exists()
+
+    def test_broken_stdin_still_kills_waits_and_closes_pipes(self) -> None:
+        client = StdioMCPClient(command="fixture")
+        process = MagicMock()
+        process.stdin.close.side_effect = [BrokenPipeError(), None]
+        client._process, client._pid = process, 42
+        client.close()
+        process.kill.assert_called_once()
+        process.wait.assert_called_once_with(timeout=2)
+        for pipe in (process.stdin, process.stdout, process.stderr):
+            assert pipe.close.called
+        assert client._process is None
 
     def test_close_timeout_constant(self) -> None:
         """Verify the close timeout constant is 5 seconds."""
@@ -707,6 +746,28 @@ class TestMCPManagerConnectAll:
         client_cls.assert_called_once()
         mock_client.close.assert_called_once()
         fire_hook.assert_called_once()
+
+    @pytest.mark.parametrize("connect_raises", [False, True])
+    def test_failed_connect_retains_cleanup_owner(self, connect_raises: bool) -> None:
+        mgr = MCPServerManager(extension_policy=_trusted_policy("test"))
+        mgr._catalog.servers = {"test": {"command": "fixture", "execution": "trusted"}}
+        client = MagicMock()
+        client.connect.return_value = False
+        if connect_raises:
+            client.connect.side_effect = OSError("connect failed")
+        client.is_connected.return_value = False
+        failure = OSError("cleanup failed")
+        client.close.side_effect = [failure, None]
+        with patch("core.mcp.manager.StdioMCPClient", return_value=client) as factory:
+            with pytest.raises(OSError) as caught:
+                mgr._get_client("test")
+            assert caught.value is failure
+            assert mgr._pool.clients["test"] is client
+            assert mgr.connected_count == 0
+            mgr.shutdown()
+        factory.assert_called_once()
+        assert client.close.call_count == 2
+        assert not mgr._pool.clients
 
     def test_auto_restart_bypasses_failed_server_cooldown(self) -> None:
         mgr = MCPServerManager()
