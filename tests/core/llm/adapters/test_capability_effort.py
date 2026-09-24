@@ -39,7 +39,7 @@ def wire_client() -> tuple[Any, list[dict[str, Any]]]:
         usage=SimpleNamespace(
             input_tokens=12,
             output_tokens=3,
-            input_tokens_details=SimpleNamespace(cached_tokens=0),
+            input_tokens_details=SimpleNamespace(cached_tokens=0, cache_write_tokens=7),
         ),
     )
     wire: list[dict[str, Any]] = []
@@ -103,13 +103,10 @@ def test_capability_wire_and_observed_effort_match(
     assert rows[0]["effort"] == effort
     assert rows[0]["source"] == adapter.source
     assert rows[0]["purpose"] == ("text_completion" if capability == "text" else "hosted_search")
-    if capability == "search" and adapter.source == "payg":
-        # Existing PAYG search has no usage projection; effort is not a counter fix.
-        assert rows[0]["usage"]["input_tokens"] is None
-        assert rows[0]["usage"]["cached_input_tokens"] is None
-    else:
-        assert rows[0]["usage"]["input_tokens"] == 12
-        assert rows[0]["usage"]["cached_input_tokens"] == 0
+    assert rows[0]["usage"]["input_tokens"] == 12
+    assert rows[0]["usage"]["output_tokens"] == 3
+    assert rows[0]["usage"]["cached_input_tokens"] == 0
+    assert rows[0]["usage"]["cache_write_tokens"] == 7
     assert rows[0]["usage"]["reasoning_tokens"] is None
     if adapter.source == "subscription":
         assert wire[0]["store"] is False
@@ -275,3 +272,58 @@ def test_inherited_effort_survives_same_adapter_retry(
     assert rows[0]["llm_attempt_id"] != rows[1]["llm_attempt_id"]
     assert all(row["effort"] == "max" for row in rows)
     assert all(attempt.kwargs["effort"] == "max" for attempt in call.await_args_list)
+
+
+@pytest.mark.parametrize(
+    "model,requested,expected",
+    [("gpt-6-sol", 200_000, 128_000), ("o3", 200_000, 100_000), ("gpt-6-sol", 32, 32)],
+)
+def test_payg_auxiliary_completion_caps_published_output_budget(
+    monkeypatch: pytest.MonkeyPatch, wire_client: Any, model: str, requested: int, expected: int
+) -> None:
+    client, wire = wire_client
+    adapter = OpenAIPaygAdapter()
+    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    result = asyncio.run(adapter.acomplete_text("input", model=model, max_tokens=requested))
+    assert result.text == "answer"
+    assert wire[0]["max_output_tokens"] == expected
+
+
+@pytest.mark.parametrize("max_tokens", [0, -1])
+def test_payg_auxiliary_completion_rejects_nonpositive_budget_before_request(
+    monkeypatch: pytest.MonkeyPatch, wire_client: Any, max_tokens: int
+) -> None:
+    from core.llm.errors import LLMRequestValidationError
+
+    client, wire = wire_client
+    adapter = OpenAIPaygAdapter()
+    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    with pytest.raises(LLMRequestValidationError, match="must be positive"):
+        asyncio.run(adapter.acomplete_text("input", model="gpt-6-sol", max_tokens=max_tokens))
+    assert wire == []
+
+
+def test_empty_payg_search_keeps_provider_usage_in_failure_hook(
+    monkeypatch: pytest.MonkeyPatch, observed: Any
+) -> None:
+    from core.llm.adapters.base import EmptyModelOutputError
+
+    response = SimpleNamespace(
+        output=[],
+        usage=SimpleNamespace(input_tokens=12, output_tokens=0),
+    )
+    create = AsyncMock(return_value=response)
+    adapter = OpenAIPaygAdapter()
+    client = SimpleNamespace(responses=SimpleNamespace(create=create))
+    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    monkeypatch.setattr("core.llm.adapters.dispatch._select_adapter", lambda *a, **kw: adapter)
+    hooks, rows = observed
+    with pytest.raises(AdapterDispatchError) as caught:
+        asyncio.run(web_search_via_adapters("input", model="gpt-6-sol", hooks=hooks))
+    assert isinstance(caught.value.__cause__, EmptyModelOutputError)
+    assert create.await_count == len(rows) == 1
+    assert rows[0]["error_type"] == "EmptyModelOutputError"
+    assert rows[0]["usage"]["input_tokens"] == 12
+    assert rows[0]["usage"]["output_tokens"] == 0
+    assert rows[0]["usage"]["cached_input_tokens"] is None
+    assert rows[0]["cost_usd"] is None
