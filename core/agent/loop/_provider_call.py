@@ -204,8 +204,8 @@ async def _prepare_request(
     adaptive_thinking = loop._thinking_budget
     adaptive_effort = loop._effort
     if wrap_up:
-        # wrap-up: minimal budget (0.5% of window, floor 4096)
-        adaptive_max_tokens = max(4096, min(loop.max_tokens, ctx_window // 200))
+        # Wrap-up targets 0.5% of the window, without exceeding the caller's ceiling.
+        adaptive_max_tokens = min(loop.max_tokens, max(4096, ctx_window // 200))
         adaptive_thinking = 0
 
     # config-driven temperature (1.0 default)
