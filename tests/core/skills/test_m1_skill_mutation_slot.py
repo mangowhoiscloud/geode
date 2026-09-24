@@ -162,14 +162,8 @@ def test_write_then_load_skill_catalog_round_trips(isolated_skill_catalog: Path)
     assert loaded == original
 
 
-def test_load_skill_catalog_missing_file_returns_empty() -> None:
-    from core.paths import AUTORESEARCH_SKILL_CATALOG_PATH
-
-    # No isolated_skill_catalog fixture — default path. Test only asserts
-    # graceful empty-dict behaviour, not against the operator's file.
-    # If the operator has a real file we monkey-patch around it.
-    if AUTORESEARCH_SKILL_CATALOG_PATH.is_file():
-        pytest.skip("operator-local skill-catalog.json present; skipping")
+def test_load_skill_catalog_missing_file_returns_empty(isolated_skill_catalog: Path) -> None:
+    assert not isolated_skill_catalog.exists()
     assert pol.load_policy("skill_catalog") == {}
 
 

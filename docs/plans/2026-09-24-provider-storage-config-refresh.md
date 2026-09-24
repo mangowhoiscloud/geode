@@ -60,8 +60,8 @@ remain outside scope.
 | E3 | Shared SDK transport ownership at actual process/thread event-loop teardown | E1 | PR #3411 merged into develop at `93532f825`; required CI passed |
 | K2 | Claude cache marker validity and 1-hour write accounting through durable records | P6 | PR #3412 merged into develop at `37138a82d`; required CI passed; activity schema v11, trajectory v1 unchanged |
 | K1 | OpenAI explicit static prefixes and OpenRouter route/session cache shaping | P6, K2 | PR #3413 merged into develop at `99e897f70`; required CI passed |
-| MCP | Preserve connection and subprocess ownership across creation and cleanup failures | existing runtime audit; queued after K1 | local integration candidate against develop `99e897f70`; remote CI and merge pending |
-| TQ | Strengthen test outcome oracles and remove an identical duplicate | existing quality audit; queued after MCP | local implementation and review at `9c931d302`; integration and remote CI/merge pending |
+| MCP | Preserve connection and subprocess ownership across creation and cleanup failures | existing runtime audit; queued after K1 | PR #3414 merged into develop at `780992e08`; required CI passed |
+| TQ | Strengthen test outcome oracles and remove an identical duplicate | existing quality audit; queued after MCP | local integration candidate against develop `780992e08`; remote CI and merge pending |
 | grill ownership | Move daemon skill-prompt builders from CLI to runtime skills owners | existing dependency audit; queued after TQ | local implementation and review at `a344009dd`; integration and remote CI/merge pending |
 | V1 bounds | Optional Harbor output/round limits and shared wrap-up cap preservation | runtime owners | PR #3404 merged into develop at `3e6e5d988` |
 | CI-1 | Conservative document-only full-test selection | existing CI gates | PR #3405 merged into develop at `ebeee591d` |
@@ -99,14 +99,14 @@ separate PRs before freezing final V1 inputs. This is a single integration
 queue operated under the existing [GitFlow manual](../../.agents/skills/geode-gitflow/SKILL.md),
 not a change to GitHub protection settings or a new merge-queue service.
 
-At develop `99e897f70`, P6, CI-3, E2, E3, K2 and K1 are also merged. The remaining
-queue is MCP → TQ → grill ownership → Compaction → V1 → F1 → R1.
+At develop `780992e08`, P6, CI-3, E2, E3, K2, K1 and MCP are also merged. The remaining
+queue is TQ → grill ownership → Compaction → V1 → F1 → R1.
 The separate Report feature follows V1 observations and must precede R1. Review
 all session changes against the report, including OpenRouter; the ACT3 page 34
 update and two added compaction pages do not limit that scope. Jev belongs to a
 separate report. No report content is implemented by this integration.
-MCP, TQ and grill retain their reviewed
-local heads pending ordered integration and exact-head remote CI. The
+TQ and grill retain their reviewed local heads pending ordered integration
+and exact-head remote CI. The
 operator's September 25 follow-up adds the separate compaction PR immediately
 before V1. Its primary-source research and offline counterexamples are recorded;
 implementation must use the final integrated base and precede paid calls.
