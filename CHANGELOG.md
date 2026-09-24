@@ -126,6 +126,14 @@ functional change.
   fails so a later write cannot commit a failed operation's pending changes.
   Close the checkpoint metadata connection even when its index write fails,
   while retaining the existing recoverable checkpoint behavior.
+- Show the requested `switch_model` role and model hint in CLI/IPC approval
+  details, including the primary-role default. Preserve exact values with JSON
+  escaping so judgment-only approval can distinguish a root-model change;
+  permission requirements and approval decisions remain unchanged.
+- Validate the complete settings reload before updating the live singleton.
+  Failed environment/TOML field validation, field preparation, or routing
+  refresh preserves the previous Settings values; corrected reloads retain
+  environment-over-TOML precedence and existing references.
 - Refresh the 2026-09-24 OpenAI, Claude and Z.AI model tariffs/context limits; honor explicit Claude cache rates and full-request OpenAI long-context tiers. Keep active source choices separate from historical accounting and unavailable subscription routes.
 - Preserve verifier failure instructions separately from the replanner's bounded
   candidate observation. The opt-in LLM/Jev diagnostic can now disclose one frozen
