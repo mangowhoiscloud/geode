@@ -18,6 +18,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from core.llm.adapters.base import (
+    EmptyModelOutputError,
     TextCompletionResult,
     WebSearchResult,
 )
@@ -222,8 +223,13 @@ async def openai_web_search(
                     text = getattr(sub, "text", "")
                     if text:
                         text_parts.append(text)
+    from core.llm.adapters._openai_common import translate_codex_response
+
+    completed = translate_codex_response(response)
     if not text_parts:
-        raise RuntimeError("openai_web_search: empty output_text in response")
+        raise EmptyModelOutputError(
+            "openai_web_search: empty output_text in response", completed_result=completed
+        )
     source_urls, citation_urls, search_activated = openai_web_search_urls(output)
     return WebSearchResult(
         query=query,
@@ -234,6 +240,7 @@ async def openai_web_search(
         retrieval_exposed=search_activated,
         model=model,
         adapter_name=adapter_name,
+        usage=completed.usage,
     )
 
 
@@ -251,13 +258,15 @@ async def openai_responses_complete_text(
     max_tokens: int,
     effort: str | None = None,
 ) -> TextCompletionResult:
-    """Single-turn OpenAI Responses API call — preferred over Chat
-    Completions for OpenAI PAYG (and Codex backend if/when it supports
-    text_completion). Responses API is the forward-going surface
-    (per developers.openai.com/api/docs) — Chat Completions stays for
-    GLM-family endpoints (z.ai PAYG / Coding Plan) which don't expose
-    Responses API.
-    """
+    """Single-turn completion on the OpenAI Platform Responses endpoint."""
+    from core.llm.adapters._openai_common import get_openai_model_spec
+    from core.llm.errors import LLMRequestValidationError
+
+    if max_tokens <= 0:
+        raise LLMRequestValidationError("max_tokens must be positive")
+    output_limit = get_openai_model_spec(model).max_output_tokens
+    if output_limit is not None:
+        max_tokens = min(max_tokens, output_limit)
     kwargs: dict[str, Any] = {
         "model": model,
         "input": prompt,
