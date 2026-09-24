@@ -598,7 +598,13 @@ def _finalize_verify_outcome(
     if "verification_error" in vr.rubric_misses:
         payload["error_type"] = (
             vr.reason
-            if vr.reason in {"judge_timeout", "verification_time_budget_exhausted"}
+            if vr.reason
+            in {
+                "judge_timeout",
+                "verification_time_budget_exhausted",
+                "jev_visual_evidence_unsupported",
+                "invalid_jev_response",
+            }
             else "verification_error"
         )
     payload["session_id"] = getattr(loop, "_session_id", "")

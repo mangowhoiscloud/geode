@@ -1,9 +1,7 @@
 # GEODE model pricing + context window catalogue.
 #
-# Source of truth for per-token cost and context limits. P3-A (2026-05-17)
-# introduces this file + ``pricing_loader.py``; P3-B migrates
-# ``core.llm.token_tracker.MODEL_PRICING`` / ``MODEL_CONTEXT_WINDOW`` to
-# read from here. Until then this file is dormant.
+# Source of truth for estimated per-token cost and context limits.
+# Provider-reported cost takes precedence in token_tracker.
 #
 # Quasi-static — refresh per quarter on pricing or model-list changes.
 # Schema layers:
@@ -202,6 +200,17 @@ output_per_mtok = 2.20
 [pricing.openai."glm-4.7-flash"]
 input_per_mtok = 0.00
 output_per_mtok = 0.00  # free tier (limited-time)
+
+# TypeSafe System One (verified 2026-09-24).
+# https://openrouter.ai/typesafe/jev-1.13 — $0.042/M input, output free.
+# These are tariff estimates, not independently verified account charges.
+[pricing.typesafe."jev-1.13.0"]
+input_per_mtok = 0.042
+output_per_mtok = 0.0
+
+[pricing.typesafe."typesafe/jev-1.13"]
+input_per_mtok = 0.042
+output_per_mtok = 0.0
 
 # ── Context windows (verified 2026-04-26 / GLM refreshed 2026-06-25) ──────
 # Anthropic: 1M tokens for opus-4-6/7/8 + sonnet-4-6; 200K for legacy.

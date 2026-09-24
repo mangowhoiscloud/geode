@@ -499,6 +499,12 @@ def cmd_model(args: str) -> None:
 
     arg = args.strip()
 
+    if arg == "judgment" or arg.startswith("judgment "):
+        from core.cli.commands.judgment import cmd_judgment
+
+        cmd_judgment(arg.removeprefix("judgment").strip())
+        return
+
     # ``/model global <…>`` — switch the user-global default instead of the
     # session's project config. Parsed before the role token (order:
     # ``/model global <role> <name>``). Default scope is "project" so a bare

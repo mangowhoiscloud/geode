@@ -33,8 +33,12 @@ def test_settings_rejects_interval_below_one(interval: int) -> None:
         Settings(cognitive_reflection_interval=interval)
 
 
-def test_settings_carries_reflection_adaptive_default_true() -> None:
-    assert Settings.model_fields["cognitive_reflection_adaptive"].default is True
+def test_settings_normalizes_valid_legacy_interval_to_every_round() -> None:
+    assert Settings(cognitive_reflection_interval=3).cognitive_reflection_interval == 1
+
+
+def test_settings_carries_reflection_adaptive_default_false() -> None:
+    assert Settings.model_fields["cognitive_reflection_adaptive"].default is False
 
 
 def test_toml_map_carries_reflection_adaptive_key() -> None:
@@ -64,19 +68,19 @@ def reflection_call(monkeypatch: pytest.MonkeyPatch) -> Any:
 
 
 @pytest.mark.parametrize(
-    ("interval", "adaptive", "confidence", "rounds", "expected"),
+    ("interval", "adaptive", "confidence", "rounds"),
     [
-        pytest.param(1, False, None, 5, [1, 2, 3, 4, 5], id="every-round"),
-        pytest.param(3, False, None, 10, [1, 4, 7, 10], id="every-third"),
-        pytest.param(5, False, None, 11, [1, 6, 11], id="every-fifth"),
-        pytest.param(30, False, None, 30, [1], id="thirty-round-session"),
-        pytest.param(0, False, None, 3, [1, 2, 3], id="defensive-zero"),
-        pytest.param(-1, False, None, 3, [1, 2, 3], id="defensive-negative"),
-        pytest.param(3, True, 0.9, 10, [1, 7], id="high-confidence-stretches"),
-        pytest.param(5, True, 0.2, 5, [1, 2, 3, 4, 5], id="low-confidence-forces"),
-        pytest.param(3, True, 0.6, 7, [1, 4, 7], id="mid-confidence-base"),
-        pytest.param(3, True, None, 4, [1, 4], id="unknown-confidence-base"),
-        pytest.param(3, False, 0.95, 7, [1, 4, 7], id="adaptive-disabled"),
+        pytest.param(1, False, None, 5, id="every-round"),
+        pytest.param(3, False, None, 10, id="legacy-every-third"),
+        pytest.param(5, False, None, 11, id="legacy-every-fifth"),
+        pytest.param(30, False, None, 30, id="thirty-round-session"),
+        pytest.param(0, False, None, 3, id="defensive-zero"),
+        pytest.param(-1, False, None, 3, id="defensive-negative"),
+        pytest.param(3, True, 0.9, 10, id="legacy-high-confidence-stretch"),
+        pytest.param(5, True, 0.2, 5, id="low-confidence"),
+        pytest.param(3, True, 0.6, 7, id="mid-confidence"),
+        pytest.param(3, True, None, 4, id="unknown-confidence"),
+        pytest.param(3, False, 0.95, 7, id="adaptive-disabled"),
     ],
 )
 def test_reflection_cadence(
@@ -87,7 +91,6 @@ def test_reflection_cadence(
     adaptive: bool,
     confidence: float | None,
     rounds: int,
-    expected: list[int],
 ) -> None:
     monkeypatch.setattr(settings, "cognitive_reflection_interval", interval)
     monkeypatch.setattr(settings, "cognitive_reflection_adaptive", adaptive)
@@ -105,8 +108,9 @@ def test_reflection_cadence(
             await loop._maybe_reflect([])
 
     asyncio.run(run_rounds())
-    assert observed == expected
-    assert reflection_call.await_count == len(expected)
+    # Legacy values remain a migration input, not an alternate cadence.
+    assert observed == list(range(1, rounds + 1))
+    assert reflection_call.await_count == rounds
     for call in reflection_call.await_args_list:
         assert call.kwargs["policy_sources"] is EMPTY_POLICY_SOURCES
         assert call.kwargs["middleware_registry"] is loop.executor.middleware_registry
@@ -115,12 +119,12 @@ def test_reflection_cadence(
         )
 
 
-def test_disabled_toggle_short_circuits_before_interval_check(
+def test_legacy_disabled_toggle_cannot_skip_round_reflection(
     monkeypatch: pytest.MonkeyPatch, loop: AgenticLoop, reflection_call: Any
 ) -> None:
     monkeypatch.setattr(settings, "cognitive_reflection_enabled", False)
-    # An unusable interval proves the disabled branch returns before reading it.
+    # The runtime no longer reads the deprecated cadence fields.
     monkeypatch.setattr(settings, "cognitive_reflection_interval", None)
     loop.cognitive_state.record_round(action="synthetic", observation="synthetic")
     asyncio.run(loop._maybe_reflect([]))
-    reflection_call.assert_not_awaited()
+    reflection_call.assert_awaited_once()

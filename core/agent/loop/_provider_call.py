@@ -137,9 +137,12 @@ async def _prepare_request(
     response_schema: dict[str, Any] | None,
     allow_tools: bool,
     purpose: str = "agentic_loop",
+    adapter_override: Any | None = None,
 ) -> tuple[AdapterCallRequest, Any, dict[str, Any], str, str, str, str]:
     """Freeze one request after policy middleware and bind its step."""
     effective_model = model or loop.model
+    if adapter_override is not None and (allow_tools or purpose != "turn_verification"):
+        raise ValueError("an explicit decision adapter requires text-only verification")
     # Shared list — in-place pruning must persist into later rounds.
     await _context.check_context_overflow(loop, system, messages)
     step_snapshot = loop._open_step_snapshot(
@@ -264,7 +267,7 @@ async def _prepare_request(
         temperature=loop_temperature,
         thinking_budget=adaptive_thinking,
         effort=adaptive_effort,
-        allowed_tool_names=session_allowed_tools,
+        allowed_tool_names=session_allowed_tools if allow_tools else frozenset(),
         denied_tool_names=executor_denied_tools,
         executable_tool_names=executor_executable_tools,
         response_schema=(response_schema if response_schema is not None else loop._response_schema),
@@ -282,8 +285,8 @@ async def _prepare_request(
         "llm_attempt_id": "",
     }
     bound_request = req
-    original_adapter = loop._new_adapter
-    if model is not None and effective_model != loop.model:
+    original_adapter = adapter_override if adapter_override is not None else loop._new_adapter
+    if adapter_override is None and model is not None and effective_model != loop.model:
         from core.config import _resolve_provider
         from core.llm.adapters._source_inference import infer_source
         from core.llm.adapters.registry import normalize_registry_provider
@@ -360,6 +363,7 @@ async def call_llm(
     response_schema: dict[str, Any] | None = None,
     allow_tools: bool = True,
     purpose: str = "agentic_loop",
+    adapter_override: Any | None = None,
 ) -> AgenticResponse | None:
     """Multi-provider LLM call via :class:`LLMAdapter` (P1 Gateway pattern).
 
@@ -393,6 +397,7 @@ async def call_llm(
         response_schema=response_schema,
         allow_tools=allow_tools,
         purpose=purpose,
+        adapter_override=adapter_override,
     )
     llm_attempt_number = 0
 
@@ -456,12 +461,17 @@ async def call_llm(
                 log.debug("LLM_CALL_RETRIED hook trigger failed", exc_info=True)
 
     try:
-        result = await _acomplete_with_fail_fast_pre_execution_retry(
-            call_adapter,
-            req,
-            on_retry=_on_fail_fast_pre_execution_retry,
-            complete=_complete_attempt,
-        )
+        if adapter_override is not None:
+            # A selected decision route is one dispatch, never a hidden retry or
+            # provider substitution. Middleware and actual-call observation remain.
+            result = await _complete_attempt(call_adapter, req)
+        else:
+            result = await _acomplete_with_fail_fast_pre_execution_retry(
+                call_adapter,
+                req,
+                on_retry=_on_fail_fast_pre_execution_retry,
+                complete=_complete_attempt,
+            )
     except Exception as exc:
         from core.llm.errors import BillingError
         from core.llm.fallback import billing_error_from_exception, classify_retry_error

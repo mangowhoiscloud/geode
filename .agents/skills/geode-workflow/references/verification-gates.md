@@ -88,6 +88,10 @@ limits in `docs/architecture/performance-baseline.json`. Invalid individual
 samples fail before aggregation; NaN, infinity, non-positive values and metric
 set drift cannot become a passing measurement.
 
+Local `scripts/preflight.sh` runs the same performance check, including in
+`--fast` mode. Its fake provider must satisfy the current runtime lifecycle;
+keep mandatory reflection enabled and reject external network attempts.
+
 CI runs the mirrored FTS and checker contract tests before performance
 acceptance. A failed performance step triggers one separate `--diagnose` probe
 with bounded, redacted first-turn profile output. This is unscored evidence,

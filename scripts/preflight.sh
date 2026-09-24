@@ -73,6 +73,7 @@ run "architecture exceptions" uv run python scripts/check_architecture_exception
 run "legacy imports"         uv run python scripts/check_legacy_imports.py --base-ref origin/develop
 run "repo hygiene"           uv run python scripts/check_repo_hygiene.py
 run "architecture baseline"  uv run python scripts/architecture_baseline.py --check
+run "architecture performance" uv run python scripts/check_architecture_performance.py --check
 # CI resolves --target-branch from the PR base and --trusted-*-ref from a trust
 # resolver; locally the base is develop for every feature branch, and the trusted
 # ref is omitted so the check runs in its untrusted (stricter) mode.

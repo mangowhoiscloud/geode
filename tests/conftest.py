@@ -16,6 +16,7 @@ for _credential_var in (
     "ANTHROPIC_API_KEY",
     "OPENAI_API_KEY",
     "OPENROUTER_API_KEY",
+    "TYPESAFE_API_KEY",
     "ZHIPUAI_API_KEY",
     "ZAI_API_KEY",
     "GOOGLE_API_KEY",
@@ -40,12 +41,54 @@ _cp_mod.DEFAULT_SESSION_DIR = Path(_test_session_dir)
 import pytest  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _block_unmarked_http(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[None]:
+    """Offline tests may use MockTransport or loopback, never operator APIs."""
+    if request.node.get_closest_marker("live"):
+        yield
+        return
+    import httpx
+
+    sync_request = httpx.HTTPTransport.handle_request
+    async_request = httpx.AsyncHTTPTransport.handle_async_request
+    blocked: list[str] = []
+
+    def guarded_sync(self: httpx.HTTPTransport, call: httpx.Request) -> httpx.Response:
+        if call.url.host not in {"localhost", "127.0.0.1", "::1"}:
+            blocked.append("sync")
+            raise AssertionError("Unmocked external HTTP in an offline test")
+        return sync_request(self, call)
+
+    async def guarded_async(self: httpx.AsyncHTTPTransport, call: httpx.Request) -> httpx.Response:
+        if call.url.host not in {"localhost", "127.0.0.1", "::1"}:
+            blocked.append("async")
+            raise AssertionError("Unmocked external HTTP in an offline test")
+        return await async_request(self, call)
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", guarded_sync)
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", guarded_async)
+    yield
+    assert not blocked, f"Offline test attempted {len(blocked)} unmocked external HTTP requests"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_judgment_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    """New decision routes cannot inherit the operator's dotenv credentials."""
+    from core.config import settings
+    from pydantic import SecretStr
+
+    monkeypatch.setattr(settings, "typesafe_api_key", SecretStr(""))
+    monkeypatch.setattr(settings, "openrouter_api_key", "")
+
+
 @pytest.fixture
 def managed_geode_runtimes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[None]:
-    """Isolate scheduler state and close every runtime created by a test.
+    """Isolate external services and close every runtime created by a test.
 
     ``GeodeRuntime.create`` owns two scheduler threads. Tests that only inspect
     wiring used to leave those threads alive and could import real project or
@@ -53,8 +96,11 @@ def managed_geode_runtimes(
     pytest had closed its capture stream.
     """
     from core import runtime as runtime_module
+    from core.config import settings
     from core.scheduler import service as scheduler_service
 
+    # Wiring tests do not own the operator's external gateway or its watcher.
+    monkeypatch.setattr(settings, "gateway_enabled", False)
     scheduler_root = tmp_path / "scheduler"
     monkeypatch.setattr(
         scheduler_service,

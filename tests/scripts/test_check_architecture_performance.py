@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -106,12 +107,77 @@ def test_probe_mode_rejects_direct_unisolated_invocation(monkeypatch: pytest.Mon
     assert checker.main(["--probe"]) == 2
 
 
+@pytest.mark.parametrize("purpose", ["root", "cognitive", "final"])
+def test_local_adapter_supplies_real_runtime_response_contracts(purpose: str) -> None:
+    from core.agent.loop._reflection import _extract_reflection_input
+    from core.agent.verify import _judge_response_schema, _parse_judge_payload
+    from core.llm.adapters.base import AdapterCallRequest
+    from core.tools.plan import ToolSpec
+
+    request = AdapterCallRequest(
+        model="gpt-5.6-luna",
+        messages=(),
+        tools=(ToolSpec("record_reflection", "local", {"type": "object"}),)
+        if purpose == "cognitive"
+        else (),
+        response_schema=_judge_response_schema() if purpose == "final" else None,
+    )
+    response = checker._local_probe_response(request)
+    assert response.usage.input_tokens == response.usage.output_tokens == 1
+    assert response.usage.input_tokens_present is True
+    assert response.usage.output_tokens_present is True
+    if purpose == "final":
+        passed, score, _hint = _parse_judge_payload(response.text)
+        assert passed is True
+        assert score == 1.0
+    elif purpose == "cognitive":
+        assert _extract_reflection_input(response) == {
+            "hypotheses": ["The local probe is complete."],
+            "confidence": 0.5,
+        }
+    else:
+        assert response.text == "ok"
+
+
+def test_local_adapter_rejects_unexpected_structured_contract() -> None:
+    with pytest.raises(ValueError, match="unexpected performance probe verification contract"):
+        checker._local_probe_response(
+            SimpleNamespace(response_schema={"title": "TaskOutput"}, tools=())
+        )
+
+
+@pytest.mark.parametrize("event", ["socket.connect", "socket.getaddrinfo"])
+def test_isolated_probe_cannot_hide_a_blocked_network_attempt(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], event: str
+) -> None:
+    hooks: list[Any] = []
+    monkeypatch.setenv("_GEODE_ARCHITECTURE_PERFORMANCE_PROBE", "1")
+    monkeypatch.setattr(checker.sys, "addaudithook", hooks.append)
+
+    def measure(**_kwargs: Any) -> dict[str, float]:
+        hooks[0]("unrelated.event", ())
+        with pytest.raises(RuntimeError, match="network is disabled"):
+            hooks[0](event, ())
+        return {"first_turn_ms": 1.0}
+
+    monkeypatch.setattr(checker, "_measure_probe", measure)
+    assert checker.main(["--probe"]) == 1
+    output = capsys.readouterr()
+    assert not output.out
+    assert "attempted network I/O" in output.err
+
+
 def test_collect_preserves_raw_samples_and_median(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     values = iter([70.125, 470.54, 169.573])
 
     def run_probe(*_args: Any, **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+        env = _kwargs["env"]
+        assert env["GEODE_VERIFY_MODE"] == "llm_judge"
+        assert env["GEODE_COGNITIVE_REFLECTION_ENABLED"] == "true"
+        assert env["GEODE_JUDGMENT_ENGINE"] == "llm"
+        assert env["GEODE_JUDGE_MODEL"] == env["GEODE_COGNITIVE_REFLECTION_MODEL"] == "gpt-5.6-luna"
         return subprocess.CompletedProcess(
             args=[], returncode=0, stdout=json.dumps({"first_turn_ms": next(values)}), stderr=""
         )

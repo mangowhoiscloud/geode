@@ -42,7 +42,13 @@ from core.hooks import (
     HookSystem,
     MiddlewareRegistry,
 )
-from core.llm.adapters.base import EmptyModelOutputError
+from core.llm.adapters.base import (
+    AdapterCallRequest,
+    AdapterCallResult,
+    EmptyModelOutputError,
+    UsageSummary,
+)
+from core.llm.agentic_response import AgenticResponse, ResponseUsage, TextBlock
 from core.orchestration.isolated_execution import IsolatedRunner
 from core.tools.base import ToolContext
 from core.tools.bash_tool import BashResult, BashTool
@@ -90,13 +96,21 @@ class TestToolExecutor:
     def test_bash_unsafe_requires_approval(self) -> None:
         """Non-safe bash commands require approval, even with auto_approve=True."""
         executor = ToolExecutor(auto_approve=True)
-        with patch.object(
-            executor, "_request_approval_async", AsyncMock(return_value=True)
-        ) as mock_approve:
+        with (
+            patch.object(
+                executor, "_request_approval_async", AsyncMock(return_value=True)
+            ) as mock_approve,
+            patch.object(
+                executor._bash,
+                "aexecute",
+                AsyncMock(return_value=BashResult(stdout="installed", returncode=0)),
+            ) as execute,
+        ):
             result = _run_executor(
                 executor, "run_bash", {"command": "npm install foo", "reason": "testing"}
             )
             mock_approve.assert_awaited_once()
+            execute.assert_awaited_once()
             assert "error" not in result or "denied" not in result
 
     def test_bash_safe_skips_approval(self) -> None:
@@ -603,6 +617,52 @@ class TestToolExecutor:
 class TestAgenticLoop:
     """Unit tests for AgenticLoop."""
 
+    @pytest.fixture(autouse=True)
+    def cognitive_provider(self, monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+        """Keep round reflection on its real local path without provider transport."""
+
+        async def complete(request: AdapterCallRequest) -> AdapterCallResult:
+            assert [tool.name for tool in request.tools] == ["record_reflection"]
+            return AdapterCallResult(
+                text="",
+                tool_uses=(
+                    {
+                        "name": "record_reflection",
+                        "input": {"hypotheses": ["Tool evidence recorded"], "confidence": 0.5},
+                    },
+                ),
+                usage=UsageSummary(),
+                stop_reason="end_turn",
+            )
+
+        provider = AsyncMock(side_effect=complete)
+        monkeypatch.setattr(
+            "core.agent.loop._reflection.resolve_for",
+            lambda *_args: SimpleNamespace(acomplete=provider),
+        )
+        return provider
+
+    @staticmethod
+    def _accepted_verification() -> AgenticResponse:
+        return AgenticResponse(
+            content=[
+                TextBlock(
+                    text=json.dumps(
+                        {
+                            "passed": True,
+                            "score": 1.0,
+                            "reflection": {
+                                "observation": "The scripted candidate satisfies this fixture.",
+                                "lesson": "Retain the observed result.",
+                                "next_check": "No further action is required for this fixture.",
+                            },
+                        }
+                    )
+                )
+            ],
+            usage=ResponseUsage(input_tokens=1, output_tokens=1),
+        )
+
     @pytest.fixture
     def context(self) -> ConversationContext:
         return ConversationContext(max_turns=10)
@@ -649,7 +709,7 @@ class TestAgenticLoop:
     def test_run_text_only_response(
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
-        """Test that a text-only response returns immediately."""
+        """A text-only response finishes after its separate final verification."""
         loop = AgenticLoop(context, executor, quiet=True)
 
         # Mock LLM returning text only (no tool_use)
@@ -665,7 +725,9 @@ class TestAgenticLoop:
         mock_response.content = [text_block]
 
         with (
-            patch.object(loop, "_call_llm", return_value=mock_response),
+            patch.object(
+                loop, "_call_llm", side_effect=[mock_response, self._accepted_verification()]
+            ) as call_llm,
             patch.object(loop, "_track_usage"),
         ):
             result = asyncio.run(loop.arun("list subjects"))
@@ -674,6 +736,12 @@ class TestAgenticLoop:
         assert result.rounds == 1
         assert result.error is None
         assert result.termination_reason == "natural"
+        assert [call.kwargs.get("purpose", "agentic_loop") for call in call_llm.call_args_list] == [
+            "agentic_loop",
+            "turn_verification",
+        ]
+        assert call_llm.call_args.kwargs["allow_tools"] is False
+        assert call_llm.call_args.kwargs["response_schema"]["title"] == "TurnVerification"
 
     def test_arun_awaits_async_lifecycle_hooks(
         self, context: ConversationContext, executor: ToolExecutor
@@ -706,7 +774,9 @@ class TestAgenticLoop:
         mock_response.content = [text_block]
 
         with (
-            patch.object(loop, "_call_llm", return_value=mock_response),
+            patch.object(
+                loop, "_call_llm", side_effect=[mock_response, self._accepted_verification()]
+            ),
             patch.object(loop, "_track_usage"),
         ):
             result = asyncio.run(loop.arun("hello"))
@@ -751,7 +821,12 @@ class TestAgenticLoop:
         assert result.rounds == 0
         assert result.termination_reason == "input_blocked"
 
-    def test_run_with_tool_use(self, context: ConversationContext, executor: ToolExecutor) -> None:
+    def test_run_with_tool_use(
+        self,
+        context: ConversationContext,
+        executor: ToolExecutor,
+        cognitive_provider: AsyncMock,
+    ) -> None:
         """Test tool_use → tool_result → text response flow."""
         loop = AgenticLoop(context, executor, quiet=True)
 
@@ -782,7 +857,11 @@ class TestAgenticLoop:
         text_response.content = [text_block]
 
         with (
-            patch.object(loop, "_call_llm", side_effect=[tool_response, text_response]),
+            patch.object(
+                loop,
+                "_call_llm",
+                side_effect=[tool_response, text_response, self._accepted_verification()],
+            ) as call_llm,
             patch.object(loop, "_track_usage"),
         ):
             result = asyncio.run(loop.arun("subject 목록 보여줘"))
@@ -792,6 +871,9 @@ class TestAgenticLoop:
         assert result.tool_calls[0]["tool"] == "list_subjects"
         assert result.error is None
         assert result.termination_reason == "natural"
+        cognitive_provider.assert_awaited_once()
+        assert loop.cognitive_state.confidence == 0.5
+        assert call_llm.call_args.kwargs["purpose"] == "turn_verification"
 
     def test_stale_session_budget_cannot_poison_next_action(
         self,
@@ -825,9 +907,10 @@ class TestAgenticLoop:
 
         async def run_same_task() -> tuple[AgenticResult, AgenticResult, AsyncMock, Any]:
             with (
-                patch.object(loop_a, "_call_llm", return_value=warm_response),
+                patch.object(
+                    loop_a, "_call_llm", side_effect=[warm_response, self._accepted_verification()]
+                ),
                 patch.object(loop_a, "_track_usage"),
-                patch.object(loop_a, "_maybe_reflect", new=AsyncMock()),
             ):
                 warm = await loop_a.arun("warm session A")
             assert warm.termination_reason == "natural"
@@ -848,9 +931,12 @@ class TestAgenticLoop:
             )
             assert loop_b._session_metrics is not loop_a._session_metrics
             with (
-                patch.object(loop_b, "_call_llm", side_effect=[tool_response, text_response]),
+                patch.object(
+                    loop_b,
+                    "_call_llm",
+                    side_effect=[tool_response, text_response, self._accepted_verification()],
+                ),
                 patch.object(loop_b, "_track_usage"),
-                patch.object(loop_b, "_maybe_reflect", new=AsyncMock()),
             ):
                 result_b = await loop_b.arun("use the tool")
             return result_b, result_a, call_llm, persist_handoff
@@ -931,6 +1017,7 @@ class TestAgenticLoop:
         self,
         context: ConversationContext,
         executor: ToolExecutor,
+        cognitive_provider: AsyncMock,
     ) -> None:
         loop = AgenticLoop(
             context,
@@ -954,7 +1041,11 @@ class TestAgenticLoop:
         )
 
         with (
-            patch.object(loop, "_call_llm", side_effect=[tool_response, empty]),
+            patch.object(
+                loop,
+                "_call_llm",
+                side_effect=[tool_response, empty, self._accepted_verification()],
+            ) as call_llm,
             patch.object(loop, "_track_usage"),
         ):
             result = asyncio.run(loop.arun("run one tool"))
@@ -966,6 +1057,8 @@ class TestAgenticLoop:
         assert [entry["tool"] for entry in result.tool_calls] == ["list_subjects"]
         assert marked == [True]
         assert context.turn_count >= 1
+        cognitive_provider.assert_awaited_once()
+        assert call_llm.call_args.kwargs["purpose"] == "turn_verification"
 
     def test_actionable_partial_cannot_mask_empty_before_any_tool(
         self,
@@ -1133,7 +1226,10 @@ class TestAgenticLoop:
             )
 
     def test_forced_text_on_last_round(
-        self, context: ConversationContext, executor: ToolExecutor
+        self,
+        context: ConversationContext,
+        executor: ToolExecutor,
+        cognitive_provider: AsyncMock,
     ) -> None:
         """On the last round, tool_choice=none forces text output."""
         loop = AgenticLoop(
@@ -1146,8 +1242,18 @@ class TestAgenticLoop:
         call_kwargs: list[dict[str, Any]] = []
 
         def mock_call_llm(
-            system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
-        ) -> MagicMock:
+            system: str,
+            messages: list[dict[str, Any]],
+            *,
+            round_idx: int = 0,
+            purpose: str = "agentic_loop",
+            **kwargs: Any,
+        ) -> MagicMock | AgenticResponse:
+            if purpose == "turn_verification":
+                assert kwargs["allow_tools"] is False
+                assert kwargs["response_schema"]["title"] == "TurnVerification"
+                return self._accepted_verification()
+            assert purpose == "agentic_loop"
             call_kwargs.append({"round_idx": round_idx})
             # Round 0, 1: return tool_use; Round 2 (last): return text
             if round_idx < 2:
@@ -1182,6 +1288,7 @@ class TestAgenticLoop:
         assert result.text == "Forced text on last round."
         # Verify all 3 rounds were called with correct round_idx
         assert [kw["round_idx"] for kw in call_kwargs] == [0, 1, 2]
+        assert cognitive_provider.await_count == 2
 
     def test_agentic_tools_include_all(self) -> None:
         """Verify AGENTIC_TOOLS includes base tools + bash + delegate."""
@@ -1900,7 +2007,25 @@ class TestAgenticLoopEdgeCases:
         text_response.content = [text_block]
 
         with (
-            patch.object(loop, "_call_llm", side_effect=[tool_response, text_response]),
+            patch.object(
+                loop,
+                "_call_llm",
+                side_effect=[
+                    tool_response,
+                    text_response,
+                    TestAgenticLoop._accepted_verification(),
+                ],
+            ),
+            patch(
+                "core.agent.loop._reflection.resolve_for",
+                return_value=SimpleNamespace(
+                    acomplete=AsyncMock(
+                        return_value=AdapterCallResult(
+                            text="", usage=UsageSummary(), stop_reason="end_turn"
+                        )
+                    )
+                ),
+            ),
             patch.object(loop, "_track_usage"),
         ):
             result = asyncio.run(loop.arun("list and search"))
