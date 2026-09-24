@@ -100,6 +100,8 @@ async def anthropic_web_search(
     prepare_kwargs: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> WebSearchResult:
     """Anthropic native ``web_search_20260318`` tool on the PAYG API."""
+    from core.llm.adapters._anthropic_common import translate_response
+
     kwargs: dict[str, Any] = {
         "model": model,
         "max_tokens": 1024,
@@ -145,6 +147,7 @@ async def anthropic_web_search(
         retrieval_exposed=search_activated,
         model=model,
         adapter_name=adapter_name,
+        usage=translate_response(response).usage,
     )
 
 
@@ -158,6 +161,9 @@ async def anthropic_complete_text(
     prepare_kwargs: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> TextCompletionResult:
     """Single-turn Anthropic ``messages.create`` — used by compaction / extraction."""
+    from core.llm.adapters._anthropic_common import translate_response, validate_output_tokens
+
+    validate_output_tokens(model, max_tokens)
     kwargs: dict[str, Any] = {
         "model": model,
         "max_tokens": max_tokens,
@@ -173,8 +179,6 @@ async def anthropic_complete_text(
     for block in getattr(response, "content", []) or []:
         if hasattr(block, "text"):
             text_parts.append(block.text)
-    from core.llm.adapters._anthropic_common import translate_response
-
     return TextCompletionResult(
         text="".join(text_parts),
         usage=translate_response(response).usage,

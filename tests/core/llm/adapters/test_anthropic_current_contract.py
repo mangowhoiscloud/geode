@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from core.llm.adapters._anthropic_common import (
@@ -275,3 +275,97 @@ def test_stream_preserves_sdk_tools_signed_content_and_cache_usage(
 def test_output_limit_is_positive_even_for_custom_models(model: str, limit: int) -> None:
     with pytest.raises(LLMRequestValidationError, match="positive"):
         build_create_kwargs(AdapterCallRequest(model=model, messages=(), max_tokens=limit))
+
+
+@pytest.mark.parametrize(
+    ("model", "limit"),
+    [("claude-opus-5-5", 0), ("claude-opus-5-5", 128_001), ("claude-haiku-4-5-20251001", 64_001)],
+)
+def test_auxiliary_completion_rejects_invalid_output_before_sdk_request(
+    model: str, limit: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import asyncio
+
+    from core.llm.adapters.anthropic_payg import AnthropicPaygAdapter
+
+    create = AsyncMock()
+    client = SimpleNamespace(
+        base_url="https://api.anthropic.com", messages=SimpleNamespace(create=create)
+    )
+    monkeypatch.setattr(AnthropicPaygAdapter, "_get_client", lambda _self: client)
+    with pytest.raises(LLMRequestValidationError, match="max_tokens"):
+        asyncio.run(AnthropicPaygAdapter().acomplete_text("input", model=model, max_tokens=limit))
+    create.assert_not_awaited()
+
+
+def test_auxiliary_completion_preserves_server_thinking_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    from core.llm.adapters.anthropic_payg import AnthropicPaygAdapter
+
+    create = AsyncMock(
+        return_value=SimpleNamespace(content=[SimpleNamespace(type="text", text="done")])
+    )
+    client = SimpleNamespace(
+        base_url="https://api.anthropic.com", messages=SimpleNamespace(create=create)
+    )
+    monkeypatch.setattr(AnthropicPaygAdapter, "_get_client", lambda _self: client)
+    result = asyncio.run(
+        AnthropicPaygAdapter().acomplete_text("input", model="claude-opus-5-5", max_tokens=128_000)
+    )
+    assert result.text == "done"
+    create.assert_awaited_once_with(
+        model="claude-opus-5-5",
+        max_tokens=128_000,
+        messages=[{"role": "user", "content": "input"}],
+        timeout=60.0,
+    )
+
+
+@pytest.mark.parametrize("cached_tokens", [None, 0])
+def test_hosted_search_preserves_usage_presence_and_sources(
+    cached_tokens: int | None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import asyncio
+
+    from core.llm.adapters.anthropic_payg import AnthropicPaygAdapter
+
+    source_url = "https://example.test/source"
+    response = SimpleNamespace(
+        content=[
+            SimpleNamespace(
+                type="text",
+                text="answer",
+                citations=[SimpleNamespace(type="web_search_result_location", url=source_url)],
+            ),
+            SimpleNamespace(
+                type="web_search_tool_result", content=[SimpleNamespace(url=source_url)]
+            ),
+        ],
+        usage=SimpleNamespace(
+            input_tokens=12,
+            output_tokens=0,
+            cache_read_input_tokens=cached_tokens,
+            cache_creation_input_tokens=0,
+        ),
+    )
+    create = AsyncMock(return_value=response)
+    client = SimpleNamespace(
+        base_url="https://api.anthropic.com", messages=SimpleNamespace(create=create)
+    )
+    monkeypatch.setattr(AnthropicPaygAdapter, "_get_client", lambda _self: client)
+    result = asyncio.run(AnthropicPaygAdapter().aweb_search("query", model="claude-opus-5-5"))
+    assert result.text == "answer"
+    assert result.source_urls == result.citation_urls == (source_url,)
+    assert result.search_activated is result.retrieval_exposed is True
+    assert result.usage is not None
+    assert result.usage.input_tokens == 12
+    assert result.usage.input_tokens_present is True
+    assert result.usage.output_tokens == result.usage.cache_write_tokens == 0
+    assert result.usage.output_tokens_present is result.usage.cache_write_tokens_present is True
+    assert result.usage.cached_input_tokens == 0
+    assert result.usage.cached_input_tokens_present is (cached_tokens is not None)
+    assert result.usage.reasoning_tokens_present is False
+    create.assert_awaited_once()
