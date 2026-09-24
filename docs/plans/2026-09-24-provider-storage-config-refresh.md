@@ -46,7 +46,7 @@ remain outside scope.
 | P1 | Price/context refresh, typed tariff rules, active offering catalogue | none | PR #3395 merged into develop at `7ea17cceb`; required CI passed |
 | P2 | OpenAI model/effort/output and API/Codex request boundaries | P1 | PR #3397 merged into develop at `be48160a1`; required CI passed |
 | P3 | Claude typed capabilities, thinking, schemas, streaming parity | P2 shared selection helper | PR #3400; required CI in progress |
-| P4 | GLM request deduplication, exact effort and subscription admission | P2 shared selection helper | PR #3401; required CI in progress |
+| P4 | GLM request deduplication, exact effort and subscription admission | P2 shared selection helper | PR #3401 merged into develop at `88b2385a4`; required CI passed |
 | P5 | Native Claude computer toolset and action translation | P3 | local implementation |
 | P6 | CLI/default/config selection and bilingual public documentation | P2–P5 | local implementation and independent review |
 | S1 | Actual event-schema/digest references owned by the event store | audit | PR #3390, `c4fc65477` required CI passed; current-base integration pending |
@@ -60,7 +60,7 @@ remain outside scope.
 | E3 | Shared SDK transport ownership at actual process/thread event-loop teardown | E1 | local implementation and independent review |
 | K2 | Claude cache marker validity and 1-hour write accounting through durable records | P6 | local implementation and independent review; activity schema v11, trajectory v1 unchanged |
 | K1 | OpenAI explicit static prefixes and OpenRouter route/session cache shaping | P6, K2 | local implementation and independent review |
-| V1 bounds | Optional Harbor output/round limits and shared wrap-up cap preservation | runtime owners | local implementation and offline verification |
+| V1 bounds | Optional Harbor output/round limits and shared wrap-up cap preservation | runtime owners | PR #3404; current-base integration pending |
 | V1 execution | New-model API/subscription E2E, cache and Harbor validation | all implementation PRs merged into develop with required CI | not started; total US$20 paid cap approved |
 | F1 | Repeatable onboarding and audit scaffold in existing contributor skills | completed refactoring and checks | pending; preserve runtime/contributor prompt separation |
 | R1 | Patch release preparation, packaging/docs, develop→main, stable publication | all accepted units | pending |
@@ -81,9 +81,12 @@ scoped validation process and are not stored in repository artifacts.
 
 ## Integration queue
 
-After P1/P2/P4/C1 and the concurrent collector change landed, the remaining
-implementation queue is P3 → D1 → P5 → P6 → C2 → E2 → E1 → E3 → S1 → S2 →
-K2 → K1 → V1 bounds. This is a single integration queue operated under the
+After P1/P2/P4/C1 and the concurrent collector change landed, integrate the
+seven already-open PRs first: P3 (#3400) → D1 (#3394) → C2 (#3396) →
+E1 (#3403) → S1 (#3390) → S2 (#3393) → V1 bounds (#3404). Their prerequisites
+are already merged or earlier in this queue. Follow with the unopened units
+P5 → P6 → E2 → E3 → K2 → K1 in dependency order; do not insert those units
+between the open PRs. This is a single integration queue operated under the
 existing [GitFlow manual](../../.agents/skills/geode-gitflow/SKILL.md), not a
 change to GitHub protection settings or a new merge-queue service.
 
