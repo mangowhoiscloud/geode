@@ -13,10 +13,7 @@ def runner() -> CliRunner:
 
 
 def _isolate_seed_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(
-        "evals.seed_generation.picker.GLOBAL_CONFIG_TOML",
-        tmp_path / "config.toml",
-    )
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "config.toml"))
     monkeypatch.setattr(
         "evals.seed_generation.picker.GLOBAL_SEED_PIPELINE_TOML",
         tmp_path / "seed_generation.toml",

@@ -53,7 +53,8 @@ import dataclasses
 import logging
 import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
@@ -98,6 +99,16 @@ log = logging.getLogger(__name__)
 _session_adapter_usage_ctx: ContextVar[dict[str, dict[str, int]] | None] = ContextVar(
     "session_adapter_usage", default=None
 )
+
+
+@contextmanager
+def preserve_session_adapter_tracking() -> Iterator[None]:
+    """Restore an outer turn's counter even if this turn fails before finalization."""
+    token = _session_adapter_usage_ctx.set(None)
+    try:
+        yield
+    finally:
+        _session_adapter_usage_ctx.reset(token)
 
 
 def begin_session_adapter_tracking() -> None:
@@ -846,5 +857,6 @@ __all__ = [
     "complete_text_via_adapters",
     "end_session_adapter_tracking",
     "get_session_adapter_usage",
+    "preserve_session_adapter_tracking",
     "web_search_via_adapters",
 ]

@@ -109,7 +109,7 @@ def test_config_toml_wins_over_legacy(tmp_path: Path, monkeypatch: pytest.Monkey
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(picker_mod, "GLOBAL_CONFIG_TOML", config)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(config))
     monkeypatch.setattr(picker_mod, "GLOBAL_SEED_PIPELINE_TOML", legacy)
 
     overrides = load_user_overrides()
@@ -143,7 +143,7 @@ def test_legacy_file_fallback_when_config_toml_lacks_section(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(picker_mod, "GLOBAL_CONFIG_TOML", config)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(config))
     monkeypatch.setattr(picker_mod, "GLOBAL_SEED_PIPELINE_TOML", legacy)
 
     with caplog.at_level("WARNING"):
@@ -157,7 +157,7 @@ def test_legacy_warning_only_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     config.write_text("# empty\n", encoding="utf-8")
     legacy = tmp_path / "seed_generation.toml"
     legacy.write_text('[generator]\nsource = "api_key"\n', encoding="utf-8")
-    monkeypatch.setattr(picker_mod, "GLOBAL_CONFIG_TOML", config)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(config))
     monkeypatch.setattr(picker_mod, "GLOBAL_SEED_PIPELINE_TOML", legacy)
 
     with caplog.at_level("WARNING"):
@@ -168,7 +168,7 @@ def test_legacy_warning_only_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 
 
 def test_both_files_missing_returns_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(picker_mod, "GLOBAL_CONFIG_TOML", tmp_path / "noconfig.toml")
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "noconfig.toml"))
     monkeypatch.setattr(picker_mod, "GLOBAL_SEED_PIPELINE_TOML", tmp_path / "nolegacy.toml")
     assert load_user_overrides() == {}
 
@@ -186,7 +186,7 @@ def test_malformed_config_toml_falls_through(
     """An unparsable config.toml does not crash the picker — fall through."""
     config = tmp_path / "config.toml"
     config.write_text("not = valid = toml\n", encoding="utf-8")
-    monkeypatch.setattr(picker_mod, "GLOBAL_CONFIG_TOML", config)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(config))
     monkeypatch.setattr(picker_mod, "GLOBAL_SEED_PIPELINE_TOML", tmp_path / "nolegacy.toml")
     with caplog.at_level("WARNING"):
         result = load_user_overrides()
