@@ -21,7 +21,9 @@ def test_context_window_comes_from_pricing_catalogue() -> None:
     assert context_window_for("gpt-5-nano") == 400_000
     assert context_window_for("o4-mini") == 200_000
     assert context_window_for("claude-opus-4-8") == 1_000_000
-    assert context_window_for("glm-5.2") == 202_752  # PAYG conservative guard (0.99.246)
+    assert (
+        context_window_for("glm-5.2") == 1_000_000
+    )  # Current Z.AI model guide, checked 2026-09-24
 
 
 def test_codex_routing_alias_normalizes_to_openai_capabilities() -> None:
@@ -36,7 +38,7 @@ def test_codex_routing_alias_normalizes_to_openai_capabilities() -> None:
 def test_adapter_model_spec_uses_catalogue_values() -> None:
     spec = model_spec_for_adapter("glm-5.2", provider="glm")
 
-    assert spec.context_tokens == 202_752  # PAYG conservative guard (0.99.246)
+    assert spec.context_tokens == 1_000_000  # Current Z.AI model guide, checked 2026-09-24
     assert spec.supports_thinking is False
     assert spec.supports_tools is True
 
@@ -121,3 +123,13 @@ def test_anthropic_endpoint_authority_is_exact_and_actual_url_wins(
 )
 def test_legacy_or_earliest_future_retirement_date_is_not_retired(model: str) -> None:
     assert model_source_unavailable_reason(model, provider="anthropic", source="payg") is None
+
+
+def test_active_offerings_have_price_and_context() -> None:
+    from core.llm.model_catalog import MODEL_OFFERINGS
+    from core.llm.pricing_loader import load_pricing_catalogue
+
+    catalogue = load_pricing_catalogue()
+    for offering in MODEL_OFFERINGS:
+        assert offering.id in catalogue.pricing
+        assert offering.id in catalogue.context_windows

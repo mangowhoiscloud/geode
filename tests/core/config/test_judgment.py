@@ -23,7 +23,7 @@ def judgment_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings
     for field in ("GLOBAL_ENV_FILE", "PROJECT_ENV_FILE", "PROJECT_CONFIG_PATH"):
         monkeypatch.setattr(explain, field, tmp_path / field)
     settings = Settings(_env_file=None, typesafe_api_key="", openrouter_api_key="")
-    monkeypatch.setattr(config, "settings", settings)
+    monkeypatch.setitem(config.__dict__, "settings", settings)
     return settings
 
 
