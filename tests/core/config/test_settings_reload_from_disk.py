@@ -25,7 +25,11 @@ from pydantic import ValidationError
 
 @pytest.fixture(autouse=True)
 def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Strip ``GEODE_*`` env vars so each test has a clean slate."""
+    """Isolate lazy facade state and ``GEODE_*`` environment overrides."""
+    import core.config as cfg
+
+    # Other tests may patch the lazy attribute; exercise its real lookup here.
+    monkeypatch.delitem(cfg.__dict__, "settings", raising=False)
     for key in list(os.environ):
         if key.startswith("GEODE_"):
             monkeypatch.delenv(key, raising=False)
