@@ -240,6 +240,7 @@ def test_cmd_model_global_token_routes_to_global_scope(
     ``/model <name>`` stays project-scoped."""
     from core.cli.commands import model as _model_mod
 
+    monkeypatch.setattr("core.cli.commands._state._selected_openai_source", lambda: "payg")
     monkeypatch.setattr(_model_mod, "model_available", lambda _id: True)
     captured: list[tuple[str, str]] = []
     monkeypatch.setattr(
@@ -532,6 +533,7 @@ def test_apply_picker_result_applies_staged_then_final(monkeypatch) -> None:
     from core.cli.commands import model as model_cmd
     from core.cli.effort_picker import PickerResult
 
+    monkeypatch.setattr("core.cli.commands._state._selected_openai_source", lambda: "payg")
     applied: list[tuple[str, str | None, str]] = []
     monkeypatch.setattr(
         model_cmd,
@@ -539,7 +541,7 @@ def test_apply_picker_result_applies_staged_then_final(monkeypatch) -> None:
         lambda profile, effort=None, role="primary": applied.append((profile.id, effort, role)),
     )
 
-    known = [p.id for p in model_cmd.get_model_profiles()[:2]]
+    known = [p.id for p in model_cmd.get_model_profiles(openai_source="payg")[:2]]
     result = PickerResult(
         model_id=known[0],
         effort="high",
@@ -560,6 +562,7 @@ def test_interactive_picker_includes_active_off_catalog_role_models(monkeypatch)
     from core.cli import effort_picker
     from core.cli.commands import model as model_cmd
 
+    monkeypatch.setattr("core.cli.commands._state._selected_openai_source", lambda: "payg")
     active = {
         "primary": "gpt-5.2",
         "reflection": "gpt-5.1",
@@ -597,6 +600,7 @@ def test_apply_picker_result_resolves_off_catalog_selected_row(monkeypatch) -> N
     from core.cli.commands import model as model_cmd
     from core.cli.effort_picker import PickerResult
 
+    monkeypatch.setattr("core.cli.commands._state._selected_openai_source", lambda: "payg")
     applied: list[tuple[str, str, str]] = []
     monkeypatch.setattr(
         model_cmd,
@@ -694,7 +698,7 @@ def test_non_primary_apply_persists_to_global_scope(monkeypatch) -> None:
     monkeypatch.setattr(_pkg, "_check_provider_key", lambda profile: None, raising=False)
     monkeypatch.setattr(_pkg, "remove_env", lambda var: False, raising=False)
 
-    profile = model_cmd.get_model_profiles()[0]
+    profile = model_cmd.get_model_profiles(openai_source="payg")[0]
     model_cmd._apply_model(profile, effort=None, role="mutator", scope="project")
 
     assert captured, "mutator pick must persist to config.toml"

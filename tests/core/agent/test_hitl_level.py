@@ -17,6 +17,7 @@ import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from core.agent.tool_executor import ToolExecutor
 from core.tools.bash_tool import BashResult
 
@@ -254,20 +255,36 @@ class TestHITLLevel:
             mock_prompt.assert_not_called()
         assert result["status"] == "ok"
 
-    def test_hitl_level_1_requires_write_approval(self) -> None:
+    @pytest.mark.parametrize("decision", ["y", "n"])
+    def test_hitl_level_1_requires_write_approval(self, decision: str) -> None:
         """hitl_level=1 still requires approval for write operations."""
         handler = MagicMock(return_value={"status": "ok"})
         executor = ToolExecutor(action_handlers={"memory_save": handler}, hitl_level=1)
+
+        def respond(*args: Any, **kwargs: Any) -> str:
+            handler.assert_not_called()
+            return decision
+
         with (
-            patch.object(executor._approval, "prompt_with_always", return_value="y"),
+            patch.object(executor._approval, "prompt_with_always", side_effect=respond) as prompt,
             patch("core.agent.approval.console"),
         ):
-            _run_executor(
+            result = _run_executor(
                 executor,
                 "memory_save",
                 {"key": "data", "content": "data"},
             )
-            # Write tools at hitl_level=1 should still prompt (write-only)
+        prompt.assert_called_once()
+        assert prompt.call_args.args[1] == "data"
+        assert prompt.call_args.kwargs["tool_name"] == "memory_save"
+        assert prompt.call_args.kwargs["safety_level"] == "write"
+        if decision == "y":
+            handler.assert_called_once_with(key="data", content="data")
+            assert result == {"status": "ok"}
+        else:
+            handler.assert_not_called()
+            assert result["denied"] is True
+            assert result["error"]
 
     def test_hitl_level_0_skips_cost_approval(self) -> None:
         """hitl_level=0 auto-approves expensive operations."""

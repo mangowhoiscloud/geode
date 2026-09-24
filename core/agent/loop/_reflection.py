@@ -311,6 +311,7 @@ def _record_completed_usage(result: AdapterCallResult, request: AdapterCallReque
         usage.output_tokens,
         cache_read_tokens=usage.cached_input_tokens,
         cache_creation_tokens=usage.cache_write_tokens,
+        cache_creation_1h_tokens=usage.cache_write_1h_tokens,
         thinking_tokens=usage.reasoning_tokens,
         reported_cost_usd=usage.reported_cost_usd,
     )

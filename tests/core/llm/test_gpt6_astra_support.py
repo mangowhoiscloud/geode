@@ -136,7 +136,7 @@ def test_astra_catalogue_route_and_picker() -> None:
     assert resolve_provider(MODEL) == "openai"
     assert _context_window(MODEL, "openai-codex") == 1_050_000
 
-    profile = {row.id: row for row in get_model_profiles()}[MODEL]
+    profile = {row.id: row for row in get_model_profiles(openai_source="payg")}[MODEL]
     assert profile.provider == "openai"
 
     from core.llm.token_tracker import MODEL_PRICING

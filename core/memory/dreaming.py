@@ -308,7 +308,9 @@ class DreamingService:
 
         def run() -> None:
             try:
-                asyncio.run(execute())
+                from core.async_runtime import run_process_coroutine
+
+                run_process_coroutine(execute())
             except asyncio.CancelledError:
                 pass  # Actual adapter terminals are recorded before cancellation unwinds.
             except TimeoutError:

@@ -152,9 +152,9 @@ OPENAI_API_KEY=sk-proj-...
 OPENROUTER_API_KEY=sk-or-v1-...
 ZAI_API_KEY={id}.{secret}`}</pre>
             <p>
-              GLM은 엔드포인트가 둘입니다. Coding Plan(구독 과금)과
-              PAYG(종량 과금)이고, Coding Plan 키를 PAYG 경로에 쓰면 구독
-              쿼터를 조용히 우회해 종량 과금됩니다.
+              GLM은 PAYG API 키 경로를 지원합니다. 2026-09-24 Coding Plan 정책은
+              공식 지원 도구로 사용을 제한하며 GEODE 사용 자격은 확인되지 않았습니다.
+              기존 구독 프로필은 보존하되 실행을 차단하고, PAYG로 자동 전환하지 않습니다.
             </p>
 
             <h2>실패 모드</h2>
@@ -342,9 +342,10 @@ OPENAI_API_KEY=sk-proj-...
 OPENROUTER_API_KEY=sk-or-v1-...
 ZAI_API_KEY={id}.{secret}`}</pre>
             <p>
-              GLM has two endpoints: Coding Plan (subscription-billed) and
-              PAYG (metered). A Coding Plan key pointed at the PAYG path
-              silently bypasses the subscription quota and bills metered.
+              GLM supports the PAYG API-key route. The Coding Plan policy checked on
+              2026-09-24 restricts use to supported tools; GEODE admission is
+              unestablished. Existing subscription profiles remain readable,
+              execution is blocked, and billing never switches to PAYG automatically.
             </p>
 
             <h2>Failure modes</h2>

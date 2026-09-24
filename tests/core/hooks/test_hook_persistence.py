@@ -169,7 +169,7 @@ def test_public_extension_audit_uses_sqlite_and_active_timeline_only(
         "step_id": "t-1:step-1",
         "session_generation": 0,
         "verify_attempt": 0,
-        "activity_schema_version": 10,
+        "activity_schema_version": 11,
         "_dispatch_duration_ms": row.payload["_dispatch_duration_ms"],
     }
     assert not (tmp_path / "events.jsonl").exists()
@@ -277,6 +277,7 @@ def test_llm_route_charge_and_usage_survive_durable_projection(tmp_path: Path) -
         "cached_input_tokens": 7,
         "reasoning_tokens": 11,
         "cache_write_tokens": 3,
+        "cache_write_1h_tokens": None,
     }
     assert row.payload["cost_usd"] == 0.00012
     assert row.payload["response_id"] == "generation-1"
@@ -284,11 +285,11 @@ def test_llm_route_charge_and_usage_survive_durable_projection(tmp_path: Path) -
     assert row.payload["response_provider"] == "OpenInference"
     assert row.payload["routing_strategy"] == "direct"
     assert row.payload["routing_attempt"] == 1
-    assert row.payload["activity_schema_version"] == 10
+    assert row.payload["activity_schema_version"] == 11
     timeline_payload = _read_timeline(tmp_path / "events.jsonl")[0]["payload"]
     assert timeline_payload["response_provider"] == "OpenInference"
     assert timeline_payload["cost_usd"] == 0.00012
-    assert timeline_payload["activity_schema_version"] == 10
+    assert timeline_payload["activity_schema_version"] == 11
     hooks.close()
 
 
@@ -394,7 +395,7 @@ def test_structured_decision_observation_survives_durable_and_export_boundaries(
         payload = row.payload
         assert payload["purpose"] == "structured_decision"
         assert payload["source"] == "payg"
-        assert payload["activity_schema_version"] == 10
+        assert payload["activity_schema_version"] == 11
         failed = outcome in {"error", "cancel", "empty"}
         assert row.status == ("failed" if failed else "ok")
         assert payload["success"] is not failed
@@ -414,6 +415,8 @@ def test_structured_decision_observation_survives_durable_and_export_boundaries(
                 count if present else None,
             )
         )
+        if expected_usage is not None:
+            expected_usage["cache_write_1h_tokens"] = None
         assert payload["usage"] == expected_usage
         assert payload["cost_usd"] == reported_cost
         assert "private" not in json.dumps(payload)

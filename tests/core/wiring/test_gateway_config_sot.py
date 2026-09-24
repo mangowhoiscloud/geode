@@ -5,12 +5,14 @@ silently depended on its launchd WorkingDirectory."""
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 from core.messaging.binding import ChannelManager, get_gateway, set_gateway
+from core.orchestration.hot_reload import ConfigWatcher
 from core.wiring.adapters import _load_gateway_config, build_gateway
 
 
@@ -77,6 +79,100 @@ def test_unreadable_file_is_skipped(config_files: dict[str, Path]) -> None:
     merged, sources = _load_gateway_config()
     assert [r["channel_id"] for r in merged["gateway"]["bindings"]["rules"]] == ["C_OK"]
     assert len(sources) == 1
+
+
+@pytest.mark.parametrize(
+    "invalid_config",
+    [
+        "not [ valid toml ===",
+        'gateway = "wrong"',
+        "[gateway]\nbindings = []",
+        '[gateway.bindings]\nrules = "wrong"',
+        '[gateway.bindings]\nrules = ["wrong"]',
+    ],
+)
+def test_strict_reload_rejects_malformed_overlay(
+    config_files: dict[str, Path], invalid_config: str
+) -> None:
+    config_files["global"].write_text(
+        '[[gateway.bindings.rules]]\nchannel = "slack"\nchannel_id = "OLD"\n'
+    )
+    config_files["project"].write_text(invalid_config)
+    with pytest.raises(ValueError):
+        _load_gateway_config(strict=True)
+
+
+def test_explicit_empty_rules_survive_loading(config_files: dict[str, Path]) -> None:
+    config_files["global"].write_text("[gateway.bindings]\nrules = []\n")
+    merged, _ = _load_gateway_config(strict=True)
+    assert merged == {"gateway": {"bindings": {"rules": []}}}
+
+
+@pytest.fixture()
+def wired_gateway(
+    config_files: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> Iterator[tuple[ChannelManager, ConfigWatcher]]:
+    for label, channel_id in (("global", "GLOBAL"), ("project", "PROJECT")):
+        config_files[label].write_text(
+            f'[[gateway.bindings.rules]]\nchannel = "slack"\nchannel_id = "{channel_id}"\n'
+        )
+    watcher = ConfigWatcher(debounce_ms=0, poll_interval_s=0.01)
+    monkeypatch.setattr("core.orchestration.hot_reload.ConfigWatcher", lambda: watcher)
+    monkeypatch.setattr(
+        "core.config.settings", SimpleNamespace(gateway_enabled=True, gateway_poll_interval_s=1)
+    )
+    monkeypatch.setattr("core.messaging.slack_transport.resolve_bot_token", lambda: "")
+    monkeypatch.setattr("core.wiring.container.build_default_lanes", lambda: None)
+    monkeypatch.setattr("core.wiring.adapters._DEFAULT_POLLERS", [])
+    monkeypatch.setattr(
+        "core.mcp.manager.get_mcp_manager",
+        lambda **_kwargs: SimpleNamespace(connected_count=0, server_count=0),
+    )
+    previous = get_gateway()
+    try:
+        build_gateway()
+        manager = get_gateway()
+        assert manager is not None
+        assert watcher.is_running
+        # The real owner stops its thread; deterministic checks reuse the wired callback.
+        manager.stop()
+        assert not watcher.is_running
+        yield manager, watcher
+    finally:
+        watcher.stop()
+        set_gateway(previous)
+
+
+def test_wired_reload_removes_deleted_overlay_then_all_bindings(
+    config_files: dict[str, Path], wired_gateway: tuple[ChannelManager, ConfigWatcher]
+) -> None:
+    manager, watcher = wired_gateway
+    assert [binding["channel_id"] for binding in manager.list_bindings()] == ["GLOBAL", "PROJECT"]
+    config_files["project"].unlink()
+    assert watcher.check_now() == 1
+    assert [binding["channel_id"] for binding in manager.list_bindings()] == ["GLOBAL"]
+    config_files["global"].unlink()
+    assert watcher.check_now() == 1
+    assert manager.list_bindings() == []
+
+
+def test_wired_reload_retains_last_valid_candidate_then_recovers(
+    config_files: dict[str, Path], wired_gateway: tuple[ChannelManager, ConfigWatcher]
+) -> None:
+    manager, watcher = wired_gateway
+    original = manager.list_bindings()
+    config_files["project"].write_text("not [ valid toml ===")
+    assert watcher.check_now() == 1
+    assert manager.list_bindings() == original
+    # Failed callbacks remain pending even when the file is unchanged.
+    assert watcher.check_now() == 1
+    assert watcher.stats.errors == 2
+    config_files["project"].write_text(
+        '[[gateway.bindings.rules]]\nchannel = "slack"\nchannel_id = "RECOVERED"\n'
+    )
+    assert watcher.check_now() == 1
+    assert [binding["channel_id"] for binding in manager.list_bindings()] == ["GLOBAL", "RECOVERED"]
+    assert watcher.check_now() == 0
 
 
 def test_disabled_external_gateway_still_builds_local_cli_manager(

@@ -35,13 +35,15 @@ class MCPLifecycle:
 
         def signal_shutdown(signum: int, frame: Any) -> None:
             log.info("MCP received signal %d, shutting down servers", signum)
-            shutdown()
-            previous = self.prev_sigterm if signum == signal.SIGTERM else self.prev_sigint
-            if previous and callable(previous):
-                previous(signum, frame)
-            elif previous == signal.SIG_DFL:
-                signal.signal(signum, signal.SIG_DFL)
-                signal.raise_signal(signum)
+            try:
+                shutdown()
+            finally:
+                previous = self.prev_sigterm if signum == signal.SIGTERM else self.prev_sigint
+                if previous and callable(previous):
+                    previous(signum, frame)
+                elif previous == signal.SIG_DFL:
+                    signal.signal(signum, signal.SIG_DFL)
+                    signal.raise_signal(signum)
 
         try:
             self.prev_sigterm = signal.getsignal(signal.SIGTERM)

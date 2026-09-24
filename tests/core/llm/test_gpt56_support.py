@@ -80,7 +80,7 @@ def test_dual_lane_routing() -> None:
 def test_model_picker_offers_gpt56_family() -> None:
     from core.cli.commands._state import get_model_profiles
 
-    profiles = {p.id: p for p in get_model_profiles()}
+    profiles = {p.id: p for p in get_model_profiles(openai_source="payg")}
     for slug in SLUGS:
         assert slug in profiles, slug
         # Provider label must match resolve_provider — "openai" family
@@ -99,15 +99,19 @@ def test_model_picker_platform_openai_surface_is_current_and_ordered() -> None:
     ]
     assert visible == [
         "gpt-6-astra",
+        "gpt-6-sol",
+        "gpt-6-luna",
         "gpt-5.6-sol",
         "gpt-5.6-terra",
         "gpt-5.6-luna",
         "gpt-5.5",
+        "gpt-5.3-codex",
         "gpt-5.4",
         "gpt-5.4-mini",
-        "gpt-5.3-codex",
+        "gpt-5.4-nano",
     ]
-    assert visible.index("gpt-5.3-codex") == len(visible) - 1
+    # Codex sign-in retirement does not remove documented Platform API models.
+    assert "gpt-5.3-codex" in visible
 
 
 def test_effort_picker_offers_max() -> None:

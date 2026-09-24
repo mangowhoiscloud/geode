@@ -2,7 +2,7 @@
 """CI ratchet: reject new imports using legacy bridge paths.
 
 Checks only files changed since base-ref (default: origin/develop).
-Exits non-zero if any legacy import is found in changed files.
+Exits non-zero if comparison fails or any legacy import is found in changed files.
 Usage:
     python scripts/check_legacy_imports.py
     python scripts/check_legacy_imports.py --base-ref origin/main
@@ -10,6 +10,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -60,18 +61,22 @@ LEGACY_PATTERNS: list[tuple[str, str]] = [
 
 
 def main() -> int:
-    base = "origin/develop"
-    if "--base-ref" in sys.argv:
-        idx = sys.argv.index("--base-ref")
-        if idx + 1 < len(sys.argv):
-            base = sys.argv[idx + 1]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--base-ref", default="origin/develop")
+    base = parser.parse_args().base_ref
+    if not base or base.startswith("-"):
+        parser.error("--base-ref must be a non-empty Git revision, not an option")
 
     try:
         result = run_git(
-            ["diff", "--name-only", "--diff-filter=ACMR", base, "HEAD"],
+            ["diff", "--name-only", "--diff-filter=ACMR", base, "HEAD", "--"],
         )
     except GitExecutableNotFoundError:
         raise SystemExit("git executable not found") from None
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"git diff exited {result.returncode}"
+        print(f"cannot compare {base} with HEAD: {detail}", file=sys.stderr)
+        return 1
     changed = [f for f in result.stdout.strip().split("\n") if f.endswith(".py")]
 
     violations: list[str] = []

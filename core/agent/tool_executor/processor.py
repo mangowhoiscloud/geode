@@ -396,6 +396,13 @@ class ToolCallProcessor:
         contains_personal_data: bool = False,
     ) -> dict[str, Any]:
         """Project, offload, guard, and serialize a result for model context."""
+        if tool_name == "computer" and isinstance(result, dict) and result.get("error"):
+            return {
+                "type": "tool_result",
+                "tool_use_id": block_id,
+                "is_error": True,
+                "content": json.dumps(result, ensure_ascii=False, default=str),
+            }
         # Computer-use screenshots return as an image block (see above) —
         # before the token guard / offload that would otherwise corrupt them.
         if tool_name == "computer" and isinstance(result, dict) and result.get("screenshot"):
