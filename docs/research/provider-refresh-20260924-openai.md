@@ -151,11 +151,17 @@ published output caps, correct inherited effort constraints, and central
 source-aware model choices. No new adapter factory or parallel provider registry
 is needed.
 
-The remaining opt-in surfaces need distinct semantics: API `configuration_update`
-changes effort while preserving cached history, but has single-agent compatibility
-limits; explicit cache breakpoints require preservation across history transforms;
-Enterprise access tokens require their credential lifecycle. These are documented
-capabilities, not implemented promises in this refresh. Existing June computer-use
+K1 implements static-prefix explicit cache breakpoints for registered GPT-5.6/GPT-6
+Platform models in the shared `build_responses_kwargs` completion/streaming path.
+When `PROMPT_CACHE_BOUNDARY` follows a nonblank static prefix, the builder moves
+that prefix unchanged into developer `input_text` with a breakpoint and preserves
+the dynamic text after it. Codex retains its `instructions` contract, and implicit
+conversation caching remains enabled. This verifies request construction, not live
+acceptance or cache hits; see the [cache lifecycle evidence](provider-cache-lifecycle-20260924.md).
+
+The remaining opt-in surfaces are cache prewarming, API `configuration_update`
+and Enterprise access tokens. They require separate request/state or credential
+lifecycle handling and are not implemented by this refresh. Existing June computer-use
 acceptance restrictions remain until an authorized route-specific round trip can
 replace that evidence. No paid request, login, credential read, service change, or
 backend probe was run for this audit.
