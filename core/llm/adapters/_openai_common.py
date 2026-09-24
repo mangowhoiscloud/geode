@@ -30,13 +30,15 @@ import json
 import logging
 import os
 import re
-from dataclasses import dataclass
+from collections.abc import AsyncIterator
+from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Any
 
 from core.llm.adapters.base import (
     AdapterCallRequest,
     AdapterCallResult,
     Message,
+    StreamEvent,
     ToolSpec,
     UsageSummary,
 )
@@ -79,7 +81,7 @@ def _catalog_context_window(model_id: str) -> int:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class OpenAIModelSpec:
     """Per-model API quirks for the OpenAI Chat Completions + Codex Responses surface."""
 
@@ -98,6 +100,9 @@ class OpenAIModelSpec:
 
     context_window: int
     """Total context window (input + output) in tokens — for guard logging only."""
+
+    max_output_tokens: int | None = None
+    """Published API output limit, including reasoning; unknown is not unlimited."""
 
     supports_tool_search: bool = False
     """True → model accepts ``{"type": "tool_search"}`` + ``defer_loading``
@@ -118,6 +123,27 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("low", "medium", "high", "xhigh", "max"),
         context_window=_catalog_context_window("gpt-6-astra"),
+        max_output_tokens=128_000,
+        supports_tool_search=True,
+    ),
+    # Public Platform and Codex models, checked 2026-09-24. Account rollout
+    # remains separate; Ultra is a Codex execution mode, not an API effort.
+    "gpt-6-sol": OpenAIModelSpec(
+        model_id="gpt-6-sol",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
+        context_window=_catalog_context_window("gpt-6-sol"),
+        max_output_tokens=128_000,
+        supports_tool_search=True,
+    ),
+    "gpt-6-luna": OpenAIModelSpec(
+        model_id="gpt-6-luna",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
+        context_window=_catalog_context_window("gpt-6-luna"),
+        max_output_tokens=128_000,
         supports_tool_search=True,
     ),
     # ── GPT-5 family (reasoning, max_completion_tokens, temperature blocked) ──
@@ -125,8 +151,9 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         model_id="gpt-5.3-codex",
         uses_max_completion_tokens=True,
         accepts_temperature=False,
-        reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
+        reasoning_effort_values=("low", "medium", "high", "xhigh"),
         context_window=_catalog_context_window("gpt-5.3-codex"),
+        max_output_tokens=128_000,
     ),
     "gpt-5.4": OpenAIModelSpec(
         model_id="gpt-5.4",
@@ -134,6 +161,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
         context_window=_catalog_context_window("gpt-5.4"),
+        max_output_tokens=128_000,
         supports_tool_search=True,
     ),
     "gpt-5.4-mini": OpenAIModelSpec(
@@ -142,6 +170,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
         context_window=_catalog_context_window("gpt-5.4-mini"),
+        max_output_tokens=128_000,
         supports_tool_search=True,
     ),
     "gpt-5.4-nano": OpenAIModelSpec(
@@ -150,6 +179,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
         context_window=_catalog_context_window("gpt-5.4-nano"),
+        max_output_tokens=128_000,
     ),
     "gpt-5.2": OpenAIModelSpec(
         model_id="gpt-5.2",
@@ -157,6 +187,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
         context_window=_catalog_context_window("gpt-5.2"),
+        max_output_tokens=128_000,
     ),
     "gpt-5.5": OpenAIModelSpec(
         model_id="gpt-5.5",
@@ -164,6 +195,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
         context_window=_catalog_context_window("gpt-5.5"),
+        max_output_tokens=128_000,
         supports_tool_search=True,
     ),
     # GPT-5.6 family (GA 2026-07-09). Effort levels incl. the new "max" are
@@ -182,6 +214,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
         context_window=_catalog_context_window("gpt-5.6"),
+        max_output_tokens=128_000,
         supports_tool_search=True,
     ),
     "gpt-5.6-luna": OpenAIModelSpec(
@@ -190,6 +223,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
         context_window=_catalog_context_window("gpt-5.6-luna"),
+        max_output_tokens=128_000,
         supports_tool_search=True,
     ),
     "gpt-5.6-sol": OpenAIModelSpec(
@@ -198,6 +232,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
         context_window=_catalog_context_window("gpt-5.6-sol"),
+        max_output_tokens=128_000,
         supports_tool_search=True,
     ),
     "gpt-5.6-terra": OpenAIModelSpec(
@@ -206,21 +241,24 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
         context_window=_catalog_context_window("gpt-5.6-terra"),
+        max_output_tokens=128_000,
         supports_tool_search=True,
     ),
     "gpt-5-mini": OpenAIModelSpec(
         model_id="gpt-5-mini",
         uses_max_completion_tokens=True,
         accepts_temperature=False,
-        reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
+        reasoning_effort_values=("minimal", "low", "medium", "high"),
         context_window=_catalog_context_window("gpt-5-mini"),
+        max_output_tokens=128_000,
     ),
     "gpt-5-nano": OpenAIModelSpec(
         model_id="gpt-5-nano",
         uses_max_completion_tokens=True,
         accepts_temperature=False,
-        reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
+        reasoning_effort_values=("minimal", "low", "medium", "high"),
         context_window=_catalog_context_window("gpt-5-nano"),
+        max_output_tokens=128_000,
     ),
     # ── o-series (always-on reasoning, no temperature, no "none" effort) ──
     "o3": OpenAIModelSpec(
@@ -229,6 +267,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("low", "medium", "high"),
         context_window=_catalog_context_window("o3"),
+        max_output_tokens=100_000,
     ),
     "o4-mini": OpenAIModelSpec(
         model_id="o4-mini",
@@ -236,6 +275,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("low", "medium", "high"),
         context_window=_catalog_context_window("o4-mini"),
+        max_output_tokens=100_000,
     ),
 }
 
@@ -1374,6 +1414,50 @@ def translate_codex_response(
     )
 
 
+async def translate_responses_stream(events: AsyncIterator[Any]) -> AsyncIterator[StreamEvent]:
+    """Normalize SDK events without equating transport EOF with completion."""
+    items: list[Any] = []
+    terminal: Any = None
+    text_emitted = False
+    async for event in events:
+        kind = getattr(event, "type", "")
+        if kind in {"response.output_text.delta", "response.refusal.delta"}:
+            text_emitted = True
+            yield StreamEvent(kind="text", payload={"text": event.delta})
+        elif kind == "response.reasoning_summary_text.delta":
+            yield StreamEvent(kind="thinking", payload={"text": event.delta})
+        elif kind == "response.output_item.done":
+            items.append(event.item)
+        elif kind in {"response.completed", "response.incomplete", "response.failed"}:
+            terminal = event.response
+            if getattr(terminal, "status", None) != kind.removeprefix("response."):
+                raise RuntimeError("OpenAI Responses stream has an inconsistent terminal status")
+            break
+        elif kind == "error":
+            raise RuntimeError("OpenAI Responses stream returned an error event")
+    if terminal is None:
+        raise RuntimeError("OpenAI Responses stream ended without a terminal response")
+    result = translate_codex_response(terminal, accumulated_items=items)
+    yield StreamEvent(kind="usage", payload=asdict(result.usage))
+    if result.stop_reason not in {"completed", "incomplete"}:
+        raise RuntimeError(f"OpenAI Responses stream ended with status {result.stop_reason!r}")
+    if not text_emitted and result.text:
+        yield StreamEvent(kind="text", payload={"text": result.text})
+    if result.stop_reason == "completed":
+        for tool in result.tool_uses:
+            yield StreamEvent(kind="tool_use", payload=tool)
+    yield StreamEvent(
+        kind="stop",
+        payload={
+            "stop_reason": result.stop_reason,
+            "response_id": result.response_id,
+            "response_model": result.response_model,
+            "codex_output_items": list(result.codex_output_items),
+            "reasoning_items": list(result.reasoning_items),
+        },
+    )
+
+
 def _normalize_summary_list(summary: Any) -> list[dict[str, Any]]:
     """PR-ADAPTER-TIMEOUT-AND-SERIALIZATION (2026-05-28) — convert OpenAI
     SDK ``Summary`` Pydantic objects (or dicts, or unknown) to a list of
@@ -1578,9 +1662,9 @@ def _apply_openai_tool_search_defer(
 def _prompt_cache_key(system_prompt: str) -> str:
     """Stable OpenAI ``prompt_cache_key`` derived from the static system prefix.
 
-    OpenAI routes same-``prompt_cache_key`` traffic onto the same cache machine
-    (combined with the prefix hash), improving cache-hit rate for requests that
-    share a common prefix. We key on the STATIC system prefix — everything
+    Before GPT-5.6 this helps route reusable prefixes; GPT-5.6+ uses the key
+    to separate cache accounting, without requiring it for cache optimization.
+    We retain the STATIC system prefix — everything
     before ``<dynamic_context>`` — so the key is byte-stable across a session's
     turns (the dynamic suffix: date / recalled memory / user context changes per
     turn and must not perturb the routing key). Returns ``""`` when there is no
@@ -1742,7 +1826,7 @@ def build_responses_kwargs(
         "input": resp_input or [{"role": "user", "content": "hello"}],
         "store": False,
     }
-    # OpenAI ``prompt_cache_key`` — cache-routing hint on both backends (each
+    # OpenAI ``prompt_cache_key`` — stable cache identity on both backends (each
     # verified: platform documented + openai 2.30.0 SDK, Codex live-2026-06-23).
     # Keyed on the static system prefix so it stays stable across a session's
     # turns. Kill switch: settings.prompt_cache_key_enabled.
@@ -1753,7 +1837,9 @@ def build_responses_kwargs(
         if cache_key:
             kwargs["prompt_cache_key"] = cache_key
     if backend == "platform":
-        kwargs["max_output_tokens"] = req.max_tokens
+        if req.max_tokens < 1:
+            raise LLMRequestValidationError("OpenAI max_output_tokens must be positive")
+        kwargs["max_output_tokens"] = min(req.max_tokens, spec.max_output_tokens or req.max_tokens)
     if req.stop_sequences:
         # Responses API exposes no ``stop`` parameter (Chat Completions
         # did). Observable drop instead of a silent one — Codex review of
@@ -1785,10 +1871,12 @@ def build_responses_kwargs(
         # Reasoning-model branch — encrypted reasoning passthrough +
         # reasoning effort. Temperature is dropped per spec.
         kwargs["include"] = ["reasoning.encrypted_content"]
-        kwargs["reasoning"] = {
-            "effort": clamp_reasoning_effort(req.effort, spec=spec),
-            "summary": "auto",
-        }
+        effort = clamp_reasoning_effort(req.effort, spec=spec)
+        kwargs["reasoning"] = {"effort": effort, "summary": "auto"}
+        # Platform supports sampling with reasoning disabled. Codex parameter
+        # acceptance is a separate contract; do not copy API knobs to it.
+        if backend == "platform" and effort == "none" and req.temperature is not None:
+            kwargs["temperature"] = req.temperature
     elif req.temperature is not None and spec.accepts_temperature:
         kwargs["temperature"] = req.temperature
     # PR-CODEX-OAUTH-RESPONSE-SCHEMA (2026-05-25) — Responses API
