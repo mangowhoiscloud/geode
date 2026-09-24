@@ -110,7 +110,7 @@ def test_invalid_toml_preserves_live_settings_and_recovers(
 
     monkeypatch.setitem(Settings.model_config, "env_file", None)
     toml_path = tmp_path / "config.toml"
-    monkeypatch.setattr(cfg, "GLOBAL_CONFIG_PATH", toml_path)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(toml_path))
     monkeypatch.setattr(cfg, "PROJECT_CONFIG_PATH", tmp_path / "absent.toml")
     current = Settings(model="previous-model", agentic_effort="low")
     monkeypatch.setattr(cfg, "_settings_instance", current)

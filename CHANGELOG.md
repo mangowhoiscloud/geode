@@ -113,6 +113,11 @@ functional change.
 
 ### Fixed
 
+- Use the shared global config path resolver for Settings, config explanation,
+  model-picker reads/writes/confirmation, MCP, gateway reload/watch, seed
+  role/voter overrides, and evaluation config migration.
+  `GEODE_CONFIG_TOML` now redirects global picker persistence and migration
+  previews/writes while project writes and overlay precedence remain unchanged.
 - Validate the complete settings reload before updating the live singleton.
   Failed environment/TOML field validation, field preparation, or routing
   refresh preserves the previous Settings values; corrected reloads retain
