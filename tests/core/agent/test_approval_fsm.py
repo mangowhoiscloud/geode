@@ -604,6 +604,71 @@ class _FakeStreamWriter:
 
 
 class TestIPCApprovalRoundTrip:
+    @pytest.mark.parametrize("path", ["write", "write_async", "declared_async"])
+    @pytest.mark.parametrize("decision", ["y", "n"])
+    def test_switch_model_detail_reaches_approval_callback(self, path: str, decision: str) -> None:
+        from core.server.ipc_server.poller import _AsyncClientEndpoint
+
+        async def scenario() -> tuple[bool, ApprovalRecord, list[dict[str, Any]]]:
+            writer = _FakeStreamWriter()
+            endpoint = _AsyncClientEndpoint(asyncio.get_running_loop(), cast(Any, writer))
+            workflow = _workflow(approval_callback=endpoint.request_approval)
+            record = workflow.begin_record("switch_model")
+            assert record is not None
+            endpoint.feed_approval_response(decision, record.approval_id)
+            arguments = {"role": "judgment", "model_hint": "llm"}
+            if path == "write":
+                approved = await asyncio.to_thread(
+                    workflow.confirm_write, "switch_model", arguments, record
+                )
+            elif path == "write_async":
+                approved = await workflow.confirm_write_async("switch_model", arguments, record)
+            else:
+                approved = await workflow.confirm_declared_async(
+                    "switch_model",
+                    arguments,
+                    per_invocation=False,
+                    contains_personal_data=False,
+                    record=record,
+                )
+            await endpoint.drain_pending_sends()
+            return approved, record, writer.sent("approval_request")
+
+        approved, record, requests = asyncio.run(scenario())
+        assert approved is (decision == "y")
+        assert record.state == ("granted" if decision == "y" else "denied")
+        assert requests == [
+            {
+                "type": "approval_request",
+                "tool_name": "switch_model",
+                "detail": 'switch_model {"role":"judgment","model_hint":"llm"}',
+                "safety_level": "declared" if path == "declared_async" else "write",
+                "approval_id": record.approval_id,
+            }
+        ]
+
+    @pytest.mark.parametrize(
+        "arguments",
+        [
+            {},
+            {"model_hint": "gpt-6-astra"},
+            {"role": "judgment", "model_hint": 'llm"\n[red]\x1b[2J\u2028'},
+            {"role": None, "model_hint": ["llm"]},
+        ],
+    )
+    def test_switch_model_detail_preserves_defaults_and_argument_values(
+        self, arguments: dict[str, Any]
+    ) -> None:
+        detail = ApprovalWorkflow._write_summary("switch_model", arguments)
+        prefix, payload = detail.split(" ", 1)
+        assert prefix == "switch_model"
+        assert json.loads(payload) == {
+            "role": arguments.get("role", "primary"),
+            "model_hint": arguments.get("model_hint", ""),
+        }
+        assert all(32 <= ord(character) < 127 for character in detail)
+        assert "[red]" not in detail
+
     def test_request_carries_id_and_stale_reply_discarded(self) -> None:
         """The approval_request must carry approval_id; a queued stale reply
         (different id — e.g. the late answer to a previous timed-out prompt)
