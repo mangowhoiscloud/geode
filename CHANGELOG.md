@@ -118,6 +118,7 @@ functional change.
 
 ### Fixed
 
+- Preserve thin Harbor cognitive-reflection usage by binding its middleware to the existing session event sink.
 - Admit native Astra final-verification calls in decision-handoff observations.
   Preserve requested and actual verifier modes separately, and require a complete
   source-reconciled final-verification boundary for explicitly opted-in current

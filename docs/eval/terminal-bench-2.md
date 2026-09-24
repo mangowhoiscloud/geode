@@ -180,6 +180,11 @@ parameter. These settings therefore do not establish a whole-runtime token or
 dollar hard cap: auxiliary calls, retries, inputs and route-specific behavior
 must be accounted for at dispatch before paid execution.
 
+The thin adapter binds cognitive-reflection middleware to the same session
+event sink as the main loop. Its durable attempt totals include completed
+reflection calls; the recorded-attempt scope remains distinct from whole-runtime
+coverage and actual account charges.
+
 The provider V1 E2E/Harbor validation revision remains provisional until all
 implementation changes are complete and its source, routes and budget are
 frozen. Adding these controls or passing offline transport tests is not a live

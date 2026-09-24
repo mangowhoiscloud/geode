@@ -288,6 +288,7 @@ def test_harbor_limits_reach_sdk_and_stop_tool_rounds(
     from core.config.policy_source import EMPTY_POLICY_SOURCES
     from core.llm.adapters.base import AdapterCallResult, UsageSummary
     from core.llm.adapters.openai_payg import OpenAIPaygAdapter
+    from core.observability.event_store import HookEventStore
     from core.wiring import runtime
     from evals.platforms.harbor import _build_loop
     from openai import AsyncOpenAI
@@ -297,6 +298,8 @@ def test_harbor_limits_reach_sdk_and_stop_tool_rounds(
     monkeypatch.setattr(settings, "openai_api_key", "offline-test-key")
     monkeypatch.setattr(runtime, "build_policy_sources", lambda: EMPTY_POLICY_SOURCES)
     wire: list[dict[str, Any]] = []
+    reflection_requests: list[Any] = []
+    observed: list[Any] = []
 
     def respond(request: httpx.Request) -> httpx.Response:
         wire.append(json.loads(request.content))
@@ -333,10 +336,11 @@ def test_harbor_limits_reach_sdk_and_stop_tool_rounds(
 
     async def reflection(request: Any) -> AdapterCallResult:
         assert request.max_tokens == settings.cognitive_reflection_max_tokens
+        reflection_requests.append(request)
         return AdapterCallResult(
             text="",
             tool_uses=({"name": "record_reflection", "input": {"hypotheses": []}},),
-            usage=UsageSummary(),
+            usage=UsageSummary(input_tokens=7, output_tokens=2),
             stop_reason="end_turn",
         )
 
@@ -363,9 +367,15 @@ def test_harbor_limits_reach_sdk_and_stop_tool_rounds(
                 max_rounds=3,
             )
             try:
-                return await loop.arun("Inspect the working directory.")
+                result = await loop.arun("Inspect the working directory.")
             finally:
                 loop._hooks.close()
+            store = HookEventStore(loop._timeline.db_path)
+            try:
+                observed.extend(store.read(session_id=loop._session_id, limit=100))
+            finally:
+                store.close()
+            return result
 
     result = asyncio.run(run())
     assert result.rounds == 3
@@ -373,6 +383,28 @@ def test_harbor_limits_reach_sdk_and_stop_tool_rounds(
     assert len(wire) == 3
     assert [request["max_output_tokens"] for request in wire] == [2048, 2048, 2048]
     assert [request["tool_choice"] for request in wire] == ["auto", "none", "none"]
+    assert reflection_requests
+    ends = [
+        event
+        for event in observed
+        if event.action == "llm.call.ended"
+        and event.payload.get("purpose") == "cognitive_reflection"
+    ]
+    assert len(ends) == len(reflection_requests)
+    reflection_ids = {event.llm_attempt_id for event in ends}
+    starts = [
+        event
+        for event in observed
+        if event.action == "llm.call.started" and event.llm_attempt_id in reflection_ids
+    ]
+    assert len(starts) == len(ends)
+    assert {event.llm_attempt_id for event in starts} == {event.llm_attempt_id for event in ends}
+    usage = _summarize_usage(observed)
+    assert usage["attempt_pairing_complete"]
+    assert usage["call_events"] == len(wire) + len(reflection_requests)
+    assert usage["input_tokens"] == 10 * len(wire) + 7 * len(reflection_requests)
+    assert usage["output_tokens"] == len(wire) + 2 * len(reflection_requests)
+    assert usage["whole_runtime_complete"] is False
 
 
 @pytest.mark.parametrize("cache", [None, 0, 4])

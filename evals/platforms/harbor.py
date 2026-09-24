@@ -642,6 +642,7 @@ def _build_loop(
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop, AgenticLoopConfig
     from core.agent.tool_executor import ToolExecutor
+    from core.hooks.middleware import MiddlewareRegistry
     from core.hooks.system import HookSystem
     from core.llm.adapters.registry import bootstrap_builtins
     from core.observability.event_store import HookEventStore
@@ -656,13 +657,14 @@ def _build_loop(
     tool = HarborExecTool(environment)
     registry = ToolRegistry()
     registry.register(tool)
+    hooks = HookSystem()
     executor = ToolExecutor(
         action_handlers={tool.name: tool.aexecute},
         auto_approve=True,
         hitl_level=0,
         tool_input_schemas={tool.name: tool.parameters},
+        middleware_registry=MiddlewareRegistry(events=hooks),
     )
-    hooks = HookSystem()
     loop = AgenticLoop(
         ConversationContext(max_turns=200),
         executor,
