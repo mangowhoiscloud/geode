@@ -45,7 +45,7 @@ def test_adapter_request_shape_for_fable() -> None:
 def test_model_picker_offers_fable() -> None:
     from core.cli.commands._state import get_model_profiles
 
-    profile = next((p for p in get_model_profiles() if p.id == FABLE), None)
+    profile = next((p for p in get_model_profiles(openai_source="payg") if p.id == FABLE), None)
     assert profile is not None
     assert profile.provider == "anthropic"
     assert profile.label == "Fable 5"

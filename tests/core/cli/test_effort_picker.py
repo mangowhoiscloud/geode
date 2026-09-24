@@ -167,7 +167,7 @@ class TestPerProviderEnumIntegrity:
     def test_every_profile_has_supported_efforts_callable(self) -> None:
         from core.cli.commands import get_model_profiles
 
-        for p in get_model_profiles():
+        for p in get_model_profiles(openai_source="payg"):
             levels = supported_efforts(p.id, p.provider)
             assert isinstance(levels, tuple)
             # Every level should be a non-empty string
@@ -176,7 +176,7 @@ class TestPerProviderEnumIntegrity:
     def test_default_either_in_enum_or_none(self) -> None:
         from core.cli.commands import get_model_profiles
 
-        for p in get_model_profiles():
+        for p in get_model_profiles(openai_source="payg"):
             levels = supported_efforts(p.id, p.provider)
             d = default_effort(p.id, p.provider)
             if not levels:
@@ -251,7 +251,7 @@ def test_active_off_catalog_openai_model_enter_is_a_noop(
     from core.cli.commands._state import get_model_profiles
 
     with patch.object(core.config, "OPENAI_PRIMARY", "gpt-5.6-sol"):
-        rows = get_model_profiles(configured_model_ids=("gpt-5.2",))
+        rows = get_model_profiles(configured_model_ids=("gpt-5.2",), openai_source="payg")
     profiles = [(row.id, row.provider, row.label, row.cost, True, None) for row in rows]
 
     monkeypatch.setattr(effort_picker, "_read_key", lambda: effort_picker._KEY_ENTER)
@@ -274,7 +274,9 @@ def test_configured_rows_are_deduplicated_across_default_and_roles() -> None:
     from core.cli.commands._state import get_model_profiles
 
     with patch.object(core.config, "OPENAI_PRIMARY", "gpt-5.2"):
-        rows = get_model_profiles(configured_model_ids=("gpt-5.2", "gpt-5.1", "gpt-5.1", ""))
+        rows = get_model_profiles(
+            configured_model_ids=("gpt-5.2", "gpt-5.1", "gpt-5.1", ""), openai_source="payg"
+        )
 
     ids = [row.id for row in rows]
     assert ids.count("gpt-5.2") == 1

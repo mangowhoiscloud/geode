@@ -79,6 +79,41 @@ Claude or Z.AI subscription admission remains an explicit rejection test, never
 a PAYG substitution. OpenRouter credentials were subsequently supplied for the
 scoped validation process and are not stored in repository artifacts.
 
+## Integration queue
+
+After P1/P2/P4/C1 and the concurrent collector change landed, the remaining
+implementation queue is P3 → D1 → P5 → P6 → C2 → E2 → E1 → E3 → S1 → S2 →
+K2 → K1 → V1 bounds. This is a single integration queue operated under the
+existing [GitFlow manual](../../.agents/skills/geode-gitflow/SKILL.md), not a
+change to GitHub protection settings or a new merge-queue service.
+
+- Freeze waiting feature heads after their scoped fixes finish. Update only
+  the next PR against the fetched develop base; do not refresh all waiting
+  branches after every merge. Finish already-running checks and retain their
+  exact source identities without treating old green results as current.
+- Fix a defect in its original owner PR and propagate that commit through
+  dependencies. Review the actual combined diff; do not apply the same patch
+  independently to several branches or use commit counts as content proof.
+- Close a failure with its cause, smallest regression and affected consumer
+  checks. Reuse unchanged local evidence; rerun changed boundaries and the
+  mandatory remote checks. External-service failures retain the failed attempt
+  and may be rerun after diagnosis, without removing the check or changing its
+  acceptance criteria.
+- Admit one merge only after current main ancestry, latest-base compatibility,
+  exact-head required CI and the existing merge guard pass. Verify the two
+  ordered parents in the receipt before advancing the queue. No bypass,
+  squash, rebase, direct protected-branch push or standalone main sync PR.
+- Complete integrated develop verification before paid V1. Final scaffold
+  closure and release preparation follow their own review gates; no unreviewed
+  fixes enter main through a release-only bypass.
+
+The quality criteria follow [Google's review standard](https://google.github.io/eng-practices/review/reviewer/standard.html)
+and [small change guidance](https://google.github.io/eng-practices/review/developer/small-cls.html):
+cohesive changes, evidence of improved code health and concrete review findings,
+without speculative perfection work. [GitHub's strict-check contract](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#require-status-checks-before-merging)
+requires an up-to-date base; the queue limits redundant updates while preserving
+that requirement. These references do not imply external certification.
+
 ## Verification record
 
 No successful live inference has been executed in this maintenance work. A

@@ -169,7 +169,7 @@ def test_all_model_profiles_match_resolver_family() -> None:
     from core.llm.adapters.registry import normalize_registry_provider
 
     mismatches: list[tuple[str, str, str]] = []
-    for profile in get_model_profiles():
+    for profile in get_model_profiles(openai_source="payg"):
         resolved = normalize_registry_provider(_resolve_provider(profile.id))
         if profile.provider != resolved:
             mismatches.append((profile.id, profile.provider, resolved))

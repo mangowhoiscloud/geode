@@ -98,7 +98,7 @@ class TestPickerPersistence:
         from core.cli.commands import _apply_model, get_model_profiles
         from core.config import settings
 
-        model_profiles = get_model_profiles()
+        model_profiles = get_model_profiles(openai_source="payg")
         old_model = settings.model
         old_effort = getattr(settings, "agentic_effort", "high")
         try:
