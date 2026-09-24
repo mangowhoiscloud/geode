@@ -120,6 +120,8 @@ functional change.
   failed runtime-state writes before reusing the connection, discard it if
   rollback fails, and close SessionManager connections when schema initialization
   fails so a later write cannot commit a failed operation's pending changes.
+  Close the checkpoint metadata connection even when its index write fails,
+  while retaining the existing recoverable checkpoint behavior.
 - Refresh the 2026-09-24 OpenAI, Claude and Z.AI model tariffs/context limits; honor explicit Claude cache rates and full-request OpenAI long-context tiers. Keep active source choices separate from historical accounting and unavailable subscription routes.
 - Preserve verifier failure instructions separately from the replanner's bounded
   candidate observation. The opt-in LLM/Jev diagnostic can now disclose one frozen
