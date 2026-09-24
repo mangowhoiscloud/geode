@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import gc
+import json
+import subprocess
+import sys
+import textwrap
 import threading
 import weakref
 from collections.abc import Callable
@@ -218,6 +222,113 @@ def test_background_shutdown_failure_is_reported_before_sdk_drain(
     assert client.close_count == 1
     assert "1 background task(s) failed during loop shutdown (ValueError)" in caplog.text
     assert "private fixture detail" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("interruption", "work_fails"),
+    [("KeyboardInterrupt", False), ("SystemExit", False), ("SystemExit", True)],
+)
+def test_background_shutdown_interruption_still_drains_owned_resources(
+    tmp_path: Path, interruption: str, work_fails: bool
+) -> None:
+    # asyncio propagates these exceptions out of task dispatch itself. Keep the
+    # real Runner boundary in a subprocess without importing operator settings.
+    script = textwrap.dedent("""
+        import asyncio, builtins, importlib.util, json, sys, types
+        from pathlib import Path
+
+        def deny_network(event, args):
+            if event in {"socket.connect", "socket.getaddrinfo", "socket.sendto"}:
+                raise AssertionError("No network in shutdown regression")
+
+        sys.addaudithook(deny_network)
+        root = Path(sys.argv[1])
+        for name in ("core", "core.llm"):
+            package = types.ModuleType(name)
+            package.__path__ = []
+            sys.modules[name] = package
+        for name in ("core.llm.loop_affinity", "core.async_runtime"):
+            spec = importlib.util.spec_from_file_location(name, root / (name.replace(".", "/") + ".py"))
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[name] = module
+            spec.loader.exec_module(module)
+        from core.async_runtime import run_process_coroutine
+        from core.llm.loop_affinity import LoopAffineClientCache
+
+        sequence, clients, tasks, generators = [], [], [], []
+        cache = LoopAffineClientCache("shutdown-interruption")
+        failure = getattr(builtins, sys.argv[2])("fixture interruption")
+        primary = ValueError("fixture work failure") if sys.argv[3] == "True" else None
+
+        class Client:
+            def __init__(self, index):
+                self.index = index
+                self.loop = asyncio.get_running_loop()
+            async def close(self):
+                assert asyncio.get_running_loop() is self.loop and not self.loop.is_closed()
+                sequence.append(f"client-{self.index}")
+
+        async def work():
+            for index in range(2):
+                clients.append(cache.get(lambda index=index: Client(index)))
+                cache.invalidate()
+            async def stream():
+                try:
+                    yield "delta"
+                finally:
+                    sequence.append("asyncgen")
+            generator = stream()
+            generators.append(generator)
+            await anext(generator)
+            entered = asyncio.Event()
+            async def pending():
+                try:
+                    entered.set()
+                    await asyncio.Event().wait()
+                finally:
+                    sequence.append("pending")
+                    raise failure
+            tasks.append(asyncio.create_task(pending()))
+            await entered.wait()
+            if primary is not None:
+                raise primary
+
+        try:
+            run_process_coroutine(work())
+        except BaseException as caught:
+            assert caught is (primary if primary is not None else failure)
+        else:
+            raise AssertionError("Original interruption was swallowed")
+        assert all(client.loop.is_closed() for client in clients)
+        sequence.append("loop-closed")
+        print(json.dumps(sequence))
+        """)
+    completed = subprocess.run(  # noqa: S603 - isolated interpreter, tracked sources, synthetic clients
+        [
+            sys.executable,
+            "-I",
+            "-B",
+            "-c",
+            script,
+            str(Path(__file__).resolve().parents[2]),
+            interruption,
+            str(work_fails),
+        ],
+        cwd=tmp_path,
+        env={},
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout) == [
+        "pending",
+        "asyncgen",
+        "client-0",
+        "client-1",
+        "loop-closed",
+    ]
 
 
 @pytest.mark.parametrize("drain", [_drain_owned_loop, drain_current_loop_clients])

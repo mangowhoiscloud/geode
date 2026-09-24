@@ -125,6 +125,8 @@ functional change.
   shutting down one runtime does not close clients shared with another.
   Preserve original failures and cancellation through bounded cleanup-error
   reporting, including normal CLI, gateway, worker and dreaming loop exits.
+  Drain generators and SDK clients even when cancelled background work raises
+  a control exception during shutdown, preserving the original failure.
 - Validate the complete settings reload before updating the live singleton.
   Failed environment/TOML field validation, field preparation, or routing
   refresh preserves the previous Settings values; corrected reloads retain

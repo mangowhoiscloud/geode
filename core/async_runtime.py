@@ -20,24 +20,27 @@ async def _drain_owned_loop() -> None:
     pending = [task for task in asyncio.all_tasks() if task is not owner]
 
     async def finish() -> None:
-        for task in pending:
-            task.cancel()
-        results = await asyncio.gather(*pending, return_exceptions=True)
-        failures = [
-            result
-            for result in results
-            if isinstance(result, BaseException) and not isinstance(result, asyncio.CancelledError)
-        ]
-        if failures:
-            log.warning(
-                "%d background task(s) failed during loop shutdown (%s)",
-                len(failures),
-                ", ".join(type(error).__name__ for error in failures[:5]),
-            )
         try:
-            await asyncio.get_running_loop().shutdown_asyncgens()
+            for task in pending:
+                task.cancel()
+            results = await asyncio.gather(*pending, return_exceptions=True)
+            failures = [
+                result
+                for result in results
+                if isinstance(result, BaseException)
+                and not isinstance(result, asyncio.CancelledError)
+            ]
+            if failures:
+                log.warning(
+                    "%d background task(s) failed during loop shutdown (%s)",
+                    len(failures),
+                    ", ".join(type(error).__name__ for error in failures[:5]),
+                )
         finally:
-            await drain_current_loop_clients()
+            try:
+                await asyncio.get_running_loop().shutdown_asyncgens()
+            finally:
+                await drain_current_loop_clients()
 
     cleanup = asyncio.create_task(finish(), name="geode-loop-cleanup")
     cancellation: asyncio.CancelledError | None = None
