@@ -232,6 +232,48 @@ def test_invalid_ttl_subcounts_cannot_lower_estimated_cost(value: int) -> None:
         )
 
 
+@pytest.mark.parametrize("long_write", [-1, 3, True])
+def test_reported_cost_cannot_bypass_ttl_subset_validation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, long_write: int
+) -> None:
+    store = UsageStore(tmp_path / "usage")
+    monkeypatch.setattr("core.llm.usage_store.get_usage_store", lambda: store)
+    tracker = TokenTracker()
+    with pytest.raises(ValueError, match="subset"):
+        tracker.record(
+            "claude-opus-5-5",
+            0,
+            0,
+            cache_creation_tokens=2,
+            cache_creation_1h_tokens=long_write,
+            reported_cost_usd=0,
+        )
+    assert tracker.accumulator.calls == []
+    assert store.get_recent_records() == []
+
+
+def test_reported_zero_cost_keeps_valid_ttl_split_without_estimated_charge(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    store = UsageStore(tmp_path / "usage")
+    monkeypatch.setattr("core.llm.usage_store.get_usage_store", lambda: store)
+    tracker = TokenTracker()
+    usage = tracker.record(
+        "claude-opus-5-5",
+        0,
+        0,
+        cache_creation_tokens=2,
+        cache_creation_1h_tokens=1,
+        reported_cost_usd=0,
+    )
+    assert usage.cost_usd == 0
+    assert tracker.accumulator.total_cost_usd == 0
+    record = UsageStore(store.usage_dir).get_recent_records()[0]
+    assert record.cache_creation_tokens == 2
+    assert record.cache_creation_1h_tokens == 1
+    assert record.cost_usd == 0
+
+
 def test_compaction_cache_marker_preserves_the_existing_beta_block() -> None:
     block = {"type": "compaction", "content": "summary", "cache_control": {"type": "ephemeral"}}
     request = _request((Message(role="assistant", content="", anthropic_content=(block,)),))
