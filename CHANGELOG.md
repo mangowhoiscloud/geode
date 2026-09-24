@@ -118,6 +118,10 @@ functional change.
   source-reconciled final-verification boundary for explicitly opted-in current
   comparisons. Keep valid semantic failures distinct from success and preserve
   historical exports without filling missing verification evidence.
+- Show the requested `switch_model` role and model hint in CLI/IPC approval
+  details, including the primary-role default. Preserve exact values with JSON
+  escaping so judgment-only approval can distinguish a root-model change;
+  permission requirements and approval decisions remain unchanged.
 - Validate the complete settings reload before updating the live singleton.
   Failed environment/TOML field validation, field preparation, or routing
   refresh preserves the previous Settings values; corrected reloads retain
