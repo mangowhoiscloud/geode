@@ -54,6 +54,8 @@ remain outside scope.
 | E1 | Runtime construction, shutdown outcomes, request context and cache generation ownership | C1 | local implementation; existing error convention extended |
 | E2 | Atomic gateway reload and owned watcher/poller lifecycle | C1, C2 | local implementation and independent review |
 | E3 | Shared SDK transport ownership at actual process/thread event-loop teardown | E1 | local implementation and independent review |
+| K1 | OpenAI explicit static boundary and OpenRouter upstream/session cache shaping | P2–P6 | local implementation; backend acceptance remains a live check |
+| K2 | Claude request-wide marker validity and TTL-specific write accounting | P3 | local implementation and independent review |
 | V1 | New-model API/subscription E2E and Harbor validation | all accepted implementation units | execution matrix in preparation; total US$20 paid cap approved |
 | R1 | Patch release preparation, packaging/docs, develop→main, stable publication | all accepted units | pending |
 

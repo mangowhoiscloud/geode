@@ -41,6 +41,34 @@ export default function Page() {
               승격합니다.
             </p>
 
+            <h2>OpenAI·Z.AI·OpenRouter의 경계</h2>
+            <p>
+              OpenAI Platform의 등록된 GPT-5.6·GPT-6 모델은 같은 경계 앞의
+              정적 문자열을 developer 메시지의 input_text 블록으로 보내고
+              <code>prompt_cache_breakpoint</code>를 붙입니다. 동적 문자열은
+              그 뒤에 두며, 대화 이력의 자동 캐싱도 유지합니다. Codex 구독
+              경로와 이전 모델은 기존 instructions 및 캐시 키 계약을 유지합니다.
+              키가 같다는 사실만으로 적중을 보장하지는 않습니다.
+            </p>
+            <p>
+              Z.AI는 반복 접두부를 자동으로 캐싱하며 별도 캐시 마커를 보내지
+              않습니다. OpenRouter의 명시적 Claude·지원 OpenAI 경로에는 해당
+              마커를 보존합니다. 논리 세션 ID의 해시로 제공자 선택의 연속성을
+              요청하고, 원래 세션 ID는 보내지 않습니다. 사용자가 설정한 제공자
+              우선순위는 유지하며, 자동 모델 선택에 특정 제공자 마커를 추측해
+              넣지 않습니다.
+            </p>
+            <p>
+              SDK 연결을 닫거나 다시 만들어도 서버의 캐시를 삭제하지 않습니다.
+              모델·계정·도구 순서·출력 스키마·추론 설정·정리된 이력이 달라지면
+              공유 접두부도 달라질 수 있습니다. 실제 적중은 반환된 사용량으로
+              확인하며, 누락된 값과 0을 구분합니다. 정책 근거는 2026-09-24에
+              확인한 <a href="https://developers.openai.com/api/docs/guides/prompt-caching">OpenAI</a>,{" "}
+              <a href="https://docs.z.ai/guides/capabilities/cache">Z.AI</a>,{" "}
+              <a href="https://openrouter.ai/docs/guides/best-practices/prompt-caching">OpenRouter</a>
+              공식 문서입니다.
+            </p>
+
             <h2>롤링 메시지 breakpoint</h2>
             <p>
               Anthropic은 요청당 cache_control breakpoint를 4개까지
@@ -144,6 +172,34 @@ export default function Page() {
               side is empty (audit mode with layers stripped), the dynamic
               side is promoted to the single cacheable block to avoid the
               400 for cache_control on an empty text block.
+            </p>
+
+            <h2>OpenAI, Z.AI and OpenRouter boundaries</h2>
+            <p>
+              Registered GPT-5.6 and GPT-6 models on OpenAI Platform receive the
+              static prefix in a developer input_text block with an explicit
+              <code>prompt_cache_breakpoint</code>. The dynamic text follows it;
+              implicit conversation caching remains enabled. Codex subscription
+              and earlier models retain their existing instructions and cache-key
+              contract. A matching key alone does not establish cache reuse.
+            </p>
+            <p>
+              Z.AI caches repeated prefixes automatically without cache markers.
+              Explicit Claude and supported OpenAI routes through OpenRouter
+              retain their corresponding markers. A hash of the logical session
+              ID requests provider affinity without sending the raw ID. Explicit
+              provider ordering remains intact; automatic model selection does
+              not guess an upstream cache protocol.
+            </p>
+            <p>
+              Closing or recreating an SDK client does not delete a provider cache.
+              Model, account, tool order, output schema, reasoning settings and
+              compacted history can change the reusable prefix. Observe actual
+              reuse through returned usage, preserving missing values separately
+              from zero. Policy sources checked on September 24, 2026:{" "}
+              <a href="https://developers.openai.com/api/docs/guides/prompt-caching">OpenAI</a>,{" "}
+              <a href="https://docs.z.ai/guides/capabilities/cache">Z.AI</a>,{" "}
+              <a href="https://openrouter.ai/docs/guides/best-practices/prompt-caching">OpenRouter</a>.
             </p>
 
             <h2>Rolling message breakpoints</h2>

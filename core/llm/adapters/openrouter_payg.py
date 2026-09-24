@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
@@ -10,6 +11,7 @@ from typing import Any
 from core.llm.adapters._openai_common import (
     build_async_openai_client,
     build_chat_completion_kwargs,
+    get_openai_model_spec,
     translate_chat_response,
 )
 from core.llm.adapters.base import (
@@ -139,7 +141,14 @@ class OpenRouterPaygAdapter:
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         model = to_openrouter_model_id(req.model)
-        extra_body = _openrouter_extra_body(req.provider_options)
+        extra_body = _openrouter_extra_body(req.provider_options) or {}
+        from core.agent.cognitive_state_ctx import get_session_id
+
+        session_id = req.metadata.get("session_id") or get_session_id()
+        if isinstance(session_id, str) and session_id:
+            # Remote affinity must follow the logical session, not changing
+            # system text or an SDK client's transport lifetime.
+            extra_body["session_id"] = "geode-" + hashlib.sha256(session_id.encode()).hexdigest()
         kwargs = build_chat_completion_kwargs(
             req,
             model=model,
@@ -147,6 +156,30 @@ class OpenRouterPaygAdapter:
             adapter_name=self.name,
             extra_body=extra_body,
         )
+        if model.startswith("anthropic/claude-"):
+            from core.llm.adapters._anthropic_common import _cache_shaped_system
+            from core.llm.providers.anthropic import apply_messages_cache_control
+
+            messages = kwargs["messages"]
+            if req.system_prompt:
+                messages[0]["content"] = _cache_shaped_system(req.system_prompt)
+            kwargs["messages"] = apply_messages_cache_control(messages)
+        elif (
+            model.startswith("openai/")
+            and get_openai_model_spec(model.removeprefix("openai/")).supports_explicit_prompt_cache
+        ):
+            from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
+
+            static, boundary, dynamic = req.system_prompt.partition(PROMPT_CACHE_BOUNDARY)
+            if boundary and static.strip():
+                kwargs["messages"][0]["content"] = [
+                    {
+                        "type": "text",
+                        "text": static,
+                        "prompt_cache_breakpoint": {"mode": "explicit"},
+                    },
+                    {"type": "text", "text": boundary + dynamic},
+                ]
         try:
             response = await self._get_client().chat.completions.create(**kwargs)
         except Exception as exc:

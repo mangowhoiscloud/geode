@@ -110,6 +110,9 @@ class OpenAIModelSpec:
     tool_search" — developers.openai.com/api/docs/guides/tools-tool-search).
     Default False so unknown/legacy models never gamble a 400."""
 
+    supports_explicit_prompt_cache: bool = False
+    """Platform GPT-5.6+ content-block breakpoints; not a Codex route claim."""
+
 
 # Registry — keep alphabetically sorted within each family for stable diffs.
 _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
@@ -125,6 +128,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         context_window=_catalog_context_window("gpt-6-astra"),
         max_output_tokens=128_000,
         supports_tool_search=True,
+        supports_explicit_prompt_cache=True,
     ),
     # Public Platform and Codex models, checked 2026-09-24. Account rollout
     # remains separate; Ultra is a Codex execution mode, not an API effort.
@@ -136,6 +140,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         context_window=_catalog_context_window("gpt-6-sol"),
         max_output_tokens=128_000,
         supports_tool_search=True,
+        supports_explicit_prompt_cache=True,
     ),
     "gpt-6-luna": OpenAIModelSpec(
         model_id="gpt-6-luna",
@@ -145,6 +150,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         context_window=_catalog_context_window("gpt-6-luna"),
         max_output_tokens=128_000,
         supports_tool_search=True,
+        supports_explicit_prompt_cache=True,
     ),
     # ── GPT-5 family (reasoning, max_completion_tokens, temperature blocked) ──
     "gpt-5.3-codex": OpenAIModelSpec(
@@ -216,6 +222,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         context_window=_catalog_context_window("gpt-5.6"),
         max_output_tokens=128_000,
         supports_tool_search=True,
+        supports_explicit_prompt_cache=True,
     ),
     "gpt-5.6-luna": OpenAIModelSpec(
         model_id="gpt-5.6-luna",
@@ -225,6 +232,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         context_window=_catalog_context_window("gpt-5.6-luna"),
         max_output_tokens=128_000,
         supports_tool_search=True,
+        supports_explicit_prompt_cache=True,
     ),
     "gpt-5.6-sol": OpenAIModelSpec(
         model_id="gpt-5.6-sol",
@@ -234,6 +242,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         context_window=_catalog_context_window("gpt-5.6-sol"),
         max_output_tokens=128_000,
         supports_tool_search=True,
+        supports_explicit_prompt_cache=True,
     ),
     "gpt-5.6-terra": OpenAIModelSpec(
         model_id="gpt-5.6-terra",
@@ -243,6 +252,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         context_window=_catalog_context_window("gpt-5.6-terra"),
         max_output_tokens=128_000,
         supports_tool_search=True,
+        supports_explicit_prompt_cache=True,
     ),
     "gpt-5-mini": OpenAIModelSpec(
         model_id="gpt-5-mini",
@@ -1872,6 +1882,29 @@ def build_responses_kwargs(
         "input": resp_input or [{"role": "user", "content": "hello"}],
         "store": False,
     }
+    if backend == "platform" and spec.supports_explicit_prompt_cache:
+        from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
+
+        static, boundary, dynamic = req.system_prompt.partition(PROMPT_CACHE_BOUNDARY)
+        if boundary and static.strip():
+            # Instructions cannot contain a breakpoint. Preserve their bytes and
+            # developer authority while marking the reusable prefix explicitly.
+            # Leave implicit caching enabled for the growing conversation.
+            kwargs.pop("instructions")
+            kwargs["input"] = [
+                {
+                    "role": "developer",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": static,
+                            "prompt_cache_breakpoint": {"mode": "explicit"},
+                        },
+                        {"type": "input_text", "text": boundary + dynamic},
+                    ],
+                },
+                *kwargs["input"],
+            ]
     # OpenAI ``prompt_cache_key`` — stable cache identity on both backends (each
     # verified: platform documented + openai 2.30.0 SDK, Codex live-2026-06-23).
     # Keyed on the static system prefix so it stays stable across a session's

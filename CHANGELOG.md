@@ -49,6 +49,12 @@ functional change.
 
 ### Changed
 
+- Preserve the static prompt boundary on supported OpenAI Platform requests
+  using developer content breakpoints while retaining implicit history caching.
+  Forward supported upstream cache markers through OpenRouter and retain
+  logical-session affinity across SDK connections using a hashed session ID.
+  Preserve Codex, legacy OpenAI and automatic Z.AI cache contracts.
+
 - Refresh Claude Messages contracts for Fable 5.1, Opus 5.5/5, and Sonnet 5
   through typed model records and one create/stream request builder. Preserve
   signed thinking, structured output, tool calls, and cache usage in streaming;
