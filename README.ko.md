@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/Anthropic-Fable_5-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Fable 5">
   <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z"><img src="https://img.shields.io/badge/OpenAI-GPT--6_Astra_E2E_smoke_1%2F1-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-6 Astra E2E smoke 1/1"></a>
   <img src="https://img.shields.io/badge/OpenRouter-inference_router-6b46c1?style=flat-square" alt="OpenRouter">
-  <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.2-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.2">
+  <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.3-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.3">
 </p>
 
 <p align="center">
@@ -203,9 +203,9 @@ geode                                 # GEODE 시작
 
 **지원 플랜** ([Codex 공식 가격 문서](https://developers.openai.com/codex/pricing/) 기준): Plus, Pro, Business, Edu, Enterprise.
 
-**할당량** (OpenAI 공시 기준, 5시간 윈도): Plus는 약 15–80 메시지,
-Pro 20x는 최대 1,600 메시지입니다. Enterprise와 Edu 한도는 workspace가
-flexible credit 또는 legacy per-seat 방식 중 무엇을 쓰는지에 따라 달라집니다.
+**사용 한도**는 플랜·모델·속도·workspace에 따라 달라집니다.
+[Codex 요금과 크레딧](https://learn.chatgpt.com/docs/pricing) 및 계정 대시보드에서
+확인합니다. 토큰 크레딧과 API의 달러 요율은 별개입니다.
 
 **참고할 점**:
 - **[GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra)는 순차 배포 중입니다.** GEODE는 `gpt-6-astra`를 ChatGPT
@@ -214,9 +214,9 @@ flexible credit 또는 legacy per-seat 방식 중 무엇을 쓰는지에 따라 
   fallback 없이 완료했습니다. 이
   [불변 E2E smoke](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z)는
   해당 계정과 경로의 증거이며, 전체 계정에 대한 가용성 주장이 아닙니다.
-- **gpt-5.5 는 구독 전용입니다.** GPT-5.6 Sol/Terra/Luna와 GPT-5.4는 듀얼 레인입니다. 구독 프로필이 활성화되면 ChatGPT OAuth, API 키 프로필을 선택하면 Platform API를 사용합니다. 5.5가 필요하면 ChatGPT 구독이 필요합니다.
+- **GPT-6 Astra/Sol/Luna와 GPT-5.6 Sol/Terra/Luna는 API와 Codex 경로를 지원합니다.** API 키와 ChatGPT 로그인을 명시적으로 선택합니다. GPT-5.5는 API 모델로 유지되며 Codex 퇴역은 10월 14일 예정입니다. GPT-5.4와 GPT-5.3 Codex의 구독 경로는 지원이 끝났습니다.
 - 기존 Codex CLI 자격은 가져올 수 있지만, `codex-cli`는 GEODE 추론 백엔드가 아닙니다.
-- **Free / Go** 는 OpenAI 가격 페이지엔 있지만 CLI README 엔 없습니다. 동작하면 다행, 보장은 안 합니다.
+- 플랜별 포함 범위와 순차 배포는 모델 지원과 별개입니다. GEODE 목록에 있다는 사실만으로 계정 접근 권한이 확인되지는 않습니다.
 
 토큰 만료가 임박하면 GEODE 가 알아서 갱신합니다 (만료 120초 전 + 401 재시도). 사용자가 따로 신경 쓸 일은 없습니다.
 
@@ -491,7 +491,7 @@ PyPI 설치라면 `uv tool install geode-agent` 실행. 소스 체크아웃이�
 <details>
 <summary><strong>모델이 도구를 안 쓰거나, 빙빙 도는 느낌.</strong></summary>
 
-`geode model` 로 확인 — 모델마다 도구 사용 능력이 다릅니다. 기본은 `claude-opus-4-8` (가장 강력). `gpt-5.5` 사용 중이면 `.geode/config.toml` 에 `effort: "high"` 설정. `tail -f ~/.geode/logs/serve.log` 로 모델이 실제로 뭘 하고 있는지 관찰.
+`geode model`로 실효 모델을, `/model`로 모델별 effort 선택지를 확인합니다. 배포 기본값은 Claude Opus 5.5, GPT-6 Sol, GLM-5.3이며 기존에 명시한 설정은 유지됩니다. 요청과 실패 원인은 `~/.geode/logs/serve.log`에서 확인합니다.
 </details>
 
 <details>
