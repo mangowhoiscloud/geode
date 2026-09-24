@@ -56,6 +56,8 @@ functional change.
   an unavailable judgment never becomes a verification pass. This increases
   judgment calls for configurations that previously skipped them. Native Harbor
   receipts distinguish the requested verifier label from its effective policy.
+  Keep the model-free performance probe on that lifecycle and run the same
+  performance gate during local preflight without relaxing its baseline.
 
 ### Added
 
