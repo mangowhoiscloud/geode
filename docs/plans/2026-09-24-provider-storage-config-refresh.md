@@ -12,7 +12,11 @@ CI-gated merges and stable publication. The operator subsequently requested
 E2E and Harbor checks for the new model families through both API and
 subscription routes after all implementation is complete. The operator
 approved a total US$20 paid-validation cap on 2026-09-24; freeze the execution
-matrix and budget before calling models. Record subscription consumption
+matrix and budget before calling models. The subsequent operator instruction
+requires every implementation PR owned by this refresh to pass its exact-head
+CI ratchet and merge into `develop` in dependency order before paid validation.
+Freeze that clean, integrated `develop` revision; a local integration candidate
+is eligible for offline checks only. Record subscription consumption
 separately from API charges. Running services and globally installed tools
 remain outside scope.
 
@@ -40,21 +44,26 @@ remain outside scope.
 | Unit | Scope | Dependency | State |
 |---|---|---|---|
 | P1 | Price/context refresh, typed tariff rules, active offering catalogue | none | PR #3395 merged into develop at `7ea17cceb`; required CI passed |
-| P2 | OpenAI model/effort/output and API/Codex request boundaries | P1 | PR #3397, CI pending |
-| P3 | Claude typed capabilities, thinking, schemas, streaming parity | P2 shared selection helper | local implementation |
-| P4 | GLM request deduplication, exact effort and subscription admission | P2 shared selection helper | local implementation |
+| P2 | OpenAI model/effort/output and API/Codex request boundaries | P1 | PR #3397 merged into develop at `be48160a1`; required CI passed |
+| P3 | Claude typed capabilities, thinking, schemas, streaming parity | P2 shared selection helper | PR #3400 merged into develop at `1e419af4d` |
+| P4 | GLM request deduplication, exact effort and subscription admission | P2 shared selection helper | PR #3401 merged into develop at `88b2385a4`; required CI passed |
 | P5 | Native Claude computer toolset and action translation | P3 | local implementation |
 | P6 | CLI/default/config selection and bilingual public documentation | P2–P5 | local implementation and independent review |
-| S1 | Actual event-schema/digest references owned by the event store | audit | PR #3390, CI pending |
-| S2 | Runtime-state DB connection ownership, serialized use and teardown | audit | PR #3393; failed-write rollback and constructor cleanup under local verification |
+| S1 | Actual event-schema/digest references owned by the event store | audit | PR #3390 merged into develop at `0f3d88fe0` |
+| S2 | Runtime-state DB connection ownership, serialized use and teardown | audit | PR #3393 merged into develop at `e0c982f50` |
 | C1 | Validate complete settings before publishing a reload | audit | PR #3389 merged into develop at `a5b23bdc2`; required CI passed |
-| C2 | One global config path for writer, reader, explanation and watchers | C1 | PR #3396, CI pending |
-| D1 | Bound compatible SDK majors and deduplicate HTTPX construction | independent migration audit | PR #3394, CI pending |
+| C2 | One global config path for writer, reader, explanation and watchers | C1 | PR #3396 merged into develop at `3436579dc` |
+| D1 | Bound compatible SDK majors and deduplicate HTTPX construction | independent migration audit | PR #3394 merged into develop at `4b414c63a` |
 | D2 | Test current major SDK/evaluation compatibility | D1 | incompatible OpenAI/Inspect import reproduced; migration deferred |
-| E1 | Runtime construction, shutdown outcomes, request context and cache generation ownership | C1 | local implementation; existing error convention extended |
+| E1 | Runtime construction, shutdown outcomes, request context and cache generation ownership | C1 | PR #3403 merged into develop at `f44cdbf5c`; existing error convention extended |
 | E2 | Atomic gateway reload and owned watcher/poller lifecycle | C1, C2 | local implementation and independent review |
 | E3 | Shared SDK transport ownership at actual process/thread event-loop teardown | E1 | local implementation and independent review |
-| V1 | New-model API/subscription E2E and Harbor validation | all accepted implementation units | execution matrix in preparation; total US$20 paid cap approved |
+| K2 | Claude cache marker validity and 1-hour write accounting through durable records | P6 | local implementation and independent review; activity schema v11, trajectory v1 unchanged |
+| K1 | OpenAI explicit static prefixes and OpenRouter route/session cache shaping | P6, K2 | local implementation and independent review |
+| V1 bounds | Optional Harbor output/round limits and shared wrap-up cap preservation | runtime owners | PR #3404 merged into develop at `3e6e5d988` |
+| CI-1 | Conservative document-only full-test selection | existing CI gates | PR #3405 merged into develop at `ebeee591d` |
+| V1 execution | New-model API/subscription E2E, cache and Harbor validation | all implementation PRs merged into develop with required CI | not started; total US$20 paid cap approved |
+| F1 | Repeatable onboarding and audit scaffold in existing contributor skills | completed refactoring and checks | pending; preserve runtime/contributor prompt separation |
 | R1 | Patch release preparation, packaging/docs, develop→main, stable publication | all accepted units | pending |
 
 The implementation workspace holds the combined candidate while changes
@@ -63,6 +72,51 @@ workspace is not itself one oversized PR. Split a unit further when its
 native protocol or persistence contract warrants independent review. The
 architecture roadmap remains authoritative for any existing program GAP;
 ordinary provider maintenance does not create an unrelated program claim.
+
+The table records observed commit-specific evidence, not permission to reuse
+stale checks after a base or head change. Every merge still runs the current
+merge guard. API and Subscription are separate validation routes; unavailable
+Claude or Z.AI subscription admission remains an explicit rejection test, never
+a PAYG substitution. OpenRouter credentials were subsequently supplied for the
+scoped validation process and are not stored in repository artifacts.
+
+## Integration queue
+
+At develop `ebeee591d` on September 25, the original seven-PR queue is
+merged: P3 (#3400) → D1 (#3394) → C2 (#3396) → E1 (#3403) → S1 (#3390) →
+S2 (#3393) → V1 bounds (#3404). CI-1 (#3405) then added conservative
+document-only full-test selection. Continue with P5 → P6 → E2 → E3 → K2 →
+K1 in dependency order. Keep audit-confirmed CI and runtime defects in small,
+separate PRs before freezing final V1 inputs. This is a single integration
+queue operated under the existing [GitFlow manual](../../.agents/skills/geode-gitflow/SKILL.md),
+not a change to GitHub protection settings or a new merge-queue service.
+
+- Freeze waiting feature heads after their scoped fixes finish. Update only
+  the next PR against the fetched develop base; do not refresh all waiting
+  branches after every merge. Finish already-running checks and retain their
+  exact source identities without treating old green results as current.
+- Fix a defect in its original owner PR and propagate that commit through
+  dependencies. Review the actual combined diff; do not apply the same patch
+  independently to several branches or use commit counts as content proof.
+- Close a failure with its cause, smallest regression and affected consumer
+  checks. Reuse unchanged local evidence; rerun changed boundaries and the
+  mandatory remote checks. External-service failures retain the failed attempt
+  and may be rerun after diagnosis, without removing the check or changing its
+  acceptance criteria.
+- Admit one merge only after current main ancestry, latest-base compatibility,
+  exact-head required CI and the existing merge guard pass. Verify the two
+  ordered parents in the receipt before advancing the queue. No bypass,
+  squash, rebase, direct protected-branch push or standalone main sync PR.
+- Complete integrated develop verification before paid V1. Final scaffold
+  closure and release preparation follow their own review gates; no unreviewed
+  fixes enter main through a release-only bypass.
+
+The quality criteria follow [Google's review standard](https://google.github.io/eng-practices/review/reviewer/standard.html)
+and [small change guidance](https://google.github.io/eng-practices/review/developer/small-cls.html):
+cohesive changes, evidence of improved code health and concrete review findings,
+without speculative perfection work. [GitHub's strict-check contract](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#require-status-checks-before-merging)
+requires an up-to-date base; the queue limits redundant updates while preserving
+that requirement. These references do not imply external certification.
 
 ## Verification record
 
