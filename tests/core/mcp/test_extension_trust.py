@@ -172,15 +172,13 @@ def test_linux_broker_uses_closed_namespaces_and_system_roots(monkeypatch, tmp_p
 
 
 def test_config_precedence_reports_collision(tmp_path: Path, monkeypatch) -> None:
-    import core.mcp.config_catalog as catalog_module
-
     global_config = tmp_path / "global.toml"
     project = tmp_path / "project"
     project_config = project / ".geode" / "config.toml"
     project_config.parent.mkdir(parents=True)
     global_config.write_text('[mcp.servers.same]\ncommand = "global"\n', encoding="utf-8")
     project_config.write_text('[mcp.servers.same]\ncommand = "project"\n', encoding="utf-8")
-    monkeypatch.setattr(catalog_module, "GLOBAL_CONFIG_TOML", global_config)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(global_config))
     catalog = MCPConfigCatalog(
         tmp_path / "absent.json",
         project_root=lambda: project,
