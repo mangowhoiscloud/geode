@@ -82,7 +82,9 @@ def test_unreadable_file_is_skipped(config_files: dict[str, Path]) -> None:
 def test_disabled_external_gateway_still_builds_local_cli_manager(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("core.config._settings_instance", SimpleNamespace(gateway_enabled=False))
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "gateway_enabled", False)
     set_gateway(None)
     try:
         build_gateway()
@@ -93,16 +95,23 @@ def test_disabled_external_gateway_still_builds_local_cli_manager(
         set_gateway(None)
 
 
+@pytest.mark.parametrize("bound_settings_export", [False, True])
 def test_gateway_watches_redirected_config_and_reloads_it(
-    config_files: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+    config_files: dict[str, Path], monkeypatch: pytest.MonkeyPatch, bound_settings_export: bool
 ) -> None:
+    from core import config
     from core.orchestration import hot_reload
 
     config_files["global"].write_text("[gateway]\npollers = []\nmax_turns = 7\n")
-    monkeypatch.setattr(
-        "core.config._settings_instance",
-        SimpleNamespace(gateway_enabled=True, gateway_poll_interval_s=1),
-    )
+    # A prior patch can leave the lazy public export bound to its old instance.
+    if bound_settings_export:
+        monkeypatch.setitem(
+            config.__dict__,
+            "settings",
+            SimpleNamespace(gateway_enabled=False, gateway_poll_interval_s=5),
+        )
+    monkeypatch.setattr(config.settings, "gateway_enabled", True)
+    monkeypatch.setattr(config.settings, "gateway_poll_interval_s", 1)
     monkeypatch.setenv("SLACK_BOT_USER_ID", "test-bot")
     monkeypatch.setattr("core.wiring.container.build_default_lanes", lambda: None)
     monkeypatch.setattr(
