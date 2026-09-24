@@ -53,6 +53,12 @@ def _wire_effort(request: Any, provider: str, source: str) -> str | None:
 
         return build_create_kwargs(request).get("output_config", {}).get("effort")
 
+    if provider == "glm":
+        from core.llm.providers.glm import build_glm_reasoning_extra_body
+
+        controls = build_glm_reasoning_extra_body(request.model, effort=request.effort)
+        return controls.get("reasoning_effort") if controls else None
+
     from core.llm.adapters._openai_common import build_responses_kwargs
 
     return (

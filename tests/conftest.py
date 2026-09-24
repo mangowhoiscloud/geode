@@ -28,6 +28,7 @@ for _credential_var in (
 # Keep the directory alive for this interpreter; each test gets its own below.
 _test_auth_dir = tempfile.TemporaryDirectory(prefix="geode-test-auth-")
 os.environ["GEODE_AUTH_TOML"] = str(Path(_test_auth_dir.name) / "auth.toml")
+os.environ["CODEX_HOME"] = str(Path(_test_auth_dir.name) / "codex")
 
 # Redirect SessionCheckpoint to a temp directory during tests to prevent
 # production data contamination.

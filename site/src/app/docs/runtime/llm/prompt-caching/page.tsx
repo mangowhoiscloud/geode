@@ -8,8 +8,8 @@ export default function Page() {
       slug="runtime/llm/prompt-caching"
       title="Prompt caching"
       titleKo="프롬프트 캐싱"
-      summary="The static/dynamic boundary, rolling message breakpoints, and the append-only conversation contract that keeps the prefix cacheable."
-      summaryKo="static/dynamic 경계, 롤링 메시지 breakpoint, 그리고 prefix를 캐시 가능하게 유지하는 append 전용 대화 계약을 다룹니다."
+      summary="Stable prefixes, bounded rolling markers, and provider-reported cache usage across request lifecycles."
+      summaryKo="정적 프리픽스, 제한된 롤링 마커, 요청 생명주기에 따른 캐시 사용량을 다룹니다."
     >
       <Bi
         ko={
@@ -32,30 +32,66 @@ export default function Page() {
               메모리 레이어, 사용자 컨텍스트).
             </p>
             <p>
-              Anthropic 어댑터(<code>core/llm/providers/anthropic.py</code>)가
-              이 마커에서 시스템 문자열을 갈라 static 블록에
-              <code>{`cache_control: {"type": "ephemeral"}`}</code>을 붙입니다.
-              dynamic 쪽은 캐시 없이 나갑니다. static이 비어 있으면(audit
-              모드에서 레이어를 벗긴 경우) 빈 텍스트 블록에 cache_control을
-              붙이는 400 오류를 피해 dynamic 쪽을 단일 캐시 블록으로
-              승격합니다.
+              Anthropic 요청 생성기(<code>core/llm/adapters/_anthropic_common.py</code>)가
+              정적 블록에 기본 <code>{`cache_control: {"type": "ephemeral", "ttl": "1h"}`}</code>을
+              붙입니다. <code>prompt_cache_extended_ttl=false</code>는 5분 TTL을
+              선택합니다. 동적 블록에는 별도 마커를 붙이지 않지만, 뒤쪽 메시지
+              마커가 만드는 누적 프리픽스에는 포함됩니다. 정적 영역이 비면 빈
+              텍스트 오류를 피해 동적 블록에 5분 마커 하나를 사용합니다.
+            </p>
+
+            <h2>OpenAI·Z.AI·OpenRouter의 경계</h2>
+            <p>
+              OpenAI Platform의 등록된 GPT-5.6·GPT-6 모델은 같은 경계 앞의
+              정적 문자열을 developer 메시지의 input_text 블록으로 보내고
+              <code>prompt_cache_breakpoint</code>를 붙입니다. 동적 문자열은
+              그 뒤에 두며, 대화 이력의 자동 캐싱도 유지합니다. Codex 구독
+              경로와 이전 모델은 기존 instructions 및 캐시 키 계약을 유지합니다.
+              키가 같다는 사실만으로 적중을 보장하지는 않습니다.
+            </p>
+            <p>
+              Z.AI는 반복 접두부를 자동으로 캐싱하며 별도 캐시 마커를 보내지
+              않습니다. OpenRouter의 명시적 Claude·지원 OpenAI 경로에는 해당
+              마커를 보존합니다. 논리 세션 ID의 해시로 제공자 선택의 연속성을
+              요청하고, 원래 세션 ID는 보내지 않습니다. 사용자가 설정한 제공자
+              우선순위는 유지하며, 자동 모델 선택에 특정 제공자 마커를 추측해
+              넣지 않습니다.
+            </p>
+            <p>
+              SDK 연결을 닫거나 다시 만들어도 서버의 캐시를 삭제하지 않습니다.
+              모델·계정·도구 순서·출력 스키마·추론 설정·정리된 이력이 달라지면
+              공유 접두부도 달라질 수 있습니다. 실제 적중은 반환된 사용량으로
+              확인하며, 누락된 값과 0을 구분합니다. 정책 근거는 2026-09-24에
+              확인한 <a href="https://developers.openai.com/api/docs/guides/prompt-caching">OpenAI</a>,{" "}
+              <a href="https://docs.z.ai/guides/capabilities/cache">Z.AI</a>,{" "}
+              <a href="https://openrouter.ai/docs/guides/best-practices/prompt-caching">OpenRouter</a>
+              공식 문서입니다.
             </p>
 
             <h2>롤링 메시지 breakpoint</h2>
             <p>
-              Anthropic은 요청당 cache_control breakpoint를 4개까지
-              허용합니다. 시스템 블록이 1-2개를 쓰고, 나머지는
-              <code>apply_messages_cache_control</code>이 대화 이력의 마지막
-              메시지들에 붙입니다. 몇 개를 붙일지(0-3)는 cache-policy
-              SoT(<code>core/llm/cache_policy.py</code>)가 정하고 기본값은
-              3입니다. breakpoint가 많을수록 긴 멀티턴 루프의 적중률이
-              오르지만, 캐시된 블록마다 적중 여부와 무관하게 쓰기 오버헤드가
-              붙습니다. 짧은 작업이라면 낮추는 쪽이 맞습니다.
+              요청 전체의 도구·시스템·메시지 마커는 최대 4개입니다. 정적 시스템
+              블록이 1개를 사용하고, <code>apply_messages_cache_control</code>이
+              기존 마커를 보존한 뒤 남은 슬롯에서 기본 최대 3개를 추가합니다.
+              <code>cache-policy</code>의 <code>messages_breakpoints</code>는
+              추가할 수를 0–3으로 제한합니다. thinking·redacted_thinking과 빈
+              텍스트에는 직접 마커를 붙이지 않습니다. 명시적 1시간 마커는 5분
+              마커보다 앞에 있어야 하며, 잘못된 입력은 호출 전에 거절합니다.
             </p>
             <p>
-              비용 산식은 단가표 기준으로 cache write가 input의 1.25배, cache
-              read가 input의 0.1배입니다
-              (<code>core/llm/pricing_loader.py</code>).
+              마커 자체에는 별도 요금이 없습니다. Anthropic 표준 API 요율은
+              5분 쓰기 1.25배, 1시간 쓰기 2배이며 읽기 할인은 모델별 단가표를
+              따릅니다. 잦은 적중은 5분 TTL도 무료로 갱신하므로 1시간의 이득은
+              재사용 간격에 달려 있습니다. GEODE는 응답의 1시간 쓰기량을 비용과
+              영구 이벤트에 보존합니다. 과거 기록의 TTL 미상은 0으로 바꾸지 않으며,
+              그 기록의 추정 비용은 기존 5분 요율을 유지합니다.
+            </p>
+            <p>
+              동적 시스템 내용이 바뀌면 정적 마커까지는 재사용할 수 있지만 뒤쪽
+              메시지 프리픽스는 달라집니다. 도구 정의, 모델, thinking·effort 변경,
+              컨텍스트 정리도 영향을 줄 수 있습니다. 이는 새 요청의 정확성을
+              위한 무효화이며 캐시 적중을 보장하지 않습니다. 공급자가 보유한
+              캐시는 로컬 SDK 클라이언트를 닫는 동작과 별개의 수명을 가집니다.
             </p>
 
             <h2>대화 이력은 실제 turn만 append</h2>
@@ -63,9 +99,9 @@ export default function Page() {
               AgenticLoop는 라운드 번호나 날짜를 합성 user message로 만들지
               않습니다. 날짜와 runtime rule은 이미{" "}
               <code>core/agent/system_prompt.py</code>의 동적 시스템 영역에 있고,
-              한 실행 안에서 대화 이력에는 실제 user, assistant, tool turn만
-              뒤에 붙습니다. 따라서 다음 요청의 메시지열은 이전 요청의
-              메시지열을 정확한 prefix로 보존합니다.
+              일반적인 대화 라운드는 user, assistant, tool 메시지를 뒤에
+              붙여 기존 프리픽스를 유지합니다. 컨텍스트 복구나 명시적 제어
+              전환은 이력을 바꿀 수 있으므로 별도로 확인합니다.
             </p>
             <ul>
               <li>
@@ -96,8 +132,8 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>짧은 작업의 비용 증가</td>
-                  <td>breakpoint 쓰기 오버헤드가 적중 이득을 초과</td>
-                  <td>cache-policy SoT에서 <code>messages_breakpoints</code>를 낮춥니다.</td>
+                  <td>재사용 전에 TTL 만료 또는 프리픽스 변경</td>
+                  <td>안정적인 구간과 재사용 간격을 확인하고 필요한 TTL을 선택합니다.</td>
                 </tr>
                 <tr>
                   <td>400: empty text block에 cache_control</td>
@@ -136,32 +172,70 @@ export default function Page() {
               card, date, memory layers, user context).
             </p>
             <p>
-              The Anthropic adapter
-              (<code>core/llm/providers/anthropic.py</code>) splits the
-              system string at the marker and attaches
-              <code>{`cache_control: {"type": "ephemeral"}`}</code> to the
-              static block; the dynamic side ships uncached. When the static
-              side is empty (audit mode with layers stripped), the dynamic
-              side is promoted to the single cacheable block to avoid the
-              400 for cache_control on an empty text block.
+              The Anthropic request builder
+              (<code>core/llm/adapters/_anthropic_common.py</code>) marks the
+              static block with <code>{`cache_control: {"type": "ephemeral", "ttl": "1h"}`}</code>
+              by default. <code>prompt_cache_extended_ttl=false</code> selects
+              five minutes. The dynamic block has no separate marker, but is
+              included in the cumulative prefix of later message markers. An
+              empty static section falls back to one five-minute dynamic marker.
+            </p>
+
+            <h2>OpenAI, Z.AI and OpenRouter boundaries</h2>
+            <p>
+              Registered GPT-5.6 and GPT-6 models on OpenAI Platform receive the
+              static prefix in a developer input_text block with an explicit
+              <code>prompt_cache_breakpoint</code>. The dynamic text follows it;
+              implicit conversation caching remains enabled. Codex subscription
+              and earlier models retain their existing instructions and cache-key
+              contract. A matching key alone does not establish cache reuse.
+            </p>
+            <p>
+              Z.AI caches repeated prefixes automatically without cache markers.
+              Explicit Claude and supported OpenAI routes through OpenRouter
+              retain their corresponding markers. A hash of the logical session
+              ID requests provider affinity without sending the raw ID. Explicit
+              provider ordering remains intact; automatic model selection does
+              not guess an upstream cache protocol.
+            </p>
+            <p>
+              Closing or recreating an SDK client does not delete a provider cache.
+              Model, account, tool order, output schema, reasoning settings and
+              compacted history can change the reusable prefix. Observe actual
+              reuse through returned usage, preserving missing values separately
+              from zero. Policy sources checked on September 24, 2026:{" "}
+              <a href="https://developers.openai.com/api/docs/guides/prompt-caching">OpenAI</a>,{" "}
+              <a href="https://docs.z.ai/guides/capabilities/cache">Z.AI</a>,{" "}
+              <a href="https://openrouter.ai/docs/guides/best-practices/prompt-caching">OpenRouter</a>.
             </p>
 
             <h2>Rolling message breakpoints</h2>
             <p>
-              Anthropic allows up to 4 cache_control breakpoints per request.
-              The system blocks spend 1-2; the rest go on the trailing
-              conversation messages via
-              <code>apply_messages_cache_control</code>. How many (0-3) comes
-              from the cache-policy SoT
-              (<code>core/llm/cache_policy.py</code>), default 3. More
-              breakpoints raise the hit rate on long multi-turn loops, but
-              each cached block carries a write overhead whether the call
-              hits or misses; for short tasks, fewer is the right call.
+              A request can contain at most four tool, system and message
+              markers combined. The static system block uses one;
+              <code>apply_messages_cache_control</code> preserves explicit
+              markers and adds up to three within the remaining slots.
+              <code>messages_breakpoints</code> in the cache policy limits
+              additions to 0–3. Thinking, redacted thinking and empty text
+              cannot receive direct markers. One-hour markers must precede
+              five-minute markers; invalid explicit inputs fail before dispatch.
             </p>
             <p>
-              On the pricing table, a cache write costs 1.25 times input and
-              a cache read 0.1 times input
-              (<code>core/llm/pricing_loader.py</code>).
+              Markers have no independent fee. Standard Anthropic writes cost
+              1.25 times input for five minutes and 2 times for one hour; read
+              discounts follow the model tariff. Frequent hits refresh the
+              five-minute TTL for free, so the longer TTL depends on reuse
+              cadence. Provider-reported one-hour writes reach cost estimates
+              and durable records. Missing historical TTL splits remain unknown
+              and retain the earlier five-minute estimate.
+            </p>
+            <p>
+              Changing dynamic system context preserves the marked static
+              prefix but changes the later message prefix. Tool definitions,
+              model, thinking/effort changes and context recovery can invalidate
+              other prefixes. A correctly rebuilt request does not promise a
+              cache hit. Provider retention is independent of closing the local
+              SDK client.
             </p>
 
             <h2>Conversation history appends only real turns</h2>
@@ -169,10 +243,10 @@ export default function Page() {
               AgenticLoop no longer synthesizes a user message for the round
               number or current date. Date and runtime rules already live in
               the dynamic system region in
-              <code>core/agent/system_prompt.py</code>. Within one run, only
-              real user, assistant, and tool turns are appended, so the next
-              request preserves the previous message sequence as an exact
-              prefix.
+              <code>core/agent/system_prompt.py</code>. Ordinary conversation
+              rounds append user, assistant and tool messages. Context recovery
+              or explicit control transitions can change this history and must
+              be assessed separately.
             </p>
             <ul>
               <li>
@@ -203,8 +277,8 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>Costs go up on short tasks</td>
-                  <td>Breakpoint write overhead exceeds the hit savings</td>
-                  <td>Lower <code>messages_breakpoints</code> in the cache-policy SoT.</td>
+                  <td>The entry expires or the prefix changes before reuse</td>
+                  <td>Check prefix stability and reuse cadence before choosing the TTL.</td>
                 </tr>
                 <tr>
                   <td>400: cache_control on an empty text block</td>

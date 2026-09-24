@@ -289,6 +289,7 @@ def test_stream_usage_retains_presence_and_precedes_terminal_stop() -> None:
         "cached_input_tokens_present": True,
         "reasoning_tokens_present": True,
         "cache_write_tokens_present": False,
+        "cache_write_1h_tokens": None,
     }
 
 

@@ -16,6 +16,58 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text()
 
 
+@pytest.mark.parametrize("full", ["true", "false", "", "unknown", None, True])
+@pytest.mark.parametrize("result", ["success", "failure", "cancelled", "skipped"])
+def test_test_reducer_requires_all_shards_and_explicit_classification(
+    tmp_path: Path, full: object, result: str
+) -> None:
+    job = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]["test"]
+    needs = {
+        "changes": {"result": "success", "outputs": {"full_tests": full}},
+        "test_shards": {"result": result},
+        "test_contracts": {"result": result},
+    }
+    checked = subprocess.run(  # noqa: S603 - real reducer predicate, synthetic job outcomes
+        ["/bin/bash", "-e", "-c", job["steps"][0]["run"]],
+        env=os.environ
+        | {"TEST_NEEDS": json.dumps(needs), "GITHUB_OUTPUT": str(tmp_path / "output")},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    expected = (full == "true" and result == "success") or (full == "false" and result == "skipped")
+    assert (checked.returncode == 0) is expected, checked.stderr
+
+
+def test_test_shards_preserve_full_coverage_and_contract_checks() -> None:
+    jobs = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]
+    shards = jobs["test_shards"]
+    assert shards["strategy"] == {"fail-fast": False, "matrix": {"shard": [0, 1, 2, 3]}}
+    assert "continue-on-error" not in shards
+    run = next(
+        step["run"] for step in shards["steps"] if step.get("name", "").startswith("Run tests")
+    )
+    for flag in ("-n auto", "--dist=loadfile", "--cov=core", "--cov=evals", "--cov=evolve"):
+        assert flag in run
+    assert "-c pyproject.toml --rootdir=." in run
+    assert "--cov-fail-under=0" in run
+    upload = shards["steps"][-1]
+    assert upload["if"] == "${{ always() }}" and upload["with"]["include-hidden-files"] is True
+    reducer = jobs["test"]["steps"][-1]["run"]
+    assert reducer.index("scripts/ci_test_shards.py") < reducer.index("coverage combine")
+    assert "coverage report --show-missing" in reducer and "--fail-under" not in reducer
+    names = {step.get("name") for step in jobs["test_contracts"]["steps"]}
+    assert {
+        "Architecture behavior contracts",
+        "Architecture performance contracts",
+        "Architecture performance baseline",
+        "Architecture performance failure profile",
+        "Extension change-surface contracts",
+        "Build and inspect package artifacts",
+        "Native Harbor 0.22 Docker contracts (no containers or model calls)",
+    } <= names
+
+
 @pytest.mark.parametrize(
     "result", ["success", "failure", "cancelled", "skipped", "neutral", "pending", ""]
 )
@@ -109,6 +161,55 @@ def test_required_pages_checks_have_no_pull_request_path_filter() -> None:
     assert "ready_for_review" in trigger["types"]
     assert workflow["jobs"]["lint"].get("if") is None
     assert workflow["jobs"]["build"].get("if") is None
+
+
+@pytest.mark.parametrize(
+    ("event", "target", "before", "expected"),
+    [
+        ("pull_request", "develop", "", "refs/remotes/origin/develop"),
+        ("pull_request", "main", "", "refs/remotes/origin/main"),
+        ("push", "develop", "a" * 40, "a" * 40),
+        ("push", "main", "b" * 40, "b" * 40),
+        ("push", "develop", "", None),
+        ("push", "develop", "0" * 40, None),
+        ("push", "develop", "main", None),
+    ],
+)
+def test_legacy_ratchet_uses_event_comparison_base(
+    tmp_path: Path, event: str, target: str, before: str, expected: str | None
+) -> None:
+    steps = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]["lint"]["steps"]
+    step = next(step for step in steps if step.get("name") == "Legacy import ratchet")
+    assert step["env"] == {
+        "LEGACY_EVENT_MODE": "${{ github.event_name }}",
+        "LEGACY_PR_BASE_REF": "refs/remotes/origin/${{ github.base_ref || github.ref_name }}",
+        "LEGACY_PUSH_BASE_REF": "${{ github.event.before }}",
+    }
+    uv = tmp_path / "uv"
+    uv.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n', encoding="utf-8")
+    uv.chmod(0o755)
+    result = subprocess.run(  # noqa: S603 - tracked workflow with an inert uv argument probe
+        ["/bin/bash", "-e", "-c", step["run"]],
+        env=os.environ
+        | {
+            "PATH": f"{tmp_path}:/usr/bin:/bin",
+            "LEGACY_EVENT_MODE": event,
+            "LEGACY_PR_BASE_REF": f"refs/remotes/origin/{target}",
+            "LEGACY_PUSH_BASE_REF": before,
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert (result.returncode == 0) is (expected is not None), result.stderr
+    if expected is not None:
+        assert result.stdout.splitlines() == [
+            "run",
+            "python",
+            "scripts/check_legacy_imports.py",
+            "--base-ref",
+            expected,
+        ]
 
 
 def test_runtime_markdown_and_skills_trigger_code_verification() -> None:
