@@ -25,6 +25,7 @@ from core.tools.computer_use import ComputerUseHarness, execute_native_computer_
             {"x": 10, "y": 20, "direction": "left", "amount": 4},
         ),
         ("wait", {"duration": 0.25}, "wait", {"ms": 250}),
+        ("wait", {"ms": 250}, "wait", {"ms": 250}),
         ("wait", {"duration": 0.25, "ms": "ignored"}, "wait", {"ms": 250}),
         ("key", {"text": "Return"}, "key", {"keys": "Return"}),
     ],
@@ -80,6 +81,8 @@ def test_missing_cursor_fails_without_clicking_origin() -> None:
         ("key", {"text": "Tab", "repeat": 0}),
         ("key", {"text": "Tab", "repeat": 101}),
         ("wait", {"duration": float("nan")}),
+        ("wait", {"duration": 10**1000}),
+        ("wait", {"ms": 10**1000}),
         ("wait", {"duration": 301}),
     ],
 )
