@@ -115,10 +115,12 @@ def _get_conn() -> sqlite3.Connection | None:
         _CONN = conn
         _DB_PATH = db_path
         return conn
-    except Exception as exc:
+    except BaseException as exc:
         if conn is not None:
             with contextlib.suppress(sqlite3.Error):
                 conn.close()
+        if not isinstance(exc, Exception):
+            raise
         log.warning("agent_runtime_state: failed to open sessions.db: %s", exc)
         return None
 

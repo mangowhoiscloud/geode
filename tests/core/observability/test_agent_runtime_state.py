@@ -22,11 +22,13 @@ wiring tests land alongside the emit-site augmentation in that follow-up.
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 import threading
 import time
 from contextlib import closing
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -67,19 +69,57 @@ def test_schema_bootstrap_connection_is_closed(
     assert ars.get_agent_runtime_state("s-bootstrap") is not None
 
 
+@pytest.mark.parametrize(
+    "failure",
+    [
+        sqlite3.OperationalError("WAL setup failed"),
+        KeyboardInterrupt(),
+        SystemExit(17),
+        asyncio.CancelledError(),
+    ],
+    ids=["sqlite_error", "keyboard_interrupt", "system_exit", "cancelled"],
+)
 def test_failed_connection_setup_is_closed_and_retryable(
-    tmp_db: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    failure: BaseException,
 ) -> None:
-    connection = Mock(spec=sqlite3.Connection)
-    connection.execute.side_effect = sqlite3.OperationalError("WAL setup failed")
+    class FailedSetupConnection(sqlite3.Connection):
+        close_calls = 0
+
+        def execute(self, sql: str, parameters: Any = (), /) -> sqlite3.Cursor:
+            if sql == "PRAGMA journal_mode=WAL":
+                raise failure
+            return super().execute(sql, parameters)
+
+        def close(self) -> None:
+            self.close_calls += 1
+            super().close()
+
     bootstrap = Mock()
-    with monkeypatch.context() as scoped:
-        scoped.setattr("core.memory.session_manager.SessionManager", Mock(return_value=bootstrap))
-        scoped.setattr(ars.sqlite3, "connect", Mock(return_value=connection))
-        ars.record_agent_session_end(agent_id="s-failed")
+    with closing(sqlite3.connect(":memory:", factory=FailedSetupConnection)) as connection:
+        with monkeypatch.context() as scoped:
+            scoped.setattr(
+                "core.memory.session_manager.SessionManager", Mock(return_value=bootstrap)
+            )
+            scoped.setattr(ars.sqlite3, "connect", Mock(return_value=connection))
+            if isinstance(failure, Exception):
+                assert ars.get_agent_runtime_state("s-failed") is None
+                assert "failed to open sessions.db" in caplog.text
+            else:
+                with pytest.raises(type(failure)) as raised:
+                    ars.get_agent_runtime_state("s-failed")
+                assert raised.value is failure
+        assert connection.close_calls == 1
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            connection.execute("SELECT 1")
     bootstrap.close.assert_called_once_with()
-    connection.close.assert_called_once_with()
     assert ars._CONN is None
+    acquired = ars._LOCK.acquire(blocking=False)
+    if acquired:
+        ars._LOCK.release()
+    assert acquired
     ars.record_agent_session_end(agent_id="s-retry")
     assert ars.get_agent_runtime_state("s-retry") is not None
 
