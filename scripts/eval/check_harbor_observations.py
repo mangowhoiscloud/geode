@@ -178,11 +178,9 @@ def _usage_check(
                 "recorded attempt model/provider/route mismatch",
             )
         else:
-            admitted_purposes = {"agentic_loop", "cognitive_reflection"}
+            admitted_purposes = {"agentic_loop", "cognitive_reflection", "turn_verification"}
             if handoff_arm != "a0":
                 admitted_purposes.add("structured_decision")
-            if verification_engine is not None:
-                admitted_purposes.add("turn_verification")
             _require(
                 purpose in admitted_purposes,
                 "handoff attempt purpose mismatch",
@@ -236,7 +234,12 @@ def _usage_check(
 
 
 def _reconcile_usage_source(
-    path: Path, usage: dict[str, Any], sessions: set[str], full: dict[str, Any]
+    path: Path,
+    usage: dict[str, Any],
+    sessions: set[str],
+    full: dict[str, Any],
+    *,
+    native_verify: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Compare the complete retained source, not only the exported end IDs.
 
@@ -279,6 +282,14 @@ def _reconcile_usage_source(
             "source hook payload hash mismatch",
         )
     expected = _summarize_usage([_row_to_event(row) for row in rows])
+    if native_verify is not None:
+        verdicts = [
+            {**event.payload, "action": event.action}
+            for row in reversed(rows)
+            for event in (_row_to_event(row),)
+            if event.action in {"turn.verify.passed", "turn.verify.failed"}
+        ]
+        _require(verdicts == native_verify, "source/export native verification mismatch")
     # Producers may traverse the same retained rows in either chronological order.
     _require(
         sorted(usage["recorded_attempts"], key=lambda row: row["source_event_id"])
@@ -308,6 +319,62 @@ def _reconcile_usage_source(
         "session_rows": len(session_rows),
         "session_count": len(sessions),
         "scope": "retained-source-rows-to-export; not physical dispatch coverage",
+    }
+
+
+def _handoff_final_check(
+    handoff: dict[str, Any], metadata: dict[str, Any], attempts: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Require a performed semantic final check, separately from task correctness."""
+    _require(
+        handoff.get("effective_verify_mode")
+        == metadata.get("effective_verify_mode")
+        == "llm_judge",
+        "handoff effective verifier missing/mismatched",
+    )
+    _require(handoff.get("valid") is True, "handoff execution is not admitted")
+    judges = [row for row in attempts if row.get("purpose") == "turn_verification"]
+    _require(
+        judges and all(not row.get("error_type") for row in judges), "final judge missing/failed"
+    )
+    verdicts = handoff.get("native_verify")
+    if (
+        not isinstance(verdicts, list)
+        or not verdicts
+        or not all(
+            isinstance(row, dict)
+            and row.get("action") in {"turn.verify.passed", "turn.verify.failed"}
+            for row in verdicts
+        )
+    ):
+        raise ValueError("native final verification missing/malformed")
+    native_passed = verdicts[-1]["action"] == "turn.verify.passed"
+    _require(
+        not native_passed or verdicts[-1].get("success") is True, "native pass is inconsistent"
+    )
+    oracle = handoff.get("oracle")
+    if not isinstance(oracle, dict) or type(oracle.get("passed")) is not bool:
+        raise ValueError("handoff oracle missing")
+    passed = handoff.get("passed")
+    _require(
+        type(passed) is bool and passed == (native_passed and oracle["passed"]),
+        "handoff success contradicts final verification/oracle",
+    )
+    _require(
+        handoff.get("termination_reason") == metadata.get("termination_reason")
+        and (
+            not passed
+            or (metadata.get("termination_reason") == "end_turn" and not metadata.get("error_type"))
+        ),
+        "failed/cancelled handoff cannot claim success",
+    )
+    return {
+        "requested_verify_mode": metadata["verify_mode"],
+        "effective_verify_mode": metadata["effective_verify_mode"],
+        "judge_attempts": len(judges),
+        "native_verdicts": len(verdicts),
+        "native_passed": native_passed,
+        "task_passed": passed,
     }
 
 
@@ -669,6 +736,7 @@ def validate_observations(
     handoff_arm: str | None = None,
     handoff_case_sha256: str | None = None,
     expected_verify_mode: str | None = None,
+    expected_effective_verify_mode: str | None = None,
     verification_engine: str | None = None,
 ) -> dict[str, Any]:
     """Validate existing exports, returning only bounded metadata and hashes.
@@ -688,6 +756,14 @@ def validate_observations(
         "handoff arm and frozen case SHA must be supplied together",
     )
     agent_name = "geode-handoff" if handoff_arm is not None else "geode-runtime"
+    _require(
+        expected_effective_verify_mode in (None, "llm_judge")
+        and (
+            expected_effective_verify_mode is None
+            or (handoff_arm is not None and source_db is not None)
+        ),
+        "effective handoff verifier requires its closed source database",
+    )
     _require(
         verification_engine in (None, "llm", "jev")
         and (verification_engine is None or handoff_arm == "a0"),
@@ -843,6 +919,7 @@ def validate_observations(
         handoff_arm=handoff_arm,
         verification_engine=verification_engine,
     )
+    final_verification = None
     if handoff_arm is not None:
         handoff = document("agent/handoff-result.json")
         _require(
@@ -859,6 +936,8 @@ def validate_observations(
             and handoff_call_coverage_complete(receipt, usage["recorded_attempts"]),
             "handoff dispatch/attempt coverage mismatch",
         )
+        if expected_effective_verify_mode is not None:
+            final_verification = _handoff_final_check(handoff, metadata, usage["recorded_attempts"])
     uniform_effort = (
         accounting["observed_efforts"] == {model["reasoning"]: accounting["attempts"]}
         and accounting["unknown_metadata_attempts"] == 0
@@ -943,7 +1022,13 @@ def validate_observations(
         # The database belongs to this exact isolated trial, not a host-wide store.
         _require(source_db.resolve().is_relative_to(trial_dir.resolve()), "source outside trial")
         read(source_db)
-        source_reconciliation = _reconcile_usage_source(source_db, usage, sessions, full)
+        source_reconciliation = _reconcile_usage_source(
+            source_db,
+            usage,
+            sessions,
+            full,
+            native_verify=handoff["native_verify"] if final_verification is not None else None,
+        )
     atif = document("agent/trajectory.json")
     atif_model = _harbor_model("trajectories", "Trajectory")
     expected_atif = _atif_trajectory_from_geode(
@@ -1020,6 +1105,7 @@ def validate_observations(
         "replay_status": "tool-actions-observed" if tools else "no-tool-action-observed",
         "accounting": accounting,
         "source_reconciliation": source_reconciliation,
+        **({"final_verification": final_verification} if final_verification is not None else {}),
         **({"verification": verification} if verification is not None else {}),
         "timing": timing,
         "limits": [
@@ -1071,6 +1157,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--handoff-arm", choices=("a0", "a", "b"))
     parser.add_argument("--verification-engine", choices=("llm", "jev"))
+    parser.add_argument(
+        "--expected-effective-verify-mode",
+        choices=("llm_judge",),
+        help=(
+            "current handoff final-check contract; requires --source-db; "
+            "omitted preserves historical evidence"
+        ),
+    )
     parser.add_argument(
         "--expected-verify-mode",
         choices=("llm_judge", "reflexion"),

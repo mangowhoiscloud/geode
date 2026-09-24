@@ -126,6 +126,25 @@ functional change.
   fails so a later write cannot commit a failed operation's pending changes.
   Close the checkpoint metadata connection even when its index write fails,
   while retaining the existing recoverable checkpoint behavior.
+
+- Admit native Astra final-verification calls in decision-handoff observations.
+  Preserve requested and actual verifier modes separately, and require a complete
+  source-reconciled final-verification boundary for explicitly opted-in current
+  comparisons. Keep valid semantic failures distinct from success and preserve
+  historical exports without filling missing verification evidence.
+- Align OpenAI GPT-6 API and subscription model choices, reasoning controls,
+  and published API output limits; keep subscription-only request restrictions
+  separate and preserve reported token usage from API web search. Normalize
+  both Responses streams through one translator with tool calls, reasoning,
+  usage and replay metadata; reject transport EOF without a terminal response.
+
+- Share the documented GLM request and streaming contracts across completion
+  and text paths, including 5.3 reasoning, tools, and exact output limits.
+  Preserve stream and hosted-search usage, and reject incomplete tool streams.
+  Separate hybrid thinking capability from graded effort controls; reject GLM
+  Coding Plan calls before credentials are read under the supported-tools policy.
+  Remove unverified automatic GLM-5V grounding and its orphaned parser/client
+  chain while retaining explicit provider/source-aware unavailability.
 - Show the requested `switch_model` role and model hint in CLI/IPC approval
   details, including the primary-role default. Preserve exact values with JSON
   escaping so judgment-only approval can distinguish a root-model change;
