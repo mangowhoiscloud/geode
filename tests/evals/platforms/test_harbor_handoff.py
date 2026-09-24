@@ -326,6 +326,7 @@ def container_trial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNa
     result = {
         "session_id": "fake-root",
         "termination_reason": "natural",
+        "effective_verify_mode": "llm_judge",
         "error_type": None,
         "usage": _summarize_usage([]),
         "source_snapshot_complete": True,
@@ -352,6 +353,18 @@ def container_trial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNa
         export=export_trajectory,
         timeline=timeline,
     )
+
+
+@pytest.mark.parametrize("effective_mode", [None, "llm_judge"])
+def test_container_retains_actual_effective_mode_separately_from_requested(
+    container_trial: SimpleNamespace, effective_mode: str | None
+) -> None:
+    trial = container_trial
+    trial.result["effective_verify_mode"] = effective_mode
+    assert asyncio.run(_run_handoff(trial.args)) == 0
+    metadata = json.loads((trial.path / "runtime-result.json").read_text())["metadata"]
+    assert metadata["verify_mode"] == "rule_based"
+    assert metadata["effective_verify_mode"] == effective_mode
 
 
 def test_full_export_failure_preserves_digest_result_and_receipt(

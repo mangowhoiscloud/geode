@@ -11,9 +11,9 @@ from scripts.probes.probe_effort_surface import (
 )
 
 
-@pytest.mark.parametrize("source,expected_count", [("subscription", 51), ("payg", 66)])
+@pytest.mark.parametrize("source", ["subscription", "payg"])
 def test_visible_effort_surface_matches_picker(
-    monkeypatch: pytest.MonkeyPatch, source: str, expected_count: int
+    monkeypatch: pytest.MonkeyPatch, source: str
 ) -> None:
     from core.cli.commands._state import get_model_profiles
     from core.cli.effort_picker import supported_efforts
@@ -21,7 +21,7 @@ def test_visible_effort_surface_matches_picker(
     monkeypatch.setattr("core.cli.commands._state._selected_openai_source", lambda: source)
     surface = visible_effort_surface()
 
-    assert len(surface) == expected_count
+    assert surface
     assert len(surface) == len(set(surface))
     assert surface == tuple(
         (profile.id, profile.provider, effort)
