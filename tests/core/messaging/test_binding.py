@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from asyncio import CancelledError
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -138,11 +139,16 @@ def test_malformed_candidates_do_not_revoke_bindings(bindings: Any) -> None:
     assert [binding["channel_id"] for binding in manager.list_bindings()] == ["OLD"]
 
 
-def test_stop_closes_watcher_and_remaining_pollers_after_poller_failure() -> None:
+@pytest.mark.parametrize(
+    "failure_type", [RuntimeError, KeyboardInterrupt, SystemExit, CancelledError]
+)
+def test_stop_closes_watcher_and_remaining_pollers_after_poller_failure(
+    failure_type: type[BaseException],
+) -> None:
     watcher = ConfigWatcher(poll_interval_s=0.01)
     manager = ChannelManager(binding_watcher=watcher)
     failed_poller = MagicMock(spec=BasePoller)
-    primary_error = RuntimeError("poller stop failed")
+    primary_error = failure_type("poller stop failed")
     failed_poller.stop.side_effect = primary_error
     remaining_poller = MagicMock(spec=BasePoller)
     manager.register_poller(failed_poller)
@@ -151,7 +157,7 @@ def test_stop_closes_watcher_and_remaining_pollers_after_poller_failure() -> Non
     thread = watcher._thread
     assert thread is not None
     try:
-        with pytest.raises(RuntimeError) as caught:
+        with pytest.raises(failure_type) as caught:
             manager.stop()
         assert caught.value is primary_error
         remaining_poller.stop.assert_called_once()
@@ -161,15 +167,20 @@ def test_stop_closes_watcher_and_remaining_pollers_after_poller_failure() -> Non
         watcher.stop()
 
 
-def test_secondary_cleanup_error_does_not_replace_primary_error() -> None:
+@pytest.mark.parametrize(
+    "failure_type", [RuntimeError, KeyboardInterrupt, SystemExit, CancelledError]
+)
+def test_secondary_cleanup_error_does_not_replace_primary_error(
+    failure_type: type[BaseException],
+) -> None:
     watcher = MagicMock(spec=ConfigWatcher)
     watcher.stop.side_effect = ValueError("watcher stop failed")
     poller = MagicMock(spec=BasePoller)
-    primary_error = RuntimeError("poller stop failed")
+    primary_error = failure_type("poller stop failed")
     poller.stop.side_effect = primary_error
     manager = ChannelManager(binding_watcher=watcher)
     manager.register_poller(poller)
-    with pytest.raises(RuntimeError) as caught:
+    with pytest.raises(failure_type) as caught:
         manager.stop()
     assert caught.value is primary_error
     watcher.stop.assert_called_once()

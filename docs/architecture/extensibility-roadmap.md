@@ -292,7 +292,7 @@ machine-readable artifact is
 | `core/` Python LOC | 127,438 |
 | `evals/` Python LOC | 34,589 |
 | `evolve/` Python LOC | 32,002 |
-| Test Python LOC | 212,795 |
+| Test Python LOC | 212,806 |
 | Tool definitions / model executions / valid schemas / policies | 86 / 86 / 86 / 86 (exact) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 6 |

@@ -116,7 +116,8 @@ functional change.
 - Reload gateway bindings atomically after file deletion, replacement or edits
   with older modification times. Invalid reloads retain the last valid routing
   and retry after debounce; explicit empty merged rules revoke bindings. Stop
-  the owned config watcher and remaining pollers even when one poller fails.
+  the owned config watcher and remaining pollers even when one poller fails,
+  including interruption or cancellation, then re-raise the original failure.
   Wake polling sleeps on shutdown; retain ownership and reject restart while a
   blocked callback prevents the previous watcher thread from stopping.
 - Use the shared global config path resolver for Settings, config explanation,

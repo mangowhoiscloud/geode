@@ -114,11 +114,11 @@ class ChannelManager:
         cleanups = [poller.stop for poller in self._pollers]
         if self._binding_watcher is not None:
             cleanups.append(self._binding_watcher.stop)
-        first_error: Exception | None = None
+        first_error: BaseException | None = None
         for cleanup in cleanups:
             try:
                 cleanup()
-            except Exception as exc:
+            except BaseException as exc:
                 if first_error is None:
                     first_error = exc
                 else:
