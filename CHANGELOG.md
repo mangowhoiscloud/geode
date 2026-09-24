@@ -75,6 +75,11 @@ functional change.
 
 ### Added
 
+- Add optional positive output-token and action-round limits to the one-tool
+  Harbor adapter while preserving its defaults. Wrap-up requests respect a
+  caller's smaller output ceiling. Auxiliary and subscription request limits
+  remain distinct from a whole-runtime spending cap; provider V1 validation
+  stays provisional until implementation is complete and its revision is frozen.
 - Add credential-gated Jev judgment selection through `/model judgment`, its
   interactive picker and the existing natural-language `switch_model` tool.
   Explicit selection uses TypeSafe System One or OpenRouter's compatible
@@ -127,6 +132,8 @@ functional change.
 
 ### Fixed
 
+- Preserve thin Harbor cognitive-reflection usage by binding its middleware to the existing session event sink.
+
 - Release partially constructed runtime resources before propagating the original
   failure, and retry incomplete shutdown without skipping sibling resources.
   Delegate the daemon's borrowed scheduler teardown to its runtime owner,
@@ -144,6 +151,21 @@ functional change.
   environments while retaining measured sizes in build logs and complete
   Markdown twins.
 
+- Close runtime-state schema-bootstrap and failed connection candidates
+  deterministically, including interrupted setup while preserving the original
+  control exception. Release the cached SQLite connection during runtime
+  shutdown, and serialize complete reads/writes with cleanup so other active
+  hook bundles can reopen it without losing cumulative records. Roll back
+  failed runtime-state writes before reusing the connection, discard it if
+  rollback fails, and close SessionManager connections when schema initialization
+  fails so a later write cannot commit a failed operation's pending changes.
+  Close the checkpoint metadata connection even when its index write fails,
+  while retaining the existing recoverable checkpoint behavior.
+
+- Bind trajectory runtime-event references to each stored hook schema version
+  and include session and physical-step correlation in the cohort digest.
+  Preserve mixed-version history and pre-v5 tables without rewriting source
+  rows or previously published artifacts.
 - Admit native Astra final-verification calls in decision-handoff observations.
   Preserve requested and actual verifier modes separately, and require a complete
   source-reconciled final-verification boundary for explicitly opted-in current

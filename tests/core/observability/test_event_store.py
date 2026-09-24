@@ -16,6 +16,7 @@ from core.observability.event_store import (
     EventRetentionPolicy,
     HookEventStore,
     HookEventWrite,
+    read_hook_event_references,
 )
 
 
@@ -60,6 +61,136 @@ def test_session_manager_owns_additive_hook_event_schema(tmp_path: Path) -> None
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
     assert "hook_events" in tables
+
+
+def test_trajectory_references_keep_mixed_persisted_hook_versions(tmp_path: Path) -> None:
+    from core.observability.session_timeline import SessionTimeline
+    from core.observability.trajectory import trajectory_from_session, verify_trajectory_integrity
+
+    db_path = tmp_path / "sessions.db"
+    timeline = SessionTimeline("s-1", db_path=db_path)
+    timeline.record_session_start()
+    timeline.record_session_end()
+    store = HookEventStore(db_path)
+    record = replace(_record(), session_id="s-1", turn_id="t-1")
+    store.append(record)
+    store.append(replace(record, step_id="step-2"))
+    store.close()
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("UPDATE hook_events SET schema_version = 3 WHERE id = 1")
+        original = conn.execute("SELECT * FROM hook_events ORDER BY id").fetchall()
+
+    trajectory = trajectory_from_session("s-1", db_path=db_path)
+    refs = trajectory["runtime_event_refs"]
+    assert [row["schema_id"] for row in refs] == [
+        "geode.hook-event@3",
+        f"geode.hook-event@{event_store_module.EVENT_SCHEMA_VERSION}",
+    ]
+    assert [row["record_count"] for row in refs] == [1, 1]
+    assert refs == list(read_hook_event_references(db_path, ("s-1", "s-1")))
+    assert verify_trajectory_integrity(trajectory)["runtime_event_ref_count"] == 2
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT * FROM hook_events ORDER BY id").fetchall() == original
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("schema_version", 4),
+        ("session_id", "s-2"),
+        ("step_id", "step-changed"),
+        ("turn_id", "turn-changed"),
+        ("tool_call_id", "tool-changed"),
+        ("llm_call_id", "llm-changed"),
+        ("llm_attempt_id", "attempt-changed"),
+        ("payload_hash", "f" * 64),
+    ],
+)
+def test_hook_reference_digest_binds_schema_and_correlation(
+    tmp_path: Path, field: str, value: str | int
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    store = HookEventStore(db_path)
+    store.append(replace(_record(), session_id="s-1", step_id="step-1"))
+    store.close()
+    before = read_hook_event_references(db_path, ("s-1",))[0]
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        values = dict(conn.execute("SELECT * FROM hook_events").fetchone())
+        values[field] = value
+        conn.execute(
+            "UPDATE hook_events SET schema_version = :schema_version, session_id = :session_id, "
+            "step_id = :step_id, turn_id = :turn_id, tool_call_id = :tool_call_id, "
+            "llm_call_id = :llm_call_id, llm_attempt_id = :llm_attempt_id, "
+            "payload_hash = :payload_hash",
+            values,
+        )
+    session_id = str(value) if field == "session_id" else "s-1"
+    after = read_hook_event_references(db_path, (session_id,))[0]
+    assert before["sha256"] != after["sha256"]
+    assert after["reference"] == f"hook-events-sha256:{after['sha256']}"
+
+
+def test_legacy_hook_reference_survives_additive_step_column(tmp_path: Path) -> None:
+    db_path = tmp_path / "sessions.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "CREATE TABLE hook_events (id INTEGER, schema_version INTEGER, "
+            "session_id TEXT, event TEXT, payload_hash TEXT, turn_id TEXT, "
+            "tool_call_id TEXT, llm_call_id TEXT, llm_attempt_id TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO hook_events VALUES (1, 3, 's-1', 'session_started', ?, '', '', '', '')",
+            ("a" * 64,),
+        )
+    before = read_hook_event_references(db_path, ("s-1",))
+    assert before[0]["schema_id"] == "geode.hook-event@3"
+    with sqlite3.connect(db_path) as conn:
+        assert "step_id" not in {row[1] for row in conn.execute("PRAGMA table_info(hook_events)")}
+        conn.execute("ALTER TABLE hook_events ADD COLUMN step_id TEXT NOT NULL DEFAULT ''")
+    assert read_hook_event_references(db_path, ("s-1",)) == before
+
+
+def test_hook_references_do_not_invent_missing_schema_identity(tmp_path: Path) -> None:
+    db_path = tmp_path / "missing.db"
+    assert read_hook_event_references(db_path, ("s-1",)) == ()
+    assert not db_path.exists()
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE unrelated (id INTEGER)")
+    assert read_hook_event_references(db_path, ("s-1",)) == ()
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "CREATE TABLE hook_events (id INTEGER, session_id TEXT, event TEXT, "
+            "payload_hash TEXT, turn_id TEXT, tool_call_id TEXT, llm_call_id TEXT, "
+            "llm_attempt_id TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO hook_events VALUES (1, 's-1', 'session_started', ?, '', '', '', '')",
+            ("a" * 64,),
+        )
+    assert read_hook_event_references(db_path, ("s-1",)) == ()
+
+
+@pytest.mark.parametrize(
+    "version,reason",
+    [(0, "positive integer"), ("legacy", "positive integer"), (5, "step_id")],
+)
+def test_invalid_hook_schema_metadata_fails_reference_export(
+    tmp_path: Path, version: int | str, reason: str
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "CREATE TABLE hook_events (id INTEGER, schema_version INTEGER, session_id TEXT, "
+            "event TEXT, payload_hash TEXT, turn_id TEXT, tool_call_id TEXT, "
+            "llm_call_id TEXT, llm_attempt_id TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO hook_events VALUES (1, ?, 's-1', 'session_started', ?, '', '', '', '')",
+            (version, "a" * 64),
+        )
+    with pytest.raises(ValueError, match=reason):
+        read_hook_event_references(db_path, ("s-1",))
 
 
 def test_append_redacts_raw_fields_secrets_and_large_payloads(tmp_path: Path) -> None:
