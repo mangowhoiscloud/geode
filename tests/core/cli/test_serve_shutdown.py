@@ -79,7 +79,7 @@ def test_serve_failure_cleanup_preserves_primary_and_closes_each_owner(
     monkeypatch.setattr("core.wiring.adapters.build_cli_poller", lambda *_, **__: poller)
     monkeypatch.setattr("core.wiring.adapters.start_gateway_webhook", lambda *_, **__: webhook)
     monkeypatch.setattr("signal.signal", lambda *_: None)
-    monkeypatch.setattr(typer_serve.asyncio, "run", run)
+    monkeypatch.setattr(typer_serve, "run_process_coroutine", run)
 
     with pytest.raises(type(primary) if primary is not None else typer.Exit) as caught:
         typer_serve.run_serve(

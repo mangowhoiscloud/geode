@@ -87,6 +87,17 @@ class AcmePaygAdapter:
               매칭되도록 강제하므로, 같은 쌍을 둘 등록하면 invariant 위반으로
               곧바로 실패합니다.
             </p>
+            <p>
+              내장 어댑터의 <code>LoopAffineClientCache</code>는 같은 이벤트 루프의
+              세션들이 SDK 연결을 공유하도록 합니다. 키 교체는 다음 호출의 연결을
+              바꾸며, 진행 중 요청의 이전 연결은 닫지 않습니다. 현재·이전 연결은
+              해당 루프가 종료될 때 작업과 스트림 정리가 끝난 뒤 함께 닫힙니다.
+              개별 런타임 종료는 다른 세션의 연결을 닫지 않습니다. 이전 연결은
+              루프 수명까지 보관되며 교체 횟수에 대한 별도 상한은 없습니다.
+              외부에서 루프를 소유한다면 작업 종료 후 루프를 닫기 전에
+              <code>core.llm.loop_affinity.drain_current_loop_clients()</code>를
+              await하십시오. 캐시 밖에서 전달한 연결의 정리는 원래 소유자 책임입니다.
+            </p>
             <pre>{`# acme-geode-adapter/pyproject.toml
 [project.entry-points."geode.llm_adapters"]
 acme-payg = "acme_geode:create_adapter"
@@ -298,6 +309,19 @@ class AcmePaygAdapter:
               <code>(provider, source)</code> pair matches exactly one adapter, so
               registering two for the same pair fails loudly as an invariant
               violation.
+            </p>
+            <p>
+              Built-in adapters use <code>LoopAffineClientCache</code> to share
+              SDK clients among sessions on the same event loop. Credential
+              rotation selects a fresh client for later calls while in-flight
+              calls keep their previous client. The loop owner closes current
+              and retired clients after its work and streams settle, before
+              closing the loop. An individual runtime shutdown leaves shared
+              clients open. Retired clients remain until loop teardown, without
+              a separate rotation-count limit. External loop owners should
+              await <code>core.llm.loop_affinity.drain_current_loop_clients()</code>
+              after their work finishes and before closing the loop. Clients
+              supplied outside the cache remain their original owner&apos;s responsibility.
             </p>
             <pre>{`# acme-geode-adapter/pyproject.toml
 [project.entry-points."geode.llm_adapters"]

@@ -120,6 +120,11 @@ functional change.
   Restore turn attribution and adapter usage context after success, failure or
   cancellation, and serialize SDK client publication with credential invalidation.
 
+- Close current and retired provider SDK clients on their owning event loop
+  after its work settles. Credential rotation preserves in-flight calls;
+  shutting down one runtime does not close clients shared with another.
+  Preserve original failures and cancellation through bounded cleanup-error
+  reporting, including normal CLI, gateway, worker and dreaming loop exits.
 - Validate the complete settings reload before updating the live singleton.
   Failed environment/TOML field validation, field preparation, or routing
   refresh preserves the previous Settings values; corrected reloads retain

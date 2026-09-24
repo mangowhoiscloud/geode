@@ -398,7 +398,9 @@ class CLIPoller:
     def _run_async_server(self) -> None:
         """Run the asyncio Unix socket server on the poller thread."""
         try:
-            with asyncio.Runner() as runner:
+            from core.async_runtime import owned_asyncio_runner
+
+            with owned_asyncio_runner() as runner:
                 self._loop = runner.get_loop()
                 runner.run(self._serve_async())
         except BaseException as exc:

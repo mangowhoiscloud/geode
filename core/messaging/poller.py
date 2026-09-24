@@ -107,7 +107,9 @@ class BasePoller(ABC):
 
     def _run_loop_thread(self) -> None:
         """Run the async polling loop in the poller's daemon thread."""
-        with asyncio.Runner() as runner:
+        from core.async_runtime import owned_asyncio_runner
+
+        with owned_asyncio_runner() as runner:
             runner.run(self._run_loop_async())
 
     async def _run_loop_async(self) -> None:

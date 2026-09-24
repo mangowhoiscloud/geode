@@ -18,6 +18,7 @@ from typing import Any
 import typer
 
 from core.agent.session_mode import SessionMode
+from core.async_runtime import run_process_coroutine
 from core.cli.session_state import _set_readiness
 from core.ui.console import console
 from core.wiring.startup import check_readiness
@@ -622,7 +623,7 @@ def _serve(
         console.print()
         signal.signal(signal.SIGINT, _on_signal)
         signal.signal(signal.SIGTERM, _on_signal)
-        asyncio.run(_serve_loop())
+        run_process_coroutine(_serve_loop())
     finally:
         primary_error = sys.exception()
         # --- Phase 0: notify shutdown hook ---
