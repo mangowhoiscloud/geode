@@ -232,6 +232,34 @@ class TestBootstrapHandlerWiring:
     SESSION_ENDED / SUBAGENT_COMPLETED with augmented payloads writes
     the expected row to ``agent_runtime_state``."""
 
+    def test_owned_services_shutdown_closes_connection_without_stopping_other_hooks(
+        self, tmp_db: Path
+    ) -> None:
+        from core.hooks import HookEvent
+        from core.server.supervised.services import SharedServices
+        from core.wiring.bootstrap import build_hooks
+
+        hooks, _, _ = build_hooks(session_key="first", run_id="r-1", log_dir=tmp_db.parent)
+        other, _, _ = build_hooks(session_key="second", run_id="r-2", log_dir=tmp_db.parent)
+        services = SharedServices(hook_system=hooks, _owns_hook_system=True)
+        payload = {"session_id": "s-shared", "usage": {"input_tokens": 7, "output_tokens": 2}}
+        try:
+            hooks.trigger(HookEvent.LLM_CALL_ENDED, payload)
+            connection = ars._CONN
+            assert connection is not None
+            services.close()
+            assert hooks.closed
+            with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+                connection.execute("SELECT 1")
+            other.trigger(HookEvent.LLM_CALL_ENDED, payload)
+            state = ars.get_agent_runtime_state("s-shared")
+            assert state is not None
+            assert (state.total_input_tokens, state.total_output_tokens) == (14, 4)
+        finally:
+            services.close()
+            other.close()
+        assert ars._CONN is None
+
     def test_session_ended_writes_full_row(self, tmp_db: Path) -> None:
         from core.hooks import HookEvent
         from core.wiring.bootstrap import build_hooks

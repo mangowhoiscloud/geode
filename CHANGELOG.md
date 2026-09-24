@@ -144,6 +144,17 @@ functional change.
   environments while retaining measured sizes in build logs and complete
   Markdown twins.
 
+- Close runtime-state schema-bootstrap and failed connection candidates
+  deterministically, including interrupted setup while preserving the original
+  control exception. Release the cached SQLite connection during runtime
+  shutdown, and serialize complete reads/writes with cleanup so other active
+  hook bundles can reopen it without losing cumulative records. Roll back
+  failed runtime-state writes before reusing the connection, discard it if
+  rollback fails, and close SessionManager connections when schema initialization
+  fails so a later write cannot commit a failed operation's pending changes.
+  Close the checkpoint metadata connection even when its index write fails,
+  while retaining the existing recoverable checkpoint behavior.
+
 - Bind trajectory runtime-event references to each stored hook schema version
   and include session and physical-step correlation in the cohort digest.
   Preserve mixed-version history and pre-v5 tables without rewriting source
