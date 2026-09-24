@@ -75,6 +75,11 @@ functional change.
 
 ### Added
 
+- Add optional positive output-token and action-round limits to the one-tool
+  Harbor adapter while preserving its defaults. Wrap-up requests respect a
+  caller's smaller output ceiling. Auxiliary and subscription request limits
+  remain distinct from a whole-runtime spending cap; provider V1 validation
+  stays provisional until implementation is complete and its revision is frozen.
 - Add credential-gated Jev judgment selection through `/model judgment`, its
   interactive picker and the existing natural-language `switch_model` tool.
   Explicit selection uses TypeSafe System One or OpenRouter's compatible
@@ -126,6 +131,8 @@ functional change.
   this does not reconstruct missing historical usage.
 
 ### Fixed
+
+- Preserve thin Harbor cognitive-reflection usage by binding its middleware to the existing session event sink.
 
 - Release partially constructed runtime resources before propagating the original
   failure, and retry incomplete shutdown without skipping sibling resources.
