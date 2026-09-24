@@ -18,6 +18,29 @@ its explicit LLM/Jev injection. Global Jev selection must not overlap that
 experiment-specific owner. Published historical M4/M5/M6 bytes and scores remain
 unchanged; see the [publication record](jev-verdict-publication-20260924.md).
 
+### Current final-verification admission
+
+`run_arm` exports the session's actual `effective_verify_mode` separately from
+the Harbor profile's requested `verify_mode`. A compatibility request of
+`rule_based` can therefore produce `llm_judge`; an unobserved effective mode
+remains `null`. General helper profiles retain Astra `turn_verification` calls
+without requiring the matched-verdict-only `verification.json` artifact.
+
+New helper comparisons must freeze and invoke
+`check_harbor_observations.py --expected-effective-verify-mode llm_judge
+--source-db <closed-trial-database>`. This admission joins final request receipts
+to observed attempts, requires native final verdicts and the actual effective
+mode, and reconciles those verdicts against the closed source database. Removing
+the entire request/attempt/verdict boundary cannot pass by vacuous coverage.
+Task success additionally requires the independent oracle and native final pass;
+an admitted bounded hold or rejected helper response remains a failed outcome.
+Cancelled or errored execution cannot claim success.
+
+The option is explicit so historical retained exports remain readable without
+inventing missing fields or changing their scores. Passing it does not establish
+per-tool-round reflection scheduling, physical-dispatch completeness, or benchmark
+promotion authority; those require their own frozen evidence and checks.
+
 ## Current evidence disposition — 2026-09-24
 
 The r6 results below are **superseded for claims about the revised,

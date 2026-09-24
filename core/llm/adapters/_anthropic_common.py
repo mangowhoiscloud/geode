@@ -165,7 +165,7 @@ def _maybe_inject_computer_use(kwargs: dict[str, Any], req: AdapterCallRequest) 
         or (req.allowed_tool_names is not None and "computer" not in req.allowed_tool_names)
     ):
         return
-    tool_type, beta = _computer_use_spec(kwargs.get("model", ""))
+    tool_type, beta = _computer_use_spec(req.model)
     tools = list(kwargs.get("tools") or [])
     # Dedup by the NATIVE type (either generation), not the name: a caller's
     # custom same-name tool must not suppress native injection, and re-entrancy

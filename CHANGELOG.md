@@ -54,7 +54,8 @@ functional change.
   signed thinking, structured output, tool calls, and cache usage in streaming;
   retain hosted search usage. Validate output/effort/forced-tool limits, including
   auxiliary text completions, and update hosted web tool versions.
-  Guard unknown computer generations until their native executor is supported.
+  Select the computer protocol from the typed request model and guard unknown
+  generations until their native executor is supported.
 
 - Run Reflection after each tool-result round and once before final delivery.
   Final semantic verification replaces the mechanical-only default; legacy
@@ -120,6 +121,11 @@ functional change.
 
 ### Fixed
 
+- Admit native Astra final-verification calls in decision-handoff observations.
+  Preserve requested and actual verifier modes separately, and require a complete
+  source-reconciled final-verification boundary for explicitly opted-in current
+  comparisons. Keep valid semantic failures distinct from success and preserve
+  historical exports without filling missing verification evidence.
 - Align OpenAI GPT-6 API and subscription model choices, reasoning controls,
   and published API output limits; keep subscription-only request restrictions
   separate and preserve reported token usage from API web search. Normalize
