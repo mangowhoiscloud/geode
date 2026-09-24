@@ -83,6 +83,10 @@ def _build_system_handlers(
         from core.config import settings
 
         model_hint = kwargs.get("model_hint", "")
+        if kwargs.get("role", "primary") == "judgment":
+            from core.cli.commands.judgment import cmd_judgment
+
+            return {"action": "judgment", **cmd_judgment(model_hint, interactive=False)}
         # Only update settings — do NOT call loop.update_model_async() here.
         # The AgenticLoop checks for model drift at the start of each round
         # and applies the change safely between LLM calls (not mid-call).

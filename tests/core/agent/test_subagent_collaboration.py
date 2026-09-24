@@ -14,6 +14,7 @@ from core.agent.sub_agent import SubAgentManager, SubTask
 from core.agent.tool_executor import ToolExecutor
 from core.agent.worker import WorkerRequest, _load_worker_resume, _run_agentic
 from core.hooks import HookName, HookRegistry
+from core.llm.adapters.base import AdapterCallRequest, AdapterCallResult, UsageSummary
 from core.llm.agentic_response import AgenticResponse, ResponseUsage, TextBlock, ToolUseBlock
 from core.memory.collaboration import CollaborationStore
 from core.memory.session_checkpoint import SessionCheckpoint, SessionState
@@ -581,6 +582,8 @@ def test_collaboration_e2e_characterizes_depth_and_resume_side_effects(
 
         mutation_round_zero_messages: list[str] = []
         verify_round_zero_messages: list[str] = []
+        final_verifications: list[str] = []
+        reflection_requests: list[AdapterCallRequest] = []
 
         async def scripted_llm(
             loop: AgenticLoop,
@@ -588,10 +591,34 @@ def test_collaboration_e2e_characterizes_depth_and_resume_side_effects(
             messages: list[dict[str, Any]],
             *,
             round_idx: int = 0,
+            purpose: str = "agentic_loop",
             **_kwargs: Any,
         ) -> AgenticResponse:
             history = json.dumps(messages, ensure_ascii=False, default=str)
             usage = ResponseUsage(input_tokens=1, output_tokens=1)
+            if purpose == "turn_verification":
+                assert _kwargs["allow_tools"] is False
+                assert _kwargs["response_schema"]["title"] == "TurnVerification"
+                final_verifications.append(loop._session_id)
+                return AgenticResponse(
+                    content=[
+                        TextBlock(
+                            text=json.dumps(
+                                {
+                                    "passed": True,
+                                    "score": 1.0,
+                                    "reflection": {
+                                        "observation": "The scripted worker supplied its artifact.",
+                                        "lesson": "Retain the artifact for the parent.",
+                                        "next_check": "The parent may consume the artifact.",
+                                    },
+                                }
+                            )
+                        )
+                    ],
+                    usage=usage,
+                )
+            assert purpose == "agentic_loop"
             if "externally visible effect" in history:
                 if round_idx == 0:
                     mutation_round_zero_messages.append(history)
@@ -631,13 +658,26 @@ def test_collaboration_e2e_characterizes_depth_and_resume_side_effects(
                 usage=usage,
             )
 
-        async def skip_auxiliary_reflection(
-            _loop: AgenticLoop, _tool_results: list[dict[str, Any]]
-        ) -> None:
-            return None
+        async def reflect(request: AdapterCallRequest) -> AdapterCallResult:
+            assert [tool.name for tool in request.tools] == ["record_reflection"]
+            reflection_requests.append(request)
+            return AdapterCallResult(
+                text="",
+                tool_uses=(
+                    {
+                        "name": "record_reflection",
+                        "input": {"hypotheses": ["Worker evidence recorded"], "confidence": 0.5},
+                    },
+                ),
+                usage=UsageSummary(),
+                stop_reason="end_turn",
+            )
 
         monkeypatch.setattr(AgenticLoop, "_call_llm", scripted_llm)
-        monkeypatch.setattr(AgenticLoop, "_maybe_reflect", skip_auxiliary_reflection)
+        monkeypatch.setattr(
+            "core.agent.loop._reflection.resolve_for",
+            lambda *_args: SimpleNamespace(acomplete=reflect),
+        )
 
         runner = _ProductionWorkerRunner(lambda: (bound, {}))
         manager = SubAgentManager(
@@ -750,5 +790,7 @@ def test_collaboration_e2e_characterizes_depth_and_resume_side_effects(
         assert {research_id, verify_id}.issubset({task["task_id"] for task in listed["tasks"]})
         # Characterization: explicit resume restores history but has no operation receipt.
         assert effects == [mutation_id, mutation_id]
+        assert final_verifications == [research_id, verify_id, mutation_id, mutation_id]
+        assert len(reflection_requests) == 4
 
     asyncio.run(scenario())

@@ -29,6 +29,7 @@ from scripts.eval import decision_handoff_pilot as pilot
 @pytest.fixture(autouse=True)
 def _isolated_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     from core import paths
+    from core.agent.loop import _reflection
     from core.config import settings
     from core.llm import token_tracker, usage_store
 
@@ -38,9 +39,10 @@ def _isolated_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterat
     monkeypatch.setattr(paths, "GEODE_HOME", tmp_path / "geode-home")
     monkeypatch.setattr(paths, "resolve_sessions_dir", lambda *_args: tmp_path / "sessions")
     monkeypatch.setattr(usage_store, "_store", usage_store.UsageStore(tmp_path / "usage"))
-    monkeypatch.setattr(settings, "cognitive_reflection_enabled", False)
+    monkeypatch.setattr(settings, "judgment_engine", "llm")
+    monkeypatch.setattr(_reflection, "resolve_for", lambda *_args: _ReflectionAdapter())
     monkeypatch.setattr(settings, "llm_max_retries", 1)
-    monkeypatch.setenv("GEODE_VERIFY_MODE", "rule_based")
+    monkeypatch.setenv("GEODE_VERIFY_MODE", "llm_judge")
     monkeypatch.setenv("GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR", "1")
     monkeypatch.setenv("TYPESAFE_API_KEY", "synthetic-test-key")
     token = token_tracker._tracker_ctx.set(token_tracker.TokenTracker())
@@ -56,16 +58,72 @@ class _Adapter:
     source = "subscription"
     billing_type = AdapterBillingType.SUBSCRIPTION
 
-    def __init__(self, responses: list[AdapterCallResult | BaseException]) -> None:
+    def __init__(
+        self,
+        responses: list[AdapterCallResult | BaseException],
+        *,
+        native_verdict: AdapterCallResult | None = None,
+    ) -> None:
         self.responses = iter(responses)
         self.requests: list[AdapterCallRequest] = []
+        self.native_verdict = native_verdict
 
     async def acomplete(self, request: AdapterCallRequest) -> AdapterCallResult:
         self.requests.append(request)
+        if (
+            self.native_verdict is not None
+            and (request.response_schema or {}).get("title") == "TurnVerification"
+        ):
+            assert not request.tools
+            assert request.allowed_tool_names == frozenset()
+            return self.native_verdict
         response = next(self.responses)
         if isinstance(response, BaseException):
             raise response
         return response
+
+
+class _ReflectionAdapter(_Adapter):
+    """An explicit synthetic belief response, never a real SDK/credential route."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            [
+                _response(
+                    calls=(
+                        _call(
+                            "record_reflection",
+                            "reflection-fixture",
+                            {"hypotheses": ["Fixture observation retained"], "confidence": 0.5},
+                        ),
+                    )
+                )
+            ]
+        )
+
+
+def _root_adapter(responses: list[AdapterCallResult | BaseException]) -> _Adapter:
+    """Supply a deliberately accepting fake judge; the independent oracle still scores.
+
+    False-acceptance cases intentionally keep this same imperfect judgment so the
+    task/handoff oracle, not a model's positive verdict, determines test success.
+    """
+    return _Adapter(
+        responses,
+        native_verdict=_response(
+            json.dumps(
+                {
+                    "passed": True,
+                    "score": 1.0,
+                    "reflection": {
+                        "observation": "Synthetic accepting verdict; independent oracle remains authoritative.",
+                        "lesson": "A judge verdict is not external correctness evidence.",
+                        "next_check": "Retain the task and handoff oracle result.",
+                    },
+                }
+            )
+        ),
+    )
 
 
 def _response(
@@ -164,7 +222,7 @@ async def _run(
                     "disposition": "answered",
                 },
             }
-    root = _Adapter(_root_responses(root_case, mode=mode))
+    root = _root_adapter(_root_responses(root_case, mode=mode))
     decision_result = _response(json.dumps(decision), input_tokens=20)
     if mode == "helper_refusal":
         decision_result = replace(decision_result, stop_reason="refusal")
@@ -217,15 +275,15 @@ def test_real_root_continues_after_source_bound_decision(arm: str, tmp_path: Pat
     )
     assert all(result["oracle"]["checks"].values())
     assert result["oracle"]["component_matches"]
-    assert len(root.requests) == 3
+    assert len(root.requests) == 4
     assert len(helper.requests) == (1 if arm == "a" else 0)
     assert len(requests) == (1 if arm == "b" else 0)
     assert all(
         request.model == pilot.MODEL and request.effort == "xhigh" for request in root.requests
     )
     assert [row["purpose"] for row in result["call_accounting"]].count("structured_decision") == 1
-    assert len(result["call_accounting"]) == 4
-    assert sum(row["usage"]["input_tokens"] for row in result["call_accounting"]) == 50
+    assert len(result["call_accounting"]) == 7
+    assert sum(row["usage"]["input_tokens"] for row in result["call_accounting"]) == 80
     assert result["usage"]["attempt_pairing_complete"]
     assert result["handoff_call_coverage_complete"]
     handoff = json.loads((directory / "handoff.json").read_text())
@@ -258,7 +316,7 @@ def test_root_handles_unavailable_action_or_target_without_lookup(
     directory = tmp_path / "run"
     result, root, _, _ = asyncio.run(_run(_case(case_id), arm, directory))
     assert result["valid"] and result["passed"], result
-    assert len(root.requests) == 2
+    assert len(root.requests) == 3
     assert result["oracle"]["checks"]["lookup_matches"]
     handoff = json.loads((directory / "handoff.json").read_text())
     assert [row["tool"] for row in handoff if row["kind"] == "tool_result"] == ["analyze_request"]
@@ -294,7 +352,7 @@ def test_root_failure_preserves_completed_usage_and_invalidates_result(tmp_path:
     assert failed[0]["error_type"] == "ValueError"
     assert failed[0]["usage"]["input_tokens"] is None
     assert failed[0]["usage"]["output_tokens"] is None
-    assert sum(row["usage"]["input_tokens"] or 0 for row in result["call_accounting"]) == 30
+    assert sum(row["usage"]["input_tokens"] or 0 for row in result["call_accounting"]) == 40
     assert (directory / "handoff.json").is_file()
     assert (directory / "trajectory.json").is_file()
 
@@ -354,7 +412,7 @@ def test_wrong_helper_decision_does_not_determine_root_task_success(
     assert result["oracle"]["checks"]["results_consumed_by_root"] is True
     assert result["oracle"]["checks"]["lookup_after_interpretation"] is True
     assert result["oracle"]["checks"]["lookup_matches"] is recovered
-    assert len(root.requests) == 3
+    assert len(root.requests) == 4
 
 
 @pytest.mark.parametrize("failure_at", ["constructor", "snapshot"])
@@ -378,7 +436,7 @@ def test_owned_resources_close_when_initialization_or_snapshot_fails(
     )
     monkeypatch.setattr(system.HookSystem, "__init__", track_hooks)
     monkeypatch.setattr(httpx, "AsyncClient", lambda **_: client)
-    root = _Adapter(_root_responses(case))
+    root = _root_adapter(_root_responses(case))
     if failure_at == "constructor":
         case = {**case, "request": ""}
         expected_error: type[Exception] = ValueError
@@ -387,7 +445,7 @@ def test_owned_resources_close_when_initialization_or_snapshot_fails(
         read = HookEventStore.read
 
         def fail_snapshot(store: HookEventStore, *args: Any, **kwargs: Any) -> Any:
-            if len(root.requests) == 3:
+            if len(root.requests) == 4:
                 raise OSError("synthetic snapshot failure")
             return read(store, *args, **kwargs)
 
@@ -397,7 +455,7 @@ def test_owned_resources_close_when_initialization_or_snapshot_fails(
     with pytest.raises(expected_error):
         asyncio.run(pilot.run_arm(case, "b", directory, root_adapter=root))
     assert hooks and all(instance.closed for instance in hooks) and client.is_closed
-    assert len(root.requests) == (0 if failure_at == "constructor" else 3)
+    assert len(root.requests) == (0 if failure_at == "constructor" else 4)
 
 
 @pytest.mark.parametrize("missing", ["checkpoint", "timeline"])
@@ -412,7 +470,7 @@ def test_missing_canonical_store_rejects_before_model_dispatch(
 
     owner = SessionCheckpoint if missing == "checkpoint" else SessionTimeline
     monkeypatch.setattr(owner, "__init__", fail_initialization)
-    root = _Adapter([])
+    root = _root_adapter([])
     helper = _Adapter([])
     with pytest.raises(RuntimeError, match="canonical checkpoint or session timeline"):
         asyncio.run(
@@ -425,6 +483,58 @@ def test_missing_canonical_store_rejects_before_model_dispatch(
             )
         )
     assert not root.requests and not helper.requests
+
+
+def test_global_jev_cannot_override_the_frozen_comparison(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "judgment_engine", "jev")
+    root = _root_adapter([])
+    with pytest.raises(ValueError, match="comparison owns its engines"):
+        asyncio.run(runtime.run_arm(_case("negated-cancel-en"), "a0", tmp_path, root_adapter=root))
+    assert not root.requests
+
+
+@pytest.mark.parametrize("malformed", [False, True])
+def test_native_final_judgment_distinguishes_semantic_hold_from_invalid_response(
+    tmp_path: Path, malformed: bool
+) -> None:
+    case = _case("negated-cancel-en")
+    initial = _root_responses(case)[1:]
+    plan = _response(
+        '{"steps":[{"id":"repair","description":"Check the recorded status",'
+        '"expected_outcome":"Evidence supports the answer"}],"reasoning":"Recheck requested"}'
+    )
+    root = _root_adapter([*initial, plan, initial[-1], plan, initial[-1]])
+    root.native_verdict = _response(
+        "invalid"
+        if malformed
+        else json.dumps(
+            {
+                "passed": False,
+                "score": 0.0,
+                "reflection": {
+                    "observation": "Synthetic negative verdict for the bounded-hold contract.",
+                    "lesson": "A judge can reject a correct answer; retain the independent oracle.",
+                    "next_check": "Recheck the recorded status.",
+                },
+            }
+        )
+    )
+    directory = tmp_path / "native-hold"
+    directory.mkdir()
+    result = asyncio.run(runtime.run_arm(case, "a0", directory, root_adapter=root))
+    assert result["valid"] is not malformed
+    assert not result["passed"]
+    assert result["oracle"]["checks"]["results_consumed_by_root"]
+    assert result["termination_reason"] == "external_verification_required"
+    assert result["error_type"] == ("runtime_error" if malformed else None)
+    calls = [row for row in result["call_accounting"] if row["purpose"] == "turn_verification"]
+    assert len(calls) == (1 if malformed else 3)
+    assert all(row["usage"]["input_tokens"] == 10 for row in calls)
+    assert result["handoff_call_coverage_complete"]
 
 
 @pytest.mark.parametrize("missing", ["terminal", "tool_result"])
@@ -444,7 +554,7 @@ def test_incomplete_canonical_evidence_cannot_pass(
     assert not trajectory["integrity"]["scope_complete"]
     if missing == "tool_result":
         assert trajectory["events"][-1]["kind"] == "session.ended"
-    assert sum(row["usage"]["input_tokens"] for row in result["call_accounting"]) == 50
+    assert sum(row["usage"]["input_tokens"] for row in result["call_accounting"]) == 80
 
 
 def test_baseline_does_not_allocate_typesafe_http_client(
@@ -463,7 +573,7 @@ def test_baseline_does_not_allocate_typesafe_http_client(
             case,
             "a",
             directory,
-            root_adapter=_Adapter(_root_responses(case)),
+            root_adapter=_root_adapter(_root_responses(case)),
             decision_adapter=_Adapter([_response(json.dumps(decision), input_tokens=20)]),
         )
     )
@@ -517,7 +627,7 @@ def test_unassisted_root_uses_same_lookup_without_helper(
 
     monkeypatch.setattr(httpx, "AsyncClient", forbidden_client)
     case = _case(case_id)
-    root = _Adapter(_root_responses(case)[1:])
+    root = _root_adapter(_root_responses(case)[1:])
     directory = tmp_path / "a0"
     directory.mkdir()
     result = asyncio.run(runtime.run_arm(case, "a0", directory, root_adapter=root))
@@ -527,6 +637,7 @@ def test_unassisted_root_uses_same_lookup_without_helper(
     assert all(
         {tool.name for tool in request.tools} == {"lookup_order_status"}
         for request in root.requests
+        if (request.response_schema or {}).get("title") != "TurnVerification"
     )
     assert all("analyze_request" not in request.system_prompt for request in root.requests)
     assert result["tool_definitions"][0]["parameters"] == runtime.StatusLookupTool().parameters
@@ -543,7 +654,9 @@ def test_task_verifier_recomputes_final_and_consumed_lookup_evidence(tmp_path: P
     directory = tmp_path / "a0"
     directory.mkdir()
     result = asyncio.run(
-        runtime.run_arm(case, "a0", directory, root_adapter=_Adapter(_root_responses(case)[1:]))
+        runtime.run_arm(
+            case, "a0", directory, root_adapter=_root_adapter(_root_responses(case)[1:])
+        )
     )
     handoff = json.loads((directory / "handoff.json").read_text())
     result["oracle"] = {"passed": True}
@@ -599,7 +712,7 @@ def _inbox_decisions(
 
 @pytest.mark.parametrize("engine", ["llm", "jev"])
 @pytest.mark.parametrize("malformed", [False, True])
-@pytest.mark.parametrize("repair_attempts", [1, 2])
+@pytest.mark.parametrize("repair_attempts", [1, 2, 3])
 def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
     engine: str,
     malformed: bool,
@@ -614,7 +727,7 @@ def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
     answer = {"items": [{"id": item["id"], **item["expected_answer"]} for item in case["items"]]}
     wrong = json.loads(json.dumps(answer))
     wrong["items"][0]["status"] = "invented"
-    root = _Adapter(
+    root = _root_adapter(
         [
             _response(
                 calls=(
@@ -706,15 +819,20 @@ def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
     result = asyncio.run(execute())
     evidence = json.loads((directory / "verification.json").read_text())
     attempts = [row for row in result["call_accounting"] if row["purpose"] == "turn_verification"]
-    assert len(attempts) == (1 if malformed else repair_attempts + 1), result
+    assert len(attempts) == (1 if malformed else min(repair_attempts + 1, 3)), result
     assert all(row["usage"]["input_tokens"] == 20 for row in attempts)
     assert result["handoff_call_coverage_complete"]
     assert evidence["inputs"][0]["state"]["candidate_output"] == json.dumps(wrong)
     assert "expected_answer" not in json.dumps(evidence["inputs"])
-    assert len(root.requests) == (2 if malformed else 2 + 2 * repair_attempts)
+    assert len(root.requests) == (2 if malformed else 2 + 2 * min(repair_attempts, 2))
     if malformed:
         assert not result["passed"]
         assert result["termination_reason"] == "external_verification_required"
+    elif repair_attempts == 3:
+        assert result["valid"] and not result["passed"], result
+        assert result["error_type"] is None
+        assert result["termination_reason"] == "external_verification_required"
+        assert all(row["verdict"] == "contradicted" for row in evidence["judgments"])
     else:
         assert result["valid"] and result["passed"], result
         assert "<reflection>" in root.requests[-1].system_prompt
@@ -730,6 +848,274 @@ def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
             [{"judge_call_id": row["llm_call_id"], "feedback_sha256": row["feedback_sha256"]}]
             for row in evidence["judgments"][:-1]
         ]
+
+
+def test_pre_dispatch_verification_error_does_not_reuse_prior_negative_verdict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.agent import verify
+
+    monkeypatch.setenv("GEODE_VERIFY_MODE", "llm_judge")
+    case, orders = _inbox_case()
+    answer = {"items": [{"id": item["id"], **item["expected_answer"]} for item in case["items"]]}
+    answer["items"][0]["status"] = "invented"
+    candidate = _response(json.dumps(answer))
+    plan = _response(
+        '{"steps":[{"id":"repair","description":"Check the status",'
+        '"expected_outcome":"Observed status matches"}],"reasoning":"Repair requested"}'
+    )
+    root = _root_adapter(
+        [
+            _response(
+                calls=(
+                    _call(
+                        "lookup_order_status",
+                        "lookup-1",
+                        {
+                            "items": [
+                                {"id": item["id"], "order_id": item["expected_order"]}
+                                for item in case["items"]
+                                if item["expected_answer"]["disposition"] == "answered"
+                            ]
+                        },
+                    ),
+                )
+            ),
+            candidate,
+            plan,
+            candidate,
+            plan,
+            candidate,
+        ]
+    )
+    judge = _Adapter([_response('{"verdict":"contradicted"}')] * 2)
+    native_verify = verify.verify_turn_async
+    attempts = 0
+
+    async def verify_until_budget(*args: Any, **kwargs: Any) -> Any:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 3:
+            assert kwargs["loop"]._verify_attempt == kwargs["loop"]._verify_continuation_budget
+            return verify._verification_error(
+                verify.VerifyMode.LLM_JUDGE, reason="verification_time_budget_exhausted"
+            )
+        return await native_verify(*args, **kwargs)
+
+    monkeypatch.setattr(verify, "verify_turn_async", verify_until_budget)
+    directory = tmp_path / "verification-unavailable"
+    directory.mkdir()
+    result = asyncio.run(
+        runtime.run_arm(
+            case,
+            "a0",
+            directory,
+            orders=orders,
+            root_adapter=root,
+            verification_engine="llm",
+            verification_adapter=judge,
+        )
+    )
+    evidence = json.loads((directory / "verification.json").read_text())
+    assert len(judge.requests) == len(evidence["judgments"]) == 2
+    assert all(
+        row["accepted"] and row["verdict"] == "contradicted" for row in evidence["judgments"]
+    )
+    assert attempts == 3
+    assert result["termination_reason"] == "external_verification_required"
+    assert result["native_verify"][-1]["error_type"] == "verification_time_budget_exhausted"
+    assert not result["valid"] and not result["passed"]
+    assert result["error_type"] == "runtime_error"
+
+
+@pytest.mark.parametrize("stop", ["refusal", "content_filter", "incomplete", "length", ""])
+def test_candidate_fault_never_replaces_noncompleted_provider_result(stop: str) -> None:
+    from core.hooks.middleware import LlmCallRequest
+
+    native = replace(_response("Native incomplete/declined output"), stop_reason=stop)
+    comparison = runtime._VerificationComparison(
+        SimpleNamespace(receipts=[]),
+        runtime.HandoffReceipt(arm="a0"),
+        "task",
+        "contract",
+        {"when": "before_observation", "candidate_output": "not the native result"},
+    )
+    call = LlmCallRequest(
+        adapter=_Adapter([]),
+        request=AdapterCallRequest(model=runtime.MODEL, messages=()),
+        purpose="agentic_loop",
+        correlation={"llm_call_id": "root-1"},
+    )
+
+    async def downstream(_call: Any) -> AdapterCallResult:
+        return native
+
+    assert asyncio.run(comparison.llm_execution(call, downstream)) is native
+    assert comparison.interventions == []
+
+
+@pytest.mark.parametrize("engine", ["llm", "jev"])
+@pytest.mark.parametrize("when", ["before_observation", "after_observation"])
+def test_candidate_intervention_retains_native_output_and_closes_real_repair(
+    engine: str, when: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts.eval.check_harbor_observations import _verification_check
+
+    monkeypatch.setenv("GEODE_VERIFY_MODE", "llm_judge")
+    case, orders = _inbox_case()
+    answer = {"items": [{"id": item["id"], **item["expected_answer"]} for item in case["items"]]}
+    candidate = json.loads(json.dumps(answer))
+    if when == "after_observation":
+        candidate["items"][0]["status"] = "cancelled"
+    fault = {"when": when, "candidate_output": json.dumps(candidate)}
+    lookup = _response(
+        calls=(
+            _call(
+                "lookup_order_status",
+                "lookup-1",
+                {
+                    "items": [
+                        {"id": item["id"], "order_id": item["expected_order"]}
+                        for item in case["items"]
+                        if item["expected_answer"]["disposition"] == "answered"
+                    ]
+                },
+            ),
+        ),
+    )
+    native_candidate = replace(
+        _response(json.dumps(answer)),
+        codex_output_items=({"type": "message", "content": [{"text": json.dumps(answer)}]},),
+        response_id="native-candidate-1",
+    )
+    plan = _response(
+        json.dumps(
+            {
+                "steps": [
+                    {
+                        "id": "repair",
+                        "description": "Check observed status",
+                        "expected_outcome": "Answer agrees with observed status",
+                    }
+                ],
+                "reasoning": "The verdict requires an evidence-based correction.",
+            }
+        )
+    )
+    root = _root_adapter(
+        [
+            lookup,
+            *([native_candidate] if when == "after_observation" else []),
+            plan,
+            *([lookup] if when == "before_observation" else []),
+            _response(json.dumps(answer)),
+        ]
+    )
+    labels = [
+        "contradicted" if when == "after_observation" else "insufficient_evidence",
+        "supported",
+    ]
+    judge = _Adapter([_response(json.dumps({"verdict": label})) for label in labels])
+    answers = iter(labels)
+
+    def transport(_request: httpx.Request) -> httpx.Response:
+        label = next(answers)
+        return httpx.Response(
+            200,
+            json={
+                "model": runtime.JEV_MODEL,
+                "usage": {"input_tokens": 20, "output_tokens": 2},
+                "answers": {
+                    "verdict": {
+                        "type": "choice",
+                        "choice": label,
+                        "confidence": 1.0,
+                        "probabilities": {
+                            key: float(key == label)
+                            for key in ("supported", "contradicted", "insufficient_evidence")
+                        },
+                    }
+                },
+            },
+        )
+
+    directory = tmp_path / "controlled"
+    directory.mkdir()
+
+    async def execute() -> dict[str, Any]:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+            return await runtime.run_arm(
+                case,
+                "a0",
+                directory,
+                orders=orders,
+                root_adapter=root,
+                verification_engine=engine,
+                verification_adapter=judge if engine == "llm" else None,
+                verification_intervention=fault,
+                client=client,
+            )
+
+    result = asyncio.run(execute())
+    assert result["valid"] and result["passed"], result
+    evidence = json.loads((directory / "verification.json").read_text())
+    interventions = json.loads((directory / "intervention.json").read_text())
+    assert len(interventions) == 1
+    record = interventions[0]
+    assert record["native"]["text"] == (
+        native_candidate.text if when == "after_observation" else ""
+    )
+    assert record["native"]["tool_uses"] == (
+        [] if when == "after_observation" else list(lookup.tool_uses)
+    )
+    assert record["effective"] == {"text": fault["candidate_output"], "tool_uses": []}
+    assert evidence["inputs"][0]["state"]["candidate_output"] == fault["candidate_output"]
+    assert len(evidence["inputs"][0]["state"]["tool_observations"]) == (
+        1 if when == "after_observation" else 0
+    )
+    assert evidence["inputs"][-1]["state"]["candidate_output"] == json.dumps(answer)
+    assert len(evidence["inputs"][-1]["state"]["tool_observations"]) == 1
+    assert [row["verdict"] for row in evidence["judgments"]] == labels
+    consumed = [row for row in evidence["root_requests"] if row["consumed_feedback"]]
+    assert (
+        consumed[0]["consumed_feedback"][0]["judge_call_id"]
+        == evidence["judgments"][0]["llm_call_id"]
+    )
+    # Effective transcript, not the displaced Codex output items, reaches the repair request.
+    replayed = [
+        message
+        for request in root.requests[2:]
+        for message in request.messages
+        if message.role == "assistant" and fault["candidate_output"] in str(message.content)
+    ]
+    assert replayed and all(not message.codex_output_items for message in replayed)
+    source_attempt = next(
+        row
+        for row in result["usage"]["recorded_attempts"]
+        if row["llm_call_id"] == record["llm_call_id"]
+    )
+    assert source_attempt["usage"]["input_tokens"] == 10
+    assert source_attempt["usage"]["output_tokens"] == 2
+    if when == "after_observation":
+        assert record["response_id"] == "native-candidate-1"
+    options = {
+        "engine": engine,
+        "receipt": json.loads((directory / "handoff.json").read_text()),
+        "attempts": result["usage"]["recorded_attempts"],
+        "call_events": json.loads((directory / "call-events.json").read_text()),
+        "trajectory": json.loads((directory / "trajectory.private.json").read_text()),
+        "intervention_spec": fault,
+        "intervention_rows": interventions,
+    }
+    assert _verification_check(evidence, **options)["completed_judgments"] == 2
+    for broken in (
+        [],
+        interventions * 2,
+        [{**record, "native_sha256": "0" * 64}],
+        [{**record, "effective": {"text": "changed", "tool_uses": []}}],
+    ):
+        with pytest.raises(ValueError, match="intervention"):
+            _verification_check(evidence, **(options | {"intervention_rows": broken}))
 
 
 async def _run_inbox(
@@ -789,7 +1175,7 @@ async def _run_inbox(
             ),
         ]
     )
-    root = _Adapter(responses)
+    root = _root_adapter(responses)
     helper = _Adapter(
         [
             _response(json.dumps(value), input_tokens=20)
@@ -843,12 +1229,13 @@ def test_complete_inbox_uses_one_helper_batch_and_one_lookup_batch(
     assert result["oracle"]["rejudgment_call_count"] == 0
     assert result["oracle"]["lookup_attempt_count"] == 1
     assert result["handoff_call_coverage_complete"]
-    assert len(root.requests) == (2 if arm == "a0" else 3)
-    assert len(result["call_accounting"]) == (2 if arm == "a0" else 4)
+    assert len(root.requests) == (3 if arm == "a0" else 4)
+    assert len(result["call_accounting"]) == (4 if arm == "a0" else 7)
     assert all(
         "Status-only intent means order-status information" in request.system_prompt
         and "including requests to take no action" in request.system_prompt
         for request in root.requests
+        if (request.response_schema or {}).get("title") != "TurnVerification"
     )
     if arm != "a0":
         assert len(payloads) == 1 and len(payloads[0]["questions"]) == 24
@@ -914,9 +1301,9 @@ def test_inbox_rejudgment_and_wrong_reads_remain_successful_but_counted(
     assert oracle["rejudgment_call_count"] == 1 and oracle["rejudged_item_count"] == 2
     assert oracle["wrong_target_lookup_count"] == oracle["extra_lookup_count"] == 1
     assert oracle["helper_rejudgment_recovery_count"] == 1
-    assert len(root.requests) == 5 and len(payloads) == 2
-    assert len(result["call_accounting"]) == 7
-    assert sum(row["usage"]["input_tokens"] for row in result["call_accounting"]) == 90
+    assert len(root.requests) == 6 and len(payloads) == 2
+    assert len(result["call_accounting"]) == 12
+    assert sum(row["usage"]["input_tokens"] for row in result["call_accounting"]) == 140
     handoff = json.loads((directory / "handoff.json").read_text())
     assert runtime.verify_handoff_result(case, result, handoff) == oracle
     result["final_text"] = json.dumps(
@@ -941,7 +1328,7 @@ def test_incomplete_inbox_fails_before_any_model_call(fault: str, tmp_path: Path
         case["items"][0]["expected_answer"]["status"] = "invented"
     else:
         case["items"][1]["id"] = case["items"][0]["id"]
-    root = _Adapter([])
+    root = _root_adapter([])
     with pytest.raises(ValueError):
         asyncio.run(runtime.run_arm(case, "a0", tmp_path, orders=orders, root_adapter=root))
     assert not root.requests
@@ -990,7 +1377,7 @@ def test_rejected_lookup_attempt_is_not_a_no_lookup_success(tmp_path: Path) -> N
     case = _case("missing-target")
     directory = tmp_path / "rejected-lookup"
     directory.mkdir()
-    root = _Adapter(
+    root = _root_adapter(
         [
             _response(
                 calls=(_call("lookup_order_status", "invalid-read", {"order_id": "UNKNOWN"}),)
@@ -1020,7 +1407,7 @@ def test_inbox_counts_rejected_lookup_batches_before_and_inside_middleware(
     invalid = (
         [{"id": "admit_one", "order_id": "UNKNOWN"}] if rejection == "schema" else [lookup, lookup]
     )
-    root = _Adapter(
+    root = _root_adapter(
         [
             _response(calls=(_call("lookup_order_status", "invalid-read", {"items": invalid}),)),
             _response(calls=(_call("lookup_order_status", "valid-read", {"items": [lookup]}),)),
@@ -1053,7 +1440,7 @@ def test_inbox_cannot_pass_after_bypassing_a_helper_response_error(tmp_path: Pat
     directory.mkdir()
     values, _ = _inbox_decisions(case)
     helper = _Adapter([_response("not-json"), _response(json.dumps(values))])
-    root = _Adapter(
+    root = _root_adapter(
         [
             _response(calls=(_call("analyze_request", "invalid-analysis"),)),
             _response(calls=(_call("analyze_request", "valid-analysis"),)),
@@ -1087,7 +1474,7 @@ def test_inbox_cannot_pass_after_bypassing_a_helper_response_error(tmp_path: Pat
     assert result["oracle"]["checks"]["all_items_passed"]
     assert not result["oracle"]["checks"]["decision_succeeded"]
     assert result["oracle"]["analysis_call_count"] == 2
-    assert len(result["call_accounting"]) == 6
+    assert len(result["call_accounting"]) == 10
     handoff = json.loads((directory / "handoff.json").read_text())
     assert runtime.verify_handoff_result(case, result, handoff) == result["oracle"]
 
@@ -1107,11 +1494,16 @@ def test_scoped_runtime_rejects_unadmitted_call_purpose(
     directory = tmp_path / "unexpected-purpose"
     directory.mkdir()
     result = asyncio.run(
-        runtime.run_arm(case, "a0", directory, root_adapter=_Adapter(_root_responses(case)[1:]))
+        runtime.run_arm(
+            case, "a0", directory, root_adapter=_root_adapter(_root_responses(case)[1:])
+        )
     )
     assert result["oracle"]["passed"]
     assert result["usage"]["attempt_pairing_complete"]
-    assert {row["purpose"] for row in result["call_accounting"]} == {"memory_dreaming"}
+    assert {row["purpose"] for row in result["call_accounting"]} == {
+        "memory_dreaming",
+        "cognitive_reflection",
+    }
     assert not result["handoff_call_coverage_complete"]
     assert not result["valid"] and not result["passed"]
 
@@ -1203,18 +1595,20 @@ def test_handoff_observes_configured_reflection_without_treating_it_as_root_cons
     directory = tmp_path / "reflection"
     directory.mkdir()
     result = asyncio.run(
-        runtime.run_arm(case, "a0", directory, root_adapter=_Adapter(_root_responses(case)[1:]))
+        runtime.run_arm(
+            case, "a0", directory, root_adapter=_root_adapter(_root_responses(case)[1:])
+        )
     )
     handoff = json.loads((directory / "handoff.json").read_text())
-    assert sum(row["kind"] == "reflection_request" for row in handoff) == 2
+    assert sum(row["kind"] == "reflection_request" for row in handoff) == 1
     assert sum(row["kind"] == "root_request" for row in handoff) == 2
     assert result["oracle"]["passed"]
-    assert len(reflection.requests) == (0 if fault == "route_drift" else 2)
+    assert len(reflection.requests) == (0 if fault == "route_drift" else 1)
     assert result["handoff_call_coverage_complete"] is (fault is None)
     assert result["valid"] is (fault is None)
     assert result["passed"] is (fault is None)
     assert sum(row["purpose"] == "cognitive_reflection" for row in result["call_accounting"]) == (
-        2 if fault is None else 0
+        1 if fault is None else 0
     )
     assert runtime.verify_handoff_result(case, result, handoff) == result["oracle"]
 
@@ -1254,14 +1648,16 @@ def test_root_retry_keeps_one_logical_dispatch_and_all_attempts(
     case = _case("negated-cancel-en")
     directory = tmp_path / "root-retry"
     directory.mkdir()
-    root = _Adapter(
+    root = _root_adapter(
         [httpx.ConnectError("synthetic connection failure"), *_root_responses(case)[1:]]
     )
     result = asyncio.run(runtime.run_arm(case, "a0", directory, root_adapter=root))
     receipt = json.loads((directory / "handoff.json").read_text())
     requests = [row for row in receipt if row["kind"] == "root_request"]
-    attempts = result["usage"]["recorded_attempts"]
-    assert len(root.requests) == len(attempts) == 3
+    attempts = [
+        row for row in result["usage"]["recorded_attempts"] if row["purpose"] == "agentic_loop"
+    ]
+    assert len(root.requests) == 4 and len(attempts) == 3
     assert len(requests) == len({row["llm_call_id"] for row in attempts}) == 2
     assert attempts[0]["llm_call_id"] == attempts[1]["llm_call_id"]
     assert attempts[0]["llm_attempt_id"] != attempts[1]["llm_attempt_id"]
@@ -1284,7 +1680,7 @@ def test_wrong_read_then_correct_read_requires_explicit_recovery_contract(
         del case["allow_extra_read_lookups"]
     directory = tmp_path / "read-recovery"
     directory.mkdir()
-    root = _Adapter(
+    root = _root_adapter(
         [
             _response(calls=(_call("lookup_order_status", "wrong-read", {"order_id": "C-318"}),)),
             _response(
@@ -1333,7 +1729,8 @@ def test_controlled_wrong_helper_preserves_real_original_and_consumed_projection
             },
         }
     )
-    root, helper = _Adapter(_root_responses(root_case)), _Adapter([_response(json.dumps(original))])
+    root = _root_adapter(_root_responses(root_case))
+    helper = _Adapter([_response(json.dumps(original))])
     directory = tmp_path / "injected"
     directory.mkdir()
 
@@ -1393,7 +1790,7 @@ def test_harder_candidate_omission_is_not_missing_text_and_has_no_label_leak(
     assert payload["state"]["order_mentions"]["order_0"]["order_id"] == "C-318"
     assert "label_rationale" not in json.dumps(payload)
     helper = _Adapter([_response('{"intent":"status_only","target":"none"}')])
-    root = _Adapter(_root_responses(case))
+    root = _root_adapter(_root_responses(case))
     directory = tmp_path / "omission"
     directory.mkdir()
     result = asyncio.run(
@@ -1421,7 +1818,7 @@ def test_cancellation_preserves_closed_private_snapshot(tmp_path: Path) -> None:
             _case("negated-cancel-en"),
             "a0",
             directory,
-            root_adapter=_Adapter([asyncio.CancelledError("synthetic interruption")]),
+            root_adapter=_root_adapter([asyncio.CancelledError("synthetic interruption")]),
         )
     )
     assert not result["valid"] and not result["passed"]
@@ -1443,7 +1840,9 @@ def test_truncated_private_content_invalidates_replay_without_losing_evidence(
     directory = tmp_path / "truncated"
     directory.mkdir()
     responses = _root_responses(case)[1:]
-    result = asyncio.run(runtime.run_arm(case, "a0", directory, root_adapter=_Adapter(responses)))
+    result = asyncio.run(
+        runtime.run_arm(case, "a0", directory, root_adapter=_root_adapter(responses))
+    )
     assert result["oracle"]["passed"]
     assert not result["valid"] and not result["passed"]
     assert result["error_type"] == "incomplete_replay_evidence"
@@ -1469,7 +1868,9 @@ def test_real_handoff_preserves_action_replay_through_native_projectors(
     if arm == "a0":
         directory.mkdir()
         result = asyncio.run(
-            runtime.run_arm(case, arm, directory, root_adapter=_Adapter(_root_responses(case)[1:]))
+            runtime.run_arm(
+                case, arm, directory, root_adapter=_root_adapter(_root_responses(case)[1:])
+            )
         )
     else:
         result, *_ = asyncio.run(_run(case, arm, directory))

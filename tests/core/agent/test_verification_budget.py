@@ -63,7 +63,7 @@ def test_verification_preparation_keeps_root_clock(monkeypatch: pytest.MonkeyPat
         ("reflexion", 0, 299, True, "none"),
         ("reflexion", 1, 299, True, "auto"),
         ("reflexion", 1, 29, True, "none"),
-        ("rule_based", 0, 299, True, "auto"),
+        ("rule_based", 0, 299, True, "none"),
         ("reflexion", 0, 299, False, "none"),
         ("llm_judge", 0, 600, True, "auto"),
         ("llm_judge", 0, 299, True, "none"),
@@ -99,9 +99,7 @@ def test_first_candidate_reserves_repair_without_disabling_repair_tools(
     )
     assert request.tool_choice == {"type": expected_choice}
     system = request.system_prompt
-    assert ("Total root wall-time budget" in system) is (
-        mode in {"llm_judge", "reflexion"} and allow_tools
-    )
+    assert ("Total root wall-time budget" in system) is (allow_tools)
     if "Candidate checkpoint" in system:
         assert system.index("Candidate checkpoint") < system.index("</dynamic_context>")
 
