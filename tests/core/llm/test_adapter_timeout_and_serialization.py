@@ -46,6 +46,7 @@ def test_adapter_inherits_transport_policy(monkeypatch: pytest.MonkeyPatch, rout
         from core.llm.adapters.glm_coding_plan import GlmCodingPlanAdapter
         from core.llm.adapters.glm_payg import GlmPaygAdapter
         from core.llm.adapters.openai_payg import OpenAIPaygAdapter
+        from core.llm.errors import ModelSourceUnavailableError
 
         monkeypatch.setattr(settings, "openai_api_key", "test-key")
         monkeypatch.setattr(settings, "zai_api_key", "test-key")
@@ -53,7 +54,7 @@ def test_adapter_inherits_transport_policy(monkeypatch: pytest.MonkeyPatch, rout
         plan_url = "https://api.z.ai/api/coding/paas/v4"
         monkeypatch.setattr(
             "core.llm.adapters.glm_coding_plan._resolve_coding_plan_endpoint",
-            lambda _sources: ("test-plan-key", plan_url),
+            lambda _sources: pytest.fail("unadmitted Coding Plan must not read credentials"),
         )
         adapters = {
             "openai": (OpenAIPaygAdapter, "https://api.openai.com/v1"),
@@ -62,6 +63,10 @@ def test_adapter_inherits_transport_policy(monkeypatch: pytest.MonkeyPatch, rout
         }
         adapter_type, expected_url = adapters[route]
         adapter = adapter_type()
+        if route == "glm-coding-plan":
+            with pytest.raises(ModelSourceUnavailableError):
+                adapter._get_client()
+            return
         async with adapter._get_client() as client:
             assert isinstance(client._client, httpx.AsyncClient)
             assert client._client.timeout.read == 23.0
