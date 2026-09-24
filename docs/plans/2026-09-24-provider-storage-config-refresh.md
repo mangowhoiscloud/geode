@@ -60,11 +60,14 @@ remain outside scope.
 | E3 | Shared SDK transport ownership at actual process/thread event-loop teardown | E1 | PR #3411 merged into develop at `93532f825`; required CI passed |
 | K2 | Claude cache marker validity and 1-hour write accounting through durable records | P6 | PR #3412 merged into develop at `37138a82d`; required CI passed; activity schema v11, trajectory v1 unchanged |
 | K1 | OpenAI explicit static prefixes and OpenRouter route/session cache shaping | P6, K2 | local integration candidate against develop `37138a82d`; remote CI and merge pending |
+| MCP | Preserve connection and subprocess ownership across creation and cleanup failures | existing runtime audit; queued after K1 | local implementation and review at `ff035e30c`; integration and remote CI/merge pending |
+| TQ | Strengthen test outcome oracles and remove an identical duplicate | existing quality audit; queued after MCP | local implementation and review at `9c931d302`; integration and remote CI/merge pending |
+| grill ownership | Move daemon skill-prompt builders from CLI to runtime skills owners | existing dependency audit; queued after TQ | local implementation and review at `a344009dd`; integration and remote CI/merge pending |
 | V1 bounds | Optional Harbor output/round limits and shared wrap-up cap preservation | runtime owners | PR #3404 merged into develop at `3e6e5d988` |
 | CI-1 | Conservative document-only full-test selection | existing CI gates | PR #3405 merged into develop at `ebeee591d` |
 | CI-2 | Fail closed on invalid comparison refs; enforce locked dependency installation | CI-1 | PR #3406 merged into develop at `6aaaf796d`; required CI passed |
 | CI-3 | Four complete, disjoint test shards and combined coverage gate | CI-2 | PR #3409 merged into develop at `0ae4705f6`; required CI passed |
-| Compaction | Route-aware context admission, overflow recovery and preserved next-turn task state | remaining implementation queue | primary-source research and offline counterexamples in progress; separate PR before V1 execution |
+| Compaction | Route-aware context admission, overflow recovery, next-turn task state and public-hook read-only/re-entry/persistence/cancellation contracts | remaining implementation queue | primary-source research and offline counterexamples recorded; implementation pending in a separate PR before V1 execution |
 | V1 execution | New-model API/subscription E2E, cache and Harbor validation | all implementation PRs merged into develop with required CI | not started; total US$20 paid cap approved |
 | F1 | Repeatable onboarding and audit scaffold in existing contributor skills | completed refactoring and checks | pending; preserve runtime/contributor prompt separation |
 | R1 | Patch release preparation, packaging/docs, develop→main, stable publication | all accepted units | pending |
@@ -89,27 +92,33 @@ At develop `39b0f6ba0` on September 25, the original seven-PR queue is
 merged: P3 (#3400) → D1 (#3394) → C2 (#3396) → E1 (#3403) → S1 (#3390) →
 S2 (#3393) → V1 bounds (#3404). CI-1 (#3405) then added conservative
 document-only full-test selection. CI-2 (#3406) hardened failure and dependency-lock
-contracts; P5 (#3407) connected native computer actions. Continue with
-P6 → E2 → E3 → K2 → K1 in dependency order. Keep audit-confirmed CI and runtime defects in small,
+contracts; P5 (#3407) connected native computer actions. The following integration
+order was P6 → E2 → E3 → K2 → K1. Keep audit-confirmed CI and runtime defects in small,
 separate PRs before freezing final V1 inputs. This is a single integration
 queue operated under the existing [GitFlow manual](../../.agents/skills/geode-gitflow/SKILL.md),
 not a change to GitHub protection settings or a new merge-queue service.
 
-At develop `1decea9ba`, P6, CI-3 and E2 are also merged. The operator's
-September 25 follow-up adds a separate compaction PR after the remaining
-implementation units and immediately before V1. Research runs in parallel;
+At develop `37138a82d`, P6, CI-3, E2, E3 and K2 are also merged. The remaining
+queue is K1 → MCP → TQ → grill ownership → Compaction → V1 → F1 → R1.
+K1 is a local integration candidate; MCP, TQ and grill retain their reviewed
+local heads pending ordered integration and exact-head remote CI. The
+operator's September 25 follow-up adds the separate compaction PR immediately
+before V1. Its primary-source research and offline counterexamples are recorded;
 implementation must use the final integrated base and precede paid calls.
 Compare pinned Codex and Hermes sources, xAI's public contracts, and primary
 long-context research. Distinguish documented model/API/subscription limits
 from account admission and unavailable proprietary harness details.
 
-The existing context regressions pass, but two offline counterexamples remain
-on that base: a confirmed provider overflow below the local estimated critical
+The existing context regressions passed on the audited `1decea9ba` base, but two
+offline counterexamples remained: a confirmed provider overflow below the local estimated critical
 threshold skips compaction, and successful token reduction with unchanged
 message count is treated as failed recovery. The compaction PR owns both.
 Its acceptance must prove bounded recovery and useful task-state preservation
 in the actual next request, including constraints, causal tool pairs, and
-checkpoint/resume behavior; a smaller transcript alone is insufficient.
+checkpoint/resume behavior; a smaller transcript alone is insufficient. Audit
+public-hook read-only behavior, duplicate/re-entrant dispatch, and the distinction
+between artifact persistence, session commit and cancellation before claiming
+successful compaction.
 
 - Freeze waiting feature heads after their scoped fixes finish. Update only
   the next PR against the fetched develop base; do not refresh all waiting
