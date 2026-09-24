@@ -127,7 +127,7 @@ jobs:
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         if: needs.changes.outputs.code == 'true' || needs.changes.outputs.docs == 'true'
       - if: needs.changes.outputs.code == 'true' || needs.changes.outputs.docs == 'true'
-        run: uv sync
+        run: uv sync --locked
       - name: Documentation owner paths and scaffold contracts
         if: needs.changes.outputs.docs == 'true'
         run: |
@@ -162,7 +162,21 @@ jobs:
         run: uv run deptry .
       - name: Legacy import ratchet
         if: needs.changes.outputs.code == 'true'
-        run: uv run python scripts/check_legacy_imports.py --base-ref origin/develop
+        env:
+          LEGACY_EVENT_MODE: ${{ github.event_name }}
+          LEGACY_PR_BASE_REF: refs/remotes/origin/${{ github.base_ref || github.ref_name }}
+          LEGACY_PUSH_BASE_REF: ${{ github.event.before }}
+        run: |
+          base_ref="$LEGACY_PR_BASE_REF"
+          if [[ "$LEGACY_EVENT_MODE" == "push" ]]; then
+            if [[ ! "$LEGACY_PUSH_BASE_REF" =~ ^[0-9a-f]{40}$ ]] ||
+               [[ "$LEGACY_PUSH_BASE_REF" == "0000000000000000000000000000000000000000" ]]; then
+              echo "::error::Legacy import validation requires a non-zero github.event.before SHA."
+              exit 1
+            fi
+            base_ref="$LEGACY_PUSH_BASE_REF"
+          fi
+          uv run python scripts/check_legacy_imports.py --base-ref "$base_ref"
       - name: Repo hygiene ratchet
         if: needs.changes.outputs.code == 'true'
         run: uv run python scripts/check_repo_hygiene.py
@@ -275,7 +289,7 @@ jobs:
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         if: needs.changes.outputs.code == 'true'
       - if: needs.changes.outputs.code == 'true'
-        run: uv sync --extra audit
+        run: uv sync --locked --extra audit
       - if: needs.changes.outputs.code == 'true'
         run: uv run mypy core/ evals/ evolve/ scripts/
       - name: Prompt integrity check
@@ -299,7 +313,7 @@ jobs:
       # and the petri-bookkeeping code in core/audit/ shows up as 0%
       # covered — pushing total coverage below the 75% ratchet).
       - if: needs.changes.outputs.full_tests != 'false'
-        run: uv sync --extra audit
+        run: uv sync --locked --extra audit
       - name: Architecture behavior contracts
         if: needs.changes.outputs.full_tests != 'false'
         run: |
@@ -387,7 +401,7 @@ jobs:
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         if: needs.changes.outputs.code == 'true'
       - if: needs.changes.outputs.code == 'true'
-        run: uv sync
+        run: uv sync --locked
       - name: Audit locked runtime dependencies
         if: needs.changes.outputs.code == 'true'
         run: |

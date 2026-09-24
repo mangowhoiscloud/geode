@@ -3,7 +3,7 @@ name: Install Smoke Test
 # Cross-OS install / update / uninstall regression gate.  Runs the same
 # four phases a new contributor would hit on a fresh machine:
 #
-#   1. INSTALL   — `uv sync` + `uv tool install -e . --force`
+#   1. INSTALL   — `uv sync --locked` + `uv tool install -e . --force`
 #   2. VERSION   — `geode version` matches pyproject.toml
 #   3. UPDATE    — `geode update --dry-run` resolves the source-checkout path
 #                  and `uv tool install -e . --force` remains idempotent
@@ -42,7 +42,7 @@ jobs:
         run: swiftc -typecheck scripts/macos/geode_computer_helper.swift
 
       - name: Install dependencies
-        run: uv sync --quiet
+        run: uv sync --locked --quiet
 
       - name: 1) INSTALL — uv tool install -e .
         run: |

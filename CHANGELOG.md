@@ -387,6 +387,11 @@ functional change.
 
 ### Infrastructure
 
+- Fail the legacy-import ratchet when its Git comparison fails, and compare
+  against the actual PR target or pre-push revision. Reject incomplete base
+  arguments instead of treating them as an empty change set. Require the
+  committed dependency lock for CI, Pages, install-smoke, and Petri validation;
+  retain the release workflow's existing lock freshness check.
 - Skip full Python tests and coverage only when the complete change set contains
   allowlisted documentation and generated public-doc files. Preserve required
   check identities, documentation/roadmap/inventory validation, and full testing
