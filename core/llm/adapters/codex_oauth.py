@@ -32,6 +32,7 @@ from core.llm.adapters._openai_common import (
     build_request_image_receipt,
     build_responses_kwargs,
     translate_codex_response,
+    translate_responses_stream,
 )
 from core.llm.adapters.base import (
     SOURCE_SUBSCRIPTION,
@@ -151,7 +152,7 @@ class CodexOAuthAdapter:
             raise RuntimeError(
                 "CodexOAuthAdapter: ChatGPT OAuth not found. Looked in GEODE "
                 f"ProfileStore ('openai-codex' profile) and {codex_auth_path()}. "
-                "Run ``/login openai`` in GEODE or ``codex auth login`` in the "
+                "Run ``/login openai`` in GEODE or ``codex login`` in the "
                 "Codex CLI to provision credentials, or use the openai-payg adapter."
             )
         with self._token_lock:
@@ -433,12 +434,8 @@ class CodexOAuthAdapter:
         client = self._get_client()
         kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
         async with client.responses.stream(**kwargs) as stream:
-            async for event in stream:
-                ev_type = getattr(event, "type", "")
-                if ev_type.endswith("output_text.delta"):
-                    yield StreamEvent(kind="text", payload={"text": getattr(event, "delta", "")})
-                elif ev_type == "response.completed":
-                    yield StreamEvent(kind="stop", payload={"stop_reason": "completed"})
+            async for event in translate_responses_stream(stream):
+                yield event
 
     def test_environment(self) -> EnvironmentReport:
         from core.llm.providers.codex import resolve_codex_token
@@ -456,7 +453,7 @@ class CodexOAuthAdapter:
                 ),
                 hints=(
                     "Run ``/login openai`` inside GEODE to provision the ChatGPT OAuth profile,",
-                    "or ``codex auth login`` in the Codex CLI to use the external token.",
+                    "or ``codex login`` in the Codex CLI to use the external token.",
                 ),
             )
         return EnvironmentReport(
@@ -466,19 +463,16 @@ class CodexOAuthAdapter:
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import CODEX_FALLBACK_CHAIN, CODEX_PRIMARY
-        from core.llm.model_catalog import model_source_unavailable_reason, model_spec_for_adapter
+        from core.llm.model_catalog import model_ids_for_source, model_spec_for_adapter
 
-        ids = [CODEX_PRIMARY, *CODEX_FALLBACK_CHAIN]
-        seen: set[str] = set()
-        out: list[ModelSpec] = []
-        for mid in ids:
-            if mid in seen or model_source_unavailable_reason(
-                mid, provider=self.provider, source=self.source
-            ):
-                continue
-            seen.add(mid)
-            out.append(model_spec_for_adapter(mid, provider=self.provider))
-        return out
+        return [
+            model_spec_for_adapter(mid, provider=self.provider)
+            for mid in model_ids_for_source(
+                provider=self.provider,
+                source=self.source,
+                configured=(CODEX_PRIMARY, *CODEX_FALLBACK_CHAIN),
+            )
+        ]
 
     def detect_credential(self) -> CredentialDetection | None:
         from core.llm.providers.codex import resolve_codex_token

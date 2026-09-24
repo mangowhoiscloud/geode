@@ -630,7 +630,7 @@
       "authority": "diagnostic",
       "path": "docs/eval/typesafe-decision-handoff.md",
       "summary": "Matched LLM/Jev final-verdict diagnostics with shared Astra repair, preserved historical handoff cohorts and an independent Harbor task verifier.",
-      "sha256": "bb090c762f2ea177de6955c3a672e439a42ef6a4a3e90fee48d7d87aa241c5a3",
+      "sha256": "4db46e5e79bfccd4a1a39cdadd5dae9254f5573aff9d82a4b1d94a60337b56e5",
       "triggers": [
         "classification",
         "confidence",
