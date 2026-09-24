@@ -55,6 +55,14 @@ functional change.
   across OpenAI, GLM, and Codex while preserving Codex's disabled connection
   reuse and application-owned retries; record both SDK major-version migrations.
 
+- Refresh Claude Messages contracts for Fable 5.1, Opus 5.5/5, and Sonnet 5
+  through typed model records and one create/stream request builder. Preserve
+  signed thinking, structured output, tool calls, and cache usage in streaming;
+  retain hosted search usage. Validate output/effort/forced-tool limits, including
+  auxiliary text completions, and update hosted web tool versions.
+  Select the computer protocol from the typed request model and guard unknown
+  generations until their native executor is supported.
+
 - Run Reflection after each tool-result round and once before final delivery.
   Final semantic verification replaces the mechanical-only default; legacy
   cadence controls and `off`/`rule_based`/`reflexion` verifier settings are
