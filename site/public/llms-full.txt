@@ -7071,7 +7071,7 @@ status dict 반환 (절대 raise하지 않음) + 히스토리 append
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use.md
 
-컴퓨터 사용은 모델이 스크린샷으로 화면을 보고 클릭, 타이핑, 스크롤을 지시하는 기능입니다. GEODE의 구현은 `core/tools/computer_use.py`의 `ComputerUseHarness` 하나이며 host backend는 pyautogui 또는 macOS helper입니다. Provider-native computer surface는 스크린샷을 해당 provider wire로 돌려주지만, normal function tool인 `computer_use`는 base64를 생략하고 compact observation만 반환합니다. Function-tool 경로의 시각적 좌표 선택은 활성 provider/source에 호환되는 grounding이 있을 때만 `locate`로 수행합니다.
+컴퓨터 사용은 모델이 스크린샷으로 화면을 보고 클릭, 타이핑, 스크롤을 지시하는 기능입니다. GEODE의 구현은 `core/tools/computer_use.py`의 `ComputerUseHarness` 하나이며 host backend는 pyautogui 또는 macOS helper입니다. Provider-native computer surface는 스크린샷을 해당 provider wire로 돌려주지만, normal function tool인 `computer_use`는 base64를 생략하고 compact observation만 반환합니다. 현재 function-tool 경로의 자동 좌표 선택인 `locate`는 모든 provider/source에서 사용할 수 없습니다.
 
 ## 동작 방식
 
@@ -7113,7 +7113,7 @@ driver = "helper"
 
 macOS에서는 `geode setup`이 helper를`~/.geode/helpers/computer-use/` 아래에 빌드합니다. wheel 안의 Swift/build source는 읽기 전용이며 생성물은 설치 디렉터리에 기록하지 않습니다.
 
-프로바이더가 native computer surface를 지원하면 그 경로를 쓰고, ChatGPT subscription처럼 native surface를 받지 않는 backend에는 같은 하네스를 normal function tool `computer_use`로 노출합니다. 이 경로는 다른 provider로 몰래 fallback하지 않습니다. OpenAI subscription source에 visual grounding을 별도로 구성하지 않았다면 `capture`는 가능하지만 `locate`는 dependency error로 중단되며, browser DOM·playwriter· `ui_probe` 같은 source-safe 구조 경로를 선택해야 합니다.
+프로바이더가 native computer surface를 지원하면 그 경로를 쓰고, ChatGPT subscription처럼 native surface를 받지 않는 backend에는 같은 하네스를 normal function tool `computer_use`로 노출합니다. 이 경로는 다른 provider로 몰래 fallback하지 않습니다.`capture`는 가능하지만 `locate`는 활성 provider/source를 표시하는 dependency error로 중단됩니다. 미검증 GLM 자동 grounding 경로는 제거했으며, browser DOM·playwriter· `ui_probe` 같은 source-safe 구조 경로를 선택해야 합니다.
 
 ## 안전
 

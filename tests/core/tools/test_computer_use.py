@@ -109,7 +109,7 @@ class TestHandlerActionForwarding:
 
         with (
             patch.object(h, "aexecute", new=fake_execute),
-            patch("core.tools.computer_grounding.glm_locate", new=AsyncMock()) as glm_locate,
+            patch("openai.AsyncOpenAI") as glm_client,
         ):
             result = asyncio.run(
                 execute_emulated_computer_use(
@@ -125,7 +125,7 @@ class TestHandlerActionForwarding:
                 )
             )
 
-        glm_locate.assert_not_awaited()
+        glm_client.assert_not_called()
         assert result["error_type"] == "dependency"
         assert result["grounding"]["provider"] == "openai"
         assert result["grounding"]["source"] == "subscription"

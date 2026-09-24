@@ -111,7 +111,7 @@ Existing normalized usage accounting is preserved. [Context caching](https://doc
 | `core/llm/providers/glm.py` | Reasoning allowed only 5.2; prefix inferred capability; request effort ignored | Exact typed 5.2/5.3 contracts and shared request builder; unknown model suffix receives no invented controls |
 | `core/llm/adapters/glm_payg.py` | Text path omitted effort; stream path omitted tools and reasoning | Text uses adapter completion; stream uses same builder and preserves thinking/tool arguments |
 | `core/llm/adapters/glm_coding_plan.py` | Claimed PAYG search parity without route evidence | Native search rejects explicitly; subscription calls use source admission before client lookup |
-| `core/llm/providers/glm.py` auxiliary client | Bare API key defaulted to Coding Plan endpoint | Explicit PAYG default; selected subscription source cannot bypass admission |
+| `core/llm/providers/glm.py` auxiliary client | Orphan grounding client could default a bare API key to Coding Plan | Remove the unverified grounding route and its unused client/cache; live API access remains adapter-owned |
 | `core/llm/model_pricing.toml`, catalog and picker | 5.3/Flash absent and 5.2 old context assumption | Central catalog owner updates rates/specs/listing; preserve historical evidence |
 | `core/llm/strategies/plans.py` | 80/240/600 call budgets modeled stale quota | Remove obsolete built-in call-count authority; provider credit balance remains provider-owned |
 
@@ -119,3 +119,34 @@ Local acceptance uses fake SDK responses and tests request precedence,
 always-enabled reasoning, exact-model matching, split streaming arguments,
 strict source admission, and PAYG endpoint selection. No local test proves
 account entitlement or a funded live response.
+
+
+## Request and grounding boundaries
+
+The shared builder enforces the documented positive output bound for the
+current models. Z.AI documents only automatic tool choice: a no-tool turn
+omits tool definitions, and forced choices fail locally. JSON schema is not
+advertised as provider-enforced; the current public `response_format` accepts
+text or a JSON object, not a strict JSON schema.
+
+Streaming preserves reported usage and field presence through the existing
+usage summary, including a usage-only final chunk. Transport EOF without the
+documented finish reason raises an error instead of implying completion.
+
+Automatic computer grounding no longer calls the unlisted `glm-5v-turbo` or
+assumes that a vision-capable replacement has a verified coordinate contract.
+The ordinary tool reports unavailability before model access. The unsupported
+`glm_locate` request, inferred coordinate parser, and its
+orphaned provider client/cache are removed. The public tool retains an explicit
+unavailable result and provider/source details; adapter-owned API clients keep
+their existing lifecycle and credential invalidation. Mocked parsing never
+established live grounding evidence.
+
+Thinking support is independent of a graded effort knob. The current API
+reference and [GLM-5.1](https://docs.z.ai/guides/llm/glm-5.1),
+[GLM-5](https://docs.z.ai/guides/llm/glm-5), and
+[GLM-4.7 series](https://docs.z.ai/guides/llm/glm-4.7) guides document thinking
+for those active models, while `reasoning_effort` applies only to 5.2 and newer.
+Their capability records therefore retain thinking with no graded effort
+control, and the provider keeps its default thinking behavior. The API
+reference explicitly bounds their 128K output at 131072 tokens.
