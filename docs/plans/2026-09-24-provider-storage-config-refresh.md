@@ -48,7 +48,7 @@ remain outside scope.
 | P3 | Claude typed capabilities, thinking, schemas, streaming parity | P2 shared selection helper | PR #3400 merged into develop at `1e419af4d` |
 | P4 | GLM request deduplication, exact effort and subscription admission | P2 shared selection helper | PR #3401 merged into develop at `88b2385a4`; required CI passed |
 | P5 | Native Claude computer toolset and action translation | P3 | PR #3407 merged into develop at `39b0f6ba0`; required CI passed |
-| P6 | CLI/default/config selection and bilingual public documentation | P2–P5 | local implementation and independent review |
+| P6 | CLI/default/config selection and bilingual public documentation | P2–P5 | PR #3408 merged into develop at `2a074aaed`; required CI passed |
 | S1 | Actual event-schema/digest references owned by the event store | audit | PR #3390 merged into develop at `0f3d88fe0` |
 | S2 | Runtime-state DB connection ownership, serialized use and teardown | audit | PR #3393 merged into develop at `e0c982f50` |
 | C1 | Validate complete settings before publishing a reload | audit | PR #3389 merged into develop at `a5b23bdc2`; required CI passed |
@@ -56,13 +56,15 @@ remain outside scope.
 | D1 | Bound compatible SDK majors and deduplicate HTTPX construction | independent migration audit | PR #3394 merged into develop at `4b414c63a` |
 | D2 | Test current major SDK/evaluation compatibility | D1 | incompatible OpenAI/Inspect import reproduced; migration deferred |
 | E1 | Runtime construction, shutdown outcomes, request context and cache generation ownership | C1 | PR #3403 merged into develop at `f44cdbf5c`; existing error convention extended |
-| E2 | Atomic gateway reload and owned watcher/poller lifecycle | C1, C2 | local implementation and independent review |
+| E2 | Atomic gateway reload and owned watcher/poller lifecycle | C1, C2 | PR #3410 merged into develop at `1decea9ba`; required CI passed |
 | E3 | Shared SDK transport ownership at actual process/thread event-loop teardown | E1 | local implementation and independent review |
 | K2 | Claude cache marker validity and 1-hour write accounting through durable records | P6 | local implementation and independent review; activity schema v11, trajectory v1 unchanged |
 | K1 | OpenAI explicit static prefixes and OpenRouter route/session cache shaping | P6, K2 | local implementation and independent review |
 | V1 bounds | Optional Harbor output/round limits and shared wrap-up cap preservation | runtime owners | PR #3404 merged into develop at `3e6e5d988` |
 | CI-1 | Conservative document-only full-test selection | existing CI gates | PR #3405 merged into develop at `ebeee591d` |
 | CI-2 | Fail closed on invalid comparison refs; enforce locked dependency installation | CI-1 | PR #3406 merged into develop at `6aaaf796d`; required CI passed |
+| CI-3 | Four complete, disjoint test shards and combined coverage gate | CI-2 | PR #3409 merged into develop at `0ae4705f6`; required CI passed |
+| Compaction | Route-aware context admission, overflow recovery and preserved next-turn task state | remaining implementation queue | primary-source research and offline counterexamples in progress; separate PR before V1 execution |
 | V1 execution | New-model API/subscription E2E, cache and Harbor validation | all implementation PRs merged into develop with required CI | not started; total US$20 paid cap approved |
 | F1 | Repeatable onboarding and audit scaffold in existing contributor skills | completed refactoring and checks | pending; preserve runtime/contributor prompt separation |
 | R1 | Patch release preparation, packaging/docs, develop→main, stable publication | all accepted units | pending |
@@ -92,6 +94,22 @@ P6 → E2 → E3 → K2 → K1 in dependency order. Keep audit-confirmed CI and 
 separate PRs before freezing final V1 inputs. This is a single integration
 queue operated under the existing [GitFlow manual](../../.agents/skills/geode-gitflow/SKILL.md),
 not a change to GitHub protection settings or a new merge-queue service.
+
+At develop `1decea9ba`, P6, CI-3 and E2 are also merged. The operator's
+September 25 follow-up adds a separate compaction PR after the remaining
+implementation units and immediately before V1. Research runs in parallel;
+implementation must use the final integrated base and precede paid calls.
+Compare pinned Codex and Hermes sources, xAI's public contracts, and primary
+long-context research. Distinguish documented model/API/subscription limits
+from account admission and unavailable proprietary harness details.
+
+The existing context regressions pass, but two offline counterexamples remain
+on that base: a confirmed provider overflow below the local estimated critical
+threshold skips compaction, and successful token reduction with unchanged
+message count is treated as failed recovery. The compaction PR owns both.
+Its acceptance must prove bounded recovery and useful task-state preservation
+in the actual next request, including constraints, causal tool pairs, and
+checkpoint/resume behavior; a smaller transcript alone is insufficient.
 
 - Freeze waiting feature heads after their scoped fixes finish. Update only
   the next PR against the fetched develop base; do not refresh all waiting

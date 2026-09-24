@@ -173,6 +173,18 @@ functional change.
   Restore turn attribution and adapter usage context after success, failure or
   cancellation, and serialize SDK client publication with credential invalidation.
 
+- Close current and retired provider SDK clients on their owning event loop
+  after its work settles. Credential rotation preserves in-flight calls;
+  shutting down one runtime does not close clients shared with another.
+  Preserve original failures and cancellation through bounded cleanup-error
+  reporting, including normal CLI, gateway, worker and dreaming loop exits.
+  Drain generators and SDK clients even when cancelled background work raises
+  a control exception during shutdown, preserving the original failure. Failed
+  client closes remain retryable while their owning event loop is still alive.
+  Keep active client selection separate from cleanup ownership, including after
+  credential invalidation or adapter replacement. Retain IPC worker and socket
+  ownership when shutdown times out, reject restart while stopping, and report
+  terminal cleanup failures to the daemon shutdown owner.
 - Use the shared global config path resolver for Settings, config explanation,
   model-picker reads/writes/confirmation, MCP, gateway reload/watch, seed
   role/voter overrides, and evaluation config migration.
