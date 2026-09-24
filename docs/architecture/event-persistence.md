@@ -78,6 +78,20 @@ markers force `replay_complete=false`. `complete` remains the conservative
 replay-completeness compatibility alias, and both failure classes carry
 explicit reasons.
 
+Automatic `runtime_event_refs` are built by the hook-event store's read-only
+reader. Each reference covers one session and one persisted `schema_version`;
+a session containing v3 and v5 rows receives two references with those actual
+`geode.hook-event@<version>` identities. The digest binds ordered row IDs,
+schema version, session, event name, payload hash, turn, physical step, tool
+call, LLM call and LLM attempt. It is a digest of that indexed projection,
+not an independent verification of the private payload or whole database.
+For pre-v5 tables, the missing physical step is normalized to the empty value
+used by additive migration. Missing version/correlation columns produce no
+automatic reference. A malformed row version or v5+ table missing its step
+column fails export instead of inventing schema metadata. Existing SQLite
+rows and published references remain immutable; newly exported digests include
+the corrected schema and correlation fields.
+
 The closed session history vocabulary is:
 
 ```text

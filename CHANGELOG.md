@@ -144,6 +144,10 @@ functional change.
   environments while retaining measured sizes in build logs and complete
   Markdown twins.
 
+- Bind trajectory runtime-event references to each stored hook schema version
+  and include session and physical-step correlation in the cohort digest.
+  Preserve mixed-version history and pre-v5 tables without rewriting source
+  rows or previously published artifacts.
 - Admit native Astra final-verification calls in decision-handoff observations.
   Preserve requested and actual verifier modes separately, and require a complete
   source-reconciled final-verification boundary for explicitly opted-in current
