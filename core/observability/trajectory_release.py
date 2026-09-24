@@ -19,6 +19,7 @@ from typing import Any
 
 from core.memory.atomic_write import atomic_write_json
 from core.observability.record_schema import validate_record
+from core.observability.redaction import TYPESAFE_API_KEY_PATTERN
 from core.observability.trajectory import TRAJECTORY_SCHEMA_ID, verify_trajectory_integrity
 
 TRAJECTORY_RELEASE_SCHEMA_ID = "geode.trajectory-release@1"
@@ -33,6 +34,7 @@ _PUBLIC_SCAN_PATTERNS = {
     "email": re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I),
     "github_token": re.compile(r"\bgh[opsu]_[A-Za-z0-9_]{20,}\b"),
     "openai_key": re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
+    "typesafe_key": TYPESAFE_API_KEY_PATTERN,
     "bearer": re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b", re.I),
     "aws_access_key": re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
     "url_query_secret": re.compile(
@@ -325,7 +327,13 @@ def verify_trajectory_release(
         "source_digests_verified": source_digest_refs,
         "remote_readback_required": True,
     }
-    if manifest["quality"] != recomputed_quality:
+    declared_quality = dict(manifest["quality"])
+    declared_scan = dict(declared_quality["secret_scan"])
+    # Older immutable releases predate the TypeSafe detector. Re-scan their
+    # bytes with today's pattern, without rewriting their historical receipt.
+    declared_scan.setdefault("typesafe_key", 0)
+    declared_quality["secret_scan"] = declared_scan
+    if declared_quality != recomputed_quality:
         raise ValueError("trajectory release quality does not match recomputed artifacts")
     if any(scan_counts.values()):
         raise ValueError("trajectory release secret scan failed during readback")

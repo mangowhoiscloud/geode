@@ -115,14 +115,15 @@ re-raised. Audit metadata never substitutes for a control decision.
 
 ### Verification and external loops
 
-`GEODE_VERIFY_MODE=llm_judge` selects an LLM assessment of the original
+The default final check assesses the original
 request, bounded recent tool observations, and candidate output. Its
 `observation`, `lesson`, and `next_check` feedback travels through the existing
 verification continuation and checkpoint, not a second memory store. Missing,
 malformed, or timed-out judgments escalate rather than pass. The legacy
-`reflexion` setting warns and resolves to `llm_judge`; it is no longer a
-separate execution mode. Reflection feedback uses the shared lifecycle rather
-than selecting a judgment engine. The default final check remains `rule_based`.
+`off`, `rule_based` and `reflexion` settings warn and resolve to `llm_judge`.
+Reflection uses one lifecycle; `[judgment].engine` selects LLM or credential-gated
+Jev independently of the generative root. It defaults to LLM. A configured key
+alone does not enable Jev, and a missing selected key retains the LLM route.
 Mechanical empty/action-required checks remain; output length, keyword overlap
 and recovered tool errors no longer veto semantic review. Reflexion can reuse
 bounded image evidence already observed by the agent, without new file access.
@@ -146,11 +147,16 @@ not guaranteed repair time. Repair tools remain available until the ordinary
 final cutoff. Per-session time budgets reach isolated workers; parent cancellation
 still owns the outer deadline. An agent definition with no model inherits the
 parent/default model; explicit task and agent model overrides remain authoritative.
-The default remains mechanical `rule_based`; selecting an LLM judge consumes
-additional model calls and does not guarantee a correct verdict.
+Every final semantic review consumes an additional call when admitted and does
+not guarantee a correct verdict. Jev uses System One's text-only bounded state
+and Choice contract, never task tools or generative-model routing. Its native
+distribution remains judgment metadata, not cognitive confidence or permission.
+Required visual evidence produces an unverified hold on that text-only route.
 
-Cognitive reflection retains its existing default-enabled setting and cadence;
-the handoff entry points no longer force it off. It uses only the root turn's
+Cognitive reflection runs after every tool-result round. A final candidate
+receives one semantic verification call instead of duplicate cognitive and
+final reviews. Legacy cadence settings normalize to enabled/every-round/non-adaptive
+with warnings. Calls use only the root turn's
 remaining time. Personal/redacted tool results suppress auxiliary reflection
 while that conversation context remains, including later user turns, final text
 and verification continuations. The final LLM judge also fails closed with
@@ -158,7 +164,8 @@ and verification continuations. The final LLM judge also fails closed with
 not sanitize prior context or clear the guard. The existing checkpoint guard
 state preserves it across resume. Invalid hypothesis lists preserve previous state;
 an explicitly empty list still clears it. These protections neither choose Jev
-nor change the configured LLM, effort, or credential source.
+nor change the root LLM or effort. An explicitly selected Jev route has separate
+PAYG credentials and accounting; failed calls do not fall back across providers.
 Legacy context/checkpoints recover the guard from known personal-tool records
 or omission markers. Assistant-only private prose with all such provenance
 removed cannot be identified retrospectively; this change does not certify or
@@ -176,6 +183,9 @@ middleware short-circuits do not incur provider usage. See the
 This is Reflexion-inspired, within-task feedback-conditioned repair, not
 cross-task learning or a weight update. `turn_verify.reason` retains concise
 feedback; the repair hint is consumed once by the next continuation.
+The advisory replanner receives the runtime failure instruction separately from
+its bounded 1,500-character candidate observation. XML-escaped data cannot
+replace those boundaries, and a long candidate cannot truncate the instruction.
 Harbor's external verifier remains benchmark score authority. New measurements
 must freeze this mode before execution, without supplying hidden test answers.
 The Harbor host validates but preserves the requested verifier wire value;

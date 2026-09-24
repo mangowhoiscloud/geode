@@ -10,13 +10,16 @@ from __future__ import annotations
 import re
 from typing import Any
 
+TYPESAFE_API_KEY_PATTERN = re.compile(r"\bapikey_[A-Za-z0-9_-]{20,}\b")
+
 # API key patterns ordered from most specific to most general.
 # More specific patterns (sk-ant-, sk-proj-) are checked first to avoid
 # partial matches from the generic sk- pattern.
 _SECRET_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"sk-ant-[a-zA-Z0-9\-_]{20,}"),  # Anthropic
     re.compile(r"sk-proj-[a-zA-Z0-9\-_]{20,}"),  # OpenAI project keys
-    re.compile(r"sk-[a-zA-Z0-9]{20,}"),  # Generic OpenAI
+    re.compile(r"sk-[a-zA-Z0-9_-]{20,}"),  # OpenAI / OpenRouter
+    TYPESAFE_API_KEY_PATTERN,
     re.compile(r"[a-f0-9]{32}\.[a-zA-Z0-9]{16,}"),  # ZhipuAI (hex.token)
     re.compile(r"ghp_[a-zA-Z0-9]{36,}"),  # GitHub PAT
     re.compile(r"gho_[a-zA-Z0-9]{36,}"),  # GitHub OAuth

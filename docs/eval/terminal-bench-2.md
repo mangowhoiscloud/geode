@@ -222,9 +222,15 @@ from `[agentic].effort` or from ATIF tool steps. This changes the treatment;
 historical auxiliary defaults remain unchanged in the old evidence.
 The fresh task-container profile permits dangerous tools so the native shell
 is available; this does not change host policy or bypass worker-role toolkits.
-The adapter's `verify_mode` option defaults to `rule_based`; freeze `llm_judge`
-explicitly when evaluating LLM-assisted repair. Legacy `reflexion` settings
-resolve to that shared path; historical run contracts keep their original bytes.
+The adapter retains `rule_based` as its legacy argument default. The current
+runtime resolves `off`, `rule_based` and `reflexion` to required `llm_judge`
+verification; new contracts should freeze `llm_judge` explicitly. Native
+receipts preserve the requested `verify_mode` and separately record
+`effective_verify_mode` from the installed runtime (null if bootstrap failed
+before resolution). This is policy evidence, not proof that a judge ran or
+passed. Historical run contracts and missing fields keep their original bytes.
+This subscription-only candidate still rejects API keys; it does not admit the
+optional paid Jev route without a separately reviewed credential contract.
 For new native observation checks, pass `--expected-verify-mode llm_judge`;
 the checker's historical default remains `reflexion`. Mode, judge model and shell
 admission are checked before inference. GEODE verification supplies runtime

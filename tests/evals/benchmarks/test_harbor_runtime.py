@@ -168,13 +168,18 @@ def test_post_run_context_keeps_missing_cache_and_no_subscription_price(tmp_path
     assert context.n_cache_tokens == "uninitialized"
     payload = {
         "usage": {"input_tokens": 10, "output_tokens": 2, "cached_input_tokens": None},
-        "metadata": {"termination_reason": "done"},
+        "metadata": {
+            "termination_reason": "done",
+            "verify_mode": "rule_based",
+            "effective_verify_mode": "llm_judge",
+        },
     }
     (tmp_path / "runtime-result.json").write_text(json.dumps(payload))
     agent.populate_context_post_run(context)
     assert context.n_input_tokens is None
     assert context.n_cache_tokens is None
     assert context.cost_usd is None
+    assert context.metadata == payload["metadata"]
 
 
 def test_stop_runtime_waits_for_shutdown_receipt_and_fails_closed() -> None:
@@ -342,7 +347,6 @@ def native_trial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Si
     import sqlite3
 
     from core.agent.loop.models import TerminationReason
-    from core.agent.verify import VerifyMode
     from core.hooks import HookEvent, HookSystem
     from core.memory.atomic_write import atomic_write_json
     from core.observability.event_store import HookEventStore
@@ -370,7 +374,6 @@ def native_trial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Si
     monkeypatch.setattr(
         "core.config.load_model_policy", lambda: SimpleNamespace(allowlist=[settings.model])
     )
-    monkeypatch.setattr("core.agent.verify.get_verify_mode", lambda: VerifyMode.RULE_BASED)
     db_path = tmp_path / "sessions.db"
 
     def record_session(session_id: str, *, closed: bool = True) -> SessionTimeline:
@@ -495,6 +498,71 @@ def native_trial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Si
     recording_hooks.close()
 
 
+@pytest.mark.parametrize("requested_mode", ["off", "rule_based", "reflexion", "llm_judge"])
+def test_native_preflight_uses_current_verify_alias_semantics(
+    native_trial: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, requested_mode: str
+) -> None:
+    from core.agent.verify import VerifyMode, get_verify_mode, resolve_verify_mode
+
+    trial = native_trial
+    trial.args.verify_mode = requested_mode
+    monkeypatch.setenv("GEODE_VERIFY_MODE", requested_mode)
+    assert get_verify_mode() == resolve_verify_mode(requested_mode) == VerifyMode.LLM_JUDGE
+    resolve_active = MagicMock(wraps=get_verify_mode)
+    monkeypatch.setattr("core.agent.verify.get_verify_mode", resolve_active)
+    assert asyncio.run(_run_native(trial.args)) == 0
+    resolve_active.assert_called_once_with()
+    trial.loop.arun.assert_awaited_once_with("fake instruction")
+    result = json.loads((trial.path / "runtime-result.json").read_text())
+    # Preserve the supplied label; the frozen runtime owns its effective semantics.
+    assert result["metadata"]["verify_mode"] == requested_mode
+    assert result["metadata"]["effective_verify_mode"] == "llm_judge"
+    for name in ("geode-trajectory.json", "geode-trajectory.private.json"):
+        assert json.loads((trial.path / name).read_text())["outcome"] == result["metadata"]
+
+
+def test_native_bootstrap_before_policy_resolution_records_unknown_effective_mode(
+    native_trial: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    trial = native_trial
+    resolve_active = MagicMock()
+    monkeypatch.setattr("core.agent.verify.get_verify_mode", resolve_active)
+
+    async def run() -> int:
+        monkeypatch.setattr(
+            asyncio.get_running_loop(),
+            "add_signal_handler",
+            MagicMock(side_effect=LookupError("synthetic signal setup failure")),
+        )
+        return await _run_native(trial.args)
+
+    with pytest.raises(LookupError, match="synthetic signal setup failure"):
+        asyncio.run(run())
+    resolve_active.assert_not_called()
+    trial.runtime_builder.assert_not_called()
+    trial.loop.arun.assert_not_awaited()
+    metadata = json.loads((trial.path / "runtime-result.json").read_text())["metadata"]
+    assert metadata["verify_mode"] == "rule_based"
+    assert metadata["effective_verify_mode"] is None
+    assert metadata["execution_started"] is False
+
+
+def test_native_preflight_rejects_raw_verify_mode_drift_despite_equivalent_aliases(
+    native_trial: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.agent.verify import get_verify_mode, resolve_verify_mode
+
+    trial = native_trial
+    monkeypatch.setenv("GEODE_VERIFY_MODE", "llm_judge")
+    assert get_verify_mode() == resolve_verify_mode(trial.args.verify_mode)
+    with pytest.raises(RuntimeError, match="runtime model/credential isolation preflight failed"):
+        asyncio.run(_run_native(trial.args))
+    trial.runtime_builder.assert_not_called()
+    trial.loop.arun.assert_not_awaited()
+    result = json.loads((trial.path / "runtime-result.json").read_text())
+    assert result["metadata"]["execution_started"] is False
+
+
 @pytest.mark.parametrize("success", [False, True])
 def test_native_dreaming_uses_existing_deadlines_and_drains_before_session_end(
     native_trial: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, success: bool
@@ -586,6 +654,8 @@ def test_native_finalizes_success_timeout_and_cancel(
     result = json.loads((trial.path / "runtime-result.json").read_text())
     assert receipt["exports_complete"] is True
     assert receipt["execution_started"] is True
+    assert result["metadata"]["verify_mode"] == "rule_based"
+    assert result["metadata"]["effective_verify_mode"] == "llm_judge"
     assert result["usage"]["whole_runtime_complete"] is False
     assert result["usage"]["input_tokens"] == (None if outcome == "no_calls" else 10)
     assert result["usage"]["cached_input_tokens"] == (None if outcome == "no_calls" else 0)
