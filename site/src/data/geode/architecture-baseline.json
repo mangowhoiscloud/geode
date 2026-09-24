@@ -229,7 +229,7 @@
         "has_default": true,
         "implementation": "ContextVar",
         "lifetime": "one CLI or agent session context",
-        "line": 471,
+        "line": 473,
         "owner": "core.llm.token_tracker",
         "path": "core/llm/token_tracker.py",
         "resetter": "core.llm.token_tracker.reset_tracker",
@@ -528,7 +528,7 @@
   "packages": {
     "core": {
       "python_files": 416,
-      "python_loc": 127185
+      "python_loc": 127329
     },
     "evals": {
       "python_files": 100,
@@ -540,7 +540,7 @@
     },
     "tests": {
       "python_files": 732,
-      "python_loc": 212028
+      "python_loc": 212127
     }
   },
   "schema_version": 6,

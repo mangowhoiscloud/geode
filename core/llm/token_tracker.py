@@ -311,22 +311,24 @@ class TokenTracker:
         if price is None:
             log.warning("Unknown model '%s' — cost tracked as $0.00", model)
             return 0.0
+        tier_input = input_tokens
+        if not price.cache_inclusive_input:
+            tier_input += cache_read_tokens + cache_creation_tokens
+        price = price.for_input_tokens(tier_input)
         # For providers whose reported ``input_tokens`` already INCLUDES the
         # cached tokens (OpenAI / GLM: prompt_tokens is the total), bill only
         # the uncached remainder at the full input rate — cache reads and
         # writes are billed below at their separate rates. Anthropic reports
         # input_tokens DISJOINT from cache, so it is left whole (no double-subtract).
         #
-        # Gate each subtraction on its configured rate being nonzero: if a model
-        # has no configured cached rate (e.g. o3 with no ``cached_per_mtok``),
-        # subtracting would move cached tokens off the input rate and bill them
-        # at 0 — i.e. make cached input FREE (undercount). Without a configured
-        # cache-category rate, retain the existing full-input-rate fallback.
+        # An explicit zero tariff is free; an absent tariff retains the full-input
+        # fallback. Positive legacy ModelPrice rates remain usable even when
+        # constructed without the loader's presence flags.
         billable_input = input_tokens
         if price.cache_inclusive_input:
-            if price.cache_read:
+            if price.cache_read_known or price.cache_read:
                 billable_input -= cache_read_tokens
-            if price.cache_write:
+            if price.cache_write_known or price.cache_write:
                 billable_input -= cache_creation_tokens
             billable_input = max(0, billable_input)
         cost = billable_input * price.input + output_tokens * price.output
