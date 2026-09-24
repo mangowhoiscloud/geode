@@ -132,6 +132,12 @@ functional change.
 
 ### Fixed
 
+- Keep daemon `/grill` execution independent of CLI initialization by moving
+  skill prompt rendering and grilling invocation to their runtime skill owners.
+  Reuse that renderer for `/geo` while preserving prompt text, session control
+  state, timeline events, and streaming results. Verify dynamically registered
+  daemon handlers cannot import CLI modules, including through dependencies.
+
 - Preserve thin Harbor cognitive-reflection usage by binding its middleware to the existing session event sink.
 
 - Release partially constructed runtime resources before propagating the original

@@ -227,6 +227,17 @@ class SkillRegistry:
         self._extension_decisions = decisions
 
 
+def build_skill_prompt(skill_registry: SkillRegistry | None, name: str, arguments: str = "") -> str:
+    """Render one trusted registry skill for AgenticLoop execution."""
+    skill = skill_registry.get(name) if skill_registry is not None else None
+    if skill is None:
+        raise ValueError(f"Skill not found: {name}")
+    rendered = skill.render(arguments=arguments.strip())
+    if not rendered:
+        raise ValueError(f"Skill '{name}' has no body content")
+    return f"[skill:{name}] {rendered}"
+
+
 # ---------------------------------------------------------------------------
 # Loader (multi-scope discovery)
 # ---------------------------------------------------------------------------
