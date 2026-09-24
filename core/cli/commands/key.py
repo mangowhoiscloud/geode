@@ -113,13 +113,7 @@ def cmd_key(args: str) -> bool:
         value = parts[1].strip()
         settings.zai_api_key = value
         _pkg._upsert_env("ZAI_API_KEY", value)
-        try:
-            from core.llm.providers.glm import reset_glm_client
-
-            reset_glm_client()
-            _invalidate("glm")
-        except ImportError:
-            pass
+        _invalidate("glm")
         clear_dry_run_opt_in()
         _pkg.console.print(f"  [success]ZhipuAI API key set[/success]  {_pkg._mask_key(value)}")
         _pkg.console.print()
@@ -148,13 +142,7 @@ def cmd_key(args: str) -> bool:
     elif _pkg._is_glm_key(value):
         settings.zai_api_key = value
         _pkg._upsert_env("ZAI_API_KEY", value)
-        try:
-            from core.llm.providers.glm import reset_glm_client
-
-            reset_glm_client()
-            _invalidate("glm")
-        except ImportError:
-            pass
+        _invalidate("glm")
         _pkg._seed_payg_plan_from_key("glm", value)
         _pkg.console.print(f"  [success]GLM API key set[/success]  {_pkg._mask_key(value)}")
     else:

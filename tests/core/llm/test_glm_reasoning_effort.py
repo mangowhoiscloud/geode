@@ -1,10 +1,4 @@
-"""GLM-5.2 reasoning_effort / thinking control gate (PR-GLM-5.2-FINALIZE).
-
-``build_glm_reasoning_extra_body`` gates the GLM-5.2 reasoning params behind
-``settings.glm_reasoning_effort`` (default empty = send nothing → server
-default, no regression). The param shape is doc-grounded (official z.ai
-chat-completion API ref) but live-unverified (GLM balance 0).
-"""
+"""Model-specific GLM reasoning controls, grounded in the current API contract."""
 
 from __future__ import annotations
 
@@ -32,8 +26,8 @@ class TestGlmReasoningGate:
         xb = build_glm_reasoning_extra_body("glm-5.2")
         assert xb == {"reasoning_effort": "none", "thinking": {"type": "disabled"}}
 
-    def test_only_glm_5_2(self, monkeypatch):
-        # reasoning_effort is GLM-5.2-only — older GLM ids never get the param.
+    def test_older_models_do_not_get_graded_effort(self, monkeypatch):
+        # The documented graded control begins with GLM-5.2.
         from core.config import settings
 
         monkeypatch.setattr(settings, "glm_reasoning_effort", "max", raising=False)

@@ -1604,6 +1604,8 @@ def test_handoff_observes_configured_reflection_without_treating_it_as_root_cons
     assert sum(row["kind"] == "root_request" for row in handoff) == 2
     assert result["oracle"]["passed"]
     assert len(reflection.requests) == (0 if fault == "route_drift" else 1)
+    if fault is None:
+        assert result["effective_verify_mode"] == "llm_judge"
     assert result["handoff_call_coverage_complete"] is (fault is None)
     assert result["valid"] is (fault is None)
     assert result["passed"] is (fault is None)

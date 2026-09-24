@@ -78,6 +78,20 @@ markers force `replay_complete=false`. `complete` remains the conservative
 replay-completeness compatibility alias, and both failure classes carry
 explicit reasons.
 
+Automatic `runtime_event_refs` are built by the hook-event store's read-only
+reader. Each reference covers one session and one persisted `schema_version`;
+a session containing v3 and v5 rows receives two references with those actual
+`geode.hook-event@<version>` identities. The digest binds ordered row IDs,
+schema version, session, event name, payload hash, turn, physical step, tool
+call, LLM call and LLM attempt. It is a digest of that indexed projection,
+not an independent verification of the private payload or whole database.
+For pre-v5 tables, the missing physical step is normalized to the empty value
+used by additive migration. Missing version/correlation columns produce no
+automatic reference. A malformed row version or v5+ table missing its step
+column fails export instead of inventing schema metadata. Existing SQLite
+rows and published references remain immutable; newly exported digests include
+the corrected schema and correlation fields.
+
 The closed session history vocabulary is:
 
 ```text
@@ -147,6 +161,25 @@ geode serve / AgenticLoop
 A hook dispatch produces at most one durable operational row. Compatibility
 signals may still reach legacy subscribers, but the sink suppresses a duplicate
 when a canonical event already owns the same transition.
+
+The cumulative `agent_runtime_state` and `run_lineage` projection uses the
+existing session database schema. Its temporary schema-bootstrap connection
+closes immediately; failed WAL setup closes the candidate before it can become
+the cached connection, including cancellation and process interruption. Control
+exceptions propagate unchanged; ordinary setup errors retain the existing
+warning and unavailable-connection result. Runtime shutdown reaches the named
+cleanup through
+`SharedServices.close()` or `GeodeRuntime.shutdown()` and `HookSystem.close()`.
+Connection acquisition, each complete read/write, and cleanup share a lock.
+Closing one hook bundle therefore waits for an in-flight database operation;
+another live bundle can lazily reopen the connection and retain stored totals.
+Before releasing the operation lock, any transaction left open by a failed
+statement or commit is rolled back. If rollback fails, the cached connection
+is closed and discarded; subsequent calls open a fresh one. A failed writer's
+pending changes therefore cannot become visible to later readers or be committed
+by an unrelated write. `SessionManager` also closes its newly opened connection
+if any schema initialization step fails, before propagating the original error.
+This resource cleanup does not change conversation recovery or history schemas.
 
 ## Bounds, privacy, and failure semantics
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -106,15 +107,21 @@ MODEL_OFFERINGS: tuple[ModelOffering, ...] = (
 )
 
 
-def model_ids_for_source(provider: str, source: str) -> tuple[str, ...]:
-    """List active choices for one route, without querying credentials."""
+def model_ids_for_source(
+    provider: str, source: str, *, configured: Sequence[str] = ()
+) -> tuple[str, ...]:
+    """List active and explicitly configured choices without querying credentials."""
     normalized = normalize_model_provider(provider)
-    return tuple(
+    public = (
         entry.id
         for entry in MODEL_OFFERINGS
-        if entry.provider == normalized
-        and source in entry.sources
-        and model_source_unavailable_reason(entry.id, provider=normalized, source=source) is None
+        if entry.provider == normalized and source in entry.sources
+    )
+    return tuple(
+        model_id
+        for model_id in dict.fromkeys((*public, *configured))
+        if model_id
+        and model_source_unavailable_reason(model_id, provider=normalized, source=source) is None
     )
 
 
@@ -221,9 +228,10 @@ def get_model_catalog_spec(model_id: str, provider: str | None = None) -> ModelC
         supports_thinking = openai_spec.reasoning_effort_values is not None
         supports_tool_search = openai_spec.supports_tool_search
     elif normalized == "glm":
-        # The GLM adapter currently owns the thinking/reasoning toggle policy
-        # separately and does not expose a user-facing effort surface.
-        supports_thinking = False
+        from core.llm.providers.glm import get_glm_model_spec
+
+        glm_spec = get_glm_model_spec(model_id)
+        supports_thinking = glm_spec.supports_thinking if glm_spec is not None else False
 
     return ModelCatalogSpec(
         id=model_id,

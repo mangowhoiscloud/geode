@@ -636,10 +636,13 @@ def _build_loop(
     source: str,
     effort: str,
     timeout: float,
+    max_tokens: int = 32768,
+    max_rounds: int = 0,
 ) -> Any:
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop, AgenticLoopConfig
     from core.agent.tool_executor import ToolExecutor
+    from core.hooks.middleware import MiddlewareRegistry
     from core.hooks.system import HookSystem
     from core.llm.adapters.registry import bootstrap_builtins
     from core.observability.event_store import HookEventStore
@@ -654,21 +657,22 @@ def _build_loop(
     tool = HarborExecTool(environment)
     registry = ToolRegistry()
     registry.register(tool)
+    hooks = HookSystem()
     executor = ToolExecutor(
         action_handlers={tool.name: tool.aexecute},
         auto_approve=True,
         hitl_level=0,
         tool_input_schemas={tool.name: tool.parameters},
+        middleware_registry=MiddlewareRegistry(events=hooks),
     )
-    hooks = HookSystem()
     loop = AgenticLoop(
         ConversationContext(max_turns=200),
         executor,
         config=AgenticLoopConfig(
             source=source,
             effort=effort,
-            max_tokens=32768,
-            max_rounds=0,
+            max_tokens=max_tokens,
+            max_rounds=max_rounds,
             time_budget_s=timeout,
             allowed_tool_names={tool.name},
             force_include_allowed_tools=True,
@@ -720,13 +724,22 @@ class GeodeHarborAgent(HarborBaseAgent):
         source: str = "subscription",
         effort: str = "max",
         agent_timeout_sec: float | None = None,
+        max_tokens: int | None = None,
+        max_rounds: int | None = None,
         **kwargs: Any,
     ) -> None:
+        for name, value in (("max_tokens", max_tokens), ("max_rounds", max_rounds)):
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, int) or value <= 0
+            ):
+                raise ValueError(f"{name} must be a positive integer when supplied")
         super().__init__(logs_dir=logs_dir, model_name=model_name, **kwargs)
         self.provider = provider
         self.source = source
         self.effort = effort
         self.agent_timeout_sec = _agent_time_budget(agent_timeout_sec)
+        self.max_tokens = 32768 if max_tokens is None else max_tokens
+        self.max_rounds = 0 if max_rounds is None else max_rounds
 
     def version(self) -> str:
         return importlib.metadata.version("geode-agent")
@@ -743,6 +756,8 @@ class GeodeHarborAgent(HarborBaseAgent):
             source=self.source,
             effort=self.effort,
             timeout=self.agent_timeout_sec,
+            max_tokens=self.max_tokens,
+            max_rounds=self.max_rounds,
         )
         previous = os.environ.get("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT")
         os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] = "1"
