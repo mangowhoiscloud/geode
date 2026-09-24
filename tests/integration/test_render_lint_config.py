@@ -209,8 +209,11 @@ def test_docs_only_owner_checks_do_not_enable_full_runtime_tests() -> None:
     assert docs_step["if"] == "needs.changes.outputs.docs == 'true'"
     assert "scripts/check_official_docs.py --check-map" in docs_step["run"]
     assert "tests/test_workflow_scaffold.py" in docs_step["run"]
-    full_test = next(step for step in jobs["test"]["steps"] if "--cov=core" in step.get("run", ""))
-    assert full_test["if"] == "needs.changes.outputs.full_tests != 'false'"
+    full_test = next(
+        step for step in jobs["test_shards"]["steps"] if "--cov=core" in step.get("run", "")
+    )
+    assert jobs["test_shards"]["if"] == "needs.changes.outputs.full_tests == 'true'"
+    assert "--dist=loadfile" in full_test["run"]
 
 
 _DOCS_ONLY_PATHS = (
@@ -292,12 +295,14 @@ def test_documentation_fast_path_keeps_required_jobs_and_owner_checks() -> None:
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
     jobs = workflow["jobs"]
     assert jobs["test"]["name"] == "Test" and jobs["gate"]["name"] == "Gate"
-    assert "if" not in jobs["test"]
+    assert jobs["test"]["if"] == "${{ always() }}"
+    assert set(jobs["test"]["needs"]) == {"changes", "test_contracts", "test_shards"}
+    for name in ("test_contracts", "test_shards"):
+        assert jobs[name]["if"] == "needs.changes.outputs.full_tests == 'true'"
     test_steps = jobs["test"]["steps"]
-    assert test_steps[0]["if"] == "needs.changes.outputs.full_tests == 'false'"
+    assert test_steps[0]["name"] == "Require complete test prerequisites"
     for step in test_steps[1:]:
-        if step.get("name") != "Architecture performance failure profile":
-            assert step["if"] == "needs.changes.outputs.full_tests != 'false'"
+        assert step["if"] == "steps.prerequisites.outputs.full_tests == 'true'"
     for name, command in (
         ("Generated architecture baseline", "scripts/architecture_baseline.py --check"),
         ("Architecture roadmap invariants", "scripts/check_architecture_roadmap.py"),

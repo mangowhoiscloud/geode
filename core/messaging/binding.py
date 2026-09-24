@@ -7,11 +7,12 @@ Follows OpenClaw Gateway pattern: static rules, no LLM for routing.
 from __future__ import annotations
 
 import logging
+import math
 import re
 import threading
 from collections.abc import Awaitable, Callable
 from inspect import isawaitable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.memory.session_key import (
     build_gateway_checkpoint_session_id,
@@ -19,6 +20,9 @@ from core.memory.session_key import (
 )
 from core.messaging.models import ChannelBinding, InboundMessage
 from core.messaging.poller import BasePoller
+
+if TYPE_CHECKING:
+    from core.orchestration.hot_reload import ConfigWatcher
 
 MessageProcessor = Callable[[str, dict[str, Any]], Awaitable[str] | str]
 SessionExistsChecker = Callable[[str], bool]
@@ -40,6 +44,30 @@ def get_gateway() -> ChannelManager | None:
 log = logging.getLogger(__name__)
 
 
+def _nonnegative_seconds(value: object, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise ValueError(f"{name} must be finite, nonnegative seconds")
+    try:
+        seconds = float(value)
+    except (ValueError, OverflowError) as exc:
+        raise ValueError(f"{name} must be finite, nonnegative seconds") from exc
+    if not math.isfinite(seconds) or seconds < 0:
+        raise ValueError(f"{name} must be finite, nonnegative seconds")
+    return seconds
+
+
+def _nonnegative_count(value: object, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise ValueError(f"{name} must be a nonnegative integer")
+    try:
+        count = int(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a nonnegative integer") from exc
+    if count < 0:
+        raise ValueError(f"{name} must be a nonnegative integer")
+    return count
+
+
 class ChannelManager:
     """Route inbound messages to GEODE processing via static bindings.
 
@@ -49,9 +77,16 @@ class ChannelManager:
     Messages from unbound channels are ignored.
     """
 
-    def __init__(self, *, lane_queue: Any = None, bot_user_id: str = "") -> None:
+    def __init__(
+        self,
+        *,
+        lane_queue: Any = None,
+        bot_user_id: str = "",
+        binding_watcher: ConfigWatcher | None = None,
+    ) -> None:
         self._bindings: list[ChannelBinding] = []
         self._pollers: list[BasePoller] = []
+        self._binding_watcher = binding_watcher
         self._processor: MessageProcessor | None = None
         self._session_exists_checker: SessionExistsChecker | None = None
         self._session_terminal_checker: SessionExistsChecker | None = None
@@ -75,9 +110,21 @@ class ChannelManager:
             poller.start()
 
     def stop(self) -> None:
-        """Stop all registered pollers."""
-        for poller in self._pollers:
-            poller.stop()
+        """Stop every owned poller and watcher, preserving the first failure."""
+        cleanups = [poller.stop for poller in self._pollers]
+        if self._binding_watcher is not None:
+            cleanups.append(self._binding_watcher.stop)
+        first_error: BaseException | None = None
+        for cleanup in cleanups:
+            try:
+                cleanup()
+            except BaseException as exc:
+                if first_error is None:
+                    first_error = exc
+                else:
+                    log.exception("Additional gateway shutdown failure")
+        if first_error is not None:
+            raise first_error
 
     def set_async_processor(self, processor: MessageProcessor) -> None:
         """Set the async message processor for channel adapters."""
@@ -315,34 +362,42 @@ class ChannelManager:
             channel_id = "C12345"
             auto_respond = true
 
-        Returns number of bindings loaded.
+        Validate before publishing. Absent rules leave bindings unchanged;
+        explicit ``rules = []`` clears them. Returns number of bindings loaded.
         """
         gw = config.get("gateway", {})
+        if not isinstance(gw, dict):
+            raise ValueError("gateway must be a table")
 
         # Gateway-level defaults
+        time_budget = self.gateway_time_budget_s
+        max_turns = self.gateway_max_turns
         if "time_budget_s" in gw:
-            self.gateway_time_budget_s = float(gw["time_budget_s"])
+            time_budget = _nonnegative_seconds(gw["time_budget_s"], "gateway.time_budget_s")
         elif "max_rounds" in gw:
             # Legacy: convert max_rounds to approximate time budget (10s/round)
-            self.gateway_time_budget_s = float(int(gw["max_rounds"]) * 10)
+            rounds = _nonnegative_count(gw["max_rounds"], "gateway.max_rounds")
+            time_budget = _nonnegative_seconds(rounds * 10, "gateway.max_rounds")
         if "max_turns" in gw:
-            self.gateway_max_turns = int(gw["max_turns"])
+            max_turns = _nonnegative_count(gw["max_turns"], "gateway.max_turns")
+        bindings = gw.get("bindings", {})
+        if not isinstance(bindings, dict):
+            raise ValueError("gateway.bindings must be a table")
+        rules = bindings.get("rules", [])
+        if not isinstance(rules, list):
+            raise ValueError("gateway.bindings.rules must be an array of tables")
 
-        rules = gw.get("bindings", {}).get("rules", [])
-        if not rules:
-            return 0
-
-        with self._lock:
-            self._bindings.clear()
-
-        # Per-binding time_budget_s falls back to gateway-level default
-        default_time_budget = self.gateway_time_budget_s
-
-        loaded = 0
+        candidate: list[ChannelBinding] = []
         for rule in rules:
             if not isinstance(rule, dict) or "channel" not in rule:
-                continue
-            channel_id = rule.get("channel_id", "").strip()
+                raise ValueError("Each binding rule must be a table with a channel")
+            channel = rule["channel"]
+            channel_id = rule.get("channel_id", "")
+            if not isinstance(channel, str) or not channel.strip():
+                raise ValueError("Binding channel must be a nonempty string")
+            if not isinstance(channel_id, str):
+                raise ValueError("Binding channel_id must be a string")
+            channel_id = channel_id.strip()
             if not channel_id:
                 log.warning(
                     "Skipping binding: channel=%s has no channel_id — "
@@ -350,21 +405,41 @@ class ChannelManager:
                     rule.get("channel"),
                 )
                 continue
+            for key in ("auto_respond", "require_mention"):
+                if key in rule and not isinstance(rule[key], bool):
+                    raise ValueError(f"Binding {key} must be a boolean")
+            allowed_tools = rule.get("allowed_tools", [])
+            if not isinstance(allowed_tools, list) or any(
+                not isinstance(tool, str) for tool in allowed_tools
+            ):
+                raise ValueError("Binding allowed_tools must be an array of strings")
             # Support both time_budget_s and legacy max_rounds
             tb = rule.get("time_budget_s")
             if tb is None and "max_rounds" in rule:
-                tb = float(int(rule["max_rounds"]) * 10)
+                tb = _nonnegative_count(rule["max_rounds"], "binding.max_rounds") * 10
             binding = ChannelBinding(
-                channel=rule["channel"],
+                channel=channel,
                 channel_id=channel_id,
                 auto_respond=rule.get("auto_respond", True),
                 require_mention=rule.get("require_mention", False),
-                allowed_tools=rule.get("allowed_tools", []),
-                time_budget_s=float(tb) if tb is not None else default_time_budget,
+                allowed_tools=list(allowed_tools),
+                time_budget_s=(
+                    _nonnegative_seconds(tb, "binding.time_budget_s")
+                    if tb is not None
+                    else time_budget
+                ),
             )
-            self.add_binding(binding)
-            loaded += 1
+            candidate.append(binding)
 
+        if rules and not candidate:
+            raise ValueError("No binding rules have a nonempty channel_id")
+        with self._lock:
+            self.gateway_time_budget_s = time_budget
+            self.gateway_max_turns = max_turns
+            if "rules" in bindings:
+                self._bindings = candidate
+
+        loaded = len(candidate)
         log.info(
             "Loaded %d gateway bindings from config (time_budget=%.0fs, max_turns=%d)",
             loaded,
