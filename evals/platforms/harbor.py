@@ -141,6 +141,14 @@ def _usage_event_metadata(event: Any) -> dict[str, Any]:
         else None
         for name in ("input_tokens", "output_tokens", "cached_input_tokens", "cache_write_tokens")
     }
+    long_write = usage.get("cache_write_1h_tokens")
+    counters["cache_write_1h_tokens"] = (
+        long_write
+        if isinstance(long_write, int)
+        and not isinstance(long_write, bool)
+        and 0 <= long_write <= (counters["cache_write_tokens"] or 0)
+        else None
+    )
     reasoning = usage.get("reasoning_tokens")
     if isinstance(reasoning, int) and not isinstance(reasoning, bool) and reasoning >= 0:
         counters["reasoning_tokens"] = reasoning

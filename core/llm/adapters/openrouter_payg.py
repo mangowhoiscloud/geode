@@ -158,12 +158,21 @@ class OpenRouterPaygAdapter:
         )
         if model.startswith("anthropic/claude-"):
             from core.llm.adapters._anthropic_common import _cache_shaped_system
-            from core.llm.providers.anthropic import apply_messages_cache_control
+            from core.llm.providers.anthropic import (
+                apply_messages_cache_control,
+                validate_cache_controls,
+            )
 
             messages = kwargs["messages"]
             if req.system_prompt:
                 messages[0]["content"] = _cache_shaped_system(req.system_prompt)
-            kwargs["messages"] = apply_messages_cache_control(messages)
+            # Chat carries the system marker inside messages; reserve only
+            # tool slots here to avoid counting the same system marker twice.
+            reserved = validate_cache_controls(messages=[], tools=kwargs.get("tools"))
+            kwargs["messages"] = apply_messages_cache_control(
+                messages, reserved_breakpoints=reserved
+            )
+            validate_cache_controls(messages=kwargs["messages"], tools=kwargs.get("tools"))
         elif (
             model.startswith("openai/")
             and get_openai_model_spec(model.removeprefix("openai/")).supports_explicit_prompt_cache

@@ -357,6 +357,7 @@ def test_recorded_attempts_keep_only_numeric_allowlist_and_source_links(purpose:
                 "cached_input_tokens": 0,
                 "cache_write_tokens": None,
                 "reasoning_tokens": 3,
+                "cache_write_1h_tokens": None,
             },
         }
     ]
@@ -432,6 +433,7 @@ def test_recorded_attempts_reject_malformed_metadata_without_invented_zero() -> 
         "output_tokens": None,
         "cached_input_tokens": 0,
         "cache_write_tokens": None,
+        "cache_write_1h_tokens": None,
     }
     assert "private" not in json.dumps(summary, allow_nan=False)
 

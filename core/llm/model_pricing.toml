@@ -4,8 +4,9 @@
 # Sources and conditional tariffs: docs/research/provider-refresh-20260924.md.
 # Historical rows support existing records; model_catalog.MODEL_OFFERINGS owns
 # active choices. Cache rates are explicit when the provider departs from its
-# usual ratio. Anthropic cache-write estimates use the 5-minute tariff; the
-# legacy tracker does not retain provider TTL detail or service-tier charges.
+# usual ratio. Anthropic total writes use the 5-minute tariff, with a 1-hour
+# premium only for provider-reported 1h counts. Legacy missing splits and
+# service-tier charges remain unknown; this is not a reconciled invoice.
 
 # ── Anthropic (verified 2026-09-24) ───────────────────────────────────────
 # Source: https://platform.claude.com/docs/en/docs/about-claude/pricing

@@ -340,6 +340,7 @@ def _system_and_messages(req: AdapterCallRequest) -> tuple[Any, list[dict[str, A
     from core.llm.providers.anthropic import (
         MAX_MESSAGE_CACHE_BREAKPOINTS,
         apply_messages_cache_control,
+        validate_cache_controls,
     )
 
     messages = build_messages(req)
@@ -355,8 +356,10 @@ def _system_and_messages(req: AdapterCallRequest) -> tuple[Any, list[dict[str, A
         if isinstance(raw_breakpoints, int) and not isinstance(raw_breakpoints, bool)
         else MAX_MESSAGE_CACHE_BREAKPOINTS
     )
-    return _cache_shaped_system(system), apply_messages_cache_control(
-        messages, n_breakpoints=n_breakpoints
+    shaped_system = _cache_shaped_system(system)
+    reserved = validate_cache_controls(messages=[], system=shaped_system)
+    return shaped_system, apply_messages_cache_control(
+        messages, n_breakpoints=n_breakpoints, reserved_breakpoints=reserved
     )
 
 
@@ -445,6 +448,11 @@ def build_create_kwargs(
     _maybe_inject_computer_use(kwargs, req)
     _inject_native_web_tools(kwargs, req)
     _maybe_inject_context_management(kwargs)
+    from core.llm.providers.anthropic import validate_cache_controls
+
+    validate_cache_controls(
+        system=kwargs["system"], messages=kwargs["messages"], tools=kwargs.get("tools")
+    )
     return kwargs
 
 
@@ -559,6 +567,9 @@ def translate_response(response: Any) -> AdapterCallResult:
             reasoning_tokens_present=getattr(output_details, "thinking_tokens", None) is not None,
             cache_write_tokens=int(cache_write_tokens or 0),
             cache_write_tokens_present=cache_write_tokens is not None,
+            cache_write_1h_tokens=getattr(
+                getattr(usage, "cache_creation", None), "ephemeral_1h_input_tokens", None
+            ),
         ),
         stop_reason=getattr(response, "stop_reason", "end_turn") or "end_turn",
         stop_details=(

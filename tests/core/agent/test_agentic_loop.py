@@ -1434,7 +1434,7 @@ class TestAgenticLoop:
         loop = AgenticLoop(context, executor, quiet=True)
 
         mock_response = MagicMock()
-        mock_response.usage = MagicMock(input_tokens=500, output_tokens=200, reported_cost_usd=None)
+        mock_response.usage = ResponseUsage(input_tokens=500, output_tokens=200)
 
         loop._track_usage(mock_response)
 
@@ -1465,7 +1465,7 @@ class TestAgenticLoop:
         hooks.register(HookEvent.COST_LIMIT_EXCEEDED, record, name="cost_limit")
         loop = AgenticLoop(context, executor, hooks=hooks, quiet=True)
         mock_response = MagicMock()
-        mock_response.usage = MagicMock(
+        mock_response.usage = ResponseUsage(
             input_tokens=500_000,
             output_tokens=200_000,
             thinking_tokens=0,
@@ -1514,10 +1514,11 @@ class TestAgenticLoop:
         loop = AgenticLoop(context, executor, quiet=True)
 
         mock_response = MagicMock()
-        mock_response.usage = MagicMock(
+        mock_response.usage = ResponseUsage(
             input_tokens=100,
             output_tokens=50,
             cache_creation_tokens=20,
+            cache_creation_1h_tokens=10,
             cache_read_tokens=80,
             thinking_tokens=10,
             reported_cost_usd=None,
@@ -1529,6 +1530,7 @@ class TestAgenticLoop:
         assert last.input_tokens == 100
         assert last.output_tokens == 50
         assert last.cache_creation_tokens == 20
+        assert last.cache_creation_1h_tokens == 10
         assert last.cache_read_tokens == 80
         assert last.thinking_tokens == 10
 

@@ -167,7 +167,12 @@ def test_openrouter_wire_preserves_cache_and_session_ownership(
             adapter = OpenRouterPaygAdapter()
             monkeypatch.setattr(adapter, "_get_client", lambda: client)
             for tail in ("first", "second"):
-                result = await adapter.acomplete(_request(f"openrouter/{model}", tail))
+                result = await adapter.acomplete(
+                    replace(
+                        _request(f"openrouter/{model}", tail),
+                        messages=tuple(Message(role="user", content=f"turn {i}") for i in range(4)),
+                    )
+                )
                 assert result.usage.cached_input_tokens == 80
                 assert result.usage.cache_write_tokens == 10
                 assert result.usage.reported_cost_usd == 0.001
@@ -186,6 +191,8 @@ def test_openrouter_wire_preserves_cache_and_session_ownership(
     assert bodies[0]["session_id"] == bodies[1]["session_id"] == bodies[2]["session_id"]
     assert bodies[3]["session_id"] != bodies[0]["session_id"]
     assert "private-session" not in json.dumps(bodies)
+    if marker == "cache_control":
+        assert json.dumps(bodies[0]).count('"cache_control"') == 4
     content = bodies[0]["messages"][0]["content"]
     if marker:
         expected = (
