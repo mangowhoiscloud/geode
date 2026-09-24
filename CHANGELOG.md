@@ -113,6 +113,13 @@ functional change.
 
 ### Fixed
 
+- Release partially constructed runtime resources before propagating the original
+  failure, and retry incomplete shutdown without skipping sibling resources.
+  Delegate the daemon's borrowed scheduler teardown to its runtime owner,
+  including partial gateway startup failures.
+  Restore turn attribution and adapter usage context after success, failure or
+  cancellation, and serialize SDK client publication with credential invalidation.
+
 - Validate the complete settings reload before updating the live singleton.
   Failed environment/TOML field validation, field preparation, or routing
   refresh preserves the previous Settings values; corrected reloads retain
