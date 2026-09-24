@@ -77,6 +77,7 @@ def test_stage_release_validates_scans_and_reads_back(tmp_path):
         "email": 0,
         "github_token": 0,
         "openai_key": 0,
+        "typesafe_key": 0,
         "bearer": 0,
         "aws_access_key": 0,
         "url_query_secret": 0,
@@ -102,6 +103,35 @@ def test_stage_release_rejects_unreviewed_or_sensitive_payload(tmp_path):
             trajectories={"trajectory.json": _trajectory(content="owner@example.com")},
             privacy_review=_privacy_review("secret"),
         )
+
+
+def test_stage_release_rejects_typesafe_key(tmp_path):
+    with pytest.raises(ValueError, match="secret scan failed"):
+        stage_trajectory_release(
+            tmp_path,
+            release_source="test",
+            release_scope="key-scan",
+            trajectories={"trajectory.json": _trajectory()},
+            privacy_review={
+                **_privacy_review("key-scan"),
+                "attestation": "apikey_" + "a" * 32 + "_" + "b" * 64,
+            },
+        )
+
+
+def test_readback_accepts_immutable_manifest_predating_typesafe_scan(tmp_path):
+    release = stage_trajectory_release(
+        tmp_path,
+        release_source="test",
+        release_scope="old-detector",
+        trajectories={"trajectory.json": _trajectory()},
+        privacy_review=_privacy_review("old-detector"),
+    )
+    manifest = json.loads((release / "manifest.json").read_text())
+    del manifest["quality"]["secret_scan"]["typesafe_key"]
+    release = _rebind_release_directory(release, manifest)
+    verified = verify_trajectory_release(release)
+    assert "typesafe_key" not in verified["quality"]["secret_scan"]
 
 
 def test_release_readback_rejects_tampering(tmp_path):

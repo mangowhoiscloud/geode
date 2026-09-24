@@ -311,6 +311,16 @@ for an authorized local audit, but that is not permission to publish them. A
 redacted public derivative receives its own path, byte count, and digest; it
 never inherits the raw artifact's identity.
 
+When normalization is needed, reuse the producer's native result and the
+existing trajectory schema. Keep an input/output digest receipt that names
+the removed fields, path substitutions, retained score authority and recording
+limits. A missing old worktree path may be rebound to an archive member only
+after its bytes match the frozen digest; never rewrite the freeze to hide it.
+Check a projector's actual suite, effort, seed and validity handling before
+reuse. A suite-specific learning view is not a generic Harbor normalizer.
+Keep component judgments, admission runs, invalid attempts and task rollouts
+separate in both directory structure and denominators.
+
 ## Publication cycle
 
 1. Preserve the source run under GEODE's ignored `artifacts/` tree.
@@ -324,6 +334,9 @@ never inherits the raw artifact's identity.
    never omit them silently from the disclosure accounting.
 5. Scan public entries for credentials, local usernames, auth headers,
    machine-local paths, personal data, and environment files.
+   Provider admission must include its key format in the shared runtime and
+   publication scans; TypeSafe `apikey_` and OpenRouter `sk-or-` are covered.
+   A clean regex scan supplements exact-payload review, not replaces it.
 6. Copy only `public` entries into a fresh branch/worktree of
    `geode-eval-artifacts`; do not rewrite an existing run directory.
 7. Open and merge a PR in the artifact repository.

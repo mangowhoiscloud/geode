@@ -68,16 +68,6 @@ from .models import (
     _ContextExhaustedError,
 )
 
-# Confidence-adaptive compute allocation — the reflection node's
-# ``CognitiveState.confidence`` (0..1) steers how much extra LLM compute
-# the loop spends on itself. High stable confidence stretches the
-# reflection cadence (fewer belief-update calls); low confidence forces
-# a reflection every round and edge-triggers a replan. Thresholds are
-# deliberately module constants, not settings knobs — one adaptive
-# on/off knob exists (``cognitive_reflection_adaptive``).
-REFLECTION_STRETCH_CONFIDENCE = 0.8  # confidence >= → interval doubled
-REFLECTION_FORCE_CONFIDENCE = 0.4  # confidence < → reflect every round
-
 if TYPE_CHECKING:
     from core.observability.run_event import RunEventSinkProvider
     from core.tools.plan import BoundToolPlan
@@ -392,10 +382,9 @@ class AgenticLoop:
         """Record round end + emit REFLECT/UPDATE_MEMORY for text-only
         completions (``stop_reason != "tool_use"``).
 
-        Contract: ACT/OBSERVE are NOT emitted (no action taken). If
-        ``cognitive_reflection_enabled`` is on, the reflection node still
-        gets one final chance to update beliefs from the terminal text
-        snapshot before REFLECT/UPDATE_MEMORY fire. ``last_action`` =
+        Contract: ACT/OBSERVE are NOT emitted (no action taken). Final
+        candidate reflection is owned by semantic verification, not a second
+        belief-update call before it. ``last_action`` =
         ``"text-only"``, ``last_observation`` = 80-char head of the text
         (distinguishes no-action from failed-tool turns). Personal-data
         exposure suppresses reflection and replaces that excerpt with a marker.
@@ -412,8 +401,6 @@ class AgenticLoop:
             action="text-only",
             observation=head or "(empty text)",
         )
-        if not requires_redaction:
-            await self._maybe_reflect([])
         await self._emit_cognitive(HookEvent.COGNITIVE_REFLECT, round=round_idx + 1)
         await self._emit_cognitive(HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1)
 
@@ -506,44 +493,10 @@ class AgenticLoop:
         await self._emit_cognitive(HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1)
 
     async def _maybe_reflect(self, tool_results: list[dict[str, Any]]) -> None:
-        """Call the reflection node if enabled.
-
-        Reads ``settings.cognitive_reflection_enabled`` lazily (toggle
-        takes effect next round, no restart). ``reflection_interval=N``
-        thins the cadence; the first round always reflects. Errors are
-        swallowed inside ``reflect_async`` (loop stays robust to a flaky
-        reflection model).
-        """
+        """Reflect once per admitted tool round; privacy and time limits remain hard."""
         from core.config import settings
 
         if getattr(self, "_reflection_requires_redaction", False):
-            return
-        if not settings.cognitive_reflection_enabled:
-            return
-        interval = max(1, int(settings.cognitive_reflection_interval))
-        # Confidence-adaptive cadence: high stable confidence buys fewer
-        # belief-update calls (interval doubled), low confidence forces a
-        # reflection every round. Reads the LAST reflection's confidence —
-        # staleness during a stretch is the accepted trade (verify still
-        # watches every turn). None (no reflection yet) → base interval.
-        confidence = self.cognitive_state.confidence
-        if getattr(settings, "cognitive_reflection_adaptive", True) and isinstance(
-            confidence, int | float
-        ):
-            if confidence >= REFLECTION_STRETCH_CONFIDENCE:
-                interval *= 2
-            elif confidence < REFLECTION_FORCE_CONFIDENCE:
-                interval = 1
-        # round_count is 1-based (record_round ran just before this);
-        # (round_count - 1) % interval == 0 → rounds 1, 1+N, 1+2N, ...
-        round_count = self.cognitive_state.round_count
-        if interval > 1 and (round_count - 1) % interval != 0:
-            log.debug(
-                "reflection skipped: round=%d interval=%d (next at round %d)",
-                round_count,
-                interval,
-                round_count + (interval - (round_count - 1) % interval),
-            )
             return
         from core.agent.loop._reflection import reflect_async
 
@@ -1136,6 +1089,7 @@ class AgenticLoop:
         response_schema: dict[str, Any] | None = None,
         allow_tools: bool = True,
         purpose: str = "agentic_loop",
+        adapter_override: Any | None = None,
     ) -> AgenticResponse | None:
         """Assemble and dispatch one provider request."""
         return await _provider_call.call_llm(
@@ -1147,6 +1101,7 @@ class AgenticLoop:
             response_schema=response_schema,
             allow_tools=allow_tools,
             purpose=purpose,
+            adapter_override=adapter_override,
         )
 
     # ------------------------------------------------------------------

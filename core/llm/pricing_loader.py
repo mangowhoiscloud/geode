@@ -3,7 +3,8 @@
 The TOML is the only price-data owner. Provider sections identify accounting
 semantics, independent of their wire protocol: Anthropic input is disjoint
 from cache; OpenAI and GLM report inclusive prompt totals. Explicit cache
-rates override defaults, including zero. These are standard API estimates.
+rates override defaults, including zero. TypeSafe has no cache tariff.
+Provider-reported cost takes precedence over these standard API estimates.
 """
 
 from __future__ import annotations
@@ -126,8 +127,10 @@ def _rate(value: Any, *, field: str) -> float:
 
 def _parse_provider(provider: str, entries: dict[str, Any]) -> dict[str, ModelPrice]:
     """Build prices without conflating provider identity with wire format."""
-    if provider not in {"anthropic", "openai", "glm"}:
-        raise ValueError(f"unknown provider {provider!r}; expected anthropic, openai or glm")
+    if provider not in {"anthropic", "openai", "glm", "typesafe"}:
+        raise ValueError(
+            f"unknown provider {provider!r}; expected anthropic, openai, glm or typesafe"
+        )
     out: dict[str, ModelPrice] = {}
     for model, fields in entries.items():
         prefix = f"pricing.{provider}.{model}"
@@ -148,11 +151,12 @@ def _parse_provider(provider: str, entries: dict[str, Any]) -> dict[str, ModelPr
             if "cache_write_per_mtok" in fields
             else None
         )
-        price = (
-            _derive_anthropic(inp, output, cached, write)
-            if provider == "anthropic"
-            else _derive_openai(inp, output, cached or 0.0, write or 0.0)
-        )
+        if provider == "typesafe":
+            price = ModelPrice(input=inp / 1_000_000, output=output / 1_000_000)
+        elif provider == "anthropic":
+            price = _derive_anthropic(inp, output, cached, write)
+        else:
+            price = _derive_openai(inp, output, cached or 0.0, write or 0.0)
         if provider != "anthropic":
             price = replace(
                 price, cache_read_known=cached is not None, cache_write_known=write is not None

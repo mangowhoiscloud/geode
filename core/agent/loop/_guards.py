@@ -606,22 +606,23 @@ async def _maybe_replan_async(loop: Any, round_idx: int, *, failure_context: str
         # the per-turn tool log was reset before a verify continuation.
         from types import SimpleNamespace
 
-        recent_parts: list[str] = []
+        recent_text = ""
         if trigger == "verify_fail":
             attempts = getattr(loop, "_verify_attempt_results", ())
             if attempts:
-                recent_parts.append(str(getattr(attempts[-1], "text", "") or ""))
-            if failure_context:
-                recent_parts.append(failure_context)
-        if not recent_parts:
+                recent_text = str(getattr(attempts[-1], "text", "") or "")
+        if not recent_text:
             try:
-                recent_parts.append(str(loop._tool_processor.tool_log[-1].get("result", "")))
+                recent_text = str(loop._tool_processor.tool_log[-1].get("result", ""))
             except Exception:
                 log.debug("recent tool_log read for replanner failed", exc_info=True)
-        recent_text = "\n\n".join(part for part in recent_parts if part)
-        stub_result = SimpleNamespace(text=str(recent_text))
+        stub_result = SimpleNamespace(text=recent_text)
         new_plan = await replan_async(
-            loop, plan=metrics.active_plan, turn_result=stub_result, trigger=trigger
+            loop,
+            plan=metrics.active_plan,
+            turn_result=stub_result,
+            trigger=trigger,
+            failure_instruction=failure_context if trigger == "verify_fail" else "",
         )
         if new_plan is None:
             log.info("Replan trigger=%s: planner failed; keeping prior plan", trigger)

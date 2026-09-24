@@ -282,3 +282,16 @@ def test_documented_alias_has_exact_price_and_context(alias: str, target: str) -
     catalogue = load_pricing_catalogue()
     assert catalogue.pricing[alias] is catalogue.pricing[target]
     assert catalogue.context_windows[alias] == catalogue.context_windows[target]
+
+
+@pytest.mark.parametrize("model", ["jev-1.13.0", "typesafe/jev-1.13"])
+def test_jev_input_only_tariff_and_reported_cost_priority(
+    model: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.llm.token_tracker import TokenTracker
+
+    tracker = TokenTracker()
+    monkeypatch.setattr(TokenTracker, "_persist_usage", lambda *args, **kwargs: None)
+    assert tracker.calculate_cost(model, 1_000_000, 500) == pytest.approx(0.042)
+    usage = tracker.record(model, 1_000_000, 500, reported_cost_usd=0.07)
+    assert usage.cost_usd == pytest.approx(0.07)

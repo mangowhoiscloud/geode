@@ -1,4 +1,5 @@
 # GEODE model pricing and context catalogue, refreshed 2026-09-24.
+# Provider-reported cost takes precedence in token_tracker.
 # Standard synchronous API USD per million tokens; never subscription invoices.
 # Sources and conditional tariffs: docs/research/provider-refresh-20260924.md.
 # Historical rows support existing records; model_catalog.MODEL_OFFERINGS owns
@@ -262,6 +263,17 @@ output_per_mtok = 2.20
 [pricing.glm."glm-4.7-flash"]
 input_per_mtok = 0.00
 output_per_mtok = 0.00  # free tier (limited-time)
+
+# TypeSafe System One (verified 2026-09-24).
+# https://openrouter.ai/typesafe/jev-1.13 — $0.042/M input, output free.
+# These are tariff estimates, not independently verified account charges.
+[pricing.typesafe."jev-1.13.0"]
+input_per_mtok = 0.042
+output_per_mtok = 0.0
+
+[pricing.typesafe."typesafe/jev-1.13"]
+input_per_mtok = 0.042
+output_per_mtok = 0.0
 
 # ── Context windows — current provider guides, 2026-09-24 ──
 

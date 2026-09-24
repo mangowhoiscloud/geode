@@ -26,6 +26,7 @@ from core.agent.loop.models import AgenticResult
 from core.agent.verify import (
     VerifyMode,
     VerifyResult,
+    _verify_rule_based,
     get_verify_mode,
     synthesize_reflection_hint,
     synthesize_reflexion_hint,
@@ -116,13 +117,13 @@ def test_verify_result_accepts_reflexion_hint_legacy_kwarg() -> None:
 
 
 def test_get_verify_mode_default() -> None:
-    """No env → rule_based default."""
-    assert get_verify_mode() is VerifyMode.RULE_BASED
+    """No env still requires final semantic reflection."""
+    assert get_verify_mode() is VerifyMode.LLM_JUDGE
 
 
 def test_get_verify_mode_off(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEODE_VERIFY_MODE", "off")
-    assert get_verify_mode() is VerifyMode.OFF
+    assert get_verify_mode() is VerifyMode.LLM_JUDGE
 
 
 def test_get_verify_mode_llm_judge(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -146,7 +147,7 @@ def test_reflexion_input_is_a_deprecated_alias_not_a_second_algorithm(monkeypatc
 def test_get_verify_mode_unknown_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
     """Typo → silent fallback to default + warning. Don't crash."""
     monkeypatch.setenv("GEODE_VERIFY_MODE", "bogus_mode")
-    assert get_verify_mode() is VerifyMode.RULE_BASED
+    assert get_verify_mode() is VerifyMode.LLM_JUDGE
 
 
 # -- Rule-based checks -------------------------------------------------
@@ -158,7 +159,7 @@ def test_rule_based_passes_normal_turn() -> None:
         text="Calling the search tool",
         tool_calls=[{"name": "search", "error": False}],
     )
-    vr = verify_turn(result)
+    vr = _verify_rule_based(result)
     assert vr.passed is True
     assert vr.mode is VerifyMode.RULE_BASED
     assert vr.rubric_misses == ()
@@ -167,7 +168,7 @@ def test_rule_based_passes_normal_turn() -> None:
 def test_rule_based_flags_empty_turn() -> None:
     """No text + no tool calls → empty_turn."""
     result = _make_result(text="", tool_calls=[])
-    vr = verify_turn(result)
+    vr = _verify_rule_based(result)
     assert vr.passed is False
     assert "empty_turn" in vr.rubric_misses
     assert vr.reflection_hint.startswith("<reflection>")
@@ -176,7 +177,7 @@ def test_rule_based_flags_empty_turn() -> None:
 
 def test_rule_based_does_not_infer_failure_from_short_output() -> None:
     result = _make_result(text="7", tool_calls=[])
-    vr = verify_turn(result)
+    vr = _verify_rule_based(result)
     assert vr.passed and not vr.should_retry
     assert vr.rubric_misses == ()
 
@@ -187,7 +188,7 @@ def test_rule_based_short_output_ok_when_tool_used() -> None:
         text="hi",
         tool_calls=[{"name": "search"}],
     )
-    vr = verify_turn(result)
+    vr = _verify_rule_based(result)
     assert vr.passed is True
 
 
@@ -200,7 +201,7 @@ def test_rule_based_does_not_judge_historical_tool_errors() -> None:
             {"name": "fetch", "error": True},
         ],
     )
-    vr = verify_turn(result)
+    vr = _verify_rule_based(result)
     assert vr.passed and not vr.should_retry
 
 
@@ -211,7 +212,7 @@ def test_rule_based_flags_model_action_required() -> None:
         tool_calls=[],
         termination_reason="model_action_required",
     )
-    vr = verify_turn(result)
+    vr = _verify_rule_based(result)
     assert "model_action_required" in vr.rubric_misses
 
 
@@ -221,7 +222,7 @@ def test_removed_min_chars_knob_does_not_change_mechanical_checks(
     """The old threshold cannot silently revive the semantic heuristic."""
     monkeypatch.setenv("GEODE_VERIFY_MIN_TEXT_CHARS", "100")
     result = _make_result(text="x" * 50, tool_calls=[])
-    vr = verify_turn(result)
+    vr = _verify_rule_based(result)
     assert vr.passed and not vr.should_retry
 
 
@@ -249,17 +250,17 @@ def test_synthesize_reflexion_hint_legacy_alias() -> None:
 # -- Mode dispatch ------------------------------------------------------
 
 
-def test_off_mode_skips_checks(monkeypatch: pytest.MonkeyPatch) -> None:
-    """OFF mode returns passing sentinel without running rule checks."""
+def test_off_alias_cannot_skip_semantic_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Legacy OFF cannot manufacture success without an available judge."""
     monkeypatch.setenv("GEODE_VERIFY_MODE", "off")
     result = _make_result(text="", tool_calls=[])  # would fail rule-based
     vr = verify_turn(result)
-    assert vr.passed is True
-    assert vr.mode is VerifyMode.OFF
-    assert vr.rubric_misses == ()
+    assert vr.passed is False
+    assert vr.mode is VerifyMode.LLM_JUDGE
+    assert vr.rubric_misses == ("verification_error",)
 
 
-@pytest.mark.parametrize("mode", ["llm_judge", "reflexion"])
+@pytest.mark.parametrize("mode", ["llm_judge", "reflexion", "off", "rule_based"])
 def test_judge_without_loop_is_unavailable(monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
     monkeypatch.setenv("GEODE_VERIFY_MODE", mode)
     vr = verify_turn(_make_result(text="A plausible answer"))
@@ -335,14 +336,17 @@ def test_consume_reflexion_hint_legacy_alias() -> None:
 def test_verify_turn_crash_is_not_success(monkeypatch: pytest.MonkeyPatch, use_async: bool) -> None:
     """Verification failure must not create success or an unbounded repair."""
 
-    # Build a result that triggers a rule-based check, then monkeypatch
-    # ``_verify_rule_based`` to raise so we exercise the except branch.
+    # The public dispatcher must contain faults from its semantic verifier.
     import core.agent.verify as verify_module
 
-    def boom(_result: AgenticResult) -> VerifyResult:
+    def boom(*_args, **_kwargs) -> VerifyResult:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(verify_module, "_verify_rule_based", boom)
+    async def async_boom(*_args, **_kwargs) -> VerifyResult:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(verify_module, "_verify_llm_judge", boom)
+    monkeypatch.setattr(verify_module, "_verify_llm_judge_async", async_boom)
     if use_async:
         import asyncio
 
@@ -358,12 +362,12 @@ def test_verify_turn_crash_is_not_success(monkeypatch: pytest.MonkeyPatch, use_a
 def test_env_does_not_leak_between_tests() -> None:
     """Smoke — autouse ``reset_env`` clears the env so this test sees default."""
     assert os.environ.get("GEODE_VERIFY_MODE") is None
-    assert get_verify_mode() is VerifyMode.RULE_BASED
+    assert get_verify_mode() is VerifyMode.LLM_JUDGE
 
 
 def test_rule_based_multi_miss_combination() -> None:
     result = _make_result(text="", termination_reason="model_action_required")
-    vr = verify_turn(result)
+    vr = _verify_rule_based(result)
     assert vr.rubric_misses == ("empty_turn", "model_action_required")
     assert not vr.passed and not vr.should_retry
     assert all(miss in vr.reflection_hint for miss in vr.rubric_misses)
@@ -380,8 +384,9 @@ def test_effective_mode_off_passthrough(monkeypatch: pytest.MonkeyPatch) -> None
     """OFF mode has no fallback — both modes match."""
     monkeypatch.setenv("GEODE_VERIFY_MODE", "off")
     vr = verify_turn(_make_result())
-    assert vr.mode is VerifyMode.OFF
-    assert vr.effective_mode is VerifyMode.OFF
+    assert vr.mode is VerifyMode.LLM_JUDGE
+    assert vr.effective_mode is VerifyMode.LLM_JUDGE
+    assert not vr.passed
 
 
 def test_lifecycle_finalize_records_verify(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -391,6 +396,17 @@ def test_lifecycle_finalize_records_verify(monkeypatch: pytest.MonkeyPatch) -> N
     result = _make_result(text="", tool_calls=[])  # rule-based: empty_turn
     loop = SimpleNamespace(
         _hook_registry=HookRegistry(),
+        model="gpt-6-astra",
+        _verify_root_user_input="Return an observed result.",
+        _call_llm=AsyncMock(
+            return_value=SimpleNamespace(
+                text=(
+                    '{"passed":true,"score":1.0,"reflection":'
+                    '{"observation":"Candidate inspected","lesson":"Use evidence",'
+                    '"next_check":"Retain the evidence"}}'
+                )
+            )
+        ),
         _session_id="",
         _turn_id="t-1",
         _verify_root_turn_id="t-1",
@@ -413,8 +429,10 @@ def test_lifecycle_finalize_records_verify(monkeypatch: pytest.MonkeyPatch) -> N
         assert m.last_verify_reflection_hint.startswith("<reflection>")
 
 
-def test_lifecycle_off_mode_skips_verify_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    """OFF mode omits the internal verify payload and metrics row."""
+def test_lifecycle_off_alias_keeps_unavailable_verify_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy OFF records the unavailable verdict instead of bypassing the gate."""
     from core.agent.loop import _lifecycle
 
     monkeypatch.setenv("GEODE_VERIFY_MODE", "off")
@@ -433,8 +451,11 @@ def test_lifecycle_off_mode_skips_verify_payload(monkeypatch: pytest.MonkeyPatch
         payload, _follow_up, _escalated, _correlation = asyncio.run(
             _lifecycle._run_public_finalization_async(loop, result)
         )
-        assert payload is None
-        assert current_session_metrics().verify_fail_count == 0
+        assert payload is not None
+        assert not payload["passed"]
+        assert "verification_error" in payload["rubric_misses"]
+        assert _escalated is True
+        assert current_session_metrics().verify_fail_count == 1
 
 
 @pytest.mark.parametrize(
@@ -442,6 +463,8 @@ def test_lifecycle_off_mode_skips_verify_payload(monkeypatch: pytest.MonkeyPatch
     [
         ("judge_timeout", "judge_timeout"),
         ("verification_time_budget_exhausted", "verification_time_budget_exhausted"),
+        ("jev_visual_evidence_unsupported", "jev_visual_evidence_unsupported"),
+        ("invalid_jev_response", "invalid_jev_response"),
         ("", "verification_error"),
         ("private judge prose", "verification_error"),
     ],
@@ -976,7 +999,7 @@ def test_final_result_detaches_from_the_reusable_tool_log() -> None:
 def test_should_retry_signal_for_recoverable_miss() -> None:
     """Empty execution can request a bounded repair."""
     result = _make_result(text="", tool_calls=[])
-    vr = verify_turn(result)
+    vr = _verify_rule_based(result)
     assert vr.passed is False
     assert "empty_turn" in vr.rubric_misses
     assert vr.should_retry is True
@@ -990,7 +1013,7 @@ def test_should_retry_false_for_hard_fail_only() -> None:
         tool_calls=[],
         termination_reason="model_action_required",
     )
-    vr = verify_turn(result)
+    vr = _verify_rule_based(result)
     assert "model_action_required" in vr.rubric_misses
     # Hard fail only — no retryable miss accompanies it.
     if vr.rubric_misses == ("model_action_required",):
@@ -1004,7 +1027,7 @@ def test_should_retry_false_when_hard_fail_co_occurs() -> None:
         tool_calls=[],
         termination_reason="model_action_required",
     )
-    vr = verify_turn(result)
+    vr = _verify_rule_based(result)
     assert "empty_turn" in vr.rubric_misses
     assert "model_action_required" in vr.rubric_misses
     assert vr.should_retry is False  # hard fail wins
@@ -1017,14 +1040,14 @@ def test_historical_tool_error_does_not_request_automatic_repair() -> None:
         text="Recovered and checked",
         tool_calls=[{"tool": "read_file", "result": {"error": "earlier failure"}}],
     )
-    vr = verify_turn(result)
+    vr = _verify_rule_based(result)
     assert vr.passed and not vr.should_retry
     assert vr.rubric_misses == ()
 
 
 def test_payload_includes_should_retry() -> None:
     """Hook consumers read ``should_retry`` from the payload directly."""
-    vr = verify_turn(_make_result(text=""))
+    vr = _verify_rule_based(_make_result(text=""))
     payload = vr.to_payload()
     assert "should_retry" in payload
     assert payload["should_retry"] is True

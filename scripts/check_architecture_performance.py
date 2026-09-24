@@ -125,11 +125,52 @@ def _minimal_bound_plan() -> Any:
     return bind_tool_plan(plan, {"architecture_noop": noop})
 
 
+def _local_probe_response(request: Any) -> Any:
+    """Supply deterministic leaf responses; keep real runtime verification active."""
+    from core.llm.adapters.base import AdapterCallResult, UsageSummary
+
+    usage = UsageSummary(input_tokens=1, output_tokens=1)
+    if request.response_schema is not None:
+        if request.response_schema.get("title") != "TurnVerification" or request.tools:
+            raise ValueError("unexpected performance probe verification contract")
+        return AdapterCallResult(
+            text=json.dumps(
+                {
+                    "passed": True,
+                    "score": 1.0,
+                    "reflection": {
+                        "observation": "The candidate is ok, as requested.",
+                        "lesson": "The requested text is present.",
+                        "next_check": "No further action is required.",
+                    },
+                }
+            ),
+            usage=usage,
+            stop_reason="end_turn",
+        )
+    if any(tool.name == "record_reflection" for tool in request.tools):
+        return AdapterCallResult(
+            text="",
+            tool_uses=(
+                {
+                    "id": "probe-reflection",
+                    "name": "record_reflection",
+                    "input": {"hypotheses": ["The local probe is complete."], "confidence": 0.5},
+                },
+            ),
+            usage=usage,
+            stop_reason="end_turn",
+        )
+    return AdapterCallResult(text="ok", usage=usage, stop_reason="end_turn")
+
+
 async def _measure_async(bound: Any, *, profile_first_turn: bool = False) -> dict[str, float]:
+    from unittest.mock import patch
+
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop, AgenticLoopConfig
     from core.agent.tool_executor import ToolExecutor
-    from core.llm.adapters.base import AdapterCallResult, UsageSummary
+    from core.llm.adapters.base import AdapterCallResult
     from core.llm.adapters.registry import bootstrap_builtins
     from core.mcp.tool_runtime import MCPToolInvoker, MCPTraceStore
 
@@ -147,12 +188,8 @@ async def _measure_async(bound: Any, *, profile_first_turn: bool = False) -> dic
         provider = "openai"
         source = "subscription"
 
-        async def acomplete(self, _request: Any) -> AdapterCallResult:
-            return AdapterCallResult(
-                text="ok",
-                usage=UsageSummary(input_tokens=1, output_tokens=1),
-                stop_reason="end_turn",
-            )
+        async def acomplete(self, request: Any) -> AdapterCallResult:
+            return cast(AdapterCallResult, _local_probe_response(request))
 
     bootstrap_builtins()
     loop = AgenticLoop(
@@ -178,7 +215,8 @@ async def _measure_async(bound: Any, *, profile_first_turn: bool = False) -> dic
         profile = None
     started = time.perf_counter()
     try:
-        turn_result = await loop.arun("Return ok.")
+        with patch("core.agent.loop._reflection.resolve_for", return_value=loop._new_adapter):
+            turn_result = await loop.arun("Return ok.")
     finally:
         first_turn_ms = (time.perf_counter() - started) * 1000.0
         if profile is not None:
@@ -344,10 +382,13 @@ def collect_measurements(*, samples: int = 3, diagnostic: bool = False) -> dict[
             env.update(
                 {
                     "CODEX_HOME": str(sample_root / "codex"),
-                    "GEODE_COGNITIVE_REFLECTION_ENABLED": "false",
+                    "GEODE_COGNITIVE_REFLECTION_ENABLED": "true",
+                    "GEODE_COGNITIVE_REFLECTION_MODEL": "gpt-5.6-luna",
                     "GEODE_HOME": str(sample_root / "home"),
                     "GEODE_STATE_ROOT": str(sample_root / "state"),
-                    "GEODE_VERIFY_MODE": "off",
+                    "GEODE_VERIFY_MODE": "llm_judge",
+                    "GEODE_JUDGE_MODEL": "gpt-5.6-luna",
+                    "GEODE_JUDGMENT_ENGINE": "llm",
                     "_GEODE_ARCHITECTURE_PERFORMANCE_PROBE": "1",
                 }
             )
@@ -410,9 +451,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         if os.environ.get("_GEODE_ARCHITECTURE_PERFORMANCE_PROBE") != "1":
             print("--probe is an internal isolated subprocess mode", file=sys.stderr)
             return 2
-        print(
-            json.dumps(_measure_probe(profile_first_turn=args.profile_first_turn), sort_keys=True)
-        )
+        network_attempts: list[str] = []
+
+        def deny_network(event: str, _args: tuple[object, ...]) -> None:
+            if event in {"socket.connect", "socket.getaddrinfo"}:
+                network_attempts.append(event)
+                raise RuntimeError("network is disabled in the local performance probe")
+
+        # This process exits after one probe; no live provider or DNS may escape.
+        sys.addaudithook(deny_network)
+        measured = _measure_probe(profile_first_turn=args.profile_first_turn)
+        if network_attempts:
+            print("local performance probe attempted network I/O", file=sys.stderr)
+            return 1
+        print(json.dumps(measured, sort_keys=True))
         return 0
     try:
         if args.diagnose:

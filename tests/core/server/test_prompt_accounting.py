@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,9 +14,15 @@ import pytest
 from core.agent.conversation import ConversationContext
 from core.agent.loop import AgenticLoop, AgenticLoopConfig
 from core.agent.tool_executor import ToolExecutor
+from core.config import settings
 from core.hooks import HookEvent, HookSystem
 from core.llm import token_tracker, usage_store
-from core.llm.adapters.base import AdapterCallResult, TextCompletionResult, UsageSummary
+from core.llm.adapters.base import (
+    AdapterCallRequest,
+    AdapterCallResult,
+    TextCompletionResult,
+    UsageSummary,
+)
 from core.observability.event_store import HookEventStore
 from core.observability.hook_persistence import HookPersistenceSink
 from core.server.ipc_server.poller import CLIPoller
@@ -45,6 +52,8 @@ def test_short_ipc_prompt_preserves_history_and_accounting(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("GEODE_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("GEODE_FAST_CHAT", "1")
+    monkeypatch.setattr(settings, "judgment_engine", "llm")
+    monkeypatch.setattr(settings, "judge_model", "")
     usage = UsageSummary(
         input_tokens=10,
         output_tokens=3,
@@ -53,13 +62,44 @@ def test_short_ipc_prompt_preserves_history_and_accounting(
         cache_write_tokens=2,
         reported_cost_usd=0.125,
     )
+    judge_usage = UsageSummary(
+        input_tokens=7,
+        output_tokens=2,
+        cached_input_tokens=0,
+        cached_input_tokens_present=True,
+        cache_write_tokens=0,
+        cache_write_tokens_present=True,
+        reported_cost_usd=0.0625,
+    )
+
+    async def complete(request: AdapterCallRequest) -> AdapterCallResult:
+        if request.response_schema and request.response_schema.get("title") == "TurnVerification":
+            assert request.model == "gpt-5.6-sol"
+            assert not request.tools
+            assert "Hello." in str(request.messages)
+            return AdapterCallResult(
+                text=json.dumps(
+                    {
+                        "passed": True,
+                        "score": 1.0,
+                        "reflection": {
+                            "observation": "The candidate greets the user with Hello.",
+                            "lesson": "A greeting needs no external action.",
+                            "next_check": "Retain the greeting as the final response.",
+                        },
+                    }
+                ),
+                usage=judge_usage,
+                stop_reason="end_turn",
+            )
+        assert request.response_schema is None
+        return AdapterCallResult(text="Hello.", usage=usage, stop_reason="end_turn")
+
     adapter = SimpleNamespace(
         name="test-adapter",
         provider="openai",
         source="payg",
-        acomplete=AsyncMock(
-            return_value=AdapterCallResult(text="Hello.", usage=usage, stop_reason="end_turn")
-        ),
+        acomplete=AsyncMock(side_effect=complete),
         acomplete_text=AsyncMock(return_value=TextCompletionResult(text="Hello.", usage=usage)),
     )
     # Fake only provider boundaries, including the removed shortcut's old route.
@@ -99,7 +139,12 @@ def test_short_ipc_prompt_preserves_history_and_accounting(
             )
             assert result is not None and result["termination"] == "natural"
             assert result["text"] == "Hello." and result["rounds"] == 1
-            adapter.acomplete.assert_awaited_once()
+            assert adapter.acomplete.await_count == 2
+            assert adapter.acomplete.await_args_list[0].args[0].response_schema is None
+            assert (
+                adapter.acomplete.await_args_list[1].args[0].response_schema["title"]
+                == "TurnVerification"
+            )
             adapter.acomplete_text.assert_not_awaited()
             assert [message["role"] for message in loop.context.messages] == ["user", "assistant"]
             assert loop.context.messages[0]["content"] == "Hello"
@@ -109,26 +154,43 @@ def test_short_ipc_prompt_preserves_history_and_accounting(
             ends = store.read(
                 session_id=loop._session_id, event_filter=HookEvent.LLM_CALL_ENDED.value
             )
-            assert len(starts) == len(ends) == 1
-            assert starts[0].llm_attempt_id == ends[0].llm_attempt_id
-            assert ends[0].turn_id == loop._turn_id
-            assert ends[0].payload["usage"]["cached_input_tokens"] == cache
-            assert ends[0].payload["usage"]["cache_write_tokens"] == 2
-            assert ends[0].payload["cost_usd"] == 0.125
-            assert len(tracker.accumulator.calls) == 1
+            assert len(starts) == len(ends) == 2
+            assert {event.llm_attempt_id for event in starts} == {
+                event.llm_attempt_id for event in ends
+            }
+            assert all(event.turn_id == loop._turn_id for event in ends)
+            by_purpose = {event.payload["purpose"]: event for event in ends}
+            assert set(by_purpose) == {"agentic_loop", "turn_verification"}
+            generation = by_purpose["agentic_loop"].payload
+            judgment = by_purpose["turn_verification"].payload
+            assert generation["usage"]["cached_input_tokens"] == cache
+            assert generation["usage"]["cache_write_tokens"] == 2
+            assert generation["cost_usd"] == 0.125
+            assert judgment["usage"]["cached_input_tokens"] == 0
+            assert judgment["usage"]["cache_write_tokens"] == 0
+            assert judgment["cost_usd"] == 0.0625
+            assert len(tracker.accumulator.calls) == 2
+            assert tracker.accumulator.total_input_tokens == 17
+            assert tracker.accumulator.total_output_tokens == 5
             assert tracker.accumulator.total_cache_read_tokens == (cache or 0)
             assert tracker.accumulator.total_cache_creation_tokens == 2
-            assert tracker.accumulator.total_cost_usd == 0.125
+            assert tracker.accumulator.total_cost_usd == 0.1875
             records = ledger.get_recent_records()
-            assert len(records) == 1 and records[0].session == loop._session_id
-            assert records[0].cache_read_tokens == (cache or 0)
-            assert records[0].cache_creation_tokens == 2
-            assert records[0].cost_usd == 0.125
+            assert len(records) == 2
+            assert all(record.session == loop._session_id for record in records)
+            assert records[0].cache_read_tokens == records[0].cache_creation_tokens == 0
+            assert records[0].input_tokens == 7 and records[0].output_tokens == 2
+            assert records[0].cost_usd == 0.0625
+            assert records[1].cache_read_tokens == (cache or 0)
+            assert records[1].cache_creation_tokens == 2
+            assert records[1].cost_usd == 0.125
             tokens = [event for event in client.events if event["type"] == "tokens"]
-            assert len(tokens) == 1
+            assert len(tokens) == 2
             assert tokens[0]["cache_read_tokens"] == (cache or 0)
             assert tokens[0]["cache_write_tokens"] == 2
             assert tokens[0]["cost"] == 0.125
+            assert tokens[1]["cache_read_tokens"] == tokens[1]["cache_write_tokens"] == 0
+            assert tokens[1]["cost"] == 0.0625
             assert loop._quiet is True
         finally:
             hooks.close()

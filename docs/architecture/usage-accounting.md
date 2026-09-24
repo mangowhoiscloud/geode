@@ -248,6 +248,28 @@ and label it supplementary reexecution in Replay.
 
 ## Verification and limits
 
+### Optional Jev judgments
+
+`SystemOneAdapter` shares the existing auxiliary-call middleware, terminal
+observer and tracker path. Direct TypeSafe uses `jev-1.13.0`; OpenRouter uses
+`typesafe/jev-1.13`. Requested and returned model identity remain separate.
+Both routes preserve native token presence; unreported cache categories remain
+unknown. Completed malformed decisions retain observed consumption.
+
+OpenRouter `usage.cost` is provider-reported USD and takes precedence over the
+tariff. Direct TypeSafe exposes token counts but no documented charge field;
+the catalogue estimates $0.042 per million input tokens and $0 output, checked
+against the [published model tariff](https://openrouter.ai/typesafe/jev-1.13)
+on 2026-09-24. This estimate is not an invoice. Distribution confidence is not
+an accounting field and does not become cognitive success probability.
+
+The judgment picker and natural-language selection do not change root
+subscription/PAYG routing. Reflection now runs each tool-result round and once
+before final delivery, so comparisons must freeze this cadence and count these
+calls; historical runs with fewer checks are not an unchanged baseline.
+
+### Existing accounting limits
+
 Run the changed boundary's existing tests: `test_cache_cost_accounting.py`,
 `test_cache_hit_rate.py`, `test_agentic_loop.py -k track_usage`,
 `test_agentic_ui.py`, `test_fullscreen_app.py`, `test_prompt_accounting.py`,

@@ -32,6 +32,11 @@ class TestRedactSecrets:
         assert "a1b2c3d4e5f6" not in result
         assert "[REDACTED]" in result
 
+    def test_judgment_provider_keys(self) -> None:
+        for key in ("apikey_" + "a" * 32 + "_" + "b" * 64, "sk-or-v1-" + "c" * 64):
+            assert redact_secrets(f"key={key}") == "key=[REDACTED]"
+        assert redact_secrets("apikey_short") == "apikey_short"
+
     def test_github_pat(self) -> None:
         text = "GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz1234567890"
         result = redact_secrets(text)
