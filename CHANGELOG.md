@@ -49,6 +49,12 @@ functional change.
 
 ### Changed
 
+- Bound OpenAI Python to SDK 2 (`>=2.45,<3`) and Anthropic Python to SDK 0
+  (`>=0.116,<1`) while preserving the verified transport and audit contracts.
+  Share configured HTTP transport construction
+  across OpenAI, GLM, and Codex while preserving Codex's disabled connection
+  reuse and application-owned retries; record both SDK major-version migrations.
+
 - Refresh Claude Messages contracts for Fable 5.1, Opus 5.5/5, and Sonnet 5
   through typed model records and one create/stream request builder. Preserve
   signed thinking, structured output, tool calls, and cache usage in streaming;
@@ -120,6 +126,10 @@ functional change.
   this does not reconstruct missing historical usage.
 
 ### Fixed
+
+- Keep oversized-page omission notices stable across documentation build
+  environments while retaining measured sizes in build logs and complete
+  Markdown twins.
 
 - Admit native Astra final-verification calls in decision-handoff observations.
   Preserve requested and actual verifier modes separately, and require a complete
