@@ -11,13 +11,12 @@ from core.orchestration.context_budget import (
 )
 
 
-def test_glm_52_resolves_conservative_payg_window() -> None:
+def test_glm_52_resolves_current_documented_window() -> None:
     policy = resolve_context_budget_policy("glm-5.2")
 
-    # 202_752, not 1M: the plain PAYG id keeps the conservative window (0.99.246
-    # decision — 1M is the DevPack ``[1m]`` alias surface; funded live test required)
-    assert policy.context_window == 202_752
-    assert policy.tier.name == "small"
+    # Current direct Z.AI model guide publishes 1M; no inferred [1m] alias.
+    assert policy.context_window == 1_000_000
+    assert policy.tier.name == "large"
     assert policy.output_reserve_tokens == DEFAULT_OUTPUT_RESERVE_TOKENS
     assert policy.warning_tokens < policy.critical_tokens < policy.effective_prompt_budget_tokens
 

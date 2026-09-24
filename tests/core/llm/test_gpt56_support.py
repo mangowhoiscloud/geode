@@ -45,16 +45,21 @@ def test_adapter_spec_registry() -> None:
 def test_gpt56_pricing_and_context_windows() -> None:
     data = tomllib.loads((REPO_ROOT / "core" / "llm" / "model_pricing.toml").read_text())
     sol = data["pricing"]["openai"]["gpt-5.6-sol"]
-    assert sol["input_per_mtok"] == 5.0 and sol["output_per_mtok"] == 30.0
+    assert sol["input_per_mtok"] == 4.0 and sol["output_per_mtok"] == 20.0
+    assert sol["cached_per_mtok"] == 0.4 and sol["cache_write_per_mtok"] == 5.0
     terra = data["pricing"]["openai"]["gpt-5.6-terra"]
-    assert terra["input_per_mtok"] == 2.5 and terra["output_per_mtok"] == 15.0
+    assert terra["input_per_mtok"] == 2.0 and terra["output_per_mtok"] == 12.0
+    assert terra["cached_per_mtok"] == 0.2 and terra["cache_write_per_mtok"] == 2.5
     luna = data["pricing"]["openai"]["gpt-5.6-luna"]
-    assert luna["input_per_mtok"] == 1.0 and luna["output_per_mtok"] == 6.0
+    assert luna["input_per_mtok"] == 0.2 and luna["output_per_mtok"] == 1.2
+    assert luna["cached_per_mtok"] == 0.02 and luna["cache_write_per_mtok"] == 0.25
     # Bare alias bills at sol rates (documented alias → routes to sol).
-    alias = data["pricing"]["openai"]["gpt-5.6"]
-    assert alias == sol
+    from core.llm.pricing_loader import load_pricing_catalogue
+
+    catalogue = load_pricing_catalogue()
+    assert catalogue.pricing["gpt-5.6"] == catalogue.pricing["gpt-5.6-sol"]
     for model_id in ALL_IDS:
-        assert data["context_windows"][model_id] == 1_050_000
+        assert catalogue.context_windows[model_id] == 1_050_000
 
 
 def test_dual_lane_routing() -> None:

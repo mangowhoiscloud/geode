@@ -236,6 +236,6 @@ def test_explicit_retired_selection_reports_reason_before_credentials_or_writes(
     assert settings.model == "gpt-5.6-sol"
     assert settings.openai_credential_source == "oauth"
     assert "retired on 2026-08-31" in str(printer.call_args_list)
-    assert "gpt-5.6-terra explicitly" in str(printer.call_args_list)
+    assert "gpt-6-sol explicitly" in str(printer.call_args_list)
     credential_check.assert_not_called()
     persist.assert_not_called()
