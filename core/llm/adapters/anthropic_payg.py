@@ -219,23 +219,15 @@ class AnthropicPaygAdapter:
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import ANTHROPIC_FALLBACK_CHAIN, ANTHROPIC_PRIMARY
-        from core.llm.model_catalog import (
-            model_ids_for_source,
-            model_source_unavailable_reason,
-            model_spec_for_adapter,
-        )
+        from core.llm.model_catalog import model_ids_for_source, model_spec_for_adapter
 
-        ids = dict.fromkeys(
-            (
-                *model_ids_for_source(provider=self.provider, source=self.source),
-                ANTHROPIC_PRIMARY,
-                *ANTHROPIC_FALLBACK_CHAIN,
-            )
-        )
         return [
             model_spec_for_adapter(mid, provider=self.provider)
-            for mid in ids
-            if not model_source_unavailable_reason(mid, provider=self.provider, source=self.source)
+            for mid in model_ids_for_source(
+                self.provider,
+                self.source,
+                configured=(ANTHROPIC_PRIMARY, *ANTHROPIC_FALLBACK_CHAIN),
+            )
         ]
 
     def detect_credential(self) -> CredentialDetection | None:
