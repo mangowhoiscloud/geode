@@ -24,8 +24,8 @@ from core.config.credential_source import (
 from core.paths import GLOBAL_ENV_FILE
 
 #: Union of every per-provider effort the picker can persist to ``[agentic]
-#: effort`` — Anthropic ``low..xhigh``, OpenAI ``none``/``minimal``, GLM
-#: ``disabled``/``enabled`` (SoT: ``core.cli.effort_picker.supported_efforts``).
+#: effort`` plus readable legacy binary values ``disabled``/``enabled``
+#: (SoT: ``core.cli.effort_picker.supported_efforts``).
 #: ``_validate_effort`` MUST accept the full union: the picker writes the
 #: provider-specific value here, so a narrower set would reject a valid config
 #: the picker itself produced (e.g. gpt-5.5 + ``none``) and brick the next
@@ -78,10 +78,8 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("zai_api_key", "ZAI_API_KEY"),
     )
-    # PR-1 G-E (2026-05-21) bumped 4-6 → 4-7; PR-RUNTIME-OPUS-4-8 (2026-06-05)
-    # bumped 4-7 → 4-8 to match routing.toml [model.defaults] anthropic.
-    # ANTHROPIC_PRIMARY constant is the source of truth; this default mirrors it.
-    model: str = "claude-opus-4-8"
+    # Mirror routing.toml [model.defaults] anthropic; explicit env/TOML wins.
+    model: str = "claude-opus-5-5"
     model_policy_path: str = Field(
         default="",
         description=(
@@ -341,15 +339,9 @@ class Settings(BaseSettings):
     # core/llm/adapters/_openai_common.py:_prompt_cache_key / build_responses_kwargs
     prompt_cache_key_enabled: bool = True
 
-    # GLM-5.2 reasoning control — when set to a z.ai ``reasoning_effort`` value
-    # (max / xhigh / high / medium / low / minimal / none), the GLM adapters
-    # send ``reasoning_effort`` + ``thinking`` to glm-5.2 via ``extra_body``.
-    # Empty (default) = send nothing → the server default applies (no
-    # regression). reasoning_effort is GLM-5.2-only per the official z.ai
-    # chat-completion API reference; acceptance is **doc-grounded but
-    # live-unverified** (the GLM account balance is 0, so the round-trip cannot
-    # be confirmed — funded live-check is the pending gate, PR-NO-FALLBACK).
-    # reader: core/llm/providers/glm.py:build_glm_reasoning_extra_body
+    # Native GLM effort fallback when a request has no explicit effort.
+    # providers/glm.py owns per-model values (5.3: low/high/max, always-on).
+    # Empty leaves the provider default; request shaping and picker share it.
     glm_reasoning_effort: str = ""
 
     # Ensemble — Multi-LLM mode

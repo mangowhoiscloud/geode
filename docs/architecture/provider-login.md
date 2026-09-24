@@ -13,6 +13,7 @@ keys. Anthropic and OpenRouter have API-key-only built-in routes.
 | OpenAI | `api_key` | `OPENAI_API_KEY` | OpenAI PAYG adapter |
 | Anthropic | `api_key` / `auto` | `ANTHROPIC_API_KEY` | Anthropic Messages adapter |
 | OpenRouter | `api_key` | `OPENROUTER_API_KEY` | OpenRouter Chat Completions adapter |
+| GLM | `api_key` | `ZAI_API_KEY` | GLM PAYG Chat Completions adapter |
 | Any provider | `none` | none | fail closed as provider-disabled |
 
 The retired Anthropic values `claude-cli` and `oauth` still parse so existing
@@ -26,6 +27,11 @@ anthropic_credential_source = "api_key"
 and configure `ANTHROPIC_API_KEY`. `/login anthropic` now configures that
 API-key route. Historical `.eval`, trajectory, and receipt readers continue to
 recognize old source labels without making them executable.
+
+GLM Coding Plan is restricted to officially supported tools. GEODE admission
+is not established by the [2026-09-24 policy](https://docs.z.ai/devpack/usage-policy),
+so legacy subscription records stay readable while execution and new profile
+creation are blocked. Choose PAYG explicitly; no billing-source fallback occurs.
 
 ## Source of truth
 

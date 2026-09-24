@@ -26,7 +26,9 @@ _LEGACY_TO_REGISTRY = {"openai-codex": "openai", "zhipuai": "glm"}
 class TestProviderRouting:
     def test_all_picker_gpt_models_use_openai_family_label(self) -> None:
         assert {
-            profile.provider for profile in get_model_profiles() if profile.id.startswith("gpt-")
+            profile.provider
+            for profile in get_model_profiles(openai_source="payg")
+            if profile.id.startswith("gpt-")
         } == {"openai"}
 
     def test_codex_models_route_to_openai_codex(self) -> None:
@@ -86,7 +88,11 @@ class TestCrossProviderFallbackSafety:
 
 class TestModelProfileLabels:
     def test_all_gpt_models_use_openai_family_label(self) -> None:
-        profiles = [profile for profile in get_model_profiles() if profile.id.startswith("gpt-")]
+        profiles = [
+            profile
+            for profile in get_model_profiles(openai_source="payg")
+            if profile.id.startswith("gpt-")
+        ]
         assert profiles
         assert {profile.provider for profile in profiles} == {"openai"}
 
@@ -126,6 +132,6 @@ class TestModelProfileLabels:
         # rotator dispatch key. Pre-fix used capitalised "GLM" which
         # diverged from the dispatch key. v0.50 originally moved away
         # from "ZhipuAI" → "GLM"; v0.53.0 finishes by lowercasing.
-        for profile in get_model_profiles():
+        for profile in get_model_profiles(openai_source="payg"):
             if profile.id.startswith("glm-"):
                 assert profile.provider == "glm", profile.id
