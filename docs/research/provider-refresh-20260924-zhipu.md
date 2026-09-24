@@ -111,7 +111,7 @@ Existing normalized usage accounting is preserved. [Context caching](https://doc
 | `core/llm/providers/glm.py` | Reasoning allowed only 5.2; prefix inferred capability; request effort ignored | Exact typed 5.2/5.3 contracts and shared request builder; unknown model suffix receives no invented controls |
 | `core/llm/adapters/glm_payg.py` | Text path omitted effort; stream path omitted tools and reasoning | Text uses adapter completion; stream uses same builder and preserves thinking/tool arguments |
 | `core/llm/adapters/glm_coding_plan.py` | Claimed PAYG search parity without route evidence | Native search rejects explicitly; subscription calls use source admission before client lookup |
-| `core/llm/providers/glm.py` auxiliary client | Bare API key defaulted to Coding Plan endpoint | Explicit PAYG default; selected subscription source cannot bypass admission |
+| `core/llm/providers/glm.py` auxiliary client | Orphan grounding client could default a bare API key to Coding Plan | Remove the unverified grounding route and its unused client/cache; live API access remains adapter-owned |
 | `core/llm/model_pricing.toml`, catalog and picker | 5.3/Flash absent and 5.2 old context assumption | Central catalog owner updates rates/specs/listing; preserve historical evidence |
 | `core/llm/strategies/plans.py` | 80/240/600 call budgets modeled stale quota | Remove obsolete built-in call-count authority; provider credit balance remains provider-owned |
 
