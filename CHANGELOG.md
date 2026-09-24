@@ -113,6 +113,12 @@ functional change.
 
 ### Fixed
 
+- Reload gateway bindings atomically after file deletion, replacement or edits
+  with older modification times. Invalid reloads retain the last valid routing
+  and retry after debounce; explicit empty merged rules revoke bindings. Stop
+  the owned config watcher and remaining pollers even when one poller fails.
+  Wake polling sleeps on shutdown; retain ownership and reject restart while a
+  blocked callback prevents the previous watcher thread from stopping.
 - Validate the complete settings reload before updating the live singleton.
   Failed environment/TOML field validation, field preparation, or routing
   refresh preserves the previous Settings values; corrected reloads retain

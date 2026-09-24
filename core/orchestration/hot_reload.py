@@ -11,13 +11,22 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 log = logging.getLogger(__name__)
 
 DEFAULT_DEBOUNCE_MS = 300.0
 DEFAULT_POLL_INTERVAL_S = 1.0
+
+
+def _file_signature(path: Path) -> tuple[int, int, int, int] | None:
+    """Observe identity, modification time and size; absence is a distinct state."""
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    return stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_size
 
 
 class ConfigWatcher:
@@ -48,7 +57,7 @@ class ConfigWatcher:
         self._poll_interval = poll_interval_s
         self._watches: dict[Path, _WatchEntry] = {}
         self._lock = threading.Lock()
-        self._running = False
+        self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._stats = _WatcherStats()
 
@@ -59,7 +68,7 @@ class ConfigWatcher:
     def watch(
         self,
         path: Path | str,
-        callback: Any,
+        callback: Callable[[Path, float], None],
         *,
         name: str | None = None,
     ) -> None:
@@ -67,20 +76,21 @@ class ConfigWatcher:
 
         Args:
             path: File path to watch.
-            callback: Called as callback(path, mtime) on change.
+            callback: Called as callback(path, mtime) on change (0.0 on deletion).
+                A failed callback is retried after the debounce window.
             name: Optional name for logging.
         """
         p = Path(path)
-        mtime = p.stat().st_mtime if p.exists() else 0.0
+        signature = _file_signature(p)
         with self._lock:
             self._watches[p] = _WatchEntry(
                 path=p,
                 callback=callback,
                 name=name or p.name,
-                last_mtime=mtime,
+                last_signature=signature,
                 debounce_until=0.0,
             )
-        log.debug("Watching %s (mtime=%.1f)", p, mtime)
+        log.debug("Watching %s", p)
 
     def unwatch(self, path: Path | str) -> bool:
         """Stop watching a file. Returns True if found."""
@@ -90,28 +100,42 @@ class ConfigWatcher:
 
     def start(self) -> None:
         """Start the polling thread."""
-        if self._running:
-            return
-        self._running = True
-        self._thread = threading.Thread(
-            target=self._poll_loop,
-            daemon=True,
-            name="config-watcher",
-        )
-        self._thread.start()
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                if self._stop_event.is_set():
+                    raise RuntimeError(
+                        "ConfigWatcher is still stopping; retry after its callback exits"
+                    )
+                return
+            self._stop_event.clear()
+            self._thread = threading.Thread(
+                target=self._poll_loop,
+                daemon=True,
+                name="config-watcher",
+            )
+            self._thread.start()
         log.info("ConfigWatcher started (%d files)", len(self._watches))
 
     def stop(self) -> None:
         """Stop the polling thread."""
-        self._running = False
-        if self._thread is not None:
-            self._thread.join(timeout=2.0)
-            self._thread = None
+        with self._lock:
+            self._stop_event.set()
+            thread = self._thread
+        if thread is not None:
+            thread.join(timeout=2.0)
+            if thread.is_alive():
+                raise RuntimeError(
+                    "ConfigWatcher callback is still running; retry stop after it exits"
+                )
+            with self._lock:
+                if self._thread is thread:
+                    self._thread = None
         log.info("ConfigWatcher stopped")
 
     @property
     def is_running(self) -> bool:
-        return self._running
+        thread = self._thread
+        return thread is not None and thread.is_alive()
 
     @property
     def watched_count(self) -> int:
@@ -124,41 +148,45 @@ class ConfigWatcher:
 
     def _poll_loop(self) -> None:
         """Background polling loop."""
-        while self._running:
+        while not self._stop_event.is_set():
             self._check_all()
-            time.sleep(self._poll_interval)
+            self._stop_event.wait(self._poll_interval)
 
     def _check_all(self) -> int:
         """Check all watched files for changes."""
-        now = time.time()
+        now = time.monotonic()
         changes = 0
 
         with self._lock:
             entries = list(self._watches.values())
 
         for entry in entries:
-            if not entry.path.exists():
+            try:
+                signature = _file_signature(entry.path)
+            except OSError:
+                self._stats.errors += 1
+                log.exception("Cannot inspect watched config %s", entry.name)
                 continue
-
-            current_mtime = entry.path.stat().st_mtime
-            if current_mtime <= entry.last_mtime:
+            if signature == entry.last_signature:
                 continue
 
             # Debounce: skip if within debounce window
             if now < entry.debounce_until:
                 continue
 
-            entry.last_mtime = current_mtime
             entry.debounce_until = now + self._debounce_s
             changes += 1
             self._stats.reloads += 1
 
+            current_mtime = signature[2] / 1_000_000_000 if signature is not None else 0.0
             log.info("Config changed: %s (mtime=%.1f)", entry.name, current_mtime)
             try:
                 entry.callback(entry.path, current_mtime)
             except Exception:
                 self._stats.errors += 1
                 log.exception("Reload callback failed for %s", entry.name)
+            else:
+                entry.last_signature = signature
 
         return changes
 
@@ -166,21 +194,21 @@ class ConfigWatcher:
 class _WatchEntry:
     """Internal tracking for a watched file."""
 
-    __slots__ = ("callback", "debounce_until", "last_mtime", "name", "path")
+    __slots__ = ("callback", "debounce_until", "last_signature", "name", "path")
 
     def __init__(
         self,
         *,
         path: Path,
-        callback: Any,
+        callback: Callable[[Path, float], None],
         name: str,
-        last_mtime: float,
+        last_signature: tuple[int, int, int, int] | None,
         debounce_until: float,
     ) -> None:
         self.path = path
         self.callback = callback
         self.name = name
-        self.last_mtime = last_mtime
+        self.last_signature = last_signature
         self.debounce_until = debounce_until
 
 
