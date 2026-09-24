@@ -169,10 +169,11 @@ geode about                    # 실효 모델 + 마스크 경고 한 줄`}</pre
             <h2>리로드 시맨틱</h2>
             <p>
               세션 경계에서 <code>reload_settings_from_disk()</code>가
-              <code>.env</code>, <code>GEODE_*</code> env, config.toml을 살아
-              있는 싱글톤에 다시 읽어 들입니다. 필드 복사가 실패하면 해당
-              필드명을 적은 경고를 남기므로 반쯤 적용된 리로드가 조용히
-              지나가지 않습니다. 리로드는
+              <code>.env</code>, <code>GEODE_*</code> env, config.toml을 새
+              설정 후보로 읽고 검증한 뒤 기존 싱글톤을 갱신합니다.
+              필드 검증이나 준비, 라우팅 갱신이 실패하면 예외를 전달하고
+              기존 Settings 값을 유지합니다. 파일을 수정한 다음 다시
+              리로드하면 같은 객체 참조에 새 값이 적용됩니다. 리로드는
               <code>reload_routing_constants()</code>도 호출해 routing
               매니페스트 캐시를 비우고 <code>core.config</code>의 라우팅
               상수를 다시 묶습니다. 한계도 명시합니다. 모듈 로드 시점에 값을
@@ -414,9 +415,11 @@ geode about                    # effective model + one-line mask warning`}</pre>
             <p>
               At session boundaries <code>reload_settings_from_disk()</code>
               re-reads <code>.env</code>, <code>GEODE_*</code> env, and
-              config.toml into the live singleton. A per-field copy failure
-              logs a warning naming the field, so a half-applied reload never
-              passes silently. The reload also calls
+              config.toml into a fresh candidate, then validates and prepares
+              it before updating the existing singleton. Field validation,
+              preparation, or routing refresh failures propagate while keeping
+              the previous Settings values. Correct the source and reload again
+              to update the same captured references. The reload also calls
               <code>reload_routing_constants()</code>, clearing the
               routing-manifest cache and rebinding the routing constants on
               <code>core.config</code>. The honest limit: importers that
