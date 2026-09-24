@@ -1,9 +1,6 @@
 """Loader for ``core/llm/model_pricing.toml`` — pricing + context windows.
 
-P3-A (2026-05-17) introduces this loader. P3-B migrates
-:mod:`core.llm.token_tracker`'s ``MODEL_PRICING`` and
-``MODEL_CONTEXT_WINDOW`` dicts to consume it. Until then the loader is
-dormant — no production call site reads from this module.
+``token_tracker`` consumes this catalogue for estimated cost and context limits.
 
 Schema (matches the TOML, provider-prefixed):
 
@@ -15,13 +12,12 @@ Schema (matches the TOML, provider-prefixed):
   GLM models live under ``[pricing.openai.*]``
   by manifest convention (OpenAI-compatible API, openai derive formula).
 - ``[context_windows]`` — model id → int (tokens).
+- ``[pricing.typesafe.<model>]`` — input/output rates, no cache tariff.
 
 Output: a single :class:`PricingCatalogue` dataclass with both maps
 already in the ``ModelPrice`` form that ``token_tracker`` consumes.
 
-Refresh cadence: quarterly per the upstream pricing pages. Tests verify
-the loader's parity with the legacy hardcoded dicts so a stale file is
-caught immediately during P3-B's migration.
+Provider-reported cost takes precedence over these estimates in the tracker.
 """
 
 from __future__ import annotations
@@ -127,10 +123,12 @@ def _parse_provider(provider: str, entries: dict[str, Any]) -> dict[str, ModelPr
                 cached_mtok=float(fields.get("cached_per_mtok", 0.0)),
                 cache_write_mtok=float(fields.get("cache_write_per_mtok", 0.0)),
             )
+        elif provider == "typesafe":
+            out[model] = ModelPrice(input=input_mtok / 1_000_000, output=output_mtok / 1_000_000)
         else:
             raise ValueError(
                 f"[pricing.{provider}.{model!r}]: unknown provider — supported "
-                f"providers are 'anthropic' and 'openai' (GLM models route "
+                f"providers are 'anthropic', 'openai', and 'typesafe' (GLM models route "
                 f"through 'openai' by manifest convention)"
             )
     return out

@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
+from typing import Literal
 
-from pydantic import AliasChoices, Field, ValidationInfo, field_validator
+from pydantic import AliasChoices, Field, SecretStr, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from core.config.credential_source import (
@@ -67,6 +68,12 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("openrouter_api_key", "OPENROUTER_API_KEY"),
     )
+    typesafe_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias=AliasChoices("typesafe_api_key", "TYPESAFE_API_KEY"),
+    )
+    judgment_engine: Literal["llm", "jev"] = "llm"
+    jev_provider: Literal["auto", "typesafe", "openrouter"] = "auto"
     zai_api_key: str = Field(
         default="",
         validation_alias=AliasChoices("zai_api_key", "ZAI_API_KEY"),
@@ -100,40 +107,23 @@ class Settings(BaseSettings):
             "learning extraction hook to differ from provider defaults."
         ),
     )
-    # PR-3 C-2 (2026-05-21) — Reflection node knobs. The reflection
-    # step runs one extra LLM call per tool-use round to populate
-    # ``CognitiveState.hypotheses`` / ``confidence``; operators can flip
-    # the toggle when they do not want that extra reflection pass.
-    # Empty model inherits the live AgenticLoop model/provider/source;
-    # operators can still pin a separate reflection model.
+    # Legacy cadence inputs remain readable for migration. Reflection now
+    # runs every round; the engine is selected separately from the root model.
     cognitive_reflection_enabled: bool = Field(
         default=True,
         validation_alias=AliasChoices(
             "cognitive_reflection_enabled",
             "GEODE_COGNITIVE_REFLECTION_ENABLED",
         ),
-        description=(
-            "When True (default) the agentic loop calls the reflection "
-            "node after every tool-use round to derive hypotheses + "
-            "confidence. When False the cognitive cycle stays "
-            "PERCEIVE → PLAN → ACT → OBSERVE → REFLECT (deterministic) "
-            "with no extra LLM call. PR-3 C-2."
-        ),
+        description="Deprecated cadence input; Reflection runs at every eligible round boundary.",
     )
     cognitive_reflection_adaptive: bool = Field(
-        default=True,
+        default=False,
         validation_alias=AliasChoices(
             "cognitive_reflection_adaptive",
             "GEODE_COGNITIVE_REFLECTION_ADAPTIVE",
         ),
-        description=(
-            "When True (default) the reflection cadence adapts to the "
-            "last reflection's confidence: >= 0.8 doubles the effective "
-            "interval (fewer belief-update calls), < 0.4 forces a "
-            "reflection every round. Thresholds are module constants in "
-            "core/agent/loop/agent_loop.py. When False the fixed "
-            "cognitive_reflection_interval applies unconditionally."
-        ),
+        description="Deprecated cadence input; confidence no longer skips Reflection rounds.",
     )
     cognitive_reflection_model: str = Field(
         default="",
@@ -212,16 +202,32 @@ class Settings(BaseSettings):
             "cognitive_reflection_interval",
             "GEODE_COGNITIVE_REFLECTION_INTERVAL",
         ),
-        description=(
-            "Reflection fires every Nth tool-use round. ``1`` (default) "
-            "= every round (current PR-3 behaviour, zero regression). "
-            "``3`` = round 1, 4, 7, 10... (skip 2 rounds between calls). "
-            "Higher values cut the extra-LLM-call overhead at the cost "
-            "of staler hypotheses + confidence. The first round always "
-            "runs so the loop sees an LLM-derived belief snapshot "
-            "before any throttling kicks in. PR-C (2026-05-21)."
-        ),
+        description="Deprecated cadence input; the effective interval is always one round.",
     )
+
+    @field_validator("cognitive_reflection_enabled", "cognitive_reflection_adaptive")
+    @classmethod
+    def _fixed_reflection_flags(cls, value: bool, info: ValidationInfo) -> bool:
+        required = info.field_name == "cognitive_reflection_enabled"
+        if value != required:
+            warnings.warn(
+                f"{info.field_name} is deprecated; Reflection runs every round.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return required
+
+    @field_validator("cognitive_reflection_interval")
+    @classmethod
+    def _fixed_reflection_interval(cls, value: int) -> int:
+        if value != 1:
+            warnings.warn(
+                "cognitive_reflection_interval is deprecated; Reflection runs every round.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return 1
+
     # Temperature — config-driven sampling (PR-TEMP, 2026-05-23).
     # Replaces six hardcoded literals (agent_loop 0.0 / reflection 0.2 /
     # verification 0.1 / commentary 0.4 / mutation 0.3 / compression 0.0)

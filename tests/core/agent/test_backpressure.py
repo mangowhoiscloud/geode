@@ -13,13 +13,29 @@ Feature 6: Convergence detection (stuck loop) + runtime ratchet
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from core.agent.conversation import ConversationContext
 from core.agent.loop import AgenticLoop, AgenticLoopConfig, _response
 from core.agent.tool_executor import ToolExecutor
 from core.config import ANTHROPIC_PRIMARY
+from core.llm.adapters.base import AdapterCallResult, UsageSummary
+
+
+@pytest.fixture
+def declined_reflection(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    """These convergence cases leave beliefs unchanged with a declined reflection."""
+    complete = AsyncMock(
+        return_value=AdapterCallResult(text="", usage=UsageSummary(), stop_reason="end_turn")
+    )
+    monkeypatch.setattr(
+        "core.agent.loop._reflection.resolve_for",
+        lambda *_args: SimpleNamespace(acomplete=complete),
+    )
+    return complete
 
 
 def _make_loop() -> AgenticLoop:
@@ -223,7 +239,7 @@ class TestConvergenceDetection:
         )
         assert "command not found" in loop._convergence.recent_errors[0]
 
-    def test_arun_convergence_terminates_loop(self) -> None:
+    def test_arun_convergence_terminates_loop(self, declined_reflection: AsyncMock) -> None:
         """arun() terminates with convergence_detected when stuck."""
         import asyncio
 
@@ -276,8 +292,11 @@ class TestConvergenceDetection:
 
         assert result.termination_reason == "convergence_detected"
         assert result.error == "convergence_detected"
+        declined_reflection.assert_awaited()
 
-    def test_arun_repeated_success_no_progress_terminates_loop(self) -> None:
+    def test_arun_repeated_success_no_progress_terminates_loop(
+        self, declined_reflection: AsyncMock
+    ) -> None:
         """Repeated identical successful observations break without a round cap."""
         import asyncio
 
@@ -330,3 +349,4 @@ class TestConvergenceDetection:
         assert call_count == 5
         assert result.termination_reason == "repeated_success_no_progress"
         assert result.error == "repeated_success_no_progress"
+        declined_reflection.assert_awaited()

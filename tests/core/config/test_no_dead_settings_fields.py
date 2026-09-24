@@ -22,10 +22,17 @@ from core.config._settings import Settings
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
-# Fields intentionally not consumed by runtime code (none today). Add a field
+# Fields intentionally not consumed by runtime code. Add a field
 # here ONLY with a comment explaining why it has no reader — the default
 # expectation is that every knob is wired.
-_ALLOWLIST: set[str] = set()
+_ALLOWLIST = {
+    # One compatibility window: Settings warns and normalizes old TOML/env
+    # cadence to 1/adaptive=False. test_reflection_cost_gate verifies the migration; the loop
+    # cannot read this field to skip mandatory round reflection. Remove with
+    # the deprecated field/TOML key at the next configuration breaking change.
+    "cognitive_reflection_interval",
+    "cognitive_reflection_adaptive",
+}
 
 
 def _consumer_texts() -> list[str]:
