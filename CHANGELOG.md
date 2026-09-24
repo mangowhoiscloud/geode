@@ -113,6 +113,10 @@ functional change.
 
 ### Fixed
 
+- Keep oversized-page omission notices stable across documentation build
+  environments while retaining measured sizes in build logs and complete
+  Markdown twins.
+
 - Bind trajectory runtime-event references to each stored hook schema version
   and include session and physical-step correlation in the cohort digest.
   Preserve mixed-version history and pre-v5 tables without rewriting source
