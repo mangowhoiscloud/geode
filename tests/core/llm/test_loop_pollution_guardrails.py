@@ -500,3 +500,62 @@ def test_web_search_deadline_covers_client_timeout_with_retry() -> None:
         "general_web_search: deadline no longer covers client-timeout x retry "
         "— healthy retries will be killed at the boundary again"
     )
+
+
+def test_invalidate_waits_for_builder_publication_before_dropping_client() -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    cache = LoopAffineClientCache("rotation")
+    entered = threading.Event()
+    release = threading.Event()
+    invalidating = threading.Event()
+    invalidated = threading.Event()
+    old, new = object(), object()
+
+    def build() -> object:
+        entered.set()
+        assert release.wait(5), "test failed to release the SDK constructor"
+        return old
+
+    async def use_cache() -> tuple[object, object]:
+        first = cache.get(build)
+        assert invalidated.wait(5), "invalidation did not finish"
+        return first, cache.get(lambda: new)
+
+    def invalidate() -> None:
+        invalidating.set()
+        cache.invalidate()
+        invalidated.set()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        owner = executor.submit(asyncio.run, use_cache())
+        try:
+            assert entered.wait(5)
+            rotation = executor.submit(invalidate)
+            assert invalidating.wait(5)
+            assert not invalidated.wait(0.05), "invalidation raced unfinished construction"
+        finally:
+            release.set()
+        rotation.result(timeout=5)
+        first, second = owner.result(timeout=5)
+    assert first is old
+    assert second is new
+
+
+def test_failed_builder_leaves_no_entry_and_next_get_recreates() -> None:
+    cache = LoopAffineClientCache("failure")
+    failure = RuntimeError("constructor failed")
+
+    def fail() -> object:
+        raise failure
+
+    async def scenario() -> None:
+        with pytest.raises(RuntimeError) as caught:
+            cache.get(fail)
+        assert caught.value is failure
+        assert cache.bound_loop_count() == 0
+        replacement = object()
+        assert cache.get(lambda: replacement) is replacement
+        assert cache.bound_loop_count() == 1
+
+    asyncio.run(scenario())

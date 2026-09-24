@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from dataclasses import replace
 from typing import Any
@@ -119,6 +120,32 @@ def test_platform_sdk_sends_static_boundary(monkeypatch: pytest.MonkeyPatch) -> 
     assert "prompt_cache_breakpoint" not in wire["input"][0]["content"][1]
 
 
+def _chat_response(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={
+            "id": "gen-fixture",
+            "object": "chat.completion",
+            "created": 0,
+            "model": json.loads(request.content)["model"],
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "ok"},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 1,
+                "total_tokens": 101,
+                "cost": 0.001,
+                "prompt_tokens_details": {"cached_tokens": 80, "cache_write_tokens": 10},
+            },
+        },
+    )
+
+
 @pytest.mark.parametrize(
     ("model", "marker"),
     [
@@ -136,29 +163,7 @@ def test_openrouter_wire_preserves_cache_and_session_ownership(
 
     def respond(request: httpx.Request) -> httpx.Response:
         bodies.append(json.loads(request.content))
-        return httpx.Response(
-            200,
-            json={
-                "id": "gen-fixture",
-                "object": "chat.completion",
-                "created": 0,
-                "model": model,
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {"role": "assistant", "content": "ok"},
-                        "finish_reason": "stop",
-                    }
-                ],
-                "usage": {
-                    "prompt_tokens": 100,
-                    "completion_tokens": 1,
-                    "total_tokens": 101,
-                    "cost": 0.001,
-                    "prompt_tokens_details": {"cached_tokens": 80, "cache_write_tokens": 10},
-                },
-            },
-        )
+        return _chat_response(request)
 
     async def run() -> None:
         async with AsyncOpenAI(
@@ -206,3 +211,100 @@ def test_openrouter_wire_preserves_cache_and_session_ownership(
     else:
         assert content == _request(f"openrouter/{model}").system_prompt
         assert "cache_control" not in json.dumps(bodies)
+
+
+def test_openrouter_session_context_is_task_local_and_retains_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.agent.cognitive_state_ctx import get_session_id, set_session_id
+
+    bodies: dict[str, dict[str, Any]] = {}
+    policy = {"order": ["openai"], "only": ["openai"], "allow_fallbacks": False}
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        bodies[body["messages"][-1]["content"]] = body
+        return _chat_response(request)
+
+    async def run() -> None:
+        set_session_id("parent-session")
+        async with AsyncOpenAI(
+            api_key="fixture", http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond))
+        ) as client:
+            adapter = OpenRouterPaygAdapter()
+            monkeypatch.setattr(adapter, "_get_client", lambda: client)
+
+            async def call(label: str, context: str, metadata: dict[str, Any]) -> None:
+                set_session_id(context)
+                await asyncio.sleep(0)  # Interleave task bindings before request shaping.
+                await adapter.acomplete(
+                    replace(
+                        _request("openrouter/openai/gpt-6-sol"),
+                        messages=(Message(role="user", content=label),),
+                        metadata=metadata,
+                        provider_options={"openrouter": policy},
+                    )
+                )
+
+            await asyncio.gather(
+                call("missing", "", {}),
+                call("explicit", "ignored-context", {"session_id": "explicit-session"}),
+                call("task-a", "session-a", {}),
+                call("task-b", "session-b", {}),
+            )
+            assert get_session_id() == "parent-session"
+
+    asyncio.run(run())
+    assert "session_id" not in bodies["missing"]
+    for label, session in (
+        ("explicit", "explicit-session"),
+        ("task-a", "session-a"),
+        ("task-b", "session-b"),
+    ):
+        expected = "geode-" + hashlib.sha256(session.encode()).hexdigest()
+        assert bodies[label]["session_id"] == expected
+        assert len(expected) <= 256
+        assert session not in json.dumps(bodies[label])
+    assert bodies["task-a"]["session_id"] != bodies["task-b"]["session_id"]
+    assert all(body["provider"] == policy for body in bodies.values())
+
+
+@pytest.mark.parametrize("turns", [0, 1, 3, 12])
+@pytest.mark.parametrize("marked_system", [False, True])
+def test_openrouter_claude_marker_budget_on_actual_sdk_wire(
+    monkeypatch: pytest.MonkeyPatch, turns: int, marked_system: bool
+) -> None:
+    bodies: list[dict[str, Any]] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return _chat_response(request)
+
+    request = replace(
+        _request("openrouter/anthropic/claude-sonnet-5"),
+        system_prompt=_request("unused").system_prompt if marked_system else "plain rules",
+        messages=tuple(Message(role="user", content=f"turn {i}") for i in range(turns)),
+    )
+
+    async def run() -> None:
+        async with AsyncOpenAI(
+            api_key="fixture", http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond))
+        ) as client:
+            adapter = OpenRouterPaygAdapter()
+            monkeypatch.setattr(adapter, "_get_client", lambda: client)
+            await adapter.acomplete(request)
+
+    asyncio.run(run())
+    markers = [
+        block["cache_control"]
+        for message in bodies[0]["messages"]
+        if isinstance(message["content"], list)
+        for block in message["content"]
+        if "cache_control" in block
+    ]
+    assert len(markers) == min(turns, 3) + int(marked_system)
+    assert len(markers) <= 4
+    if marked_system:
+        assert markers[0] == {"type": "ephemeral", "ttl": "1h"}
+    assert all(marker == {"type": "ephemeral"} for marker in markers[int(marked_system) :])
+    assert all(isinstance(message.content, str) for message in request.messages)

@@ -24,7 +24,6 @@ import base64
 import io
 import json
 import logging
-import math
 import os
 import re
 import shutil
@@ -678,15 +677,15 @@ async def execute_native_computer_use(
                 raise ValueError("type requires text")
             shaped["text"] = params["text"]
         elif action == "wait":
-            duration = params["duration"] if "duration" in params else params.get("ms", 1000) / 1000
+            seconds = "duration" in params
+            duration = params["duration"] if seconds else params.get("ms", 1000)
             if (
                 isinstance(duration, bool)
                 or not isinstance(duration, (int, float))
-                or not math.isfinite(duration)
-                or not 0 <= duration <= 300
+                or not 0 <= duration <= (300 if seconds else 300_000)
             ):
                 raise ValueError("wait duration must be between 0 and 300 seconds")
-            shaped["ms"] = round(duration * 1000)
+            shaped["ms"] = round(duration * (1000 if seconds else 1))
         elif action == "scroll":
             direction = params.get("scroll_direction", params.get("direction", "down"))
             amount = params.get("scroll_amount", params.get("amount", 3))

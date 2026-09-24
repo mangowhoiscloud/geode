@@ -58,19 +58,6 @@ target = "DI-003"
 expires_when = "Lifecycle extraction reduces main below 207 statements and the ceiling is lowered."
 
 [[ruff_debt]]
-id = "RUFF-010"
-rule = "PLR0915"
-mode = "override"
-path = "core/cli/typer_serve.py"
-symbol = "_serve"
-observed = 216
-owner = "core.cli"
-reason = "The serve command still composes gateway, scheduler, IPC, and shutdown lifecycles inline."
-created = "2026-08-05"
-target = "DI-003"
-expires_when = "_serve composition is split to at most the 212-statement global ceiling."
-
-[[ruff_debt]]
 id = "RUFF-007"
 rule = "PLR0911"
 mode = "ceiling"

@@ -115,7 +115,7 @@ class TestCheckBindings:
     @pytest.fixture(autouse=True)
     def _isolate_global_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Keep binding diagnostics independent of the operator's config."""
-        monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", tmp_path / "absent-global.toml")
+        monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "absent-global.toml"))
 
     def test_valid_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -130,7 +130,7 @@ channel_id = "C0ALUA25DKK"
 auto_respond = true
 require_mention = true
 """)
-        monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", tmp_path / "absent.toml")
+        monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "absent.toml"))
         monkeypatch.setattr("core.paths.PROJECT_CONFIG_TOML", config)
         from core.cli.doctor import _check_bindings
 
@@ -148,7 +148,7 @@ require_mention = true
 channel = "slack"
 channel_id = "C0XXXXXXXXX"
 """)
-        monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", tmp_path / "absent.toml")
+        monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "absent.toml"))
         monkeypatch.setattr("core.paths.PROJECT_CONFIG_TOML", config)
         from core.cli.doctor import _check_bindings
 
@@ -158,7 +158,7 @@ channel_id = "C0XXXXXXXXX"
 
     def test_missing_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", tmp_path / "absent.toml")
+        monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "absent.toml"))
         monkeypatch.setattr("core.paths.PROJECT_CONFIG_TOML", tmp_path / "absent2.toml")
         from core.cli.doctor import _check_bindings
 
@@ -206,7 +206,7 @@ class TestRunDoctorSlack:
         # Machine isolation: without this the resolvers fall back to the
         # REAL ~/.geode/.env and the doctor makes live auth.test calls.
         monkeypatch.setattr("core.paths.GLOBAL_ENV_FILE", tmp_path / "absent.env")
-        monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", tmp_path / "absent.toml")
+        monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "absent.toml"))
         monkeypatch.setattr("core.paths.PROJECT_CONFIG_TOML", tmp_path / "absent2.toml")
 
         report = run_doctor_slack()

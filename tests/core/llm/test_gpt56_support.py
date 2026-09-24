@@ -80,7 +80,7 @@ def test_dual_lane_routing() -> None:
 def test_model_picker_offers_gpt56_family() -> None:
     from core.cli.commands._state import get_model_profiles
 
-    profiles = {p.id: p for p in get_model_profiles()}
+    profiles = {p.id: p for p in get_model_profiles(openai_source="payg")}
     for slug in SLUGS:
         assert slug in profiles, slug
         # Provider label must match resolve_provider — "openai" family

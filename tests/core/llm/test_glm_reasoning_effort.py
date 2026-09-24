@@ -64,7 +64,7 @@ def test_glm_default_is_5_3():
 def test_glm_5_3_leads_picker_without_retiring_active_older_models():
     from core.cli.commands._state import get_model_profiles
 
-    rows = [row for row in get_model_profiles() if row.provider == "glm"]
+    rows = [row for row in get_model_profiles(openai_source="payg") if row.provider == "glm"]
     assert rows[0].id == "glm-5.3"
     assert rows[0].label == "GLM-5.3"
     assert {"glm-5.2", "glm-5.1"} <= {row.id for row in rows}

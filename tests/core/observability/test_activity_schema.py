@@ -446,7 +446,9 @@ def test_legacy_llm_activity_does_not_infer_root_effort_or_purpose(
     schema_version: int,
     legacy_purpose: str | None,
 ) -> None:
-    row = map_hook_to_activity(HookEvent.LLM_CALL_ENDED, {}, run_id="legacy")
+    row = map_hook_to_activity(
+        HookEvent.LLM_CALL_ENDED, {"usage": {"cache_write_tokens": 1000}}, run_id="legacy"
+    )
     legacy = row.model_dump(exclude_none=True)
     legacy["schema_version"] = schema_version
     if legacy_purpose is not None:
@@ -456,6 +458,8 @@ def test_legacy_llm_activity_does_not_infer_root_effort_or_purpose(
     details = reparsed.model_dump()["details"]
     assert details["purpose"] == legacy_purpose
     assert details["source"] is details["effort"] is None
+    assert details["usage"]["cache_write_tokens"] == 1000
+    assert details["usage"]["cache_write_1h_tokens"] is None
 
 
 @pytest.mark.parametrize(

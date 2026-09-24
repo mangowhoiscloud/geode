@@ -48,6 +48,20 @@ def test_project_toml_still_overlays_env_redirected_global(tmp_path: Path, monke
     assert merged.get("model") == "proj-pick"
 
 
+def test_explicit_global_path_outranks_env_redirect(tmp_path: Path, monkeypatch) -> None:
+    from core.config import _load_toml_config
+
+    redirected = tmp_path / "redirected.toml"
+    redirected.write_text('[llm]\nprimary_model = "redirected"\n')
+    explicit = tmp_path / "explicit.toml"
+    explicit.write_text('[llm]\nprimary_model = "explicit"\n')
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(redirected))
+
+    values = _load_toml_config(global_path=explicit, project_path=tmp_path / "absent.toml")
+
+    assert values["model"] == "explicit"
+
+
 def test_reload_rebinds_routing_constants(tmp_path: Path, monkeypatch) -> None:
     """H11: after reload_routing_constants, core.config module attrs track
     the manifest on disk (function-local importers see fresh values)."""

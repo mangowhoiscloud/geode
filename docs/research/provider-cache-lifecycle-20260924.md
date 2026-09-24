@@ -41,3 +41,17 @@ acceptance, account/model access, provider selection, positive reuse and billed
 cost remain part of the separately authorized E2E/Harbor validation after all
 implementation is complete. OpenRouter credentials were not available during
 the read-only preflight; that route cannot be reported as live-verified.
+
+## Offline integration review — 2026-09-25
+
+Rechecked the three linked OpenAI, OpenRouter and Z.AI primary contracts and
+merged the final Claude TTL/accounting candidate before validating K1. The
+SDK fixture checks now also cover absent session identity, explicit metadata
+precedence, concurrently bound task-local sessions, and retained provider
+ordering/fallback policy. Claude route fixtures count the actual serialized
+markers with and without a marked static system block over short and longer
+histories. They preserve input messages and the request-wide four-marker cap.
+
+These are offline wire and ownership checks. The runner rejects network
+connect attempts and access to operator credential files; it does not establish
+live API or subscription acceptance, cache reuse, account routing, or charges.

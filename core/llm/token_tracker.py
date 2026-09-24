@@ -26,6 +26,14 @@ from typing import Any, NamedTuple
 
 log = logging.getLogger(__name__)
 
+
+def _validate_cache_write_split(total: int, one_hour: int | None) -> None:
+    if one_hour is not None and (
+        isinstance(one_hour, bool) or not isinstance(one_hour, int) or not 0 <= one_hour <= total
+    ):
+        raise ValueError("cache_creation_1h_tokens must be a nonnegative subset of cache writes")
+
+
 # ───────────────────────────────────────────────────────────────────────────
 # Data models
 # ───────────────────────────────────────────────────────────────────────────
@@ -263,6 +271,7 @@ class TokenTracker:
         reported_cost_usd: float | None = None,
     ) -> LLMUsage:
         """Record one LLM call: cost → accumulator → persistent store."""
+        _validate_cache_write_split(cache_creation_tokens, cache_creation_1h_tokens)
         if reported_cost_usd is not None:
             if (
                 isinstance(reported_cost_usd, bool)
@@ -315,14 +324,7 @@ class TokenTracker:
         cache_read_tokens: int = 0,
     ) -> float:
         """Calculate cost in USD for a single LLM call."""
-        if cache_creation_1h_tokens is not None and (
-            isinstance(cache_creation_1h_tokens, bool)
-            or not isinstance(cache_creation_1h_tokens, int)
-            or not 0 <= cache_creation_1h_tokens <= cache_creation_tokens
-        ):
-            raise ValueError(
-                "cache_creation_1h_tokens must be a nonnegative subset of cache writes"
-            )
+        _validate_cache_write_split(cache_creation_tokens, cache_creation_1h_tokens)
         price = self._pricing.get(model)
         if price is None:
             log.warning("Unknown model '%s' — cost tracked as $0.00", model)

@@ -565,6 +565,7 @@ def trajectory_from_sessions(
     trajectory_class: Sequence[str] = ("dialogue", "tool", "lifecycle"),
 ) -> dict[str, Any]:
     """Build one validated trajectory from one or more canonical sessions."""
+    from core.observability.event_store import read_hook_event_references
     from core.observability.session_timeline import SessionEventStore
 
     ordered_session_ids = list(dict.fromkeys(str(value) for value in session_ids if value))
@@ -589,7 +590,7 @@ def trajectory_from_sessions(
             incompleteness.append(f"session {session_id} reports canonical write failures")
         if terminal_payload.get("runtime_observation_status") in {"degraded", "unavailable"}:
             incompleteness.append(f"session {session_id} reports incomplete runtime observation")
-    automatic_runtime_refs = _runtime_event_references(
+    automatic_runtime_refs = read_hook_event_references(
         Path(runtime_event_db_path) if runtime_event_db_path is not None else store.db_path,
         ordered_session_ids,
     )
@@ -641,66 +642,6 @@ def _verification_evidence_references(
             continue
         references.extend(item for item in raw if isinstance(item, Mapping))
     return _dedupe_external_references(references)
-
-
-def _runtime_event_references(
-    db_path: Path,
-    session_ids: Sequence[str],
-) -> tuple[dict[str, Any], ...]:
-    """Bind indexed hook-event cohorts without embedding the private store."""
-    if not db_path.is_file() or not session_ids:
-        return ()
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
-    try:
-        columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(hook_events)").fetchall()}
-        required = {
-            "id",
-            "event",
-            "payload_hash",
-            "session_id",
-            "turn_id",
-            "tool_call_id",
-            "llm_call_id",
-            "llm_attempt_id",
-        }
-        if not required.issubset(columns):
-            return ()
-        references: list[dict[str, Any]] = []
-        for session_id in session_ids:
-            rows = conn.execute(
-                """\
-                SELECT id, event, payload_hash, turn_id, tool_call_id,
-                       llm_call_id, llm_attempt_id
-                FROM hook_events
-                WHERE session_id = ?
-                ORDER BY id
-                """,
-                (session_id,),
-            ).fetchall()
-            if not rows:
-                continue
-            canonical = json.dumps(
-                [dict(row) for row in rows],
-                ensure_ascii=False,
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode("utf-8")
-            digest = sha256(canonical).hexdigest()
-            references.append(
-                {
-                    "kind": "runtime_event",
-                    "schema_id": "geode.hook-event@3",
-                    "authority": "GEODE local runtime hook event store",
-                    "reference": f"hook-events-sha256:{digest}",
-                    "session_id": session_id,
-                    "record_count": len(rows),
-                    "sha256": digest,
-                }
-            )
-        return tuple(references)
-    finally:
-        conn.close()
 
 
 def _digest_private_event_payload(
