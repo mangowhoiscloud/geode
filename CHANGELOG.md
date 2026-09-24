@@ -113,6 +113,10 @@ functional change.
 
 ### Fixed
 
+- Keep oversized-page omission notices stable across documentation build
+  environments while retaining measured sizes in build logs and complete
+  Markdown twins.
+
 - Close runtime-state schema-bootstrap and failed connection candidates
   deterministically, release the cached SQLite connection during runtime
   shutdown, and serialize complete reads/writes with cleanup so other active
