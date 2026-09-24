@@ -177,7 +177,8 @@ def _load_gateway_config() -> tuple[dict[str, Any], list[str]]:
     """
     import tomllib
 
-    from core.paths import GLOBAL_CONFIG_TOML, PROJECT_CONFIG_TOML
+    from core.config.toml_edit import resolve_config_toml_path
+    from core.paths import PROJECT_CONFIG_TOML
 
     merged_gateway: dict[str, Any] = {}
     # (channel, channel_id) -> rule; a project rule REPLACES the global
@@ -186,7 +187,7 @@ def _load_gateway_config() -> tuple[dict[str, Any], list[str]]:
     # first-match routing).
     merged_rules: dict[tuple[str, str], dict[str, Any]] = {}
     sources: list[str] = []
-    for label, path in (("global", GLOBAL_CONFIG_TOML), ("project", PROJECT_CONFIG_TOML)):
+    for label, path in (("global", resolve_config_toml_path()), ("project", PROJECT_CONFIG_TOML)):
         if not path.exists():
             continue
         try:
@@ -324,13 +325,13 @@ def build_gateway(*, notification: Any = None) -> None:
             except Exception as reload_exc:
                 log.warning("Gateway binding reload failed: %s", reload_exc)
 
-        from core.paths import GLOBAL_CONFIG_TOML as _GLOBAL_TOML
+        from core.config.toml_edit import resolve_config_toml_path
         from core.paths import PROJECT_CONFIG_TOML as _PROJECT_TOML
 
         _watcher = ConfigWatcher()
         # Watch BOTH paths even when absent at boot — an overlay created
         # (or removed) later must re-merge without a daemon restart.
-        for _cfg in (_GLOBAL_TOML, _PROJECT_TOML):
+        for _cfg in (resolve_config_toml_path(), _PROJECT_TOML):
             _watcher.watch(_cfg, _reload_bindings, name=f"gateway-bindings:{_cfg}")
         _watcher.start()
         # Attach to manager to prevent GC (daemon thread lifetime)

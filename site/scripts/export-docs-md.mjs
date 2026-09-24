@@ -220,7 +220,7 @@ function writeLlmsFull(pages, bodies, version) {
     const body = bodies.get(page.slug).trim();
     if (body.length > LLMS_FULL_BODY_CAP) {
       lines.push(
-        `(body omitted from llms-full: ${Math.round(body.length / 1024)} KB — ` +
+        "(body omitted from llms-full: size limit exceeded — " +
           "fetch the Markdown twin above for the complete page)",
       );
       console.log(

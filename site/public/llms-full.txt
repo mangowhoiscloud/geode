@@ -1258,6 +1258,8 @@ MCP 결과는 evidence용 원본과 model-facing 표현을 분리합니다. time
 
 어떤 도구를 누가 쓸 수 있는지는 `core/tools/policy.py`의 `PolicyChain`이 6단계로 해석합니다. Profile, Organization, Mode, Agent 레벨, Node-scope allowlist, 서브에이전트 자동 승인 위임 순서입니다. 권한 등급은 STANDARD(서브에이전트 자동 승인 가능), WRITE(승인 필요), DANGEROUS(항상 HITL. `run_bash`, `computer`)입니다. `delegate_task`는 별도 위임 경로로 실행되며, 사람이 없는 headless 세션에서는 denylist가 먼저 막습니다.
 
+`switch_model` 승인 요청에는 JSON으로 인코딩한 `role`과 `model_hint`가 표시됩니다. 역할을 생략하면 실행 핸들러와 같은 `primary`가 표시되므로, root 모델 변경과 `judgment` 전환을 승인 전에 구분할 수 있습니다. 이 상세 정보는 기존 승인 정책을 대체하지 않으며, 기본 HITL 2에서는 최초 `judgment` 전환도 승인 대상입니다.
+
 ## 실패 모드
 
 | 증상 | 원인 | 해법 |
@@ -3246,6 +3248,8 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유
 
 배선 불변식 하나가 이 단계 전체를 지배합니다. 핸들러가 존재한다고 발화하지 않습니다. 훅 핸들러는 bootstrap에 등록되어야 하고, 프로세스 서비스는 그룹형 설정·생성자·`ToolContext`로 명시적으로 주입되어야 합니다. ContextVar는 요청 식별, 진단, 요청 로컬 상태와 캐시에만 사용합니다.
 
+생성 중 실패하면 그 단계까지 만든 자원을 정리하고 원래 오류를 전달합니다. 물리적 turn의 세션 식별과 어댑터 사용량 상태는 최종 관측을 마친 뒤 이전 바인딩으로 복원되며, 실패나 취소에도 같은 정리 경로를 거칩니다.
+
 ## 데몬이 호스팅하는 것
 
 -   CLI IPC 서버 (`core/server/ipc_server/poller.py`). thin CLI의 자유 텍스트와 슬래시 명령 처리.
@@ -3259,12 +3263,14 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유
 
 ```
 1. RuntimeEvent.SHUTDOWN_STARTED 발화
-2. IPC 소켓 닫기 (신규 클라이언트 차단)
+2. IPC 신규 연결 차단 + 게이트웨이 입력 정지
 3. 활성 세션 drain (최대 30초)
-4. 스케줄러 save + stop
-5. MCP 종료
-6. 게이트웨이 정지
+4. CLI poller + webhook 종료
+5. 런타임 소유 작업·watcher·스케줄러·MCP 종료
+6. 훅과 이벤트 저장소 닫기
 ```
+
+스케줄러 저장 실패도 나머지 자원 정리를 막지 않습니다. 런타임은 불완전한 종료를 재시도할 수 있게 유지하고, 데몬은 종료 실패를 표시합니다. 실행 자체가 정상 반환했어도 정리가 끝나지 않으면 종료 코드는 1입니다. 기존 실행 오류나 취소가 있다면 그 원인이 정리 오류로 바뀌지 않습니다.
 
 ## 실패 모드
 
@@ -5789,7 +5795,7 @@ GEODE 설정의 규칙은 한 줄입니다. 시크릿은 `.env`에, 동작은 `c
 
 모델 해석으로 좁히면 같은 사다리가 이렇게 읽힙니다. CLI 인자 > env 층(os.environ + .env 파일들) > 프로젝트 toml > 전역 toml > routing 기본값. env 층이 toml 전부를 이기므로, 잊힌`.env` 줄 하나가 이후의 모든 toml 편집을 가립니다. 이 구조의 대표 함정입니다.
 
-`GEODE_CONFIG_TOML` env 변수는 전역`config.toml`의 경로를 바꿉니다. C-4부터 메인 설정 로더(`core/config/__init__.py`)와 self-improving 로더(`core/config/self_improving.py`)가 같은 경로를 읽습니다. 프로젝트 toml은 그 위에 그대로 얹힙니다.
+`GEODE_CONFIG_TOML` env 변수는 전역`config.toml`의 경로를 바꿉니다. 메인 설정 로더,`geode config explain`, `/model`의 전역 읽기·저장·확인 화면은 같은 경로 해석 함수를 사용합니다. MCP 서버 로딩, 게이트웨이 읽기·변경 감시, seed 역할·투표자 설정도 이 전역 경로를 따릅니다. 프로젝트 범위로 저장하면 `.geode/config.toml`에 기록되며, 프로젝트 toml은 전역 설정 위에 그대로 얹힙니다.`geode-eval config migrate-petri-toml`의 미리보기와`--yes` 저장도 같은 전역 경로를 사용합니다.
 
 ## geode config explain
 
@@ -5804,7 +5810,7 @@ geode about                    # 실효 모델 + 마스크 경고 한 줄
 
 ## 리로드 시맨틱
 
-세션 경계에서 `reload_settings_from_disk()`가`.env`, `GEODE_*` env, config.toml을 살아 있는 싱글톤에 다시 읽어 들입니다. 필드 복사가 실패하면 해당 필드명을 적은 경고를 남기므로 반쯤 적용된 리로드가 조용히 지나가지 않습니다. 리로드는`reload_routing_constants()`도 호출해 routing 매니페스트 캐시를 비우고 `core.config`의 라우팅 상수를 다시 묶습니다. 한계도 명시합니다. 모듈 로드 시점에 값을 복사해 간 importer는 부트 시점 복사본을 계속 들고 있으므로, 그 경로까지 갱신하려면 프로세스를 재시작해야 합니다.
+세션 경계에서 `reload_settings_from_disk()`가`.env`, `GEODE_*` env, config.toml을 새 설정 후보로 읽고 검증한 뒤 기존 싱글톤을 갱신합니다. 필드 검증이나 준비, 라우팅 갱신이 실패하면 예외를 전달하고 기존 Settings 값을 유지합니다. 파일을 수정한 다음 다시 리로드하면 같은 객체 참조에 새 값이 적용됩니다. 리로드는`reload_routing_constants()`도 호출해 routing 매니페스트 캐시를 비우고 `core.config`의 라우팅 상수를 다시 묶습니다. 한계도 명시합니다. 모듈 로드 시점에 값을 복사해 간 importer는 부트 시점 복사본을 계속 들고 있으므로, 그 경로까지 갱신하려면 프로세스를 재시작해야 합니다.
 
 ## 데몬과 모델 env 키
 
@@ -5827,7 +5833,7 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE
 | thin CLI는 새 모델, 데몬만 옛 모델 | `GEODE_SERVE_KEEP_MODEL_ENV=1`이 켜져 있거나 C-3 이전 데몬 | 플래그를 끄거나 데몬을 재시작합니다. `pkill -f "geode serve"` 후 재진입. |
 | `~/.geode/routing.toml`을 고쳤는데 반영 안 됨 | 부트 시점 복사본을 든 모듈 경로 | 세션 리로드로 매니페스트 독자는 갱신됩니다. 그래도 남으면 프로세스를 재시작합니다. |
 | 프로젝트 `.env`에 둔 시크릿이 안 먹고 전역 값이 이김 | 전역 `~/.geode/.env`가 같은 키를 가짐. 전역이 권위입니다 (Hermes, 2026-06-15) | 의도된 동작입니다. 시크릿은 전역에 두고, 프로젝트는 전역에 없는 키만 채웁니다. `geode config explain <KEY>`로 WINNER 층을 확인하세요. |
-| `GEODE_CONFIG_TOML`이 일부 로더에만 적용 | C-4 이전에는 self-improving 로더만 인식 | 업그레이드합니다. `geode config explain`이 실제로 읽은 경로를 보고합니다. |
+| 대체 전역 경로에서 `/model` 선택이 남지 않음 | 구 버전 피커가 기본 전역 파일에 기록 | 업그레이드하고 저장 확인 화면의 경로와 `geode config explain`의 전역 경로를 비교합니다. |
 
 ## 다음
 
@@ -7071,7 +7077,7 @@ status dict 반환 (절대 raise하지 않음) + 히스토리 append
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use.md
 
-컴퓨터 사용은 모델이 스크린샷으로 화면을 보고 클릭, 타이핑, 스크롤을 지시하는 기능입니다. GEODE의 구현은 `core/tools/computer_use.py`의 `ComputerUseHarness` 하나이며 host backend는 pyautogui 또는 macOS helper입니다. Provider-native computer surface는 스크린샷을 해당 provider wire로 돌려주지만, normal function tool인 `computer_use`는 base64를 생략하고 compact observation만 반환합니다. Function-tool 경로의 시각적 좌표 선택은 활성 provider/source에 호환되는 grounding이 있을 때만 `locate`로 수행합니다.
+컴퓨터 사용은 모델이 스크린샷으로 화면을 보고 클릭, 타이핑, 스크롤을 지시하는 기능입니다. GEODE의 구현은 `core/tools/computer_use.py`의 `ComputerUseHarness` 하나이며 host backend는 pyautogui 또는 macOS helper입니다. Provider-native computer surface는 스크린샷을 해당 provider wire로 돌려주지만, normal function tool인 `computer_use`는 base64를 생략하고 compact observation만 반환합니다. 현재 function-tool 경로의 자동 좌표 선택인 `locate`는 모든 provider/source에서 사용할 수 없습니다.
 
 ## 동작 방식
 
@@ -7115,7 +7121,7 @@ driver = "helper"
 
 macOS에서는 `geode setup`이 helper를`~/.geode/helpers/computer-use/` 아래에 빌드합니다. wheel 안의 Swift/build source는 읽기 전용이며 생성물은 설치 디렉터리에 기록하지 않습니다.
 
-프로바이더가 native computer surface를 지원하면 그 경로를 쓰고, ChatGPT subscription처럼 native surface를 받지 않는 backend에는 같은 하네스를 normal function tool `computer_use`로 노출합니다. 이 경로는 다른 provider로 몰래 fallback하지 않습니다. OpenAI subscription source에 visual grounding을 별도로 구성하지 않았다면 `capture`는 가능하지만 `locate`는 dependency error로 중단되며, browser DOM·playwriter· `ui_probe` 같은 source-safe 구조 경로를 선택해야 합니다.
+프로바이더가 native computer surface를 지원하면 그 경로를 쓰고, ChatGPT subscription처럼 native surface를 받지 않는 backend에는 같은 하네스를 normal function tool `computer_use`로 노출합니다. 이 경로는 다른 provider로 몰래 fallback하지 않습니다.`capture`는 가능하지만 `locate`는 활성 provider/source를 표시하는 dependency error로 중단됩니다. 미검증 GLM 자동 grounding 경로는 제거했으며, browser DOM·playwriter· `ui_probe` 같은 source-safe 구조 경로를 선택해야 합니다.
 
 ## 안전
 
@@ -7180,7 +7186,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1577 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: size limit exceeded — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -7341,7 +7347,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 589 |
-| 테스트 Python 파일 | 735 |
+| 테스트 Python 파일 | 738 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |

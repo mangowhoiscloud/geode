@@ -318,13 +318,13 @@ PROVIDER_VARIANTS: dict[str, ProviderSpec] = {
             selector="profile-store",
             auth_type="bearer",
             billing_type=AdapterBillingType.SUBSCRIPTION,
-            quota_policy="plan-registry",
+            quota_policy="provider-owned",
         ),
         transport=TransportSpec(
             id="glm-coding-chat-completions",
             api="openai-chat-completions",
             default_base_url="https://api.z.ai/api/coding/paas/v4",
-            native_capabilities=_COMMON_NATIVE,
+            native_capabilities=frozenset({"streaming", "text_completion"}),
         ),
     ),
 }

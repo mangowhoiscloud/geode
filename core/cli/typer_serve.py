@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import sys
 from collections.abc import Callable
 from typing import Any
 
@@ -23,6 +24,60 @@ from core.wiring.startup import check_readiness
 
 log = logging.getLogger(__name__)
 _DRAIN_TIMEOUT_S = 30
+
+
+def _stop_serve_ingress(*, cli_poller: Any, gateway: Any) -> BaseException | None:
+    """Attempt both ingress owners and defer failure until session/resource drain."""
+    ingress_error: BaseException | None = None
+    ingress_stops = [("gateway", gateway.stop)]
+    if cli_poller is not None:
+        ingress_stops.insert(0, ("CLI admission", cli_poller.stop_accepting))
+    for name, stop_ingress in ingress_stops:
+        try:
+            stop_ingress()
+        except BaseException as exc:
+            log.warning("Serve ingress shutdown failed: %s (%s)", name, type(exc).__name__)
+            if ingress_error is None:
+                ingress_error = exc
+    return ingress_error
+
+
+def _shutdown_serve_components(
+    *,
+    cli_poller: Any,
+    webhook_server: Any,
+    runtime: Any,
+    primary_error: BaseException | None = None,
+) -> bool:
+    """Close host-owned ingress and the runtime without replacing a primary failure."""
+    primary = sys.exception()
+    if primary is None:
+        primary = primary_error
+    interruption: BaseException | None = None
+    completed = True
+    cleanups: list[tuple[str, Callable[[], object]]] = []
+    if cli_poller is not None:
+        cleanups.append(("CLI poller", cli_poller.stop))
+    if webhook_server is not None:
+        cleanups.append(("webhook server", webhook_server.shutdown))
+    if runtime is not None:
+        # The scheduler is borrowed from runtime; only its owner saves/stops it.
+        cleanups.append(("runtime", runtime.shutdown))
+    for name, close in cleanups:
+        try:
+            outcome = close()
+            # Injected legacy runtimes may return None; only explicit False
+            # declares the native runtime's incomplete teardown contract.
+            if name == "runtime" and outcome is False:
+                completed = False
+        except BaseException as exc:
+            completed = False
+            log.warning("Serve shutdown failed: %s (%s)", name, type(exc).__name__)
+            if primary is None and interruption is None and not isinstance(exc, Exception):
+                interruption = exc
+    if interruption is not None:
+        raise interruption
+    return completed
 
 
 async def _host_goal_continuations(
@@ -153,7 +208,7 @@ async def _restore_gateway_loop(loop: Any, state: Any) -> None:
         await loop.update_model_async(state.model)
 
 
-def _serve(  # noqa: PLR0915
+def _serve(
     poll_interval: float,
     *,
     services_builder: Callable[..., Any] | None = None,
@@ -489,27 +544,17 @@ def _serve(  # noqa: PLR0915
         console.print(f"  [success]CLI channel: {_cli_poller.socket_path}[/success]")
     except Exception as exc:
         log.warning("CLI channel init failed", exc_info=True)
-        if _cli_poller is not None:
-            _cli_poller.stop()
-        _cli_poller = None
         if not settings.gateway_enabled:
-            console.print("  [error]CLI channel failed to start; daemon stopped.[/error]")
-            if _sched_svc is not None:
-                _sched_svc.stop()
-            if runtime is not None:
-                runtime.shutdown()
+            shutdown_completed = _shutdown_serve_components(
+                cli_poller=_cli_poller, webhook_server=_webhook_server, runtime=runtime
+            )
+            console.print(
+                "  [error]CLI channel failed to start."
+                f"{' Shutdown incomplete.' if not shutdown_completed else ''}[/error]"
+            )
             raise typer.Exit(1) from exc
-
-    # Start gateway pollers
-    gateway.start()
-    if settings.gateway_enabled and _cli_poller is not None:
-        console.print("  [success]Gateway and CLI daemon started. Listening...[/success]")
-    elif settings.gateway_enabled:
-        console.print("  [warning]Gateway started; CLI channel unavailable.[/warning]")
-    else:
-        console.print("  [success]CLI daemon started. External gateway disabled.[/success]")
-
-    console.print()
+        _shutdown_serve_components(cli_poller=_cli_poller, webhook_server=None, runtime=None)
+        _cli_poller = None
 
     # Block until Ctrl+C
     stop = False
@@ -517,9 +562,6 @@ def _serve(  # noqa: PLR0915
     def _on_signal(sig: int, frame: Any) -> None:
         nonlocal stop
         stop = True
-
-    signal.signal(signal.SIGINT, _on_signal)
-    signal.signal(signal.SIGTERM, _on_signal)
 
     async def _serve_loop() -> None:
         """Async serve loop driving scheduler drain + idle cleanup.
@@ -568,8 +610,21 @@ def _serve(  # noqa: PLR0915
         await _drain_goal_continuation(_goal_task)
 
     try:
+        # CLI admission is already running; partial gateway startup shares the
+        # same drain and cleanup owner as normal daemon termination.
+        gateway.start()
+        if settings.gateway_enabled and _cli_poller is not None:
+            console.print("  [success]Gateway and CLI daemon started. Listening...[/success]")
+        elif settings.gateway_enabled:
+            console.print("  [warning]Gateway started; CLI channel unavailable.[/warning]")
+        else:
+            console.print("  [success]CLI daemon started. External gateway disabled.[/success]")
+        console.print()
+        signal.signal(signal.SIGINT, _on_signal)
+        signal.signal(signal.SIGTERM, _on_signal)
         asyncio.run(_serve_loop())
     finally:
+        primary_error = sys.exception()
         # --- Phase 0: notify shutdown hook ---
         try:
             if _gw_services and _gw_services.hook_system:
@@ -586,11 +641,9 @@ def _serve(  # noqa: PLR0915
         # --- Phase 1: stop accepting new connections ---
         # Close the server socket so no new CLI clients connect during drain.
         # Active client handler threads continue running.
-        if _cli_poller is not None:
-            _cli_poller.stop_accepting()
         # Stop channel ingress (Slack Socket Mode / pollers) before draining —
         # otherwise new inbound events keep starting sessions during drain.
-        gateway.stop()
+        ingress_error = _stop_serve_ingress(cli_poller=_cli_poller, gateway=gateway)
 
         # --- Phase 2: drain active sessions ---
         _drain_poll_s = 0.5
@@ -625,22 +678,23 @@ def _serve(  # noqa: PLR0915
                 log.info("Graceful drain completed")
 
         # --- Phase 3: component shutdown ---
-        # Scheduler graceful shutdown (save state before stopping)
-        if _sched_svc is not None:
-            _sched_svc.save()
-            _sched_svc.stop()
-            log.info("Scheduler stopped, state saved")
-        if _cli_poller is not None:
-            _cli_poller.stop()
-        if _webhook_server is not None:
-            _webhook_server.shutdown()
-        if runtime is not None:
-            try:
-                runtime.shutdown()
-            except Exception:
-                log.debug("Runtime shutdown error", exc_info=True)
+        shutdown_completed = _shutdown_serve_components(
+            cli_poller=_cli_poller,
+            webhook_server=_webhook_server,
+            runtime=runtime,
+            primary_error=primary_error if primary_error is not None else ingress_error,
+        )
         console.print()
-        console.print("  [dim]GEODE daemon stopped.[/dim]")
+        if shutdown_completed and ingress_error is None:
+            console.print("  [dim]GEODE daemon stopped.[/dim]")
+        else:
+            console.print(
+                "  [error]GEODE daemon shutdown incomplete; check shutdown errors.[/error]"
+            )
+            if primary_error is None:
+                if ingress_error is not None and not isinstance(ingress_error, Exception):
+                    raise ingress_error
+                raise typer.Exit(1) from ingress_error
 
 
 # Public outer-composition seam.

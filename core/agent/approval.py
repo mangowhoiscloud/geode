@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
@@ -789,6 +790,16 @@ class ApprovalWorkflow:
 
     @staticmethod
     def _write_summary(tool_name: str, tool_input: dict[str, Any]) -> str:
+        if tool_name == "switch_model":
+            switch_fields = {
+                "role": tool_input.get("role", "primary"),
+                "model_hint": tool_input.get("model_hint", ""),
+            }
+            detail = json.dumps(switch_fields, ensure_ascii=True, separators=(",", ":"))
+            if all(isinstance(value, str) for value in switch_fields.values()):
+                # Keep string arguments literal in Rich while preserving JSON round-trip.
+                detail = detail.replace("[", "\\u005b").replace("]", "\\u005d")
+            return f"switch_model {detail}"
         if tool_name == "memory_save":
             return str(tool_input.get("content", tool_input.get("value", "")))[:80]
         if tool_name == "note_save":

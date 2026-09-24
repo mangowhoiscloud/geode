@@ -378,6 +378,16 @@ separate axes; never advance one as a proxy for another.
   credentials. Use the existing redaction helpers.
 - Do not silently convert an exception into an empty success. A recoverable
   result must encode its error type and recovery guidance explicitly.
+- Register cleanup when a resource is acquired, before publishing its owner.
+  Failed construction releases only the resources it created; successful
+  construction transfers that responsibility to the established lifetime owner.
+- Cleanup must still attempt sibling resources when one close or persistence
+  step fails. Preserve an existing primary exception, including cancellation;
+  log secondary cleanup failures with bounded metadata. Catch `BaseException`
+  only for this cleanup boundary, then propagate the primary interruption.
+- A best-effort shutdown must not mark failed teardown as completed or make a
+  retry a no-op. Request-local bindings restore their prior tokens in `finally`,
+  after final observation, on success, failure, and cancellation.
 
 ## 6. Imports and dependencies
 

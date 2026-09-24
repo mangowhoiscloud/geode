@@ -25,7 +25,7 @@ def test_merge_gate_executes_actual_predicate_and_rejects_non_success(result: st
     assert gate["if"] == "${{ always() }}"
     assert set(gate["needs"]) == {"changes", "lint", "typecheck", "test", "security"}
     needs: dict[str, dict[str, object]] = {key: {"result": "success"} for key in gate["needs"]}
-    needs["changes"]["outputs"] = {"code": "true", "docs": "false"}
+    needs["changes"]["outputs"] = {"code": "true", "docs": "false", "full_tests": "true"}
     needs["test"]["result"] = result
     script = gate["steps"][0]["run"]
     checked = subprocess.run(  # noqa: S603 - execute the tracked gate against synthetic results
@@ -38,15 +38,19 @@ def test_merge_gate_executes_actual_predicate_and_rejects_non_success(result: st
     assert (checked.returncode == 0) is (result == "success"), checked.stderr
 
 
-@pytest.mark.parametrize("missing", ["test", "classification", "docs_classification", "all"])
+@pytest.mark.parametrize(
+    "missing", ["test", "classification", "docs_classification", "full_tests_classification", "all"]
+)
 def test_merge_gate_rejects_absent_evidence(missing: str) -> None:
     gate = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]["gate"]
     needs: dict[str, dict[str, object]] = {key: {"result": "success"} for key in gate["needs"]}
-    needs["changes"]["outputs"] = {"code": "false", "docs": "false"}
+    needs["changes"]["outputs"] = {"code": "false", "docs": "false", "full_tests": "false"}
     if missing == "classification":
         del needs["changes"]["outputs"]
     elif missing == "docs_classification":
-        needs["changes"]["outputs"] = {"code": "false"}
+        del needs["changes"]["outputs"]["docs"]
+    elif missing == "full_tests_classification":
+        del needs["changes"]["outputs"]["full_tests"]
     elif missing == "all":
         needs.clear()
     else:
@@ -58,6 +62,42 @@ def test_merge_gate_rejects_absent_evidence(missing: str) -> None:
         check=False,
     )
     assert checked.returncode != 0
+
+
+@pytest.mark.parametrize("classification", ["true", "false", "", "unknown", None, True])
+def test_merge_gate_requires_explicit_full_test_classification(classification: object) -> None:
+    gate = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]["gate"]
+    needs = {key: {"result": "success"} for key in gate["needs"]}
+    needs["changes"]["outputs"] = {"code": "true", "docs": "true", "full_tests": classification}
+    checked = subprocess.run(  # noqa: S603 - tracked predicate with synthetic classifications
+        ["/bin/bash", "-e", "-c", gate["steps"][0]["run"]],
+        env=os.environ | {"GATE_NEEDS": json.dumps(needs)},
+        capture_output=True,
+        check=False,
+    )
+    assert (checked.returncode == 0) is (classification in ("true", "false"))
+
+
+@pytest.mark.parametrize("base_sha", ["a" * 40, "", "0" * 40, "a" * 39, "main", "a" * 40 + "\n"])
+def test_push_change_detection_rejects_missing_or_invalid_base(base_sha: str) -> None:
+    steps = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]["changes"]["steps"]
+    validate = next(step for step in steps if step.get("name") == "Validate push comparison base")
+    dispatch = next(step for step in steps if step.get("id") == "filter")
+    assert steps.index(validate) < steps.index(dispatch)
+    assert validate["if"] == "github.event_name == 'push'"
+    assert validate["env"]["PUSH_BASE_SHA"] == "${{ github.event.before }}"
+    assert (
+        dispatch["with"]["base"]
+        == "${{ github.event_name == 'push' && github.event.before || '' }}"
+    )
+    assert "token" not in dispatch["with"]
+    checked = subprocess.run(  # noqa: S603 - tracked validation against synthetic push metadata
+        ["/bin/bash", "-e", "-c", validate["run"]],
+        env=os.environ | {"PUSH_BASE_SHA": base_sha},
+        capture_output=True,
+        check=False,
+    )
+    assert (checked.returncode == 0) is (base_sha == "a" * 40)
 
 
 def test_required_pages_checks_have_no_pull_request_path_filter() -> None:

@@ -6,8 +6,8 @@
    settings loader (pre-fix only the self-improving loop loader honored it).
 2. H11: ``reload_settings_from_disk`` re-reads routing.toml — manifest cache
    cleared + ``core.config`` routing constants rebound.
-3. H13: a per-field copy failure during reload logs a warning instead of
-   being silently suppressed.
+3. A field preparation failure rejects the reload and preserves the live
+   settings instead of publishing a mixture of old and new values.
 4. C-3 follow-up (Codex review): train/campaign standalone env load uses the
    shared :func:`core.config.env_io.load_env_files` (global>project secrets,
    never clobbers exports) instead of a global-file-only ``load_dotenv``.
@@ -18,8 +18,9 @@
 from __future__ import annotations
 
 import inspect
-import logging
 from pathlib import Path
+
+import pytest
 
 
 def test_main_loader_honors_geode_config_toml(tmp_path: Path, monkeypatch) -> None:
@@ -45,6 +46,20 @@ def test_project_toml_still_overlays_env_redirected_global(tmp_path: Path, monke
     monkeypatch.setattr(cfg, "PROJECT_CONFIG_PATH", project_dir / "config.toml")
     merged = cfg._load_toml_config(project_path=project_dir / "config.toml")
     assert merged.get("model") == "proj-pick"
+
+
+def test_explicit_global_path_outranks_env_redirect(tmp_path: Path, monkeypatch) -> None:
+    from core.config import _load_toml_config
+
+    redirected = tmp_path / "redirected.toml"
+    redirected.write_text('[llm]\nprimary_model = "redirected"\n')
+    explicit = tmp_path / "explicit.toml"
+    explicit.write_text('[llm]\nprimary_model = "explicit"\n')
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(redirected))
+
+    values = _load_toml_config(global_path=explicit, project_path=tmp_path / "absent.toml")
+
+    assert values["model"] == "explicit"
 
 
 def test_reload_rebinds_routing_constants(tmp_path: Path, monkeypatch) -> None:
@@ -79,38 +94,30 @@ def test_reload_settings_calls_routing_reload(monkeypatch) -> None:
     assert calls == ["hit"]
 
 
-def test_reload_field_failure_warns_not_silent(monkeypatch, caplog) -> None:
-    """H13: a field whose copy raises must leave a warning naming the field."""
+def test_reload_field_failure_preserves_live_settings(monkeypatch) -> None:
+    """A late field read failure must propagate before any live field changes."""
     import core.config as cfg
     from core.config._settings import Settings
 
-    class _Boom:
-        def __get__(self, obj, objtype=None):
-            raise RuntimeError("computed field refused")
-
-    fresh = Settings()
+    current = Settings(_env_file=None, model="previous-model", agentic_effort="low")
+    fresh = Settings(_env_file=None, model="new-model", agentic_effort="high")
+    before = current.model_dump()
     real_getattr = getattr
 
     def _flaky_getattr(obj, name, *default):
         if obj is not fresh:
             return real_getattr(obj, name, *default)
-        if name == "model":
+        if name == "agentic_effort":
             raise RuntimeError("computed field refused")
         return real_getattr(obj, name, *default)
 
-    monkeypatch.setattr(cfg, "_get_settings", lambda: Settings())
+    monkeypatch.setattr(cfg, "_get_settings", lambda: current)
+    monkeypatch.setattr(cfg, "_load_toml_config", lambda: {})
     monkeypatch.setattr("core.config._settings.Settings", lambda: fresh, raising=False)
-    # Patch the module-level reference reload uses
-    import core.config._settings as settings_mod
-
-    monkeypatch.setattr(settings_mod, "Settings", lambda: fresh)
     monkeypatch.setattr("builtins.getattr", _flaky_getattr, raising=False)
-    try:
-        with caplog.at_level(logging.WARNING, logger="core.config"):
-            cfg.reload_settings_from_disk()
-    finally:
-        monkeypatch.undo()
-    assert any("kept its previous value" in record.message for record in caplog.records)
+    with pytest.raises(RuntimeError, match="computed field refused"):
+        cfg.reload_settings_from_disk()
+    assert current.model_dump() == before
 
 
 def test_train_env_load_uses_shared_loader() -> None:

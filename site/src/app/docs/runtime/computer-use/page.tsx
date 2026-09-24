@@ -22,9 +22,8 @@ export default function Page() {
               또는 macOS helper입니다. Provider-native computer surface는
               스크린샷을 해당 provider wire로 돌려주지만, normal function tool인{" "}
               <code>computer_use</code>는 base64를 생략하고 compact observation만
-              반환합니다. Function-tool 경로의 시각적 좌표 선택은 활성
-              provider/source에 호환되는 grounding이 있을 때만 <code>locate</code>로
-              수행합니다.
+              반환합니다. 현재 function-tool 경로의 자동 좌표 선택인{" "}
+              <code>locate</code>는 모든 provider/source에서 사용할 수 없습니다.
             </p>
 
             <h2>동작 방식</h2>
@@ -121,9 +120,9 @@ driver = "helper"
               ChatGPT subscription처럼 native surface를 받지 않는 backend에는
               같은 하네스를 normal function tool <code>computer_use</code>로
               노출합니다. 이 경로는 다른 provider로 몰래 fallback하지 않습니다.
-              OpenAI subscription source에 visual grounding을 별도로 구성하지
-              않았다면 <code>capture</code>는 가능하지만 <code>locate</code>는
-              dependency error로 중단되며, browser DOM·playwriter·{" "}
+              <code>capture</code>는 가능하지만 <code>locate</code>는 활성
+              provider/source를 표시하는 dependency error로 중단됩니다.
+              미검증 GLM 자동 grounding 경로는 제거했으며, browser DOM·playwriter·{" "}
               <code>ui_probe</code> 같은 source-safe 구조 경로를 선택해야 합니다.
             </p>
 
@@ -179,9 +178,8 @@ driver = "helper"
               pyautogui or the macOS helper. Provider-native computer surfaces
               return screenshots on their provider wire. The normal function
               tool <code>computer_use</code> instead omits base64 and returns a
-              compact observation. Visual target selection on that path uses{" "}
-              <code>locate</code> only when compatible grounding exists for the
-              active provider/source.
+              compact observation. Automatic target selection through{" "}
+              <code>locate</code> is currently unavailable for every provider/source.
             </p>
 
             <h2>How it runs</h2>
@@ -284,9 +282,10 @@ driver = "helper"
               Backends that do not accept it, including the ChatGPT subscription
               route, receive the same harness as the normal{" "}
               <code>computer_use</code> function tool. That path never silently
-              falls across providers. Without separately configured visual
-              grounding for the OpenAI subscription source, <code>capture</code>
-              works but <code>locate</code> returns a dependency error; choose a
+              falls across providers. <code>capture</code> works, but{" "}
+              <code>locate</code> returns a dependency error identifying the active
+              provider/source. The unverified automatic GLM grounding route has
+              been removed; choose a
               source-safe structural path such as browser DOM, playwriter, or{" "}
               <code>ui_probe</code> instead.
             </p>

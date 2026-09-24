@@ -193,15 +193,9 @@ def _load_toml_config(
     Returns a dict mapping Settings field names to their values.
     Only keys present in _TOML_TO_SETTINGS are returned.
     """
-    # H9 (C-4, 2026-06-11) — ``GEODE_CONFIG_TOML`` redirects the GLOBAL
-    # config.toml for the MAIN settings loader too. Pre-fix only the
-    # self-improving loop loader honored it
-    # (core/config/toml_edit.py:resolve_config_toml_path), so an operator
-    # pointing the env var at an alternate file changed loop behavior while
-    # the runtime kept reading ~/.geode/config.toml — two meanings for one
-    # variable. The project overlay still applies on top.
-    env_toml = os.environ.get("GEODE_CONFIG_TOML", "").strip()
-    gp = global_path or (Path(env_toml).expanduser() if env_toml else GLOBAL_CONFIG_PATH)
+    from core.config.toml_edit import resolve_config_toml_path
+
+    gp = resolve_config_toml_path(global_path)
     pp = project_path or PROJECT_CONFIG_PATH
     merged: dict[str, Any] = {}
 
@@ -234,10 +228,8 @@ def _apply_toml_overlay(s: Settings, *, env_set_fields: set[str] | None = None) 
     ``GEODE_MODEL`` was wrongly overwritten by ``[llm] primary_model`` — inverting
     env > TOML. ``model_fields_set`` closes that gap.
 
-    ``env_set_fields`` overrides which fields count as env/.env-set. Needed by
-    :func:`reload_settings_from_disk`, which copies a fresh instance's *values*
-    onto the singleton via ``object.__setattr__`` (that bypasses
-    ``model_fields_set``), so the caller passes the fresh instance's set.
+    ``env_set_fields`` can override which fields count as env/.env-set.
+    Initialization and reload use the fresh instance's ``model_fields_set``.
     """
     toml_values = _load_toml_config()
     if not toml_values:
@@ -322,6 +314,12 @@ def reload_settings_from_disk() -> None:
     the current singleton at the moment of import) keeps observing the new
     values. Replacing the binding would leave stale references unfixed.
 
+    Build and validate the complete candidate before updating live fields.
+    Validation, field preparation, or routing refresh failures propagate and
+    leave the current Settings values intact. This preserves a failed reload's
+    previous settings; it does not provide a lock-free snapshot to concurrent
+    readers or roll back the separate routing manifest cache.
+
     Idempotent — calling on a fresh process is a no-op (the new Settings()
     just re-reads the same disk). Cheap: ~ms-scale (pydantic_settings re-init
     + TOML re-parse).
@@ -330,29 +328,15 @@ def reload_settings_from_disk() -> None:
 
     current = _get_settings()
     fresh = _Settings()  # re-reads .env + GEODE_* env vars
-    # Pydantic V2.11 deprecated instance-level ``.model_fields`` access; read
-    # the field map off the class. Per-field failures are tolerated (a
-    # pydantic validator may refuse certain reassignments, e.g. computed
-    # fields) but no longer SILENT (H13, C-4 2026-06-11): pre-fix a field
-    # that failed to copy kept its stale value with zero trace, so a reload
-    # could half-apply and the operator had no way to tell which half.
-    for field_name in type(fresh).model_fields:
-        try:
-            new_value = getattr(fresh, field_name)
-            object.__setattr__(current, field_name, new_value)
-        except Exception:
-            log.warning(
-                "reload_settings_from_disk: field %r kept its previous value "
-                "(refresh raised; stale until restart)",
-                field_name,
-                exc_info=True,
-            )
-    # ``object.__setattr__`` above copied fresh *values* but not its
-    # ``model_fields_set``, so pass the fresh instance's set explicitly — the
-    # overlay must skip fields the fresh ``.env`` / env actually set, not what
-    # the stale singleton recorded at boot.
-    _apply_toml_overlay(current, env_set_fields=set(fresh.model_fields_set))
+    _apply_toml_overlay(fresh)
+    # Prepare every declared field before publication. A late getter failure
+    # must not leave earlier fields updated while later ones retain old values.
+    values = {field_name: getattr(fresh, field_name) for field_name in type(fresh).model_fields}
+    env_set_fields = set(fresh.model_fields_set)
     reload_routing_constants()
+    for field_name, value in values.items():
+        object.__setattr__(current, field_name, value)
+    object.__setattr__(current, "__pydantic_fields_set__", env_set_fields)
     log.info(
         "reload_settings_from_disk applied: model=%r (pid=%d)",
         getattr(current, "model", "?"),
