@@ -132,6 +132,43 @@ def test_matched_verifier_requires_lookup_only_inbox_and_scoped_credential(
         )
 
 
+def test_candidate_intervention_is_frozen_and_requires_the_matched_profile(
+    host_agent: SimpleNamespace,
+) -> None:
+    from evals.benchmarks.decision_handoff_runtime import inbox_request
+
+    fixture = json.loads(
+        (
+            Path(__file__).parents[3] / "evals/benchmarks/fixtures/decision-handoff-inbox.json"
+        ).read_text()
+    )
+    case = fixture["admission"]
+    case.update(profile="inbox", request=inbox_request(case["items"]))
+    fault = {
+        "when": "before_observation",
+        "candidate_output": json.dumps(
+            {"items": [{"id": item["id"], **item["expected_answer"]} for item in case["items"]]}
+        ),
+    }
+    _, digest = _write_task(
+        host_agent.case, case=case, orders=fixture["orders"], verification_intervention=fault
+    )
+    options = host_agent.kwargs | {"case_sha256": digest}
+    assert _task(host_agent.case, digest)["verification_intervention"] == fault
+    with pytest.raises(ValueError, match="requires matched verification"):
+        GeodeHandoffHarborAgent(**options)
+    agent = GeodeHandoffHarborAgent(**options, verification_engine="llm", verify_mode="llm_judge")
+    assert agent.task["verification_intervention"] == fault
+    _, digest = _write_task(
+        host_agent.case,
+        case=case,
+        orders=fixture["orders"],
+        verification_intervention={**fault, "candidate_output": '{"items":[]}'},
+    )
+    with pytest.raises(ValueError, match="complete ordered inbox"):
+        _task(host_agent.case, digest)
+
+
 @pytest.mark.parametrize(
     "override",
     [

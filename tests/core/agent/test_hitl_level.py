@@ -18,6 +18,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.agent.tool_executor import ToolExecutor
+from core.tools.bash_tool import BashResult
 
 
 def _run_executor(
@@ -100,9 +101,20 @@ class TestAlwaysApproval:
         executor = ToolExecutor()
         executor._always_approved_categories.add("bash")
         # Non-safe bash command should be auto-approved
-        with patch.object(executor._approval, "prompt_with_always") as mock_prompt:
-            _run_executor(executor, "run_bash", {"command": "npm install foo", "reason": "test"})
+        with (
+            patch.object(executor._approval, "prompt_with_always") as mock_prompt,
+            patch.object(
+                executor._bash,
+                "aexecute",
+                AsyncMock(return_value=BashResult(stdout="installed", returncode=0)),
+            ) as mock_bash,
+        ):
+            result = _run_executor(
+                executor, "run_bash", {"command": "npm install foo", "reason": "test"}
+            )
             mock_prompt.assert_not_called()
+        mock_bash.assert_awaited_once_with("npm install foo", timeout=30, cancellation=None)
+        assert result["stdout"] == "installed"
 
     def test_write_always_adds_category(self) -> None:
         """When user responds 'a' to write approval, 'write' category is added."""
@@ -177,16 +189,38 @@ class TestHITLLevel:
     def test_hitl_level_0_skips_bash_approval(self) -> None:
         """hitl_level=0 auto-approves all bash commands."""
         executor = ToolExecutor(hitl_level=0)
-        with patch.object(executor._approval, "prompt_with_always") as mock_prompt:
-            _run_executor(executor, "run_bash", {"command": "npm install foo", "reason": "test"})
+        with (
+            patch.object(executor._approval, "prompt_with_always") as mock_prompt,
+            patch.object(
+                executor._bash,
+                "aexecute",
+                AsyncMock(return_value=BashResult(stdout="installed", returncode=0)),
+            ) as mock_bash,
+        ):
+            result = _run_executor(
+                executor, "run_bash", {"command": "npm install foo", "reason": "test"}
+            )
             mock_prompt.assert_not_called()
+        mock_bash.assert_awaited_once_with("npm install foo", timeout=30, cancellation=None)
+        assert result["stdout"] == "installed"
 
     def test_hitl_level_1_skips_bash_approval(self) -> None:
         """hitl_level=1 auto-approves bash commands."""
         executor = ToolExecutor(hitl_level=1)
-        with patch.object(executor._approval, "prompt_with_always") as mock_prompt:
-            _run_executor(executor, "run_bash", {"command": "npm install foo", "reason": "test"})
+        with (
+            patch.object(executor._approval, "prompt_with_always") as mock_prompt,
+            patch.object(
+                executor._bash,
+                "aexecute",
+                AsyncMock(return_value=BashResult(stdout="installed", returncode=0)),
+            ) as mock_bash,
+        ):
+            result = _run_executor(
+                executor, "run_bash", {"command": "npm install foo", "reason": "test"}
+            )
             mock_prompt.assert_not_called()
+        mock_bash.assert_awaited_once_with("npm install foo", timeout=30, cancellation=None)
+        assert result["stdout"] == "installed"
 
     def test_hitl_level_2_requires_bash_approval(self) -> None:
         """hitl_level=2 requires approval for non-safe bash commands."""
@@ -194,9 +228,18 @@ class TestHITLLevel:
         with (
             patch.object(executor._approval, "prompt_with_always", return_value="y") as mock_prompt,
             patch("core.agent.approval.console"),
+            patch.object(
+                executor._bash,
+                "aexecute",
+                AsyncMock(return_value=BashResult(stdout="installed", returncode=0)),
+            ) as mock_bash,
         ):
-            _run_executor(executor, "run_bash", {"command": "npm install foo", "reason": "test"})
+            result = _run_executor(
+                executor, "run_bash", {"command": "npm install foo", "reason": "test"}
+            )
             mock_prompt.assert_called_once()
+        mock_bash.assert_awaited_once_with("npm install foo", timeout=30, cancellation=None)
+        assert result["stdout"] == "installed"
 
     def test_hitl_level_0_skips_write_approval(self) -> None:
         """hitl_level=0 auto-approves write operations."""

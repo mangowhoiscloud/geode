@@ -149,6 +149,7 @@ def test_site_static_check_failure_survives_successful_generation(
     [
         "run lint-imports --no-cache",
         "run python scripts/check_architecture_exceptions.py --check --base-ref origin/develop",
+        "run python scripts/check_architecture_performance.py --check",
         "run ruff check --config ruff-production.toml core/ evals/ evolve/",
     ],
 )

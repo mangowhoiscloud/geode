@@ -250,6 +250,14 @@ Want OpenAI, OpenRouter, or ZhipuAI GLM instead? Add
 `ZAI_API_KEY=...` to the same file. Select an OpenRouter model with an exact
 reference such as `/model openrouter/anthropic/claude-sonnet-4`.
 
+**Optional Jev judgments (Unreleased, source checkout).** Keep `TYPESAFE_API_KEY` or `OPENROUTER_API_KEY` in
+the same local secret file, then choose `/model judgment typesafe` or
+`/model judgment openrouter`. A key alone does not enable Jev. The picker at
+`/model judgment` also switches back to `llm`; the root generation model and
+effort stay unchanged. Reflection runs after each tool-result round and before
+the final response. See [judgment configuration](https://mangowhoiscloud.github.io/geode/docs/config/reference/)
+for credential precedence, supported evidence and cost boundaries.
+
 **Cost control.** Provider prices vary by model and workload. Check the
 provider's current pricing, then set a hard cap in `~/.geode/config.toml`:
 
