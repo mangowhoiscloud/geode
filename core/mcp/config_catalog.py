@@ -12,7 +12,8 @@ from typing import Any
 
 from dotenv import dotenv_values
 
-from core.paths import GLOBAL_CONFIG_TOML, GLOBAL_ENV_FILE, get_project_root
+from core.config.toml_edit import resolve_config_toml_path
+from core.paths import GLOBAL_ENV_FILE, get_project_root
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class MCPConfigCatalog:
         self.origins = {}
         self.collisions = []
         for config_toml in (
-            GLOBAL_CONFIG_TOML,
+            resolve_config_toml_path(),
             self._project_root() / ".geode" / "config.toml",
         ):
             if not config_toml.exists():

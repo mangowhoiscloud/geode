@@ -193,15 +193,9 @@ def _load_toml_config(
     Returns a dict mapping Settings field names to their values.
     Only keys present in _TOML_TO_SETTINGS are returned.
     """
-    # H9 (C-4, 2026-06-11) — ``GEODE_CONFIG_TOML`` redirects the GLOBAL
-    # config.toml for the MAIN settings loader too. Pre-fix only the
-    # self-improving loop loader honored it
-    # (core/config/toml_edit.py:resolve_config_toml_path), so an operator
-    # pointing the env var at an alternate file changed loop behavior while
-    # the runtime kept reading ~/.geode/config.toml — two meanings for one
-    # variable. The project overlay still applies on top.
-    env_toml = os.environ.get("GEODE_CONFIG_TOML", "").strip()
-    gp = global_path or (Path(env_toml).expanduser() if env_toml else GLOBAL_CONFIG_PATH)
+    from core.config.toml_edit import resolve_config_toml_path
+
+    gp = resolve_config_toml_path(global_path)
     pp = project_path or PROJECT_CONFIG_PATH
     merged: dict[str, Any] = {}
 

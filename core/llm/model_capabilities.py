@@ -1,140 +1,109 @@
-"""Anthropic model-capability sets — single SoT (PR-DRIFT-ANCHORS, 2026-06-10).
+"""Verified Anthropic Messages capabilities, retrieved 2026-09-24.
 
-Before this module, the same "which Anthropic models support X" facts were
-hardcoded independently in ``core/llm/providers/anthropic.py`` (adapter
-request shaping) and ``core/cli/effort_picker.py`` (which knobs the picker
-surfaces), with a "Keep these in sync" comment standing in for an actual
-anchor. Model onboarding meant N independent edits and one missed edit
-meant "the new model silently doesn't work on this one surface" — exactly
-the 2026-05-29 incident where the opus-4-8 onboarding missed the
-seed-generation role allowlist ([[reference_model_compat_surfaces]]).
-
-Onboarding a new Anthropic model now means editing THIS file (plus pricing
-TOML); both consumers import from here. The ``model-onboarding`` scaffold
-skill points here.
-
-Capability provenance (doc-before-behaviour, CANNOT §4d): adaptive thinking
-+ sampling-parameter removal per the platform 4.6/4.7 model pages; xhigh
-on 4.7/4.8 and opus-4-8 1M/compaction confirmed live by the running
-harness (Claude Code /model configures claude-opus-4-8 with xhigh effort).
+One immutable row owns each model's request contract. Existing feature-set
+consumers use projections of these rows; unknown models gain no native tools.
+Sources: docs/research/provider-refresh-20260924-claude.md.
 """
 
 from __future__ import annotations
 
-# Native Messages tool search for models admitted by GEODE. Dated aliases
-# resolve to these base IDs. Unknown models stay eager until verified.
-# https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool
-# Model compatibility checked 2026-09-20; Opus 4.1 and earlier are unsupported.
-ANTHROPIC_TOOL_SEARCH_MODELS: frozenset[str] = frozenset(
-    {
-        "claude-fable-5",
-        "claude-opus-4-8",
-        "claude-opus-4-7",
-        "claude-opus-4-6",
-        "claude-opus-4-5",
-        "claude-sonnet-4-6",
-        "claude-sonnet-4-5",
-        "claude-haiku-4-5",
-    }
-)
+from dataclasses import dataclass, replace
+from typing import Literal
 
-# Server-side tool-result clearing, independent of compaction support.
-ANTHROPIC_CONTEXT_MGMT_MODELS: frozenset[str] = frozenset(
-    {
-        # Fable 5 (2026-06-09 GA): 1M ctx + compaction supported; adaptive
-        # thinking always-on (thinking:{type:"disabled"} errors — omit or send
-        # adaptive); sampling params 400; effort incl. xhigh supported.
-        # ref: https://platform.claude.com/docs/en/about-claude/models/introducing-claude-fable-5-and-claude-mythos-5
-        "claude-fable-5",
-        "claude-opus-4-8",
-        "claude-opus-4-7",
-        "claude-opus-4-6",
-        "claude-opus-4-5",
-        "claude-sonnet-4-6",
-        "claude-sonnet-4-5",
-    }
-)
 
-# The compact-2026-01-12 beta excludes Opus/Sonnet 4.5.
-# https://platform.claude.com/docs/en/build-with-claude/compaction#compatibility
-ANTHROPIC_COMPACTION_MODELS: frozenset[str] = ANTHROPIC_CONTEXT_MGMT_MODELS - {
-    "claude-opus-4-5",
-    "claude-sonnet-4-5",
+@dataclass(frozen=True, slots=True)
+class AnthropicModelSpec:
+    """Model capabilities, independent of credentials and account availability."""
+
+    max_output_tokens: int = 128_000
+    adaptive_thinking: bool = True
+    effort_values: tuple[str, ...] = ("low", "medium", "high", "xhigh", "max")
+    default_effort: str | None = "high"
+    tool_search: bool = True
+    context_editing: bool = True
+    compaction: bool = True
+    dynamic_web_search: bool = True
+    dynamic_web_fetch: bool = True
+    computer_tool: Literal[
+        "computer_20250124", "computer_20251124", "computer_toolset_20260801"
+    ] = "computer_20251124"
+    forced_tool_choice: bool = True
+    binds_thinking: bool = False
+
+
+_MODERN = AnthropicModelSpec()
+_EXTENDED = AnthropicModelSpec(
+    max_output_tokens=64_000,
+    adaptive_thinking=False,
+    effort_values=(),
+    default_effort=None,
+    compaction=False,
+    dynamic_web_search=False,
+    dynamic_web_fetch=False,
+    computer_tool="computer_20250124",
+)
+ANTHROPIC_MODEL_SPECS: dict[str, AnthropicModelSpec] = {
+    "claude-fable-5-1": replace(_MODERN, forced_tool_choice=False, binds_thinking=True),
+    "claude-fable-5": _MODERN,
+    "claude-opus-5-5": replace(
+        _MODERN,
+        default_effort="medium",
+        computer_tool="computer_toolset_20260801",
+        forced_tool_choice=False,
+        binds_thinking=True,
+        dynamic_web_fetch=False,
+    ),
+    "claude-opus-5": replace(_MODERN, dynamic_web_fetch=False),
+    "claude-opus-4-8": _MODERN,
+    "claude-opus-4-7": _MODERN,
+    "claude-opus-4-6": replace(_MODERN, effort_values=("low", "medium", "high", "max")),
+    "claude-opus-4-5": replace(
+        _EXTENDED,
+        effort_values=("low", "medium", "high"),
+        default_effort="high",
+        computer_tool="computer_20251124",
+    ),
+    # The published tool-search compatibility table omits Sonnet 5.
+    # Keep tools eager until the provider documents this pairing.
+    "claude-sonnet-5": replace(_MODERN, tool_search=False),
+    "claude-sonnet-4-6": replace(_MODERN, effort_values=("low", "medium", "high", "max")),
+    "claude-sonnet-4-5": _EXTENDED,
+    "claude-haiku-4-5": _EXTENDED,
 }
 
-# Adaptive-thinking models (Opus 4.6+ / Sonnet 4.6). Sampling parameters
-# (temperature/top_p/top_k) are rejected with 400 from Opus 4.7 and by
-# Opus 4.6 under adaptive thinking — omit them entirely on these models.
-# The effort knob (incl. xhigh) only exists for adaptive models.
-ANTHROPIC_ADAPTIVE_MODELS: frozenset[str] = frozenset(
-    {
-        # Fable 5 (2026-06-09 GA): 1M ctx + compaction supported; adaptive
-        # thinking always-on (thinking:{type:"disabled"} errors — omit or send
-        # adaptive); sampling params 400; effort incl. xhigh supported.
-        # ref: https://platform.claude.com/docs/en/about-claude/models/introducing-claude-fable-5-and-claude-mythos-5
-        "claude-fable-5",
-        "claude-opus-4-8",
-        "claude-opus-4-7",
-        "claude-opus-4-6",
-        "claude-sonnet-4-6",
-    }
-)
 
-# Models that accept ``output_config.effort = "xhigh"`` (one step above
-# high). 4.6 / Sonnet 4.6 reject it with 400.
-ANTHROPIC_XHIGH_MODELS: frozenset[str] = frozenset(
-    {
-        # Fable 5 (2026-06-09 GA): 1M ctx + compaction supported; adaptive
-        # thinking always-on (thinking:{type:"disabled"} errors — omit or send
-        # adaptive); sampling params 400; effort incl. xhigh supported.
-        # ref: https://platform.claude.com/docs/en/about-claude/models/introducing-claude-fable-5-and-claude-mythos-5
-        "claude-fable-5",
-        "claude-opus-4-8",
-        "claude-opus-4-7",
-    }
-)
+def anthropic_base_model(model: str) -> str:
+    """Normalize dated snapshots and released aliases without changing family."""
+    model = model.removesuffix("-latest")
+    head, separator, tail = model.rpartition("-")
+    return head if separator and len(tail) == 8 and tail.isdigit() else model
 
-# Models documented to support the ``web_search_20260209`` server tool.
-# ref: https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool
-# (verified 2026-06-12) — "The latest web search tool version
-# (web_search_20260209) supports dynamic filtering with Claude Fable 5,
-# Claude Opus 4.8, Claude Mythos 5, Claude Mythos Preview, Claude Opus 4.7,
-# Claude Opus 4.6, and Claude Sonnet 4.6." Mythos models are not in GEODE's
-# routing set and are intentionally omitted. A session model outside this
-# set escalates to ANTHROPIC_PRIMARY for the search call
-# (core/llm/adapters/_capability_impls.py:resolve_web_search_model) instead
-# of risking an undocumented model+tool pairing.
-ANTHROPIC_WEB_SEARCH_20260209_MODELS: frozenset[str] = frozenset(
-    {
-        "claude-fable-5",
-        "claude-opus-4-8",
-        "claude-opus-4-7",
-        "claude-opus-4-6",
-        "claude-sonnet-4-6",
-    }
-)
 
-# Computer-use tool generation per model (doc-before-behaviour, CANNOT §4d).
-# ref: https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool
-#   beta "computer-use-2025-11-24" + tool type "computer_20251124"
-#       → Opus 4.8 / 4.7 / 4.6, Sonnet 4.6, Opus 4.5  (the current generation)
-#   beta "computer-use-2025-01-24" + tool type "computer_20250124"
-#       → Sonnet 4.5, Haiku 4.5, (deprecated) Opus 4.1 / Sonnet 4 / Opus 4
-# The SDK's ``AnthropicBetaParam`` Literal does NOT yet enumerate
-# "computer-use-2025-11-24" ("typed constant pending in the Go SDK" per the
-# docs example) — it is sent as a plain string, which the ``Union[str,
-# Literal]`` type permits. ctx7's SDK snapshot lagged here; the docs page is
-# the SoT.
-#
-# This set is the LEGACY (2025-01-24) generation; every other model — incl.
-# Fable 5 and any future model — defaults to the 2025-11-24 generation so a
-# newly onboarded model tracks the newer beta automatically.
-ANTHROPIC_COMPUTER_USE_LEGACY_MODELS: frozenset[str] = frozenset(
-    {
-        "claude-sonnet-4-5",
-        "claude-haiku-4-5",
-        "claude-opus-4-1",
-        "claude-sonnet-4",
-        "claude-opus-4",
-    }
+def get_anthropic_model_spec(model: str) -> AnthropicModelSpec | None:
+    """Return a verified contract; unknown models stay unverified."""
+    return ANTHROPIC_MODEL_SPECS.get(anthropic_base_model(model))
+
+
+ANTHROPIC_TOOL_SEARCH_MODELS = frozenset(
+    model for model, spec in ANTHROPIC_MODEL_SPECS.items() if spec.tool_search
+)
+ANTHROPIC_CONTEXT_MGMT_MODELS = frozenset(
+    model for model, spec in ANTHROPIC_MODEL_SPECS.items() if spec.context_editing
+)
+ANTHROPIC_COMPACTION_MODELS = frozenset(
+    model for model, spec in ANTHROPIC_MODEL_SPECS.items() if spec.compaction
+)
+ANTHROPIC_ADAPTIVE_MODELS = frozenset(
+    model for model, spec in ANTHROPIC_MODEL_SPECS.items() if spec.adaptive_thinking
+)
+ANTHROPIC_XHIGH_MODELS = frozenset(
+    model for model, spec in ANTHROPIC_MODEL_SPECS.items() if "xhigh" in spec.effort_values
+)
+ANTHROPIC_WEB_SEARCH_MODELS = frozenset(
+    model for model, spec in ANTHROPIC_MODEL_SPECS.items() if spec.dynamic_web_search
+)
+ANTHROPIC_COMPUTER_USE_LEGACY_MODELS = frozenset(
+    model
+    for model, spec in ANTHROPIC_MODEL_SPECS.items()
+    if spec.computer_tool == "computer_20250124"
 )

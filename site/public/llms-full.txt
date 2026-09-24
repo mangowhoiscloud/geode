@@ -5795,7 +5795,7 @@ GEODE 설정의 규칙은 한 줄입니다. 시크릿은 `.env`에, 동작은 `c
 
 모델 해석으로 좁히면 같은 사다리가 이렇게 읽힙니다. CLI 인자 > env 층(os.environ + .env 파일들) > 프로젝트 toml > 전역 toml > routing 기본값. env 층이 toml 전부를 이기므로, 잊힌`.env` 줄 하나가 이후의 모든 toml 편집을 가립니다. 이 구조의 대표 함정입니다.
 
-`GEODE_CONFIG_TOML` env 변수는 전역`config.toml`의 경로를 바꿉니다. C-4부터 메인 설정 로더(`core/config/__init__.py`)와 self-improving 로더(`core/config/self_improving.py`)가 같은 경로를 읽습니다. 프로젝트 toml은 그 위에 그대로 얹힙니다.
+`GEODE_CONFIG_TOML` env 변수는 전역`config.toml`의 경로를 바꿉니다. 메인 설정 로더,`geode config explain`, `/model`의 전역 읽기·저장·확인 화면은 같은 경로 해석 함수를 사용합니다. MCP 서버 로딩, 게이트웨이 읽기·변경 감시, seed 역할·투표자 설정도 이 전역 경로를 따릅니다. 프로젝트 범위로 저장하면 `.geode/config.toml`에 기록되며, 프로젝트 toml은 전역 설정 위에 그대로 얹힙니다.`geode-eval config migrate-petri-toml`의 미리보기와`--yes` 저장도 같은 전역 경로를 사용합니다.
 
 ## geode config explain
 
@@ -5833,7 +5833,7 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE
 | thin CLI는 새 모델, 데몬만 옛 모델 | `GEODE_SERVE_KEEP_MODEL_ENV=1`이 켜져 있거나 C-3 이전 데몬 | 플래그를 끄거나 데몬을 재시작합니다. `pkill -f "geode serve"` 후 재진입. |
 | `~/.geode/routing.toml`을 고쳤는데 반영 안 됨 | 부트 시점 복사본을 든 모듈 경로 | 세션 리로드로 매니페스트 독자는 갱신됩니다. 그래도 남으면 프로세스를 재시작합니다. |
 | 프로젝트 `.env`에 둔 시크릿이 안 먹고 전역 값이 이김 | 전역 `~/.geode/.env`가 같은 키를 가짐. 전역이 권위입니다 (Hermes, 2026-06-15) | 의도된 동작입니다. 시크릿은 전역에 두고, 프로젝트는 전역에 없는 키만 채웁니다. `geode config explain <KEY>`로 WINNER 층을 확인하세요. |
-| `GEODE_CONFIG_TOML`이 일부 로더에만 적용 | C-4 이전에는 self-improving 로더만 인식 | 업그레이드합니다. `geode config explain`이 실제로 읽은 경로를 보고합니다. |
+| 대체 전역 경로에서 `/model` 선택이 남지 않음 | 구 버전 피커가 기본 전역 파일에 기록 | 업그레이드하고 저장 확인 화면의 경로와 `geode config explain`의 전역 경로를 비교합니다. |
 
 ## 다음
 
@@ -7077,7 +7077,7 @@ status dict 반환 (절대 raise하지 않음) + 히스토리 append
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use.md
 
-컴퓨터 사용은 모델이 스크린샷으로 화면을 보고 클릭, 타이핑, 스크롤을 지시하는 기능입니다. GEODE의 구현은 `core/tools/computer_use.py`의 `ComputerUseHarness` 하나이며 host backend는 pyautogui 또는 macOS helper입니다. Provider-native computer surface는 스크린샷을 해당 provider wire로 돌려주지만, normal function tool인 `computer_use`는 base64를 생략하고 compact observation만 반환합니다. Function-tool 경로의 시각적 좌표 선택은 활성 provider/source에 호환되는 grounding이 있을 때만 `locate`로 수행합니다.
+컴퓨터 사용은 모델이 스크린샷으로 화면을 보고 클릭, 타이핑, 스크롤을 지시하는 기능입니다. GEODE의 구현은 `core/tools/computer_use.py`의 `ComputerUseHarness` 하나이며 host backend는 pyautogui 또는 macOS helper입니다. Provider-native computer surface는 스크린샷을 해당 provider wire로 돌려주지만, normal function tool인 `computer_use`는 base64를 생략하고 compact observation만 반환합니다. 현재 function-tool 경로의 자동 좌표 선택인 `locate`는 모든 provider/source에서 사용할 수 없습니다.
 
 ## 동작 방식
 
@@ -7119,7 +7119,7 @@ driver = "helper"
 
 macOS에서는 `geode setup`이 helper를`~/.geode/helpers/computer-use/` 아래에 빌드합니다. wheel 안의 Swift/build source는 읽기 전용이며 생성물은 설치 디렉터리에 기록하지 않습니다.
 
-프로바이더가 native computer surface를 지원하면 그 경로를 쓰고, ChatGPT subscription처럼 native surface를 받지 않는 backend에는 같은 하네스를 normal function tool `computer_use`로 노출합니다. 이 경로는 다른 provider로 몰래 fallback하지 않습니다. OpenAI subscription source에 visual grounding을 별도로 구성하지 않았다면 `capture`는 가능하지만 `locate`는 dependency error로 중단되며, browser DOM·playwriter· `ui_probe` 같은 source-safe 구조 경로를 선택해야 합니다.
+프로바이더가 native computer surface를 지원하면 그 경로를 쓰고, ChatGPT subscription처럼 native surface를 받지 않는 backend에는 같은 하네스를 normal function tool `computer_use`로 노출합니다. 이 경로는 다른 provider로 몰래 fallback하지 않습니다.`capture`는 가능하지만 `locate`는 활성 provider/source를 표시하는 dependency error로 중단됩니다. 미검증 GLM 자동 grounding 경로는 제거했으며, browser DOM·playwriter· `ui_probe` 같은 source-safe 구조 경로를 선택해야 합니다.
 
 ## 안전
 
@@ -7345,7 +7345,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 589 |
-| 테스트 Python 파일 | 734 |
+| 테스트 Python 파일 | 736 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |

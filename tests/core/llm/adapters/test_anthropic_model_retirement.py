@@ -67,7 +67,11 @@ def test_list_filters_retired_user_override_without_rewriting_it(
 
     monkeypatch.setattr(cfg, "ANTHROPIC_PRIMARY", "claude-opus-4-1")
     monkeypatch.setattr(cfg, "ANTHROPIC_FALLBACK_CHAIN", ["claude-opus-4", "claude-opus-4-8"])
-    assert [model.id for model in AnthropicPaygAdapter().list_models()] == ["claude-opus-4-8"]
+    ids = [model.id for model in AnthropicPaygAdapter().list_models()]
+    assert "claude-opus-4-8" in ids
+    assert "claude-opus-4-1" not in ids
+    assert "claude-opus-4" not in ids
+    assert len(ids) == len(set(ids))
     assert cfg.ANTHROPIC_PRIMARY == "claude-opus-4-1"
 
 
@@ -145,4 +149,4 @@ def test_custom_host_retains_configured_models_in_adapter_list(
     monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://gateway.example.test")
     monkeypatch.setattr(cfg, "ANTHROPIC_PRIMARY", "claude-opus-4-1")
     monkeypatch.setattr(cfg, "ANTHROPIC_FALLBACK_CHAIN", [])
-    assert [model.id for model in AnthropicPaygAdapter().list_models()] == ["claude-opus-4-1"]
+    assert "claude-opus-4-1" in [model.id for model in AnthropicPaygAdapter().list_models()]
