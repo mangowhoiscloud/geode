@@ -113,6 +113,11 @@ functional change.
 
 ### Fixed
 
+- Admit native Astra final-verification calls in decision-handoff observations.
+  Preserve requested and actual verifier modes separately, and require a complete
+  source-reconciled final-verification boundary for explicitly opted-in current
+  comparisons. Keep valid semantic failures distinct from success and preserve
+  historical exports without filling missing verification evidence.
 - Validate the complete settings reload before updating the live singleton.
   Failed environment/TOML field validation, field preparation, or routing
   refresh preserves the previous Settings values; corrected reloads retain
