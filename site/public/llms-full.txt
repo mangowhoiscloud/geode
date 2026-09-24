@@ -5498,35 +5498,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/guides/llm-adapter.md
 
 ## 1\. 어댑터를 작성합니다
 
-어댑터는 `core/llm/adapters/base.py`의 `LLMAdapter` 프로토콜을 만족하면 됩니다. 최소 요건은 네 정체성 속성(`name`, `provider`, `source`, `billing_type`)과 비동기 호출 메서드 `acomplete()`입니다. `source`는 `CONCRETE_SOURCES`(`payg` / `subscription` / `adapter`) 중 하나여야 하고, `"auto"`는 picker 전용 sentinel이라 어댑터에 박을 수 없습니다. 요청·응답 셰이핑은 프로토콜이 정의한 provider-agnostic 타입(`AdapterCallRequest`, `AdapterCallResult`)을 어댑터 내부에서 SDK 페이로드로 번역하는 일입니다. `AnthropicPaygAdapter`(`core/llm/adapters/anthropic_payg.py`)가 PAYG 경로의 참조 구현입니다.
-
-```
-# core/llm/adapters/acme_payg.py
-from dataclasses import dataclass, field
-from typing import Any
-from core.llm.adapters.base import (
-    SOURCE_PAYG, AdapterBillingType,
-    AdapterCallRequest, AdapterCallResult,
-    UsageSummary,
-)
-
-@dataclass
-class AcmePaygAdapter:
-    name: str = "acme-payg"
-    provider: str = "acme"
-    source: str = SOURCE_PAYG
-    billing_type: AdapterBillingType = AdapterBillingType.API
-    _client: Any = field(default=None, init=False, repr=False)
-
-    async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
-        client = self._get_client()
-        raw = await client.create(...)  # translate req -> SDK payload
-        return AdapterCallResult(
-            text=raw.text,
-            usage=UsageSummary(input_tokens=..., output_tokens=...),
-            stop_reason=raw.stop_reason,
-        )
-```
+어댑터는 `core/llm/adapters/base.py`의 `LLMAdapter` 프로토콜을 만족하면 됩니다. 최소 요건은 네 정체성 속성(`name`, `provider`, `source`, `billing_type`)과 비동기 호출 메서드 `acomplete()`입니다. `source`는 `CONCRETE_SOURCES`(`payg` / `subscription` / `adapter`) 중 하나여야 하고, `"auto"`는 picker 전용 sentinel이라 어댑터에 박을 수 없습니다. 요청·응답 셰이핑은 프로토콜이 정의한 provider-agnostic 타입(`AdapterCallRequest`, `AdapterCallResult`)을 어댑터 내부에서 SDK 페이로드로 번역하는 일입니다. PAYG 경로의 실제 구현은 [`AnthropicPaygAdapter`](https://github.com/mangowhoiscloud/geode/blob/main/core/llm/adapters/anthropic_payg.py)를 참고하십시오. 이 구현의 `_clients`, `_get_client()`, `acomplete()`에서 루프별 클라이언트 선택과 요청·응답 변환을 확인할 수 있습니다.
 
 스트리밍과 introspection은 필수가 아닙니다. 지원하는 표면만 `StreamingCapable`, `EnvironmentDiagnosticCapable`, `ModelListingCapable`, `QuotaInspectionCapable`, `CredentialDetectionCapable` 구조를 만족시키면 됩니다. 지원하지 않는 메서드를 빈 값이나 `None` stub으로 만들지 마십시오.
 

@@ -35,35 +35,14 @@ export default function Page() {
               없습니다. 요청·응답 셰이핑은 프로토콜이 정의한 provider-agnostic
               타입(<code>AdapterCallRequest</code>,{" "}
               <code>AdapterCallResult</code>)을 어댑터 내부에서 SDK 페이로드로
-              번역하는 일입니다. <code>AnthropicPaygAdapter</code>(
-              <code>core/llm/adapters/anthropic_payg.py</code>)가 PAYG 경로의
-              참조 구현입니다.
+              번역하는 일입니다. PAYG 경로의 실제 구현은{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/blob/main/core/llm/adapters/anthropic_payg.py">
+                <code>AnthropicPaygAdapter</code>
+              </a>
+              를 참고하십시오. 이 구현의 <code>_clients</code>,{" "}
+              <code>_get_client()</code>, <code>acomplete()</code>에서 루프별
+              클라이언트 선택과 요청·응답 변환을 확인할 수 있습니다.
             </p>
-            <pre>{`# core/llm/adapters/acme_payg.py
-from dataclasses import dataclass, field
-from typing import Any
-from core.llm.adapters.base import (
-    SOURCE_PAYG, AdapterBillingType,
-    AdapterCallRequest, AdapterCallResult,
-    UsageSummary,
-)
-
-@dataclass
-class AcmePaygAdapter:
-    name: str = "acme-payg"
-    provider: str = "acme"
-    source: str = SOURCE_PAYG
-    billing_type: AdapterBillingType = AdapterBillingType.API
-    _client: Any = field(default=None, init=False, repr=False)
-
-    async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
-        client = self._get_client()
-        raw = await client.create(...)  # translate req -> SDK payload
-        return AdapterCallResult(
-            text=raw.text,
-            usage=UsageSummary(input_tokens=..., output_tokens=...),
-            stop_reason=raw.stop_reason,
-        )`}</pre>
             <p>
               스트리밍과 introspection은 필수가 아닙니다. 지원하는 표면만{" "}
               <code>StreamingCapable</code>,{" "}
@@ -261,35 +240,14 @@ if isinstance(a, EnvironmentDiagnosticCapable):
               an adapter. Request and response shaping is the work of translating
               the protocol&apos;s provider-agnostic types (<code>AdapterCallRequest</code>,{" "}
               <code>AdapterCallResult</code>) to SDK payloads inside the adapter.{" "}
-              <code>AnthropicPaygAdapter</code> in{" "}
-              <code>core/llm/adapters/anthropic_payg.py</code> is the reference for
-              the PAYG path.
+              For the working PAYG implementation, read{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/blob/main/core/llm/adapters/anthropic_payg.py">
+                <code>AnthropicPaygAdapter</code>
+              </a>
+              . Its <code>_clients</code>, <code>_get_client()</code>, and{" "}
+              <code>acomplete()</code> show loop-specific client selection and
+              request/response translation.
             </p>
-            <pre>{`# core/llm/adapters/acme_payg.py
-from dataclasses import dataclass, field
-from typing import Any
-from core.llm.adapters.base import (
-    SOURCE_PAYG, AdapterBillingType,
-    AdapterCallRequest, AdapterCallResult,
-    UsageSummary,
-)
-
-@dataclass
-class AcmePaygAdapter:
-    name: str = "acme-payg"
-    provider: str = "acme"
-    source: str = SOURCE_PAYG
-    billing_type: AdapterBillingType = AdapterBillingType.API
-    _client: Any = field(default=None, init=False, repr=False)
-
-    async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
-        client = self._get_client()
-        raw = await client.create(...)  # translate req -> SDK payload
-        return AdapterCallResult(
-            text=raw.text,
-            usage=UsageSummary(input_tokens=..., output_tokens=...),
-            stop_reason=raw.stop_reason,
-        )`}</pre>
             <p>
               Streaming and introspection are optional. Implement only the
               structural capabilities you support: <code>StreamingCapable</code>,{" "}
