@@ -363,6 +363,10 @@ functional change.
 
 ### Infrastructure
 
+- Skip full Python tests and coverage only when the complete change set contains
+  allowlisted documentation and generated public-doc files. Preserve required
+  check identities, documentation/roadmap/inventory validation, and full testing
+  for runtime, test, dependency, workflow, schema, and unrecognized paths.
 - Share contributor instructions through Claude Code's native `@AGENTS.md`
   import. Check declared code/documentation/verification paths in the existing
   docs gate, and run focused scaffold checks for contributor-doc-only changes.
