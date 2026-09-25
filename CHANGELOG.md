@@ -178,6 +178,13 @@ functional change.
 
 ### Fixed
 
+- Pass Anthropic structured-output schemas through the SDK's
+  `transform_schema` before sending `output_config.format`. The API rejected
+  the turn-verification judge schema with HTTP 400 because number
+  `minimum`/`maximum` is unsupported; those constraints now move into the field
+  description and GEODE's judge parser still rejects scores outside 0..1.
+  Schemas the SDK cannot express (such as type arrays) fail before the request.
+
 - Preserve the admitted model, source, effort and auxiliary policy through session
   checkpoints and child-worker requests. Validate resume selection before changing
   history, identity or checkpoint status; reject malformed saved records and keep

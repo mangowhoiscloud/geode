@@ -91,6 +91,29 @@ def test_structured_output_preserves_schema_and_effort() -> None:
         build_create_kwargs(replace(request, response_schema={"type": "string"}))
 
 
+def test_structured_output_moves_unsupported_number_bounds_to_description() -> None:
+    schema = {
+        "type": "object",
+        "properties": {"score": {"type": "number", "minimum": 0.0, "maximum": 1.0}},
+        "required": ["score"],
+        "additionalProperties": False,
+    }
+    request = AdapterCallRequest(model="claude-sonnet-5", messages=(), response_schema=schema)
+    score = build_create_kwargs(request)["output_config"]["format"]["schema"]["properties"]["score"]
+    assert score == {"type": "number", "description": "{minimum: 0.0, maximum: 1.0}"}
+    assert schema["properties"]["score"]["maximum"] == 1.0
+    with pytest.raises(LLMRequestValidationError, match="not supported"):
+        build_create_kwargs(
+            replace(
+                request,
+                response_schema={
+                    "type": "object",
+                    "properties": {"x": {"type": ["string", "null"]}},
+                },
+            )
+        )
+
+
 def test_output_limit_includes_extended_thinking() -> None:
     with pytest.raises(LLMRequestValidationError, match="including any thinking budget"):
         build_create_kwargs(
