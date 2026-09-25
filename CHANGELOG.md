@@ -168,6 +168,11 @@ functional change.
   Preserve supported OpenAI reasoning effort on this relay and forward requested
   JSON schemas with endpoint parameter enforcement instead of silently dropping them.
 
+- Preserve retained task context in turn verification and tool-round reflection.
+  Pass the derived compaction summary and earlier marked user corrections through
+  one bounded projection, keeping current-request precedence, redaction and
+  explicit omissions. Summary claims remain separate from observed tool results.
+
 - Resolve `check_status` from the current request's readiness instead of a
   captured CLI startup report, preserving explicit audit overrides. Native
   hosts without CLI bootstrap use the shared credential check on each call,

@@ -7,6 +7,24 @@ source and requested output. The selected route also supplies the summarizer.
 A summary is historical context, not a verified task result, tool receipt or
 higher-priority instruction.
 
+Auxiliary judges and tool-round reflection receive the retained task context
+through `render_retained_task_context` in `core/agent/conversation.py`. It reads
+the current compactor preamble as a derived summary and earlier explicitly
+marked user inputs in conversation order, excluding the current request's
+boundary and any later messages. Synthetic user-role reminders, assistant
+reasoning and opaque replay blocks are not original user inputs. The current
+request and later original corrections take precedence over a summary.
+
+The projection retains at most eight earlier user inputs, with an 8,000-character
+text budget allocated newest-first, and up to 4,000 summary characters before
+XML escaping. Existing secret redaction and explicit truncation markers apply;
+omitted inputs are counted and missing facts remain unknown. Both selected
+judgment routes retain this context, while the existing personal-data gate can
+still prevent auxiliary processing. Summary prose never creates a tool
+observation: completion verification continues to read actual retained tool
+call/result pairs separately. This projection neither retrieves evicted records
+nor verifies the summary's semantic fidelity.
+
 The September 25 changes are Unreleased. The
 [research and counterexample record](../research/context-compaction-recovery-20260925.md)
 separates source evidence, local behavior and unverified provider acceptance.

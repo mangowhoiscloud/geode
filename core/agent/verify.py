@@ -37,6 +37,7 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+from core.agent.conversation import render_retained_task_context
 from core.agent.loop._reflection import (
     synthesize_failure_reflection_hint,
     synthesize_reflexion_hint,
@@ -385,6 +386,12 @@ def _judge_prompt(result: AgenticResult, *, loop: Any | None = None) -> str:
         for index, scope, call in calls[-12:]
     ]
     task = getattr(loop, "_verify_root_user_input", "") if loop is not None else ""
+    history = getattr(getattr(loop, "context", None), "messages", None)
+    task_context = (
+        render_retained_task_context(history, current_request=task)
+        if isinstance(history, list)
+        else ""
+    )
     # Share a bounded excerpt budget, excluding outer JSON encoding/metadata.
     # Small fields release space for complete code/output instead of always
     # chopping inputs at 300 characters.
@@ -417,6 +424,7 @@ def _judge_prompt(result: AgenticResult, *, loop: Any | None = None) -> str:
     observation_text = json.dumps(bounded_observations, ensure_ascii=False)
     return (
         f"Original request: {redact_and_bound_text(task, 4000)}\n"
+        f"{task_context}"
         "Observed execution (not a correctness verdict):\n"
         f"- termination_reason: {result.termination_reason!r}\n"
         f"- rounds: {result.rounds}\n"
