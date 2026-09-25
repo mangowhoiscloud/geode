@@ -66,7 +66,7 @@ export default function Page() {
             <h2>오버플로 처리: 요청 경로와 복구</h2>
             <p>
               공통 요청 경로는 미들웨어와 도구 허용 목록 적용 뒤의 모델·공급자·
-              source·출력 예비분으로 예산을 정합니다. 요청이 원래 대화를 유지하면
+              source·출력 예비분으로 예산을 정합니다. 요청이 원래 대화를 유지하면{" "}
               <code>ContextWindowManager</code>가 한 번만 유지보수를 수행합니다.
               미들웨어가 대화를 교체했다면 원래 세션을 대신 요약하지 않습니다.
               최종 적합성 검사는 읽기 전용이며, 훅이나 요약을 다시 실행하지 않습니다.
@@ -101,7 +101,7 @@ export default function Page() {
               <li>
                 <strong>Anthropic</strong>. 지원 모델의 자동 threshold compaction은
                 유지합니다. Tool-result clearing은 별도 지원 목록을 따릅니다.
-                알려진 Haiku·Sonnet·Opus 4.5처럼 threshold compaction이 없는
+                알려진 Haiku 4.5·Sonnet 4.5·Opus 4.5처럼 threshold compaction이 없는
                 모델은 클라이언트 요약을 사용할 수 있습니다. 수동 압축과 실제
                 오버플로 복구도 알려진 모델의 호환 이력에서 가능하지만, native
                 compaction 블록이 있거나 모델 계약이 미상이면 텍스트 교체와
@@ -122,9 +122,9 @@ export default function Page() {
               </li>
             </ul>
             <p>
-              전략은 컨텍스트 소유자가 결정합니다. <code>PreCompact</code>는
+              전략은 컨텍스트 소유자가 결정합니다. <code>PreCompact</code>는{" "}
               <code>keep_recent</code>만 바꾸거나 soft 요약을 유예할 수 있고,
-              모델·공급자·trigger·hard는 바꿀 수 없습니다.
+              모델·공급자·trigger·hard는 바꿀 수 없습니다.{" "}
               <code>PostCompact</code>는 이력 교체와 호출자가 제공한 체크포인트
               콜백 뒤에 실행됩니다. <code>persisted</code>는 요약 아티팩트의
               저장 여부이며, 세션 전체가 원자적으로 저장됐다는 뜻은 아닙니다.
@@ -134,7 +134,7 @@ export default function Page() {
               공급자가 입력 초과를 확인하면 로컬 추정이 낮아도 제한된 복구를
               시도합니다. 메시지 개수가 같아도 내용은 줄어들 수 있으므로 작업
               결과로 진행 여부를 판단하고, 다음 실제 요청의 수락 여부는 별도로
-              확인합니다. 복구가 불가능하거나 한도를 소진하면
+              확인합니다. 복구가 불가능하거나 한도를 소진하면{" "}
               <code>context_exhausted</code>로 끝납니다. 안내문은 추가 모델 호출
               없이 반환하며, 모든 진입점에서 세션이 자동 초기화된다고 주장하지 않습니다.
             </p>
@@ -149,7 +149,7 @@ export default function Page() {
             </p>
             <p>
               예산은 <code>core/orchestration/context_budget.py</code>, 경로별
-              모델 정보는 <code>core/llm/model_catalog.py</code>, 변환은
+              모델 정보는 <code>core/llm/model_catalog.py</code>, 변환은{" "}
               <code>core/orchestration/compaction.py</code>가 소유합니다.
               이 설명의 9월 25일 변경은 Unreleased입니다. 실제 공급자의 요청 수락과
               사용량은 로컬 회귀 검사와 별도로 검증해야 합니다.
@@ -293,7 +293,7 @@ export default function Page() {
             <h2>Overflow handling: request routes and recovery</h2>
             <p>
               The shared request path resolves the model, provider, source and
-              output reserve after request middleware and tool allowlists.
+              output reserve after request middleware and tool allowlists.{" "}
               <code>ContextWindowManager</code> performs maintenance once when
               the request retains the caller&apos;s conversation. A middleware-owned
               replacement cannot cause the original session to be summarized.
@@ -353,9 +353,9 @@ export default function Page() {
               </li>
             </ul>
             <p>
-              The context owner selects the strategy. <code>PreCompact</code>
+              The context owner selects the strategy. <code>PreCompact</code>{" "}
               may change only <code>keep_recent</code> or defer soft summarization;
-              model, provider, trigger and hard are read-only.
+              model, provider, trigger and hard are read-only.{" "}
               <code>PostCompact</code> follows history replacement and any
               caller-supplied checkpoint callback. <code>persisted</code> means
               the summary artifact was stored, not that the whole session committed
@@ -366,12 +366,12 @@ export default function Page() {
               when the local estimate is low. Equal message counts can still
               contain less content, so operation status determines progress.
               Acceptance of the next actual request is separate evidence.
-              Unrecoverable or exhausted recovery ends as
+              Unrecoverable or exhausted recovery ends as{" "}
               <code>context_exhausted</code>. A local notice uses no additional
               model call and does not claim every entry point resets its session.
             </p>
             <p>
-              Thirty messages alone do not discard history; the separate
+              Thirty messages alone do not discard history; the separate{" "}
               <code>ConversationContext.max_turns</code> limit remains.
               The latest explicitly marked original user input, causal tool pairs
               and fresh <code>use_skill</code> output are protected.

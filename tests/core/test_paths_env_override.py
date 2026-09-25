@@ -195,6 +195,7 @@ def test_explicit_evolve_workspace_must_be_a_writable_geode_checkout(
 def test_explicit_evolve_workspace_owns_tracked_state(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, reload_paths: None
 ) -> None:
+    monkeypatch.delenv("GEODE_STATE_ROOT", raising=False)
     checkout = tmp_path / "geode"
     checkout.mkdir()
     (checkout / ".git").mkdir()

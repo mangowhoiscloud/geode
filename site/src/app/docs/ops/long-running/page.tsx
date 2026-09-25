@@ -78,13 +78,13 @@ export default function Page() {
               OpenRouter 경로의 허용량으로 가정하지 않습니다.
             </p>
             <p>
-              전략은 <code>ContextWindowManager</code>가 소유합니다.
-              <code>PreCompact</code>는 보존 개수와 soft 유예만 결정하고,
-              <code>CONTEXT_CRITICAL</code>은 관측 이벤트입니다.
+              전략은 <code>ContextWindowManager</code>가 소유합니다.{" "}
+              <code>PreCompact</code>는 보존 개수와 soft 유예만 결정하고,{" "}
+              <code>CONTEXT_CRITICAL</code>은 관측 이벤트입니다.{" "}
               <code>CONTEXT_OVERFLOW_ACTION</code>은 전략을 선택하지 않습니다.
               복구할 수 없으면 <code>context_exhausted</code>로 끝내고 추가 모델
               호출 없이 안내합니다. 모든 진입점의 세션 자동 초기화를 뜻하지는
-              않습니다. 이력 보호와 저장 경계는
+              않습니다. 이력 보호와 저장 경계는{" "}
               <a href="/geode/docs/runtime/context">컨텍스트 조립</a>을 참고합니다.
             </p>
 
@@ -192,9 +192,9 @@ export default function Page() {
               or OpenRouter route allowances.
             </p>
             <p>
-              <code>ContextWindowManager</code> owns strategy selection.
+              <code>ContextWindowManager</code> owns strategy selection.{" "}
               <code>PreCompact</code> controls only the retained count and soft
-              deferral; <code>CONTEXT_CRITICAL</code> is observation.
+              deferral; <code>CONTEXT_CRITICAL</code> is observation.{" "}
               <code>CONTEXT_OVERFLOW_ACTION</code> does not select a strategy.
               Unrecoverable context ends as <code>context_exhausted</code> with a
               local notice and no additional model call. It does not imply an

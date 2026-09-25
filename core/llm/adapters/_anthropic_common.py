@@ -528,6 +528,73 @@ def report_input_transformations(response: Any) -> None:
             log.warning("Anthropic thinking transformations: reason=%s blocks=%d", reason, count)
 
 
+def _translate_usage(usage: Any, *, model: str) -> UsageSummary:
+    """Aggregate native compaction iterations without recounting top-level usage."""
+
+    def value(part: Any, name: str) -> Any:
+        return part.get(name) if isinstance(part, dict) else getattr(part, name, None)
+
+    iterations = value(usage, "iterations") or []
+    compacted = any(value(part, "type") == "compaction" for part in iterations)
+    parts = [usage]
+    if compacted:
+        # The wire builder admits no advisor or fallback models. Such usage
+        # cannot be estimated under this response's single model tariff.
+        if any(
+            value(part, "type") not in {"message", "compaction"}
+            or (value(part, "model") is not None and value(part, "model") != model)
+            for part in iterations
+        ):
+            log.warning("Anthropic compaction usage has unsupported iteration models or types")
+            return UsageSummary()
+        # Top-level totals exclude compaction. Full iterations also retain TTL
+        # detail in the SDK's final streamed message when the top-level delta does not.
+        parts = iterations
+
+    def total(name: str) -> int | None:
+        counts = [value(part, name) for part in parts]
+        return sum(int(count) for count in counts) if all(c is not None for c in counts) else None
+
+    input_tokens = total("input_tokens")
+    output_tokens = total("output_tokens")
+    cached_tokens = total("cache_read_input_tokens")
+    cache_write_tokens = total("cache_creation_input_tokens")
+    cache_write_1h_tokens = value(value(usage, "cache_creation"), "ephemeral_1h_input_tokens")
+    thinking_tokens = value(value(usage, "output_tokens_details"), "thinking_tokens")
+    if compacted:
+        # Iterations report no thinking breakdown; a message-only value is not
+        # the request total. Missing counters remain unknown, not partial sums.
+        thinking_tokens = None
+        cache_write_1h_tokens = 0 if cache_write_tokens is not None else None
+        for part in parts:
+            writes = value(part, "cache_creation_input_tokens")
+            hour = value(value(part, "cache_creation"), "ephemeral_1h_input_tokens")
+            if writes == 0 and hour is None:
+                hour = 0  # A known zero total has a known zero one-hour subset.
+            if hour is None or writes is None:
+                cache_write_1h_tokens = None
+            elif isinstance(hour, bool) or not isinstance(hour, int) or not 0 <= hour <= writes:
+                raise ValueError(
+                    "cache_write_1h_tokens must be a nonnegative subset of cache writes"
+                )
+            elif cache_write_1h_tokens is not None:
+                cache_write_1h_tokens += hour
+
+    return UsageSummary(
+        input_tokens=input_tokens or 0,
+        output_tokens=output_tokens or 0,
+        input_tokens_present=input_tokens is not None,
+        output_tokens_present=output_tokens is not None,
+        cached_input_tokens=cached_tokens or 0,
+        cached_input_tokens_present=cached_tokens is not None,
+        reasoning_tokens=int(thinking_tokens or 0),
+        reasoning_tokens_present=thinking_tokens is not None,
+        cache_write_tokens=cache_write_tokens or 0,
+        cache_write_tokens_present=cache_write_tokens is not None,
+        cache_write_1h_tokens=cache_write_1h_tokens,
+    )
+
+
 def translate_response(response: Any) -> AdapterCallResult:
     """Anthropic SDK Message → :class:`AdapterCallResult`."""
     report_input_transformations(response)
@@ -558,26 +625,10 @@ def translate_response(response: Any) -> AdapterCallResult:
                     "input": tool_input,
                 }
             )
-    usage = getattr(response, "usage", None)
-    output_details = getattr(usage, "output_tokens_details", None) if usage else None
-    cached_tokens = getattr(usage, "cache_read_input_tokens", None)
-    cache_write_tokens = getattr(usage, "cache_creation_input_tokens", None)
     result = AdapterCallResult(
         text="".join(text_blocks),
-        usage=UsageSummary(
-            input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
-            output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
-            input_tokens_present=getattr(usage, "input_tokens", None) is not None,
-            output_tokens_present=getattr(usage, "output_tokens", None) is not None,
-            cached_input_tokens=int(cached_tokens or 0),
-            cached_input_tokens_present=cached_tokens is not None,
-            reasoning_tokens=int(getattr(output_details, "thinking_tokens", 0) or 0),
-            reasoning_tokens_present=getattr(output_details, "thinking_tokens", None) is not None,
-            cache_write_tokens=int(cache_write_tokens or 0),
-            cache_write_tokens_present=cache_write_tokens is not None,
-            cache_write_1h_tokens=getattr(
-                getattr(usage, "cache_creation", None), "ephemeral_1h_input_tokens", None
-            ),
+        usage=_translate_usage(
+            getattr(response, "usage", None), model=getattr(response, "model", "")
         ),
         stop_reason=getattr(response, "stop_reason", "end_turn") or "end_turn",
         stop_details=(

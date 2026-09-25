@@ -171,9 +171,14 @@ class AnthropicPaygAdapter:
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         client = self._get_client()
         self._require_model_allowed(req.model, base_url=str(client.base_url))
-        async with client.messages.stream(
-            **build_stream_kwargs(req, base_url=str(client.base_url))
-        ) as stream:
+        kwargs = build_stream_kwargs(req, base_url=str(client.base_url))
+        edits = kwargs.get("extra_body", {}).get("context_management", {}).get("edits", [])
+        messages_api = (
+            client.beta.messages
+            if any(edit.get("type") == "compact_20260112" for edit in edits)
+            else client.messages
+        )
+        async with messages_api.stream(**kwargs) as stream:
             async for text_chunk in stream.text_stream:
                 yield StreamEvent(kind="text", payload={"text": text_chunk})
             final = await stream.get_final_message()

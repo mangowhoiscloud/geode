@@ -170,6 +170,9 @@ functional change.
   reject stale/reentrant replacement and read-only hook rewrites. Exhaustion
   now returns a truthful local notice without another model call or a universal
   session-reset claim.
+  Include native Anthropic compaction iterations in completed and streamed
+  usage without double-counting top-level totals, retaining cache TTL subsets
+  and explicit unknowns.
 
 - Keep daemon `/grill` execution independent of CLI initialization by moving
   skill prompt rendering and grilling invocation to their runtime skill owners.

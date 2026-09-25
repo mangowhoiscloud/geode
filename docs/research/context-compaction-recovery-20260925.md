@@ -111,6 +111,13 @@ unreported successful summary attempts.
 
 ## Validation limits and acceptance
 
+- Pre-execution review found native Anthropic compaction sampling absent from
+  the top-level usage consumed by GEODE. The SDK's stable stream accumulator
+  also omitted iteration details. The shared usage translator and beta stream
+  accumulator now retain same-model iteration totals and cache TTL subsets;
+  unknown categories remain unknown. The [usage contract](../architecture/usage-accounting.md)
+  documents the remaining legacy estimation boundary. These fixes were found
+  before any paid validation; they do not establish real provider acceptance.
 - Final verification must bind the integrated revision to its actual checks.
   This document contains no new test-pass totals or paid/live success claim.
 - Estimated fit, a committed replacement, a provider-accepted next request and
