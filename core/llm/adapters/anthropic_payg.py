@@ -17,6 +17,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from core.llm.adapters._anthropic_common import (
+    anthropic_effort_kwargs,
     build_async_anthropic_client,
     build_create_kwargs,
     build_stream_kwargs,
@@ -96,6 +97,7 @@ class AnthropicPaygAdapter:
         )
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
+        anthropic_effort_kwargs(req.model, req.effort)
         client = self._get_client()
         self._require_model_allowed(req.model, base_url=str(client.base_url))
         # The API-key path has its own concurrency lane.
@@ -116,7 +118,7 @@ class AnthropicPaygAdapter:
                 raise
 
     async def aweb_search(
-        self, query: str, *, max_results: int = 5, model: str = ""
+        self, query: str, *, max_results: int = 5, model: str = "", effort: str | None = None
     ) -> WebSearchResult:
         """Anthropic hosted web search via the PAYG endpoint.
 
@@ -131,11 +133,12 @@ class AnthropicPaygAdapter:
 
         # The actual (possibly cached) SDK endpoint owns the lifecycle policy;
         # do not project Anthropic API retirements onto a custom host.
+        search_model = resolve_web_search_model(model)
+        anthropic_effort_kwargs(search_model, effort)
         client = self._get_client()
         # Reject before web-search capability routing can replace the choice.
         if model:
             self._require_model_allowed(model, base_url=str(client.base_url))
-        search_model = resolve_web_search_model(model)
         self._require_model_allowed(search_model, base_url=str(client.base_url))
         return await anthropic_web_search(
             client,
@@ -143,6 +146,7 @@ class AnthropicPaygAdapter:
             max_results=max_results,
             model=search_model,
             adapter_name=self.name,
+            effort=effort,
         )
 
     async def acomplete_text(
@@ -152,12 +156,14 @@ class AnthropicPaygAdapter:
         system: str = "",
         model: str = "",
         max_tokens: int = 1024,
+        effort: str | None = None,
     ) -> TextCompletionResult:
         """Single-turn ``messages.create`` — used by compaction / extraction."""
         from core.config import ANTHROPIC_PRIMARY
         from core.llm.adapters._capability_impls import anthropic_complete_text
 
         completion_model = model or ANTHROPIC_PRIMARY
+        anthropic_effort_kwargs(completion_model, effort)
         client = self._get_client()
         self._require_model_allowed(completion_model, base_url=str(client.base_url))
         return await anthropic_complete_text(
@@ -166,9 +172,11 @@ class AnthropicPaygAdapter:
             system=system,
             model=completion_model,
             max_tokens=max_tokens,
+            effort=effort,
         )
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
+        anthropic_effort_kwargs(req.model, req.effort)
         client = self._get_client()
         self._require_model_allowed(req.model, base_url=str(client.base_url))
         kwargs = build_stream_kwargs(req, base_url=str(client.base_url))

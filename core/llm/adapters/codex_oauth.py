@@ -196,8 +196,8 @@ class CodexOAuthAdapter:
         forwards them to :attr:`AgenticResponse.codex_reasoning_items`.
         """
         self._require_model_allowed(req.model)
-        client = self._get_client()
         kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
+        client = self._get_client()
         # PR-LEGACY-PROVIDER-REMOVAL (2026-05-28) — pre-send input-shape
         # diagnostic backfilled from the now-deleted
         # ``CodexAgenticAdapter.agentic_call``. The Codex backend rejects
@@ -431,8 +431,8 @@ class CodexOAuthAdapter:
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         self._require_model_allowed(req.model)
-        client = self._get_client()
         kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
+        client = self._get_client()
         async with client.responses.stream(**kwargs) as stream:
             async for event in translate_responses_stream(stream):
                 yield event

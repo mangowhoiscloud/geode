@@ -38,6 +38,9 @@ def supported_efforts(model: str, provider: str) -> tuple[str, ...]:
     if provider == "anthropic":
         spec = get_anthropic_model_spec(model)
         return spec.effort_values if spec is not None else ()
+    if provider == "openrouter" and model.startswith("openrouter/openai/"):
+        model = model.removeprefix("openrouter/openai/")
+        provider = "openai"
     if provider in ("openai", "openai-codex"):
         return get_openai_model_spec(model).reasoning_effort_values or ()
     if provider == "glm":
@@ -66,8 +69,8 @@ def cycle_effort(current: str, levels: tuple[str, ...], direction: int) -> str:
     try:
         idx = levels.index(current)
     except ValueError:
-        # Persisted generic efforts can sit between native levels (OpenAI
-        # minimal, GLM medium/xhigh). Move in the requested direction without
+        # A persisted unsupported value can sit between native levels.
+        # Move only on explicit arrow input, in the requested direction without
         # turning a first left-arrow press into a higher effort.
         order = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
         if current in order and all(level in order for level in levels):
@@ -168,7 +171,7 @@ class PickerResult:
     PR-PICKER-SPACE-STAGE (2026-06-12) — ``staged`` carries per-role
     picks applied with Space WITHOUT closing the picker (operator:
     three role tabs, Enter-only meant one pick per open). Each entry is
-    ``(role_name, model_id)``; the final Enter pick is still
+    ``(role_name, model_id, effort)``; the final Enter pick is still
     ``(role, model_id)`` and is NOT duplicated into ``staged``. Esc /
     q discards staged picks (``cancelled=True`` + empty ``staged``).
     """
@@ -177,7 +180,7 @@ class PickerResult:
     effort: str | None  # None → no effort knob applies for this model
     cancelled: bool = False
     role: str = "primary"
-    staged: tuple[tuple[str, str], ...] = ()
+    staged: tuple[tuple[str, str, str | None], ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -400,6 +403,8 @@ def _render(
         sym = effort_symbol(current or default or "")
         name = effort_label(current or default or "")
         suffix = " (default)" if current == default else ""
+        if current is not None and current not in levels:
+            suffix = " (unsupported; choose a supported value)"
         out.write(
             _fit_to_width(
                 f"  \033[1;36m{sym}\033[0m {name} effort\033[2m{suffix}\033[0m"
@@ -483,15 +488,16 @@ def pick_model_and_effort(
     )
 
     effort_per_model: dict[str, str | None] = {}
+    effort_model = role_initial_models.get("primary", current_model)
     for mid, prov, *_rest in profiles:
         levels = supported_efforts(mid, prov)
         if not levels:
             effort_per_model[mid] = None
             continue
         # Opening and confirming the current model must not rewrite explicit
-        # effort, including generic values normalized by the adapter. Only an
-        # explicit arrow-key adjustment moves it to the native model levels.
-        if mid == current_model:
+        # effort. Unsupported saved values remain visible and are rejected at
+        # application; only explicit arrow input selects a supported value.
+        if mid == effort_model:
             effort_per_model[mid] = current_effort
         else:
             effort_per_model[mid] = default_effort(mid, prov)
@@ -499,7 +505,7 @@ def pick_model_and_effort(
     role_has_effort = dict(role_has_effort or {})
     # PR-PICKER-SPACE-STAGE (2026-06-12) — picks applied with Space per
     # role; returned on Enter, discarded on Esc/q.
-    staged_picks: dict[str, str] = {}
+    staged_picks: dict[str, tuple[str, str | None]] = {}
     initial_for_render = role_initial_models.get(role_names[role_cursor], current_model)
     show_effort = role_has_effort.get(role_names[role_cursor], True)
 
@@ -564,8 +570,8 @@ def pick_model_and_effort(
                 cancelled=False,
                 role=final_role,
                 staged=tuple(
-                    (role_name, mid)
-                    for role_name, mid in staged_picks.items()
+                    (role_name, mid, staged_effort)
+                    for role_name, (mid, staged_effort) in staged_picks.items()
                     if role_name != final_role
                 ),
             )
@@ -580,7 +586,12 @@ def pick_model_and_effort(
             ]
             if staged_available:
                 staged_role = role_names[role_cursor]
-                staged_picks[staged_role] = staged_mid
+                staged_picks[staged_role] = (
+                    staged_mid,
+                    effort_per_model.get(staged_mid)
+                    if role_has_effort.get(staged_role, True)
+                    else None,
+                )
                 role_initial_models[staged_role] = staged_mid
         elif key == _KEY_TAB and len(role_names) > 1:
             role_cursor = (role_cursor + 1) % len(role_names)

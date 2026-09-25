@@ -358,49 +358,15 @@ def get_openai_model_spec(model_id: str) -> OpenAIModelSpec:
     return _OPENAI_LEGACY_DEFAULT
 
 
-# Canonical effort ladder (weakest → strongest) for cross-model clamping.
-# "max" exists only on gpt-5.6+; "minimal" only on pre-5.5 families.
-_EFFORT_LADDER: tuple[str, ...] = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
-
-# One-shot dedup per (model_id, requested effort) so a persisted effort
-# from another model's picker session doesn't spam every call.
-_EFFORT_CLAMP_WARNED: set[tuple[str, str]] = set()
-
-
-def clamp_reasoning_effort(effort: str | None, *, spec: OpenAIModelSpec) -> str | None:
-    """Clamp a requested reasoning effort to what ``spec`` supports.
-
-    The effort setting persists across model switches (picker → config),
-    so a value valid on one model can reach another that rejects it —
-    e.g. ``max`` picked on gpt-5.6-sol then sent to gpt-5.5, or
-    ``minimal`` sent to a gpt-5.6 spec that doesn't list it. The wire
-    must only carry values in ``spec.reasoning_effort_values``; clamp to
-    the nearest supported level below the request (above when nothing
-    weaker exists) instead of gambling a backend 400.
-    """
-    values = spec.reasoning_effort_values
-    if effort is None or values is None or effort in values:
-        return effort
-    key = (spec.model_id, effort)
-    clamped: str
-    try:
-        idx = _EFFORT_LADDER.index(effort)
-    except ValueError:
-        clamped = values[len(values) // 2]  # unknown label — mid-ladder default
-    else:
-        weaker = [v for v in _EFFORT_LADDER[:idx] if v in values]
-        stronger = [v for v in _EFFORT_LADDER[idx + 1 :] if v in values]
-        clamped = weaker[-1] if weaker else (stronger[0] if stronger else values[0])
-    if key not in _EFFORT_CLAMP_WARNED:
-        _EFFORT_CLAMP_WARNED.add(key)
-        log.warning(
-            "reasoning effort %r unsupported on %s (allowed: %s) — clamped to %r",
-            effort,
-            spec.model_id,
-            "/".join(values),
-            clamped,
+def validate_reasoning_effort(effort: str | None, *, spec: OpenAIModelSpec) -> str | None:
+    """Preserve supported effort and reject incompatible explicit selections."""
+    if effort is None:
+        return None
+    if spec.reasoning_effort_values is None or effort not in spec.reasoning_effort_values:
+        raise LLMRequestValidationError(
+            f"Reasoning effort {effort!r} is unsupported for {spec.model_id!r}"
         )
-    return clamped
+    return effort
 
 
 def cap_tools(
@@ -1940,7 +1906,7 @@ def build_responses_kwargs(
         # Reasoning-model branch — encrypted reasoning passthrough +
         # reasoning effort. Temperature is dropped per spec.
         kwargs["include"] = ["reasoning.encrypted_content"]
-        effort = clamp_reasoning_effort(req.effort, spec=spec)
+        effort = validate_reasoning_effort(req.effort, spec=spec)
         kwargs["reasoning"] = {"effort": effort, "summary": "auto"}
         # Platform supports sampling with reasoning disabled. Codex parameter
         # acceptance is a separate contract; do not copy API knobs to it.

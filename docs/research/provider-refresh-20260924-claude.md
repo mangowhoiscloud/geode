@@ -80,8 +80,9 @@ Primary evidence:
 
 [Claude Code model configuration](https://code.claude.com/docs/en/model-config)
 separates model capability, explicit effort, organization caps, and account
-defaults. Unsupported effort clamps downward: xhigh becomes high on Opus
-4.6. GEODE adopts this bounded behavior instead of increasing cost to max.
+defaults. GEODE preserves an explicit supported effort unchanged and rejects
+an unsupported selection before the request. It does not silently replace
+xhigh with high on Opus 4.6 or substitute another native level.
 An immutable `AnthropicModelSpec` record now owns the adapter rules and feeds
 the existing capability-set consumers; no additional adapter hierarchy is
 needed.
