@@ -14,7 +14,7 @@ def _build_system_handlers(
 ) -> UniqueEntries[str, Any]:
     """Build system management tool handlers."""
     from core.cli import _set_readiness
-    from core.cli.commands import cmd_key, cmd_login, show_help
+    from core.cli.commands import cmd_key, show_help
     from core.cli.onboarding import render_readiness
     from core.wiring.startup import check_readiness
 
@@ -186,13 +186,18 @@ def _build_system_handlers(
 
     def handle_manage_login(**kwargs: Any) -> dict[str, Any]:
         """Natural-language entry to /login (Plans + Profiles + OAuth + Routing)."""
+        from core.cli.commands.login import (
+            INTERACTIVE_LOGIN_SUBCOMMANDS,
+            build_login_snapshot,
+            run_login,
+        )
+        from core.tools.base import tool_error
 
         sub = (kwargs.get("subcommand") or "status").strip().lower()
         args = (kwargs.get("args") or "").strip()
         if sub == "source":
             from core.agent.loop._model_switching import stage_session_model_config
             from core.cli.commands.login import session_source_changes
-            from core.tools.base import tool_error
 
             loop = getattr(kwargs.get("_tool_context"), "agent_loop", None)
             if loop is None:
@@ -214,88 +219,24 @@ def _build_system_handlers(
                 }
             except (RuntimeError, ValueError) as exc:
                 return tool_error(str(exc), error_type="validation")
+        if sub in INTERACTIVE_LOGIN_SUBCOMMANDS:
+            # Interactive attempts outlive this tool call's deadline and cannot be
+            # cancelled from here; the user's terminal owns them.
+            return tool_error(
+                f"/login {sub} needs the user's terminal or browser; "
+                f"ask the user to run `/login {sub}` there",
+                error_type="validation",
+            )
         login_input = "" if sub in ("", "status", "list", "ls") else f"{sub} {args}".strip()
-        cmd_login(login_input)
-
         try:
-            from core.llm.strategies.plan_registry import get_plan_registry
-            from core.wiring.container import ensure_profile_store
-
-            store = ensure_profile_store()
-            registry = get_plan_registry()
-            plans_payload = []
-            for plan in registry.list_all():
-                usage = registry.usage_for(plan.id)
-                plans_payload.append(
-                    {
-                        "id": plan.id,
-                        "provider": plan.provider,
-                        "kind": plan.kind.value,
-                        "display_name": plan.display_name,
-                        "base_url": plan.base_url,
-                        "subscription_tier": plan.subscription_tier,
-                        "quota_max": (plan.quota.max_calls if plan.quota else None),
-                        "quota_used": int(usage.weighted_calls),
-                    }
-                )
-            # v0.51.0 — annotate each profile with its current eligibility
-            # verdict per the profile's own provider. This lets the LLM see
-            # *why* a credential is unusable (cooldown / expired / disabled
-            # / missing key) without needing a second tool call.
-            #
-            # Skip cross-provider iterations: ``evaluate_eligibility(prov)``
-            # returns a PROVIDER_MISMATCH verdict for every profile whose
-            # provider != prov, but those are noise here — we want each
-            # profile's verdict against its OWN provider. Without this
-            # filter the dict-key ``(name, profile.provider)`` collides
-            # across iterations and the last-iterated provider's mismatch
-            # verdict overwrites the real one, so a healthy PAYG profile
-            # surfaces as ``eligible=False / provider_mismatch`` to the
-            # LLM and the dashboard. Mirrors the same filter applied in
-            # ``credential_breadcrumb.format``.
-            from core.auth.profiles import ProfileRejectReason
-
-            verdict_index: dict[tuple[str, str], tuple[bool, str, str]] = {}
-            for prov in {p.provider for p in store.list_all()}:
-                for v in store.evaluate_eligibility(prov):
-                    if v.reason is ProfileRejectReason.PROVIDER_MISMATCH:
-                        continue
-                    verdict_index[(v.profile_name, v.provider)] = (
-                        v.eligible,
-                        v.reason_code,
-                        v.detail,
-                    )
-
-            profiles_payload = []
-            for p in store.list_all():
-                eligible, reason, detail = verdict_index.get(
-                    (p.name, p.provider), (False, "unknown", "")
-                )
-                profiles_payload.append(
-                    {
-                        "name": p.name,
-                        "provider": p.provider,
-                        "type": p.credential_type.value,
-                        "plan_id": p.plan_id or None,
-                        "managed_by": p.managed_by or None,
-                        "eligible": eligible,
-                        "reason": reason,
-                        "reason_detail": detail,
-                    }
-                )
-            routing_payload = registry.all_routing()
-        except Exception:
-            plans_payload = []
-            profiles_payload = []
-            routing_payload = {}
-
+            run_login(login_input)
+        except (ValueError, OSError) as exc:
+            return tool_error(str(exc), error_type="validation")
         return {
             "status": "ok",
             "action": "login",
             "subcommand": sub or "status",
-            "plans": plans_payload,
-            "profiles": profiles_payload,
-            "routing": routing_payload,
+            **build_login_snapshot(),
         }
 
     def handle_doctor_slack(**_kwargs: Any) -> dict[str, Any]:

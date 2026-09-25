@@ -76,12 +76,13 @@ def _block_unmarked_http(
 
 @pytest.fixture(autouse=True)
 def _isolate_judgment_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    """New decision routes cannot inherit the operator's dotenv credentials."""
+    """Offline tests cannot inherit the operator's dotenv credentials."""
     from core.config import settings
     from pydantic import SecretStr
 
     monkeypatch.setattr(settings, "typesafe_api_key", SecretStr(""))
-    monkeypatch.setattr(settings, "openrouter_api_key", "")
+    for field in ("anthropic_api_key", "openai_api_key", "openrouter_api_key", "zai_api_key"):
+        monkeypatch.setattr(settings, field, "")
 
 
 @pytest.fixture

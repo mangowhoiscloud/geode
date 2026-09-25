@@ -280,7 +280,7 @@
   },
   {
     "name": "manage_login",
-    "description": "Unified credentials/plans command — Plans + API keys + OAuth + routing in one tool. Use whenever the user says login/logout, sets up a supported subscription OAuth route (ChatGPT Plus/Pro/Pro Lite/Team/Business/Enterprise/Edu), configures PAYG providers (Anthropic, OpenAI, ZhipuAI GLM), changes credentials, asks about quota, switches active plan, or pastes an API key with intent. source changes only this session's matching model roles after the complete tool batch, preserves effort and persisted defaults, and requires an explicit user request. Other subcommands use the /login credential and plan owners.",
+    "description": "Unified credentials/plans command — Plans + API keys + OAuth + routing in one tool. Use whenever the user says login/logout, sets up a supported subscription OAuth route (ChatGPT Plus/Pro/Pro Lite/Team/Business/Enterprise/Edu), configures PAYG providers (Anthropic, OpenAI, ZhipuAI GLM), changes credentials, asks about quota, switches active plan, or pastes an API key with intent. source changes only this session's matching model roles after the complete tool batch, preserves effort and persisted defaults, and requires an explicit user request. Other subcommands use the /login credential and plan owners and fail when the change is not saved.",
     "category": "model",
     "cost_tier": "cheap",
     "input_schema": {
@@ -288,7 +288,7 @@
       "properties": {
         "subcommand": {
           "type": "string",
-          "description": "One of: status (default — show plans/profiles/routing/quota), openai (ChatGPT subscription OAuth), anthropic (Anthropic API-key setup explanation), add (interactive wizard), set-key, source (session source selection), use, route, remove, quota, help.",
+          "description": "One of: status (default — show plans/profiles/routing and declared quotas), set-key, source (session source selection), use, route, remove, quota, help. openai (ChatGPT subscription OAuth), anthropic (API-key prompt) and add (interactive wizard) need the user's terminal or browser: they return the /login command for the user to run.",
           "enum": [
             "status",
             "openai",

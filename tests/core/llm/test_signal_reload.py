@@ -1,9 +1,11 @@
-"""Thin auth commands signal daemon reload after local execution.
+"""Thin auth commands run terminal input locally and daemon state remotely.
 
-The shared thin routing owner relays ``/login refresh`` after ``/login`` or
-``/key``. Model selection instead keeps the IPC client attached to its session
-admission path. Daemon reload reconciles file-owned auth entries while
-preserving profiles supplied by other owners, such as Codex CLI OAuth.
+Terminal-bound ``/login`` subcommands and ``/key`` run in the thin client and
+then relay ``/login refresh``; every other ``/login`` request runs in the
+daemon, which owns the live credential state. Model selection keeps the IPC
+client attached to its session admission path. Daemon reload reconciles
+file-owned auth entries while preserving profiles supplied by other owners,
+such as Codex CLI OAuth.
 """
 
 from __future__ import annotations
@@ -26,15 +28,22 @@ from core.wiring.container import ensure_profile_store
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(("cmd", "args"), [("/login", "openai"), ("/key", "status")])
+@pytest.mark.parametrize(
+    ("cmd", "args", "local_target"),
+    [
+        ("/login", "openai", "core.cli.commands.login.cmd_login"),
+        ("/key", "status", "core.cli.dispatcher._handle_command"),
+    ],
+)
 def test_cli_thin_dispatch_signals_daemon_refresh(
-    cmd: str, args: str, monkeypatch: pytest.MonkeyPatch
+    cmd: str, args: str, local_target: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Execute the routing owner; local handling precedes the refresh signal."""
     from core.ui.console import console
 
     calls = Mock()
-    monkeypatch.setattr("core.cli.dispatcher._handle_command", calls.local)
+    calls.local.return_value = True
+    monkeypatch.setattr(local_target, calls.local)
     client = Mock(spec=IPCClient)
     calls.attach_mock(client.send_command, "relay")
     client.send_command.return_value = {"status": "error", "message": "refresh rejected"}
@@ -42,12 +51,82 @@ def test_cli_thin_dispatch_signals_daemon_refresh(
     with console.capture() as output:
         run_thin_command(client, cmd, args)
 
-    assert calls.mock_calls == [
-        call.local(cmd, args, False, command_registry=None),
-        call.relay("/login", "refresh"),
-    ]
+    local = (
+        call.local(args) if cmd == "/login" else call.local(cmd, args, False, command_registry=None)
+    )
+    assert calls.mock_calls == [local, call.relay("/login", "refresh")]
     assert "daemon refresh failed" in output.get()
     assert "refresh rejected" in output.get()
+
+
+def test_cli_thin_failed_local_login_does_not_signal_refresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("core.cli.commands.login.cmd_login", Mock(return_value=False))
+    client = Mock(spec=IPCClient)
+
+    run_thin_command(client, "/login", "set-key ghost sk-test")
+
+    client.send_command.assert_not_called()
+
+
+@pytest.mark.parametrize("args", ["", "remove glm-payg", "use-profile openai:work", "refresh"])
+def test_cli_thin_daemon_owned_login_relays_without_local_state(
+    args: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Views and nonsecret changes read or change the daemon's live state."""
+    from core.ui.console import console
+
+    local = Mock(side_effect=AssertionError("thin state must not answer this request"))
+    monkeypatch.setattr("core.cli.commands.login.cmd_login", local)
+    monkeypatch.setattr("core.cli.dispatcher._handle_command", local)
+    client = Mock(spec=IPCClient)
+    client.send_command.return_value = {
+        "status": "error",
+        "message": "Plan not found: glm-payg",
+        "output": "",
+    }
+
+    with console.capture() as output:
+        run_thin_command(client, "/login", args)
+
+    client.send_command.assert_called_once_with("/login", args)
+    assert "Plan not found: glm-payg" in output.get()
+
+
+def test_cli_thin_readopts_the_file_after_a_daemon_change(monkeypatch: pytest.MonkeyPatch) -> None:
+    reload = Mock(return_value=True)
+    monkeypatch.setattr("core.auth.auth_toml.load_auth_toml", reload)
+    client = Mock(spec=IPCClient)
+    client.send_command.return_value = {"status": "ok", "output": ""}
+
+    run_thin_command(client, "/login", "route gpt-6-sol openai-payg")
+
+    reload.assert_called_once_with()
+
+
+def test_cli_thin_keeps_unrecognized_login_input_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A pasted key after /login must not cross IPC or be echoed by the daemon."""
+    local = Mock(return_value=False)
+    monkeypatch.setattr("core.cli.commands.login.cmd_login", local)
+    client = Mock(spec=IPCClient)
+
+    run_thin_command(client, "/login", "sk-pasted-secret-value")
+
+    local.assert_called_once_with("sk-pasted-secret-value")
+    client.send_command.assert_not_called()
+
+
+def test_cli_thin_reports_lost_daemon_connection(monkeypatch: pytest.MonkeyPatch) -> None:
+    from core.ui.console import console
+
+    client = Mock(spec=IPCClient)
+    client.send_command.return_value = {"type": "error", "message": "Connection lost"}
+
+    with console.capture() as output:
+        run_thin_command(client, "/login", "")
+
+    assert "Connection lost" in output.get()
 
 
 def test_cli_thin_non_auth_command_does_not_refresh(
@@ -147,15 +226,14 @@ def test_cmd_login_refresh_reloads_auth_toml(
     )
 
 
-def test_cmd_login_refresh_is_additive_only(
+def test_cmd_login_refresh_keeps_profiles_the_file_does_not_own(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Refresh MUST NOT evict in-memory profiles missing from auth.toml.
+    """Refresh replaces file-owned entries and keeps profiles owned elsewhere.
 
-    This protects Codex CLI OAuth + .env-seeded profiles, which are loaded
-    once at boot and never written to auth.toml. A naive 'rebuild from disk'
-    refresh would silently delete them — exactly the v0.51 stale-state bug
-    in reverse.
+    Codex CLI OAuth and environment profiles are loaded at boot and never
+    written to auth.toml. A 'rebuild from disk' refresh would silently delete
+    them — the v0.51 stale-state bug in reverse.
     """
     auth_path = tmp_path / "auth.toml"
     monkeypatch.setenv("GEODE_AUTH_TOML", str(auth_path))
@@ -183,23 +261,28 @@ def test_cmd_login_refresh_is_additive_only(
 
     names = {p.name for p in ensure_profile_store().list_all()}
     assert "openai:codex-cli" in names, (
-        "Additive-only invariant: managed-by-CLI profile (not in auth.toml) "
-        "must survive a /login refresh — see commands.py refresh docstring"
+        "A profile auth.toml does not own must survive a /login refresh"
     )
     assert "openai:plan-on-disk" in names, (
         "Refresh must still re-merge profiles that ARE in auth.toml"
     )
 
 
-def test_cmd_login_refresh_swallows_missing_auth_toml(
+def test_cmd_login_refresh_without_auth_toml_still_resets_imported_caches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Refresh on a fresh install (no auth.toml yet) must not raise."""
+    """With no file there is nothing to adopt; imported credential caches still reset."""
     auth_path = tmp_path / "does-not-exist.toml"
     monkeypatch.setenv("GEODE_AUTH_TOML", str(auth_path))
+    codex, google = Mock(), Mock()
+    monkeypatch.setattr("core.auth.codex_cli_oauth.invalidate_cache", codex)
+    monkeypatch.setattr("core.mcp.google_workspace_client.reset_google_workspace_client", google)
+
+    assert cmd_login("refresh") is True
+
+    codex.assert_called_once_with()
+    google.assert_called_once_with()
     assert not auth_path.exists()
-    # Must not raise.
-    cmd_login("refresh")
 
 
 def test_cmd_login_refresh_emits_observability_log(
@@ -234,8 +317,6 @@ def test_cmd_login_refresh_emits_observability_log(
     )
     # The summary line must include count fields so SREs can see at a glance
     # whether a refresh was a no-op vs. actually merged something.
-    summary = next(m for m in messages if "auth.toml reload" in m and "loaded=" in m)
-    assert "total_plans=" in summary
-    assert "total_profiles=" in summary
-    assert "new_plans=" in summary
-    assert "new_profiles=" in summary
+    summary = next(m for m in messages if "auth.toml reload" in m and "plans=" in m)
+    assert "profiles=" in summary
+    assert "changes=" in summary

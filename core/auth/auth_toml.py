@@ -38,10 +38,13 @@ created with mode 0600 so other users on the host can't read it.
 
 from __future__ import annotations
 
+import fcntl
 import logging
 import math
 import os
 import tomllib
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -261,6 +264,11 @@ def save_auth_toml(
         "auth_order": orders,
     }
     text = _to_toml(payload)
+    try:
+        _auth_candidate(tomllib.loads(text))
+    except ValueError as exc:  # TOMLDecodeError included; values stay out of the message
+        reason = type(exc).__name__
+        raise ValueError(f"refusing to write an unreadable auth file ({reason})") from exc
     from core.memory.atomic_write import atomic_write_text
 
     atomic_write_text(path, text)
@@ -350,7 +358,6 @@ def load_auth_toml(
     """
     from core.wiring.container import ensure_profile_store
 
-    use_singletons = store is None and registry is None
     registry = registry or get_plan_registry()
     store = ensure_profile_store() if store is None else store
     path = path or auth_toml_path()
@@ -391,70 +398,43 @@ def load_auth_toml(
         return False
     registry.reconcile_auth_file(source, plans, routing)
     store.reconcile_auth_file(source, owned, pins, orders)
-
-    # v0.95.x — re-read the stored JWT for the GEODE-owned OpenAI OAuth and
-    # update Plan.subscription_tier if the user's plan tier changed since
-    # auth.toml was last written (e.g. Plus → Pro upgrade between logins).
-    # Failures are non-fatal: the load itself has already succeeded.
-    try:
-        from core.auth.oauth_login import reconcile_plan_tier_from_stored_jwt
-
-        if use_singletons:
-            reconcile_plan_tier_from_stored_jwt()
-    except Exception:
-        log.debug("Plan tier reconciliation skipped", exc_info=True)
     return True
 
 
-def migrate_env_to_toml(
+@contextmanager
+def auth_file_transaction(
     *,
     registry: PlanRegistry | None = None,
     store: ProfileStore | None = None,
     path: Path | None = None,
-) -> int:
-    """Snapshot any env-loaded PAYG keys into auth.toml on first run.
+) -> Iterator[tuple[PlanRegistry, ProfileStore]]:
+    """Change the file-owned auth state, then publish it after the write succeeds.
 
-    Returns the number of plans persisted. Idempotent — re-running after
-    the file exists is a no-op (data is loaded but not duplicated).
+    The thin CLI, daemon and workers each hold an in-memory copy and write the
+    whole file. The block edits a candidate read from the current file under one
+    lock, so a stale copy cannot revive removed entries or restore rotated
+    tokens. A rejected change or failed write raises and leaves both the file
+    and the live stores unchanged. Environment and imported CLI credentials are
+    not file-owned and are absent from the candidate. Not reentrant: a nested
+    transaction on the same file waits on its own lock.
     """
-    from core.llm.strategies.plans import default_plan_for_payg
     from core.wiring.container import ensure_profile_store
 
     registry = registry or get_plan_registry()
     store = ensure_profile_store() if store is None else store
     path = path or auth_toml_path()
-
-    if path.exists():
-        # Already migrated. Just hydrate.
-        load_auth_toml(registry=registry, store=store, path=path)
-        return 0
-
-    from core.config import settings
-    from core.config.env_io import is_placeholder
-
-    seeded = 0
-    for provider, key in (
-        ("anthropic", settings.anthropic_api_key),
-        ("openai", settings.openai_api_key),
-        ("openrouter", settings.openrouter_api_key),
-        ("glm", settings.zai_api_key),
-    ):
-        if not key or is_placeholder(key):
-            continue  # empty or a placeholder (sk-ant-...) is not a real key
-        plan = default_plan_for_payg(provider, key)
-        registry.add(plan)
-        profile_name = f"{plan.id}:env"
-        if profile_name not in store:
-            store.add(
-                AuthProfile(
-                    name=profile_name,
-                    provider=provider,
-                    credential_type=CredentialType.API_KEY,
-                    key=key,
-                    plan_id=plan.id,
-                )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    candidate = PlanRegistry(), ProfileStore()
+    with open(path.with_name(f".{path.name}.lock"), "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if path.exists() and not load_auth_toml(
+            registry=candidate[0], store=candidate[1], path=path
+        ):
+            raise ValueError(f"{path} is invalid; fix or remove it before changing credentials")
+        yield candidate
+        save_auth_toml(registry=candidate[0], store=candidate[1], path=path)
+        if not load_auth_toml(registry=registry, store=store, path=path):
+            raise ValueError(
+                f"{path} was saved, but this process kept its previous credentials; "
+                "run /login refresh after resolving the conflict"
             )
-        seeded += 1
-    if seeded:
-        save_auth_toml(registry=registry, store=store, path=path)
-    return seeded

@@ -10,7 +10,6 @@ from core.llm.strategies.plans import (
     PLAN_KIND_PRIORITY,
     Plan,
     PlanKind,
-    PlanUsage,
     Quota,
     default_plan_for_payg,
 )
@@ -21,7 +20,6 @@ __all__ = [
     "Plan",
     "PlanKind",
     "PlanRegistry",
-    "PlanUsage",
     "Quota",
     "default_plan_for_payg",
     "get_plan_registry",

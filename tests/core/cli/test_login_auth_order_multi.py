@@ -25,6 +25,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
+from core.auth.auth_toml import save_auth_toml
 from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
 from core.auth.rotation import ProfileRotator
 
@@ -170,10 +171,8 @@ def test_cmd_login_order_set_records_pin(capsys: pytest.CaptureFixture[str]) -> 
     from core.cli.commands.login import _login_order
 
     store = _three_profiles()
-    with (
-        patch("core.wiring.container.ensure_profile_store", return_value=store),
-        patch("core.cli.commands._persist_auth_state"),
-    ):
+    save_auth_toml(store=store)
+    with patch("core.wiring.container.ensure_profile_store", return_value=store):
         _login_order("set openai-codex openai-codex:p2 openai-codex:p3")
 
     out = capsys.readouterr().out
@@ -190,10 +189,8 @@ def test_cmd_login_order_clear_drops_pin(capsys: pytest.CaptureFixture[str]) -> 
 
     store = _three_profiles()
     store.set_auth_order("openai-codex", ["openai-codex:p1"])
-    with (
-        patch("core.wiring.container.ensure_profile_store", return_value=store),
-        patch("core.cli.commands._persist_auth_state"),
-    ):
+    save_auth_toml(store=store)
+    with patch("core.wiring.container.ensure_profile_store", return_value=store):
         _login_order("clear openai-codex")
 
     out = capsys.readouterr().out
@@ -202,25 +199,23 @@ def test_cmd_login_order_clear_drops_pin(capsys: pytest.CaptureFixture[str]) -> 
 
 
 def test_cmd_login_order_set_missing_args_warns(capsys: pytest.CaptureFixture[str]) -> None:
-    from core.cli.commands.login import _login_order
+    from core.cli.commands.login import cmd_login
 
     store = _three_profiles()
     with patch("core.wiring.container.ensure_profile_store", return_value=store):
-        _login_order("set")
+        assert cmd_login("order set") is False
 
     out = capsys.readouterr().out
     assert "Usage:" in out
 
 
 def test_cmd_login_order_set_unknown_name_warns(capsys: pytest.CaptureFixture[str]) -> None:
-    from core.cli.commands.login import _login_order
+    from core.cli.commands.login import cmd_login
 
     store = _three_profiles()
-    with (
-        patch("core.wiring.container.ensure_profile_store", return_value=store),
-        patch("core.cli.commands._persist_auth_state"),
-    ):
-        _login_order("set openai-codex does-not-exist")
+    save_auth_toml(store=store)
+    with patch("core.wiring.container.ensure_profile_store", return_value=store):
+        assert cmd_login("order set openai-codex does-not-exist") is False
 
     out = capsys.readouterr().out
-    assert "not found" in out
+    assert "Unknown profile: does-not-exist" in out

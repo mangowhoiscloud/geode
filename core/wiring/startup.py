@@ -123,11 +123,9 @@ def _has_available_profile() -> bool:
     eligibility filter (``is_available``) so readiness and the actual call
     path agree on what counts as usable.
 
-    Applies the same placeholder rule as ``_has_any_llm_key``: ``build_auth`` /
-    ``migrate_env_to_toml`` seed an API-key profile from a non-empty env value
-    without checking for placeholders, so a stale ``ANTHROPIC_API_KEY=sk-ant-...``
-    would otherwise yield an ``is_available`` profile that passes here while the
-    raw-key path correctly rejects it. OAuth access-token keys are real, so they
+    Applies the same placeholder rule as ``_has_any_llm_key`` so a stale
+    ``ANTHROPIC_API_KEY=sk-ant-...`` cannot yield an ``is_available`` profile
+    that passes here while the raw-key path rejects it. OAuth access-token keys are real, so they
     pass. Best-effort: ``ensure_profile_store`` self-builds, but any failure
     (pre-hydration, IO) is treated as no signal.
     """

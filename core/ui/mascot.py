@@ -68,17 +68,8 @@ def _resolve_active_plan_summary(model: str) -> str:
         label = f"Plan: {plan.display_name}"
         if plan.quota is None:
             return label
-        from core.llm.strategies.plan_registry import get_plan_registry
-
-        usage = get_plan_registry().usage_for(plan.id)
-        remaining = usage.remaining_in_window(plan)
-        used = int(usage.weighted_calls)
-        if usage.next_reset_at > 0:
-            mins = max(0, usage.seconds_until_reset() // 60)
-            reset_label = f"resets {mins}m"
-        else:
-            reset_label = f"window {plan.quota.window_s // 3600}h"
-        return f"{label} (used {used}/{plan.quota.max_calls} · {remaining} left · {reset_label})"
+        # Declared limit only: GEODE does not count calls against plan quotas.
+        return f"{label} (quota {plan.quota.max_calls} calls / {plan.quota.window_s // 3600}h)"
     except Exception:
         return ""
 

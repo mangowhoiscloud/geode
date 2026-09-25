@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 from core.auth.auth_toml import (
+    auth_file_transaction,
     auth_toml_path,
     load_auth_toml,
-    migrate_env_to_toml,
     save_auth_toml,
 )
 from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
@@ -108,74 +108,25 @@ class TestRoundtrsubject:
         path.unlink()
 
 
-class TestMigrateEnvToToml:
-    def test_migration_seeds_payg_plans_for_env_keys(self) -> None:
+class TestEnvironmentKeys:
+    def test_first_use_keeps_environment_keys_in_their_own_store(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from core.config import settings
+        from core.wiring.container import ensure_profile_store
+
         _reset_state()
-        from unittest.mock import patch
+        monkeypatch.setattr(settings, "openai_api_key", "sk-proj-environment-only")
+        monkeypatch.setattr(settings, "anthropic_api_key", "sk-ant-...")  # placeholder
 
-        path = _fresh_path()
-        with patch("core.config.settings") as mock_settings:
-            mock_settings.anthropic_api_key = "sk-ant-test"
-            mock_settings.openai_api_key = "sk-proj-test"
-            mock_settings.openrouter_api_key = "sk-or-v1-test"
-            mock_settings.zai_api_key = ""
+        store = ensure_profile_store()
 
-            seeded = migrate_env_to_toml(path=path)
-            assert seeded == 3
-            assert path.exists()
-
-            registry = get_plan_registry()
-            ids = {p.id for p in registry.list_all()}
-            assert "anthropic-payg" in ids
-            assert "openai-payg" in ids
-            assert "openrouter-payg" in ids
-            assert "glm-payg" not in ids
-        path.unlink()
-
-    def test_migration_skips_placeholder_keys(self) -> None:
-        """PR-PRE10-HYGIENE — a placeholder env value (`sk-ant-...`) must not
-        seed a PAYG plan/profile; it is not a real credential (same rule the
-        readiness path applies via `core.config.env_io.is_placeholder`)."""
-        _reset_state()
-        from unittest.mock import patch
-
-        path = _fresh_path()
-        with patch("core.config.settings") as mock_settings:
-            mock_settings.anthropic_api_key = "sk-ant-..."  # placeholder
-            mock_settings.openai_api_key = "sk-proj-real"
-            mock_settings.openrouter_api_key = ""
-            mock_settings.zai_api_key = ""
-
-            seeded = migrate_env_to_toml(path=path)
-            assert seeded == 1  # only the real openai key
-
-            ids = {p.id for p in get_plan_registry().list_all()}
-            assert "openai-payg" in ids
-            assert "anthropic-payg" not in ids  # placeholder skipped
-            assert "glm-payg" not in ids  # empty skipped
-        path.unlink()
-
-    def test_migration_is_idempotent(self) -> None:
-        _reset_state()
-        from unittest.mock import patch
-
-        path = _fresh_path()
-        with patch("core.config.settings") as mock_settings:
-            mock_settings.anthropic_api_key = "sk-ant-test"
-            mock_settings.openai_api_key = ""
-            mock_settings.openrouter_api_key = ""
-            mock_settings.zai_api_key = ""
-
-            migrate_env_to_toml(path=path)
-
-            # Second call sees the file exists → just loads, doesn't double-seed
-            _reset_state()
-            seeded = migrate_env_to_toml(path=path)
-            assert seeded == 0
-
-            registry = get_plan_registry()
-            assert sum(1 for p in registry.list_all() if p.id == "anthropic-payg") == 1
-        path.unlink()
+        assert not auth_toml_path().exists()
+        profile = store.get("openai:default")
+        assert profile is not None and profile.metadata["origin"] == "environment"
+        assert not store.list_by_provider("anthropic")
+        save_auth_toml()
+        assert "sk-proj-environment-only" not in auth_toml_path().read_text()
 
 
 class TestEnvOverride:
@@ -453,11 +404,8 @@ def test_file_bindings_validate_effective_external_plan_before_publication(
     registry, store = PlanRegistry(), ProfileStore()
     external = replace(GLM_CODING_TIERS["lite"], id="one", provider=external_provider)
     registry.add(external)
-    usage = registry.usage_for("one")
-    usage.calls_in_window = 3
     loaded = load_auth_toml(registry=registry, store=store, path=path)
     assert registry.get("one") is external
-    assert registry.usage_for("one") is usage and usage.calls_in_window == 3
     if external_provider == "openai":
         assert not loaded
         assert not store.list_all() and not registry.all_routing()
@@ -476,3 +424,122 @@ def test_non_string_profile_endpoint_rejects_whole_candidate(tmp_path: Path) -> 
     path.write_text(path.read_text() + "base_url_override=123\n")
     assert not load_auth_toml(registry=registry, store=store, path=path)
     assert store.get("first") is first and store.get("second") is second
+
+
+def test_transaction_adopts_other_writers_before_changing_the_file(tmp_path: Path) -> None:
+    """A stale in-memory copy cannot revive a removed profile or restore a rotated key."""
+    path = tmp_path / "auth.toml"
+    registry, store = _auth_state()
+    save_auth_toml(registry=registry, store=store, path=path)
+    stale_registry, stale = PlanRegistry(), ProfileStore()
+    assert load_auth_toml(registry=stale_registry, store=stale, path=path)
+    other_registry, other = PlanRegistry(), ProfileStore()
+    assert load_auth_toml(registry=other_registry, store=other, path=path)
+    other.remove("second")
+    other.add(_user_profile("first", key="rotated-key"))
+    save_auth_toml(registry=other_registry, store=other, path=path)
+
+    with auth_file_transaction(registry=stale_registry, store=stale, path=path) as (_, profiles):
+        profiles.set_active("first")
+
+    restored_registry, restored = PlanRegistry(), ProfileStore()
+    assert load_auth_toml(registry=restored_registry, store=restored, path=path)
+    assert restored.get("second") is None
+    assert restored.get("first").key == "rotated-key"
+    assert restored.get_pinned_active("glm-coding").name == "first"
+    assert stale.get("second") is None  # The writer publishes what it saved.
+    assert stale.get("first").key == "rotated-key"
+
+
+def test_transaction_write_failure_leaves_file_and_live_state_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.memory import atomic_write
+
+    path = tmp_path / "auth.toml"
+    registry, store = _auth_state()
+    save_auth_toml(registry=registry, store=store, path=path)
+    before = path.read_bytes()
+
+    def fail_replace(*args: object) -> None:
+        raise OSError("synthetic filesystem failure")
+
+    monkeypatch.setattr(atomic_write.os, "replace", fail_replace)
+    with (
+        pytest.raises(OSError, match="synthetic filesystem failure"),
+        auth_file_transaction(registry=registry, store=store, path=path) as (_, profiles),
+    ):
+        profiles.add(_user_profile("third"))
+    assert path.read_bytes() == before
+    assert store.get("third") is None
+
+
+def test_transaction_rejects_invalid_file_without_running_the_change(tmp_path: Path) -> None:
+    path = tmp_path / "auth.toml"
+    path.write_text('[[profiles]]\nname="bad"\n')
+    before = path.read_bytes()
+    registry, store = _auth_state()
+    with (
+        pytest.raises(ValueError, match="is invalid"),
+        auth_file_transaction(registry=registry, store=store, path=path),
+    ):
+        pytest.fail("a change must not run against an unreadable file")
+    assert path.read_bytes() == before
+
+
+def test_load_does_not_rewrite_the_file_when_the_token_tier_differs(tmp_path: Path) -> None:
+    """Reading hydrates the stores only; token writers record the tier."""
+    import base64
+    import json
+
+    from core.auth.oauth_login import _GEODE_OPENAI_PLAN_ID
+    from core.llm.strategies.plans import Plan, PlanKind
+
+    claims = {"https://api.openai.com/auth": {"chatgpt_plan_type": "pro"}}
+    payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b"=").decode()
+    registry, store = PlanRegistry(), ProfileStore()
+    registry.add(
+        Plan(
+            id=_GEODE_OPENAI_PLAN_ID,
+            provider="openai-codex",
+            kind=PlanKind.OAUTH_BORROWED,
+            display_name="GEODE OAuth",
+            base_url="https://chatgpt.com/backend-api/codex",
+            subscription_tier="plus",
+        )
+    )
+    store.add(
+        AuthProfile(
+            name=f"{_GEODE_OPENAI_PLAN_ID}:user",
+            provider="openai-codex",
+            credential_type=CredentialType.OAUTH,
+            key=f"e30.{payload}.sig",
+            plan_id=_GEODE_OPENAI_PLAN_ID,
+        )
+    )
+    path = auth_toml_path()
+    save_auth_toml(registry=registry, store=store, path=path)
+    before = path.read_bytes()
+    _reset_state()
+
+    assert load_auth_toml()
+
+    assert path.read_bytes() == before
+    assert get_plan_registry().get(_GEODE_OPENAI_PLAN_ID).subscription_tier == "plus"
+
+
+def test_unreadable_credential_value_is_rejected_before_writing(tmp_path: Path) -> None:
+    """A stray terminal control sequence cannot produce a file that later loads reject."""
+    path = tmp_path / "auth.toml"
+    registry, store = _auth_state()
+    save_auth_toml(registry=registry, store=store, path=path)
+    before = path.read_bytes()
+
+    with (
+        pytest.raises(ValueError, match="unreadable auth file"),
+        auth_file_transaction(registry=registry, store=store, path=path) as (_, profiles),
+    ):
+        profiles.add(_user_profile("pasted", key="synthetic\x1b[201~"))
+
+    assert path.read_bytes() == before
+    assert store.get("pasted") is None
