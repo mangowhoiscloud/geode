@@ -302,48 +302,47 @@ class TestUpdateModelIntegration:
             asyncio.run(loop.update_model_async("glm-5", "zhipuai"))
         # No crash
 
-    def test_sync_model_from_settings_no_longer_detects_drift(self):
-        """PR-DRIFT-CUT (2026-05-24) — drift sync is a permanent no-op.
-
-        Pre-PR this asserted that updating ``settings.model`` made
-        ``_sync_model_from_settings_async`` swap ``loop.model``. That
-        auto-revert behaviour silently overrode operator ``/model``
-        selections (the CLI process updates settings on disk; the
-        daemon's in-memory copy stays stale; the next round's drift
-        sync "synced" the loop back to the stale value). Drift is
-        cut at the source — ``loop.model`` must persist regardless
-        of how ``settings.model`` changes.
-        """
-        ctx = ConversationContext()
-        loop = _make_loop(ctx, model="claude-opus-4-6")
-        assert loop.model == "claude-opus-4-6"
-
+    def test_explicit_selection_survives_defaults_change_at_next_model_call(self, monkeypatch):
+        from core.agent.loop import _phases
+        from core.agent.loop.models import TurnState
         from core.config import settings
 
-        old = settings.model
-        try:
-            settings.model = "glm-5"
-            with patch("core.ui.agentic_ui.update_session_model"):
-                asyncio.run(_model_switching.sync_model_from_settings_async(loop))
-            assert loop.model == "claude-opus-4-6"  # PR-DRIFT-CUT: no auto-swap
-        finally:
-            settings.model = old
+        loop = _make_loop(ConversationContext(), model="claude-opus-4-6")
 
-    def test_sync_model_from_settings_noop_when_same(self):
-        """No update when settings.model matches loop.model."""
-        ctx = ConversationContext()
-        loop = _make_loop(ctx, model="claude-opus-4-6")
+        async def scenario():
+            await loop.update_model_async("claude-sonnet-5", "anthropic")
+            selected = loop._model_settings
+            adapter = loop._new_adapter
+            assert loop._prompt_dirty
+            monkeypatch.setattr(settings, "model", "gpt-6-sol")
+            monkeypatch.setattr(settings, "act_model", "glm-5.3")
+            monkeypatch.setattr(settings, "agentic_effort", "low")
+            turn = _phases.PreparedTurn(
+                user_input="keep the selected model",
+                messages=[],
+                turn_state=TurnState(turn_id="selected-model", messages=[]),
+                system_prompt="outdated prompt",
+                reflection_hint="retained reflection",
+                verification_hint="retained verification",
+                verification_continuation=False,
+            )
+            call = await _phases.prepare_model_call(loop, turn, 0)
+            assert call.system_prompt == turn.system_prompt
+            assert "<model_card>\nModel: claude-sonnet-5" in call.system_prompt
+            assert "retained reflection" in call.system_prompt
+            assert "retained verification" in call.system_prompt
+            assert loop.model == "claude-sonnet-5"
+            assert loop._model_settings == selected
+            assert loop._new_adapter is adapter
+            assert not loop._prompt_dirty
 
-        from core.config import settings
-
-        old = settings.model
-        try:
-            settings.model = "claude-opus-4-6"
-            with patch.object(loop, "update_model_async") as mock_update:
-                asyncio.run(_model_switching.sync_model_from_settings_async(loop))
-                mock_update.assert_not_called()
-        finally:
-            settings.model = old
+        with (
+            patch("core.ui.agentic_ui.update_session_model"),
+            patch("core.ui.agentic_ui.emit_model_switched"),
+            patch("core.agent.loop._guards._maybe_replan_async", new=AsyncMock()),
+            patch("core.agent.loop._phases.TextSpinner"),
+        ):
+            asyncio.run(scenario())
 
 
 # ---------------------------------------------------------------------------

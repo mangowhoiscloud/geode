@@ -67,6 +67,14 @@ choices retain their separate next-run owner. Cancellation sends no patch, and
 terminal capability refreshes contain no model policy, so a following prompt
 cannot reapply stale client defaults.
 
+The registered `switch_model` tool uses the same candidate validation and session
+owner. Its `pending` result means admission succeeded; adoption happens only after
+the complete tool batch, before the next primary request or external tool-round
+yield. Sibling tools retain the current step's selection. An interrupted batch's
+proposal is not saved or replayed on a new turn. `check_status` reads the actual
+session record. Tool selections do not persist project/global defaults; no-op
+settings-drift synchronization and its unused constructor option were removed.
+
 Model/tool publication restores its previous route and tool bindings if projection
 fails. Context adaptation may have already committed a valid compaction using the
 previous route; this is not a promise to roll back history or external effects.

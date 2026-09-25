@@ -168,7 +168,9 @@ functional change.
   fullscreen mode. Snapshot auxiliary model policy per session, reject
   unsuccessful or unsupported handshakes, and retain the previous selection and
   tool bindings when adoption fails. Project/global defaults no longer implicitly
-  update other active sessions.
+  update other active sessions. Route runtime model/judgment tools through the
+  same admitted record after their complete tool batch; status reports the actual
+  session. Remove unused settings-drift code and its constructor flag.
 
 - Preserve explicit auth profile pins and priority order across auth.toml writes
   and fresh-process routing. Validate reload candidates before publication and

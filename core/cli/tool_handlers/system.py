@@ -14,7 +14,7 @@ def _build_system_handlers(
 ) -> UniqueEntries[str, Any]:
     """Build system management tool handlers."""
     from core.cli import _set_readiness
-    from core.cli.commands import cmd_key, cmd_login, cmd_model, show_help
+    from core.cli.commands import cmd_key, cmd_login, show_help
     from core.cli.onboarding import render_readiness
     from core.wiring.startup import check_readiness
 
@@ -28,11 +28,14 @@ def _build_system_handlers(
         commands = sorted(COMMAND_MAP.keys() | registered.keys())
         return {"status": "ok", "action": "help", "commands": commands}
 
-    def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
+    def handle_check_status(**kwargs: Any) -> dict[str, Any]:
         from core import __version__ as geode_version
         from core.cli.session_state import _get_readiness
         from core.config import settings
 
+        owner = getattr(kwargs.get("_tool_context"), "agent_loop", None)
+        model_config = owner._model_settings.model_dump() if owner is not None else None
+        model = owner.model if owner is not None else settings.model
         ant_ok = bool(settings.anthropic_api_key)
         oai_ok = bool(settings.openai_api_key)
         # Preserve explicit request policy (including audit overrides), but do
@@ -42,7 +45,7 @@ def _build_system_handlers(
 
         console.print()
         console.print(f"  [header]GEODE v{geode_version}[/header]")
-        console.print(f"  Model: [bold]{settings.model}[/bold]")
+        console.print(f"  Model: [bold]{model}[/bold]")
         console.print(f"  Ensemble: [bold]{settings.ensemble_mode}[/bold]")
         ant_status = "[success]configured[/success]" if ant_ok else "[red]not set[/red]"
         oai_status = "[success]configured[/success]" if oai_ok else "[red]not set[/red]"
@@ -73,7 +76,9 @@ def _build_system_handlers(
             "status": "ok",
             "action": "status",
             "version": geode_version,
-            "model": settings.model,
+            "model": model,
+            "scope": "session" if owner is not None else "defaults",
+            "model_config": model_config,
             "ensemble": settings.ensemble_mode,
             "anthropic_configured": ant_ok,
             "openai_configured": oai_ok,
@@ -81,25 +86,65 @@ def _build_system_handlers(
             "mcp_status": mcp_status,
         }
 
-    def handle_switch_model(**kwargs: Any) -> dict[str, Any]:
-        from core.config import settings
+    async def handle_switch_model(**kwargs: Any) -> dict[str, Any]:
+        from core.agent.loop._model_switching import validate_session_model_config
+        from core.cli.commands._state import get_model_profiles
+        from core.cli.commands.model import resolve_model_hint
+        from core.config import _resolve_provider
+        from core.llm.adapters._source_inference import infer_source
+        from core.tools.base import tool_error
 
-        model_hint = kwargs.get("model_hint", "")
-        if kwargs.get("role", "primary") == "judgment":
-            from core.cli.commands.judgment import cmd_judgment
-
-            return {"action": "judgment", **cmd_judgment(model_hint, interactive=False)}
-        # Only update settings — do NOT call loop.update_model_async() here.
-        # The AgenticLoop checks for model drift at the start of each round
-        # and applies the change safely between LLM calls (not mid-call).
-        cmd_model(model_hint)
-        return {
-            "status": "ok",
-            "action": "model_deferred",
-            "current_model": settings.model,
-            "ensemble": settings.ensemble_mode,
-            "note": "Model change applied. Will take effect on next round.",
-        }
+        loop = getattr(kwargs.get("_tool_context"), "agent_loop", None)
+        if loop is None:
+            return tool_error("Model selection requires an owning session", error_type="dependency")
+        current = loop._model_settings
+        hint = str(kwargs.get("model_hint", "")).strip()
+        role = kwargs.get("role", "primary")
+        if not hint or hint == "status":
+            return {"status": "ok", "scope": "session", "model_config": current.model_dump()}
+        try:
+            if role == "judgment":
+                if hint not in {"llm", "jev", "typesafe", "openrouter"}:
+                    raise ValueError("Choose llm, jev, typesafe, or openrouter")
+                candidate = current.updated(
+                    {
+                        "judgment_engine": "llm" if hint == "llm" else "jev",
+                        "jev_provider": hint
+                        if hint in {"typesafe", "openrouter"}
+                        else current.jev_provider,
+                    }
+                )
+            elif role == "primary":
+                selected = resolve_model_hint(
+                    hint,
+                    get_model_profiles(
+                        configured_model_ids=(
+                            current.model,
+                            current.reflection_model,
+                            current.judge_model,
+                        ),
+                        openai_source=current.source,
+                    ),
+                )
+                provider = _resolve_provider(selected.id)
+                source = current.source if provider == loop._provider else infer_source(provider)
+                candidate = current.updated({"model": selected.id, "source": source})
+            else:
+                raise ValueError("Choose primary or judgment")
+            validate_session_model_config(loop, candidate)
+            if loop._pending_model_settings is not None:
+                raise ValueError("A selection is already pending for this tool batch")
+            if candidate == current:
+                return {"status": "applied", "changed": False, "model_config": current.model_dump()}
+            loop._pending_model_settings = candidate
+            return {
+                "status": "pending",
+                "scope": "session",
+                "model_config": candidate.model_dump(),
+                "note": "Validated; applies to this session after the complete tool batch.",
+            }
+        except ValueError as exc:
+            return tool_error(str(exc), error_type="validation")
 
     def handle_set_api_key(**kwargs: Any) -> dict[str, Any]:
         from core.config import settings

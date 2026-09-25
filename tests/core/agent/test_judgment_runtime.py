@@ -54,7 +54,7 @@ def test_round_then_terminal_dispatch_once_with_native_usage_and_no_synthetic_be
         ConversationContext(),
         ToolExecutor(middleware_registry=registry),
         hooks=hooks,
-        config=AgenticLoopConfig(source="payg", session_id="judgment", disable_settings_drift=True),
+        config=AgenticLoopConfig(source="payg", session_id="judgment"),
         model="claude-sonnet-4-6",
         provider="anthropic",
         quiet=True,

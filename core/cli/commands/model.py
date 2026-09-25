@@ -33,6 +33,29 @@ if TYPE_CHECKING:
     from core.cli.ipc_client import IPCClient
 
 
+def resolve_model_hint(hint: str, profiles: list[ModelProfile]) -> ModelProfile:
+    """Resolve the same explicit model notation for slash commands and tools."""
+    if hint.isdigit():
+        index = int(hint) - 1
+        if 0 <= index < len(profiles):
+            return profiles[index]
+        raise ValueError(f"Invalid number: {hint} (1-{len(profiles)})")
+    for profile in profiles:
+        if profile.id == hint:
+            return profile
+    if hint.startswith("openrouter/"):
+        from core.llm.providers.openrouter import to_openrouter_model_id
+
+        return ModelProfile(hint, "openrouter", to_openrouter_model_id(hint), "var")
+    normalized = hint.lower().replace("-", "").replace(" ", "").replace("_", "")
+    if normalized:
+        for profile in profiles:
+            for value in (profile.id, profile.label):
+                if normalized in value.lower().replace("-", "").replace(" ", "").replace("_", ""):
+                    return profile
+    raise ValueError(f"Unknown model: {hint}")
+
+
 def _current_model_for_role(role: AgentRole, client: IPCClient | None = None) -> str:
     """Read the current model id for ``role`` from ``settings`` (or the
     role-specific toml section when the role has no Settings attr).
@@ -770,9 +793,7 @@ def cmd_model(args: str, *, client: IPCClient | None = None) -> None:
             _interactive_model_picker_for_role(role_def, client=client)
         return
 
-    # Resolve by number or name
-    selected: ModelProfile | None = None
-
+    # Resolve by number or name.
     reason = (
         None
         if arg.isdigit()
@@ -787,42 +808,13 @@ def cmd_model(args: str, *, client: IPCClient | None = None) -> None:
     model_profiles = get_model_profiles(
         configured_model_ids=role_currents.values(), openai_source=role_source
     )
-    if arg.isdigit():
-        idx = int(arg) - 1
-        if 0 <= idx < len(model_profiles):
-            selected = model_profiles[idx]
-        else:
-            _pkg.console.print(
-                f"  [warning]Invalid number: {arg} (1-{len(model_profiles)})[/warning]"
-            )
-            _pkg.console.print()
-            return
-    else:
-        selected = {profile.id: profile for profile in model_profiles}.get(arg)
-        if not selected and arg.startswith("openrouter/"):
-            try:
-                from core.llm.providers.openrouter import to_openrouter_model_id
-
-                upstream_model = to_openrouter_model_id(arg)
-            except ValueError as exc:
-                _pkg.console.print(f"  [warning]{exc}[/warning]")
-                _pkg.console.print()
-                return
-            selected = ModelProfile(arg, "openrouter", upstream_model, "var")
-        if not selected:
-            arg_norm = arg.lower().replace("-", "").replace(" ", "").replace("_", "")
-            for p in model_profiles:
-                id_norm = p.id.lower().replace("-", "").replace(" ", "").replace("_", "")
-                label_norm = p.label.lower().replace("-", "").replace(" ", "").replace("_", "")
-                if arg_norm in id_norm or arg_norm in label_norm:
-                    selected = p
-                    break
-
-    if not selected:
-        _pkg.console.print(f"  [warning]Unknown model: {arg}[/warning]")
+    try:
+        selected = resolve_model_hint(arg, model_profiles)
+    except ValueError as exc:
+        _pkg.console.print(f"  [warning]{exc}[/warning]")
         _pkg.console.print("  [muted]Available:[/muted]", end="")
-        for p in model_profiles:
-            _pkg.console.print(f" [muted]{p.id}[/muted]", end="")
+        for profile in model_profiles:
+            _pkg.console.print(f" [muted]{profile.id}[/muted]", end="")
         _pkg.console.print()
         _pkg.console.print()
         return
