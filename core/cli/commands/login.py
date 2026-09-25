@@ -16,6 +16,7 @@ _pkg`` lookup, mirroring the pattern used by ``core/ui/agentic_ui``.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import Any
 
 from simple_term_menu import TerminalMenu
@@ -138,23 +139,9 @@ def cmd_login(args: str) -> None:
         _login_source(rest)
         return
     if sub == "refresh":
-        # v0.52 phase 3 — daemon-side reload of auth.toml after thin client
-        # writes (e.g. /login openai completed in CLI process). When invoked
-        # in CLI process this is a no-op; the actual reload happens when the
-        # CLI relays /login refresh to the daemon via IPC.
-        #
-        # Semantics — ADDITIVE ONLY (v0.52.1 documented invariant):
-        #   * Plans/Profiles newly written to auth.toml ARE picked up.
-        #   * Plans/Profiles REMOVED from auth.toml are NOT removed from the
-        #     daemon's in-memory singletons. Use `/login remove <plan-id>`
-        #     for explicit deletion (which goes through the same IPC path
-        #     and updates both file + memory atomically).
-        #
-        # Why additive: lifecycle.container.ensure_profile_store() returns
-        # the cached singleton on subsequent calls; load_auth_toml() merges
-        # into the existing store rather than rebuilding it. This protects
-        # in-flight requests using profiles loaded from .env / managed CLIs
-        # (Codex CLI OAuth) which never appear in auth.toml.
+        # Thin clients persist credentials locally before this value-free signal.
+        # Reload validates the entire file, replaces only its owned entries and
+        # retains managed/environment objects and in-flight borrowed references.
         try:
             from core.auth.auth_toml import auth_toml_path, load_auth_toml
             from core.auth.codex_cli_oauth import invalidate_cache as invalidate_codex_cli_cache
@@ -863,9 +850,7 @@ def _login_set_key(rest: str) -> None:
     name = f"{plan.id}:user"
     existing = store.get(name)
     if existing is not None:
-        existing.key = key
-        existing.error_count = 0
-        existing.cooldown_until = 0.0
+        store.add(replace(existing, key=key, error_count=0, cooldown_until=0.0))
     else:
         store.add(
             AuthProfile(

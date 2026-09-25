@@ -163,7 +163,23 @@ functional change.
 
 ### Fixed
 
-- Apply CLI model, effort, and concrete source selections to the owning daemon session before saving defaults, including named commands, role pickers, and fullscreen mode. Snapshot auxiliary model policy per session, reject unsuccessful or unsupported handshakes, and retain the previous selection and tool bindings when adoption fails. Project/global defaults no longer implicitly update other active sessions.
+- Apply CLI model, effort, and concrete source selections to the owning daemon
+  session before saving defaults, including named commands, role pickers, and
+  fullscreen mode. Snapshot auxiliary model policy per session, reject
+  unsuccessful or unsupported handshakes, and retain the previous selection and
+  tool bindings when adoption fails. Project/global defaults no longer implicitly
+  update other active sessions.
+
+- Preserve explicit auth profile pins and priority order across auth.toml writes
+  and fresh-process routing. Validate reload candidates before publication and
+  reconcile deletions only for file-owned entries, retaining managed/environment
+  credentials, unchanged health state and borrowed references. Write auth state
+  atomically and materialize explicit OpenAI/GLM `/key` updates consistently.
+
+- Bind effort-probe resume to the verified source revision and provider route,
+  retaining older measurements without reusing unidentified results. Include
+  configured OpenRouter models and inspect their actual Chat SDK serialization;
+  preserve observed reasoning usage separately from missing values.
 
 - Show only supported model effort choices and require an explicit valid choice
   before confirming or staging an incompatible saved effort. Preserve valid
