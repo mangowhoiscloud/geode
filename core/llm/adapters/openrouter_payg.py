@@ -28,6 +28,7 @@ from core.llm.adapters.base import (
 from core.llm.errors import LLMRequestValidationError
 from core.llm.loop_affinity import LoopAffineClientCache
 from core.llm.providers.openrouter import to_openrouter_model_id
+from core.llm.strategies.plan_registry import resolve_payg_profile
 
 log = logging.getLogger(__name__)
 
@@ -123,11 +124,24 @@ class OpenRouterPaygAdapter:
         repr=False,
     )
 
-    def _get_client(self) -> Any:
+    def _credential(self) -> tuple[str, str, str]:
+        """Read the selected PAYG key, endpoint and non-secret provenance."""
         from core.config import settings
         from core.llm.registry import get_provider_spec
 
-        api_key = settings.openrouter_api_key
+        spec = get_provider_spec(self.provider)
+        if spec is None:
+            raise RuntimeError("PAYG provider composition is not registered")
+        base_url = spec.default_base_url
+        profile = resolve_payg_profile(self.provider, base_url=base_url)
+        if profile is not None:
+            return profile.key, base_url, f"auth profile:{profile.name}"
+        return settings.openrouter_api_key, base_url, "settings.openrouter_api_key"
+
+    def _get_client(self) -> Any:
+        from core.llm.registry import get_provider_spec
+
+        api_key, base_url, _ = self._credential()
         if not api_key:
             raise RuntimeError(
                 "OpenRouterPaygAdapter: OPENROUTER_API_KEY not set. "
@@ -140,9 +154,10 @@ class OpenRouterPaygAdapter:
         return self._clients.get(
             lambda: build_async_openai_client(
                 api_key,
-                base_url=spec.default_base_url,
+                base_url=base_url,
                 default_headers=headers,
-            )
+            ),
+            identity=hashlib.sha256(f"{base_url}\0{api_key}".encode()).hexdigest(),
         )
 
     async def acomplete_text(
@@ -273,9 +288,8 @@ class OpenRouterPaygAdapter:
         )
 
     def test_environment(self) -> EnvironmentReport:
-        from core.config import settings
-
-        if not settings.openrouter_api_key:
+        api_key, _, _ = self._credential()
+        if not api_key:
             return EnvironmentReport(
                 ok=False,
                 checks=(("openrouter_api_key", "missing"),),
@@ -283,7 +297,7 @@ class OpenRouterPaygAdapter:
             )
         return EnvironmentReport(
             ok=True,
-            checks=(("openrouter_api_key", f"set ({len(settings.openrouter_api_key)} chars)"),),
+            checks=(("openrouter_api_key", f"set ({len(api_key)} chars)"),),
         )
 
 

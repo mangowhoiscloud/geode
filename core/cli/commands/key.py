@@ -188,20 +188,18 @@ def _seed_payg_plan_from_key(provider: str, key: str) -> None:
         store = ensure_profile_store()
         name = f"{plan.id}:env"
         existing = store.get(name)
-        if existing is not None:
-            store.add(
-                replace(existing, key=key, plan_id=plan.id, error_count=0, cooldown_until=0.0)
+        profile = (
+            replace(existing, key=key, plan_id=plan.id, error_count=0, cooldown_until=0.0)
+            if existing is not None
+            else AuthProfile(
+                name=name,
+                provider=plan.provider,
+                credential_type=CredentialType.API_KEY,
+                key=key,
+                plan_id=plan.id,
             )
-        else:
-            store.add(
-                AuthProfile(
-                    name=name,
-                    provider=plan.provider,
-                    credential_type=CredentialType.API_KEY,
-                    key=key,
-                    plan_id=plan.id,
-                )
-            )
+        )
+        store.add(profile, activate=True)
         _pkg._persist_auth_state()
     except Exception:
         # The legacy /key path must not fail because of plan-seeding.

@@ -12,8 +12,8 @@ import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from core.auth.profiles import AuthProfile
-from core.llm.strategies.plans import Plan, PlanUsage, default_plan_for_payg
+from core.auth.profiles import AuthProfile, CredentialType
+from core.llm.strategies.plans import Plan, PlanKind, PlanUsage, default_plan_for_payg
 
 if TYPE_CHECKING:
     from core.auth.profiles import ProfileStore
@@ -172,6 +172,47 @@ def reset_plan_registry() -> None:
 # ---------------------------------------------------------------------------
 # Routing resolution — model → (Plan, AuthProfile, base_url)
 # ---------------------------------------------------------------------------
+
+
+def resolve_payg_profile(provider: str, *, base_url: str) -> AuthProfile | None:
+    """Select an API key for an already chosen PAYG endpoint, never another route.
+
+    Only available API-key profiles bound to this provider's PAYG plan may
+    override the adapter's settings key. A different endpoint, subscription,
+    or externally managed credential is not a PAYG fallback. This read does
+    not bootstrap auth, reload settings, or mutate profile health/selection.
+    """
+    from core.wiring.container import get_profile_store
+
+    store = get_profile_store()
+    if store is None:
+        return None
+    registry = get_plan_registry()
+    candidates: list[AuthProfile] = []
+    for profile in store.list_by_provider(provider):
+        if (
+            profile.credential_type is not CredentialType.API_KEY
+            or profile.managed_by
+            or not profile.key
+            or not profile.is_available
+        ):
+            continue
+        plan = registry.get(profile.plan_id)
+        if plan is None or plan.provider != provider or plan.kind is not PlanKind.PAYG:
+            continue
+        if (profile.base_url_override or plan.base_url).rstrip("/") != base_url.rstrip("/"):
+            continue
+        candidates.append(profile)
+    order = store.get_auth_order(provider)
+    pinned = store.get_pinned_active(provider)
+    if not order and pinned is not None:
+        order = [pinned.name]
+    ranks = {name: rank for rank, name in enumerate(order)}
+    return min(
+        candidates,
+        key=lambda profile: (ranks.get(profile.name, len(ranks)), profile.sort_key()),
+        default=None,
+    )
 
 
 def resolve_routing(
