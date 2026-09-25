@@ -179,6 +179,11 @@ functional change.
   the current validated selection for legacy checkpoints. Report the applied
   selection to the thin client without rereading unrelated process defaults.
 
+- Exclude the Anthropic, OpenAI, OpenRouter and Z.AI API keys from `Settings`
+  `repr()` and `str()`, so failing pytest assertions and formatted settings
+  objects no longer print credential values. The fields remain plain strings;
+  the Typesafe key was already masked by `SecretStr`.
+
 - Apply CLI model, effort, and concrete source selections to the owning daemon
   session before saving defaults, including named commands, role pickers, and
   fullscreen mode. Snapshot auxiliary model policy per session, reject
