@@ -80,12 +80,14 @@ def test_run_agent_fork_excludes_denied_tools() -> None:
 
     class _FakeLoop:
         def __init__(self, *a: object, **kw: object) -> None:
-            pass
+            captured["config"] = kw["config"]
 
         async def arun(self, _prompt: str) -> str:
             return "ok"
 
     with (
+        patch("core.config.settings.agentic_effort", "low"),
+        patch("core.llm.routing.infer_source", return_value="payg"),
         patch("core.agent.tool_executor.ToolExecutor", side_effect=_capture_executor),
         patch("core.agent.loop.AgenticLoop", _FakeLoop),
         patch("core.llm.adapters.registry.bootstrap_builtins"),
@@ -94,6 +96,8 @@ def test_run_agent_fork_excludes_denied_tools() -> None:
         profile = ensure_user_profile.return_value
         asyncio.run(bootstrap.arun_agentic_oneshot("hi", tool_plan_builder=_build_tool_plan))
 
+    assert captured["config"].effort == "low"
+    assert captured["config"].source == "payg"
     ensure_user_profile.assert_called_once_with()
     assert built_with["persistence"].user_profile is profile
     filtered_bound = captured["bound_tool_plan"]

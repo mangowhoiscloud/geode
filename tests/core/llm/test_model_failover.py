@@ -764,7 +764,9 @@ class TestAgenticLoopFailover:
             body = {"error": {"code": "insufficient_quota"}}
 
         raw_billing = RawBillingError("insufficient quota")
-        self._install_acomplete_stub(loop, raw_billing)
+        adapter = self._install_acomplete_stub(loop, raw_billing)
+        adapter.provider = "anthropic"
+        adapter.source = "payg"
         captured: dict[str, Any] = {}
 
         def normalize(exc: Exception, **kwargs: Any) -> BillingError:
@@ -778,6 +780,8 @@ class TestAgenticLoopFailover:
             asyncio.run(loop._call_llm("system", [{"role": "user", "content": "go"}]))
 
         assert captured["routing_sources"] is routing_source
+        assert captured["provider"] == loop._new_adapter.provider
+        assert captured["source"] == loop._new_adapter.source
 
     def test_call_llm_no_api_key_returns_none(self) -> None:
         """When ``acomplete`` raises an auth-style failure, ``_call_llm``

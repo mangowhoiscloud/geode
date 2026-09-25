@@ -30,7 +30,9 @@ def test_codex_oauth_adapter_invalidates_loop_cache_when_token_changes(monkeypat
             self.invalidations += 1
             self.client = None
 
-    def fake_resolve(*, force_refresh: bool = False) -> _ResolvedCodexToken:
+    def fake_resolve(
+        *, force_refresh: bool = False, model: str = "", sources=None
+    ) -> _ResolvedCodexToken:
         assert force_refresh is True
         return _ResolvedCodexToken(
             token=current_token["value"],

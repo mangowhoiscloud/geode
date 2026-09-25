@@ -34,14 +34,14 @@ class _Services:
 def _loop(tmp_path: Path) -> Any:
     from core.config import _resolve_provider, settings
     from core.config.session import capture_session_model_config
-    from core.llm.adapters._source_inference import infer_source
     from core.llm.adapters.registry import active_registry_snapshot
+    from core.llm.routing import infer_source
 
     policy = capture_session_model_config(
         settings,
         model=settings.model,
         effort=settings.agentic_effort,
-        source=infer_source(_resolve_provider(settings.model)),
+        source=infer_source(_resolve_provider(settings.model), model=settings.model),
     )
 
     plan_payload = json.dumps(

@@ -355,7 +355,7 @@ def test_harbor_limits_reach_sdk_and_stop_tool_rounds(
             max_retries=0,
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond)),
         ) as client:
-            monkeypatch.setattr(OpenAIPaygAdapter, "_get_client", lambda _self: client)
+            monkeypatch.setattr(OpenAIPaygAdapter, "_get_client", lambda _self, _model: client)
             loop = _build_loop(
                 _Environment(),
                 model="gpt-5.6-sol",
@@ -381,6 +381,7 @@ def test_harbor_limits_reach_sdk_and_stop_tool_rounds(
     assert result.rounds == 3
     assert result.error == result.termination_reason == "max_rounds"
     assert len(wire) == 3
+    assert [request["model"] for request in wire] == ["gpt-5.6-sol"] * 3
     assert [request["max_output_tokens"] for request in wire] == [2048, 2048, 2048]
     assert [request["tool_choice"] for request in wire] == ["auto", "none", "none"]
     assert reflection_requests

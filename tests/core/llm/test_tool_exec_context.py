@@ -157,8 +157,8 @@ def test_select_adapter_model_derives_provider_source(
     ]
     monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: cands)
     monkeypatch.setattr(
-        "core.llm.adapters._source_inference.infer_source",
-        lambda provider: "subscription" if provider == "openai" else "payg",
+        "core.llm.routing.infer_source",
+        lambda provider, **kwargs: "subscription" if provider == "openai" else "payg",
     )
 
     picked = _select_adapter(
@@ -476,7 +476,7 @@ def test_web_search_via_adapters_no_fallback_on_billing(
     fallback.aweb_search = AsyncMock()  # Should NEVER be called.
 
     monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: [selected, fallback])
-    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda provider: "payg")
+    monkeypatch.setattr("core.llm.routing.infer_source", lambda provider, **kwargs: "payg")
 
     with pytest.raises(BillingError, match=r"anthropic-payg .* credit exhausted"):
         asyncio.run(web_search_via_adapters("q", prefer_provider="anthropic", prefer_source="payg"))

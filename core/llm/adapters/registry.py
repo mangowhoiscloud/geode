@@ -549,7 +549,17 @@ def _builtin_registrations(
     records: list[AdapterRegistration] = []
     for factory, provider_variant in factories:
         instance = factory()
-        if isinstance(instance, GlmCodingPlanAdapter):
+        if isinstance(
+            instance,
+            (
+                AnthropicPaygAdapter,
+                OpenAIPaygAdapter,
+                OpenRouterPaygAdapter,
+                CodexOAuthAdapter,
+                GlmPaygAdapter,
+                GlmCodingPlanAdapter,
+            ),
+        ):
             instance.routing_sources = (policy_sources or {}).get("provider_routing")
         provider_spec = PROVIDER_VARIANTS[provider_variant]
         records.append(

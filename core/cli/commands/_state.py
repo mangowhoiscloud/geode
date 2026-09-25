@@ -90,20 +90,20 @@ def get_model_profiles(
     )
     from core.llm.model_catalog import MODEL_OFFERINGS, model_source_unavailable_reason
 
-    if openai_source is None:
-        openai_source = _selected_openai_source()
-
-    def active_profiles(provider: str, source: str) -> list[ModelProfile]:
-        return [
-            ModelProfile(entry.id, entry.provider, entry.label, entry.cost)
-            for entry in MODEL_OFFERINGS
-            if entry.provider == provider
-            and source in entry.sources
-            and not model_source_unavailable_reason(entry.id, provider=provider, source=source)
-        ]
+    def active_profiles(provider: str, source: str | None) -> list[ModelProfile]:
+        profiles: list[ModelProfile] = []
+        for entry in MODEL_OFFERINGS:
+            if entry.provider != provider:
+                continue
+            selected = source or _selected_openai_source(entry.id) or "payg"
+            if selected in entry.sources and not model_source_unavailable_reason(
+                entry.id, provider=provider, source=selected
+            ):
+                profiles.append(ModelProfile(entry.id, entry.provider, entry.label, entry.cost))
+        return profiles
 
     anthropic_profiles = active_profiles("anthropic", "payg")
-    openai_profiles = active_profiles("openai", openai_source or "payg")
+    openai_profiles = active_profiles("openai", openai_source)
     openrouter_profiles = list(_OPENROUTER_PICKER_MODELS)
     glm_profiles = active_profiles("glm", "payg")
     # Routing defaults are read on every invocation; preserve explicit choices
@@ -374,12 +374,15 @@ def _get_profile_store() -> ProfileStore:
     return ensure_profile_store()
 
 
-def _selected_openai_source() -> str | None:
+def _selected_openai_source(model: str = "") -> str | None:
     """Read the same source choice as adapter dispatch, without changing it."""
-    from core.llm.adapters._source_inference import infer_source
+    from core.config.runtime_policy_sources import build_policy_source_bundle
+    from core.llm.routing import infer_source
 
     try:
-        return infer_source("openai")
+        return infer_source(
+            "openai", model=model, sources=build_policy_source_bundle().get("provider_routing")
+        )
     except RuntimeError:
         # A disabled provider is handled by the credential availability path.
         return None
@@ -394,29 +397,33 @@ def model_unavailable_reason(model_id: str, *, source: str | None = None) -> str
     if provider == "anthropic":
         return model_source_unavailable_reason(model_id, provider=provider, source="payg")
     if normalize_model_provider(provider) == "glm":
-        from core.llm.adapters._source_inference import infer_source
+        from core.config.runtime_policy_sources import build_policy_source_bundle
+        from core.llm.routing import infer_source
 
         return model_source_unavailable_reason(
-            model_id, provider="glm", source=source if source is not None else infer_source("glm")
+            model_id,
+            provider="glm",
+            source=source
+            if source is not None
+            else infer_source(
+                "glm", model=model_id, sources=build_policy_source_bundle().get("provider_routing")
+            ),
         )
     if normalize_model_provider(provider) != "openai":
         return None
     return model_source_unavailable_reason(
         model_id,
         provider=provider,
-        source=source if source is not None else _selected_openai_source() or "",
+        source=source if source is not None else _selected_openai_source(model_id) or "",
     )
 
 
 def model_available(model_id: str, *, source: str | None = None) -> bool:
     """Return True if `model_id` has a usable credential route.
 
-    Mirrors what ``AgenticLoop`` would resolve at the next LLM call:
-    by default delegates to ``resolve_routing(model_id)`` (which walks per-model
-    routing → equivalence-class scan → single-provider fallback → PAYG
-    synthesis) and treats a non-None ``RoutingTarget`` as "available". An
-    explicit role source instead checks that concrete adapter's credential
-    detector; an OAuth plan cannot satisfy a PAYG pin (or vice versa).
+    Uses admission's model-aware source and the same account selector as SDK
+    requests. Bare Settings/environment credentials remain adapter-owned. An
+    unavailable explicit plan never falls through to them or another source.
 
     Used by the ``/model`` picker (M5) to flag entries whose provider
     has no authenticated profile yet — so the user sees *why* a model
@@ -425,21 +432,27 @@ def model_available(model_id: str, *, source: str | None = None) -> bool:
     routing raises so a broken plan registry does not lock the picker.
     """
     try:
-        from core.llm.strategies.plan_registry import resolve_routing
+        from core.config import _resolve_provider
+        from core.config.runtime_policy_sources import build_policy_source_bundle
+        from core.llm.adapters.base import CredentialDetectionCapable, EnvironmentDiagnosticCapable
+        from core.llm.adapters.registry import resolve_for
+        from core.llm.routing import infer_source, resolve_routing
 
+        sources = build_policy_source_bundle().get("provider_routing")
+        provider = _resolve_provider(model_id)
+        source = (
+            source
+            if source is not None
+            else infer_source(provider, model=model_id, sources=sources)
+        )
         if model_unavailable_reason(model_id, source=source) is not None:
             return False
-        if source is not None:
-            from core.config import _resolve_provider
-            from core.llm.adapters.base import CredentialDetectionCapable
-            from core.llm.adapters.registry import normalize_registry_provider, resolve_for
-
-            adapter = resolve_for(normalize_registry_provider(_resolve_provider(model_id)), source)
-            return (
-                isinstance(adapter, CredentialDetectionCapable)
-                and adapter.detect_credential() is not None
-            )
-        return resolve_routing(model_id, sources=None) is not None
+        if resolve_routing(model_id, provider=provider, source=source, sources=sources) is not None:
+            return True
+        adapter = resolve_for(provider, source)
+        if isinstance(adapter, CredentialDetectionCapable):
+            return adapter.detect_credential() is not None
+        return isinstance(adapter, EnvironmentDiagnosticCapable) and adapter.test_environment().ok
     except Exception:
         return False
 
@@ -462,11 +475,9 @@ def forced_login_method_for(provider: str) -> str | None:
     user has *explicitly* chosen a non-default routing — that's the
     bit that surprises them.
 
-    Mirrors the normalisation in
-    ``core.llm.strategies.plan_registry._apply_forced_login_method`` so the
-    badge stays in lockstep with the actual sort behaviour: any of
-    ``apikey`` / ``api`` / ``api_key`` / ``key`` collapse to the
-    ``"apikey"`` label that the underlying sort uses.
+    Mirrors the aliases accepted by ``core.llm.routing``. This label is
+    presentation only; runtime admission validates conflicts and resolves the
+    concrete source before account selection.
     """
     try:
         from core.config import settings

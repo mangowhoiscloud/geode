@@ -59,7 +59,7 @@ def _resolve_active_plan_summary(model: str) -> str:
     Returns "" when no plan is registered or routing isn't initialised.
     """
     try:
-        from core.llm.strategies.plan_registry import resolve_routing
+        from core.llm.routing import resolve_routing
 
         target = resolve_routing(model, sources=None)
         if target is None:

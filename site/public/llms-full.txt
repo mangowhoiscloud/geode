@@ -568,6 +568,12 @@ Anthropic 공식 API에서도 지원이 끝난 Opus 4.1·Opus 4·Sonnet 4와 이
 
 모델, effort, 로그인 소스를 .env에 적는 방식은 폐기되었습니다. 예전 버전이 남긴 .env의 모델 줄은 `/model`이 toml에 쓰면서 자동으로 지우고 "removed stale ... from .env" 안내를 출력합니다.
 
+## 실행 중 세션과 새 세션의 기본값
+
+저장한 모델·effort·인증 설정은 새 세션의 기본값입니다. 실행 중인 세션은 승인된 모델·effort·API/구독 소스를 보존합니다. 연결된 CLI의 `/login source`는 해당 세션의 적용 응답을 받은 뒤 기본값을 저장하며, 연결되지 않은 명령은 새 세션의 기본값만 바꿉니다.
+
+런타임 `manage_login source` 도구는 같은 검증을 거쳐 전체 도구 묶음 이후 해당 세션의 주·보조 모델 소스만 바꾸며 effort와 저장된 기본값을 보존합니다. 명시적 로그인 소스와 `forced_login_method`가 충돌하면 거절합니다. 모델별 plan 순서와 계정 선택은 SDK 요청에도 적용됩니다. 선택한 소스의 계정을 사용할 수 없어도 다른 과금 소스로 자동 전환하지 않습니다.`/login use`와 `/login route`는 같은 소스 안에서 다음 요청의 계정을 바꿀 수 있으며, 실행 중 세션의 소스를 바꾸지는 않습니다.
+
 ## 모델 결정 순서
 
 위가 아래를 가립니다. 첫 번째로 값이 설정된 레이어가 이깁니다.
@@ -584,7 +590,7 @@ Anthropic 공식 API에서도 지원이 끝난 Opus 4.1·Opus 4·Sonnet 4와 이
 
 값이 설정된 첫 레이어가 이깁니다. 어느 레이어가 이겼는지는 geode config explain model이 보여줍니다.
 
-데몬은 시작할 때 모델 계열 env 키를 의도적으로 버리므로 (`BEHAVIOR_ENV_KEYS`, `core/config/env_io.py`), 세션마다 toml의 선택이 항상 이깁니다. 셸에서 직접 export한`GEODE_MODEL`은 그 세션 한정의 파워유저 오버라이드입니다.
+데몬은 시작할 때 모델 계열 env 키를 의도적으로 버리므로 (`BEHAVIOR_ENV_KEYS`, `core/config/env_io.py`), 새 세션은 유효한 설정에서 시작합니다. 기존 세션은 승인된 선택을 유지합니다. 셸에서 직접 export한`GEODE_MODEL`은 그 세션 한정의 파워유저 오버라이드입니다.
 
 ## 디버깅 플로우: geode config explain
 
@@ -7343,7 +7349,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 591 |
-| 테스트 Python 파일 | 746 |
+| 테스트 Python 파일 | 747 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |

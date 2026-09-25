@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from simple_term_menu import TerminalMenu
 
@@ -25,6 +25,12 @@ from core.auth.profiles import AuthProfile
 from core.cli.onboarding import clear_dry_run_opt_in
 
 log = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from core.cli.ipc_client import IPCClient
+    from core.config import Settings
+    from core.config.policy_source import PolicySourcePaths
+    from core.config.session import SessionModelConfig
 
 
 _VALID_CREDENTIAL_SOURCES: tuple[str, ...] = (
@@ -48,7 +54,7 @@ _PROVIDER_ALIASES: dict[str, str] = {
 name (``chatgpt``, ``claude``) and the maintained Codex source alias."""
 
 
-def cmd_login(args: str) -> None:
+def cmd_login(args: str, *, client: IPCClient | None = None) -> None:
     """Handle /login — unified credentials/plans command.
 
     Parameter shape: ``/login [<provider>|<subcommand>]``. OpenAI runs the
@@ -136,7 +142,7 @@ def cmd_login(args: str) -> None:
         _login_providers()
         return
     if sub == "source":
-        _login_source(rest)
+        _login_source(rest, client=client)
         return
     if sub == "refresh":
         # Thin clients persist credentials locally before this value-free signal.
@@ -664,12 +670,7 @@ def _format_credential_source_label(provider: str, source: str) -> str:
 
 
 def _persist_credential_source(provider: str, source: str) -> None:
-    """Persist the source choice — settings + .env + config.toml.
-
-    Mirrors :func:`core.cli.commands.model._apply_model` — same
-    three-location write so the choice survives env wipes (Hermes /
-    Codex / Claude Code precedent: durable settings outrank env).
-    """
+    """Persist future defaults in TOML and remove obsolete behavior env keys."""
     from core.cli import commands as _pkg
     from core.config import settings
     from core.config.env_io import upsert_config_toml
@@ -680,22 +681,54 @@ def _persist_credential_source(provider: str, source: str) -> None:
         if provider == "anthropic"
         else "GEODE_OPENAI_CREDENTIAL_SOURCE"
     )
-    try:
-        object.__setattr__(settings, field, source)
-    except Exception:
-        log.debug("login: settings.%s setattr failed", field, exc_info=True)
     # C-2 (2026-06-11) — credential_source is a behavior setting, not a
     # secret: toml-only (the toml row is now READ — registered in
     # _TOML_TO_SETTINGS, closing hazard H7's dead write). Stale env lines
     # from earlier releases are cleaned so they stop masking the toml.
     upsert_config_toml("llm", field, source)
+    object.__setattr__(settings, field, source)
     if _pkg.remove_env(env_var):
         _pkg.console.print(
             f"  [muted]removed stale {env_var} from .env — config.toml is the durable layer[/muted]"
         )
 
 
-def _login_source(args: str) -> None:
+def session_source_changes(
+    config: SessionModelConfig,
+    provider: str,
+    credential_source: str,
+    *,
+    settings: Settings | None = None,
+    sources: PolicySourcePaths | None = None,
+) -> dict[str, Any]:
+    """Build a source-only candidate; the caller owns admission and persistence."""
+    from core.config import _resolve_provider
+    from core.llm.adapters.registry import normalize_registry_provider
+    from core.llm.routing import infer_source
+
+    if provider not in _VALID_CREDENTIAL_PROVIDERS:
+        raise ValueError(f"Unsupported credential provider {provider!r}")
+    if credential_source not in _VALID_CREDENTIAL_SOURCES:
+        raise ValueError(f"Unsupported credential source {credential_source!r}")
+    changes: dict[str, Any] = {}
+    for model_field, source_field in (
+        ("model", "source"),
+        ("reflection_model", "reflection_source"),
+        ("judge_model", "judge_source"),
+    ):
+        model = getattr(config, model_field)
+        if model and normalize_registry_provider(_resolve_provider(model)) == provider:
+            changes[source_field] = infer_source(
+                provider,
+                model=model,
+                credential_source=credential_source,
+                settings=settings,
+                sources=sources,
+            )
+    return changes
+
+
+def _login_source(args: str, *, client: IPCClient | None = None) -> None:
     """``/login source <provider> <type>`` — choose the credential source.
 
     Migrated from the legacy ``/auth set`` (PR #1203, removed alongside
@@ -745,12 +778,39 @@ def _login_source(args: str) -> None:
             f"  [warning]{source} is not a credential source for {provider}.[/warning]\n"
         )
         return
-    _persist_credential_source(provider, source)
+    try:
+        from core.llm.routing import infer_source
+
+        # A disabled future default is valid; executable choices must agree
+        # with forced policy even without a matching role in this session.
+        if source != "none":
+            infer_source(provider, credential_source=source)
+        if client is not None:
+            from core.config.runtime_policy_sources import build_policy_source_bundle
+            from core.config.session import SessionModelConfig
+
+            changes = session_source_changes(
+                SessionModelConfig.model_validate(client.model_config),
+                provider,
+                source,
+                sources=build_policy_source_bundle().get("provider_routing"),
+            )
+            if changes:
+                response = client.apply_model_config(changes)
+                if response.get("status") != "applied":
+                    raise ValueError(str(response.get("message", "Session source rejected")))
+                _pkg.console.print("  Session source applied; saving future defaults.")
+        _persist_credential_source(provider, source)
+    except (RuntimeError, ValueError, OSError) as exc:
+        _pkg.console.print(f"  [warning]Credential source not saved: {exc}[/warning]\n")
+        return
     label = _format_credential_source_label(provider, source)
     _pkg.console.print(
         f"  [success]✓[/success] {provider} credential source → "
         f"[bold]{source}[/bold]  [muted]({label})[/muted]"
     )
+    if client is None:
+        _pkg.console.print("  Defaults saved for new sessions; running sessions are unchanged.")
     _pkg.console.print()
 
 
@@ -1222,18 +1282,9 @@ def _login_health(rest: str) -> None:
 
 
 def _login_providers() -> None:
-    """Render provider variants + which providers share a model family.
-
-    X3 — pre-fix the equivalence map (``openai ↔ openai-codex``,
-    ``glm ↔ glm-coding``) lived only in ``core.llm.registry``; users
-    saw the ``provider`` label in ``/login`` / ``/model`` and had no way
-    to discover that a ChatGPT subscription token and an OpenAI PAYG key both
-    serve a ``gpt-5.x`` request, or that a GLM Coding key shadows the
-    PAYG endpoint. Surfacing the table makes the policy auditable
-    without grep'ing ``PROVIDER_EQUIVALENCE`` in code.
-    """
+    """Show registered provider families without implying a billing fallback."""
     from core.cli import commands as _pkg
-    from core.llm.registry import PROVIDER_EQUIVALENCE, PROVIDER_VARIANTS
+    from core.llm.registry import PROVIDER_VARIANTS
     from core.llm.strategies.plan_registry import get_plan_registry
 
     registry = get_plan_registry()
@@ -1256,24 +1307,15 @@ def _login_providers() -> None:
         )
         _pkg.console.print(f"    [muted]{spec.default_base_url}[/muted]")
 
-    _pkg.console.print("\n  [header]Equivalence map[/header]")
+    _pkg.console.print("\n  [header]Source alternatives[/header]")
     _pkg.console.print(
-        "  [muted]Resolving to the left key tries the right list in order; "
-        "a credential from any sibling can serve the request.[/muted]"
+        "  [muted]Each model family may expose separate billing sources. "
+        "The selected source is fixed; missing credentials never select a sibling.[/muted]"
     )
-    # Singletons (only the provider itself) are noise — show only true
-    # equivalence classes with ≥ 2 members.
-    multi_member = {k: v for k, v in PROVIDER_EQUIVALENCE.items() if len(v) > 1}
-    if not multi_member:
-        _pkg.console.print("  [muted]No equivalence classes registered.[/muted]")
-    else:
-        # Render each class once (de-dup by tuple of members, preserve
-        # the dict-insertion entry-point as the key shown).
-        seen: set[tuple[str, ...]] = set()
-        for base in multi_member:
-            members = tuple(PROVIDER_EQUIVALENCE[base])
-            if members in seen:
-                continue
-            seen.add(members)
-            _pkg.console.print(f"  [bold]{base:<16}[/bold] → " + " · ".join(members))
+    families: dict[str, list[str]] = {}
+    for spec in PROVIDER_VARIANTS.values():
+        families.setdefault(spec.profile.provider, []).append(spec.id)
+    for family, members in families.items():
+        if len(members) > 1:
+            _pkg.console.print(f"  [bold]{family:<16}[/bold] → " + " · ".join(members))
     _pkg.console.print()

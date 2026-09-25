@@ -140,9 +140,10 @@ def test_coding_plan_route_preserves_subscription_identity(
     profile_provider: str,
     accepted: bool,
 ) -> None:
+    from core.llm import routing
     from core.llm.adapters import glm_coding_plan
     from core.llm.errors import ModelSourceUnavailableError
-    from core.llm.strategies import plan_registry, provider_routing_policy
+    from core.llm.strategies import provider_routing_policy
     from core.wiring import container
 
     plan = replace(GLM_CODING_TIERS["pro"], provider=plan_provider, kind=plan_kind)
@@ -162,7 +163,7 @@ def test_coding_plan_route_preserves_subscription_identity(
     registry.set_routing(GLM_PRIMARY, [plan.id])
     monkeypatch.setattr(container, "get_profile_store", lambda: store)
     monkeypatch.setattr(container, "get_profile_rotator", lambda: ProfileRotator(store))
-    monkeypatch.setattr(plan_registry, "get_plan_registry", lambda: registry)
+    monkeypatch.setattr(routing, "get_plan_registry", lambda: registry)
     monkeypatch.setattr(provider_routing_policy, "_load_provider_routing_override", lambda **kw: {})
     build_client = Mock(return_value=object())
     monkeypatch.setattr(glm_coding_plan, "build_async_openai_client", build_client)
