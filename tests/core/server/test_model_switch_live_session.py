@@ -122,6 +122,30 @@ def test_invalid_role_effort_rejects_entire_candidate(loop):
     assert loop._effort == "low"
 
 
+@pytest.mark.parametrize("role", ["primary", "reflection", "judge"])
+def test_unavailable_source_is_rejected_before_session_adoption(loop, role):
+    before = loop._model_settings
+    model_field = "model" if role == "primary" else f"{role}_model"
+    source_field = "source" if role == "primary" else f"{role}_source"
+    response = asyncio.run(
+        _poller()._process_message_async(
+            {
+                "type": "command",
+                "cmd": "/model",
+                "args": "",
+                "model_config": {model_field: "glm-5.3", source_field: "subscription"},
+            },
+            loop,
+            loop.context,
+            "test",
+        )
+    )
+    assert response["status"] == "error"
+    assert "GEODE admission" in response["message"]
+    assert loop._model_settings is before
+    assert (loop.model, loop._source, loop._new_adapter.source) == ("gpt-6-sol", "payg", "payg")
+
+
 @pytest.mark.parametrize("source", ["payg", "subscription"])
 def test_tool_projection_failure_restores_actual_route_and_tool_owners(loop, monkeypatch, source):
     original = (
