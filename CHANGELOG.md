@@ -169,6 +169,11 @@ functional change.
   credentials, unchanged health state and borrowed references. Write auth state
   atomically and materialize explicit OpenAI/GLM `/key` updates consistently.
 
+- Bind effort-probe resume to the verified source revision and provider route,
+  retaining older measurements without reusing unidentified results. Include
+  configured OpenRouter models and inspect their actual Chat SDK serialization;
+  preserve observed reasoning usage separately from missing values.
+
 - Show only supported model effort choices and require an explicit valid choice
   before confirming or staging an incompatible saved effort. Preserve valid
   selections and cancellation without silently replacing settings. Validate
