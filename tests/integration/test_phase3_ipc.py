@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -17,8 +18,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 # Unix domain socket paths must be < 104 chars on macOS.
-# pytest tmp_path is too long, so we use /tmp/ directly.
-_SOCK_PREFIX = Path("/tmp/geode-test-subjectc")  # noqa: S108
+# pytest tmp_path is too long, so we use /tmp/ directly. The process id keeps
+# one pytest worker's cleanup from deleting another worker's live socket.
+_SOCK_PREFIX = Path(f"/tmp/geode-test-subjectc-{os.getpid()}")  # noqa: S108
 
 
 @pytest.fixture(autouse=True)
