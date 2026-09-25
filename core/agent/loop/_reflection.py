@@ -156,7 +156,7 @@ def _summarise_tool_results(tool_results: list[dict[str, Any]], *, cap: int = 8)
 
 
 def _build_user_prompt(
-    state: CognitiveState, tool_summary: str, *, current_request: str = ""
+    state: CognitiveState, tool_summary: str, *, current_request: str = "", task_context: str = ""
 ) -> str:
     """Compose the user-side prompt that the reflection LLM sees."""
     snapshot = (
@@ -173,6 +173,7 @@ def _build_user_prompt(
     return (
         f"<current_request>{escape(redact_and_bound_text(current_request, 4000))}"
         "</current_request>\n"
+        f"{task_context}"
         f"<cognitive_state>{escape(snapshot)}</cognitive_state>\n"
         f"<tool_observations>{escape(tool_summary)}</tool_observations>\n"
         f"Invoke the {REFLECTION_TOOL_NAME} tool now."
@@ -330,6 +331,7 @@ async def reflect_async(
     tool_results: list[dict[str, Any]],
     *,
     current_request: str = "",
+    task_context: str = "",
     model: str,
     max_tokens: int,
     effort: str | None = None,
@@ -368,6 +370,7 @@ async def reflect_async(
                 state,
                 tool_results,
                 current_request=current_request,
+                task_context=task_context,
                 route=route,
                 middleware_registry=middleware_registry,
                 correlation=correlation,
@@ -386,7 +389,9 @@ async def reflect_async(
         resolved_source = source or infer_source(provider)
         adapter = resolve_for(normalize_registry_provider(provider), resolved_source)
         tool_summary = _summarise_tool_results(tool_results)
-        user_prompt = _build_user_prompt(state, tool_summary, current_request=current_request)
+        user_prompt = _build_user_prompt(
+            state, tool_summary, current_request=current_request, task_context=task_context
+        )
 
         log.info(
             "reflection dispatch: model=%s provider=%s source=%s round=%d max_tokens=%d",
@@ -484,6 +489,7 @@ async def _reflect_with_jev(
     tool_results: list[dict[str, Any]],
     *,
     current_request: str,
+    task_context: str,
     route: tuple[str, SecretStr],
     middleware_registry: Any | None,
     correlation: Mapping[str, Any] | None,
@@ -501,6 +507,10 @@ async def _reflect_with_jev(
             12_000,
         )
     }
+    if task_context:
+        # Preserve the shared projection independently of the older cognitive
+        # snapshot's cap so its tail cannot discard the latest user correction.
+        evidence["retained_task_context"] = task_context
     request = AdapterCallRequest(
         model=adapter.model,
         messages=(

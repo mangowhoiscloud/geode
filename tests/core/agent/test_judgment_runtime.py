@@ -61,6 +61,14 @@ def test_round_then_terminal_dispatch_once_with_native_usage_and_no_synthetic_be
     )
     loop._time_budget_s = 0
     loop._verify_root_user_input = "Return the observed value."
+    from core.orchestration.compaction import _carry_forward
+
+    loop.context.messages[:] = _carry_forward("Archived key: violet-signal. " + "s" * 3900, [])
+    loop.context.add_user_message(
+        "Earlier input " + "u" * 7800 + " Correction: multiplier 3.", origin="user_input"
+    )
+    loop.context.add_user_message("SYNTHETIC_NEW_AUTHORITY")
+    loop.context.add_user_message(loop._verify_root_user_input, origin="user_input")
     loop.cognitive_state.goal = "Inspect the original file."
     loop.cognitive_state.hypotheses = ["The value may be known"]
     loop.cognitive_state.confidence = 0.4
@@ -122,15 +130,39 @@ def test_round_then_terminal_dispatch_once_with_native_usage_and_no_synthetic_be
                 "cognitive_state", ""
             )
             assert loop.cognitive_state.goal == "Inspect the original file."
+            retained_context = requests[0]["state"]["retained_task_context"]
+            assert "Archived key: violet-signal" in retained_context
+            assert "Correction: multiplier 3." in retained_context
+            assert "derived_summary" in retained_context
+            assert "SYNTHETIC_NEW_AUTHORITY" not in retained_context
             await loop._record_text_only_round(1, text="The value is 7.")
             assert len(requests) == 1  # no second reflection before final judgment
             return await verify_turn_async(
-                AgenticResult(text="The value is 7.", termination_reason="natural"), loop=loop
+                AgenticResult(
+                    text="The value is 7.",
+                    termination_reason="natural",
+                    tool_calls=[
+                        {
+                            "tool": "read_file",
+                            "input": {"path": "evidence.txt"},
+                            "result": "Final actual observation: value 7.",
+                        }
+                    ],
+                ),
+                loop=loop,
             )
 
     try:
         result = asyncio.run(run())
         assert len(requests) == 2
+        final_evidence = requests[1]["state"]["tool_observations"]
+        assert len(final_evidence) > 12_000
+        assert "Final actual observation: value 7." in final_evidence
+        assert final_evidence.index("Final actual observation: value 7.") > 12_000
+        assert (
+            requests[0]["state"]["retained_task_context"]
+            in (requests[1]["state"]["tool_observations"])
+        )
         assert loop.cognitive_state.hypotheses == ["The value may be known"]
         assert loop.cognitive_state.confidence == 0.4
         assert loop.cognitive_state.confidence_observed_round == 0
@@ -192,3 +224,65 @@ def test_jev_visual_evidence_is_unavailable_not_silently_discarded(monkeypatch) 
     assert verdict.reason == "jev_visual_evidence_unsupported"
     assert not verdict.passed and not verdict.should_retry
     loop._call_llm.assert_not_called()
+
+
+def test_jev_reflection_snapshot_limit_does_not_discard_retained_correction(monkeypatch) -> None:
+    from core.agent.cognitive_state import CognitiveState
+    from core.agent.conversation import render_retained_task_context
+    from core.agent.loop._reflection import reflect_async
+    from core.orchestration.compaction import _carry_forward
+
+    monkeypatch.setattr(settings, "judgment_engine", "jev")
+    monkeypatch.setattr(settings, "jev_provider", "typesafe")
+    monkeypatch.setattr(settings, "typesafe_api_key", SecretStr("test-secret"))
+    context = ConversationContext(messages=_carry_forward("Archived key: violet-signal.", []))
+    context.add_user_message("Correction: multiplier 3.", origin="user_input")
+    task_context = render_retained_task_context(context.messages, current_request="Execute")
+    state = CognitiveState(goal="Earlier legacy goal " + "x" * 15000)
+    requests = []
+
+    def transport(request):
+        payload = json.loads(request.content)
+        requests.append(payload)
+        return httpx.Response(
+            200,
+            json={
+                "model": payload["model"],
+                "answers": {
+                    "evidence": {
+                        "type": "choice",
+                        "choice": "supported",
+                        "confidence": 1.0,
+                        "probabilities": {
+                            "supported": 1.0,
+                            "contradicted": 0.0,
+                            "insufficient_evidence": 0.0,
+                        },
+                    }
+                },
+            },
+        )
+
+    original_adapter = typesafe.SystemOneAdapter
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+            monkeypatch.setattr(
+                typesafe,
+                "SystemOneAdapter",
+                lambda provider, key: original_adapter(provider, key, client=client),
+            )
+            await reflect_async(
+                state,
+                [],
+                current_request="Execute",
+                task_context=task_context,
+                model="gpt-6-sol",
+                max_tokens=128,
+            )
+
+    asyncio.run(run())
+    assert len(requests) == 1
+    assert "[truncated:" in requests[0]["state"]["cognitive_state"]
+    assert requests[0]["state"]["retained_task_context"] == task_context
+    assert "Correction: multiplier 3." in task_context

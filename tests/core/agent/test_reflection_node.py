@@ -500,6 +500,21 @@ def test_reflection_skips_an_expired_root_budget(
     reflection_call.assert_not_awaited()
 
 
+def test_retained_task_context_does_not_bypass_reflection_privacy(
+    reflection_loop: tuple[AgenticLoop, HookSystem], reflection_call: Any
+) -> None:
+    from core.orchestration.compaction import _carry_forward
+
+    loop, _hooks = reflection_loop
+    loop.context.messages[:] = _carry_forward("PRIVATE_DERIVED_SUMMARY", [])
+    loop.context.add_user_message("Prior private correction", origin="user_input")
+    loop._reflection_requires_redaction = True
+
+    asyncio.run(loop._maybe_reflect([]))
+
+    reflection_call.assert_not_awaited()
+
+
 def test_reflection_cancels_at_the_remaining_root_budget(
     reflection_loop: tuple[AgenticLoop, HookSystem], reflection_call: Any
 ) -> None:
@@ -946,3 +961,43 @@ def test_reflect_async_swallows_setup_failure(monkeypatch: pytest.MonkeyPatch) -
     # state preserved
     assert state.hypotheses == ["keep"]
     assert state.confidence == 0.4
+
+
+def test_compacted_reflection_caller_passes_retained_task_context(
+    monkeypatch: pytest.MonkeyPatch, reflection_loop: tuple[AgenticLoop, HookSystem]
+) -> None:
+    from copy import deepcopy
+
+    from core.orchestration.compaction import _carry_forward
+
+    loop, _hooks = reflection_loop
+    request = "Execute using the archived key and latest user correction."
+    correction = "Correction: use beta with multiplier 3."
+    loop.context.messages[:] = _carry_forward("Archived key: violet-signal.", [])
+    loop.context.add_user_message(correction, origin="user_input")
+    loop.context.add_user_message("SYNTHETIC_REMINDER")
+    loop.context.add_user_message(request, origin="user_input")
+    loop._verify_root_user_input = request
+    loop.cognitive_state.goal = "Earlier fixture request"
+    response = AdapterCallResult(
+        text="",
+        usage=UsageSummary(),
+        stop_reason="tool_use",
+        tool_uses=({"name": REFLECTION_TOOL_NAME, "input": {"confidence": 0.8}},),
+    )
+    adapter = _StubAdapter(response=response)
+    _install_reflection_stubs(monkeypatch, adapter=adapter)
+    monkeypatch.setattr(settings, "judgment_engine", "llm")
+    before = deepcopy(loop.context.messages)
+
+    asyncio.run(loop._maybe_reflect([]))
+
+    prompt = adapter.last_kwargs["messages"][0].content
+    assert "Archived key: violet-signal" in prompt
+    assert correction in prompt
+    assert prompt.count(request) == 1
+    assert "SYNTHETIC_REMINDER" not in prompt
+    assert loop.context.messages == before
+    loop.context.messages[4]["content"] = correction.replace("3", "11")
+    asyncio.run(loop._maybe_reflect([]))
+    assert "multiplier 11" in adapter.last_kwargs["messages"][0].content

@@ -22,7 +22,7 @@ from collections.abc import Mapping, Set
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
-from core.agent.conversation import ConversationContext
+from core.agent.conversation import ConversationContext, render_retained_task_context
 from core.agent.tool_executor import (
     ToolCallProcessor,
     ToolExecutor,
@@ -511,6 +511,11 @@ class AgenticLoop:
         )
 
         reflection_kwargs: dict[str, Any] = {}
+        task_context = render_retained_task_context(
+            self.context.messages, current_request=self._verify_root_user_input
+        )
+        if task_context:
+            reflection_kwargs["task_context"] = task_context
         active_middleware = getattr(self, "_middleware_registry", None)
         if active_middleware is not None:
             reflection_kwargs["middleware_registry"] = active_middleware
