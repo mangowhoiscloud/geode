@@ -126,8 +126,7 @@ GLM_CODING_TIERS: dict[str, Plan] = {
 def default_plan_for_payg(provider: str, key: str) -> Plan:
     """Build a default PAYG Plan from a bare API key + provider.
 
-    Used by .env auto-migration so legacy users keep working without
-    explicit `/login add` calls.
+    Used by `/login add` and `/key` when they register a PAYG key.
     """
     from core.llm.registry import get_provider_spec
 

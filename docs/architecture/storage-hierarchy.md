@@ -190,6 +190,7 @@ git-reviewable evidence ledgers.
 ```
 ~/.geode/                                  user-private state
 ├── auth.toml                              # credentials + plans + routing
+├── .auth.toml.lock                        # serializes auth.toml changes
 ├── config.toml                            # global config overrides
 ├── cli.sock                               # thin-CLI ↔ serve IPC
 ├── .env                                   # secrets

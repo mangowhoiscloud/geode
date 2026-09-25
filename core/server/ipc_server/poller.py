@@ -1090,7 +1090,11 @@ class CLIPoller:
                 "should_break": should_break,
             }
         except Exception as exc:
-            log.warning("CLI command error: %s %s", cmd, exc, exc_info=True)
+            if isinstance(exc, ValueError | OSError):
+                # Rejected input may echo user text (even a pasted key); log only the class.
+                log.info("CLI command rejected: %s (%s)", cmd, type(exc).__name__)
+            else:
+                log.warning("CLI command error: %s %s", cmd, exc, exc_info=True)
             return {
                 "type": "command_result",
                 "cmd": cmd,

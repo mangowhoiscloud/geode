@@ -225,6 +225,11 @@ def reload_auth_state() -> str:
         len(profiles_after),
         changes,
     )
+    if not auth_toml_path().exists():
+        return (
+            f"  [muted]No auth.toml; nothing to reload "
+            f"({len(plans_after)} plans, {len(profiles_after)} profiles in use)[/muted]\n"
+        )
     lines = [
         f"  [success]auth.toml reloaded[/success]  "
         f"[muted]{len(plans_after)} plans, {len(profiles_after)} profiles[/muted]",

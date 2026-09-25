@@ -26,7 +26,7 @@ def _poller() -> CLIPoller:
     ("args", "status", "text"),
     [
         ("remove ghost-plan", "error", "Plan not found: ghost-plan"),
-        ("refresh", "ok", "auth.toml reloaded"),
+        ("refresh", "ok", "nothing to reload"),
         ("help", "ok", "credentials & subscription plans"),
     ],
 )

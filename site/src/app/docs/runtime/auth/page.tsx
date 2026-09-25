@@ -61,10 +61,10 @@ export default function Page() {
             <p>
               세션 안의 <code>/login</code>은 플랜과 자격을 한 화면에서
               관리합니다(<code>core/cli/commands/login.py</code>). 키 입력과
-              브라우저 로그인(<code>add</code>, <code>set-key</code>,
-              <code>openai</code>, <code>anthropic</code>, <code>google</code>)은
-              thin CLI에서 실행해 저장한 뒤 데몬에 리로드를 알립니다. 조회와
-              그 밖의 변경은 실행 중인 상태를 가진 데몬이 처리합니다. 저장하지
+              브라우저 로그인(<code>add</code>, <code>set-key</code>, <code>openai</code>,
+              {" "}<code>anthropic</code>, <code>google</code>)과 <code>source</code>는
+              thin CLI에서 실행합니다. 키는 저장한 뒤 데몬에 리로드를 알립니다. 조회와
+              plan·프로파일 변경은 실행 중인 상태를 가진 데몬이 처리합니다. 저장하지
               못한 변경은 성공으로 표시하지 않습니다.
             </p>
             <table>
@@ -249,10 +249,10 @@ ZAI_API_KEY={id}.{secret}`}</pre>
             <p>
               In-session <code>/login</code> manages plans and credentials on
               one screen (<code>core/cli/commands/login.py</code>). Key entry and
-              browser logins (<code>add</code>, <code>set-key</code>,
-              <code>openai</code>, <code>anthropic</code>, <code>google</code>)
-              run in the thin CLI, save, and then ask the daemon to reload. Views
-              and other changes run in the daemon, which owns the live state. A
+              browser logins (<code>add</code>, <code>set-key</code>, <code>openai</code>,
+              {" "}<code>anthropic</code>, <code>google</code>) and <code>source</code>
+              {" "}run in the thin CLI; saved keys then ask the daemon to reload. Views
+              and plan or profile changes run in the daemon, which owns the live state. A
               change that could not be saved is not reported as a success.
             </p>
             <table>
