@@ -169,7 +169,7 @@ def test_geo_operator_slash_receipts_are_correlated_and_model_inaccessible(
         _prompt_dirty=False,
     )
     monkeypatch.setattr(
-        "core.cli.commands.skills.build_skill_prompt",
+        "core.skills.skills.build_skill_prompt",
         lambda _registry, name, arguments="": f"{name}:{arguments}",
     )
     assert (

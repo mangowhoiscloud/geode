@@ -111,7 +111,7 @@ COMMAND_REGISTRY: dict[str, CommandSpec] = {
         name="/grill",
         location=RunLocation.DAEMON_STREAM,
         description="Stress-test a decision as a dependency-aware design tree",
-        handler_path="core.cli.commands.skills:build_grilling_prompt",
+        handler_path="core.skills.grilling:build_grilling_prompt",
     ),
     # ────────── DAEMON_RPC — short read-only daemon queries ──────────
     # Phase 4에서 core/server/handlers/ 로 이동 후 handler_path 갱신.

@@ -15,48 +15,6 @@ from typing import Any as _Any
 log = logging.getLogger(__name__)
 
 
-def build_skill_prompt(skill_registry: _Any, name: str, arguments: str = "") -> str:
-    """Render one trusted registry skill for AgenticLoop execution."""
-    skill = skill_registry.get(name) if skill_registry is not None else None
-    if skill is None:
-        raise ValueError(f"Skill not found: {name}")
-    rendered = skill.render(arguments=arguments.strip())
-    if not rendered:
-        raise ValueError(f"Skill '{name}' has no body content")
-    return f"[skill:{name}] {rendered}"
-
-
-def build_grilling_prompt(arg: str, *, skill_registry: _Any, agentic_ref: _Any) -> str:
-    """Build the `/grill` prompt without adding a second execution engine."""
-    from core.memory.grills import GrillStore
-    from core.observability.session_timeline import SessionEventKind
-
-    loop = agentic_ref
-    if loop is None or not getattr(loop, "_session_id", ""):
-        raise ValueError("/grill requires an active AgenticLoop session")
-    db_path = getattr(getattr(loop, "_timeline", None), "db_path", None)
-    store = GrillStore(db_path)
-    before = store.get(loop._session_id)
-    subject = arg.strip() or (before.subject if before is not None else "")
-    grill = store.start(loop._session_id, subject)
-    controls = getattr(loop, "_control_state_renderers", None)
-    if not isinstance(controls, dict):
-        controls = {}
-        loop._control_state_renderers = controls
-    controls["grill"] = store
-    if before is None or before.grill_id != grill.grill_id:
-        timeline = getattr(loop, "_timeline", None)
-        if timeline is not None:
-            timeline.begin_control_turn()
-            timeline.record_control_state(
-                SessionEventKind.GRILL_STARTED,
-                grill,
-                trigger="slash_grill",
-            )
-    loop._prompt_dirty = True
-    return build_skill_prompt(skill_registry, "grilling", subject)
-
-
 def cmd_skills(skill_registry: _Any, arg: str) -> None:
     """Handle /skills command — list/inspect loaded skills.
 
