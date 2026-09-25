@@ -30,13 +30,15 @@ import json
 import logging
 import os
 import re
-from dataclasses import dataclass
+from collections.abc import AsyncIterator
+from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Any
 
 from core.llm.adapters.base import (
     AdapterCallRequest,
     AdapterCallResult,
     Message,
+    StreamEvent,
     ToolSpec,
     UsageSummary,
 )
@@ -79,7 +81,7 @@ def _catalog_context_window(model_id: str) -> int:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class OpenAIModelSpec:
     """Per-model API quirks for the OpenAI Chat Completions + Codex Responses surface."""
 
@@ -99,11 +101,24 @@ class OpenAIModelSpec:
     context_window: int
     """Total context window (input + output) in tokens — for guard logging only."""
 
+    max_output_tokens: int | None = None
+    """Published API output limit, including reasoning; unknown is not unlimited."""
+
+    max_input_tokens: int | None = None
+    """Published Platform input cap; absent is unknown, not context minus output."""
+
+    codex_context_window: int | None = None
+    codex_max_context_window: int | None = None
+    """Pinned Codex client defaults/config ceiling, never account entitlement."""
+
     supports_tool_search: bool = False
     """True → model accepts ``{"type": "tool_search"}`` + ``defer_loading``
     on the Responses API ("only gpt-5.4 and later models support
     tool_search" — developers.openai.com/api/docs/guides/tools-tool-search).
     Default False so unknown/legacy models never gamble a 400."""
+
+    supports_explicit_prompt_cache: bool = False
+    """Platform GPT-5.6+ content-block breakpoints; not a Codex route claim."""
 
 
 # Registry — keep alphabetically sorted within each family for stable diffs.
@@ -118,15 +133,50 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("low", "medium", "high", "xhigh", "max"),
         context_window=_catalog_context_window("gpt-6-astra"),
+        max_input_tokens=922_000,
+        codex_context_window=272_000,
+        codex_max_context_window=872_000,
+        max_output_tokens=128_000,
         supports_tool_search=True,
+        supports_explicit_prompt_cache=True,
+    ),
+    # Public Platform and Codex models, checked 2026-09-24. Account rollout
+    # remains separate; Ultra is a Codex execution mode, not an API effort.
+    "gpt-6-sol": OpenAIModelSpec(
+        model_id="gpt-6-sol",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
+        context_window=_catalog_context_window("gpt-6-sol"),
+        max_input_tokens=922_000,
+        codex_context_window=272_000,
+        codex_max_context_window=872_000,
+        max_output_tokens=128_000,
+        supports_tool_search=True,
+        supports_explicit_prompt_cache=True,
+    ),
+    "gpt-6-luna": OpenAIModelSpec(
+        model_id="gpt-6-luna",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
+        context_window=_catalog_context_window("gpt-6-luna"),
+        max_input_tokens=922_000,
+        codex_context_window=272_000,
+        codex_max_context_window=872_000,
+        max_output_tokens=128_000,
+        supports_tool_search=True,
+        supports_explicit_prompt_cache=True,
     ),
     # ── GPT-5 family (reasoning, max_completion_tokens, temperature blocked) ──
     "gpt-5.3-codex": OpenAIModelSpec(
         model_id="gpt-5.3-codex",
         uses_max_completion_tokens=True,
         accepts_temperature=False,
-        reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
+        reasoning_effort_values=("low", "medium", "high", "xhigh"),
         context_window=_catalog_context_window("gpt-5.3-codex"),
+        max_input_tokens=272_000,
+        max_output_tokens=128_000,
     ),
     "gpt-5.4": OpenAIModelSpec(
         model_id="gpt-5.4",
@@ -134,6 +184,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
         context_window=_catalog_context_window("gpt-5.4"),
+        max_output_tokens=128_000,
         supports_tool_search=True,
     ),
     "gpt-5.4-mini": OpenAIModelSpec(
@@ -142,6 +193,8 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
         context_window=_catalog_context_window("gpt-5.4-mini"),
+        max_input_tokens=272_000,
+        max_output_tokens=128_000,
         supports_tool_search=True,
     ),
     "gpt-5.4-nano": OpenAIModelSpec(
@@ -150,6 +203,8 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
         context_window=_catalog_context_window("gpt-5.4-nano"),
+        max_input_tokens=272_000,
+        max_output_tokens=128_000,
     ),
     "gpt-5.2": OpenAIModelSpec(
         model_id="gpt-5.2",
@@ -157,6 +212,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
         context_window=_catalog_context_window("gpt-5.2"),
+        max_output_tokens=128_000,
     ),
     "gpt-5.5": OpenAIModelSpec(
         model_id="gpt-5.5",
@@ -164,6 +220,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
         context_window=_catalog_context_window("gpt-5.5"),
+        max_output_tokens=128_000,
         supports_tool_search=True,
     ),
     # GPT-5.6 family (GA 2026-07-09). Effort levels incl. the new "max" are
@@ -182,7 +239,9 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
         context_window=_catalog_context_window("gpt-5.6"),
+        max_output_tokens=128_000,
         supports_tool_search=True,
+        supports_explicit_prompt_cache=True,
     ),
     "gpt-5.6-luna": OpenAIModelSpec(
         model_id="gpt-5.6-luna",
@@ -190,7 +249,12 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
         context_window=_catalog_context_window("gpt-5.6-luna"),
+        max_input_tokens=922_000,
+        codex_context_window=272_000,
+        codex_max_context_window=872_000,
+        max_output_tokens=128_000,
         supports_tool_search=True,
+        supports_explicit_prompt_cache=True,
     ),
     "gpt-5.6-sol": OpenAIModelSpec(
         model_id="gpt-5.6-sol",
@@ -198,7 +262,12 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
         context_window=_catalog_context_window("gpt-5.6-sol"),
+        max_input_tokens=922_000,
+        codex_context_window=272_000,
+        codex_max_context_window=872_000,
+        max_output_tokens=128_000,
         supports_tool_search=True,
+        supports_explicit_prompt_cache=True,
     ),
     "gpt-5.6-terra": OpenAIModelSpec(
         model_id="gpt-5.6-terra",
@@ -206,21 +275,28 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
         context_window=_catalog_context_window("gpt-5.6-terra"),
+        max_input_tokens=922_000,
+        codex_context_window=272_000,
+        codex_max_context_window=872_000,
+        max_output_tokens=128_000,
         supports_tool_search=True,
+        supports_explicit_prompt_cache=True,
     ),
     "gpt-5-mini": OpenAIModelSpec(
         model_id="gpt-5-mini",
         uses_max_completion_tokens=True,
         accepts_temperature=False,
-        reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
+        reasoning_effort_values=("minimal", "low", "medium", "high"),
         context_window=_catalog_context_window("gpt-5-mini"),
+        max_output_tokens=128_000,
     ),
     "gpt-5-nano": OpenAIModelSpec(
         model_id="gpt-5-nano",
         uses_max_completion_tokens=True,
         accepts_temperature=False,
-        reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
+        reasoning_effort_values=("minimal", "low", "medium", "high"),
         context_window=_catalog_context_window("gpt-5-nano"),
+        max_output_tokens=128_000,
     ),
     # ── o-series (always-on reasoning, no temperature, no "none" effort) ──
     "o3": OpenAIModelSpec(
@@ -229,6 +305,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("low", "medium", "high"),
         context_window=_catalog_context_window("o3"),
+        max_output_tokens=100_000,
     ),
     "o4-mini": OpenAIModelSpec(
         model_id="o4-mini",
@@ -236,6 +313,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("low", "medium", "high"),
         context_window=_catalog_context_window("o4-mini"),
+        max_output_tokens=100_000,
     ),
 }
 
@@ -280,49 +358,15 @@ def get_openai_model_spec(model_id: str) -> OpenAIModelSpec:
     return _OPENAI_LEGACY_DEFAULT
 
 
-# Canonical effort ladder (weakest → strongest) for cross-model clamping.
-# "max" exists only on gpt-5.6+; "minimal" only on pre-5.5 families.
-_EFFORT_LADDER: tuple[str, ...] = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
-
-# One-shot dedup per (model_id, requested effort) so a persisted effort
-# from another model's picker session doesn't spam every call.
-_EFFORT_CLAMP_WARNED: set[tuple[str, str]] = set()
-
-
-def clamp_reasoning_effort(effort: str | None, *, spec: OpenAIModelSpec) -> str | None:
-    """Clamp a requested reasoning effort to what ``spec`` supports.
-
-    The effort setting persists across model switches (picker → config),
-    so a value valid on one model can reach another that rejects it —
-    e.g. ``max`` picked on gpt-5.6-sol then sent to gpt-5.5, or
-    ``minimal`` sent to a gpt-5.6 spec that doesn't list it. The wire
-    must only carry values in ``spec.reasoning_effort_values``; clamp to
-    the nearest supported level below the request (above when nothing
-    weaker exists) instead of gambling a backend 400.
-    """
-    values = spec.reasoning_effort_values
-    if effort is None or values is None or effort in values:
-        return effort
-    key = (spec.model_id, effort)
-    clamped: str
-    try:
-        idx = _EFFORT_LADDER.index(effort)
-    except ValueError:
-        clamped = values[len(values) // 2]  # unknown label — mid-ladder default
-    else:
-        weaker = [v for v in _EFFORT_LADDER[:idx] if v in values]
-        stronger = [v for v in _EFFORT_LADDER[idx + 1 :] if v in values]
-        clamped = weaker[-1] if weaker else (stronger[0] if stronger else values[0])
-    if key not in _EFFORT_CLAMP_WARNED:
-        _EFFORT_CLAMP_WARNED.add(key)
-        log.warning(
-            "reasoning effort %r unsupported on %s (allowed: %s) — clamped to %r",
-            effort,
-            spec.model_id,
-            "/".join(values),
-            clamped,
+def validate_reasoning_effort(effort: str | None, *, spec: OpenAIModelSpec) -> str | None:
+    """Preserve supported effort and reject incompatible explicit selections."""
+    if effort is None:
+        return None
+    if spec.reasoning_effort_values is None or effort not in spec.reasoning_effort_values:
+        raise LLMRequestValidationError(
+            f"Reasoning effort {effort!r} is unsupported for {spec.model_id!r}"
         )
-    return clamped
+    return effort
 
 
 def cap_tools(
@@ -354,6 +398,7 @@ def cap_tools(
 
 
 if TYPE_CHECKING:
+    import httpx
     import openai
 
 
@@ -394,40 +439,17 @@ def build_async_openai_client(
 
 
 def build_async_codex_client(api_key: str) -> openai.AsyncOpenAI:
-    """Construct a fresh ``AsyncOpenAI`` bound to the Codex OAuth endpoint.
+    """Construct a Codex OAuth client with its route and authentication headers.
 
-    Mirrors the loop-affine client caching used across adapters (which uses a
-    module-level singleton — the adapter must NOT reuse it, so we replicate
-    the header + base_url plumbing here). The ``originator: codex_cli_rs``
-    header and ``ChatGPT-Account-ID`` (extracted from the JWT) are mandatory
-    — the Codex backend rejects unsigned requests with 401.
-
-    PR-CODEX-NO-KEEPALIVE (2026-05-28) — the Codex backend
-    (``chatgpt.com/backend-api/codex/responses``) closes idle HTTP/2
-    connections aggressively (sub-second to a few-second window)
-    without sending a GOAWAY frame the client can observe in time.
-    First call after an idle period silently reuses a stale connection
-    from httpx's keep-alive pool → ``httpx.WriteError`` → openai SDK
-    ``APIConnectionError`` in ~4ms (no roundtrip). Observed pattern:
-    4 parallel ``web_search`` calls right after a slower LLM call —
-    first one fails instantly, next three open fresh connections and
-    succeed (12-19s typical). Traced via PR-DISPATCH-OBS-EXT's
-    ``adapter_dispatch_attempt`` events 2026-05-28 15:44:37 KST.
-
-    Fix: this client overrides ``max_keepalive_connections=0`` so every
-    Codex backend call opens a fresh TCP+TLS connection. Costs
-    ~100-300ms TLS handshake per call but eliminates the stale-
-    connection failure mode entirely. Other OpenAI-family endpoints
-    (api.openai.com PAYG, api.z.ai GLM PAYG, GLM Coding Plan) keep the
-    default keep-alive policy via :func:`_build_async_httpx_client` —
-    they have proper server-side idle timeout policies + GOAWAY signaling.
+    Codex retains no idle connections after observed stale-connection failures.
+    OpenAI and GLM use the configured keep-alive policy. All routes share the
+    operator's timeouts, and application code owns retries.
     """
     if not api_key:
         raise ValueError("build_async_codex_client: api_key is empty")
-    import httpx
     import openai
 
-    from core.config import CODEX_BASE_URL, settings
+    from core.config import CODEX_BASE_URL
     from core.llm.adapters._codex_sdk_workaround import install as _install_codex_workaround
     from core.llm.providers.codex import build_codex_oauth_headers
 
@@ -435,24 +457,7 @@ def build_async_codex_client(api_key: str) -> openai.AsyncOpenAI:
     # workaround before the first Codex backend call. Idempotent across
     # process lifetime; only patches when the openai SDK is importable.
     _install_codex_workaround()
-    # PR-CODEX-NO-KEEPALIVE (2026-05-28) — Codex-specific httpx client
-    # with ``max_keepalive_connections=0`` (see method docstring for the
-    # stale-connection rationale). Other timeout / pool settings mirror
-    # :func:`_build_async_httpx_client` so operators tune both with the
-    # same ``settings.llm_*`` knobs.
-    codex_http_client = httpx.AsyncClient(
-        limits=httpx.Limits(
-            max_connections=settings.llm_max_connections,
-            max_keepalive_connections=0,
-            keepalive_expiry=settings.llm_keepalive_expiry,
-        ),
-        timeout=httpx.Timeout(
-            connect=settings.llm_connect_timeout,
-            read=settings.llm_read_timeout,
-            write=settings.llm_write_timeout,
-            pool=settings.llm_pool_timeout,
-        ),
-    )
+    codex_http_client = _build_async_httpx_client(max_keepalive_connections=0)
 
     return openai.AsyncOpenAI(
         api_key=api_key,
@@ -465,22 +470,11 @@ def build_async_codex_client(api_key: str) -> openai.AsyncOpenAI:
     )
 
 
-def _build_async_httpx_client() -> Any:
-    """PR-ADAPTER-TIMEOUT (2026-05-28) — share Anthropic adapter's timeout
-    policy with every OpenAI-family client (PAYG OpenAI, Codex OAuth, GLM
-    PAYG, GLM Coding Plan).
+def _build_async_httpx_client(*, max_keepalive_connections: int | None = None) -> httpx.AsyncClient:
+    """Apply the operator's HTTP limits and timeouts to OpenAI-family clients.
 
-    Without an explicit ``http_client``, ``AsyncOpenAI`` uses the SDK's
-    default httpx instance whose read-timeout defaults are long enough that
-    a stalled ``responses.stream`` on the Codex backend silently waited
-    ~10 minutes before the SDK's retry loop kicked in (operator-observed
-    incident 2026-05-28 11:06→11:16, 620062 ms latency). Pinning
-    ``settings.llm_read_timeout`` here caps the stall window — the
-    app-owned retry policy then decides whether another attempt is safe.
-
-    Reads the same ``llm_*_timeout`` / ``llm_*_connections`` settings the
-    Anthropic adapter consumes so operators tune both providers with one
-    knob (``config.toml [llm]`` or ``GEODE_LLM_READ_TIMEOUT``).
+    An explicit keep-alive override lets Codex disable connection reuse while
+    preserving the same timeout policy as OpenAI, GLM, and Anthropic.
     """
     import httpx
 
@@ -489,7 +483,11 @@ def _build_async_httpx_client() -> Any:
     return httpx.AsyncClient(
         limits=httpx.Limits(
             max_connections=settings.llm_max_connections,
-            max_keepalive_connections=settings.llm_max_keepalive_connections,
+            max_keepalive_connections=(
+                settings.llm_max_keepalive_connections
+                if max_keepalive_connections is None
+                else max_keepalive_connections
+            ),
             keepalive_expiry=settings.llm_keepalive_expiry,
         ),
         timeout=httpx.Timeout(
@@ -1420,6 +1418,50 @@ def translate_codex_response(
     )
 
 
+async def translate_responses_stream(events: AsyncIterator[Any]) -> AsyncIterator[StreamEvent]:
+    """Normalize SDK events without equating transport EOF with completion."""
+    items: list[Any] = []
+    terminal: Any = None
+    text_emitted = False
+    async for event in events:
+        kind = getattr(event, "type", "")
+        if kind in {"response.output_text.delta", "response.refusal.delta"}:
+            text_emitted = True
+            yield StreamEvent(kind="text", payload={"text": event.delta})
+        elif kind == "response.reasoning_summary_text.delta":
+            yield StreamEvent(kind="thinking", payload={"text": event.delta})
+        elif kind == "response.output_item.done":
+            items.append(event.item)
+        elif kind in {"response.completed", "response.incomplete", "response.failed"}:
+            terminal = event.response
+            if getattr(terminal, "status", None) != kind.removeprefix("response."):
+                raise RuntimeError("OpenAI Responses stream has an inconsistent terminal status")
+            break
+        elif kind == "error":
+            raise RuntimeError("OpenAI Responses stream returned an error event")
+    if terminal is None:
+        raise RuntimeError("OpenAI Responses stream ended without a terminal response")
+    result = translate_codex_response(terminal, accumulated_items=items)
+    yield StreamEvent(kind="usage", payload=asdict(result.usage))
+    if result.stop_reason not in {"completed", "incomplete"}:
+        raise RuntimeError(f"OpenAI Responses stream ended with status {result.stop_reason!r}")
+    if not text_emitted and result.text:
+        yield StreamEvent(kind="text", payload={"text": result.text})
+    if result.stop_reason == "completed":
+        for tool in result.tool_uses:
+            yield StreamEvent(kind="tool_use", payload=tool)
+    yield StreamEvent(
+        kind="stop",
+        payload={
+            "stop_reason": result.stop_reason,
+            "response_id": result.response_id,
+            "response_model": result.response_model,
+            "codex_output_items": list(result.codex_output_items),
+            "reasoning_items": list(result.reasoning_items),
+        },
+    )
+
+
 def _normalize_summary_list(summary: Any) -> list[dict[str, Any]]:
     """PR-ADAPTER-TIMEOUT-AND-SERIALIZATION (2026-05-28) — convert OpenAI
     SDK ``Summary`` Pydantic objects (or dicts, or unknown) to a list of
@@ -1624,9 +1666,9 @@ def _apply_openai_tool_search_defer(
 def _prompt_cache_key(system_prompt: str) -> str:
     """Stable OpenAI ``prompt_cache_key`` derived from the static system prefix.
 
-    OpenAI routes same-``prompt_cache_key`` traffic onto the same cache machine
-    (combined with the prefix hash), improving cache-hit rate for requests that
-    share a common prefix. We key on the STATIC system prefix — everything
+    Before GPT-5.6 this helps route reusable prefixes; GPT-5.6+ uses the key
+    to separate cache accounting, without requiring it for cache optimization.
+    We retain the STATIC system prefix — everything
     before ``<dynamic_context>`` — so the key is byte-stable across a session's
     turns (the dynamic suffix: date / recalled memory / user context changes per
     turn and must not perturb the routing key). Returns ``""`` when there is no
@@ -1731,6 +1773,16 @@ def build_request_image_receipt(resp_input: Any) -> dict[str, Any] | None:
     return receipt
 
 
+def effective_output_tokens(req: AdapterCallRequest, *, backend: str) -> int | None:
+    """Return the transmitted Responses cap; Codex manages output itself."""
+    if backend == "codex":
+        return None
+    if req.max_tokens < 1:
+        raise LLMRequestValidationError("OpenAI max_output_tokens must be positive")
+    spec = get_openai_model_spec(req.model)
+    return min(req.max_tokens, spec.max_output_tokens or req.max_tokens)
+
+
 def build_responses_kwargs(
     req: AdapterCallRequest, *, backend: str, adapter_name: str
 ) -> dict[str, Any]:
@@ -1788,7 +1840,30 @@ def build_responses_kwargs(
         "input": resp_input or [{"role": "user", "content": "hello"}],
         "store": False,
     }
-    # OpenAI ``prompt_cache_key`` — cache-routing hint on both backends (each
+    if backend == "platform" and spec.supports_explicit_prompt_cache:
+        from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
+
+        static, boundary, dynamic = req.system_prompt.partition(PROMPT_CACHE_BOUNDARY)
+        if boundary and static.strip():
+            # Instructions cannot contain a breakpoint. Preserve their bytes and
+            # developer authority while marking the reusable prefix explicitly.
+            # Leave implicit caching enabled for the growing conversation.
+            kwargs.pop("instructions")
+            kwargs["input"] = [
+                {
+                    "role": "developer",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": static,
+                            "prompt_cache_breakpoint": {"mode": "explicit"},
+                        },
+                        {"type": "input_text", "text": boundary + dynamic},
+                    ],
+                },
+                *kwargs["input"],
+            ]
+    # OpenAI ``prompt_cache_key`` — stable cache identity on both backends (each
     # verified: platform documented + openai 2.30.0 SDK, Codex live-2026-06-23).
     # Keyed on the static system prefix so it stays stable across a session's
     # turns. Kill switch: settings.prompt_cache_key_enabled.
@@ -1799,7 +1874,7 @@ def build_responses_kwargs(
         if cache_key:
             kwargs["prompt_cache_key"] = cache_key
     if backend == "platform":
-        kwargs["max_output_tokens"] = req.max_tokens
+        kwargs["max_output_tokens"] = effective_output_tokens(req, backend=backend)
     if req.stop_sequences:
         # Responses API exposes no ``stop`` parameter (Chat Completions
         # did). Observable drop instead of a silent one — Codex review of
@@ -1831,10 +1906,12 @@ def build_responses_kwargs(
         # Reasoning-model branch — encrypted reasoning passthrough +
         # reasoning effort. Temperature is dropped per spec.
         kwargs["include"] = ["reasoning.encrypted_content"]
-        kwargs["reasoning"] = {
-            "effort": clamp_reasoning_effort(req.effort, spec=spec),
-            "summary": "auto",
-        }
+        effort = validate_reasoning_effort(req.effort, spec=spec)
+        kwargs["reasoning"] = {"effort": effort, "summary": "auto"}
+        # Platform supports sampling with reasoning disabled. Codex parameter
+        # acceptance is a separate contract; do not copy API knobs to it.
+        if backend == "platform" and effort == "none" and req.temperature is not None:
+            kwargs["temperature"] = req.temperature
     elif req.temperature is not None and spec.accepts_temperature:
         kwargs["temperature"] = req.temperature
     # PR-CODEX-OAUTH-RESPONSE-SCHEMA (2026-05-25) — Responses API

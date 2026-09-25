@@ -62,6 +62,7 @@ class UsageRecord:
     role: str = ""
     source: str = ""
     eval_id: str = ""
+    cache_creation_1h_tokens: int | None = None
 
     def to_json(self) -> str:
         """Serialize to compact JSON line. Falsy extension fields omitted."""
@@ -78,6 +79,8 @@ class UsageRecord:
             d["subject"] = self.subject_id
         if self.cache_creation_tokens:
             d["cache_w"] = self.cache_creation_tokens
+        if self.cache_creation_1h_tokens is not None:
+            d["cache_w_1h"] = self.cache_creation_1h_tokens
         if self.cache_read_tokens:
             d["cache_r"] = self.cache_read_tokens
         if self.thinking_tokens:
@@ -103,6 +106,7 @@ class UsageRecord:
             session=data.get("session", ""),
             subject_id=data.get("subject", ""),
             cache_creation_tokens=data.get("cache_w", 0),
+            cache_creation_1h_tokens=data.get("cache_w_1h"),
             cache_read_tokens=data.get("cache_r", 0),
             thinking_tokens=data.get("think", 0),
             role=data.get("role", ""),
@@ -141,6 +145,7 @@ class UsageStore:
         session: str = "",
         subject_id: str = "",
         cache_creation_tokens: int = 0,
+        cache_creation_1h_tokens: int | None = None,
         cache_read_tokens: int = 0,
         thinking_tokens: int = 0,
         role: str = "",
@@ -163,6 +168,7 @@ class UsageStore:
             session=session,
             subject_id=subject_id,
             cache_creation_tokens=cache_creation_tokens,
+            cache_creation_1h_tokens=cache_creation_1h_tokens,
             cache_read_tokens=cache_read_tokens,
             thinking_tokens=thinking_tokens,
             role=role,

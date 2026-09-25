@@ -54,13 +54,15 @@ def _wire_openai_credentials(monkeypatch: pytest.MonkeyPatch, *, oauth: bool, pa
 def test_explicit_source_checks_its_real_adapter_credentials(
     monkeypatch: pytest.MonkeyPatch, oauth: bool, payg: bool
 ) -> None:
-    from core.llm.strategies.plan_registry import resolve_routing
+    from core.llm.routing import resolve_routing
 
     _wire_openai_credentials(monkeypatch, oauth=oauth, payg=payg)
     target = resolve_routing("gpt-5.5")
-    assert target is not None
-    assert target.plan.provider == ("openai-codex" if oauth else "openai")
-    assert _state.model_available("gpt-5.5") is True  # default behavior unchanged
+    if oauth:
+        assert target is not None and target.plan.provider == "openai-codex"
+    else:
+        assert target is None  # explicit OAuth never falls through to a PAYG key
+    assert _state.model_available("gpt-5.5") is oauth
     assert _state.model_available("gpt-5.4", source="payg") is payg
     assert _state.model_available("gpt-5.5", source="subscription") is oauth
 
@@ -69,10 +71,17 @@ def test_explicit_source_checks_its_real_adapter_credentials(
 def test_subscription_picker_excludes_retired_offerings_but_keeps_disabled_current_row(
     monkeypatch: pytest.MonkeyPatch, retired: str
 ) -> None:
-    monkeypatch.setattr(_state, "_selected_openai_source", lambda: "subscription")
+    # Both sources have credentials and settings pin subscription, so only the
+    # retirement can disable the row, whatever an operator ``.env`` holds.
+    _wire_openai_credentials(monkeypatch, oauth=True, payg=True)
     rows = _state.get_model_profiles()
     assert retired not in {row.id for row in rows}
-    assert "gpt-5.5" in {row.id for row in rows}  # October 14 is still future
+    assert "gpt-5.5" not in {row.id for row in rows}  # Not a new subscription choice.
+    # The October 14 retirement is future: retain an explicit saved selection
+    # without treating it as a retired route or silently remapping it.
+    legacy = _state.get_model_profiles(configured_model_ids=("gpt-5.5",))
+    assert len([row for row in legacy if row.id == "gpt-5.5"]) == 1
+    assert _state.model_unavailable_reason("gpt-5.5", source="subscription") is None
 
     configured = _state.get_model_profiles(configured_model_ids=(retired, retired))
     matches = [row for row in configured if row.id == retired]
@@ -84,13 +93,26 @@ def test_subscription_picker_excludes_retired_offerings_but_keeps_disabled_curre
 def test_picker_reloads_source_without_hiding_platform_models(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_state, "_selected_openai_source", lambda: "subscription")
+    monkeypatch.setattr(_state, "_selected_openai_source", lambda model="": "subscription")
     assert "gpt-5.4" not in {row.id for row in _state.get_model_profiles()}
-    monkeypatch.setattr(_state, "_selected_openai_source", lambda: "payg")
+    monkeypatch.setattr(_state, "_selected_openai_source", lambda model="": "payg")
     assert {"gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"} <= {
         row.id for row in _state.get_model_profiles()
     }
     assert _state.model_unavailable_reason("gpt-5.4") is None
+
+
+@pytest.mark.parametrize("source", ["payg", "subscription"])
+def test_explicit_picker_source_does_not_read_operator_credentials(
+    monkeypatch: pytest.MonkeyPatch, source: str
+) -> None:
+    reader = Mock(side_effect=AssertionError("Operator credential reader reached"))
+    monkeypatch.setattr("core.auth.codex_cli_oauth.read_codex_cli_credentials", reader)
+
+    rows = _state.get_model_profiles(openai_source=source)
+
+    assert "gpt-6-sol" in {row.id for row in rows}
+    reader.assert_not_called()
 
 
 def test_retired_anthropic_configuration_is_disabled_and_not_replaced(
@@ -99,7 +121,9 @@ def test_retired_anthropic_configuration_is_disabled_and_not_replaced(
     import core.config as cfg
 
     monkeypatch.setattr(cfg, "ANTHROPIC_SECONDARY", "claude-sonnet-4")
-    rows = _state.get_model_profiles(configured_model_ids=("claude-opus-4-1",))
+    rows = _state.get_model_profiles(
+        configured_model_ids=("claude-opus-4-1",), openai_source="payg"
+    )
     for model_id in ("claude-sonnet-4", "claude-opus-4-1"):
         row = next(row for row in rows if row.id == model_id)
         assert "Unavailable on Anthropic API" in row.label
@@ -116,7 +140,9 @@ def test_custom_anthropic_host_does_not_inherit_official_api_retirement(
     monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://gateway.example.test")
     monkeypatch.setattr(cfg, "ANTHROPIC_SECONDARY", "claude-sonnet-4")
     monkeypatch.setattr(settings, "anthropic_api_key", "offline-key")
-    rows = _state.get_model_profiles(configured_model_ids=("claude-opus-4-1",))
+    rows = _state.get_model_profiles(
+        configured_model_ids=("claude-opus-4-1",), openai_source="payg"
+    )
     for model_id in ("claude-sonnet-4", "claude-opus-4-1"):
         row = next(row for row in rows if row.id == model_id)
         assert "Unavailable" not in row.label
@@ -129,7 +155,7 @@ def test_retired_current_selection_enter_does_not_pick_another_model(
 ) -> None:
     from core.cli import effort_picker
 
-    monkeypatch.setattr(_state, "_selected_openai_source", lambda: "subscription")
+    monkeypatch.setattr(_state, "_selected_openai_source", lambda model="": "subscription")
     rows = _state.get_model_profiles(configured_model_ids=("gpt-5.4",))
     profiles = [
         (row.id, row.provider, row.label, row.cost, row.id != "gpt-5.4", None) for row in rows
@@ -192,7 +218,7 @@ def test_non_tty_displayed_index_selects_the_same_role_specific_model(
         "_read_toml_value",
         lambda section, key: "api_key" if key == "source" else "gpt-6-astra",
     )
-    monkeypatch.setattr(model, "_current_model_for_role", lambda role: "gpt-6-astra")
+    monkeypatch.setattr(model, "_current_model_for_role", lambda role, client=None: "gpt-6-astra")
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
     printer = Mock()
     monkeypatch.setattr(commands.console, "print", printer)
@@ -222,7 +248,7 @@ def test_explicit_retired_selection_reports_reason_before_credentials_or_writes(
     from core.cli import commands
     from core.config import env_io
 
-    monkeypatch.setattr(_state, "_selected_openai_source", lambda: "subscription")
+    monkeypatch.setattr(_state, "_selected_openai_source", lambda model="": "subscription")
     monkeypatch.setattr(settings, "model", "gpt-5.6-sol")
     monkeypatch.setattr(settings, "openai_credential_source", "oauth")
     printer, credential_check, persist = Mock(), Mock(), Mock()

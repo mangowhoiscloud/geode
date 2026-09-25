@@ -113,6 +113,7 @@ def test_observe_checkpoints_balanced_tool_history_before_next_model(
     context = SimpleNamespace(messages=[])
     loop = SimpleNamespace(
         context=context,
+        _pending_model_settings=None,
         _convergence=SimpleNamespace(total_consecutive_tool_errors=0),
         _consecutive_tool_tracker=[],
         _update_tool_error_tracking=lambda _results: None,

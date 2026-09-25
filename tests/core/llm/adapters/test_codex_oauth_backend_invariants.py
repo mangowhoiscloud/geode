@@ -203,7 +203,7 @@ def test_codex_receipt_tracks_post_middleware_wire_and_completed_event(
         return Stream()
 
     client = SimpleNamespace(responses=SimpleNamespace(stream=stream))
-    monkeypatch.setattr(CodexOAuthAdapter, "_get_client", lambda _self: client)
+    monkeypatch.setattr(CodexOAuthAdapter, "_get_client", lambda _self, model="": client)
     monkeypatch.setattr(
         "core.llm.adapters.codex_oauth.translate_codex_response",
         lambda *_args, **_kwargs: AdapterCallResult(
@@ -241,7 +241,7 @@ def test_codex_receipt_tracks_post_middleware_wire_and_completed_event(
     loop = AgenticLoop(
         ConversationContext(),
         ToolExecutor(middleware_registry=middleware),
-        config=AgenticLoopConfig(source="codex-oauth", disable_settings_drift=True),
+        config=AgenticLoopConfig(source="codex-oauth"),
         model="gpt-5.6-sol",
         provider="openai",
         hooks=hooks,
@@ -284,7 +284,7 @@ def test_codex_receipt_tracks_post_middleware_wire_and_completed_event(
     assert row.llm_attempt_id == ended[-1]["llm_attempt_id"]
     assert row.payload["request_image_receipt"] == ended[-1].get("request_image_receipt")
     assert row.payload["usage"] == ended[-1].get("usage")
-    assert row.payload["activity_schema_version"] == 10
+    assert row.payload["activity_schema_version"] == 11
     assert "private.png" not in json.dumps(row.payload)
     assert len(images) == 2
     hooks.close()
@@ -378,7 +378,7 @@ def test_codex_web_search_honors_frozen_model_hint(monkeypatch) -> None:
 
     client = SimpleNamespace(responses=Responses())
     adapter = CodexOAuthAdapter()
-    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
 
     result = asyncio.run(adapter.aweb_search("query", model="gpt-5.6-sol"))
 

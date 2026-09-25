@@ -129,7 +129,7 @@ def test_acomplete_empty_response_no_schema_dumps_and_returns_empty(
     """
     client, capture = _build_mock_codex_client_empty_response()
     adapter = CodexOAuthAdapter()
-    adapter._get_client = lambda: client  # type: ignore[method-assign] # bypass OAuth probe
+    adapter._get_client = lambda _model="": client  # type: ignore[method-assign] # bypass OAuth probe
 
     with patch("core.paths.GLOBAL_DIAGNOSTICS_DIR", tmp_path):
         result = asyncio.run(adapter.acomplete(_voter_req(schema=None)))
@@ -158,7 +158,7 @@ def test_acomplete_empty_response_env_fail_fast_still_dumps(
     """Benchmark routes can opt into treating empty output_text as infra failure."""
     client, _capture = _build_mock_codex_client_empty_response()
     adapter = CodexOAuthAdapter()
-    adapter._get_client = lambda: client  # type: ignore[method-assign]
+    adapter._get_client = lambda _model="": client  # type: ignore[method-assign]
     monkeypatch.setenv("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", "1")
 
     with (
@@ -186,7 +186,7 @@ def test_acomplete_empty_response_can_attest_actionable_partial(
 ) -> None:
     client, _capture = _build_mock_codex_client_empty_response()
     adapter = CodexOAuthAdapter()
-    adapter._get_client = lambda: client  # type: ignore[method-assign]
+    adapter._get_client = lambda _model="": client  # type: ignore[method-assign]
     monkeypatch.setenv("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", "1")
 
     with (
@@ -233,7 +233,7 @@ def test_completed_empty_attempt_usage_reaches_sql_once_per_attempt(
         )
 
     client = SimpleNamespace(responses=SimpleNamespace(stream=stream))
-    monkeypatch.setattr(CodexOAuthAdapter, "_get_client", lambda _self: client)
+    monkeypatch.setattr(CodexOAuthAdapter, "_get_client", lambda _self, _model="": client)
     monkeypatch.setenv("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", "1")
     monkeypatch.setenv("GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR", "1")
     monkeypatch.setattr("core.agent.loop._provider_call._FAIL_FAST_RETRY_DELAY_S", 0)
@@ -249,7 +249,7 @@ def test_completed_empty_attempt_usage_reaches_sql_once_per_attempt(
     loop = AgenticLoop(
         ConversationContext(),
         ToolExecutor(),
-        config=AgenticLoopConfig(source="codex-oauth", disable_settings_drift=True),
+        config=AgenticLoopConfig(source="codex-oauth"),
         model="gpt-5.6-sol",
         provider="openai",
         hooks=hooks,
@@ -282,6 +282,7 @@ def test_completed_empty_attempt_usage_reaches_sql_once_per_attempt(
                 "cached_input_tokens": 0,
                 "reasoning_tokens": 0,
                 "cache_write_tokens": None,
+                "cache_write_1h_tokens": None,
             }
             assert row.payload["cost_usd"] > 0
             assert "raw_response" not in row.payload
@@ -297,7 +298,7 @@ def test_acomplete_empty_response_cannot_attest_without_dump(
 ) -> None:
     client, _capture = _build_mock_codex_client_empty_response()
     adapter = CodexOAuthAdapter()
-    adapter._get_client = lambda: client  # type: ignore[method-assign]
+    adapter._get_client = lambda _model="": client  # type: ignore[method-assign]
     monkeypatch.setenv("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", "1")
 
     with (
@@ -347,7 +348,7 @@ def test_acomplete_empty_text_with_function_call_is_not_empty_failure(
     client = MagicMock()
     client.responses.stream = MagicMock(side_effect=_create_stream)
     adapter = CodexOAuthAdapter()
-    adapter._get_client = lambda: client  # type: ignore[method-assign]
+    adapter._get_client = lambda _model="": client  # type: ignore[method-assign]
     monkeypatch.setenv("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", "1")
 
     with patch("core.paths.GLOBAL_DIAGNOSTICS_DIR", tmp_path):
@@ -375,7 +376,7 @@ def test_acomplete_empty_response_with_schema_still_dumps(tmp_path: Path) -> Non
     """
     client, capture = _build_mock_codex_client_empty_response()
     adapter = CodexOAuthAdapter()
-    adapter._get_client = lambda: client  # type: ignore[method-assign]
+    adapter._get_client = lambda _model="": client  # type: ignore[method-assign]
 
     with patch("core.paths.GLOBAL_DIAGNOSTICS_DIR", tmp_path):
         result = asyncio.run(adapter.acomplete(_voter_req(schema=_VOTE_SCHEMA)))
@@ -425,7 +426,7 @@ def test_acomplete_non_empty_response_with_schema_no_dump(tmp_path: Path) -> Non
     client.responses.stream = MagicMock(side_effect=_create_stream)
 
     adapter = CodexOAuthAdapter()
-    adapter._get_client = lambda: client  # type: ignore[method-assign]
+    adapter._get_client = lambda _model="": client  # type: ignore[method-assign]
 
     with patch("core.paths.GLOBAL_DIAGNOSTICS_DIR", tmp_path):
         result = asyncio.run(adapter.acomplete(_voter_req(schema=_VOTE_SCHEMA)))

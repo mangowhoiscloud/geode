@@ -25,7 +25,7 @@ Names re-exported at the package level keep the legacy import path
 (``from core.cli.commands import …``) intact for the 30+ external call
 sites identified by the migration audit. ``console``, ``_upsert_env``,
 ``_mask_key``, ``_is_glm_key``, ``_check_provider_key``,
-``_get_cost_budget``, ``_set_cost_budget``, ``_persist_auth_state``,
+``_get_cost_budget``, ``_set_cost_budget``,
 ``_seed_payg_plan_from_key``, ``_mcp_add``, ``_skills_add``,
 ``get_conversation_context``,
 ``set_conversation_context``, ``cmd_login`` are addressable on the
@@ -64,7 +64,7 @@ from ._state import (
 )
 from .cost import _budget_bar, _get_cost_budget, _set_cost_budget, cmd_cost
 from .goal import cmd_goal
-from .key import _check_provider_key, _persist_auth_state, _seed_payg_plan_from_key, cmd_key
+from .key import _check_provider_key, _seed_payg_plan_from_key, cmd_key
 from .login import (
     _login_add_interactive,
     _login_help,
@@ -114,7 +114,6 @@ __all__ = [
     "_login_use",
     "_mask_key",
     "_mcp_add",
-    "_persist_auth_state",
     "_seed_payg_plan_from_key",
     "_set_cost_budget",
     "_skills_add",

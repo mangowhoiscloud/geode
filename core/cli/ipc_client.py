@@ -179,6 +179,8 @@ class IPCClient:
         self.session_id: str = ""
         self.protocol_version: str = ""
         self.features: tuple[str, ...] = ()
+        self.model_config: dict[str, Any] = {}
+        self.last_error = ""
 
     def connect(self) -> bool:
         """Connect to serve. Returns True on success.
@@ -201,37 +203,47 @@ class IPCClient:
             self.protocol_version, self.features = negotiate_protocol(
                 msg.get("protocol_version"), msg.get("features")
             )
+            if "session_model_config" not in self.features:
+                raise ValueError(
+                    "Daemon cannot apply session settings; restart serve and reconnect"
+                )
             log.info("Connected to serve (session=%s)", self.session_id)
             # Send terminal capability so the daemon knows whether to
             # emit ANSI / spinner output (v0.84.0). The daemon replies
             # with an ``ack`` which we drain here so subsequent
             # one-shot reads (``send_command`` / ``request_resume``)
             # see their actual response, not the stale ack.
-            capability_request_id = self._send_client_capability()
+            capability_request_id = self._send_client_capability(include_model_config=True)
             ack = self._recv_for(capability_request_id)
-            if ack and ack.get("type") != "ack":
-                log.debug("Unexpected response to client_capability: %s", ack)
-                self.close()
-                return False
+            if not ack or ack.get("type") != "ack" or ack.get("status") != "applied":
+                raise ValueError(
+                    str((ack or {}).get("message", "Session settings were not applied"))
+                )
+            from core.config.session import SessionModelConfig
+
+            self.model_config = SessionModelConfig.model_validate(
+                ack.get("model_config")
+            ).model_dump()
             if ack and ack.get("protocol_version"):
                 self.protocol_version, self.features = negotiate_protocol(
                     ack.get("protocol_version"), ack.get("features")
                 )
             return True
         except (ConnectionRefusedError, OSError, ValueError) as exc:
-            log.debug("IPC connect failed: %s", exc)
+            self.last_error = str(exc)
+            log.warning("IPC connect failed: %s", exc)
             if self._sock is not None:
                 with contextlib.suppress(OSError):
                     self._sock.close()
             self._sock = None
             return False
 
-    def _send_client_capability(self) -> str:
+    def _send_client_capability(self, *, include_model_config: bool = False) -> str:
         """Send terminal capability to the daemon.
 
         Reports ``is_tty`` (both stdin and stdout are terminals) and
-        ``width`` (terminal columns, falling back to 120). The daemon
-        ignores unknown fields, so old daemons stay compatible.
+        ``width`` (terminal columns, falling back to 120). Only the initial
+        handshake includes model settings, after feature negotiation succeeds.
         """
         import os
         import shutil
@@ -247,17 +259,27 @@ class IPCClient:
             width = 120
         if width <= 0:
             width = 120
-        # The thin CLI resolves the model at ITS cwd (the user's project). The
-        # daemon otherwise resolves from its own launch cwd, so without this the
-        # session's project model is ignored and the call diverges from the
-        # banner. ``cwd`` is sent for diagnostics / future per-project routing.
-        # Old daemons ignore unknown fields (back-compat).
-        try:
-            from core.config import settings as _settings
+        # Initial selection comes from client defaults; the daemon validates it
+        # against its actual workspace. Feature negotiation rejects older peers.
+        # Later terminal refreshes omit the selection to preserve live choices.
+        selection_fields: dict[str, Any] = {}
+        if include_model_config:
+            from core.config import _resolve_provider, settings
+            from core.config.runtime_policy_sources import build_policy_source_bundle
+            from core.config.session import capture_session_model_config
+            from core.llm.routing import infer_source
 
-            model = _settings.model
-        except Exception:
-            model = ""
+            sources = build_policy_source_bundle().get("provider_routing")
+            selection = capture_session_model_config(
+                settings,
+                model=settings.model,
+                effort=settings.agentic_effort,
+                source=infer_source(
+                    _resolve_provider(settings.model), model=settings.model, sources=sources
+                ),
+                sources=sources,
+            )
+            selection_fields = {"model": selection.model, "model_config": selection.model_dump()}
         # --dangerously-skip-permissions: advertise the bypass so a running
         # daemon adopts it for THIS connection (same handshake as model). The
         # thin CLI sets GEODE_DANGEROUSLY_SKIP_PERMISSIONS when the flag is
@@ -274,7 +296,7 @@ class IPCClient:
                 "features": list(IPC_FEATURES),
                 "is_tty": is_tty,
                 "width": width,
-                "model": model,
+                **selection_fields,
                 "cwd": os.getcwd(),
                 "dangerously_skip_permissions": skip_perms,
             }
@@ -539,6 +561,12 @@ class IPCClient:
         response = self._recv_for(request_id)
         if response is None:
             return {"type": "resume_error", "message": "Connection lost"}
+        if response.get("type") == "resumed":
+            from core.config.session import SessionModelConfig
+
+            self.model_config = SessionModelConfig.model_validate(
+                response.get("model_config")
+            ).model_dump()
         return response
 
     def send_command(self, cmd: str, args: str = "") -> dict[str, Any]:
@@ -552,6 +580,30 @@ class IPCClient:
         response = self._recv_for(request_id)
         if response is None:
             return {"type": "error", "message": "Connection lost"}
+        return response
+
+    def apply_model_config(self, changes: dict[str, Any]) -> dict[str, Any]:
+        """Ask the session owner to apply a bounded explicit selection."""
+        if "session_model_config" not in self.features:
+            return {
+                "status": "error",
+                "message": "Restart serve and reconnect: session settings unsupported",
+            }
+        if not self._sock:
+            return {"status": "error", "message": "Not connected"}
+        request_id = self._send(
+            {"type": "command", "cmd": "/model", "args": "", "model_config": changes}
+        )
+        response = self._recv_for(request_id) or {
+            "status": "error",
+            "message": "Connection lost; application unconfirmed",
+        }
+        if response.get("status") == "applied":
+            from core.config.session import SessionModelConfig
+
+            self.model_config = SessionModelConfig.model_validate(
+                response.get("model_config")
+            ).model_dump()
         return response
 
     def _send(self, data: dict[str, Any]) -> str:

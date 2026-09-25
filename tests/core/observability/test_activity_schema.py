@@ -419,7 +419,7 @@ def test_llm_activity_preserves_requested_effort_and_call_purpose(purpose: str) 
         },
         run_id="purpose-test",
     )
-    assert row.schema_version == 10
+    assert row.schema_version == 11
     reparsed = TypeAdapter(TypedActivityRow).validate_python(row.model_dump())
     details = reparsed.model_dump()["details"]
     assert (details["purpose"], details["source"], details["effort"]) == (
@@ -435,18 +435,20 @@ def test_exported_activity_json_schema_includes_structured_decision() -> None:
     schema = TypeAdapter(TypedActivityRow).json_schema()
     details = schema["$defs"]["LLMCallEndedDetails"]
     assert "structured_decision" in details["properties"]["purpose"]["anyOf"][0]["enum"]
-    assert schema["$defs"]["LLMCallEndedRow"]["properties"]["schema_version"]["default"] == 10
+    assert schema["$defs"]["LLMCallEndedRow"]["properties"]["schema_version"]["default"] == 11
 
 
 @pytest.mark.parametrize(
     ("schema_version", "legacy_purpose"),
-    [(6, None), (8, "text_completion"), (9, "learning_extraction")],
+    [(6, None), (8, "text_completion"), (9, "learning_extraction"), (10, "structured_decision")],
 )
 def test_legacy_llm_activity_does_not_infer_root_effort_or_purpose(
     schema_version: int,
     legacy_purpose: str | None,
 ) -> None:
-    row = map_hook_to_activity(HookEvent.LLM_CALL_ENDED, {}, run_id="legacy")
+    row = map_hook_to_activity(
+        HookEvent.LLM_CALL_ENDED, {"usage": {"cache_write_tokens": 1000}}, run_id="legacy"
+    )
     legacy = row.model_dump(exclude_none=True)
     legacy["schema_version"] = schema_version
     if legacy_purpose is not None:
@@ -456,6 +458,8 @@ def test_legacy_llm_activity_does_not_infer_root_effort_or_purpose(
     details = reparsed.model_dump()["details"]
     assert details["purpose"] == legacy_purpose
     assert details["source"] is details["effort"] is None
+    assert details["usage"]["cache_write_tokens"] == 1000
+    assert details["usage"]["cache_write_1h_tokens"] is None
 
 
 @pytest.mark.parametrize(

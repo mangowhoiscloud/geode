@@ -23,10 +23,10 @@ Contracts pinned here:
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
+from core.auth.auth_toml import save_auth_toml
 from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
 from core.auth.rotation import ProfileRotator
 
@@ -122,10 +122,8 @@ def test_cmd_login_use_profile_sets_active(capsys: pytest.CaptureFixture[str]) -
     from core.cli.commands.login import _login_use_profile
 
     store = _build_store_two_oauth()
-    with (
-        patch("core.wiring.container.ensure_profile_store", return_value=store),
-        patch("core.cli.commands._persist_auth_state"),
-    ):
+    save_auth_toml(store=store)
+    with patch("core.wiring.container.ensure_profile_store", return_value=store):
         _login_use_profile("openai-codex:work")
 
     out = capsys.readouterr().out
@@ -136,20 +134,20 @@ def test_cmd_login_use_profile_sets_active(capsys: pytest.CaptureFixture[str]) -
 
 
 def test_cmd_login_use_profile_unknown_warns(capsys: pytest.CaptureFixture[str]) -> None:
-    from core.cli.commands.login import _login_use_profile
+    from core.cli.commands.login import cmd_login
 
     store = _build_store_two_oauth()
     with patch("core.wiring.container.ensure_profile_store", return_value=store):
-        _login_use_profile("does-not-exist")
+        assert cmd_login("use-profile does-not-exist") is False
 
     out = capsys.readouterr().out
     assert "Unknown profile" in out
 
 
 def test_cmd_login_use_profile_missing_arg(capsys: pytest.CaptureFixture[str]) -> None:
-    from core.cli.commands.login import _login_use_profile
+    from core.cli.commands.login import cmd_login
 
-    _login_use_profile("")
+    assert cmd_login("use-profile") is False
     out = capsys.readouterr().out
     assert "Usage:" in out
 
@@ -161,22 +159,27 @@ def test_cmd_login_use_profile_missing_arg(capsys: pytest.CaptureFixture[str]) -
             "openai",
             [
                 "gpt-6-astra",
+                "gpt-6-sol",
+                "gpt-6-luna",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
                 "gpt-5.6-luna",
                 "gpt-5.5",
+                "gpt-5.3-codex",
                 "gpt-5.4",
                 "gpt-5.4-mini",
+                "gpt-5.4-nano",
             ],
         ),
         (
             "openai-codex",
             [
                 "gpt-6-astra",
+                "gpt-6-sol",
+                "gpt-6-luna",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
                 "gpt-5.6-luna",
-                "gpt-5.5",
             ],
         ),
     ],
@@ -186,28 +189,28 @@ def test_cmd_login_use_routes_current_openai_surface(
     expected_models: list[str],
 ) -> None:
     from core.cli.commands.login import _login_use
+    from core.llm.strategies.plan_registry import get_plan_registry
+    from core.llm.strategies.plans import Plan, PlanKind
 
     # Subscription retirements do not remove still-valid Platform API rows;
-    # GPT-5.5 is available on both sources at the 2026-09-20 snapshot.
-    registry = MagicMock()
-    registry.get.return_value = SimpleNamespace(
-        id=f"{provider}-plan",
-        provider=provider,
-        display_name=provider,
+    # GPT-5.5 remains callable on subscription until October 14, but new plan
+    # activation uses the current selection catalog at the September 24 snapshot.
+    registry = get_plan_registry()
+    registry.add(
+        Plan(
+            id=f"{provider}-plan",
+            provider=provider,
+            kind=PlanKind.PAYG,
+            display_name=provider,
+            base_url="https://example.test/v1",
+        )
     )
-    registry.get_routing.return_value = []
+    save_auth_toml()
 
-    with (
-        patch(
-            "core.llm.strategies.plan_registry.get_plan_registry",
-            return_value=registry,
-        ),
-        patch("core.cli.commands._persist_auth_state"),
-    ):
-        _login_use(f"{provider}-plan")
+    _login_use(f"{provider}-plan")
 
-    assert [call.args[0] for call in registry.set_routing.call_args_list] == expected_models
-    assert all(call.args[1] == [f"{provider}-plan"] for call in registry.set_routing.call_args_list)
+    assert registry.all_routing() == {model: [f"{provider}-plan"] for model in expected_models}
+    assert list(registry.all_routing()) == expected_models
 
 
 # ---------------------------------------------------------------------------
@@ -268,11 +271,11 @@ def test_cmd_login_order_empty_store(capsys: pytest.CaptureFixture[str]) -> None
 
 
 def test_cmd_login_order_unknown_provider_warns(capsys: pytest.CaptureFixture[str]) -> None:
-    from core.cli.commands.login import _login_order
+    from core.cli.commands.login import cmd_login
 
     store = _build_store_two_oauth()
     with patch("core.wiring.container.ensure_profile_store", return_value=store):
-        _login_order("not-a-provider")
+        assert cmd_login("order not-a-provider") is False
 
     out = capsys.readouterr().out
     assert "No profiles for provider" in out

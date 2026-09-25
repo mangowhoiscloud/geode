@@ -774,3 +774,169 @@ class TestGuardToolResultModelAware:
 
         assert guarded["_truncated"] is True
         assert len(json.dumps(guarded, ensure_ascii=False)) <= 32 * 4
+
+
+@pytest.mark.parametrize("native_sidecar", [True, False])
+def test_anthropic_compaction_counts_last_valid_block_without_history_mutation(native_sidecar):
+    from core.orchestration.context_budget import resolve_context_budget_policy
+
+    blocks = [
+        {"type": "compaction", "content": "older summary"},
+        {"type": "thinking", "thinking": "", "signature": "opaque" * 200_000},
+        {"type": "compaction", "content": "current constraints retained"},
+        {"type": "text", "text": "next action"},
+    ]
+    assistant = {"role": "assistant", "content": blocks}
+    if native_sidecar:
+        assistant = {"role": "assistant", "content": "normalized", "anthropic_content": blocks}
+    messages = [
+        {"role": "user", "content": "old" * 1_000_000},
+        assistant,
+        {"role": "user", "content": "continue"},
+    ]
+    original = deepcopy(messages)
+    policy = resolve_context_budget_policy("claude-opus-5-5", provider="anthropic", source="payg")
+    projected = [{"role": "assistant", "content": blocks[2:]}, messages[-1]]
+    assert estimate_message_tokens(messages, policy=policy) == estimate_message_tokens(projected)
+    assert not check_context(messages, policy.model, tools_tokens=0, policy=policy).is_warning
+    assert estimate_message_tokens(messages) > 500_000
+    assert messages == original
+
+
+@pytest.mark.parametrize("content", [None, "", 0, [], {}])
+def test_failed_native_compaction_does_not_hide_history(content):
+    from core.orchestration.context_budget import resolve_context_budget_policy
+
+    messages = [
+        {"role": "user", "content": "old" * 10_000},
+        {"role": "assistant", "content": [{"type": "compaction", "content": content}]},
+    ]
+    policy = resolve_context_budget_policy("claude-opus-5-5", provider="anthropic", source="payg")
+    assert estimate_message_tokens(messages, policy=policy) == estimate_message_tokens(messages)
+
+
+@pytest.mark.parametrize(
+    "provider,source,model",
+    [
+        ("openrouter", "payg", "claude-opus-5-5"),
+        ("anthropic", "subscription", "claude-opus-5-5"),
+        ("anthropic", "payg", "claude-haiku-4-5-20251001"),
+    ],
+)
+def test_native_prefix_exclusion_requires_supported_anthropic_route(provider, source, model):
+    from core.orchestration.context_budget import resolve_context_budget_policy
+
+    messages = [
+        {"role": "user", "content": "old" * 10_000},
+        {"role": "assistant", "content": [{"type": "compaction", "content": "summary"}]},
+    ]
+    policy = resolve_context_budget_policy(model, provider=provider, source=source)
+    assert estimate_message_tokens(messages, policy=policy) == estimate_message_tokens(messages)
+
+
+def test_request_context_uses_frozen_native_messages_actual_tools_and_system():
+    from core.llm.adapters._anthropic_common import build_messages
+    from core.llm.adapters.base import AdapterCallRequest, Message, ToolSpec
+    from core.orchestration.context_budget import resolve_request_context_budget
+    from core.orchestration.context_monitor import check_request_context
+
+    native = (
+        {"type": "compaction", "content": "current summary"},
+        {"type": "tool_use", "id": "call", "name": "read", "input": {}},
+    )
+    req = AdapterCallRequest(
+        model="claude-opus-5-5",
+        system_prompt="system " * 1_000,
+        max_tokens=8_192,
+        messages=(
+            Message(role="user", content="old" * 1_000_000),
+            Message(role="assistant", content="", anthropic_content=native),
+            Message(role="tool", content="observation", tool_use_id="call"),
+        ),
+    )
+    original = deepcopy(req)
+    policy = resolve_request_context_budget(req, provider="anthropic", source="payg")
+    empty = check_request_context(req, policy=policy)
+    expected = check_context(
+        build_messages(req),
+        req.model,
+        system_prompt=req.system_prompt,
+        tools_tokens=0,
+        policy=policy,
+    )
+    assert empty.estimated_tokens == expected.estimated_tokens
+    assert empty.policy is policy
+    from dataclasses import replace
+
+    with_tools = replace(
+        req,
+        tools=(ToolSpec(name="read", description="read a file", input_schema={"type": "object"}),),
+    )
+    assert (
+        check_request_context(with_tools, policy=policy).estimated_tokens > empty.estimated_tokens
+    )
+    assert req == original
+
+
+def test_zero_tool_tokens_means_no_tools_not_legacy_overhead():
+    messages = [{"role": "user", "content": "hello"}]
+    no_tools = check_context(messages, "glm-5", tools_tokens=0)
+    unspecified = check_context(messages, "glm-5")
+    assert no_tools.raw_estimated_tokens + 10_000 == unspecified.raw_estimated_tokens
+
+
+@pytest.mark.parametrize("pruner", ["oldest", "adaptive"])
+def test_pruning_retains_latest_original_user_input(pruner):
+    latest = {
+        "role": "user",
+        "content": "Latest correction: do not publish.",
+        "metadata": {"origin": "user_input"},
+    }
+    messages = [{"role": "user", "content": "Original task"}, latest]
+    messages += [{"role": "assistant", "content": "old observation " * 3_000} for _ in range(10)]
+    messages += [
+        {"role": "user", "content": "Synthetic continuation"},
+        {"role": "assistant", "content": "next step"},
+    ]
+    pruned = (
+        prune_oldest_messages(messages, keep_recent=2)
+        if pruner == "oldest"
+        else adaptive_prune(messages, 1_000)
+    )
+    assert pruned.count(latest) == 1
+    assert pruned.index(messages[0]) < pruned.index(latest)
+    assert len(pruned) < len(messages)
+    assert pruned[-2:] == messages[-2:]
+
+
+@pytest.mark.parametrize("pruner", ["oldest", "adaptive"])
+def test_pruning_never_deletes_native_compaction_summary(pruner):
+    messages = [
+        {"role": "user", "content": "old prefix" * 10_000},
+        {
+            "role": "assistant",
+            "content": "",
+            "anthropic_content": [
+                {"type": "compaction", "content": "only summary of earlier work"}
+            ],
+        },
+    ]
+    messages += [
+        {"role": "assistant", "content": "large active suffix " * 10_000} for _ in range(12)
+    ]
+    original = deepcopy(messages)
+    pruned = (
+        prune_oldest_messages(messages, keep_recent=2)
+        if pruner == "oldest"
+        else adaptive_prune(messages, 1_000)
+    )
+    assert pruned == original
+    assert messages == original
+
+
+def test_request_policy_mismatch_is_not_silently_reused():
+    from core.orchestration.context_budget import resolve_context_budget_policy
+
+    policy = resolve_context_budget_policy("gpt-6-astra", provider="openai", source="payg")
+    with pytest.raises(ValueError, match="policy model"):
+        check_context([], "glm-5", policy=policy)

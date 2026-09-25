@@ -35,14 +35,14 @@ export default function Page() {
               <tbody>
                 <tr>
                   <td>Anthropic</td>
-                  <td><code>claude-opus-4-8</code> (보조 <code>claude-sonnet-4-6</code>, 저비용 <code>claude-haiku-4-5-20251001</code>)</td>
+                  <td><code>claude-opus-5-5</code> (보조 <code>claude-sonnet-5</code>, 저비용 <code>claude-haiku-4-5-20251001</code>)</td>
                   <td><code>claude-</code> 접두사</td>
                   <td><code>ANTHROPIC_API_KEY</code></td>
                 </tr>
                 <tr>
                   <td>OpenAI / Codex</td>
-                  <td><code>gpt-5.5</code></td>
-                  <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> 접두사. <code>-codex</code> 접미사는 Codex OAuth로 라우팅하며, 다른 모델은 선택된 API 키 또는 구독 소스를 따릅니다. 모델별 지원·퇴역은 소스마다 다르고, 카탈로그 등록은 계정 접근 증거가 아닙니다.</td>
+                  <td><code>gpt-6-sol</code></td>
+                  <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> 접두사. <code>-codex</code> 접미사는 기존 provider 별칭으로 해석하며, 실제 API 키 또는 구독 경로는 선택한 자격 소스를 따릅니다. 모델별 지원·퇴역은 소스마다 다르고, 카탈로그 등록은 계정 접근 증거가 아닙니다.</td>
                   <td>ChatGPT 구독 OAuth(<code>~/.codex/auth.json</code>) 또는 <code>OPENAI_API_KEY</code></td>
                 </tr>
                 <tr>
@@ -53,9 +53,9 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>GLM (ZhipuAI)</td>
-                  <td><code>glm-5.2</code> (무료 티어 <code>glm-4.7-flash</code>)</td>
+                  <td><code>glm-5.3</code> (무료 티어 <code>glm-4.7-flash</code>)</td>
                   <td><code>glm-</code> 접두사</td>
-                  <td><code>ZAI_API_KEY</code>. Coding Plan과 PAYG 엔드포인트가 분리되어 있습니다.</td>
+                  <td><code>ZAI_API_KEY</code>. PAYG API 경로입니다. 현재 Coding Plan 정책에서 GEODE 사용 자격은 확인되지 않아 구독 실행을 차단합니다.</td>
                 </tr>
               </tbody>
             </table>
@@ -74,14 +74,16 @@ export default function Page() {
               경로이므로 고정 모델 공식 평가에 사용하지 않습니다.
             </p>
 
+            <p>활성 모델과 별칭, 문맥·출력 한도, API 요율은 <a href="https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20260924.md">2026-09-24 공급자 조사</a>에서 원문 출처와 함께 확인할 수 있습니다. API 달러 요율과 Codex·Coding Plan의 크레딧은 별개이며, 카탈로그 갱신이 실제 계정 수락이나 청구 검증을 뜻하지 않습니다.</p>
+
             <h2>소스별 모델 지원 종료</h2>
             <p>
-              Unreleased, 2026-09-20 기준: Codex의 ChatGPT 로그인 경로에서
+              2026-09-24 확인: Codex의 ChatGPT 로그인 경로에서
               <code>gpt-5.2</code>·<code>gpt-5.3-codex</code>는 폐기되었고,
               <code>gpt-5.4</code>·<code>gpt-5.4-mini</code>는 8월 31일 지원이
               끝났습니다. 이 경로의 선택·요청은 차단하지만 유효한 API 사용과
               과거 요금·평가 기록은 보존합니다. <code>gpt-5.5</code>의 구독
-              퇴역 예정일은 10월 14일이므로 아직 퇴역 처리하지 않습니다.
+              퇴역 예정일은 10월 14일입니다. 신규 구독 선택지에서는 빼되 기존 명시적 설정을 이미 퇴역한 것으로 처리하지 않습니다.
               근거는 <a href="https://learn.chatgpt.com/docs/models#deprecated-codex-models">공식 Codex 모델 안내</a>입니다.
             </p>
             <p>
@@ -89,7 +91,7 @@ export default function Page() {
               이전 세대를 네트워크 요청 전에 거절합니다. 현재 지원되는 4.5 이상
               모델은 유지하며, 이 퇴역 일정을 OpenRouter 등 다른 운영사의 경로에
               일괄 적용하지 않으며 실제 클라이언트의 endpoint를 확인합니다. <a href="https://platform.claude.com/docs/en/about-claude/model-deprecations">공식 모델 수명주기</a>를
-              2026-09-21에 확인했으며, 계정별 실제 접근 권한은 별도 검증 대상입니다.
+              2026-09-24에 확인했으며, 계정별 실제 접근 권한은 별도 검증 대상입니다.
             </p>
             <h2>키와 설정이 사는 곳</h2>
             <p>역할이 파일별로 분리되어 있습니다. 키와 프로필은 로컬 비밀 파일, 동작은 config.toml에 둡니다.</p>
@@ -134,6 +136,23 @@ export default function Page() {
               안내를 출력합니다.
             </p>
 
+            <h2>실행 중 세션과 새 세션의 기본값</h2>
+            <p>
+              저장한 모델·effort·인증 설정은 새 세션의 기본값입니다. 실행 중인 세션은
+              승인된 모델·effort·API/구독 소스를 보존합니다. 연결된 CLI의{" "}
+              <code>/login source</code>는 해당 세션의 적용 응답을 받은 뒤 기본값을
+              저장하며, 연결되지 않은 명령은 새 세션의 기본값만 바꿉니다.
+            </p>
+            <p>
+              런타임 <code>manage_login source</code> 도구는 같은 검증을 거쳐 전체 도구 묶음 이후
+              해당 세션의 주·보조 모델 소스만 바꾸며 effort와 저장된 기본값을 보존합니다.
+              명시적 로그인 소스와 <code>forced_login_method</code>가 충돌하면 거절합니다.
+              모델별 plan 순서와 계정 선택은 SDK 요청에도 적용됩니다. 선택한 소스의
+              계정을 사용할 수 없어도 다른 과금 소스로 자동 전환하지 않습니다.
+              <code>/login use</code>와 <code>/login route</code>는 같은 소스 안에서
+              다음 요청의 계정을 바꿀 수 있으며, 실행 중 세션의 소스를 바꾸지는 않습니다.
+            </p>
+
             <h2>모델 결정 순서</h2>
             <p>위가 아래를 가립니다. 첫 번째로 값이 설정된 레이어가 이깁니다.</p>
             <pre>{`1. CLI 인자
@@ -153,7 +172,8 @@ export default function Page() {
             <p>
               데몬은 시작할 때 모델 계열 env 키를 의도적으로 버리므로
               (<code>BEHAVIOR_ENV_KEYS</code>, <code>core/config/env_io.py</code>),
-              세션마다 toml의 선택이 항상 이깁니다. 셸에서 직접 export한
+              새 세션은 유효한 설정에서 시작합니다. 기존 세션은 승인된 선택을 유지합니다.
+              셸에서 직접 export한
               <code>GEODE_MODEL</code>은 그 세션 한정의 파워유저 오버라이드입니다.
             </p>
 
@@ -220,12 +240,12 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
                 <tr>
                   <td>데몬만 옛 모델로 응답</td>
                   <td>데몬 환경에 모델 env가 박제됨</td>
-                  <td>데몬은 시작 시 모델 계열 env 키를 버리는 것이 기본입니다. <code>pkill -f &quot;geode serve&quot;</code> 후 재시작합니다. 데몬 모델을 env로 일부러 고정하려면 <code>GEODE_SERVE_KEEP_MODEL_ENV=1</code>이 탈출구입니다.</td>
+                  <td>데몬은 시작 시 모델 계열 env 키를 버리는 것이 기본입니다. <code>geode stop</code>으로 해당 데몬을 종료한 뒤 <code>geode serve</code>로 시작합니다. 데몬 모델을 env로 일부러 고정하려면 <code>GEODE_SERVE_KEEP_MODEL_ENV=1</code>을 설정합니다.</td>
                 </tr>
                 <tr>
-                  <td>GLM 구독인데 미터링 과금</td>
-                  <td>Coding Plan 키가 PAYG 엔드포인트로 나감</td>
-                  <td>Coding Plan 엔드포인트(<code>api.z.ai/api/coding/paas/v4</code>)와 PAYG(<code>api.z.ai/api/paas/v4</code>)는 다릅니다. 어느 쪽으로 나가는지 확인합니다.</td>
+                  <td>GLM Coding Plan 실행 차단</td>
+                  <td>공식 지원 도구로 사용 범위 제한</td>
+                  <td>기존 구독 프로필은 보존합니다. API를 쓰려면 PAYG 소스를 명시적으로 선택합니다. GEODE는 과금 소스를 자동 전환하지 않습니다.</td>
                 </tr>
                 <tr>
                   <td>저장된 구독 모델을 선택할 수 없음</td>
@@ -266,14 +286,14 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               <tbody>
                 <tr>
                   <td>Anthropic</td>
-                  <td><code>claude-opus-4-8</code> (secondary <code>claude-sonnet-4-6</code>, budget <code>claude-haiku-4-5-20251001</code>)</td>
+                  <td><code>claude-opus-5-5</code> (secondary <code>claude-sonnet-5</code>, budget <code>claude-haiku-4-5-20251001</code>)</td>
                   <td><code>claude-</code> prefix</td>
                   <td><code>ANTHROPIC_API_KEY</code></td>
                 </tr>
                 <tr>
                   <td>OpenAI / Codex</td>
-                  <td><code>gpt-5.5</code></td>
-                  <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> prefixes. The <code>-codex</code> suffix routes to Codex OAuth; other models follow the selected API-key or subscription source. Support and retirement are source-specific; catalog presence does not establish account access.</td>
+                  <td><code>gpt-6-sol</code></td>
+                  <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> prefixes. The <code>-codex</code> suffix retains a legacy provider alias; the actual route follows the selected API-key or subscription source. Support and retirement are source-specific; catalog presence does not establish account access.</td>
                   <td>ChatGPT subscription OAuth (<code>~/.codex/auth.json</code>) or <code>OPENAI_API_KEY</code></td>
                 </tr>
                 <tr>
@@ -284,9 +304,9 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
                 </tr>
                 <tr>
                   <td>GLM (ZhipuAI)</td>
-                  <td><code>glm-5.2</code> (free tier <code>glm-4.7-flash</code>)</td>
+                  <td><code>glm-5.3</code> (free tier <code>glm-4.7-flash</code>)</td>
                   <td><code>glm-</code> prefix</td>
-                  <td><code>ZAI_API_KEY</code>. Coding Plan and PAYG endpoints are separate.</td>
+                  <td><code>ZAI_API_KEY</code>. PAYG API route. GEODE admission under the current Coding Plan policy is unestablished, so subscription execution is blocked.</td>
                 </tr>
               </tbody>
             </table>
@@ -307,15 +327,17 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               evaluation targets.
             </p>
 
+            <p>See the <a href="https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20260924.md">2026-09-24 provider audit</a> for active models, aliases, context/output limits and API tariffs with primary sources. API dollar prices and subscription credits are separate; a catalogue refresh does not establish live account acceptance or billed charges.</p>
+
             <h2>Source-specific model retirement</h2>
             <p>
-              Unreleased, checked 2026-09-20: on the ChatGPT-sign-in Codex route,
+              Checked 2026-09-24: on the ChatGPT-sign-in Codex route,
               <code>gpt-5.2</code> and <code>gpt-5.3-codex</code> are deprecated;
               <code>gpt-5.4</code> and <code>gpt-5.4-mini</code> retired on August 31.
               GEODE blocks selection and requests on that source while retaining
               valid API routes and historical pricing/evaluation records.
               <code>gpt-5.5</code> is scheduled to retire on October 14, so it is
-              not retired yet. See the <a href="https://learn.chatgpt.com/docs/models#deprecated-codex-models">official Codex model guidance</a>.
+              not retired yet. It is omitted from new subscription choices while existing explicit settings remain readable and executable until that boundary. See the <a href="https://learn.chatgpt.com/docs/models#deprecated-codex-models">official Codex model guidance</a>.
             </p>
             <p>
               The official Anthropic API similarly rejects confirmed retired Opus
@@ -324,7 +346,7 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               independently operated routes such as OpenRouter; admission checks
               the actual client endpoint. The{" "}
               <a href="https://platform.claude.com/docs/en/about-claude/model-deprecations">official model lifecycle</a>{" "}
-              was checked on 2026-09-21; account entitlement still requires its
+              was checked on 2026-09-24; account entitlement still requires its
               own verification.
             </p>
             <h2>Where keys and settings live</h2>
@@ -371,6 +393,25 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               prints a &quot;removed stale ... from .env&quot; notice.
             </p>
 
+            <h2>Live sessions and future defaults</h2>
+            <p>
+              Saved model, effort and credential settings seed new sessions. A live
+              session keeps its admitted model, effort and API/subscription source.
+              A connected <code>/login source</code> command requires the session&apos;s
+              applied acknowledgment before saving defaults; a disconnected command
+              changes defaults for future sessions only.
+            </p>
+            <p>
+              The runtime <code>manage_login source</code> tool validates the same candidate
+              and changes matching primary/auxiliary session routes after the complete tool batch,
+              preserving effort and stored defaults.
+              An explicit credential source conflicting with <code>forced_login_method</code>
+              is rejected. Model plan order and account selection also govern SDK
+              requests. An unavailable account never authorizes switching billing sources.
+              <code>/login use</code> and <code>/login route</code> can change the next
+              account within the selected source, while the live source remains fixed.
+            </p>
+
             <h2>Model resolution order</h2>
             <p>Higher masks lower. The first layer with a value wins.</p>
             <pre>{`1. CLI arguments
@@ -390,8 +431,8 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
             <p>
               The serve daemon deliberately drops model-pick env keys at startup
               (<code>BEHAVIOR_ENV_KEYS</code>, <code>core/config/env_io.py</code>),
-              so the toml choice wins for every daemon session. A
-              <code>GEODE_MODEL</code> you export by hand stays a power-user
+              so new sessions start from effective settings. Existing sessions retain
+              their admitted choices. A <code>GEODE_MODEL</code> you export by hand stays a power-user
               override for that shell session.
             </p>
 
@@ -461,12 +502,12 @@ geode about                   # the EFFECTIVE model + provider`}</pre>
                 <tr>
                   <td>Only the daemon answers with the old model</td>
                   <td>A model env var got pinned into the daemon’s environment</td>
-                  <td>Dropping model env keys at daemon startup is the default. <code>pkill -f &quot;geode serve&quot;</code> and restart. To pin the daemon’s model via env on purpose, <code>GEODE_SERVE_KEEP_MODEL_ENV=1</code> is the escape hatch.</td>
+                  <td>Dropping model env keys at daemon startup is the default. Stop the managed daemon with <code>geode stop</code>, then start it with <code>geode serve</code>. To pin the daemon’s model via env on purpose, set <code>GEODE_SERVE_KEEP_MODEL_ENV=1</code>.</td>
                 </tr>
                 <tr>
-                  <td>GLM subscription, yet metered billing</td>
-                  <td>A Coding Plan key went out over the PAYG endpoint</td>
-                  <td>The Coding Plan endpoint (<code>api.z.ai/api/coding/paas/v4</code>) and PAYG (<code>api.z.ai/api/paas/v4</code>) differ. Check which one your traffic uses.</td>
+                  <td>GLM Coding Plan execution blocked</td>
+                  <td>Use restricted to officially supported tools</td>
+                  <td>Existing subscription profiles are preserved. Select PAYG explicitly for API use; GEODE never switches billing sources automatically.</td>
                 </tr>
                 <tr>
                   <td>A saved subscription model is unavailable</td>

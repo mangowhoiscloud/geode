@@ -151,11 +151,17 @@ published output caps, correct inherited effort constraints, and central
 source-aware model choices. No new adapter factory or parallel provider registry
 is needed.
 
-The remaining opt-in surfaces need distinct semantics: API `configuration_update`
-changes effort while preserving cached history, but has single-agent compatibility
-limits; explicit cache breakpoints require preservation across history transforms;
-Enterprise access tokens require their credential lifecycle. These are documented
-capabilities, not implemented promises in this refresh. Existing June computer-use
+K1 implements static-prefix explicit cache breakpoints for registered GPT-5.6/GPT-6
+Platform models in the shared `build_responses_kwargs` completion/streaming path.
+When `PROMPT_CACHE_BOUNDARY` follows a nonblank static prefix, the builder moves
+that prefix unchanged into developer `input_text` with a breakpoint and preserves
+the dynamic text after it. Codex retains its `instructions` contract, and implicit
+conversation caching remains enabled. This verifies request construction, not live
+acceptance or cache hits; see the [cache lifecycle evidence](provider-cache-lifecycle-20260924.md).
+
+The remaining opt-in surfaces are cache prewarming, API `configuration_update`
+and Enterprise access tokens. They require separate request/state or credential
+lifecycle handling and are not implemented by this refresh. Existing June computer-use
 acceptance restrictions remain until an authorized route-specific round trip can
 replace that evidence. No paid request, login, credential read, service change, or
 backend probe was run for this audit.
@@ -178,3 +184,24 @@ providers, so SDK major-version migration is a shared transport change rather
 than a model-name edit. The installed 2.45.0 still types `priority`, not the new
 `fast`/`ultrafast` spellings, and has no cache-prewarm option. Those facts describe
 the inspected version; the release record does not establish backend acceptance.
+
+## Runtime request and accounting checks
+
+The shared Responses builder caps positive Platform output budgets at the
+published per-model maximum. The auxiliary text route applies the same limit;
+Codex omits that server-managed field. Platform sampling is emitted only when
+the effective effort is `none`; Codex keeps its independent request restrictions.
+OpenAI API web-search results now use the existing Responses usage translator,
+so reported input, output, cache read/write and missing-counter flags reach the
+auxiliary dispatch hook instead of appearing as unknown usage. Completed empty
+search responses preserve these counters through `EmptyModelOutputError`. Mocked SDK
+response checks cover that translation; they do not prove current account access.
+
+Both API and Codex `astream` routes reuse one Responses translator. Text and
+reasoning-summary deltas remain incremental; a completed response emits each
+fully assembled tool call once, usage with presence flags, and native replay
+items. An incomplete response preserves its actual status and accounting but
+does not admit partial tool calls. Failed/error responses and transport EOF
+without a consistent terminal response raise instead of claiming completion.
+Tests feed native SSE into the installed SDK through an HTTP mock; this
+checks SDK parsing and both adapters without provider traffic.

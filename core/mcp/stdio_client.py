@@ -256,18 +256,17 @@ class StdioMCPClient:
                 self._process.terminate()
                 self._process.wait(timeout=_CLOSE_TIMEOUT_S)
                 log.debug("MCP subprocess terminated gracefully (PID %s)", pid)
-            except subprocess.TimeoutExpired:
+            except Exception as exc:
                 log.warning(
-                    "MCP subprocess did not exit within %ds, sending SIGKILL (PID %s)",
-                    _CLOSE_TIMEOUT_S,
+                    "MCP graceful close failed (%s), sending SIGKILL (PID %s)",
+                    type(exc).__name__,
                     pid,
                 )
-                with contextlib.suppress(Exception):
-                    self._process.kill()
-                    self._process.wait(timeout=2)
-            except Exception:
-                with contextlib.suppress(Exception):
-                    self._process.kill()
+                self._process.kill()
+                self._process.wait(timeout=2)
+            for pipe in (self._process.stdin, self._process.stdout, self._process.stderr):
+                if pipe is not None:
+                    pipe.close()
             self._process = None
             self._pid = None
         self._remove_working_dir()

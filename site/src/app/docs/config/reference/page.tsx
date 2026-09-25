@@ -56,7 +56,7 @@ export default function Page() {
                 <tr><th>필드</th><th>toml 키</th><th>타입 / 기본값</th><th>용도</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>agentic_effort</code></td><td><code>agentic.effort</code></td><td>str = <code>&quot;high&quot;</code></td><td><code>low</code>/<code>medium</code>/<code>high</code>/<code>max</code>/<code>xhigh</code>. Anthropic <code>output_config.effort</code>, OpenAI <code>reasoning.effort</code>로 전달됩니다. xhigh는 Opus 4.7 이상과 Fable 5 전용.</td></tr>
+                <tr><td><code>agentic_effort</code></td><td><code>agentic.effort</code></td><td>str = <code>&quot;high&quot;</code></td><td>허용 값은 선택한 모델의 공통 스펙과 <code>/model</code> 선택 화면을 따릅니다. Anthropic <code>output_config.effort</code>, OpenAI <code>reasoning.effort</code>, GLM <code>reasoning_effort</code>에 같은 값을 전달하며, 지원하지 않는 조합은 호출 전에 거절합니다.</td></tr>
                 <tr><td><code>agentic_loop_time_budget</code></td><td><code>agentic.time_budget</code></td><td>float = 0.0</td><td>벽시계 초 단위 예산. 0이면 무제한.</td></tr>
                 <tr><td><code>agentic_thinking_budget</code></td><td><code>agentic.thinking_budget</code></td><td>int = 0</td><td>레거시 thinking 토큰 예산. 0이면 비활성.</td></tr>
               </tbody>
@@ -421,7 +421,7 @@ export default function Page() {
                 <tr><th>Field</th><th>toml key</th><th>Type / default</th><th>Purpose</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>agentic_effort</code></td><td><code>agentic.effort</code></td><td>str = <code>&quot;high&quot;</code></td><td><code>low</code>/<code>medium</code>/<code>high</code>/<code>max</code>/<code>xhigh</code>, forwarded as Anthropic <code>output_config.effort</code> or OpenAI <code>reasoning.effort</code>. xhigh is Opus 4.7+ and Fable 5 only.</td></tr>
+                <tr><td><code>agentic_effort</code></td><td><code>agentic.effort</code></td><td>str = <code>&quot;high&quot;</code></td><td>Allowed values come from the selected model&apos;s shared specification and the <code>/model</code> picker. The same value is forwarded as Anthropic <code>output_config.effort</code>, OpenAI <code>reasoning.effort</code>, or GLM <code>reasoning_effort</code>; unsupported combinations are rejected before a call.</td></tr>
                 <tr><td><code>agentic_loop_time_budget</code></td><td><code>agentic.time_budget</code></td><td>float = 0.0</td><td>Wall-clock seconds. 0 means no limit.</td></tr>
                 <tr><td><code>agentic_thinking_budget</code></td><td><code>agentic.thinking_budget</code></td><td>int = 0</td><td>Legacy thinking-token budget. 0 disables.</td></tr>
               </tbody>

@@ -1,20 +1,17 @@
 """Tests for OAuth login flow + auth.toml SOT (v0.50.2 onwards).
 
 The legacy ``~/.geode/auth.json`` was retired in v0.50.2; these tests
-exercise the new auth.toml-backed save/load path through the public
-``_save_auth_store`` / ``_load_auth_store`` helpers (kept as
-backwards-compatible shims for ``get_auth_status`` etc).
+exercise the new auth.toml-backed save/load path through the
+``_save_auth_store`` / ``_load_auth_store`` helpers.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
 
 from core.auth.oauth_login import (
     _load_auth_store,
     _save_auth_store,
-    get_auth_status,
     read_geode_openai_credentials,
 )
 
@@ -95,45 +92,6 @@ class TestReadCredentials:
     def test_read_missing(self, tmp_path: Path, monkeypatch):
         _isolate(tmp_path, monkeypatch)
         assert read_geode_openai_credentials() is None
-
-
-class TestAuthStatus:
-    def test_status_with_credentials(self, tmp_path: Path, monkeypatch):
-        import time
-
-        _isolate(tmp_path, monkeypatch)
-        _save_auth_store(
-            {
-                "version": 1,
-                "providers": {
-                    "openai": {
-                        "access_token": "tok",
-                        "email": "test@example.com",
-                        "plan_type": "plus",
-                        "source": "geode-device-code",
-                        "expires_at": time.time() + 7200,
-                    }
-                },
-            }
-        )
-
-        with patch("core.auth.codex_cli_oauth.read_codex_cli_credentials", return_value=None):
-            statuses = get_auth_status()
-
-        assert len(statuses) >= 1
-        # The first status row corresponds to our openai entry
-        openai_rows = [s for s in statuses if s["provider"] == "openai"]
-        assert openai_rows
-        assert openai_rows[0]["email"] == "test@example.com"
-        assert openai_rows[0]["status"] == "active"
-
-    def test_status_empty(self, tmp_path: Path, monkeypatch):
-        _isolate(tmp_path, monkeypatch)
-
-        with patch("core.auth.codex_cli_oauth.read_codex_cli_credentials", return_value=None):
-            statuses = get_auth_status()
-
-        assert statuses == []
 
 
 class TestCmdLogin:
@@ -219,103 +177,17 @@ class TestJWTDecode:
         assert _plan_type_from_token(token) == ""
 
 
-class TestPlanTierReconcile:
-    """`reconcile_plan_tier_from_stored_jwt` — drift detection + update."""
+def test_persisting_new_tokens_records_their_plan_tier(tmp_path: Path, monkeypatch) -> None:
+    from core.auth.oauth_login import _GEODE_OPENAI_PLAN_ID, _persist_oauth_to_authtoml
+    from core.llm.strategies.plan_registry import get_plan_registry, reset_plan_registry
 
-    def test_no_drift_returns_none(self, tmp_path: Path, monkeypatch):
-        from core.auth.oauth_login import reconcile_plan_tier_from_stored_jwt
-        from core.auth.profiles import AuthProfile, CredentialType
-        from core.llm.strategies.plan_registry import get_plan_registry, reset_plan_registry
-        from core.llm.strategies.plans import Plan, PlanKind
-        from core.wiring import container as container_mod
+    _isolate(tmp_path, monkeypatch)
+    _persist_oauth_to_authtoml({"access_token": "first-token", "plan_type": "plus"})
+    _persist_oauth_to_authtoml({"access_token": "second-token", "plan_type": "pro"})
+    assert get_plan_registry().get(_GEODE_OPENAI_PLAN_ID).subscription_tier == "pro"
 
-        _isolate(tmp_path, monkeypatch)
-        reset_plan_registry()
+    reset_plan_registry()
+    from core.auth.auth_toml import load_auth_toml
 
-        registry = get_plan_registry()
-        registry.add(
-            Plan(
-                id="openai-codex-geode",
-                provider="openai-codex",
-                kind=PlanKind.OAUTH_BORROWED,
-                display_name="OpenAI Codex (GEODE OAuth)",
-                base_url="https://chatgpt.com/backend-api/codex",
-                subscription_tier="prolite",
-            )
-        )
-
-        from core.auth.profiles import ProfileStore
-
-        store = ProfileStore()
-        token = _build_fake_jwt({"https://api.openai.com/auth": {"chatgpt_plan_type": "prolite"}})
-        store.add(
-            AuthProfile(
-                name="openai-codex-geode:user",
-                provider="openai-codex",
-                credential_type=CredentialType.OAUTH,
-                key=token,
-                plan_id="openai-codex-geode",
-            )
-        )
-        monkeypatch.setattr(container_mod, "ensure_profile_store", lambda: store)
-
-        assert reconcile_plan_tier_from_stored_jwt() is None
-
-    def test_drift_reconciles_and_returns_pair(self, tmp_path: Path, monkeypatch):
-        from core.auth.oauth_login import reconcile_plan_tier_from_stored_jwt
-        from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
-        from core.llm.strategies.plan_registry import get_plan_registry, reset_plan_registry
-        from core.llm.strategies.plans import Plan, PlanKind
-        from core.wiring import container as container_mod
-
-        _isolate(tmp_path, monkeypatch)
-        reset_plan_registry()
-
-        registry = get_plan_registry()
-        registry.add(
-            Plan(
-                id="openai-codex-geode",
-                provider="openai-codex",
-                kind=PlanKind.OAUTH_BORROWED,
-                display_name="OpenAI Codex (GEODE OAuth)",
-                base_url="https://chatgpt.com/backend-api/codex",
-                subscription_tier="plus",  # stale
-            )
-        )
-
-        store = ProfileStore()
-        token = _build_fake_jwt({"https://api.openai.com/auth": {"chatgpt_plan_type": "max"}})
-        store.add(
-            AuthProfile(
-                name="openai-codex-geode:user",
-                provider="openai-codex",
-                credential_type=CredentialType.OAUTH,
-                key=token,
-                plan_id="openai-codex-geode",
-                metadata={"plan_type": "plus"},
-            )
-        )
-        monkeypatch.setattr(container_mod, "ensure_profile_store", lambda: store)
-
-        result = reconcile_plan_tier_from_stored_jwt()
-        assert result == ("plus", "max")
-        plan = get_plan_registry().get("openai-codex-geode")
-        assert plan is not None
-        assert plan.subscription_tier == "max"
-        # Profile metadata also updated
-        profile = store.get("openai-codex-geode:user")
-        assert profile is not None
-        assert profile.metadata["plan_type"] == "max"
-
-    def test_no_profile_returns_none(self, tmp_path: Path, monkeypatch):
-        from core.auth.oauth_login import reconcile_plan_tier_from_stored_jwt
-        from core.auth.profiles import ProfileStore
-        from core.llm.strategies.plan_registry import reset_plan_registry
-        from core.wiring import container as container_mod
-
-        _isolate(tmp_path, monkeypatch)
-        reset_plan_registry()
-
-        monkeypatch.setattr(container_mod, "ensure_profile_store", lambda: ProfileStore())
-
-        assert reconcile_plan_tier_from_stored_jwt() is None
+    assert load_auth_toml()
+    assert get_plan_registry().get(_GEODE_OPENAI_PLAN_ID).subscription_tier == "pro"

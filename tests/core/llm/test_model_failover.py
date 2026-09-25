@@ -479,6 +479,7 @@ class TestAgenticLoopFailover:
             "cached_input_tokens": 40,
             "reasoning_tokens": 8,
             "cache_write_tokens": 10,
+            "cache_write_1h_tokens": None,
         }
         assert ended["cost_usd"] == 0.123
         assert ended["response_id"] == "gen-1"
@@ -647,6 +648,45 @@ class TestAgenticLoopFailover:
         assert result is None
         assert loop._last_llm_error is not None
 
+    @pytest.mark.parametrize("diagnostic", ["prompt is too long", object()])
+    def test_non_exception_adapter_diagnostic_preserves_current_failure(
+        self, diagnostic: object
+    ) -> None:
+        loop = self._make_loop()
+        stub = self._install_acomplete_stub(loop, RuntimeError("current call failed"))
+        stub._last_error = diagnostic
+
+        result = asyncio.run(loop._call_llm("system", [{"role": "user", "content": "hello"}]))
+
+        assert result is None
+        assert loop._last_llm_error == "current call failed"
+
+    def test_legacy_context_error_preserves_typed_recovery_metadata(self) -> None:
+        import httpx
+        from core.agent.loop import _ContextExhaustedError
+
+        loop = self._make_loop()
+        stub = self._install_acomplete_stub(loop, RuntimeError("legacy completion failed"))
+        stub.provider = loop._provider
+        stub.source = loop._source
+        overflow = anthropic.BadRequestError(
+            "prompt is too long",
+            response=httpx.Response(400, request=httpx.Request("POST", "https://offline.invalid")),
+            body={"error": {"type": "invalid_request_error", "message": "prompt is too long"}},
+        )
+        stub._last_error = overflow
+
+        with pytest.raises(_ContextExhaustedError) as caught:
+            asyncio.run(loop._call_llm("system", [{"role": "user", "content": "hello"}]))
+
+        assert caught.value.__cause__ is overflow
+        assert caught.value.provider_rejected is True
+        assert caught.value.can_recover_history is True
+        assert caught.value.policy is not None
+        assert caught.value.policy.model == loop.model
+        assert caught.value.system_prompt == "system"
+        stub.acomplete.assert_called_once()
+
     def test_failed_llm_event_omits_raw_provider_error(
         self,
         caplog: pytest.LogCaptureFixture,
@@ -724,7 +764,9 @@ class TestAgenticLoopFailover:
             body = {"error": {"code": "insufficient_quota"}}
 
         raw_billing = RawBillingError("insufficient quota")
-        self._install_acomplete_stub(loop, raw_billing)
+        adapter = self._install_acomplete_stub(loop, raw_billing)
+        adapter.provider = "anthropic"
+        adapter.source = "payg"
         captured: dict[str, Any] = {}
 
         def normalize(exc: Exception, **kwargs: Any) -> BillingError:
@@ -738,6 +780,8 @@ class TestAgenticLoopFailover:
             asyncio.run(loop._call_llm("system", [{"role": "user", "content": "go"}]))
 
         assert captured["routing_sources"] is routing_source
+        assert captured["provider"] == loop._new_adapter.provider
+        assert captured["source"] == loop._new_adapter.source
 
     def test_call_llm_no_api_key_returns_none(self) -> None:
         """When ``acomplete`` raises an auth-style failure, ``_call_llm``

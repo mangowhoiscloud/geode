@@ -32,8 +32,8 @@ from unittest.mock import patch
 
 import pytest
 from core.auth.profiles import AuthProfile, CredentialType
-from core.llm.registry import equivalent_providers
-from core.llm.strategies.plan_registry import resolve_routing
+from core.llm.registry import provider_specs_for
+from core.llm.routing import resolve_routing
 from core.llm.strategies.plans import PLAN_KIND_PRIORITY, Plan, PlanKind
 
 # ---------------------------------------------------------------------------
@@ -50,22 +50,10 @@ def test_plan_kind_priority_subscription_first() -> None:
     assert PLAN_KIND_PRIORITY[PlanKind.CLOUD_PROVIDER] < PLAN_KIND_PRIORITY[PlanKind.PAYG]
 
 
-def test_openai_equivalence_class_pairs_with_codex() -> None:
-    """openai and openai-codex must share an equivalence class so a
-    Codex OAuth plan is considered when the user requests gpt-5.x."""
-    eq = equivalent_providers("openai")
-    assert "openai-codex" in eq
-    assert "openai" in eq
-    # Preferred-first ordering: codex (OAuth) before openai (PAYG).
-    assert eq.index("openai-codex") < eq.index("openai")
-
-
-def test_unrelated_provider_is_singleton() -> None:
-    """Anthropic and GLM must NOT pull in unrelated siblings."""
-    assert equivalent_providers("anthropic") == ["anthropic"]
-    # GLM has its own equivalence class for the Coding Plan vs PAYG split.
-    glm_class = equivalent_providers("glm")
-    assert set(glm_class) == {"glm-coding", "glm"}
+def test_provider_routes_have_no_unrelated_siblings() -> None:
+    assert {spec.id for spec in provider_specs_for("openai")} == {"openai", "openai-codex"}
+    assert {spec.id for spec in provider_specs_for("anthropic")} == {"anthropic"}
+    assert {spec.id for spec in provider_specs_for("glm")} == {"glm", "glm-coding"}
 
 
 # ---------------------------------------------------------------------------

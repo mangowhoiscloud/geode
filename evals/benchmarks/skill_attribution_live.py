@@ -276,7 +276,6 @@ def _build_loop(*, request: SkillArmRequest, spec: Mapping[str, Any], session_id
             system_prompt_override=SYSTEM_PROMPT,
             session_id=session_id,
             response_schema=skill_response_schema(request.case),
-            disable_settings_drift=True,
         ),
         model=str(model["label"]),
         provider="openai",

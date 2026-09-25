@@ -87,6 +87,7 @@ def test_turn_verification_dispatch_keeps_purpose_usage_and_timeout(
     from core.agent.tool_executor import ToolExecutor
     from core.agent.verify import verify_turn_async
     from core.config import settings
+    from core.config.session import SessionModelConfig
     from core.llm.adapters.registry import bootstrap_builtins
     from evals.platforms.harbor import _summarize_usage
 
@@ -107,7 +108,17 @@ def test_turn_verification_dispatch_keeps_purpose_usage_and_timeout(
         ConversationContext(),
         ToolExecutor(middleware_registry=registry),
         hooks=hooks,
-        config=AgenticLoopConfig(source="codex-oauth", effort="max", disable_settings_drift=True),
+        config=AgenticLoopConfig(
+            source="subscription",
+            effort="max",
+            model_settings=SessionModelConfig(
+                model="gpt-5.6-sol",
+                effort="max",
+                source="subscription",
+                judge_model="gpt-5.6-sol",
+                judge_source="subscription",
+            ),
+        ),
         model="gpt-5.6-sol",
         provider="openai",
         quiet=True,
@@ -228,6 +239,7 @@ def test_completed_auxiliary_dispatch_survives_interpretation(
             "cached_input_tokens": cache,
             "reasoning_tokens": 0,
             "cache_write_tokens": None,
+            "cache_write_1h_tokens": None,
         }
         assert end.payload["cost_usd"] == 0
         assert "private" not in str(end.payload)

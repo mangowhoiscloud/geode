@@ -32,15 +32,15 @@ from typing import Any
 
 from dotenv import dotenv_values
 
-from core.config import _TOML_TO_SETTINGS, GLOBAL_CONFIG_PATH, PROJECT_CONFIG_PATH, _flatten_toml
+from core.config import _TOML_TO_SETTINGS, PROJECT_CONFIG_PATH, _flatten_toml
+from core.config.toml_edit import read_config_toml, resolve_config_toml_path
 from core.paths import GLOBAL_ENV_FILE
 
 PROJECT_ENV_FILE = Path(".env")
 
 
 def _global_toml_path() -> Path:
-    env_toml = os.environ.get("GEODE_CONFIG_TOML", "").strip()
-    return Path(env_toml).expanduser() if env_toml else GLOBAL_CONFIG_PATH
+    return resolve_config_toml_path()
 
 
 #: Layer identifiers in precedence order (index 0 = strongest).
@@ -101,27 +101,20 @@ def explain_field(field_name: str) -> FieldReport:
     # Dotenv layer — env_file=(project, global) with later-file-wins, so the
     # GLOBAL file beats project (2026-06-15 Hermes-aligned secret precedence);
     # report both files separately so a duplicate key is visible. An empty
-    # value (KEY=) coalesces to None so it never registers as a winning layer,
-    # matching the loaders' "empty never clobbers" contract.
+    # value (KEY=) is an explicit Settings value, including role inheritance;
+    # only an absent key or a bare KEY without a value is unset.
     global_env = dotenv_values(GLOBAL_ENV_FILE) if GLOBAL_ENV_FILE.exists() else {}
     project_env = dotenv_values(PROJECT_ENV_FILE) if PROJECT_ENV_FILE.exists() else {}
+    candidates.append(LayerValue("global .env", str(GLOBAL_ENV_FILE), global_env.get(env_var)))
     candidates.append(
-        LayerValue("global .env", str(GLOBAL_ENV_FILE), global_env.get(env_var) or None)
-    )
-    candidates.append(
-        LayerValue(
-            "project .env", str(PROJECT_ENV_FILE.resolve()), project_env.get(env_var) or None
-        )
+        LayerValue("project .env", str(PROJECT_ENV_FILE.resolve()), project_env.get(env_var))
     )
 
     def _toml_value(path: Path) -> Any | None:
         if toml_key is None or not path.exists():
             return None
-        import tomllib
-
         try:
-            with open(path, "rb") as f:
-                flat = _flatten_toml(tomllib.load(f))
+            flat = _flatten_toml(read_config_toml(path))
         except Exception:
             return None
         return flat.get(toml_key)

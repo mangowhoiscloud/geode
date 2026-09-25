@@ -90,9 +90,7 @@ def test_dispatch_enriches_web_search_result_with_adapter_identity(
         return_value=WebSearchResult(query="q", text="hello", adapter_name="codex-oauth")
     )
     monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: [adapter])
-    monkeypatch.setattr(
-        "core.llm.adapters._source_inference.infer_source", lambda provider: "subscription"
-    )
+    monkeypatch.setattr("core.llm.routing.infer_source", lambda provider, **kwargs: "subscription")
 
     result = asyncio.run(
         web_search_via_adapters("q", prefer_provider="openai", prefer_source="subscription")
@@ -144,7 +142,7 @@ def test_session_adapter_usage_accumulates_across_dispatch_calls(
     monkeypatch.setattr(
         "core.llm.adapters.dispatch.list_adapters", lambda: [adapter_ok, adapter_bill]
     )
-    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda provider: "payg")
+    monkeypatch.setattr("core.llm.routing.infer_source", lambda provider, **kwargs: "payg")
 
     begin_session_adapter_tracking()
     assert get_session_adapter_usage() == {}

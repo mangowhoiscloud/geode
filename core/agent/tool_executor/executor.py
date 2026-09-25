@@ -358,14 +358,15 @@ class ToolExecutor:
             raise ValueError(f"transient handlers collide with tool plan: {', '.join(collisions)}")
         from core.tools.plan import thaw_tool_schema
 
-        self._bound_tool_plan = bound_tool_plan
-        self._handlers = MappingProxyType({**bound_tool_plan.handlers, **self._transient_handlers})
-        self._tool_input_schemas = {
+        handlers = MappingProxyType({**bound_tool_plan.handlers, **self._transient_handlers})
+        schemas = {
             spec.name: thaw_tool_schema(spec.input_schema) for spec in bound_tool_plan.ordered_specs
         }
-        self._bound_allowed_tools = frozenset(
-            (*bound_tool_plan.tool_names, *self._transient_handlers)
-        )
+        allowed = frozenset((*bound_tool_plan.tool_names, *self._transient_handlers))
+        self._bound_tool_plan = bound_tool_plan
+        self._handlers = handlers
+        self._tool_input_schemas = schemas
+        self._bound_allowed_tools = allowed
 
     def _execution_plan(self, context: ToolContext | None) -> BoundToolPlan | None:
         captured = context.bound_tool_plan if context is not None else None
@@ -1903,6 +1904,7 @@ class ToolExecutor:
             on_activity=_on_activity,
             default_model=default_model,
             default_effort=default_effort,
+            model_settings=getattr(getattr(context, "agent_loop", None), "_model_settings", None),
         )
 
         # Fleet view: guarantee a terminal state for EVERY dispatched task.
@@ -1981,6 +1983,9 @@ class ToolExecutor:
                 parent_session_id=parent_session_id,
                 default_model=str(getattr(context, "model", "") or ""),
                 default_effort=str(getattr(context, "effort", "") or ""),
+                model_settings=getattr(
+                    getattr(context, "agent_loop", None), "_model_settings", None
+                ),
             )
         except ValueError as exc:
             return {"error": str(exc)}
@@ -2034,6 +2039,9 @@ class ToolExecutor:
                     message,
                     default_model=default_model,
                     default_effort=str(getattr(context, "effort", "") or ""),
+                    model_settings=getattr(
+                        getattr(context, "agent_loop", None), "_model_settings", None
+                    ),
                 )
                 return {"task": run.to_dict(), "turn_triggered": resumed, "resumed": resumed}
             return {"error": f"Unknown collaboration tool: {tool_name}"}
@@ -2049,18 +2057,10 @@ class ToolExecutor:
     ) -> dict[str, Any]:
         """Judge-select the winner among best-of-N candidate SubResults.
 
-        Judges only the SUCCESSFUL candidates; the winner block carries
-        the winning candidate's full ``to_dict()`` so the model reads
-        the selected result without re-scanning ``tasks``. Judge model
-        precedence mirrors verify's llm_judge: ``settings.judge_model``
-        → the delegating loop's live model → ``settings.model``. When
-        the judge INHERITS the loop model, the ToolContext's live
-        provider/source route is forwarded so the judge cannot land on
-        a different credential source than the session's main calls
-        (Codex MCP MED, 2026-07-06); an operator-pinned judge_model
-        re-infers its own route (same rule as the reflection node's
-        configured-model path). All failure shapes are observable
-        (``judge_error``), never silent.
+        Only successful candidates are judged. Explicit judge routes use the
+        owning loop's snapshot; an empty role inherits the current action route.
+        Standalone callers without an owning loop retain their configured default.
+        Failures remain observable in ``judge_error``.
         """
         successful = [r for r in results if getattr(r, "success", False)]
         if not successful:
@@ -2072,12 +2072,23 @@ class ToolExecutor:
         from core.agent.candidate_sampling import candidate_text, judge_candidates
         from core.config import settings
 
-        pinned_judge_model = (getattr(settings, "judge_model", "") or "").strip()
+        policy = getattr(getattr(context, "agent_loop", None), "_model_settings", None)
+        pinned_judge_model = (
+            policy.judge_model
+            if policy is not None
+            else (getattr(settings, "judge_model", "") or "").strip()
+        )
         context_model = getattr(context, "model", "") or ""
         model = pinned_judge_model or context_model or getattr(settings, "model", "")
         inherits_loop_model = not pinned_judge_model and bool(context_model)
         judge_provider = getattr(context, "provider", None) if inherits_loop_model else None
-        judge_source = getattr(context, "source", None) if inherits_loop_model else None
+        judge_source = (
+            getattr(context, "source", None)
+            if inherits_loop_model
+            else policy.judge_source
+            if policy is not None
+            else None
+        )
         candidate_texts = [candidate_text(getattr(r, "output", None)) for r in successful]
         verdict = await judge_candidates(
             task_description,

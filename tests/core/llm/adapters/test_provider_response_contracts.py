@@ -29,7 +29,7 @@ from core.llm.adapters.translation import (
     build_adapter_request,
 )
 from core.llm.agentic_response import AgenticResponse, parse_chat_reasoning_replay
-from core.llm.errors import LLMRequestValidationError
+from core.llm.errors import LLMRequestValidationError, ModelSourceUnavailableError
 from core.llm.fallback import classify_retry_error, provider_retry_policy, run_with_retry_policy
 from core.memory.session_checkpoint import SessionCheckpoint, SessionState
 from core.memory.session_manager import SessionManager, SessionMeta
@@ -254,8 +254,15 @@ def test_concrete_chat_adapters_capture_and_replay_on_next_request(
     monkeypatch.setattr(
         adapter,
         "_get_client",
-        lambda: SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create))),
+        lambda model="": SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        ),
     )
+    if isinstance(adapter, GlmCodingPlanAdapter):
+        with pytest.raises(ModelSourceUnavailableError, match="GEODE"):
+            asyncio.run(adapter.acomplete(_request([], model)))
+        create.assert_not_called()
+        return
     result = asyncio.run(adapter.acomplete(_request([], model)))
     assert result.chat_reasoning is not None
     assert result.chat_reasoning["source"] == adapter.name

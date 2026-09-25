@@ -90,12 +90,11 @@ class TestModelCapabilityAnchor:
         assert anthropic_provider._ADAPTIVE_MODELS is caps.ANTHROPIC_ADAPTIVE_MODELS
         assert anthropic_provider._XHIGH_EFFORT_MODELS is caps.ANTHROPIC_XHIGH_MODELS
 
-    def test_effort_picker_aliases_are_anchor_objects(self) -> None:
+    def test_effort_picker_uses_the_model_contract_owner(self) -> None:
         from core.cli import effort_picker
         from core.llm import model_capabilities as caps
 
-        assert effort_picker._ANTHROPIC_ADAPTIVE_MODELS is caps.ANTHROPIC_ADAPTIVE_MODELS
-        assert effort_picker._ANTHROPIC_XHIGH_MODELS is caps.ANTHROPIC_XHIGH_MODELS
+        assert effort_picker.get_anthropic_model_spec is caps.get_anthropic_model_spec
 
     def test_picker_surfaces_match_adapter_acceptance(self) -> None:
         """End-to-end invariant the anchor exists to guarantee: the picker

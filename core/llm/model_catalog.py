@@ -11,14 +11,16 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Literal
 from urllib.parse import urlsplit
 
 from core.config.routing_manifest import resolve_provider
 from core.llm.adapters._openai_common import get_openai_model_spec
 from core.llm.adapters.base import SOURCE_PAYG, SOURCE_SUBSCRIPTION, ModelSpec
 from core.llm.errors import ModelSourceUnavailableError
-from core.llm.model_capabilities import ANTHROPIC_TOOL_SEARCH_MODELS
+from core.llm.model_capabilities import ANTHROPIC_TOOL_SEARCH_MODELS, get_anthropic_model_spec
 from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
 DEFAULT_UNKNOWN_CONTEXT_WINDOW = 200_000
@@ -106,15 +108,21 @@ MODEL_OFFERINGS: tuple[ModelOffering, ...] = (
 )
 
 
-def model_ids_for_source(provider: str, source: str) -> tuple[str, ...]:
-    """List active choices for one route, without querying credentials."""
+def model_ids_for_source(
+    provider: str, source: str, *, configured: Sequence[str] = ()
+) -> tuple[str, ...]:
+    """List active and explicitly configured choices without querying credentials."""
     normalized = normalize_model_provider(provider)
-    return tuple(
+    public = (
         entry.id
         for entry in MODEL_OFFERINGS
-        if entry.provider == normalized
-        and source in entry.sources
-        and model_source_unavailable_reason(entry.id, provider=normalized, source=source) is None
+        if entry.provider == normalized and source in entry.sources
+    )
+    return tuple(
+        model_id
+        for model_id in dict.fromkeys((*public, *configured))
+        if model_id
+        and model_source_unavailable_reason(model_id, provider=normalized, source=source) is None
     )
 
 
@@ -188,6 +196,11 @@ class ModelCatalogSpec:
     context_window: int
     supports_thinking: bool
     supports_tool_search: bool = False
+    source: str = ""
+    max_input_tokens: int | None = None
+    max_output_tokens: int | None = None
+    max_context_window: int | None = None
+    context_origin: Literal["provider_catalog", "client_default", "fallback"] = "fallback"
 
 
 def normalize_model_provider(provider: str) -> str:
@@ -197,10 +210,13 @@ def normalize_model_provider(provider: str) -> str:
 
 def context_window_for(model_id: str, *, default: int = DEFAULT_UNKNOWN_CONTEXT_WINDOW) -> int:
     """Return the catalogued context window for ``model_id``."""
-    return int(MODEL_CONTEXT_WINDOW.get(model_id, default))
+    value = MODEL_CONTEXT_WINDOW.get(model_id, default)
+    return value if type(value) is int and value > 0 else default
 
 
-def get_model_catalog_spec(model_id: str, provider: str | None = None) -> ModelCatalogSpec:
+def get_model_catalog_spec(
+    model_id: str, provider: str | None = None, *, source: str | None = None
+) -> ModelCatalogSpec:
     """Resolve model metadata from the central catalogue.
 
     ``provider`` may be supplied by an adapter to avoid re-resolving. When
@@ -210,20 +226,42 @@ def get_model_catalog_spec(model_id: str, provider: str | None = None) -> ModelC
     routed_provider = provider or resolve_provider(model_id)
     normalized = normalize_model_provider(routed_provider)
     context_window = context_window_for(model_id)
+    known_window = MODEL_CONTEXT_WINDOW.get(model_id)
+    context_origin: Literal["provider_catalog", "client_default", "fallback"] = (
+        "provider_catalog" if type(known_window) is int and known_window > 0 else "fallback"
+    )
+    max_input_tokens = None
+    max_output_tokens = None
+    max_context_window = None
+    if normalized == "openrouter" and not model_id.startswith("openrouter/"):
+        context_window = DEFAULT_UNKNOWN_CONTEXT_WINDOW
+        context_origin = "fallback"
 
     supports_thinking = False
     supports_tool_search = False
     if normalized == "anthropic":
         supports_thinking = model_id.startswith("claude-")
         supports_tool_search = re.sub(r"-\d{8}$", "", model_id) in ANTHROPIC_TOOL_SEARCH_MODELS
+        anthropic_spec = get_anthropic_model_spec(model_id)
+        max_output_tokens = anthropic_spec.max_output_tokens if anthropic_spec is not None else None
     elif normalized == "openai":
         openai_spec = get_openai_model_spec(model_id)
         supports_thinking = openai_spec.reasoning_effort_values is not None
         supports_tool_search = openai_spec.supports_tool_search
+        if source == SOURCE_SUBSCRIPTION:
+            # Codex 549455f3 (2026-09-25): bundled metadata, not a server limit.
+            context_window = openai_spec.codex_context_window or 272_000
+            max_context_window = openai_spec.codex_max_context_window or 272_000
+            context_origin = "client_default" if openai_spec.codex_context_window else "fallback"
+        else:
+            max_input_tokens = openai_spec.max_input_tokens
+            max_output_tokens = openai_spec.max_output_tokens
     elif normalized == "glm":
-        # The GLM adapter currently owns the thinking/reasoning toggle policy
-        # separately and does not expose a user-facing effort surface.
-        supports_thinking = False
+        from core.llm.providers.glm import get_glm_model_spec
+
+        glm_spec = get_glm_model_spec(model_id)
+        supports_thinking = glm_spec.supports_thinking if glm_spec is not None else False
+        max_output_tokens = glm_spec.max_output_tokens if glm_spec is not None else None
 
     return ModelCatalogSpec(
         id=model_id,
@@ -231,6 +269,11 @@ def get_model_catalog_spec(model_id: str, provider: str | None = None) -> ModelC
         context_window=context_window,
         supports_thinking=supports_thinking,
         supports_tool_search=supports_tool_search,
+        source=source or "",
+        max_input_tokens=max_input_tokens,
+        max_output_tokens=max_output_tokens,
+        max_context_window=max_context_window,
+        context_origin=context_origin,
     )
 
 

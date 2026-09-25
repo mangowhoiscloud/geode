@@ -9,7 +9,7 @@ import subprocess
 import sys
 from io import StringIO
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 from core.agent.loop import AgenticLoop
@@ -26,9 +26,174 @@ from core.agent.worker import (
 from core.tools.plan import bind_tool_plan, compile_tool_plan
 
 
+def _worker_loop_double():
+    """Keep route admission real when a test replaces only loop execution."""
+    from core.llm.adapters.registry import active_registry_snapshot
+
+    loop = MagicMock(spec=AgenticLoop)
+    loop._adapter_registry_snapshot = active_registry_snapshot()
+    return loop
+
+
 def _empty_tool_plan_builder():
     """Return the explicit empty catalog used by worker wiring unit tests."""
     return bind_tool_plan(compile_tool_plan((), ()), {}), {}
+
+
+@pytest.mark.parametrize("saved", [True, False])
+def test_worker_resume_uses_one_saved_or_current_selection(monkeypatch, tmp_path, saved):
+    from core.agent.worker import _run_agentic
+    from core.config import settings
+    from core.config.session import SessionModelConfig
+    from core.memory.session_checkpoint import SessionCheckpoint, SessionState
+
+    monkeypatch.setattr("core.memory.session_checkpoint.DEFAULT_SESSION_DIR", tmp_path)
+    monkeypatch.setattr("core.wiring.bootstrap.build_worker_hooks", lambda **kwargs: None)
+    parent = SessionModelConfig(model="gpt-6-luna", source="payg", effort="low")
+    historical = parent.updated(
+        {
+            "model": "gpt-6-sol",
+            "source": "subscription",
+            "effort": "medium",
+            "judge_model": "gpt-6-luna",
+            "judge_source": "subscription",
+            "reflection_max_tokens": 321,
+        }
+    )
+    cp = SessionCheckpoint(tmp_path)
+    cp.save(
+        SessionState(
+            session_id="worker-resume",
+            model="obsolete-model",
+            provider="obsolete-provider",
+            model_settings=historical if saved else None,
+            status="completed",
+            messages=[{"role": "user", "content": "original task"}],
+        )
+    )
+    monkeypatch.setattr(settings, "judge_model", "unrelated-global-model")
+    observed = []
+
+    async def run(loop, prompt):
+        expected = historical if saved else parent
+        observed.append(loop._model_settings)
+        assert loop._model_settings == expected
+        assert (loop.model, loop._source, loop._effort) == (
+            expected.model,
+            expected.source,
+            expected.effort,
+        )
+        assert loop.context.messages[0]["content"] == "original task"
+        assert str(cp.current_status("worker-resume")) == "active"
+        assert loop._session_id == "worker-resume" and prompt == "continue"
+        return AgenticResult(text="done", termination_reason="natural")
+
+    monkeypatch.setattr(AgenticLoop, "arun", run)
+    result = _run_agentic(
+        WorkerRequest(
+            task_id="worker-resume",
+            resume=True,
+            description="continue",
+            model_settings=parent,
+        ),
+        _empty_tool_plan_builder,
+    )
+    assert result.success and len(observed) == 1
+
+
+@pytest.mark.parametrize("from_parent", [False, True])
+def test_worker_selection_consumes_injected_model_policy(monkeypatch, tmp_path, from_parent):
+    from core.agent.subagent_protocol import SubagentProtocol, SubTask
+    from core.agent.worker import _run_agentic
+    from core.auth.profiles import ProfileStore
+    from core.config import settings
+    from core.config.policy_source import PolicySourcePaths, encode_policy_sources
+    from core.config.session import SessionModelConfig
+    from core.llm.strategies import plan_registry
+    from core.llm.strategies.plans import Plan, PlanKind, default_plan_for_payg
+    from core.wiring import container
+
+    monkeypatch.setattr(container, "_profile_store", ProfileStore())
+    registry = plan_registry.PlanRegistry()
+    payg = default_plan_for_payg("openai", "synthetic")
+    registry.add(payg)
+    registry.add(Plan("codex-default", "openai-codex", PlanKind.SUBSCRIPTION, "Codex", ""))
+    monkeypatch.setattr(plan_registry, "_plan_registry", registry)
+    monkeypatch.setattr(settings, "openai_credential_source", "auto")
+    monkeypatch.setattr(settings, "forced_login_method", {})
+    monkeypatch.setattr(settings, "judge_model", "gpt-6-sol")
+    monkeypatch.setattr("core.wiring.bootstrap.build_worker_hooks", lambda **kwargs: None)
+    path = tmp_path / "routing.json"
+    path.write_text(json.dumps({"gpt-6-sol": [payg.id]}))
+    sources = {
+        "provider_routing": PolicySourcePaths(
+            "TEST_ROUTING_OVERRIDE", explicit_override=path, explicit_override_strict=True
+        )
+    }
+    if from_parent:
+        protocol = SubagentProtocol(set(), 60, 0, None, "parent", sources)
+        parent = SessionModelConfig(
+            model="claude-fable-5-1",
+            effort="low",
+            source="payg",
+            judge_model="gpt-6-luna",
+            judge_source="subscription",
+        )
+        request = protocol.build_worker_request(
+            SubTask("route-child", "inspect", "analyze", model="gpt-6-sol"),
+            model_settings=parent,
+        )
+        expected_judge_source = "subscription"  # An explicit parent auxiliary pin survives.
+    else:
+        request = WorkerRequest(
+            task_id="route-child",
+            model="gpt-6-sol",
+            effort="low",
+            policy_sources=encode_policy_sources(sources),
+        )
+        expected_judge_source = "payg"  # A new auxiliary route uses that same model policy.
+    observed = []
+
+    async def run(loop, _prompt):
+        observed.append(loop._model_settings)
+        assert (loop.model, loop._source, loop._effort) == ("gpt-6-sol", "payg", "low")
+        assert loop._model_settings.judge_source == expected_judge_source
+        return AgenticResult(text="done", termination_reason="natural")
+
+    monkeypatch.setattr(AgenticLoop, "arun", run)
+    result = _run_agentic(WorkerRequest.from_dict(request.to_dict()), _empty_tool_plan_builder)
+    assert result.success and len(observed) == 1
+
+
+def test_worker_invalid_saved_selection_preserves_checkpoint(monkeypatch, tmp_path):
+    from core.agent.worker import _run_agentic
+    from core.config.session import SessionModelConfig
+    from core.memory.session_checkpoint import SessionCheckpoint, SessionState
+
+    monkeypatch.setattr("core.memory.session_checkpoint.DEFAULT_SESSION_DIR", tmp_path)
+    monkeypatch.setattr("core.wiring.bootstrap.build_worker_hooks", lambda **kwargs: None)
+    cp = SessionCheckpoint(tmp_path)
+    cp.save(
+        SessionState(
+            session_id="invalid-worker",
+            status="paused",
+            model_settings=SessionModelConfig(model="gpt-6-sol", source="payg", effort="turbo"),
+            messages=[{"role": "user", "content": "untouched"}],
+        )
+    )
+    state_bytes = (tmp_path / "invalid-worker/state.json").read_bytes()
+    calls = []
+
+    async def no_dispatch(*args):
+        calls.append(args)
+        raise AssertionError("invalid resume reached execution")
+
+    monkeypatch.setattr(AgenticLoop, "arun", no_dispatch)
+    with pytest.raises(ValueError, match="effort"):
+        _run_agentic(WorkerRequest(task_id="invalid-worker", resume=True), _empty_tool_plan_builder)
+    assert not calls
+    assert (tmp_path / "invalid-worker/state.json").read_bytes() == state_bytes
+    assert str(cp.current_status("invalid-worker")) == "paused"
 
 
 # ---------------------------------------------------------------------------
@@ -37,6 +202,23 @@ def _empty_tool_plan_builder():
 
 
 class TestWorkerRequest:
+    def test_model_settings_survive_json_boundary(self):
+        from core.config.session import SessionModelConfig
+
+        policy = SessionModelConfig(
+            model="gpt-6-sol",
+            source="subscription",
+            effort="low",
+            judge_model="gpt-6-luna",
+            judge_source="payg",
+            reflection_max_tokens=321,
+        )
+        request = WorkerRequest(task_id="policy-worker", model_settings=policy)
+        loaded = WorkerRequest.from_dict(json.loads(json.dumps(request.to_dict())))
+        assert loaded.model_settings == policy
+        with pytest.raises(ValueError):
+            WorkerRequest.from_dict({"task_id": "invalid", "model_settings": {}})
+
     def test_roundtrip(self) -> None:
         req = WorkerRequest(
             task_id="t-001",
@@ -325,7 +507,7 @@ def test_sigterm_cancels_turn_closes_error_session_and_flushes_hooks(
     async def close_session() -> None:
         lifecycle.append("session_error")
 
-    loop = MagicMock(spec=AgenticLoop)
+    loop = _worker_loop_double()
     loop.arun = run_until_signal
     loop.amark_session_error = AsyncMock(side_effect=close_session)
     loop.amark_session_completed = AsyncMock(side_effect=close_completed)
@@ -516,13 +698,13 @@ class TestSubAgentReasoningWiring:
     """
 
     def test_loop_receives_reasoning_kwargs(self, monkeypatch, tmp_path) -> None:
-        from unittest.mock import AsyncMock, MagicMock, patch
+        from unittest.mock import AsyncMock, patch
 
         captured: dict = {}
 
         def _fake_loop(*args, **kwargs):
             captured.update(kwargs)
-            mock_loop = MagicMock(spec=AgenticLoop)
+            mock_loop = _worker_loop_double()
             # PR-DEFECT-AB (2026-05-24): _resolve_worker_outcome now reads
             # ``.error`` + ``.termination_reason`` off the loop's return,
             # so the stub must be a real AgenticResult (or close enough)
@@ -567,7 +749,7 @@ def test_reviewer_prompt_reaches_worker_assembly_and_read_only_executor(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from unittest.mock import AsyncMock, MagicMock, patch
+    from unittest.mock import AsyncMock, patch
 
     from core.agent.loop import AgenticLoop
     from core.agent.sub_agent import SubAgentManager, SubTask
@@ -598,7 +780,7 @@ def test_reviewer_prompt_reaches_worker_assembly_and_read_only_executor(
                 assert result["denied"] is True
             return AgenticResult(text='{"findings": []}', termination_reason="natural")
 
-        loop = MagicMock(spec=AgenticLoop)
+        loop = _worker_loop_double()
         loop.arun = AsyncMock(side_effect=review)
         return loop
 
@@ -631,7 +813,7 @@ def test_run_agentic_shares_one_bound_plan_with_executor_and_loop(
 
     def fake_loop(*args, **_kwargs):
         captured["loop_bound"] = args[1]._bound_tool_plan
-        loop = MagicMock(spec=AgenticLoop)
+        loop = _worker_loop_double()
         loop.arun = AsyncMock(return_value=AgenticResult(text="ok", termination_reason="unknown"))
         return loop
 
@@ -657,7 +839,7 @@ def test_worker_uses_one_event_bus_through_auxiliary_dispatch(
     monkeypatch: pytest.MonkeyPatch, purpose: str, native_builder: bool
 ) -> None:
     from types import SimpleNamespace
-    from unittest.mock import AsyncMock, MagicMock
+    from unittest.mock import AsyncMock
 
     from core.agent.worker import _run_agentic
     from core.hooks import HookEvent, HookSystem
@@ -686,7 +868,7 @@ def test_worker_uses_one_event_bus_through_auxiliary_dispatch(
     def fake_loop(conversation, executor, **kwargs):
         assert executor._hooks is kwargs["hooks"] is hooks
         assert executor.middleware_registry._events is hooks
-        loop = MagicMock(spec=AgenticLoop)
+        loop = _worker_loop_double()
 
         async def run(_prompt):
             await executor.middleware_registry.call_llm(
@@ -792,7 +974,7 @@ def test_worker_toolkit_filter_blocks_special_route_before_side_effect(
     def fake_loop(_conversation, loop_executor, **_kwargs):
         nonlocal executor
         executor = loop_executor
-        loop = MagicMock(spec=AgenticLoop)
+        loop = _worker_loop_double()
         loop.arun = AsyncMock(side_effect=fake_arun)
         return loop
 
@@ -1003,9 +1185,9 @@ class TestSchemaAwareRetryWiring:
     def test_retry_fires_once_when_schema_set_and_first_is_empty(
         self, monkeypatch, tmp_path
     ) -> None:
-        from unittest.mock import AsyncMock, MagicMock, patch
+        from unittest.mock import AsyncMock, patch
 
-        mock_loop = MagicMock(spec=AgenticLoop)
+        mock_loop = _worker_loop_double()
         mock_loop.arun = AsyncMock(
             side_effect=[
                 AgenticResult(text="", termination_reason="unknown"),
@@ -1038,9 +1220,9 @@ class TestSchemaAwareRetryWiring:
         assert "candidate_id" in result.output
 
     def test_no_retry_when_first_attempt_passes(self, monkeypatch, tmp_path) -> None:
-        from unittest.mock import AsyncMock, MagicMock, patch
+        from unittest.mock import AsyncMock, patch
 
-        mock_loop = MagicMock(spec=AgenticLoop)
+        mock_loop = _worker_loop_double()
         mock_loop.arun = AsyncMock(
             return_value=AgenticResult(
                 text='{"candidate_id": "c1", "score": 0.7}',
@@ -1071,9 +1253,9 @@ class TestSchemaAwareRetryWiring:
         """Free-form callers (REPL, gateway, ad-hoc CLI) never opt into
         the structured retry — an empty response is the caller's
         problem, not ours."""
-        from unittest.mock import AsyncMock, MagicMock, patch
+        from unittest.mock import AsyncMock, patch
 
-        mock_loop = MagicMock(spec=AgenticLoop)
+        mock_loop = _worker_loop_double()
         mock_loop.arun = AsyncMock(
             return_value=AgenticResult(text="", termination_reason="unknown")
         )
@@ -1103,9 +1285,9 @@ class TestSchemaAwareRetryWiring:
         """The retry budget is exactly one. A third pass would burn
         cost without changing the underlying behaviour — the role
         contract is the same prompt."""
-        from unittest.mock import AsyncMock, MagicMock, patch
+        from unittest.mock import AsyncMock, patch
 
-        mock_loop = MagicMock(spec=AgenticLoop)
+        mock_loop = _worker_loop_double()
         mock_loop.arun = AsyncMock(
             return_value=AgenticResult(text="", termination_reason="unknown")
         )
@@ -1143,9 +1325,9 @@ class TestSchemaAwareRetryWiring:
         This includes operator/policy exits and the external-verification
         delivery gate; re-calling the loop would override authority.
         """
-        from unittest.mock import AsyncMock, MagicMock, patch
+        from unittest.mock import AsyncMock, patch
 
-        mock_loop = MagicMock(spec=AgenticLoop)
+        mock_loop = _worker_loop_double()
         mock_loop.arun = AsyncMock(
             return_value=AgenticResult(
                 text="non-JSON body",
@@ -1179,12 +1361,12 @@ class TestSchemaAwareRetryWiring:
         full ``time_budget_s``. Guard the retry on
         ``elapsed_before_retry < 0.5 * request.timeout_s`` so a worker
         pegged near its wall-clock cap doesn't get pushed past it."""
-        from unittest.mock import AsyncMock, MagicMock, patch
+        from unittest.mock import AsyncMock, patch
 
         async def _slow_arun(_prompt: str) -> AgenticResult:
             return AgenticResult(text="", termination_reason="unknown")
 
-        mock_loop = MagicMock(spec=AgenticLoop)
+        mock_loop = _worker_loop_double()
         mock_loop.arun = AsyncMock(side_effect=_slow_arun)
 
         # Fake the wall-clock so ``time.time() - started`` looks like
@@ -1227,7 +1409,7 @@ class TestSchemaAwareRetryWiring:
         """The second ``arun`` call must include the schema text + the
         explicit ``start with `{` and end with `}``` enforcement — that
         is the entire point of the retry."""
-        from unittest.mock import AsyncMock, MagicMock, patch
+        from unittest.mock import AsyncMock, patch
 
         prompts_seen: list[str] = []
 
@@ -1240,7 +1422,7 @@ class TestSchemaAwareRetryWiring:
                 termination_reason="unknown",
             )
 
-        mock_loop = MagicMock(spec=AgenticLoop)
+        mock_loop = _worker_loop_double()
         mock_loop.arun = AsyncMock(side_effect=_capture_arun)
 
         monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)

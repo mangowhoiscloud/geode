@@ -281,29 +281,17 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
     cooldown_tracker = CooldownTracker()
 
     # v0.50.0 — hydrate Plans + user-defined Profiles from ~/.geode/auth.toml.
-    # On first run we migrate any env-loaded API keys into the file so the
-    # next startup sees them as PAYG plans (``<provider>-payg:env`` profiles
-    # carrying ``plan_id``).
+    # Reading never creates the file.
     try:
-        from core.auth.auth_toml import auth_toml_path, load_auth_toml, migrate_env_to_toml
+        from core.auth.auth_toml import load_auth_toml
 
-        if auth_toml_path().exists():
-            load_auth_toml()
-        else:
-            migrate_env_to_toml()
+        load_auth_toml()
     except Exception:  # pragma: no cover — bootstrap must never fail on auth I/O
         log.debug("auth.toml hydration skipped", exc_info=True)
 
-    # PR-MIC (2026-05-23) — legacy ``:default`` API-key profiles, added
-    # ONLY for providers that ended up with NO profile after disk
-    # hydration. The ``-payg:env`` row from ``migrate_env_to_toml`` /
-    # ``load_auth_toml`` is the canonical entry; this branch only catches
-    # operators whose ``auth.toml`` is corrupt / partial / manually
-    # pruned but who still have the env key set, so the runtime stays
-    # routable. Previously the ``:default`` add ran unconditionally and
-    # ``save_auth_toml`` then persisted BOTH the legacy and plan-bound
-    # entries — a silent shadow-duplicate that the rotator counted
-    # twice.
+    # Environment API keys stay in ~/.geode/.env, their only store. Providers
+    # without a stored profile get a runtime ``:default`` profile marked
+    # ``origin=environment``, which ``save_auth_toml`` never persists.
     from core.config.env_io import is_placeholder
 
     _legacy_providers = {
@@ -323,6 +311,7 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
                 provider=_prov,
                 credential_type=CredentialType.API_KEY,
                 key=_key,
+                metadata={"origin": "environment"},
             )
         )
 

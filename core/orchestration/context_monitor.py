@@ -12,11 +12,12 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from core.llm.adapters._openai_common import build_codex_input
-from core.llm.adapters.base import AdapterCallRequest, Message
+from core.llm.adapters.base import AdapterCallRequest, Message, ToolSpec
 from core.llm.agentic_response import parse_chat_reasoning_replay
 from core.orchestration.context_budget import (
     ABSOLUTE_TOKEN_CEILING as _ABSOLUTE_TOKEN_CEILING,
@@ -31,6 +32,7 @@ from core.orchestration.context_budget import (
     ContextBudgetPolicy,
     resolve_context_budget_policy,
 )
+from core.tools.plan import thaw_tool_schema
 
 log = logging.getLogger(__name__)
 
@@ -86,7 +88,71 @@ def _estimate_content_chars(content: Any) -> int:
     return total_chars
 
 
-def estimate_message_tokens(messages: list[dict[str, Any]]) -> int:
+def _anthropic_compaction_boundary(messages: list[dict[str, Any]]) -> tuple[int, int] | None:
+    """Find the last successful native summary in replay order, without mutation."""
+    for index in range(len(messages) - 1, -1, -1):
+        message = messages[index]
+        if message.get("role") != "assistant":
+            continue
+        native = message.get("anthropic_content")
+        blocks = (
+            [block for block in native if isinstance(block, dict)]
+            if isinstance(native, list)
+            else []
+        )
+        content = blocks or message.get("content")
+        if not isinstance(content, list):
+            continue
+        for ordinal in range(len(content) - 1, -1, -1):
+            block = content[ordinal]
+            if (
+                isinstance(block, dict)
+                and block.get("type") == "compaction"
+                and isinstance(block.get("content"), str)
+                and block["content"]
+            ):
+                return index, ordinal
+    return None
+
+
+def _anthropic_active_messages(
+    messages: list[dict[str, Any]], policy: ContextBudgetPolicy
+) -> list[dict[str, Any]]:
+    """Project the documented effective prefix, preserving all stored native bytes."""
+    from core.llm.model_capabilities import get_anthropic_model_spec
+
+    spec = get_anthropic_model_spec(policy.model)
+    if (
+        policy.provider != "anthropic"
+        or policy.source != "payg"
+        or spec is None
+        or not spec.compaction
+    ):
+        return messages
+    boundary = _anthropic_compaction_boundary(messages)
+    if boundary is None:
+        return messages
+    index, ordinal = boundary
+    projected = []
+    for offset, message in enumerate(messages[index:]):
+        native = message.get("anthropic_content")
+        blocks = (
+            [block for block in native if isinstance(block, dict)]
+            if isinstance(native, list)
+            else []
+        )
+        content = (
+            blocks if message.get("role") == "assistant" and blocks else message.get("content", "")
+        )
+        if offset == 0:
+            content = content[ordinal:]
+        projected.append({"role": message.get("role"), "content": content})
+    return projected
+
+
+def estimate_message_tokens(
+    messages: list[dict[str, Any]], *, policy: ContextBudgetPolicy | None = None
+) -> int:
     """Estimate token count with the policy-owned chars/token heuristic.
 
     Replay can replace normalized content, not just extend it. Before route
@@ -95,6 +161,8 @@ def estimate_message_tokens(messages: list[dict[str, Any]]) -> int:
     Opaque/encrypted payload characters are a conservative size proxy, not a
     provider token count, decoded-reasoning expansion, or billable usage.
     """
+    if policy is not None:
+        messages = _anthropic_active_messages(messages, policy)
     total_chars = 0
     for msg in messages:
         content = msg.get("content", "")
@@ -158,22 +226,27 @@ def check_context(
     model: str,
     *,
     system_prompt: str = "",
-    tools_tokens: int = 0,
+    tools_tokens: int | None = None,
+    policy: ContextBudgetPolicy | None = None,
 ) -> ContextMetrics:
     """Check context window health for the given conversation.
 
     Args:
         tools_tokens: Estimated tokens for tool definitions sent to the API.
-            Defaults to _DEFAULT_TOOLS_OVERHEAD (~10K) when 0.
+            None uses the legacy 10K estimate; zero means an actual empty tool set.
 
     Returns a ContextMetrics snapshot with usage percentage and thresholds.
     """
-    policy = resolve_context_budget_policy(model)
+    if policy is not None and policy.model != model:
+        raise ValueError("context policy model does not match the request")
+    policy = policy or resolve_context_budget_policy(model)
     context_window = policy.context_window
 
     system_tokens = len(system_prompt) // CHARS_PER_TOKEN if system_prompt else 0
-    message_tokens = estimate_message_tokens(messages)
-    overhead = tools_tokens if tools_tokens > 0 else policy.default_tools_overhead_tokens
+    message_tokens = estimate_message_tokens(messages, policy=policy)
+    if tools_tokens is not None and tools_tokens < 0:
+        raise ValueError("tools_tokens must be non-negative")
+    overhead = policy.default_tools_overhead_tokens if tools_tokens is None else tools_tokens
     raw_estimated = system_tokens + message_tokens + overhead
     estimated = policy.apply_safety_margin(raw_estimated)
 
@@ -203,6 +276,58 @@ def check_context(
     )
 
 
+def estimate_tool_tokens(tools: Sequence[ToolSpec]) -> int:
+    """Estimate supplied tool schemas; an empty tool set adds no overhead."""
+    schemas = [
+        {
+            "name": tool.name,
+            "description": tool.description,
+            "input_schema": thaw_tool_schema(tool.input_schema),
+        }
+        for tool in tools
+    ]
+    return max(1, len(json.dumps(schemas, ensure_ascii=False)) // CHARS_PER_TOKEN) if schemas else 0
+
+
+def check_request_context(
+    request: AdapterCallRequest, *, policy: ContextBudgetPolicy
+) -> ContextMetrics:
+    """Estimate a frozen request including replay and actual tool schemas.
+
+    Provider-injected native tools, image tokenization and opaque payloads still
+    make this a conservative heuristic, not a server token-count response.
+    """
+    messages: list[dict[str, Any]] = []
+    for message in request.messages:
+        content = message.content
+        if message.role == "tool":
+            content = [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": message.tool_use_id or "",
+                    "content": content,
+                }
+            ]
+        messages.append(
+            {
+                "role": "user" if message.role == "tool" else message.role,
+                "content": content,
+                "anthropic_content": list(message.anthropic_content),
+                "codex_output_items": list(message.codex_output_items),
+                "codex_reasoning_items": list(message.codex_reasoning_items),
+                "chat_reasoning": message.chat_reasoning,
+                "phase": message.phase,
+            }
+        )
+    return check_context(
+        messages,
+        request.model,
+        system_prompt=request.system_prompt,
+        tools_tokens=estimate_tool_tokens(request.tools),
+        policy=policy,
+    )
+
+
 def prune_oldest_messages(
     messages: list[dict[str, Any]],
     *,
@@ -213,11 +338,13 @@ def prune_oldest_messages(
     Preserves system message integrity by keeping the first message
     if it's from the user (initial context), plus the most recent messages.
     """
-    if len(messages) <= keep_recent:
+    from core.orchestration.compaction import preserve_latest_user_input
+
+    if len(messages) <= keep_recent or _anthropic_compaction_boundary(messages) is not None:
         return messages
 
-    # Keep the first message (initial user context) + last N
-    return messages[:1] + messages[-keep_recent:]
+    # Native summaries and latest original instructions cannot be silently lost.
+    return preserve_latest_user_input(messages, messages[:1] + messages[-keep_recent:])
 
 
 def _truncate_tool_call_args_json(args: str) -> str:
@@ -514,9 +641,9 @@ def adaptive_prune(
     3. Add middle messages from newest to oldest until budget is reached
     4. Budget is the resolved policy's warning-token budget.
     """
-    if len(messages) <= 3:
+    if len(messages) <= 3 or _anthropic_compaction_boundary(messages) is not None:
         return list(messages)
-    from core.orchestration.compaction import find_safe_boundary
+    from core.orchestration.compaction import find_safe_boundary, preserve_latest_user_input
 
     boundary = find_safe_boundary(messages, keep_recent=2)
     if boundary == 0:
@@ -535,7 +662,7 @@ def adaptive_prune(
     base_tokens = estimate_message_tokens([first]) + estimate_message_tokens(recent)
     if base_tokens >= budget:
         # Even first + recent exceeds budget — return minimal
-        return [first, *recent]
+        return preserve_latest_user_input(messages, [first, *recent])
 
     remaining_budget = budget - base_tokens
     kept_middle: list[dict[str, Any]] = []
@@ -549,7 +676,7 @@ def adaptive_prune(
         # Skip messages that don't fit
 
     kept_middle.reverse()  # restore chronological order
-    result = [first, *kept_middle, *recent]
+    result = preserve_latest_user_input(messages, [first, *kept_middle, *recent])
     tokens_before = estimate_message_tokens(messages)
     tokens_after = estimate_message_tokens(result)
     log.info(

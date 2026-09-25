@@ -1,26 +1,25 @@
 """GlmPaygAdapter — PAYG (api/paas/v4) endpoint for ZhipuAI GLM.
 
 Layer 3 adapter for the ``glm`` provider, source=payg. Uses
-``api.z.ai/api/paas/v4`` (PAYG, metered) with the API key in
-``settings.zai_api_key``. GLM speaks the OpenAI Chat Completions wire
+``api.z.ai/api/paas/v4`` (PAYG, metered) with a matching API-key/PAYG profile
+or ``settings.zai_api_key``. GLM speaks the OpenAI Chat Completions wire
 shape so the adapter reuses :mod:`core.llm.adapters._openai_common`
 helpers (``build_messages`` + ``translate_chat_response``).
 
-Pair with :class:`GlmCodingPlanAdapter` (same provider, subscription
-``api/coding/paas/v4`` endpoint). Codex MCP A2 (v0.99.44) Follow-up F.
+Coding Plan eligibility is a separate product policy from API compatibility.
 """
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
+from core.config.policy_source import PolicySourcePaths
 from core.llm.adapters._openai_common import (
     build_async_openai_client,
-    build_chat_completion_kwargs,
-    build_messages,
     translate_chat_response,
 )
 from core.llm.adapters.base import (
@@ -30,13 +29,15 @@ from core.llm.adapters.base import (
     AdapterCallResult,
     CredentialDetection,
     EnvironmentReport,
+    Message,
     ModelSpec,
     StreamEvent,
     TextCompletionResult,
     WebSearchResult,
 )
 from core.llm.loop_affinity import LoopAffineClientCache
-from core.llm.providers.glm import build_glm_reasoning_extra_body
+from core.llm.providers.glm import build_glm_chat_kwargs, translate_glm_stream
+from core.llm.routing import resolve_routing
 
 log = logging.getLogger(__name__)
 
@@ -45,8 +46,7 @@ log = logging.getLogger(__name__)
 class GlmPaygAdapter:
     """PAYG-routed GLM adapter (api/paas/v4 endpoint).
 
-    Owns its own ``AsyncOpenAI`` client bound explicitly to
-    ``settings.zai_api_key`` + :data:`core.config.GLM_PAYG_BASE_URL` so a
+    Owns its own ``AsyncOpenAI`` client bound explicitly to the PAYG endpoint so a
     subscription Coding Plan profile in :class:`ProfileStore` cannot
     silently shadow the PAYG path (mirrors the
     :class:`AnthropicPaygAdapter` isolation pattern — Codex MCP
@@ -57,10 +57,7 @@ class GlmPaygAdapter:
     provider: str = "glm"
     source: str = SOURCE_PAYG
     billing_type: AdapterBillingType = AdapterBillingType.API
-    # PR-ADAPTER-PATTERN-UNIFICATION — z.ai native web_search Chat Completions
-    # tool works on PAYG. Coding Plan subscription endpoint untested for
-    # web_search (frontier audit 2026-05-28); glm_coding_plan adapter keeps
-    # supports_web_search=False until verified.
+    # PAYG native search and the subscription MCP product are separate routes.
     supports_web_search: bool = True
     supports_text_completion: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
@@ -70,18 +67,38 @@ class GlmPaygAdapter:
         default_factory=lambda: LoopAffineClientCache("glm-payg"), init=False, repr=False
     )
 
-    def _get_client(self) -> Any:
-        from core.config import GLM_PAYG_BASE_URL, settings
+    routing_sources: PolicySourcePaths | None = field(default=None, repr=False)
 
-        api_key = settings.zai_api_key
+    def _credential(self, model: str = "") -> tuple[str, str, str]:
+        """Read the selected PAYG key, endpoint and non-secret provenance."""
+        from core.config import settings
+        from core.llm.registry import get_provider_spec
+
+        spec = get_provider_spec(self.provider)
+        if spec is None:
+            raise RuntimeError("PAYG provider composition is not registered")
+        base_url = spec.default_base_url
+        target = resolve_routing(
+            model,
+            provider=self.provider,
+            source=self.source,
+            base_url=base_url,
+            sources=self.routing_sources,
+        )
+        if target is not None:
+            return target.profile.key, target.base_url, f"auth profile:{target.profile.name}"
+        return settings.zai_api_key, base_url, "settings.zai_api_key"
+
+    def _get_client(self, model: str = "") -> Any:
+        api_key, base_url, _ = self._credential(model)
         if not api_key:
             raise RuntimeError(
                 "GlmPaygAdapter: ZAI_API_KEY not set. PAYG path requires "
-                "an explicit API key — set ``zai_api_key`` in settings or use "
-                "the glm-coding-plan adapter (subscription endpoint) instead."
+                "an explicit API key — set ``zai_api_key`` in settings."
             )
         return self._clients.get(
-            lambda: build_async_openai_client(api_key, base_url=GLM_PAYG_BASE_URL)
+            lambda: build_async_openai_client(api_key, base_url=base_url),
+            identity=hashlib.sha256(f"{base_url}\0{api_key}".encode()).hexdigest(),
         )
 
     async def aweb_search(
@@ -94,7 +111,7 @@ class GlmPaygAdapter:
         from core.llm.adapters._capability_impls import glm_web_search
 
         return await glm_web_search(
-            self._get_client(),
+            self._get_client(GLM_PRIMARY),
             query=query,
             max_results=max_results,
             model=GLM_PRIMARY,
@@ -108,27 +125,24 @@ class GlmPaygAdapter:
         system: str = "",
         model: str = "",
         max_tokens: int = 1024,
+        effort: str | None = None,
     ) -> TextCompletionResult:
         from core.config import GLM_PRIMARY
-        from core.llm.adapters._capability_impls import openai_chat_complete_text
 
-        return await openai_chat_complete_text(
-            self._get_client(),
-            prompt=prompt,
-            system=system,
-            model=model or GLM_PRIMARY,
-            max_tokens=max_tokens,
+        result = await self.acomplete(
+            AdapterCallRequest(
+                model=model or GLM_PRIMARY,
+                messages=(Message(role="user", content=prompt),),
+                system_prompt=system,
+                max_tokens=max_tokens,
+                effort=effort if effort is not None else "",
+            )
         )
+        return TextCompletionResult(text=result.text, usage=result.usage)
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
-        client = self._get_client()
-        kwargs = build_chat_completion_kwargs(
-            req,
-            model=req.model,
-            provider="glm",
-            adapter_name=self.name,
-            extra_body=build_glm_reasoning_extra_body(req.model),
-        )
+        kwargs = build_glm_chat_kwargs(req, adapter_name=self.name, source=self.source)
+        client = self._get_client(req.model)
         try:
             response = await client.chat.completions.create(**kwargs)
         except Exception as exc:
@@ -144,72 +158,48 @@ class GlmPaygAdapter:
         )
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
-        client = self._get_client()
-        kwargs: dict[str, Any] = {
-            "model": req.model,
-            "messages": build_messages(
-                req, provider=self.provider, adapter_name=self.name, model=req.model
-            ),
-            "max_tokens": req.max_tokens,
-            "stream": True,
-        }
-        if req.temperature is not None:
-            kwargs["temperature"] = req.temperature
-        _reasoning_xb = build_glm_reasoning_extra_body(req.model)
-        if _reasoning_xb is not None:
-            kwargs["extra_body"] = _reasoning_xb
-        async for chunk in await client.chat.completions.create(**kwargs):
-            choice = chunk.choices[0] if chunk.choices else None
-            if choice is None:
-                continue
-            delta = getattr(choice, "delta", None)
-            text_chunk = getattr(delta, "content", None) if delta else None
-            if text_chunk:
-                yield StreamEvent(kind="text", payload={"text": text_chunk})
-            finish_reason = getattr(choice, "finish_reason", None)
-            if finish_reason is not None:
-                yield StreamEvent(kind="stop", payload={"stop_reason": finish_reason})
+        kwargs = build_glm_chat_kwargs(req, adapter_name=self.name, source=self.source, stream=True)
+        client = self._get_client(req.model)
+        chunks = await client.chat.completions.create(**kwargs)
+        async for event in translate_glm_stream(chunks):
+            yield event
 
     def test_environment(self) -> EnvironmentReport:
-        from core.config import settings
-
-        if not settings.zai_api_key:
+        api_key, _, _ = self._credential()
+        if not api_key:
             return EnvironmentReport(
                 ok=False,
                 checks=(("zai_api_key", "missing"),),
-                hints=(
-                    "Set ``ZAI_API_KEY`` in your environment or in ~/.geode/config.toml.",
-                    "Or use glm-coding-plan (Coding Plan subscription).",
-                ),
+                hints=("Set ``ZAI_API_KEY`` in your environment or in ~/.geode/config.toml.",),
             )
         return EnvironmentReport(
             ok=True,
-            checks=(("zai_api_key", f"set ({len(settings.zai_api_key)} chars)"),),
+            checks=(("zai_api_key", f"set ({len(api_key)} chars)"),),
         )
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import GLM_FALLBACK_CHAIN, GLM_PRIMARY
-        from core.llm.model_catalog import model_spec_for_adapter
+        from core.llm.model_catalog import model_ids_for_source, model_spec_for_adapter
 
-        ids = [GLM_PRIMARY, *GLM_FALLBACK_CHAIN]
-        seen: set[str] = set()
-        models: list[ModelSpec] = []
-        for mid in ids:
-            if mid in seen:
-                continue
-            seen.add(mid)
-            models.append(model_spec_for_adapter(mid, provider=self.provider))
-        return models
+        return [
+            model_spec_for_adapter(mid, provider=self.provider)
+            for mid in model_ids_for_source(
+                provider=self.provider,
+                source=self.source,
+                configured=(GLM_PRIMARY, *GLM_FALLBACK_CHAIN),
+            )
+        ]
 
     def detect_credential(self) -> CredentialDetection | None:
-        from core.config import GLM_PRIMARY, settings
+        from core.config import GLM_PRIMARY
 
-        if not settings.zai_api_key:
+        api_key, _, source_path = self._credential()
+        if not api_key:
             return None
         return CredentialDetection(
             model=GLM_PRIMARY,
             provider=self.provider,
-            source_path="settings.zai_api_key",
+            source_path=source_path,
         )
 
 

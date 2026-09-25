@@ -47,8 +47,61 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- Partition the complete pytest collection into four file-preserving CI shards,
+  retaining xdist loadfile scheduling and the existing offline test selection.
+  The required Test check verifies every shard's successful result and disjoint
+  collection coverage before enforcing the unchanged 75% combined branch/line
+  coverage threshold. Documentation-only skips and architecture, Harbor, and
+  installed-package checks remain mandatory under their existing conditions.
+- Add a read-only `check_repo_hygiene.py assert-write-workspace` entry check
+  that requires an owned topic worktree before independent writes, and treat an
+  empty `.owner` as an orphan worktree. Preflight keeps each failing gate's full
+  output in a log file. Contributor guidance adds a delegation return contract
+  and a bounded CI-recovery budget with hand-off on exhaustion.
+
 ### Changed
 
+- Resolve new-session credential policy and per-model plan accounts through one
+  routing owner. Preserve each live session's concrete API/Subscription source,
+  pass model-specific credentials and endpoints to SDK calls, and reject
+  conflicting policy or unavailable explicit plans without billing fallback.
+  Validate `/login source` before changing defaults and apply connected-session
+  changes only after admission. Runtime source selection applies matching model
+  roles after the complete tool batch while retaining effort and saved defaults.
+  Share TOML parsing between configuration and
+  CLI diagnostics, including explicit empty role values.
+
+- Preserve the static prompt boundary on supported OpenAI Platform requests
+  using developer content breakpoints while retaining implicit history caching.
+  Forward supported upstream cache markers through OpenRouter and retain
+  logical-session affinity across SDK connections using a hashed session ID.
+  Preserve Codex, legacy OpenAI and automatic Z.AI cache contracts.
+
+- Bound OpenAI Python to SDK 2 (`>=2.45,<3`) and Anthropic Python to SDK 0
+  (`>=0.116,<1`) while preserving the verified transport and audit contracts.
+  Share configured HTTP transport construction
+  across OpenAI, GLM, and Codex while preserving Codex's disabled connection
+  reuse and application-owned retries; record both SDK major-version migrations.
+
+- Refresh Claude Messages contracts for Fable 5.1, Opus 5.5/5, and Sonnet 5
+  through typed model records and one create/stream request builder. Preserve
+  signed thinking, structured output, tool calls, and cache usage in streaming;
+  retain hosted search usage. Validate output/effort/forced-tool limits, including
+  auxiliary text completions, and update hosted web tool versions.
+  Select the computer protocol from the typed request model and guard unknown
+  generations until their native executor is supported.
+
+- Align model selection, login routing and effort controls with the shared
+  provider contracts checked on September 24. Ship Claude Opus 5.5, GPT-6 Sol
+  and GLM-5.3 defaults while preserving explicit configuration; retain saved
+  GLM Coding Plan profiles without inventing local call quotas for token credits.
+  Preserve saved effort when reopening the picker and use each provider's own
+  source for configured-model availability. Use GLM's native reasoning builder
+  when the existing effort probe records its outgoing control.
+  Update bilingual provider and authentication guidance with source-specific
+  availability, current model specifications and pricing evidence.
 - Run Reflection after each tool-result round and once before final delivery.
   Final semantic verification replaces the mechanical-only default; legacy
   cadence controls and `off`/`rule_based`/`reflexion` verifier settings are
@@ -61,6 +114,18 @@ functional change.
 
 ### Added
 
+- Support Claude Opus 5.5's native computer toolset with serial execution,
+  toolset-aware result replay and parameter validation before desktop actions.
+  Withhold unsupported members; report native action errors and preserve
+  legacy computer protocols. Retain billed usage when rejecting invalid
+  responses without replaying actions. Fix horizontal scrolling, native macOS
+  drag and wait deadlines; propagate helper-signing failures. Require the
+  native helper source and build script in both wheel and source distributions.
+- Add optional positive output-token and action-round limits to the one-tool
+  Harbor adapter while preserving its defaults. Wrap-up requests respect a
+  caller's smaller output ceiling. Auxiliary and subscription request limits
+  remain distinct from a whole-runtime spending cap; provider V1 validation
+  stays provisional until implementation is complete and its revision is frozen.
 - Add credential-gated Jev judgment selection through `/model judgment`, its
   interactive picker and the existing natural-language `switch_model` tool.
   Explicit selection uses TypeSafe System One or OpenRouter's compatible
@@ -113,6 +178,204 @@ functional change.
 
 ### Fixed
 
+- Pass Anthropic structured-output schemas through the SDK's
+  `transform_schema` before sending `output_config.format`. The API rejected
+  the turn-verification judge schema with HTTP 400 because number
+  `minimum`/`maximum` is unsupported; those constraints now move into the field
+  description and GEODE's judge parser still rejects scores outside 0..1.
+  Schemas the SDK cannot express (such as type arrays) fail before the request.
+
+- Preserve the admitted model, source, effort and auxiliary policy through session
+  checkpoints and child-worker requests. Validate resume selection before changing
+  history, identity or checkpoint status; reject malformed saved records and keep
+  the current validated selection for legacy checkpoints. Report the applied
+  selection to the thin client without rereading unrelated process defaults.
+
+- Exclude the Anthropic, OpenAI, OpenRouter and Z.AI API keys from `Settings`
+  `repr()` and `str()`, so failing pytest assertions and formatted settings
+  objects no longer print credential values. The fields remain plain strings;
+  the Typesafe key was already masked by `SecretStr`.
+
+- Apply CLI model, effort, and concrete source selections to the owning daemon
+  session before saving defaults, including named commands, role pickers, and
+  fullscreen mode. Snapshot auxiliary model policy per session, reject
+  unsuccessful or unsupported handshakes, and retain the previous selection and
+  tool bindings when adoption fails. Project/global defaults no longer implicitly
+  update other active sessions. Route runtime model/judgment tools through the
+  same admitted record after their complete tool batch; status reports the actual
+  session. Remove unused settings-drift code and its constructor flag.
+
+- Apply explicit API-key selections and validated auth-file refreshes to the
+  next OpenAI, Anthropic, GLM and OpenRouter PAYG SDK request, including adapters
+  retained by existing sessions. Reuse persisted profile pins and ordering;
+  preserve subscription routes, endpoint boundaries and environment fallbacks.
+  Retire replaced clients until their owning event loop drains them.
+
+- Change auth.toml through one locked transaction that edits the current file,
+  writes it atomically and only then updates the running process. A stale thin
+  client or worker copy no longer revives removed credentials or restores
+  rotated tokens, and rejected or unsaved `/login` and OAuth changes report
+  failure instead of success; `/key` warns when auth.toml was not updated.
+  Loading never creates or rewrites the file: environment API keys stay in
+  `~/.geode/.env` instead of being copied into auth.toml on first use, and the
+  ChatGPT plan tier is recorded with the tokens. Thin clients read and change
+  login state through the daemon, keeping only key entry and browser logins
+  local, and daemon `/login` results carry the command outcome; a local login
+  always asks the daemon to reload, even when a later `.env` or config mirror
+  write fails. The dashboard, `/login health` and `manage_login` share one
+  key-free snapshot that judges each credential against its own provider. Plan
+  quotas show declared limits only because calls were never counted;
+  `manage_login` returns interactive logins to the user. New installs with an
+  OpenAI key and a Codex CLI login now follow the documented subscription
+  default, because no PAYG plan is created implicitly; existing auth.toml plans
+  keep their routing.
+
+- Preserve explicit auth profile pins and priority order across auth.toml writes
+  and fresh-process routing. Validate reload candidates before publication and
+  reconcile deletions only for file-owned entries, retaining managed/environment
+  credentials, unchanged health state and borrowed references. Write auth state
+  atomically and materialize explicit OpenAI/GLM `/key` updates consistently.
+
+- Bind effort-probe resume to the verified source revision and provider route,
+  retaining older measurements without reusing unidentified results. Include
+  configured OpenRouter models and inspect their actual Chat SDK serialization;
+  preserve observed reasoning usage separately from missing values.
+
+- Show only supported model effort choices and require an explicit valid choice
+  before confirming or staging an incompatible saved effort. Preserve valid
+  selections and cancellation without silently replacing settings. Validate
+  reflection against the final primary effort before saving staged choices.
+
+- Omit default temperature on known OpenAI reasoning models through OpenRouter,
+  including `effort=none`, and reject unsupported custom sampling before dispatch.
+  Preserve selected effort and endpoint routing constraints.
+
+- Preserve selected reasoning effort through model selection, staged role picks
+  and supported auxiliary requests. Reject unsupported model/effort combinations
+  before dispatch instead of clamping, remapping or silently omitting the value;
+  keep stored primary effort when the picker opens on another role.
+
+- Route OpenRouter text summaries through the existing Chat Completions adapter,
+  retaining its model/source identity, cache markers, session affinity and usage.
+  Preserve supported OpenAI reasoning effort on this relay and forward requested
+  JSON schemas with endpoint parameter enforcement instead of silently dropping them.
+
+- Preserve retained task context in turn verification and tool-round reflection.
+  Pass the derived compaction summary and earlier marked user corrections through
+  one bounded projection, keeping current-request precedence, redaction and
+  explicit omissions. Summary claims remain separate from observed tool results.
+
+- Resolve `check_status` from the current request's readiness instead of a
+  captured CLI startup report, preserving explicit audit overrides. Native
+  hosts without CLI bootstrap use the shared credential check on each call,
+  including API keys, subscription OAuth and profiles. This remains local
+  readiness, not a successful provider request or billing check.
+
+- Preserve matched earlier-turn tool evidence when judging resumed requests,
+  with historical provenance, privacy protection and ambiguous-ID rejection.
+  Share a bounded text budget across observations so complete short scripts
+  and validation commands survive instead of always truncating inputs at 300
+  characters. Reflection also receives the current approved request while
+  retaining the session's initial goal. Judgment criteria, call budgets and
+  external verifier authority remain unchanged.
+
+- Use the selected model/provider/source and request output reserve for context
+  admission. Treat 200K as soft local maintenance, recover boundedly from actual
+  provider overflow, and avoid duplicate pre-request compaction decisions.
+  Preserve original user input, causal tool pairs and native replay boundaries;
+  reject stale/reentrant replacement and read-only hook rewrites. Exhaustion
+  now returns a truthful local notice without another model call or a universal
+  session-reset claim.
+  Include native Anthropic compaction iterations in completed and streamed
+  usage without double-counting top-level totals, retaining cache TTL subsets
+  and explicit unknowns.
+
+- Keep daemon `/grill` execution independent of CLI initialization by moving
+  skill prompt rendering and grilling invocation to their runtime skill owners.
+  Reuse that renderer for `/geo` while preserving prompt text, session control
+  state, timeline events, and streaming results. Verify dynamically registered
+  daemon handlers cannot import CLI modules, including through dependencies.
+
+- Runtime MCP managers now own their connections and event bindings, including
+  notification, calendar and gateway consumers. Another runtime's rollback or
+  shutdown cannot close them. Restarted managers close each connection generation;
+  failed closes retain the resource for retry after attempting sibling cleanup.
+  Keep failed connection attempts owned and confirm child exit after forced
+  termination before releasing process handles, pipes and scratch directories.
+
+- **Anthropic cache lifecycle and TTL accounting.** Cache markers preserve signed thinking replay, reserve existing system/tool/message slots within the four-marker limit, and reject invalid TTL ordering before dispatch. Provider-reported one-hour writes reach runtime cost guards, durable activity schema 11, monthly usage and Harbor attempt metadata; missing historical TTL splits remain unknown. Validate the TTL subset before storing usage even when a provider-reported cost bypasses price estimation.
+
+- Reload gateway bindings atomically after file deletion, replacement or edits
+  with older modification times. Invalid reloads retain the last valid routing
+  and retry after debounce; explicit empty merged rules revoke bindings. Stop
+  the owned config watcher and remaining pollers even when one poller fails,
+  including interruption or cancellation, then re-raise the original failure.
+  Wake polling sleeps on shutdown; retain ownership and reject restart while a
+  blocked callback prevents the previous watcher thread from stopping.
+- Preserve thin Harbor cognitive-reflection usage by binding its middleware to the existing session event sink.
+
+- Release partially constructed runtime resources before propagating the original
+  failure, and retry incomplete shutdown without skipping sibling resources.
+  Delegate the daemon's borrowed scheduler teardown to its runtime owner,
+  including partial gateway startup failures.
+  Restore turn attribution and adapter usage context after success, failure or
+  cancellation, and serialize SDK client publication with credential invalidation.
+
+- Close current and retired provider SDK clients on their owning event loop
+  after its work settles. Credential rotation preserves in-flight calls;
+  shutting down one runtime does not close clients shared with another.
+  Preserve original failures and cancellation through bounded cleanup-error
+  reporting, including normal CLI, gateway, worker and dreaming loop exits.
+  Drain generators and SDK clients even when cancelled background work raises
+  a control exception during shutdown, preserving the original failure. Failed
+  client closes remain retryable while their owning event loop is still alive.
+  Keep active client selection separate from cleanup ownership, including after
+  credential invalidation or adapter replacement. Retain IPC worker and socket
+  ownership when shutdown times out, reject restart while stopping, and report
+  terminal cleanup failures to the daemon shutdown owner.
+- Use the shared global config path resolver for Settings, config explanation,
+  model-picker reads/writes/confirmation, MCP, gateway reload/watch, seed
+  role/voter overrides, and evaluation config migration.
+  `GEODE_CONFIG_TOML` now redirects global picker persistence and migration
+  previews/writes while project writes and overlay precedence remain unchanged.
+
+- Keep oversized-page omission notices stable across documentation build
+  environments while retaining measured sizes in build logs and complete
+  Markdown twins.
+
+- Close runtime-state schema-bootstrap and failed connection candidates
+  deterministically, including interrupted setup while preserving the original
+  control exception. Release the cached SQLite connection during runtime
+  shutdown, and serialize complete reads/writes with cleanup so other active
+  hook bundles can reopen it without losing cumulative records. Roll back
+  failed runtime-state writes before reusing the connection, discard it if
+  rollback fails, and close SessionManager connections when schema initialization
+  fails so a later write cannot commit a failed operation's pending changes.
+  Close the checkpoint metadata connection even when its index write fails,
+  while retaining the existing recoverable checkpoint behavior.
+
+- Bind trajectory runtime-event references to each stored hook schema version
+  and include session and physical-step correlation in the cohort digest.
+  Preserve mixed-version history and pre-v5 tables without rewriting source
+  rows or previously published artifacts.
+- Admit native Astra final-verification calls in decision-handoff observations.
+  Preserve requested and actual verifier modes separately, and require a complete
+  source-reconciled final-verification boundary for explicitly opted-in current
+  comparisons. Keep valid semantic failures distinct from success and preserve
+  historical exports without filling missing verification evidence.
+- Align OpenAI GPT-6 API and subscription model choices, reasoning controls,
+  and published API output limits; keep subscription-only request restrictions
+  separate and preserve reported token usage from API web search. Normalize
+  both Responses streams through one translator with tool calls, reasoning,
+  usage and replay metadata; reject transport EOF without a terminal response.
+
+- Share the documented GLM request and streaming contracts across completion
+  and text paths, including 5.3 reasoning, tools, and exact output limits.
+  Preserve stream and hosted-search usage, and reject incomplete tool streams.
+  Separate hybrid thinking capability from graded effort controls; reject GLM
+  Coding Plan calls before credentials are read under the supported-tools policy.
+  Remove unverified automatic GLM-5V grounding and its orphaned parser/client
+  chain while retaining explicit provider/source-aware unavailability.
 - Show the requested `switch_model` role and model hint in CLI/IPC approval
   details, including the primary-role default. Preserve exact values with JSON
   escaping so judgment-only approval can distinguish a root-model change;
@@ -292,6 +555,15 @@ functional change.
 
 ### Infrastructure
 
+- Fail the legacy-import ratchet when its Git comparison fails, and compare
+  against the actual PR target or pre-push revision. Reject incomplete base
+  arguments instead of treating them as an empty change set. Require the
+  committed dependency lock for CI, Pages, install-smoke, and Petri validation;
+  retain the release workflow's existing lock freshness check.
+- Skip full Python tests and coverage only when the complete change set contains
+  allowlisted documentation and generated public-doc files. Preserve required
+  check identities, documentation/roadmap/inventory validation, and full testing
+  for runtime, test, dependency, workflow, schema, and unrecognized paths.
 - Share contributor instructions through Claude Code's native `@AGENTS.md`
   import. Check declared code/documentation/verification paths in the existing
   docs gate, and run focused scaffold checks for contributor-doc-only changes.

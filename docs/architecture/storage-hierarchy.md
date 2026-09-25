@@ -112,6 +112,62 @@ The split is therefore deliberate, not accidental.
 
 ## Writer contract
 
+`core/auth/auth_toml.py` owns credential-plan serialization and reload. Explicit
+profile pins and ordered choices are persisted alongside profiles and routing;
+legacy files without those tables have no file-owned preference. Reload validates
+the complete candidate before changing live stores. A missing or invalid file
+leaves them unchanged; a valid file removes only entries that it still owns.
+Reading never creates or rewrites the file. Managed CLI credentials and
+environment fallbacks stay with their original owner: environment API keys remain
+in `~/.geode/.env` and appear only as runtime `origin=environment` profiles.
+Unchanged profiles retain cooldown/health state, while a replaced credential does
+not mutate objects already borrowed by running work. Every change runs through
+`auth_file_transaction`: under an exclusive lock it edits a candidate read from
+the current file, writes it atomically and only then reloads the live stores, so
+a stale process copy cannot revive removed entries or restore rotated tokens and a
+failed write changes neither the file nor the live state. Thin clients change
+login state through the daemon except for terminal key entry and browser logins,
+which write the file locally and send the value-free `/login refresh` signal.
+
+Explicit `/key`, PAYG `/login add`, `/login set-key` and `/login anthropic`
+entries select the entered profile through `ProfileStore`'s existing pin/order
+owner before persistence. Hydration alone does not override an operator's choice.
+`core/llm/routing.py` is the shared route owner. New sessions resolve an explicit
+credential setting and `forced_login_method` as compatible constraints; conflicts
+fail admission. A composed provider-routing policy supplies the model plan chain
+before the stored auth plan order. With no explicit choice, registered plan kind
+priority selects the source before account availability. Missing or expired
+subscription accounts never authorize PAYG fallback.
+
+`SessionModelConfig` retains the concrete source for the primary model and
+explicit reflection/judge overrides. Future default changes do not re-infer it.
+Within that source, the SDK selects the requested model's available plan account
+and endpoint, then honors profile pin/order inside the allowed plan chain.
+Unavailable explicit plans fail; only an unconfigured same-source route may use
+its existing settings/environment credential fallback. The model picker, billing
+context and effort probe consume the same route owner. Declared external adapter
+routes remain explicit; a family name alone does not register a provider.
+
+`/login source` validates future policy before saving. A connected client submits
+its source-only session candidate and requires an applied acknowledgment before
+saving defaults. Without a client the command changes future defaults only.
+The runtime `manage_login source` tool uses that same source candidate builder
+and the loop's model-selection admission. It reports pending until the complete
+tool batch ends, updates matching primary/auxiliary roles together and leaves
+persisted defaults unchanged; an absent owning session or unused provider is rejected.
+`/login use` and `/login route` change plan order: requests can select another
+account inside the already concrete source, but cannot switch billing sources.
+`/login refresh` reconciles credentials before subsequent SDK account selection.
+Their loop-owned cache compares key/endpoint identity under its existing lock;
+replacement clients serve new requests while prior clients remain open until the
+owning loop drains them. A failed reload preserves the published selection;
+a failed client construction keeps the previous cached client owned.
+
+`core/config/toml_edit.py` owns resolved config-TOML reads and writes; the Settings
+loader, CLI role reader and config explainer reuse it. Schema owners stay separate.
+An explicit empty dotenv role value masks lower TOML values and means inheritance;
+the explainer reports that actual winner instead of treating empty as absent.
+
 All new writers should import constants from `core.paths` instead of
 reconstructing path literals.
 
@@ -134,6 +190,7 @@ git-reviewable evidence ledgers.
 ```
 ~/.geode/                                  user-private state
 ├── auth.toml                              # credentials + plans + routing
+├── .auth.toml.lock                        # serializes auth.toml changes
 ├── config.toml                            # global config overrides
 ├── cli.sock                               # thin-CLI ↔ serve IPC
 ├── .env                                   # secrets

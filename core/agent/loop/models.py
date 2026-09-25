@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from core.hooks import HookCorrelation, RuntimeEventBus
     from core.llm.token_tracker import LLMUsage
+    from core.orchestration.context_budget import ContextBudgetPolicy
     from core.tools.plan import BoundToolPlan
 
 log = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ class TurnState:
     round_index: int = 0
     step_count: int = 0
     retry_count: int = 0
+    context_recovery_attempts: int = 0
     termination_reason: TerminationReason | None = None
     cancellation: asyncio.Event = field(default_factory=asyncio.Event)
 
@@ -159,19 +161,29 @@ def is_successful_task_termination(
 
 
 class _ContextExhaustedError(Exception):
-    """Raised when context remains critical after pruning — unrecoverable."""
+    """A local budget or provider rejection needs bounded context recovery."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        provider_rejected: bool = False,
+        can_recover_history: bool = True,
+        policy: ContextBudgetPolicy | None = None,
+        system_prompt: str | None = None,
+        tools_tokens: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.provider_rejected = provider_rejected
+        self.can_recover_history = can_recover_history
+        self.policy = policy
+        self.system_prompt = system_prompt
+        self.tools_tokens = tools_tokens
 
 
-_EXHAUSTED_FALLBACK = (
-    "Context window exhausted. "
-    "This conversation has been automatically reset — "
-    "please start a new thread or send a new message to continue."
-)
-
-_EXHAUSTED_SYSTEM = (
-    "The conversation context has been exhausted and automatically reset. "
-    "Reply ONLY with a short notice (1-2 sentences) in the SAME language as the user's message. "
-    "Tell them the conversation was reset and they should start a new thread or send a new message."
+_EXHAUSTED_NOTICE = (
+    "Context window exhausted. This turn stopped before completing the request. "
+    "Start a new conversation with the relevant details to continue."
 )
 
 
@@ -182,62 +194,12 @@ async def _context_exhausted_message(
     hooks: RuntimeEventBus | None = None,
     correlation: Mapping[str, Any] | None = None,
 ) -> str:
-    """Generate context-exhausted message in the user's language via lightweight LLM call.
+    """Return a local terminal notice without claiming a caller-owned session reset.
 
-    PR-EXTRACT-LEARNING-MODELS-ADAPTER (2026-05-28) — dispatches through
-    :func:`core.llm.adapters.dispatch.complete_text_via_adapters` so a
-    ChatGPT-subscription-only operator (no Anthropic key) finally gets
-    a language-matched notice. The previous direct ``anthropic.Anthropic``
-    instantiation returned the static English fallback for that operator
-    every time, defeating the localisation intent. The helper now routes
-    through the current configured model's provider/source only; it never
-    scans a cross-provider order.
-
-    Returns the static ``_EXHAUSTED_FALLBACK`` on every failure (billing,
-    transient, no-credential) — graceful by design, the loop surfaces
-    SOME message to the user even on a fully-degraded credential surface.
+    Keep the async call signature for existing finalization callers. A terminal
+    notice must not depend on provider availability or make an additional model call.
     """
-    from core.config import _resolve_provider, settings
-    from core.llm.adapters._source_inference import infer_source
-    from core.llm.adapters.dispatch import (
-        AdapterDispatchError,
-        AdapterUnavailableError,
-        complete_text_via_adapters,
-    )
-    from core.llm.adapters.registry import normalize_registry_provider
-    from core.llm.errors import BillingError
-
-    model = settings.model
-    provider = normalize_registry_provider(_resolve_provider(model))
-    source = infer_source(provider)
-    # The static ``_EXHAUSTED_FALLBACK`` covers every failure mode; the
-    # dispatch layer records exactly which adapter was tried.
-    try:
-        result = await complete_text_via_adapters(
-            user_input[:200],
-            purpose="context_exhaustion",
-            system=_EXHAUSTED_SYSTEM,
-            model=model,
-            max_tokens=150,
-            effort=effort,
-            prefer_provider=provider,
-            prefer_source=source,
-            hooks=hooks,
-            correlation=correlation,
-        )
-    except BillingError:
-        log.debug("Exhausted message: adapter credit exhausted — static fallback")
-        return _EXHAUSTED_FALLBACK
-    except AdapterUnavailableError:
-        log.debug("Exhausted message: no capable adapter registered — static fallback")
-        return _EXHAUSTED_FALLBACK
-    except AdapterDispatchError:
-        log.debug("Exhausted message: single attempt transient failure — static fallback")
-        return _EXHAUSTED_FALLBACK
-    except Exception:
-        log.debug("Exhausted message LLM call failed, using fallback", exc_info=True)
-        return _EXHAUSTED_FALLBACK
-    return (result.text or "").strip() or _EXHAUSTED_FALLBACK
+    return _EXHAUSTED_NOTICE
 
 
 @dataclass

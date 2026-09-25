@@ -77,6 +77,57 @@ class _ProductionWorkerRunner(IsolatedRunner):
         )
 
 
+def test_tool_dispatch_preserves_parent_policy_through_background_followup(tmp_path, monkeypatch):
+    from core.config import settings
+    from core.config.session import SessionModelConfig
+
+    policy = SessionModelConfig(
+        model="gpt-6-sol",
+        effort="low",
+        source="subscription",
+        judge_model="gpt-6-luna",
+        judge_source="payg",
+        reflection_max_tokens=321,
+    )
+    monkeypatch.setattr(settings, "judge_model", "unrelated-default")
+
+    async def scenario():
+        runner = _ControlledRunner()
+        runner.release.set()
+        manager = SubAgentManager(
+            runner,
+            action_handlers={},
+            collaboration_store=CollaborationStore(tmp_path / "db"),
+        )
+        executor = ToolExecutor(sub_agent_manager=manager, auto_approve=True, hitl_level=0)
+        context = ToolContext(
+            session_id="parent",
+            model=policy.model,
+            effort=policy.effort,
+            source=policy.source,
+            agent_loop=SimpleNamespace(_model_settings=policy),
+        )
+        await executor.aexecute(
+            "delegate_task", {"task_description": "foreground"}, context=context
+        )
+        spawned = await executor.aexecute(
+            "spawn_agent", {"task_description": "background"}, context=context
+        )
+        task_id = spawned["task"]["task_id"]
+        await manager.wait_for_task("parent", task_id, timeout_s=1)
+        await executor.aexecute(
+            "followup_task", {"task_id": task_id, "message": "continue"}, context=context
+        )
+        await manager.wait_for_task("parent", task_id, timeout_s=1)
+        assert len(runner.requests) == 3
+        for request in runner.requests:
+            wire = WorkerRequest.from_dict(json.loads(json.dumps(request.to_dict())))
+            assert wire.model_settings == policy
+        assert [request.resume for request in runner.requests] == [False, False, True]
+
+    asyncio.run(scenario())
+
+
 def test_background_collaboration_rejects_uncancellable_thread_workers(tmp_path) -> None:
     manager = SubAgentManager(
         _ControlledRunner(),
@@ -438,7 +489,7 @@ def test_worker_request_marks_resume_without_changing_fresh_default(tmp_path) ->
     assert manager._protocol.build_worker_request(task, resume=True).resume is True
 
 
-def test_worker_resume_loads_existing_child_messages(tmp_path, monkeypatch) -> None:
+def test_worker_resume_stages_existing_child_messages(tmp_path, monkeypatch) -> None:
     from core.memory import session_checkpoint
 
     monkeypatch.setattr(session_checkpoint, "DEFAULT_SESSION_DIR", tmp_path)
@@ -449,14 +500,12 @@ def test_worker_resume_loads_existing_child_messages(tmp_path, monkeypatch) -> N
             cognitive_state={"goal": "original task"},
         )
     )
-    conversation = ConversationContext(max_turns=200)
     state, checkpoint = _load_worker_resume(
         WorkerRequest(task_id="child-4", resume=True),
-        conversation,
     )
     assert state.session_id == "child-4"
-    assert conversation.messages[0]["role"] == "user"
-    assert conversation.messages[0]["content"] == "original task"
+    assert state.messages[0]["role"] == "user"
+    assert state.messages[0]["content"] == "original task"
     assert checkpoint.session_dir == tmp_path
 
 
@@ -688,7 +737,7 @@ def test_collaboration_e2e_characterizes_depth_and_resume_side_effects(
         executor = ToolExecutor(sub_agent_manager=manager, auto_approve=True, hitl_level=0)
         context = ToolContext(
             session_id="parent-e2e",
-            model="gpt-5.4",
+            model="gpt-6-sol",
             source="subscription",
         )
 

@@ -12,12 +12,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Phase 1 (v0.99.x) — path-filter dispatch so docs-only / blog-only PRs
-  # skip the heavy lint/type/test steps below. Required-status-check names
-  # stay stable (Lint & Format / Type Check / Test / Security Scan / Gate)
-  # so branch protection keeps passing; only the inner steps short-circuit
-  # when ``changes.code != 'true'``. Pattern mirrored from OpenClaw +
-  # Hermes (frontier survey 2026-05-17).
+  # Required jobs always report a result. Full runtime tests may skip only
+  # when every changed path is in the exact documentation allowlist below.
+  # Existing code/docs filters continue to own other checks.
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
@@ -25,6 +22,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
       docs: ${{ steps.filter.outputs.docs }}
+      full_tests: ${{ steps.filter.outputs.full_tests }}
     steps:
       - name: Reject standalone main-to-develop sync PRs
         if: >-
@@ -33,10 +31,23 @@ jobs:
         run: |
           echo "::error::Merge current main into the feature branch before integration; do not open a sync PR."
           exit 1
+      - name: Validate push comparison base
+        if: github.event_name == 'push'
+        env:
+          PUSH_BASE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ ! "$PUSH_BASE_SHA" =~ ^[0-9a-f]{40}$ ]] ||
+             [[ "$PUSH_BASE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            echo "::error::Change detection requires a non-zero github.event.before SHA."
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
+          # PRs keep the complete API diff; pushes compare before -> current SHA.
+          base: ${{ github.event_name == 'push' && github.event.before || '' }}
+          predicate-quantifier: some-with-excludes
           filters: |
             code:
               - 'core/**'
@@ -68,12 +79,38 @@ jobs:
               - 'uv.lock'
               - '.github/workflows/**'
             docs:
+              - 'README.md'
+              - 'README.ko.md'
+              - 'CHANGELOG.md'
               - 'AGENTS.md'
               - 'CLAUDE.md'
               - 'docs/workflow.md'
               - 'docs/scaffold-skills.md'
               - 'docs/architecture/*.md'
               - 'docs/eval/**'
+              - 'site/src/data/geode/sot.ts'
+              - 'site/src/data/geode/changelog.ts'
+              - 'site/src/data/geode/architecture-baseline.json'
+              - 'site/public/llms.txt'
+              - 'site/public/llms-full.txt'
+            # Unknown paths stay full. Do not generalize these exclusions to
+            # docs/**, Markdown, site source, runtime guidance or schemas.
+            # Public generated files remain checked by the required Pages job.
+            full_tests:
+              - '**'
+              - '!README.md'
+              - '!README.ko.md'
+              - '!CHANGELOG.md'
+              - '!CLAUDE.md'
+              - '!docs/workflow.md'
+              - '!docs/scaffold-skills.md'
+              - '!docs/architecture/official-docs-generation.md'
+              - '!docs/architecture/extensibility-roadmap.md'
+              - '!site/src/data/geode/sot.ts'
+              - '!site/src/data/geode/changelog.ts'
+              - '!site/src/data/geode/architecture-baseline.json'
+              - '!site/public/llms.txt'
+              - '!site/public/llms-full.txt'
 
   lint:
     name: Lint & Format
@@ -90,7 +127,7 @@ jobs:
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         if: needs.changes.outputs.code == 'true' || needs.changes.outputs.docs == 'true'
       - if: needs.changes.outputs.code == 'true' || needs.changes.outputs.docs == 'true'
-        run: uv sync
+        run: uv sync --locked
       - name: Documentation owner paths and scaffold contracts
         if: needs.changes.outputs.docs == 'true'
         run: |
@@ -125,7 +162,21 @@ jobs:
         run: uv run deptry .
       - name: Legacy import ratchet
         if: needs.changes.outputs.code == 'true'
-        run: uv run python scripts/check_legacy_imports.py --base-ref origin/develop
+        env:
+          LEGACY_EVENT_MODE: ${{ github.event_name }}
+          LEGACY_PR_BASE_REF: refs/remotes/origin/${{ github.base_ref || github.ref_name }}
+          LEGACY_PUSH_BASE_REF: ${{ github.event.before }}
+        run: |
+          base_ref="$LEGACY_PR_BASE_REF"
+          if [[ "$LEGACY_EVENT_MODE" == "push" ]]; then
+            if [[ ! "$LEGACY_PUSH_BASE_REF" =~ ^[0-9a-f]{40}$ ]] ||
+               [[ "$LEGACY_PUSH_BASE_REF" == "0000000000000000000000000000000000000000" ]]; then
+              echo "::error::Legacy import validation requires a non-zero github.event.before SHA."
+              exit 1
+            fi
+            base_ref="$LEGACY_PUSH_BASE_REF"
+          fi
+          uv run python scripts/check_legacy_imports.py --base-ref "$base_ref"
       - name: Repo hygiene ratchet
         if: needs.changes.outputs.code == 'true'
         run: uv run python scripts/check_repo_hygiene.py
@@ -238,33 +289,27 @@ jobs:
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         if: needs.changes.outputs.code == 'true'
       - if: needs.changes.outputs.code == 'true'
-        run: uv sync --extra audit
+        run: uv sync --locked --extra audit
       - if: needs.changes.outputs.code == 'true'
         run: uv run mypy core/ evals/ evolve/ scripts/
       - name: Prompt integrity check
         if: needs.changes.outputs.code == 'true'
         run: uv run python -c "from core.llm.prompts import verify_prompt_integrity; verify_prompt_integrity(raise_on_drift=True)"
 
-  test:
-    name: Test
+  test_contracts:
+    name: Test contracts
     runs-on: ubuntu-latest
     needs: changes
+    if: needs.changes.outputs.full_tests == 'true'
     steps:
-      - name: Skip — no code change
-        if: needs.changes.outputs.code != 'true'
-        run: echo "::notice::Docs-only PR — skipping tests."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.changes.outputs.code == 'true'
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
-        if: needs.changes.outputs.code == 'true'
       # [audit] extra installs inspect_ai so tests/core/audit/ runs (otherwise
       # ``pytest.importorskip("inspect_ai.log")`` skips those modules
       # and the petri-bookkeeping code in core/audit/ shows up as 0%
       # covered — pushing total coverage below the 75% ratchet).
-      - if: needs.changes.outputs.code == 'true'
-        run: uv sync --extra audit
+      - run: uv sync --locked --extra audit
       - name: Architecture behavior contracts
-        if: needs.changes.outputs.code == 'true'
         run: |
           uv run pytest -q \
             tests/core/agent/test_loop_architecture_budget.py \
@@ -280,30 +325,18 @@ jobs:
             tests/integration/test_architecture_site_inventory.py \
             tests/integration/test_namespace_composition.py
       - name: Architecture performance contracts
-        if: needs.changes.outputs.code == 'true'
         run: |
           uv run pytest -q tests/core/memory/test_hermes_1c_fts5.py \
             tests/scripts/test_check_architecture_performance.py
       - name: Architecture performance baseline
         id: architecture_performance
-        if: needs.changes.outputs.code == 'true'
         run: uv run python scripts/check_architecture_performance.py --check
       - name: Architecture performance failure profile
         if: failure() && steps.architecture_performance.outcome == 'failure'
         run: uv run python scripts/check_architecture_performance.py --diagnose
       - name: Extension change-surface contracts
-        if: needs.changes.outputs.code == 'true'
         run: uv run pytest -q tests/integration/test_extension_change_surfaces.py
-      - name: Run tests with coverage (xdist parallel, loadfile)
-        if: needs.changes.outputs.code == 'true'
-        # --dist=loadfile pins same-file tests to the same worker. Without
-        # it, xdist can split TestAutoLearnHandler.{test_saves_pattern_on_match,
-        # test_cooldown_prevents_rapid_fire} across workers — those two share
-        # module-level state (cooldown timestamp), producing a flaky
-        # FAILURE on develop→main PR #1220 (2026-05-17).
-        run: uv run pytest -n auto --dist=loadfile --cov=core --cov=evals --cov=evolve --cov-report=term-missing
       - name: Native Harbor 0.22 Docker contracts (no containers or model calls)
-        if: needs.changes.outputs.code == 'true'
         env:
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
         run: |
@@ -320,7 +353,6 @@ jobs:
           ]))
           PY
       - name: Build and inspect package artifacts
-        if: needs.changes.outputs.code == 'true'
         run: |
           uv build
           uv run python scripts/check_package_artifacts.py
@@ -337,6 +369,93 @@ jobs:
             --import-mode=importlib --noconftest \
             tests/core/llm/adapters/test_registry.py \
             tests/core/tools/test_toolkit_registry.py
+  test_shards:
+    name: Test shard (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.full_tests == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+      - run: uv sync --locked --extra audit
+      - name: Run tests with coverage (xdist parallel, loadfile)
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_OUTPUT: ${{ runner.temp }}/test-shard-${{ matrix.shard }}
+          COVERAGE_FILE: ${{ runner.temp }}/test-shard-${{ matrix.shard }}/.coverage.${{ matrix.shard }}
+        # File hashing preserves the existing same-file state boundary; xdist
+        # still keeps each file on one worker. Only the combined report gates 75%.
+        # Pin config/root so external artifacts cannot change worker collection.
+        run: |
+          uv run pytest -c pyproject.toml --rootdir=. -p scripts.ci_test_shards \
+            --ci-shard "$SHARD_INDEX" --ci-shards 4 --ci-shard-output "$SHARD_OUTPUT" \
+            -n auto --dist=loadfile --cov=core --cov=evals --cov=evolve \
+            --cov-report= --cov-fail-under=0 --junitxml="$SHARD_OUTPUT/junit.xml"
+      - name: Preserve shard evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/test-shard-${{ matrix.shard }}
+          include-hidden-files: true
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: [changes, test_contracts, test_shards]
+    if: ${{ always() }}
+    steps:
+      - name: Require complete test prerequisites
+        id: prerequisites
+        env:
+          TEST_NEEDS: ${{ toJSON(needs) }}
+        run: |
+          python - <<'PYTEST_GATE'
+          import json
+          import os
+          import sys
+          needs = json.loads(os.environ["TEST_NEEDS"])
+          if set(needs) != {"changes", "test_contracts", "test_shards"}:
+              sys.exit("::error::Missing test prerequisites")
+          changes = needs["changes"]
+          full = changes.get("outputs", {}).get("full_tests")
+          if changes.get("result") != "success" or full not in {"true", "false"}:
+              sys.exit("::error::Invalid full-test classification")
+          expected = "success" if full == "true" else "skipped"
+          if any(needs[key].get("result") != expected for key in ("test_contracts", "test_shards")):
+              sys.exit("::error::Missing, failed, or cancelled test prerequisites")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"full_tests={full}\n")
+          PYTEST_GATE
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.prerequisites.outputs.full_tests == 'true'
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        if: steps.prerequisites.outputs.full_tests == 'true'
+      - run: uv sync --locked
+        if: steps.prerequisites.outputs.full_tests == 'true'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: steps.prerequisites.outputs.full_tests == 'true'
+        with:
+          pattern: test-shard-*
+          path: ${{ runner.temp }}/test-shards
+      - name: Verify complete collection and combined coverage
+        if: steps.prerequisites.outputs.full_tests == 'true'
+        run: |
+          uv run python scripts/ci_test_shards.py "$RUNNER_TEMP/test-shards"
+          uv run coverage combine --keep \
+            "$RUNNER_TEMP/test-shards/test-shard-0" \
+            "$RUNNER_TEMP/test-shards/test-shard-1" \
+            "$RUNNER_TEMP/test-shards/test-shard-2" \
+            "$RUNNER_TEMP/test-shards/test-shard-3"
+          uv run coverage report --show-missing
+
   security:
     name: Security Scan
     runs-on: ubuntu-latest
@@ -350,7 +469,7 @@ jobs:
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         if: needs.changes.outputs.code == 'true'
       - if: needs.changes.outputs.code == 'true'
-        run: uv sync
+        run: uv sync --locked
       - name: Audit locked runtime dependencies
         if: needs.changes.outputs.code == 'true'
         run: |
@@ -387,5 +506,7 @@ jobs:
               sys.exit("::error::Change detection did not produce an explicit code classification")
           if needs["changes"].get("outputs", {}).get("docs") not in {"true", "false"}:
               sys.exit("::error::Change detection did not produce an explicit docs classification")
+          if needs["changes"].get("outputs", {}).get("full_tests") not in {"true", "false"}:
+              sys.exit("::error::Change detection did not produce an explicit full-tests classification")
           print("All required prerequisites succeeded on this workflow revision")
           PY

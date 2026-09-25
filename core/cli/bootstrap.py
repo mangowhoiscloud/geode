@@ -234,13 +234,18 @@ async def arun_agentic_oneshot(
         bound_tool_plan, transient_handlers = tool_plan_builder()
 
     from core.agent.loop._tool_factory import project_bound_tool_plan
-    from core.llm.adapters._source_inference import infer_source
+    from core.llm.routing import infer_source
 
     provider = _resolve_provider(_stk_settings.model)
+    source = infer_source(
+        provider,
+        model=_stk_settings.model,
+        sources=(resolved_policy_sources or {}).get("provider_routing"),
+    )
     bound_tool_plan = project_bound_tool_plan(
         bound_tool_plan,
         provider=provider,
-        source=infer_source(provider),
+        source=source,
         policy_sources=resolved_policy_sources,
     )
     from core.tools.policy import apply_profile_policy, load_profile_policy
@@ -294,6 +299,8 @@ async def arun_agentic_oneshot(
         config=AgenticLoopConfig(
             time_budget_s=time_budget_s,
             max_rounds=0,
+            source=source,
+            effort=_stk_settings.agentic_effort,
             user_profile=user_profile,
         ),
         model=_stk_settings.model,

@@ -11,9 +11,14 @@ Responses-only).
 
 from __future__ import annotations
 
+import asyncio
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
+import openai
+import pytest
 from core.llm.adapters._capability_impls import openai_web_search_urls
 from core.llm.adapters._openai_common import build_responses_kwargs
 from core.llm.adapters.base import AdapterCallRequest, Message, ToolSpec
@@ -124,3 +129,141 @@ def test_stop_sequences_drop_is_observable(caplog) -> None:
             _request(stop_sequences=("END",)), backend="platform", adapter_name="openai-payg"
         )
     assert any("stop_sequences unsupported" in r.message for r in caplog.records)
+
+
+@pytest.mark.parametrize("source", ["payg", "subscription"])
+@pytest.mark.parametrize(
+    "ending", ["completed", "incomplete", "failed", "eof", "error", "mismatch"]
+)
+def test_responses_stream_preserves_native_items_and_terminal_status(
+    monkeypatch: pytest.MonkeyPatch, source: str, ending: str
+) -> None:
+    from core.llm.adapters.base import StreamEvent
+    from core.llm.adapters.codex_oauth import CodexOAuthAdapter
+    from core.llm.adapters.openai_payg import OpenAIPaygAdapter
+
+    call = {
+        "type": "function_call",
+        "id": "fc-fixture",
+        "call_id": "call-fixture",
+        "name": "demo",
+        "arguments": '{"x":1}',
+        "status": "completed",
+    }
+    reasoning = {
+        "type": "reasoning",
+        "id": "rs-fixture",
+        "encrypted_content": "fixture-replay",
+        "summary": [{"type": "summary_text", "text": "Checking."}],
+    }
+    response = {
+        "id": "resp-fixture",
+        "object": "response",
+        "created_at": 0,
+        "model": "gpt-6-sol",
+        "status": "in_progress",
+        "output": [],
+    }
+    events = [
+        {"type": "response.created", "response": response},
+        {
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {**call, "arguments": ""},
+        },
+        {
+            "type": "response.function_call_arguments.delta",
+            "item_id": "fc-fixture",
+            "output_index": 0,
+            "delta": '{"x":',
+        },
+        {
+            "type": "response.function_call_arguments.delta",
+            "item_id": "fc-fixture",
+            "output_index": 0,
+            "delta": "1}",
+        },
+        {"type": "response.output_item.done", "output_index": 0, "item": call},
+        {
+            "type": "response.reasoning_summary_text.delta",
+            "delta": "Checking.",
+            "item_id": "rs-fixture",
+            "output_index": 1,
+            "summary_index": 0,
+        },
+        {"type": "response.output_item.done", "output_index": 1, "item": reasoning},
+    ]
+    if ending in {"completed", "incomplete", "failed", "mismatch"}:
+        events.append(
+            {
+                "type": f"response.{ending}" if ending != "mismatch" else "response.completed",
+                "response": {
+                    **response,
+                    "status": ending,
+                    "usage": {
+                        "input_tokens": 12,
+                        "output_tokens": 3,
+                        "total_tokens": 15,
+                        "input_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 7},
+                    },
+                },
+            }
+        )
+    elif ending == "error":
+        events.append({"type": "error", "code": "fixture_error", "message": "fixture"})
+    payload = "".join(
+        "event: "
+        + event["type"]
+        + "\ndata: "
+        + json.dumps({**event, "sequence_number": index})
+        + "\n\n"
+        for index, event in enumerate(events)
+    )
+    wire: list[dict] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        wire.append(json.loads(request.content))
+        return httpx.Response(200, text=payload, headers={"content-type": "text/event-stream"})
+
+    emitted: list[StreamEvent] = []
+
+    async def consume() -> None:
+        async with openai.AsyncOpenAI(
+            api_key="fixture", http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond))
+        ) as client:
+            adapter = OpenAIPaygAdapter() if source == "payg" else CodexOAuthAdapter()
+            monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
+            async for event in adapter.astream(_request(model="gpt-6-sol")):
+                emitted.append(event)
+
+    if ending in {"completed", "incomplete"}:
+        asyncio.run(consume())
+        stop = emitted[-1]
+        assert stop.kind == "stop" and stop.payload["stop_reason"] == ending
+        assert stop.payload["response_id"] == "resp-fixture"
+        assert stop.payload["codex_output_items"][1]["encrypted_content"] == "fixture-replay"
+    else:
+        with pytest.raises((RuntimeError, openai.APIError)):
+            asyncio.run(consume())
+        assert not any(event.kind == "stop" for event in emitted)
+    assert wire[0]["model"] == "gpt-6-sol"
+    assert ("max_output_tokens" in wire[0]) is (source == "payg")
+    assert [event.payload for event in emitted if event.kind == "thinking"] == [
+        {"text": "Checking."}
+    ]
+    tools = [event.payload for event in emitted if event.kind == "tool_use"]
+    assert tools == (
+        [{"id": "call-fixture", "name": "demo", "input": '{"x":1}'}]
+        if ending == "completed"
+        else []
+    )
+    usages = [event.payload for event in emitted if event.kind == "usage"]
+    if ending in {"completed", "incomplete", "failed"}:
+        assert len(usages) == 1
+        assert usages[0]["input_tokens"] == 12
+        assert usages[0]["cached_input_tokens"] == 0
+        assert usages[0]["cached_input_tokens_present"] is True
+        assert usages[0]["cache_write_tokens"] == 7
+        assert usages[0]["reasoning_tokens_present"] is False
+    else:
+        assert not usages

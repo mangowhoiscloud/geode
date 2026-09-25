@@ -41,6 +41,7 @@ sandboxing remain separate. The shared-file pattern follows the
 |---|---|
 | Ordinary development | [Evidence-first workflow](docs/workflow.md) and `.agents/skills/geode-workflow/` |
 | Branches, PRs, merge, cleanup | `.agents/skills/geode-gitflow/`; `.github/PULL_REQUEST_TEMPLATE.md` |
+| Codebase audit, deduplication, or pruning | `.agents/skills/codebase-audit/`; trace consumers and surviving behavior before deletion |
 | Abstraction, naming, types, schemas, tests, compatibility | [Naming conventions](docs/architecture/naming-conventions.md) and `.agents/skills/geode-code-conventions/` |
 | Public hooks, middleware, runtime events | [Hook contracts](docs/architecture/hook-system.md) and `.agents/skills/geode-code-conventions/`; distinguish decisions, trusted transforms, and observation |
 | Architecture/extensibility program | [Extensibility roadmap](docs/architecture/extensibility-roadmap.md), the single execution SOT for GAP IDs, order, status, acceptance, and closure evidence |
@@ -87,8 +88,8 @@ must trace every affected boundary; this table is routing, not an API census.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 589 production Python files,
-732 test Python files,
+The current snapshot records 591 production Python files,
+748 test Python files,
 86 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->
@@ -114,6 +115,10 @@ do not turn an incident-specific fix into an unconditional rule for every task.
    Implementation and ordinary roadmap work start from `origin/develop`;
    main-maintained tracking work uses `origin/main`. The roadmap's §0.3 owns
    its narrow readiness/claim/GAP/reconciliation/full-ledger exceptions.
+   Independent writes start after `check_repo_hygiene.py assert-write-workspace`
+   passes; delegates return the workflow's [handoff contract](docs/workflow.md#execution-scope);
+   CI recovery stops at GitFlow's [budget](.agents/skills/geode-gitflow/SKILL.md#post-pr-ci-ratchet)
+   and hands off.
 3. **Implement at the owner.** Reuse existing registries and helpers. Trace
    producer → field/state → reader → decision, including explicit/automatic
    input branches and refresh/invalidation. Process services cross constructors,

@@ -481,3 +481,88 @@ async def test_blocking_sync_handler_is_bounded_off_the_event_loop() -> None:
     assert outcome.decisions == ()
     assert len(outcome.handler_errors) == 1
     assert "blocking" in outcome.handler_errors[0]
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("model", "other-model"),
+        ("provider", "glm"),
+        ("message_count", 0),
+        ("trigger", "manual"),
+        ("hard", False),
+    ],
+)
+def test_pre_compact_rejects_readonly_rewrite_atomically(field, replacement) -> None:
+    events = RuntimeEventBus()
+    recorded = []
+    events.subscribe(RuntimeEvent.EXTENSION_INVOKED, lambda _event, data: recorded.append(data))
+    registry = HookRegistry(events=events)
+    payload = {
+        "model": "gpt-5.6-sol",
+        "provider": "openai",
+        "message_count": 20,
+        "keep_recent": 6,
+        "trigger": "context_overflow",
+        "hard": True,
+    }
+    observed = []
+    registry.register(
+        HookName.PRE_COMPACT,
+        lambda _invocation: HookDecision(
+            action=HookAction.REWRITE, updates={"keep_recent": 2, field: replacement}
+        ),
+        name="invalid-rewrite",
+        priority=10,
+    )
+    registry.register(
+        HookName.PRE_COMPACT,
+        lambda invocation: observed.append(dict(invocation.payload)),
+        name="observer",
+        priority=20,
+    )
+    try:
+        outcome = asyncio.run(registry.invoke(HookName.PRE_COMPACT, payload=payload))
+        assert outcome.invocation.payload == payload
+        assert observed == [payload]
+        assert outcome.decisions == outcome.decision_sources == ()
+        assert len(outcome.handler_errors) == 1
+        assert "keep_recent" in outcome.handler_errors[0]
+        assert [row["status"] for row in recorded] == ["error", "ok"]
+        assert recorded[0]["reason"] == "InvalidHookDecisionError"
+    finally:
+        events.close()
+
+
+def test_pre_compact_allows_only_keep_recent_rewrite_to_reach_next_handler() -> None:
+    registry = HookRegistry()
+    observed = []
+    registry.register(
+        HookName.PRE_COMPACT,
+        lambda _invocation: HookDecision(action=HookAction.REWRITE, updates={"keep_recent": 2}),
+        name="tail-policy",
+        priority=10,
+    )
+    registry.register(
+        HookName.PRE_COMPACT,
+        lambda invocation: observed.append(invocation.payload["keep_recent"]),
+        name="observer",
+        priority=20,
+    )
+    outcome = asyncio.run(
+        registry.invoke(
+            HookName.PRE_COMPACT,
+            payload={
+                "model": "gpt-5.6-sol",
+                "provider": "openai",
+                "message_count": 20,
+                "keep_recent": 6,
+                "trigger": "manual",
+                "hard": False,
+            },
+        )
+    )
+    assert outcome.handler_errors == ()
+    assert outcome.invocation.payload["keep_recent"] == 2
+    assert observed == [2]
+    assert outcome.decision_sources == ("tail-policy",)

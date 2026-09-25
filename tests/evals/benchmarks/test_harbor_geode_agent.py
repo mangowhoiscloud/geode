@@ -26,6 +26,15 @@ class _Environment:
         return SimpleNamespace(stdout="ok\n", stderr="", return_code=0)
 
 
+@pytest.mark.parametrize("name", ["max_tokens", "max_rounds"])
+@pytest.mark.parametrize("value", [0, -1, True, 1.5, "2"])
+def test_harbor_rejects_invalid_limits_before_initialization(
+    tmp_path: Path, name: str, value: Any
+) -> None:
+    with pytest.raises(ValueError, match=f"{name} must be a positive integer"):
+        GeodeHarborAgent(tmp_path, **{name: value})
+
+
 def test_harbor_exec_tool_preserves_environment_result() -> None:
     environment = _Environment()
     result = asyncio.run(
@@ -154,6 +163,8 @@ def _observed_agent(
     failure: BaseException | None = None,
     leave_call_open: bool = False,
     include_lost_pair: bool = False,
+    max_tokens: int = 32768,
+    max_rounds: int = 0,
 ) -> tuple[GeodeHarborAgent, list[Any]]:
     """Exercise real thin-loop wiring and SQLite, never a provider call."""
     from core.agent.loop import AgenticLoop
@@ -178,7 +189,7 @@ def _observed_agent(
         assert loop._effort == "max"
         assert loop._time_budget_s == 900
         assert [t["name"] for t in loop._tools] == ["terminal_exec"]
-        assert loop.max_tokens == 32768 and loop.max_rounds == 0
+        assert loop.max_tokens == max_tokens and loop.max_rounds == max_rounds
         loop._timeline.record_session_start(model=loop.model, provider="openai")
         loop._timeline.bind_turn("t-observed")
         loop._timeline.record_user_message(instruction)
@@ -255,7 +266,146 @@ def _observed_agent(
     agent.source = "subscription"
     agent.effort = "max"
     agent.agent_timeout_sec = 900
+    agent.max_tokens = max_tokens
+    agent.max_rounds = max_rounds
     return agent, loops
+
+
+def test_harbor_forwards_optional_limits_to_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    agent, loops = _observed_agent(tmp_path, monkeypatch, cache=0, max_tokens=2048, max_rounds=2)
+    asyncio.run(agent.run("Inspect the task.", _Environment(), SimpleNamespace()))
+    assert len(loops) == 1 and loops[0]._hooks.closed
+
+
+def test_harbor_limits_reach_sdk_and_stop_tool_rounds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import httpx
+    from core.agent.loop import _reflection
+    from core.config import settings
+    from core.config.policy_source import EMPTY_POLICY_SOURCES
+    from core.llm.adapters.base import AdapterCallResult, UsageSummary
+    from core.llm.adapters.openai_payg import OpenAIPaygAdapter
+    from core.observability.event_store import HookEventStore
+    from core.wiring import runtime
+    from evals.platforms.harbor import _build_loop
+    from openai import AsyncOpenAI
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GEODE_HOME", str(tmp_path / "geode-home"))
+    monkeypatch.setattr(settings, "openai_api_key", "offline-test-key")
+    monkeypatch.setattr(runtime, "build_policy_sources", lambda: EMPTY_POLICY_SOURCES)
+    wire: list[dict[str, Any]] = []
+    reflection_requests: list[Any] = []
+    observed: list[Any] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        wire.append(json.loads(request.content))
+        event = {
+            "type": "response.completed",
+            "response": {
+                "id": f"response-{len(wire)}",
+                "object": "response",
+                "model": "gpt-5.6-sol",
+                "created_at": 0,
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "function_call",
+                        "name": "terminal_exec",
+                        "id": f"tool-{len(wire)}",
+                        "call_id": f"call-{len(wire)}",
+                        "arguments": '{"command":"pwd"}',
+                        "status": "completed",
+                    }
+                ],
+                "usage": {"input_tokens": 10, "output_tokens": 1, "total_tokens": 11},
+            },
+        }
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=(
+                "event: response.created\ndata: "
+                + json.dumps({**event, "type": "response.created"})
+                + f"\n\nevent: response.completed\ndata: {json.dumps(event)}\n\n"
+            ),
+        )
+
+    async def reflection(request: Any) -> AdapterCallResult:
+        assert request.max_tokens == settings.cognitive_reflection_max_tokens
+        reflection_requests.append(request)
+        return AdapterCallResult(
+            text="",
+            tool_uses=({"name": "record_reflection", "input": {"hypotheses": []}},),
+            usage=UsageSummary(input_tokens=7, output_tokens=2),
+            stop_reason="end_turn",
+        )
+
+    monkeypatch.setattr(
+        _reflection, "resolve_for", lambda *_args: SimpleNamespace(acomplete=reflection)
+    )
+
+    async def run() -> Any:
+        async with AsyncOpenAI(
+            api_key="offline-test-key",
+            base_url="https://offline.example.test/v1",
+            max_retries=0,
+            http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond)),
+        ) as client:
+            monkeypatch.setattr(OpenAIPaygAdapter, "_get_client", lambda _self, _model: client)
+            loop = _build_loop(
+                _Environment(),
+                model="gpt-5.6-sol",
+                provider="openai",
+                source="payg",
+                effort="low",
+                timeout=0,
+                max_tokens=2048,
+                max_rounds=3,
+            )
+            try:
+                result = await loop.arun("Inspect the working directory.")
+            finally:
+                loop._hooks.close()
+            store = HookEventStore(loop._timeline.db_path)
+            try:
+                observed.extend(store.read(session_id=loop._session_id, limit=100))
+            finally:
+                store.close()
+            return result
+
+    result = asyncio.run(run())
+    assert result.rounds == 3
+    assert result.error == result.termination_reason == "max_rounds"
+    assert len(wire) == 3
+    assert [request["model"] for request in wire] == ["gpt-5.6-sol"] * 3
+    assert [request["max_output_tokens"] for request in wire] == [2048, 2048, 2048]
+    assert [request["tool_choice"] for request in wire] == ["auto", "none", "none"]
+    assert reflection_requests
+    ends = [
+        event
+        for event in observed
+        if event.action == "llm.call.ended"
+        and event.payload.get("purpose") == "cognitive_reflection"
+    ]
+    assert len(ends) == len(reflection_requests)
+    reflection_ids = {event.llm_attempt_id for event in ends}
+    starts = [
+        event
+        for event in observed
+        if event.action == "llm.call.started" and event.llm_attempt_id in reflection_ids
+    ]
+    assert len(starts) == len(ends)
+    assert {event.llm_attempt_id for event in starts} == {event.llm_attempt_id for event in ends}
+    usage = _summarize_usage(observed)
+    assert usage["attempt_pairing_complete"]
+    assert usage["call_events"] == len(wire) + len(reflection_requests)
+    assert usage["input_tokens"] == 10 * len(wire) + 7 * len(reflection_requests)
+    assert usage["output_tokens"] == len(wire) + 2 * len(reflection_requests)
+    assert usage["whole_runtime_complete"] is False
 
 
 @pytest.mark.parametrize("cache", [None, 0, 4])
@@ -357,6 +507,7 @@ def test_recorded_attempts_keep_only_numeric_allowlist_and_source_links(purpose:
                 "cached_input_tokens": 0,
                 "cache_write_tokens": None,
                 "reasoning_tokens": 3,
+                "cache_write_1h_tokens": None,
             },
         }
     ]
@@ -432,6 +583,7 @@ def test_recorded_attempts_reject_malformed_metadata_without_invented_zero() -> 
         "output_tokens": None,
         "cached_input_tokens": 0,
         "cache_write_tokens": None,
+        "cache_write_1h_tokens": None,
     }
     assert "private" not in json.dumps(summary, allow_nan=False)
 

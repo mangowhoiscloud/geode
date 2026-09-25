@@ -23,7 +23,7 @@ def test_refresh_console_width_updates_active_tty_console(monkeypatch) -> None:
     monkeypatch.setattr(sys, "stdout", _TtyStdout())
     monkeypatch.setattr(
         "core.ui.console.shutil.get_terminal_size",
-        lambda: os.terminal_size((100, 24)),
+        lambda fallback=(80, 24): os.terminal_size((100, 24)),
     )
     try:
         refresh_console_width()

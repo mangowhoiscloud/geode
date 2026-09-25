@@ -53,7 +53,8 @@ import dataclasses
 import logging
 import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
@@ -98,6 +99,16 @@ log = logging.getLogger(__name__)
 _session_adapter_usage_ctx: ContextVar[dict[str, dict[str, int]] | None] = ContextVar(
     "session_adapter_usage", default=None
 )
+
+
+@contextmanager
+def preserve_session_adapter_tracking() -> Iterator[None]:
+    """Restore an outer turn's counter even if this turn fails before finalization."""
+    token = _session_adapter_usage_ctx.set(None)
+    try:
+        yield
+    finally:
+        _session_adapter_usage_ctx.reset(token)
 
 
 def begin_session_adapter_tracking() -> None:
@@ -298,9 +309,9 @@ def _resolve_dispatch_route(
 
         provider = normalize_registry_provider(_resolve_provider(model))
     if provider and not source:
-        from core.llm.adapters._source_inference import infer_source
+        from core.llm.routing import infer_source
 
-        source = infer_source(provider)
+        source = infer_source(provider, model=model or "")
     if source and not provider and model:
         from core.config import _resolve_provider
 
@@ -445,6 +456,27 @@ async def _call_aweb_search(
     return legacy_result
 
 
+def _capability_effort(provider: str, model: str, effort: str | None) -> str | None:
+    """Forward inherited effort only where the selected native model exposes it."""
+    if provider == "openrouter" and model.startswith("openrouter/openai/"):
+        provider, model = "openai", model.removeprefix("openrouter/openai/")
+    if provider == "openai":
+        supported = get_openai_model_spec(model).reasoning_effort_values
+    elif provider == "anthropic":
+        from core.llm.model_capabilities import get_anthropic_model_spec
+
+        spec = get_anthropic_model_spec(model)
+        supported = spec.effort_values if spec is not None else None
+    elif provider == "glm":
+        from core.llm.providers.glm import get_glm_model_spec
+
+        glm_spec = get_glm_model_spec(model)
+        supported = glm_spec.reasoning_effort_values if glm_spec is not None else None
+    else:
+        supported = None
+    return effort if supported else None
+
+
 # ---------------------------------------------------------------------------
 # web_search — strict single-adapter dispatch
 # ---------------------------------------------------------------------------
@@ -477,8 +509,8 @@ async def web_search_via_adapters(
     empty. Other providers keep their provider primary.
 
     ``effort`` is the caller's inherited effort, not a cross-provider force
-    policy. Only a known OpenAI reasoning model receives it; other routes keep
-    their existing request shape and unknown effort observation.
+    policy. Known OpenAI and Anthropic models retain their native effort.
+    Fixed-model GLM search keeps its existing unverified-effort policy.
     """
     capability = "supports_web_search"
     adapter = _select_adapter(
@@ -498,10 +530,13 @@ async def web_search_via_adapters(
         from core.config import CODEX_PRIMARY, OPENAI_PRIMARY
 
         model = CODEX_PRIMARY if adapter.source == "subscription" else OPENAI_PRIMARY
+    if effort is not None and adapter.provider == "anthropic" and not model:
+        from core.config import ANTHROPIC_PRIMARY
+
+        model = ANTHROPIC_PRIMARY
     request_effort = (
-        effort
-        if adapter.provider == "openai"
-        and get_openai_model_spec(model).reasoning_effort_values is not None
+        _capability_effort(adapter.provider, model, effort)
+        if adapter.provider in {"openai", "anthropic"}
         else None
     )
 
@@ -673,9 +708,9 @@ async def complete_text_via_adapters(
     compaction callers outside the tool flow must pass an explicit route
     or a concrete model; dispatch will not scan provider order.
 
-    ``effort`` is inherited from the caller. It is applied only to known
-    OpenAI reasoning models; other providers/models retain their legacy
-    request shape and an unknown effort observation.
+    ``effort`` is inherited from the caller for known native effort models,
+    including OpenAI's explicit OpenRouter namespace. Models without a verified
+    effort control retain their legacy request shape and unknown observation.
 
     ``purpose`` identifies the producing helper in observations only; it is
     never forwarded to the provider. Unidentified callers retain the legacy
@@ -701,12 +736,16 @@ async def complete_text_via_adapters(
         from core.config import CODEX_PRIMARY, OPENAI_PRIMARY
 
         chosen_model = CODEX_PRIMARY if adapter.source == "subscription" else OPENAI_PRIMARY
-    request_effort = (
-        effort
-        if adapter.provider == "openai"
-        and get_openai_model_spec(chosen_model).reasoning_effort_values is not None
-        else None
-    )
+    if effort is not None and not chosen_model:
+        if adapter.provider == "anthropic":
+            from core.config import ANTHROPIC_PRIMARY
+
+            chosen_model = ANTHROPIC_PRIMARY
+        elif adapter.provider == "glm":
+            from core.config import GLM_PRIMARY
+
+            chosen_model = GLM_PRIMARY
+    request_effort = _capability_effort(adapter.provider, chosen_model, effort)
     effort_kwargs = {"effort": request_effort} if request_effort is not None else {}
     # Same-adapter retry on connection-class transients ONLY — mirrors
     # web_search_via_adapters. Compaction / learning-extraction callers have
@@ -846,5 +885,6 @@ __all__ = [
     "complete_text_via_adapters",
     "end_session_adapter_tracking",
     "get_session_adapter_usage",
+    "preserve_session_adapter_tracking",
     "web_search_via_adapters",
 ]

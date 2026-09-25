@@ -88,14 +88,54 @@ def test_masking_and_failed_write_do_not_change_memory(
     assert judgment_config.judgment_engine == "llm"
 
 
-def test_cli_and_natural_language_share_selection(judgment_config: Settings) -> None:
+def test_cli_and_natural_language_share_selection(
+    judgment_config: Settings, tmp_path: Path
+) -> None:
+    import asyncio
+
+    from core.agent.conversation import ConversationContext
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig
+    from core.agent.loop._model_switching import apply_pending_model_config
+    from core.agent.tool_executor import ToolExecutor
     from core.cli.commands.judgment import cmd_judgment
-    from core.cli.tool_handlers.system import _build_system_handlers
+    from core.cli.tool_handlers import cli_handler_groups
+    from core.config.session import SessionModelConfig
+    from core.tools.base import ToolContext
 
     judgment_config.typesafe_api_key = SecretStr("test-typesafe-credential")
     assert cmd_judgment("typesafe", interactive=False)["effective_engine"] == "jev"
-    handlers = dict(_build_system_handlers(None, False, None))
-    result = handlers["switch_model"](model_hint="llm", role="judgment")
-    assert result["action"] == "judgment"
-    assert result["effective_engine"] == "llm"
+    saved_defaults = (tmp_path / "config.toml").read_bytes()
+    policy = SessionModelConfig(
+        model="gpt-6-sol",
+        effort="low",
+        source="payg",
+        judgment_engine="jev",
+        jev_provider="typesafe",
+    )
+    loop = AgenticLoop(
+        ConversationContext(),
+        ToolExecutor(),
+        model=policy.model,
+        provider="openai",
+        quiet=True,
+        config=AgenticLoopConfig(source=policy.source, effort=policy.effort, model_settings=policy),
+    )
+    handlers = dict(next(group for name, group in cli_handler_groups() if name == "system"))
+
+    async def select_and_finish_batch() -> None:
+        result = await handlers["switch_model"](
+            model_hint="llm", role="judgment", _tool_context=ToolContext(agent_loop=loop)
+        )
+        assert result["status"] == "pending" and result["scope"] == "session"
+        assert result["model_config"]["judgment_engine"] == "llm"
+        assert loop._model_settings == policy  # The current batch keeps its original policy.
+        assert loop._pending_model_settings == policy.updated({"judgment_engine": "llm"})
+        await apply_pending_model_config(loop, loop.context.get_messages())
+
+    asyncio.run(select_and_finish_batch())
+    assert loop._model_settings.judgment_engine == "llm"
+    assert loop._pending_model_settings is None
+    assert (loop.model, loop._source, loop._effort) == (policy.model, policy.source, policy.effort)
+    assert judgment_status()["effective_engine"] == "jev"
+    assert (tmp_path / "config.toml").read_bytes() == saved_defaults
     assert cmd_judgment("invalid", interactive=False)["status"] == "error"

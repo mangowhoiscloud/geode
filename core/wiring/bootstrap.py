@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     # is imported lazily inside its build_* function below; this block
     # exists solely so mypy / IDEs can resolve the annotations.
     from core.hooks import HookRegistry, MiddlewareRegistry, RuntimeEventBus
+    from core.mcp.manager import MCPServerManager
     from core.memory.context import ContextAssembler
     from core.memory.dreaming import DreamingService
     from core.memory.organization import MonoLakeOrganizationMemory
@@ -282,6 +283,7 @@ def build_hooks(
     def _reg_agent_runtime_state() -> None:
         from core.observability.agent_runtime_state import (
             accumulate_tokens_and_cost,
+            close_runtime_state,
             record_agent_session_end,
             record_subagent_completed,
         )
@@ -357,6 +359,7 @@ def build_hooks(
             name="agent_runtime_llm_call_ended",
             priority=55,
         )
+        hooks.add_cleanup("agent_runtime_state", close_runtime_state)
 
     _register_plugin("agent_runtime_state", _reg_agent_runtime_state)
 
@@ -816,11 +819,13 @@ def build_task_graph() -> TaskGraph:
 # ---------------------------------------------------------------------------
 
 
-def build_mcp_manager() -> Any:
-    """Load MCP server config (lazy — no subprocess connections yet)."""
-    from core.mcp.manager import get_mcp_manager
+def build_mcp_manager(*, hooks: RuntimeEventBus | None = None) -> MCPServerManager:
+    """Create a runtime-owned manager; connections remain lazy."""
+    from core.mcp.manager import MCPServerManager
 
-    mgr = get_mcp_manager()
+    # Runtime rollback/shutdown owns this manager; process handlers belong to
+    # the standalone compatibility manager, never to overlapping runtimes.
+    mgr = MCPServerManager(hooks=hooks, process_signals=False)
     mgr.load_config()
     return mgr
 

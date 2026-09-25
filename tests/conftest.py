@@ -28,6 +28,7 @@ for _credential_var in (
 # Keep the directory alive for this interpreter; each test gets its own below.
 _test_auth_dir = tempfile.TemporaryDirectory(prefix="geode-test-auth-")
 os.environ["GEODE_AUTH_TOML"] = str(Path(_test_auth_dir.name) / "auth.toml")
+os.environ["CODEX_HOME"] = str(Path(_test_auth_dir.name) / "codex")
 
 # Redirect SessionCheckpoint to a temp directory during tests to prevent
 # production data contamination.
@@ -75,12 +76,13 @@ def _block_unmarked_http(
 
 @pytest.fixture(autouse=True)
 def _isolate_judgment_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    """New decision routes cannot inherit the operator's dotenv credentials."""
+    """Offline tests cannot inherit the operator's dotenv credentials."""
     from core.config import settings
     from pydantic import SecretStr
 
     monkeypatch.setattr(settings, "typesafe_api_key", SecretStr(""))
-    monkeypatch.setattr(settings, "openrouter_api_key", "")
+    for field in ("anthropic_api_key", "openai_api_key", "openrouter_api_key", "zai_api_key"):
+        monkeypatch.setattr(settings, field, "")
 
 
 @pytest.fixture
@@ -147,10 +149,14 @@ def managed_geode_runtimes(
 @pytest.fixture(autouse=True)
 def _isolate_state_root(
     tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
-) -> None:
+) -> Iterator[None]:
     import core.paths as cp
     from core.memory import session_checkpoint, session_manager
 
+    # get_project_root() caches its first caller's cwd for the process. After
+    # a test's monkeypatch.chdir(tmp_path), that tmp root must not become the
+    # workspace of later tests (IPC workspace admission, BashTool working dir).
+    clear_project_root = cp.get_project_root.cache_clear
     sandbox = tmp_path_factory.mktemp("state-isolation")
     monkeypatch.setattr(cp, "STATE_ROOT", sandbox)
     monkeypatch.setattr(cp, "AUTORESEARCH_STATE_DIR", sandbox / "autoresearch")
@@ -164,14 +170,21 @@ def _isolate_state_root(
     session_dir = sandbox / "sessions"
     monkeypatch.setattr(session_checkpoint, "DEFAULT_SESSION_DIR", session_dir)
     monkeypatch.setattr(session_manager, "_DEFAULT_DB_PATH", session_dir / "sessions.db")
+    yield
+    clear_project_root()
 
 
 @pytest.fixture(autouse=True)
 def _reset_auth_singletons(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
+    from core import config as _config
     from core.llm.strategies import plan_registry as _pr
     from core.wiring import container as _infra
 
+    # Undoing a patch of the PEP 562 ``settings`` export binds the old object in
+    # the module dict, shadowing the live singleton for later tests. Drop it at
+    # setup: monkeypatch undoes after this fixture's teardown.
+    _config.__dict__.pop("settings", None)
     _infra._profile_store = None
     _infra._profile_rotator = None
     _pr._plan_registry = None

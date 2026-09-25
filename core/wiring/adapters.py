@@ -6,9 +6,13 @@ Extracted from core.runtime as standalone functions (formerly GeodeRuntime stati
 from __future__ import annotations
 
 import logging
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from core.wiring.bootstrap import _plugin_status
+
+if TYPE_CHECKING:
+    from core.mcp.manager import MCPServerManager
 
 log = logging.getLogger(__name__)
 
@@ -59,50 +63,30 @@ def build_cli_poller(
     )
 
 
-def _load_mcp_manager_for_plugin(
-    plugin_name: str,
-) -> Any | None:
-    """Load MCP manager config, or mark plugin unavailable and return None."""
-    from core.mcp.manager import get_mcp_manager
-
-    try:
-        manager = get_mcp_manager()
-        manager.load_config()
-        return manager
-    except Exception as exc:
-        _plugin_status[plugin_name] = "unavailable"
-        log.warning("Plugin %s: MCP manager failed (%s)", plugin_name, exc)
-        return None
-
-
-def build_notification_adapter() -> Any | None:
+def build_notification_adapter(*, mcp_manager: MCPServerManager) -> Any:
     """Build a CompositeNotificationAdapter with MCP-backed channels.
 
     Chains Slack + Discord + Telegram adapters. If no messaging MCP servers
-    are available, notification tools fall back to stub responses.
+    are available, notification tools report that the message was not sent.
     """
     from core.mcp.composite_notification import CompositeNotificationAdapter
     from core.mcp.discord_adapter import DiscordNotificationAdapter
     from core.mcp.slack_adapter import SlackNotificationAdapter
     from core.mcp.telegram_adapter import TelegramNotificationAdapter
 
-    manager = _load_mcp_manager_for_plugin("notification_adapter")
-    if manager is None:
-        return None
-
     adapters = [
         # Slack posts directly to the Web API (PR-SLACK-TRANSPORT);
         # Discord/Telegram remain MCP-backed.
         SlackNotificationAdapter(),
-        DiscordNotificationAdapter(manager=manager),
-        TelegramNotificationAdapter(manager=manager),
+        DiscordNotificationAdapter(manager=mcp_manager),
+        TelegramNotificationAdapter(manager=mcp_manager),
     ]
     composite = CompositeNotificationAdapter(adapters)  # type: ignore[arg-type]
     log.info("Notification adapter wired: channels=%s", composite.list_channels())
     return composite
 
 
-def build_calendar_adapter() -> Any:
+def build_calendar_adapter(*, mcp_manager: MCPServerManager) -> Any:
     """Build direct Google OAuth plus MCP-backed calendar sources.
 
     The direct Google adapter is always present and discovers credentials at
@@ -115,14 +99,12 @@ def build_calendar_adapter() -> Any:
     from core.mcp.google_workspace_calendar import GoogleWorkspaceCalendarAdapter
 
     adapters: list[Any] = [GoogleWorkspaceCalendarAdapter()]
-    manager = _load_mcp_manager_for_plugin("calendar_adapter")
-    if manager is not None:
-        adapters.extend(
-            [
-                GoogleCalendarAdapter(manager=manager),
-                AppleCalendarAdapter(manager=manager),
-            ]
-        )
+    adapters.extend(
+        [
+            GoogleCalendarAdapter(manager=mcp_manager),
+            AppleCalendarAdapter(manager=mcp_manager),
+        ]
+    )
     composite = CompositeCalendarAdapter(adapters)
     log.info("Calendar adapter wired; availability will be checked at call time")
     return composite
@@ -168,16 +150,18 @@ def _resolve_slack_bot_user_id() -> str:
     return ""
 
 
-def _load_gateway_config() -> tuple[dict[str, Any], list[str]]:
+def _load_gateway_config(*, strict: bool = False) -> tuple[dict[str, Any], list[str]]:
     """Merge the [gateway] config: global SoT + project overlay.
 
     Returns ``(merged_config, source_labels)``. Scalar keys: project
     overrides global. ``bindings.rules``: global rules first, project
-    rules appended (both active). Either file may be absent.
+    rules appended (both active). Either file may be absent. Strict reloads
+    reject unreadable or malformed sources instead of publishing a partial overlay.
     """
     import tomllib
 
-    from core.paths import GLOBAL_CONFIG_TOML, PROJECT_CONFIG_TOML
+    from core.config.toml_edit import resolve_config_toml_path
+    from core.paths import PROJECT_CONFIG_TOML
 
     merged_gateway: dict[str, Any] = {}
     # (channel, channel_id) -> rule; a project rule REPLACES the global
@@ -186,24 +170,38 @@ def _load_gateway_config() -> tuple[dict[str, Any], list[str]]:
     # first-match routing).
     merged_rules: dict[tuple[str, str], dict[str, Any]] = {}
     sources: list[str] = []
-    for label, path in (("global", GLOBAL_CONFIG_TOML), ("project", PROJECT_CONFIG_TOML)):
+    for label, path in (("global", resolve_config_toml_path()), ("project", PROJECT_CONFIG_TOML)):
         if not path.exists():
             continue
         try:
             with open(path, "rb") as fh:
                 raw = tomllib.load(fh)
-        except Exception:
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError):
+            if strict:
+                raise
             log.warning("Gateway config unreadable: %s", path, exc_info=True)
             continue
         gw = raw.get("gateway")
         if not isinstance(gw, dict):
+            if strict and "gateway" in raw:
+                raise ValueError("gateway must be a table")
             continue
         sources.append(f"{label}:{path}")
         for key, value in gw.items():
             if key == "bindings":
+                if strict and not isinstance(value, dict):
+                    raise ValueError("gateway.bindings must be a table")
                 rules = value.get("rules", []) if isinstance(value, dict) else []
+                if strict and not isinstance(rules, list):
+                    raise ValueError("gateway.bindings.rules must be an array of tables")
                 if isinstance(rules, list):
+                    if isinstance(value, dict) and "rules" in value:
+                        merged_gateway["bindings"] = {"rules": []}
                     for rule in rules:
+                        if strict and not isinstance(rule, dict):
+                            raise ValueError("Each binding rule must be a table")
                         if isinstance(rule, dict):
                             rule_key = (
                                 str(rule.get("channel", "")),
@@ -217,7 +215,7 @@ def _load_gateway_config() -> tuple[dict[str, Any], list[str]]:
     return ({"gateway": merged_gateway} if merged_gateway else {}), sources
 
 
-def build_gateway(*, notification: Any = None) -> None:
+def build_gateway(*, notification: Any = None, mcp_manager: MCPServerManager | None = None) -> None:
     """Build the channel manager and optional external-channel pollers.
 
     Reads ``[gateway] pollers`` from ``.geode/config.toml`` to determine
@@ -227,6 +225,7 @@ def build_gateway(*, notification: Any = None) -> None:
     """
     from core.config import settings
     from core.messaging.binding import ChannelManager, set_gateway
+    from core.orchestration.hot_reload import ConfigWatcher
 
     if not settings.gateway_enabled:
         set_gateway(ChannelManager())
@@ -253,7 +252,10 @@ def build_gateway(*, notification: Any = None) -> None:
     if not bot_user_id and resolve_bot_token():
         bot_user_id = _resolve_slack_bot_user_id()
 
-    manager = ChannelManager(lane_queue=lane_queue, bot_user_id=bot_user_id)
+    binding_watcher = ConfigWatcher()
+    manager = ChannelManager(
+        lane_queue=lane_queue, bot_user_id=bot_user_id, binding_watcher=binding_watcher
+    )
     poll_interval = settings.gateway_poll_interval_s
 
     # Load config from TOML — root-level SoT (PR-SLACK-TRANSPORT).
@@ -275,7 +277,11 @@ def build_gateway(*, notification: Any = None) -> None:
     try:
         from core.mcp.manager import get_mcp_manager
 
-        mcp = get_mcp_manager(auto_startup=True)
+        if mcp_manager is None:
+            mcp = get_mcp_manager(auto_startup=True)
+        else:
+            mcp = mcp_manager
+            mcp.startup()
         log.info(
             "Gateway MCP: %d/%d servers connected",
             mcp.connected_count,
@@ -310,31 +316,26 @@ def build_gateway(*, notification: Any = None) -> None:
 
     # Hot-reload bindings on config.toml change
     try:
-        from core.orchestration.hot_reload import ConfigWatcher
 
-        def _reload_bindings(path: Any, mtime: float) -> None:
-            try:
-                reload_config, reload_sources = _load_gateway_config()
-                manager.load_bindings_from_config(reload_config)
-                log.info(
-                    "Gateway bindings reloaded (trigger=%s, sources=%s)",
-                    path,
-                    ", ".join(reload_sources) or "none",
-                )
-            except Exception as reload_exc:
-                log.warning("Gateway binding reload failed: %s", reload_exc)
+        def _reload_bindings(path: Path, mtime: float) -> None:
+            reload_config, reload_sources = _load_gateway_config(strict=True)
+            # This is a complete disk snapshot, so removed rules revoke bindings.
+            reload_config.setdefault("gateway", {}).setdefault("bindings", {"rules": []})
+            manager.load_bindings_from_config(reload_config)
+            log.info(
+                "Gateway bindings reloaded (trigger=%s, sources=%s)",
+                path,
+                ", ".join(reload_sources) or "none",
+            )
 
-        from core.paths import GLOBAL_CONFIG_TOML as _GLOBAL_TOML
+        from core.config.toml_edit import resolve_config_toml_path
         from core.paths import PROJECT_CONFIG_TOML as _PROJECT_TOML
 
-        _watcher = ConfigWatcher()
         # Watch BOTH paths even when absent at boot — an overlay created
         # (or removed) later must re-merge without a daemon restart.
-        for _cfg in (_GLOBAL_TOML, _PROJECT_TOML):
-            _watcher.watch(_cfg, _reload_bindings, name=f"gateway-bindings:{_cfg}")
-        _watcher.start()
-        # Attach to manager to prevent GC (daemon thread lifetime)
-        manager._binding_watcher = _watcher  # type: ignore[attr-defined]
+        for _cfg in (resolve_config_toml_path(), _PROJECT_TOML):
+            binding_watcher.watch(_cfg, _reload_bindings, name=f"gateway-bindings:{_cfg}")
+        binding_watcher.start()
     except Exception as exc:
         _plugin_status["gateway_hot_reload"] = "unavailable"
         log.debug("Gateway binding hot-reload not available: %s", exc)
@@ -345,9 +346,9 @@ def build_gateway(*, notification: Any = None) -> None:
     )
 
 
-def build_plugins() -> tuple[Any | None, Any]:
+def build_plugins(*, mcp_manager: MCPServerManager) -> tuple[Any | None, Any]:
     """Build plugin adapters and return the owned notification/calendar pair."""
-    notification = build_notification_adapter()
-    calendar = build_calendar_adapter()
-    build_gateway(notification=notification)
+    notification = build_notification_adapter(mcp_manager=mcp_manager)
+    calendar = build_calendar_adapter(mcp_manager=mcp_manager)
+    build_gateway(notification=notification, mcp_manager=mcp_manager)
     return notification, calendar

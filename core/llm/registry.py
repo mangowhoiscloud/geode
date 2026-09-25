@@ -213,7 +213,7 @@ PROVIDER_VARIANTS: dict[str, ProviderSpec] = {
         credential=CredentialRoute(
             source=SOURCE_PAYG,
             account_provider="anthropic",
-            selector="settings",
+            selector="payg-profile-or-settings",
             auth_type="x-api-key",
             billing_type=AdapterBillingType.API,
             settings_field="anthropic_credential_source",
@@ -233,7 +233,7 @@ PROVIDER_VARIANTS: dict[str, ProviderSpec] = {
         credential=CredentialRoute(
             source=SOURCE_PAYG,
             account_provider="openai",
-            selector="settings",
+            selector="payg-profile-or-settings",
             auth_type="bearer",
             billing_type=AdapterBillingType.API,
             settings_field="openai_credential_source",
@@ -279,7 +279,7 @@ PROVIDER_VARIANTS: dict[str, ProviderSpec] = {
         credential=CredentialRoute(
             source=SOURCE_PAYG,
             account_provider="openrouter",
-            selector="settings",
+            selector="payg-profile-or-settings",
             auth_type="bearer",
             billing_type=AdapterBillingType.CREDITS,
             default=True,
@@ -288,6 +288,7 @@ PROVIDER_VARIANTS: dict[str, ProviderSpec] = {
         transport=TransportSpec(
             id="openrouter-chat-completions",
             api="openai-chat-completions",
+            native_capabilities=frozenset({"text_completion"}),
             default_base_url="https://openrouter.ai/api/v1",
             extra_headers_factory=_openrouter_extra_headers,
         ),
@@ -297,7 +298,7 @@ PROVIDER_VARIANTS: dict[str, ProviderSpec] = {
         credential=CredentialRoute(
             source=SOURCE_PAYG,
             account_provider="glm",
-            selector="settings",
+            selector="payg-profile-or-settings",
             auth_type="bearer",
             billing_type=AdapterBillingType.API,
             default=True,
@@ -318,13 +319,13 @@ PROVIDER_VARIANTS: dict[str, ProviderSpec] = {
             selector="profile-store",
             auth_type="bearer",
             billing_type=AdapterBillingType.SUBSCRIPTION,
-            quota_policy="plan-registry",
+            quota_policy="provider-owned",
         ),
         transport=TransportSpec(
             id="glm-coding-chat-completions",
             api="openai-chat-completions",
             default_base_url="https://api.z.ai/api/coding/paas/v4",
-            native_capabilities=_COMMON_NATIVE,
+            native_capabilities=frozenset({"streaming", "text_completion"}),
         ),
     ),
 }
@@ -345,23 +346,8 @@ def provider_specs_for(provider: str) -> tuple[ProviderSpec, ...]:
     return tuple(spec for spec in PROVIDER_VARIANTS.values() if spec.profile.provider == provider)
 
 
-PROVIDER_EQUIVALENCE: dict[str, list[str]] = {
-    "openai": ["openai-codex", "openai"],
-    "openai-codex": ["openai-codex", "openai"],
-    "glm": ["glm-coding", "glm"],
-    "glm-coding": ["glm-coding", "glm"],
-    "anthropic": ["anthropic"],
-}
-
-
-def equivalent_providers(provider: str) -> list[str]:
-    """Return preferred-first variants that share a model family."""
-    return PROVIDER_EQUIVALENCE.get(provider, [provider])
-
-
 __all__ = [
     "CONCRETE_SOURCES",
-    "PROVIDER_EQUIVALENCE",
     "PROVIDER_VARIANTS",
     "SOURCE_ADAPTER",
     "SOURCE_AUTO",
@@ -372,7 +358,6 @@ __all__ = [
     "ProviderProfile",
     "ProviderSpec",
     "TransportSpec",
-    "equivalent_providers",
     "get_provider_spec",
     "list_provider_ids",
     "provider_specs_for",

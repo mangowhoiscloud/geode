@@ -274,6 +274,9 @@ do {
         let point = targetToScreen(x, y, targetWidth: targetWidth, targetHeight: targetHeight)
         warpCursor(to: point)
     case "scroll":
+        let x = params["x"] as? Int ?? 0
+        let y = params["y"] as? Int ?? 0
+        warpCursor(to: targetToScreen(x, y, targetWidth: targetWidth, targetHeight: targetHeight))
         let amount = params["amount"] as? Int ?? 3
         let direction = (params["direction"] as? String ?? "down").lowercased()
         let dy = direction == "up" ? amount : direction == "down" ? -amount : 0
@@ -289,6 +292,27 @@ do {
             fail("failed to create a scroll event", type: "permission")
         }
         event.post(tap: .cghidEventTap)
+    case "drag":
+        let start = targetToScreen(
+            params["start_x"] as? Int ?? 0, params["start_y"] as? Int ?? 0,
+            targetWidth: targetWidth, targetHeight: targetHeight
+        )
+        let end = targetToScreen(
+            params["end_x"] as? Int ?? 0, params["end_y"] as? Int ?? 0,
+            targetWidth: targetWidth, targetHeight: targetHeight
+        )
+        warpCursor(to: start)
+        postMouse(.leftMouseDown, at: start, button: .left)
+        defer { postMouse(.leftMouseUp, at: end, button: .left) }
+        for step in 1...20 {
+            let fraction = CGFloat(step) / 20
+            let point = CGPoint(
+                x: start.x + (end.x - start.x) * fraction,
+                y: start.y + (end.y - start.y) * fraction
+            )
+            postMouse(.leftMouseDragged, at: point, button: .left)
+            usleep(25_000)
+        }
     case "key", "keypress":
         let keys = (params["keys"] as? String ?? params["key"] as? String ?? "")
         let parts = keys.split(separator: "+").map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }

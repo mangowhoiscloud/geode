@@ -67,13 +67,44 @@ def _stub_plan(monkeypatch: pytest.MonkeyPatch, plan: dict[str, dict[str, str]])
     monkeypatch.setattr(uo, "migration_plan_from_petri_toml", lambda: plan)
 
 
+@pytest.mark.parametrize("apply", [False, True])
+def test_migration_uses_redirected_global_destination(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, apply: bool
+) -> None:
+    import tomllib
+
+    import core.paths
+    import evals.config_cli as cmd_config
+    from core.config import toml_edit
+    from rich.console import Console
+
+    default_global = tmp_path / "default.toml"
+    original = '[llm]\nprimary_model = "keep-default"\n'
+    default_global.write_text(original)
+    redirected = tmp_path / "redirected.toml"
+    monkeypatch.setattr(core.paths, "GLOBAL_CONFIG_TOML", default_global)
+    monkeypatch.setattr(toml_edit, "GLOBAL_CONFIG_TOML", default_global)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(redirected))
+    monkeypatch.setattr(cmd_config, "_console", Console(width=500))
+    _stub_plan(monkeypatch, {"auditor": {"model": "claude-opus-4-7", "source": "claude-cli"}})
+
+    result = runner.invoke(app, ["migrate-petri-toml", *(["--yes"] if apply else [])])
+
+    assert result.exit_code == 0, result.output
+    assert str(redirected) in " ".join(result.output.split())
+    assert default_global.read_text() == original
+    if apply:
+        data = tomllib.loads(redirected.read_text())
+        assert data["self_improving_loop"]["autoresearch"]["auditor"]["model"] == "claude-opus-4-7"
+    else:
+        assert not redirected.exists()
+
+
 def test_migrate_dry_run_prints_preview_and_does_not_write(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import core.paths
-
     target = tmp_path / "config.toml"
-    monkeypatch.setattr(core.paths, "GLOBAL_CONFIG_TOML", target)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(target))
     _stub_plan(
         monkeypatch,
         {"auditor": {"model": "claude-opus-4-7", "source": "claude-cli"}},
@@ -88,10 +119,8 @@ def test_migrate_dry_run_prints_preview_and_does_not_write(
 def test_migrate_yes_appends_to_config_when_destination_absent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import core.paths
-
     target = tmp_path / "config.toml"
-    monkeypatch.setattr(core.paths, "GLOBAL_CONFIG_TOML", target)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(target))
     _stub_plan(
         monkeypatch,
         {
@@ -113,11 +142,9 @@ def test_migrate_yes_appends_to_config_when_destination_absent(
 def test_migrate_yes_preserves_existing_unrelated_sections(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import core.paths
-
     target = tmp_path / "config.toml"
     target.write_text('[mcp.servers.calendar]\ncommand = "npx"\n', encoding="utf-8")
-    monkeypatch.setattr(core.paths, "GLOBAL_CONFIG_TOML", target)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(target))
     _stub_plan(
         monkeypatch,
         {"target": {"model": "geode/gpt-5.5", "source": "openai-codex"}},
@@ -133,14 +160,12 @@ def test_migrate_yes_preserves_existing_unrelated_sections(
 def test_migrate_yes_refuses_when_destination_already_has_overlapping_section(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import core.paths
-
     target = tmp_path / "config.toml"
     target.write_text(
         '[self_improving_loop.autoresearch.auditor]\nmodel = "old-model"\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr(core.paths, "GLOBAL_CONFIG_TOML", target)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(target))
     _stub_plan(
         monkeypatch,
         {"auditor": {"model": "claude-opus-4-7"}},
@@ -161,11 +186,9 @@ def test_migrate_yes_refuses_when_destination_already_has_overlapping_section(
 def test_migrate_yes_refuses_when_destination_has_broken_toml(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import core.paths
-
     target = tmp_path / "config.toml"
     target.write_text("[broken_toml = unclosed", encoding="utf-8")
-    monkeypatch.setattr(core.paths, "GLOBAL_CONFIG_TOML", target)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(target))
     _stub_plan(monkeypatch, {"auditor": {"model": "x"}})
     result = runner.invoke(app, ["migrate-petri-toml", "--yes"])
     assert result.exit_code == 2, result.output
@@ -173,10 +196,8 @@ def test_migrate_yes_refuses_when_destination_has_broken_toml(
 
 
 def test_migrate_empty_plan_exits_silently(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import core.paths
-
     target = tmp_path / "config.toml"
-    monkeypatch.setattr(core.paths, "GLOBAL_CONFIG_TOML", target)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(target))
     _stub_plan(monkeypatch, {})
     result = runner.invoke(app, ["migrate-petri-toml"])
     assert result.exit_code == 0, result.output
@@ -225,10 +246,8 @@ def test_yes_migration_with_embedded_quotes_writes_valid_toml(
     through ``--yes`` and the destination is valid TOML."""
     import tomllib
 
-    import core.paths
-
     target = tmp_path / "config.toml"
-    monkeypatch.setattr(core.paths, "GLOBAL_CONFIG_TOML", target)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(target))
     _stub_plan(
         monkeypatch,
         {"target": {"model": 'gpt-5.5 "tactical"', "source": "openai-codex"}},
@@ -248,13 +267,12 @@ def test_yes_atomic_write_rollback_preserves_existing_config_on_failure(
     """If ``atomic_write_text`` raises mid-flight, the destination must
     keep its original contents — atomic_io's tmp+rename pattern means we
     never see a partial file even on simulated disk-full."""
-    import core.paths
     import evals.config_cli as cmd_config
 
     target = tmp_path / "config.toml"
     original = '[mcp.servers.calendar]\ncommand = "npx"\n'
     target.write_text(original, encoding="utf-8")
-    monkeypatch.setattr(core.paths, "GLOBAL_CONFIG_TOML", target)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(target))
     _stub_plan(monkeypatch, {"target": {"model": "geode/gpt-5.5"}})
 
     def _raise(*_args: object, **_kwargs: object) -> None:
@@ -274,10 +292,8 @@ def test_yes_accepts_source_only_legacy_entry(
     is optional so partial overrides parity-match the legacy semantics."""
     import tomllib
 
-    import core.paths
-
     target = tmp_path / "config.toml"
-    monkeypatch.setattr(core.paths, "GLOBAL_CONFIG_TOML", target)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(target))
     _stub_plan(monkeypatch, {"judge": {"source": "claude-cli"}})
     result = runner.invoke(app, ["migrate-petri-toml", "--yes"])
     assert result.exit_code == 0, result.output
@@ -294,12 +310,10 @@ def test_yes_schema_validation_blocks_invalid_source(
     ~/.geode/config.toml. The post-render pydantic validation refuses
     the write and the destination stays at its prior content
     (Codex HIGH — schema check, not just TOML syntax)."""
-    import core.paths
-
     target = tmp_path / "config.toml"
     original = '[mcp.servers.calendar]\ncommand = "npx"\n'
     target.write_text(original, encoding="utf-8")
-    monkeypatch.setattr(core.paths, "GLOBAL_CONFIG_TOML", target)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(target))
     # `source = "bogus"` is not in the Literal["claude-cli", "openai-codex",
     # "api_key", "auto"] union → pydantic rejects.
     _stub_plan(
@@ -319,13 +333,12 @@ def test_yes_post_render_validation_blocks_corrupt_combined_toml(
     """If the rendered plan would produce invalid combined TOML, the
     destination must NOT be written. Force the case by stubbing the
     renderer to return a known-bad snippet."""
-    import core.paths
     import evals.config_cli as cmd_config
 
     target = tmp_path / "config.toml"
     original = '[mcp.servers.calendar]\ncommand = "npx"\n'
     target.write_text(original, encoding="utf-8")
-    monkeypatch.setattr(core.paths, "GLOBAL_CONFIG_TOML", target)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(target))
     _stub_plan(monkeypatch, {"target": {"model": "x"}})
     monkeypatch.setattr(
         cmd_config,

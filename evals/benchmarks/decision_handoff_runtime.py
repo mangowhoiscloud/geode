@@ -1313,7 +1313,6 @@ async def run_arm(
                 effort="xhigh",
                 max_rounds=6,
                 time_budget_s=180,
-                disable_settings_drift=True,
                 allowed_tool_names=set(names),
                 force_include_allowed_tools=True,
                 system_prompt_override=system,
@@ -1548,6 +1547,7 @@ async def run_arm(
         "runtime_scope": "isolated-AgenticLoop-not-default-GeodeRuntime-services",
         "handoff_call_coverage_complete": call_coverage_complete,
         "workload_profile": "inbox" if inbox else "single-request",
+        "effective_verify_mode": loop._session_metrics.last_verify_effective_mode or None,
     }
     if verification_engine is not None:
         metadata["verification_engine"] = verification_engine

@@ -535,20 +535,22 @@ GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), OpenRouter, GLM 
 
 | 프로바이더 | 기본 모델 | 라우팅 규칙 | 인증 레인 |
 | --- | --- | --- | --- |
-| Anthropic | `claude-opus-4-8` (보조 `claude-sonnet-4-6`, 저비용 `claude-haiku-4-5-20251001`) | `claude-` 접두사 | `ANTHROPIC_API_KEY` |
-| OpenAI / Codex | `gpt-5.5` | `gpt-`, `o3-`, `o4-` 접두사. `-codex` 접미사는 Codex OAuth로 라우팅하며, 다른 모델은 선택된 API 키 또는 구독 소스를 따릅니다. 모델별 지원·퇴역은 소스마다 다르고, 카탈로그 등록은 계정 접근 증거가 아닙니다. | ChatGPT 구독 OAuth(`~/.codex/auth.json`) 또는 `OPENAI_API_KEY` |
+| Anthropic | `claude-opus-5-5` (보조 `claude-sonnet-5`, 저비용 `claude-haiku-4-5-20251001`) | `claude-` 접두사 | `ANTHROPIC_API_KEY` |
+| OpenAI / Codex | `gpt-6-sol` | `gpt-`, `o3-`, `o4-` 접두사. `-codex` 접미사는 기존 provider 별칭으로 해석하며, 실제 API 키 또는 구독 경로는 선택한 자격 소스를 따릅니다. 모델별 지원·퇴역은 소스마다 다르고, 카탈로그 등록은 계정 접근 증거가 아닙니다. | ChatGPT 구독 OAuth(`~/.codex/auth.json`) 또는 `OPENAI_API_KEY` |
 | OpenRouter | `openrouter/openrouter/free`, `openrouter/openrouter/auto` 또는 정확한 catalogue id | `openrouter/<publisher>/<model>`. 외부 namespace 하나를 제거해 OpenRouter에 전달 | `OPENROUTER_API_KEY`. 크레딧 기반 PAYG이며 direct provider와 동치 폴백하지 않습니다. |
-| GLM (ZhipuAI) | `glm-5.2` (무료 티어 `glm-4.7-flash`) | `glm-` 접두사 | `ZAI_API_KEY`. Coding Plan과 PAYG 엔드포인트가 분리되어 있습니다. |
+| GLM (ZhipuAI) | `glm-5.3` (무료 티어 `glm-4.7-flash`) | `glm-` 접두사 | `ZAI_API_KEY`. PAYG API 경로입니다. 현재 Coding Plan 정책에서 GEODE 사용 자격은 확인되지 않아 구독 실행을 차단합니다. |
 
 (프로바이더, 자격 소스) 조합마다 어댑터가 하나씩 등록됩니다 (`core/llm/adapters/`). `geode adapters list`로 현재 등록 상태, API transport, billing, 자격 환경을 확인할 수 있습니다.
 
 OpenRouter는 OpenAI의 별칭이 아니라 별도 inference router입니다. `/login add`로 키를 등록하고 `/model openrouter/anthropic/claude-sonnet-4`처럼 정확한 참조를 선택합니다. 응답의 `usage.cost`가 예산·사용량 기록의 권위이고, 반환 모델·선택 provider·routing attempt는 bounded LLM-call event에 남습니다. `free`/`auto`는 동적 경로이므로 고정 모델 공식 평가에 사용하지 않습니다.
 
+활성 모델과 별칭, 문맥·출력 한도, API 요율은 [2026-09-24 공급자 조사](https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20260924.md)에서 원문 출처와 함께 확인할 수 있습니다. API 달러 요율과 Codex·Coding Plan의 크레딧은 별개이며, 카탈로그 갱신이 실제 계정 수락이나 청구 검증을 뜻하지 않습니다.
+
 ## 소스별 모델 지원 종료
 
-Unreleased, 2026-09-20 기준: Codex의 ChatGPT 로그인 경로에서`gpt-5.2`·`gpt-5.3-codex`는 폐기되었고,`gpt-5.4`·`gpt-5.4-mini`는 8월 31일 지원이 끝났습니다. 이 경로의 선택·요청은 차단하지만 유효한 API 사용과 과거 요금·평가 기록은 보존합니다. `gpt-5.5`의 구독 퇴역 예정일은 10월 14일이므로 아직 퇴역 처리하지 않습니다. 근거는 [공식 Codex 모델 안내](https://learn.chatgpt.com/docs/models#deprecated-codex-models)입니다.
+2026-09-24 확인: Codex의 ChatGPT 로그인 경로에서`gpt-5.2`·`gpt-5.3-codex`는 폐기되었고,`gpt-5.4`·`gpt-5.4-mini`는 8월 31일 지원이 끝났습니다. 이 경로의 선택·요청은 차단하지만 유효한 API 사용과 과거 요금·평가 기록은 보존합니다. `gpt-5.5`의 구독 퇴역 예정일은 10월 14일입니다. 신규 구독 선택지에서는 빼되 기존 명시적 설정을 이미 퇴역한 것으로 처리하지 않습니다. 근거는 [공식 Codex 모델 안내](https://learn.chatgpt.com/docs/models#deprecated-codex-models)입니다.
 
-Anthropic 공식 API에서도 지원이 끝난 Opus 4.1·Opus 4·Sonnet 4와 이전 세대를 네트워크 요청 전에 거절합니다. 현재 지원되는 4.5 이상 모델은 유지하며, 이 퇴역 일정을 OpenRouter 등 다른 운영사의 경로에 일괄 적용하지 않으며 실제 클라이언트의 endpoint를 확인합니다. [공식 모델 수명주기](https://platform.claude.com/docs/en/about-claude/model-deprecations)를 2026-09-21에 확인했으며, 계정별 실제 접근 권한은 별도 검증 대상입니다.
+Anthropic 공식 API에서도 지원이 끝난 Opus 4.1·Opus 4·Sonnet 4와 이전 세대를 네트워크 요청 전에 거절합니다. 현재 지원되는 4.5 이상 모델은 유지하며, 이 퇴역 일정을 OpenRouter 등 다른 운영사의 경로에 일괄 적용하지 않으며 실제 클라이언트의 endpoint를 확인합니다. [공식 모델 수명주기](https://platform.claude.com/docs/en/about-claude/model-deprecations)를 2026-09-24에 확인했으며, 계정별 실제 접근 권한은 별도 검증 대상입니다.
 
 ## 키와 설정이 사는 곳
 
@@ -566,6 +568,12 @@ Anthropic 공식 API에서도 지원이 끝난 Opus 4.1·Opus 4·Sonnet 4와 이
 
 모델, effort, 로그인 소스를 .env에 적는 방식은 폐기되었습니다. 예전 버전이 남긴 .env의 모델 줄은 `/model`이 toml에 쓰면서 자동으로 지우고 "removed stale ... from .env" 안내를 출력합니다.
 
+## 실행 중 세션과 새 세션의 기본값
+
+저장한 모델·effort·인증 설정은 새 세션의 기본값입니다. 실행 중인 세션은 승인된 모델·effort·API/구독 소스를 보존합니다. 연결된 CLI의 `/login source`는 해당 세션의 적용 응답을 받은 뒤 기본값을 저장하며, 연결되지 않은 명령은 새 세션의 기본값만 바꿉니다.
+
+런타임 `manage_login source` 도구는 같은 검증을 거쳐 전체 도구 묶음 이후 해당 세션의 주·보조 모델 소스만 바꾸며 effort와 저장된 기본값을 보존합니다. 명시적 로그인 소스와 `forced_login_method`가 충돌하면 거절합니다. 모델별 plan 순서와 계정 선택은 SDK 요청에도 적용됩니다. 선택한 소스의 계정을 사용할 수 없어도 다른 과금 소스로 자동 전환하지 않습니다.`/login use`와 `/login route`는 같은 소스 안에서 다음 요청의 계정을 바꿀 수 있으며, 실행 중 세션의 소스를 바꾸지는 않습니다.
+
 ## 모델 결정 순서
 
 위가 아래를 가립니다. 첫 번째로 값이 설정된 레이어가 이깁니다.
@@ -582,7 +590,7 @@ Anthropic 공식 API에서도 지원이 끝난 Opus 4.1·Opus 4·Sonnet 4와 이
 
 값이 설정된 첫 레이어가 이깁니다. 어느 레이어가 이겼는지는 geode config explain model이 보여줍니다.
 
-데몬은 시작할 때 모델 계열 env 키를 의도적으로 버리므로 (`BEHAVIOR_ENV_KEYS`, `core/config/env_io.py`), 세션마다 toml의 선택이 항상 이깁니다. 셸에서 직접 export한`GEODE_MODEL`은 그 세션 한정의 파워유저 오버라이드입니다.
+데몬은 시작할 때 모델 계열 env 키를 의도적으로 버리므로 (`BEHAVIOR_ENV_KEYS`, `core/config/env_io.py`), 새 세션은 유효한 설정에서 시작합니다. 기존 세션은 승인된 선택을 유지합니다. 셸에서 직접 export한`GEODE_MODEL`은 그 세션 한정의 파워유저 오버라이드입니다.
 
 ## 디버깅 플로우: geode config explain
 
@@ -612,8 +620,8 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
 | 모델을 바꿨는데 그대로 | 상위 레이어(보통 옛 .env 줄 또는 셸 export)가 가림 | `geode config explain model`로 WINNER 레이어를 찾아 그 줄을 고치거나 지웁니다. |
-| 데몬만 옛 모델로 응답 | 데몬 환경에 모델 env가 박제됨 | 데몬은 시작 시 모델 계열 env 키를 버리는 것이 기본입니다. `pkill -f "geode serve"` 후 재시작합니다. 데몬 모델을 env로 일부러 고정하려면 `GEODE_SERVE_KEEP_MODEL_ENV=1`이 탈출구입니다. |
-| GLM 구독인데 미터링 과금 | Coding Plan 키가 PAYG 엔드포인트로 나감 | Coding Plan 엔드포인트(`api.z.ai/api/coding/paas/v4`)와 PAYG(`api.z.ai/api/paas/v4`)는 다릅니다. 어느 쪽으로 나가는지 확인합니다. |
+| 데몬만 옛 모델로 응답 | 데몬 환경에 모델 env가 박제됨 | 데몬은 시작 시 모델 계열 env 키를 버리는 것이 기본입니다. `geode stop`으로 해당 데몬을 종료한 뒤 `geode serve`로 시작합니다. 데몬 모델을 env로 일부러 고정하려면 `GEODE_SERVE_KEEP_MODEL_ENV=1`을 설정합니다. |
+| GLM Coding Plan 실행 차단 | 공식 지원 도구로 사용 범위 제한 | 기존 구독 프로필은 보존합니다. API를 쓰려면 PAYG 소스를 명시적으로 선택합니다. GEODE는 과금 소스를 자동 전환하지 않습니다. |
 | 저장된 구독 모델을 선택할 수 없음 | 해당 소스에서 지원이 종료되었거나 폐기됨 | 현재 지원되는 모델을 명시적으로 다시 선택합니다. GEODE는 다른 모델이나 PAYG로 자동 전환하지 않습니다. API 지원과 구독 지원은 별개입니다. |
 
 ## 설정 레퍼런스
@@ -987,9 +995,9 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/context.md
 
 `core/agent/system_prompt.py`의 `build_system_prompt(model)`이 캐시 가능한 정적 prefix와 턴마다 바뀌는 동적 섹션(`<dynamic_context>`)을 경계 마커로 나눠 조립합니다. 레이어 구성과 모드는 [프롬프트 조립](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-system.md), 캐시 동작은 [프롬프트 캐싱](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-caching.md)을 참고합니다.
 
-## 오버플로 처리: 누가 양보하는가
+## 오버플로 처리: 요청 경로와 복구
 
-루프는 매 라운드 진입 시 `core/agent/context_manager.py`의 `ContextWindowManager`에 오버플로 점검을 위임합니다. 임계값은 `core/orchestration/context_budget.py`의 `resolve_context_budget_policy`가 모델의 컨텍스트 윈도에 맞춰 계산합니다. 반환된 `ContextBudgetPolicy`가 세 티어 중 하나를 고릅니다.
+공통 요청 경로는 미들웨어와 도구 허용 목록 적용 뒤의 모델·공급자· source·출력 예비분으로 예산을 정합니다. 요청이 원래 대화를 유지하면 `ContextWindowManager`가 한 번만 유지보수를 수행합니다. 미들웨어가 대화를 교체했다면 원래 세션을 대신 요약하지 않습니다. 최종 적합성 검사는 읽기 전용이며, 훅이나 요약을 다시 실행하지 않습니다. 이 준비 경계는 루트와 보조 모델 호출이 공유합니다.
 
 | 티어 | 윈도 범위 | 경고 임계 | 임계 |
 | --- | --- | --- | --- |
@@ -997,23 +1005,21 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/context.md
 | standard | ≤ 512K | 70% | 90% |
 | large | \> 512K | 80% | 90% |
 
-퍼센트는 _유효 프롬프트 예산_(`effective_prompt_budget_tokens` = 윈도에서 출력 예비분 약 20K를 뺀 값) 기준입니다. 실제 대응은 프로바이더에 따라 갈립니다.
+퍼센트의 기준은 윈도에서 요청의 출력 예비분을 빼고, 알려진 입력 상한도 적용한 _유효 프롬프트 예산_입니다. Codex 구독 경로는 Platform 출력 매개변수를 보내지 않으므로 로컬 계획용 예비분을 씁니다. 카탈로그 값·클라이언트 기본값·미상 경로 폴백은 실제 계정의 서버 허용량과 구분합니다. API의 한도를 구독 경로에 그대로 적용하거나 OpenRouter를 동명의 직접 공급자 모델로 간주하지 않습니다.
 
-압력 추정에는 재전송할 native reasoning/output도 포함합니다. 일반 메시지와 중복 metadata를 두 번 더하지 않고, 가능한 제공자별 표현 중 가장 큰 값을 사용합니다. 암호화된 payload의 문자 수는 보수적인 크기 추정치이며 실제 보고 토큰이나 달러 청구액이 아닙니다.
+추정에는 시스템 지침, 실제 도구 스키마, 재전송할 native 내용이 포함됩니다. 암호화된 내용과 이미지의 크기는 추정치이며 청구 토큰이 아닙니다. 지원되는 Anthropic PAYG 경로에서는 마지막 성공한 native compaction 블록부터 활성 문맥을 추정하되 저장된 재전송 바이트는 보존합니다. 비어 있거나 실패한 블록은 성공한 압축으로 보지 않습니다.
 
--   **Anthropic**. 경고 수준 압력은 서버 측 context management가 처리하므로 클라이언트는 개입하지 않습니다. 임계 수준에서만 클라이언트가 비상 정리(prune)를 수행합니다. Tool-result clearing과 서버 압축의 지원 목록은 별개입니다. Opus 4.5·Sonnet 4.5에는 clearing만 보내며, 지원되지 않는 compaction beta header/edit는 보내지 않습니다.
--   **OpenAI / GLM**. GEODE의 현재 연결은 텍스트 요약 경로를 사용합니다. (1) 값싼 도구 압축 — 오래된 관측 마스킹(`mask_stale_observations`)과 큰 도구 결과 요약(`summarize_tool_results`, LLM 호출 없음), (2) 구조화 LLM 압축(`compact_conversation`), (3) 명시적인 hard 경계에서 압축으로 부족하거나 실패하면 적응형 정리(`adaptive_prune`). 경고 수준의 요약·저장 실패는 메시지 삭제로 전환하지 않습니다.
+-   **Anthropic**. 지원 모델의 자동 threshold compaction은 유지합니다. Tool-result clearing은 별도 지원 목록을 따릅니다. 알려진 Haiku 4.5·Sonnet 4.5·Opus 4.5처럼 threshold compaction이 없는 모델은 클라이언트 요약을 사용할 수 있습니다. 수동 압축과 실제 오버플로 복구도 알려진 모델의 호환 이력에서 가능하지만, native compaction 블록이 있거나 모델 계약이 미상이면 텍스트 교체와 강제 정리를 막습니다. Signed thinking과 도구 호출·결과 쌍을 임의로 삭제하지 않습니다.
+-   **OpenAI / Codex / GLM / OpenRouter**. 현재는 GEODE의 클라이언트 텍스트 요약 경로입니다. 값싼 관측 마스킹과 도구 결과 축소, 구조화 요약, 명시적인 hard 경계의 보호된 정리 순으로 처리합니다. 공개 native API가 있다는 사실만으로 GEODE 연결이나 구독 사용 권한이 입증되지는 않습니다.
+-   **200K**는 로컬의 soft 유지보수 선호입니다. 모든 공급자의 입력 상한이나 rate-limit 풀 경계가 아니며, 이를 넘었다는 이유만으로 이력을 강제 삭제하지 않습니다.
 
--   컨텍스트 윈도가 200K를 넘는 모델에는 별도로 절대 200K 토큰 천장(`absolute_ceiling_tokens`)이 걸립니다. 퍼센트 임계와 무관하게 rate-limit 풀 분리를 피하려는 조치로, 도구 결과 요약 후 필요하면 압축을 강제합니다.
--   전략 선택은 `ContextWindowManager`의 domain policy가 소유합니다. `PreCompact`는 soft 압축을 유예할 수 있고, `PostCompact`는 성공한 교체 뒤에 실행됩니다. `CONTEXT_CRITICAL`은 관측 이벤트이며, 과거 `CONTEXT_OVERFLOW_ACTION`은 제어에 쓰지 않습니다.
--   정리 후에도 임계 상태면 루프는 `context_exhausted`로 종료하고, 사용자 언어에 맞춘 안내문을 생성해 돌려줍니다 (`core/agent/loop/models.py`).
--   API가 400으로 컨텍스트 오버플로를 알리면 공격적 복구를 시도한 뒤 재시도하고, 실패하면 역시 `context_exhausted`입니다.
+전략은 컨텍스트 소유자가 결정합니다. `PreCompact`는 `keep_recent`만 바꾸거나 soft 요약을 유예할 수 있고, 모델·공급자·trigger·hard는 바꿀 수 없습니다. `PostCompact`는 이력 교체와 호출자가 제공한 체크포인트 콜백 뒤에 실행됩니다. `persisted`는 요약 아티팩트의 저장 여부이며, 세션 전체가 원자적으로 저장됐다는 뜻은 아닙니다. 관측 훅은 공급자 허용량이나 복구 전략을 결정하지 않습니다.
 
-압축 장비는 `core/orchestration/compaction.py`와 `core/orchestration/context_monitor.py`에 있고, 티어 경계와 임계 상수는 `core/orchestration/context_budget.py`가 SoT입니다. 모델별 컨텍스트 윈도 값은 `core/llm/token_tracker.py`의 `MODEL_CONTEXT_WINDOW`가 SoT입니다 (`core/llm/model_pricing.toml`이 뒷받침).
+공급자가 입력 초과를 확인하면 로컬 추정이 낮아도 제한된 복구를 시도합니다. 메시지 개수가 같아도 내용은 줄어들 수 있으므로 작업 결과로 진행 여부를 판단하고, 다음 실제 요청의 수락 여부는 별도로 확인합니다. 복구가 불가능하거나 한도를 소진하면 `context_exhausted`로 끝납니다. 안내문은 추가 모델 호출 없이 반환하며, 모든 진입점에서 세션이 자동 초기화된다고 주장하지 않습니다.
 
-메시지가 30개를 넘었다는 이유만으로 이력을 버리지 않습니다. 토큰 압력 검사는 모델 요청 전에 수행하며, 별도의 `ConversationContext.max_turns` 보존 한도는 유지합니다. 압축 경계에 걸친 병렬 도구 결과는 대응하는 앞선 호출과 함께 보존합니다. 요약이나 저장이 실패한 soft 압축은 입력 이력을 유지하지만, 앞서 수행한 관측 마스킹까지 되돌리지는 않습니다.
+메시지가 30개를 넘었다는 이유만으로 이력을 버리지 않습니다. 별도의 `ConversationContext.max_turns` 한도는 유지합니다. 가장 최근의 명시적 원본 사용자 입력, 인과 관계가 있는 도구 쌍, 마지막 도구 묶음의 `use_skill` 결과를 보호합니다. soft 요약·저장이 실패하면 입력을 유지하되 앞선 관측 마스킹까지 되돌리지는 않습니다. 보호된 tail이 여전히 한도를 넘으면 종료할 수 있으며, 보호가 모델 용량을 늘리지는 않습니다.
 
-Unreleased: 마지막 assistant 도구 호출 묶음의 `use_skill`결과는 다음 모델 요청 전에 요약하지 않습니다. hard 정리도 그 묶음의 호출·결과를 함께 남깁니다. 이전 스킬 결과를 생략할 때는 `use_skill` 재호출 안내를 남기며, 보존된 입력이 여전히 한도를 넘으면 기존 `context_exhausted` 경계를 따릅니다. 이 보호는 컨텍스트 예산을 늘리지 않습니다.
+예산은 `core/orchestration/context_budget.py`, 경로별 모델 정보는 `core/llm/model_catalog.py`, 변환은 `core/orchestration/compaction.py`가 소유합니다. 이 설명의 9월 25일 변경은 Unreleased입니다. 실제 공급자의 요청 수락과 사용량은 로컬 회귀 검사와 별도로 검증해야 합니다.
 
 ## 대형 도구 결과: 오프로드
 
@@ -1412,6 +1418,16 @@ GEODE는 Anthropic, OpenAI(+ChatGPT 구독), OpenRouter, GLM 네 프로바이더
 ## OpenRouter 경계
 
 OpenRouter는 `openrouter` provider identity와 Chat Completions transport를 조합합니다. GEODE model id는 `openrouter/<publisher>/<model>`이며 어댑터가 외부 namespace 하나만 제거합니다. direct Anthropic/OpenAI와 equivalence group을 만들지 않으므로 자격이나 비용 경계가 조용히 바뀌지 않습니다. 응답이 제공한 실제 charge와 최종 serving route는 공통 usage/event 경로로 들어가고, 없을 때만 기존 정적 가격 추정을 사용합니다.
+
+컴팩션 등 텍스트 요약도 같은 OpenRouter 어댑터를 사용해 캐시 마커, 세션 식별과 사용량을 보존합니다. 알려진 OpenAI reasoning 모델은 선택한 effort를 relay 요청에 전달하며, 다른 모델의 effort 지원을 추정하지 않습니다. 응답 스키마를 요청하면 JSON Schema 형식과 `require_parameters: true`를 함께 전달합니다. 명시적으로 이 옵션을 false로 지정한 호출은 거절합니다. 실제 스키마 지원과 강제 수준은 상위 endpoint에 달려 있고, 로컬 응답 검증도 유지됩니다.
+
+알려진 OpenAI reasoning 경로는 기본 temperature를 전송하지 않고, 지원하지 않는 사용자 지정 값을 호출 전에 거절합니다. 이 relay에서는`effort=none`도 sampling 지원을 의미하지 않습니다. 선택한 effort와 공급자 제한은 그대로 유지합니다.
+
+## 선택한 effort 보존
+
+모델 선택 화면에서 확인한 effort는 요청의 값과 같아야 합니다. 프로바이더별 필드명은 달라도 값을 임의로 낮추거나 높이지 않습니다. 선택한 모델이 저장된 값을 지원하지 않으면 설정 변경이나 호출 전에 거절하므로, `/model`에서 지원하는 값을 직접 선택해야 합니다. 역할 탭을 이동하거나 Space로 선택을 추가한 뒤 Enter로 확정해도 primary effort를 보존합니다. 선택 화면에는 지원되는 값만 표시하며, 저장된 값이 맞지 않으면 방향키로 유효한 값을 고르기 전까지 Enter·Space 확정을 막습니다. 취소하면 기존 설정은 유지됩니다. Reflection 모델은 primary effort를 상속하므로, 함께 고른 모델과 effort의 호환성도 저장 전에 검사합니다.
+
+지원되는 OpenAI·Claude·GLM 텍스트 보조 요청에도 명시한 effort를 전달합니다. OpenRouter의 알려진 OpenAI 경로도 같은 값을 전달합니다. effort 제어가 없는 모델은 선택 화면에 조절 기능을 표시하지 않으며, 서로 다른 모델의 같은 effort가 같은 계산량을 뜻하지는 않습니다.
 
 ## 모델 해석 우선순위
 
@@ -2227,6 +2243,8 @@ Reflection은 도구 결과를 반영한 매 라운드와 최종 응답 전에 �
 완료된 인지 reflection의 토큰·캐시·비용은 기존 tracker와 비용 가드에 한 번 반영합니다. 모델이 도구 호출을 거절하거나 잘못된 응답을 반환해도 관측된 사용량은 남습니다. 실제 공급자를 호출하지 않은 middleware 응답이나 사용량을 받기 전에 중단된 호출을 유료 호출로 만들지는 않습니다. 공급자 보고 비용과 가격표 기반 추정은 실제 청구서와 구분해야 합니다.
 
 이미지 근거는 텍스트 tool 기록과 별도로 선택해, 파일 쓰기나 계획 갱신 때문에 밀려나지 않도록 합니다. 이전 시도와 현재 시도의 관측, 전달하지 못한 이미지도 구분합니다. 이전 자료가 여전히 유용할 수는 있지만 수정 후 새로 확인한 증거와 같지는 않습니다.
+
+재개한 요청의 검증에는 보존된 이전 턴의 실제 도구 호출·결과 쌍도 포함합니다. 호출 ID가 모호하거나 짝이 없으면 제외하고, 이전 관측을 새 검증 시도로 표시하지 않습니다. 최근 12개 관측의 입력·결과는 총 16,000자, 필드당 최대 6,000자 안에서 공간을 나누며 절단을 표시합니다. 후보의 주장·압축 요약·내부 추론은 도구 증거로 승격하지 않습니다. Reflection에는 현재 승인된 요청과 세션 최초 요청을 구분해 전달하며, 개인정보와 이미지 제한은 유지합니다.
 
 관측 근거를 먼저, 후보의 주장을 마지막에 제시합니다. 동일한 값을 쓰고 다시 읽은 일관성이나 실패한 위임은 독립 검증이 아닙니다. 근거로 해소되지 않는 모호함은 통과시키지 말고, 구별 가능한 재검사를 요청하도록 judge를 구성합니다. 이 지시만으로 오판이 사라졌다고 주장하지 않습니다.
 
@@ -3248,6 +3266,8 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유
 
 배선 불변식 하나가 이 단계 전체를 지배합니다. 핸들러가 존재한다고 발화하지 않습니다. 훅 핸들러는 bootstrap에 등록되어야 하고, 프로세스 서비스는 그룹형 설정·생성자·`ToolContext`로 명시적으로 주입되어야 합니다. ContextVar는 요청 식별, 진단, 요청 로컬 상태와 캐시에만 사용합니다.
 
+생성 중 실패하면 그 단계까지 만든 자원을 정리하고 원래 오류를 전달합니다. 물리적 turn의 세션 식별과 어댑터 사용량 상태는 최종 관측을 마친 뒤 이전 바인딩으로 복원되며, 실패나 취소에도 같은 정리 경로를 거칩니다.
+
 ## 데몬이 호스팅하는 것
 
 -   CLI IPC 서버 (`core/server/ipc_server/poller.py`). thin CLI의 자유 텍스트와 슬래시 명령 처리.
@@ -3261,12 +3281,16 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유
 
 ```
 1. RuntimeEvent.SHUTDOWN_STARTED 발화
-2. IPC 소켓 닫기 (신규 클라이언트 차단)
+2. IPC 신규 연결 차단 + 게이트웨이 입력 정지
 3. 활성 세션 drain (최대 30초)
-4. 스케줄러 save + stop
-5. MCP 종료
-6. 게이트웨이 정지
+4. CLI poller + webhook 종료
+5. 런타임 소유 작업·watcher·스케줄러·MCP 종료
+6. 훅과 이벤트 저장소 닫기
 ```
+
+스케줄러 저장 실패도 나머지 자원 정리를 막지 않습니다. 런타임은 불완전한 종료를 재시도할 수 있게 유지하고, 데몬은 종료 실패를 표시합니다. 실행 자체가 정상 반환했어도 정리가 끝나지 않으면 종료 코드는 1입니다. 기존 실행 오류나 취소가 있다면 그 원인이 정리 오류로 바뀌지 않습니다.
+
+각 런타임은 별도 MCP manager를 만들고 알림·캘린더·게이트웨이에 같은 인스턴스를 전달합니다. 다른 런타임의 생성 실패나 종료가 이 연결을 닫지 않으며, 런타임 manager는 프로세스 신호 핸들러를 변경하지 않습니다. 종료에 실패한 연결은 재시도를 위해 보존합니다. 연결 생성 중 실패해도 같은 소유자가 정리하며, 자식 프로세스의 종료를 확인한 뒤 파이프와 작업 디렉터리를 해제합니다.
 
 ## 실패 모드
 
@@ -3304,18 +3328,16 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/long-running.md
 
 ## 컨텍스트 오버플로 사다리
 
-오버플로 처리는 `ContextWindowManager`(`core/agent/context_manager.py`)에 위임되고, 프로바이더에 따라 갈립니다.
+공통 요청 경로는 미들웨어 뒤의 모델·공급자·source·출력 예비분으로 예산을 정합니다. 원래 대화에 대한 유지보수는 한 번만 수행하고, 최종 적합성 검사는 읽기 전용입니다. 미들웨어가 대화를 교체하면 원래 세션을 대신 요약하지 않습니다.
 
-```
-Anthropic   80%+  서버 사이드 compaction이 처리
-            95%   클라이언트 emergency prune만 개입
-OpenAI/GLM  80%   클라이언트 LLM 기반 compaction
-            95%   emergency prune
-공통        200K  초과 윈도 모델에도 200K 절대 상한
-                  (rate-limit pool 분리) → 도구 결과 요약 + compact
-```
+-   경고: 윈도 티어에 따라 유효 입력 예산의 50%·70%·80%.
+-   임계: 유효 입력 예산의 90%.
+-   200K: soft 로컬 유지보수 선호이며, 모든 경로의 서버 상한이 아닙니다.
+-   실제 입력 거절: 로컬 추정과 별개로 제한된 복구를 시도하고 다음 요청에서 다시 확인합니다.
 
-전략 결정은 `CONTEXT_OVERFLOW_ACTION` 훅 핸들러에 위임되고, 핸들러가 없으면 하드코딩된 폴백을 씁니다. prune 후에도 critical이면 실행은 `context_exhausted`로 끝나며, 사용자 언어에 맞춘 안내문을 남깁니다 (`core/agent/loop/models.py`). API가 400 context-overflow를 돌려준 경우는 `aggressive_context_recovery` 후 재시도하고, 실패하면 같은 이유로 끝납니다.
+지원되는 Anthropic 모델의 자동 threshold compaction은 유지합니다. 지원되지 않는 알려진 모델은 호환 이력에서 클라이언트 요약을 사용할 수 있습니다. native compaction 블록이 있는 이력은 일반 텍스트 교체나 강제 정리로 손상시키지 않습니다. API의 한도를 구독이나 OpenRouter 경로의 허용량으로 가정하지 않습니다.
+
+전략은 `ContextWindowManager`가 소유합니다. `PreCompact`는 보존 개수와 soft 유예만 결정하고, `CONTEXT_CRITICAL`은 관측 이벤트입니다. `CONTEXT_OVERFLOW_ACTION`은 전략을 선택하지 않습니다. 복구할 수 없으면 `context_exhausted`로 끝내고 추가 모델 호출 없이 안내합니다. 모든 진입점의 세션 자동 초기화를 뜻하지는 않습니다. 이력 보호와 저장 경계는 [컨텍스트 조립](https://mangowhoiscloud.github.io/geode/docs/runtime/context.md)을 참고합니다.
 
 ## 도구 결과 오프로딩
 
@@ -5494,41 +5516,15 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/guides/llm-adapter.md
 
 ## 1\. 어댑터를 작성합니다
 
-어댑터는 `core/llm/adapters/base.py`의 `LLMAdapter` 프로토콜을 만족하면 됩니다. 최소 요건은 네 정체성 속성(`name`, `provider`, `source`, `billing_type`)과 비동기 호출 메서드 `acomplete()`입니다. `source`는 `CONCRETE_SOURCES`(`payg` / `subscription` / `adapter`) 중 하나여야 하고, `"auto"`는 picker 전용 sentinel이라 어댑터에 박을 수 없습니다. 요청·응답 셰이핑은 프로토콜이 정의한 provider-agnostic 타입(`AdapterCallRequest`, `AdapterCallResult`)을 어댑터 내부에서 SDK 페이로드로 번역하는 일입니다. `AnthropicPaygAdapter`(`core/llm/adapters/anthropic_payg.py`)가 PAYG 경로의 참조 구현입니다.
-
-```
-# core/llm/adapters/acme_payg.py
-from dataclasses import dataclass, field
-from typing import Any
-from core.llm.adapters.base import (
-    SOURCE_PAYG, AdapterBillingType,
-    AdapterCallRequest, AdapterCallResult,
-    UsageSummary,
-)
-
-@dataclass
-class AcmePaygAdapter:
-    name: str = "acme-payg"
-    provider: str = "acme"
-    source: str = SOURCE_PAYG
-    billing_type: AdapterBillingType = AdapterBillingType.API
-    _client: Any = field(default=None, init=False, repr=False)
-
-    async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
-        client = self._get_client()
-        raw = await client.create(...)  # translate req -> SDK payload
-        return AdapterCallResult(
-            text=raw.text,
-            usage=UsageSummary(input_tokens=..., output_tokens=...),
-            stop_reason=raw.stop_reason,
-        )
-```
+어댑터는 `core/llm/adapters/base.py`의 `LLMAdapter` 프로토콜을 만족하면 됩니다. 최소 요건은 네 정체성 속성(`name`, `provider`, `source`, `billing_type`)과 비동기 호출 메서드 `acomplete()`입니다. `source`는 `CONCRETE_SOURCES`(`payg` / `subscription` / `adapter`) 중 하나여야 하고, `"auto"`는 picker 전용 sentinel이라 어댑터에 박을 수 없습니다. 요청·응답 셰이핑은 프로토콜이 정의한 provider-agnostic 타입(`AdapterCallRequest`, `AdapterCallResult`)을 어댑터 내부에서 SDK 페이로드로 번역하는 일입니다. PAYG 경로의 실제 구현은 [`AnthropicPaygAdapter`](https://github.com/mangowhoiscloud/geode/blob/main/core/llm/adapters/anthropic_payg.py)를 참고하십시오. 이 구현의 `_clients`, `_get_client()`, `acomplete()`에서 루프별 클라이언트 선택과 요청·응답 변환을 확인할 수 있습니다.
 
 스트리밍과 introspection은 필수가 아닙니다. 지원하는 표면만 `StreamingCapable`, `EnvironmentDiagnosticCapable`, `ModelListingCapable`, `QuotaInspectionCapable`, `CredentialDetectionCapable` 구조를 만족시키면 됩니다. 지원하지 않는 메서드를 빈 값이나 `None` stub으로 만들지 마십시오.
 
 ## 2\. 레지스트리에 등록합니다
 
 어댑터는 `core/llm/adapters/registry.py`가 발행한 불변 generation snapshot으로 조회됩니다. 내장 어댑터는 명시적 factory 목록에서 생성합니다. 외부 패키지는 전역 dict를 직접 수정하지 않고 `geode.llm_adapters` 패키지 진입점에 factory를 선언합니다. 진입점 이름은 factory가 반환한 canonical adapter name과 같아야 합니다. `resolve_for(provider, source)`는 `(provider, source)` 쌍이 정확히 하나의 어댑터에 매칭되도록 강제하므로, 같은 쌍을 둘 등록하면 invariant 위반으로 곧바로 실패합니다.
+
+내장 어댑터의 `LoopAffineClientCache`는 같은 이벤트 루프의 세션들이 SDK 연결을 공유하도록 합니다. 키 교체는 다음 호출의 연결을 바꾸며, 진행 중 요청의 이전 연결은 닫지 않습니다. 현재·이전 연결은 해당 루프가 종료될 때 작업과 스트림 정리가 끝난 뒤 함께 닫힙니다. 개별 런타임 종료는 다른 세션의 연결을 닫지 않습니다. 이전 연결은 루프 수명까지 보관되며 교체 횟수에 대한 별도 상한은 없습니다. 외부에서 루프를 소유한다면 작업 종료 후 루프를 닫기 전에`core.llm.loop_affinity.drain_current_loop_clients()`를 await하십시오. 종료 실패 연결은 같은 루프가 살아 있는 동안 재시도할 수 있도록 보존합니다. 이미 닫힌 루프의 연결을 다른 루프에서 정리하지는 않습니다. 캐시 밖에서 전달한 연결의 정리는 원래 소유자 책임입니다. IPC 작업 스레드의 종료 대기가 만료되면 소유권을 유지하고 재시작을 거부합니다. 최종 정리 오류도 데몬 종료 호출자에게 전달합니다.
 
 ```
 # acme-geode-adapter/pyproject.toml
@@ -5638,7 +5634,7 @@ allowed_tools = ["memory_search", "web_fetch"]
 time_budget_s = 90
 ```
 
-각 규칙은 자체 정책 손잡이를 가집니다. `require_mention`은 GEODE가 멘션됐을 때만 응답하게 하고, `allowed_tools`는 그 채널에서 허용할 도구를 제한하며(빈 리스트는 전체 허용), `time_budget_s`는 메시지당 wall-clock 예산을 지정합니다.`auto_respond=false`는 처리를 계속하고 세션은 저장하되 채널로 최종 텍스트를 보내지 않습니다. 헤드리스 denylist는 바인딩 allowlist보다 항상 우선합니다. 규칙에 없으면 gateway 레벨 기본값으로 떨어집니다. 이 필드들은 `ChannelBinding`(`core/messaging/models.py`)의 dataclass 필드와 일대일로 대응합니다.
+각 규칙은 자체 정책 손잡이를 가집니다. `require_mention`은 GEODE가 멘션됐을 때만 응답하게 하고, `allowed_tools`는 그 채널에서 허용할 도구를 제한하며(빈 리스트는 전체 허용), `time_budget_s`는 메시지당 wall-clock 예산을 지정합니다. 시간 예산은 0 이상의 유한한 수, 횟수 제한은 0 이상의 정수여야 합니다. 숫자 필드에 불리언은 사용할 수 없습니다.`auto_respond=false`는 처리를 계속하고 세션은 저장하되 채널로 최종 텍스트를 보내지 않습니다. 헤드리스 denylist는 바인딩 allowlist보다 항상 우선합니다. 규칙에 없으면 gateway 레벨 기본값으로 떨어집니다. 이 필드들은 `ChannelBinding`(`core/messaging/models.py`)의 dataclass 필드와 일대일로 대응합니다.
 
 ## 2\. 세션 레인으로 라우팅됩니다
 
@@ -5646,7 +5642,7 @@ time_budget_s = 90
 
 ## 3\. 리로드합니다
 
-바인딩은 두 시점에 로드됩니다. serve 부팅 시 한 번 (`core/wiring/adapters.py`에서 `load_bindings_from_config(toml_config)` 호출), 그리고 `config.toml`이 바뀔 때마다입니다. `ConfigWatcher`가 파일 변경을 감지해 `load_bindings_from_config`를 다시 부르므로 serve를 재시작하지 않아도 새 바인딩이 적용됩니다. 리로드 시 기존 바인딩 리스트는 비워지고 config의 규칙으로 다시 채워집니다.
+바인딩은 두 시점에 로드됩니다. serve 부팅 시 한 번 (`core/wiring/adapters.py`에서 `load_bindings_from_config(toml_config)` 호출), 그리고 `config.toml`이 바뀔 때마다입니다. `ConfigWatcher`가 파일 변경을 감지해 `load_bindings_from_config`를 다시 부르므로 serve를 재시작하지 않아도 새 바인딩이 적용됩니다. 파일 삭제나 교체도 감지하며, 전역·프로젝트 설정을 합친 후보를 검증한 뒤 바인딩을 한 번에 교체합니다. 읽기·파싱·검증에 실패하면 기존 바인딩을 유지하고 debounce 이후 재시도합니다. 삭제된 파일의 규칙은 제거되고, 합쳐진 규칙이 빈 배열이면 모든 바인딩을 해제합니다. 함수에 규칙이 없는 설정을 직접 전달하면 기존 바인딩을 유지하고,`rules = []`를 명시하면 해제합니다. 채널 ID가 없는 규칙은 건너뛰지만, 비어 있지 않은 후보의 모든 규칙이 이 사유로 제외되면 실패로 처리합니다. serve 종료 시 감시자도 종료합니다. 실행 중인 콜백 때문에 종료가 지연되면 오류를 보고하고 이전 감시자가 끝날 때까지 중복 시작을 차단합니다. poller 구성과 serve 실행 기본값 변경은 재시작 후 적용됩니다.
 
 ## 확인
 
@@ -5791,7 +5787,7 @@ GEODE 설정의 규칙은 한 줄입니다. 시크릿은 `.env`에, 동작은 `c
 
 모델 해석으로 좁히면 같은 사다리가 이렇게 읽힙니다. CLI 인자 > env 층(os.environ + .env 파일들) > 프로젝트 toml > 전역 toml > routing 기본값. env 층이 toml 전부를 이기므로, 잊힌`.env` 줄 하나가 이후의 모든 toml 편집을 가립니다. 이 구조의 대표 함정입니다.
 
-`GEODE_CONFIG_TOML` env 변수는 전역`config.toml`의 경로를 바꿉니다. C-4부터 메인 설정 로더(`core/config/__init__.py`)와 self-improving 로더(`core/config/self_improving.py`)가 같은 경로를 읽습니다. 프로젝트 toml은 그 위에 그대로 얹힙니다.
+`GEODE_CONFIG_TOML` env 변수는 전역`config.toml`의 경로를 바꿉니다. 메인 설정 로더,`geode config explain`, `/model`의 전역 읽기·저장·확인 화면은 같은 경로 해석 함수를 사용합니다. MCP 서버 로딩, 게이트웨이 읽기·변경 감시, seed 역할·투표자 설정도 이 전역 경로를 따릅니다. 프로젝트 범위로 저장하면 `.geode/config.toml`에 기록되며, 프로젝트 toml은 전역 설정 위에 그대로 얹힙니다.`geode-eval config migrate-petri-toml`의 미리보기와`--yes` 저장도 같은 전역 경로를 사용합니다.
 
 ## geode config explain
 
@@ -5829,7 +5825,7 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE
 | thin CLI는 새 모델, 데몬만 옛 모델 | `GEODE_SERVE_KEEP_MODEL_ENV=1`이 켜져 있거나 C-3 이전 데몬 | 플래그를 끄거나 데몬을 재시작합니다. `pkill -f "geode serve"` 후 재진입. |
 | `~/.geode/routing.toml`을 고쳤는데 반영 안 됨 | 부트 시점 복사본을 든 모듈 경로 | 세션 리로드로 매니페스트 독자는 갱신됩니다. 그래도 남으면 프로세스를 재시작합니다. |
 | 프로젝트 `.env`에 둔 시크릿이 안 먹고 전역 값이 이김 | 전역 `~/.geode/.env`가 같은 키를 가짐. 전역이 권위입니다 (Hermes, 2026-06-15) | 의도된 동작입니다. 시크릿은 전역에 두고, 프로젝트는 전역에 없는 키만 채웁니다. `geode config explain <KEY>`로 WINNER 층을 확인하세요. |
-| `GEODE_CONFIG_TOML`이 일부 로더에만 적용 | C-4 이전에는 self-improving 로더만 인식 | 업그레이드합니다. `geode config explain`이 실제로 읽은 경로를 보고합니다. |
+| 대체 전역 경로에서 `/model` 선택이 남지 않음 | 구 버전 피커가 기본 전역 파일에 기록 | 업그레이드하고 저장 확인 화면의 경로와 `geode config explain`의 전역 경로를 비교합니다. |
 
 ## 다음
 
@@ -5865,7 +5861,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 
 | 필드 | toml 키 | 타입 / 기본값 | 용도 |
 | --- | --- | --- | --- |
-| `agentic_effort` | `agentic.effort` | str = `"high"` | `low`/`medium`/`high`/`max`/`xhigh`. Anthropic `output_config.effort`, OpenAI `reasoning.effort`로 전달됩니다. xhigh는 Opus 4.7 이상과 Fable 5 전용. |
+| `agentic_effort` | `agentic.effort` | str = `"high"` | 허용 값은 선택한 모델의 공통 스펙과 `/model` 선택 화면을 따릅니다. Anthropic `output_config.effort`, OpenAI `reasoning.effort`, GLM `reasoning_effort`에 같은 값을 전달하며, 지원하지 않는 조합은 호출 전에 거절합니다. |
 | `agentic_loop_time_budget` | `agentic.time_budget` | float = 0.0 | 벽시계 초 단위 예산. 0이면 무제한. |
 | `agentic_thinking_budget` | `agentic.thinking_budget` | int = 0 | 레거시 thinking 토큰 예산. 0이면 비활성. |
 
@@ -6089,11 +6085,11 @@ env 사이드 채널이 키 몇 개에 붙어 있습니다.`GEODE_HELD_OUT_BENCH
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/auth
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md
 
-GEODE는 구독 경로와 PAYG API 키를 받습니다. 어느 쪽을 쓸지는 `CredentialSource` 하나로 표현됩니다. OpenAI 구독 프로파일과 플랜은 `~/.geode/auth.toml`에, API 키는`~/.geode/.env`에 저장됩니다.
+GEODE는 구독 경로와 PAYG API 키를 받습니다. 어느 쪽을 쓸지는 `CredentialSource` 하나로 표현됩니다. OpenAI 구독 프로파일과 플랜은 `~/.geode/auth.toml`에, API 키는 `~/.geode/.env`에 저장됩니다.
 
 ## 자격 소스
 
-단일 SoT는 `core/config/credential_source.py`의`CredentialSource` StrEnum입니다.
+단일 SoT는 `core/config/credential_source.py`의 `CredentialSource` StrEnum입니다.
 
 | 값 | 의미 |
 | --- | --- |
@@ -6104,28 +6100,28 @@ GEODE는 구독 경로와 PAYG API 키를 받습니다. 어느 쪽을 쓸지는 
 | `oauth` | OpenAI는 Codex OAuth 별칭, Anthropic은 퇴역 오류 입력. |
 | `none` | 해당 프로바이더 비활성 센티널. |
 
-Anthropic과 OpenRouter의 내장 경로는 `api_key`뿐입니다. 과거`claude-cli`/`oauth` 값은 migration 안내를 위해 읽지만 binary나 네트워크 호출 전에 중단됩니다.
+Anthropic과 OpenRouter의 내장 경로는 `api_key`뿐입니다. 과거 `claude-cli`/`oauth` 값은 migration 안내를 위해 읽지만 binary나 네트워크 호출 전에 중단됩니다.
 
-선택은 `[llm] anthropic_credential_source` /`openai_credential_source`(기본 `auto`)에 저장됩니다. `/login source <provider> <type>`은 toml에만 쓰므로 `.env`를 지워도 선택이 살아남습니다. (provider, source) 쌍마다 구체 어댑터가 하나씩 레지스트리에 등록됩니다(`core/llm/adapters/`의`anthropic_payg`, `openai_payg`,`codex_oauth`,`openrouter_payg`,`glm_coding_plan`, `glm_payg`).
+선택은 `[llm] anthropic_credential_source` / `openai_credential_source`(기본 `auto`)에 저장됩니다. `/login source <provider> <type>`은 toml에만 쓰므로 `.env`를 지워도 선택이 살아남습니다. (provider, source) 쌍마다 구체 어댑터가 하나씩 레지스트리에 등록됩니다(`core/llm/adapters/`의 `anthropic_payg`, `openai_payg`, `codex_oauth`, `openrouter_payg`, `glm_coding_plan`, `glm_payg`).
 
 ## /login 대시보드
 
-세션 안의 `/login`은 플랜과 자격을 한 화면에서 관리합니다(`core/cli/commands/login.py`). thin CLI에서 로컬로 실행되고, 끝나면 데몬에 인증 상태 리로드를 알립니다.
+세션 안의 `/login`은 플랜과 자격을 한 화면에서 관리합니다(`core/cli/commands/login.py`). 키 입력과 브라우저 로그인(`add`, `set-key`, `openai`, `anthropic`, `google`)과 `source`는 thin CLI에서 실행합니다. 키는 저장한 뒤 데몬에 리로드를 알립니다. 조회와 plan·프로파일 변경은 실행 중인 상태를 가진 데몬이 처리합니다. 저장하지 못한 변경은 성공으로 표시하지 않습니다.
 
 | 서브커맨드 | 동작 |
 | --- | --- |
 | `/login openai` | ChatGPT 구독 OAuth 로그인. device-code 플로우는 `core/auth/oauth_login.py`이고, 결과는 `auth.toml`에 OAUTH\_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다. |
 | `/login anthropic` | `ANTHROPIC_API_KEY`를 등록하고 `api_key` 경로를 선택합니다. |
 | `/login google` | Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts용 Google Workspace OAuth. 사용자가 만든 Desktop 앱 클라이언트를 가져오며 LLM 프로바이더 자격과 분리됩니다. |
-| `/login add` | 자격 추가. 키 모양(`sk-ant-`, `sk-proj-`, `sk-or-v1-`, GLM {id}.{secret})으로 프로바이더를 추정합니다. |
+| `/login add` | 자격 추가. 메뉴에서 플랜 종류(ChatGPT 구독 또는 PAYG API 키)를 고르고, PAYG는 프로바이더(Anthropic, OpenAI, OpenRouter, GLM)를 고른 뒤 키를 입력합니다. |
 | `/login use` / `remove` | 프로파일 선택과 제거. |
 | `/login route` | 프로바이더와 플랜 라우팅 확인. |
-| `/login quota` | 구독 쿼터 상태. |
+| `/login quota` | 플랜에 선언된 호출 한도. GEODE는 사용량을 세지 않으므로 현재 사용량은 프로바이더 계정에서 확인합니다. |
 | `/login source <provider> <type>` | 자격 소스 영속화. config.toml `[llm]`에 기록. |
 
 ## Google Workspace
 
-uv나 GitHub에서 설치한 사용자도 중앙 GEODE OAuth 앱 없이 자신의 Google Cloud Desktop 클라이언트로 연결할 수 있습니다. 권장 진입점은`/login google`입니다. 첫 연결에서는 client JSON 경로와 필요한 서비스 번들을 명시적으로 고릅니다. 자동화하려면 다음처럼 한 줄로 지정할 수 있습니다. Google Cloud 콘솔부터 시작하는 절차는 [Google Workspace 연결 가이드](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace.md)에 있습니다.
+uv나 GitHub에서 설치한 사용자도 중앙 GEODE OAuth 앱 없이 자신의 Google Cloud Desktop 클라이언트로 연결할 수 있습니다. 권장 진입점은 `/login google`입니다. 첫 연결에서는 client JSON 경로와 필요한 서비스 번들을 명시적으로 고릅니다. 자동화하려면 다음처럼 한 줄로 지정할 수 있습니다. Google Cloud 콘솔부터 시작하는 절차는 [Google Workspace 연결 가이드](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace.md)에 있습니다.
 
 ```
 /login google --client-json ~/Downloads/client_secret.json \
@@ -6148,11 +6144,11 @@ uv나 GitHub에서 설치한 사용자도 중앙 GEODE OAuth 앱 없이 자신�
 | 프로세스 메모리 | 짧은 수명의 access token과 expiry. 데몬 auth reload와 logout 때 폐기. |
 | 세션 영속 저장소 | Workspace 도구의 원문 입력·결과는 JSON·SQLite·도구 로그에서 도구 이름을 담은 `_personal_data_omitted` 표식으로 치환하고, 바깥 호출 행만 call id를 유지합니다. 영속 telemetry에는 API 오류 상세를 복사하지 않고, 개인 도구가 포함된 batch는 별도 reflection provider 호출을 건너뜁니다. 별도의 회전형 런타임 로그에는 제한된 Google API 오류 진단이 남을 수 있습니다. 사용자가 직접 쓴 대화문과 모델이 대화문으로 작성한 요약은 일반 세션 보존 정책을 따릅니다. |
 
-Workspace 읽기 결과는 선택한 LLM 프로바이더로 전달될 수 있으므로 매 도구 호출 직전에 개인 데이터 disclosure와 affirmative consent가 뜹니다. 이 승인은 always-allow할 수 없고 headless·서브에이전트에서는 닫힌 채로 거부됩니다. Gmail 전송과 Drive/Docs/Sheets/Tasks/Calendar 변경도 같은 비캐시형 매 호출 승인을 거쳐 HITL 0·권한 건너뛰기로 우회할 수 없습니다. 자세한 스키마와 Hermes 비교는 설계 기록`docs/architecture/google-workspace-oauth.md`에 있습니다.
+Workspace 읽기 결과는 선택한 LLM 프로바이더로 전달될 수 있으므로 매 도구 호출 직전에 개인 데이터 disclosure와 affirmative consent가 뜹니다. 이 승인은 always-allow할 수 없고 headless·서브에이전트에서는 닫힌 채로 거부됩니다. Gmail 전송과 Drive/Docs/Sheets/Tasks/Calendar 변경도 같은 비캐시형 매 호출 승인을 거쳐 HITL 0·권한 건너뛰기로 우회할 수 없습니다. 자세한 스키마와 Hermes 비교는 설계 기록 `docs/architecture/google-workspace-oauth.md`에 있습니다.
 
 ## ChatGPT 자격 가져오기
 
-기본 경로는 `/login openai`가 발급해`~/.geode/auth.toml`에 저장한 자격입니다. 기존`~/.codex/auth.json`도 읽을 수 있지만 이는 자격 가져오기일 뿐이며 GEODE는 Codex CLI를 추론에 실행하지 않습니다.
+기본 경로는 `/login openai`가 발급해 `~/.geode/auth.toml`에 저장한 자격입니다. 기존 `~/.codex/auth.json`도 읽을 수 있지만 이는 자격 가져오기일 뿐이며 GEODE는 Codex CLI를 추론에 실행하지 않습니다.
 
 ## PAYG 키
 
@@ -6166,7 +6162,7 @@ OPENROUTER_API_KEY=sk-or-v1-...
 ZAI_API_KEY={id}.{secret}
 ```
 
-GLM은 엔드포인트가 둘입니다. Coding Plan(구독 과금)과 PAYG(종량 과금)이고, Coding Plan 키를 PAYG 경로에 쓰면 구독 쿼터를 조용히 우회해 종량 과금됩니다.
+GLM은 PAYG API 키 경로를 지원합니다. 2026-09-24 Coding Plan 정책은 공식 지원 도구로 사용을 제한하며 GEODE 사용 자격은 확인되지 않았습니다. 기존 구독 프로필은 보존하되 실행을 차단하고, PAYG로 자동 전환하지 않습니다.
 
 ## 실패 모드
 
@@ -6302,17 +6298,27 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-cachin
 
 시스템 프롬프트는 `core/agent/system_prompt.py`의`PROMPT_CACHE_BOUNDARY`마커(`<dynamic_context>` 여는 태그)로 두 쪽이 납니다. 마커 앞은 턴 사이 불변(베이스 스캐폴드, 스타일 가이드, 기본 ON identity), 마커 뒤는 턴마다 변합니다(model card, 날짜, 메모리 레이어, 사용자 컨텍스트).
 
-Anthropic 어댑터(`core/llm/providers/anthropic.py`)가 이 마커에서 시스템 문자열을 갈라 static 블록에`cache_control: {"type": "ephemeral"}`을 붙입니다. dynamic 쪽은 캐시 없이 나갑니다. static이 비어 있으면(audit 모드에서 레이어를 벗긴 경우) 빈 텍스트 블록에 cache\_control을 붙이는 400 오류를 피해 dynamic 쪽을 단일 캐시 블록으로 승격합니다.
+Anthropic 요청 생성기(`core/llm/adapters/_anthropic_common.py`)가 정적 블록에 기본 `cache_control: {"type": "ephemeral", "ttl": "1h"}`을 붙입니다. `prompt_cache_extended_ttl=false`는 5분 TTL을 선택합니다. 동적 블록에는 별도 마커를 붙이지 않지만, 뒤쪽 메시지 마커가 만드는 누적 프리픽스에는 포함됩니다. 정적 영역이 비면 빈 텍스트 오류를 피해 동적 블록에 5분 마커 하나를 사용합니다.
+
+## OpenAI·Z.AI·OpenRouter의 경계
+
+OpenAI Platform의 등록된 GPT-5.6·GPT-6 모델은 같은 경계 앞의 정적 문자열을 developer 메시지의 input\_text 블록으로 보내고`prompt_cache_breakpoint`를 붙입니다. 동적 문자열은 그 뒤에 두며, 대화 이력의 자동 캐싱도 유지합니다. Codex 구독 경로와 이전 모델은 기존 instructions 및 캐시 키 계약을 유지합니다. 키가 같다는 사실만으로 적중을 보장하지는 않습니다.
+
+Z.AI는 반복 접두부를 자동으로 캐싱하며 별도 캐시 마커를 보내지 않습니다. OpenRouter의 명시적 Claude·지원 OpenAI 경로에는 해당 마커를 보존합니다. 논리 세션 ID의 해시로 제공자 선택의 연속성을 요청하고, 원래 세션 ID는 보내지 않습니다. 사용자가 설정한 제공자 우선순위는 유지하며, 자동 모델 선택에 특정 제공자 마커를 추측해 넣지 않습니다.
+
+SDK 연결을 닫거나 다시 만들어도 서버의 캐시를 삭제하지 않습니다. 모델·계정·도구 순서·출력 스키마·추론 설정·정리된 이력이 달라지면 공유 접두부도 달라질 수 있습니다. 실제 적중은 반환된 사용량으로 확인하며, 누락된 값과 0을 구분합니다. 정책 근거는 2026-09-24에 확인한 [OpenAI](https://developers.openai.com/api/docs/guides/prompt-caching), [Z.AI](https://docs.z.ai/guides/capabilities/cache), [OpenRouter](https://openrouter.ai/docs/guides/best-practices/prompt-caching)공식 문서입니다.
 
 ## 롤링 메시지 breakpoint
 
-Anthropic은 요청당 cache\_control breakpoint를 4개까지 허용합니다. 시스템 블록이 1-2개를 쓰고, 나머지는`apply_messages_cache_control`이 대화 이력의 마지막 메시지들에 붙입니다. 몇 개를 붙일지(0-3)는 cache-policy SoT(`core/llm/cache_policy.py`)가 정하고 기본값은 3입니다. breakpoint가 많을수록 긴 멀티턴 루프의 적중률이 오르지만, 캐시된 블록마다 적중 여부와 무관하게 쓰기 오버헤드가 붙습니다. 짧은 작업이라면 낮추는 쪽이 맞습니다.
+요청 전체의 도구·시스템·메시지 마커는 최대 4개입니다. 정적 시스템 블록이 1개를 사용하고, `apply_messages_cache_control`이 기존 마커를 보존한 뒤 남은 슬롯에서 기본 최대 3개를 추가합니다.`cache-policy`의 `messages_breakpoints`는 추가할 수를 0–3으로 제한합니다. thinking·redacted\_thinking과 빈 텍스트에는 직접 마커를 붙이지 않습니다. 명시적 1시간 마커는 5분 마커보다 앞에 있어야 하며, 잘못된 입력은 호출 전에 거절합니다.
 
-비용 산식은 단가표 기준으로 cache write가 input의 1.25배, cache read가 input의 0.1배입니다 (`core/llm/pricing_loader.py`).
+마커 자체에는 별도 요금이 없습니다. Anthropic 표준 API 요율은 5분 쓰기 1.25배, 1시간 쓰기 2배이며 읽기 할인은 모델별 단가표를 따릅니다. 잦은 적중은 5분 TTL도 무료로 갱신하므로 1시간의 이득은 재사용 간격에 달려 있습니다. GEODE는 응답의 1시간 쓰기량을 비용과 영구 이벤트에 보존합니다. 과거 기록의 TTL 미상은 0으로 바꾸지 않으며, 그 기록의 추정 비용은 기존 5분 요율을 유지합니다.
+
+동적 시스템 내용이 바뀌면 정적 마커까지는 재사용할 수 있지만 뒤쪽 메시지 프리픽스는 달라집니다. 도구 정의, 모델, thinking·effort 변경, 컨텍스트 정리도 영향을 줄 수 있습니다. 이는 새 요청의 정확성을 위한 무효화이며 캐시 적중을 보장하지 않습니다. 공급자가 보유한 캐시는 로컬 SDK 클라이언트를 닫는 동작과 별개의 수명을 가집니다.
 
 ## 대화 이력은 실제 turn만 append
 
-AgenticLoop는 라운드 번호나 날짜를 합성 user message로 만들지 않습니다. 날짜와 runtime rule은 이미 `core/agent/system_prompt.py`의 동적 시스템 영역에 있고, 한 실행 안에서 대화 이력에는 실제 user, assistant, tool turn만 뒤에 붙습니다. 따라서 다음 요청의 메시지열은 이전 요청의 메시지열을 정확한 prefix로 보존합니다.
+AgenticLoop는 라운드 번호나 날짜를 합성 user message로 만들지 않습니다. 날짜와 runtime rule은 이미 `core/agent/system_prompt.py`의 동적 시스템 영역에 있고, 일반적인 대화 라운드는 user, assistant, tool 메시지를 뒤에 붙여 기존 프리픽스를 유지합니다. 컨텍스트 복구나 명시적 제어 전환은 이력을 바꿀 수 있으므로 별도로 확인합니다.
 
 -   턴마다 바뀌는 시스템 정보는 메시지 이력에 중복 주입하지 않습니다.
 -   컨텍스트 정리는 공유 이력을 직접 갱신하고, 그 뒤 adapter request를 조립합니다.
@@ -6324,7 +6330,7 @@ AgenticLoop는 라운드 번호나 날짜를 합성 user message로 만들지 �
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
 | cache\_read가 늘 0 | prefix가 매 호출 변함. static 영역에 턴별 값이 새어 들어간 경우 | 턴마다 변하는 값은 경계 마커 뒤로 옮깁니다. |
-| 짧은 작업의 비용 증가 | breakpoint 쓰기 오버헤드가 적중 이득을 초과 | cache-policy SoT에서 `messages_breakpoints`를 낮춥니다. |
+| 짧은 작업의 비용 증가 | 재사용 전에 TTL 만료 또는 프리픽스 변경 | 안정적인 구간과 재사용 간격을 확인하고 필요한 TTL을 선택합니다. |
 | 400: empty text block에 cache\_control | 빈 static에 breakpoint를 붙이려는 시도 | 어댑터가 dynamic 승격으로 처리합니다. 직접 어댑터를 다룰 때만 해당합니다. |
 
 ## 다음
@@ -6591,7 +6597,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/external-refere
 
 ## Frontier 에이전트 시스템
 
-| 시스템 | 출처 | GEODE가 가져온 것 |
+| 시스템 | 출처 | 참고 관점·적용 여부 |
 | --- | --- | --- |
 | **Claude Code** | [docs.anthropic.com](https://docs.anthropic.com/en/docs/claude-code/overview) | while(tool\_use) primitive, CLAUDE.md 스캐폴드 패턴, 4-tier memory, hooks 패턴. |
 | **Codex CLI** | [github.com/openai/codex](https://github.com/openai/codex) | thin CLI + IPC daemon, OAuth flow, sandbox policy. |
@@ -6599,9 +6605,14 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/external-refere
 | **Karpathy autoresearch** | [github.com/karpathy/autoresearch](https://github.com/karpathy/autoresearch) (2026-03) | Fixed wall-budget으로 비교 가능성 보존. Frozen scoreboard 분리. git monotone ratchet. Token-economic loop. Simplicity criterion. |
 | **Karpathy LLM Wiki** | [GitHub Gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) | "wiki = compiled artifact" 지식 컴파일 패턴. |
 | **Hermes Agent (NousResearch)** | [hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/) | llms.txt / llms-full.txt 듀얼 인덱스, system\_and\_3 cache\_control 패턴, 멀티채널 personal agent. |
+| **DeepSeek Harness** | [공식 저장소](https://github.com/deepseek-ai/deepseek-harness); [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.7-rc.2) prerelease (2026-09-24). 조사 HEAD [477b4f420](https://github.com/deepseek-ai/deepseek-harness/commit/477b4f420553e8a52c2fbccc464d7561b239c443) (2026-09-24). | 비교 후보: plugin scope·해제 책임과 세션 문맥 조립. [agent loop](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/agent-loop/src/agent.ts#L529-L618) → [LLM 요청](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/llm/llm/src/index.ts#L867-L950), [compaction](https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/compaction/compaction-basic/src/index.ts#L158-L228)의 실제 소비자를 대조합니다. GEODE 채택·동등 성능은 미검증입니다. |
+| **Google AX** | [공식 저장소](https://github.com/google/ax); [v0.3.0](https://github.com/google/ax/releases/tag/v0.3.0) (2026-09-20). 조사 HEAD [e09ed1bc5](https://github.com/google/ax/commit/e09ed1bc5463ad4b5ca88f755a6e1e2005b3c7b7) (2026-09-25). | 비교 후보: Task/Workspace/Model 선언을 Agent Substrate에 배치하는 orchestration 계층. [controller](https://github.com/google/ax/blob/e09ed1bc5463ad4b5ca88f755a6e1e2005b3c7b7/internal/controller/reconciler.go#L193-L218) → [runner 시작](https://github.com/google/ax/blob/e09ed1bc5463ad4b5ca88f755a6e1e2005b3c7b7/cmd/ax-task-runner/main.go#L15-L79) → [실행 수명](https://github.com/google/ax/blob/e09ed1bc5463ad4b5ca88f755a6e1e2005b3c7b7/runner/runner.go#L109-L220)을 대조합니다. 작업 배치와 호스팅된 에이전트의 판단·완료 검증은 책임이 다릅니다. |
+| **Grok Build** | [공식 소스 미러](https://github.com/xai-org/grok-build); 조사 HEAD [f0e3be110](https://github.com/xai-org/grok-build/commit/f0e3be1100ef5252488e3be8bb0e91cf68d8c305) (2026-09-23). [제품 changelog](https://x.ai/build/changelog)의 v1.0.40 (2026-09-20)은 별도 버전입니다. 조회 시 GitHub release/tag 목록은 비어 있었습니다. | 비교 후보: coding agent와 TUI의 [설정 계층](https://github.com/xai-org/grok-build/blob/f0e3be1100ef5252488e3be8bb0e91cf68d8c305/crates/codegen/xai-grok-config/src/config_layers.rs#L99-L156) → [세션 구성](https://github.com/xai-org/grok-build/blob/f0e3be1100ef5252488e3be8bb0e91cf68d8c305/crates/codegen/xai-grok-shell/src/agent/mvp_agent/session_setup.rs#L582-L636), compaction·도구·hook 수명. 공개 소스 미러와 배포 제품의 동등성을 가정하지 않습니다. |
 | **Cursor** | [docs.cursor.com](https://docs.cursor.com/) | Composer 패턴 (참조용. GEODE는 별도 구현). |
 | **Aider** | [aider.chat](https://aider.chat/) | "AI pair programming in your terminal" 카피 패턴 (간결한 hero 1-line). |
 | **Devin / Cognition** | [cognition.ai](https://cognition.ai/blog/introducing-devin) | "The AI software engineer" 명사구 정체성. 장기 실행 소프트웨어 에이전트 비교점. |
+
+위 세 사례의 버전·소스 조회일은 2026-09-25입니다. 후속 조사에서는 release·prerelease·기본 브랜치 HEAD를 따로 확인하고, 이전 고정 커밋과의 변경분에서 생산자 → 상태 필드 → 소비자 → 결정 및 종료 책임을 추적합니다. README의 의도, 코드에서 확인한 구현, 실제 실행·verifier 근거를 구분하고 GEODE의 기존 담당 모듈과 채택·수정·제외 여부를 정렬합니다. 인증 상태 경계 비교의 적용·제외 결과는 [PR #3435](https://github.com/mangowhoiscloud/geode/pull/3435)에 기록했습니다. DeepSeek Harness의 키 없는 자격 증명 요약과 저장 확인 뒤 성공 보고는 적용했고, Google AX의 키 누락 시 대체 응답은 따르지 않았습니다.
 
 ## Diátaxis 와 docs 디자인 표준
 
@@ -6667,16 +6678,16 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 
 | 메커니즘 | 묶는 발산 | 제어 지점 | 위치 |
 | --- | --- | --- | --- |
-| **ContextWindowManager** | 컨텍스트 총량이 임계선을 넘으면 emergency prune과 recovery를 발화 | CONTEXT\_CRITICAL / CONTEXT\_OVERFLOW\_ACTION hooks | `core/agent/context_manager.py` |
-| **Context budget policy** | 모델 window에서 토큰 상한, warning, critical 밴드를 유도하는 단일 SoT | ceiling 200k, warn 50/70/80%, crit 90%, output reserve 20k | `core/orchestration/context_budget.py` |
-| **Message prune policy** | first-user, bridge, 최근 N개만 유지해 히스토리를 예산 안에 고정 | activation at 30 msgs, keep-recent 5/8, floor 3 | `core/orchestration/context_budget.py` |
+| **ContextWindowManager** | 선택된 요청 경로의 압력과 실제 입력 거절에 제한된 유지보수·복구 적용 | PreCompact keep\_recent/defer; CONTEXT\_CRITICAL observation | `core/agent/context_manager.py` |
+| **Context budget policy** | 모델·공급자·source·요청 출력 예비분에서 유효 예산과 경고 밴드 도출 | soft maintenance 200k; warn 50/70/80%; critical 90%; route-aware reserve | `core/orchestration/context_budget.py` |
+| **Message prune policy** | 인과 도구 쌍·최신 원본 입력·native 상태 보호 아래 명시적 hard 정리 | token pressure, keep-recent 5/8, floor 3; protected tail can exceed budget | `core/orchestration/context_budget.py` |
 | **Deferred tool loading** | 도구가 임계 초과면 스키마를 검색 도구 뒤로 지연시켜 컨텍스트 범람 차단 | TOOL\_DEFER\_THRESHOLD=16, always-loaded set | `core/llm/tool_defer.py` |
-| **Cache breakpoint policy** | trailing cache\_control breakpoint 수를 제한해 캐시 적중과 호출 오버헤드를 교환 | cache-policy.json messages\_breakpoints, 0..3 | `core/llm/cache_policy.py` |
+| **Cache breakpoint policy** | trailing cache\_control breakpoint 수를 제한해 재사용할 프리픽스 위치를 선택 | cache-policy.json messages\_breakpoints, 0..3 | `core/llm/cache_policy.py` |
 | **Append-only conversation history** | 합성 reminder 없이 실제 turn만 append해 프롬프트 cache prefix를 보존 | consecutive AdapterCallRequest prefix test | `core/agent/loop/agent_loop.py` |
 | **System prompt modes** | persona 주입과 audit strip으로 모델이 수렴할 identity를 제어 | GEODE\_PERSONA=off, GEODE\_AUDIT\_UNRESTRICTED=1 | `core/agent/system_prompt.py` |
 | **ToolResultOffloadStore** | 대형 tool result를 디스크로 이관하고 컨텍스트에는 ref만 남김 | threshold 15000 tokens, TOOL\_RESULT\_OFFLOADED hook | `core/orchestration/tool_offload.py` |
 | **Result token guard** | tool result 단건에 모델 파생 토큰 상한을 적용해 절단 | max\_tool\_result\_tokens setting | `core/agent/tool_executor/result_token_guard.py` |
-| **compact\_conversation** | server-side compaction이 없는 프로바이더용 4단계 클라이언트 압축 | keep\_recent arg, Anthropic no-op (server-side) | `core/orchestration/compaction.py` |
+| **compact\_conversation** | 호환 이력의 구조화 요약과 원본 입력·최근 인과 tail 보존 | keep\_recent; selected source; unknown Claude/native-block guard | `core/orchestration/compaction.py` |
 | **SessionManager** | 메시지 상태를 checkpoint로 저장, 복원해 긴 실행을 유한 지점에서 재개 | geode\_checkpoints.db, cleanup 72h | `core/memory/session_manager.py` |
 | **EpisodicStore** | 회전 캡이 있는 episodic 메모리 tier, 무한 성장 없이 recall 공급 | JSONL rotation cap | `core/memory/episodic.py` |
 | **DreamingService** | 세션을 배경에서 압축 artifact로 통합 | dream artifact via SessionManager | `core/memory/dreaming.py` |
@@ -6818,7 +6829,7 @@ geode (thin CLI)  ── Unix socket IPC (~/.geode/cli.sock) ──→  geode se
   슬래시 → 조립된 command registry가 THIN/daemon 결정           메신저 폴러, CLIPoller
 ```
 
-bare `geode`는 환영 화면을 띄우고 소켓을 조사한 뒤, 데몬이 없으면 자동 기동합니다(`start_serve_if_needed`, `core/cli/ipc_client.py`). 동시 기동 경합은 pidfile flock이 막습니다. 그 뒤 thin REPL이 IPC로 붙습니다. 프로토콜은 최대 1 MiB의 줄 단위 JSON인 `geode.ipc.v1`이고 서버 쪽 상대는 `CLIPoller`(`core/server/ipc_server/poller.py`)입니다. 연결 시 지원 기능의 교집합을 협상하고, 각 요청 ID가 스트림·구조화 이벤트·최종 응답에 그대로 붙습니다. 구버전의 version-less peer도 v0 호환 경계로 계속 연결됩니다.
+bare `geode`는 환영 화면을 띄우고 소켓을 조사한 뒤, 데몬이 없으면 자동 기동합니다(`start_serve_if_needed`, `core/cli/ipc_client.py`). 동시 기동 경합은 pidfile flock이 막습니다. 그 뒤 thin REPL이 IPC로 붙습니다. 프로토콜은 최대 1 MiB의 줄 단위 JSON인 `geode.ipc.v1`이고 서버 쪽 상대는 `CLIPoller`(`core/server/ipc_server/poller.py`)입니다. 연결 시 지원 기능의 교집합을 협상하고, 각 요청 ID가 스트림·구조화 이벤트·최종 응답에 그대로 붙습니다. v0 envelope는 계속 읽을 수 있지만 세션 설정 적용 기능이 없는 구버전 peer는 실행 전에 명시적으로 거절합니다.
 
 ## 환영 화면과 라이브 상태
 
@@ -6869,7 +6880,7 @@ HITL 승인 프롬프트(`core/cli/ipc_client.py`의 `_handle_approval_request`)
 
 ## 슬래시 명령
 
-런타임의 명시적 실행 위치와 핸들러는`core/slash_routing.py`의 `COMMAND_REGISTRY`가 정의합니다. 평가와 진화 명령은 각각 `geode-eval`과`geode-evolve`로 분리됩니다. thin REPL은 `/help`, `/fleet`, 인자 없는 `/model`도 로컬에서 특별 처리합니다. `core/cli/commands/_state.py`의 `COMMAND_MAP`은 legacy dispatcher action과 별칭을 매핑합니다. 로컬로 처리되지 않은 짧은 명령은 IPC `send_command`, 장기 명령은`send_command_streaming`으로 데몬에 전달됩니다.
+런타임의 명시적 실행 위치와 핸들러는`core/slash_routing.py`의 `COMMAND_REGISTRY`가 정의합니다. 평가와 진화 명령은 각각 `geode-eval`과`geode-evolve`로 분리됩니다. thin REPL은 `/help`, `/fleet`도 로컬에서 특별 처리합니다. `core/cli/commands/_state.py`의 `COMMAND_MAP`은 legacy dispatcher action과 별칭을 매핑합니다. 로컬로 처리되지 않은 짧은 명령은 IPC `send_command`, 장기 명령은`send_command_streaming`으로 데몬에 전달됩니다.
 
 | 명령 | 별칭 | 실행 위치 | 용도 | 핸들러 |
 | --- | --- | --- | --- | --- |
@@ -6881,7 +6892,7 @@ HITL 승인 프롬프트(`core/cli/ipc_client.py`의 `_handle_approval_request`)
 | `/fleet` |  | THIN | 최근 턴의 서브에이전트 fleet 뷰 | `core/cli/dispatcher.py` |
 | `/goal [objective|clear]` |  | DAEMON\_RPC | 지속 Goal 조회·생성·empty 전이. 목적 문장은 파싱하지 않고 그대로 저장 | `core/cli/commands/goal.py` |
 | `/plan [objective]` |  | DAEMON\_STREAM | 현재 advisory plan 조회 또는 도구가 꺼진 structured planner로 계획 생성. 실행하지 않음 | `core/server/ipc_server/plan_command.py` |
-| `/grill <decision>` |  | DAEMON\_STREAM | 의존성 frontier를 따라 의사결정을 압박 검증하는 grilling 스킬 | `core/cli/commands/skills.py` |
+| `/grill <decision>` |  | DAEMON\_STREAM | 의존성 frontier를 따라 의사결정을 압박 검증하는 grilling 스킬 | `core/skills/grilling.py` |
 | `/quit` | `/exit`, `/q` | daemon | 세션 비용 요약과 함께 종료 | `core/cli/dispatcher.py` |
 | `/verbose` |  | daemon | verbose 토글 | `core/cli/dispatcher.py` |
 | `/schedule` | `/sched` | daemon | 예약 자동화 관리 | `core/cli/commands/schedule.py` |
@@ -6898,9 +6909,9 @@ HITL 승인 프롬프트(`core/cli/ipc_client.py`의 `_handle_approval_request`)
 | `/clear` |  | daemon | 대화 이력 삭제. thin 클라이언트는 IPC 모드에서 `--force`를 자동 부착 | `core/cli/commands/session.py` |
 | `/tasks` | `/task`, `/t` | daemon | 사용자 태스크 목록 | `core/cli/commands/tasks.py` |
 
-`/login`이나 `/key`가 로컬에서 끝나면 thin 클라이언트가 데몬에 인증 상태 리로드를 통지합니다. 인자 없는 `/model`은 TTY에서 picker를 로컬로 띄운 뒤 선택 결과만 데몬에 전달합니다(`core/cli/__init__.py`).
+`/login`이나 `/key`가 로컬에서 끝나면 thin 클라이언트가 데몬에 인증 상태 리로드를 통지합니다. 이름 지정, picker, fullscreen의 `/model`은 같은 적용 경로를 사용합니다. 현재 세션의 모델·effort·source와 보조 역할을 데몬이 검증하고 적용한 뒤 기본값을 저장합니다. project/global은 미래 세션의 기본값 범위이며 다른 실행 중 세션을 바꾸지 않습니다. 적용 거절과 적용 후 저장 실패는 구분해 표시합니다.
 
-picker 키 계약(`core/cli/effort_picker.py`): Tab이 역할 탭(Primary, Reflection, Mutator)을 순환하고 ↑↓가 모델, ←→가 effort를 고릅니다. **Space는 포커스된 역할에 적용하고 picker를 유지**하므로 세 역할을 한 세션에서 모두 설정할 수 있습니다. Enter는 staged 선택까지 전부 확정하고 닫으며, Esc는 staged 선택을 포함해 전부 폐기합니다. provider가 바뀌는 전환은 credential source(payg, subscription)를 새 provider 기준으로 다시 추론합니다. `/login codex` 직후의 GPT 전환이 구독 쿼터로 라우팅되는 근거입니다.
+picker 키 계약(`core/cli/effort_picker.py`): Tab이 역할 탭(Primary, Reflection, Mutator)을 순환하고 ↑↓가 모델, ←→가 effort를 고릅니다. **Space는 포커스된 역할을 임시 선택하고 picker를 유지**하므로 세 역할을 한 세션에서 모두 설정할 수 있습니다. Enter는 staged 선택까지 전부 확정하고 닫으며, Esc는 staged 선택을 포함해 전부 폐기합니다. 같은 공급자 안에서 모델이나 effort를 바꾸면 현재 source를 유지하고, 공급자가 바뀔 때 새 경로를 해석합니다. 연결 시 실제 데몬 workspace를 확인하며 다른 프로젝트는 별도 serve가 필요합니다. 이 계약을 지원하지 않는 구버전 데몬은 재시작 후 다시 연결해야 합니다.
 
 ## geode-mcp 서버
 
@@ -7073,7 +7084,7 @@ status dict 반환 (절대 raise하지 않음) + 히스토리 append
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use.md
 
-컴퓨터 사용은 모델이 스크린샷으로 화면을 보고 클릭, 타이핑, 스크롤을 지시하는 기능입니다. GEODE의 구현은 `core/tools/computer_use.py`의 `ComputerUseHarness` 하나이며 host backend는 pyautogui 또는 macOS helper입니다. Provider-native computer surface는 스크린샷을 해당 provider wire로 돌려주지만, normal function tool인 `computer_use`는 base64를 생략하고 compact observation만 반환합니다. Function-tool 경로의 시각적 좌표 선택은 활성 provider/source에 호환되는 grounding이 있을 때만 `locate`로 수행합니다.
+컴퓨터 사용은 모델이 스크린샷으로 화면을 보고 클릭, 타이핑, 스크롤을 지시하는 기능입니다. GEODE의 구현은 `core/tools/computer_use.py`의 `ComputerUseHarness` 하나이며 host backend는 pyautogui 또는 macOS helper입니다. Provider-native computer surface는 스크린샷을 해당 provider wire로 돌려주지만, normal function tool인 `computer_use`는 base64를 생략하고 compact observation만 반환합니다. 현재 function-tool 경로의 자동 좌표 선택인 `locate`는 모든 provider/source에서 사용할 수 없습니다.
 
 ## 동작 방식
 
@@ -7089,9 +7100,11 @@ native computer ←── screenshot(provider wire) ─────────�
 computer_use ←────── compact observation(base64 omitted) ◄┘
 ```
 
-디스패치 테이블은 프로바이더 중립입니다. Anthropic 어휘 (`left_click`, `triple_click`, `cursor_position`)와 OpenAI 어휘 (`keypress`)를 같은 핸들러로 받습니다. 지원 동작은 `screenshot`, `click`, `double_click`, `type`, `key`, `scroll`, `move`, `drag`, `wait`와 클릭 변형들입니다. 모르는 action은 지원 목록과 함께 오류로 돌아갑니다.
+디스패치 테이블은 프로바이더 중립입니다. Anthropic 어휘 (`left_click`, `triple_click`, `cursor_position`)와 OpenAI 어휘 (`keypress`)를 같은 핸들러로 받습니다. 지원 동작은 `screenshot`, `click`, `double_click`, `type`, `key`, `scroll`, `move`, `drag`, `wait`와 클릭 변형들입니다. 지원하지 않는 action은 실행 전에 오류로 돌아갑니다.
 
-좌표는 타깃 공간과 실제 화면 사이를 양방향 스케일링합니다. 모델은 `display_width_px=1280, display_height_px=800` 기준으로 좌표를 내고, 하네스가 실제 해상도로 변환합니다.
+좌표는 1280×800 스크린샷 공간과 실제 화면 사이를 양방향 스케일링합니다. 기존 Anthropic 도구는 display 필드로 크기를 선언하고, Opus 5.5의 `computer_toolset_20260801`은 스크린샷에서 크기를 읽습니다. 도구 결과에도 toolset 식별자를 보존합니다.
+
+새 toolset은 순차 호출을 요청합니다. 구현되지 않은 `zoom`, `hold_key`, `left_mouse_down`, `left_mouse_up`은 노출하지 않습니다. 좌표·키·대기 시간은 실행 전에 검증하고, 생략된 클릭 좌표는 관측한 커서 위치를 사용합니다. 예상하지 못한 복수 동작 응답은 실행을 차단하되 사용량과 실패 원인을 기록합니다. 프로토콜 회귀 검사는 실제 데스크톱 조작 성공을 뜻하지 않습니다.
 
 ## 구조를 먼저 읽고, 스크린샷은 나중에
 
@@ -7115,7 +7128,7 @@ driver = "helper"
 
 macOS에서는 `geode setup`이 helper를`~/.geode/helpers/computer-use/` 아래에 빌드합니다. wheel 안의 Swift/build source는 읽기 전용이며 생성물은 설치 디렉터리에 기록하지 않습니다.
 
-프로바이더가 native computer surface를 지원하면 그 경로를 쓰고, ChatGPT subscription처럼 native surface를 받지 않는 backend에는 같은 하네스를 normal function tool `computer_use`로 노출합니다. 이 경로는 다른 provider로 몰래 fallback하지 않습니다. OpenAI subscription source에 visual grounding을 별도로 구성하지 않았다면 `capture`는 가능하지만 `locate`는 dependency error로 중단되며, browser DOM·playwriter· `ui_probe` 같은 source-safe 구조 경로를 선택해야 합니다.
+프로바이더가 native computer surface를 지원하면 그 경로를 쓰고, ChatGPT subscription처럼 native surface를 받지 않는 backend에는 같은 하네스를 normal function tool `computer_use`로 노출합니다. 이 경로는 다른 provider로 몰래 fallback하지 않습니다.`capture`는 가능하지만 `locate`는 활성 provider/source를 표시하는 dependency error로 중단됩니다. 미검증 GLM 자동 grounding 경로는 제거했으며, browser DOM·playwriter· `ui_probe` 같은 source-safe 구조 경로를 선택해야 합니다.
 
 ## 안전
 
@@ -7180,7 +7193,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1576 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: size limit exceeded — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -7340,8 +7353,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 589 |
-| 테스트 Python 파일 | 732 |
+| 프로덕션 Python 파일 | 591 |
+| 테스트 Python 파일 | 748 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |

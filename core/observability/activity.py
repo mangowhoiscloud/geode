@@ -160,7 +160,7 @@ class ActivityRowBase(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: int = 10
+    schema_version: int = 11
     """Row-schema version (PR-OBS-CONTRACT, 2026-06-13). Bump when a
     field is added/renamed/retyped on any row class so JSONL re-readers
     can branch on shape instead of guessing from key presence.
@@ -178,7 +178,8 @@ class ActivityRowBase(BaseModel):
     old rows read those fields as unknown, not inferred from the root model.
     v8: turn-final verification has its own bounded call purpose.
     v9: native text helpers retain their producer-specific call purpose.
-    v10: nested classification/extraction calls retain structured_decision purpose."""
+    v10: nested classification/extraction calls retain structured_decision purpose.
+    v11: known 1-hour cache writes remain separate from total cache writes."""
 
     ts: float
     run_id: str
@@ -255,6 +256,17 @@ class LLMCallUsageDetails(BaseModel):
     cached_input_tokens: int | None = Field(default=None, ge=0)
     reasoning_tokens: int | None = Field(default=None, ge=0)
     cache_write_tokens: int | None = Field(default=None, ge=0)
+    cache_write_1h_tokens: int | None = Field(default=None, ge=0, strict=True)
+
+    @model_validator(mode="after")
+    def validate_cache_write_split(self) -> LLMCallUsageDetails:
+        if (
+            self.cache_write_1h_tokens is not None
+            and self.cache_write_tokens is not None
+            and self.cache_write_1h_tokens > self.cache_write_tokens
+        ):
+            raise ValueError("1-hour cache writes exceed total cache writes")
+        return self
 
 
 class LLMRequestImageRefDetails(BaseModel):
