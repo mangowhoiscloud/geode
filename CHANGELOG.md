@@ -163,6 +163,11 @@ functional change.
 
 ### Fixed
 
+- Route OpenRouter text summaries through the existing Chat Completions adapter,
+  retaining its model/source identity, cache markers, session affinity and usage.
+  Preserve supported OpenAI reasoning effort on this relay and forward requested
+  JSON schemas with endpoint parameter enforcement instead of silently dropping them.
+
 - Resolve `check_status` from the current request's readiness instead of a
   captured CLI startup report, preserving explicit audit overrides. Native
   hosts without CLI bootstrap use the shared credential check on each call,

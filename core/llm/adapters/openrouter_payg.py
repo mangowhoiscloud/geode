@@ -8,7 +8,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from core.llm.adapters._capability_impls import openai_effort_kwargs
 from core.llm.adapters._openai_common import (
+    _is_openai_strict_compatible,
     build_async_openai_client,
     build_chat_completion_kwargs,
     get_openai_model_spec,
@@ -20,7 +22,10 @@ from core.llm.adapters.base import (
     AdapterCallRequest,
     AdapterCallResult,
     EnvironmentReport,
+    Message,
+    TextCompletionResult,
 )
+from core.llm.errors import LLMRequestValidationError
 from core.llm.loop_affinity import LoopAffineClientCache
 from core.llm.providers.openrouter import to_openrouter_model_id
 
@@ -111,6 +116,7 @@ class OpenRouterPaygAdapter:
     provider: str = "openrouter"
     source: str = SOURCE_PAYG
     billing_type: AdapterBillingType = AdapterBillingType.CREDITS
+    supports_text_completion: bool = True
     _clients: LoopAffineClientCache = field(
         default_factory=lambda: LoopAffineClientCache("openrouter-payg"),
         init=False,
@@ -139,9 +145,38 @@ class OpenRouterPaygAdapter:
             )
         )
 
+    async def acomplete_text(
+        self,
+        prompt: str,
+        *,
+        system: str = "",
+        model: str = "",
+        max_tokens: int = 1024,
+        effort: str | None = None,
+    ) -> TextCompletionResult:
+        result = await self.acomplete(
+            AdapterCallRequest(
+                model=model,
+                messages=(Message(role="user", content=prompt),),
+                system_prompt=system,
+                max_tokens=max_tokens,
+                effort=effort or "",
+            )
+        )
+        return TextCompletionResult(text=result.text, usage=result.usage)
+
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         model = to_openrouter_model_id(req.model)
+        if req.max_tokens <= 0:
+            raise LLMRequestValidationError("OpenRouter max_tokens must be positive")
         extra_body = _openrouter_extra_body(req.provider_options) or {}
+        if (
+            req.effort
+            and model.startswith("openai/")
+            and get_openai_model_spec(model.removeprefix("openai/")).reasoning_effort_values
+            is not None
+        ):
+            extra_body.update(openai_effort_kwargs(model.removeprefix("openai/"), req.effort))
         from core.agent.cognitive_state_ctx import get_session_id
 
         session_id = req.metadata.get("session_id") or get_session_id()
@@ -156,6 +191,26 @@ class OpenRouterPaygAdapter:
             adapter_name=self.name,
             extra_body=extra_body,
         )
+        if req.response_schema is not None:
+            if req.response_schema.get("type") != "object" or "anyOf" in req.response_schema:
+                raise LLMRequestValidationError(
+                    "OpenRouter response_schema requires an object root without anyOf"
+                )
+            policy = extra_body.setdefault("provider", {})
+            if policy.get("require_parameters") is False:
+                raise LLMRequestValidationError(
+                    "OpenRouter response_schema requires provider.require_parameters=true"
+                )
+            policy["require_parameters"] = True
+            kwargs["extra_body"] = extra_body
+            kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": str(req.response_schema.get("title") or "response"),
+                    "strict": _is_openai_strict_compatible(req.response_schema),
+                    "schema": req.response_schema,
+                },
+            }
         if model.startswith("anthropic/claude-"):
             from core.llm.adapters._anthropic_common import _cache_shaped_system
             from core.llm.providers.anthropic import (

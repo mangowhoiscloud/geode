@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
+from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
+from core.hooks import HookEvent, HookSystem
 from core.llm.adapters.base import AdapterCallRequest, Message, ToolSpec, UsageSummary
+from core.llm.adapters.dispatch import AdapterDispatchError, complete_text_via_adapters
 from core.llm.adapters.openrouter_payg import OpenRouterPaygAdapter, _openrouter_extra_body
 from core.llm.adapters.provider_inference import infer_provider_from_model
 from core.llm.providers.openrouter import to_openrouter_model_id
 from core.llm.token_tracker import TokenTracker
+from openai import AsyncOpenAI
 
 
 @pytest.mark.parametrize(
@@ -84,7 +91,7 @@ def test_provider_composition_is_explicit_and_attributed() -> None:
     assert spec.profile.provider == "openrouter"
     assert spec.credential.billing_type is AdapterBillingType.CREDITS
     assert spec.transport.api == "openai-chat-completions"
-    assert spec.transport.native_capabilities == frozenset()
+    assert spec.transport.native_capabilities == frozenset({"text_completion"})
     assert spec.extra_headers_factory is not None
     assert spec.extra_headers_factory("ignored") == {
         "HTTP-Referer": "https://mangowhoiscloud.github.io/geode/",
@@ -255,3 +262,268 @@ def test_usage_summary_rejects_invalid_provider_cost(cost: Any) -> None:
     error = TypeError if isinstance(cost, (bool, str)) else ValueError
     with pytest.raises(error):
         UsageSummary(reported_cost_usd=cost)
+
+
+@pytest.mark.parametrize("capability", ["text", "agentic"])
+@pytest.mark.parametrize(
+    "model, effort, expected_effort",
+    [
+        ("openrouter/openai/gpt-6-sol", "low", "low"),
+        ("openrouter/openai/gpt-6-sol", "max", "max"),
+        ("openrouter/openai/gpt-6-sol", None, None),
+        ("openrouter/openai/gpt-4.1", "low", None),
+        ("openrouter/openai/unregistered-model", "low", None),
+        ("openrouter/anthropic/claude-sonnet-4", "low", None),
+    ],
+)
+def test_sdk_wire_preserves_text_route_usage_and_supported_effort(
+    monkeypatch: pytest.MonkeyPatch,
+    capability: str,
+    model: str,
+    effort: str | None,
+    expected_effort: str | None,
+) -> None:
+    bodies: list[dict[str, Any]] = []
+    hooks = HookSystem()
+    rows: list[dict[str, Any]] = []
+    hooks.register(HookEvent.LLM_CALL_ENDED, lambda _event, data: rows.append(dict(data)))
+    system = f"Stable rules.\n\n{PROMPT_CACHE_BOUNDARY}current context</dynamic_context>"
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "openrouter.ai"
+        assert request.url.path == "/api/v1/chat/completions"
+        body = json.loads(request.content)
+        bodies.append(body)
+        return httpx.Response(
+            200,
+            json={
+                "id": "gen-text",
+                "object": "chat.completion",
+                "created": 0,
+                "model": body["model"],
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "summary"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 120,
+                    "completion_tokens": 13,
+                    "total_tokens": 133,
+                    "prompt_tokens_details": {"cached_tokens": 80, "cache_write_tokens": 10},
+                    "completion_tokens_details": {"reasoning_tokens": 3},
+                    "cost": 0.0042,
+                },
+            },
+        )
+
+    async def run() -> Any:
+        async with AsyncOpenAI(
+            api_key="fixture",
+            base_url="https://openrouter.ai/api/v1",
+            http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond)),
+        ) as client:
+            adapter = OpenRouterPaygAdapter()
+            monkeypatch.setattr(adapter, "_get_client", lambda: client)
+            monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: [adapter])
+            monkeypatch.setattr(
+                "core.agent.cognitive_state_ctx.get_session_id", lambda: "private-session"
+            )
+            if capability == "text":
+                return await complete_text_via_adapters(
+                    "prior conversation",
+                    system=system,
+                    model=model,
+                    effort=effort,
+                    max_tokens=10_000,
+                    prefer_provider="openrouter",
+                    prefer_source="payg",
+                    purpose="context_compaction",
+                    hooks=hooks,
+                )
+            return await adapter.acomplete(
+                AdapterCallRequest(
+                    model=model,
+                    system_prompt=system,
+                    messages=(Message(role="user", content="prior conversation"),),
+                    max_tokens=10_000,
+                    effort=effort or "",
+                )
+            )
+
+    result = asyncio.run(run())
+    assert len(bodies) == 1
+    body = bodies[0]
+    assert body["model"] == to_openrouter_model_id(model)
+    assert body["max_tokens"] == 10_000
+    assert body.get("reasoning", {}).get("effort") == expected_effort
+    assert body["session_id"] == "geode-" + hashlib.sha256(b"private-session").hexdigest()
+    assert "private-session" not in json.dumps(body)
+    assert body["messages"][-1]["role"] == "user"
+    if model.startswith("openrouter/anthropic/"):
+        assert body["messages"][-1]["content"] == [
+            {"type": "text", "text": "prior conversation", "cache_control": {"type": "ephemeral"}}
+        ]
+    else:
+        assert body["messages"][-1]["content"] == "prior conversation"
+    assert "tools" not in body and "provider" not in body
+    if model == "openrouter/openai/gpt-6-sol":
+        assert body["messages"][0]["content"][0] == {
+            "type": "text",
+            "text": "Stable rules.\n\n",
+            "prompt_cache_breakpoint": {"mode": "explicit"},
+        }
+    assert result.text == "summary"
+    assert result.usage.input_tokens == 120
+    assert result.usage.output_tokens == 13
+    assert result.usage.cached_input_tokens == 80
+    assert result.usage.cache_write_tokens == 10
+    assert result.usage.reasoning_tokens == 3
+    assert result.usage.reported_cost_usd == 0.0042
+    if capability == "text":
+        assert (result.adapter_name, result.adapter_provider, result.adapter_source) == (
+            "openrouter-payg",
+            "openrouter",
+            "payg",
+        )
+        assert len(rows) == 1
+        assert rows[0]["model"] == model
+        assert rows[0]["provider"] == "openrouter" and rows[0]["source"] == "payg"
+        assert rows[0]["purpose"] == "context_compaction"
+        assert rows[0]["effort"] == expected_effort
+        assert rows[0]["usage"]["cached_input_tokens"] == 80
+        assert rows[0]["cost_usd"] == 0.0042
+
+
+@pytest.mark.parametrize("model, effort", [("openrouter/openai/gpt-5.5", "max"), ("", "low")])
+def test_text_validation_does_not_select_a_direct_provider(
+    monkeypatch: pytest.MonkeyPatch, model: str, effort: str
+) -> None:
+    from unittest.mock import Mock
+
+    from core.llm.adapters.openai_payg import OpenAIPaygAdapter
+
+    adapter = OpenRouterPaygAdapter()
+    direct = OpenAIPaygAdapter()
+    relay_client, direct_client = Mock(), Mock()
+    monkeypatch.setattr(adapter, "_get_client", relay_client)
+    monkeypatch.setattr(direct, "_get_client", direct_client)
+    monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: [direct, adapter])
+    with pytest.raises(AdapterDispatchError) as caught:
+        asyncio.run(
+            complete_text_via_adapters(
+                "input",
+                model=model,
+                effort=effort,
+                prefer_provider="openrouter",
+                prefer_source="payg",
+            )
+        )
+    assert isinstance(caught.value.__cause__, ValueError)
+    if model:
+        from core.llm.errors import LLMRequestValidationError, is_request_fatal
+
+        assert isinstance(caught.value.__cause__, LLMRequestValidationError)
+        assert is_request_fatal(caught.value.__cause__)
+    relay_client.assert_not_called()
+    direct_client.assert_not_called()
+
+
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.parametrize("explicit_policy", [True, False])
+def test_structured_output_reaches_sdk_with_parameter_enforcement(
+    monkeypatch: pytest.MonkeyPatch, strict: bool, explicit_policy: bool
+) -> None:
+    schema: dict[str, Any] = {
+        "title": "verdict",
+        "type": "object",
+        "properties": {"pass": {"type": "boolean"}},
+    }
+    if strict:
+        schema.update(required=["pass"], additionalProperties=False)
+    policy = {"only": ["openai"], "allow_fallbacks": False} if explicit_policy else {}
+    bodies: list[dict[str, Any]] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        # An endpoint rejection remains an error, never an unstructured retry.
+        return httpx.Response(400, json={"error": {"message": "unsupported schema"}})
+
+    async def run() -> None:
+        from openai import BadRequestError
+
+        async with AsyncOpenAI(
+            api_key="fixture",
+            max_retries=0,
+            base_url="https://openrouter.ai/api/v1",
+            http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond)),
+        ) as client:
+            adapter = OpenRouterPaygAdapter()
+            monkeypatch.setattr(adapter, "_get_client", lambda: client)
+            with pytest.raises(BadRequestError):
+                await adapter.acomplete(
+                    AdapterCallRequest(
+                        model="openrouter/openai/gpt-6-sol",
+                        messages=(Message(role="user", content="verify"),),
+                        effort="",
+                        response_schema=schema,
+                        provider_options={"openrouter": policy},
+                    )
+                )
+
+    asyncio.run(run())
+    assert len(bodies) == 1
+    assert bodies[0]["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {"name": "verdict", "strict": strict, "schema": schema},
+    }
+    assert bodies[0]["provider"] == {**policy, "require_parameters": True}
+    assert "require_parameters" not in policy
+
+
+@pytest.mark.parametrize(
+    "schema, policy",
+    [({"type": "array"}, {}), ({"type": "object"}, {"require_parameters": False})],
+)
+def test_invalid_schema_or_optional_parameters_fail_before_client(
+    monkeypatch: pytest.MonkeyPatch, schema: dict[str, Any], policy: dict[str, Any]
+) -> None:
+    from unittest.mock import Mock
+
+    from core.llm.errors import LLMRequestValidationError
+
+    adapter = OpenRouterPaygAdapter()
+    client = Mock()
+    monkeypatch.setattr(adapter, "_get_client", client)
+    with pytest.raises(LLMRequestValidationError):
+        asyncio.run(
+            adapter.acomplete(
+                AdapterCallRequest(
+                    model="openrouter/openai/gpt-6-sol",
+                    messages=(Message(role="user", content="verify"),),
+                    response_schema=schema,
+                    provider_options={"openrouter": policy},
+                )
+            )
+        )
+    client.assert_not_called()
+
+
+def test_nonpositive_text_output_limit_is_fatal_before_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import Mock
+
+    from core.llm.errors import LLMRequestValidationError, is_request_fatal
+
+    adapter = OpenRouterPaygAdapter()
+    client = Mock()
+    monkeypatch.setattr(adapter, "_get_client", client)
+    with pytest.raises(LLMRequestValidationError) as caught:
+        asyncio.run(
+            adapter.acomplete_text("input", model="openrouter/openai/gpt-6-sol", max_tokens=0)
+        )
+    assert is_request_fatal(caught.value)
+    client.assert_not_called()

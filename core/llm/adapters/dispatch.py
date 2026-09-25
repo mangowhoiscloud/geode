@@ -685,8 +685,9 @@ async def complete_text_via_adapters(
     or a concrete model; dispatch will not scan provider order.
 
     ``effort`` is inherited from the caller. It is applied only to known
-    OpenAI reasoning models; other providers/models retain their legacy
-    request shape and an unknown effort observation.
+    OpenAI reasoning models, including their explicit OpenRouter namespace;
+    other providers/models retain their legacy request shape and an unknown
+    effort observation.
 
     ``purpose`` identifies the producing helper in observations only; it is
     never forwarded to the provider. Unidentified callers retain the legacy
@@ -712,10 +713,18 @@ async def complete_text_via_adapters(
         from core.config import CODEX_PRIMARY, OPENAI_PRIMARY
 
         chosen_model = CODEX_PRIMARY if adapter.source == "subscription" else OPENAI_PRIMARY
+    effort_model = (
+        chosen_model.removeprefix("openrouter/openai/")
+        if adapter.provider == "openrouter"
+        else chosen_model
+    )
     request_effort = (
         effort
-        if adapter.provider == "openai"
-        and get_openai_model_spec(chosen_model).reasoning_effort_values is not None
+        if (
+            adapter.provider == "openai"
+            or (adapter.provider == "openrouter" and chosen_model.startswith("openrouter/openai/"))
+        )
+        and get_openai_model_spec(effort_model).reasoning_effort_values is not None
         else None
     )
     effort_kwargs = {"effort": request_effort} if request_effort is not None else {}
