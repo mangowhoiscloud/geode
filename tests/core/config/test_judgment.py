@@ -94,7 +94,7 @@ def test_cli_and_natural_language_share_selection(judgment_config: Settings) -> 
 
     judgment_config.typesafe_api_key = SecretStr("test-typesafe-credential")
     assert cmd_judgment("typesafe", interactive=False)["effective_engine"] == "jev"
-    handlers = dict(_build_system_handlers(None, False, None))
+    handlers = dict(_build_system_handlers(None))
     result = handlers["switch_model"](model_hint="llm", role="judgment")
     assert result["action"] == "judgment"
     assert result["effective_engine"] == "llm"
