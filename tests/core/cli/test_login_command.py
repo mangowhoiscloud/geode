@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from core.auth.auth_toml import save_auth_toml
 from core.cli.commands import cmd_login
 from core.llm.strategies.plan_registry import (
     get_plan_registry,
@@ -73,9 +74,8 @@ def test_source_candidate_does_not_mutate_current_record_or_global_defaults() ->
 def _scrub_real_provider_keys(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Isolate the machine's real credentials from the auth/profile store.
 
-    ``build_auth`` seeds ``<provider>-payg:env`` profiles from
-    ``settings.{openai,anthropic,zai}_api_key`` (``migrate_env_to_toml`` +
-    the legacy-provider loop in ``core.wiring.container``). ``Settings``
+    ``build_auth`` seeds runtime ``<provider>:default`` profiles from
+    ``settings.{openai,anthropic,zai}_api_key`` in ``core.wiring.container``. ``Settings``
     resolves those from the process env AND an ``env_file`` fallback
     (``.env`` + ``~/.geode/.env``), so on a developer box with real keys
     present the store gains a real-key profile the test never created —
@@ -203,6 +203,7 @@ class TestSetKeyAndUse:
         registry = get_plan_registry()
         plan = default_plan_for_payg("openai", "")
         registry.add(plan)
+        save_auth_toml()  # Credential changes apply to plans stored in auth.toml.
         with patch("core.cli.commands.login.clear_dry_run_opt_in") as clear_opt_in:
             cmd_login(f"set-key {plan.id} sk-fresh-key-1234567890")
         from core.wiring.container import ensure_profile_store
@@ -230,6 +231,7 @@ class TestSetKeyAndUse:
         registry = get_plan_registry()
         plan = default_plan_for_payg("glm", "")
         registry.add(plan)
+        save_auth_toml()
         cmd_login(f"use {plan.id}")
         for model in ("glm-5.3", "glm-5.2", "glm-5.1"):
             assert registry.get_routing(model)[0] == plan.id
@@ -240,11 +242,12 @@ class TestSetKeyAndUse:
         plan = GLM_CODING_TIERS["lite"]
         registry.add(plan)
         registry.set_routing("glm-5.1", ["existing-plan"])
-        with patch("core.cli.commands._persist_auth_state") as persist:
-            cmd_login(f"use {plan.id}")
+        from core.auth.auth_toml import auth_toml_path
+
+        assert cmd_login(f"use {plan.id}") is False
         assert registry.get_routing("glm-5.1") == ["existing-plan"]
         assert registry.get_routing("glm-5.3") == []
-        persist.assert_not_called()
+        assert not auth_toml_path().exists()
 
 
 class TestRouteAndQuota:
@@ -265,6 +268,7 @@ class TestRouteAndQuota:
         registry.add(a)
         b = GLM_CODING_TIERS["lite"]
         registry.add(b)
+        save_auth_toml()
         cmd_login(f"route glm-5.1 {b.id} {a.id}")
         assert registry.get_routing("glm-5.1") == [b.id, a.id]
 
@@ -366,3 +370,21 @@ def test_source_conflict_does_not_save_defaults_or_mutate_unrelated_session(
         cmd_login("source openai api_key", client=Client() if with_client else None)
     persist.assert_not_called()
     assert settings.openai_credential_source == "auto"
+
+
+def test_status_judges_each_profile_against_its_own_provider(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from core.auth.profiles import AuthProfile, CredentialType
+    from core.wiring.container import ensure_profile_store
+
+    _reset_state()
+    store = ensure_profile_store()
+    for name, provider in (("openai:work", "openai"), ("anthropic:work", "anthropic")):
+        store.add(AuthProfile(name, provider, CredentialType.API_KEY, key="synthetic-key-123456"))
+
+    assert cmd_login("") is True
+
+    out = capsys.readouterr().out
+    assert "provider_mismatch" not in out
+    assert "openai:work" in out and "anthropic:work" in out

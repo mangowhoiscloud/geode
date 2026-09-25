@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from simple_term_menu import TerminalMenu
 
@@ -54,7 +54,7 @@ _PROVIDER_ALIASES: dict[str, str] = {
 name (``chatgpt``, ``claude``) and the maintained Codex source alias."""
 
 
-def cmd_login(args: str, *, client: IPCClient | None = None) -> None:
+def cmd_login(args: str, *, client: IPCClient | None = None) -> bool:
     """Handle /login — unified credentials/plans command.
 
     Parameter shape: ``/login [<provider>|<subcommand>]``. OpenAI runs the
@@ -67,18 +67,46 @@ def cmd_login(args: str, *, client: IPCClient | None = None) -> None:
 
     Subcommands::
 
-        /login                — show plans, profiles, routing, quota
+        /login                — show plans, profiles, routing, declared quotas
         /login add            — interactive wizard (kind → provider → key/OAuth)
         /login set-key <plan> <key>
         /login use <plan>     — pin a plan as the active one for its provider
         /login remove <plan>
         /login route <model> <plan> [<plan>...]
-        /login quota          — per-plan usage breakdown
+        /login quota          — declared per-plan call limits
         /login health [<profile>] — eligibility verdict + actionable suggestion
         /login status         — legacy alias of bare /login
     """
+    from rich.markup import escape
+
     from core.cli import commands as _pkg
 
+    try:
+        run_login(args, client=client)
+    except ValueError as exc:
+        _pkg.console.print(f"  [warning]{escape(str(exc))}[/warning]\n")
+    except OSError as exc:
+        _pkg.console.print(f"  [error]Credential change not saved: {escape(str(exc))}[/error]\n")
+    else:
+        return True
+    return False
+
+
+# Views and nonsecret changes of daemon-owned state; a thin client relays only
+# these, so terminal input and anything else it cannot classify stay local.
+DAEMON_LOGIN_SUBCOMMANDS = frozenset(
+    {
+        *("status", "list", "ls", "quota", "health", "providers", "provider"),
+        *("use", "use-profile", "useprofile", "profile-use", "order", "route"),
+        *("remove", "rm", "delete", "refresh", "help", "?"),
+    }
+)
+# Flows that read keys or wait for a browser in the user's terminal.
+INTERACTIVE_LOGIN_SUBCOMMANDS = frozenset({"add", "new", "google", *_PROVIDER_ALIASES})
+
+
+def run_login(args: str, *, client: IPCClient | None = None) -> None:
+    """Dispatch one /login request; invalid requests and failed writes raise."""
     raw = args.strip()
     if not raw:
         _login_show_status()
@@ -145,97 +173,64 @@ def cmd_login(args: str, *, client: IPCClient | None = None) -> None:
         _login_source(rest, client=client)
         return
     if sub == "refresh":
-        # Thin clients persist credentials locally before this value-free signal.
-        # Reload validates the entire file, replaces only its owned entries and
-        # retains managed/environment objects and in-flight borrowed references.
-        try:
-            from core.auth.auth_toml import auth_toml_path, load_auth_toml
-            from core.auth.codex_cli_oauth import invalidate_cache as invalidate_codex_cli_cache
-            from core.llm.strategies.plan_registry import get_plan_registry
-            from core.mcp.google_workspace_client import reset_google_workspace_client
-            from core.wiring.container import ensure_profile_store
+        from core.cli import commands as _pkg
 
-            registry = get_plan_registry()
-            store = ensure_profile_store()
-            plans_before = {p.id for p in registry.list_all()}
-            profiles_before = {p.name for p in store.list_all()}
-            ok = load_auth_toml()
-            if ok:
-                # PAYG adapters compare the selected credential on their next
-                # request, including instances from retired registry generations.
-                invalidate_codex_cli_cache()
-                reset_google_workspace_client()
-            plans_after = {p.id for p in registry.list_all()}
-            profiles_after = {p.name for p in store.list_all()}
-            new_plans = plans_after - plans_before
-            new_profiles = profiles_after - profiles_before
-            # v0.52.2 — production observability for the B7 thin → daemon
-            # refresh signal. Pre-fix this branch was completely silent on
-            # success, making it impossible to verify the relay was firing.
-            log.info(
-                "auth.toml reload: file=%s loaded=%s new_plans=%d "
-                "new_profiles=%d total_plans=%d total_profiles=%d",
-                auth_toml_path(),
-                ok,
-                len(new_plans),
-                len(new_profiles),
-                len(plans_after),
-                len(profiles_after),
-            )
-            for plan_id in sorted(new_plans):
-                log.info("auth.toml reload: + plan %s", plan_id)
-            for profile_name in sorted(new_profiles):
-                log.info("auth.toml reload: + profile %s", profile_name)
-            # L2 — pre-fix this branch logged via ``log.info`` only, so
-            # the operator running ``/login refresh`` from the REPL saw
-            # nothing on stdout and could not tell whether the daemon
-            # had picked up the new plan/profile. Surface the same
-            # counts to the console so the success path is visible.
-            from core.cli import commands as _pkg
-
-            if not ok:
-                _pkg.console.print(
-                    f"  [warning]auth.toml reload failed[/warning]  "
-                    f"[muted]({auth_toml_path()})[/muted]\n"
-                )
-            elif new_plans or new_profiles:
-                added = []
-                if new_plans:
-                    added.append(f"{len(new_plans)} plan{'s' if len(new_plans) != 1 else ''}")
-                if new_profiles:
-                    added.append(
-                        f"{len(new_profiles)} profile{'s' if len(new_profiles) != 1 else ''}"
-                    )
-                _pkg.console.print(
-                    f"  [success]auth.toml reloaded[/success]  [muted]+{' · +'.join(added)}[/muted]"
-                )
-                for plan_id in sorted(new_plans):
-                    _pkg.console.print(f"    [muted]+ plan {plan_id}[/muted]")
-                for profile_name in sorted(new_profiles):
-                    _pkg.console.print(f"    [muted]+ profile {profile_name}[/muted]")
-                _pkg.console.print()
-            else:
-                _pkg.console.print(
-                    f"  [muted]auth.toml reloaded — no new plans or profiles "
-                    f"(total: {len(plans_after)} plans, {len(profiles_after)} profiles)[/muted]\n"
-                )
-        except Exception:
-            log.warning("auth.toml reload failed", exc_info=True)
-            from core.cli import commands as _pkg
-
-            _pkg.console.print(
-                "  [warning]auth.toml reload failed[/warning]  "
-                "[muted](see daemon log for traceback)[/muted]\n"
-            )
+        _pkg.console.print(reload_auth_state())
         return
     if sub in ("help", "?"):
         _login_help()
         return
+    raise ValueError(f"Unknown /login subcommand: {sub}. Run /login help for the full menu.")
 
-    _pkg.console.print(
-        f"\n  [warning]Unknown /login subcommand:[/warning] {sub}\n"
-        "  Run [label]/login help[/label] for the full menu.\n"
+
+def reload_auth_state() -> str:
+    """Adopt the current auth.toml in this process and describe what changed.
+
+    Thin clients write credentials locally and send this value-free signal.
+    The reload validates the whole file and replaces only its owned entries,
+    retaining managed/environment objects and in-flight borrowed references.
+    A rejected file raises and leaves the live state unchanged; with no file
+    there is nothing to adopt.
+    """
+    from core.auth.auth_toml import auth_toml_path, load_auth_toml
+    from core.auth.codex_cli_oauth import invalidate_cache as invalidate_codex_cli_cache
+    from core.llm.strategies.plan_registry import get_plan_registry
+    from core.mcp.google_workspace_client import reset_google_workspace_client
+    from core.wiring.container import ensure_profile_store
+
+    registry = get_plan_registry()
+    store = ensure_profile_store()
+    plans_before = {p.id for p in registry.list_all()}
+    profiles_before = {p.name for p in store.list_all()}
+    # Imported Codex and Google credentials live outside auth.toml; drop their
+    # caches even when there is no file to adopt.
+    invalidate_codex_cli_cache()
+    reset_google_workspace_client()
+    if auth_toml_path().exists() and not load_auth_toml():
+        raise ValueError(
+            f"auth.toml reload failed ({auth_toml_path()}); the previous credentials remain active"
+        )
+    plans_after = {p.id for p in registry.list_all()}
+    profiles_after = {p.name for p in store.list_all()}
+    changes = [
+        *(f"+ plan {name}" for name in sorted(plans_after - plans_before)),
+        *(f"- plan {name}" for name in sorted(plans_before - plans_after)),
+        *(f"+ profile {name}" for name in sorted(profiles_after - profiles_before)),
+        *(f"- profile {name}" for name in sorted(profiles_before - profiles_after)),
+    ]
+    log.info(
+        "auth.toml reload: file=%s plans=%d profiles=%d changes=%s",
+        auth_toml_path(),
+        len(plans_after),
+        len(profiles_after),
+        changes,
     )
+    lines = [
+        f"  [success]auth.toml reloaded[/success]  "
+        f"[muted]{len(plans_after)} plans, {len(profiles_after)} profiles[/muted]",
+        *(f"    [muted]{change}[/muted]" for change in changes),
+    ]
+    return "\n".join(lines) + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -263,7 +258,7 @@ def _login_help() -> None:
         "  [label]/login order clear[/label] <prov>    Drop the multi-rank pin\n"
         "  [label]/login route[/label] <model> <plan>… Bind a model to plan(s) in priority order\n"
         "  [label]/login remove[/label] <plan>         Delete a plan\n"
-        "  [label]/login quota[/label]                 Per-plan quota / usage\n"
+        "  [label]/login quota[/label]                 Declared per-plan call limits\n"
         "  [label]/login health[/label] [<profile>]    Eligibility verdict per profile\n"
         "  [label]/login providers[/label]             Provider variants + equivalence map\n"
         "\n"
@@ -307,23 +302,124 @@ def _format_plan_binding(registry: Any, plan_id: str) -> str:
     return f"[bold]{plan_id}[/bold] [muted]({kind}{tier_suffix} · {display})[/muted]"
 
 
-def _login_show_status() -> None:
-    """Render the unified plans + profiles + routing dashboard.
+class LoginQuota(TypedDict):
+    """A plan's declared call limit; GEODE does not count calls against it."""
 
-    Combines OpenClaw `/status` (auth-mode badge), Hermes `hermes status`
-    (per-provider expiry + subscription line), and Claude Code Settings
-    Status tab (plan + token source + provider).
+    max_calls: int
+    window_s: int
+
+
+class LoginPlanRow(TypedDict):
+    id: str
+    provider: str
+    kind: str
+    display_name: str
+    base_url: str
+    subscription_tier: str | None
+    quota: LoginQuota | None
+
+
+class LoginProfileRow(TypedDict):
+    """One credential without key material; ``expires_at`` is None when it never expires."""
+
+    name: str
+    provider: str
+    type: str
+    plan_id: str | None
+    managed_by: str | None
+    active: bool
+    eligible: bool
+    reason: str
+    reason_detail: str
+    expires_at: float | None
+
+
+class LoginSnapshot(TypedDict):
+    plans: list[LoginPlanRow]
+    profiles: list[LoginProfileRow]
+    routing: dict[str, list[str]]
+
+
+def build_login_snapshot() -> LoginSnapshot:
+    """Build the nonsecret plan, profile and routing state every /login view reports.
+
+    The dashboard, ``/login health`` and the ``manage_login`` tool render this
+    one result; each profile carries its verdict against its own provider.
     """
-    from core.auth.oauth_login import get_auth_status as get_oauth_status
-    from core.auth.profiles import CredentialType
-    from core.cli import commands as _pkg
+    from core.auth.profiles import ProfileRejectReason
     from core.llm.strategies.plan_registry import get_plan_registry
     from core.wiring.container import ensure_profile_store
 
     store = ensure_profile_store()
     registry = get_plan_registry()
-    plans = registry.list_all()
     profiles = store.list_all()
+    providers = {profile.provider for profile in profiles}
+    verdicts = {
+        verdict.profile_name: verdict
+        for provider in providers
+        for verdict in store.evaluate_eligibility(provider)
+        if verdict.reason is not ProfileRejectReason.PROVIDER_MISMATCH
+    }
+    pinned = {
+        provider: pin.name
+        for provider in providers
+        if (pin := store.get_pinned_active(provider)) is not None
+    }
+    profile_rows: list[LoginProfileRow] = []
+    for profile in profiles:
+        verdict = verdicts.get(profile.name)
+        profile_rows.append(
+            {
+                "name": profile.name,
+                "provider": profile.provider,
+                "type": profile.credential_type.value,
+                "plan_id": profile.plan_id or None,
+                "managed_by": profile.managed_by or None,
+                "active": pinned.get(profile.provider) == profile.name,
+                "eligible": verdict.eligible if verdict else False,
+                "reason": verdict.reason_code if verdict else "unknown",
+                "reason_detail": verdict.detail if verdict else "",
+                "expires_at": profile.expires_at if profile.expires_at > 0 else None,
+            }
+        )
+    return {
+        "plans": [
+            {
+                "id": plan.id,
+                "provider": plan.provider,
+                "kind": plan.kind.value,
+                "display_name": plan.display_name,
+                "base_url": plan.base_url,
+                "subscription_tier": plan.subscription_tier,
+                "quota": (
+                    {"max_calls": plan.quota.max_calls, "window_s": plan.quota.window_s}
+                    if plan.quota is not None
+                    else None
+                ),
+            }
+            for plan in registry.list_all()
+        ],
+        "profiles": profile_rows,
+        "routing": registry.all_routing(),
+    }
+
+
+def _login_show_status() -> None:
+    """Render the login snapshot plus Google Workspace accounts.
+
+    Combines OpenClaw `/status` (auth-mode badge), Hermes `hermes status`
+    (per-provider expiry + subscription line), and Claude Code Settings
+    Status tab (plan + token source + provider).
+    """
+    import time
+
+    from core.auth.oauth_login import chatgpt_plan_label
+    from core.cli import commands as _pkg
+    from core.llm.strategies.plan_registry import get_plan_registry
+    from core.wiring.container import ensure_profile_store
+
+    snapshot = build_login_snapshot()
+    plans, profiles = snapshot["plans"], snapshot["profiles"]
     try:
         from core.auth.google_oauth import google_account_status
 
@@ -341,29 +437,23 @@ def _login_show_status() -> None:
         _pkg.console.print()
         return
 
-    if plans:
-        for plan in plans:
-            usage = registry.usage_for(plan.id)
-            subscription_tier = plan.subscription_tier
-            if getattr(plan, "provider", "") == "openai-codex":
-                from core.auth.oauth_login import chatgpt_plan_label
-
-                subscription_tier = chatgpt_plan_label(subscription_tier)
-            tier_label = f" · {subscription_tier}" if subscription_tier else ""
-            quota_label = ""
-            if plan.quota is not None:
-                remaining = usage.remaining_in_window(plan)
-                quota_label = (
-                    f"  [muted]used {int(usage.weighted_calls)}/{plan.quota.max_calls}"
-                    f" ({plan.quota.window_s // 3600}h window, {remaining} left)[/muted]"
-                )
-            bound = [p for p in profiles if p.plan_id == plan.id]
-            mark = "[success]✓[/success]" if bound else "[warning]?[/warning]"
-            _pkg.console.print(
-                f"  {mark} [bold]{plan.id}[/bold]  "
-                f"[muted]{plan.kind.value}[/muted]  {plan.base_url}{tier_label}{quota_label}"
-            )
-    else:
+    for plan in plans:
+        tier = plan["subscription_tier"]
+        if plan["provider"] == "openai-codex":
+            tier = chatgpt_plan_label(tier)
+        tier_label = f" · {tier}" if tier else ""
+        quota = plan["quota"]
+        quota_label = ""
+        if quota is not None:
+            hours = quota["window_s"] // 3600
+            quota_label = f"  [muted]quota {quota['max_calls']} calls / {hours}h window[/muted]"
+        bound = any(p["plan_id"] == plan["id"] for p in profiles)
+        mark = "[success]✓[/success]" if bound else "[warning]?[/warning]"
+        _pkg.console.print(
+            f"  {mark} [bold]{plan['id']}[/bold]  "
+            f"[muted]{plan['kind']}[/muted]  {plan['base_url']}{tier_label}{quota_label}"
+        )
+    if not plans:
         _pkg.console.print(
             "  [muted]No Plans registered. Profiles below run via PAYG defaults.[/muted]"
         )
@@ -375,97 +465,41 @@ def _login_show_status() -> None:
         _pkg.console.print(
             "  [muted]No credentials. Run /login add or set provider env vars.[/muted]"
         )
-    else:
-        # Group by provider for readability
-        by_provider: dict[str, list[AuthProfile]] = {}
-        for p in profiles:
-            by_provider.setdefault(p.provider, []).append(p)
-        # v0.51.0 — pre-compute eligibility per provider so each profile row
-        # carries an inline reject badge (cooldown / expired / disabled / etc).
-        verdicts_by_name: dict[str, str] = {}
-        details_by_name: dict[str, str] = {}
-        for prov in by_provider:
-            for v in store.evaluate_eligibility(prov):
-                verdicts_by_name[v.profile_name] = v.reason_code
-                details_by_name[v.profile_name] = v.detail
-        # X1 — surface the user-pinned active profile per provider so
-        # the operator sees which one ``ProfileRotator.resolve`` will
-        # pick first. The pin lives in ``ProfileStore.set_active`` and
-        # is read through ``get_pinned_active`` (excludes the auto-set
-        # legacy active so the badge tracks operator intent, not the
-        # first-registered side effect).
-        active_by_provider: dict[str, str] = {}
-        for prov in by_provider:
-            active = store.get_pinned_active(prov)
-            if active is not None:
-                active_by_provider[prov] = active.name
-
-        for provider in sorted(by_provider.keys()):
-            active_name = active_by_provider.get(provider)
-            for p in by_provider[provider]:
-                badge = {
-                    CredentialType.OAUTH: "oauth",
-                    CredentialType.TOKEN: "token",
-                    CredentialType.API_KEY: "api-key",
-                }.get(p.credential_type, "?")
-                # L3 — surface Plan binding detail (display_name + kind +
-                # subscription_tier) so an OAuth profile row actually
-                # says *what subscription* it talks to instead of just an
-                # opaque plan id. Falls back to ``(none)`` when the
-                # profile is PAYG / unmanaged.
-                plan_label = _format_plan_binding(registry, p.plan_id)
-                managed = f" · managed:{p.managed_by}" if p.managed_by else ""
-                expiry = ""
-                if p.expires_at:
-                    import time as _t
-
-                    rem = int(p.expires_at - _t.time())
-                    expiry = f" · expires {rem // 60}m" if rem > 0 else " · [error]expired[/error]"
-                # Eligibility badge — success ✓ when ok, warning/error with reason otherwise.
-                reason = verdicts_by_name.get(p.name, "ok")
-                if reason == "ok":
-                    badge_str = "[success]✓[/success]"
-                else:
-                    detail = details_by_name.get(p.name, "")
-                    badge_str = f"[warning]✗ {reason}[/warning]"
-                    if detail:
-                        badge_str += f" [muted]({detail})[/muted]"
-                # X1 — mark the active row so ``/login`` shows which
-                # profile a call will pick first when multiple are
-                # eligible for the same provider.
-                active_suffix = " [success](active)[/success]" if p.name == active_name else ""
-                _pkg.console.print(
-                    f"  {badge_str}  {p.name:<28}{active_suffix} "
-                    f"[muted]{badge:<7}[/muted] {p.masked_key} "
-                    f"plan={plan_label}{managed}{expiry}"
-                )
+    registry = get_plan_registry()
+    masked_keys = {p.name: p.masked_key for p in ensure_profile_store().list_all()}
+    badges = {"oauth": "oauth", "token": "token", "api_key": "api-key"}
+    # Sorting by provider keeps each provider's registration order.
+    for p in sorted(profiles, key=lambda row: row["provider"]):
+        # L3 — surface Plan binding detail (display_name + kind +
+        # subscription_tier) so an OAuth profile row says *what
+        # subscription* it talks to instead of just an opaque plan id.
+        plan_label = _format_plan_binding(registry, p["plan_id"] or "")
+        managed = f" · managed:{p['managed_by']}" if p["managed_by"] else ""
+        expiry = ""
+        if p["expires_at"] is not None:
+            rem = int(p["expires_at"] - time.time())
+            expiry = f" · expires {rem // 60}m" if rem > 0 else " · [error]expired[/error]"
+        if p["eligible"]:
+            badge_str = "[success]✓[/success]"
+        else:
+            badge_str = f"[warning]✗ {p['reason']}[/warning]"
+            if p["reason_detail"]:
+                badge_str += f" [muted]({p['reason_detail']})[/muted]"
+        # X1 — mark the pinned profile a call picks first for its provider.
+        active_suffix = " [success](active)[/success]" if p["active"] else ""
+        _pkg.console.print(
+            f"  {badge_str}  {p['name']:<28}{active_suffix} "
+            f"[muted]{badges.get(p['type'], '?'):<7}[/muted] {masked_keys.get(p['name'], '')} "
+            f"plan={plan_label}{managed}{expiry}"
+        )
     _pkg.console.print()
 
-    # Routing section
-    routing = registry.all_routing()
+    routing = snapshot["routing"]
     if routing:
         _pkg.console.print("  [header]Routing[/header]")
         for model, plan_ids in sorted(routing.items()):
             chain = " → ".join(plan_ids) if plan_ids else "[muted](none)[/muted]"
             _pkg.console.print(f"  {model:<24} → {chain}")
-        _pkg.console.print()
-
-    # OAuth status (shows expiry + email when available)
-    try:
-        oauth = get_oauth_status()
-    except Exception:
-        oauth = []
-    if oauth:
-        _pkg.console.print("  [header]OAuth (external CLIs)[/header]")
-        for s in oauth:
-            colour = "success" if s.get("status") == "active" else "warning"
-            _pkg.console.print(
-                f"  [{colour}]{s.get('status', '?'):<8}[/{colour}] "
-                f"{s.get('provider', ''):<20} "
-                f"{s.get('email') or '-':<24} "
-                f"{s.get('expires_in', ''):<10} "
-                f"[muted]({s.get('source', '')})[/muted]"
-            )
         _pkg.console.print()
 
     if google_accounts:
@@ -480,7 +514,8 @@ def _login_show_status() -> None:
         _pkg.console.print()
 
     _pkg.console.print(
-        "  [muted]Tip: /login add to register a plan · /login quota for usage detail[/muted]\n"
+        "  [muted]Tip: /login add to register a plan · "
+        "/login health for credential detail[/muted]\n"
     )
 
 
@@ -492,19 +527,17 @@ def _login_add_interactive(_args: str) -> None:
     """
     import sys
 
+    from core.auth.auth_toml import auth_file_transaction
     from core.auth.profiles import AuthProfile, CredentialType
     from core.cli import commands as _pkg
-    from core.llm.strategies.plan_registry import get_plan_registry
     from core.llm.strategies.plans import default_plan_for_payg
-    from core.wiring.container import ensure_profile_store
 
     if not sys.stdin.isatty():
-        _pkg.console.print(
-            "  [warning]/login add requires an interactive terminal.[/warning]\n"
-            "  [muted]Set keys via env vars (ZAI_API_KEY, OPENAI_API_KEY, "
-            "OPENROUTER_API_KEY, ANTHROPIC_API_KEY) for non-interactive setup.[/muted]"
+        raise ValueError(
+            "/login add requires an interactive terminal. Set keys via env vars "
+            "(ZAI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY) "
+            "for non-interactive setup."
         )
-        return
 
     kinds = [
         (
@@ -525,9 +558,6 @@ def _login_add_interactive(_args: str) -> None:
         _pkg.console.print("  [muted]Cancelled[/muted]\n")
         return
     kind_id = kinds[idx][0]
-
-    registry = get_plan_registry()
-    store = ensure_profile_store()
 
     if kind_id == "subscription":
         _login_oauth("openai")
@@ -559,17 +589,18 @@ def _login_add_interactive(_args: str) -> None:
             _pkg.console.print("  [warning]No key provided.[/warning]\n")
             return
         plan = default_plan_for_payg(provider, key)
-        registry.add(plan)
-        store.add(
-            AuthProfile(
-                name=f"{plan.id}:user",
-                provider=provider,
-                credential_type=CredentialType.API_KEY,
-                key=key,
-                plan_id=plan.id,
-            ),
-            activate=True,
-        )
+        with auth_file_transaction() as (registry, store):
+            registry.add(plan)
+            store.add(
+                AuthProfile(
+                    name=f"{plan.id}:user",
+                    provider=provider,
+                    credential_type=CredentialType.API_KEY,
+                    key=key,
+                    plan_id=plan.id,
+                ),
+                activate=True,
+            )
         # Mirror to settings + .env so legacy fallbacks keep working
         from core.config import settings
 
@@ -583,7 +614,6 @@ def _login_add_interactive(_args: str) -> None:
             field_name, env_var = env_field_map[provider]
             object.__setattr__(settings, field_name, key)
             _pkg._upsert_env(env_var, key)
-        _pkg._persist_auth_state()
         clear_dry_run_opt_in()
         _pkg.console.print(
             f"  [success]Registered[/success] {plan.display_name}  "
@@ -610,35 +640,35 @@ def _login_oauth(target: str) -> None:
 
     target = target.lower().strip()
     if target == "openai":
+        from core.auth.oauth_login import login_openai
+        from core.llm.adapters.registry import invalidate_provider_clients
+
         _pkg.console.print()
         try:
-            from core.auth.oauth_login import login_openai
-
             creds = login_openai()
-            if creds:
-                import contextlib
-
-                with contextlib.suppress(Exception):
-                    from core.llm.adapters.registry import invalidate_provider_clients
-
-                    invalidate_provider_clients("openai")
-                clear_dry_run_opt_in()
-                _pkg.console.print(
-                    "  [success]ChatGPT subscription OAuth registered.[/success]  "
-                    "[muted]Provider: openai-codex[/muted]\n"
-                )
+        except (ValueError, OSError):
+            raise  # Rejected or unsaved credential; cmd_login reports it.
         except Exception as exc:
-            _pkg.console.print(f"  [red]Login failed: {exc}[/red]\n")
+            # External device-code payloads can fail in any shape; report the
+            # cause and keep the REPL alive rather than exiting on it.
+            raise ValueError(f"Login failed: {exc}") from exc
+        if not creds:
+            raise ValueError("ChatGPT login cancelled; no credential was saved")
+        invalidate_provider_clients("openai")
+        clear_dry_run_opt_in()
+        _pkg.console.print(
+            "  [success]ChatGPT subscription OAuth registered.[/success]  "
+            "[muted]Provider: openai-codex[/muted]\n"
+        )
         return
 
     if target == "anthropic":
         _login_anthropic_api_key()
         return
 
-    _pkg.console.print(
-        f"  [warning]OAuth not implemented for '{target}'.[/warning]\n"
-        "  [muted]Available: openai (ChatGPT subscription), "
-        "anthropic (API key)[/muted]\n"
+    raise ValueError(
+        f"OAuth not implemented for '{target}'. "
+        "Available: openai (ChatGPT subscription), anthropic (API key)"
     )
 
 
@@ -825,13 +855,12 @@ def _login_anthropic_api_key() -> None:
     import getpass
     from datetime import UTC, datetime
 
+    from core.auth.auth_toml import auth_file_transaction
     from core.auth.profiles import AuthProfile, CredentialType
     from core.cli import commands as _pkg
     from core.config import settings
     from core.llm.adapters.registry import invalidate_provider_clients
-    from core.llm.strategies.plan_registry import get_plan_registry
     from core.llm.strategies.plans import Plan, PlanKind
-    from core.wiring.container import ensure_profile_store
 
     try:
         # allow-direct-io: thin handler — getpass hides typed input from screen.
@@ -847,28 +876,26 @@ def _login_anthropic_api_key() -> None:
         _pkg.console.print("  [warning]Key does not look like sk-ant-… — saving anyway.[/warning]")
 
     plan_id = "anthropic-payg-geode"
-    registry = get_plan_registry()
-    plan = registry.get(plan_id) or Plan(
-        id=plan_id,
-        provider="anthropic",
-        kind=PlanKind.PAYG,
-        display_name="Anthropic (PAYG)",
-        base_url="https://api.anthropic.com",
-        auth_type="x-api-key",
-    )
-    registry.add(plan)
-
-    profile = AuthProfile(
-        name=f"{plan_id}:user",
-        provider="anthropic",
-        credential_type=CredentialType.API_KEY,
-        key=api_key,
-        plan_id=plan.id,
-        expires_at=0.0,
-        metadata={"last_refresh": datetime.now(UTC).isoformat().replace("+00:00", "Z")},
-    )
-    ensure_profile_store().add(profile, activate=True)
-    _pkg._persist_auth_state()
+    with auth_file_transaction() as (registry, store):
+        plan = registry.get(plan_id) or Plan(
+            id=plan_id,
+            provider="anthropic",
+            kind=PlanKind.PAYG,
+            display_name="Anthropic (PAYG)",
+            base_url="https://api.anthropic.com",
+            auth_type="x-api-key",
+        )
+        registry.add(plan)
+        profile = AuthProfile(
+            name=f"{plan_id}:user",
+            provider="anthropic",
+            credential_type=CredentialType.API_KEY,
+            key=api_key,
+            plan_id=plan.id,
+            expires_at=0.0,
+            metadata={"last_refresh": datetime.now(UTC).isoformat().replace("+00:00", "Z")},
+        )
+        store.add(profile, activate=True)
     settings.anthropic_api_key = api_key
     _pkg._upsert_env("ANTHROPIC_API_KEY", api_key)
     _persist_credential_source("anthropic", "api_key")
@@ -881,45 +908,36 @@ def _login_anthropic_api_key() -> None:
 
 
 def _login_set_key(rest: str) -> None:
+    from core.auth.auth_toml import auth_file_transaction
+    from core.auth.profiles import AuthProfile, CredentialType
     from core.cli import commands as _pkg
 
     parts = rest.split(None, 1)
     if len(parts) < 2:
-        _pkg.console.print("  [warning]Usage: /login set-key <plan-id> <api-key>[/warning]\n")
-        return
+        raise ValueError("Usage: /login set-key <plan-id> <api-key>")
     plan_id, key = parts[0], parts[1].strip()
-
-    from core.auth.profiles import AuthProfile, CredentialType
-    from core.llm.strategies.plan_registry import get_plan_registry
-    from core.wiring.container import ensure_profile_store
-
-    registry = get_plan_registry()
-    plan = registry.get(plan_id)
-    if plan is None:
-        _pkg.console.print(
-            f"  [warning]Unknown plan: {plan_id}[/warning]  [muted](use /login add first)[/muted]\n"
+    with auth_file_transaction() as (registry, store):
+        plan = registry.get(plan_id)
+        if plan is None:
+            raise ValueError(f"Unknown plan: {plan_id} (use /login add first)")
+        name = f"{plan.id}:user"
+        existing = store.get(name)
+        profile = (
+            replace(existing, key=key, error_count=0, cooldown_until=0.0)
+            if existing is not None
+            else AuthProfile(
+                name=name,
+                provider=plan.provider,
+                credential_type=CredentialType.API_KEY,
+                key=key,
+                plan_id=plan.id,
+            )
         )
-        return
-    store = ensure_profile_store()
-    name = f"{plan.id}:user"
-    existing = store.get(name)
-    profile = (
-        replace(existing, key=key, error_count=0, cooldown_until=0.0)
-        if existing is not None
-        else AuthProfile(
-            name=name,
-            provider=plan.provider,
-            credential_type=CredentialType.API_KEY,
-            key=key,
-            plan_id=plan.id,
-        )
-    )
-    store.add(profile, activate=True)
+        store.add(profile, activate=True)
     if plan.provider == "glm-coding":
         from core.llm.adapters.registry import invalidate_provider_clients
 
         invalidate_provider_clients("glm")
-    _pkg._persist_auth_state()
     clear_dry_run_opt_in()
     _pkg.console.print(
         f"  [success]Updated key[/success] for {plan.display_name}  "
@@ -932,35 +950,43 @@ def _login_use(rest: str) -> None:
 
     plan_id = rest.strip()
     if not plan_id:
-        _pkg.console.print("  [warning]Usage: /login use <plan-id>[/warning]\n")
-        return
-    from core.llm.strategies.plan_registry import get_plan_registry
-
-    registry = get_plan_registry()
-    plan = registry.get(plan_id)
-    if plan is None:
-        _pkg.console.print(f"  [warning]Unknown plan: {plan_id}[/warning]\n")
-        return
+        raise ValueError("Usage: /login use <plan-id>")
+    from core.auth.auth_toml import auth_file_transaction
     from core.llm.model_catalog import model_ids_for_source, model_source_unavailable_reason
     from core.llm.registry import get_provider_spec
 
-    spec = get_provider_spec(plan.provider)
-    if spec is None:
-        _pkg.console.print(f"  [warning]Unknown provider: {plan.provider}[/warning]\n")
-        return
-    reason = model_source_unavailable_reason(
-        spec.profile.default_model(), provider=spec.profile.provider, source=spec.credential.source
-    )
-    if reason:
-        _pkg.console.print(f"  [warning]{reason}[/warning]\n")
-        return
-    for model in model_ids_for_source(spec.profile.provider, spec.credential.source):
-        existing = [pid for pid in registry.get_routing(model) if pid != plan.id]
-        registry.set_routing(model, [plan.id, *existing])
-    _pkg._persist_auth_state()
+    with auth_file_transaction() as (registry, _store):
+        plan = registry.get(plan_id)
+        if plan is None:
+            raise ValueError(f"Unknown plan: {plan_id}")
+        spec = get_provider_spec(plan.provider)
+        if spec is None:
+            raise ValueError(f"Unknown provider: {plan.provider}")
+        reason = model_source_unavailable_reason(
+            spec.profile.default_model(),
+            provider=spec.profile.provider,
+            source=spec.credential.source,
+        )
+        if reason:
+            raise ValueError(reason)
+        for model in model_ids_for_source(spec.profile.provider, spec.credential.source):
+            existing = [pid for pid in registry.get_routing(model) if pid != plan.id]
+            registry.set_routing(model, [plan.id, *existing])
     _pkg.console.print(
         f"  [success]Activated[/success] {plan.display_name} for {plan.provider} models.\n"
     )
+
+
+def _unstored_profile_message(name: str) -> str:
+    """Explain why a profile choice cannot be saved to auth.toml."""
+    from core.wiring.container import ensure_profile_store
+
+    if name in ensure_profile_store():
+        return (
+            f"{name} comes from the environment or an imported CLI login; "
+            "auth.toml cannot store a choice for it"
+        )
+    return f"Unknown profile: {name} (run /login to list all profiles)"
 
 
 def _login_use_profile(rest: str) -> None:
@@ -974,23 +1000,17 @@ def _login_use_profile(rest: str) -> None:
     surfaces the pinned profile first (legacy sort applies to the
     remaining candidates so an ineligible pin gracefully steps aside).
     """
+    from core.auth.auth_toml import auth_file_transaction
     from core.cli import commands as _pkg
-    from core.wiring.container import ensure_profile_store
 
     name = rest.strip()
     if not name:
-        _pkg.console.print("  [warning]Usage: /login use-profile <profile-name>[/warning]\n")
-        return
-    store = ensure_profile_store()
-    profile = store.get(name)
-    if profile is None:
-        _pkg.console.print(
-            f"  [warning]Unknown profile: {name}[/warning]"
-            "  [muted](run /login to list all profiles)[/muted]\n"
-        )
-        return
-    store.set_active(name)
-    _pkg._persist_auth_state()
+        raise ValueError("Usage: /login use-profile <profile-name>")
+    with auth_file_transaction() as (_registry, store):
+        profile = store.get(name)
+        if profile is None:
+            raise ValueError(_unstored_profile_message(name))
+        store.set_active(name)
     _pkg.console.print(f"  [success]Pinned[/success] {name} as active for {profile.provider}.\n")
 
 
@@ -1010,25 +1030,23 @@ def _login_order(rest: str) -> None:
     (``ProfileStore.set_active`` parity) so X1's ``/login`` ``(active)``
     badge stays accurate.
     """
+    from core.auth.auth_toml import auth_file_transaction
     from core.cli import commands as _pkg
     from core.wiring.container import ensure_profile_store
-
-    store = ensure_profile_store()
 
     # X1.1 mutating subcommands.
     parts = rest.split()
     if parts and parts[0].lower() in ("set", "clear"):
         action = parts[0].lower()
         if len(parts) < 2:
-            _pkg.console.print(
-                "  [warning]Usage: /login order set <provider> <name1> <name2> …[/warning]\n"
-                "  [warning]       /login order clear <provider>[/warning]\n"
+            raise ValueError(
+                "Usage: /login order set <provider> <name1> <name2> … "
+                "or /login order clear <provider>"
             )
-            return
         provider = parts[1]
         if action == "clear":
-            store.clear_auth_order(provider)
-            _pkg._persist_auth_state()
+            with auth_file_transaction() as (_registry, store):
+                store.clear_auth_order(provider)
             _pkg.console.print(
                 f"  [success]Cleared auth order[/success]  {provider}  "
                 "[muted](rotator falls back to LRU/type-priority)[/muted]\n"
@@ -1036,25 +1054,22 @@ def _login_order(rest: str) -> None:
             return
         names = parts[2:]
         if not names:
-            _pkg.console.print(
-                "  [warning]Usage: /login order set <provider> <name1> "
-                "[<name2> …][/warning]\n"
-                "  [muted]Pass at least one profile name; use "
-                "`/login order clear <provider>` to drop a pin.[/muted]\n"
+            raise ValueError(
+                "Usage: /login order set <provider> <name1> [<name2> …]. Pass at least "
+                "one profile name; use `/login order clear <provider>` to drop a pin."
             )
-            return
-        try:
+        with auth_file_transaction() as (_registry, store):
+            missing = [name for name in names if name not in store]
+            if missing:
+                raise ValueError(_unstored_profile_message(missing[0]))
             store.set_auth_order(provider, names)
-        except (KeyError, ValueError) as exc:
-            _pkg.console.print(f"  [warning]{exc}[/warning]\n")
-            return
-        _pkg._persist_auth_state()
         _pkg.console.print(
             f"  [success]Pinned auth order[/success]  {provider}  "
             f"[muted]({' → '.join(names)})[/muted]\n"
         )
         return
 
+    store = ensure_profile_store()
     profiles = store.list_all()
     if not profiles:
         _pkg.console.print(
@@ -1070,8 +1085,7 @@ def _login_order(rest: str) -> None:
         by_provider.setdefault(p.provider, []).append(p)
 
     if not by_provider:
-        _pkg.console.print(f"  [warning]No profiles for provider {target_provider!r}.[/warning]\n")
-        return
+        raise ValueError(f"No profiles for provider {target_provider!r}.")
 
     _pkg.console.print("\n  [header]Profile order[/header]")
     for provider in sorted(by_provider.keys()):
@@ -1127,20 +1141,15 @@ def _login_remove(rest: str) -> None:
 
     plan_id = rest.strip()
     if not plan_id:
-        _pkg.console.print("  [warning]Usage: /login remove <plan-id>[/warning]\n")
-        return
-    from core.llm.strategies.plan_registry import get_plan_registry
-    from core.wiring.container import ensure_profile_store
+        raise ValueError("Usage: /login remove <plan-id>")
+    from core.auth.auth_toml import auth_file_transaction
 
-    registry = get_plan_registry()
-    if not registry.remove(plan_id):
-        _pkg.console.print(f"  [warning]Plan not found: {plan_id}[/warning]\n")
-        return
-    store = ensure_profile_store()
-    for p in list(store.list_all()):
-        if p.plan_id == plan_id:
-            store.remove(p.name)
-    _pkg._persist_auth_state()
+    with auth_file_transaction() as (registry, store):
+        if not registry.remove(plan_id):
+            raise ValueError(f"Plan not found: {plan_id}")
+        for p in list(store.list_all()):
+            if p.plan_id == plan_id:
+                store.remove(p.name)
     _pkg.console.print(f"  [success]Removed plan and its profiles:[/success] {plan_id}\n")
 
 
@@ -1149,52 +1158,38 @@ def _login_route(rest: str) -> None:
 
     parts = rest.split()
     if len(parts) < 2:
-        _pkg.console.print(
-            "  [warning]Usage: /login route <model> <plan-id> [<plan-id>...][/warning]\n"
-        )
-        return
+        raise ValueError("Usage: /login route <model> <plan-id> [<plan-id>...]")
     model, plan_ids = parts[0], parts[1:]
-    from core.llm.strategies.plan_registry import get_plan_registry
+    from core.auth.auth_toml import auth_file_transaction
 
-    registry = get_plan_registry()
-    unknown = [pid for pid in plan_ids if registry.get(pid) is None]
-    if unknown:
-        _pkg.console.print(f"  [warning]Unknown plan(s): {', '.join(unknown)}[/warning]\n")
-        return
-    registry.set_routing(model, plan_ids)
-    _pkg._persist_auth_state()
+    with auth_file_transaction() as (registry, _store):
+        unknown = [pid for pid in plan_ids if registry.get(pid) is None]
+        if unknown:
+            raise ValueError(f"Unknown plan(s): {', '.join(unknown)}")
+        registry.set_routing(model, plan_ids)
     _pkg.console.print(f"  [success]Routing[/success] {model} → " + " → ".join(plan_ids) + "\n")
 
 
 def _login_quota() -> None:
+    """List declared plan quotas; GEODE does not count calls against them."""
     from core.cli import commands as _pkg
-    from core.llm.strategies.plan_registry import get_plan_registry
 
-    registry = get_plan_registry()
-    plans = registry.list_all()
-    quoted = [p for p in plans if p.quota is not None]
+    quoted = [
+        (plan["id"], quota)
+        for plan in build_login_snapshot()["plans"]
+        if (quota := plan["quota"]) is not None
+    ]
     if not quoted:
         _pkg.console.print("  [muted]No quota-bearing plans registered.[/muted]\n")
         return
     _pkg.console.print("\n  [header]Plan Quota[/header]")
-    for plan in quoted:
-        usage = registry.usage_for(plan.id)
-        assert plan.quota is not None
-        reset_in = usage.seconds_until_reset()
-        reset_label = f"{reset_in // 60}m" if reset_in > 0 else "ready"
+    for plan_id, quota in quoted:
         _pkg.console.print(
-            f"  {plan.id:<24} "
-            f"used {int(usage.weighted_calls):>4}/{plan.quota.max_calls} "
-            f"· resets in {reset_label}"
-            + (
-                "  [muted](weights: "
-                + ", ".join(f"{m}×{int(w)}" for m, w in plan.quota.model_weights.items())
-                + ")[/muted]"
-                if plan.quota.model_weights
-                else ""
-            )
+            f"  {plan_id:<24} {quota['max_calls']} calls / {quota['window_s'] // 3600}h window"
         )
-    _pkg.console.print()
+    _pkg.console.print(
+        "  [muted]Declared limits only; check the provider account for current usage.[/muted]\n"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1214,7 +1209,6 @@ _HEALTH_SUGGESTIONS: dict[str, str] = {
     "`/login use <other-plan>` to switch providers in the meantime.",
     "disabled": "Manually disabled (`/login remove <plan>` to delete, or "
     "edit `~/.geode/auth.toml` to flip `disabled=false`).",
-    "provider_mismatch": "Profile belongs to a different provider — info only, no action needed.",
 }
 
 
@@ -1229,47 +1223,30 @@ def _login_health(rest: str) -> None:
     `claude`", "wait Xm", …) so the user can resolve a verdict without
     guessing.
     """
-    from core.auth.profiles import EligibilityResult
     from core.cli import commands as _pkg
-    from core.wiring.container import ensure_profile_store
 
-    store = ensure_profile_store()
-    profiles = store.list_all()
+    profiles = build_login_snapshot()["profiles"]
     if not profiles:
         _pkg.console.print(
             "  [muted]No profiles registered. Run `/login add` to create one.[/muted]\n"
         )
         return
 
-    target = rest.strip()
-
     # When the operator names a profile, narrow down — same matching the
     # rest of the login subcommands use (exact name).
-    verdicts: list[EligibilityResult] = []
-    seen_providers: set[str] = set()
-    for profile in profiles:
-        if profile.provider in seen_providers:
-            continue
-        seen_providers.add(profile.provider)
-        verdicts.extend(store.evaluate_eligibility(profile.provider))
-
+    target = rest.strip()
     if target:
-        narrowed = [v for v in verdicts if v.profile_name == target]
-        if not narrowed:
-            _pkg.console.print(
-                f"\n  [warning]No profile named[/warning] {target}\n"
-                "  [muted]Run `/login` to list all profiles.[/muted]\n"
-            )
-            return
-        verdicts = narrowed
+        profiles = [p for p in profiles if p["name"] == target]
+        if not profiles:
+            raise ValueError(f"No profile named {target}. Run `/login` to list all profiles.")
 
     _pkg.console.print("\n  [header]Eligibility[/header]")
-    for v in verdicts:
-        code = v.reason_code
-        badge = "[success]ok[/success]" if v.eligible else f"[warning]{code}[/warning]"
-        _pkg.console.print(f"  {badge:<24} [bold]{v.profile_name}[/bold]")
-        if v.detail:
-            _pkg.console.print(f"    [muted]{v.detail}[/muted]")
+    for p in profiles:
+        code = p["reason"]
+        badge = "[success]ok[/success]" if p["eligible"] else f"[warning]{code}[/warning]"
+        _pkg.console.print(f"  {badge:<24} [bold]{p['name']}[/bold]")
+        if p["reason_detail"]:
+            _pkg.console.print(f"    [muted]{p['reason_detail']}[/muted]")
         suggestion = _HEALTH_SUGGESTIONS.get(code, "")
         if suggestion:
             _pkg.console.print(f"    → {suggestion}")

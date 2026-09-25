@@ -30,8 +30,8 @@ _NEXT_ACTION: dict[ProfileRejectReason, str] = {
     ),
     ProfileRejectReason.DISABLED: ("user explicitly disabled this profile; do not auto-re-enable"),
     ProfileRejectReason.EXPIRED: (
-        "OAuth token expired — call manage_login(subcommand='oauth', args='openai') "
-        "to refresh, or surface to the user"
+        "OAuth token expired — ask the user to sign in again with `/login openai` "
+        "(or `codex login` then `/login refresh` for an imported Codex credential)"
     ),
     ProfileRejectReason.COOLING_DOWN: (
         "rate-limited or upstream rejected — wait until cooldown clears, "

@@ -6106,7 +6106,7 @@ Anthropic과 OpenRouter의 내장 경로는 `api_key`뿐입니다. 과거`claude
 
 ## /login 대시보드
 
-세션 안의 `/login`은 플랜과 자격을 한 화면에서 관리합니다(`core/cli/commands/login.py`). thin CLI에서 로컬로 실행되고, 끝나면 데몬에 인증 상태 리로드를 알립니다.
+세션 안의 `/login`은 플랜과 자격을 한 화면에서 관리합니다(`core/cli/commands/login.py`). 키 입력과 브라우저 로그인(`add`, `set-key`,`openai`, `anthropic`, `google`)은 thin CLI에서 실행해 저장한 뒤 데몬에 리로드를 알립니다. 조회와 그 밖의 변경은 실행 중인 상태를 가진 데몬이 처리합니다. 저장하지 못한 변경은 성공으로 표시하지 않습니다.
 
 | 서브커맨드 | 동작 |
 | --- | --- |
@@ -6116,7 +6116,7 @@ Anthropic과 OpenRouter의 내장 경로는 `api_key`뿐입니다. 과거`claude
 | `/login add` | 자격 추가. 키 모양(`sk-ant-`, `sk-proj-`, `sk-or-v1-`, GLM {id}.{secret})으로 프로바이더를 추정합니다. |
 | `/login use` / `remove` | 프로파일 선택과 제거. |
 | `/login route` | 프로바이더와 플랜 라우팅 확인. |
-| `/login quota` | 구독 쿼터 상태. |
+| `/login quota` | 플랜에 선언된 호출 한도. GEODE는 사용량을 세지 않으므로 현재 사용량은 프로바이더 계정에서 확인합니다. |
 | `/login source <provider> <type>` | 자격 소스 영속화. config.toml `[llm]`에 기록. |
 
 ## Google Workspace
@@ -7349,7 +7349,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 591 |
-| 테스트 Python 파일 | 747 |
+| 테스트 Python 파일 | 748 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |

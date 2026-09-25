@@ -50,6 +50,8 @@ from core.ipc_protocol import (
 log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from io import StringIO
+
     from core.server.supervised.services import SharedServices
 
 from core.paths import CLI_SOCKET_PATH  # noqa: E402 — placed after TYPE_CHECKING block
@@ -1047,6 +1049,7 @@ class CLIPoller:
                 return await self._apply_session_selection(msg, loop)
             except Exception as exc:
                 return {"type": "command_result", "status": "error", "message": str(exc)}
+        buf: StringIO | None = None
         try:
             from core.ui.console import capture_output
 
@@ -1093,6 +1096,7 @@ class CLIPoller:
                 "cmd": cmd,
                 "status": "error",
                 "message": str(exc),
+                "output": buf.getvalue() if buf is not None else "",
             }
 
     async def _handle_resume(

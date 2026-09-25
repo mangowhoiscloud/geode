@@ -23,7 +23,6 @@ from core.llm.strategies.plans import (
     GLM_CODING_TIERS,
     Plan,
     PlanKind,
-    PlanUsage,
     Quota,
     default_plan_for_payg,
 )
@@ -155,9 +154,6 @@ class TestGlmCodingTiers:
     def test_credit_quota_is_not_invented_as_a_local_call_limit(self) -> None:
         for plan in GLM_CODING_TIERS.values():
             assert plan.quota is None
-            usage = PlanUsage(plan_id=plan.id, weighted_calls=80.0)
-            assert not usage.is_quota_exhausted(plan)
-            assert usage.remaining_in_window(plan) == -1
 
     def test_subscription_kind(self) -> None:
         for plan in GLM_CODING_TIERS.values():
@@ -192,20 +188,6 @@ class TestPlanRegistry:
         reg.set_routing("glm-5.1", [plan.id])
         reg.remove(plan.id)
         assert reg.get_routing("glm-5.1") == []
-
-
-class TestPlanUsage:
-    def test_quota_unset_means_no_known_local_limit(self) -> None:
-        plan = default_plan_for_payg("openai", "sk-...")
-        usage = PlanUsage(plan_id=plan.id)
-        assert usage.is_quota_exhausted(plan) is False
-        assert usage.remaining_in_window(plan) == -1
-
-    def test_quota_exhausted_after_max_calls(self) -> None:
-        plan = replace(GLM_CODING_TIERS["lite"], quota=Quota(window_s=18_000, max_calls=80))
-        usage = PlanUsage(plan_id=plan.id, weighted_calls=80.0)
-        assert usage.is_quota_exhausted(plan) is True
-        assert usage.remaining_in_window(plan) == 0
 
 
 class TestResolveRouting:

@@ -117,10 +117,17 @@ profile pins and ordered choices are persisted alongside profiles and routing;
 legacy files without those tables have no file-owned preference. Reload validates
 the complete candidate before changing live stores. A missing or invalid file
 leaves them unchanged; a valid file removes only entries that it still owns.
-Managed CLI credentials and environment fallbacks stay with their original owner.
+Reading never creates or rewrites the file. Managed CLI credentials and
+environment fallbacks stay with their original owner: environment API keys remain
+in `~/.geode/.env` and appear only as runtime `origin=environment` profiles.
 Unchanged profiles retain cooldown/health state, while a replaced credential does
-not mutate objects already borrowed by running work. Atomic replacement preserves
-the prior file if a write fails.
+not mutate objects already borrowed by running work. Every change runs through
+`auth_file_transaction`: under an exclusive lock it edits a candidate read from
+the current file, writes it atomically and only then reloads the live stores, so
+a stale process copy cannot revive removed entries or restore rotated tokens and a
+failed write changes neither the file nor the live state. Thin clients change
+login state through the daemon except for terminal key entry and browser logins,
+which write the file locally and send the value-free `/login refresh` signal.
 
 Explicit `/key`, PAYG `/login add`, `/login set-key` and `/login anthropic`
 entries select the entered profile through `ProfileStore`'s existing pin/order

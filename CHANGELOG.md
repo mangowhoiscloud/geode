@@ -188,6 +188,22 @@ functional change.
   preserve subscription routes, endpoint boundaries and environment fallbacks.
   Retire replaced clients until their owning event loop drains them.
 
+- Change auth.toml through one locked transaction that edits the current file,
+  writes it atomically and only then updates the running process. A stale thin
+  client or worker copy no longer revives removed credentials or restores rotated
+  tokens, and rejected or unsaved `/login` and OAuth changes report failure
+  instead of success; `/key` warns when auth.toml was not updated. Loading never creates or rewrites the file:
+  environment API keys stay in `~/.geode/.env` instead of being copied into
+  auth.toml on first use, and the ChatGPT plan tier is recorded with the tokens. Thin clients read and change login state
+  through the daemon, keeping only key entry and browser logins local, and daemon
+  `/login` results carry the command outcome. The dashboard, `/login health` and
+  `manage_login` share one key-free snapshot that judges each credential against
+  its own provider. Plan quotas show declared limits only because calls were never
+  counted; `manage_login` returns interactive logins to the user. New installs
+  with an OpenAI key and a Codex CLI login now follow the documented subscription
+  default, because no PAYG plan is created implicitly; existing auth.toml plans
+  keep their routing.
+
 - Preserve explicit auth profile pins and priority order across auth.toml writes
   and fresh-process routing. Validate reload candidates before publication and
   reconcile deletions only for file-owned entries, retaining managed/environment

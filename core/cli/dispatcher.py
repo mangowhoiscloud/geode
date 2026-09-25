@@ -14,7 +14,6 @@ from core.cli.commands import (
     cmd_apply,
     cmd_context,
     cmd_key,
-    cmd_login,
     cmd_mcp,
     cmd_model,
     cmd_schedule,
@@ -23,6 +22,7 @@ from core.cli.commands import (
     resolve_action,
     show_help,
 )
+from core.cli.commands.login import run_login
 from core.cli.onboarding import render_readiness
 from core.cli.session_state import _get_readiness
 from core.ui.console import console
@@ -121,7 +121,9 @@ def _handle_command(
 
         cmd_goal(args, agentic_ref=agentic_ref)
     elif action == "login":
-        cmd_login(args)
+        # The daemon runs this handler; a rejected or unsaved change raises so
+        # the command result reports it (thin clients route /login themselves).
+        run_login(args)
     elif action == "schedule":
         cmd_schedule(args, scheduler_service=scheduler_service)
     elif action == "trigger":

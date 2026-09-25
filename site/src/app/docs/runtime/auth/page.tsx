@@ -60,9 +60,12 @@ export default function Page() {
             <h2>/login 대시보드</h2>
             <p>
               세션 안의 <code>/login</code>은 플랜과 자격을 한 화면에서
-              관리합니다(<code>core/cli/commands/login.py</code>). thin
-              CLI에서 로컬로 실행되고, 끝나면 데몬에 인증 상태 리로드를
-              알립니다.
+              관리합니다(<code>core/cli/commands/login.py</code>). 키 입력과
+              브라우저 로그인(<code>add</code>, <code>set-key</code>,
+              <code>openai</code>, <code>anthropic</code>, <code>google</code>)은
+              thin CLI에서 실행해 저장한 뒤 데몬에 리로드를 알립니다. 조회와
+              그 밖의 변경은 실행 중인 상태를 가진 데몬이 처리합니다. 저장하지
+              못한 변경은 성공으로 표시하지 않습니다.
             </p>
             <table>
               <thead>
@@ -75,7 +78,7 @@ export default function Page() {
                 <tr><td><code>/login add</code></td><td>자격 추가. 키 모양(<code>sk-ant-</code>, <code>sk-proj-</code>, <code>sk-or-v1-</code>, GLM {`{id}.{secret}`})으로 프로바이더를 추정합니다.</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>프로파일 선택과 제거.</td></tr>
                 <tr><td><code>/login route</code></td><td>프로바이더와 플랜 라우팅 확인.</td></tr>
-                <tr><td><code>/login quota</code></td><td>구독 쿼터 상태.</td></tr>
+                <tr><td><code>/login quota</code></td><td>플랜에 선언된 호출 한도. GEODE는 사용량을 세지 않으므로 현재 사용량은 프로바이더 계정에서 확인합니다.</td></tr>
                 <tr><td><code>/login source &lt;provider&gt; &lt;type&gt;</code></td><td>자격 소스 영속화. config.toml <code>[llm]</code>에 기록.</td></tr>
               </tbody>
             </table>
@@ -245,9 +248,12 @@ ZAI_API_KEY={id}.{secret}`}</pre>
             <h2>The /login dashboard</h2>
             <p>
               In-session <code>/login</code> manages plans and credentials on
-              one screen (<code>core/cli/commands/login.py</code>). It runs
-              locally in the thin CLI and notifies the daemon to reload auth
-              state when it finishes.
+              one screen (<code>core/cli/commands/login.py</code>). Key entry and
+              browser logins (<code>add</code>, <code>set-key</code>,
+              <code>openai</code>, <code>anthropic</code>, <code>google</code>)
+              run in the thin CLI, save, and then ask the daemon to reload. Views
+              and other changes run in the daemon, which owns the live state. A
+              change that could not be saved is not reported as a success.
             </p>
             <table>
               <thead>
@@ -260,7 +266,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
                 <tr><td><code>/login add</code></td><td>Add a credential. The provider is sniffed from the key shape (<code>sk-ant-</code>, <code>sk-proj-</code>, <code>sk-or-v1-</code>, GLM {`{id}.{secret}`}).</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>Select and remove profiles.</td></tr>
                 <tr><td><code>/login route</code></td><td>Inspect provider and plan routing.</td></tr>
-                <tr><td><code>/login quota</code></td><td>Subscription quota state.</td></tr>
+                <tr><td><code>/login quota</code></td><td>Declared plan call limits. GEODE does not count usage; check current usage in the provider account.</td></tr>
                 <tr><td><code>/login source &lt;provider&gt; &lt;type&gt;</code></td><td>Persist the credential source into config.toml <code>[llm]</code>.</td></tr>
               </tbody>
             </table>

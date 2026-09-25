@@ -1,14 +1,14 @@
 """Runtime plan and per-model plan-order storage.
 
 Policy interpretation and source-constrained account selection belong to
-``core.llm.routing``. This module owns only stored plans, usage and file ownership.
+``core.llm.routing``. This module owns only stored plans and file ownership.
 """
 
 from __future__ import annotations
 
 import threading
 
-from core.llm.strategies.plans import Plan, PlanUsage
+from core.llm.strategies.plans import Plan
 
 
 class PlanRegistry:
@@ -21,7 +21,6 @@ class PlanRegistry:
 
     def __init__(self) -> None:
         self._plans: dict[str, Plan] = {}
-        self._usage: dict[str, PlanUsage] = {}
         # model_pattern -> ordered list of plan_ids
         self._routing: dict[str, list[str]] = {}
         self._file_plans: dict[str, dict[str, Plan]] = {}
@@ -33,7 +32,6 @@ class PlanRegistry:
     def add(self, plan: Plan) -> None:
         with self._lock:
             self._plans[plan.id] = plan
-            self._usage.setdefault(plan.id, PlanUsage(plan_id=plan.id))
 
     def get(self, plan_id: str) -> Plan | None:
         return self._plans.get(plan_id)
@@ -41,7 +39,6 @@ class PlanRegistry:
     def remove(self, plan_id: str) -> bool:
         with self._lock:
             existed = self._plans.pop(plan_id, None) is not None
-            self._usage.pop(plan_id, None)
             for model, ids in list(self._routing.items()):
                 self._routing[model] = [i for i in ids if i != plan_id]
                 if not self._routing[model]:
@@ -53,9 +50,6 @@ class PlanRegistry:
 
     def list_for_provider(self, provider: str) -> list[Plan]:
         return [p for p in self._plans.values() if p.provider == provider]
-
-    def usage_for(self, plan_id: str) -> PlanUsage:
-        return self._usage.setdefault(plan_id, PlanUsage(plan_id=plan_id))
 
     # --- Routing ---
 
@@ -92,14 +86,13 @@ class PlanRegistry:
     def reconcile_auth_file(
         self, source: str, plans: list[Plan], routing: dict[str, list[str]]
     ) -> None:
-        """Replace this file's validated entries, retaining usage and borrowed plans."""
+        """Replace this file's validated entries, retaining borrowed plans."""
         with self._lock:
             previous = self._file_plans.get(source, {})
             ids = {plan.id for plan in plans}
             for plan_id, plan in previous.items():
                 if plan_id not in ids and self._plans.get(plan_id) is plan:
                     self._plans.pop(plan_id)
-                    self._usage.pop(plan_id, None)
             for model, chain in self._file_routing.get(source, {}).items():
                 if self._routing.get(model) == chain:
                     self._routing.pop(model)
@@ -111,7 +104,6 @@ class PlanRegistry:
                 if current == plan:
                     plan = current
                 self._plans[plan.id] = plan
-                self._usage.setdefault(plan.id, PlanUsage(plan_id=plan.id))
                 owned.append(plan)
             owned_routing = {
                 model: list(chain) for model, chain in routing.items() if model not in self._routing
@@ -122,7 +114,6 @@ class PlanRegistry:
     def clear(self) -> None:
         with self._lock:
             self._plans.clear()
-            self._usage.clear()
             self._routing.clear()
             self._file_plans.clear()
             self._file_routing.clear()
