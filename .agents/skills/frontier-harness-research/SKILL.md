@@ -19,7 +19,30 @@ description: Research process for comparing frontier harnesses (Claude Code, Cod
 | 3 | **OpenClaw** | Chat agent | Gateway, Session Key, Binding, Lane Queue, Plugin, Failover, 4-tier automation | `openclaw-patterns` |
 | 4 | **autoresearch** | Autonomous experiment loop | Constraint-based design, ratchet, Context Budget, program.md, Simplicity Selection | `karpathy-patterns` |
 | 5 | **Prime Agent** | RLM-native coding/research harness | Persistent REPL, programmable context, recursive subagents, continual harness state, native-harness evaluation | official source and technical report |
-| 6 | **Original / upstream implementation** | Native authority | Task and scorer semantics, prompts, assets, workspace assumptions, reference results, reproduction path | pinned upstream source and primary docs |
+| 6 | **DeepSeek Harness** | Plugin-composed agent harness | Plugin scope and disposal, session/context ownership, provider and tool composition | [official source](https://github.com/deepseek-ai/deepseek-harness) |
+| 7 | **Google AX** | Task orchestration runtime | Task/Workspace/Model declarations, controller/runner boundary, sandbox and suspend/resume ownership | [official source](https://github.com/google/ax); distinguish orchestration from the hosted agent loop |
+| 8 | **Grok Build** | Coding agent harness and TUI | Layered config, session/model selection, compaction, tools, hooks and lifecycle | [official source](https://github.com/xai-org/grok-build); distinguish source mirror from product release |
+| 9 | **Original / upstream implementation** | Native authority | Task and scorer semantics, prompts, assets, workspace assumptions, reference results, reproduction path | pinned upstream source and primary docs |
+
+The [cited source inventory](../../../site/src/app/docs/reference/external-references/page.tsx)
+owns dated version pins and comparison entry points. A source's inclusion is
+not evidence of GEODE adoption or equivalent task performance.
+
+### Version follow-up and responsibility alignment
+
+When revisiting a selected source, record the retrieval date, latest stable and
+prerelease tags where available, and the default-branch commit separately. A
+missing stable release is not proof that prereleases or product builds are absent.
+Pin file links to the inspected commit; compare the previously recorded revision
+with the new one before changing a claim.
+
+Trace only the affected producer → field/state → consumer → decision, including
+config precedence, admission, persistence, invalidation and teardown when relevant.
+Match each upstream responsibility to GEODE's existing owner and record
+adopt/adapt/reject with the regression that would establish the intended behavior.
+Keep documented intent, inspected implementation and executed evidence distinct;
+do not import upstream fallbacks or synthetic results as verified task success.
+Store the delta in the existing task artifact, not a parallel status ledger.
 
 ## Research Process
 

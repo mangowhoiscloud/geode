@@ -50,7 +50,7 @@ The security review and handling contracts are recorded in
 | `code-review-quality` | quality, SOLID, dead code, resource leak | Python code quality 6-lens review |
 | `dependency-review` | dependency, import, layer, circular, lazy | [Dependency direction and composition review](../.agents/skills/dependency-review/SKILL.md), including cycles and optional-dependency loading |
 | `kent-beck-review` | kent beck, simple design, simplify, god object, SRP | Simple Design 4-rule code review |
-| `codebase-audit` | audit, dead code, refactor, god object, duplication | Code audit + refactoring workflow (v0.24.0 proven) |
+| `codebase-audit` | audit, dead code, refactor, god object, duplication | Evidence-backed audit/refactoring with consumer and surviving-test checks |
 | `geode-serve` | serve, gateway, slack, binding, poller, config.toml | Slack Gateway operations + debugging guide |
 | `long-task-watcher` | monitor, wait, progress, background task | Thin development router to the runtime long-task monitoring contract |
 | `manim-scene-craft` | manim, scene, 영상, 비디오, 1080p60, EN/KO 렌더, GEODE_HERO_LANG | Manim Community Scene 작성 표준 — EN/KO 다국어 lang, Helvetica Neue + Pretendard 폰트 페어링, Anthropic-style 팔레트, layout ratchet + CI 가드. 4 검증 scene (`geode_hero` / `autoresearch_filewalk` / `autoresearch_compare` / `critical_floor`) 의 공통 패턴. |

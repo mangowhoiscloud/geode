@@ -41,6 +41,7 @@ sandboxing remain separate. The shared-file pattern follows the
 |---|---|
 | Ordinary development | [Evidence-first workflow](docs/workflow.md) and `.agents/skills/geode-workflow/` |
 | Branches, PRs, merge, cleanup | `.agents/skills/geode-gitflow/`; `.github/PULL_REQUEST_TEMPLATE.md` |
+| Codebase audit, deduplication, or pruning | `.agents/skills/codebase-audit/`; trace consumers and surviving behavior before deletion |
 | Abstraction, naming, types, schemas, tests, compatibility | [Naming conventions](docs/architecture/naming-conventions.md) and `.agents/skills/geode-code-conventions/` |
 | Public hooks, middleware, runtime events | [Hook contracts](docs/architecture/hook-system.md) and `.agents/skills/geode-code-conventions/`; distinguish decisions, trusted transforms, and observation |
 | Architecture/extensibility program | [Extensibility roadmap](docs/architecture/extensibility-roadmap.md), the single execution SOT for GAP IDs, order, status, acceptance, and closure evidence |
