@@ -640,7 +640,7 @@ def test_apply_picker_result_applies_staged_then_final(monkeypatch) -> None:
     monkeypatch.setattr(
         model_cmd,
         "_apply_model",
-        lambda profile, effort=None, role="primary", primary_effort=None, reflection_model=None: (
+        lambda profile, effort=None, role="primary", primary_effort=None, reflection_model=None, scope="project", admitted=False: (
             applied.append((profile.id, effort, role))
         ),
     )
@@ -687,7 +687,7 @@ def test_interactive_picker_includes_active_off_catalog_role_models(monkeypatch)
     monkeypatch.setattr(
         model_cmd,
         "_current_model_for_role",
-        lambda role: active[role.name],
+        lambda role, client=None: active[role.name],
     )
     monkeypatch.setattr(model_cmd, "model_available", lambda model_id: True)
     monkeypatch.setattr(model_cmd, "forced_login_method_for", lambda provider: None)
@@ -709,7 +709,7 @@ def test_apply_picker_result_resolves_off_catalog_selected_row(monkeypatch) -> N
     monkeypatch.setattr(
         model_cmd,
         "_apply_model",
-        lambda profile, effort=None, role="primary", primary_effort=None, reflection_model=None: (
+        lambda profile, effort=None, role="primary", primary_effort=None, reflection_model=None, scope="project", admitted=False: (
             applied.append((profile.id, profile.provider, role))
         ),
     )
@@ -998,7 +998,9 @@ def test_staged_admission_rejection_preserves_all_active_and_durable_settings(
         )
         monkeypatch.setattr(
             "core.orchestration.context_budget.resolve_context_budget_policy",
-            lambda _: SimpleNamespace(warning_tokens=100, tier=SimpleNamespace(name="test")),
+            lambda _, *, provider=None, source=None: SimpleNamespace(
+                warning_tokens=100, tier=SimpleNamespace(name="test")
+            ),
         )
     selections = [("primary", "gpt-6-sol", "high"), ("reflection", "glm-5.3", None)]
     if not primary_first:

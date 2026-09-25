@@ -1,13 +1,4 @@
-"""Daemon adopts the thin CLI's project-resolved model (2026-06-09 fix).
-
-The serve daemon creates each session with its OWN launch-cwd default
-(``settings.model``); the thin CLI resolves the model at the *caller's*
-project cwd and ships it in the ``client_capability`` message. The poller must
-adopt it so the executed model matches the caller's project (and the banner),
-instead of the daemon's launch-cwd model. The ``client_capability`` branch of
-``CLIPoller._process_message_async`` is self-stateless, so we exercise it
-directly on a bare instance with a mock loop.
-"""
+"""Initial IPC selection admission and the existing public session-end owner."""
 
 from __future__ import annotations
 
@@ -26,50 +17,78 @@ def _capability_msg(**extra: object) -> dict[str, object]:
     return {"type": "client_capability", "is_tty": True, "width": 120, "_client": None, **extra}
 
 
-def test_client_capability_adopts_cli_project_model() -> None:
-    poller = _bare_poller()
-    loop = MagicMock()
-    loop.model = "claude-opus-4-6"  # daemon launch-cwd default
-    loop.update_model_async = AsyncMock()
+def _loop(model="gpt-6-sol"):
+    from core.agent.conversation import ConversationContext
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig
+    from core.agent.tool_executor import ToolExecutor
+    from core.config.session import SessionModelConfig
 
+    policy = SessionModelConfig(model=model, effort="low", source="payg")
+    return AgenticLoop(
+        ConversationContext(),
+        ToolExecutor(),
+        model=model,
+        provider="openai",
+        config=AgenticLoopConfig(source="payg", effort="low", model_settings=policy),
+        quiet=True,
+    )
+
+
+def test_client_capability_adopts_cli_project_model() -> None:
+    from core.ipc_protocol import IPC_FEATURES, IPC_PROTOCOL_VERSION
+
+    poller = _bare_poller()
+    loop = _loop()
+    candidate = loop._model_settings.updated({"model": "gpt-6-luna"})
     result = asyncio.run(
         poller._process_message_async(
-            _capability_msg(model="claude-opus-4-8"), loop, MagicMock(), "cli-test"
+            _capability_msg(
+                model_config=candidate.model_dump(),
+                protocol_version=IPC_PROTOCOL_VERSION,
+                features=list(IPC_FEATURES),
+            ),
+            loop,
+            loop.context,
+            "cli-test",
         )
     )
-
-    assert result == {
-        "type": "ack",
-        "protocol_version": "geode.ipc.v0",
-        "features": [],
-    }
-    loop.update_model_async.assert_awaited_once()
-    assert loop.update_model_async.call_args.args[0] == "claude-opus-4-8"
+    assert result["type"] == "ack" and result["status"] == "applied"
+    assert loop.model == "gpt-6-luna"
+    assert result["model_config"] == loop._model_settings.model_dump() == candidate.model_dump()
 
 
-def test_client_capability_no_model_keeps_daemon_default() -> None:
+def test_client_capability_no_model_rejects_legacy_peer_without_swap() -> None:
     poller = _bare_poller()
-    loop = MagicMock()
-    loop.model = "claude-opus-4-6"
-    loop.update_model_async = AsyncMock()
+    loop = _loop()
+    result = asyncio.run(
+        poller._process_message_async(_capability_msg(), loop, loop.context, "cli-test")
+    )
+    assert result["type"] == "error"
+    assert "unsupported" in result["message"]
+    assert loop.model == "gpt-6-sol"
 
-    # Old client (no model field) — daemon must not swap.
-    asyncio.run(poller._process_message_async(_capability_msg(), loop, MagicMock(), "cli-test"))
-    loop.update_model_async.assert_not_awaited()
 
+def test_client_capability_same_complete_selection_is_noop() -> None:
+    from core.ipc_protocol import IPC_FEATURES, IPC_PROTOCOL_VERSION
 
-def test_client_capability_same_model_no_swap() -> None:
     poller = _bare_poller()
-    loop = MagicMock()
-    loop.model = "claude-opus-4-8"
-    loop.update_model_async = AsyncMock()
-
-    asyncio.run(
+    loop = _loop()
+    original = loop._model_settings
+    result = asyncio.run(
         poller._process_message_async(
-            _capability_msg(model="claude-opus-4-8"), loop, MagicMock(), "cli-test"
+            _capability_msg(
+                model_config=original.model_dump(),
+                protocol_version=IPC_PROTOCOL_VERSION,
+                features=list(IPC_FEATURES),
+            ),
+            loop,
+            loop.context,
+            "cli-test",
         )
     )
-    loop.update_model_async.assert_not_awaited()
+    assert result["type"] == "ack" and result["status"] == "applied"
+    assert loop._model_settings is original
+    assert loop.context.is_empty
 
 
 def test_async_exit_uses_public_session_end_owner() -> None:

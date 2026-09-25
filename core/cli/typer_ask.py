@@ -111,10 +111,8 @@ def answer_ask(
     # burn the one winning reply on a continuation that cannot run.
     client = IPCClient()
     if not client.connect():
-        console.print(
-            "  [error]serve daemon unreachable — start it (geode serve) and retry; "
-            "the ask was NOT claimed.[/error]"
-        )
+        reason = client.last_error or "serve daemon unreachable — start geode serve and retry"
+        console.print(f"  [error]{reason}; the ask was NOT claimed.[/error]")
         raise typer.Exit(code=1)
 
     try:

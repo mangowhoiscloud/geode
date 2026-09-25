@@ -194,7 +194,6 @@ async def _prepare_request(
 
     # Adaptive compute — context-proportional caps; the only adaptive
     # case left is wrap-up. Text length alone does not establish failure.
-    from core.config import settings as _settings
     from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
     ctx_window = MODEL_CONTEXT_WINDOW.get(effective_model, 200_000)
@@ -208,7 +207,7 @@ async def _prepare_request(
         adaptive_thinking = 0
 
     # config-driven temperature (1.0 default)
-    loop_temperature = _settings.temperature_agent_loop
+    loop_temperature = loop._model_settings.temperature_agent_loop
 
     # build the adapter-neutral request, then translate back to
     # AgenticResponse so the rest of the loop is unchanged
@@ -247,17 +246,23 @@ async def _prepare_request(
         else frozenset()
     )
     original_adapter = adapter_override if adapter_override is not None else loop._new_adapter
-    if adapter_override is None and model is not None and effective_model != loop.model:
+    if adapter_override is None and model is not None:
         from core.config import _resolve_provider
-        from core.llm.adapters._source_inference import infer_source
         from core.llm.adapters.registry import normalize_registry_provider
 
         target_provider = normalize_registry_provider(_resolve_provider(effective_model))
-        if target_provider != normalize_registry_provider(loop._provider):
-            if allow_tools:
-                raise ValueError("cross-provider model overrides require a text-only call")
+        policy = loop._model_settings
+        target_source = (
+            policy.judge_source if policy.judge_model == effective_model else loop._source
+        )
+        if (target_provider, target_source) != (
+            normalize_registry_provider(loop._provider),
+            loop._source,
+        ):
+            if allow_tools or (policy.judge_model != effective_model):
+                raise ValueError("model override has no admitted text-only session route")
             original_adapter = loop._adapter_registry_snapshot.resolve_for(
-                target_provider, infer_source(target_provider)
+                target_provider, target_source
             )
 
     def build_request() -> AdapterCallRequest:

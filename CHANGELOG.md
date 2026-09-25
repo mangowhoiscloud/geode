@@ -163,6 +163,8 @@ functional change.
 
 ### Fixed
 
+- Apply CLI model, effort, and concrete source selections to the owning daemon session before saving defaults, including named commands, role pickers, and fullscreen mode. Snapshot auxiliary model policy per session, reject unsuccessful or unsupported handshakes, and retain the previous selection and tool bindings when adoption fails. Project/global defaults no longer implicitly update other active sessions.
+
 - Show only supported model effort choices and require an explicit valid choice
   before confirming or staging an incompatible saved effort. Preserve valid
   selections and cancellation without silently replacing settings. Validate

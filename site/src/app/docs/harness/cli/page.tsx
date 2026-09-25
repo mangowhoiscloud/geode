@@ -46,8 +46,9 @@ export default function Page() {
               상대는 <code>CLIPoller</code>
               (<code>core/server/ipc_server/poller.py</code>)입니다. 연결 시 지원
               기능의 교집합을 협상하고, 각 요청 ID가 스트림·구조화 이벤트·최종
-              응답에 그대로 붙습니다. 구버전의 version-less peer도 v0 호환
-              경계로 계속 연결됩니다.
+              응답에 그대로 붙습니다. v0 envelope는 계속 읽을 수 있지만 세션
+              설정 적용 기능이 없는 구버전 peer는 실행 전에 명시적으로
+              거절합니다.
             </p>
 
             <h2>환영 화면과 라이브 상태</h2>
@@ -153,7 +154,7 @@ export default function Page() {
               <code>core/slash_routing.py</code>의 <code>COMMAND_REGISTRY</code>가
               정의합니다. 평가와 진화 명령은 각각 <code>geode-eval</code>과
               <code>geode-evolve</code>로 분리됩니다. thin REPL은 <code>/help</code>,{" "}
-              <code>/fleet</code>, 인자 없는 <code>/model</code>도 로컬에서 특별
+              <code>/fleet</code>도 로컬에서 특별
               처리합니다. <code>core/cli/commands/_state.py</code>의{" "}
               <code>COMMAND_MAP</code>은 legacy dispatcher action과 별칭을
               매핑합니다. 로컬로 처리되지 않은 짧은 명령은 IPC{" "}
@@ -193,20 +194,24 @@ export default function Page() {
             </table>
             <p>
               <code>/login</code>이나 <code>/key</code>가 로컬에서 끝나면 thin
-              클라이언트가 데몬에 인증 상태 리로드를 통지합니다. 인자 없는{" "}
-              <code>/model</code>은 TTY에서 picker를 로컬로 띄운 뒤 선택 결과만
-              데몬에 전달합니다(<code>core/cli/__init__.py</code>).
+              클라이언트가 데몬에 인증 상태 리로드를 통지합니다. 이름 지정,
+              picker, fullscreen의 <code>/model</code>은 같은 적용 경로를
+              사용합니다. 현재 세션의 모델·effort·source와 보조 역할을
+              데몬이 검증하고 적용한 뒤 기본값을 저장합니다. project/global은
+              미래 세션의 기본값 범위이며 다른 실행 중 세션을 바꾸지 않습니다.
+              적용 거절과 적용 후 저장 실패는 구분해 표시합니다.
             </p>
             <p>
               picker 키 계약(<code>core/cli/effort_picker.py</code>): Tab이
               역할 탭(Primary, Reflection, Mutator)을 순환하고 ↑↓가 모델,
-              ←→가 effort를 고릅니다. <strong>Space는 포커스된 역할에
-              적용하고 picker를 유지</strong>하므로 세 역할을 한 세션에서
+              ←→가 effort를 고릅니다. <strong>Space는 포커스된 역할을
+              임시 선택하고 picker를 유지</strong>하므로 세 역할을 한 세션에서
               모두 설정할 수 있습니다. Enter는 staged 선택까지 전부 확정하고
-              닫으며, Esc는 staged 선택을 포함해 전부 폐기합니다. provider가
-              바뀌는 전환은 credential source(payg, subscription)를 새
-              provider 기준으로 다시 추론합니다. <code>/login codex</code>{" "}
-              직후의 GPT 전환이 구독 쿼터로 라우팅되는 근거입니다.
+              닫으며, Esc는 staged 선택을 포함해 전부 폐기합니다. 같은 공급자
+              안에서 모델이나 effort를 바꾸면 현재 source를 유지하고, 공급자가
+              바뀔 때 새 경로를 해석합니다. 연결 시 실제 데몬 workspace를
+              확인하며 다른 프로젝트는 별도 serve가 필요합니다. 이 계약을
+              지원하지 않는 구버전 데몬은 재시작 후 다시 연결해야 합니다.
             </p>
 
             <h2>geode-mcp 서버</h2>
@@ -290,8 +295,8 @@ export default function Page() {
               <code>CLIPoller</code> (<code>core/server/ipc_server/poller.py</code>).
               Peers negotiate the intersection of supported features, and one
               request ID follows the stream, structured events, and terminal
-              response. Version-less peers remain accepted through the legacy
-              v0 compatibility boundary.
+              response. Legacy v0 envelopes remain readable, but peers without
+              session-setting admission are explicitly rejected before execution.
             </p>
 
             <h2>Welcome screen and live status</h2>
@@ -401,8 +406,7 @@ export default function Page() {
               <code>COMMAND_REGISTRY</code> in <code>core/slash_routing.py</code>.
               Evaluation and evolution commands are separate under
               <code>geode-eval</code> and <code>geode-evolve</code>. The thin REPL also
-              special-cases <code>/help</code>, <code>/fleet</code>, and
-              argument-free <code>/model</code> locally. <code>COMMAND_MAP</code> in{" "}
+              special-cases <code>/help</code> and <code>/fleet</code> locally. <code>COMMAND_MAP</code> in{" "}
               <code>core/cli/commands/_state.py</code> maps legacy dispatcher actions
               and aliases. Commands not handled locally are relayed through IPC{" "}
               <code>send_command</code> for short RPCs or
@@ -441,22 +445,25 @@ export default function Page() {
             </table>
             <p>
               After <code>/login</code> or <code>/key</code> finish locally, the
-              thin client notifies the daemon to reload auth state.{" "}
-              <code>/model</code> with no arguments runs the interactive picker
-              locally on a TTY, then relays only the chosen model to the daemon
-              (<code>core/cli/__init__.py</code>).
+              thin client notifies the daemon to reload auth state. Named, picker,
+              and fullscreen <code>/model</code> choices share one application path.
+              The daemon validates and applies the current session&apos;s model,
+              effort, source, and auxiliary roles before the client saves defaults.
+              Project/global scope controls future defaults; other running sessions
+              retain their own choices. Rejection and a later persistence failure
+              are reported separately.
             </p>
             <p>
               Picker key contract (<code>core/cli/effort_picker.py</code>): Tab
               cycles the role tabs (Primary, Reflection, Mutator), ↑↓ pick the
-              model, ←→ pick effort. <strong>Space applies the focused row to
+              model, ←→ pick effort. <strong>Space stages the focused row for
               the focused role and keeps the picker open</strong>, so all three
               roles can be set in one session. Enter confirms everything
               (including staged picks) and closes; Esc discards everything,
-              staged picks included. A provider-changing switch re-infers the
-              credential source (payg, subscription) for the new provider,
-              which is why a GPT switch right after <code>/login codex</code>{" "}
-              routes through the subscription quota.
+              staged picks included. Model and effort changes within the same provider
+              keep the current source; a provider change resolves a new route. Connection admission
+              reports the daemon&apos;s actual workspace and rejects other projects.
+              Restart and reconnect to daemons that do not support this contract.
             </p>
 
             <h2>The geode-mcp server</h2>

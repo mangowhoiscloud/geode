@@ -10,6 +10,8 @@ import logging
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
+from core.config.session import SessionModelConfig
+
 if TYPE_CHECKING:
     from core.llm.adapters.base import LLMAdapter
 
@@ -144,13 +146,128 @@ def _apply_model_update(
     *,
     source: str | None = None,
 ) -> tuple[str, bool]:
+    """Publish synchronously; a tool projection failure preserves the old route."""
+    loop_fields = (
+        "model",
+        "_provider",
+        "_source",
+        "_new_adapter",
+        "_prompt_dirty",
+        "_bound_tool_plan",
+        "_tools",
+        "_transient_tools",
+        "_transient_deferred_tool_names",
+        "_capability_graph",
+        "_preflight_hint",
+    )
+    processor_fields = ("_model", "_provider", "_source", "_adapter_name")
+    executor_fields = (
+        "_bound_tool_plan",
+        "_handlers",
+        "_tool_input_schemas",
+        "_bound_allowed_tools",
+    )
+    snapshots = [
+        (owner, {name: getattr(owner, name) for name in names if hasattr(owner, name)})
+        for owner, names in (
+            (loop, loop_fields),
+            (loop._tool_processor, processor_fields),
+            (getattr(loop, "executor", None), executor_fields),
+        )
+    ]
+    try:
+        return _publish_model_update(loop, model, provider, source=source)
+    except BaseException:
+        for owner, fields in snapshots:
+            for name, value in fields.items():
+                setattr(owner, name, value)
+        raise
+
+
+def validate_session_model_config(loop: AgenticLoop, candidate: SessionModelConfig) -> None:
+    """Resolve all requested routes before any live selection is published."""
+    from core.config import settings
+    from core.config.judgment import resolve_judgment_route
+    from core.llm.adapters._anthropic_common import anthropic_effort_kwargs
+    from core.llm.adapters._openai_common import get_openai_model_spec, validate_reasoning_effort
+    from core.llm.adapters.registry import normalize_registry_provider
+    from core.llm.errors import LLMRequestValidationError
+    from core.llm.providers.glm import get_glm_model_spec
+
+    for model, source in (
+        (candidate.model, candidate.source),
+        (candidate.reflection_model, candidate.reflection_source),
+        (candidate.judge_model, candidate.judge_source),
+    ):
+        if not model:
+            if source:
+                raise LLMRequestValidationError("An inherited model cannot pin a separate source")
+            continue
+        provider = normalize_registry_provider(_resolve_provider(model))
+        loop._adapter_registry_snapshot.resolve_for(provider, source)
+        openai_model = model.removeprefix("openrouter/openai/")
+        if provider == "openai" or model.startswith("openrouter/openai/"):
+            spec = get_openai_model_spec(openai_model)
+            if spec.reasoning_effort_values is not None:
+                validate_reasoning_effort(candidate.effort, spec=spec)
+        elif provider == "anthropic":
+            anthropic_effort_kwargs(model, candidate.effort)
+        elif provider == "glm":
+            spec_glm = get_glm_model_spec(model)
+            if (
+                spec_glm
+                and spec_glm.reasoning_effort_values
+                and candidate.effort not in spec_glm.reasoning_effort_values
+            ):
+                raise LLMRequestValidationError(
+                    f"{model} does not support effort {candidate.effort!r}"
+                )
+    if (
+        candidate.judgment_engine == "jev"
+        and resolve_judgment_route(
+            settings, engine=candidate.judgment_engine, provider=candidate.jev_provider
+        )
+        is None
+    ):
+        raise LLMRequestValidationError("The selected judgment route has no usable credentials")
+
+
+async def apply_session_model_config(
+    loop: AgenticLoop, candidate: SessionModelConfig, *, reason: str = "user_switch"
+) -> bool:
+    """Apply one admitted candidate to this session, never process defaults."""
+    validate_session_model_config(loop, candidate)
+    current = loop._model_settings.updated(
+        {"model": loop.model, "effort": loop._effort, "source": loop._source}
+    )
+    if candidate == current:
+        return False
+    await update_model_async(
+        loop,
+        candidate.model,
+        _resolve_provider(candidate.model),
+        reason,
+        source=candidate.source,
+        model_settings=candidate,
+    )
+    return True
+
+
+def _publish_model_update(
+    loop: AgenticLoop,
+    model: str,
+    provider: str | None = None,
+    *,
+    source: str | None = None,
+) -> tuple[str, bool]:
     """Apply the route already checked by adaptation, or resolve a direct update."""
     old_model = loop.model
+    old_route = (loop._provider, loop._source)
     if source is None:
         new_provider, new_source = _resolve_model_route(loop, model, provider)
     else:
         new_provider, new_source = provider or _resolve_provider(model), source
-    if new_provider != loop._provider:
+    if (new_provider, new_source) != (loop._provider, loop._source):
         if new_source != loop._source:
             log.info(
                 "AgenticLoop source re-inferred on provider switch: %s (%s) -> %s (%s)",
@@ -175,7 +292,7 @@ def _apply_model_update(
         loop._new_adapter, "source", getattr(loop, "_source", "")
     )
     loop._tool_processor._adapter_name = getattr(loop._new_adapter, "name", "")
-    if old_model != model:
+    if old_model != model or old_route != (new_provider, new_source):
         loop._prompt_dirty = True
         reproject_bound = getattr(loop, "_reproject_bound_tool_plan", None)
         if callable(reproject_bound):
@@ -221,14 +338,31 @@ async def update_model_async(
     model: str,
     provider: str | None = None,
     reason: str = "user_switch",
+    *,
+    source: str | None = None,
+    model_settings: SessionModelConfig | None = None,
 ) -> None:
     """Async model update path used from ``AgenticLoop.arun``."""
     # Summarize with the current route before selecting the smaller target.
     # Never route maintenance through a new credential source implicitly.
     target_provider, target_source = _resolve_model_route(loop, model, provider)
-    if reason != "resume":
+    if source is not None:
+        target_source = source
+    if reason != "resume" and (model, target_provider, target_source) != (
+        loop.model,
+        loop._provider,
+        loop._source,
+    ):
         await adapt_context_for_model(loop, model, target_provider, source=target_source)
     old_model, changed = _apply_model_update(loop, model, target_provider, source=target_source)
+    if model_settings is not None:
+        loop._model_settings = model_settings
+        loop._effort = model_settings.effort
+        loop._source_explicit = True
+    elif hasattr(loop, "_model_settings"):
+        loop._model_settings = loop._model_settings.updated(
+            {"model": model, "source": target_source}
+        )
     if changed:
         from core.ui.agentic_ui import emit_model_switched
 

@@ -37,6 +37,27 @@ def _test_sock() -> Path:
     return _SOCK_PREFIX.with_suffix(f".{time.monotonic_ns()}.sock")
 
 
+def _mock_session_loop() -> MagicMock:
+    """Keep transport doubles subject to the real session-policy admission."""
+    from core.config import settings
+    from core.config.session import capture_session_model_config
+    from core.llm.adapters.registry import active_registry_snapshot
+
+    policy = capture_session_model_config(
+        settings, model=settings.model, effort=settings.agentic_effort, source="payg"
+    )
+    loop = MagicMock(
+        model=policy.model,
+        _effort=policy.effort,
+        _source=policy.source,
+        _model_settings=policy,
+        _adapter_registry_snapshot=active_registry_snapshot(),
+        _checkpoint=None,
+    )
+    loop.executor._bash._working_dir = str(Path.cwd())
+    return loop
+
+
 # ---------------------------------------------------------------------------
 # IPC Client unit tests
 # ---------------------------------------------------------------------------
@@ -60,14 +81,14 @@ class TestIPCClient:
     def test_is_serve_running_stale_socket(self, tmp_path: Path) -> None:
         from core.cli.ipc_client import is_serve_running
 
-        sock_path = tmp_path / "stale.sock"
+        sock_path = _test_sock()
         sock_path.touch()  # file exists but no server
         assert not is_serve_running(sock_path)
 
     def test_client_connect_no_server(self, tmp_path: Path) -> None:
         from core.cli.ipc_client import IPCClient
 
-        client = IPCClient(socket_path=tmp_path / "noserver.sock")
+        client = IPCClient(socket_path=_test_sock())
         assert not client.connect()
         assert not client.connected
 
@@ -469,6 +490,218 @@ class TestCLIPoller:
 class TestCLIChannelIntegration:
     """End-to-end tests for CLIPoller ↔ IPCClient IPC."""
 
+    @pytest.fixture(autouse=True)
+    def _session_selection(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from core.config import settings
+
+        monkeypatch.setattr(settings, "model", "claude-opus-4-6")
+        monkeypatch.setattr(settings, "agentic_effort", "low")
+        monkeypatch.setattr(settings, "cognitive_reflection_model", "")
+        monkeypatch.setattr(settings, "judge_model", "")
+        monkeypatch.setattr(settings, "judgment_engine", "llm")
+        monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda _: "payg")
+
+    @pytest.fixture
+    def actual_session(self, monkeypatch: pytest.MonkeyPatch) -> Any:
+        """Real policy and loop owners; only task execution is replaced."""
+        from core.agent.conversation import ConversationContext
+        from core.agent.loop import AgenticLoop
+        from core.agent.loop._bootstrap import AgenticLoopConfig
+        from core.agent.tool_executor import ToolExecutor
+        from core.cli.ipc_client import IPCClient
+        from core.config import settings
+        from core.server.ipc_server.poller import CLIPoller
+
+        monkeypatch.setattr(settings, "model", "gpt-6-sol")
+        loop = AgenticLoop(
+            ConversationContext(),
+            ToolExecutor(),
+            model="gpt-6-sol",
+            provider="openai",
+            config=AgenticLoopConfig(source="payg", effort="low"),
+            quiet=True,
+        )
+        observed: list[tuple[str, str, str]] = []
+
+        async def record_selection(_prompt: str) -> MagicMock:
+            observed.append((loop.model, loop._effort, loop._source))
+            return MagicMock(
+                text="done", rounds=1, tool_calls=[], termination_reason="natural", summary=""
+            )
+
+        monkeypatch.setattr(loop, "arun", AsyncMock(side_effect=record_selection))
+        services = MagicMock(lane_queue=None, command_registry=None)
+        services.create_session.return_value = (loop.executor, loop)
+        poller = CLIPoller(services, socket_path=_test_sock())
+        client = IPCClient(socket_path=poller._socket_path)
+        poller.start()
+        try:
+            yield loop, client, poller, observed
+        finally:
+            client.close()
+            poller.stop()
+
+    def test_real_handshake_applies_route_and_reports_workspace(
+        self, actual_session: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from core.config import settings
+
+        loop, client, _poller, observed = actual_session
+        monkeypatch.setattr(settings, "agentic_effort", "none")
+        monkeypatch.setattr(
+            "core.llm.adapters._source_inference.infer_source", lambda _: "subscription"
+        )
+        assert client.connect(), client.last_error
+        assert client.model_config == loop._model_settings.model_dump()
+        assert (loop.model, loop._effort, loop._source) == ("gpt-6-sol", "none", "subscription")
+        assert loop._new_adapter.source == "subscription"
+        request_id = client._send_client_capability()
+        ack = client._recv_for(request_id)
+        assert ack["type"] == "ack" and ack["status"] == "applied"
+        assert ack["request_id"] == request_id
+        assert ack["model_config"] == client.model_config
+        assert ack["workspace"] == str(Path(loop.executor._bash._working_dir).resolve())
+        assert ack["checkpoint_directory"] == str(loop._checkpoint.session_dir)
+        assert client.send_prompt("selected tuple")["type"] == "result"
+        assert observed == [("gpt-6-sol", "none", "subscription")]
+
+    def test_explicit_session_change_survives_next_terminal_refresh(
+        self, actual_session: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from core.config import settings
+
+        loop, client, _poller, observed = actual_session
+        assert client.connect(), client.last_error
+        request_id = client._send(
+            {
+                "type": "command",
+                "cmd": "/model",
+                "args": "",
+                "model_config": {"model": "gpt-6-luna", "effort": "high", "source": "subscription"},
+            }
+        )
+        ack = client._recv_for(request_id)
+        assert ack["type"] == "command_result" and ack["status"] == "applied"
+        assert ack["changed"] and ack["request_id"] == request_id
+        assert ack["model_config"] == loop._model_settings.model_dump()
+        # Changed defaults belong to a future session, not the next terminal refresh.
+        monkeypatch.setattr(settings, "model", "gpt-6-astra")
+        monkeypatch.setattr(settings, "agentic_effort", "max")
+        assert client.send_prompt("keep live selection")["type"] == "result"
+        assert observed == [("gpt-6-luna", "high", "subscription")]
+        assert loop._new_adapter.source == "subscription"
+
+    def test_initial_adoption_failure_closes_client_without_execution(
+        self, actual_session: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from core.config import settings
+
+        loop, client, _poller, observed = actual_session
+        original = loop._model_settings
+        monkeypatch.setattr(settings, "model", "gpt-6-luna")
+        monkeypatch.setattr(
+            "core.agent.loop._model_switching.adapt_context_for_model",
+            AsyncMock(side_effect=RuntimeError("adoption rejected")),
+        )
+        assert not client.connect()
+        assert not client.connected and "adoption rejected" in client.last_error
+        assert loop._model_settings is original
+        assert (loop.model, loop._effort, loop._source) == ("gpt-6-sol", "low", "payg")
+        assert client.send_prompt("must not run")["type"] == "error"
+        assert observed == []
+
+    def test_duplicate_initial_selection_requires_explicit_model_command(
+        self, actual_session: Any
+    ) -> None:
+        from core.ipc_protocol import IPC_FEATURES, IPC_PROTOCOL_VERSION
+
+        loop, client, _poller, _observed = actual_session
+        assert client.connect(), client.last_error
+        original = loop._model_settings
+        candidate = original.updated({"model": "gpt-6-luna", "effort": "high"}).model_dump()
+        duplicate_id = client._send(
+            {
+                "type": "client_capability",
+                "protocol_version": IPC_PROTOCOL_VERSION,
+                "features": list(IPC_FEATURES),
+                "model_config": candidate,
+            }
+        )
+        rejected = client._recv_for(duplicate_id)
+        assert rejected["type"] == "error"
+        assert rejected["request_id"] == duplicate_id
+        assert loop._model_settings is original
+        assert (loop.model, loop._effort, loop._source) == ("gpt-6-sol", "low", "payg")
+        command_id = client._send(
+            {"type": "command", "cmd": "/model", "args": "", "model_config": candidate}
+        )
+        applied = client._recv_for(command_id)
+        assert applied["status"] == "applied" and applied["request_id"] == command_id
+        assert applied["model_config"] == candidate == loop._model_settings.model_dump()
+
+    def test_invalid_update_returns_failure_and_preserves_live_selection(
+        self, actual_session: Any
+    ) -> None:
+        loop, client, _poller, observed = actual_session
+        assert client.connect(), client.last_error
+        original = loop._model_settings
+        request_id = client._send(
+            {
+                "type": "command",
+                "cmd": "/model",
+                "args": "",
+                "model_config": {"effort": "invalid-effort"},
+            }
+        )
+        response = client._recv_for(request_id)
+        assert response["type"] == "command_result" and response["status"] == "error"
+        assert response["request_id"] == request_id
+        assert loop._model_settings is original
+        assert client.send_prompt("prior admitted settings")["type"] == "result"
+        assert observed == [("gpt-6-sol", "low", "payg")]
+
+    def test_requests_before_initial_admission_are_rejected(self, actual_session: Any) -> None:
+        import socket
+
+        from core.ipc_protocol import IPC_FEATURES, IPC_PROTOCOL_VERSION, encode_message
+
+        loop, _client, poller, observed = actual_session
+        original = loop._model_settings
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as raw:
+            raw.settimeout(2.0)
+            raw.connect(str(poller._socket_path))
+            with raw.makefile("rb") as stream:
+                assert json.loads(stream.readline())["type"] == "session"
+                requests: list[dict[str, Any]] = [
+                    {
+                        "type": "client_capability",
+                        "features": list(IPC_FEATURES),
+                        "protocol_version": IPC_PROTOCOL_VERSION,
+                    },
+                    {"type": "prompt", "text": "not admitted"},
+                    {
+                        "type": "command",
+                        "cmd": "/model",
+                        "args": "",
+                        "model_config": {"model": "gpt-6-luna"},
+                    },
+                    {"type": "command_stream", "cmd": "/grill", "args": "not admitted"},
+                    {"type": "resume", "session_id": "s-missing"},
+                ]
+                for index, request in enumerate(requests):
+                    request_id = f"unadmitted-{index}"
+                    raw.sendall(encode_message({**request, "request_id": request_id}))
+                    response = json.loads(stream.readline())
+                    assert response["type"] == "error"
+                    assert response["request_id"] == request_id
+                    assert (
+                        "model_config" in response["message"]
+                        if index == 0
+                        else ("not been admitted" in response["message"])
+                    )
+        assert loop._model_settings is original
+        assert observed == []
+
     def test_connect_and_receive_session(self) -> None:
         """Client should receive session ID on connect."""
         from core.cli.ipc_client import IPCClient
@@ -478,7 +711,7 @@ class TestCLIChannelIntegration:
         mock_services = MagicMock()
 
         # Mock create_session to return a mock loop
-        mock_loop = MagicMock()
+        mock_loop = _mock_session_loop()
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
 
         poller = CLIPoller(mock_services, socket_path=sock_path)
@@ -494,6 +727,7 @@ class TestCLIChannelIntegration:
                 "bounded_json",
                 "request_correlation",
                 "stable_events",
+                "session_model_config",
             }
             client.close()
         finally:
@@ -520,10 +754,10 @@ class TestCLIChannelIntegration:
             _ipc_writer_local.writer.send_event("context_event", source="test")
             return mock_result
 
-        mock_loop = MagicMock()
+        mock_loop = _mock_session_loop()
         mock_loop.arun = AsyncMock(side_effect=run_with_event)
         mock_loop.run = MagicMock(side_effect=AssertionError("sync loop.run path used"))
-        mock_loop.model = "test-model"
+        mock_loop.model = "claude-opus-4-6"
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
         mock_services.lane_queue = None
 
@@ -557,7 +791,7 @@ class TestCLIChannelIntegration:
 
         sock_path = _test_sock()
         mock_services = MagicMock()
-        mock_services.create_session.return_value = (MagicMock(), MagicMock())
+        mock_services.create_session.return_value = (MagicMock(), _mock_session_loop())
         poller = CLIPoller(mock_services, socket_path=sock_path)
         poller.start()
         time.sleep(0.1)
@@ -591,7 +825,7 @@ class TestCLIChannelIntegration:
         sock_path = _test_sock()
         mock_services = MagicMock()
 
-        mock_loop = MagicMock()
+        mock_loop = _mock_session_loop()
         mock_loop.arun = AsyncMock(side_effect=RuntimeError("API key missing"))
         mock_loop.run = MagicMock(side_effect=AssertionError("sync loop.run path used"))
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
@@ -621,7 +855,7 @@ class TestCLIChannelIntegration:
 
         sock_path = _test_sock()
         mock_services = MagicMock()
-        mock_loop = MagicMock()
+        mock_loop = _mock_session_loop()
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
 
         poller = CLIPoller(mock_services, socket_path=sock_path)
@@ -656,7 +890,7 @@ class TestCLIChannelIntegration:
         mock_result.tool_calls = []
         mock_result.termination_reason = "natural"
 
-        mock_loop = MagicMock()
+        mock_loop = _mock_session_loop()
         mock_loop.arun = AsyncMock(return_value=mock_result)
         mock_loop.run = MagicMock(side_effect=AssertionError("sync loop.run path used"))
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
@@ -690,7 +924,7 @@ class TestCLIChannelIntegration:
 
         sock_path = _test_sock()
         mock_services = MagicMock()
-        mock_services.create_session.return_value = (MagicMock(), MagicMock())
+        mock_services.create_session.return_value = (MagicMock(), _mock_session_loop())
 
         poller = CLIPoller(mock_services, socket_path=sock_path)
         poller.start()
@@ -711,7 +945,7 @@ class TestCLIChannelIntegration:
 
         sock_path = _test_sock()
         mock_services = MagicMock()
-        mock_loop = MagicMock()
+        mock_loop = _mock_session_loop()
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
 
         poller = CLIPoller(
@@ -743,7 +977,7 @@ class TestCLIChannelIntegration:
 
         sock_path = _test_sock()
         mock_services = MagicMock()
-        mock_loop = MagicMock()
+        mock_loop = _mock_session_loop()
         mock_loop.model = "claude-opus-4-6"
 
         # v0.99.328 resume contract — the poller delegates the machine-state
@@ -812,7 +1046,7 @@ class TestCLIChannelIntegration:
 
         sock_path = _test_sock()
         mock_services = MagicMock()
-        mock_loop = MagicMock()
+        mock_loop = _mock_session_loop()
         mock_loop.model = "claude-opus-4-6"
 
         def _restore(state_arg):
@@ -873,7 +1107,7 @@ class TestCLIChannelIntegration:
 
         sock_path = _test_sock()
         mock_services = MagicMock()
-        mock_loop = MagicMock()
+        mock_loop = _mock_session_loop()
         mock_loop.model = "claude-opus-4-6"
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
 
@@ -924,10 +1158,10 @@ class TestCLIChannelIntegration:
             captured["width"] = console_at_runtime.width if console_at_runtime else None
             return mock_result
 
-        mock_loop = MagicMock()
+        mock_loop = _mock_session_loop()
         mock_loop.arun = AsyncMock(side_effect=capture_console)
         mock_loop.run = MagicMock(side_effect=AssertionError("sync loop.run path used"))
-        mock_loop.model = "test-model"
+        mock_loop.model = "claude-opus-4-6"
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
         mock_services.lane_queue = None  # bypass lane queue
 
