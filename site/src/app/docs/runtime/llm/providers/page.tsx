@@ -62,6 +62,12 @@ export default function Page() {
               이 옵션을 false로 지정한 호출은 거절합니다. 실제 스키마 지원과
               강제 수준은 상위 endpoint에 달려 있고, 로컬 응답 검증도 유지됩니다.
             </p>
+            <p>
+              알려진 OpenAI reasoning 경로는 기본 temperature를 전송하지 않고,
+              지원하지 않는 사용자 지정 값을 호출 전에 거절합니다. 이 relay에서는
+              <code>effort=none</code>도 sampling 지원을 의미하지 않습니다.
+              선택한 effort와 공급자 제한은 그대로 유지합니다.
+            </p>
 
             <h2>선택한 effort 보존</h2>
             <p>
@@ -243,6 +249,13 @@ export default function Page() {
               {" "}and <a href="https://openrouter.ai/docs/guides/features/structured-outputs">structured output contract</a>
               {" "}and <a href="https://openrouter.ai/api/v1/models">per-model reasoning metadata</a>
               {" "}(checked September 25, 2026; account acceptance remains separate).
+            </p>
+            <p>
+              Known OpenAI reasoning routes omit the default temperature and
+              reject unsupported custom values before dispatch. On this relay,
+              <code>effort=none</code> does not imply sampling support. Selected
+              effort and provider constraints stay unchanged. See the official{" "}
+              <a href="https://openrouter.ai/docs/guides/routing/provider-selection#requiring-providers-to-support-all-parameters">parameter routing policy</a>.
             </p>
 
             <h2>Preserving selected effort</h2>

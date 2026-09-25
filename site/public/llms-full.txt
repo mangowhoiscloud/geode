@@ -1415,6 +1415,8 @@ OpenRouter는 `openrouter` provider identity와 Chat Completions transport를 �
 
 컴팩션 등 텍스트 요약도 같은 OpenRouter 어댑터를 사용해 캐시 마커, 세션 식별과 사용량을 보존합니다. 알려진 OpenAI reasoning 모델은 선택한 effort를 relay 요청에 전달하며, 다른 모델의 effort 지원을 추정하지 않습니다. 응답 스키마를 요청하면 JSON Schema 형식과 `require_parameters: true`를 함께 전달합니다. 명시적으로 이 옵션을 false로 지정한 호출은 거절합니다. 실제 스키마 지원과 강제 수준은 상위 endpoint에 달려 있고, 로컬 응답 검증도 유지됩니다.
 
+알려진 OpenAI reasoning 경로는 기본 temperature를 전송하지 않고, 지원하지 않는 사용자 지정 값을 호출 전에 거절합니다. 이 relay에서는`effort=none`도 sampling 지원을 의미하지 않습니다. 선택한 effort와 공급자 제한은 그대로 유지합니다.
+
 ## 선택한 effort 보존
 
 모델 선택 화면에서 확인한 effort는 요청의 값과 같아야 합니다. 프로바이더별 필드명은 달라도 값을 임의로 낮추거나 높이지 않습니다. 선택한 모델이 저장된 값을 지원하지 않으면 설정 변경이나 호출 전에 거절하므로, `/model`에서 지원하는 값을 직접 선택해야 합니다. 역할 탭을 이동하거나 Space로 선택을 추가한 뒤 Enter로 확정해도 primary effort를 보존합니다. 선택 화면에는 지원되는 값만 표시하며, 저장된 값이 맞지 않으면 방향키로 유효한 값을 고르기 전까지 Enter·Space 확정을 막습니다. 취소하면 기존 설정은 유지됩니다. Reflection 모델은 primary effort를 상속하므로, 함께 고른 모델과 effort의 호환성도 저장 전에 검사합니다.

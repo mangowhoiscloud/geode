@@ -270,10 +270,14 @@ def test_usage_summary_rejects_invalid_provider_cost(cost: Any) -> None:
     [
         ("openrouter/openai/gpt-6-sol", "low", "low"),
         ("openrouter/openai/gpt-6-sol", "max", "max"),
+        ("openrouter/openai/gpt-6-sol", "none", "none"),
         ("openrouter/openai/gpt-6-sol", None, None),
+        ("openrouter/openai/gpt-6-astra", "low", "low"),
+        ("openrouter/openai/gpt-6-luna", "low", "low"),
         ("openrouter/openai/gpt-4.1", "low", None),
         ("openrouter/openai/unregistered-model", "low", None),
         ("openrouter/anthropic/claude-sonnet-4", "low", None),
+        ("openrouter/z-ai/glm-5.3", "low", None),
     ],
 )
 def test_sdk_wire_preserves_text_route_usage_and_supported_effort(
@@ -350,6 +354,17 @@ def test_sdk_wire_preserves_text_route_usage_and_supported_effort(
                     messages=(Message(role="user", content="prior conversation"),),
                     max_tokens=10_000,
                     effort=effort or "",
+                    temperature=1.0,
+                    tools=(ToolSpec(name="lookup", description="lookup", input_schema={}),),
+                    tool_choice="auto",
+                    provider_options={
+                        "openrouter": {
+                            "only": ["openai"],
+                            "allow_fallbacks": False,
+                            "require_parameters": True,
+                            "data_collection": "deny",
+                        }
+                    },
                 )
             )
 
@@ -368,7 +383,22 @@ def test_sdk_wire_preserves_text_route_usage_and_supported_effort(
         ]
     else:
         assert body["messages"][-1]["content"] == "prior conversation"
-    assert "tools" not in body and "provider" not in body
+    if capability == "text":
+        assert "temperature" not in body and "tools" not in body and "provider" not in body
+    else:
+        if model.startswith("openrouter/openai/gpt-6-"):
+            # The relay does not advertise Platform's effort=none sampling exception.
+            assert "temperature" not in body
+        else:
+            assert body["temperature"] == 1.0
+        assert body["tools"][0]["function"]["name"] == "lookup"
+        assert body["tool_choice"] == "auto"
+        assert body["provider"] == {
+            "only": ["openai"],
+            "allow_fallbacks": False,
+            "require_parameters": True,
+            "data_collection": "deny",
+        }
     if model == "openrouter/openai/gpt-6-sol":
         assert body["messages"][0]["content"][0] == {
             "type": "text",
@@ -468,6 +498,7 @@ def test_structured_output_reaches_sdk_with_parameter_enforcement(
                         model="openrouter/openai/gpt-6-sol",
                         messages=(Message(role="user", content="verify"),),
                         effort="",
+                        temperature=1.0,
                         response_schema=schema,
                         provider_options={"openrouter": policy},
                     )
@@ -475,6 +506,7 @@ def test_structured_output_reaches_sdk_with_parameter_enforcement(
 
     asyncio.run(run())
     assert len(bodies) == 1
+    assert "temperature" not in bodies[0]
     assert bodies[0]["response_format"] == {
         "type": "json_schema",
         "json_schema": {"name": "verdict", "strict": strict, "schema": schema},
@@ -508,6 +540,33 @@ def test_invalid_schema_or_optional_parameters_fail_before_client(
                 )
             )
         )
+    client.assert_not_called()
+
+
+@pytest.mark.parametrize("effort", ["low", "none"])
+@pytest.mark.parametrize("temperature", [0.0, 0.5])
+def test_unsupported_custom_sampling_is_fatal_before_client(
+    monkeypatch: pytest.MonkeyPatch, effort: str, temperature: float
+) -> None:
+    from unittest.mock import Mock
+
+    from core.llm.errors import LLMRequestValidationError, is_request_fatal
+
+    adapter = OpenRouterPaygAdapter()
+    client = Mock()
+    monkeypatch.setattr(adapter, "_get_client", client)
+    with pytest.raises(LLMRequestValidationError, match="temperature") as caught:
+        asyncio.run(
+            adapter.acomplete(
+                AdapterCallRequest(
+                    model="openrouter/openai/gpt-6-sol",
+                    messages=(Message(role="user", content="input"),),
+                    effort=effort,
+                    temperature=temperature,
+                )
+            )
+        )
+    assert is_request_fatal(caught.value)
     client.assert_not_called()
 
 

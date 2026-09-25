@@ -168,6 +168,10 @@ functional change.
   selections and cancellation without silently replacing settings. Validate
   reflection against the final primary effort before saving staged choices.
 
+- Omit default temperature on known OpenAI reasoning models through OpenRouter,
+  including `effort=none`, and reject unsupported custom sampling before dispatch.
+  Preserve selected effort and endpoint routing constraints.
+
 - Preserve selected reasoning effort through model selection, staged role picks
   and supported auxiliary requests. Reject unsupported model/effort combinations
   before dispatch instead of clamping, remapping or silently omitting the value;
