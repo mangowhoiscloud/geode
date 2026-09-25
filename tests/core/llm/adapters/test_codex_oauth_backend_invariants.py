@@ -241,7 +241,7 @@ def test_codex_receipt_tracks_post_middleware_wire_and_completed_event(
     loop = AgenticLoop(
         ConversationContext(),
         ToolExecutor(middleware_registry=middleware),
-        config=AgenticLoopConfig(source="codex-oauth", disable_settings_drift=True),
+        config=AgenticLoopConfig(source="codex-oauth"),
         model="gpt-5.6-sol",
         provider="openai",
         hooks=hooks,

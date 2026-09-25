@@ -144,6 +144,10 @@ routes remain explicit; a family name alone does not register a provider.
 `/login source` validates future policy before saving. A connected client submits
 its source-only session candidate and requires an applied acknowledgment before
 saving defaults. Without a client the command changes future defaults only.
+The runtime `manage_login source` tool uses that same source candidate builder
+and the loop's model-selection admission. It reports pending until the complete
+tool batch ends, updates matching primary/auxiliary roles together and leaves
+persisted defaults unchanged; an absent owning session or unused provider is rejected.
 `/login use` and `/login route` change plan order: requests can select another
 account inside the already concrete source, but cannot switch billing sources.
 `/login refresh` reconciles credentials before subsequent SDK account selection.

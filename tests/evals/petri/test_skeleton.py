@@ -150,7 +150,7 @@ def test_target_invalid_policy_stops_before_loop(
 
 
 @pytest.mark.policy_real
-def test_default_target_keeps_runtime_settings_drift(
+def test_default_target_leaves_initial_model_selection_to_loop(
     target_credential_boundary: tuple[Path, Mock],
 ) -> None:
     from evals.petri.geode_target import _default_geode_runner
@@ -165,7 +165,6 @@ def test_default_target_keeps_runtime_settings_drift(
     )
     assert loop.call_args.kwargs["model"] is None
     assert loop.call_args.kwargs["config"].source == ""
-    assert loop.call_args.kwargs["config"].disable_settings_drift is False
 
 
 @pytest.mark.policy_real
@@ -234,34 +233,25 @@ def test_native_provider_without_petri_contract_does_not_discard_source_pin(
         assert loop.call_args.kwargs["config"].source == ""
 
 
-def test_default_runner_passes_pinned_model_to_loop_with_drift_disabled() -> None:
-    """N6-followup: caller-pinned model arrives at AgenticLoop sticky.
+@pytest.mark.policy_real
+def test_default_runner_passes_explicit_model_to_loop(
+    target_credential_boundary: tuple[Path, Mock],
+) -> None:
+    from evals.petri.geode_target import _default_geode_runner
 
-    Source-inspect — verify the runner constructs AgenticLoop with the
-    model arg and ``disable_settings_drift=True`` when ``model`` is
-    pinned, and lets it fall back (no flag) when ``model is None``.
-    """
-    import inspect
-
-    from evals.petri import geode_target
-
-    src = inspect.getsource(geode_target._default_geode_runner)
-    code_only = "\n".join(line for line in src.splitlines() if not line.lstrip().startswith("#"))
-    assert "model=model" in code_only, (
-        "_default_geode_runner must pass its ``model`` argument to AgenticLoop"
-    )
-    assert "disable_settings_drift=(model is not None)" in code_only, (
-        "_default_geode_runner must scope drift suppression to caller-pinned "
-        "models — passing model=None must keep the regular drift sync active."
-    )
+    _, loop = target_credential_boundary
+    assert asyncio.run(
+        _default_geode_runner([{"role": "user", "content": "hello"}], model="gpt-5.5")
+    ) == ("ok", None)
+    assert loop.call_args.kwargs["model"] == "gpt-5.5"
+    loop.return_value.arun.assert_awaited_once()
 
 
 def test_geode_model_api_routes_default_sentinel_to_none() -> None:
     """N6-followup: ``geode/default`` sentinel → runner_model=None.
 
     The bare ``base`` (e.g. ``claude-opus-4-7``) is forwarded; the
-    ``default`` sentinel maps to ``None`` so AgenticLoop falls back to
-    ANTHROPIC_PRIMARY + drift sync.
+    ``default`` sentinel maps to ``None`` so AgenticLoop owns the initial choice.
     """
     import inspect
 

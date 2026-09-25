@@ -313,7 +313,7 @@ def test_model_switch_reprojects_bound_plan_in_both_provider_directions(
     loop = AgenticLoop(
         ConversationContext(),
         executor,
-        config=AgenticLoopConfig(source="subscription", disable_settings_drift=True),
+        config=AgenticLoopConfig(source="subscription"),
         model="gpt-5.6-luna",
         provider="openai",
         quiet=True,
@@ -386,7 +386,7 @@ def test_bound_request_rejects_middleware_tool_rewrite_before_adapter(rewrite: s
     loop = AgenticLoop(
         ConversationContext(),
         executor,
-        config=AgenticLoopConfig(source="payg", disable_settings_drift=True),
+        config=AgenticLoopConfig(source="payg"),
         model="gpt-5.6-luna",
         provider="openai",
         quiet=True,
@@ -439,7 +439,7 @@ def test_bound_request_rejects_middleware_adapter_swap_before_provider() -> None
     loop = AgenticLoop(
         ConversationContext(),
         executor,
-        config=AgenticLoopConfig(source="payg", disable_settings_drift=True),
+        config=AgenticLoopConfig(source="payg"),
         model="gpt-5.6-luna",
         provider="openai",
         quiet=True,

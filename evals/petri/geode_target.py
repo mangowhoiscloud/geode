@@ -183,18 +183,13 @@ async def _default_geode_runner(
     prior turns seed ``ConversationContext.messages``, and the final
     user message is the ``loop.run`` prompt.
 
-    **Model priority** (N6-followup):
+    **Model priority**:
 
-    - ``model`` argument set (= caller-explicit, e.g.
-      ``geode/claude-opus-4-7``) → that model is sticky for the lifetime
-      of the loop and ``AgenticLoop`` is constructed with
-      ``disable_settings_drift=True`` so a divergent ``settings.model``
-      never silently swaps it mid-audit.
-    - ``model=None`` (= caller did not pin a base; the registered
-      ``GeodeModelAPI`` is using the default sentinel) → ``AgenticLoop``
-      falls back to ``ANTHROPIC_PRIMARY`` and the regular drift sync
-      stays active so the user's GEODE ``settings.model`` (e.g.
-      whatever ``/model`` last selected) wins.
+    - An explicit ``model`` is passed to ``AgenticLoop`` and remains selected
+      until an explicit runtime selection changes it.
+    - ``model=None`` (the default sentinel) leaves the initial choice to the
+      loop constructor. Later global settings changes do not rewrite that
+      session's model.
 
     Live LLM authorisation: this function will trigger live API calls
     when the bootstrapped readiness lacks ``force_dry_run``. Callers
@@ -214,7 +209,7 @@ async def _default_geode_runner(
     )
 
     # Validate policy before bootstrap, including the settings-driven default
-    # target. A missing model retains its existing unpinned drift behavior.
+    # target. A missing model leaves initial selection to the loop constructor.
     fallback_to_payg = self_improving_loop_fallback_policy()
     resolved_provider = "anthropic"
     resolved_source = ""
@@ -377,8 +372,6 @@ async def _default_geode_runner(
     # signal. AgenticLoop's `DEFAULT_MAX_ROUNDS = 0` (unlimited, time-
     # budget based) is the right default for an audit target.
     #
-    # ``disable_settings_drift`` is True iff the caller explicitly pinned
-    # a target model — see N6-followup priority docstring above.
     # The inspect-ai audit subprocess (``uv run inspect eval inspect_petri/audit``)
     # does not go through ``core.runtime.GeodeRuntime._build_core``, the
     # parent's bootstrap path. Without an explicit adapter bootstrap
@@ -394,7 +387,6 @@ async def _default_geode_runner(
         config=AgenticLoopConfig(
             system_suffix=system_text,
             source=resolved_source,
-            disable_settings_drift=(model is not None),
         ),
         model=model,
         provider=resolved_provider,
@@ -402,9 +394,8 @@ async def _default_geode_runner(
         policy_sources=policy_sources,
     )
     log.debug(
-        "AgenticLoop constructed: model=%s drift_disabled=%s system_chars=%d history=%d",
+        "AgenticLoop constructed: model=%s system_chars=%d history=%d",
         loop.model,
-        model is not None,
         len(system_text),
         len(history),
     )

@@ -247,7 +247,6 @@ def test_call_llm_disables_action_tools_for_auxiliary_calls(
         ToolExecutor(middleware_registry=middleware),
         config=AgenticLoopConfig(
             source="codex-oauth",
-            disable_settings_drift=True,
             allowed_tool_names={"read_file"},
             effort=effort,
             max_rounds=1 if wrap_up == "rounds" else 0,
@@ -705,69 +704,6 @@ def test_verify_turn_async_off_alias_is_unavailable_without_judge(
     vr = asyncio.run(verify_turn_async(_make_result(text="", tool_calls=[]), loop=None))
     assert not vr.passed and not vr.should_retry
     assert vr.mode is VerifyMode.LLM_JUDGE
-
-
-# -- Act-model drift (PR-CL-A6 Codex MCP HIGH #1) ----------------------
-
-
-def test_drift_target_uses_act_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    """PR-DRIFT-CUT (2026-05-24) — drift target is unconditionally None.
-
-    Pre-PR this returned ``settings.act_model`` (or ``settings.model``)
-    so the per-turn drift sync would revert ``loop.model`` to the
-    settings value. The auto-revert silently overrode operator
-    ``/model`` selections and was cut at the source. The test now
-    pins the no-op contract — the function must NEVER return a
-    drift target, regardless of how settings diverge from
-    ``loop.model``.
-    """
-    from core.agent.loop._model_switching import _settings_model_target
-
-    fake_settings = SimpleNamespace(model="claude-opus-4-7", act_model="claude-sonnet-4-6")
-    monkeypatch.setattr("core.config.settings", fake_settings)
-
-    loop_stub = SimpleNamespace(
-        model="claude-haiku-4-5-20251001",
-        _disable_settings_drift=False,
-        _drift_target_is_healthy=lambda _m: True,
-    )
-    target = _settings_model_target(loop_stub)
-    assert target is None  # PR-DRIFT-CUT — auto-revert disabled
-
-
-def test_drift_target_is_none_regardless_of_settings(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Companion to the above — empty ``act_model`` also gets no target."""
-    from core.agent.loop._model_switching import _settings_model_target
-
-    fake_settings = SimpleNamespace(model="claude-opus-4-7", act_model="")
-    monkeypatch.setattr("core.config.settings", fake_settings)
-
-    loop_stub = SimpleNamespace(
-        model="claude-haiku-4-5-20251001",
-        _disable_settings_drift=False,
-        _drift_target_is_healthy=lambda _m: True,
-    )
-    target = _settings_model_target(loop_stub)
-    assert target is None
-
-
-def test_drift_target_no_drift_when_already_matched(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """When ``loop.model`` already equals the act-model target, no drift."""
-    from core.agent.loop._model_switching import _settings_model_target
-
-    fake_settings = SimpleNamespace(model="claude-opus-4-7", act_model="claude-sonnet-4-6")
-    monkeypatch.setattr("core.config.settings", fake_settings)
-
-    loop_stub = SimpleNamespace(
-        model="claude-sonnet-4-6",
-        _disable_settings_drift=False,
-        _drift_target_is_healthy=lambda _m: True,
-    )
-    assert _settings_model_target(loop_stub) is None
 
 
 def test_judge_usage_recorded(monkeypatch: pytest.MonkeyPatch) -> None:

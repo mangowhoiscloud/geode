@@ -199,7 +199,7 @@ def test_rejected_native_batch_keeps_paid_usage_without_retry_or_action(
         ConversationContext(),
         ToolExecutor(action_handlers={"computer": action, "custom": action}),
         hooks=hooks,
-        config=AgenticLoopConfig(source="anthropic-payg", disable_settings_drift=True),
+        config=AgenticLoopConfig(source="anthropic-payg"),
         model="claude-opus-5-5",
         provider="anthropic",
         quiet=True,

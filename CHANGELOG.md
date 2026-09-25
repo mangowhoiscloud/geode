@@ -63,7 +63,9 @@ functional change.
   pass model-specific credentials and endpoints to SDK calls, and reject
   conflicting policy or unavailable explicit plans without billing fallback.
   Validate `/login source` before changing defaults and apply connected-session
-  changes only after admission. Share TOML parsing between configuration and
+  changes only after admission. Runtime source selection applies matching model
+  roles after the complete tool batch while retaining effort and saved defaults.
+  Share TOML parsing between configuration and
   CLI diagnostics, including explicit empty role values.
 
 - Preserve the static prompt boundary on supported OpenAI Platform requests
@@ -176,7 +178,9 @@ functional change.
   fullscreen mode. Snapshot auxiliary model policy per session, reject
   unsuccessful or unsupported handshakes, and retain the previous selection and
   tool bindings when adoption fails. Project/global defaults no longer implicitly
-  update other active sessions.
+  update other active sessions. Route runtime model/judgment tools through the
+  same admitted record after their complete tool batch; status reports the actual
+  session. Remove unused settings-drift code and its constructor flag.
 
 - Apply explicit API-key selections and validated auth-file refreshes to the
   next OpenAI, Anthropic, GLM and OpenRouter PAYG SDK request, including adapters

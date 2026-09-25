@@ -29,7 +29,6 @@ class AgenticLoopConfig:
     parent_session_id: str = ""
     system_suffix: str = ""
     system_prompt_override: str | None = None
-    disable_settings_drift: bool = False
     allowed_tool_names: set[str] | None = None
     force_include_allowed_tools: bool = False
     source: str = ""
@@ -75,6 +74,7 @@ def initialize_runtime(
         source,
     ):
         raise ValueError("Session model configuration does not match the constructor route")
+    loop._pending_model_settings = None
     loop._allowed_tool_names = config.allowed_tool_names
     loop._force_include_allowed_tools = config.force_include_allowed_tools
 

@@ -144,6 +144,8 @@ export default function Page() {
               저장하며, 연결되지 않은 명령은 새 세션의 기본값만 바꿉니다.
             </p>
             <p>
+              런타임 <code>manage_login source</code> 도구는 같은 검증을 거쳐 전체 도구 묶음 이후
+              해당 세션의 주·보조 모델 소스만 바꾸며 effort와 저장된 기본값을 보존합니다.
               명시적 로그인 소스와 <code>forced_login_method</code>가 충돌하면 거절합니다.
               모델별 plan 순서와 계정 선택은 SDK 요청에도 적용됩니다. 선택한 소스의
               계정을 사용할 수 없어도 다른 과금 소스로 자동 전환하지 않습니다.
@@ -400,6 +402,9 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               changes defaults for future sessions only.
             </p>
             <p>
+              The runtime <code>manage_login source</code> tool validates the same candidate
+              and changes matching primary/auxiliary session routes after the complete tool batch,
+              preserving effort and stored defaults.
               An explicit credential source conflicting with <code>forced_login_method</code>
               is rejected. Model plan order and account selection also govern SDK
               requests. An unavailable account never authorizes switching billing sources.

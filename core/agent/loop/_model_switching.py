@@ -1,4 +1,4 @@
-"""Model drift sync, escalation, and per-model context adaptation.
+"""Explicit model selection, escalation, and per-model context adaptation.
 
 Extracted from the monolithic ``core/agent/loop.py`` (Tier 3 #7). Each
 function takes the ``AgenticLoop`` as the first parameter (``loop``).
@@ -55,73 +55,6 @@ def _resolve_path_b_adapter(
     if source not in CONCRETE_SOURCES:
         return None
     return active_registry_snapshot().resolve_for(normalize_registry_provider(provider), source)
-
-
-def _settings_model_target(loop: AgenticLoop) -> str | None:
-    """**DEPRECATED — returns None unconditionally as of PR-DRIFT-CUT (2026-05-24).**
-
-    Pre-PR behaviour: compared ``loop.model`` against ``settings.model``
-    (or ``settings.act_model``) and forced the loop to swap back to the
-    settings value at the start of every round. The intent was to keep
-    the runtime aligned with the operator's persisted preference, but
-    in practice it *reverted* the operator's most-recent ``/model``
-    selection because the CLI process updates settings on disk while
-    the daemon's in-memory ``settings`` object stays stale — drift sync
-    then "synced" the loop back to the stale daemon value, and the
-    operator's choice silently evaporated until a second turn was
-    issued. Post-mortem: 2026-05-24 v0.99.52 smoke (gpt-5.5 picked
-    via ``/model`` → first turn reverted to ``claude-opus-4-7``).
-
-    The drift surface is intentionally cut at the root (this function)
-    rather than at each caller so the deprecation point is single. The
-    function is retained as a no-op so existing tests / callers keep
-    compiling without a same-PR rewrite. A future re-introduction of
-    *operator-explicit* drift sync should live behind a new opt-in
-    entry point — do not revive this name.
-    """
-    return None
-
-
-async def sync_model_from_settings_async(loop: AgenticLoop) -> bool:
-    """**DEPRECATED — always returns ``False`` (PR-DRIFT-CUT, 2026-05-24).**
-
-    Was the per-turn entry point that called
-    :func:`_settings_model_target` and (when a target was returned)
-    rewrote ``loop.model`` to match ``settings.model``. The function is
-    now a no-op for the same reason that ``_settings_model_target``
-    short-circuits: settings-driven auto-revert was the load-bearing
-    cause of the v0.99.52 smoke incident. ``/model`` is the operator's
-    sole entry point — drift is no longer inferred.
-
-    The signature is kept so :class:`AgenticLoop` callers don't fork
-    on the rollout, and so a forensic ``grep`` can locate every site
-    that *used* to be touched by drift sync.
-    """
-    return False
-
-
-def drift_target_is_healthy(loop: AgenticLoop, target_model: str) -> bool:
-    """Return False if no profile in target_model's provider can serve a call.
-
-    Uses ProfileRotator.resolve to mirror the actual selection path the
-    next LLM call would take. None ⇒ all profiles missing/cooled-down/
-    disabled. We refuse the drift rather than silently swap to a model
-    the next call cannot fulfil.
-    """
-    try:
-        target_provider = _resolve_provider(target_model)
-        from core.wiring.container import get_profile_rotator
-
-        rotator = get_profile_rotator()
-        if rotator is None:
-            # Rotator not initialised yet (early bootstrap) — accept drift.
-            return True
-        return rotator.resolve(target_provider) is not None
-    except Exception:
-        log.debug("Drift health check failed for %s", target_model, exc_info=True)
-        # On any introspection failure, accept the drift to avoid
-        # blocking legitimate user-initiated /model switches.
-        return True
 
 
 def _resolve_model_route(
@@ -192,6 +125,7 @@ def validate_session_model_config(loop: AgenticLoop, candidate: SessionModelConf
     from core.llm.adapters._openai_common import get_openai_model_spec, validate_reasoning_effort
     from core.llm.adapters.registry import normalize_registry_provider
     from core.llm.errors import LLMRequestValidationError
+    from core.llm.model_catalog import require_model_source_available
     from core.llm.providers.glm import get_glm_model_spec
 
     for model, source in (
@@ -204,6 +138,7 @@ def validate_session_model_config(loop: AgenticLoop, candidate: SessionModelConf
                 raise LLMRequestValidationError("An inherited model cannot pin a separate source")
             continue
         provider = normalize_registry_provider(_resolve_provider(model))
+        require_model_source_available(model, provider=provider, source=source)
         loop._adapter_registry_snapshot.resolve_for(provider, source)
         openai_model = model.removeprefix("openrouter/openai/")
         if provider == "openai" or model.startswith("openrouter/openai/"):
@@ -232,6 +167,17 @@ def validate_session_model_config(loop: AgenticLoop, candidate: SessionModelConf
         raise LLMRequestValidationError("The selected judgment route has no usable credentials")
 
 
+def stage_session_model_config(loop: AgenticLoop, candidate: SessionModelConfig) -> bool:
+    """Admit one tool selection for publication after its complete batch."""
+    validate_session_model_config(loop, candidate)
+    if loop._pending_model_settings is not None:
+        raise ValueError("A selection is already pending for this tool batch")
+    if candidate == loop._model_settings:
+        return False
+    loop._pending_model_settings = candidate
+    return True
+
+
 async def apply_session_model_config(
     loop: AgenticLoop, candidate: SessionModelConfig, *, reason: str = "user_switch"
 ) -> bool:
@@ -251,6 +197,17 @@ async def apply_session_model_config(
         model_settings=candidate,
     )
     return True
+
+
+async def apply_pending_model_config(loop: AgenticLoop, messages: list[dict[str, Any]]) -> None:
+    """Commit a tool-requested selection only after its whole batch completed."""
+    candidate = loop._pending_model_settings
+    loop._pending_model_settings = None
+    if candidate is not None:
+        await apply_session_model_config(loop, candidate)
+        # Adaptation and model breadcrumbs operate on the complete context.
+        # Keep the current turn on that same history, including tool results.
+        messages[:] = loop.context.get_messages()
 
 
 def _publish_model_update(
