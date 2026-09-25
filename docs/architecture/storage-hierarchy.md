@@ -112,6 +112,17 @@ The split is therefore deliberate, not accidental.
 
 ## Writer contract
 
+`core/auth/auth_toml.py` owns credential-plan serialization and reload. Explicit
+profile pins and ordered choices are persisted alongside profiles and routing;
+legacy files without those tables have no file-owned preference. Reload validates
+the complete candidate before changing live stores. A missing or invalid file
+leaves them unchanged; a valid file removes only entries that it still owns.
+Managed CLI credentials and environment fallbacks stay with their original owner.
+Unchanged profiles retain cooldown/health state, while a replaced credential does
+not mutate objects already borrowed by running work. Atomic replacement preserves
+the prior file if a write fails. These are storage/selection guarantees; SDK cache
+invalidation and adoption of a new key at the request boundary remain separate.
+
 All new writers should import constants from `core.paths` instead of
 reconstructing path literals.
 

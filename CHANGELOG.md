@@ -163,6 +163,12 @@ functional change.
 
 ### Fixed
 
+- Preserve explicit auth profile pins and priority order across auth.toml writes
+  and fresh-process routing. Validate reload candidates before publication and
+  reconcile deletions only for file-owned entries, retaining managed/environment
+  credentials, unchanged health state and borrowed references. Write auth state
+  atomically and materialize explicit OpenAI/GLM `/key` updates consistently.
+
 - Bind effort-probe resume to the verified source revision and provider route,
   retaining older measurements without reusing unidentified results. Include
   configured OpenRouter models and inspect their actual Chat SDK serialization;

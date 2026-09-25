@@ -14,6 +14,7 @@ as _pkg`` lookup, mirroring the pattern used by ``core/ui/agentic_ui``.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from core.cli.onboarding import clear_dry_run_opt_in
@@ -85,6 +86,7 @@ def cmd_key(args: str) -> bool:
         value = parts[1].strip()
         settings.openai_api_key = value
         _pkg._upsert_env("OPENAI_API_KEY", value)
+        _pkg._seed_payg_plan_from_key("openai", value)
         _invalidate("openai")
         clear_dry_run_opt_in()
         _pkg.console.print(f"  [success]OpenAI API key set[/success]  {_pkg._mask_key(value)}")
@@ -113,6 +115,7 @@ def cmd_key(args: str) -> bool:
         value = parts[1].strip()
         settings.zai_api_key = value
         _pkg._upsert_env("ZAI_API_KEY", value)
+        _pkg._seed_payg_plan_from_key("glm", value)
         _invalidate("glm")
         clear_dry_run_opt_in()
         _pkg.console.print(f"  [success]ZhipuAI API key set[/success]  {_pkg._mask_key(value)}")
@@ -186,10 +189,9 @@ def _seed_payg_plan_from_key(provider: str, key: str) -> None:
         name = f"{plan.id}:env"
         existing = store.get(name)
         if existing is not None:
-            existing.key = key
-            existing.plan_id = plan.id
-            existing.error_count = 0
-            existing.cooldown_until = 0.0
+            store.add(
+                replace(existing, key=key, plan_id=plan.id, error_count=0, cooldown_until=0.0)
+            )
         else:
             store.add(
                 AuthProfile(

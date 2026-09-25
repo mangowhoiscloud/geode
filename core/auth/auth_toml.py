@@ -39,6 +39,7 @@ created with mode 0600 so other users on the host can't read it.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import tomllib
 from pathlib import Path
@@ -145,6 +146,74 @@ def _profile_from_dict(d: dict[str, Any]) -> AuthProfile:
     )
 
 
+def _auth_candidate(
+    data: dict[str, Any],
+) -> tuple[
+    list[Plan], list[AuthProfile], dict[str, list[str]], dict[str, str], dict[str, list[str]]
+]:
+    """Validate the complete file before any live registry can be changed."""
+    plan_rows = data.get("plans", [])
+    profile_rows = data.get("profiles", [])
+    if not isinstance(plan_rows, list) or not isinstance(profile_rows, list):
+        raise ValueError("plans and profiles must be arrays of tables")
+    for rows, identity in ((plan_rows, "id"), (profile_rows, "name")):
+        seen: set[str] = set()
+        for row in rows:
+            if not isinstance(row, dict):
+                raise ValueError("auth entries must be tables")
+            for field in (identity, "provider"):
+                if not isinstance(row.get(field), str) or not row[field].strip():
+                    raise ValueError("auth identity and provider must be nonempty strings")
+            if row[identity] in seen:
+                raise ValueError("duplicate auth identity")
+            seen.add(row[identity])
+    plans = [_plan_from_dict(row) for row in plan_rows]
+    profiles = [_profile_from_dict(row) for row in profile_rows]
+    for raw, profile in zip(profile_rows, profiles, strict=True):
+        if profile.managed_by or not math.isfinite(profile.expires_at):
+            raise ValueError("managed credentials and nonfinite expiry are not file-owned")
+        for field in ("key", "refresh_token", "plan_id"):
+            if not isinstance(raw.get(field, ""), str):
+                raise ValueError("credential fields must be strings")
+        if raw.get("base_url_override") is not None and not isinstance(
+            raw["base_url_override"], str
+        ):
+            raise ValueError("profile endpoint must be a string or absent")
+    by_name = {profile.name: profile for profile in profiles}
+    by_id = {plan.id: plan for plan in plans}
+    for profile in profiles:
+        if profile.plan_id and (
+            profile.plan_id not in by_id or by_id[profile.plan_id].provider != profile.provider
+        ):
+            raise ValueError("profile plan binding must reference its provider")
+    routing = data.get("routing", {})
+    pins = data.get("pinned_active", {})
+    orders = data.get("auth_order", {})
+    if not all(isinstance(mapping, dict) for mapping in (routing, pins, orders)):
+        raise ValueError("auth routing and preferences must be tables")
+    for model, chain in routing.items():
+        if (
+            not model
+            or not isinstance(chain, list)
+            or any(not isinstance(pid, str) or pid not in by_id for pid in chain)
+        ):
+            raise ValueError("routing must reference declared plans")
+    for provider, name in pins.items():
+        if not isinstance(name, str) or name not in by_name or by_name[name].provider != provider:
+            raise ValueError("pin must reference a profile of the same provider")
+    for provider, order in orders.items():
+        if not isinstance(order, list) or any(
+            not isinstance(name, str) or name not in by_name or by_name[name].provider != provider
+            for name in order
+        ):
+            raise ValueError("auth order must reference profiles of the same provider")
+        if len(set(order)) != len(order):
+            raise ValueError("auth order must not contain duplicate profiles")
+        if order and pins.get(provider, order[0]) != order[0]:
+            raise ValueError("pin must agree with the first ordered profile")
+    return plans, profiles, routing, pins, orders
+
+
 # ---------------------------------------------------------------------------
 # Read / write
 # ---------------------------------------------------------------------------
@@ -165,21 +234,39 @@ def save_auth_toml(
     from core.wiring.container import ensure_profile_store
 
     registry = registry or get_plan_registry()
-    store = store or ensure_profile_store()
+    store = ensure_profile_store() if store is None else store
     path = path or auth_toml_path()
 
-    payload: dict[str, Any] = {
-        "plans": [_plan_to_dict(p) for p in registry.list_all()],
-        "profiles": [_profile_to_dict(p) for p in store.list_all() if not p.managed_by],
-        "routing": registry.all_routing(),
+    plans = registry.list_all()
+    profiles = [
+        p
+        for p in store.list_all()
+        if not p.managed_by and p.metadata.get("origin") != "environment"
+    ]
+    names = {profile.name for profile in profiles}
+    pins, orders = store.auth_preferences()
+    pins = {provider: name for provider, name in pins.items() if name in names}
+    orders = {
+        provider: [name for name in order if name in names] for provider, order in orders.items()
     }
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.touch(mode=0o600, exist_ok=True)
-    path.chmod(0o600)
+    orders = {provider: order for provider, order in orders.items() if order}
+    # Filtering externally managed entries can change an order's first entry.
+    pins.update({provider: order[0] for provider, order in orders.items()})
+    routing = registry.all_routing()
+    payload: dict[str, Any] = {
+        "plans": [_plan_to_dict(p) for p in plans],
+        "profiles": [_profile_to_dict(p) for p in profiles],
+        "routing": routing,
+        "pinned_active": pins,
+        "auth_order": orders,
+    }
     text = _to_toml(payload)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
+    from core.memory.atomic_write import atomic_write_text
+
+    atomic_write_text(path, text)
+    source = str(path.resolve())
+    registry.remember_auth_file(source, plans, routing)
+    store.remember_auth_file(source, profiles, pins, orders)
     return path
 
 
@@ -240,11 +327,12 @@ def _to_toml(payload: dict[str, Any]) -> str:
         for k, v in profile.items():
             lines.append(f"{_toml_key(k)} = {_toml_value(v)}")
         lines.append("")
-    routing = payload.get("routing") or {}
-    if routing:
-        lines.append("[routing]")
-        for model, plan_ids in routing.items():
-            lines.append(f"{_toml_key(model)} = {_toml_value(plan_ids)}")
+    for section in ("routing", "pinned_active", "auth_order"):
+        entries = payload.get(section) or {}
+        if entries:
+            lines.append(f"\n[{section}]")
+            for key, value in entries.items():
+                lines.append(f"{_toml_key(key)} = {_toml_value(value)}")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -254,40 +342,55 @@ def load_auth_toml(
     store: ProfileStore | None = None,
     path: Path | None = None,
 ) -> bool:
-    """Hydrate Plan + Profile singletons from TOML.
+    """Validate then reconcile this file's plans, credentials and explicit choices.
 
-    Returns True if the file existed and was parsed. Profiles already in
-    the store (e.g. from .env / managed CLIs) are NOT removed.
+    Missing or invalid files leave the live stores unchanged. Deleted entries
+    disappear only if this file still owns their current objects; callers with
+    borrowed references keep them, and managed/environment objects are retained.
     """
     from core.wiring.container import ensure_profile_store
 
+    use_singletons = store is None and registry is None
     registry = registry or get_plan_registry()
-    store = store or ensure_profile_store()
+    store = ensure_profile_store() if store is None else store
     path = path or auth_toml_path()
 
     if not path.exists():
         return False
-    path.chmod(0o600)
     try:
+        path.chmod(0o600)
         with open(path, "rb") as f:
             data = tomllib.load(f)
+        plans, profiles, routing, pins, orders = _auth_candidate(data)
+        source = str(path.resolve())
+        previous_plans = registry.file_plans(source)
+        for plan in plans:
+            current_plan = registry.get(plan.id)
+            if (
+                current_plan is not None
+                and previous_plans.get(plan.id) is not current_plan
+                and current_plan.provider != plan.provider
+            ):
+                raise ValueError("plan provider conflicts with an existing owner")
+        previous = store.file_profiles(source)
+        owned: list[AuthProfile] = []
+        for profile in profiles:
+            current = store.get(profile.name)
+            if current is not None:
+                if current.provider != profile.provider:
+                    raise ValueError("profile provider conflicts with an existing owner")
+                if current.managed_by or previous.get(profile.name) is not current:
+                    continue
+                if _profile_to_dict(current) == _profile_to_dict(profile):
+                    profile = current
+            owned.append(profile)
     except Exception as exc:
-        log.warning("Failed to parse %s: %s", path, exc)
+        # Exception strings and raw entries can contain keys supplied by a
+        # malformed file. Report the class only; never log credential values.
+        log.warning("Auth file rejected: %s (%s)", path, type(exc).__name__)
         return False
-
-    for raw in data.get("plans", []):
-        try:
-            registry.add(_plan_from_dict(raw))
-        except Exception:
-            log.warning("Skipping malformed plan entry: %r", raw, exc_info=True)
-    for raw in data.get("profiles", []):
-        try:
-            store.add(_profile_from_dict(raw))
-        except Exception:
-            log.warning("Skipping malformed profile entry: %r", raw, exc_info=True)
-    for model, plan_ids in (data.get("routing") or {}).items():
-        if isinstance(plan_ids, list):
-            registry.set_routing(str(model), [str(pid) for pid in plan_ids])
+    registry.reconcile_auth_file(source, plans, routing)
+    store.reconcile_auth_file(source, owned, pins, orders)
 
     # v0.95.x — re-read the stored JWT for the GEODE-owned OpenAI OAuth and
     # update Plan.subscription_tier if the user's plan tier changed since
@@ -296,7 +399,8 @@ def load_auth_toml(
     try:
         from core.auth.oauth_login import reconcile_plan_tier_from_stored_jwt
 
-        reconcile_plan_tier_from_stored_jwt()
+        if use_singletons:
+            reconcile_plan_tier_from_stored_jwt()
     except Exception:
         log.debug("Plan tier reconciliation skipped", exc_info=True)
     return True
@@ -317,7 +421,7 @@ def migrate_env_to_toml(
     from core.wiring.container import ensure_profile_store
 
     registry = registry or get_plan_registry()
-    store = store or ensure_profile_store()
+    store = ensure_profile_store() if store is None else store
     path = path or auth_toml_path()
 
     if path.exists():

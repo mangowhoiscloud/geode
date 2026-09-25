@@ -323,6 +323,7 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
                 provider=_prov,
                 credential_type=CredentialType.API_KEY,
                 key=_key,
+                metadata={"origin": "environment"},
             )
         )
 

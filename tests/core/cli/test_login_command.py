@@ -150,6 +150,10 @@ class TestSetKeyAndUse:
         bound = [p for p in store.list_all() if p.plan_id == plan.id]
         assert bound and bound[0].key == "sk-fresh-key-1234567890"
         clear_opt_in.assert_called_once_with()
+        borrowed = bound[0]
+        cmd_login(f"set-key {plan.id} synthetic-replacement")
+        assert borrowed.key == "sk-fresh-key-1234567890"
+        assert store.get(borrowed.name).key == "synthetic-replacement"
 
     def test_set_key_unknown_plan_warns(self) -> None:
         _reset_state()
@@ -248,3 +252,28 @@ class TestLegacyKeyAlias:
         ):
             assert cmd_key("openai sk-fresh-key-1234567890") is True
         clear_opt_in.assert_called_once_with()
+
+
+@pytest.mark.parametrize("provider", ["openai", "glm"])
+def test_explicit_key_persists_fresh_profile_and_preserves_borrowed_key(
+    provider: str, tmp_path: Path
+) -> None:
+    from core.auth.auth_toml import load_auth_toml
+    from core.auth.profiles import ProfileStore
+    from core.auth.rotation import ProfileRotator
+    from core.cli.commands import cmd_key
+    from core.llm.strategies.plan_registry import PlanRegistry
+    from core.wiring.container import ensure_profile_store
+
+    _reset_state()
+    with patch("core.cli.commands._upsert_env"), patch("core.cli.commands.console"):
+        assert cmd_key(f"{provider} synthetic-original")
+        live = ensure_profile_store()
+        borrowed = ProfileRotator(live).resolve(provider)
+        assert borrowed is not None
+        assert cmd_key(f"{provider} synthetic-replacement")
+    fresh_registry, fresh = PlanRegistry(), ProfileStore()
+    assert load_auth_toml(registry=fresh_registry, store=fresh, path=tmp_path / "auth.toml")
+    selected = ProfileRotator(fresh).resolve(provider)
+    assert selected is not None and selected.key == "synthetic-replacement"
+    assert borrowed.key == "synthetic-original"
