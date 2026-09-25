@@ -108,7 +108,7 @@ def test_login_refresh_failure_warns(capsys: pytest.CaptureFixture[str]) -> None
     with patches[0], patches[1], patches[2], patches[3]:
         assert cmd_login("refresh") is False
 
-    out = capsys.readouterr().out
+    out = " ".join(capsys.readouterr().out.split())  # console width may wrap the path
     assert "auth.toml reload failed" in out
     assert "previous credentials remain active" in out
 
