@@ -172,6 +172,12 @@ functional change.
   same admitted record after their complete tool batch; status reports the actual
   session. Remove unused settings-drift code and its constructor flag.
 
+- Apply explicit API-key selections and validated auth-file refreshes to the
+  next OpenAI, Anthropic, GLM and OpenRouter PAYG SDK request, including adapters
+  retained by existing sessions. Reuse persisted profile pins and ordering;
+  preserve subscription routes, endpoint boundaries and environment fallbacks.
+  Retire replaced clients until their owning event loop drains them.
+
 - Preserve explicit auth profile pins and priority order across auth.toml writes
   and fresh-process routing. Validate reload candidates before publication and
   reconcile deletions only for file-owned entries, retaining managed/environment

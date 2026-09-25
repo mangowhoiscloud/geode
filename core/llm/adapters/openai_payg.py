@@ -1,11 +1,10 @@
 """OpenAIPaygAdapter — PAYG (API-key) path to OpenAI models.
 
 Layer 3 adapter for OpenAI provider, source=payg. Owns its own
-``AsyncOpenAI`` client bound explicitly to ``OPENAI_API_KEY`` — bypasses the
-module-level singleton in ``core.llm.providers.openai`` which routes through
-``ProfileRotator`` and would prefer an OAuth profile if one existed. Codex
-MCP review 2026-05-23 flagged that singleton sharing as a BLOCKER for source
-isolation.
+``AsyncOpenAI`` client bound to a same-endpoint API-key/PAYG profile or the
+existing settings key. Subscription and OAuth profiles never supply this
+route's credential. A changed selection retires the client without closing
+requests that still use it.
 
 Pair with :class:`CodexOAuthAdapter` (same provider, OAuth path).
 
@@ -21,7 +20,9 @@ are Responses-only. Chat Completions now lives only on the GLM adapters
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -46,6 +47,7 @@ from core.llm.adapters.base import (
     WebSearchResult,
 )
 from core.llm.loop_affinity import LoopAffineClientCache
+from core.llm.strategies.plan_registry import resolve_payg_profile
 from core.orchestration.openai_api_lane import acquire_openai_api_lane_async
 
 log = logging.getLogger(__name__)
@@ -92,17 +94,32 @@ class OpenAIPaygAdapter:
         del display_width, display_height  # GA {type:"computer"} is bare
         return openai_computer_tool_param()
 
-    def _get_client(self) -> Any:
+    def _credential(self) -> tuple[str, str, str]:
+        """Read the selected PAYG key, endpoint and non-secret provenance."""
         from core.config import settings
+        from core.llm.registry import get_provider_spec
 
-        api_key = settings.openai_api_key
+        spec = get_provider_spec(self.provider)
+        if spec is None:
+            raise RuntimeError("PAYG provider composition is not registered")
+        base_url = os.environ.get("OPENAI_BASE_URL") or spec.default_base_url
+        profile = resolve_payg_profile(self.provider, base_url=base_url)
+        if profile is not None:
+            return profile.key, base_url, f"auth profile:{profile.name}"
+        return settings.openai_api_key, base_url, "settings.openai_api_key"
+
+    def _get_client(self) -> Any:
+        api_key, base_url, _ = self._credential()
         if not api_key:
             raise RuntimeError(
                 "OpenAIPaygAdapter: OPENAI_API_KEY not set. PAYG path requires "
                 "an explicit API key — set ``openai_api_key`` in settings or use "
                 "the codex-oauth adapter instead."
             )
-        return self._clients.get(lambda: build_async_openai_client(api_key))
+        return self._clients.get(
+            lambda: build_async_openai_client(api_key),
+            identity=hashlib.sha256(f"{base_url}\0{api_key}".encode()).hexdigest(),
+        )
 
     async def aweb_search(
         self, query: str, *, max_results: int = 5, model: str = "", effort: str | None = None
@@ -195,9 +212,8 @@ class OpenAIPaygAdapter:
                 yield event
 
     def test_environment(self) -> EnvironmentReport:
-        from core.config import settings
-
-        if not settings.openai_api_key:
+        api_key, _, _ = self._credential()
+        if not api_key:
             return EnvironmentReport(
                 ok=False,
                 checks=(("openai_api_key", "missing"),),
@@ -208,7 +224,7 @@ class OpenAIPaygAdapter:
             )
         return EnvironmentReport(
             ok=True,
-            checks=(("openai_api_key", f"set ({len(settings.openai_api_key)} chars)"),),
+            checks=(("openai_api_key", f"set ({len(api_key)} chars)"),),
         )
 
     def list_models(self) -> list[ModelSpec]:
@@ -225,14 +241,15 @@ class OpenAIPaygAdapter:
         ]
 
     def detect_credential(self) -> CredentialDetection | None:
-        from core.config import OPENAI_PRIMARY, settings
+        from core.config import OPENAI_PRIMARY
 
-        if not settings.openai_api_key:
+        api_key, _, source_path = self._credential()
+        if not api_key:
             return None
         return CredentialDetection(
             model=OPENAI_PRIMARY,
             provider=self.provider,
-            source_path="settings.openai_api_key",
+            source_path=source_path,
         )
 
 

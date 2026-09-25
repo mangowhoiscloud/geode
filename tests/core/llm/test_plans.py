@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
 from core.auth.profiles import AuthProfile, CredentialType
 from core.llm.registry import (
     PROVIDER_VARIANTS,
@@ -16,6 +17,7 @@ from core.llm.strategies.plan_registry import (
     PlanRegistry,
     get_plan_registry,
     reset_plan_registry,
+    resolve_payg_profile,
     resolve_routing,
 )
 from core.llm.strategies.plans import (
@@ -26,6 +28,71 @@ from core.llm.strategies.plans import (
     Quota,
     default_plan_for_payg,
 )
+
+
+@pytest.fixture
+def payg_selection(monkeypatch: pytest.MonkeyPatch):
+    from core.auth.profiles import ProfileStore
+    from core.llm.strategies import plan_registry
+    from core.wiring import container
+
+    registry, store = PlanRegistry(), ProfileStore()
+    monkeypatch.setattr(plan_registry, "_plan_registry", registry)
+    monkeypatch.setattr(container, "_profile_store", store)
+    plan = default_plan_for_payg("openai", "fixture")
+    profile = AuthProfile(
+        "openai:work", "openai", CredentialType.API_KEY, key="fixture", plan_id=plan.id
+    )
+    registry.add(plan)
+    store.add(profile)
+    return registry, store, plan, profile
+
+
+@pytest.mark.parametrize(
+    "change",
+    ["oauth", "subscription", "provider", "unbound", "managed", "disabled", "empty", "endpoint"],
+)
+def test_payg_selection_never_borrows_an_ineligible_or_other_route_profile(
+    payg_selection, change: str
+) -> None:
+    registry, store, plan, profile = payg_selection
+    base_url = plan.base_url
+    if change == "oauth":
+        profile.credential_type = CredentialType.OAUTH
+    elif change == "subscription":
+        registry.add(replace(plan, kind=PlanKind.SUBSCRIPTION))
+    elif change == "provider":
+        registry.add(replace(plan, provider="openai-codex"))
+    elif change == "unbound":
+        profile.plan_id = "missing"
+    elif change == "managed":
+        profile.managed_by = "external-cli"
+    elif change == "disabled":
+        profile.disabled = True
+    elif change == "empty":
+        profile.key = ""
+    elif change == "endpoint":
+        profile.base_url_override = "https://other.invalid/v1"
+    store.set_active(profile.name)
+    assert resolve_payg_profile("openai", base_url=base_url) is None
+
+
+def test_payg_selection_respects_pin_order_availability_and_effective_endpoint(
+    payg_selection,
+) -> None:
+    _registry, store, plan, first = payg_selection
+    second = replace(first, name="openai:second", key="second", last_used=100)
+    store.add(second)
+    assert resolve_payg_profile("openai", base_url=plan.base_url) is first
+    store.set_active(second.name)
+    assert resolve_payg_profile("openai", base_url=plan.base_url) is second
+    store.set_auth_order("openai", [first.name, second.name])
+    assert resolve_payg_profile("openai", base_url=plan.base_url) is first
+    first.disabled = True
+    assert resolve_payg_profile("openai", base_url=plan.base_url) is second
+    second.base_url_override = "https://relay.invalid/v1/"
+    assert resolve_payg_profile("openai", base_url=plan.base_url) is None
+    assert resolve_payg_profile("openai", base_url="https://relay.invalid/v1") is second
 
 
 class TestProviderRegistry:
