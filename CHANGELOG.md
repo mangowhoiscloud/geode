@@ -163,6 +163,11 @@ functional change.
 
 ### Fixed
 
+- Bind effort-probe resume to the verified source revision and provider route,
+  retaining older measurements without reusing unidentified results. Include
+  configured OpenRouter models and inspect their actual Chat SDK serialization;
+  preserve observed reasoning usage separately from missing values.
+
 - Omit default temperature on known OpenAI reasoning models through OpenRouter,
   including `effort=none`, and reject unsupported custom sampling before dispatch.
   Preserve selected effort and endpoint routing constraints.
