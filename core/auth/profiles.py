@@ -154,10 +154,16 @@ class ProfileStore:
         self._file_profiles: dict[str, dict[str, AuthProfile]] = {}
         self._file_preferences: dict[str, tuple[dict[str, str], dict[str, list[str]]]] = {}
 
-    def add(self, profile: AuthProfile) -> None:
-        """Add a profile. If no active profile exists for the provider, set it."""
+    def add(self, profile: AuthProfile, *, activate: bool = False) -> None:
+        """Add a profile, optionally recording an explicit operator selection.
+
+        Hydration preserves existing preferences. Explicit credential entry uses
+        the same pin/order owner as selecting an existing profile.
+        """
         self._profiles[profile.name] = profile
-        if profile.provider not in self._active:
+        if activate:
+            self.set_active(profile.name)
+        elif profile.provider not in self._active:
             self._active[profile.provider] = profile.name
 
     def get(self, name: str) -> AuthProfile | None:

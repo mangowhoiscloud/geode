@@ -120,8 +120,23 @@ leaves them unchanged; a valid file removes only entries that it still owns.
 Managed CLI credentials and environment fallbacks stay with their original owner.
 Unchanged profiles retain cooldown/health state, while a replaced credential does
 not mutate objects already borrowed by running work. Atomic replacement preserves
-the prior file if a write fails. These are storage/selection guarantees; SDK cache
-invalidation and adoption of a new key at the request boundary remain separate.
+the prior file if a write fails.
+
+Explicit `/key`, PAYG `/login add`, `/login set-key` and `/login anthropic`
+entries select the entered profile through `ProfileStore`'s existing pin/order
+owner before persistence. Hydration alone does not override an operator's choice.
+The four PAYG adapters select only available API-key profiles on a same-provider
+PAYG plan matching their existing endpoint, honoring that pin/order. When none
+matches, the existing settings/environment key remains the fallback; this does
+not select an OAuth credential, change API/Subscription source, or enable a new
+endpoint. `/login refresh` validates and reconciles the file before the next SDK
+request reads the selection, even for adapters retained by an existing session.
+Their loop-owned cache compares credential identity under its existing lock;
+replacement clients serve new requests while prior clients remain open until the
+owning loop drains them. A failed reload preserves the published selection;
+a failed client construction keeps the previous cached client owned. Per-model
+plan routing remains a separate policy consumer; a provider-wide profile pin
+does not replace it.
 
 All new writers should import constants from `core.paths` instead of
 reconstructing path literals.
