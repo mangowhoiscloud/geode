@@ -53,7 +53,7 @@ export default function Page() {
               </tbody>
             </table>
 
-            <p>위 세 사례의 버전·소스 조회일은 2026-09-25입니다. 후속 조사에서는 release·prerelease·기본 브랜치 HEAD를 따로 확인하고, 이전 고정 커밋과의 변경분에서 생산자 → 상태 필드 → 소비자 → 결정 및 종료 책임을 추적합니다. README의 의도, 코드에서 확인한 구현, 실제 실행·verifier 근거를 구분하고 GEODE의 기존 담당 모듈과 채택·수정·제외 여부를 정렬합니다.</p>
+            <p>위 세 사례의 버전·소스 조회일은 2026-09-25입니다. 후속 조사에서는 release·prerelease·기본 브랜치 HEAD를 따로 확인하고, 이전 고정 커밋과의 변경분에서 생산자 → 상태 필드 → 소비자 → 결정 및 종료 책임을 추적합니다. README의 의도, 코드에서 확인한 구현, 실제 실행·verifier 근거를 구분하고 GEODE의 기존 담당 모듈과 채택·수정·제외 여부를 정렬합니다. 인증 상태 경계 비교의 적용·제외 결과는 <a href="https://github.com/mangowhoiscloud/geode/pull/3435">PR #3435</a>에 기록했습니다. DeepSeek Harness의 키 없는 자격 증명 요약과 저장 확인 뒤 성공 보고는 적용했고, Google AX의 키 누락 시 대체 응답은 따르지 않았습니다.</p>
 
             <h2>Diátaxis 와 docs 디자인 표준</h2>
             <ul>
@@ -178,7 +178,7 @@ export default function Page() {
               </tbody>
             </table>
 
-            <p>The three additions were checked on 2026-09-25. On follow-up, inspect releases, prereleases and default-branch HEAD separately, then compare the previous pinned commit with the new revision. Trace producer → state field → consumer → decision and teardown ownership. Separate documented intent, inspected implementation and executed verifier evidence; map responsibilities to existing GEODE owners before deciding to adopt, adapt or reject a change.</p>
+            <p>The three additions were checked on 2026-09-25. On follow-up, inspect releases, prereleases and default-branch HEAD separately, then compare the previous pinned commit with the new revision. Trace producer → state field → consumer → decision and teardown ownership. Separate documented intent, inspected implementation and executed verifier evidence; map responsibilities to existing GEODE owners before deciding to adopt, adapt or reject a change. The auth-state comparison is recorded in <a href="https://github.com/mangowhoiscloud/geode/pull/3435">PR #3435</a>: DeepSeek Harness&apos;s key-free credential summary and success-after-commit reporting were adapted, while Google AX&apos;s fallback response for a missing key was not adopted.</p>
 
             <h2>Diátaxis and docs design standards</h2>
             <ul>

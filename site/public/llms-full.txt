@@ -6612,7 +6612,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/external-refere
 | **Aider** | [aider.chat](https://aider.chat/) | "AI pair programming in your terminal" 카피 패턴 (간결한 hero 1-line). |
 | **Devin / Cognition** | [cognition.ai](https://cognition.ai/blog/introducing-devin) | "The AI software engineer" 명사구 정체성. 장기 실행 소프트웨어 에이전트 비교점. |
 
-위 세 사례의 버전·소스 조회일은 2026-09-25입니다. 후속 조사에서는 release·prerelease·기본 브랜치 HEAD를 따로 확인하고, 이전 고정 커밋과의 변경분에서 생산자 → 상태 필드 → 소비자 → 결정 및 종료 책임을 추적합니다. README의 의도, 코드에서 확인한 구현, 실제 실행·verifier 근거를 구분하고 GEODE의 기존 담당 모듈과 채택·수정·제외 여부를 정렬합니다.
+위 세 사례의 버전·소스 조회일은 2026-09-25입니다. 후속 조사에서는 release·prerelease·기본 브랜치 HEAD를 따로 확인하고, 이전 고정 커밋과의 변경분에서 생산자 → 상태 필드 → 소비자 → 결정 및 종료 책임을 추적합니다. README의 의도, 코드에서 확인한 구현, 실제 실행·verifier 근거를 구분하고 GEODE의 기존 담당 모듈과 채택·수정·제외 여부를 정렬합니다. 인증 상태 경계 비교의 적용·제외 결과는 [PR #3435](https://github.com/mangowhoiscloud/geode/pull/3435)에 기록했습니다. DeepSeek Harness의 키 없는 자격 증명 요약과 저장 확인 뒤 성공 보고는 적용했고, Google AX의 키 누락 시 대체 응답은 따르지 않았습니다.
 
 ## Diátaxis 와 docs 디자인 표준
 

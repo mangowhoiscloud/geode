@@ -73,13 +73,18 @@ remain outside scope.
 | Effort fidelity | Preserve supported selections and reject unsupported values before client construction | actual request audit | PR #3422 merged at `cbb4e33bf`; supported-choice UI #3424 merged at `43ce8e827` |
 | Relay sampling | Omit unsupported default temperature for known OpenAI reasoning relay requests | actual failed request | PR #3423 merged at `8d525ca83`; sole cause of the observed endpoint rejection still requires live confirmation |
 | Probe identity | Bind resumed checks to route, endpoint and source; observe actual OpenRouter Chat serialization | verification tooling audit | PR #3425 merged at `a22bc119d`; forty targeted checks and required CI passed |
-| Session application | Coherent initial/explicit model policy, actual-state ACK and session-local consumers | IPC and runtime counterexamples | PR #3428 open; three stale CI test contracts corrected with 23 passing adjacent checks; new-head remote CI pending |
+| Session application | Coherent initial/explicit model policy, actual-state ACK and session-local consumers | IPC and runtime counterexamples | PR #3428 merged at `c0716cd6a`; required CI passed on head `404815ee7` |
 | Auth persistence | Pin/order persistence and file-owned removal without mutating borrowed credentials | auth serializer/consumer counterexamples | PR #3426 merged at `89f9a9579`; 185 targeted checks and required CI passed |
 | Credential adoption | Explicit API-key choices reach actual SDK requests and retained adapter generations | Auth persistence | PR #3427 merged at `abfcf05db`; all ten required checks passed on `bd99842bf`, ordered merge parents verified |
-| Configuration authority | One shallow source/account decision owner and shared config reads; remove duplicate parsing, unused drift and hidden PAYG fallback | Credential adoption and Session application | implementation in owned `codex/config-authority-20260925`; Codex/Hermes/OpenCode source grounding completed; not merged |
-| Resume | Restore the admitted nonsecret session policy through IPC, gateway and worker callers | Session application and Configuration authority | implementation in owned `codex/session-resume-policy-20260925`; invalid-present and absent legacy records remain distinct; not merged |
-| V1 execution | New-model API/subscription E2E, cache and Harbor validation | final implementation PRs merged into develop with required CI | selected earlier-source runs complete; final-source follow-ups pending; total US$20 paid cap unchanged |
-| F1 | Repeatable onboarding and audit scaffold in existing contributor skills | completed refactoring and checks | local preparation reviewed; added dated DeepSeek Harness, Google AX and Grok Build research references and version/responsibility follow-up; final integration pending |
+| Configuration authority | One shallow source/account decision owner and shared config reads; remove duplicate parsing, unused drift and hidden PAYG fallback | Credential adoption and Session application | PR #3429 merged at `330159a2d`; all ten required checks passed on `4fea8c7fb`, ordered merge parents verified; Codex/Hermes/OpenCode source grounding below |
+| Test isolation | Restore lazy settings exports, exclude credentials from `Settings` repr/str, isolate project-root cache and operator PAYG keys in tests | CI observations after Configuration authority | PRs #3431, #3432 and #3433 merged at `79867c10f`, `dba5c2bf9` and `cc6289d09` |
+| Resume | Restore the admitted nonsecret session policy through IPC, gateway and worker callers | Session application and Configuration authority | PR #3430 merged at `b200b3d82`; invalid-present and absent legacy records remain distinct |
+| Auth state authority | One locked `auth_file_transaction` change path; loads do not write; environment keys stay runtime-only; failures are not reported as success | Credential adoption; auth-boundary comparison below | PR #3435 merged at `b03713cc2` |
+| IPC test sockets | Per-process IPC integration-test socket cleanup | local shared-socket interference | PR #3436 merged at `b26a2ab30` |
+| Harness boundaries | Write-entry workspace check, delegation return contract and CI recovery budget | workflow observations | PR #3437 merged at `b842c3ac7` |
+| Anthropic schema | Normalize unsupported structured-output schema constraints through the SDK's `transform_schema` | direct Anthropic V1 request rejected with HTTP 400 | PR #3438 merged at `b37134627` |
+| V1 execution | New-model API/subscription E2E, cache and Harbor validation | final implementation PRs merged into develop with required CI | [final-source results](#final-source-v1-results) on `b26a2ab30` and `b37134627`; Anthropic Harbor 12 and GLM Harbor 25 invalid at frozen guard limits, Opus Harbor 09 not run; total US$20 paid cap unchanged |
+| F1 | Repeatable onboarding and audit scaffold in existing contributor skills | completed refactoring and checks | contributor skill/reference updates and dated DeepSeek Harness, Google AX and Grok Build research references; integrated with develop `b37134627` through the F1 feature PR |
 | Report | Reconcile all session changes with the existing report and update stale or missing content, including OpenRouter and compaction; exclude Jev | Compaction and V1 execution | pending separate feature PR; publication through main Pages |
 | R1 | Patch release preparation, packaging/docs, develop→main, stable publication | all accepted units, including Report | pending |
 
@@ -109,14 +114,15 @@ separate PRs before freezing final V1 inputs. This is a single integration
 queue operated under the existing [GitFlow manual](../../.agents/skills/geode-gitflow/SKILL.md),
 not a change to GitHub protection settings or a new merge-queue service.
 
-At develop `abfcf05db`, the original provider, lifecycle, cache, compaction and
-CI units and PRs #3418–#3427 are merged. The remaining implementation queue is
-session application (#3428), shared config/source authority, then checkpoint/worker resume.
-Remove redundant resolvers, repeated TOML reads and unused drift options while
-preserving actual selection and lifecycle tests. Keep
-these as cohesive review units; fixing one model picker alone does not close
-the client/daemon contract. Final source freeze and selected V1 follow-ups
-precede F1, Report and R1.
+After PRs #3418–#3427, develop integrated session application (#3428),
+configuration authority (#3429), test isolation (#3431–#3433), resume (#3430),
+auth state authority (#3435) and IPC test sockets (#3436) in that order. The
+resulting develop `b26a2ab30` was frozen for the final-source V1 runs below.
+Harness boundaries (#3437) and the Anthropic schema fix found by those runs
+(#3438) followed at `b37134627`, the source of the direct Anthropic
+replacements and the Sol Harbor replacement. Redundant resolvers, repeated TOML reads and unused drift options
+were removed while actual selection and lifecycle tests were preserved.
+F1, Report and R1 remain separate feature PRs.
 The separate Report feature follows V1 observations and must precede R1. Review
 all session changes against the report, including OpenRouter; the ACT3 page 34
 update and two added compaction pages do not limit that scope. Jev belongs to a
@@ -166,6 +172,39 @@ without speculative perfection work. [GitHub's strict-check contract](https://do
 requires an up-to-date base; the queue limits redundant updates while preserving
 that requirement. These references do not imply external certification.
 
+## External source grounding
+
+Configuration authority compared pinned Codex `549455f3e`, Hermes `7b761da2d`
+and OpenCode `16c56fe5e` sources. "OpenCodex" was ambiguous and is not treated
+as a separate repository.
+
+On 2026-09-25, F1 added three first-party sources to the
+[cited source inventory](../../site/src/app/docs/reference/external-references/page.tsx).
+Their release channels stay distinct:
+
+| Source | Stable release | Prerelease | Inspected default branch | Comparison focus |
+|---|---|---|---|---|
+| DeepSeek Harness | none observed; a 404 from the latest-release API is not proof that no release exists | `dsh-v0.1.7-rc.2`, same commit as HEAD | `477b4f420` (2026-09-24) | plugin scope and disposal, exact effort rejection, prepared calls, compaction pressure and provider errors |
+| Google AX | `v0.3.0` (2026-09-20) | — | `e09ed1bc5` (2026-09-25) | Task/Workspace/Model → substrate actor → controller reconciliation → process lifecycle. Its model client returns a synthetic plan and estimated usage when disabled, missing a key or on selected errors; that is not provider or verifier evidence |
+| Grok Build | GitHub tags/releases empty; product changelog v1.0.40 (2026-09-20) is not mapped to a commit | — | `f0e3be110` (2026-09-23) | config layers, session setup and lifecycle. Its warn-and-ignore handling of unsupported effort conflicts with GEODE's selected-equals-actual contract and is not adopted |
+
+The auth-state comparison recorded in PR #3435 used the same Grok, AX and
+DeepSeek commits with Codex `4b1c0c30` and Hermes `61286a88`. What merged code
+now shows, rather than what those sources suggest:
+
+- Raw API keys live in `~/.geode/.env` (`core/config/env_io.py`). An environment
+  key without a stored profile becomes a runtime `<provider>:default` profile with
+  `origin=environment` (`core/wiring/container.py`); `save_auth_toml` skips it.
+- `auth_file_transaction` (`core/auth/auth_toml.py`) is the change path for
+  `/login`, `/key` and OAuth token storage: it locks, reads a candidate from the
+  current file, saves it, then reconciles the live stores. A rejected change or
+  failed write leaves the file and live stores unchanged.
+- Loading no longer creates or rewrites `auth.toml`; the `.env`-to-`auth.toml`
+  key migration was removed.
+- AX's missing-key fallback response and Grok's non-atomic write under disk
+  pressure were compared and not adopted. Login-attempt identity (Codex
+  `loginId`, Grok attempt generation) remains follow-up work.
+
 ## Verification record
 
 The initial offline stage had no successful live inference. A broad test
@@ -186,9 +225,47 @@ OpenRouter compaction attempts hit credit and endpoint admission failures;
 retain their invalid/unknown classifications and fresh replacement lineage.
 Historical cache responses retain their raw observations even where export
 metadata prevented promotion of the selected result. Prepared cache candidates
-are not executed measurements. Direct OpenAI/Anthropic/Zhipu credit failures
-remain unverified paths until authorised funded calls succeed. The later
+are not executed measurements. Earlier direct OpenAI/Anthropic/Zhipu credit
+failures remain recorded; the final-source direct results are listed below. The later
 OpenRouter US$5 top-up does not expand the existing total US$20 campaign cap.
+
+### Final-source V1 results
+
+Direct Anthropic cells and the Sol Harbor replacement ran on develop
+`b37134627`; all other rows ran on `b26a2ab30`. Between those revisions only
+#3437 (harness docs, scripts, tests and site) and #3438 (Anthropic adapter)
+changed. "valid/passed" is the validity and outcome in the cell's closure
+receipt, not a model ranking. Earlier invalid attempts stay in each cell's
+lineage. Closures are private evidence under the validation workspace, not yet
+published artifacts.
+
+| Cell | Route | Kind | Result |
+|---|---|---|---|
+| 10 / 07 | direct Anthropic Claude Sonnet 5 / Opus 5.5 PAYG | E2E | valid/passed on `b37134627`, eight calls each |
+| 11 / 08 | direct Anthropic Claude Sonnet 5 / Opus 5.5 PAYG | cache | valid/passed on `b37134627`; phase A wrote 2,229 cache tokens each; phases B and C read 2,152 and 2,229 |
+| 12 | direct Anthropic Claude Sonnet 5 PAYG | Harbor | invalid/unknown on `b37134627`: the native guard's frozen 5,000 input-token count cap was exceeded before the fourth call. This is a harness limit; the cap was not raised |
+| 09 | direct Anthropic Claude Opus 5.5 PAYG | Harbor | not run; the same frozen cap would block it, pending an operator decision |
+| 17 / 18 | direct OpenAI GPT-6 Sol PAYG | E2E / cache | valid/passed; cache phase A wrote 1,394 tokens; phases B and C read 1,376 and 1,394 |
+| 19 | direct OpenAI GPT-6 Sol PAYG | Harbor | valid/passed on the `b37134627` replacement. The `b26a2ab30` attempt had reward 1 but unobserved container teardown and was not closable |
+| 20 / 21 / 22 | direct OpenAI GPT-6 Luna PAYG | E2E / cache / Harbor | valid/passed |
+| 23 / 24 | direct Z.AI GLM-5.3 PAYG | E2E / cache | valid/passed; automatic cache read 1,536 tokens in phases B and C; cell 23 replaces an HTTP 429 attempt |
+| 25 | direct Z.AI GLM-5.3 PAYG | Harbor | invalid/unknown: the frozen per-cell call limit of 8 was reached |
+| 67 / 68 / 69 | OpenRouter `openai/gpt-6-sol`, `anthropic/claude-sonnet-5`, `z-ai/glm-5.3` PAYG | cache | valid/passed; only the OpenAI row asserts native wire effort |
+| 71 | OpenRouter `openai/gpt-6-sol` PAYG | compaction | valid/passed; successor of invalid cell 70 |
+
+The `b26a2ab30` direct Anthropic attempts remain invalid/unknown in lineage.
+First, the private validation guard required model and cache fields on
+`usage.iterations` rows; its copy was corrected. Then the API rejected the
+request with HTTP 400 because `output_config.format.schema` carried `maximum`
+and `minimum` on a `number` property; #3438 fixed that in the adapter.
+
+Codex subscription GPT-6 routes were not rerun on the final source because the
+weekly limit was exhausted until about 2026-10-01; their earlier-source results
+remain historical. The shared ledger holds US$8.10 of reservations against the
+US$16 operating cap within the US$20 authorization, covering 127 generation
+calls and 39 free count calls. Two native holds that could not be released are
+settled as reservations with unknown actual charge, because no Anthropic Admin
+key is available. Reservations are not charges; actual charges are unreconciled.
 
 Final publication must bind its claims to the eventual integrated source,
 native results, complete usage and verifier receipts. Main promotion, public
