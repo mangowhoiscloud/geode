@@ -75,6 +75,7 @@ source "$preflight_script" "$@"
             "PREFLIGHT_DRIFT": "1" if drift else "0",
             "PREFLIGHT_AUDIT": "1" if audit else "0",
             "PREFLIGHT_FAIL_UV": fail_uv,
+            "TMPDIR": str(tmp_path),
         },
         capture_output=True,
         text=True,
@@ -109,6 +110,9 @@ def test_generated_docs_drift_fails_gate(tmp_path: Path) -> None:
     assert "public-doc generators" in completed.stdout
     assert "generated docs drift" in completed.stdout
     assert "all gates passed" not in completed.stdout
+    log = Path(completed.stdout.split("full log: ", 1)[1].splitlines()[0])
+    assert log.is_relative_to(tmp_path)
+    assert "generated docs drift" in log.read_text(encoding="utf-8")
     assert calls == [*SITE_CHECKS, *NPM_COMMANDS, "git diff"]
 
 

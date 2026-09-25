@@ -55,6 +55,11 @@ functional change.
   collection coverage before enforcing the unchanged 75% combined branch/line
   coverage threshold. Documentation-only skips and architecture, Harbor, and
   installed-package checks remain mandatory under their existing conditions.
+- Add a read-only `check_repo_hygiene.py assert-write-workspace` entry check
+  that requires an owned topic worktree before independent writes, and treat an
+  empty `.owner` as an orphan worktree. Preflight keeps each failing gate's full
+  output in a log file. Contributor guidance adds a delegation return contract
+  and a bounded CI-recovery budget with hand-off on exhaustion.
 
 ### Changed
 
