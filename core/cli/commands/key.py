@@ -60,13 +60,13 @@ def cmd_key(args: str) -> bool:
         _pkg.console.print(
             "  [muted]Legacy[/muted]                      → [muted]Replacement[/muted]\n"
             "  [label]/key <sk-...>[/label]               → [label]/login add[/label]  "
-            "[muted](interactive — picks provider by prefix)[/muted]\n"
+            "[muted](interactive — choose plan kind, then provider)[/muted]\n"
             "  [label]/key <provider> <key>[/label]       → [label]/login add[/label], or "
             "[label]/login set-key <plan-id> <key>[/label] for a registered plan\n"
             "\n"
-            "  [muted]The legacy forms above still work — they shim into the unified\n"
-            "  Plan/Profile model, but `/login add` registers richer metadata\n"
-            "  (subscription tier, expiry, quota) that `/key` cannot express.\n"
+            "  [muted]The legacy forms above still work; both paths store a PAYG key\n"
+            "  under the same `<provider>-payg` plan. `/login add` also offers the\n"
+            "  ChatGPT subscription sign-in.\n"
             "  Run `/login providers` to see every provider variant the dashboard\n"
             "  supports; `/login` (bare) to see plans + profiles + routing.[/muted]"
         )
