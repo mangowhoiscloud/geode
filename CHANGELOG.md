@@ -163,6 +163,12 @@ functional change.
 
 ### Fixed
 
+- Resolve `check_status` from the current request's readiness instead of a
+  captured CLI startup report, preserving explicit audit overrides. Native
+  hosts without CLI bootstrap use the shared credential check on each call,
+  including API keys, subscription OAuth and profiles. This remains local
+  readiness, not a successful provider request or billing check.
+
 - Preserve matched earlier-turn tool evidence when judging resumed requests,
   with historical provenance, privacy protection and ambiguous-ID rejection.
   Share a bounded text budget across observations so complete short scripts

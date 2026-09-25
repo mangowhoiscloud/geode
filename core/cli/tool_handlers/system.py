@@ -9,8 +9,6 @@ from core.ui.console import console
 
 
 def _build_system_handlers(
-    readiness: Any,
-    force_dry: bool,
     mcp_manager: Any,
     command_registry: Any = None,
 ) -> UniqueEntries[str, Any]:
@@ -32,11 +30,15 @@ def _build_system_handlers(
 
     def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
         from core import __version__ as geode_version
+        from core.cli.session_state import _get_readiness
         from core.config import settings
 
         ant_ok = bool(settings.anthropic_api_key)
         oai_ok = bool(settings.openai_api_key)
-        mode = "full_llm" if (readiness and not readiness.force_dry_run) else "dry_run"
+        # Preserve explicit request policy (including audit overrides), but do
+        # not infer dry-run from a native host's missing CLI bootstrap.
+        readiness = _get_readiness() or check_readiness()
+        mode = "dry_run" if readiness.force_dry_run else "full_llm"
 
         console.print()
         console.print(f"  [header]GEODE v{geode_version}[/header]")
