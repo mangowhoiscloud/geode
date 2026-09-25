@@ -499,7 +499,7 @@ class TestCLIChannelIntegration:
         monkeypatch.setattr(settings, "cognitive_reflection_model", "")
         monkeypatch.setattr(settings, "judge_model", "")
         monkeypatch.setattr(settings, "judgment_engine", "llm")
-        monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda _: "payg")
+        monkeypatch.setattr("core.llm.routing.infer_source", lambda _, **kwargs: "payg")
 
     @pytest.fixture
     def actual_session(self, monkeypatch: pytest.MonkeyPatch) -> Any:
@@ -548,9 +548,7 @@ class TestCLIChannelIntegration:
 
         loop, client, _poller, observed = actual_session
         monkeypatch.setattr(settings, "agentic_effort", "none")
-        monkeypatch.setattr(
-            "core.llm.adapters._source_inference.infer_source", lambda _: "subscription"
-        )
+        monkeypatch.setattr("core.llm.routing.infer_source", lambda _, **kwargs: "subscription")
         assert client.connect(), client.last_error
         assert client.model_config == loop._model_settings.model_dump()
         assert (loop.model, loop._effort, loop._source) == ("gpt-6-sol", "none", "subscription")

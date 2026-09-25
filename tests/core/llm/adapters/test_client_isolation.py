@@ -14,6 +14,7 @@ The invariants (updated for PR-LOOP-POLLUTION-FIX, 2026-06-12):
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,6 +31,7 @@ from core.cli.commands.login import cmd_login
 from core.config import settings
 from core.llm.adapters import registry as adapters
 from core.llm.adapters.anthropic_payg import AnthropicPaygAdapter
+from core.llm.adapters.base import AdapterCallRequest, Message
 from core.llm.adapters.openai_payg import OpenAIPaygAdapter
 from core.llm.loop_affinity import drain_current_loop_clients
 from core.llm.strategies import plan_registry
@@ -57,7 +59,7 @@ def test_payg_client_cached_per_instance_within_loop(
 
     built: list[object] = []
 
-    def _fake_build(api_key: str) -> object:
+    def _fake_build(api_key: str, *, base_url: str | None = None) -> object:
         marker = object()
         built.append(marker)
         return marker
@@ -143,7 +145,7 @@ def _sdk_transport(
         # Real SDK auth serialization; only HTTP transport is synthetic.
         http = httpx.AsyncClient(transport=httpx.MockTransport(respond))
         if provider == "anthropic":
-            return anthropic.AsyncAnthropic(api_key=key, http_client=http, max_retries=0)
+            return anthropic.AsyncAnthropic(api_key=key, http_client=http, max_retries=0, **kwargs)
         return openai.AsyncOpenAI(api_key=key, http_client=http, max_retries=0, **kwargs)
 
     factory = (
@@ -406,6 +408,141 @@ def test_explicit_api_key_selection_replaces_prior_pin_in_sdk_and_fresh_store(
             assert adapter._get_client() is after
             await after.models.list()
             assert observed[-1][1] == new_key
+        finally:
+            await drain_current_loop_clients()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "provider,field,model",
+    [
+        ("openai", "openai_api_key", "gpt-6-sol"),
+        ("anthropic", "anthropic_api_key", "claude-fable-5-1"),
+        ("glm", "zai_api_key", "glm-5.3"),
+        ("openrouter", "openrouter_api_key", "openrouter/openai/gpt-6-sol"),
+    ],
+)
+def test_actual_completion_uses_model_plan_account_and_endpoint(
+    provider, field, model, tmp_path, monkeypatch
+):
+    _, store = _setup_state(monkeypatch, tmp_path, provider, field)
+    registry = plan_registry.get_plan_registry()
+    plan = replace(
+        default_plan_for_payg(provider, "selected"),
+        id="model-account",
+        base_url="https://selected.invalid/v1",
+    )
+    registry.add(plan)
+    profile = AuthProfile(
+        "selected",
+        provider,
+        CredentialType.API_KEY,
+        key="synthetic-model-selected",
+        plan_id=plan.id,
+    )
+    store.add(profile)
+    registry.set_routing(model, [plan.id])
+    from core.cli.commands._state import model_available
+
+    assert model_available(model, source="payg")
+    requests: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if provider == "anthropic":
+            body = {
+                "id": "msg_test",
+                "type": "message",
+                "role": "assistant",
+                "model": model,
+                "content": [{"type": "text", "text": "done"}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            }
+        elif provider == "openai":
+            body = {
+                "id": "resp_test",
+                "object": "response",
+                "created_at": 0,
+                "model": model,
+                "status": "completed",
+                "output": [
+                    {
+                        "id": "msg_test",
+                        "type": "message",
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [{"type": "output_text", "text": "done", "annotations": []}],
+                    }
+                ],
+                "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+            }
+        else:
+            body = {
+                "id": "chat_test",
+                "object": "chat.completion",
+                "created": 0,
+                "model": model,
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": "done"},
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            }
+        if provider == "openai":
+            events = [
+                {
+                    "type": "response.created",
+                    "response": {**body, "status": "in_progress"},
+                    "sequence_number": 0,
+                },
+                {"type": "response.completed", "response": body, "sequence_number": 1},
+            ]
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content="".join(
+                    f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
+                ).encode(),
+            )
+        return httpx.Response(200, json=body)
+
+    def build(key, **kwargs):
+        http = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+        sdk = anthropic.AsyncAnthropic if provider == "anthropic" else openai.AsyncOpenAI
+        return sdk(api_key=key, http_client=http, max_retries=0, **kwargs)
+
+    factory = (
+        "build_async_anthropic_client" if provider == "anthropic" else "build_async_openai_client"
+    )
+    monkeypatch.setattr(f"core.llm.adapters.{provider}_payg.{factory}", build)
+    adapter = adapters.registry_snapshot().get_adapter(f"{provider}-payg")
+    request = AdapterCallRequest(
+        model=model, effort="low", messages=(Message(role="user", content="hello"),)
+    )
+
+    async def scenario() -> None:
+        try:
+            result = await adapter.acomplete(request)
+            assert result.text == "done"
+            assert requests[-1].url.host == "selected.invalid"
+            expected = profile.key if provider == "anthropic" else f"Bearer {profile.key}"
+            header = "x-api-key" if provider == "anthropic" else "authorization"
+            assert requests[-1].headers[header] == expected
+            wire_model = json.loads(requests[-1].content)["model"]
+            assert wire_model == model.removeprefix("openrouter/")
+            from scripts.probes.probe_effort_surface import _adapter_base_url
+
+            assert _adapter_base_url(adapter, model) == "https://selected.invalid/v1"
+            profile.disabled = True
+            assert not model_available(model, source="payg")
+            with pytest.raises(RuntimeError, match="no available account"):
+                await adapter.acomplete(request)
+            assert len(requests) == 1  # no settings-key or other-source dispatch
         finally:
             await drain_current_loop_clients()
 

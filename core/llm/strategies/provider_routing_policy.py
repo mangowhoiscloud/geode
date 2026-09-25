@@ -1,13 +1,10 @@
 """Provider routing SoT reader — ADR-013 T4, JSON mutation surface.
 
-Mutator picks the **preferred plan-chain** for each model (plan_id ordered
-list). `resolve_routing(model)` consults this override before falling back
-to the user-set `PlanRegistry.set_routing(model, ...)` chain. Choosing a
-cheaper plan (PAYG vs SUBSCRIPTION) for the same model reduces per-call
-cost without changing behavior. This used to target the ``ux_means``
-fitness axis (``token_cost_norm``); that axis was removed in
-PR-MARGIN-FITNESS-SCALE (2026-05-30) — fitness is now pure Petri dim
-aggregate, so this remains a cost knob with no dedicated fitness lever.
+The optional policy supplies a preferred plan chain for each model. The shared
+``core.llm.routing`` owner combines it with explicit source constraints and the
+stored ``PlanRegistry`` order. A different plan need not have the same model
+support, endpoint, quota, or price; account availability does not authorize a
+cross-source fallback.
 
 **SoT schema** (모든 entry optional):
 
@@ -19,17 +16,13 @@ aggregate, so this remains a cost knob with no dedicated fitness lever.
     }
 
 빈 entry / 누락 model / 부적합 schema → no-op (registry's set_routing
-chain 그대로 사용). Unknown plan_id 는 정책에 있어도 `resolve_routing`
-이 등록된 plan 만 시도하므로 silently ignored.
+chain 그대로 사용). Unknown plan_id는 runtime admission에서 명시적으로 거절한다.
+선택한 source의 계정이 불가능해도 다른 과금 source로 전환하지 않는다.
 
 Candidate paths are supplied by product composition. Selection is explicit
 override → operator-local → packaged default → no-op; an explicit override is
 authoritative and may request strict loading.
 
-**Frontier**: OpenRouter's explicit per-model plan ordering — same model,
-different providers, different prices. Anthropic / OpenAI both surface
-multiple credential tiers (subscription / PAYG / batch); routing across
-them is a measurable cost lever.
 """
 
 from __future__ import annotations

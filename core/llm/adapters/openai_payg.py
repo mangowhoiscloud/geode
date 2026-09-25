@@ -27,6 +27,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
+from core.config.policy_source import PolicySourcePaths
 from core.llm.adapters._openai_common import (
     build_async_openai_client,
     build_responses_kwargs,
@@ -47,7 +48,7 @@ from core.llm.adapters.base import (
     WebSearchResult,
 )
 from core.llm.loop_affinity import LoopAffineClientCache
-from core.llm.strategies.plan_registry import resolve_payg_profile
+from core.llm.routing import resolve_routing
 from core.orchestration.openai_api_lane import acquire_openai_api_lane_async
 
 log = logging.getLogger(__name__)
@@ -94,7 +95,9 @@ class OpenAIPaygAdapter:
         del display_width, display_height  # GA {type:"computer"} is bare
         return openai_computer_tool_param()
 
-    def _credential(self) -> tuple[str, str, str]:
+    routing_sources: PolicySourcePaths | None = field(default=None, repr=False)
+
+    def _credential(self, model: str = "") -> tuple[str, str, str]:
         """Read the selected PAYG key, endpoint and non-secret provenance."""
         from core.config import settings
         from core.llm.registry import get_provider_spec
@@ -103,13 +106,19 @@ class OpenAIPaygAdapter:
         if spec is None:
             raise RuntimeError("PAYG provider composition is not registered")
         base_url = os.environ.get("OPENAI_BASE_URL") or spec.default_base_url
-        profile = resolve_payg_profile(self.provider, base_url=base_url)
-        if profile is not None:
-            return profile.key, base_url, f"auth profile:{profile.name}"
+        target = resolve_routing(
+            model,
+            provider=self.provider,
+            source=self.source,
+            base_url=base_url,
+            sources=self.routing_sources,
+        )
+        if target is not None:
+            return target.profile.key, target.base_url, f"auth profile:{target.profile.name}"
         return settings.openai_api_key, base_url, "settings.openai_api_key"
 
-    def _get_client(self) -> Any:
-        api_key, base_url, _ = self._credential()
+    def _get_client(self, model: str = "") -> Any:
+        api_key, base_url, _ = self._credential(model)
         if not api_key:
             raise RuntimeError(
                 "OpenAIPaygAdapter: OPENAI_API_KEY not set. PAYG path requires "
@@ -117,7 +126,7 @@ class OpenAIPaygAdapter:
                 "the codex-oauth adapter instead."
             )
         return self._clients.get(
-            lambda: build_async_openai_client(api_key),
+            lambda: build_async_openai_client(api_key, base_url=base_url),
             identity=hashlib.sha256(f"{base_url}\0{api_key}".encode()).hexdigest(),
         )
 
@@ -132,7 +141,7 @@ class OpenAIPaygAdapter:
 
         openai_effort_kwargs(model or OPENAI_PRIMARY, effort)
         return await openai_web_search(
-            self._get_client(),
+            self._get_client(model or OPENAI_PRIMARY),
             query=query,
             max_results=max_results,
             model=model or OPENAI_PRIMARY,
@@ -166,7 +175,7 @@ class OpenAIPaygAdapter:
 
         openai_effort_kwargs(model or OPENAI_PRIMARY, effort)
         return await openai_responses_complete_text(
-            self._get_client(),
+            self._get_client(model or OPENAI_PRIMARY),
             prompt=prompt,
             system=system,
             model=model or OPENAI_PRIMARY,
@@ -176,7 +185,7 @@ class OpenAIPaygAdapter:
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         kwargs = build_responses_kwargs(req, backend="platform", adapter_name=self.name)
-        client = self._get_client()
+        client = self._get_client(req.model)
         # PR-OAUTH-API-LANES (2026-05-26) — pooled with codex-oauth in
         # the same per-account openai-api lane (OpenAI rate-limits
         # per-account, not per-source).
@@ -206,7 +215,7 @@ class OpenAIPaygAdapter:
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         kwargs = build_responses_kwargs(req, backend="platform", adapter_name=self.name)
-        client = self._get_client()
+        client = self._get_client(req.model)
         async with client.responses.stream(**kwargs) as stream:
             async for event in translate_responses_stream(stream):
                 yield event

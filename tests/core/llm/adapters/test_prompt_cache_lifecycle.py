@@ -106,7 +106,7 @@ def test_platform_sdk_sends_static_boundary(monkeypatch: pytest.MonkeyPatch) -> 
             api_key="fixture", http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond))
         ) as client:
             adapter = OpenAIPaygAdapter()
-            monkeypatch.setattr(adapter, "_get_client", lambda: client)
+            monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
             events = [event async for event in adapter.astream(_request("gpt-6-sol"))]
             usage = next(event.payload for event in events if event.kind == "usage")
             assert usage["cached_input_tokens"] == 1024
@@ -170,7 +170,7 @@ def test_openrouter_wire_preserves_cache_and_session_ownership(
             api_key="fixture", http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond))
         ) as client:
             adapter = OpenRouterPaygAdapter()
-            monkeypatch.setattr(adapter, "_get_client", lambda: client)
+            monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
             for tail in ("first", "second"):
                 result = await adapter.acomplete(
                     replace(
@@ -185,7 +185,7 @@ def test_openrouter_wire_preserves_cache_and_session_ownership(
             api_key="fixture", http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond))
         ) as new_client:
             adapter = OpenRouterPaygAdapter()
-            monkeypatch.setattr(adapter, "_get_client", lambda: new_client)
+            monkeypatch.setattr(adapter, "_get_client", lambda model="": new_client)
             await adapter.acomplete(_request(f"openrouter/{model}"))
             monkeypatch.setattr(
                 "core.agent.cognitive_state_ctx.get_session_id", lambda: "another-session"
@@ -232,7 +232,7 @@ def test_openrouter_session_context_is_task_local_and_retains_policy(
             api_key="fixture", http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond))
         ) as client:
             adapter = OpenRouterPaygAdapter()
-            monkeypatch.setattr(adapter, "_get_client", lambda: client)
+            monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
 
             async def call(label: str, context: str, metadata: dict[str, Any]) -> None:
                 set_session_id(context)
@@ -291,7 +291,7 @@ def test_openrouter_claude_marker_budget_on_actual_sdk_wire(
             api_key="fixture", http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond))
         ) as client:
             adapter = OpenRouterPaygAdapter()
-            monkeypatch.setattr(adapter, "_get_client", lambda: client)
+            monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
             await adapter.acomplete(request)
 
     asyncio.run(run())

@@ -136,6 +136,21 @@ export default function Page() {
               안내를 출력합니다.
             </p>
 
+            <h2>실행 중 세션과 새 세션의 기본값</h2>
+            <p>
+              저장한 모델·effort·인증 설정은 새 세션의 기본값입니다. 실행 중인 세션은
+              승인된 모델·effort·API/구독 소스를 보존합니다. 연결된 CLI의{" "}
+              <code>/login source</code>는 해당 세션의 적용 응답을 받은 뒤 기본값을
+              저장하며, 연결되지 않은 명령은 새 세션의 기본값만 바꿉니다.
+            </p>
+            <p>
+              명시적 로그인 소스와 <code>forced_login_method</code>가 충돌하면 거절합니다.
+              모델별 plan 순서와 계정 선택은 SDK 요청에도 적용됩니다. 선택한 소스의
+              계정을 사용할 수 없어도 다른 과금 소스로 자동 전환하지 않습니다.
+              <code>/login use</code>와 <code>/login route</code>는 같은 소스 안에서
+              다음 요청의 계정을 바꿀 수 있으며, 실행 중 세션의 소스를 바꾸지는 않습니다.
+            </p>
+
             <h2>모델 결정 순서</h2>
             <p>위가 아래를 가립니다. 첫 번째로 값이 설정된 레이어가 이깁니다.</p>
             <pre>{`1. CLI 인자
@@ -155,7 +170,8 @@ export default function Page() {
             <p>
               데몬은 시작할 때 모델 계열 env 키를 의도적으로 버리므로
               (<code>BEHAVIOR_ENV_KEYS</code>, <code>core/config/env_io.py</code>),
-              세션마다 toml의 선택이 항상 이깁니다. 셸에서 직접 export한
+              새 세션은 유효한 설정에서 시작합니다. 기존 세션은 승인된 선택을 유지합니다.
+              셸에서 직접 export한
               <code>GEODE_MODEL</code>은 그 세션 한정의 파워유저 오버라이드입니다.
             </p>
 
@@ -375,6 +391,22 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               prints a &quot;removed stale ... from .env&quot; notice.
             </p>
 
+            <h2>Live sessions and future defaults</h2>
+            <p>
+              Saved model, effort and credential settings seed new sessions. A live
+              session keeps its admitted model, effort and API/subscription source.
+              A connected <code>/login source</code> command requires the session&apos;s
+              applied acknowledgment before saving defaults; a disconnected command
+              changes defaults for future sessions only.
+            </p>
+            <p>
+              An explicit credential source conflicting with <code>forced_login_method</code>
+              is rejected. Model plan order and account selection also govern SDK
+              requests. An unavailable account never authorizes switching billing sources.
+              <code>/login use</code> and <code>/login route</code> can change the next
+              account within the selected source, while the live source remains fixed.
+            </p>
+
             <h2>Model resolution order</h2>
             <p>Higher masks lower. The first layer with a value wins.</p>
             <pre>{`1. CLI arguments
@@ -394,8 +426,8 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
             <p>
               The serve daemon deliberately drops model-pick env keys at startup
               (<code>BEHAVIOR_ENV_KEYS</code>, <code>core/config/env_io.py</code>),
-              so the toml choice wins for every daemon session. A
-              <code>GEODE_MODEL</code> you export by hand stays a power-user
+              so new sessions start from effective settings. Existing sessions retain
+              their admitted choices. A <code>GEODE_MODEL</code> you export by hand stays a power-user
               override for that shell session.
             </p>
 

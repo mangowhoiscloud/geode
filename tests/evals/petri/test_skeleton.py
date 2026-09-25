@@ -214,7 +214,7 @@ def test_native_provider_without_petri_contract_does_not_discard_source_pin(
     from evals.petri.geode_target import _default_geode_runner
 
     config, loop = target_credential_boundary
-    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda provider: "payg")
+    monkeypatch.setattr("core.llm.routing.infer_source", lambda provider, **kwargs: "payg")
     if explicit_source:
         config.write_text('[self_improving_loop.autoresearch.target]\nsource = "api_key"\n')
         with pytest.raises(ValueError, match="credential contract"):

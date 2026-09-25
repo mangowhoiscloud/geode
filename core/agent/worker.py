@@ -461,9 +461,9 @@ def _run_agentic(
     ) or _resolve_provider(effective_model)
     effective_source = request.source
     if not effective_source:
-        from core.llm.adapters._source_inference import infer_source
+        from core.llm.routing import infer_source
 
-        effective_source = infer_source(effective_provider)
+        effective_source = infer_source(effective_provider, model=effective_model)
 
     # 2. Filter the complete native catalog — ordinary handlers, named special
     # routes, and explicit execution-only overlays — from one contribution set.

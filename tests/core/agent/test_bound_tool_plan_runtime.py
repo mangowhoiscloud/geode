@@ -325,8 +325,8 @@ def test_model_switch_reprojects_bound_plan_in_both_provider_directions(
 
     monkeypatch.setattr(_model_switching, "_resolve_path_b_adapter", adapter)
     monkeypatch.setattr(
-        "core.llm.adapters._source_inference.infer_source",
-        lambda provider: "subscription" if provider == "openai" else "payg",
+        "core.llm.routing.infer_source",
+        lambda provider, **kwargs: "subscription" if provider == "openai" else "payg",
     )
     monkeypatch.setattr("core.ui.agentic_ui.update_session_model", lambda _model: None)
 

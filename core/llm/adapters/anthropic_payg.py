@@ -16,6 +16,7 @@ from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from core.config.policy_source import PolicySourcePaths
 from core.llm.adapters._anthropic_common import (
     anthropic_effort_kwargs,
     build_async_anthropic_client,
@@ -37,7 +38,7 @@ from core.llm.adapters.base import (
 )
 from core.llm.errors import LLMResponseValidationError
 from core.llm.loop_affinity import LoopAffineClientCache
-from core.llm.strategies.plan_registry import resolve_payg_profile
+from core.llm.routing import resolve_routing
 from core.orchestration.anthropic_api_lane import acquire_anthropic_api_lane_async
 
 log = logging.getLogger(__name__)
@@ -79,7 +80,9 @@ class AnthropicPaygAdapter:
 
         return anthropic_computer_tool_param(display_width, display_height)
 
-    def _credential(self) -> tuple[str, str, str]:
+    routing_sources: PolicySourcePaths | None = field(default=None, repr=False)
+
+    def _credential(self, model: str = "") -> tuple[str, str, str]:
         """Read the selected PAYG key, endpoint and non-secret provenance."""
         from core.config import settings
         from core.llm.registry import get_provider_spec
@@ -88,20 +91,26 @@ class AnthropicPaygAdapter:
         if spec is None:
             raise RuntimeError("PAYG provider composition is not registered")
         base_url = os.environ.get("ANTHROPIC_BASE_URL") or spec.default_base_url
-        profile = resolve_payg_profile(self.provider, base_url=base_url)
-        if profile is not None:
-            return profile.key, base_url, f"auth profile:{profile.name}"
+        target = resolve_routing(
+            model,
+            provider=self.provider,
+            source=self.source,
+            base_url=base_url,
+            sources=self.routing_sources,
+        )
+        if target is not None:
+            return target.profile.key, target.base_url, f"auth profile:{target.profile.name}"
         return settings.anthropic_api_key, base_url, "settings.anthropic_api_key"
 
-    def _get_client(self) -> Any:
-        api_key, base_url, _ = self._credential()
+    def _get_client(self, model: str = "") -> Any:
+        api_key, base_url, _ = self._credential(model)
         if not api_key:
             raise RuntimeError(
                 "AnthropicPaygAdapter: ANTHROPIC_API_KEY not set. PAYG path requires "
                 "an explicit API key — set ``anthropic_api_key`` in settings."
             )
         return self._clients.get(
-            lambda: build_async_anthropic_client(api_key),
+            lambda: build_async_anthropic_client(api_key, base_url=base_url),
             identity=hashlib.sha256(f"{base_url}\0{api_key}".encode()).hexdigest(),
         )
 
@@ -114,7 +123,7 @@ class AnthropicPaygAdapter:
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         anthropic_effort_kwargs(req.model, req.effort)
-        client = self._get_client()
+        client = self._get_client(req.model)
         self._require_model_allowed(req.model, base_url=str(client.base_url))
         # The API-key path has its own concurrency lane.
         lane_key = f"anthropic-payg:{req.model}"
@@ -151,7 +160,7 @@ class AnthropicPaygAdapter:
         # do not project Anthropic API retirements onto a custom host.
         search_model = resolve_web_search_model(model)
         anthropic_effort_kwargs(search_model, effort)
-        client = self._get_client()
+        client = self._get_client(search_model)
         # Reject before web-search capability routing can replace the choice.
         if model:
             self._require_model_allowed(model, base_url=str(client.base_url))
@@ -180,7 +189,7 @@ class AnthropicPaygAdapter:
 
         completion_model = model or ANTHROPIC_PRIMARY
         anthropic_effort_kwargs(completion_model, effort)
-        client = self._get_client()
+        client = self._get_client(completion_model)
         self._require_model_allowed(completion_model, base_url=str(client.base_url))
         return await anthropic_complete_text(
             client,
@@ -193,7 +202,7 @@ class AnthropicPaygAdapter:
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         anthropic_effort_kwargs(req.model, req.effort)
-        client = self._get_client()
+        client = self._get_client(req.model)
         self._require_model_allowed(req.model, base_url=str(client.base_url))
         kwargs = build_stream_kwargs(req, base_url=str(client.base_url))
         edits = kwargs.get("extra_body", {}).get("context_management", {}).get("edits", [])

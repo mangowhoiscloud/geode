@@ -348,12 +348,12 @@ async def _default_geode_runner(
     bootstrap_builtins(policy_sources=policy_sources)
 
     from core.agent.loop._tool_factory import project_bound_tool_plan
-    from core.llm.adapters._source_inference import infer_source
+    from core.llm.routing import infer_source
 
     bound_tool_plan = project_bound_tool_plan(
         bound_tool_plan,
         provider=resolved_provider,
-        source=resolved_source or infer_source(resolved_provider),
+        source=resolved_source or infer_source(resolved_provider, model=model or ""),
         policy_sources=policy_sources,
     )
     from core.tools.policy import apply_profile_policy

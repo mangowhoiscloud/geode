@@ -86,7 +86,7 @@ def test_actual_input_rejection_recovers_below_local_threshold(
         )
 
     transport = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
-    monkeypatch.setattr(adapter, "_get_client", lambda: transport)
+    monkeypatch.setattr(adapter, "_get_client", lambda model="": transport)
     summary = AsyncMock(side_effect=["Earlier findings. " + "z" * 12_000, "Earlier facts."])
     monkeypatch.setattr("core.orchestration.compaction._call_summarize", summary)
     assert not check_context(context.messages, loop.model).is_warning

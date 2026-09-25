@@ -70,13 +70,10 @@ def _read_toml_value(section: str, key: str) -> str:
     ``settings_field=""``)."""
     import tomllib
 
-    from core.config.toml_edit import resolve_config_toml_path
+    from core.config.toml_edit import read_config_toml
 
-    config_path = resolve_config_toml_path()
-    if not config_path.is_file():
-        return ""
     try:
-        data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+        data = read_config_toml()
     except (OSError, tomllib.TOMLDecodeError):
         return ""
     cursor: object = data
@@ -539,7 +536,7 @@ def _apply_picker_result(
     if client is not None:
         from core.cli import commands as package
         from core.config import _resolve_provider
-        from core.llm.adapters._source_inference import infer_source
+        from core.llm.routing import infer_source
 
         changes: dict[str, object] = {}
         for role, model_id, _effort in selections:
@@ -549,7 +546,7 @@ def _apply_picker_result(
                     effort=primary_effort,
                     source=(
                         _selection_source(model_id, role_by_name(role), client)
-                        or infer_source(_resolve_provider(model_id))
+                        or infer_source(_resolve_provider(model_id), model=model_id)
                     ),
                 )
             elif role == "reflection":
@@ -557,7 +554,7 @@ def _apply_picker_result(
                     reflection_model=model_id,
                     reflection_source=(
                         _selection_source(model_id, role_by_name(role), client)
-                        or infer_source(_resolve_provider(model_id))
+                        or infer_source(_resolve_provider(model_id), model=model_id)
                         if model_id
                         else ""
                     ),

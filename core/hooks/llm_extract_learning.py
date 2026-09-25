@@ -99,7 +99,6 @@ async def _call_budget_llm(
     degrades cleanly instead of trying unrelated credentials.
     """
     from core.config import _resolve_provider, settings
-    from core.llm.adapters._source_inference import infer_source
     from core.llm.adapters.dispatch import (
         AdapterDispatchError,
         AdapterUnavailableError,
@@ -107,9 +106,10 @@ async def _call_budget_llm(
     )
     from core.llm.adapters.registry import normalize_registry_provider
     from core.llm.errors import BillingError
+    from core.llm.routing import infer_source
 
     provider = normalize_registry_provider(_resolve_provider(settings.learning_extract_model))
-    source = infer_source(provider)
+    source = infer_source(provider, model=settings.learning_extract_model)
     # Strict single-adapter dispatch tries exactly the extraction model's
     # route and never silently widens. Returning ``None`` on any failure
     # keeps the extraction hook a soft hint — the loop's main path is

@@ -331,7 +331,7 @@ def test_admitted_tuple_reaches_actual_primary_request(loop, monkeypatch, source
             max_retries=0,
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond)),
         ) as sdk:
-            monkeypatch.setattr(adapter, "_get_client", lambda: sdk)
+            monkeypatch.setattr(adapter, "_get_client", lambda model="": sdk)
             result = await adapter.acomplete(request)
         assert sdk.is_closed()
         assert adapter.source == source
@@ -500,7 +500,7 @@ def test_effort_only_change_admits_current_payg_model_after_future_default_chang
     client.model_config = SessionModelConfig(
         model="gpt-5.4", effort="low", source="payg"
     ).model_dump()
-    monkeypatch.setattr(_state, "_selected_openai_source", lambda: "subscription")
+    monkeypatch.setattr(_state, "_selected_openai_source", lambda model="": "subscription")
     profile = next(p for p in _state.get_model_profiles(openai_source="payg") if p.id == "gpt-5.4")
     assert (
         commands._model_selection_error(

@@ -90,12 +90,12 @@ def test_default_llm_call_routes_openai_sources(
     )
     monkeypatch.setattr("core.config._resolve_provider", lambda m: "openai-codex")
     # PR-SOURCE-ROUTING (2026-05-28) — runner now consults
-    # :func:`core.llm.adapters._source_inference.infer_source` instead of
+    # :func:`core.llm.routing.infer_source` instead of
     # hard-coding ``"payg"``. Pin the test to the historical API-path
     # default by stubbing the inference helper; the live behaviour
     # (settings + ProfileStore promotion) is covered by
     # ``tests/core/llm/test_source_routing_regression.py``.
-    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda _p: "payg")
+    monkeypatch.setattr("core.llm.routing.infer_source", lambda _p, **kwargs: "payg")
 
     captured: dict[str, object] = {"provider": None, "source": None}
 
@@ -264,6 +264,7 @@ def test_cmd_source_set_rejects_invalid_source(
     from evolve.scaffold_search import cli_commands as self_improving
 
     fake_toml = tmp_path / "config.toml"
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(fake_toml))
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
     # PR-DEDUP-CONFIG-TOML — writer + loader both resolve through
     # ``core.config.toml_edit.resolve_config_toml_path``, which reads the
@@ -285,6 +286,7 @@ def test_cmd_source_set_persists_valid_source(
     from evolve.scaffold_search import cli_commands as self_improving
 
     fake_toml = tmp_path / "config.toml"
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(fake_toml))
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
     # See sibling test for rationale on patching both symbols.
     monkeypatch.setattr("core.config.toml_edit.GLOBAL_CONFIG_TOML", fake_toml)
@@ -316,6 +318,7 @@ def test_persist_full_config_uses_plural_roles_path(
     from evolve.scaffold_search import cli_commands as self_improving
 
     fake_toml = tmp_path / "config.toml"
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(fake_toml))
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
     monkeypatch.setattr("core.config.toml_edit.GLOBAL_CONFIG_TOML", fake_toml)
     self_improving._persist_full_config(
@@ -355,9 +358,7 @@ def test_default_llm_call_explicit_api_key_routes_payg_not_inferred_subscription
     # infer_source WOULD say subscription (OAuth profile present). The fix must NOT
     # consult it for an explicit api_key — otherwise the operator's PAYG choice is
     # silently reverted to the rate-limited subscription lane.
-    monkeypatch.setattr(
-        "core.llm.adapters._source_inference.infer_source", lambda _p: "openai-codex"
-    )
+    monkeypatch.setattr("core.llm.routing.infer_source", lambda _p, **kwargs: "openai-codex")
 
     captured: dict[str, object] = {"provider": None, "source": None}
 

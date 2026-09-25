@@ -133,9 +133,9 @@ def _resolve_model_route(
     new_provider = provider or _resolve_provider(model)
     source = loop._source
     if new_provider != loop._provider and not getattr(loop, "_source_explicit", False):
-        from core.llm.adapters._source_inference import infer_source
+        from core.llm.routing import infer_source
 
-        source = infer_source(new_provider)
+        source = infer_source(new_provider, model=model)
     return new_provider, source
 
 

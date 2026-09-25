@@ -19,6 +19,56 @@ from core.llm.strategies.plan_registry import (
 from core.llm.strategies.plans import GLM_CODING_TIERS, default_plan_for_payg
 
 
+@pytest.mark.parametrize("accepted", [True, False])
+def test_source_choice_requires_session_ack_before_saving_defaults(
+    accepted: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.config.session import SessionModelConfig
+
+    _reset_state()
+    calls: list[tuple[str, object]] = []
+    config = SessionModelConfig(
+        model="gpt-6-sol",
+        effort="low",
+        source="subscription",
+        reflection_model="gpt-6-luna",
+        reflection_source="subscription",
+        judge_model="claude-fable-5-1",
+        judge_source="payg",
+    )
+
+    class Client:
+        model_config = config.model_dump()
+
+        def apply_model_config(self, changes):
+            calls.append(("apply", changes))
+            return {"status": "applied" if accepted else "error", "message": "rejected"}
+
+    monkeypatch.setattr(
+        "core.cli.commands.login._persist_credential_source",
+        lambda *args: calls.append(("persist", args)),
+    )
+    with patch("core.cli.commands.console"):
+        cmd_login("source openai api_key", client=Client())
+    assert calls[0] == ("apply", {"source": "payg", "reflection_source": "payg"})
+    assert [kind for kind, _ in calls] == (["apply", "persist"] if accepted else ["apply"])
+    assert config.effort == "low" and config.judge_source == "payg"
+
+
+def test_source_candidate_does_not_mutate_current_record_or_global_defaults() -> None:
+    from core.cli.commands.login import session_source_changes
+    from core.config import settings
+    from core.config.session import SessionModelConfig
+
+    _reset_state()
+    before = settings.openai_credential_source
+    config = SessionModelConfig(model="gpt-6-sol", effort="low", source="subscription")
+    assert session_source_changes(config, "openai", "api_key") == {"source": "payg"}
+    assert config.source == "subscription" and settings.openai_credential_source == before
+    with pytest.raises(RuntimeError, match="disabled"):
+        session_source_changes(config, "openai", "none")
+
+
 @pytest.fixture(autouse=True)
 def _scrub_real_provider_keys(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Isolate the machine's real credentials from the auth/profile store.
@@ -288,3 +338,31 @@ def test_explicit_key_persists_fresh_profile_and_preserves_borrowed_key(
     selected = ProfileRotator(fresh).resolve(provider)
     assert selected is not None and selected.key == "synthetic-replacement"
     assert borrowed.key == "synthetic-original"
+
+
+@pytest.mark.parametrize("with_client", [False, True])
+def test_source_conflict_does_not_save_defaults_or_mutate_unrelated_session(
+    monkeypatch: pytest.MonkeyPatch,
+    with_client: bool,
+) -> None:
+    from core.config import settings
+    from core.config.session import SessionModelConfig
+
+    _reset_state()
+    monkeypatch.setattr(settings, "forced_login_method", {"openai": "subscription"})
+    monkeypatch.setattr(settings, "openai_credential_source", "auto")
+    config = SessionModelConfig(model="claude-fable-5-1", effort="low", source="payg")
+
+    class Client:
+        model_config = config.model_dump()
+
+        def apply_model_config(self, changes):
+            pytest.fail("conflicting future default must not mutate a session")
+
+    with (
+        patch("core.cli.commands.console"),
+        patch("core.cli.commands.login._persist_credential_source") as persist,
+    ):
+        cmd_login("source openai api_key", client=Client() if with_client else None)
+    persist.assert_not_called()
+    assert settings.openai_credential_source == "auto"

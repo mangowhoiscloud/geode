@@ -307,7 +307,9 @@ def test_file_preferences_reach_plan_bound_routing(
     monkeypatch.setattr(plan_registry, "_plan_registry", live_registry)
     monkeypatch.setattr(container, "_profile_store", live)
     monkeypatch.setattr(container, "_profile_rotator", ProfileRotator(live))
-    target = plan_registry.resolve_routing("glm-5.3")
+    from core.llm.routing import resolve_routing
+
+    target = resolve_routing("glm-5.3")
     assert target is not None and target.profile.name == "second"
     live.set_active("first")
     assert ProfileRotator(live).resolve("glm-coding").name == "first"

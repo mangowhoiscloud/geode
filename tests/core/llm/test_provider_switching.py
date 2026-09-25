@@ -45,7 +45,7 @@ from unittest.mock import patch
 
 import pytest
 from core.auth.profiles import AuthProfile, CredentialType
-from core.llm.strategies.plan_registry import resolve_routing
+from core.llm.routing import resolve_routing
 from core.llm.strategies.plans import Plan, PlanKind
 
 # ---------------------------------------------------------------------------

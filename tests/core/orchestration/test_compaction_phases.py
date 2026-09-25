@@ -857,7 +857,7 @@ def test_summary_source_is_inferred_only_when_not_pinned(
 ) -> None:
     infer = Mock(return_value="payg")
     dispatch = AsyncMock(return_value=SimpleNamespace(text="SUMMARY"))
-    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", infer)
+    monkeypatch.setattr("core.llm.routing.infer_source", infer)
     monkeypatch.setattr("core.llm.adapters.dispatch.complete_text_via_adapters", dispatch)
     asyncio.run(
         compact_conversation(

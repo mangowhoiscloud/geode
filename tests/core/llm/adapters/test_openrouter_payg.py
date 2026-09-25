@@ -169,7 +169,7 @@ def test_provider_error_log_omits_raw_upstream_payload(
     monkeypatch.setattr(
         adapter,
         "_get_client",
-        lambda: SimpleNamespace(chat=SimpleNamespace(completions=completions)),
+        lambda model="": SimpleNamespace(chat=SimpleNamespace(completions=completions)),
     )
 
     with (
@@ -217,7 +217,7 @@ def test_completion_forwards_chat_tools_and_captures_charge_and_route(
     completions = _Completions(response)
     client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
     adapter = OpenRouterPaygAdapter()
-    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
 
     result = asyncio.run(
         adapter.acomplete(
@@ -330,7 +330,7 @@ def test_sdk_wire_preserves_text_route_usage_and_supported_effort(
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond)),
         ) as client:
             adapter = OpenRouterPaygAdapter()
-            monkeypatch.setattr(adapter, "_get_client", lambda: client)
+            monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
             monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: [adapter])
             monkeypatch.setattr(
                 "core.agent.cognitive_state_ctx.get_session_id", lambda: "private-session"
@@ -491,7 +491,7 @@ def test_structured_output_reaches_sdk_with_parameter_enforcement(
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond)),
         ) as client:
             adapter = OpenRouterPaygAdapter()
-            monkeypatch.setattr(adapter, "_get_client", lambda: client)
+            monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
             with pytest.raises(BadRequestError):
                 await adapter.acomplete(
                     AdapterCallRequest(

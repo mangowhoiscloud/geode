@@ -58,6 +58,14 @@ functional change.
 
 ### Changed
 
+- Resolve new-session credential policy and per-model plan accounts through one
+  routing owner. Preserve each live session's concrete API/Subscription source,
+  pass model-specific credentials and endpoints to SDK calls, and reject
+  conflicting policy or unavailable explicit plans without billing fallback.
+  Validate `/login source` before changing defaults and apply connected-session
+  changes only after admission. Share TOML parsing between configuration and
+  CLI diagnostics, including explicit empty role values.
+
 - Preserve the static prompt boundary on supported OpenAI Platform requests
   using developer content breakpoints while retaining implicit history caching.
   Forward supported upstream cache markers through OpenRouter and retain

@@ -17,6 +17,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
+from core.config.policy_source import PolicySourcePaths
 from core.llm.adapters._openai_common import (
     build_async_openai_client,
     translate_chat_response,
@@ -36,7 +37,7 @@ from core.llm.adapters.base import (
 )
 from core.llm.loop_affinity import LoopAffineClientCache
 from core.llm.providers.glm import build_glm_chat_kwargs, translate_glm_stream
-from core.llm.strategies.plan_registry import resolve_payg_profile
+from core.llm.routing import resolve_routing
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +67,9 @@ class GlmPaygAdapter:
         default_factory=lambda: LoopAffineClientCache("glm-payg"), init=False, repr=False
     )
 
-    def _credential(self) -> tuple[str, str, str]:
+    routing_sources: PolicySourcePaths | None = field(default=None, repr=False)
+
+    def _credential(self, model: str = "") -> tuple[str, str, str]:
         """Read the selected PAYG key, endpoint and non-secret provenance."""
         from core.config import settings
         from core.llm.registry import get_provider_spec
@@ -75,13 +78,19 @@ class GlmPaygAdapter:
         if spec is None:
             raise RuntimeError("PAYG provider composition is not registered")
         base_url = spec.default_base_url
-        profile = resolve_payg_profile(self.provider, base_url=base_url)
-        if profile is not None:
-            return profile.key, base_url, f"auth profile:{profile.name}"
+        target = resolve_routing(
+            model,
+            provider=self.provider,
+            source=self.source,
+            base_url=base_url,
+            sources=self.routing_sources,
+        )
+        if target is not None:
+            return target.profile.key, target.base_url, f"auth profile:{target.profile.name}"
         return settings.zai_api_key, base_url, "settings.zai_api_key"
 
-    def _get_client(self) -> Any:
-        api_key, base_url, _ = self._credential()
+    def _get_client(self, model: str = "") -> Any:
+        api_key, base_url, _ = self._credential(model)
         if not api_key:
             raise RuntimeError(
                 "GlmPaygAdapter: ZAI_API_KEY not set. PAYG path requires "
@@ -102,7 +111,7 @@ class GlmPaygAdapter:
         from core.llm.adapters._capability_impls import glm_web_search
 
         return await glm_web_search(
-            self._get_client(),
+            self._get_client(GLM_PRIMARY),
             query=query,
             max_results=max_results,
             model=GLM_PRIMARY,
@@ -133,7 +142,7 @@ class GlmPaygAdapter:
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         kwargs = build_glm_chat_kwargs(req, adapter_name=self.name, source=self.source)
-        client = self._get_client()
+        client = self._get_client(req.model)
         try:
             response = await client.chat.completions.create(**kwargs)
         except Exception as exc:
@@ -150,7 +159,7 @@ class GlmPaygAdapter:
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         kwargs = build_glm_chat_kwargs(req, adapter_name=self.name, source=self.source, stream=True)
-        client = self._get_client()
+        client = self._get_client(req.model)
         chunks = await client.chat.completions.create(**kwargs)
         async for event in translate_glm_stream(chunks):
             yield event

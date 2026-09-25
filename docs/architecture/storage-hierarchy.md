@@ -125,18 +125,37 @@ the prior file if a write fails.
 Explicit `/key`, PAYG `/login add`, `/login set-key` and `/login anthropic`
 entries select the entered profile through `ProfileStore`'s existing pin/order
 owner before persistence. Hydration alone does not override an operator's choice.
-The four PAYG adapters select only available API-key profiles on a same-provider
-PAYG plan matching their existing endpoint, honoring that pin/order. When none
-matches, the existing settings/environment key remains the fallback; this does
-not select an OAuth credential, change API/Subscription source, or enable a new
-endpoint. `/login refresh` validates and reconciles the file before the next SDK
-request reads the selection, even for adapters retained by an existing session.
-Their loop-owned cache compares credential identity under its existing lock;
+`core/llm/routing.py` is the shared route owner. New sessions resolve an explicit
+credential setting and `forced_login_method` as compatible constraints; conflicts
+fail admission. A composed provider-routing policy supplies the model plan chain
+before the stored auth plan order. With no explicit choice, registered plan kind
+priority selects the source before account availability. Missing or expired
+subscription accounts never authorize PAYG fallback.
+
+`SessionModelConfig` retains the concrete source for the primary model and
+explicit reflection/judge overrides. Future default changes do not re-infer it.
+Within that source, the SDK selects the requested model's available plan account
+and endpoint, then honors profile pin/order inside the allowed plan chain.
+Unavailable explicit plans fail; only an unconfigured same-source route may use
+its existing settings/environment credential fallback. The model picker, billing
+context and effort probe consume the same route owner. Declared external adapter
+routes remain explicit; a family name alone does not register a provider.
+
+`/login source` validates future policy before saving. A connected client submits
+its source-only session candidate and requires an applied acknowledgment before
+saving defaults. Without a client the command changes future defaults only.
+`/login use` and `/login route` change plan order: requests can select another
+account inside the already concrete source, but cannot switch billing sources.
+`/login refresh` reconciles credentials before subsequent SDK account selection.
+Their loop-owned cache compares key/endpoint identity under its existing lock;
 replacement clients serve new requests while prior clients remain open until the
 owning loop drains them. A failed reload preserves the published selection;
-a failed client construction keeps the previous cached client owned. Per-model
-plan routing remains a separate policy consumer; a provider-wide profile pin
-does not replace it.
+a failed client construction keeps the previous cached client owned.
+
+`core/config/toml_edit.py` owns resolved config-TOML reads and writes; the Settings
+loader, CLI role reader and config explainer reuse it. Schema owners stay separate.
+An explicit empty dotenv role value masks lower TOML values and means inheritance;
+the explainer reports that actual winner instead of treating empty as absent.
 
 All new writers should import constants from `core.paths` instead of
 reconstructing path literals.

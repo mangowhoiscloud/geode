@@ -194,9 +194,9 @@ async def judge_candidates(
         return CandidateVerdict(0, "only one successful candidate; judge call skipped")
     try:
         provider = provider or _resolve_provider(model)
-        from core.llm.adapters._source_inference import infer_source
+        from core.llm.routing import infer_source
 
-        resolved_source = source or infer_source(provider)
+        resolved_source = source or infer_source(provider, model=model)
         adapter = resolve_for(normalize_registry_provider(provider), resolved_source)
         user_prompt = _build_judge_prompt(task_description, candidates)
         log.info(

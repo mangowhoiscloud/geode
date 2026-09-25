@@ -53,15 +53,21 @@ def initialize_runtime(
     source = config.source
     loop._source_explicit = bool(source)
     if not source:
-        from core.llm.adapters._source_inference import infer_source
+        from core.llm.routing import infer_source
 
-        source = infer_source(loop._provider)
+        source = infer_source(
+            loop._provider, model=loop.model, sources=loop._policy_sources.get("provider_routing")
+        )
     loop._source = source
     from core.config import settings
     from core.config.session import capture_session_model_config
 
     loop._model_settings = config.model_settings or capture_session_model_config(
-        settings, model=loop.model, effort=loop._effort, source=source
+        settings,
+        model=loop.model,
+        effort=loop._effort,
+        source=source,
+        sources=loop._policy_sources.get("provider_routing"),
     )
     if (loop._model_settings.model, loop._model_settings.effort, loop._model_settings.source) != (
         loop.model,

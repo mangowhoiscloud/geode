@@ -265,14 +265,19 @@ class IPCClient:
         selection_fields: dict[str, Any] = {}
         if include_model_config:
             from core.config import _resolve_provider, settings
+            from core.config.runtime_policy_sources import build_policy_source_bundle
             from core.config.session import capture_session_model_config
-            from core.llm.adapters._source_inference import infer_source
+            from core.llm.routing import infer_source
 
+            sources = build_policy_source_bundle().get("provider_routing")
             selection = capture_session_model_config(
                 settings,
                 model=settings.model,
                 effort=settings.agentic_effort,
-                source=infer_source(_resolve_provider(settings.model)),
+                source=infer_source(
+                    _resolve_provider(settings.model), model=settings.model, sources=sources
+                ),
+                sources=sources,
             )
             selection_fields = {"model": selection.model, "model_config": selection.model_dump()}
         # --dangerously-skip-permissions: advertise the bypass so a running
