@@ -163,6 +163,11 @@ functional change.
 
 ### Fixed
 
+- Show only supported model effort choices and require an explicit valid choice
+  before confirming or staging an incompatible saved effort. Preserve valid
+  selections and cancellation without silently replacing settings. Validate
+  reflection against the final primary effort before saving staged choices.
+
 - Preserve selected reasoning effort through model selection, staged role picks
   and supported auxiliary requests. Reject unsupported model/effort combinations
   before dispatch instead of clamping, remapping or silently omitting the value;

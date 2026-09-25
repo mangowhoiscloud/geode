@@ -187,16 +187,17 @@ class TestPerProviderEnumIntegrity:
                 assert d in levels, f"{p.id} ({p.provider}): default={d} not in {levels}"
 
 
-def test_picker_preserves_legacy_openai_minimal_on_noop_enter(
+def test_picker_rejects_legacy_openai_minimal_on_enter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Opening and confirming a persisted legacy value must not rewrite it."""
+    """Enter cannot confirm a stale value; cancel preserves the saved setting."""
     from core.cli import effort_picker
 
     profiles: list[tuple[str, str, str, str, bool, str | None]] = [
         ("gpt-5.4", "openai", "GPT-5.4", "$$", True, None),
     ]
-    monkeypatch.setattr(effort_picker, "_read_key", lambda: effort_picker._KEY_ENTER)
+    keys = iter([effort_picker._KEY_ENTER, effort_picker._KEY_QUIT])
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
     monkeypatch.setattr(effort_picker, "_render", lambda *args, **kwargs: 0)
     monkeypatch.setattr(effort_picker, "_clear_lines", lambda lines: None)
 
@@ -206,7 +207,7 @@ def test_picker_preserves_legacy_openai_minimal_on_noop_enter(
         current_effort="minimal",
     )
 
-    assert result.cancelled is False
+    assert result.cancelled is True
     assert result.model_id == "gpt-5.4"
     assert result.effort == "minimal"
 
@@ -229,8 +230,11 @@ def test_picker_marks_unsupported_saved_effort(monkeypatch, capsys) -> None:
         initial_model="glm-5.3",
     )
     output = capsys.readouterr().out
-    assert "Medium effort" in output
-    assert "unsupported; choose a supported value" in output
+    choices, hint = output.split("  Effort: ", 1)[1].split("\n", 1)
+    assert all(level in choices for level in ("Low", "High", "Max"))
+    assert "Medium" not in choices
+    assert "\033[1;36m" not in choices
+    assert "Saved effort 'medium' is unsupported" in hint
 
 
 @pytest.mark.parametrize(
@@ -308,7 +312,7 @@ def test_configured_rows_are_deduplicated_across_default_and_roles() -> None:
 
 @pytest.mark.parametrize("current_effort", ["none", "minimal", "medium", "xhigh"])
 @pytest.mark.parametrize("navigate", [False, True])
-def test_picker_preserves_explicit_glm_effort_until_arrow_input(
+def test_picker_requires_arrow_after_invalid_glm_enter(
     monkeypatch: pytest.MonkeyPatch, current_effort: str, navigate: bool
 ) -> None:
     from core.cli import effort_picker
@@ -319,7 +323,7 @@ def test_picker_preserves_explicit_glm_effort_until_arrow_input(
     ]
     keys = iter(
         ([effort_picker._KEY_DOWN, effort_picker._KEY_UP] if navigate else [])
-        + [effort_picker._KEY_ENTER]
+        + [effort_picker._KEY_ENTER, effort_picker._KEY_RIGHT, effort_picker._KEY_ENTER]
     )
     monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
     monkeypatch.setattr(effort_picker, "_render", lambda *args, **kwargs: 0)
@@ -327,7 +331,11 @@ def test_picker_preserves_explicit_glm_effort_until_arrow_input(
     result = effort_picker.pick_model_and_effort(profiles, "glm-5.3", current_effort)
     assert result.cancelled is False
     assert result.model_id == "glm-5.3"
-    assert result.effort == current_effort
+    assert (
+        result.effort
+        == {"none": "low", "minimal": "low", "medium": "high", "xhigh": "max"}[current_effort]
+    )
+    assert list(keys) == []
 
 
 @pytest.mark.parametrize(
@@ -393,3 +401,23 @@ class TestRenderVersionHeader:
         out = capsys.readouterr().out
         assert f"GEODE v{__version__}" in out
         assert "Select model" in out
+
+
+@pytest.mark.parametrize("current_effort", ["low", "high", "max"])
+def test_picker_renders_all_supported_efforts_and_preserves_noop_enter(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], current_effort: str
+) -> None:
+    from core.cli import effort_picker
+
+    monkeypatch.setattr(effort_picker, "_fit_to_width", lambda text: text)
+    keys = iter([effort_picker._KEY_ENTER])
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda lines: None)
+    result = effort_picker.pick_model_and_effort(
+        [("glm-5.3", "glm", "GLM-5.3", "$", True, None)], "glm-5.3", current_effort
+    )
+    choices = capsys.readouterr().out.split("  Effort: ", 1)[1].split("\n", 1)[0]
+    assert all(level in choices for level in ("Low", "High", "Max"))
+    assert choices.count("\033[1;36m") == 1
+    assert result.effort == current_effort
+    assert result.cancelled is False

@@ -71,6 +71,11 @@ export default function Page() {
               거절하므로, <code>/model</code>에서 지원하는 값을 직접 선택해야 합니다.
               역할 탭을 이동하거나 Space로 선택을 추가한 뒤 Enter로 확정해도
               primary effort를 보존합니다.
+              선택 화면에는 지원되는 값만 표시하며, 저장된 값이 맞지 않으면
+              방향키로 유효한 값을 고르기 전까지 Enter·Space 확정을 막습니다.
+              취소하면 기존 설정은 유지됩니다.
+              Reflection 모델은 primary effort를 상속하므로, 함께 고른 모델과
+              effort의 호환성도 저장 전에 검사합니다.
             </p>
             <p>
               지원되는 OpenAI·Claude·GLM 텍스트 보조 요청에도 명시한 effort를
@@ -248,6 +253,11 @@ export default function Page() {
               rejected before changing settings or dispatching a request. Select
               a supported value in <code>/model</code>. Switching role tabs and
               staging a pick with Space preserve primary effort.
+              Only supported choices are displayed. An incompatible saved value
+              requires an explicit arrow selection before Enter or Space can
+              confirm it; cancelling preserves the existing configuration.
+              Reflection inherits primary effort, so the selected model and
+              effort combinations are checked together before saving.
             </p>
             <p>
               Supported OpenAI, Claude and GLM auxiliary text requests preserve
