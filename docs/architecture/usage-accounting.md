@@ -83,8 +83,12 @@ This does not repair historical records or the legacy presence limitations below
   observation path; parsing a declined or malformed response does not erase
   its usage. Native text/compaction, learning extraction and hosted search
   pass their event bus explicitly to the same observation helper. Capability
-  calls on supported OpenAI reasoning models now carry the inherited effort
-  through the actual request and observation helper. Other capability backends
+  calls on supported OpenAI reasoning models carry the inherited effort
+  through the actual request and observation helper. This includes text calls
+  through the explicit `openrouter/openai/<model>` route: they reuse the
+  OpenRouter completion adapter and retain `openrouter/payg` attribution and
+  provider-reported charge, rather than direct OpenAI billing authority.
+  Other capability backends
   retain their existing policies and unknown effort; no cross-provider effort
   equivalence is claimed. The direct Responses request path retains its
   model-switch clamp; for example, an unsupported `max` on GPT-5.5 can become

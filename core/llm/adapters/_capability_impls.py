@@ -22,6 +22,7 @@ from core.llm.adapters.base import (
     TextCompletionResult,
     WebSearchResult,
 )
+from core.llm.errors import LLMRequestValidationError
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ def openai_effort_kwargs(model: str, effort: str | None) -> dict[str, Any]:
 
     supported = get_openai_model_spec(model).reasoning_effort_values
     if supported is None or effort not in supported:
-        raise ValueError(f"Reasoning effort {effort!r} is unsupported for {model!r}")
+        raise LLMRequestValidationError(f"Reasoning effort {effort!r} is unsupported for {model!r}")
     return {"reasoning": {"effort": effort}}
 
 
@@ -264,7 +265,6 @@ async def openai_responses_complete_text(
 ) -> TextCompletionResult:
     """Single-turn completion on the OpenAI Platform Responses endpoint."""
     from core.llm.adapters._openai_common import get_openai_model_spec
-    from core.llm.errors import LLMRequestValidationError
 
     if max_tokens <= 0:
         raise LLMRequestValidationError("max_tokens must be positive")

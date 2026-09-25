@@ -288,6 +288,7 @@ PROVIDER_VARIANTS: dict[str, ProviderSpec] = {
         transport=TransportSpec(
             id="openrouter-chat-completions",
             api="openai-chat-completions",
+            native_capabilities=frozenset({"text_completion"}),
             default_base_url="https://openrouter.ai/api/v1",
             extra_headers_factory=_openrouter_extra_headers,
         ),

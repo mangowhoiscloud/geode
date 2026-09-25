@@ -163,6 +163,11 @@ functional change.
 
 ### Fixed
 
+- Route OpenRouter text summaries through the existing Chat Completions adapter,
+  retaining its model/source identity, cache markers, session affinity and usage.
+  Preserve supported OpenAI reasoning effort on this relay and forward requested
+  JSON schemas with endpoint parameter enforcement instead of silently dropping them.
+
 - Preserve retained task context in turn verification and tool-round reflection.
   Pass the derived compaction summary and earlier marked user corrections through
   one bounded projection, keeping current-request precedence, redaction and
