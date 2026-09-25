@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from core.llm.adapters.base import AdapterCallRequest
+from core.llm.errors import LLMRequestValidationError
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODEL = "gpt-6-astra"
@@ -38,13 +39,17 @@ def test_astra_contract_and_request_shape() -> None:
     assert spec.supports_tool_search is True
     assert spec.context_window == 1_050_000
 
-    codex = build_responses_kwargs(_request(), backend="codex", adapter_name="test")
+    request = replace(_request(), effort="low")
+    codex = build_responses_kwargs(request, backend="codex", adapter_name="test")
     assert codex["reasoning"]["effort"] == "low"
     assert "temperature" not in codex
     assert "max_output_tokens" not in codex
 
-    platform = build_responses_kwargs(_request(), backend="platform", adapter_name="test")
+    platform = build_responses_kwargs(request, backend="platform", adapter_name="test")
     assert platform["max_output_tokens"] == 32
+    for backend in ("codex", "platform"):
+        with pytest.raises(LLMRequestValidationError, match="unsupported"):
+            build_responses_kwargs(_request(), backend=backend, adapter_name="test")
 
 
 @pytest.mark.parametrize("model", ["gpt-6-sol", "gpt-6-luna"])
@@ -77,7 +82,6 @@ def test_new_gpt6_contract_reaches_both_routes(model: str) -> None:
 @pytest.mark.parametrize("max_tokens", [0, -1])
 def test_platform_rejects_nonpositive_output_budget(max_tokens: int) -> None:
     from core.llm.adapters._openai_common import build_responses_kwargs
-    from core.llm.errors import LLMRequestValidationError
 
     with pytest.raises(LLMRequestValidationError, match="must be positive"):
         build_responses_kwargs(
@@ -102,13 +106,17 @@ def test_retained_api_models_keep_their_exact_effort_and_output_contract(
     spec = get_openai_model_spec(model)
     assert spec.reasoning_effort_values == efforts
     result = build_responses_kwargs(
-        replace(_request(), model=model, max_tokens=200_000),
+        replace(_request(), model=model, max_tokens=200_000, effort=efforts[0]),
         backend="platform",
         adapter_name="test",
     )
     assert result["max_output_tokens"] == limit
     assert result["reasoning"]["effort"] == efforts[0]
     assert "temperature" not in result
+    with pytest.raises(LLMRequestValidationError, match="unsupported"):
+        build_responses_kwargs(
+            replace(_request(), model=model), backend="platform", adapter_name="test"
+        )
 
 
 def test_astra_catalogue_route_and_picker() -> None:

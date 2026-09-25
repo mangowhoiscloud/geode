@@ -90,7 +90,7 @@ def test_request_output_reserve_matches_provider_wire() -> None:
         ("glm-5.3", "glm", "payg", 200_000, 0),
     ):
         req = AdapterCallRequest(
-            model=model, messages=(), max_tokens=output, thinking_budget=thinking
+            model=model, messages=(), max_tokens=output, thinking_budget=thinking, effort="high"
         )
         policy = resolve_request_context_budget(req, provider=provider, source=source)
         if provider == "openai":
