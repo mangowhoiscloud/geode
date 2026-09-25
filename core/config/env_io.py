@@ -43,9 +43,9 @@ def is_placeholder(value: str) -> bool:
 
     The one home for this rule (was duplicated in ``core.wiring.startup``).
     Readiness (``_has_any_llm_key`` / ``_has_available_profile``), ``.env``
-    auto-generation, and the auth-profile seeders (``build_auth`` /
-    ``migrate_env_to_toml``) all share it so a stale ``sk-ant-...`` is rejected
-    uniformly. Empty string is NOT a placeholder (callers handle empty first).
+    auto-generation, and the environment profile seeder in ``build_auth`` all
+    share it so a stale ``sk-ant-...`` is rejected uniformly. Empty string is
+    NOT a placeholder (callers handle empty first).
     """
     return value == "..." or value.endswith("...")
 

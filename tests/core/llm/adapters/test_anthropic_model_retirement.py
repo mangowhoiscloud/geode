@@ -38,7 +38,7 @@ def test_retired_model_rejected_before_network_or_web_search_replacement(
     adapter = AnthropicPaygAdapter()
     messages = Mock()
     client = SimpleNamespace(base_url="https://api.anthropic.com", messages=messages)
-    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
     with pytest.raises(ModelSourceUnavailableError, match=r"retired.*Anthropic API"):
         asyncio.run(_request(adapter, method, model))
     assert messages.mock_calls == []
@@ -54,7 +54,7 @@ def test_retired_default_rejected_without_silent_replacement(
     adapter = AnthropicPaygAdapter()
     messages = Mock()
     client = SimpleNamespace(base_url="https://api.anthropic.com", messages=messages)
-    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
     with pytest.raises(ModelSourceUnavailableError, match=r"retired.*Anthropic API"):
         asyncio.run(_request(adapter, method, ""))
     assert messages.mock_calls == []
@@ -78,16 +78,17 @@ def test_list_filters_retired_user_override_without_rewriting_it(
 @pytest.mark.parametrize(
     "cached_url,current_env,should_block",
     [
-        ("http://127.0.0.1:9/custom", "https://api.anthropic.com", False),
-        ("https://api.anthropic.com", "http://127.0.0.1:9/custom", True),
+        ("http://127.0.0.1:9/custom", "https://api.anthropic.com", True),
+        ("https://api.anthropic.com", "http://127.0.0.1:9/custom", False),
     ],
 )
-def test_actual_cached_sdk_endpoint_owns_retirement_not_changed_environment(
+def test_refreshed_sdk_endpoint_owns_retirement_and_retains_previous_client(
     monkeypatch: pytest.MonkeyPatch, cached_url: str, current_env: str, should_block: bool
 ) -> None:
     import anthropic
     import httpx
     from core.config import settings
+    from core.llm.loop_affinity import drain_current_loop_clients
 
     calls: list[httpx.Request] = []
 
@@ -107,9 +108,10 @@ def test_actual_cached_sdk_endpoint_owns_retirement_not_changed_environment(
             },
         )
 
-    def build_client(api_key: str) -> anthropic.AsyncAnthropic:
+    def build_client(api_key: str, *, base_url: str | None = None) -> anthropic.AsyncAnthropic:
         return anthropic.AsyncAnthropic(
             api_key=api_key,
+            base_url=base_url,
             auth_token="",
             max_retries=0,
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond)),
@@ -125,7 +127,12 @@ def test_actual_cached_sdk_endpoint_owns_retirement_not_changed_environment(
     async def run() -> None:
         client = adapter._get_client()
         monkeypatch.setenv("ANTHROPIC_BASE_URL", current_env)
-        assert adapter._get_client() is client  # the real loop-affine cache
+        refreshed = adapter._get_client()
+        assert refreshed is not client
+        assert adapter._get_client() is refreshed
+        assert str(client.base_url).rstrip("/") == cached_url
+        assert str(refreshed.base_url).rstrip("/") == current_env
+        assert not client.is_closed() and not refreshed.is_closed()
         try:
             if should_block:
                 with pytest.raises(ModelSourceUnavailableError):
@@ -133,7 +140,8 @@ def test_actual_cached_sdk_endpoint_owns_retirement_not_changed_environment(
             else:
                 await _request(adapter, "acomplete", "claude-sonnet-4-20250514")
         finally:
-            await client.close()
+            await drain_current_loop_clients()
+        assert client.is_closed() and refreshed.is_closed()
 
     asyncio.run(run())
     assert len(calls) == (0 if should_block else 1)

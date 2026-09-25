@@ -679,8 +679,8 @@ async def _call_summarize(
 
     # Map legacy provider key to the registry-canonical provider name.
     canonical = {"zhipuai": "glm"}.get(provider, provider)
-    from core.llm.adapters._source_inference import infer_source
     from core.llm.adapters.registry import normalize_registry_provider
+    from core.llm.routing import infer_source
 
     canonical = normalize_registry_provider(canonical)
     result = await complete_text_via_adapters(
@@ -691,7 +691,7 @@ async def _call_summarize(
         effort=effort or settings.agentic_effort,
         max_tokens=max_tokens,
         prefer_provider=canonical,
-        prefer_source=source if source is not None else infer_source(canonical),
+        prefer_source=source if source is not None else infer_source(canonical, model=model),
         hooks=hooks,
         correlation=correlation,
     )

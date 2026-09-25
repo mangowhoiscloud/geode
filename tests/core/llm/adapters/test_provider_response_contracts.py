@@ -254,7 +254,9 @@ def test_concrete_chat_adapters_capture_and_replay_on_next_request(
     monkeypatch.setattr(
         adapter,
         "_get_client",
-        lambda: SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create))),
+        lambda model="": SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        ),
     )
     if isinstance(adapter, GlmCodingPlanAdapter):
         with pytest.raises(ModelSourceUnavailableError, match="GEODE"):

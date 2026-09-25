@@ -14,6 +14,7 @@ as _pkg`` lookup, mirroring the pattern used by ``core/ui/agentic_ui``.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from core.cli.onboarding import clear_dry_run_opt_in
@@ -60,12 +61,8 @@ def cmd_key(args: str) -> bool:
             "  [muted]Legacy[/muted]                      → [muted]Replacement[/muted]\n"
             "  [label]/key <sk-...>[/label]               → [label]/login add[/label]  "
             "[muted](interactive — picks provider by prefix)[/muted]\n"
-            "  [label]/key openai <key>[/label]           → "
-            "[label]/login set-key openai-payg <key>[/label]\n"
-            "  [label]/key openrouter <key>[/label]       → "
-            "[label]/login set-key openrouter-payg <key>[/label]\n"
-            "  [label]/key glm <key>[/label]              → "
-            "[label]/login set-key glm-payg <key>[/label]\n"
+            "  [label]/key <provider> <key>[/label]       → [label]/login add[/label], or "
+            "[label]/login set-key <plan-id> <key>[/label] for a registered plan\n"
             "\n"
             "  [muted]The legacy forms above still work — they shim into the unified\n"
             "  Plan/Profile model, but `/login add` registers richer metadata\n"
@@ -85,6 +82,7 @@ def cmd_key(args: str) -> bool:
         value = parts[1].strip()
         settings.openai_api_key = value
         _pkg._upsert_env("OPENAI_API_KEY", value)
+        _pkg._seed_payg_plan_from_key("openai", value)
         _invalidate("openai")
         clear_dry_run_opt_in()
         _pkg.console.print(f"  [success]OpenAI API key set[/success]  {_pkg._mask_key(value)}")
@@ -113,6 +111,7 @@ def cmd_key(args: str) -> bool:
         value = parts[1].strip()
         settings.zai_api_key = value
         _pkg._upsert_env("ZAI_API_KEY", value)
+        _pkg._seed_payg_plan_from_key("glm", value)
         _invalidate("glm")
         clear_dry_run_opt_in()
         _pkg.console.print(f"  [success]ZhipuAI API key set[/success]  {_pkg._mask_key(value)}")
@@ -171,28 +170,21 @@ def _seed_payg_plan_from_key(provider: str, key: str) -> None:
     Keeps `/login` dashboard in sync with `/key` writes so users see the
     same credential in both views (Phase 1 single-store + Phase 2 plans).
     """
+    from core.auth.auth_toml import auth_file_transaction
+    from core.auth.profiles import AuthProfile, CredentialType
     from core.cli import commands as _pkg
+    from core.llm.strategies.plans import default_plan_for_payg
 
     try:
-        from core.auth.profiles import AuthProfile, CredentialType
-        from core.llm.strategies.plan_registry import get_plan_registry
-        from core.llm.strategies.plans import default_plan_for_payg
-        from core.wiring.container import ensure_profile_store
-
-        registry = get_plan_registry()
-        plan = registry.get(f"{provider}-payg") or default_plan_for_payg(provider, key)
-        registry.add(plan)
-        store = ensure_profile_store()
-        name = f"{plan.id}:env"
-        existing = store.get(name)
-        if existing is not None:
-            existing.key = key
-            existing.plan_id = plan.id
-            existing.error_count = 0
-            existing.cooldown_until = 0.0
-        else:
-            store.add(
-                AuthProfile(
+        with auth_file_transaction() as (registry, store):
+            plan = registry.get(f"{provider}-payg") or default_plan_for_payg(provider, key)
+            registry.add(plan)
+            name = f"{plan.id}:env"
+            existing = store.get(name)
+            profile = (
+                replace(existing, key=key, plan_id=plan.id, error_count=0, cooldown_until=0.0)
+                if existing is not None
+                else AuthProfile(
                     name=name,
                     provider=plan.provider,
                     credential_type=CredentialType.API_KEY,
@@ -200,20 +192,10 @@ def _seed_payg_plan_from_key(provider: str, key: str) -> None:
                     plan_id=plan.id,
                 )
             )
-        _pkg._persist_auth_state()
-    except Exception:
-        # The legacy /key path must not fail because of plan-seeding.
-        log.debug("Plan seed from /key failed", exc_info=True)
-
-
-def _persist_auth_state() -> None:
-    """Persist Plan + Profile state to ~/.geode/auth.toml (best-effort)."""
-    try:
-        from core.auth.auth_toml import save_auth_toml
-
-        save_auth_toml()
-    except Exception:
-        log.debug("auth.toml save failed", exc_info=True)
+            store.add(profile, activate=True)
+    except (ValueError, OSError) as exc:
+        # The key already reached ~/.geode/.env; report the stale dashboard entry.
+        _pkg.console.print(f"  [warning]auth.toml not updated: {exc}[/warning]")
 
 
 def _check_provider_key(selected: ModelProfile) -> None:

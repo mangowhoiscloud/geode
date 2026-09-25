@@ -88,8 +88,8 @@ must trace every affected boundary; this table is routing, not an API census.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 590 production Python files,
-747 test Python files,
+The current snapshot records 591 production Python files,
+748 test Python files,
 86 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->
@@ -115,6 +115,10 @@ do not turn an incident-specific fix into an unconditional rule for every task.
    Implementation and ordinary roadmap work start from `origin/develop`;
    main-maintained tracking work uses `origin/main`. The roadmap's §0.3 owns
    its narrow readiness/claim/GAP/reconciliation/full-ledger exceptions.
+   Independent writes start after `check_repo_hygiene.py assert-write-workspace`
+   passes; delegates return the workflow's [handoff contract](docs/workflow.md#execution-scope);
+   CI recovery stops at GitFlow's [budget](.agents/skills/geode-gitflow/SKILL.md#post-pr-ci-ratchet)
+   and hands off.
 3. **Implement at the owner.** Reuse existing registries and helpers. Trace
    producer → field/state → reader → decision, including explicit/automatic
    input branches and refresh/invalidation. Process services cross constructors,

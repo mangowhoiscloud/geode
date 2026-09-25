@@ -39,7 +39,9 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def build_async_anthropic_client(api_key: str) -> anthropic.AsyncAnthropic:
+def build_async_anthropic_client(
+    api_key: str, *, base_url: str | None = None
+) -> anthropic.AsyncAnthropic:
     """Construct a fresh ``AsyncAnthropic`` bound to an API key.
 
     Each adapter owns its client — bypassing the module-level singleton in
@@ -66,6 +68,7 @@ def build_async_anthropic_client(api_key: str) -> anthropic.AsyncAnthropic:
     )
     return anthropic.AsyncAnthropic(
         api_key=api_key,
+        base_url=base_url,
         max_retries=0,  # app-level retry handles this
         http_client=http_client,
     )
@@ -428,9 +431,19 @@ def build_create_kwargs(
             raise LLMRequestValidationError(f"Structured output is not verified for {req.model}")
         if req.response_schema.get("type") != "object":
             raise LLMRequestValidationError("Anthropic response_schema requires an object root")
+        # The API rejects unsupported keywords such as number minimum/maximum;
+        # the SDK moves them into descriptions. Callers still validate bounds.
+        from anthropic import transform_schema
+
+        try:
+            schema = transform_schema(deepcopy(req.response_schema))
+        except (AssertionError, ValueError) as exc:
+            raise LLMRequestValidationError(
+                f"Anthropic response_schema is not supported: {exc}"
+            ) from exc
         kwargs.setdefault("output_config", {})["format"] = {
             "type": "json_schema",
-            "schema": deepcopy(req.response_schema),
+            "schema": schema,
         }
     tc = _translate_tool_choice(req.tool_choice)
     if (

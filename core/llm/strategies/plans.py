@@ -20,7 +20,6 @@ authoritative provider for routing.
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -83,34 +82,6 @@ class Plan:
     upgrade_url: str | None = None  # surfaced in error hints when quota hits
 
 
-@dataclass
-class PlanUsage:
-    """Runtime usage tracker — populated by Phase 6 quota awareness.
-
-    Carried as a sibling to Plan rather than mutating Plan so Plans
-    remain immutable configuration.
-    """
-
-    plan_id: str
-    calls_in_window: int = 0
-    weighted_calls: float = 0.0
-    next_reset_at: float = 0.0
-    last_call_at: float = 0.0
-
-    def is_quota_exhausted(self, plan: Plan) -> bool:
-        if plan.quota is None:
-            return False
-        return self.weighted_calls >= plan.quota.max_calls
-
-    def remaining_in_window(self, plan: Plan) -> int:
-        if plan.quota is None:
-            return -1  # unlimited / unknown
-        return max(0, plan.quota.max_calls - int(self.weighted_calls))
-
-    def seconds_until_reset(self) -> int:
-        return max(0, int(self.next_reset_at - time.time()))
-
-
 # ---------------------------------------------------------------------------
 # Built-in plan templates
 # ---------------------------------------------------------------------------
@@ -155,8 +126,7 @@ GLM_CODING_TIERS: dict[str, Plan] = {
 def default_plan_for_payg(provider: str, key: str) -> Plan:
     """Build a default PAYG Plan from a bare API key + provider.
 
-    Used by .env auto-migration so legacy users keep working without
-    explicit `/login add` calls.
+    Used by `/login add` and `/key` when they register a PAYG key.
     """
     from core.llm.registry import get_provider_spec
 

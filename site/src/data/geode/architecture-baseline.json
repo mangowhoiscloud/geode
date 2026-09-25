@@ -409,7 +409,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 12,
-      "file_loc": 1153,
+      "file_loc": 1143,
       "method_count": 39,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -419,7 +419,7 @@
     },
     "SubAgentManager": {
       "constructor_arg_count": 18,
-      "file_loc": 849,
+      "file_loc": 861,
       "method_count": 17,
       "path": "core/agent/sub_agent.py"
     }
@@ -527,20 +527,20 @@
   },
   "packages": {
     "core": {
-      "python_files": 417,
-      "python_loc": 128691
+      "python_files": 418,
+      "python_loc": 129359
     },
     "evals": {
       "python_files": 100,
-      "python_loc": 34615
+      "python_loc": 34604
     },
     "evolve": {
       "python_files": 73,
       "python_loc": 32002
     },
     "tests": {
-      "python_files": 747,
-      "python_loc": 220998
+      "python_files": 748,
+      "python_loc": 223521
     }
   },
   "schema_version": 6,

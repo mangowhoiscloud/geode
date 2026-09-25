@@ -1,21 +1,22 @@
 """AnthropicPaygAdapter — PAYG (API-key) path to Anthropic models.
 
 Layer 3 adapter (paperclip ``ServerAdapterModule`` shape). Calls the Anthropic
-SDK with the API key from settings — and *not* another credential, even if
-``ProfileRotator`` would prefer one under the legacy
-``_resolve_anthropic_key()`` global priority. Codex MCP review 2026-05-23
-flagged the singleton-client sharing as a BLOCKER for source isolation; this
-adapter now owns its client via :func:`_anthropic_common.build_async_anthropic_client`.
+SDK with a same-endpoint API-key/PAYG profile or the existing settings key,
+never another credential type from the legacy global priority. This adapter
+owns its client via :func:`_anthropic_common.build_async_anthropic_client`.
 This is the only built-in Anthropic execution path.
 """
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import os
 from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from core.config.policy_source import PolicySourcePaths
 from core.llm.adapters._anthropic_common import (
     anthropic_effort_kwargs,
     build_async_anthropic_client,
@@ -37,6 +38,7 @@ from core.llm.adapters.base import (
 )
 from core.llm.errors import LLMResponseValidationError
 from core.llm.loop_affinity import LoopAffineClientCache
+from core.llm.routing import resolve_routing
 from core.orchestration.anthropic_api_lane import acquire_anthropic_api_lane_async
 
 log = logging.getLogger(__name__)
@@ -78,16 +80,39 @@ class AnthropicPaygAdapter:
 
         return anthropic_computer_tool_param(display_width, display_height)
 
-    def _get_client(self) -> Any:
-        from core.config import settings
+    routing_sources: PolicySourcePaths | None = field(default=None, repr=False)
 
-        api_key = settings.anthropic_api_key
+    def _credential(self, model: str = "") -> tuple[str, str, str]:
+        """Read the selected PAYG key, endpoint and non-secret provenance."""
+        from core.config import settings
+        from core.llm.registry import get_provider_spec
+
+        spec = get_provider_spec(self.provider)
+        if spec is None:
+            raise RuntimeError("PAYG provider composition is not registered")
+        base_url = os.environ.get("ANTHROPIC_BASE_URL") or spec.default_base_url
+        target = resolve_routing(
+            model,
+            provider=self.provider,
+            source=self.source,
+            base_url=base_url,
+            sources=self.routing_sources,
+        )
+        if target is not None:
+            return target.profile.key, target.base_url, f"auth profile:{target.profile.name}"
+        return settings.anthropic_api_key, base_url, "settings.anthropic_api_key"
+
+    def _get_client(self, model: str = "") -> Any:
+        api_key, base_url, _ = self._credential(model)
         if not api_key:
             raise RuntimeError(
                 "AnthropicPaygAdapter: ANTHROPIC_API_KEY not set. PAYG path requires "
                 "an explicit API key — set ``anthropic_api_key`` in settings."
             )
-        return self._clients.get(lambda: build_async_anthropic_client(api_key))
+        return self._clients.get(
+            lambda: build_async_anthropic_client(api_key, base_url=base_url),
+            identity=hashlib.sha256(f"{base_url}\0{api_key}".encode()).hexdigest(),
+        )
 
     def _require_model_allowed(self, model: str, *, base_url: str) -> None:
         from core.llm.model_catalog import require_model_source_available
@@ -98,7 +123,7 @@ class AnthropicPaygAdapter:
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         anthropic_effort_kwargs(req.model, req.effort)
-        client = self._get_client()
+        client = self._get_client(req.model)
         self._require_model_allowed(req.model, base_url=str(client.base_url))
         # The API-key path has its own concurrency lane.
         lane_key = f"anthropic-payg:{req.model}"
@@ -135,7 +160,7 @@ class AnthropicPaygAdapter:
         # do not project Anthropic API retirements onto a custom host.
         search_model = resolve_web_search_model(model)
         anthropic_effort_kwargs(search_model, effort)
-        client = self._get_client()
+        client = self._get_client(search_model)
         # Reject before web-search capability routing can replace the choice.
         if model:
             self._require_model_allowed(model, base_url=str(client.base_url))
@@ -164,7 +189,7 @@ class AnthropicPaygAdapter:
 
         completion_model = model or ANTHROPIC_PRIMARY
         anthropic_effort_kwargs(completion_model, effort)
-        client = self._get_client()
+        client = self._get_client(completion_model)
         self._require_model_allowed(completion_model, base_url=str(client.base_url))
         return await anthropic_complete_text(
             client,
@@ -177,7 +202,7 @@ class AnthropicPaygAdapter:
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         anthropic_effort_kwargs(req.model, req.effort)
-        client = self._get_client()
+        client = self._get_client(req.model)
         self._require_model_allowed(req.model, base_url=str(client.base_url))
         kwargs = build_stream_kwargs(req, base_url=str(client.base_url))
         edits = kwargs.get("extra_body", {}).get("context_management", {}).get("edits", [])
@@ -219,9 +244,7 @@ class AnthropicPaygAdapter:
             )
 
     def test_environment(self) -> EnvironmentReport:
-        from core.config import settings
-
-        api_key = settings.anthropic_api_key
+        api_key, _, _ = self._credential()
         if not api_key:
             return EnvironmentReport(
                 ok=False,
@@ -249,14 +272,15 @@ class AnthropicPaygAdapter:
         ]
 
     def detect_credential(self) -> CredentialDetection | None:
-        from core.config import ANTHROPIC_PRIMARY, settings
+        from core.config import ANTHROPIC_PRIMARY
 
-        if not settings.anthropic_api_key:
+        api_key, _, source_path = self._credential()
+        if not api_key:
             return None
         return CredentialDetection(
             model=ANTHROPIC_PRIMARY,
             provider=self.provider,
-            source_path="settings.anthropic_api_key",
+            source_path=source_path,
         )
 
 

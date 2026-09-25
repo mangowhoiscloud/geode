@@ -20,7 +20,7 @@ def test_visible_effort_surface_matches_picker(
     from core.cli.commands._state import get_model_profiles
     from core.cli.effort_picker import supported_efforts
 
-    monkeypatch.setattr("core.cli.commands._state._selected_openai_source", lambda: source)
+    monkeypatch.setattr("core.cli.commands._state._selected_openai_source", lambda model="": source)
     surface = visible_effort_surface()
 
     assert surface
@@ -90,7 +90,7 @@ def test_glm_probe_uses_native_reasoning_contract(model: str, effort: str) -> No
 def test_visible_effort_surface_includes_selected_openrouter(
     monkeypatch: pytest.MonkeyPatch, configured: bool
 ) -> None:
-    monkeypatch.setattr("core.cli.commands._state._selected_openai_source", lambda: "payg")
+    monkeypatch.setattr("core.cli.commands._state._selected_openai_source", lambda model="": "payg")
     model = "openrouter/openai/gpt-6-sol"
     surface = (
         visible_effort_surface(configured_model_ids=(model,))
@@ -224,7 +224,7 @@ def test_measure_does_not_skip_another_source_or_revision(
     monkeypatch.setattr("core.cli.commands.model._current_model_for_role", lambda role: "")
     monkeypatch.setattr("core.llm.adapters.registry.bootstrap_builtins", lambda: None)
     monkeypatch.setattr("core.llm.adapters.registry.resolve_for", lambda *a: adapter)
-    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda provider: source)
+    monkeypatch.setattr("core.llm.routing.infer_source", lambda provider, **kwargs: source)
     output = tmp_path / "measurements.jsonl"
     prior = {
         "schema": probe.SCHEMA,

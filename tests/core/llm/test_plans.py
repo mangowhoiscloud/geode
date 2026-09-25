@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
 from core.auth.profiles import AuthProfile, CredentialType
 from core.llm.registry import (
     PROVIDER_VARIANTS,
@@ -12,20 +13,101 @@ from core.llm.registry import (
     TransportSpec,
     get_provider_spec,
 )
+from core.llm.routing import resolve_routing
 from core.llm.strategies.plan_registry import (
     PlanRegistry,
     get_plan_registry,
     reset_plan_registry,
-    resolve_routing,
 )
 from core.llm.strategies.plans import (
     GLM_CODING_TIERS,
     Plan,
     PlanKind,
-    PlanUsage,
     Quota,
     default_plan_for_payg,
 )
+
+
+@pytest.fixture
+def payg_selection(monkeypatch: pytest.MonkeyPatch):
+    from core.auth.profiles import ProfileStore
+    from core.llm.strategies import plan_registry
+    from core.wiring import container
+
+    registry, store = PlanRegistry(), ProfileStore()
+    monkeypatch.setattr(plan_registry, "_plan_registry", registry)
+    monkeypatch.setattr(container, "_profile_store", store)
+    plan = default_plan_for_payg("openai", "fixture")
+    profile = AuthProfile(
+        "openai:work", "openai", CredentialType.API_KEY, key="fixture", plan_id=plan.id
+    )
+    registry.add(plan)
+    store.add(profile)
+    return registry, store, plan, profile
+
+
+@pytest.mark.parametrize(
+    "change",
+    ["oauth", "subscription", "provider", "unbound", "managed", "disabled", "empty", "endpoint"],
+)
+def test_payg_selection_never_borrows_an_ineligible_or_other_route_profile(
+    payg_selection, change: str
+) -> None:
+    registry, store, plan, profile = payg_selection
+    base_url = plan.base_url
+    if change == "oauth":
+        profile.credential_type = CredentialType.OAUTH
+    elif change == "subscription":
+        registry.add(replace(plan, kind=PlanKind.SUBSCRIPTION))
+    elif change == "provider":
+        registry.add(replace(plan, provider="openai-codex"))
+    elif change == "unbound":
+        profile.plan_id = "missing"
+    elif change == "managed":
+        profile.managed_by = "external-cli"
+    elif change == "disabled":
+        profile.disabled = True
+    elif change == "empty":
+        profile.key = ""
+    elif change == "endpoint":
+        profile.base_url_override = "https://other.invalid/v1"
+    store.set_active(profile.name)
+    assert resolve_routing("", provider="openai", source="payg", base_url=base_url) is None
+
+
+def test_payg_selection_respects_pin_order_availability_and_effective_endpoint(
+    payg_selection,
+) -> None:
+    _registry, store, plan, first = payg_selection
+    second = replace(first, name="openai:second", key="second", last_used=100)
+    store.add(second)
+    assert (
+        resolve_routing("", provider="openai", source="payg", base_url=plan.base_url).profile
+        is first
+    )
+    store.set_active(second.name)
+    assert (
+        resolve_routing("", provider="openai", source="payg", base_url=plan.base_url).profile
+        is second
+    )
+    store.set_auth_order("openai", [first.name, second.name])
+    assert (
+        resolve_routing("", provider="openai", source="payg", base_url=plan.base_url).profile
+        is first
+    )
+    first.disabled = True
+    assert (
+        resolve_routing("", provider="openai", source="payg", base_url=plan.base_url).profile
+        is second
+    )
+    second.base_url_override = "https://relay.invalid/v1/"
+    assert resolve_routing("", provider="openai", source="payg", base_url=plan.base_url) is None
+    assert (
+        resolve_routing(
+            "", provider="openai", source="payg", base_url="https://relay.invalid/v1"
+        ).profile
+        is second
+    )
 
 
 class TestProviderRegistry:
@@ -72,9 +154,6 @@ class TestGlmCodingTiers:
     def test_credit_quota_is_not_invented_as_a_local_call_limit(self) -> None:
         for plan in GLM_CODING_TIERS.values():
             assert plan.quota is None
-            usage = PlanUsage(plan_id=plan.id, weighted_calls=80.0)
-            assert not usage.is_quota_exhausted(plan)
-            assert usage.remaining_in_window(plan) == -1
 
     def test_subscription_kind(self) -> None:
         for plan in GLM_CODING_TIERS.values():
@@ -111,42 +190,22 @@ class TestPlanRegistry:
         assert reg.get_routing("glm-5.1") == []
 
 
-class TestPlanUsage:
-    def test_quota_unset_means_no_known_local_limit(self) -> None:
-        plan = default_plan_for_payg("openai", "sk-...")
-        usage = PlanUsage(plan_id=plan.id)
-        assert usage.is_quota_exhausted(plan) is False
-        assert usage.remaining_in_window(plan) == -1
-
-    def test_quota_exhausted_after_max_calls(self) -> None:
-        plan = replace(GLM_CODING_TIERS["lite"], quota=Quota(window_s=18_000, max_calls=80))
-        usage = PlanUsage(plan_id=plan.id, weighted_calls=80.0)
-        assert usage.is_quota_exhausted(plan) is True
-        assert usage.remaining_in_window(plan) == 0
-
-
 class TestResolveRouting:
-    def test_falls_back_to_payg_when_no_plan_registered(self) -> None:
-        # Reset state for a clean test
-        from core.wiring.container import build_auth
-
-        reset_plan_registry()
-        store, _, _ = build_auth()
-
-        # Ensure at least an anthropic profile exists for the fallback path
-        store.add(
-            AuthProfile(
-                name="anthropic:test-routing",
-                provider="anthropic",
-                credential_type=CredentialType.API_KEY,
-                key="sk-ant-test-routing",
-            )
+    def test_unbound_profile_does_not_fabricate_a_payg_plan(self, payg_selection) -> None:
+        registry, store, _plan, _profile = payg_selection
+        before = registry.list_all()
+        unbound = AuthProfile(
+            name="anthropic:test-routing",
+            provider="anthropic",
+            credential_type=CredentialType.API_KEY,
+            key="sk-ant-test-routing",
         )
+        store.add(unbound)
 
-        target = resolve_routing("claude-opus-4-7")
-        assert target is not None
-        assert target.plan.provider == "anthropic"
-        assert target.plan.kind == PlanKind.PAYG
+        target = resolve_routing("claude-opus-4-7", source="payg")
+        assert target is None
+        assert unbound.plan_id == ""
+        assert registry.list_all() == before
 
     def test_explicit_plan_routing_takes_precedence(self) -> None:
         from core.wiring.container import build_auth

@@ -5,7 +5,7 @@ Checks
 ------
 - Dangling symlinks (target does not exist).
 - Absolute symlinks (path leaks to a specific machine).
-- Orphan worktrees (.claude/worktrees/<name>/ missing .owner).
+- Orphan worktrees (.claude/worktrees/<name>/ missing or empty .owner).
 - Petri bundle file-count ratchet — guards docs/self-improving/petri-bundle/logs/*.eval
   against accidental deletion during non-petri refactors. The PR that
   drops bundle archives must also lower the floor here, making the
@@ -14,6 +14,7 @@ Checks
 Usage:
     python scripts/check_repo_hygiene.py
     python scripts/check_repo_hygiene.py free-merged-worktree --pr N --worktree PATH
+    python scripts/check_repo_hygiene.py assert-write-workspace
 
 Exits 0 if clean, 1 on violations (details on stderr).
 """
@@ -185,8 +186,13 @@ def check_petri_eval_floor(root: Path) -> tuple[int, int] | None:
     return None
 
 
+def _has_owner(worktree: Path) -> bool:
+    owner_file = worktree / ".owner"
+    return owner_file.is_file() and bool(owner_file.read_text(encoding="utf-8").strip())
+
+
 def find_orphan_worktrees(root: Path) -> list[Path]:
-    """Return each .claude/worktrees/<name>/ directory missing an `.owner` file."""
+    """Return each .claude/worktrees/<name>/ directory missing a non-empty `.owner`."""
     worktrees_dir = root / ".claude" / "worktrees"
     if not worktrees_dir.is_dir():
         return []
@@ -194,7 +200,7 @@ def find_orphan_worktrees(root: Path) -> list[Path]:
     for entry in sorted(worktrees_dir.iterdir()):
         if not entry.is_dir():
             continue
-        if not (entry / ".owner").is_file():
+        if not _has_owner(entry):
             orphans.append(entry)
     return orphans
 
@@ -232,7 +238,7 @@ def format_report(
         lines.append("[orphan worktree]")
         for path in orphans:
             lines.append(f"  {path.relative_to(root)}/")
-            lines.append("    hint: missing .owner file; remove worktree or add .owner")
+            lines.append("    hint: missing .owner or empty record; remove worktree or add .owner")
         lines.append("")
     if petri_shortfall:
         found, floor = petri_shortfall
@@ -453,15 +459,7 @@ def _free_worktree_main(argv: list[str]) -> int:
     parser.add_argument("--dry-run", action="store_true", help="verify without deleting anything")
     args = parser.parse_args(argv)
     try:
-        common_dir = Path(
-            _git(
-                Path.cwd(),
-                "rev-parse",
-                "--path-format=absolute",
-                "--git-common-dir",
-            ).stdout.strip()
-        )
-        root = common_dir.resolve().parent
+        root = _checkout_root(Path.cwd())
         target = args.worktree if args.worktree.is_absolute() else root / args.worktree
         free_merged_worktree(
             root=root,
@@ -475,11 +473,39 @@ def _free_worktree_main(argv: list[str]) -> int:
     return 0
 
 
+def _checkout_root(cwd: Path) -> Path:
+    common_dir = _git(cwd, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    return Path(common_dir.stdout.strip()).resolve().parent
+
+
+def assert_write_workspace(cwd: Path) -> None:
+    """Refuse independent write work outside an owned feature worktree."""
+    top = Path(_git(cwd, "rev-parse", "--show-toplevel").stdout.strip()).resolve()
+    if top.parent != _checkout_root(cwd) / ".claude" / "worktrees":
+        raise CleanupError(f"not a worktree under .claude/worktrees/: {top}")
+    branch = _git(top, "branch", "--show-current").stdout.strip()
+    if branch in {"", "main", "develop"}:
+        raise CleanupError(f"write work needs a topic branch, not {branch or 'detached HEAD'!r}")
+    if not _has_owner(top):
+        raise CleanupError(f"missing or empty ownership record: {top / '.owner'}")
+
+
+def _assert_write_workspace_main() -> int:
+    try:
+        assert_write_workspace(Path.cwd())
+    except CleanupError as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv:
         if argv[0] == "free-merged-worktree":
             return _free_worktree_main(argv[1:])
+        if argv[0] == "assert-write-workspace":
+            return _assert_write_workspace_main()
         print(f"unknown command: {argv[0]}", file=sys.stderr)
         return 2
 

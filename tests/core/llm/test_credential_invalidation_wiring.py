@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import ast
 import asyncio
-import contextlib
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -84,23 +83,33 @@ def test_invalidate_is_scoped_to_one_provider() -> None:
     assert all(n == 1 for n in untouched), f"unrelated providers were dropped: {untouched}"
 
 
-def test_login_refresh_calls_adapter_invalidation() -> None:
-    """``/login refresh`` must drop adapter clients, not just provider caches."""
+@pytest.mark.parametrize(
+    ("stored", "loaded", "resets"), [(True, False, 0), (True, True, 1), (False, False, 1)]
+)
+def test_login_refresh_preserves_payg_clients_until_selected_identity_changes(
+    stored: bool, loaded: bool, resets: int, tmp_path: Path
+) -> None:
+    """Reload admission keeps PAYG selections; a rejected file also keeps imported caches."""
     from core.cli.commands import login as login_mod
 
-    with (
-        patch("core.llm.adapters.registry.invalidate_provider_clients") as mock_inv,
-        patch("core.auth.auth_toml.load_auth_toml", return_value=True),
-        patch("core.auth.codex_cli_oauth.invalidate_cache"),
-        patch("core.mcp.google_workspace_client.reset_google_workspace_client"),
-        # The CLI surface may bail on environment; the invalidation call is
-        # what this pins.
-        contextlib.suppress(Exception),
-    ):
-        login_mod.cmd_login("refresh")
+    if stored:
+        (tmp_path / "auth.toml").write_text("")  # conftest points GEODE_AUTH_TOML here
+    adapters = _cached_adapters()
 
-    assert mock_inv.called, "/login refresh did not invalidate adapter clients"
-    assert mock_inv.call_args.args[0] == "openai"
+    async def scenario() -> None:
+        _seed(adapters)
+        before = [adapter._clients.bound_loop_count() for adapter in adapters]
+        assert all(count == 1 for count in before)
+        with (
+            patch("core.auth.auth_toml.load_auth_toml", return_value=loaded),
+            patch("core.auth.codex_cli_oauth.invalidate_cache") as codex_cache,
+            patch("core.mcp.google_workspace_client.reset_google_workspace_client") as google_cache,
+        ):
+            login_mod.cmd_login("refresh")
+        assert [adapter._clients.bound_loop_count() for adapter in adapters] == before
+        assert codex_cache.call_count == google_cache.call_count == resets
+
+    asyncio.run(scenario())
 
 
 def test_codex_oauth_refresh_in_fallback_invalidates() -> None:

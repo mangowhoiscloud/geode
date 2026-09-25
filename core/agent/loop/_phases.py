@@ -20,7 +20,7 @@ from core.llm.adapters.base import EmptyModelOutputError
 from core.llm.agentic_response import AgenticResponse
 from core.ui.status import TextSpinner
 
-from . import _collaboration_mailbox, _context, _guards, _lifecycle
+from . import _collaboration_mailbox, _context, _guards, _lifecycle, _model_switching
 from .models import (
     AgenticResult,
     StepSnapshot,
@@ -159,6 +159,7 @@ async def prepare_input(
     goal_continuation_trigger: str,
 ) -> PreparedTurn | AgenticResult:
     """Cross input/interceptor boundaries and freeze turn-level inputs."""
+    loop._pending_model_settings = None
     # Verification repairs share the original execution budget, including
     # preparation and judge calls. Only a new user/goal turn starts a clock.
     if verify_continuation is None:
@@ -609,6 +610,8 @@ async def process_tool_calls(
     if loop._yield_after_tool_round:
         turn.messages.append(_guards._tool_round_assistant_message(loop, response))
         turn.messages.append({"role": "user", "content": tool_results})
+        _context.sync_messages_to_context(loop, turn.messages)
+        await _model_switching.apply_pending_model_config(loop, turn.messages)
         return await _guards._afinalize_tool_round_yield(
             loop,
             messages=turn.messages,
@@ -699,6 +702,7 @@ async def observe_and_compact(
     turn.messages.append({"role": "user", "content": tool_results})
     turn.turn_state.round_index += 1
     _context.sync_messages_to_context(loop, turn.messages)
+    await _model_switching.apply_pending_model_config(loop, turn.messages)
     loop._save_checkpoint(turn.user_input, round_idx=turn.turn_state.round_index)
     return None
 

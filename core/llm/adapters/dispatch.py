@@ -309,9 +309,9 @@ def _resolve_dispatch_route(
 
         provider = normalize_registry_provider(_resolve_provider(model))
     if provider and not source:
-        from core.llm.adapters._source_inference import infer_source
+        from core.llm.routing import infer_source
 
-        source = infer_source(provider)
+        source = infer_source(provider, model=model or "")
     if source and not provider and model:
         from core.config import _resolve_provider
 

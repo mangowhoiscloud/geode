@@ -568,6 +568,12 @@ Anthropic 공식 API에서도 지원이 끝난 Opus 4.1·Opus 4·Sonnet 4와 이
 
 모델, effort, 로그인 소스를 .env에 적는 방식은 폐기되었습니다. 예전 버전이 남긴 .env의 모델 줄은 `/model`이 toml에 쓰면서 자동으로 지우고 "removed stale ... from .env" 안내를 출력합니다.
 
+## 실행 중 세션과 새 세션의 기본값
+
+저장한 모델·effort·인증 설정은 새 세션의 기본값입니다. 실행 중인 세션은 승인된 모델·effort·API/구독 소스를 보존합니다. 연결된 CLI의 `/login source`는 해당 세션의 적용 응답을 받은 뒤 기본값을 저장하며, 연결되지 않은 명령은 새 세션의 기본값만 바꿉니다.
+
+런타임 `manage_login source` 도구는 같은 검증을 거쳐 전체 도구 묶음 이후 해당 세션의 주·보조 모델 소스만 바꾸며 effort와 저장된 기본값을 보존합니다. 명시적 로그인 소스와 `forced_login_method`가 충돌하면 거절합니다. 모델별 plan 순서와 계정 선택은 SDK 요청에도 적용됩니다. 선택한 소스의 계정을 사용할 수 없어도 다른 과금 소스로 자동 전환하지 않습니다.`/login use`와 `/login route`는 같은 소스 안에서 다음 요청의 계정을 바꿀 수 있으며, 실행 중 세션의 소스를 바꾸지는 않습니다.
+
 ## 모델 결정 순서
 
 위가 아래를 가립니다. 첫 번째로 값이 설정된 레이어가 이깁니다.
@@ -584,7 +590,7 @@ Anthropic 공식 API에서도 지원이 끝난 Opus 4.1·Opus 4·Sonnet 4와 이
 
 값이 설정된 첫 레이어가 이깁니다. 어느 레이어가 이겼는지는 geode config explain model이 보여줍니다.
 
-데몬은 시작할 때 모델 계열 env 키를 의도적으로 버리므로 (`BEHAVIOR_ENV_KEYS`, `core/config/env_io.py`), 세션마다 toml의 선택이 항상 이깁니다. 셸에서 직접 export한`GEODE_MODEL`은 그 세션 한정의 파워유저 오버라이드입니다.
+데몬은 시작할 때 모델 계열 env 키를 의도적으로 버리므로 (`BEHAVIOR_ENV_KEYS`, `core/config/env_io.py`), 새 세션은 유효한 설정에서 시작합니다. 기존 세션은 승인된 선택을 유지합니다. 셸에서 직접 export한`GEODE_MODEL`은 그 세션 한정의 파워유저 오버라이드입니다.
 
 ## 디버깅 플로우: geode config explain
 
@@ -6100,7 +6106,7 @@ Anthropic과 OpenRouter의 내장 경로는 `api_key`뿐입니다. 과거`claude
 
 ## /login 대시보드
 
-세션 안의 `/login`은 플랜과 자격을 한 화면에서 관리합니다(`core/cli/commands/login.py`). thin CLI에서 로컬로 실행되고, 끝나면 데몬에 인증 상태 리로드를 알립니다.
+세션 안의 `/login`은 플랜과 자격을 한 화면에서 관리합니다(`core/cli/commands/login.py`). 키 입력과 브라우저 로그인(`add`, `set-key`, `openai`, `anthropic`, `google`)과 `source`는 thin CLI에서 실행합니다. 키는 저장한 뒤 데몬에 리로드를 알립니다. 조회와 plan·프로파일 변경은 실행 중인 상태를 가진 데몬이 처리합니다. 저장하지 못한 변경은 성공으로 표시하지 않습니다.
 
 | 서브커맨드 | 동작 |
 | --- | --- |
@@ -6110,7 +6116,7 @@ Anthropic과 OpenRouter의 내장 경로는 `api_key`뿐입니다. 과거`claude
 | `/login add` | 자격 추가. 키 모양(`sk-ant-`, `sk-proj-`, `sk-or-v1-`, GLM {id}.{secret})으로 프로바이더를 추정합니다. |
 | `/login use` / `remove` | 프로파일 선택과 제거. |
 | `/login route` | 프로바이더와 플랜 라우팅 확인. |
-| `/login quota` | 구독 쿼터 상태. |
+| `/login quota` | 플랜에 선언된 호출 한도. GEODE는 사용량을 세지 않으므로 현재 사용량은 프로바이더 계정에서 확인합니다. |
 | `/login source <provider> <type>` | 자격 소스 영속화. config.toml `[llm]`에 기록. |
 
 ## Google Workspace
@@ -6823,7 +6829,7 @@ geode (thin CLI)  ── Unix socket IPC (~/.geode/cli.sock) ──→  geode se
   슬래시 → 조립된 command registry가 THIN/daemon 결정           메신저 폴러, CLIPoller
 ```
 
-bare `geode`는 환영 화면을 띄우고 소켓을 조사한 뒤, 데몬이 없으면 자동 기동합니다(`start_serve_if_needed`, `core/cli/ipc_client.py`). 동시 기동 경합은 pidfile flock이 막습니다. 그 뒤 thin REPL이 IPC로 붙습니다. 프로토콜은 최대 1 MiB의 줄 단위 JSON인 `geode.ipc.v1`이고 서버 쪽 상대는 `CLIPoller`(`core/server/ipc_server/poller.py`)입니다. 연결 시 지원 기능의 교집합을 협상하고, 각 요청 ID가 스트림·구조화 이벤트·최종 응답에 그대로 붙습니다. 구버전의 version-less peer도 v0 호환 경계로 계속 연결됩니다.
+bare `geode`는 환영 화면을 띄우고 소켓을 조사한 뒤, 데몬이 없으면 자동 기동합니다(`start_serve_if_needed`, `core/cli/ipc_client.py`). 동시 기동 경합은 pidfile flock이 막습니다. 그 뒤 thin REPL이 IPC로 붙습니다. 프로토콜은 최대 1 MiB의 줄 단위 JSON인 `geode.ipc.v1`이고 서버 쪽 상대는 `CLIPoller`(`core/server/ipc_server/poller.py`)입니다. 연결 시 지원 기능의 교집합을 협상하고, 각 요청 ID가 스트림·구조화 이벤트·최종 응답에 그대로 붙습니다. v0 envelope는 계속 읽을 수 있지만 세션 설정 적용 기능이 없는 구버전 peer는 실행 전에 명시적으로 거절합니다.
 
 ## 환영 화면과 라이브 상태
 
@@ -6874,7 +6880,7 @@ HITL 승인 프롬프트(`core/cli/ipc_client.py`의 `_handle_approval_request`)
 
 ## 슬래시 명령
 
-런타임의 명시적 실행 위치와 핸들러는`core/slash_routing.py`의 `COMMAND_REGISTRY`가 정의합니다. 평가와 진화 명령은 각각 `geode-eval`과`geode-evolve`로 분리됩니다. thin REPL은 `/help`, `/fleet`, 인자 없는 `/model`도 로컬에서 특별 처리합니다. `core/cli/commands/_state.py`의 `COMMAND_MAP`은 legacy dispatcher action과 별칭을 매핑합니다. 로컬로 처리되지 않은 짧은 명령은 IPC `send_command`, 장기 명령은`send_command_streaming`으로 데몬에 전달됩니다.
+런타임의 명시적 실행 위치와 핸들러는`core/slash_routing.py`의 `COMMAND_REGISTRY`가 정의합니다. 평가와 진화 명령은 각각 `geode-eval`과`geode-evolve`로 분리됩니다. thin REPL은 `/help`, `/fleet`도 로컬에서 특별 처리합니다. `core/cli/commands/_state.py`의 `COMMAND_MAP`은 legacy dispatcher action과 별칭을 매핑합니다. 로컬로 처리되지 않은 짧은 명령은 IPC `send_command`, 장기 명령은`send_command_streaming`으로 데몬에 전달됩니다.
 
 | 명령 | 별칭 | 실행 위치 | 용도 | 핸들러 |
 | --- | --- | --- | --- | --- |
@@ -6903,9 +6909,9 @@ HITL 승인 프롬프트(`core/cli/ipc_client.py`의 `_handle_approval_request`)
 | `/clear` |  | daemon | 대화 이력 삭제. thin 클라이언트는 IPC 모드에서 `--force`를 자동 부착 | `core/cli/commands/session.py` |
 | `/tasks` | `/task`, `/t` | daemon | 사용자 태스크 목록 | `core/cli/commands/tasks.py` |
 
-`/login`이나 `/key`가 로컬에서 끝나면 thin 클라이언트가 데몬에 인증 상태 리로드를 통지합니다. 인자 없는 `/model`은 TTY에서 picker를 로컬로 띄운 뒤 선택 결과만 데몬에 전달합니다(`core/cli/__init__.py`).
+`/login`이나 `/key`가 로컬에서 끝나면 thin 클라이언트가 데몬에 인증 상태 리로드를 통지합니다. 이름 지정, picker, fullscreen의 `/model`은 같은 적용 경로를 사용합니다. 현재 세션의 모델·effort·source와 보조 역할을 데몬이 검증하고 적용한 뒤 기본값을 저장합니다. project/global은 미래 세션의 기본값 범위이며 다른 실행 중 세션을 바꾸지 않습니다. 적용 거절과 적용 후 저장 실패는 구분해 표시합니다.
 
-picker 키 계약(`core/cli/effort_picker.py`): Tab이 역할 탭(Primary, Reflection, Mutator)을 순환하고 ↑↓가 모델, ←→가 effort를 고릅니다. **Space는 포커스된 역할에 적용하고 picker를 유지**하므로 세 역할을 한 세션에서 모두 설정할 수 있습니다. Enter는 staged 선택까지 전부 확정하고 닫으며, Esc는 staged 선택을 포함해 전부 폐기합니다. provider가 바뀌는 전환은 credential source(payg, subscription)를 새 provider 기준으로 다시 추론합니다. `/login codex` 직후의 GPT 전환이 구독 쿼터로 라우팅되는 근거입니다.
+picker 키 계약(`core/cli/effort_picker.py`): Tab이 역할 탭(Primary, Reflection, Mutator)을 순환하고 ↑↓가 모델, ←→가 effort를 고릅니다. **Space는 포커스된 역할을 임시 선택하고 picker를 유지**하므로 세 역할을 한 세션에서 모두 설정할 수 있습니다. Enter는 staged 선택까지 전부 확정하고 닫으며, Esc는 staged 선택을 포함해 전부 폐기합니다. 같은 공급자 안에서 모델이나 effort를 바꾸면 현재 source를 유지하고, 공급자가 바뀔 때 새 경로를 해석합니다. 연결 시 실제 데몬 workspace를 확인하며 다른 프로젝트는 별도 serve가 필요합니다. 이 계약을 지원하지 않는 구버전 데몬은 재시작 후 다시 연결해야 합니다.
 
 ## geode-mcp 서버
 
@@ -7347,8 +7353,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 590 |
-| 테스트 Python 파일 | 747 |
+| 프로덕션 Python 파일 | 591 |
+| 테스트 Python 파일 | 748 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |

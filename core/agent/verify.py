@@ -814,7 +814,8 @@ async def _verify_llm_judge_async(
         from core.config import settings
         from core.config.judgment import resolve_judgment_route
 
-        judge_model = (getattr(settings, "judge_model", "") or "").strip() or loop.model
+        policy = loop._model_settings
+        judge_model = policy.judge_model or loop.model
         structural = _verify_rule_based(result)
         if not structural.passed and not structural.should_retry:
             return replace(structural, mode=mode, effective_mode=mode)
@@ -830,7 +831,9 @@ async def _verify_llm_judge_async(
         if timeout <= 0:
             return _verification_error(mode, reason="verification_time_budget_exhausted")
         messages = _judge_messages(result, loop=loop, prompt=prompt)
-        route = resolve_judgment_route(settings)
+        route = resolve_judgment_route(
+            settings, engine=policy.judgment_engine, provider=policy.jev_provider
+        )
         call_options: dict[str, Any] = {}
         if route is not None:
             from core.llm.adapters.typesafe import SystemOneAdapter

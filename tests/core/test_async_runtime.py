@@ -15,6 +15,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import Mock, call
 
 import httpx
 import pytest
@@ -37,6 +38,29 @@ class Client:
             raise OSError("fixture cleanup failure")
 
 
+def test_credential_identity_retires_clients_only_after_successful_construction() -> None:
+    cache = LoopAffineClientCache("identity")
+    clients: list[Client] = []
+
+    def failed_builder() -> Client:
+        raise ValueError("invalid replacement")
+
+    async def work() -> None:
+        first = cache.get(Client, identity="first")
+        clients.append(first)
+        assert cache.get(failed_builder, identity="first") is first
+        with pytest.raises(ValueError, match="invalid replacement"):
+            cache.get(failed_builder, identity="second")
+        assert cache.get(failed_builder, identity="first") is first
+        second = cache.get(Client, identity="second")
+        clients.append(second)
+        assert second is not first
+        assert first.close_count == second.close_count == 0
+
+    run_process_coroutine(work())
+    assert [client.close_count for client in clients] == [1, 1]
+
+
 @pytest.mark.usefixtures("managed_geode_runtimes")
 def test_runtime_recreation_keeps_shared_and_borrowed_clients_until_loop_exit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -45,9 +69,9 @@ def test_runtime_recreation_keeps_shared_and_borrowed_clients_until_loop_exit(
     from core.runtime import GeodeRuntime
 
     monkeypatch.setattr(settings, "openai_api_key", "fixture-key")
-    monkeypatch.setattr(
-        "core.llm.adapters.openai_payg.build_async_openai_client", lambda _: Client()
-    )
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://sdk-lifecycle.invalid/v1")
+    build_client = Mock(side_effect=lambda api_key, *, base_url: Client())
+    monkeypatch.setattr("core.llm.adapters.openai_payg.build_async_openai_client", build_client)
 
     async def work() -> tuple[Client, Client]:
         first_runtime = GeodeRuntime.create("first", log_dir=tmp_path / "first")
@@ -68,6 +92,7 @@ def test_runtime_recreation_keeps_shared_and_borrowed_clients_until_loop_exit(
     assert owned.close_count == 1
     assert borrowed.close_count == 0
     assert owned.loop.is_closed()
+    build_client.assert_called_once_with("fixture-key", base_url="https://sdk-lifecycle.invalid/v1")
 
 
 def test_rotation_and_registry_replacement_keep_inflight_clients_until_drain(
@@ -77,9 +102,9 @@ def test_rotation_and_registry_replacement_keep_inflight_clients_until_drain(
     from core.extensions import ExtensionPolicy
 
     monkeypatch.setattr(settings, "openai_api_key", "fixture-key")
-    monkeypatch.setattr(
-        "core.llm.adapters.openai_payg.build_async_openai_client", lambda _: Client()
-    )
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://sdk-lifecycle.invalid/v1")
+    build_client = Mock(side_effect=lambda api_key, *, base_url: Client())
+    monkeypatch.setattr("core.llm.adapters.openai_payg.build_async_openai_client", build_client)
     clients: list[Client] = []
 
     async def work() -> None:
@@ -108,6 +133,10 @@ def test_rotation_and_registry_replacement_keep_inflight_clients_until_drain(
 
     run_process_coroutine(work())
     assert [client.close_count for client in clients] == [1, 1, 1]
+    assert (
+        build_client.call_args_list
+        == [call("fixture-key", base_url="https://sdk-lifecycle.invalid/v1")] * 3
+    )
 
 
 def test_pending_work_and_async_generators_finish_before_client_close() -> None:

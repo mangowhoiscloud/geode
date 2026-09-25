@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from core.config.policy_source import PolicySourcePaths
 from core.llm.adapters._capability_impls import openai_effort_kwargs
 from core.llm.adapters._openai_common import (
     _is_openai_strict_compatible,
@@ -28,6 +29,7 @@ from core.llm.adapters.base import (
 from core.llm.errors import LLMRequestValidationError
 from core.llm.loop_affinity import LoopAffineClientCache
 from core.llm.providers.openrouter import to_openrouter_model_id
+from core.llm.routing import resolve_routing
 
 log = logging.getLogger(__name__)
 
@@ -123,11 +125,32 @@ class OpenRouterPaygAdapter:
         repr=False,
     )
 
-    def _get_client(self) -> Any:
+    routing_sources: PolicySourcePaths | None = field(default=None, repr=False)
+
+    def _credential(self, model: str = "") -> tuple[str, str, str]:
+        """Read the selected PAYG key, endpoint and non-secret provenance."""
         from core.config import settings
         from core.llm.registry import get_provider_spec
 
-        api_key = settings.openrouter_api_key
+        spec = get_provider_spec(self.provider)
+        if spec is None:
+            raise RuntimeError("PAYG provider composition is not registered")
+        base_url = spec.default_base_url
+        target = resolve_routing(
+            model,
+            provider=self.provider,
+            source=self.source,
+            base_url=base_url,
+            sources=self.routing_sources,
+        )
+        if target is not None:
+            return target.profile.key, target.base_url, f"auth profile:{target.profile.name}"
+        return settings.openrouter_api_key, base_url, "settings.openrouter_api_key"
+
+    def _get_client(self, model: str = "") -> Any:
+        from core.llm.registry import get_provider_spec
+
+        api_key, base_url, _ = self._credential(model)
         if not api_key:
             raise RuntimeError(
                 "OpenRouterPaygAdapter: OPENROUTER_API_KEY not set. "
@@ -140,9 +163,10 @@ class OpenRouterPaygAdapter:
         return self._clients.get(
             lambda: build_async_openai_client(
                 api_key,
-                base_url=spec.default_base_url,
+                base_url=base_url,
                 default_headers=headers,
-            )
+            ),
+            identity=hashlib.sha256(f"{base_url}\0{api_key}".encode()).hexdigest(),
         )
 
     async def acomplete_text(
@@ -253,7 +277,7 @@ class OpenRouterPaygAdapter:
                     {"type": "text", "text": boundary + dynamic},
                 ]
         try:
-            response = await self._get_client().chat.completions.create(**kwargs)
+            response = await self._get_client(req.model).chat.completions.create(**kwargs)
         except Exception as exc:
             log.warning(
                 "openrouter-payg: request failed model=%s error_type=%s",
@@ -273,9 +297,8 @@ class OpenRouterPaygAdapter:
         )
 
     def test_environment(self) -> EnvironmentReport:
-        from core.config import settings
-
-        if not settings.openrouter_api_key:
+        api_key, _, _ = self._credential()
+        if not api_key:
             return EnvironmentReport(
                 ok=False,
                 checks=(("openrouter_api_key", "missing"),),
@@ -283,7 +306,7 @@ class OpenRouterPaygAdapter:
             )
         return EnvironmentReport(
             ok=True,
-            checks=(("openrouter_api_key", f"set ({len(settings.openrouter_api_key)} chars)"),),
+            checks=(("openrouter_api_key", f"set ({len(api_key)} chars)"),),
         )
 
 

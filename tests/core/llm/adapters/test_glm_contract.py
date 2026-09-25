@@ -76,7 +76,9 @@ def test_completion_and_text_share_glm_reasoning_policy(monkeypatch: pytest.Monk
     monkeypatch.setattr(
         adapter,
         "_get_client",
-        lambda: SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create))),
+        lambda model="": SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        ),
     )
     monkeypatch.setattr(settings, "glm_reasoning_effort", "max")
     asyncio.run(
@@ -131,7 +133,9 @@ def test_stream_preserves_request_tools_reasoning_and_fragmented_arguments(
     monkeypatch.setattr(
         adapter,
         "_get_client",
-        lambda: SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create))),
+        lambda model="": SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        ),
     )
     request = AdapterCallRequest(
         model="glm-5.3-flash",

@@ -204,9 +204,13 @@ def _gateway_session_is_terminal(session_key: str, checkpoint: Any) -> bool:
 
 async def _restore_gateway_loop(loop: Any, state: Any) -> None:
     """Apply the same machine and model restore contract as CLI resume."""
+    from core.agent.loop._model_switching import apply_session_model_config
+
+    candidate = state.model_settings or loop._model_settings.updated(
+        {"model": loop.model, "source": loop._source, "effort": loop._effort}
+    )
+    await apply_session_model_config(loop, candidate, reason="resume")
     loop.restore_from_checkpoint(state)
-    if state.model and state.model != loop.model:
-        await loop.update_model_async(state.model)
 
 
 def _serve(
@@ -349,7 +353,6 @@ def _serve(
     ) -> str:
         """Resume a checkpointed session with the operator's ask answer."""
         _ask_ctx = ConversationContext(max_turns=_gw_max_turns)
-        _ask_ctx.messages = list(state.messages)
         _ask_executor, _ask_loop = _gw_services.create_session(
             SessionMode.DAEMON,
             conversation=_ask_ctx,
@@ -360,6 +363,7 @@ def _serve(
         # path as the IPC resume handler); arun() re-binds the ContextVars
         # from the restored objects.
         await _restore_gateway_loop(_ask_loop, state)
+        _ask_ctx.messages = list(state.messages)
         _res = await _ask_loop.arun(answer)
         # Close the one-shot lifecycle (finalize re-wrote status "active"):
         # a fresh clarification re-parks the checkpoint behind a NEW ask;
@@ -416,11 +420,11 @@ def _serve(
         _gw_session_id = _gateway_checkpoint_session_id(session_key) if session_key else ""
         _prior_state = _gw_checkpoint.load(_gw_session_id) if _gw_session_id else None
         prior = runtime.session_store.get(session_key) if session_key else None
-        ctx.messages = _gateway_resume_messages(prior, _prior_state)
-        if ctx.messages:
+        prior_messages = _gateway_resume_messages(prior, _prior_state)
+        if prior_messages:
             log.info(
                 "Gateway multi-turn: loaded %d messages for %s",
-                len(ctx.messages),
+                len(prior_messages),
                 session_key,
             )
 
@@ -436,21 +440,19 @@ def _serve(
             **_gateway_session_overrides(metadata, _gw_time_budget),
             session_id=_gw_session_id,
         )
-        if _gw_session_id:
+        if _gw_session_id and _prior_state is not None:
             # Machine continuity across turns — cognitive state + guard
-            # counters come from the thread's checkpoint; the conversation
-            # itself stays session_store-owned (restored above). A TERMINAL
+            # counters come from the thread's checkpoint; the selected history
+            # is published below after policy admission. A TERMINAL
             # prior state (context exhaustion completed the instance) means
             # the thread starts a FRESH machine under the same id: reopen
             # the edge explicitly and skip the restore so the old goal and
             # guard counters do not leak into the new topic.
-            from core.memory.session_checkpoint import SessionStatus
-
-            if _prior_state is not None:
-                if _prior_state.status in (SessionStatus.ACTIVE, SessionStatus.PAUSED):
-                    await _restore_gateway_loop(loop, _prior_state)
-                else:
-                    _gw_checkpoint.reopen(_gw_session_id)
+            if _gateway_checkpoint_is_resumable(_prior_state):
+                await _restore_gateway_loop(loop, _prior_state)
+            else:
+                _gw_checkpoint.reopen(_gw_session_id)
+        ctx.messages = prior_messages
         try:
             result = await loop.arun(content)
 

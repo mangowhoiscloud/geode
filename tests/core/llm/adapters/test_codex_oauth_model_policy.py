@@ -45,7 +45,7 @@ def test_required_policy_blocks_mismatch_before_client(
     client.assert_not_called()
     with pytest.raises(_ClientBoundaryError):
         asyncio.run(_request(adapter, method, "gpt-5.6-sol"))
-    client.assert_called_once_with()
+    client.assert_called_once_with("gpt-5.6-sol")
 
 
 @pytest.mark.parametrize("content", [None, "{{invalid toml}}", '[policy]\nallowlist = "bad"'])
@@ -75,7 +75,7 @@ def test_default_configuration_preserves_existing_admission(
 
     with pytest.raises(_ClientBoundaryError):
         asyncio.run(_request(adapter, method, "gpt-5.5"))
-    client.assert_called_once_with()
+    client.assert_called_once_with("gpt-5.5")
 
 
 @pytest.mark.parametrize("mutation", ["replace", "remove", "malform"])
@@ -102,7 +102,7 @@ def test_adapter_snapshots_required_policy_for_lifetime(
     client.assert_not_called()
     with pytest.raises(_ClientBoundaryError):
         asyncio.run(_request(adapter, "acomplete", "gpt-5.6-sol"))
-    client.assert_called_once_with()
+    client.assert_called_once_with("gpt-5.6-sol")
 
 
 @pytest.mark.parametrize("method", ["aweb_search", "acomplete_text"])
@@ -172,7 +172,7 @@ def test_platform_models_still_reach_the_existing_client_boundary(
     request = AdapterCallRequest(model=model, messages=[Message(role="user", content="probe")])
     with pytest.raises(_ClientBoundaryError):
         asyncio.run(adapter.acomplete(request))
-    client.assert_called_once_with()
+    client.assert_called_once_with(model)
 
 
 @pytest.mark.parametrize("policy_name", ["interactive", "auxiliary", "provider"])

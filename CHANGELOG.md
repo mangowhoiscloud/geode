@@ -55,8 +55,23 @@ functional change.
   collection coverage before enforcing the unchanged 75% combined branch/line
   coverage threshold. Documentation-only skips and architecture, Harbor, and
   installed-package checks remain mandatory under their existing conditions.
+- Add a read-only `check_repo_hygiene.py assert-write-workspace` entry check
+  that requires an owned topic worktree before independent writes, and treat an
+  empty `.owner` as an orphan worktree. Preflight keeps each failing gate's full
+  output in a log file. Contributor guidance adds a delegation return contract
+  and a bounded CI-recovery budget with hand-off on exhaustion.
 
 ### Changed
+
+- Resolve new-session credential policy and per-model plan accounts through one
+  routing owner. Preserve each live session's concrete API/Subscription source,
+  pass model-specific credentials and endpoints to SDK calls, and reject
+  conflicting policy or unavailable explicit plans without billing fallback.
+  Validate `/login source` before changing defaults and apply connected-session
+  changes only after admission. Runtime source selection applies matching model
+  roles after the complete tool batch while retaining effort and saved defaults.
+  Share TOML parsing between configuration and
+  CLI diagnostics, including explicit empty role values.
 
 - Preserve the static prompt boundary on supported OpenAI Platform requests
   using developer content breakpoints while retaining implicit history caching.
@@ -162,6 +177,61 @@ functional change.
   this does not reconstruct missing historical usage.
 
 ### Fixed
+
+- Pass Anthropic structured-output schemas through the SDK's
+  `transform_schema` before sending `output_config.format`. The API rejected
+  the turn-verification judge schema with HTTP 400 because number
+  `minimum`/`maximum` is unsupported; those constraints now move into the field
+  description and GEODE's judge parser still rejects scores outside 0..1.
+  Schemas the SDK cannot express (such as type arrays) fail before the request.
+
+- Preserve the admitted model, source, effort and auxiliary policy through session
+  checkpoints and child-worker requests. Validate resume selection before changing
+  history, identity or checkpoint status; reject malformed saved records and keep
+  the current validated selection for legacy checkpoints. Report the applied
+  selection to the thin client without rereading unrelated process defaults.
+
+- Exclude the Anthropic, OpenAI, OpenRouter and Z.AI API keys from `Settings`
+  `repr()` and `str()`, so failing pytest assertions and formatted settings
+  objects no longer print credential values. The fields remain plain strings;
+  the Typesafe key was already masked by `SecretStr`.
+
+- Apply CLI model, effort, and concrete source selections to the owning daemon
+  session before saving defaults, including named commands, role pickers, and
+  fullscreen mode. Snapshot auxiliary model policy per session, reject
+  unsuccessful or unsupported handshakes, and retain the previous selection and
+  tool bindings when adoption fails. Project/global defaults no longer implicitly
+  update other active sessions. Route runtime model/judgment tools through the
+  same admitted record after their complete tool batch; status reports the actual
+  session. Remove unused settings-drift code and its constructor flag.
+
+- Apply explicit API-key selections and validated auth-file refreshes to the
+  next OpenAI, Anthropic, GLM and OpenRouter PAYG SDK request, including adapters
+  retained by existing sessions. Reuse persisted profile pins and ordering;
+  preserve subscription routes, endpoint boundaries and environment fallbacks.
+  Retire replaced clients until their owning event loop drains them.
+
+- Change auth.toml through one locked transaction that edits the current file,
+  writes it atomically and only then updates the running process. A stale thin
+  client or worker copy no longer revives removed credentials or restores rotated
+  tokens, and rejected or unsaved `/login` and OAuth changes report failure
+  instead of success; `/key` warns when auth.toml was not updated. Loading never creates or rewrites the file:
+  environment API keys stay in `~/.geode/.env` instead of being copied into
+  auth.toml on first use, and the ChatGPT plan tier is recorded with the tokens. Thin clients read and change login state
+  through the daemon, keeping only key entry and browser logins local, and daemon
+  `/login` results carry the command outcome. The dashboard, `/login health` and
+  `manage_login` share one key-free snapshot that judges each credential against
+  its own provider. Plan quotas show declared limits only because calls were never
+  counted; `manage_login` returns interactive logins to the user. New installs
+  with an OpenAI key and a Codex CLI login now follow the documented subscription
+  default, because no PAYG plan is created implicitly; existing auth.toml plans
+  keep their routing.
+
+- Preserve explicit auth profile pins and priority order across auth.toml writes
+  and fresh-process routing. Validate reload candidates before publication and
+  reconcile deletions only for file-owned entries, retaining managed/environment
+  credentials, unchanged health state and borrowed references. Write auth state
+  atomically and materialize explicit OpenAI/GLM `/key` updates consistently.
 
 - Bind effort-probe resume to the verified source revision and provider route,
   retaining older measurements without reusing unidentified results. Include

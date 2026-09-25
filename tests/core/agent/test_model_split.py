@@ -53,6 +53,23 @@ def _make_result(
     )
 
 
+def _loop_fixture(**values: Any) -> SimpleNamespace:
+    """A minimal judge caller with the session policy captured at construction."""
+    from core.config import settings
+    from core.config.session import SessionModelConfig
+
+    if "model" in values:
+        judge = getattr(settings, "judge_model", "")
+        values["_model_settings"] = SessionModelConfig(
+            model=values["model"],
+            effort="high",
+            source="payg",
+            judge_model=judge,
+            judge_source="payg" if judge else "",
+        )
+    return SimpleNamespace(**values)
+
+
 # -- Settings knob defaults --------------------------------------------
 
 
@@ -94,8 +111,11 @@ def test_act_model_used_when_no_explicit_model(monkeypatch: pytest.MonkeyPatch) 
     """When ``settings.act_model`` is set and caller doesn't pass an
     explicit model, ``AgenticLoop.model`` reflects ``act_model``."""
     from core.agent.loop.agent_loop import AgenticLoop
+    from core.config import settings
 
-    fake_settings = SimpleNamespace(act_model="claude-sonnet-4-6", llm_max_retries=3)
+    fake_settings = settings.model_copy(
+        update={"act_model": "claude-sonnet-4-6", "llm_max_retries": 3}
+    )
     monkeypatch.setattr("core.config.settings", fake_settings)
     # Build a minimal loop — most kwargs are optional, but ConversationContext
     # + ToolExecutor are required. Use mocks.
@@ -109,8 +129,11 @@ def test_act_model_used_when_no_explicit_model(monkeypatch: pytest.MonkeyPatch) 
 def test_explicit_model_wins_over_act_model(monkeypatch: pytest.MonkeyPatch) -> None:
     """Caller-passed ``model=...`` overrides ``settings.act_model``."""
     from core.agent.loop.agent_loop import AgenticLoop
+    from core.config import settings
 
-    fake_settings = SimpleNamespace(act_model="claude-sonnet-4-6", llm_max_retries=3)
+    fake_settings = settings.model_copy(
+        update={"act_model": "claude-sonnet-4-6", "llm_max_retries": 3}
+    )
     monkeypatch.setattr("core.config.settings", fake_settings)
     ctx = MagicMock()
     ctx.get_messages.return_value = []
@@ -123,9 +146,9 @@ def test_act_model_empty_falls_back_to_primary(monkeypatch: pytest.MonkeyPatch) 
     """Empty ``act_model`` falls back to ``ANTHROPIC_PRIMARY`` (the
     legacy pre-A6 default)."""
     from core.agent.loop.agent_loop import AgenticLoop
-    from core.config import ANTHROPIC_PRIMARY
+    from core.config import ANTHROPIC_PRIMARY, settings
 
-    fake_settings = SimpleNamespace(act_model="", llm_max_retries=3)
+    fake_settings = settings.model_copy(update={"act_model": "", "llm_max_retries": 3})
     monkeypatch.setattr("core.config.settings", fake_settings)
     ctx = MagicMock()
     ctx.get_messages.return_value = []
@@ -224,7 +247,6 @@ def test_call_llm_disables_action_tools_for_auxiliary_calls(
         ToolExecutor(middleware_registry=middleware),
         config=AgenticLoopConfig(
             source="codex-oauth",
-            disable_settings_drift=True,
             allowed_tool_names={"read_file"},
             effort=effort,
             max_rounds=1 if wrap_up == "rounds" else 0,
@@ -352,8 +374,15 @@ def test_judge_model_routes_without_mutating_action_adapter(
     loop._new_adapter = action_adapter
     loop._adapter_registry_snapshot = SimpleNamespace(resolve_for=resolve)
     loop._verify_root_user_input = "Complete the requested task"
-    monkeypatch.setattr(settings, "judge_model", judge_model)
-    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda _: "payg")
+    loop._model_settings = loop._model_settings.updated(
+        {
+            "judge_model": judge_model,
+            "judge_source": "payg"
+            if judge_model.startswith("claude-")
+            else (loop._source if judge_model else ""),
+        }
+    )
+    monkeypatch.setattr(settings, "judge_model", "unrelated-future-default")
     monkeypatch.setattr(
         "core.ui.agentic_ui.emit_reasoning_summary", lambda *values: summaries.append(values)
     )
@@ -411,7 +440,7 @@ def test_verify_llm_judge_calls_loop_call_llm(monkeypatch: pytest.MonkeyPatch) -
         captured["response_schema"] = response_schema
         return _reflexion_response(passed=True, score=0.92)
 
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Complete the requested task",
         _call_llm=_fake_call_llm,
         model="claude-opus-4-7",
@@ -441,7 +470,7 @@ def test_verify_llm_judge_judge_fail_records_misses(
     ) -> SimpleNamespace:
         return _reflexion_response(score=0.1, observation="tool error masked the goal")
 
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Complete the requested task",
         _call_llm=_fake_call_llm,
         model="claude-opus-4-7",
@@ -469,7 +498,7 @@ def test_verify_llm_judge_is_unavailable_on_exception() -> None:
     ) -> None:
         raise RuntimeError("network down")
 
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Complete the requested task",
         _call_llm=_broken,
         model="claude-opus-4-7",
@@ -487,7 +516,7 @@ def test_verify_llm_judge_is_unavailable_on_none_response() -> None:
     ) -> None:
         return None
 
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Complete the requested task",
         _call_llm=_returns_none,
         model="claude-opus-4-7",
@@ -574,7 +603,7 @@ def test_verify_turn_routes_llm_judge_through_loop(
     ) -> SimpleNamespace:
         return _reflexion_response(passed=True)
 
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Complete the requested task",
         _call_llm=_fake_call_llm,
         model="claude-opus-4-7",
@@ -619,7 +648,7 @@ def test_verify_turn_async_routes_through_judge(
 
     fake_settings = SimpleNamespace(judgment_engine="llm", judge_model="claude-haiku-4-5-20251001")
     monkeypatch.setattr("core.config.settings", fake_settings)
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Complete the requested task",
         _call_llm=_fake_call_llm,
         model="claude-opus-4-7",
@@ -649,7 +678,7 @@ def test_verify_turn_async_timeout_is_unavailable(
         await asyncio.sleep(1.0)
         return _reflexion_response(passed=True)
 
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Complete the requested task",
         _call_llm=_slow,
         model="claude-opus-4-7",
@@ -677,69 +706,6 @@ def test_verify_turn_async_off_alias_is_unavailable_without_judge(
     assert vr.mode is VerifyMode.LLM_JUDGE
 
 
-# -- Act-model drift (PR-CL-A6 Codex MCP HIGH #1) ----------------------
-
-
-def test_drift_target_uses_act_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    """PR-DRIFT-CUT (2026-05-24) — drift target is unconditionally None.
-
-    Pre-PR this returned ``settings.act_model`` (or ``settings.model``)
-    so the per-turn drift sync would revert ``loop.model`` to the
-    settings value. The auto-revert silently overrode operator
-    ``/model`` selections and was cut at the source. The test now
-    pins the no-op contract — the function must NEVER return a
-    drift target, regardless of how settings diverge from
-    ``loop.model``.
-    """
-    from core.agent.loop._model_switching import _settings_model_target
-
-    fake_settings = SimpleNamespace(model="claude-opus-4-7", act_model="claude-sonnet-4-6")
-    monkeypatch.setattr("core.config.settings", fake_settings)
-
-    loop_stub = SimpleNamespace(
-        model="claude-haiku-4-5-20251001",
-        _disable_settings_drift=False,
-        _drift_target_is_healthy=lambda _m: True,
-    )
-    target = _settings_model_target(loop_stub)
-    assert target is None  # PR-DRIFT-CUT — auto-revert disabled
-
-
-def test_drift_target_is_none_regardless_of_settings(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Companion to the above — empty ``act_model`` also gets no target."""
-    from core.agent.loop._model_switching import _settings_model_target
-
-    fake_settings = SimpleNamespace(model="claude-opus-4-7", act_model="")
-    monkeypatch.setattr("core.config.settings", fake_settings)
-
-    loop_stub = SimpleNamespace(
-        model="claude-haiku-4-5-20251001",
-        _disable_settings_drift=False,
-        _drift_target_is_healthy=lambda _m: True,
-    )
-    target = _settings_model_target(loop_stub)
-    assert target is None
-
-
-def test_drift_target_no_drift_when_already_matched(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """When ``loop.model`` already equals the act-model target, no drift."""
-    from core.agent.loop._model_switching import _settings_model_target
-
-    fake_settings = SimpleNamespace(model="claude-opus-4-7", act_model="claude-sonnet-4-6")
-    monkeypatch.setattr("core.config.settings", fake_settings)
-
-    loop_stub = SimpleNamespace(
-        model="claude-sonnet-4-6",
-        _disable_settings_drift=False,
-        _drift_target_is_healthy=lambda _m: True,
-    )
-    assert _settings_model_target(loop_stub) is None
-
-
 def test_judge_usage_recorded(monkeypatch: pytest.MonkeyPatch) -> None:
     """Codex MCP MEDIUM #4 — the judge LLM call's ``response`` is passed
     to ``loop._track_usage_async`` so judge cost surfaces in the session
@@ -764,7 +730,7 @@ def test_judge_usage_recorded(monkeypatch: pytest.MonkeyPatch) -> None:
     async def _fake_track_usage(response: Any) -> None:
         recorded_responses.append(response)
 
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _call_llm=_fake_call_llm,
         _track_usage_async=_fake_track_usage,
         _verify_root_user_input="Complete the requested task",
@@ -795,7 +761,7 @@ def test_judge_usage_track_failure_does_not_break_judge(
     async def _broken_track(_response: Any) -> None:
         raise RuntimeError("tracker down")
 
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _call_llm=_fake_call_llm,
         _track_usage_async=_broken_track,
         _verify_root_user_input="Complete the requested task",
@@ -836,7 +802,7 @@ def test_reflexion_receives_task_and_real_tool_observations(monkeypatch) -> None
 
     monkeypatch.setenv("GEODE_VERIFY_MODE", "reflexion")
     call = AsyncMock(return_value=_reflexion_response())
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Write the decoded content to out.txt",
         _call_llm=call,
         model="gpt-5.6-sol",
@@ -875,7 +841,7 @@ def test_judge_retains_prior_attempt_evidence_without_mutating_current_result() 
 
     prior = _make_result(tool_calls=[{"tool": "read_file", "result": "verified-content-123"}])
     current = _make_result(text="Corrected answer based on the earlier file", tool_calls=[])
-    loop = SimpleNamespace(_verify_attempt_results=[prior], _verify_root_user_input="Read the file")
+    loop = _loop_fixture(_verify_attempt_results=[prior], _verify_root_user_input="Read the file")
     assert "verified-content-123" in _judge_prompt(current, loop=loop)
     assert current.tool_calls == []
 
@@ -971,7 +937,7 @@ def test_resumed_judge_receives_prior_turn_evidence_before_candidate(monkeypatch
         return _reflexion_response(passed=True)
 
     monkeypatch.setattr("core.config.settings.judgment_engine", "llm")
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         context=context,
         _verify_root_user_input="Read beta; retain alpha without rereading",
         _call_llm=AsyncMock(side_effect=judge),
@@ -1055,7 +1021,7 @@ def test_resumed_judge_preserves_image_and_privacy_boundaries(monkeypatch, perso
         # The image origin cannot be replayed with a secret, but text stays redacted.
         context.messages[0]["content"][-1]["input"]["note"] = "safe retained context"
     context.add_user_message("Review earlier observation", origin="user_input")
-    loop = SimpleNamespace(context=context)
+    loop = _loop_fixture(context=context)
     result = _make_result()
     prompt = _judge_prompt(result, loop=loop)
     messages = _judge_messages(result, loop=loop, prompt=prompt)
@@ -1072,7 +1038,7 @@ def test_resumed_judge_labels_prior_images_without_a_new_attempt_index() -> None
     context = ConversationContext()
     _add_observed_judge_call(context, "retained-image", ["aW1hZ2U="])
     context.add_user_message("Review earlier image", origin="user_input")
-    loop = SimpleNamespace(context=context)
+    loop = _loop_fixture(context=context)
     result = _make_result()
     messages = _judge_messages(result, loop=loop, prompt=_judge_prompt(result, loop=loop))
     coverage = _judge_coverage(messages)
@@ -1110,7 +1076,7 @@ def test_judge_replays_observed_images_despite_intervening_nonvisual_calls() -> 
     # An unrelated image is not admitted merely because it is in context.
     _add_observed_judge_call(context, "unrelated-image", ["aW1hZ2U="])
     result = _make_result(tool_calls=calls, text="UNSUPPORTED_CANDIDATE_CLAIM " * 100)
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         context=context,
         _verify_root_user_input="Verify the observed drawing",
     )
@@ -1251,7 +1217,7 @@ def test_judge_labels_prior_observations_without_claiming_new_checks() -> None:
     call = _add_observed_judge_call(context, "old-image", ["AAAA"])
     prior = _make_result(tool_calls=[call])
     current = _make_result(tool_calls=[])
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         context=context,
         _verify_attempt_results=[prior],
         _verify_attempt=1,
@@ -1268,7 +1234,7 @@ def test_judge_labels_prior_observations_without_claiming_new_checks() -> None:
     assert coverage["replayed_calls"] == [
         {"tool_use_id": "old-image", "attempt_index": 0, "scope": "prior", "images": 1}
     ]
-    fresh_loop = SimpleNamespace(
+    fresh_loop = _loop_fixture(
         _verify_attempt_results=[_make_result()],
         _verify_attempt=1,
         _verify_root_user_input="Review the candidate",
@@ -1330,7 +1296,7 @@ def test_compacted_judge_receives_summary_and_prior_user_correction(monkeypatch)
         return _reflexion_response(passed=True)
 
     monkeypatch.setattr("core.config.settings.judgment_engine", "llm")
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         context=context,
         _verify_root_user_input=request,
         _call_llm=AsyncMock(side_effect=judge),
@@ -1442,7 +1408,7 @@ def test_judge_unavailable_never_claims_success_or_repair(monkeypatch, mode, fai
         side_effect=RuntimeError("judge unavailable") if failure == "exception" else None,
         return_value=response.get(failure),
     )
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Complete the requested task",
         model="gpt-5.6-sol",
         _call_llm=call,
@@ -1529,7 +1495,7 @@ def test_judge_can_accept_short_answer_after_recovered_tool_failure(monkeypatch,
 
     monkeypatch.setenv("GEODE_VERIFY_MODE", mode)
     call = AsyncMock(return_value=_reflexion_response(passed=True))
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Return only the checked result",
         model="gpt-5.6-sol",
         _call_llm=call,
@@ -1559,7 +1525,7 @@ def test_finalizer_includes_judge_usage_before_persistence(monkeypatch) -> None:
 
     tracker = TokenTracker()
     monkeypatch.setattr("core.llm.token_tracker.get_tracker", lambda: tracker)
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         model="gpt-5.6-sol",
         max_rounds=0,
         _hooks=None,
@@ -1599,7 +1565,7 @@ def test_reflexion_unavailable_never_downgrades_to_structural_pass(monkeypatch, 
     from core.agent.verify import verify_turn_async
 
     monkeypatch.setenv("GEODE_VERIFY_MODE", "reflexion")
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Do the task",
         model="gpt-5.6-sol",
         _call_llm=AsyncMock(return_value=response),
@@ -1624,7 +1590,7 @@ def test_reflexion_timeout_is_unavailable_not_pass(monkeypatch) -> None:
         await asyncio.sleep(1)
         return _reflexion_response(passed=True)
 
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Do the task", model="gpt-5.6-sol", _call_llm=delayed
     )
     verdict = asyncio.run(
@@ -1642,7 +1608,7 @@ def test_reflexion_cannot_override_structural_failure(monkeypatch) -> None:
     from core.agent.verify import verify_turn_async
 
     monkeypatch.setenv("GEODE_VERIFY_MODE", "reflexion")
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Do the task",
         model="gpt-5.6-sol",
         _call_llm=AsyncMock(return_value=_reflexion_response(passed=True)),
@@ -1661,7 +1627,7 @@ def test_judge_does_not_call_after_time_budget_or_without_task(monkeypatch, mode
 
     monkeypatch.setenv("GEODE_VERIFY_MODE", mode)
     call = AsyncMock()
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Do the task",
         model="gpt-5.6-sol",
         _call_llm=call,
@@ -1686,7 +1652,7 @@ def test_judge_preserves_caller_cancellation(monkeypatch, mode) -> None:
     from core.agent.verify import verify_turn_async
 
     monkeypatch.setenv("GEODE_VERIFY_MODE", mode)
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Complete the task",
         model="gpt-5.6-sol",
         _call_llm=AsyncMock(side_effect=asyncio.CancelledError("cancelled")),
@@ -1711,7 +1677,7 @@ def test_personal_candidate_is_not_sent_to_an_auxiliary_judge(
     monkeypatch.setenv("GEODE_VERIFY_MODE", mode)
     monkeypatch.setattr(settings, "judge_model", judge_model)
     call = AsyncMock()
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Summarize private mail",
         _reflection_requires_redaction=True,
         context=ConversationContext(messages=_carry_forward("PRIVATE_DERIVED_SUMMARY", [])),
@@ -1751,7 +1717,7 @@ def test_reflection_feedback_reaches_bounded_continuation(monkeypatch, mode) -> 
     from core.observability.session_metrics import session_metrics_scope
 
     monkeypatch.setenv("GEODE_VERIFY_MODE", mode)
-    loop = SimpleNamespace(
+    loop = _loop_fixture(
         _verify_root_user_input="Produce a checked file",
         model="gpt-5.6-sol",
         _call_llm=AsyncMock(return_value=_reflexion_response()),

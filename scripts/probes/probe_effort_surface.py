@@ -141,8 +141,8 @@ async def _openrouter_wire_effort(request: Any, adapter: Any) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def _adapter_base_url(adapter: Any) -> str | None:
-    """Read the built-in SDK construction inputs; never load credentials."""
+def _adapter_base_url(adapter: Any, model: str = "") -> str | None:
+    """Read the selected endpoint without constructing a live SDK client."""
     from core import config
     from core.llm.registry import get_provider_spec
 
@@ -171,6 +171,18 @@ def _adapter_base_url(adapter: Any) -> str | None:
         raw = spec.default_base_url
     else:
         raise ValueError("no endpoint oracle for this adapter")
+    if model:
+        from core.llm.routing import resolve_routing
+
+        target = resolve_routing(
+            model,
+            provider=adapter.provider,
+            source=adapter.source,
+            sources=getattr(adapter, "routing_sources", None),
+            base_url=raw,
+        )
+        if target is not None:
+            raw = target.base_url
     parts = urlsplit(raw)
     if (
         parts.scheme not in {"http", "https"}
@@ -292,9 +304,9 @@ async def measure(
     producer_revision: str,
     model_ids: tuple[str, ...] = (),
 ) -> int:
-    from core.llm.adapters._source_inference import infer_source
     from core.llm.adapters.base import AdapterCallRequest, Message
     from core.llm.adapters.registry import bootstrap_builtins, resolve_for
+    from core.llm.routing import infer_source
 
     _require_producer_revision(producer_revision)
     from core.cli.commands._state import AGENT_ROLES
@@ -306,12 +318,13 @@ async def measure(
         configured_model_ids=tuple(_current_model_for_role(role) for role in AGENT_ROLES),
     )
     adapters = {
-        provider: resolve_for(provider, infer_source(provider)) for _, provider, _ in surface
+        (model, provider): resolve_for(provider, infer_source(provider, model=model))
+        for model, provider, _ in surface
     }
     passed = _passed_keys(output)
 
     for ordinal, (model, provider, effort) in enumerate(surface, 1):
-        adapter = adapters[provider]
+        adapter = adapters[(model, provider)]
         identity = {
             "schema": SCHEMA,
             "producer_revision": producer_revision,
@@ -319,7 +332,7 @@ async def measure(
             "provider": provider,
             "adapter": adapter.name,
             "adapter_source": adapter.source,
-            "adapter_base_url": _adapter_base_url(adapter),
+            "adapter_base_url": _adapter_base_url(adapter, model),
             "requested_effort": effort,
         }
         if _measurement_key(identity) in passed:

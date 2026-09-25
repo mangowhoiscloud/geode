@@ -117,7 +117,6 @@ def test_short_ipc_prompt_preserves_history_and_accounting(
             config=AgenticLoopConfig(
                 session_id="ipc-accounting",
                 source="payg",
-                disable_settings_drift=True,
                 allowed_tool_names=set(),
             ),
             model="gpt-5.6-sol",

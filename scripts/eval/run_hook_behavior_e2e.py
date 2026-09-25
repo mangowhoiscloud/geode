@@ -601,7 +601,6 @@ async def _run(
             max_rounds=6,
             time_budget_s=360,
             allowed_tool_names={probe_tool.name},
-            disable_settings_drift=True,
             session_id=f"{run_id}-live",
         ),
         model=model,

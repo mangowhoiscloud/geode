@@ -14,7 +14,7 @@ def _build_system_handlers(
 ) -> UniqueEntries[str, Any]:
     """Build system management tool handlers."""
     from core.cli import _set_readiness
-    from core.cli.commands import cmd_key, cmd_login, cmd_model, show_help
+    from core.cli.commands import cmd_key, show_help
     from core.cli.onboarding import render_readiness
     from core.wiring.startup import check_readiness
 
@@ -28,11 +28,14 @@ def _build_system_handlers(
         commands = sorted(COMMAND_MAP.keys() | registered.keys())
         return {"status": "ok", "action": "help", "commands": commands}
 
-    def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
+    def handle_check_status(**kwargs: Any) -> dict[str, Any]:
         from core import __version__ as geode_version
         from core.cli.session_state import _get_readiness
         from core.config import settings
 
+        owner = getattr(kwargs.get("_tool_context"), "agent_loop", None)
+        model_config = owner._model_settings.model_dump() if owner is not None else None
+        model = owner.model if owner is not None else settings.model
         ant_ok = bool(settings.anthropic_api_key)
         oai_ok = bool(settings.openai_api_key)
         # Preserve explicit request policy (including audit overrides), but do
@@ -42,7 +45,7 @@ def _build_system_handlers(
 
         console.print()
         console.print(f"  [header]GEODE v{geode_version}[/header]")
-        console.print(f"  Model: [bold]{settings.model}[/bold]")
+        console.print(f"  Model: [bold]{model}[/bold]")
         console.print(f"  Ensemble: [bold]{settings.ensemble_mode}[/bold]")
         ant_status = "[success]configured[/success]" if ant_ok else "[red]not set[/red]"
         oai_status = "[success]configured[/success]" if oai_ok else "[red]not set[/red]"
@@ -73,7 +76,9 @@ def _build_system_handlers(
             "status": "ok",
             "action": "status",
             "version": geode_version,
-            "model": settings.model,
+            "model": model,
+            "scope": "session" if owner is not None else "defaults",
+            "model_config": model_config,
             "ensemble": settings.ensemble_mode,
             "anthropic_configured": ant_ok,
             "openai_configured": oai_ok,
@@ -81,25 +86,65 @@ def _build_system_handlers(
             "mcp_status": mcp_status,
         }
 
-    def handle_switch_model(**kwargs: Any) -> dict[str, Any]:
-        from core.config import settings
+    async def handle_switch_model(**kwargs: Any) -> dict[str, Any]:
+        from core.agent.loop._model_switching import stage_session_model_config
+        from core.cli.commands._state import get_model_profiles
+        from core.cli.commands.model import resolve_model_hint
+        from core.config import _resolve_provider
+        from core.llm.routing import infer_source
+        from core.tools.base import tool_error
 
-        model_hint = kwargs.get("model_hint", "")
-        if kwargs.get("role", "primary") == "judgment":
-            from core.cli.commands.judgment import cmd_judgment
-
-            return {"action": "judgment", **cmd_judgment(model_hint, interactive=False)}
-        # Only update settings — do NOT call loop.update_model_async() here.
-        # The AgenticLoop checks for model drift at the start of each round
-        # and applies the change safely between LLM calls (not mid-call).
-        cmd_model(model_hint)
-        return {
-            "status": "ok",
-            "action": "model_deferred",
-            "current_model": settings.model,
-            "ensemble": settings.ensemble_mode,
-            "note": "Model change applied. Will take effect on next round.",
-        }
+        loop = getattr(kwargs.get("_tool_context"), "agent_loop", None)
+        if loop is None:
+            return tool_error("Model selection requires an owning session", error_type="dependency")
+        current = loop._model_settings
+        hint = str(kwargs.get("model_hint", "")).strip()
+        role = kwargs.get("role", "primary")
+        if not hint or hint == "status":
+            return {"status": "ok", "scope": "session", "model_config": current.model_dump()}
+        try:
+            if role == "judgment":
+                if hint not in {"llm", "jev", "typesafe", "openrouter"}:
+                    raise ValueError("Choose llm, jev, typesafe, or openrouter")
+                candidate = current.updated(
+                    {
+                        "judgment_engine": "llm" if hint == "llm" else "jev",
+                        "jev_provider": hint
+                        if hint in {"typesafe", "openrouter"}
+                        else current.jev_provider,
+                    }
+                )
+            elif role == "primary":
+                selected = resolve_model_hint(
+                    hint,
+                    get_model_profiles(
+                        configured_model_ids=(
+                            current.model,
+                            current.reflection_model,
+                            current.judge_model,
+                        ),
+                        openai_source=current.source,
+                    ),
+                )
+                provider = _resolve_provider(selected.id)
+                source = (
+                    current.source
+                    if provider == loop._provider
+                    else infer_source(provider, model=selected.id)
+                )
+                candidate = current.updated({"model": selected.id, "source": source})
+            else:
+                raise ValueError("Choose primary or judgment")
+            if not stage_session_model_config(loop, candidate):
+                return {"status": "applied", "changed": False, "model_config": current.model_dump()}
+            return {
+                "status": "pending",
+                "scope": "session",
+                "model_config": candidate.model_dump(),
+                "note": "Validated; applies to this session after the complete tool batch.",
+            }
+        except (RuntimeError, ValueError) as exc:
+            return tool_error(str(exc), error_type="validation")
 
     def handle_set_api_key(**kwargs: Any) -> dict[str, Any]:
         from core.config import settings
@@ -135,95 +180,63 @@ def _build_system_handlers(
         login_args = ""
         if " " in sub_action:
             login_args = sub_action.split(None, 1)[1]
-        return handle_manage_login(subcommand=login_sub, args=login_args)
+        return handle_manage_login(
+            subcommand=login_sub, args=login_args, _tool_context=kwargs.get("_tool_context")
+        )
 
     def handle_manage_login(**kwargs: Any) -> dict[str, Any]:
         """Natural-language entry to /login (Plans + Profiles + OAuth + Routing)."""
+        from core.cli.commands.login import (
+            INTERACTIVE_LOGIN_SUBCOMMANDS,
+            build_login_snapshot,
+            run_login,
+        )
+        from core.tools.base import tool_error
 
         sub = (kwargs.get("subcommand") or "status").strip().lower()
         args = (kwargs.get("args") or "").strip()
+        if sub == "source":
+            from core.agent.loop._model_switching import stage_session_model_config
+            from core.cli.commands.login import session_source_changes
+
+            loop = getattr(kwargs.get("_tool_context"), "agent_loop", None)
+            if loop is None:
+                return tool_error(
+                    "Source selection requires an owning session", error_type="dependency"
+                )
+            try:
+                provider, source = args.lower().split()
+                changes = session_source_changes(loop._model_settings, provider, source)
+                if not changes:
+                    raise ValueError("The provider is not used by this session")
+                candidate = loop._model_settings.updated(changes)
+                changed = stage_session_model_config(loop, candidate)
+                return {
+                    "status": "pending" if changed else "applied",
+                    "changed": changed,
+                    "scope": "session",
+                    "model_config": candidate.model_dump(),
+                }
+            except (RuntimeError, ValueError) as exc:
+                return tool_error(str(exc), error_type="validation")
+        if sub in INTERACTIVE_LOGIN_SUBCOMMANDS:
+            # Interactive attempts outlive this tool call's deadline and cannot be
+            # cancelled from here; the user's terminal owns them.
+            return tool_error(
+                f"/login {sub} needs the user's terminal or browser; "
+                f"ask the user to run `/login {sub}` there",
+                error_type="validation",
+            )
         login_input = "" if sub in ("", "status", "list", "ls") else f"{sub} {args}".strip()
-        cmd_login(login_input)
-
         try:
-            from core.llm.strategies.plan_registry import get_plan_registry
-            from core.wiring.container import ensure_profile_store
-
-            store = ensure_profile_store()
-            registry = get_plan_registry()
-            plans_payload = []
-            for plan in registry.list_all():
-                usage = registry.usage_for(plan.id)
-                plans_payload.append(
-                    {
-                        "id": plan.id,
-                        "provider": plan.provider,
-                        "kind": plan.kind.value,
-                        "display_name": plan.display_name,
-                        "base_url": plan.base_url,
-                        "subscription_tier": plan.subscription_tier,
-                        "quota_max": (plan.quota.max_calls if plan.quota else None),
-                        "quota_used": int(usage.weighted_calls),
-                    }
-                )
-            # v0.51.0 — annotate each profile with its current eligibility
-            # verdict per the profile's own provider. This lets the LLM see
-            # *why* a credential is unusable (cooldown / expired / disabled
-            # / missing key) without needing a second tool call.
-            #
-            # Skip cross-provider iterations: ``evaluate_eligibility(prov)``
-            # returns a PROVIDER_MISMATCH verdict for every profile whose
-            # provider != prov, but those are noise here — we want each
-            # profile's verdict against its OWN provider. Without this
-            # filter the dict-key ``(name, profile.provider)`` collides
-            # across iterations and the last-iterated provider's mismatch
-            # verdict overwrites the real one, so a healthy PAYG profile
-            # surfaces as ``eligible=False / provider_mismatch`` to the
-            # LLM and the dashboard. Mirrors the same filter applied in
-            # ``credential_breadcrumb.format``.
-            from core.auth.profiles import ProfileRejectReason
-
-            verdict_index: dict[tuple[str, str], tuple[bool, str, str]] = {}
-            for prov in {p.provider for p in store.list_all()}:
-                for v in store.evaluate_eligibility(prov):
-                    if v.reason is ProfileRejectReason.PROVIDER_MISMATCH:
-                        continue
-                    verdict_index[(v.profile_name, v.provider)] = (
-                        v.eligible,
-                        v.reason_code,
-                        v.detail,
-                    )
-
-            profiles_payload = []
-            for p in store.list_all():
-                eligible, reason, detail = verdict_index.get(
-                    (p.name, p.provider), (False, "unknown", "")
-                )
-                profiles_payload.append(
-                    {
-                        "name": p.name,
-                        "provider": p.provider,
-                        "type": p.credential_type.value,
-                        "plan_id": p.plan_id or None,
-                        "managed_by": p.managed_by or None,
-                        "eligible": eligible,
-                        "reason": reason,
-                        "reason_detail": detail,
-                    }
-                )
-            routing_payload = registry.all_routing()
-        except Exception:
-            plans_payload = []
-            profiles_payload = []
-            routing_payload = {}
-
+            run_login(login_input)
+        except (ValueError, OSError) as exc:
+            return tool_error(str(exc), error_type="validation")
         return {
             "status": "ok",
             "action": "login",
             "subcommand": sub or "status",
-            "plans": plans_payload,
-            "profiles": profiles_payload,
-            "routing": routing_payload,
+            **build_login_snapshot(),
         }
 
     def handle_doctor_slack(**_kwargs: Any) -> dict[str, Any]:

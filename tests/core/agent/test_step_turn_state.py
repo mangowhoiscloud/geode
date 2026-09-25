@@ -108,7 +108,6 @@ def test_one_sampling_snapshot_reaches_its_tool_context_and_retries_are_monotone
             ToolExecutor(bound_tool_plan=bound),
             config=AgenticLoopConfig(
                 source="subscription",
-                disable_settings_drift=True,
                 session_id="session-1",
             ),
             model="gpt-5.6-luna",
@@ -177,7 +176,7 @@ def test_auxiliary_sampling_does_not_replace_turn_messages() -> None:
         loop = AgenticLoop(
             ConversationContext(),
             ToolExecutor(action_handlers={}),
-            config=AgenticLoopConfig(source="subscription", disable_settings_drift=True),
+            config=AgenticLoopConfig(source="subscription"),
             model="gpt-5.6-luna",
             provider="openai",
             quiet=True,
@@ -246,7 +245,7 @@ def test_sampling_snapshot_finalizes_the_middleware_route_for_tools() -> None:
         loop = AgenticLoop(
             ConversationContext(),
             executor,
-            config=AgenticLoopConfig(source="subscription", disable_settings_drift=True),
+            config=AgenticLoopConfig(source="subscription"),
             model="initial-model",
             provider="openai",
             quiet=True,

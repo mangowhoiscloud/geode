@@ -62,13 +62,13 @@ id = "RUFF-007"
 rule = "PLR0911"
 mode = "ceiling"
 path = "core/cli/commands/login.py"
-symbol = "cmd_login"
+symbol = "run_login"
 observed = 18
 owner = "core.cli"
 reason = "The login command still dispatches provider-specific credential and account workflows inline."
 created = "2026-05-06"
 target = "DI-003"
-expires_when = "Injected authentication handlers reduce cmd_login below 18 returns and the ceiling is lowered."
+expires_when = "Injected authentication handlers reduce run_login below 18 returns and the ceiling is lowered."
 
 [[ruff_debt]]
 id = "RUFF-008"

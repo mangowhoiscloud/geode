@@ -81,7 +81,7 @@ def test_capability_wire_and_observed_effort_match(
 ) -> None:
     client, wire = wire_client
     adapter = adapter_class()
-    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
     # A different default exposes adapters that overwrite the selected model.
     monkeypatch.setattr("core.config.OPENAI_PRIMARY", "gpt-5.5")
     monkeypatch.setattr("core.config.CODEX_PRIMARY", "gpt-5.5")
@@ -129,7 +129,7 @@ def test_empty_model_uses_selected_route_default_without_losing_inherited_effort
 ) -> None:
     client, wire = wire_client
     adapter = adapter_class()
-    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
     monkeypatch.setattr("core.config.CODEX_PRIMARY", "gpt-5.6-sol")
     monkeypatch.setattr("core.config.OPENAI_PRIMARY", "gpt-6-astra")
     # Exercise actual route selection, not a model-filled selection stub.
@@ -168,7 +168,7 @@ def test_empty_model_validates_effort_against_actual_route_default(
 ) -> None:
     client, wire = wire_client
     adapter = adapter_class()
-    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
     monkeypatch.setattr("core.config.CODEX_PRIMARY", "gpt-5.5")
     monkeypatch.setattr("core.config.OPENAI_PRIMARY", "gpt-5.5")
     monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: [adapter])
@@ -197,7 +197,7 @@ def test_unsupported_explicit_effort_fails_before_provider_request(
 ) -> None:
     client, wire = wire_client
     adapter = adapter_class()
-    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
     monkeypatch.setattr("core.config.OPENAI_PRIMARY", model)
     monkeypatch.setattr("core.llm.adapters.dispatch._select_adapter", lambda *a, **kw: adapter)
     dispatch = complete_text_via_adapters if capability == "text" else web_search_via_adapters
@@ -283,7 +283,7 @@ def test_payg_auxiliary_completion_caps_published_output_budget(
 ) -> None:
     client, wire = wire_client
     adapter = OpenAIPaygAdapter()
-    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
     result = asyncio.run(adapter.acomplete_text("input", model=model, max_tokens=requested))
     assert result.text == "answer"
     assert wire[0]["max_output_tokens"] == expected
@@ -297,7 +297,7 @@ def test_payg_auxiliary_completion_rejects_nonpositive_budget_before_request(
 
     client, wire = wire_client
     adapter = OpenAIPaygAdapter()
-    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
     with pytest.raises(LLMRequestValidationError, match="must be positive"):
         asyncio.run(adapter.acomplete_text("input", model="gpt-6-sol", max_tokens=max_tokens))
     assert wire == []
@@ -315,7 +315,7 @@ def test_empty_payg_search_keeps_provider_usage_in_failure_hook(
     create = AsyncMock(return_value=response)
     adapter = OpenAIPaygAdapter()
     client = SimpleNamespace(responses=SimpleNamespace(create=create))
-    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
     monkeypatch.setattr("core.llm.adapters.dispatch._select_adapter", lambda *a, **kw: adapter)
     hooks, rows = observed
     with pytest.raises(AdapterDispatchError) as caught:
@@ -403,7 +403,7 @@ def test_native_capability_effort_reaches_sdk_wire_and_observation(
             api_key="test-key", http_client=http, max_retries=0
         )
         adapter = AnthropicPaygAdapter() if provider == "anthropic" else GlmPaygAdapter()
-        monkeypatch.setattr(adapter, "_get_client", lambda: client)
+        monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
         monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: [adapter])
         try:
             dispatch = (

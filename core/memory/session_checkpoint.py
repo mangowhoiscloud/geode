@@ -21,6 +21,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from core.config.session import SessionModelConfig
 from core.memory.atomic_write import atomic_write_json
 from core.tools.computer_observation import sanitize_computer_payload
 from core.tools.personal_data import sanitize_personal_data_payload
@@ -111,6 +112,7 @@ class SessionState:
     # ``_lifecycle.collect_guard_state``, restored by ``restore_loop_state``.
     loop_guards: dict[str, Any] = field(default_factory=dict)
     pending_verification: dict[str, Any] = field(default_factory=dict)
+    model_settings: SessionModelConfig | None = None
 
 
 class SessionCheckpoint:
@@ -164,6 +166,8 @@ class SessionCheckpoint:
             "loop_guards": state.loop_guards,
             "pending_verification": state.pending_verification,
         }
+        if state.model_settings is not None:
+            data["model_settings"] = state.model_settings.model_dump()
         state_file = session_path / "state.json"
 
         with self._status_lock():
@@ -254,6 +258,13 @@ class SessionCheckpoint:
 
         try:
             data = json.loads(state_file.read_text(encoding="utf-8"))
+            # Absence is legacy; a present invalid record must never fall back
+            # to today's defaults or partially restore historical identity.
+            model_settings = (
+                SessionModelConfig.model_validate(data["model_settings"])
+                if "model_settings" in data
+                else None
+            )
 
             msg_file = session_path / "messages.json"
             state_updated_at_raw = data.get("updated_at")
@@ -292,6 +303,7 @@ class SessionCheckpoint:
                 round_idx=data.get("round_idx", 0),
                 model=data.get("model", ""),
                 provider=data.get("provider", "anthropic"),
+                model_settings=model_settings,
                 status=normalize_status(data.get("status", SessionStatus.PAUSED)),
                 messages=messages,
                 tool_log=tool_log,

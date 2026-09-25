@@ -67,8 +67,8 @@ def _patched_resolution(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         raising=False,
     )
     monkeypatch.setattr(
-        "core.llm.adapters._source_inference.infer_source",
-        lambda provider: "subscription",
+        "core.llm.routing.infer_source",
+        lambda provider, **kwargs: "subscription",
     )
     monkeypatch.setattr("core.ui.agentic_ui.update_session_model", lambda model: None)
     return calls
@@ -118,7 +118,7 @@ def test_same_provider_switch_does_not_touch_source(
     def _boom(provider: str) -> str:
         raise AssertionError("infer_source must not run on a same-provider switch")
 
-    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", _boom)
+    monkeypatch.setattr("core.llm.routing.infer_source", _boom)
     loop = _FakeLoop(provider="anthropic", source="payg", explicit=False)
 
     _model_switching._apply_model_update(loop, "claude-haiku-4-5-20251001")  # type: ignore[arg-type]
@@ -159,7 +159,7 @@ def test_adaptation_and_dispatch_share_one_resolved_target_route(
     )
     loop._source_explicit = explicit
     inference = Mock(return_value="subscription")
-    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", inference)
+    monkeypatch.setattr("core.llm.routing.infer_source", inference)
 
     async def summarize(messages: Any, **kwargs: Any) -> tuple[list[dict[str, Any]], bool]:
         assert loop.model == "glm-5"

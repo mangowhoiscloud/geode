@@ -54,13 +54,15 @@ def _wire_openai_credentials(monkeypatch: pytest.MonkeyPatch, *, oauth: bool, pa
 def test_explicit_source_checks_its_real_adapter_credentials(
     monkeypatch: pytest.MonkeyPatch, oauth: bool, payg: bool
 ) -> None:
-    from core.llm.strategies.plan_registry import resolve_routing
+    from core.llm.routing import resolve_routing
 
     _wire_openai_credentials(monkeypatch, oauth=oauth, payg=payg)
     target = resolve_routing("gpt-5.5")
-    assert target is not None
-    assert target.plan.provider == ("openai-codex" if oauth else "openai")
-    assert _state.model_available("gpt-5.5") is True  # default behavior unchanged
+    if oauth:
+        assert target is not None and target.plan.provider == "openai-codex"
+    else:
+        assert target is None  # explicit OAuth never falls through to a PAYG key
+    assert _state.model_available("gpt-5.5") is oauth
     assert _state.model_available("gpt-5.4", source="payg") is payg
     assert _state.model_available("gpt-5.5", source="subscription") is oauth
 
@@ -69,7 +71,9 @@ def test_explicit_source_checks_its_real_adapter_credentials(
 def test_subscription_picker_excludes_retired_offerings_but_keeps_disabled_current_row(
     monkeypatch: pytest.MonkeyPatch, retired: str
 ) -> None:
-    monkeypatch.setattr(_state, "_selected_openai_source", lambda: "subscription")
+    # Both sources have credentials and settings pin subscription, so only the
+    # retirement can disable the row, whatever an operator ``.env`` holds.
+    _wire_openai_credentials(monkeypatch, oauth=True, payg=True)
     rows = _state.get_model_profiles()
     assert retired not in {row.id for row in rows}
     assert "gpt-5.5" not in {row.id for row in rows}  # Not a new subscription choice.
@@ -89,9 +93,9 @@ def test_subscription_picker_excludes_retired_offerings_but_keeps_disabled_curre
 def test_picker_reloads_source_without_hiding_platform_models(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(_state, "_selected_openai_source", lambda: "subscription")
+    monkeypatch.setattr(_state, "_selected_openai_source", lambda model="": "subscription")
     assert "gpt-5.4" not in {row.id for row in _state.get_model_profiles()}
-    monkeypatch.setattr(_state, "_selected_openai_source", lambda: "payg")
+    monkeypatch.setattr(_state, "_selected_openai_source", lambda model="": "payg")
     assert {"gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"} <= {
         row.id for row in _state.get_model_profiles()
     }
@@ -151,7 +155,7 @@ def test_retired_current_selection_enter_does_not_pick_another_model(
 ) -> None:
     from core.cli import effort_picker
 
-    monkeypatch.setattr(_state, "_selected_openai_source", lambda: "subscription")
+    monkeypatch.setattr(_state, "_selected_openai_source", lambda model="": "subscription")
     rows = _state.get_model_profiles(configured_model_ids=("gpt-5.4",))
     profiles = [
         (row.id, row.provider, row.label, row.cost, row.id != "gpt-5.4", None) for row in rows
@@ -214,7 +218,7 @@ def test_non_tty_displayed_index_selects_the_same_role_specific_model(
         "_read_toml_value",
         lambda section, key: "api_key" if key == "source" else "gpt-6-astra",
     )
-    monkeypatch.setattr(model, "_current_model_for_role", lambda role: "gpt-6-astra")
+    monkeypatch.setattr(model, "_current_model_for_role", lambda role, client=None: "gpt-6-astra")
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
     printer = Mock()
     monkeypatch.setattr(commands.console, "print", printer)
@@ -244,7 +248,7 @@ def test_explicit_retired_selection_reports_reason_before_credentials_or_writes(
     from core.cli import commands
     from core.config import env_io
 
-    monkeypatch.setattr(_state, "_selected_openai_source", lambda: "subscription")
+    monkeypatch.setattr(_state, "_selected_openai_source", lambda model="": "subscription")
     monkeypatch.setattr(settings, "model", "gpt-5.6-sol")
     monkeypatch.setattr(settings, "openai_credential_source", "oauth")
     printer, credential_check, persist = Mock(), Mock(), Mock()

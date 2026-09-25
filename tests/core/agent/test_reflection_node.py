@@ -444,6 +444,7 @@ def test_maybe_reflect_inherits_loop_model_provider_source(
         provider="openai-codex",
         source="subscription",
         policy_sources=EMPTY_POLICY_SOURCES,
+        model_settings=loop._model_settings,
         middleware_registry=loop.executor.middleware_registry,
         correlation=asdict(snapshot.correlation),
     )
@@ -460,7 +461,12 @@ def test_maybe_reflect_configured_model_stays_explicit(
     reflection_call: Any,
 ) -> None:
     loop, _hooks = reflection_loop
-    monkeypatch.setattr(settings, "cognitive_reflection_model", "claude-haiku-4-5-20251001")
+    loop._model_settings = loop._model_settings.updated(
+        {
+            "reflection_model": "claude-haiku-4-5-20251001",
+            "reflection_source": "payg",
+        }
+    )
     loop.cognitive_state.record_round(action="synthetic", observation="synthetic")
     loop._turn_id = "t-fallback"
     loop._session_generation = 2
@@ -476,8 +482,9 @@ def test_maybe_reflect_configured_model_stays_explicit(
         max_tokens=321,
         effort=loop._effort,
         provider=None,
-        source=None,
+        source="payg",
         policy_sources=EMPTY_POLICY_SOURCES,
+        model_settings=loop._model_settings,
         middleware_registry=loop.executor.middleware_registry,
         correlation=asdict(
             HookCorrelation(
