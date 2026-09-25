@@ -12,9 +12,10 @@ and legacy models, limits, pricing, lifecycle and upstream comparisons:
 - [Z.AI API and Coding Plan](provider-refresh-20260924-zhipu.md)
 
 Public documentation, deterministic request tests, account entitlement and
-live provider acceptance are separate evidence. This refresh has no paid
-inference or account-access test. Published limits are not proof that a
-particular account admits that model.
+live provider acceptance are separate evidence. The September 24 inventory
+was source-only; subsequent live attempts have their own frozen source and
+result records. Published limits are not proof that a particular account
+admits that model.
 
 ## Runtime ownership
 
@@ -48,6 +49,37 @@ Its saved profiles remain readable, but direct subscription execution and
 unsupported native search claims are disabled. PAYG must be selected
 explicitly. Coding Plan now uses token credits; stale 80/240/600-call quotas
 and model call weights no longer represent provider quota authority.
+
+## Effort exposure: frontier review on 2026-09-25
+
+The comparison concerns choice construction and state changes, not model quality
+or account entitlement. Codex source is pinned to the September 24 cutoff;
+Claude Code documentation and the newer Hermes source were retrieved September 25.
+
+| Harness | Primary evidence | GEODE decision |
+|---|---|---|
+| Codex | [Model-owned supported levels and separate defaults](https://github.com/openai/codex/blob/549455f3ec5a7f2a0489894543a0e49f307142a6/codex-rs/protocol/src/openai_models.rs#L942) feed the [reasoning picker](https://github.com/openai/codex/blob/549455f3ec5a7f2a0489894543a0e49f307142a6/codex-rs/tui/src/chatwidget/model_popups.rs#L476). Saved state does not create another advertised option. | Reuse the existing model specs for choices. Keep defaults separate from explicitly saved values. Do not copy Ultra/Persistent execution-mode aliases into native effort. |
+| Claude Code | The [official model settings](https://code.claude.com/docs/en/model-config#adjust-effort-level) describe model-specific sliders and limits, plus automatic adjustment of unsupported levels. | Adopt bounded choices; reject automatic remapping because GEODE preserves explicit selections. Product UI choices do not establish third-party subscription eligibility. |
+| Hermes | The [pinned menu](https://github.com/NousResearch/hermes-agent/blob/085d9ee608893bb0611c2fc339c19d8848af9f2b/hermes_cli/main_provider_setup.py#L571) uses model-specific efforts for Copilot but often exposes a global ladder elsewhere. Its [metadata parser](https://github.com/NousResearch/hermes-agent/blob/085d9ee608893bb0611c2fc339c19d8848af9f2b/hermes_cli/models_reasoning_caps.py#L39) distinguishes unknown capabilities from explicit non-support. | Do not copy the global ladder or infer support from missing metadata. Preserve the existing fixed/unknown-route boundary. |
+
+GEODE already shares native effort specs between request shaping and the picker.
+The remaining UI gap was rendering an incompatible saved value as the current
+effort and returning it on Enter before application rejected it. The picker now
+shows only supported choices; a stale selection requires an explicit arrow choice
+before Enter or Space can confirm it. Cancellation preserves configuration, valid
+existing choices remain unchanged, and roles without an effort control do not
+offer one. Existing application and adapter validation remain necessary for
+configuration, IPC and other inputs that bypass the picker.
+
+Reflection inherits primary effort rather than exposing a separate control.
+Staged role picks must be checked against their final combined candidate before
+any model setting is saved; checking the current primary value while applying
+each row can reject a valid batch or leave incompatible settings after a later
+admission failure.
+
+A client catalog's omission is not by itself proof that the native backend rejects
+a value. API, subscription and relay capability differences require their own
+evidence; no new support claim or remote catalog service follows from this review.
 
 ## Price semantics
 

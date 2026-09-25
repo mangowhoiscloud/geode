@@ -163,6 +163,11 @@ functional change.
 
 ### Fixed
 
+- Show only supported model effort choices and require an explicit valid choice
+  before confirming or staging an incompatible saved effort. Preserve valid
+  selections and cancellation without silently replacing settings. Validate
+  reflection against the final primary effort before saving staged choices.
+
 - Omit default temperature on known OpenAI reasoning models through OpenRouter,
   including `effort=none`, and reject unsupported custom sampling before dispatch.
   Preserve selected effort and endpoint routing constraints.

@@ -1419,7 +1419,7 @@ OpenRouter는 `openrouter` provider identity와 Chat Completions transport를 �
 
 ## 선택한 effort 보존
 
-모델 선택 화면에서 확인한 effort는 요청의 값과 같아야 합니다. 프로바이더별 필드명은 달라도 값을 임의로 낮추거나 높이지 않습니다. 선택한 모델이 저장된 값을 지원하지 않으면 설정 변경이나 호출 전에 거절하므로, `/model`에서 지원하는 값을 직접 선택해야 합니다. 역할 탭을 이동하거나 Space로 선택을 추가한 뒤 Enter로 확정해도 primary effort를 보존합니다.
+모델 선택 화면에서 확인한 effort는 요청의 값과 같아야 합니다. 프로바이더별 필드명은 달라도 값을 임의로 낮추거나 높이지 않습니다. 선택한 모델이 저장된 값을 지원하지 않으면 설정 변경이나 호출 전에 거절하므로, `/model`에서 지원하는 값을 직접 선택해야 합니다. 역할 탭을 이동하거나 Space로 선택을 추가한 뒤 Enter로 확정해도 primary effort를 보존합니다. 선택 화면에는 지원되는 값만 표시하며, 저장된 값이 맞지 않으면 방향키로 유효한 값을 고르기 전까지 Enter·Space 확정을 막습니다. 취소하면 기존 설정은 유지됩니다. Reflection 모델은 primary effort를 상속하므로, 함께 고른 모델과 effort의 호환성도 저장 전에 검사합니다.
 
 지원되는 OpenAI·Claude·GLM 텍스트 보조 요청에도 명시한 effort를 전달합니다. OpenRouter의 알려진 OpenAI 경로도 같은 값을 전달합니다. effort 제어가 없는 모델은 선택 화면에 조절 기능을 표시하지 않으며, 서로 다른 모델의 같은 effort가 같은 계산량을 뜻하지는 않습니다.
 
