@@ -23,6 +23,7 @@ from pydantic import SecretStr
 
 from core.agent.cognitive_state import CognitiveState, bounded_confidence
 from core.config import _resolve_provider
+from core.config.session import SessionModelConfig
 from core.llm.adapters import resolve_for
 from core.llm.adapters.base import (
     AdapterCallRequest,
@@ -340,6 +341,7 @@ async def reflect_async(
     middleware_registry: Any | None = None,
     policy_sources: Any | None = None,
     correlation: Mapping[str, Any] | None = None,
+    model_settings: SessionModelConfig | None = None,
 ) -> None:
     """Run one selected reflection engine and update bounded state in place.
 
@@ -364,7 +366,11 @@ async def reflect_async(
         from core.config import settings
         from core.config.judgment import resolve_judgment_route
 
-        route = resolve_judgment_route(settings)
+        route = resolve_judgment_route(
+            settings,
+            engine=model_settings.judgment_engine if model_settings else None,
+            provider=model_settings.jev_provider if model_settings else None,
+        )
         if route is not None:
             await _reflect_with_jev(
                 state,
@@ -444,7 +450,11 @@ async def reflect_async(
                 tools=(tool_spec,),
                 tool_choice="auto",
                 max_tokens=max_tokens,
-                temperature=_settings.temperature_reflection,
+                temperature=(
+                    model_settings.temperature_reflection
+                    if model_settings
+                    else _settings.temperature_reflection
+                ),
                 effort=effort if effort is not None else _settings.agentic_effort,
             )
             if middleware_registry is None:

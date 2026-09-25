@@ -15,10 +15,11 @@ member가 추가되어도 자동으로 공개 계약이 되지 않는다.
 ## CLI IPC
 
 thin CLI와 `CLIPoller`는 기존 flat line-delimited JSON 형식을 유지한다.
-v1 필드는 additive이므로 구버전 peer는 이를 무시할 수 있다.
+v1 envelope는 additive이며, 세션 모델 설정 적용에는 협상된
+`session_model_config` 기능이 필요하다.
 
 ```json
-{"type":"session","session_id":"cli-1234","version":"1.0.23","protocol_version":"geode.ipc.v1","features":["bounded_json","request_correlation","stable_events"]}
+{"type":"session","session_id":"cli-1234","version":"1.0.23","protocol_version":"geode.ipc.v1","features":["bounded_json","request_correlation","stable_events","session_model_config"]}
 ```
 
 client는 `client_capability`에 같은 버전과 지원 feature 목록을 보낸다.
@@ -36,6 +37,45 @@ response는 계속 읽지만 다른 ID의 응답은 active request에 전달하�
 socket은 local이며 mode `0600`이다. 따라서 user prompt와 model result는 전송
 중 redaction하지 않고 그대로 보존한다. 대신 envelope와 receive buffer를 1
 MiB로 제한해 무한 할당을 막는다.
+
+### 세션 모델 설정
+
+새 클라이언트는 `session_model_config` 기능을 협상하고 최초
+`client_capability.model_config`에 `core/config/session.py`의 비밀값 없는
+`SessionModelConfig`를 전달합니다. 주 모델·native effort·구체적 adapter
+source와 reflection/judge 모델·source, reflection 출력 제한, 두 호출의
+온도 및 judgment 선택만 포함합니다. 인증 키나 credential-source 정책을
+실제 adapter source와 혼동하지 않습니다. 보조 모델/source가 모두 비어
+있으면 현재 주 모델의 경로를 상속합니다.
+
+데몬은 전체 후보를 검증·적용한 뒤에만 `status: applied` ACK와 실제 설정,
+기존 `workspace` 및 `checkpoint_directory`를 반환합니다. 다른 workspace나
+중첩된 별도 프로젝트는 거절하며, 같은 workspace 하위 경로도 데몬의
+기존 root에서 실행합니다. 프로세스 cwd를 바꾸지 않습니다. 기능 없는
+구버전 peer는 재시작·업그레이드 후 다시 연결해야 합니다. v0 codec을 읽을
+수 있다는 사실은 설정을 무시한 실행을 허용한다는 뜻이 아닙니다.
+
+이름 지정·picker·fullscreen `/model`은 같은 command와 bounded patch를
+사용합니다. 기존 session lane에서 현재 세션에 적용한 응답을 받은 뒤
+클라이언트가 기본값을 저장합니다. 거절 시 저장하지 않으며, 적용 후 저장
+실패는 두 결과를 구분해 표시합니다. project/global은 미래 세션의 기본값
+범위이며 다른 실행 중 세션을 덮어쓰지 않습니다. Mutator는 기존 다음 실행
+소유자를 유지합니다. 취소는 patch를 보내지 않고, 매 prompt의 터미널 크기
+갱신에도 모델 설정을 다시 보내지 않습니다.
+
+등록된 `switch_model` 도구도 같은 후보 검증과 세션 소유자를 사용합니다.
+`pending`은 검증을 통과했다는 뜻이며, 도구 묶음 전체가 끝난 뒤 다음 주 모델
+요청이나 외부 도구 라운드 반환 전에 적용합니다. 같은 묶음의 다른 도구는
+기존 step의 선택을 유지합니다. 중단된 묶음의 후보는 저장하거나 새 턴에
+재적용하지 않습니다. `check_status`는 실제 세션 설정을 읽습니다. 이 도구는
+project/global 기본값을 저장하지 않습니다. 아무 동작도 하지 않던 settings
+동기화와 사용되지 않는 생성자 옵션은 제거했습니다.
+
+도구 projection 실패 시 이전 모델 경로와 도구 바인딩을 복원합니다. 그 전에
+이전 경로로 유효한 compaction이 완료됐을 수 있으므로 이력이나 외부 효과의
+rollback까지 보장하지는 않습니다. 보조 호출은 세션의 불변 설정과 기존 인증
+소유자를 사용합니다. 체크포인트 스키마나 과거 세션 모델 설정의 완전한 resume
+복원은 이 계약에서 확장하지 않습니다.
 
 ## Gateway 입력
 
@@ -62,6 +102,6 @@ extension 계약을 충족한다. 내부 event 증가는 이 ABI를 확장하지
 
 golden v0/v1 IPC greeting은 `tests/fixtures/protocol/`에 있다. protocol test는
 협상, unknown-field 보존, event 이름, size failure를 고정한다. integration test는
-실제 Unix socket에서 field-less 구버전 호환과 정확한 request correlation을
+실제 Unix socket에서 미지원 peer 거절, 세션 적용 성공·실패와 정확한 request correlation을
 검증한다. Gateway test는 envelope 제한과 processor correlation을, public-hook
 test는 exact 이름과 두 schema version을 고정한다.

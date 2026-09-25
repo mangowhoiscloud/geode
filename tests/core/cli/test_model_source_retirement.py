@@ -214,7 +214,7 @@ def test_non_tty_displayed_index_selects_the_same_role_specific_model(
         "_read_toml_value",
         lambda section, key: "api_key" if key == "source" else "gpt-6-astra",
     )
-    monkeypatch.setattr(model, "_current_model_for_role", lambda role: "gpt-6-astra")
+    monkeypatch.setattr(model, "_current_model_for_role", lambda role, client=None: "gpt-6-astra")
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
     printer = Mock()
     monkeypatch.setattr(commands.console, "print", printer)

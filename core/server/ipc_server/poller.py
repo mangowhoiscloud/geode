@@ -115,6 +115,7 @@ class _AsyncClientEndpoint:
         self._is_tty = True
         self._width = 120
         self._request_id = ""
+        self.session_model_config_applied = False
 
     async def send_json_async(self, obj: dict[str, Any]) -> None:
         if self._request_id and "request_id" not in obj:
@@ -649,6 +650,14 @@ class CLIPoller:
         except IPCProtocolError as exc:
             return {"type": "protocol_error", "message": str(exc)}
 
+        endpoint = msg.get("_client")
+        if (
+            isinstance(endpoint, _AsyncClientEndpoint)
+            and not endpoint.session_model_config_applied
+            and msg_type in {"prompt", "command", "command_stream", "resume"}
+        ):
+            return {"type": "error", "message": "Initial session settings have not been admitted"}
+
         if msg_type == "prompt":
             text = msg.get("text", "").strip()
             if not text:
@@ -700,33 +709,41 @@ class CLIPoller:
                 width = 120
             if isinstance(endpoint, _AsyncClientEndpoint):
                 endpoint.set_capability(is_tty=is_tty, width=width)
-            # Adopt the thin CLI's project-resolved model. The daemon creates the
-            # session with its OWN launch-cwd default (``settings.model``); the
-            # thin CLI resolves the model at the *caller's* project cwd. Without
-            # this the session's project config is ignored and the executed model
-            # diverges from the banner. Sent once at session start, before any
-            # prompt, so the swap is safe (no in-flight LLM call).
-            cli_model = str(msg.get("model", "")).strip()
-            if cli_model and cli_model != getattr(loop, "model", ""):
-                try:
-                    from core.config import _resolve_provider
-
-                    await loop.update_model_async(
-                        cli_model, _resolve_provider(cli_model), reason="cli_session_cwd"
-                    )
-                    log.info(
-                        "client_capability: adopted CLI project model %s (session=%s)",
-                        cli_model,
-                        session_id,
-                    )
-                except Exception:
-                    log.warning(
-                        "client_capability: failed to adopt CLI model %s", cli_model, exc_info=True
-                    )
+            if "session_model_config" not in features:
+                return {
+                    "type": "error",
+                    "message": "Upgrade and reconnect: client session settings unsupported",
+                }
+            try:
+                if (
+                    isinstance(endpoint, _AsyncClientEndpoint)
+                    and not endpoint.session_model_config_applied
+                    and "model_config" not in msg
+                ):
+                    raise IPCProtocolError("Initial client capability requires model_config")
+                if (
+                    isinstance(endpoint, _AsyncClientEndpoint)
+                    and endpoint.session_model_config_applied
+                    and "model_config" in msg
+                ):
+                    raise IPCProtocolError("Use /model for changes after initial admission")
+                workspace = self._session_workspace(loop, str(msg.get("cwd", "")))
+                applied = (
+                    await self._apply_session_selection(msg, loop, initial=True)
+                    if "model_config" in msg
+                    else {"model_config": loop._model_settings.model_dump()}
+                )
+            except Exception as exc:
+                return {"type": "error", "message": str(exc)}
+            if isinstance(endpoint, _AsyncClientEndpoint):
+                endpoint.session_model_config_applied = True
             _adopt_skip_permissions(msg)
             log.debug("client_capability: is_tty=%s width=%d", is_tty, width if width > 0 else 120)
             return {
                 "type": "ack",
+                "status": "applied",
+                "model_config": applied["model_config"],
+                **workspace,
                 "protocol_version": protocol_version,
                 "features": list(features),
             }
@@ -943,6 +960,64 @@ class CLIPoller:
             "summary": summary,
         }
 
+    @staticmethod
+    def _session_workspace(loop: Any, requested: str) -> dict[str, str]:
+        """Admit only the existing workspace; never change daemon cwd."""
+        from core.paths import get_project_root
+
+        bash = getattr(getattr(loop, "executor", None), "_bash", None)
+        working_dir = getattr(bash, "_working_dir", None)
+        root = (
+            Path(working_dir).resolve()
+            if isinstance(working_dir, str)
+            else get_project_root().resolve()
+        )
+        caller = Path(requested).resolve() if requested else root
+        if not caller.is_relative_to(root):
+            raise ValueError(
+                "This daemon serves a different workspace; start serve in the requested project"
+            )
+        for directory in (caller, *caller.parents):
+            if directory == root:
+                break
+            if (directory / ".git").exists() or (directory / ".geode" / "config.toml").exists():
+                raise ValueError("A nested project needs its own serve workspace")
+        checkpoint = getattr(loop, "_checkpoint", None)
+        return {
+            "workspace": str(root),
+            "checkpoint_directory": str(checkpoint.session_dir) if checkpoint is not None else "",
+        }
+
+    async def _apply_session_selection(
+        self, msg: dict[str, Any], loop: Any, *, initial: bool = False
+    ) -> dict[str, Any]:
+        from core.agent.loop._model_switching import apply_session_model_config
+        from core.config.session import SessionModelConfig
+
+        raw = msg.get("model_config")
+        if not isinstance(raw, dict):
+            raise IPCProtocolError("Session model_config must be an object")
+        current = loop._model_settings.updated(
+            {"model": loop.model, "effort": loop._effort, "source": loop._source}
+        )
+        from pydantic import ValidationError
+
+        try:
+            candidate = SessionModelConfig.model_validate(raw) if initial else current.updated(raw)
+        except ValidationError as exc:
+            fields = sorted({str(error["loc"][0]) for error in exc.errors() if error["loc"]})
+            raise IPCProtocolError(f"Invalid session model settings: {', '.join(fields)}") from None
+        changed = await apply_session_model_config(
+            loop, candidate, reason="cli_session" if initial else "user_switch"
+        )
+        return {
+            "type": "command_result",
+            "cmd": "/model",
+            "status": "applied",
+            "changed": changed,
+            "model_config": candidate.model_dump(),
+        }
+
     async def _handle_command_on_server(self, msg: dict[str, Any], loop: Any) -> dict[str, Any]:
         """Execute a slash command on the server side.
 
@@ -961,22 +1036,17 @@ class CLIPoller:
                 "status": "error",
                 "message": f"Slash command requires streaming transport: {cmd}",
             }
-        # Capture the primary model + effort BEFORE the command so the live-loop
-        # sync below fires only when THIS /model actually changed the primary
-        # axis. A role-specific switch (``/model reflection X`` writes
-        # ``cognitive_reflection_model``), an unknown/login-blocked/list/
-        # already-current ``/model``, or ``/model`` with no primary change must
-        # NOT touch the live loop — otherwise it would clobber the model the
-        # client_capability path adopted at session start (which moves
-        # ``loop.model`` WITHOUT moving ``settings.model``). See Codex review,
-        # 2026-06-11.
-        model_before = ""
-        effort_before = ""
-        if cmd == "/model" and loop is not None:
-            from core.config import settings as _pre_settings
-
-            model_before = (getattr(_pre_settings, "model", "") or "").strip()
-            effort_before = (getattr(_pre_settings, "agentic_effort", "") or "").strip()
+        if cmd == "/model":
+            if "model_config" not in msg:
+                return {
+                    "type": "command_result",
+                    "status": "error",
+                    "message": "Explicit session settings required; upgrade and reconnect",
+                }
+            try:
+                return await self._apply_session_selection(msg, loop)
+            except Exception as exc:
+                return {"type": "command_result", "status": "error", "message": str(exc)}
         try:
             from core.ui.console import capture_output
 
@@ -1009,17 +1079,6 @@ class CLIPoller:
                 if inspect.isawaitable(result):
                     result = await result
                 should_break, _verbose, _resume = result
-                # /model writes config.toml + the daemon's Settings singleton but
-                # cmd_model does NOT touch the live session's AgenticLoop — its
-                # docstring even says "applies to *new* sessions". So a /model
-                # switch inside an interactive REPL was silently ignored until the
-                # session ended: the thin CLI relays /model here, the singleton
-                # flips, but the loop the next prompt runs on keeps its boot-time
-                # model. Operator-reported "fable 5로 바꿔도 opus-4-8로 동작"
-                # (2026-06-11) — the thin-CLI ↔ daemon model gap. Sync the live
-                # loop here so the switch lands in the SAME session.
-                if cmd == "/model" and loop is not None:
-                    await self._sync_live_loop_to_settings(loop, model_before, effort_before)
             return {
                 "type": "command_result",
                 "cmd": cmd,
@@ -1035,65 +1094,6 @@ class CLIPoller:
                 "status": "error",
                 "message": str(exc),
             }
-
-    async def _sync_live_loop_to_settings(
-        self, loop: Any, model_before: str, effort_before: str
-    ) -> None:
-        """Re-point the live session loop after a ``/model`` changed the primary.
-
-        Called right after a ``/model`` command lands on the daemon. The
-        command updated ``settings.model`` (+ ``settings.agentic_effort``)
-        but not the AgenticLoop the active session runs on. This mirrors the
-        ``client_capability`` adoption path (which only fires once at session
-        start) for the mid-session case, awaiting the same ``update_model_async``
-        path on the serving event loop, including compaction and hooks.
-        The effort axis is
-        re-pointed directly, matching ``services.create_session``'s
-        constructor bridge.
-
-        Gated on ``settings.model != model_before`` (the value captured before
-        the command ran), NOT on ``settings.model != loop.model``. Only a
-        command that *actually moved the primary axis* should touch the live
-        loop: a role-specific ``/model reflection X`` moves
-        ``cognitive_reflection_model`` and leaves ``settings.model`` untouched,
-        and an unknown/blocked/list ``/model`` moves nothing — in both cases
-        ``loop.model`` may legitimately differ from ``settings.model`` because
-        the ``client_capability`` path adopted the thin CLI's project model
-        without moving the singleton. Gating on the singleton delta keeps those
-        cases from clobbering the live loop. (Codex review, 2026-06-11.)
-
-        Why an explicit sync rather than the old per-turn drift sync:
-        ``_model_switching.sync_model_from_settings_async`` was cut to a
-        no-op (PR-DRIFT-CUT, 2026-05-24) because *inferring* drift from
-        ``settings.model`` between rounds caused an auto-revert smoke
-        incident. The cut left ``/model`` as the operator's sole explicit
-        entry point — so the switch must be pushed at the command boundary,
-        not inferred. This is that push: it fires ONLY on an explicit
-        ``/model`` command that moved the primary axis, so it carries the
-        operator's intent without reintroducing speculative drift.
-        """
-        from core.agent.loop import _model_switching
-        from core.config import _resolve_provider, settings
-
-        target = (settings.model or "").strip()
-        # Only sync when this command moved the primary axis AND the live loop
-        # hasn't already caught up.
-        if target and target != model_before and target != getattr(loop, "model", ""):
-            try:
-                await _model_switching.update_model_async(loop, target, _resolve_provider(target))
-                log.info("model command: live session loop synced to %s", target)
-            except Exception:
-                log.warning("model command: live loop model sync failed", exc_info=True)
-                raise
-
-        new_effort = (getattr(settings, "agentic_effort", "") or "").strip()
-        if (
-            new_effort
-            and new_effort != effort_before
-            and getattr(loop, "_effort", None) != new_effort
-        ):
-            loop._effort = new_effort
-            log.info("model command: live session effort synced to %s", new_effort)
 
     async def _handle_resume(
         self,

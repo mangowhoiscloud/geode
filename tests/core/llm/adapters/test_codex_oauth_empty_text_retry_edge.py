@@ -249,7 +249,7 @@ def test_completed_empty_attempt_usage_reaches_sql_once_per_attempt(
     loop = AgenticLoop(
         ConversationContext(),
         ToolExecutor(),
-        config=AgenticLoopConfig(source="codex-oauth", disable_settings_drift=True),
+        config=AgenticLoopConfig(source="codex-oauth"),
         model="gpt-5.6-sol",
         provider="openai",
         hooks=hooks,

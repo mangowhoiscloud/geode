@@ -1,4 +1,4 @@
-"""Model drift sync, escalation, and per-model context adaptation.
+"""Explicit model selection, escalation, and per-model context adaptation.
 
 Extracted from the monolithic ``core/agent/loop.py`` (Tier 3 #7). Each
 function takes the ``AgenticLoop`` as the first parameter (``loop``).
@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
+
+from core.config.session import SessionModelConfig
 
 if TYPE_CHECKING:
     from core.llm.adapters.base import LLMAdapter
@@ -55,73 +57,6 @@ def _resolve_path_b_adapter(
     return active_registry_snapshot().resolve_for(normalize_registry_provider(provider), source)
 
 
-def _settings_model_target(loop: AgenticLoop) -> str | None:
-    """**DEPRECATED — returns None unconditionally as of PR-DRIFT-CUT (2026-05-24).**
-
-    Pre-PR behaviour: compared ``loop.model`` against ``settings.model``
-    (or ``settings.act_model``) and forced the loop to swap back to the
-    settings value at the start of every round. The intent was to keep
-    the runtime aligned with the operator's persisted preference, but
-    in practice it *reverted* the operator's most-recent ``/model``
-    selection because the CLI process updates settings on disk while
-    the daemon's in-memory ``settings`` object stays stale — drift sync
-    then "synced" the loop back to the stale daemon value, and the
-    operator's choice silently evaporated until a second turn was
-    issued. Post-mortem: 2026-05-24 v0.99.52 smoke (gpt-5.5 picked
-    via ``/model`` → first turn reverted to ``claude-opus-4-7``).
-
-    The drift surface is intentionally cut at the root (this function)
-    rather than at each caller so the deprecation point is single. The
-    function is retained as a no-op so existing tests / callers keep
-    compiling without a same-PR rewrite. A future re-introduction of
-    *operator-explicit* drift sync should live behind a new opt-in
-    entry point — do not revive this name.
-    """
-    return None
-
-
-async def sync_model_from_settings_async(loop: AgenticLoop) -> bool:
-    """**DEPRECATED — always returns ``False`` (PR-DRIFT-CUT, 2026-05-24).**
-
-    Was the per-turn entry point that called
-    :func:`_settings_model_target` and (when a target was returned)
-    rewrote ``loop.model`` to match ``settings.model``. The function is
-    now a no-op for the same reason that ``_settings_model_target``
-    short-circuits: settings-driven auto-revert was the load-bearing
-    cause of the v0.99.52 smoke incident. ``/model`` is the operator's
-    sole entry point — drift is no longer inferred.
-
-    The signature is kept so :class:`AgenticLoop` callers don't fork
-    on the rollout, and so a forensic ``grep`` can locate every site
-    that *used* to be touched by drift sync.
-    """
-    return False
-
-
-def drift_target_is_healthy(loop: AgenticLoop, target_model: str) -> bool:
-    """Return False if no profile in target_model's provider can serve a call.
-
-    Uses ProfileRotator.resolve to mirror the actual selection path the
-    next LLM call would take. None ⇒ all profiles missing/cooled-down/
-    disabled. We refuse the drift rather than silently swap to a model
-    the next call cannot fulfil.
-    """
-    try:
-        target_provider = _resolve_provider(target_model)
-        from core.wiring.container import get_profile_rotator
-
-        rotator = get_profile_rotator()
-        if rotator is None:
-            # Rotator not initialised yet (early bootstrap) — accept drift.
-            return True
-        return rotator.resolve(target_provider) is not None
-    except Exception:
-        log.debug("Drift health check failed for %s", target_model, exc_info=True)
-        # On any introspection failure, accept the drift to avoid
-        # blocking legitimate user-initiated /model switches.
-        return True
-
-
 def _resolve_model_route(
     loop: AgenticLoop,
     model: str,
@@ -144,13 +79,141 @@ def _apply_model_update(
     *,
     source: str | None = None,
 ) -> tuple[str, bool]:
+    """Publish synchronously; a tool projection failure preserves the old route."""
+    loop_fields = (
+        "model",
+        "_provider",
+        "_source",
+        "_new_adapter",
+        "_prompt_dirty",
+        "_bound_tool_plan",
+        "_tools",
+        "_transient_tools",
+        "_transient_deferred_tool_names",
+        "_capability_graph",
+        "_preflight_hint",
+    )
+    processor_fields = ("_model", "_provider", "_source", "_adapter_name")
+    executor_fields = (
+        "_bound_tool_plan",
+        "_handlers",
+        "_tool_input_schemas",
+        "_bound_allowed_tools",
+    )
+    snapshots = [
+        (owner, {name: getattr(owner, name) for name in names if hasattr(owner, name)})
+        for owner, names in (
+            (loop, loop_fields),
+            (loop._tool_processor, processor_fields),
+            (getattr(loop, "executor", None), executor_fields),
+        )
+    ]
+    try:
+        return _publish_model_update(loop, model, provider, source=source)
+    except BaseException:
+        for owner, fields in snapshots:
+            for name, value in fields.items():
+                setattr(owner, name, value)
+        raise
+
+
+def validate_session_model_config(loop: AgenticLoop, candidate: SessionModelConfig) -> None:
+    """Resolve all requested routes before any live selection is published."""
+    from core.config import settings
+    from core.config.judgment import resolve_judgment_route
+    from core.llm.adapters._anthropic_common import anthropic_effort_kwargs
+    from core.llm.adapters._openai_common import get_openai_model_spec, validate_reasoning_effort
+    from core.llm.adapters.registry import normalize_registry_provider
+    from core.llm.errors import LLMRequestValidationError
+    from core.llm.model_catalog import require_model_source_available
+    from core.llm.providers.glm import get_glm_model_spec
+
+    for model, source in (
+        (candidate.model, candidate.source),
+        (candidate.reflection_model, candidate.reflection_source),
+        (candidate.judge_model, candidate.judge_source),
+    ):
+        if not model:
+            if source:
+                raise LLMRequestValidationError("An inherited model cannot pin a separate source")
+            continue
+        provider = normalize_registry_provider(_resolve_provider(model))
+        require_model_source_available(model, provider=provider, source=source)
+        loop._adapter_registry_snapshot.resolve_for(provider, source)
+        openai_model = model.removeprefix("openrouter/openai/")
+        if provider == "openai" or model.startswith("openrouter/openai/"):
+            spec = get_openai_model_spec(openai_model)
+            if spec.reasoning_effort_values is not None:
+                validate_reasoning_effort(candidate.effort, spec=spec)
+        elif provider == "anthropic":
+            anthropic_effort_kwargs(model, candidate.effort)
+        elif provider == "glm":
+            spec_glm = get_glm_model_spec(model)
+            if (
+                spec_glm
+                and spec_glm.reasoning_effort_values
+                and candidate.effort not in spec_glm.reasoning_effort_values
+            ):
+                raise LLMRequestValidationError(
+                    f"{model} does not support effort {candidate.effort!r}"
+                )
+    if (
+        candidate.judgment_engine == "jev"
+        and resolve_judgment_route(
+            settings, engine=candidate.judgment_engine, provider=candidate.jev_provider
+        )
+        is None
+    ):
+        raise LLMRequestValidationError("The selected judgment route has no usable credentials")
+
+
+async def apply_session_model_config(
+    loop: AgenticLoop, candidate: SessionModelConfig, *, reason: str = "user_switch"
+) -> bool:
+    """Apply one admitted candidate to this session, never process defaults."""
+    validate_session_model_config(loop, candidate)
+    current = loop._model_settings.updated(
+        {"model": loop.model, "effort": loop._effort, "source": loop._source}
+    )
+    if candidate == current:
+        return False
+    await update_model_async(
+        loop,
+        candidate.model,
+        _resolve_provider(candidate.model),
+        reason,
+        source=candidate.source,
+        model_settings=candidate,
+    )
+    return True
+
+
+async def apply_pending_model_config(loop: AgenticLoop, messages: list[dict[str, Any]]) -> None:
+    """Commit a tool-requested selection only after its whole batch completed."""
+    candidate = loop._pending_model_settings
+    loop._pending_model_settings = None
+    if candidate is not None:
+        await apply_session_model_config(loop, candidate)
+        # Adaptation and model breadcrumbs operate on the complete context.
+        # Keep the current turn on that same history, including tool results.
+        messages[:] = loop.context.get_messages()
+
+
+def _publish_model_update(
+    loop: AgenticLoop,
+    model: str,
+    provider: str | None = None,
+    *,
+    source: str | None = None,
+) -> tuple[str, bool]:
     """Apply the route already checked by adaptation, or resolve a direct update."""
     old_model = loop.model
+    old_route = (loop._provider, loop._source)
     if source is None:
         new_provider, new_source = _resolve_model_route(loop, model, provider)
     else:
         new_provider, new_source = provider or _resolve_provider(model), source
-    if new_provider != loop._provider:
+    if (new_provider, new_source) != (loop._provider, loop._source):
         if new_source != loop._source:
             log.info(
                 "AgenticLoop source re-inferred on provider switch: %s (%s) -> %s (%s)",
@@ -175,7 +238,7 @@ def _apply_model_update(
         loop._new_adapter, "source", getattr(loop, "_source", "")
     )
     loop._tool_processor._adapter_name = getattr(loop._new_adapter, "name", "")
-    if old_model != model:
+    if old_model != model or old_route != (new_provider, new_source):
         loop._prompt_dirty = True
         reproject_bound = getattr(loop, "_reproject_bound_tool_plan", None)
         if callable(reproject_bound):
@@ -221,14 +284,31 @@ async def update_model_async(
     model: str,
     provider: str | None = None,
     reason: str = "user_switch",
+    *,
+    source: str | None = None,
+    model_settings: SessionModelConfig | None = None,
 ) -> None:
     """Async model update path used from ``AgenticLoop.arun``."""
     # Summarize with the current route before selecting the smaller target.
     # Never route maintenance through a new credential source implicitly.
     target_provider, target_source = _resolve_model_route(loop, model, provider)
-    if reason != "resume":
+    if source is not None:
+        target_source = source
+    if reason != "resume" and (model, target_provider, target_source) != (
+        loop.model,
+        loop._provider,
+        loop._source,
+    ):
         await adapt_context_for_model(loop, model, target_provider, source=target_source)
     old_model, changed = _apply_model_update(loop, model, target_provider, source=target_source)
+    if model_settings is not None:
+        loop._model_settings = model_settings
+        loop._effort = model_settings.effort
+        loop._source_explicit = True
+    elif hasattr(loop, "_model_settings"):
+        loop._model_settings = loop._model_settings.updated(
+            {"model": model, "source": target_source}
+        )
     if changed:
         from core.ui.agentic_ui import emit_model_switched
 

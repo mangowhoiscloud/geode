@@ -313,7 +313,7 @@ def test_model_switch_reprojects_bound_plan_in_both_provider_directions(
     loop = AgenticLoop(
         ConversationContext(),
         executor,
-        config=AgenticLoopConfig(source="subscription", disable_settings_drift=True),
+        config=AgenticLoopConfig(source="subscription"),
         model="gpt-5.6-luna",
         provider="openai",
         quiet=True,
@@ -386,7 +386,7 @@ def test_bound_request_rejects_middleware_tool_rewrite_before_adapter(rewrite: s
     loop = AgenticLoop(
         ConversationContext(),
         executor,
-        config=AgenticLoopConfig(source="payg", disable_settings_drift=True),
+        config=AgenticLoopConfig(source="payg"),
         model="gpt-5.6-luna",
         provider="openai",
         quiet=True,
@@ -439,7 +439,7 @@ def test_bound_request_rejects_middleware_adapter_swap_before_provider() -> None
     loop = AgenticLoop(
         ConversationContext(),
         executor,
-        config=AgenticLoopConfig(source="payg", disable_settings_drift=True),
+        config=AgenticLoopConfig(source="payg"),
         model="gpt-5.6-luna",
         provider="openai",
         quiet=True,
@@ -456,3 +456,27 @@ def test_bound_request_rejects_middleware_adapter_swap_before_provider() -> None
 
     assert original_called is False
     assert poison_called is False
+
+
+def test_replacement_schema_failure_preserves_bound_execution_owners(monkeypatch) -> None:
+    bound = _bound_plan()
+    executor = ToolExecutor(bound_tool_plan=bound)
+    original = (
+        executor._bound_tool_plan,
+        executor._handlers,
+        executor._tool_input_schemas,
+        executor._bound_allowed_tools,
+    )
+
+    def fail_schema(_schema):
+        raise ValueError("schema projection failed")
+
+    monkeypatch.setattr("core.tools.plan.thaw_tool_schema", fail_schema)
+    with pytest.raises(ValueError, match="schema projection failed"):
+        executor._replace_bound_tool_plan(bound.at_generation(bound.generation + 1))
+    assert (
+        executor._bound_tool_plan,
+        executor._handlers,
+        executor._tool_input_schemas,
+        executor._bound_allowed_tools,
+    ) == original

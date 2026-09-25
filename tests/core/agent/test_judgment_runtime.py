@@ -54,7 +54,7 @@ def test_round_then_terminal_dispatch_once_with_native_usage_and_no_synthetic_be
         ConversationContext(),
         ToolExecutor(middleware_registry=registry),
         hooks=hooks,
-        config=AgenticLoopConfig(source="payg", session_id="judgment", disable_settings_drift=True),
+        config=AgenticLoopConfig(source="payg", session_id="judgment"),
         model="claude-sonnet-4-6",
         provider="anthropic",
         quiet=True,
@@ -202,12 +202,21 @@ def test_jev_visual_evidence_is_unavailable_not_silently_discarded(monkeypatch) 
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
 
+    from core.config.session import SessionModelConfig
+
     monkeypatch.setattr(settings, "judgment_engine", "jev")
     monkeypatch.setattr(settings, "jev_provider", "typesafe")
     monkeypatch.setattr(settings, "typesafe_api_key", SecretStr("test-secret"))
     loop = SimpleNamespace(
         model="gpt-6-astra",
         _verify_root_user_input="Describe the screenshot",
+        _model_settings=SessionModelConfig(
+            model="gpt-6-astra",
+            effort="high",
+            source="payg",
+            judgment_engine="jev",
+            jev_provider="typesafe",
+        ),
         _call_llm=AsyncMock(),
     )
     result = AgenticResult(

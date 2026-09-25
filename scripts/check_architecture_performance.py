@@ -170,6 +170,7 @@ async def _measure_async(bound: Any, *, profile_first_turn: bool = False) -> dic
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop, AgenticLoopConfig
     from core.agent.tool_executor import ToolExecutor
+    from core.config.session import SessionModelConfig
     from core.llm.adapters.base import AdapterCallResult
     from core.llm.adapters.registry import bootstrap_builtins
     from core.mcp.tool_runtime import MCPToolInvoker, MCPTraceStore
@@ -197,8 +198,10 @@ async def _measure_async(bound: Any, *, profile_first_turn: bool = False) -> dic
         ToolExecutor(bound_tool_plan=bound, hitl_level=0),
         config=AgenticLoopConfig(
             source="subscription",
-            disable_settings_drift=True,
             session_id="architecture-performance",
+            model_settings=SessionModelConfig(
+                model="gpt-5.6-luna", effort="high", source="subscription"
+            ),
         ),
         model="gpt-5.6-luna",
         provider="openai",

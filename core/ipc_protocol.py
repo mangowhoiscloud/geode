@@ -15,6 +15,7 @@ IPC_FEATURES = (
     "bounded_json",
     "request_correlation",
     "stable_events",
+    "session_model_config",
 )
 MAX_IPC_MESSAGE_BYTES = 1024 * 1024
 
@@ -71,13 +72,14 @@ IPC_EVENT_TYPES = (
 IPC_CONTROL_TYPES = frozenset({"ack", "exit_ack"})
 _CLIENT_FIELD_TYPES: dict[str, dict[str, type[Any] | tuple[type[Any], ...]]] = {
     "prompt": {"text": str},
-    "command": {"cmd": str, "args": str},
+    "command": {"cmd": str, "args": str, "model_config": dict},
     "command_stream": {"cmd": str, "args": str},
     "resume": {"session_id": str, "continue": bool},
     "client_capability": {
         "is_tty": bool,
         "width": (int, str),
         "model": str,
+        "model_config": dict,
         "cwd": str,
         "dangerously_skip_permissions": bool,
     },

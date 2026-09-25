@@ -28,6 +28,7 @@ from core.agent.tool_executor import (
     ToolExecutor,
 )
 from core.config.policy_source import EMPTY_POLICY_SOURCES, PolicySourceBundle
+from core.config.session import SessionModelConfig
 from core.hooks import (
     HookCorrelation,
     HookEvent,
@@ -106,6 +107,9 @@ class AgenticLoop:
     WRAP_UP_HEADROOM = 2  # force text response N rounds before max
     _WRAP_UP_TIME_HEADROOM_S = 30.0  # force text 30s before time budget expires
 
+    _model_settings: SessionModelConfig
+    _pending_model_settings: SessionModelConfig | None
+    _source_explicit: bool
     _source: str
     _allowed_tool_names: set[str] | None
     _force_include_allowed_tools: bool
@@ -171,7 +175,6 @@ class AgenticLoop:
         parent_session_id = config.parent_session_id
         system_suffix = config.system_suffix
         system_prompt_override = config.system_prompt_override
-        disable_settings_drift = config.disable_settings_drift
         allowed_tool_names = config.allowed_tool_names
         allow_actionable_partial_on_empty = config.allow_actionable_partial_on_empty
         yield_after_tool_round = config.yield_after_tool_round
@@ -262,7 +265,6 @@ class AgenticLoop:
         self._provider = provider  # "anthropic", "openai", "openrouter", or "glm"
         # When True, sync_model_from_settings is a no-op — caller's model
         # stays sticky for the loop's lifetime.
-        self._disable_settings_drift = disable_settings_drift
         # set by update_model_async on model change; the run-loop rebuilds
         # system_prompt before the next LLM call.
         self._prompt_dirty: bool = False
@@ -495,22 +497,23 @@ class AgenticLoop:
 
     async def _maybe_reflect(self, tool_results: list[dict[str, Any]]) -> None:
         """Reflect once per admitted tool round; privacy and time limits remain hard."""
-        from core.config import settings
-
         if getattr(self, "_reflection_requires_redaction", False):
             return
         from core.agent.loop._reflection import reflect_async
 
-        raw_model = settings.cognitive_reflection_model
+        policy = self._model_settings
+        raw_model = policy.reflection_model
         configured_model = raw_model.strip() if isinstance(raw_model, str) else ""
         inherit_loop_model = not configured_model
         reflection_model = configured_model or self.model
         reflection_provider = self._provider if inherit_loop_model else None
         reflection_source = (
-            getattr(self._new_adapter, "source", self._source) if inherit_loop_model else None
+            getattr(self._new_adapter, "source", self._source)
+            if inherit_loop_model
+            else policy.reflection_source
         )
 
-        reflection_kwargs: dict[str, Any] = {}
+        reflection_kwargs: dict[str, Any] = {"model_settings": policy}
         task_context = render_retained_task_context(
             self.context.messages, current_request=self._verify_root_user_input
         )
@@ -542,7 +545,7 @@ class AgenticLoop:
                     tool_results,
                     current_request=self._verify_root_user_input,
                     model=reflection_model,
-                    max_tokens=settings.cognitive_reflection_max_tokens,
+                    max_tokens=policy.reflection_max_tokens,
                     effort=self._effort,
                     provider=reflection_provider,
                     source=reflection_source,
@@ -737,16 +740,7 @@ class AgenticLoop:
         reflection_hint: str | None = None,
         verification_hint: str | None = None,
     ) -> str:
-        """Sync model drift + rebuild the system prompt.
-
-        Rebuilds when the model drifted (``settings.model`` changed),
-        ``_prompt_dirty`` is set (direct ``update_model_async``), or advisory
-        plan progress changed. On rebuild, re-applies the preflight /
-        reflection / verification / plan hints inside the dynamic envelope so
-        a mid-arun change does not drop them. Returns the (possibly-rebuilt)
-        prompt; clears ``_prompt_dirty``.
-        """
-        drift_detected = await _model_switching.sync_model_from_settings_async(self)
+        """Rebuild after an explicit selection or changed runtime hints."""
         prompt_dirty = self._prompt_dirty
         raw_plan_hint = _guards._consume_plan_hint(self)
         plan_hint = raw_plan_hint if isinstance(raw_plan_hint, str) else ""
@@ -754,7 +748,7 @@ class AgenticLoop:
         if not isinstance(last_plan_hint, str):
             last_plan_hint = plan_hint
         plan_changed = plan_hint != last_plan_hint
-        if drift_detected or prompt_dirty or plan_changed:
+        if prompt_dirty or plan_changed:
             from core.agent.loop._context import inject_runtime_hints
 
             system_prompt = inject_runtime_hints(
@@ -772,11 +766,7 @@ class AgenticLoop:
             if hooks:
                 from core.hooks import HookEvent
 
-                reason = (
-                    "model_drift"
-                    if drift_detected
-                    else ("prompt_dirty" if prompt_dirty else "plan_progress")
-                )
+                reason = "prompt_dirty" if prompt_dirty else "plan_progress"
                 await hooks.trigger_async(
                     HookEvent.PROMPT_ASSEMBLED,
                     {

@@ -1,36 +1,22 @@
-"""Bug class B7 — state propagation invariants for thin → daemon auth writes.
+"""Thin auth commands signal daemon reload after local execution.
 
-When a THIN slash command (``/login``, ``/key``, ``/auth``) writes to
-``~/.geode/auth.toml`` from the CLI process, the daemon's in-memory
-``ProfileStore`` / ``PlanRegistry`` singletons stay stale until the daemon
-re-reads the file. v0.52 phase 3 wires this via a ``client.send_command(
-"/login", "refresh")`` signal sent immediately after every THIN auth command,
-which the daemon handles by calling ``load_auth_toml()``.
-
-This file pins both halves of the contract so a future refactor of either
-the CLI dispatch loop or the ``cmd_login("refresh")`` handler cannot silently
-re-introduce the stale-state bug.
-
-Contracts:
-  1. CLI dispatch loop (``core/cli/__init__.py``) MUST call ``send_command(
-     "/login", "refresh")`` after THIN execution of ``/login``, ``/key``,
-     ``/auth``.
-  2. ``cmd_login("refresh")`` MUST invoke ``load_auth_toml()`` and the merge
-     MUST be additive — newly written plans/profiles appear in the singleton
-     while in-memory entries that don't appear in auth.toml (e.g. Codex CLI
-     OAuth, .env-seeded profiles) are NOT evicted.
+The shared thin routing owner relays ``/login refresh`` after ``/login`` or
+``/key``. Model selection instead keeps the IPC client attached to its session
+admission path. Daemon reload reconciles file-owned auth entries while
+preserving profiles supplied by other owners, such as Codex CLI OAuth.
 """
 
 from __future__ import annotations
 
-import inspect
 from pathlib import Path
+from unittest.mock import Mock, call
 
-import core.cli as _cli_pkg
 import pytest
 from core.auth.auth_toml import save_auth_toml
 from core.auth.profiles import AuthProfile, CredentialType
 from core.cli.commands import cmd_login
+from core.cli.ipc_client import IPCClient
+from core.cli.routing import run_thin_command
 from core.llm.strategies.plan_registry import get_plan_registry
 from core.llm.strategies.plans import Plan, PlanKind
 from core.wiring.container import ensure_profile_store
@@ -40,25 +26,58 @@ from core.wiring.container import ensure_profile_store
 # ---------------------------------------------------------------------------
 
 
-def test_cli_thin_dispatch_signals_daemon_refresh() -> None:
-    """Source-level invariant: THIN auth commands must trigger /login refresh.
+@pytest.mark.parametrize(("cmd", "args"), [("/login", "openai"), ("/key", "status")])
+def test_cli_thin_dispatch_signals_daemon_refresh(
+    cmd: str, args: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Execute the routing owner; local handling precedes the refresh signal."""
+    from core.ui.console import console
 
-    We inspect the dispatch block in ``core/cli/__init__.py`` rather than
-    spinning up a real IPC socket — the goal is to catch a future refactor
-    that moves the dispatch but forgets to copy the refresh signal.
-    """
-    src = inspect.getsource(_cli_pkg)
-    # The exact relay call. If this string disappears, B7 regresses.
-    assert 'client.send_command("/login", "refresh")' in src, (
-        "Thin dispatch must relay /login refresh to daemon after THIN auth "
-        "commands write to auth.toml. See core/cli/__init__.py THIN branch."
-    )
-    # And it must be gated by the auth-writing command set.
-    # PR #C (2026-05-17) — /auth removed; gating set narrowed to /login + /key.
-    assert '("/login", "/key")' in src, (
-        "Refresh signal must fire only for THIN commands that mutate "
-        "auth.toml — gating set ('/login', '/key') missing."
-    )
+    calls = Mock()
+    monkeypatch.setattr("core.cli.dispatcher._handle_command", calls.local)
+    client = Mock(spec=IPCClient)
+    calls.attach_mock(client.send_command, "relay")
+    client.send_command.return_value = {"status": "error", "message": "refresh rejected"}
+
+    with console.capture() as output:
+        run_thin_command(client, cmd, args)
+
+    assert calls.mock_calls == [
+        call.local(cmd, args, False, command_registry=None),
+        call.relay("/login", "refresh"),
+    ]
+    assert "daemon refresh failed" in output.get()
+    assert "refresh rejected" in output.get()
+
+
+def test_cli_thin_non_auth_command_does_not_refresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    local = Mock()
+    monkeypatch.setattr("core.cli.dispatcher._handle_command", local)
+    client = Mock(spec=IPCClient)
+
+    run_thin_command(client, "/skills", "")
+
+    local.assert_called_once_with("/skills", "", False, command_registry=None)
+    client.send_command.assert_not_called()
+
+
+def test_cli_thin_model_keeps_session_client_and_propagates_admission_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    local = Mock()
+    model = Mock(side_effect=RuntimeError("session admission rejected"))
+    monkeypatch.setattr("core.cli.dispatcher._handle_command", local)
+    monkeypatch.setattr("core.cli.commands.model.cmd_model", model)
+    client = Mock(spec=IPCClient)
+
+    with pytest.raises(RuntimeError, match="session admission rejected"):
+        run_thin_command(client, "/model", "gpt-6-sol low")
+
+    model.assert_called_once_with("gpt-6-sol low", client=client)
+    local.assert_not_called()
+    client.send_command.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -175,12 +194,7 @@ def test_cmd_login_refresh_is_additive_only(
 def test_cmd_login_refresh_swallows_missing_auth_toml(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Refresh on a fresh install (no auth.toml yet) must not raise.
-
-    Important because the dispatch loop in core/cli/__init__.py wraps the
-    relay in ``contextlib.suppress(Exception)`` precisely because a daemon
-    that throws here would tank the user's slash command.
-    """
+    """Refresh on a fresh install (no auth.toml yet) must not raise."""
     auth_path = tmp_path / "does-not-exist.toml"
     monkeypatch.setenv("GEODE_AUTH_TOML", str(auth_path))
     assert not auth_path.exists()
