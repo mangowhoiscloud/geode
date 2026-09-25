@@ -202,14 +202,14 @@ def reload_auth_state() -> str:
     store = ensure_profile_store()
     plans_before = {p.id for p in registry.list_all()}
     profiles_before = {p.name for p in store.list_all()}
-    # Imported Codex and Google credentials live outside auth.toml; drop their
-    # caches even when there is no file to adopt.
-    invalidate_codex_cli_cache()
-    reset_google_workspace_client()
     if auth_toml_path().exists() and not load_auth_toml():
         raise ValueError(
             f"auth.toml reload failed ({auth_toml_path()}); the previous credentials remain active"
         )
+    # Imported Codex and Google credentials live outside auth.toml; drop their
+    # caches even when there is no file to adopt, but not after a rejection.
+    invalidate_codex_cli_cache()
+    reset_google_workspace_client()
     plans_after = {p.id for p in registry.list_all()}
     profiles_after = {p.name for p in store.list_all()}
     changes = [

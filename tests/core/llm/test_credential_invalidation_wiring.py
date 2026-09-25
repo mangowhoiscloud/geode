@@ -83,11 +83,17 @@ def test_invalidate_is_scoped_to_one_provider() -> None:
     assert all(n == 1 for n in untouched), f"unrelated providers were dropped: {untouched}"
 
 
-@pytest.mark.parametrize("loaded", [False, True])
-def test_login_refresh_preserves_payg_clients_until_selected_identity_changes(loaded: bool) -> None:
-    """Reload admission does not discard PAYG selections or failed-reload caches."""
+@pytest.mark.parametrize(
+    ("stored", "loaded", "resets"), [(True, False, 0), (True, True, 1), (False, False, 1)]
+)
+def test_login_refresh_preserves_payg_clients_until_selected_identity_changes(
+    stored: bool, loaded: bool, resets: int, tmp_path: Path
+) -> None:
+    """Reload admission keeps PAYG selections; a rejected file also keeps imported caches."""
     from core.cli.commands import login as login_mod
 
+    if stored:
+        (tmp_path / "auth.toml").write_text("")  # conftest points GEODE_AUTH_TOML here
     adapters = _cached_adapters()
 
     async def scenario() -> None:
@@ -101,7 +107,7 @@ def test_login_refresh_preserves_payg_clients_until_selected_identity_changes(lo
         ):
             login_mod.cmd_login("refresh")
         assert [adapter._clients.bound_loop_count() for adapter in adapters] == before
-        assert codex_cache.call_count == google_cache.call_count == int(loaded)
+        assert codex_cache.call_count == google_cache.call_count == resets
 
     asyncio.run(scenario())
 
