@@ -88,21 +88,86 @@ def _read_toml_value(section: str, key: str) -> str:
 
 
 def _effort_selection_error(
-    selected: ModelProfile, effort: str | None, role: AgentRole
+    selected: ModelProfile,
+    effort: str | None,
+    role: AgentRole,
+    *,
+    primary_effort: str | None = None,
+    reflection_model: str | None = None,
 ) -> str | None:
     """Reject incompatible selections before any model or config state changes."""
-    if not role.has_effort:
+    if not role.has_effort and role.name != "reflection":
         return None
     from core.cli.effort_picker import supported_efforts
-    from core.config import settings
+    from core.config import _resolve_provider, settings
 
     levels = supported_efforts(selected.id, selected.provider)
-    value = effort if effort is not None else settings.agentic_effort
+    value = primary_effort
+    if value is None:
+        value = effort if role.has_effort and effort is not None else settings.agentic_effort
     if levels and value not in levels:
+        inherited = "inherited " if role.name == "reflection" else ""
         return (
-            f"{selected.id} does not support effort {value!r}. "
+            f"{selected.id} does not support {inherited}effort {value!r}. "
             f"Choose one of {', '.join(levels)} in /model; selection unchanged."
         )
+    if role.name == "primary":
+        reflected = (
+            reflection_model
+            if reflection_model is not None
+            else settings.cognitive_reflection_model
+        )
+        if reflected:
+            levels = supported_efforts(reflected, _resolve_provider(reflected))
+            if levels and value not in levels:
+                return (
+                    f"Reflection model {reflected} does not support inherited effort {value!r}. "
+                    "Choose a compatible primary effort or reflection model; selection unchanged."
+                )
+    return None
+
+
+def _model_selection_error(
+    selected: ModelProfile,
+    effort: str | None,
+    role: AgentRole,
+    *,
+    primary_effort: str | None = None,
+    reflection_model: str | None = None,
+) -> str | None:
+    """Run existing admission checks before any row in a selection is written."""
+    from core.cli import commands as _pkg
+    from core.config import settings
+
+    reason = model_unavailable_reason(selected.id, source=_openai_source_for_role(role))
+    if reason is not None:
+        return reason
+    if error := _effort_selection_error(
+        selected,
+        effort,
+        role,
+        primary_effort=primary_effort,
+        reflection_model=reflection_model,
+    ):
+        return error
+    if role.name != "primary" or (
+        selected.id == _current_model_for_role(role)
+        and (effort is None or effort == settings.agentic_effort)
+    ):
+        return None
+    ctx = _pkg.get_conversation_context()
+    if ctx is not None and ctx.messages:
+        from core.orchestration.context_budget import resolve_context_budget_policy
+        from core.orchestration.context_monitor import estimate_message_tokens
+
+        current_tokens = estimate_message_tokens(ctx.messages)
+        policy = resolve_context_budget_policy(selected.id)
+        if current_tokens > policy.warning_tokens:
+            return (
+                f"Context guard: {current_tokens:,} tokens exceeds {selected.label}'s "
+                f"{policy.tier.name}-tier warning budget ({policy.warning_tokens:,} tokens). "
+                "Run /compact or /clear first, then retry /model."
+            )
     return None
 
 
@@ -112,6 +177,8 @@ def _apply_model(
     effort: str | None = None,
     role: str = "primary",
     scope: str = "project",
+    primary_effort: str | None = None,
+    reflection_model: str | None = None,
 ) -> None:
     """Apply a model selection — update settings + .env + config.toml.
 
@@ -129,7 +196,9 @@ def _apply_model(
     (``settings.cognitive_reflection_model`` + ``[cognitive]
     reflection_model``); when empty, reflection inherits the active loop
     model/provider/source. Effort is *only* applied when the role declares
-    ``has_effort=True`` — the reflection node has no effort axis.
+    ``has_effort=True`` — reflection inherits it without a separate axis.
+    Staged picks supply the final primary effort and reflection model so every
+    admission check uses the same candidate, independent of persistence order.
 
     ``scope`` picks the durable config target (precedence: CLI > env >
     project ``.geode/config.toml`` > global ``~/.geode/config.toml`` >
@@ -152,20 +221,20 @@ def _apply_model(
     from core.config.env_io import upsert_config_toml
 
     role_def = role_by_name(role)
-    reason = model_unavailable_reason(selected.id, source=_openai_source_for_role(role_def))
-    if reason is not None:
-        _pkg.console.print(f"  [warning]{reason}[/warning]")
-        _pkg.console.print()
-        return
-
     # Non-primary picks retain global scope. Global reads and writes share
     # the GEODE_CONFIG_TOML resolver, including roles without a Settings field.
     if role_def.name != "primary":
         scope = "global"
     old = _current_model_for_role(role_def)
     old_effort = getattr(settings, "agentic_effort", "high")
-    if effort_error := _effort_selection_error(selected, effort, role_def):
-        _pkg.console.print(f"  [warning]{effort_error}[/warning]")
+    if selection_error := _model_selection_error(
+        selected,
+        effort,
+        role_def,
+        primary_effort=primary_effort,
+        reflection_model=reflection_model,
+    ):
+        _pkg.console.print(f"  [warning]{selection_error}[/warning]")
         _pkg.console.print()
         return
     same_model = selected.id == old
@@ -179,35 +248,6 @@ def _apply_model(
         return
 
     _pkg._check_provider_key(selected)
-
-    # --- Context Window Guard --- (primary only — reflection runs in
-    # a clean-context sandbox per PR-3 C-2 design, so the main loop's
-    # context size doesn't constrain its model choice).
-    if role_def.name == "primary":
-        ctx = _pkg.get_conversation_context()
-        if ctx is not None and ctx.messages:
-            from core.orchestration.context_budget import resolve_context_budget_policy
-            from core.orchestration.context_monitor import estimate_message_tokens
-
-            current_tokens = estimate_message_tokens(ctx.messages)
-            # Consume the same tiered ContextBudgetPolicy the loop uses, not a
-            # bare 80% literal — small windows warn earlier, large windows keep
-            # the absolute ceiling (Codex LOW follow-up on PR-CONTEXT-BUDGET).
-            policy = resolve_context_budget_policy(selected.id)
-            threshold = policy.warning_tokens
-
-            if current_tokens > threshold:
-                _pkg.console.print()
-                _pkg.console.print(
-                    f"  [warning]Context guard: {current_tokens:,} tokens "
-                    f"exceeds {selected.label}'s {policy.tier.name}-tier warning "
-                    f"budget ({threshold:,} tokens)[/warning]"
-                )
-                _pkg.console.print(
-                    "  [muted]Run /compact or /clear first, then retry /model.[/muted]"
-                )
-                _pkg.console.print()
-                return
 
     # Model picker choices persist to config.toml only. 3-codebase consensus
     # (Hermes/Codex/Claude Code) is that durable picker choices belong in
@@ -433,15 +473,32 @@ def _apply_picker_result(
     (``_apply_model`` with the matching role) so the operator can set
     Primary + Reflection + Mutator in ONE picker session.
     """
+    from core.config import settings
+
     if model_profiles is None:
         selected_ids = [result.model_id]
         selected_ids.extend(mid for _role, mid, _effort in result.staged)
         model_profiles = get_model_profiles(configured_model_ids=selected_ids)
     selections = [*result.staged, (result.role, result.model_id, result.effort)]
     profiles = {profile.id: profile for profile in model_profiles}
+    primary_effort = settings.agentic_effort
+    reflection_model = settings.cognitive_reflection_model
+    for role, model_id, effort in selections:
+        if model_id not in profiles:
+            continue
+        if role == "primary" and effort is not None:
+            primary_effort = effort
+        elif role == "reflection":
+            reflection_model = model_id
     for role, model_id, effort in selections:
         if model_id in profiles and (
-            error := _effort_selection_error(profiles[model_id], effort, role_by_name(role))
+            error := _model_selection_error(
+                profiles[model_id],
+                effort,
+                role_by_name(role),
+                primary_effort=primary_effort,
+                reflection_model=reflection_model,
+            )
         ):
             from core.cli import commands as _pkg
 
@@ -450,7 +507,13 @@ def _apply_picker_result(
             return
     for role, model_id, effort in selections:
         if model_id in profiles:
-            _apply_model(profiles[model_id], effort=effort, role=role)
+            _apply_model(
+                profiles[model_id],
+                effort=effort,
+                role=role,
+                primary_effort=primary_effort,
+                reflection_model=reflection_model,
+            )
 
 
 def _interactive_model_picker_for_role(role_def: AgentRole) -> None:

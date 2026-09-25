@@ -640,7 +640,9 @@ def test_apply_picker_result_applies_staged_then_final(monkeypatch) -> None:
     monkeypatch.setattr(
         model_cmd,
         "_apply_model",
-        lambda profile, effort=None, role="primary": applied.append((profile.id, effort, role)),
+        lambda profile, effort=None, role="primary", primary_effort=None, reflection_model=None: (
+            applied.append((profile.id, effort, role))
+        ),
     )
 
     known = [p.id for p in model_cmd.get_model_profiles(openai_source="payg")[:2]]
@@ -707,8 +709,8 @@ def test_apply_picker_result_resolves_off_catalog_selected_row(monkeypatch) -> N
     monkeypatch.setattr(
         model_cmd,
         "_apply_model",
-        lambda profile, effort=None, role="primary": applied.append(
-            (profile.id, profile.provider, role)
+        lambda profile, effort=None, role="primary", primary_effort=None, reflection_model=None: (
+            applied.append((profile.id, profile.provider, role))
         ),
     )
 
@@ -807,3 +809,211 @@ def test_non_primary_apply_persists_to_global_scope(monkeypatch) -> None:
     assert all(scope == "global" for *_rest, scope in captured), (
         f"non-primary picks must write GLOBAL scope (readers are global-only): {captured}"
     )
+
+
+@pytest.mark.parametrize("finish", ["_KEY_ENTER", "_KEY_QUIT"])
+def test_invalid_primary_space_never_stages_a_partial_setting(monkeypatch, finish) -> None:
+    from core.cli import effort_picker
+    from core.cli.commands import model as model_cmd
+    from core.cli.commands._state import ModelProfile
+    from core.config import settings
+
+    _, writes = _capture_apply_io(monkeypatch)
+    monkeypatch.setattr(settings, "model", "glm-5.3")
+    monkeypatch.setattr(settings, "agentic_effort", "medium")
+    options = _two_role_picker_kwargs()
+    options["role_initial_models"] = {"primary": "glm-5.3", "mutator": "glm-5.3"}
+    profiles = [("glm-5.3", "glm", "GLM-5.3", "$", True, None)]
+    keys = iter([effort_picker._KEY_SPACE, effort_picker._KEY_TAB, getattr(effort_picker, finish)])
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_render", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda lines: None)
+    result = effort_picker.pick_model_and_effort(profiles, "glm-5.3", "medium", **options)
+    assert result.staged == ()
+    if not result.cancelled:
+        assert result.effort is None
+        monkeypatch.setattr(model_cmd, "_current_model_for_role", lambda role: "glm-5.3")
+        model_cmd._apply_picker_result(result, [ModelProfile("glm-5.3", "glm", "GLM-5.3", "$")])
+    assert settings.agentic_effort == "medium"
+    assert writes == []
+
+
+def test_invalid_primary_space_then_arrow_stages_exact_supported_effort(monkeypatch) -> None:
+    from core.cli import effort_picker
+
+    options = _two_role_picker_kwargs()
+    options["role_initial_models"] = {"primary": "glm-5.3", "mutator": "glm-5.3"}
+    keys = iter(
+        [
+            effort_picker._KEY_SPACE,
+            effort_picker._KEY_RIGHT,
+            effort_picker._KEY_SPACE,
+            effort_picker._KEY_TAB,
+            effort_picker._KEY_ENTER,
+        ]
+    )
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_render", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda lines: None)
+    result = effort_picker.pick_model_and_effort(
+        [("glm-5.3", "glm", "GLM-5.3", "$", True, None)], "glm-5.3", "medium", **options
+    )
+    assert result.staged == (("primary", "glm-5.3", "high"),)
+    assert result.effort is None
+
+
+@pytest.mark.parametrize("role", ["primary", "reflection"])
+def test_inherited_reflection_effort_rejected_before_writes(monkeypatch, role) -> None:
+    from core.cli import commands
+    from core.cli.commands import model as model_cmd
+    from core.cli.commands._state import ModelProfile
+    from core.config import settings
+
+    _, writes = _capture_apply_io(monkeypatch)
+    monkeypatch.setattr(settings, "model", "gpt-6-sol")
+    monkeypatch.setattr(settings, "agentic_effort", "low" if role == "primary" else "medium")
+    old_reflection = "glm-5.3" if role == "primary" else "claude-haiku-4-5"
+    monkeypatch.setattr(settings, "cognitive_reflection_model", old_reflection)
+    monkeypatch.setattr(model_cmd, "model_unavailable_reason", lambda *args, **kwargs: None)
+    checks = []
+    monkeypatch.setattr(commands, "_check_provider_key", checks.append)
+    target = (
+        ModelProfile("gpt-6-sol", "openai", "Sol", "$")
+        if role == "primary"
+        else ModelProfile("glm-5.3", "glm", "GLM", "$")
+    )
+    model_cmd._apply_model(target, role=role, effort="medium" if role == "primary" else "high")
+    assert writes == []
+    assert checks == []
+    assert settings.model == "gpt-6-sol"
+    assert settings.cognitive_reflection_model == old_reflection
+    assert settings.agentic_effort == ("low" if role == "primary" else "medium")
+
+
+@pytest.mark.parametrize("primary_first", [False, True])
+@pytest.mark.parametrize("effort", ["high", "medium"])
+def test_staged_reflection_uses_final_primary_effort_before_any_writes(
+    monkeypatch, primary_first, effort
+) -> None:
+    from core.cli import commands
+    from core.cli.commands import model as model_cmd
+    from core.cli.commands._state import ModelProfile
+    from core.cli.effort_picker import PickerResult
+    from core.config import settings
+
+    _, writes = _capture_apply_io(monkeypatch)
+    monkeypatch.setattr(commands, "remove_env", lambda name: False)
+    monkeypatch.setattr(settings, "model", "gpt-6-sol")
+    monkeypatch.setattr(settings, "agentic_effort", "medium")
+    monkeypatch.setattr(settings, "cognitive_reflection_model", "claude-haiku-4-5")
+    monkeypatch.setattr(model_cmd, "model_unavailable_reason", lambda *args, **kwargs: None)
+    checks = []
+    monkeypatch.setattr(commands, "_check_provider_key", checks.append)
+    selections = [("primary", "gpt-6-sol", effort), ("reflection", "glm-5.3", None)]
+    if not primary_first:
+        selections.reverse()
+    role, mid, final_effort = selections[1]
+    result = PickerResult(mid, final_effort, role=role, staged=(selections[0],))
+    profiles = [
+        ModelProfile("gpt-6-sol", "openai", "Sol", "$"),
+        ModelProfile("glm-5.3", "glm", "GLM", "$"),
+    ]
+    model_cmd._apply_picker_result(result, profiles)
+    if effort == "medium":
+        assert writes == []
+        assert checks == []
+        assert settings.agentic_effort == "medium"
+        assert settings.cognitive_reflection_model == "claude-haiku-4-5"
+    else:
+        assert settings.agentic_effort == "high"
+        assert settings.cognitive_reflection_model == "glm-5.3"
+        assert ("agentic", "effort", "high", "project") in writes
+        assert ("cognitive", "reflection_model", "glm-5.3", "global") in writes
+
+
+def test_staged_primary_change_checks_new_reflection_not_replaced_model(monkeypatch) -> None:
+    from core.cli import commands
+    from core.cli.commands import model as model_cmd
+    from core.cli.commands._state import ModelProfile
+    from core.cli.effort_picker import PickerResult
+    from core.config import settings
+
+    _, writes = _capture_apply_io(monkeypatch)
+    monkeypatch.setattr(commands, "remove_env", lambda name: False)
+    monkeypatch.setattr(settings, "model", "gpt-6-sol")
+    monkeypatch.setattr(settings, "agentic_effort", "high")
+    monkeypatch.setattr(settings, "cognitive_reflection_model", "glm-5.3")
+    monkeypatch.setattr(model_cmd, "model_unavailable_reason", lambda *args, **kwargs: None)
+    result = PickerResult(
+        "claude-sonnet-5", None, role="reflection", staged=(("primary", "gpt-6-sol", "medium"),)
+    )
+    profiles = [
+        ModelProfile("gpt-6-sol", "openai", "Sol", "$"),
+        ModelProfile("claude-sonnet-5", "anthropic", "Sonnet", "$"),
+    ]
+    model_cmd._apply_picker_result(result, profiles)
+    assert settings.agentic_effort == "medium"
+    assert settings.cognitive_reflection_model == "claude-sonnet-5"
+    assert ("agentic", "effort", "medium", "project") in writes
+    assert ("cognitive", "reflection_model", "claude-sonnet-5", "global") in writes
+
+
+@pytest.mark.parametrize("primary_first", [False, True])
+@pytest.mark.parametrize("rejection", ["context", "source"])
+def test_staged_admission_rejection_preserves_all_active_and_durable_settings(
+    monkeypatch, primary_first, rejection
+) -> None:
+    from types import SimpleNamespace
+
+    from core.cli import commands
+    from core.cli.commands import model as model_cmd
+    from core.cli.commands._state import ModelProfile
+    from core.cli.effort_picker import PickerResult
+    from core.config import settings
+
+    _, writes = _capture_apply_io(monkeypatch)
+    monkeypatch.setattr(settings, "model", "gpt-6-sol")
+    monkeypatch.setattr(settings, "agentic_effort", "medium")
+    monkeypatch.setattr(settings, "cognitive_reflection_model", "claude-sonnet-5")
+    checks, removed = [], []
+    monkeypatch.setattr(commands, "_check_provider_key", checks.append)
+    monkeypatch.setattr(commands, "remove_env", removed.append)
+    monkeypatch.setattr(
+        model_cmd,
+        "model_unavailable_reason",
+        lambda model, **kwargs: (
+            "selected source unavailable"
+            if rejection == "source" and model == "gpt-6-sol"
+            else None
+        ),
+    )
+    if rejection == "context":
+        monkeypatch.setattr(
+            commands,
+            "get_conversation_context",
+            lambda: SimpleNamespace(messages=[{"role": "user", "content": "retained context"}]),
+        )
+        monkeypatch.setattr(
+            "core.orchestration.context_monitor.estimate_message_tokens", lambda _: 200
+        )
+        monkeypatch.setattr(
+            "core.orchestration.context_budget.resolve_context_budget_policy",
+            lambda _: SimpleNamespace(warning_tokens=100, tier=SimpleNamespace(name="test")),
+        )
+    selections = [("primary", "gpt-6-sol", "high"), ("reflection", "glm-5.3", None)]
+    if not primary_first:
+        selections.reverse()
+    role, mid, effort = selections[1]
+    model_cmd._apply_picker_result(
+        PickerResult(mid, effort, role=role, staged=(selections[0],)),
+        [
+            ModelProfile("gpt-6-sol", "openai", "Sol", "$"),
+            ModelProfile("glm-5.3", "glm", "GLM", "$"),
+        ],
+    )
+    assert settings.model == "gpt-6-sol"
+    assert settings.agentic_effort == "medium"
+    assert settings.cognitive_reflection_model == "claude-sonnet-5"
+    assert writes == []
+    assert removed == []
+    assert checks == []

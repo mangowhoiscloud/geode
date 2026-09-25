@@ -396,22 +396,24 @@ def _render(
     cur_mid, cur_prov, _cur_label, _cur_cost, _cur_avail, _cur_forced = profiles[cursor]
     levels = supported_efforts(cur_mid, cur_prov)
     current = effort_per_model.get(cur_mid)
-    default = default_effort(cur_mid, cur_prov)
     if not levels:
         out.write("  \033[2m· No effort knob for this model\033[0m\n")
     else:
-        sym = effort_symbol(current or default or "")
-        name = effort_label(current or default or "")
-        suffix = " (default)" if current == default else ""
-        if current is not None and current not in levels:
-            suffix = " (unsupported; choose a supported value)"
-        out.write(
-            _fit_to_width(
-                f"  \033[1;36m{sym}\033[0m {name} effort\033[2m{suffix}\033[0m"
-                f"  \033[2m← → to adjust\033[0m"
-            )
-            + "\n"
+        options = "  ".join(
+            f"\033[1;36m{effort_symbol(level)} {effort_label(level)}\033[0m"
+            if level == current
+            else effort_label(level)
+            for level in levels
         )
+        out.write(_fit_to_width(f"  Effort: {options}  \033[2m← → to choose\033[0m") + "\n")
+        if current not in levels:
+            out.write(
+                _fit_to_width(
+                    f"  Saved effort {current!r} is unsupported; choose with ← → before confirming."
+                )
+                + "\n"
+            )
+            lines += 1
     lines += 1
 
     out.write(_fit_to_width(f"\n  \033[2m{confirm_hint}\033[0m") + "\n")
@@ -495,8 +497,8 @@ def pick_model_and_effort(
             effort_per_model[mid] = None
             continue
         # Opening and confirming the current model must not rewrite explicit
-        # effort. Unsupported saved values remain visible and are rejected at
-        # application; only explicit arrow input selects a supported value.
+        # effort. Unsupported saved values remain separate from the choices;
+        # only explicit arrow input selects a supported value.
         if mid == effort_model:
             effort_per_model[mid] = current_effort
         else:
@@ -517,6 +519,12 @@ def pick_model_and_effort(
             (mid, prov, label, cost, availability.get(mid, available), forced)
             for mid, prov, label, cost, available, forced in profiles
         ]
+
+    def effort_is_selectable(model: str, provider: str) -> bool:
+        if not role_has_effort.get(role_names[role_cursor], True):
+            return True
+        levels = supported_efforts(model, provider)
+        return not levels or effort_per_model.get(model) in levels
 
     line_count = _render(
         profiles_for_role(),
@@ -562,11 +570,17 @@ def pick_model_and_effort(
                     cancelled=True,
                     role=role_names[role_cursor],
                 )
+            if not effort_is_selectable(chosen_mid, chosen_prov):
+                continue
             _clear_lines(line_count)
             final_role = role_names[role_cursor]
             return PickerResult(
                 model_id=chosen_mid,
-                effort=effort_per_model.get(chosen_mid),
+                effort=(
+                    effort_per_model.get(chosen_mid)
+                    if role_has_effort.get(final_role, True)
+                    else None
+                ),
                 cancelled=False,
                 role=final_role,
                 staged=tuple(
@@ -581,10 +595,10 @@ def pick_model_and_effort(
             # can be set in one picker session (Enter-only closed after
             # a single pick). The tab strip's per-role marker updates
             # immediately via role_initial_models; Esc discards.
-            staged_mid, _prov, _label, _cost, staged_available, _forced = profiles_for_role()[
+            staged_mid, staged_prov, _label, _cost, staged_available, _forced = profiles_for_role()[
                 cursor
             ]
-            if staged_available:
+            if staged_available and effort_is_selectable(staged_mid, staged_prov):
                 staged_role = role_names[role_cursor]
                 staged_picks[staged_role] = (
                     staged_mid,
