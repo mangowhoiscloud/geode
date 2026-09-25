@@ -511,12 +511,11 @@ class AgenticLoop:
         )
 
         reflection_kwargs: dict[str, Any] = {}
-        if isinstance(history := getattr(self.context, "messages", None), list):
-            task_context = render_retained_task_context(
-                history, current_request=self._verify_root_user_input
-            )
-            if task_context:
-                reflection_kwargs["task_context"] = task_context
+        task_context = render_retained_task_context(
+            self.context.messages, current_request=self._verify_root_user_input
+        )
+        if task_context:
+            reflection_kwargs["task_context"] = task_context
         active_middleware = getattr(self, "_middleware_registry", None)
         if active_middleware is not None:
             reflection_kwargs["middleware_registry"] = active_middleware

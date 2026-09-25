@@ -289,17 +289,17 @@ machine-readable artifact is
 |---|---:|
 | Production Python files (`core/` + `evals/` + `evolve/`) | 590 |
 | Test Python files | 747 |
-| `core/` Python LOC | 128,407 |
+| `core/` Python LOC | 128,507 |
 | `evals/` Python LOC | 34,615 |
 | `evolve/` Python LOC | 32,002 |
-| Test Python LOC | 219,500 |
+| Test Python LOC | 219,803 |
 | Tool definitions / model executions / valid schemas / policies | 86 / 86 / 86 / 86 (exact) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 6 |
 | Module/class-scoped `ContextVar`-backed bindings in production packages | 25 |
 | `core` → outer import sites | 0 across 0 files |
 | Import-linter contracts / ignored edges | 7 / 0 |
-| `AgenticLoop` file LOC / methods / constructor args | 1,148 / 39 / 12 |
+| `AgenticLoop` file LOC / methods / constructor args | 1,153 / 39 / 12 |
 | `SubAgentManager` file LOC / methods / constructor args | 849 / 17 / 18 |
 | `RuntimeCoreConfig` fields | 6 |
 | Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 207 |
