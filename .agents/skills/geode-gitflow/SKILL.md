@@ -58,6 +58,12 @@ editor. Do not overwrite another session's ownership record, change branches
 inside a worktree, or move a checkout held by another session. Fetching does
 not update a checked-out local `develop`; allocate from the remote-tracking tip.
 
+Before the first write of independent work, whether reused or new, run
+`uv run python scripts/check_repo_hygiene.py assert-write-workspace` in that
+checkout. It is read-only and requires an owned `.claude/worktrees/` topic
+checkout. On refusal, stop and allocate or assign the worktree above; do not
+continue writing in the current checkout.
+
 ### Architecture Ledger
 
 Ordinary tracking documents are maintained from `main`. Architecture-program
@@ -137,6 +143,15 @@ report meaningful state changes rather than polling an unchanged failure.
 On failure, inspect `gh run view <run-id> --log-failed`, fix the actual cause,
 verify affected behavior, push the scoped fix, and wait for the new head's CI.
 Do not delete tests or suppress a security finding merely to get green.
+
+Classify each failure before acting: **CI pending** (not attached or still
+running: wait in one bounded watcher), **code defect** (fix as above), or
+**environment interference** (runner outage or shared host state such as `/tmp`
+sockets or ports; a separate worktree does not isolate these). Only a code
+defect spends the recovery budget: 3 fix-push cycles per task. Stop earlier
+when the same failure signature recurs with no new evidence. On exhaustion,
+record the branch, head SHA, failing check, and log location, then report the
+task incomplete or hand it to a new session instead of looping.
 
 The read-only merge guard requires the live repository settings
 `allow_merge_commit=true`, `allow_squash_merge=false`, and

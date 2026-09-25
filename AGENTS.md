@@ -114,6 +114,10 @@ do not turn an incident-specific fix into an unconditional rule for every task.
    Implementation and ordinary roadmap work start from `origin/develop`;
    main-maintained tracking work uses `origin/main`. The roadmap's §0.3 owns
    its narrow readiness/claim/GAP/reconciliation/full-ledger exceptions.
+   Independent writes start after `check_repo_hygiene.py assert-write-workspace`
+   passes; delegates return the workflow's [handoff contract](docs/workflow.md#execution-scope);
+   CI recovery stops at GitFlow's [budget](.agents/skills/geode-gitflow/SKILL.md#post-pr-ci-ratchet)
+   and hands off.
 3. **Implement at the owner.** Reuse existing registries and helpers. Trace
    producer → field/state → reader → decision, including explicit/automatic
    input branches and refresh/invalidation. Process services cross constructors,

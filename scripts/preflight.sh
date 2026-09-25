@@ -22,6 +22,7 @@ FAST=0
 [ "${1:-}" = "--fast" ] && FAST=1
 
 FAILED=0
+LOG_DIR=""
 declare -a FAILURES=()
 declare -a SKIPPED=()
 
@@ -35,6 +36,12 @@ run() {
   else
     printf '\033[31mFAIL\033[0m\n'
     printf '%s\n' "$out" | tail -15 | sed 's/^/     /'
+    # Keep the full output so diagnosis does not require rerunning the gate.
+    [ -n "$LOG_DIR" ] || LOG_DIR=$(mktemp -d "${TMPDIR:-/tmp}/geode-preflight.XXXXXX")
+    local log="$LOG_DIR/${name//[^A-Za-z0-9._-]/_}.log"
+    if [ -n "$LOG_DIR" ] && printf '%s\n' "$out" > "$log"; then
+      printf '     full log: %s\n' "$log"
+    fi
     FAILED=$((FAILED + 1))
     FAILURES+=("$name")
   fi
