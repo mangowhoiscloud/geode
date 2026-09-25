@@ -6,6 +6,10 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from core.agent.conversation import ConversationContext
+from core.agent.loop import AgenticLoop, AgenticLoopConfig
+from core.agent.tool_executor import ToolExecutor
+from core.config.session import SessionModelConfig
 from core.memory.goals import GoalStore
 from core.memory.session_checkpoint import SessionCheckpoint, SessionState
 from core.observability.session_metrics import current_session_metrics
@@ -14,20 +18,25 @@ from core.orchestration.lane_queue import LaneQueue, SessionLane
 from core.server.supervised.services import SessionMode
 
 
-class _Loop:
-    def __init__(self) -> None:
-        self.model = "current-model"
+class _Loop(AgenticLoop):
+    def __init__(self, conversation: ConversationContext) -> None:
+        policy = SessionModelConfig(model="gpt-6-sol", effort="low", source="payg")
+        super().__init__(
+            conversation,
+            ToolExecutor(),
+            model=policy.model,
+            provider="openai",
+            config=AgenticLoopConfig(
+                effort=policy.effort, source=policy.source, model_settings=policy
+            ),
+            quiet=True,
+        )
         self.restored: Any = None
-        self.updated_model = ""
-        self.update_reason = ""
         self.trigger = ""
 
     def restore_from_checkpoint(self, state: Any) -> None:
+        super().restore_from_checkpoint(state)
         self.restored = state
-
-    async def update_model_async(self, model: str, *, reason: str = "") -> None:
-        self.updated_model = model
-        self.update_reason = reason
 
     async def acontinue_goal(self, *, trigger: str) -> Any:
         self.trigger = trigger
@@ -43,7 +52,7 @@ class _Services:
     def create_session(self, mode: SessionMode, **kwargs: Any) -> tuple[object, _Loop]:
         metrics = current_session_metrics()
         self.metric_scopes.append((metrics, metrics.session_id))
-        loop = _Loop()
+        loop = _Loop(kwargs["conversation"])
         self.created.append((mode, kwargs, loop))
         return object(), loop
 
@@ -54,7 +63,15 @@ def _setup(tmp_path: Path, *, session_id: str = "s-goal") -> tuple[Any, ...]:
         SessionState(
             session_id=session_id,
             status="active",
-            model="persisted-model",
+            model="gpt-6-luna",
+            model_settings=SessionModelConfig(
+                model="gpt-6-luna",
+                effort="medium",
+                source="subscription",
+                judge_model="gpt-6-sol",
+                judge_source="payg",
+                reflection_max_tokens=321,
+            ),
             messages=[{"role": "user", "content": "original request"}],
         )
     )
@@ -91,8 +108,8 @@ def test_restart_host_restores_once_and_waits_for_state_change(tmp_path: Path) -
         (message["role"], message["content"]) for message in kwargs["conversation"].messages
     ] == [("user", "original request")]
     assert loop.restored.session_id == "s-gw-test"
-    assert loop.updated_model == "persisted-model"
-    assert loop.update_reason == "resume"
+    assert loop._model_settings == _checkpoint.load("s-gw-test").model_settings
+    assert (loop.model, loop._source, loop._effort) == ("gpt-6-luna", "subscription", "medium")
     assert loop.trigger == "serve_idle"
 
     assert asyncio.run(host.continue_next_if_idle()) is None
@@ -108,6 +125,38 @@ def test_restart_host_restores_once_and_waits_for_state_change(tmp_path: Path) -
     assert len(services.created) == 2
     assert services.metric_scopes[0][1] == "s-gw-test"
     assert services.metric_scopes[0][0] is not services.metric_scopes[1][0]
+
+
+def test_host_rejects_saved_selection_before_history_or_identity(tmp_path: Path) -> None:
+    host, services, checkpoint, _goals, _lanes = _setup(tmp_path)
+    state = checkpoint.load("s-goal")
+    assert state is not None and state.model_settings is not None
+    state.model_settings = state.model_settings.updated({"effort": "turbo"})
+    checkpoint.save(state)
+    original = (tmp_path / "s-goal" / "state.json").read_bytes()
+
+    with pytest.raises(ValueError, match="effort"):
+        asyncio.run(host.continue_next_if_idle())
+
+    loop = services.created[0][2]
+    assert loop.context.is_empty
+    assert loop.restored is None and loop.trigger == ""
+    assert loop._session_id != "s-goal"
+    assert (loop.model, loop._source, loop._effort) == ("gpt-6-sol", "payg", "low")
+    assert (tmp_path / "s-goal" / "state.json").read_bytes() == original
+
+
+def test_host_legacy_checkpoint_keeps_current_selection(tmp_path: Path) -> None:
+    host, services, checkpoint, _goals, _lanes = _setup(tmp_path)
+    state = checkpoint.load("s-goal")
+    assert state is not None
+    state.model_settings = None
+    checkpoint.save(state)
+
+    assert asyncio.run(host.continue_next_if_idle()) == "s-goal"
+    loop = services.created[0][2]
+    assert (loop.model, loop._source, loop._effort) == ("gpt-6-sol", "payg", "low")
+    assert loop._session_id == "s-goal" and loop.trigger == "serve_idle"
 
 
 def test_foreground_lane_defers_hosted_goal(tmp_path: Path) -> None:

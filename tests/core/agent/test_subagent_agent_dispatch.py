@@ -69,6 +69,55 @@ def test_worker_effort_precedence(
     assert task.effort == explicit
 
 
+@pytest.mark.parametrize("explicit", [False, True])
+def test_worker_policy_preserves_auxiliary_and_agent_task_precedence(monkeypatch, explicit):
+    from core.config import settings
+    from core.config.session import SessionModelConfig
+
+    parent = SessionModelConfig(
+        model="gpt-6-sol",
+        source="subscription",
+        effort="low",
+        judge_model="gpt-6-astra",
+        judge_source="payg",
+        reflection_max_tokens=321,
+    )
+    registry = AgentRegistry()
+    registry.register(
+        AgentDefinition(
+            name="worker",
+            role="inspect",
+            system_prompt="Inspect the supplied artifact.",
+            model="gpt-6-luna",
+        )
+    )
+    monkeypatch.setattr(settings, "judge_model", "unrelated-default")
+    task = SubTask(
+        "policy-child",
+        "inspect",
+        "analyze",
+        agent="worker",
+        model="gpt-6-astra" if explicit else "",
+        effort="high" if explicit else "",
+        source="payg" if explicit else "",
+    )
+    request = _make_manager(registry)._protocol.build_worker_request(
+        task,
+        model_settings=parent,
+    )
+    wire = WorkerRequest.from_dict(request.to_dict())
+    assert wire.model == ("gpt-6-astra" if explicit else "gpt-6-luna")
+    assert wire.effort == ("high" if explicit else "low")
+    assert wire.source == ("payg" if explicit else "subscription")
+    assert wire.model_settings == parent.updated(
+        {
+            "model": wire.model,
+            "effort": wire.effort,
+            "source": wire.source,
+        }
+    )
+
+
 def test_build_worker_request_pulls_agent_system_prompt(
     seed_generator_registry: AgentRegistry,
 ) -> None:

@@ -179,21 +179,38 @@ def test_gateway_checkpoint_round_trip_restores_thread_history(tmp_path: Path):
     ]
 
 
-def test_gateway_loop_restore_matches_cli_machine_and_model_contract():
-    class Loop:
-        model = "new-default"
-        restored = None
-        updated_model = ""
+@pytest.mark.parametrize("invalid", [False, True])
+def test_gateway_loop_restore_admits_policy_before_machine_state(invalid):
+    from core.agent.conversation import ConversationContext
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig
+    from core.agent.tool_executor import ToolExecutor
+    from core.config.session import SessionModelConfig
+    from core.memory.session_checkpoint import SessionState
 
-        def restore_from_checkpoint(self, state):
-            self.restored = state
-
-        async def update_model_async(self, model: str):
-            self.updated_model = model
-
-    state = SimpleNamespace(model="persisted-model")
-    loop = Loop()
-    asyncio.run(_restore_gateway_loop(loop, state))
-
-    assert loop.restored is state
-    assert loop.updated_model == "persisted-model"
+    policy = SessionModelConfig(model="gpt-6-sol", source="payg", effort="low")
+    loop = AgenticLoop(
+        ConversationContext(),
+        ToolExecutor(),
+        model=policy.model,
+        provider="openai",
+        config=AgenticLoopConfig(source=policy.source, effort=policy.effort, model_settings=policy),
+        quiet=True,
+    )
+    original_id = loop._session_id
+    target = policy.updated(
+        {
+            "source": "subscription",
+            "effort": "turbo" if invalid else "medium",
+            "reflection_model": "gpt-6-luna",
+            "reflection_source": "payg",
+        }
+    )
+    state = SessionState(session_id="gateway-saved", model_settings=target)
+    if invalid:
+        with pytest.raises(ValueError, match="effort"):
+            asyncio.run(_restore_gateway_loop(loop, state))
+        assert loop._session_id == original_id and loop._model_settings == policy
+    else:
+        asyncio.run(_restore_gateway_loop(loop, state))
+        assert loop._session_id == "gateway-saved" and loop._model_settings == target
+        assert loop._source == "subscription" and loop._effort == "medium"

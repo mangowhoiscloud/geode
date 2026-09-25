@@ -173,6 +173,12 @@ functional change.
 
 ### Fixed
 
+- Preserve the admitted model, source, effort and auxiliary policy through session
+  checkpoints and child-worker requests. Validate resume selection before changing
+  history, identity or checkpoint status; reject malformed saved records and keep
+  the current validated selection for legacy checkpoints. Report the applied
+  selection to the thin client without rereading unrelated process defaults.
+
 - Exclude the Anthropic, OpenAI, OpenRouter and Z.AI API keys from `Settings`
   `repr()` and `str()`, so failing pytest assertions and formatted settings
   objects no longer print credential values. The fields remain plain strings;
