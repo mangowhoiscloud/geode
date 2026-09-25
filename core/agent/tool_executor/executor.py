@@ -1904,6 +1904,7 @@ class ToolExecutor:
             on_activity=_on_activity,
             default_model=default_model,
             default_effort=default_effort,
+            model_settings=getattr(getattr(context, "agent_loop", None), "_model_settings", None),
         )
 
         # Fleet view: guarantee a terminal state for EVERY dispatched task.
@@ -1982,6 +1983,9 @@ class ToolExecutor:
                 parent_session_id=parent_session_id,
                 default_model=str(getattr(context, "model", "") or ""),
                 default_effort=str(getattr(context, "effort", "") or ""),
+                model_settings=getattr(
+                    getattr(context, "agent_loop", None), "_model_settings", None
+                ),
             )
         except ValueError as exc:
             return {"error": str(exc)}
@@ -2035,6 +2039,9 @@ class ToolExecutor:
                     message,
                     default_model=default_model,
                     default_effort=str(getattr(context, "effort", "") or ""),
+                    model_settings=getattr(
+                        getattr(context, "agent_loop", None), "_model_settings", None
+                    ),
                 )
                 return {"task": run.to_dict(), "turn_triggered": resumed, "resumed": resumed}
             return {"error": f"Unknown collaboration tool: {tool_name}"}

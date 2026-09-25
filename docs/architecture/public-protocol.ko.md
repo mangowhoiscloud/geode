@@ -74,8 +74,12 @@ project/global 기본값을 저장하지 않습니다. 아무 동작도 하지 �
 도구 projection 실패 시 이전 모델 경로와 도구 바인딩을 복원합니다. 그 전에
 이전 경로로 유효한 compaction이 완료됐을 수 있으므로 이력이나 외부 효과의
 rollback까지 보장하지는 않습니다. 보조 호출은 세션의 불변 설정과 기존 인증
-소유자를 사용합니다. 체크포인트 스키마나 과거 세션 모델 설정의 완전한 resume
-복원은 이 계약에서 확장하지 않습니다.
+소유자를 사용합니다. 새 checkpoint의 `state.json.model_settings`에는 같은
+비밀값 없는 record가 저장됩니다. resume는 이력을 변경하거나 머신을 다시 열기
+전에 설정을 승인하고, 실제 `model_config`와 `model_config_origin:
+checkpoint|current`를 반환합니다. 클라이언트는 이 값으로 선택을 갱신합니다.
+legacy 필드 부재는 현재 검증된 선택을 유지하고, 존재하지만 잘못된 record는
+거절합니다. 기존 JSON IPC envelope와 협상 기능은 유지합니다.
 
 ## Gateway 입력
 

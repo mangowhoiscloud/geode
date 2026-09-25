@@ -561,6 +561,12 @@ class IPCClient:
         response = self._recv_for(request_id)
         if response is None:
             return {"type": "resume_error", "message": "Connection lost"}
+        if response.get("type") == "resumed":
+            from core.config.session import SessionModelConfig
+
+            self.model_config = SessionModelConfig.model_validate(
+                response.get("model_config")
+            ).model_dump()
         return response
 
     def send_command(self, cmd: str, args: str = "") -> dict[str, Any]:
