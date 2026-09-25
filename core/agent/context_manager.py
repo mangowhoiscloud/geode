@@ -22,6 +22,7 @@ from core.hooks import (
 )
 from core.orchestration.context_budget import (
     ABSOLUTE_TOKEN_CEILING,
+    ContextBudgetPolicy,
     resolve_context_budget_policy,
 )
 
@@ -63,6 +64,7 @@ class ContextWindowManager:
         self._session_id_provider = session_id_provider
         self._effort_provider = effort_provider
         self._source_provider = source_provider
+        self._compacting = False
 
     async def compact(
         self,
@@ -74,11 +76,16 @@ class ContextWindowManager:
         keep_recent: int | None = None,
         trigger: str = "manual",
         commit: Callable[[], None] | None = None,
+        policy: ContextBudgetPolicy | None = None,
     ) -> ContextOperationResult:
         """Run explicit summary or lossful pruning through the same runtime owner."""
         from core.config import settings
 
-        policy = resolve_context_budget_policy(model)
+        policy = policy or resolve_context_budget_policy(
+            model,
+            provider=provider,
+            source=self._source_provider() if self._source_provider else None,
+        )
         return await self._apply_overflow_strategy(
             {
                 "strategy": "prune" if prune else "compact",
@@ -103,6 +110,9 @@ class ContextWindowManager:
         messages: list[dict[str, Any]],
         model: str,
         provider: str,
+        *,
+        policy: ContextBudgetPolicy | None = None,
+        tools_tokens: int | None = None,
     ) -> None:
         """Check context window usage and apply provider-aware compression.
 
@@ -112,8 +122,8 @@ class ContextWindowManager:
         - OpenAI/GLM: GEODE uses client-side text compaction. It triggers LLM-based
           compaction at warning pressure and emergency prune at critical pressure.
 
-        The policy also carries the absolute ceiling that avoids large-context
-        rate-limit pool separation before percentage thresholds become relevant.
+        The early-maintenance ceiling is a local soft preference, not a
+        provider input limit or permission to discard otherwise valid history.
 
         The domain policy chooses the compression strategy. Public PreCompact
         handlers may adjust bounded inputs or defer a soft compaction, but they
@@ -121,9 +131,24 @@ class ContextWindowManager:
         """
         try:
             from core.config import settings
-            from core.orchestration.context_monitor import check_context
+            from core.orchestration.context_monitor import ContextMetrics, check_context
 
-            metrics = check_context(messages, model, system_prompt=system)
+            if self._compacting:
+                from core.agent.loop import _ContextExhaustedError
+
+                raise _ContextExhaustedError("Context compaction is already in progress")
+            policy = policy or resolve_context_budget_policy(
+                model,
+                provider=provider,
+                source=self._source_provider() if self._source_provider else None,
+            )
+
+            def measure() -> ContextMetrics:
+                return check_context(
+                    messages, model, system_prompt=system, tools_tokens=tools_tokens, policy=policy
+                )
+
+            metrics = measure()
 
             if metrics.is_critical:
                 log.warning(
@@ -147,14 +172,17 @@ class ContextWindowManager:
                     messages,
                     getattr(metrics, "policy", None) or metrics.context_window,
                 )
-                metrics = check_context(messages, model, system_prompt=system)
+                metrics = measure()
                 strategy = await self._resolve_overflow_strategy(metrics, settings, model, provider)
                 strategy["hard"] = True
-                await self._apply_overflow_strategy(strategy, messages, settings, model, provider)
+                strategy["source"] = policy.source
+                outcome = await self._apply_overflow_strategy(
+                    strategy, messages, settings, model, provider
+                )
 
                 # Re-check: if still critical after pruning, context is exhausted
-                post = check_context(messages, model, system_prompt=system)
-                if post.is_critical:
+                post = measure()
+                if post.is_critical and outcome.status not in {"unsupported", "deferred"}:
                     pruned = adaptive_prune(
                         messages,
                         getattr(post, "policy", None) or post.context_window,
@@ -163,13 +191,16 @@ class ContextWindowManager:
 
                     messages.clear()
                     messages.extend(repair_tool_pairs(pruned))
-                    post = check_context(messages, model, system_prompt=system)
+                    post = measure()
 
                 if post.is_critical:
                     from core.agent.loop import _ContextExhaustedError
 
                     raise _ContextExhaustedError(
-                        f"Context exhausted: {post.usage_pct:.0f}% after pruning"
+                        f"Context exhausted: {post.usage_pct:.0f}% after maintenance",
+                        policy=policy,
+                        system_prompt=system,
+                        tools_tokens=tools_tokens,
                     )
 
             elif metrics.is_warning:
@@ -186,7 +217,9 @@ class ContextWindowManager:
                     )
 
                 # Step 2: compact or summarize
+                metrics = measure()
                 strategy = await self._resolve_overflow_strategy(metrics, settings, model, provider)
+                strategy["source"] = policy.source
                 if strategy.get("strategy") == "compact":
                     await self._apply_overflow_strategy(
                         strategy, messages, settings, model, provider
@@ -212,7 +245,7 @@ class ContextWindowManager:
 
                 log.info(
                     "Context ceiling: %d tokens > %dK ceiling (%.0f%% of %dK window) "
-                    "— compressing to avoid rate limit pool separation",
+                    "— attempting soft local maintenance",
                     metrics.estimated_tokens,
                     metrics.policy.absolute_ceiling_tokens // 1000
                     if metrics.policy
@@ -226,22 +259,15 @@ class ContextWindowManager:
                     messages,
                     metrics.policy or ABSOLUTE_TOKEN_CEILING,
                 )
-                post = check_context(messages, model, system_prompt=system)
+                post = measure()
 
                 if post.is_ceiling_exceeded:
-                    # Phase 2: compact conversation
-                    keep_recent = (
-                        post.policy.resolve_keep_recent(settings.compact_keep_recent)
-                        if post.policy
-                        else settings.compact_keep_recent
+                    # The route policy also owns soft maintenance; native
+                    # compaction must not acquire a second client-side path.
+                    strategy = await self._resolve_overflow_strategy(
+                        post, settings, model, provider
                     )
-                    strategy = {
-                        "strategy": "compact",
-                        "keep_recent": keep_recent,
-                        "policy": post.policy,
-                        "trigger": "ceiling",
-                        "hard": True,
-                    }
+                    strategy.update(trigger="ceiling", hard=False, source=policy.source)
                     await self._apply_overflow_strategy(
                         strategy, messages, settings, model, provider
                     )
@@ -300,11 +326,21 @@ class ContextWindowManager:
                 )
             return result
 
-        if action == "compact":
-            from core.orchestration.compaction import compact_conversation
+        from core.orchestration.compaction import (
+            StaleCompactionError,
+            can_compact_conversation,
+            compact_conversation,
+        )
 
-            if provider == "anthropic":
-                return finish("compact", "unsupported")
+        if action in {"compact", "prune"} and not can_compact_conversation(
+            messages, provider=provider, model=model
+        ):
+            return finish(action, "unsupported")
+
+        if action == "compact":
+            if self._compacting:
+                return finish("compact", "deferred")
+            self._compacting = True
             try:
                 session_id = self._session_id_provider() if self._session_id_provider else None
                 correlation = HookCorrelation(
@@ -338,7 +374,13 @@ class ContextWindowManager:
                     provider=provider,
                     model=model,
                     effort=self._effort_provider() if self._effort_provider else None,
-                    source=self._source_provider() if self._source_provider else None,
+                    source=(
+                        strategy["source"]
+                        if strategy.get("source")
+                        else self._source_provider()
+                        if self._source_provider
+                        else None
+                    ),
                     keep_recent=keep_recent,
                     policy=strategy.get("policy"),
                     session_id=session_id,
@@ -347,26 +389,38 @@ class ContextWindowManager:
                     correlation=dataclasses.asdict(correlation),
                 )
                 if did_compact:
-                    replace_messages(new_msgs)
+                    try:
+                        replace_messages(new_msgs)
+                    except Exception as exc:
+                        log.warning("Compaction commit failed", exc_info=True)
+                        return finish("compact", "failed", type(exc).__name__)
                     if self._hook_registry is not None:
-                        await self._hook_registry.invoke(
-                            HookName.POST_COMPACT,
-                            payload={
-                                "model": model,
-                                "provider": provider,
-                                "original_message_count": original_count,
-                                "new_message_count": len(new_msgs),
-                                "keep_recent": keep_recent,
-                                "trigger": strategy.get("trigger", "overflow"),
-                                "persisted": bool(session_id),
-                            },
-                            correlation=correlation,
-                        )
+                        try:
+                            await self._hook_registry.invoke(
+                                HookName.POST_COMPACT,
+                                payload={
+                                    "model": model,
+                                    "provider": provider,
+                                    "original_message_count": original_count,
+                                    "new_message_count": len(new_msgs),
+                                    "keep_recent": keep_recent,
+                                    "trigger": strategy.get("trigger", "overflow"),
+                                    "persisted": bool(session_id),
+                                },
+                                correlation=correlation,
+                            )
+                        except Exception:
+                            # Observation cannot undo or prune a committed summary.
+                            log.warning("PostCompact notification failed", exc_info=True)
                     return finish("compact", "changed")
+            except StaleCompactionError as exc:
+                return finish("compact", "deferred", type(exc).__name__)
             except Exception as exc:
                 log.warning("Client compaction failed", exc_info=True)
                 if not strategy.get("hard", False):
                     return finish("compact", "failed", type(exc).__name__)
+            finally:
+                self._compacting = False
             # Soft maintenance must not turn a failed summary or durable write
             # into irreversible history loss. Only an explicit hard boundary
             # permits the emergency prune fallback.
@@ -403,64 +457,60 @@ class ContextWindowManager:
         messages: list[dict[str, Any]],
         model: str,
         provider: str = "anthropic",
-    ) -> int:
-        """Last-resort context recovery: aggressive prune + tool result summarization.
+        *,
+        provider_rejected: bool = False,
+        policy: ContextBudgetPolicy | None = None,
+        tools_tokens: int | None = None,
+    ) -> ContextOperationResult:
+        """Produce a smaller retry candidate without claiming server acceptance.
 
-        Uses the same deterministic domain policy as normal overflow, with an
-        aggressive keep_recent override. Public hooks cannot disable this hard
-        recovery boundary.
-
-        Returns number of messages freed, or 0 if recovery failed.
+        A confirmed input rejection overrides local size estimates. Message
+        count is diagnostic: an equal-count summary can still reduce input.
         """
-        try:
-            from core.config import settings
-            from core.orchestration.context_monitor import (
-                check_context,
-                summarize_tool_results,
+        from core.config import settings
+        from core.orchestration.context_monitor import (
+            ContextMetrics,
+            check_context,
+            summarize_tool_results,
+        )
+
+        original_count = len(messages)
+        if self._compacting:
+            return ContextOperationResult("compact", "deferred", original_count, original_count)
+        policy = policy or resolve_context_budget_policy(
+            model,
+            provider=provider,
+            source=self._source_provider() if self._source_provider else None,
+        )
+
+        def measure() -> ContextMetrics:
+            return check_context(
+                messages, model, system_prompt=system, tools_tokens=tools_tokens, policy=policy
             )
 
-            original_count = len(messages)
+        before = measure()
+        summarize_tool_results(messages, policy)
+        post = measure()
+        if post.estimated_tokens < before.estimated_tokens and not post.is_critical:
+            return ContextOperationResult("none", "changed", original_count, len(messages))
+        if not provider_rejected and not post.is_critical:
+            return ContextOperationResult("none", "unchanged", original_count, len(messages))
 
-            # Phase 1: summarize large tool_result blocks in-place
-            metrics = check_context(messages, model, system_prompt=system)
-            summarized, _tok_before, _tok_after = summarize_tool_results(
-                messages,
-                metrics.policy or metrics.context_window,
-            )
-            if summarized > 0:
-                log.info("Aggressive recovery: summarized %d tool results", summarized)
-
-            # Check if summarization alone resolved it
-            post = check_context(messages, model, system_prompt=system)
-            if not post.is_critical:
-                return original_count - len(messages) + summarized
-
-            # Phase 2: resolve the domain policy and tighten its retention.
-            strategy = await self._resolve_overflow_strategy(post, settings, model, provider)
-
-            aggressive_keep = (
-                post.policy.resolve_aggressive_keep_recent(settings.compact_keep_recent)
-                if post.policy
-                else max(3, settings.compact_keep_recent // 2)
-            )
-            strategy["keep_recent"] = aggressive_keep
-            strategy["hard"] = True
-
-            # Force prune if hook returned "none" — aggressive recovery must act
-            if strategy.get("strategy") == "none":
-                strategy["strategy"] = "prune"
-
-            await self._apply_overflow_strategy(strategy, messages, settings, model, provider)
-
-            # Final check
-            post2 = check_context(messages, model, system_prompt=system)
-            if not post2.is_critical:
-                return original_count - len(messages)
-
-            return 0  # recovery failed
-        except Exception:
-            log.warning("Aggressive context recovery failed", exc_info=True)
-            return 0
+        strategy = await self._resolve_overflow_strategy(post, settings, model, provider)
+        strategy.update(
+            keep_recent=policy.resolve_aggressive_keep_recent(settings.compact_keep_recent),
+            hard=True,
+            trigger="provider_overflow" if provider_rejected else "recovery",
+            source=policy.source,
+        )
+        if provider_rejected or strategy.get("strategy") == "none":
+            strategy["strategy"] = "compact"
+        outcome = await self._apply_overflow_strategy(strategy, messages, settings, model, provider)
+        if outcome.status != "changed":
+            return outcome
+        if measure().estimated_tokens < before.estimated_tokens:
+            return outcome
+        return ContextOperationResult(outcome.action, "unchanged", original_count, len(messages))
 
     def _notify_context_event(
         self,
@@ -511,7 +561,10 @@ class ContextWindowManager:
             getattr(metrics, "is_critical", estimated_tokens >= policy.critical_tokens)
         )
         is_warning = bool(getattr(metrics, "is_warning", estimated_tokens >= policy.warning_tokens))
-        if provider == "anthropic":
+        from core.llm.model_capabilities import get_anthropic_model_spec
+
+        native = get_anthropic_model_spec(model) if provider == "anthropic" else None
+        if native is not None and native.compaction:
             if is_critical:
                 return {
                     "strategy": "prune",
@@ -528,7 +581,7 @@ class ContextWindowManager:
                 "policy": policy,
                 "trigger": "critical",
             }
-        elif is_warning:
+        elif is_warning or bool(getattr(metrics, "is_ceiling_exceeded", False)):
             return {
                 "strategy": "compact",
                 "keep_recent": keep_recent,

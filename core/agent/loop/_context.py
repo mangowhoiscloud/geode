@@ -20,6 +20,9 @@ from core.skills.skill_catalog_policy import (
 )
 
 if TYPE_CHECKING:
+    from core.agent.context_manager import ContextOperationResult
+    from core.orchestration.context_budget import ContextBudgetPolicy
+
     from .agent_loop import AgenticLoop
 
 log = logging.getLogger(__name__)
@@ -45,20 +48,43 @@ def notify_context_event(
 
 
 async def check_context_overflow(
-    loop: AgenticLoop, system: str, messages: list[dict[str, Any]]
+    loop: AgenticLoop,
+    system: str,
+    messages: list[dict[str, Any]],
+    *,
+    policy: ContextBudgetPolicy | None = None,
+    tools_tokens: int | None = None,
 ) -> None:
     """Check context window usage. Delegates to ContextWindowManager."""
-    await loop._ctx_mgr.check_context_overflow(system, messages, loop.model, loop._provider)
+    await loop._ctx_mgr.check_context_overflow(
+        system,
+        messages,
+        policy.model if policy else loop.model,
+        policy.provider if policy else loop._provider,
+        policy=policy,
+        tools_tokens=tools_tokens,
+    )
 
 
 async def aggressive_context_recovery(
-    loop: AgenticLoop, system: str, messages: list[dict[str, Any]]
-) -> int:
+    loop: AgenticLoop,
+    system: str,
+    messages: list[dict[str, Any]],
+    *,
+    provider_rejected: bool = False,
+    policy: ContextBudgetPolicy | None = None,
+    tools_tokens: int | None = None,
+) -> ContextOperationResult:
     """Last-resort context recovery. Delegates to ContextWindowManager."""
-    recovered: int = await loop._ctx_mgr.aggressive_context_recovery(
-        system, messages, loop.model, loop._provider
+    return await loop._ctx_mgr.aggressive_context_recovery(
+        system,
+        messages,
+        policy.model if policy else loop.model,
+        policy.provider if policy else loop._provider,
+        provider_rejected=provider_rejected,
+        policy=policy,
+        tools_tokens=tools_tokens,
     )
-    return recovered
 
 
 def repair_messages(messages: list[dict[str, Any]]) -> None:

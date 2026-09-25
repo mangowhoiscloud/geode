@@ -250,11 +250,8 @@ def test_session_start_signals_bind_parent_session_id() -> None:
 
     from core.agent.cognitive_state import CognitiveState
     from core.agent.cognitive_state_ctx import get_parent_session_id
+    from core.agent.conversation import ConversationContext
     from core.agent.loop.agent_loop import AgenticLoop
-
-    class _StubCtx:
-        def add_user_message(self, _msg: str) -> None:
-            return None
 
     captured: dict[str, str] = {}
 
@@ -262,7 +259,7 @@ def test_session_start_signals_bind_parent_session_id() -> None:
         captured["parent_session_id"] = get_parent_session_id()
 
     loop_obj = _cast(Any, AgenticLoop.__new__(AgenticLoop))
-    loop_obj.context = _StubCtx()
+    loop_obj.context = ConversationContext()
     loop_obj.cognitive_state = CognitiveState()
     loop_obj._session_id = "s-child-uuid"
     loop_obj._parent_session_key = "subject:foo:bar"

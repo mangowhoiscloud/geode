@@ -133,3 +133,23 @@ def test_active_offerings_have_price_and_context() -> None:
     for offering in MODEL_OFFERINGS:
         assert offering.id in catalogue.pricing
         assert offering.id in catalogue.context_windows
+
+
+@pytest.mark.parametrize(
+    "model",
+    ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
+)
+def test_source_context_metadata_does_not_claim_codex_server_limits(model: str) -> None:
+    api = get_model_catalog_spec(model, "openai", source="payg")
+    sub = get_model_catalog_spec(model, "openai", source="subscription")
+    assert api.context_window == 1_050_000 and api.max_input_tokens == 922_000
+    assert sub.context_window == 272_000 and sub.max_context_window == 872_000
+    assert sub.max_input_tokens is None and sub.max_output_tokens is None
+    assert sub.context_origin == "client_default"
+
+
+def test_unknown_codex_is_not_known_client_metadata() -> None:
+    spec = get_model_catalog_spec("unknown-codex-model", "openai", source="subscription")
+    assert spec.context_window == spec.max_context_window == 272_000
+    assert spec.context_origin == "fallback"
+    assert spec.max_input_tokens is None

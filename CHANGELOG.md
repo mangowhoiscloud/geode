@@ -163,6 +163,17 @@ functional change.
 
 ### Fixed
 
+- Use the selected model/provider/source and request output reserve for context
+  admission. Treat 200K as soft local maintenance, recover boundedly from actual
+  provider overflow, and avoid duplicate pre-request compaction decisions.
+  Preserve original user input, causal tool pairs and native replay boundaries;
+  reject stale/reentrant replacement and read-only hook rewrites. Exhaustion
+  now returns a truthful local notice without another model call or a universal
+  session-reset claim.
+  Include native Anthropic compaction iterations in completed and streamed
+  usage without double-counting top-level totals, retaining cache TTL subsets
+  and explicit unknowns.
+
 - Keep daemon `/grill` execution independent of CLI initialization by moving
   skill prompt rendering and grilling invocation to their runtime skill owners.
   Reuse that renderer for `/geo` while preserving prompt text, session control

@@ -91,6 +91,16 @@ def build_glm_reasoning_extra_body(
     }
 
 
+def effective_output_tokens(req: AdapterCallRequest) -> int:
+    """Return the existing GLM wire cap without reading credentials."""
+    from core.llm.errors import LLMRequestValidationError
+
+    if req.max_tokens <= 0:
+        raise LLMRequestValidationError("GLM max_tokens must be positive")
+    spec = get_glm_model_spec(req.model)
+    return min(req.max_tokens, spec.max_output_tokens) if spec is not None else req.max_tokens
+
+
 def build_glm_chat_kwargs(
     req: AdapterCallRequest, *, adapter_name: str, source: str, stream: bool = False
 ) -> dict[str, Any]:
@@ -107,11 +117,7 @@ def build_glm_chat_kwargs(
         adapter_name=adapter_name,
         extra_body=build_glm_reasoning_extra_body(req.model, effort=req.effort or None),
     )
-    if req.max_tokens <= 0:
-        raise LLMRequestValidationError("GLM max_tokens must be positive")
-    spec = get_glm_model_spec(req.model)
-    if spec is not None:
-        kwargs["max_tokens"] = min(req.max_tokens, spec.max_output_tokens)
+    kwargs["max_tokens"] = effective_output_tokens(req)
     choice = kwargs.get("tool_choice")
     if choice == "none":
         # Z.AI documents auto only. Omitting definitions enforces the caller's

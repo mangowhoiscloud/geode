@@ -42,7 +42,7 @@ or durable telemetry. Test the affected producer and consumer together.
 | Boundary | Required behavior | Regression evidence |
 |---|---|---|
 | Observation → execution | Each subscriber receives a deep snapshot; nested edits cannot change admitted tool arguments, later subscribers, or persisted event data. | [Event isolation](../../tests/core/hooks/test_hook_system_lifecycle.py) |
-| Model switch → compaction | Use `ContextWindowManager`, including `PreCompact` defer and `PostCompact` after commit; no direct summary bypass. | [Model-switch compaction](../../tests/core/agent/test_model_switch_guard.py) |
+| Model switch → compaction | Use `ContextWindowManager`, including soft `PreCompact` defer and `PostCompact` after live replacement; checkpoint durability belongs to the caller. | [Model-switch compaction](../../tests/core/agent/test_model_switch_guard.py) |
 | Cancellation → audit | Foreground child cancellation emits one `SubagentStop`; hook/middleware audit failure cannot replace the original interruption. | [Child wiring](../../tests/core/hooks/test_public_hook_wiring.py), [middleware](../../tests/core/hooks/test_middleware.py) |
 | Shared handler → session state | Learning quotas, cooldowns, tool counts and input cursors are keyed by session; only matching durable `SessionEnd` clears them. Legacy turn-end events do not delete shared offload files. | [Learning lifecycle](../../tests/core/hooks/test_auto_learn.py), [offload lifetime](../../tests/core/wiring/test_tool_offload_rewire.py) |
 | MCP trace → content | Tracing never reads local files or modifies write content. Schema argument aliases remain separate from content. | [MCP invocation](../../tests/core/mcp/test_mcp_lifecycle.py) |
@@ -112,6 +112,33 @@ attributed decision, and leaves the domain owner's fallback intact. It is not
 an implicit `continue` or permission grant. Cancellation is audited as `error`
 with only its exception type as the reason, then the original cancellation is
 re-raised. Audit metadata never substitutes for a control decision.
+
+### Compaction decisions and observations
+
+`PreCompact` may rewrite only `keep_recent`. `model`, `provider`,
+`message_count`, `trigger` and `hard` are read-only: a decision containing any
+other update is rejected in full, audited as an error, and cannot alter the
+payload seen by the next handler. The context owner bounds the retained count
+and ignores soft deferral at an explicit hard boundary. The public v1/v2
+payload schemas do not gain provider-routing or budget authority.
+
+After request middleware and tool allowlists select the effective route, the
+shared root/auxiliary path performs one mutable preventive pressure check when
+the request retains caller-owned history. A middleware-owned replacement gets
+only a read-only fit check and cannot trigger compaction of the original history.
+The final check before adapter execution is also read-only.
+A provider rejection can start a distinct bounded recovery attempt; it is not
+an excuse to invoke the same soft decision twice before one provider call.
+`CONTEXT_CRITICAL` is observation, and `CONTEXT_OVERFLOW_ACTION` does not select
+a strategy. Pruning and cheap observation masking remain separate operations.
+
+`PostCompact` follows live history replacement and any caller-supplied commit
+callback. Its `persisted` field describes the summary artifact, not an atomic
+session checkpoint. A failed checkpoint callback restores the live list even
+if an artifact was already stored. Post-handler failure does not roll back a
+completed replacement; cancellation still propagates. See the
+[compaction owner contract](context-compaction.md) for manual, tool and
+model-switch checkpoint boundaries and the current implementation status.
 
 ### Verification and external loops
 

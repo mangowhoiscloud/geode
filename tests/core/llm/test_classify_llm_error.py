@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import anthropic
 import httpx
+import pytest
 from core.llm.errors import classify_llm_error
 
 
@@ -137,3 +138,45 @@ class TestClassifyOpenAiSdkErrorsUnchanged:
         )
         error_type, _severity, _hint = classify_llm_error(exc)
         assert error_type == "server"
+
+
+@pytest.mark.parametrize(
+    ("code", "message", "expected"),
+    [
+        ("1261", "Prompt too long", "context_overflow"),
+        (1261, "Prompt exceeds max length", "context_overflow"),
+        (
+            "1261",
+            "The length of the history messages exceeds the maximum length.",
+            "context_overflow",
+        ),
+        ("1261", "", "context_overflow"),
+        (None, "Prompt too long", "context_overflow"),
+        (
+            None,
+            "The length of the history messages exceeds the maximum length.",
+            "context_overflow",
+        ),
+        ("1210", "Invalid API parameter", "bad_request"),
+        ("unsupported_parameter", "Unsupported parameter: max_tokens", "bad_request"),
+        (None, "max_tokens must be positive", "bad_request"),
+        (None, "Output length exceeds the maximum length", "bad_request"),
+        (None, "Prompt cache TTL is too long", "bad_request"),
+        (None, "History retention period exceeds the maximum length", "bad_request"),
+    ],
+)
+@pytest.mark.parametrize("nested", [True, False])
+def test_glm_context_overflow_is_bounded_by_code_or_input_length(code, message, expected, nested):
+    import openai
+
+    detail = {"message": message}
+    if code is not None:
+        detail["code"] = code
+    exc = openai.BadRequestError(
+        message=message,
+        response=httpx.Response(
+            400, request=httpx.Request("POST", "https://api.z.ai/api/paas/v4/chat/completions")
+        ),
+        body={"error": detail} if nested else detail,
+    )
+    assert classify_llm_error(exc)[0] == expected

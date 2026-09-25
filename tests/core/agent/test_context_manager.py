@@ -378,7 +378,9 @@ class TestContextWindowManager:
 
         mgr = self._make_mgr()
         result = asyncio.run(
-            mgr._resolve_overflow_strategy(FakeMetrics(), FakeSettings(), "claude-3", "anthropic")
+            mgr._resolve_overflow_strategy(
+                FakeMetrics(), FakeSettings(), "claude-fable-5", "anthropic"
+            )
         )
         assert result["strategy"] == "none"
 

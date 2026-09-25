@@ -6,9 +6,10 @@ import asyncio
 import json
 from contextlib import closing
 from copy import deepcopy
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 
 import httpx
@@ -16,8 +17,8 @@ import pytest
 from anthropic import AsyncAnthropic
 from core.agent.loop._response import _record_usage
 from core.hooks import HookEvent, HookSystem
-from core.hooks.llm_observation import observe_llm_call
-from core.llm.adapters._anthropic_common import build_create_kwargs
+from core.hooks.llm_observation import _completed_attempt_payload, observe_llm_call
+from core.llm.adapters._anthropic_common import build_create_kwargs, translate_response
 from core.llm.adapters.anthropic_payg import AnthropicPaygAdapter
 from core.llm.adapters.base import AdapterCallRequest, Message, UsageSummary
 from core.llm.adapters.translation import agentic_response_from_adapter_result
@@ -334,3 +335,241 @@ def test_sdk_stream_preserves_one_hour_usage() -> None:
             assert usage["cache_write_1h_tokens"] == 600
 
     asyncio.run(run())
+
+
+def _compaction_usage() -> dict[str, Any]:
+    def iteration(
+        kind: str, inputs: int, outputs: int, reads: int, writes: int, hour: int
+    ) -> dict[str, Any]:
+        return {
+            "type": kind,
+            "model": "claude-opus-5-5",
+            "input_tokens": inputs,
+            "output_tokens": outputs,
+            "cache_read_input_tokens": reads,
+            "cache_creation_input_tokens": writes,
+            "cache_creation": {
+                "ephemeral_1h_input_tokens": hour,
+                "ephemeral_5m_input_tokens": writes - hour,
+            },
+        }
+
+    return {
+        "input_tokens": 23700,
+        "output_tokens": 1100,
+        "cache_read_input_tokens": 350,
+        "cache_creation_input_tokens": 1030,
+        "cache_creation": {"ephemeral_1h_input_tokens": 610, "ephemeral_5m_input_tokens": 420},
+        "output_tokens_details": {"thinking_tokens": 7},
+        "iterations": [
+            iteration("compaction", 180000, 3500, 200, 100, 40),
+            iteration("message", 23000, 1000, 300, 1000, 600),
+            iteration("compaction", 400, 10, 0, 0, 0),
+            iteration("message", 700, 100, 50, 30, 10),
+        ],
+    }
+
+
+def _compaction_message(usage: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": "msg_compaction",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-opus-5-5",
+        "stop_reason": "end_turn",
+        "stop_sequence": None,
+        "content": [{"type": "text", "text": "continued"}],
+        "usage": usage,
+    }
+
+
+@pytest.mark.parametrize("beta", [False, True])
+def test_compaction_iterations_replace_top_level_usage_without_double_counting(beta: bool) -> None:
+    from anthropic.types import Message as SDKMessage
+    from anthropic.types.beta import BetaMessage
+
+    message = (BetaMessage if beta else SDKMessage).model_validate(
+        _compaction_message(_compaction_usage())
+    )
+    result = translate_response(message)
+    assert result.raw_response is message
+    assert result.usage.input_tokens == 204100
+    assert result.usage.output_tokens == 4610
+    assert result.usage.cached_input_tokens == 550
+    assert result.usage.cache_write_tokens == 1130
+    assert result.usage.cache_write_1h_tokens == 650
+    assert result.usage.input_tokens_present and result.usage.output_tokens_present
+    assert result.usage.cached_input_tokens_present and result.usage.cache_write_tokens_present
+    # Compaction iterations have no thinking breakdown; seven is not a request total.
+    assert not result.usage.reasoning_tokens_present
+
+
+@pytest.mark.parametrize(
+    "missing,field,present",
+    [
+        ("input_tokens", "input_tokens", "input_tokens_present"),
+        ("output_tokens", "output_tokens", "output_tokens_present"),
+        ("cache_read_input_tokens", "cached_input_tokens", "cached_input_tokens_present"),
+        ("cache_creation_input_tokens", "cache_write_tokens", "cache_write_tokens_present"),
+    ],
+)
+def test_missing_compaction_counter_is_unknown_not_a_partial_total(
+    missing: str, field: str, present: str
+) -> None:
+    from anthropic.types import Message as SDKMessage
+
+    usage = _compaction_usage()
+    del usage["iterations"][0][missing]
+    result = translate_response(SDKMessage.model_validate(_compaction_message(usage)))
+    assert getattr(result.usage, present) is False
+    assert getattr(result.usage, field) == 0  # Compatibility value; presence is unknown.
+    if missing == "cache_creation_input_tokens":
+        assert result.usage.cache_write_1h_tokens is None
+
+
+@pytest.mark.parametrize("missing_index,expected", [(0, None), (2, 650)])
+def test_compaction_cache_ttl_requires_every_nonzero_write_split(
+    missing_index: int, expected: int | None
+) -> None:
+    from anthropic.types import Message as SDKMessage
+
+    usage = _compaction_usage()
+    del usage["iterations"][missing_index]["cache_creation"]
+    result = translate_response(SDKMessage.model_validate(_compaction_message(usage)))
+    assert result.usage.cache_write_tokens == 1130
+    assert result.usage.cache_write_1h_tokens == expected
+
+
+def test_replayed_compaction_without_new_iteration_uses_top_level_usage() -> None:
+    from anthropic.types import Message as SDKMessage
+
+    usage = _compaction_usage()
+    usage["iterations"] = [row for row in usage["iterations"] if row["type"] == "message"]
+    result = translate_response(SDKMessage.model_validate(_compaction_message(usage)))
+    assert result.usage.input_tokens == 23700
+    assert result.usage.output_tokens == 1100
+    assert result.usage.cached_input_tokens == 350
+    assert result.usage.cache_write_tokens == 1030
+    assert result.usage.cache_write_1h_tokens == 610
+    assert result.usage.reasoning_tokens == 7 and result.usage.reasoning_tokens_present
+
+
+@pytest.mark.parametrize("kind", ["advisor_message", "fallback_message", "message"])
+def test_compaction_does_not_assign_mixed_model_iterations_one_tariff(kind: str) -> None:
+    from anthropic.types import Message as SDKMessage
+
+    usage = _compaction_usage()
+    usage["iterations"][1].update(type=kind, model="claude-haiku-4-5-20251001")
+    message = SDKMessage.model_validate(_compaction_message(usage))
+    result = translate_response(message)
+    assert result.raw_response is message
+    assert not result.usage.input_tokens_present and not result.usage.output_tokens_present
+    projected = _completed_attempt_payload(
+        result, "claude-opus-5-5", cost_estimator=TokenTracker().calculate_cost
+    )
+    assert projected["cost_usd"] is None
+
+
+def test_compaction_rejects_invalid_ttl_split_even_when_aggregate_would_fit() -> None:
+    from anthropic.types import Message as SDKMessage
+
+    usage = _compaction_usage()
+    usage["iterations"][0]["cache_creation"]["ephemeral_1h_input_tokens"] = 101
+    with pytest.raises(ValueError, match="subset of cache writes"):
+        translate_response(SDKMessage.model_validate(_compaction_message(usage)))
+
+
+@pytest.mark.parametrize(
+    "streaming,model,base_url,compacted",
+    [
+        (False, "claude-opus-5-5", "https://api.anthropic.com", True),
+        (True, "claude-opus-5-5", "https://api.anthropic.com", True),
+        (True, "custom-model", "https://compat.invalid", False),
+        (True, "claude-opus-4-5", "https://api.anthropic.com", False),
+    ],
+    ids=["native-completion", "native-stream", "custom-stream", "clearing-only-stream"],
+)
+def test_sdk_adapter_preserves_compaction_and_stable_stream_usage(
+    streaming: bool, model: str, base_url: str, compacted: bool
+) -> None:
+    usage = _compaction_usage()
+    if not compacted:
+        usage.pop("iterations")
+    request = replace(_request((Message(role="user", content="hi"),)), model=model)
+    start_usage = {"input_tokens": 0, "output_tokens": 0} if compacted else usage
+    events = [
+        {
+            "type": "message_start",
+            "message": {
+                **_compaction_message(start_usage),
+                "model": model,
+                "content": [],
+                "stop_reason": None,
+            },
+        },
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+            "usage": usage,
+        },
+        {"type": "message_stop"},
+    ]
+    body = "".join(f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events)
+
+    requests: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if streaming:
+            return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=body)
+        return httpx.Response(200, json={**_compaction_message(usage), "model": model})
+
+    async def run() -> None:
+        async with AsyncAnthropic(
+            api_key="offline-fixture",
+            base_url=base_url,
+            max_retries=0,
+            http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond)),
+        ) as client:
+            adapter = AnthropicPaygAdapter()
+            with patch.object(adapter, "_get_client", return_value=client):
+                if streaming:
+                    result = [event async for event in adapter.astream(request)]
+                    actual = next(event.payload for event in result if event.kind == "usage")
+                    assert result[-1].payload["usage"] == actual
+                else:
+                    response = await adapter.acomplete(request)
+                    actual = asdict(response.usage)
+            assert (
+                actual["input_tokens"],
+                actual["output_tokens"],
+                actual["cached_input_tokens"],
+                actual["cache_write_tokens"],
+                actual["cache_write_1h_tokens"],
+            ) == ((204100, 4610, 550, 1130, 650) if compacted else (23700, 1100, 350, 1030, 610))
+            if compacted:
+                projected = _completed_attempt_payload(
+                    SimpleNamespace(usage=UsageSummary(**actual)),
+                    "claude-opus-5-5",
+                    cost_estimator=TokenTracker().calculate_cost,
+                )
+                assert projected["cost_usd"] == pytest.approx(
+                    (204100 * 4 + 4610 * 20 + 550 * 0.2 + 1130 * 5 + 650 * 3) / 1e6
+                )
+            else:
+                assert actual["reasoning_tokens"] == 7 and actual["reasoning_tokens_present"]
+
+    asyncio.run(run())
+    assert len(requests) == 1
+    sent = requests[0]
+    kwargs = build_create_kwargs(request, base_url=base_url)
+    headers = kwargs.pop("extra_headers", {})
+    extra_body = kwargs.pop("extra_body", {})
+    expected = {**kwargs, **extra_body}
+    if streaming:
+        expected["stream"] = True
+    assert json.loads(sent.content) == expected
+    assert sent.url.path == "/v1/messages"
+    assert sent.url.host == httpx.URL(base_url).host
+    assert dict(sent.url.params) == ({"beta": "true"} if streaming and compacted else {})
+    assert sent.headers.get("anthropic-beta") == headers.get("anthropic-beta")

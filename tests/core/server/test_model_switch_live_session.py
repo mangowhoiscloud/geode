@@ -27,6 +27,7 @@ class _FakeLoop:
         self._hooks = None
         self.model = "claude-opus-4-8"
         self._provider = "anthropic"
+        self._source = "payg"
         self._tool_processor = type("_TP", (), {"_model": "claude-opus-4-8"})()
         self._new_adapter = None
         self._prompt_dirty = False
@@ -57,7 +58,9 @@ def test_sync_repoints_live_loop_model(poller: CLIPoller, monkeypatch) -> None:
     monkeypatch.setattr(
         "core.agent.loop._model_switching.adapt_context_for_model",
         AsyncMock(
-            side_effect=lambda current_loop, target: setattr(current_loop, "adapted_to", target)
+            side_effect=lambda current_loop, target, _provider, **_kwargs: setattr(
+                current_loop, "adapted_to", target
+            )
         ),
     )
     # primary moved: model_before is the old value, settings.model is the new

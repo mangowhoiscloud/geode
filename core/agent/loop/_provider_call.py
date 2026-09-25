@@ -17,6 +17,7 @@ from core.llm.agentic_response import AgenticResponse
 from core.tools.plan import BoundToolPlan
 
 from . import _context
+from .models import _ContextExhaustedError
 
 log = logging.getLogger(__name__)
 
@@ -138,13 +139,11 @@ async def _prepare_request(
     allow_tools: bool,
     purpose: str = "agentic_loop",
     adapter_override: Any | None = None,
-) -> tuple[AdapterCallRequest, Any, dict[str, Any], str, str, str, str]:
+) -> tuple[AdapterCallRequest, Any, dict[str, Any], str, str, str, str, bool]:
     """Freeze one request after policy middleware and bind its step."""
     effective_model = model or loop.model
     if adapter_override is not None and (allow_tools or purpose != "turn_verification"):
         raise ValueError("an explicit decision adapter requires text-only verification")
-    # Shared list — in-place pruning must persist into later rounds.
-    await _context.check_context_overflow(loop, system, messages)
     step_snapshot = loop._open_step_snapshot(
         round_idx=round_idx,
         model=effective_model,
@@ -247,44 +246,6 @@ async def _prepare_request(
         if isinstance(raw_executable_tools, (Mapping, Set))
         else frozenset()
     )
-    req = build_adapter_request(
-        model=effective_model,
-        system=system,
-        messages=messages,
-        tools=request_tools,
-        transient_tools=(
-            list(loop._transient_tools)
-            if allow_tools and step_snapshot.bound_tool_plan is not None
-            else None
-        ),
-        transient_deferred_tool_names=(
-            loop._transient_deferred_tool_names
-            if allow_tools and step_snapshot.bound_tool_plan is not None
-            else ()
-        ),
-        tool_choice=tool_choice,
-        max_tokens=adaptive_max_tokens,
-        temperature=loop_temperature,
-        thinking_budget=adaptive_thinking,
-        effort=adaptive_effort,
-        allowed_tool_names=session_allowed_tools if allow_tools else frozenset(),
-        denied_tool_names=executor_denied_tools,
-        executable_tool_names=executor_executable_tools,
-        response_schema=(response_schema if response_schema is not None else loop._response_schema),
-    )
-    import uuid as _uuid
-
-    llm_call_id = f"llm-{step_snapshot.step_id}-{_uuid.uuid4().hex[:8]}"
-    correlation = {
-        "session_id": step_snapshot.correlation.session_id,
-        "turn_id": step_snapshot.correlation.turn_id,
-        "step_id": step_snapshot.step_id,
-        "session_generation": step_snapshot.correlation.session_generation,
-        "verify_attempt": step_snapshot.correlation.verify_attempt,
-        "llm_call_id": llm_call_id,
-        "llm_attempt_id": "",
-    }
-    bound_request = req
     original_adapter = adapter_override if adapter_override is not None else loop._new_adapter
     if adapter_override is None and model is not None and effective_model != loop.model:
         from core.config import _resolve_provider
@@ -298,6 +259,50 @@ async def _prepare_request(
             original_adapter = loop._adapter_registry_snapshot.resolve_for(
                 target_provider, infer_source(target_provider)
             )
+
+    def build_request() -> AdapterCallRequest:
+        return build_adapter_request(
+            model=effective_model,
+            system=system,
+            messages=messages,
+            tools=request_tools,
+            transient_tools=(
+                list(loop._transient_tools)
+                if allow_tools and step_snapshot.bound_tool_plan is not None
+                else None
+            ),
+            transient_deferred_tool_names=(
+                loop._transient_deferred_tool_names
+                if allow_tools and step_snapshot.bound_tool_plan is not None
+                else ()
+            ),
+            tool_choice=tool_choice,
+            max_tokens=adaptive_max_tokens,
+            temperature=loop_temperature,
+            thinking_budget=adaptive_thinking,
+            effort=adaptive_effort,
+            allowed_tool_names=session_allowed_tools if allow_tools else frozenset(),
+            denied_tool_names=executor_denied_tools,
+            executable_tool_names=executor_executable_tools,
+            response_schema=(
+                response_schema if response_schema is not None else loop._response_schema
+            ),
+        )
+
+    req = build_request()
+    import uuid as _uuid
+
+    llm_call_id = f"llm-{step_snapshot.step_id}-{_uuid.uuid4().hex[:8]}"
+    correlation = {
+        "session_id": step_snapshot.correlation.session_id,
+        "turn_id": step_snapshot.correlation.turn_id,
+        "step_id": step_snapshot.step_id,
+        "session_generation": step_snapshot.correlation.session_generation,
+        "verify_attempt": step_snapshot.correlation.verify_attempt,
+        "llm_call_id": llm_call_id,
+        "llm_attempt_id": "",
+    }
+    bound_request = req
     llm_request = await loop._middleware_registry.llm_request(
         LlmCallRequest(
             adapter=original_adapter,
@@ -333,6 +338,24 @@ async def _prepare_request(
     adapter_name = getattr(call_adapter, "name", "<unknown>")
     effective_provider = getattr(call_adapter, "provider", loop._provider)
     effective_source = getattr(call_adapter, "source", loop._source)
+    can_recover_history = req.messages == bound_request.messages
+    if can_recover_history:
+        from core.orchestration.context_budget import resolve_request_context_budget
+        from core.orchestration.context_monitor import estimate_tool_tokens
+
+        policy = resolve_request_context_budget(
+            req, provider=str(effective_provider), source=str(effective_source)
+        )
+        # Maintain caller-owned history once, after request transforms select
+        # the actual route. A middleware-owned replacement is request-local.
+        await _context.check_context_overflow(
+            loop,
+            req.system_prompt,
+            messages,
+            policy=policy,
+            tools_tokens=estimate_tool_tokens(req.tools),
+        )
+        req = replace(req, messages=build_request().messages)
     step_snapshot = replace(
         step_snapshot,
         model=effective_model,
@@ -350,6 +373,7 @@ async def _prepare_request(
         llm_call_id,
         str(effective_provider),
         str(adapter_name),
+        can_recover_history,
     )
 
 
@@ -388,6 +412,7 @@ async def call_llm(
         llm_call_id,
         effective_provider,
         adapter_name,
+        can_recover_history,
     ) = await _prepare_request(
         loop,
         system,
@@ -400,6 +425,26 @@ async def call_llm(
         adapter_override=adapter_override,
     )
     llm_attempt_number = 0
+    active_request = req
+    active_provider = effective_provider
+    active_source = str(getattr(call_adapter, "source", loop._source))
+
+    def context_failure(*, provider_rejected: bool) -> _ContextExhaustedError:
+        from core.orchestration.context_budget import resolve_request_context_budget
+        from core.orchestration.context_monitor import estimate_tool_tokens
+
+        return _ContextExhaustedError(
+            "Provider rejected input context"
+            if provider_rejected
+            else "Request exceeds local context budget",
+            provider_rejected=provider_rejected,
+            can_recover_history=can_recover_history,
+            policy=resolve_request_context_budget(
+                active_request, provider=active_provider, source=active_source
+            ),
+            system_prompt=active_request.system_prompt,
+            tools_tokens=estimate_tool_tokens(active_request.tools),
+        )
 
     async def _complete_attempt(adapter: Any, request: Any) -> Any:
         nonlocal llm_attempt_number
@@ -416,10 +461,21 @@ async def call_llm(
         )
 
         async def terminal(effective: LlmCallRequest) -> Any:
+            nonlocal active_request, active_provider, active_source
             from core.llm.token_tracker import calculate_cost
+            from core.orchestration.context_budget import resolve_request_context_budget
+            from core.orchestration.context_monitor import check_request_context
 
             active_adapter = effective.adapter
             active_request = effective.request
+            active_provider = str(getattr(active_adapter, "provider", effective_provider))
+            active_source = str(getattr(active_adapter, "source", loop._source))
+            policy = resolve_request_context_budget(
+                active_request, provider=active_provider, source=active_source
+            )
+            metrics = check_request_context(active_request, policy=policy)
+            if metrics.estimated_tokens > policy.effective_prompt_budget_tokens:
+                raise context_failure(provider_rejected=False)
             return await observe_llm_call(
                 lambda: active_adapter.acomplete(active_request),
                 hooks=loop._hooks,
@@ -478,6 +534,8 @@ async def call_llm(
 
         if isinstance(exc, BillingError):
             raise
+        if isinstance(exc, _ContextExhaustedError):
+            raise
         if classify_retry_error(exc) == "billing":
             raise billing_error_from_exception(
                 exc,
@@ -487,6 +545,8 @@ async def call_llm(
             ) from exc
         error_detail = str(exc) or type(exc).__name__
         loop._last_llm_error = error_detail
+        if classify_retry_error(exc) == "context_overflow":
+            raise context_failure(provider_rejected=True) from exc
         log.warning(
             "AgenticLoop: adapter.acomplete failed adapter=%s error_type=%s",
             adapter_name,
@@ -500,8 +560,12 @@ async def call_llm(
 
     if response is None:
         adapter_err = getattr(call_adapter, "_last_error", None)
-        if adapter_err:
+        if isinstance(adapter_err, Exception):
             loop._last_llm_error = str(adapter_err)
+            from core.llm.fallback import classify_retry_error
+
+            if classify_retry_error(adapter_err) == "context_overflow":
+                raise context_failure(provider_rejected=True) from adapter_err
         elif not loop._last_llm_error:
             loop._last_llm_error = f"All {loop._provider} models exhausted"
 
