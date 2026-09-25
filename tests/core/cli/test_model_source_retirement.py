@@ -71,7 +71,9 @@ def test_explicit_source_checks_its_real_adapter_credentials(
 def test_subscription_picker_excludes_retired_offerings_but_keeps_disabled_current_row(
     monkeypatch: pytest.MonkeyPatch, retired: str
 ) -> None:
-    monkeypatch.setattr(_state, "_selected_openai_source", lambda model="": "subscription")
+    # Both sources have credentials and settings pin subscription, so only the
+    # retirement can disable the row, whatever an operator ``.env`` holds.
+    _wire_openai_credentials(monkeypatch, oauth=True, payg=True)
     rows = _state.get_model_profiles()
     assert retired not in {row.id for row in rows}
     assert "gpt-5.5" not in {row.id for row in rows}  # Not a new subscription choice.
