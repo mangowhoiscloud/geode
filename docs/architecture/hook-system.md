@@ -155,8 +155,8 @@ Mechanical empty/action-required checks remain; output length, keyword overlap
 and recovered tool errors no longer veto semantic review. Reflexion can reuse
 bounded image evidence already observed by the agent, without new file access.
 Text uses the latest 12 tool observations; image evidence has its own window of
-12 image-bearing calls from the current verification chain. At most two distinct
-images per call are replayed, bounded to 7 MiB per image and 14 MiB in aggregate
+12 image-bearing calls from retained context or the current verification chain.
+At most two distinct images per call are replayed, bounded to 7 MiB per image and 14 MiB in aggregate
 (encoded payload size). The prompt labels prior/current observations and omitted
 evidence; it does not treat old source material as a newly executed check.
 Evidence precedes the candidate claim. The neutral verdict contract asks the

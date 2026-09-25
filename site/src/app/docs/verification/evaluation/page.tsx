@@ -114,6 +114,9 @@ function EvaluationGuide({ ko }: { ko: boolean }) {
         ? "이미지 근거는 텍스트 tool 기록과 별도로 선택해, 파일 쓰기나 계획 갱신 때문에 밀려나지 않도록 합니다. 이전 시도와 현재 시도의 관측, 전달하지 못한 이미지도 구분합니다. 이전 자료가 여전히 유용할 수는 있지만 수정 후 새로 확인한 증거와 같지는 않습니다."
         : "Image evidence has a separate bounded window, so writes and plan updates do not displace it. Reviews identify prior versus current observations and omitted images. Earlier source material may remain useful, but is not a fresh post-repair check."}</p>
       <p>{ko
+        ? "재개한 요청의 검증에는 보존된 이전 턴의 실제 도구 호출·결과 쌍도 포함합니다. 호출 ID가 모호하거나 짝이 없으면 제외하고, 이전 관측을 새 검증 시도로 표시하지 않습니다. 최근 12개 관측의 입력·결과는 총 16,000자, 필드당 최대 6,000자 안에서 공간을 나누며 절단을 표시합니다. 후보의 주장·압축 요약·내부 추론은 도구 증거로 승격하지 않습니다. Reflection에는 현재 승인된 요청과 세션 최초 요청을 구분해 전달하며, 개인정보와 이미지 제한은 유지합니다."
+        : "Resumed-request review also includes retained actual tool-call/result pairs from earlier turns. Ambiguous or orphaned IDs are excluded; earlier observations are not labeled as new verification attempts. The latest 12 observations share 16,000 characters across inputs and results, capped at 6,000 per field, with explicit truncation. Candidate claims, compaction summaries and internal reasoning are not promoted to tool evidence. Reflection receives the current approved request separately from the session's initial request; privacy and image bounds remain."}</p>
+      <p>{ko
         ? "관측 근거를 먼저, 후보의 주장을 마지막에 제시합니다. 동일한 값을 쓰고 다시 읽은 일관성이나 실패한 위임은 독립 검증이 아닙니다. 근거로 해소되지 않는 모호함은 통과시키지 말고, 구별 가능한 재검사를 요청하도록 judge를 구성합니다. 이 지시만으로 오판이 사라졌다고 주장하지 않습니다."
         : "Evidence precedes the candidate claim. Reading back the same written value or making a failed delegation is not independent verification. The judge is instructed to request a distinguishing check for unresolved material ambiguity. These instructions alone do not establish that false verdicts are eliminated."}</p>
       <p>{ko

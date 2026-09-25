@@ -535,6 +535,7 @@ class AgenticLoop:
                 await reflect_async(
                     self.cognitive_state,
                     tool_results,
+                    current_request=self._verify_root_user_input,
                     model=reflection_model,
                     max_tokens=settings.cognitive_reflection_max_tokens,
                     effort=self._effort,

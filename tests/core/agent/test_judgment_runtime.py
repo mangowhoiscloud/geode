@@ -61,7 +61,7 @@ def test_round_then_terminal_dispatch_once_with_native_usage_and_no_synthetic_be
     )
     loop._time_budget_s = 0
     loop._verify_root_user_input = "Return the observed value."
-    loop.cognitive_state.goal = loop._verify_root_user_input
+    loop.cognitive_state.goal = "Inspect the original file."
     loop.cognitive_state.hypotheses = ["The value may be known"]
     loop.cognitive_state.confidence = 0.4
     loop.cognitive_state.confidence_observed_round = 0
@@ -113,6 +113,15 @@ def test_round_then_terminal_dispatch_once_with_native_usage_and_no_synthetic_be
             )
             loop.cognitive_state.record_round(action="read", observation="value observed")
             await loop._maybe_reflect([{"tool_use_id": "read-1", "content": "Observed value: 7"}])
+            from defusedxml.ElementTree import fromstring
+
+            prompt = requests[0]["state"]["cognitive_state"]
+            document = fromstring(f"<request>{prompt}</request>")
+            assert document.findtext("current_request") == "Return the observed value."
+            assert "Session initial request: 'Inspect the original file.'" in document.findtext(
+                "cognitive_state", ""
+            )
+            assert loop.cognitive_state.goal == "Inspect the original file."
             await loop._record_text_only_round(1, text="The value is 7.")
             assert len(requests) == 1  # no second reflection before final judgment
             return await verify_turn_async(

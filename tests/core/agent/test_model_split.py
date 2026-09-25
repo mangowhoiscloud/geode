@@ -940,6 +940,153 @@ def _judge_coverage(messages) -> dict:
     return json.loads(messages[0]["content"].rsplit("Image evidence coverage: ", 1)[1])
 
 
+def test_resumed_judge_receives_prior_turn_evidence_before_candidate(monkeypatch) -> None:
+    import asyncio
+    import copy
+    import json
+    from unittest.mock import AsyncMock
+
+    from core.agent.conversation import ConversationContext
+    from core.agent.verify import _verify_llm_judge_async
+
+    context = ConversationContext()
+    context.add_user_message("Read alpha", origin="user_input")
+    _add_observed_judge_call(context, "alpha-observed")
+    context.add_user_message("Read beta; retain alpha without rereading", origin="user_input")
+    current = _add_observed_judge_call(context, "beta-observed")
+    before = copy.deepcopy(context.messages)
+    candidate = _make_result(text="CANDIDATE_ONLY", tool_calls=[current])
+
+    async def judge(_system, messages, **_kwargs):
+        evidence = messages[0]["content"]
+        assert '"scope": "retained_context"' in evidence
+        assert "alpha-observed" in evidence and "beta-observed" in evidence
+        assert evidence.count('"tool_use_id": "\\"beta-observed\\""') == 1
+        assert "CANDIDATE_ONLY" not in evidence
+        assert messages[-1]["content"].endswith("CANDIDATE_ONLY")
+        assert all(
+            marker not in json.dumps(messages)
+            for marker in ("PRIVATE_REASONING", "PRIVATE_BLOB", "UNNECESSARY_PROSE")
+        )
+        return _reflexion_response(passed=True)
+
+    monkeypatch.setattr("core.config.settings.judgment_engine", "llm")
+    loop = SimpleNamespace(
+        context=context,
+        _verify_root_user_input="Read beta; retain alpha without rereading",
+        _call_llm=AsyncMock(side_effect=judge),
+        _track_usage_async=AsyncMock(),
+        model="gpt-6-astra",
+    )
+    verdict = asyncio.run(_verify_llm_judge_async(candidate, loop=loop))
+    assert verdict.passed
+    loop._call_llm.assert_awaited_once()
+    assert context.messages == before and candidate.tool_calls == [current]
+
+
+def test_judge_preserves_long_code_evidence_within_shared_text_budget() -> None:
+    import json
+
+    script = "# setup\n" * 320 + "assert cert.signature_is_valid()\n"
+    command = "# inspect\n" * 240 + "python /app/verify_certificate.py"
+    calls = [
+        {
+            "tool": "write_file",
+            "input": {"content": script},
+            "result": {"bytes_written": len(script)},
+        },
+        {"tool": "run_bash", "input": {"command": command}, "result": {"exit_code": 0}},
+        {"tool": "run_bash", "input": {"command": "ls -l"}, "result": "permissions confirmed"},
+        {
+            "tool": "read_file",
+            "input": {"path": "verification.txt"},
+            "result": "verification passed",
+        },
+    ]
+    prompt = _judge_prompt(_make_result(tool_calls=calls))
+    rows = json.loads(prompt.split("older records omitted):\n", 1)[1])
+    assert json.loads(rows[0]["input"])["content"] == script
+    assert json.loads(rows[1]["input"])["command"] == command
+    assert len(prompt) < 25000
+
+
+@pytest.mark.parametrize(
+    "invalid", ["orphan", "duplicate_origin", "duplicate_result", "empty_id", "no_boundary"]
+)
+def test_judge_does_not_infer_historical_evidence_from_ambiguous_context(invalid) -> None:
+    import copy
+
+    from core.agent.conversation import ConversationContext
+
+    context = ConversationContext()
+    _add_observed_judge_call(context, "UNTRUSTED_MATCH")
+    if invalid == "orphan":
+        context.messages.pop(0)
+    elif invalid == "duplicate_origin":
+        context.messages[0]["content"].append(copy.deepcopy(context.messages[0]["content"][-1]))
+    elif invalid == "duplicate_result":
+        context.messages[1]["content"].append(copy.deepcopy(context.messages[1]["content"][0]))
+    elif invalid == "empty_id":
+        context.messages[0]["content"][-1]["id"] = ""
+        context.messages[1]["content"][0]["tool_use_id"] = ""
+    if invalid != "no_boundary":
+        context.add_user_message("Current request", origin="user_input")
+    prompt = _judge_prompt(_make_result(), loop=SimpleNamespace(context=context))
+    assert "UNTRUSTED_MATCH" not in prompt
+
+
+@pytest.mark.parametrize("personal", [False, True])
+def test_resumed_judge_preserves_image_and_privacy_boundaries(monkeypatch, personal) -> None:
+    import json
+
+    from core.agent.conversation import ConversationContext
+    from core.agent.verify import _judge_messages
+
+    context = ConversationContext()
+    _add_observed_judge_call(context, "old-observation", ["aW1hZ2U="])
+    secret = "sk-" + "x" * 30
+    context.messages[0]["content"][-1]["input"]["token"] = secret
+    if personal:
+        monkeypatch.setattr(
+            "core.tools.personal_data.requires_durable_redaction",
+            lambda name: name == "read_document",
+        )
+    else:
+        # The image origin cannot be replayed with a secret, but text stays redacted.
+        context.messages[0]["content"][-1]["input"]["note"] = "safe retained context"
+    context.add_user_message("Review earlier observation", origin="user_input")
+    loop = SimpleNamespace(context=context)
+    result = _make_result()
+    prompt = _judge_prompt(result, loop=loop)
+    messages = _judge_messages(result, loop=loop, prompt=prompt)
+    assert secret not in json.dumps(messages)
+    assert "aW1hZ2U=" not in json.dumps(messages)
+    assert _judge_coverage(messages)["omitted_image_blocks_by_reason"] == {"privacy": 1}
+    assert ("_personal_data_omitted" in prompt) is personal
+
+
+def test_resumed_judge_labels_prior_images_without_a_new_attempt_index() -> None:
+    from core.agent.conversation import ConversationContext
+    from core.agent.verify import _judge_messages
+
+    context = ConversationContext()
+    _add_observed_judge_call(context, "retained-image", ["aW1hZ2U="])
+    context.add_user_message("Review earlier image", origin="user_input")
+    loop = SimpleNamespace(context=context)
+    result = _make_result()
+    messages = _judge_messages(result, loop=loop, prompt=_judge_prompt(result, loop=loop))
+    coverage = _judge_coverage(messages)
+    assert coverage["current_attempt_replayed_images"] == 0
+    assert coverage["replayed_calls"] == [
+        {
+            "tool_use_id": "retained-image",
+            "attempt_index": None,
+            "scope": "retained_context",
+            "images": 1,
+        }
+    ]
+
+
 def test_judge_replays_observed_images_despite_intervening_nonvisual_calls() -> None:
     import base64
     import copy

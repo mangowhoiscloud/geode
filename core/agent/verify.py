@@ -257,20 +257,112 @@ def _judge_attempts(
     ]
 
 
+def _judge_context_pairs(
+    history: list[dict[str, Any]],
+) -> tuple[list[tuple[int, dict[str, Any], dict[str, Any]]], set[str]]:
+    """Select actual adjacent observations; ambiguous IDs never establish evidence."""
+    from collections import Counter
+    from itertools import pairwise
+
+    origins: Counter[str] = Counter()
+    results: Counter[str] = Counter()
+    for message in history:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if message.get("role") == "assistant" and block.get("type") == "tool_use":
+                if isinstance(call_id := block.get("id"), str) and call_id:
+                    origins[call_id] += 1
+            elif (
+                message.get("role") == "user"
+                and block.get("type") == "tool_result"
+                and isinstance(call_id := block.get("tool_use_id"), str)
+                and call_id
+            ):
+                results[call_id] += 1
+    ambiguous = {key for counts in (origins, results) for key, count in counts.items() if count > 1}
+    pairs = []
+    for index, (previous, current) in enumerate(pairwise(history)):
+        if previous.get("role") != "assistant" or current.get("role") != "user":
+            continue
+        previous_content, current_content = previous.get("content"), current.get("content")
+        if not isinstance(previous_content, list) or not isinstance(current_content, list):
+            continue
+        by_id = {
+            block["id"]: block
+            for block in previous_content
+            if isinstance(block, dict)
+            and block.get("type") == "tool_use"
+            and isinstance(block.get("id"), str)
+            and block["id"]
+            and block["id"] not in ambiguous
+        }
+        for observation in current_content:
+            if not isinstance(observation, dict) or observation.get("type") != "tool_result":
+                continue
+            call_id = observation.get("tool_use_id")
+            if isinstance(call_id, str) and call_id in by_id:
+                pairs.append((index + 1, by_id[call_id], observation))
+    return pairs, ambiguous
+
+
+def _judge_calls(
+    result: AgenticResult, loop: Any | None
+) -> list[tuple[int | None, str, dict[str, Any]]]:
+    """Combine this verification chain with retained observations before its user input."""
+    from core.tools.computer_observation import sanitize_computer_payload
+    from core.tools.personal_data import sanitize_personal_data_payload
+
+    calls: list[tuple[int | None, str, dict[str, Any]]] = [
+        (index, scope, call)
+        for index, scope, attempt in _judge_attempts(result, loop)
+        for call in (attempt.tool_calls or [])
+        if isinstance(call, dict)
+    ]
+    history = getattr(getattr(loop, "context", None), "messages", ())
+    if not isinstance(history, list):
+        return calls
+    boundary = next(
+        (
+            index
+            for index in range(len(history) - 1, -1, -1)
+            if history[index].get("role") == "user"
+            and history[index].get("metadata", {}).get("origin") == "user_input"
+        ),
+        0,
+    )
+    logged_ids = {
+        call_id for _, _, call in calls if isinstance(call_id := call.get("tool_use_id"), str)
+    }
+    pairs, _ = _judge_context_pairs(history)
+    retained: list[tuple[int | None, str, dict[str, Any]]] = []
+    for index, origin, observation in pairs:
+        if index >= boundary or origin["id"] in logged_ids:
+            continue
+        call = {
+            "tool": origin.get("name", "?"),
+            "tool_use_id": origin["id"],
+            "input": origin.get("input"),
+            "result": observation.get("content"),
+            "error": observation.get("is_error", False),
+        }
+        safe = sanitize_computer_payload({"type": "tool_result", "content": call})["content"]
+        retained.append((None, "retained_context", sanitize_personal_data_payload(safe)))
+    return [*retained, *calls]
+
+
 def _judge_prompt(result: AgenticResult, *, loop: Any | None = None) -> str:
     """Render the just-finished turn as input for the judge."""
     import json
 
-    from core.observability.redaction import redact_and_bound_text
+    from core.observability.redaction import redact_and_bound_text, redact_secrets
     from core.tools.computer_observation import sanitize_computer_payload
 
     attempts = _judge_attempts(result, loop)
-    calls = [
-        (index, scope, tc)
-        for index, scope, attempt in attempts
-        for tc in (attempt.tool_calls or [])
-        if isinstance(tc, dict)
-    ]
+    calls = _judge_calls(result, loop)
     tool_names = [tc.get("tool", tc.get("name", "?")) for _, _, tc in calls]
     counts = [
         {
@@ -293,21 +385,35 @@ def _judge_prompt(result: AgenticResult, *, loop: Any | None = None) -> str:
         for index, scope, call in calls[-12:]
     ]
     task = getattr(loop, "_verify_root_user_input", "") if loop is not None else ""
-    # Bound fields before joining, so a large early result cannot hide the
-    # latest calls. Image bytes belong only in ephemeral multimodal messages.
+    # Share a bounded excerpt budget, excluding outer JSON encoding/metadata.
+    # Small fields release space for complete code/output instead of always
+    # chopping inputs at 300 characters.
+    # Image bytes belong only in ephemeral multimodal messages.
     bounded_observations = []
     for index, scope, observation in observations:
         safe = sanitize_computer_payload({"type": "tool_result", "content": observation})["content"]
         bounded_observations.append(
             {"attempt_index": index, "scope": scope}
             | {
-                key: redact_and_bound_text(
-                    json.dumps(value, ensure_ascii=False, default=str),
-                    1000 if key == "result" else (300 if key == "input" else 160),
-                )
+                key: redact_secrets(json.dumps(value, ensure_ascii=False, default=str))
+                if key in {"input", "result"}
+                else redact_and_bound_text(json.dumps(value, ensure_ascii=False, default=str), 160)
                 for key, value in safe.items()
             }
         )
+    fields = sorted(
+        (len(row[key]), index, key)
+        for index, row in enumerate(bounded_observations)
+        for key in ("input", "result")
+        if key in row
+    )
+    remaining = 16000
+    for ordinal, (_, index, key) in enumerate(fields):
+        limit = min(6000, remaining // (len(fields) - ordinal))
+        row = bounded_observations[index]
+        text = row[key]
+        remaining -= min(len(text), limit)
+        row[key] = redact_and_bound_text(text, limit)
     observation_text = json.dumps(bounded_observations, ensure_ascii=False)
     return (
         f"Original request: {redact_and_bound_text(task, 4000)}\n"
@@ -316,6 +422,7 @@ def _judge_prompt(result: AgenticResult, *, loop: Any | None = None) -> str:
         f"- rounds: {result.rounds}\n"
         f"- tool_calls (bounded): {redact_and_bound_text(str(tool_names), 1000)}\n"
         f"- retained tool-call counts by verification attempt: {json.dumps(counts)}\n"
+        "- retained_context observations predate this request; they are not fresh checks.\n"
         f"- recent observations ({len(observations)}/{len(calls)}; older records omitted):\n"
         f"{observation_text}\n"
     )
@@ -347,8 +454,8 @@ def _judge_image_omissions(value: Any) -> int:
 def _judge_messages(result: AgenticResult, *, loop: Any, prompt: str) -> list[dict[str, Any]]:
     """Replay bounded observed images independently of the text-call window.
 
-    Consider the latest 12 image-bearing matched calls in this verification
-    chain, with at most two distinct images per call and 14 MiB of encoded
+    Consider the latest 12 image-bearing matched calls retained from context
+    or this verification chain, with at most two distinct images per call and 14 MiB of encoded
     image data overall. No filesystem reads, assistant reasoning or mutations
     to the live context. Omission counts describe retained evidence only.
     """
@@ -356,64 +463,43 @@ def _judge_messages(result: AgenticResult, *, loop: Any, prompt: str) -> list[di
     from collections import Counter
     from copy import deepcopy
     from hashlib import sha256
-    from itertools import pairwise
 
     from core.observability.redaction import redact_and_bound_text, redact_secrets
 
-    logged: dict[str, tuple[int, str, dict[str, Any]]] = {}
+    logged: dict[str, tuple[int | None, str, dict[str, Any]]] = {}
     ambiguous: set[str] = set()
-    for index, scope, attempt in _judge_attempts(result, loop):
-        for call in attempt.tool_calls or []:
-            call_id = call.get("tool_use_id")
-            if not isinstance(call_id, str) or not call_id:
-                continue
-            if call_id in logged:
-                ambiguous.add(call_id)
-            logged[call_id] = (index, scope, call)
+    for index, scope, call in _judge_calls(result, loop):
+        call_id = call.get("tool_use_id")
+        if not isinstance(call_id, str) or not call_id:
+            continue
+        if call_id in logged:
+            ambiguous.add(call_id)
+        logged[call_id] = (index, scope, call)
     history = getattr(getattr(loop, "context", None), "messages", ())
-    matched: Counter[str] = Counter()
+    context_pairs, context_ambiguities = _judge_context_pairs(
+        history if isinstance(history, list) else []
+    )
+    ambiguous.update(context_ambiguities & logged.keys())
+    matched: set[str] = set()
     image_calls: list[tuple[str, dict[str, Any], list[dict[str, Any]], int]] = []
-    for previous, current in reversed(list(pairwise(history))):
-        if previous.get("role") != "assistant" or current.get("role") != "user":
+    for _, origin, observation in reversed(context_pairs):
+        call_id = origin["id"]
+        if call_id not in logged:
             continue
-        previous_content = previous.get("content")
-        current_content = current.get("content")
-        if not isinstance(previous_content, list) or not isinstance(current_content, list):
-            continue
-        for observation in reversed(current_content):
-            if not isinstance(observation, dict) or observation.get("type") != "tool_result":
-                continue
-            call_id = observation.get("tool_use_id")
-            content = observation.get("content")
-            if not isinstance(call_id, str) or call_id not in logged:
-                continue
-            origins = [
-                block
-                for block in previous_content
-                if isinstance(block, dict)
-                and block.get("type") == "tool_use"
-                and block.get("id") == call_id
-            ]
-            if len(origins) != 1:
-                if origins:
-                    ambiguous.add(call_id)
-                continue
-            matched[call_id] += 1
-            images = [
-                block
-                for block in (content if isinstance(content, list) else [])
-                if isinstance(block, dict) and block.get("type") == "image"
-            ]
-            # Compaction may replace image content with plain placeholder text.
-            # The retained structured log markers, not that prose, establish
-            # that previously observed image blocks are now unavailable.
-            unavailable = max(
-                _judge_image_omissions(content),
-                _judge_image_omissions(logged[call_id][2].get("result")) - len(images),
-            )
-            if images or unavailable:
-                image_calls.append((call_id, origins[0], images, unavailable))
-    ambiguous.update(call_id for call_id, count in matched.items() if count > 1)
+        matched.add(call_id)
+        content = observation.get("content")
+        images = [
+            block
+            for block in (content if isinstance(content, list) else [])
+            if isinstance(block, dict) and block.get("type") == "image"
+        ]
+        # Retained structured markers, not placeholder prose, establish missing images.
+        unavailable = max(
+            _judge_image_omissions(content),
+            _judge_image_omissions(logged[call_id][2].get("result")) - len(images),
+        )
+        if images or unavailable:
+            image_calls.append((call_id, origin, images, unavailable))
     image_calls = [entry for entry in image_calls if entry[0] not in ambiguous]
     omitted: Counter[str] = Counter()
     unmatched = set(logged) - set(matched) - ambiguous
@@ -502,7 +588,7 @@ def _judge_messages(result: AgenticResult, *, loop: Any, prompt: str) -> list[di
                 }
             )
     coverage = {
-        "scope": "retained logged calls in this verification chain; not complete session history",
+        "scope": "retained context and verification-chain matches; not complete session history",
         "matched_image_calls": len(image_calls),
         "considered_image_calls": min(12, len(image_calls)),
         "replayed_images": sum(item["images"] for item in replayed),
@@ -743,9 +829,7 @@ async def _verify_llm_judge_async(
             from core.observability.redaction import redact_and_bound_text
 
             if len(messages) != 2 or any(
-                _judge_image_omissions(call)
-                for _, _, attempt in _judge_attempts(result, loop)
-                for call in attempt.tool_calls
+                _judge_image_omissions(call) for _, _, call in _judge_calls(result, loop)
             ):
                 return _verification_error(mode, reason="jev_visual_evidence_unsupported")
             adapter = SystemOneAdapter(*route)
