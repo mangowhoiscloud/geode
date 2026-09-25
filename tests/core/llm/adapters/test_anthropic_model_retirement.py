@@ -78,16 +78,17 @@ def test_list_filters_retired_user_override_without_rewriting_it(
 @pytest.mark.parametrize(
     "cached_url,current_env,should_block",
     [
-        ("http://127.0.0.1:9/custom", "https://api.anthropic.com", False),
-        ("https://api.anthropic.com", "http://127.0.0.1:9/custom", True),
+        ("http://127.0.0.1:9/custom", "https://api.anthropic.com", True),
+        ("https://api.anthropic.com", "http://127.0.0.1:9/custom", False),
     ],
 )
-def test_actual_cached_sdk_endpoint_owns_retirement_not_changed_environment(
+def test_refreshed_sdk_endpoint_owns_retirement_and_retains_previous_client(
     monkeypatch: pytest.MonkeyPatch, cached_url: str, current_env: str, should_block: bool
 ) -> None:
     import anthropic
     import httpx
     from core.config import settings
+    from core.llm.loop_affinity import drain_current_loop_clients
 
     calls: list[httpx.Request] = []
 
@@ -125,7 +126,12 @@ def test_actual_cached_sdk_endpoint_owns_retirement_not_changed_environment(
     async def run() -> None:
         client = adapter._get_client()
         monkeypatch.setenv("ANTHROPIC_BASE_URL", current_env)
-        assert adapter._get_client() is client  # the real loop-affine cache
+        refreshed = adapter._get_client()
+        assert refreshed is not client
+        assert adapter._get_client() is refreshed
+        assert str(client.base_url).rstrip("/") == cached_url
+        assert str(refreshed.base_url).rstrip("/") == current_env
+        assert not client.is_closed() and not refreshed.is_closed()
         try:
             if should_block:
                 with pytest.raises(ModelSourceUnavailableError):
@@ -133,7 +139,8 @@ def test_actual_cached_sdk_endpoint_owns_retirement_not_changed_environment(
             else:
                 await _request(adapter, "acomplete", "claude-sonnet-4-20250514")
         finally:
-            await client.close()
+            await drain_current_loop_clients()
+        assert client.is_closed() and refreshed.is_closed()
 
     asyncio.run(run())
     assert len(calls) == (0 if should_block else 1)

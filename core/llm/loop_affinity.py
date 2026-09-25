@@ -26,6 +26,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class _LoopClients:
     active: Any = None
+    identity: str | None = None
     # ponytail: retired clients live until loop teardown; add leases if rotation retention grows.
     owned: list[Any] = field(default_factory=list)
 
@@ -106,7 +107,8 @@ class LoopAffineClientCache:
         # Cache state is shared by the main loop and poller threads.
         self._lock = threading.Lock()
 
-    def get(self, builder: Callable[[], Any]) -> Any:
+    def get(self, builder: Callable[[], Any], *, identity: str | None = None) -> Any:
+        """Reuse the selection only while its optional non-secret identity matches."""
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -116,7 +118,7 @@ class LoopAffineClientCache:
         _discard_closed_loops()
         with self._lock:
             entry = self._by_loop.get(loop)
-            if entry is not None and entry.active is not None:
+            if entry is not None and entry.active is not None and entry.identity == identity:
                 return entry.active
 
             # Keep construction/publication atomic with credential invalidation.
@@ -126,6 +128,7 @@ class LoopAffineClientCache:
             if entry is None:
                 entry = self._by_loop[loop] = _LoopClients()
             entry.active = client
+            entry.identity = identity
             entry.owned.append(client)
             bound = sum(item.active is not None for item in self._by_loop.values())
             with _OWNERS_LOCK:

@@ -37,6 +37,29 @@ class Client:
             raise OSError("fixture cleanup failure")
 
 
+def test_credential_identity_retires_clients_only_after_successful_construction() -> None:
+    cache = LoopAffineClientCache("identity")
+    clients: list[Client] = []
+
+    def failed_builder() -> Client:
+        raise ValueError("invalid replacement")
+
+    async def work() -> None:
+        first = cache.get(Client, identity="first")
+        clients.append(first)
+        assert cache.get(failed_builder, identity="first") is first
+        with pytest.raises(ValueError, match="invalid replacement"):
+            cache.get(failed_builder, identity="second")
+        assert cache.get(failed_builder, identity="first") is first
+        second = cache.get(Client, identity="second")
+        clients.append(second)
+        assert second is not first
+        assert first.close_count == second.close_count == 0
+
+    run_process_coroutine(work())
+    assert [client.close_count for client in clients] == [1, 1]
+
+
 @pytest.mark.usefixtures("managed_geode_runtimes")
 def test_runtime_recreation_keeps_shared_and_borrowed_clients_until_loop_exit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -145,7 +145,6 @@ def cmd_login(args: str) -> None:
         try:
             from core.auth.auth_toml import auth_toml_path, load_auth_toml
             from core.auth.codex_cli_oauth import invalidate_cache as invalidate_codex_cli_cache
-            from core.llm.adapters.registry import invalidate_provider_clients
             from core.llm.strategies.plan_registry import get_plan_registry
             from core.mcp.google_workspace_client import reset_google_workspace_client
             from core.wiring.container import ensure_profile_store
@@ -155,11 +154,11 @@ def cmd_login(args: str) -> None:
             plans_before = {p.id for p in registry.list_all()}
             profiles_before = {p.name for p in store.list_all()}
             ok = load_auth_toml()
-            invalidate_codex_cli_cache()
-            # Live path is the adapter cache — the providers/ sync singletons
-            # these resets target no longer serve traffic (2026-07-29).
-            invalidate_provider_clients("openai")
-            reset_google_workspace_client()
+            if ok:
+                # PAYG adapters compare the selected credential on their next
+                # request, including instances from retired registry generations.
+                invalidate_codex_cli_cache()
+                reset_google_workspace_client()
             plans_after = {p.id for p in registry.list_all()}
             profiles_after = {p.name for p in store.list_all()}
             new_plans = plans_after - plans_before
@@ -562,7 +561,8 @@ def _login_add_interactive(_args: str) -> None:
                 credential_type=CredentialType.API_KEY,
                 key=key,
                 plan_id=plan.id,
-            )
+            ),
+            activate=True,
         )
         # Mirror to settings + .env so legacy fallbacks keep working
         from core.config import settings
@@ -805,16 +805,10 @@ def _login_anthropic_api_key() -> None:
         key=api_key,
         plan_id=plan.id,
         expires_at=0.0,
-        managed_by="geode-api-key",
         metadata={"last_refresh": datetime.now(UTC).isoformat().replace("+00:00", "Z")},
     )
-    ensure_profile_store().add(profile)
-    try:
-        from core.auth.auth_toml import save_auth_toml
-
-        save_auth_toml()
-    except Exception:
-        log.debug("auth.toml persist after anthropic login failed", exc_info=True)
+    ensure_profile_store().add(profile, activate=True)
+    _pkg._persist_auth_state()
     settings.anthropic_api_key = api_key
     _pkg._upsert_env("ANTHROPIC_API_KEY", api_key)
     _persist_credential_source("anthropic", "api_key")
@@ -849,18 +843,18 @@ def _login_set_key(rest: str) -> None:
     store = ensure_profile_store()
     name = f"{plan.id}:user"
     existing = store.get(name)
-    if existing is not None:
-        store.add(replace(existing, key=key, error_count=0, cooldown_until=0.0))
-    else:
-        store.add(
-            AuthProfile(
-                name=name,
-                provider=plan.provider,
-                credential_type=CredentialType.API_KEY,
-                key=key,
-                plan_id=plan.id,
-            )
+    profile = (
+        replace(existing, key=key, error_count=0, cooldown_until=0.0)
+        if existing is not None
+        else AuthProfile(
+            name=name,
+            provider=plan.provider,
+            credential_type=CredentialType.API_KEY,
+            key=key,
+            plan_id=plan.id,
         )
+    )
+    store.add(profile, activate=True)
     if plan.provider == "glm-coding":
         from core.llm.adapters.registry import invalidate_provider_clients
 

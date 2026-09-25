@@ -91,7 +91,7 @@ class TestSubcommandRouter:
             cmd_login("anthropic")
         login_api_key.assert_called_once_with()
 
-    def test_anthropic_login_persists_the_live_adapter_key(self) -> None:
+    def test_anthropic_login_persists_the_live_adapter_key(self, tmp_path: Path) -> None:
         _reset_state()
         key = "sk-ant-api03-test-key-1234567890"
         with (
@@ -109,6 +109,17 @@ class TestSubcommandRouter:
         upsert_env.assert_called_once_with("ANTHROPIC_API_KEY", key)
         persist_source.assert_called_once_with("anthropic", "api_key")
         invalidate.assert_called_once_with("anthropic")
+
+        from core.auth.auth_toml import load_auth_toml
+        from core.auth.profiles import ProfileStore
+        from core.auth.rotation import ProfileRotator
+        from core.llm.strategies.plan_registry import PlanRegistry
+
+        registry, store = PlanRegistry(), ProfileStore()
+        assert load_auth_toml(registry=registry, store=store, path=tmp_path / "auth.toml")
+        profile = ProfileRotator(store).resolve("anthropic")
+        assert profile is not None and profile.key == key
+        assert profile.managed_by == ""
 
     def test_unknown_subcommand_warns(self) -> None:
         _reset_state()
