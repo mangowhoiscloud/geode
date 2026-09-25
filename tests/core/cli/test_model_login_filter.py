@@ -8,9 +8,9 @@ so the user saw a confusing "model switched, but it doesn't work" state.
 
 Contracts pinned here:
 
-1. ``commands._state.model_available(model_id)`` delegates to
-   ``resolve_routing(model_id)`` and is False when no credential route
-   exists.
+1. ``commands._state.model_available(model_id)`` checks the selected route
+   and its adapter credential fallback; it is False when neither has a
+   credential for that source.
 2. The interactive picker tuple carries an ``available`` flag as the
    5th element. ``pick_model_and_effort`` returns ``cancelled=True``
    when the user presses Enter on an unavailable entry, leaving the
@@ -44,13 +44,20 @@ def test_model_available_true_when_resolve_routing_returns_target() -> None:
         assert _state.model_available("claude-opus-4-7") is True
 
 
-def test_model_available_false_when_resolve_routing_returns_none() -> None:
-    """A None RoutingTarget means no credential route — picker should
-    flag the entry as (login required)."""
+@pytest.mark.parametrize("api_key, expected", [("", False), ("fixture-api-key", True)])
+def test_model_available_without_plan_uses_same_source_settings_credential(
+    monkeypatch: pytest.MonkeyPatch, api_key: str, expected: bool
+) -> None:
+    """No plan account is usable; only the selected PAYG adapter fallback remains."""
     from core.cli.commands import _state
+    from core.config import settings
 
-    with patch("core.llm.routing.resolve_routing", return_value=None):
-        assert _state.model_available("claude-opus-4-7") is False
+    monkeypatch.setattr(settings, "anthropic_api_key", api_key)
+    with (
+        patch("core.llm.routing.resolve_routing", return_value=None),
+        patch("core.llm.adapters.anthropic_payg.resolve_routing", return_value=None),
+    ):
+        assert _state.model_available("claude-opus-4-7", source="payg") is expected
 
 
 def test_model_available_swallows_routing_exceptions() -> None:

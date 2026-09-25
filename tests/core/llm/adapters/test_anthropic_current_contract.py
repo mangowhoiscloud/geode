@@ -236,7 +236,9 @@ def test_stream_preserves_sdk_tools_signed_content_and_cache_usage(
             max_retries=0,
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond)),
         ) as client:
-            monkeypatch.setattr(AnthropicPaygAdapter, "_get_client", lambda _self: client)
+            monkeypatch.setattr(
+                AnthropicPaygAdapter, "_get_client", lambda _self, _model="": client
+            )
             stream = [
                 event
                 async for event in AnthropicPaygAdapter().astream(
@@ -292,7 +294,7 @@ def test_auxiliary_completion_rejects_invalid_output_before_sdk_request(
     client = SimpleNamespace(
         base_url="https://api.anthropic.com", messages=SimpleNamespace(create=create)
     )
-    monkeypatch.setattr(AnthropicPaygAdapter, "_get_client", lambda _self: client)
+    monkeypatch.setattr(AnthropicPaygAdapter, "_get_client", lambda _self, _model="": client)
     with pytest.raises(LLMRequestValidationError, match="max_tokens"):
         asyncio.run(AnthropicPaygAdapter().acomplete_text("input", model=model, max_tokens=limit))
     create.assert_not_awaited()
@@ -311,7 +313,7 @@ def test_auxiliary_completion_preserves_server_thinking_defaults(
     client = SimpleNamespace(
         base_url="https://api.anthropic.com", messages=SimpleNamespace(create=create)
     )
-    monkeypatch.setattr(AnthropicPaygAdapter, "_get_client", lambda _self: client)
+    monkeypatch.setattr(AnthropicPaygAdapter, "_get_client", lambda _self, _model="": client)
     result = asyncio.run(
         AnthropicPaygAdapter().acomplete_text("input", model="claude-opus-5-5", max_tokens=128_000)
     )
@@ -355,7 +357,7 @@ def test_hosted_search_preserves_usage_presence_and_sources(
     client = SimpleNamespace(
         base_url="https://api.anthropic.com", messages=SimpleNamespace(create=create)
     )
-    monkeypatch.setattr(AnthropicPaygAdapter, "_get_client", lambda _self: client)
+    monkeypatch.setattr(AnthropicPaygAdapter, "_get_client", lambda _self, _model="": client)
     result = asyncio.run(AnthropicPaygAdapter().aweb_search("query", model="claude-opus-5-5"))
     assert result.text == "answer"
     assert result.source_urls == result.citation_urls == (source_url,)

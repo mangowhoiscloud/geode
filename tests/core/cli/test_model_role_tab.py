@@ -240,7 +240,9 @@ def test_cmd_model_global_token_routes_to_global_scope(
     ``/model <name>`` stays project-scoped."""
     from core.cli.commands import model as _model_mod
 
-    monkeypatch.setattr("core.cli.commands._state._selected_openai_source", lambda: "payg")
+    monkeypatch.setattr(
+        "core.cli.commands._state._selected_openai_source", lambda _model="": "payg"
+    )
     monkeypatch.setattr(_model_mod, "model_available", lambda _id: True)
     captured: list[tuple[str, str]] = []
     monkeypatch.setattr(
@@ -635,7 +637,9 @@ def test_apply_picker_result_applies_staged_then_final(monkeypatch) -> None:
     from core.cli.commands import model as model_cmd
     from core.cli.effort_picker import PickerResult
 
-    monkeypatch.setattr("core.cli.commands._state._selected_openai_source", lambda: "payg")
+    monkeypatch.setattr(
+        "core.cli.commands._state._selected_openai_source", lambda _model="": "payg"
+    )
     applied: list[tuple[str, str | None, str]] = []
     monkeypatch.setattr(
         model_cmd,
@@ -666,7 +670,9 @@ def test_interactive_picker_includes_active_off_catalog_role_models(monkeypatch)
     from core.cli import effort_picker
     from core.cli.commands import model as model_cmd
 
-    monkeypatch.setattr("core.cli.commands._state._selected_openai_source", lambda: "payg")
+    monkeypatch.setattr(
+        "core.cli.commands._state._selected_openai_source", lambda _model="": "payg"
+    )
     active = {
         "primary": "gpt-5.2",
         "reflection": "gpt-5.1",
@@ -704,7 +710,9 @@ def test_apply_picker_result_resolves_off_catalog_selected_row(monkeypatch) -> N
     from core.cli.commands import model as model_cmd
     from core.cli.effort_picker import PickerResult
 
-    monkeypatch.setattr("core.cli.commands._state._selected_openai_source", lambda: "payg")
+    monkeypatch.setattr(
+        "core.cli.commands._state._selected_openai_source", lambda _model="": "payg"
+    )
     applied: list[tuple[str, str, str]] = []
     monkeypatch.setattr(
         model_cmd,

@@ -209,25 +209,21 @@ class TestPlanUsage:
 
 
 class TestResolveRouting:
-    def test_unbound_profile_does_not_fabricate_a_payg_plan(self) -> None:
-        # Reset state for a clean test
-        from core.wiring.container import build_auth
-
-        reset_plan_registry()
-        store, _, _ = build_auth()
-
-        # Ensure at least an anthropic profile exists for the fallback path
-        store.add(
-            AuthProfile(
-                name="anthropic:test-routing",
-                provider="anthropic",
-                credential_type=CredentialType.API_KEY,
-                key="sk-ant-test-routing",
-            )
+    def test_unbound_profile_does_not_fabricate_a_payg_plan(self, payg_selection) -> None:
+        registry, store, _plan, _profile = payg_selection
+        before = registry.list_all()
+        unbound = AuthProfile(
+            name="anthropic:test-routing",
+            provider="anthropic",
+            credential_type=CredentialType.API_KEY,
+            key="sk-ant-test-routing",
         )
+        store.add(unbound)
 
-        target = resolve_routing("claude-opus-4-7")
+        target = resolve_routing("claude-opus-4-7", source="payg")
         assert target is None
+        assert unbound.plan_id == ""
+        assert registry.list_all() == before
 
     def test_explicit_plan_routing_takes_precedence(self) -> None:
         from core.wiring.container import build_auth
