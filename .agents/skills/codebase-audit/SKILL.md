@@ -6,7 +6,6 @@ description: Codebase audit + refactoring workflow. Dead code detection, God Obj
 # Codebase Audit & Refactoring Workflow
 
 A systematic workflow for auditing and improving the entire codebase.
-Proven in the GEODE v0.24.0 session (3,205 lines reduced, __init__.py -57%).
 
 ## Workflow
 
@@ -86,6 +85,14 @@ grep -rn "def __init__" core/ --include="*.py" -A20 | grep -B1 "def __init__" | 
 | **Refactoring** | Multiple proven responsibilities or drift paths | Use the smallest extraction that removes the failure |
 | **Defer** | Planned for future use, or requires large-scale changes | Kanban Backlog |
 
+Before implementation, use the [finding record](../agent-anti-pattern/references/field-guide.md#finding-record)
+to connect the violated contract, actual caller, counterexample, smallest
+correction and surviving oracle. Review entry/registration, persisted readers
+and failure branches; discovery counts are not findings. For deletion, apply
+the existing [deletion gate](../agent-anti-pattern/references/field-guide.md#deletion-gate).
+Similar setup does not make distinct provider, route, cancellation or cleanup
+checks redundant. Keep the behavior oracle after refactoring or test deduplication.
+
 ## Phase 3: Module Extraction Patterns
 
 ### Circular Import Prevention
@@ -113,16 +120,6 @@ Preserve a surviving check for every affected behavior or invariant after
 deletion. Follow the [verification reference](../geode-workflow/references/verification-gates.md)
 for scope and evidence reuse; do not run a full suite merely to report an audit.
 Use `scripts/preflight.sh` when broad checks are warranted and report all skips.
-
-## GEODE Proven Results
-
-| Task | Lines Reduced |
-|------|---------------|
-| Inline handler deletion (dead code) | -898 lines |
-| 6 dead modules deleted | -1,243 lines |
-| 5 dead tests deleted | -1,064 lines |
-| God Object splitting (pipeline_executor + report_renderer) | -786 lines |
-| **Total** | **-3,991 lines** |
 
 ## Anti-patterns
 

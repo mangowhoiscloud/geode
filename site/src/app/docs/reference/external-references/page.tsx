@@ -24,7 +24,7 @@ export default function Page() {
 
             <h2>Frontier 에이전트 시스템</h2>
             <table>
-              <thead><tr><th>시스템</th><th>출처</th><th>GEODE가 가져온 것</th></tr></thead>
+              <thead><tr><th>시스템</th><th>출처</th><th>참고 관점·적용 여부</th></tr></thead>
               <tbody>
                 <tr><td><strong>Claude Code</strong></td><td><a href="https://docs.anthropic.com/en/docs/claude-code/overview">docs.anthropic.com</a></td><td>while(tool_use) primitive, CLAUDE.md 스캐폴드 패턴, 4-tier memory, hooks 패턴.</td></tr>
                 <tr><td><strong>Codex CLI</strong></td><td><a href="https://github.com/openai/codex">github.com/openai/codex</a></td><td>thin CLI + IPC daemon, OAuth flow, sandbox policy.</td></tr>
@@ -32,11 +32,28 @@ export default function Page() {
                 <tr><td><strong>Karpathy autoresearch</strong></td><td><a href="https://github.com/karpathy/autoresearch">github.com/karpathy/autoresearch</a> (2026-03)</td><td>Fixed wall-budget으로 비교 가능성 보존. Frozen scoreboard 분리. git monotone ratchet. Token-economic loop. Simplicity criterion.</td></tr>
                 <tr><td><strong>Karpathy LLM Wiki</strong></td><td><a href="https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f">GitHub Gist</a></td><td>&quot;wiki = compiled artifact&quot; 지식 컴파일 패턴.</td></tr>
                 <tr><td><strong>Hermes Agent (NousResearch)</strong></td><td><a href="https://hermes-agent.nousresearch.com/docs/">hermes-agent.nousresearch.com/docs</a></td><td>llms.txt / llms-full.txt 듀얼 인덱스, system_and_3 cache_control 패턴, 멀티채널 personal agent.</td></tr>
+                <tr>
+                  <td><strong>DeepSeek Harness</strong></td>
+                  <td><a href="https://github.com/deepseek-ai/deepseek-harness">공식 저장소</a>; <a href="https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.7-rc.2">dsh-v0.1.7-rc.2</a> prerelease (2026-09-24). 조사 HEAD <a href="https://github.com/deepseek-ai/deepseek-harness/commit/477b4f420553e8a52c2fbccc464d7561b239c443">477b4f420</a> (2026-09-24).</td>
+                  <td>비교 후보: plugin scope·해제 책임과 세션 문맥 조립. <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/agent-loop/src/agent.ts#L529-L618">agent loop</a> → <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/llm/llm/src/index.ts#L867-L950">LLM 요청</a>, <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/compaction/compaction-basic/src/index.ts#L158-L228">compaction</a>의 실제 소비자를 대조합니다. GEODE 채택·동등 성능은 미검증입니다.</td>
+                </tr>
+                <tr>
+                  <td><strong>Google AX</strong></td>
+                  <td><a href="https://github.com/google/ax">공식 저장소</a>; <a href="https://github.com/google/ax/releases/tag/v0.3.0">v0.3.0</a> (2026-09-20). 조사 HEAD <a href="https://github.com/google/ax/commit/e09ed1bc5463ad4b5ca88f755a6e1e2005b3c7b7">e09ed1bc5</a> (2026-09-25).</td>
+                  <td>비교 후보: Task/Workspace/Model 선언을 Agent Substrate에 배치하는 orchestration 계층. <a href="https://github.com/google/ax/blob/e09ed1bc5463ad4b5ca88f755a6e1e2005b3c7b7/internal/controller/reconciler.go#L193-L218">controller</a> → <a href="https://github.com/google/ax/blob/e09ed1bc5463ad4b5ca88f755a6e1e2005b3c7b7/cmd/ax-task-runner/main.go#L15-L79">runner 시작</a> → <a href="https://github.com/google/ax/blob/e09ed1bc5463ad4b5ca88f755a6e1e2005b3c7b7/runner/runner.go#L109-L220">실행 수명</a>을 대조합니다. 작업 배치와 호스팅된 에이전트의 판단·완료 검증은 책임이 다릅니다.</td>
+                </tr>
+                <tr>
+                  <td><strong>Grok Build</strong></td>
+                  <td><a href="https://github.com/xai-org/grok-build">공식 소스 미러</a>; 조사 HEAD <a href="https://github.com/xai-org/grok-build/commit/f0e3be1100ef5252488e3be8bb0e91cf68d8c305">f0e3be110</a> (2026-09-23). <a href="https://x.ai/build/changelog">제품 changelog</a>의 v1.0.40 (2026-09-20)은 별도 버전입니다. 조회 시 GitHub release/tag 목록은 비어 있었습니다.</td>
+                  <td>비교 후보: coding agent와 TUI의 <a href="https://github.com/xai-org/grok-build/blob/f0e3be1100ef5252488e3be8bb0e91cf68d8c305/crates/codegen/xai-grok-config/src/config_layers.rs#L99-L156">설정 계층</a> → <a href="https://github.com/xai-org/grok-build/blob/f0e3be1100ef5252488e3be8bb0e91cf68d8c305/crates/codegen/xai-grok-shell/src/agent/mvp_agent/session_setup.rs#L582-L636">세션 구성</a>, compaction·도구·hook 수명. 공개 소스 미러와 배포 제품의 동등성을 가정하지 않습니다.</td>
+                </tr>
                 <tr><td><strong>Cursor</strong></td><td><a href="https://docs.cursor.com/">docs.cursor.com</a></td><td>Composer 패턴 (참조용. GEODE는 별도 구현).</td></tr>
                 <tr><td><strong>Aider</strong></td><td><a href="https://aider.chat/">aider.chat</a></td><td>&quot;AI pair programming in your terminal&quot; 카피 패턴 (간결한 hero 1-line).</td></tr>
                 <tr><td><strong>Devin / Cognition</strong></td><td><a href="https://cognition.ai/blog/introducing-devin">cognition.ai</a></td><td>&quot;The AI software engineer&quot; 명사구 정체성. 장기 실행 소프트웨어 에이전트 비교점.</td></tr>
               </tbody>
             </table>
+
+            <p>위 세 사례의 버전·소스 조회일은 2026-09-25입니다. 후속 조사에서는 release·prerelease·기본 브랜치 HEAD를 따로 확인하고, 이전 고정 커밋과의 변경분에서 생산자 → 상태 필드 → 소비자 → 결정 및 종료 책임을 추적합니다. README의 의도, 코드에서 확인한 구현, 실제 실행·verifier 근거를 구분하고 GEODE의 기존 담당 모듈과 채택·수정·제외 여부를 정렬합니다.</p>
 
             <h2>Diátaxis 와 docs 디자인 표준</h2>
             <ul>
@@ -132,7 +149,7 @@ export default function Page() {
 
             <h2>Frontier agent systems</h2>
             <table>
-              <thead><tr><th>System</th><th>Source</th><th>What GEODE took</th></tr></thead>
+              <thead><tr><th>System</th><th>Source</th><th>Comparison focus / adoption</th></tr></thead>
               <tbody>
                 <tr><td><strong>Claude Code</strong></td><td><a href="https://docs.anthropic.com/en/docs/claude-code/overview">docs.anthropic.com</a></td><td>while(tool_use) primitive, CLAUDE.md scaffold pattern, 4-tier memory, hook pattern.</td></tr>
                 <tr><td><strong>Codex CLI</strong></td><td><a href="https://github.com/openai/codex">github.com/openai/codex</a></td><td>thin CLI plus IPC daemon, OAuth flow, sandbox policy.</td></tr>
@@ -140,11 +157,28 @@ export default function Page() {
                 <tr><td><strong>Karpathy autoresearch</strong></td><td><a href="https://github.com/karpathy/autoresearch">github.com/karpathy/autoresearch</a> (2026-03)</td><td>Fixed wall-budget for comparability. Frozen scoreboard. git monotone ratchet. Token-economic loop. Simplicity criterion.</td></tr>
                 <tr><td><strong>Karpathy LLM Wiki</strong></td><td><a href="https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f">GitHub Gist</a></td><td>&quot;wiki = compiled artifact&quot; knowledge-compilation pattern.</td></tr>
                 <tr><td><strong>Hermes Agent (NousResearch)</strong></td><td><a href="https://hermes-agent.nousresearch.com/docs/">hermes-agent.nousresearch.com/docs</a></td><td>llms.txt and llms-full.txt dual index, system_and_3 cache_control pattern, multi-channel personal agent.</td></tr>
+                <tr>
+                  <td><strong>DeepSeek Harness</strong></td>
+                  <td><a href="https://github.com/deepseek-ai/deepseek-harness">Official repository</a>; <a href="https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.7-rc.2">dsh-v0.1.7-rc.2</a> prerelease (2026-09-24). Inspected HEAD <a href="https://github.com/deepseek-ai/deepseek-harness/commit/477b4f420553e8a52c2fbccc464d7561b239c443">477b4f420</a> (2026-09-24).</td>
+                  <td>Comparison candidate: plugin scope/disposal and session context assembly. Trace the <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/core/agent-loop/src/agent.ts#L529-L618">agent loop</a> → <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/llm/llm/src/index.ts#L867-L950">LLM request</a> and <a href="https://github.com/deepseek-ai/deepseek-harness/blob/477b4f420553e8a52c2fbccc464d7561b239c443/packages/compaction/compaction-basic/src/index.ts#L158-L228">compaction</a> consumers. GEODE adoption and equivalent performance are unverified.</td>
+                </tr>
+                <tr>
+                  <td><strong>Google AX</strong></td>
+                  <td><a href="https://github.com/google/ax">Official repository</a>; <a href="https://github.com/google/ax/releases/tag/v0.3.0">v0.3.0</a> (2026-09-20). Inspected HEAD <a href="https://github.com/google/ax/commit/e09ed1bc5463ad4b5ca88f755a6e1e2005b3c7b7">e09ed1bc5</a> (2026-09-25).</td>
+                  <td>Comparison candidate: Task/Workspace/Model orchestration on Agent Substrate. Trace the <a href="https://github.com/google/ax/blob/e09ed1bc5463ad4b5ca88f755a6e1e2005b3c7b7/internal/controller/reconciler.go#L193-L218">controller</a> → <a href="https://github.com/google/ax/blob/e09ed1bc5463ad4b5ca88f755a6e1e2005b3c7b7/cmd/ax-task-runner/main.go#L15-L79">runner entry</a> → <a href="https://github.com/google/ax/blob/e09ed1bc5463ad4b5ca88f755a6e1e2005b3c7b7/runner/runner.go#L109-L220">execution lifecycle</a>. Workload placement and the hosted agent&apos;s decisions and completion verification have different owners.</td>
+                </tr>
+                <tr>
+                  <td><strong>Grok Build</strong></td>
+                  <td><a href="https://github.com/xai-org/grok-build">Official source mirror</a>; inspected HEAD <a href="https://github.com/xai-org/grok-build/commit/f0e3be1100ef5252488e3be8bb0e91cf68d8c305">f0e3be110</a> (2026-09-23). The <a href="https://x.ai/build/changelog">product changelog</a> lists v1.0.40 (2026-09-20) separately. GitHub release/tag lists were empty at retrieval.</td>
+                  <td>Comparison candidate: coding agent/TUI <a href="https://github.com/xai-org/grok-build/blob/f0e3be1100ef5252488e3be8bb0e91cf68d8c305/crates/codegen/xai-grok-config/src/config_layers.rs#L99-L156">config layers</a> → <a href="https://github.com/xai-org/grok-build/blob/f0e3be1100ef5252488e3be8bb0e91cf68d8c305/crates/codegen/xai-grok-shell/src/agent/mvp_agent/session_setup.rs#L582-L636">session setup</a>, compaction, tools and hook lifecycle. Public mirror and shipped product equivalence is not assumed.</td>
+                </tr>
                 <tr><td><strong>Cursor</strong></td><td><a href="https://docs.cursor.com/">docs.cursor.com</a></td><td>Composer pattern (reference; GEODE implements separately).</td></tr>
                 <tr><td><strong>Aider</strong></td><td><a href="https://aider.chat/">aider.chat</a></td><td>&quot;AI pair programming in your terminal&quot; copy pattern (succinct one-line hero).</td></tr>
                 <tr><td><strong>Devin / Cognition</strong></td><td><a href="https://cognition.ai/blog/introducing-devin">cognition.ai</a></td><td>&quot;The AI software engineer&quot; noun-anchored identity. Long-running software-agent comparison point.</td></tr>
               </tbody>
             </table>
+
+            <p>The three additions were checked on 2026-09-25. On follow-up, inspect releases, prereleases and default-branch HEAD separately, then compare the previous pinned commit with the new revision. Trace producer → state field → consumer → decision and teardown ownership. Separate documented intent, inspected implementation and executed verifier evidence; map responsibilities to existing GEODE owners before deciding to adopt, adapt or reject a change.</p>
 
             <h2>Diátaxis and docs design standards</h2>
             <ul>

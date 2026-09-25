@@ -17,6 +17,45 @@ Exercise the real entry and runtime with only the provider
 boundary faked, including opt-in branches, missing/zero/positive usage, and
 failure/cancellation. Do not mock away the accounting seam being checked.
 
+For state replacement, distinguish candidate validation, live replacement,
+artifact persistence, checkpoint commit and downstream acceptance. An emitted
+success event does not establish an atomic transaction across stores. Verify
+the owner's cancellation, stale-candidate and reentrant-mutation boundaries;
+preserve newer input and already committed state according to that contract.
+For conversation changes, read the existing
+[compaction contract](../../../../docs/architecture/context-compaction.md).
+Trace retained context through the next action and auxiliary requests, keeping
+derived summaries, original user corrections and observed tool evidence distinct.
+
+For client/daemon changes, trace the explicit request through the owning session
+to its next actual consumer and the response rendered by the client. Distinguish
+received, deferred, applied and persisted outcomes; transport acknowledgement or
+saved defaults do not prove live adoption. Validate coupled values together and
+compare explicit no-op requests with the target runtime, not stale defaults.
+Keep session scope separate from project/global persistence and credential
+ownership. Exercise the affected start, explicit-change, failure, reconnect/resume
+and cross-session paths; preserve absent historical fields instead of inventing
+restored values.
+Verify auxiliary and worker readers as well as the primary request. Use the
+existing protocol, configuration and lifecycle owners, with no secret-bearing
+settings snapshot or process-global rebinding to emulate a session change.
+
+For host diagnostics, preserve explicit request policy. Missing host-specific
+startup state does not establish unavailable capability; resolve it through the
+existing runtime owner and keep absent evidence distinct from a negative result.
+
+For resumed verification, distinguish observations retained from earlier
+requests from current checks; preserve their provenance and privacy boundaries.
+Prior observations are not fresh checks, omitted evidence remains unknown, and
+candidate prose does not establish an observed result. Check bounded rendering
+against useful inputs/results from the actual caller, not only toy payloads.
+
+For public hooks, follow [hook contracts](../../../../docs/architecture/hook-system.md)
+for bounded decisions, trusted transforms and observations. Trace registration
+and the actual caller; observers do not choose admission or recovery. Before
+extending a payload, inspect its validator, readers and supported versions.
+Reuse existing metadata where sufficient instead of adding a parallel schema.
+
 ## Required Surfaces
 
 | Surface | Requirement |

@@ -67,9 +67,19 @@ remain outside scope.
 | CI-1 | Conservative document-only full-test selection | existing CI gates | PR #3405 merged into develop at `ebeee591d` |
 | CI-2 | Fail closed on invalid comparison refs; enforce locked dependency installation | CI-1 | PR #3406 merged into develop at `6aaaf796d`; required CI passed |
 | CI-3 | Four complete, disjoint test shards and combined coverage gate | CI-2 | PR #3409 merged into develop at `0ae4705f6`; required CI passed |
-| Compaction | Route-aware context admission, overflow recovery, next-turn task state and public-hook read-only/re-entry/persistence/cancellation contracts | remaining implementation queue | candidate `00ec0ed0d` integrated with develop `0fd68aaa9`; final integrated checks, required CI and merge pending before V1 execution |
-| V1 execution | New-model API/subscription E2E, cache and Harbor validation | all implementation PRs merged into develop with required CI | not started; total US$20 paid cap approved |
-| F1 | Repeatable onboarding and audit scaffold in existing contributor skills | completed refactoring and checks | pending; preserve runtime/contributor prompt separation |
+| Compaction | Route-aware context admission, overflow recovery, next-turn task state and public-hook read-only/re-entry/persistence/cancellation contracts | runtime and hook owners | PR #3417 merged at `6cb71da02`; evidence and auxiliary-input follow-ups #3418 and #3420 merged at `580927e1a` and `54ed9cf78` |
+| Readiness | Recognize actual OAuth runtime readiness without overriding explicit audit policy | V1 observations | PR #3419 merged at `cf5851dcd` |
+| Relay completion | OpenRouter text completion and preserved native effort through auxiliary calls | V1 observations | PR #3421 merged at `567755848` |
+| Effort fidelity | Preserve supported selections and reject unsupported values before client construction | actual request audit | PR #3422 merged at `cbb4e33bf`; supported-choice UI #3424 merged at `43ce8e827` |
+| Relay sampling | Omit unsupported default temperature for known OpenAI reasoning relay requests | actual failed request | PR #3423 merged at `8d525ca83`; sole cause of the observed endpoint rejection still requires live confirmation |
+| Probe identity | Bind resumed checks to route, endpoint and source; observe actual OpenRouter Chat serialization | verification tooling audit | PR #3425 merged at `a22bc119d`; forty targeted checks and required CI passed |
+| Session application | Coherent initial/explicit model policy, actual-state ACK and session-local consumers | IPC and runtime counterexamples | PR #3428 open; three stale CI test contracts corrected with 23 passing adjacent checks; new-head remote CI pending |
+| Auth persistence | Pin/order persistence and file-owned removal without mutating borrowed credentials | auth serializer/consumer counterexamples | PR #3426 merged at `89f9a9579`; 185 targeted checks and required CI passed |
+| Credential adoption | Explicit API-key choices reach actual SDK requests and retained adapter generations | Auth persistence | PR #3427 merged at `abfcf05db`; all ten required checks passed on `bd99842bf`, ordered merge parents verified |
+| Configuration authority | One shallow source/account decision owner and shared config reads; remove duplicate parsing, unused drift and hidden PAYG fallback | Credential adoption and Session application | implementation in owned `codex/config-authority-20260925`; Codex/Hermes/OpenCode source grounding completed; not merged |
+| Resume | Restore the admitted nonsecret session policy through IPC, gateway and worker callers | Session application and Configuration authority | implementation in owned `codex/session-resume-policy-20260925`; invalid-present and absent legacy records remain distinct; not merged |
+| V1 execution | New-model API/subscription E2E, cache and Harbor validation | final implementation PRs merged into develop with required CI | selected earlier-source runs complete; final-source follow-ups pending; total US$20 paid cap unchanged |
+| F1 | Repeatable onboarding and audit scaffold in existing contributor skills | completed refactoring and checks | local preparation reviewed; added dated DeepSeek Harness, Google AX and Grok Build research references and version/responsibility follow-up; final integration pending |
 | Report | Reconcile all session changes with the existing report and update stale or missing content, including OpenRouter and compaction; exclude Jev | Compaction and V1 execution | pending separate feature PR; publication through main Pages |
 | R1 | Patch release preparation, packaging/docs, develop→main, stable publication | all accepted units, including Report | pending |
 
@@ -99,25 +109,30 @@ separate PRs before freezing final V1 inputs. This is a single integration
 queue operated under the existing [GitFlow manual](../../.agents/skills/geode-gitflow/SKILL.md),
 not a change to GitHub protection settings or a new merge-queue service.
 
-At develop `0fd68aaa9`, P6, CI-3, E2, E3, K2, K1, MCP, TQ and grill ownership
-are also merged. The remaining queue is Compaction → V1 → F1 → R1.
+At develop `abfcf05db`, the original provider, lifecycle, cache, compaction and
+CI units and PRs #3418–#3427 are merged. The remaining implementation queue is
+session application (#3428), shared config/source authority, then checkpoint/worker resume.
+Remove redundant resolvers, repeated TOML reads and unused drift options while
+preserving actual selection and lifecycle tests. Keep
+these as cohesive review units; fixing one model picker alone does not close
+the client/daemon contract. Final source freeze and selected V1 follow-ups
+precede F1, Report and R1.
 The separate Report feature follows V1 observations and must precede R1. Review
 all session changes against the report, including OpenRouter; the ACT3 page 34
 update and two added compaction pages do not limit that scope. Jev belongs to a
 separate report. No report content is implemented by this integration.
-The operator's September 25 follow-up adds the separate compaction PR immediately
-before V1. Its candidate now incorporates the final grill ownership base in the
-owned worktree; finish integrated verification, then pass required CI and merge
-before paid calls.
+The operator's September 25 compaction follow-up was implemented before V1.
+Subsequent live observations produced the bounded readiness, auxiliary-context,
+relay and effort corrections above. Each passed required CI before its develop
+merge; earlier-source results are not silently promoted to the latest source.
 Compare pinned Codex and Hermes sources, xAI's public contracts, and primary
 long-context research. Distinguish documented model/API/subscription limits
 from account admission and unavailable proprietary harness details.
 
-The existing context regressions passed on the audited `1decea9ba` base, but two
-offline counterexamples remained: a confirmed provider overflow below the local estimated critical
-threshold skips compaction, and successful token reduction with unchanged
-message count is treated as failed recovery. The compaction PR owns both.
-Its acceptance must prove bounded recovery and useful task-state preservation
+The compaction work reproduced and corrected two offline counterexamples:
+a confirmed provider overflow below the local estimated critical threshold
+skipped compaction, and successful token reduction with unchanged message count
+was treated as failed recovery. Its acceptance covers bounded recovery and useful task-state preservation
 in the actual next request, including constraints, causal tool pairs, and
 checkpoint/resume behavior; a smaller transcript alone is insufficient. Audit
 public-hook read-only behavior, duplicate/re-entrant dispatch, and the distinction
@@ -153,15 +168,34 @@ that requirement. These references do not imply external certification.
 
 ## Verification record
 
-No successful live inference has been executed in this maintenance work. A
-broad test invocation accidentally removed the default live-test exclusion;
+The initial offline stage had no successful live inference. A broad test
+invocation accidentally removed the default live-test exclusion;
 one live case failed at adapter dispatch before SDK construction. The
 corrected offline run excluded live tests explicitly. Initial narrow checks found old tests
 pinning retired picker choices and old context/effort contracts. Update
 only assertions whose documented behavior changed and retain route, replay,
 credential-isolation and no-silent-fallback checks. Passing local tests are
-not remote CI or publication evidence. Final PR/run/release receipts will
-be recorded when observed.
+not remote CI or publication evidence.
+
+Later source-bound measurements include successful Astra/Sol/Luna subscription
+E2E, Astra/Sol native Harbor tasks, and one Sol subscription compaction
+diagnostic. Luna Harbor also has a valid semantic failure; keep its native
+verifier outcome despite a model judge's false acceptance. These bounded
+observations do not establish model rankings or universal provider support.
+OpenRouter compaction attempts hit credit and endpoint admission failures;
+retain their invalid/unknown classifications and fresh replacement lineage.
+Historical cache responses retain their raw observations even where export
+metadata prevented promotion of the selected result. Prepared cache candidates
+are not executed measurements. Direct OpenAI/Anthropic/Zhipu credit failures
+remain unverified paths until authorised funded calls succeed. The later
+OpenRouter US$5 top-up does not expand the existing total US$20 campaign cap.
+
+Final publication must bind its claims to the eventual integrated source,
+native results, complete usage and verifier receipts. Main promotion, public
+report readback, package publication and installed-version verification remain
+separate pending gates. The Jev owner receives the final validated-main
+handoff afterward and retains its own implementation, experiment and film queue;
+this refresh neither claims those results nor inserts Jev into the GEODE report.
 
 ## SWE review record
 

@@ -37,7 +37,10 @@ grep -rn "except:" core/ --include="*.py"
 ```
 
 Rules:
-- Empty except: At minimum log, or wrap and re-raise
+- Empty except is a discovery candidate: inspect expected failure, suppression
+  and the upper caller. Follow the existing
+  [error conventions](../../../docs/architecture/naming-conventions.md#5-errors-logging-and-trust-boundaries);
+  do not add duplicate logging, lose cancellation or manufacture empty success.
 - except Exception: Must state legitimate justification
 - Bare except: Prohibited — specify at minimum the Exception type
 
@@ -54,7 +57,13 @@ grep -rn "subprocess\.Popen" core/ --include="*.py" | grep -v "with "
 grep -rn "tempfile\.\|NamedTemporaryFile\|mktemp" core/ --include="*.py"
 ```
 
-Rule: All `Closeable` must be wrapped with `with` statement
+Trace the creator, ownership transfer, borrower and lifetime owner. Use a
+context manager, `finally` or the established async shutdown owner as appropriate;
+verify constructor failure, cancellation and partial teardown. Preserve failed
+resources when the owning lifetime permits retry, and still attempt sibling cleanup. Follow
+[construction/lifecycle](../../../docs/architecture/naming-conventions.md#33-construction-and-lifecycle)
+and [error conventions](../../../docs/architecture/naming-conventions.md#5-errors-logging-and-trust-boundaries),
+rather than requiring a `with` statement for every shared client.
 
 ## Check 4: Thread Safety
 
