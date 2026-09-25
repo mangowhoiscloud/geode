@@ -1299,6 +1299,62 @@ def test_judge_dedup_preserves_the_current_observation_provenance() -> None:
     ]
 
 
+def test_compacted_judge_receives_summary_and_prior_user_correction(monkeypatch) -> None:
+    import asyncio
+    import copy
+    import json
+    from unittest.mock import AsyncMock
+
+    from core.agent.conversation import ConversationContext
+    from core.agent.verify import _verify_llm_judge_async
+    from core.orchestration.compaction import _carry_forward
+
+    correction = "Correction: use beta and multiplier 3, keeping the archived key."
+    request = "Execute the pending lookup using the archived key and latest correction."
+    context = ConversationContext(
+        messages=_carry_forward(
+            "Archived key: violet-signal. Earlier multiplier: 2. Historical lookup claimed success.",
+            [],
+        )
+    )
+    context.add_user_message(correction, origin="user_input")
+    context.add_user_message("SYNTHETIC_REMINDER")
+    context.add_user_message(request, origin="user_input")
+    call = _add_observed_judge_call(context, "observed-beta")
+    candidate = _make_result(text='{"total":87}', tool_calls=[call])
+    before = copy.deepcopy(context.messages)
+    captured = []
+
+    async def judge(_system, messages, **_kwargs):
+        captured.append(messages)
+        return _reflexion_response(passed=True)
+
+    monkeypatch.setattr("core.config.settings.judgment_engine", "llm")
+    loop = SimpleNamespace(
+        context=context,
+        _verify_root_user_input=request,
+        _call_llm=AsyncMock(side_effect=judge),
+        _track_usage_async=AsyncMock(),
+        model="gpt-6-sol",
+    )
+    assert asyncio.run(_verify_llm_judge_async(candidate, loop=loop)).passed
+    evidence = captured[0][0]["content"]
+    assert "Archived key: violet-signal" in evidence
+    assert correction in evidence
+    assert "recent observations (1/1" in evidence
+    assert "not proof of tool execution" in evidence
+    assert evidence.count(request) == 1
+    assert "SYNTHETIC_REMINDER" not in json.dumps(captured)
+    assert context.messages == before
+
+    context.messages[0]["content"] = context.messages[0]["content"].replace(
+        "violet-signal", "different-key"
+    )
+    assert asyncio.run(_verify_llm_judge_async(candidate, loop=loop)).passed
+    assert captured[1] != captured[0]
+    assert "different-key" in captured[1][0]["content"]
+
+
 @pytest.mark.parametrize(
     "context_state", ["sanitized", "masked", "missing", "unknown", "nonvisual"]
 )
@@ -1647,8 +1703,10 @@ def test_personal_candidate_is_not_sent_to_an_auxiliary_judge(
     import asyncio
     from unittest.mock import AsyncMock
 
+    from core.agent.conversation import ConversationContext
     from core.agent.verify import verify_turn_async
     from core.config import settings
+    from core.orchestration.compaction import _carry_forward
 
     monkeypatch.setenv("GEODE_VERIFY_MODE", mode)
     monkeypatch.setattr(settings, "judge_model", judge_model)
@@ -1656,6 +1714,7 @@ def test_personal_candidate_is_not_sent_to_an_auxiliary_judge(
     loop = SimpleNamespace(
         _verify_root_user_input="Summarize private mail",
         _reflection_requires_redaction=True,
+        context=ConversationContext(messages=_carry_forward("PRIVATE_DERIVED_SUMMARY", [])),
         model="gpt-5.6-sol",
         _call_llm=call,
     )

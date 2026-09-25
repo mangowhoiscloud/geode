@@ -163,6 +163,11 @@ functional change.
 
 ### Fixed
 
+- Preserve retained task context in turn verification and tool-round reflection.
+  Pass the derived compaction summary and earlier marked user corrections through
+  one bounded projection, keeping current-request precedence, redaction and
+  explicit omissions. Summary claims remain separate from observed tool results.
+
 - Preserve matched earlier-turn tool evidence when judging resumed requests,
   with historical provenance, privacy protection and ambiguous-ID rejection.
   Share a bounded text budget across observations so complete short scripts
