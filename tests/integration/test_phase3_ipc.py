@@ -531,7 +531,14 @@ class TestCLIChannelIntegration:
 
         monkeypatch.setattr(loop, "arun", AsyncMock(side_effect=record_selection))
         services = MagicMock(lane_queue=None, command_registry=None)
-        services.create_session.return_value = (loop.executor, loop)
+
+        def create_session(_mode, *, conversation, **kwargs):
+            # SharedServices binds this exact context. Keep the pre-created
+            # real loop available for failure injection before connecting.
+            loop.context = conversation
+            return loop.executor, loop
+
+        services.create_session.side_effect = create_session
         poller = CLIPoller(services, socket_path=_test_sock())
         client = IPCClient(socket_path=poller._socket_path)
         poller.start()
@@ -564,6 +571,49 @@ class TestCLIChannelIntegration:
         assert ack["checkpoint_directory"] == str(loop._checkpoint.session_dir)
         assert client.send_prompt("selected tuple")["type"] == "result"
         assert observed == [("gpt-6-sol", "none", "subscription")]
+
+    @pytest.mark.parametrize("invalid", [False, True])
+    def test_resume_roundtrip_reports_applied_record_or_preserves_current(
+        self,
+        actual_session: Any,
+        invalid: bool,
+    ) -> None:
+        from core.memory.session_checkpoint import SessionCheckpoint, SessionState
+
+        loop, client, _poller, observed = actual_session
+        assert client.connect(), client.last_error
+        prior = loop._model_settings
+        prior_id = loop._session_id
+        saved = prior.updated(
+            {
+                "source": "subscription",
+                "effort": "turbo" if invalid else "medium",
+                "reflection_model": "gpt-6-luna",
+                "reflection_source": "payg",
+            }
+        )
+        cp = SessionCheckpoint()
+        cp.save(
+            SessionState(
+                session_id="ipc-saved",
+                status="completed",
+                model_settings=saved,
+                messages=[{"role": "user", "content": "checkpoint input"}],
+            )
+        )
+        response = client.request_resume("ipc-saved")
+        if invalid:
+            assert response["type"] == "resume_error"
+            assert client.model_config == prior.model_dump() == loop._model_settings.model_dump()
+            assert loop._session_id == prior_id and loop.context.is_empty
+            assert str(cp.current_status("ipc-saved")) == "completed"
+        else:
+            assert response["type"] == "resumed"
+            assert response["model_config_origin"] == "checkpoint"
+            assert client.model_config == saved.model_dump() == loop._model_settings.model_dump()
+            assert loop.context.messages[0]["content"] == "checkpoint input"
+            assert client.send_prompt("continue")["type"] == "result"
+            assert observed == [("gpt-6-sol", "medium", "subscription")]
 
     def test_explicit_session_change_survives_next_terminal_refresh(
         self, actual_session: Any, monkeypatch: pytest.MonkeyPatch

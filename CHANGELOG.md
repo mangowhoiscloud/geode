@@ -163,6 +163,12 @@ functional change.
 
 ### Fixed
 
+- Preserve the admitted model, source, effort and auxiliary policy through session
+  checkpoints and child-worker requests. Validate resume selection before changing
+  history, identity or checkpoint status; reject malformed saved records and keep
+  the current validated selection for legacy checkpoints. Report the applied
+  selection to the thin client without rereading unrelated process defaults.
+
 - Apply CLI model, effort, and concrete source selections to the owning daemon
   session before saving defaults, including named commands, role pickers, and
   fullscreen mode. Snapshot auxiliary model policy per session, reject

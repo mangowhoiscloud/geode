@@ -41,6 +41,7 @@ from core.agent.loop.models import (
 from core.agent.safety import SUBAGENT_CONTROL_TOOLS
 from core.async_runtime import run_process_coroutine
 from core.config.policy_source import EncodedPolicySourceBundle
+from core.config.session import SessionModelConfig
 from core.paths import GLOBAL_WORKERS_DIR
 
 if TYPE_CHECKING:
@@ -135,6 +136,7 @@ class WorkerRequest:
     # Reopen and restore the checkpoint owned by ``task_id`` before adding the
     # new description as a follow-up turn. False preserves fresh-worker behavior.
     resume: bool = False
+    model_settings: SessionModelConfig | None = None
     # PR-Q (2026-05-24) chose to carry the orchestrator's active run_dir
     # across the parent → worker boundary via the ``GEODE_RUN_DIR``
     # environment variable (see
@@ -153,7 +155,12 @@ class WorkerRequest:
             raise ValueError("Worker workspace isolation is not supported; omit isolation")
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        if self.model_settings is not None:
+            data["model_settings"] = self.model_settings.model_dump()
+        else:
+            data.pop("model_settings")
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> WorkerRequest:
@@ -184,6 +191,11 @@ class WorkerRequest:
             parent_session_key=data.get("parent_session_key", ""),
             parent_session_id=data.get("parent_session_id", ""),
             source=data.get("source", ""),
+            model_settings=(
+                SessionModelConfig.model_validate(data["model_settings"])
+                if "model_settings" in data
+                else None
+            ),
             policy_sources=data.get("policy_sources"),
             response_schema=data.get("response_schema"),
             emit_activity=data.get("emit_activity", False),
@@ -395,8 +407,8 @@ def _make_activity_sink(task_id: str) -> Any:
     return _sink
 
 
-def _load_worker_resume(request: WorkerRequest, conversation: Any) -> tuple[Any, Any]:
-    """Load an explicitly requested child checkpoint into its fresh context."""
+def _load_worker_resume(request: WorkerRequest) -> tuple[Any, Any]:
+    """Stage the requested child checkpoint without publishing its history."""
     if not request.resume:
         return None, None
     from core.memory.session_checkpoint import SessionCheckpoint
@@ -405,7 +417,6 @@ def _load_worker_resume(request: WorkerRequest, conversation: Any) -> tuple[Any,
     state = checkpoint.load(request.task_id)
     if state is None:
         raise RuntimeError(f"No checkpoint exists for child task {request.task_id}")
-    conversation.messages.extend(state.messages)
     return state, checkpoint
 
 
@@ -451,19 +462,24 @@ def _run_agentic(
     from core.config import _resolve_provider, settings
 
     conversation = ConversationContext(max_turns=200)
-    resume_state, resume_checkpoint = _load_worker_resume(request, conversation)
-    resumed_model = str(resume_state.model) if resume_state is not None else ""
-    effective_model = resumed_model or request.model or settings.model
-    effective_provider = (
-        str(resume_state.provider)
-        if resume_state is not None and resume_state.provider
-        else request.provider
-    ) or _resolve_provider(effective_model)
-    effective_source = request.source
-    if not effective_source:
+    resume_state, resume_checkpoint = _load_worker_resume(request)
+    saved_settings = resume_state.model_settings if resume_state is not None else None
+    model_settings = saved_settings or request.model_settings
+    if model_settings is None:
+        from core.config.session import capture_session_model_config
         from core.llm.adapters._source_inference import infer_source
 
-        effective_source = infer_source(effective_provider)
+        model = request.model or settings.model
+        provider = request.provider or _resolve_provider(model)
+        model_settings = capture_session_model_config(
+            settings,
+            model=model,
+            effort=request.effort,
+            source=request.source or infer_source(provider),
+        )
+    effective_model = model_settings.model
+    effective_provider = _resolve_provider(effective_model)
+    effective_source = model_settings.source
 
     # 2. Filter the complete native catalog — ordinary handlers, named special
     # routes, and explicit execution-only overlays — from one contribution set.
@@ -557,6 +573,7 @@ def _run_agentic(
                 task.cancel("Worker cancelled by SIGTERM")
 
         loop: AgenticLoop | None = None
+        session_admitted = False
         try:
             if handle_sigterm:
                 event_loop.add_signal_handler(signal.SIGTERM, _cancel_worker)
@@ -584,14 +601,15 @@ def _run_agentic(
                     max_rounds=0,
                     max_tokens=request.subagent_max_tokens,
                     thinking_budget=request.thinking_budget,
-                    effort=request.effort,
+                    effort=model_settings.effort,
                     time_budget_s=request.time_budget_s,
                     system_prompt_override=system_prompt_override,
                     parent_session_key=request.parent_session_key,
                     parent_session_id=request.parent_session_id,
                     allowed_tool_names=allowed_tool_names,
                     force_include_allowed_tools=True,
-                    source=request.source,
+                    source=effective_source,
+                    model_settings=model_settings,
                     session_id=request.task_id,
                     response_schema=request.response_schema,
                 ),
@@ -624,9 +642,14 @@ def _run_agentic(
                 # preserves legacy free-form text responses for callers that
                 # didn't declare a schema (REPL, gateway, ad-hoc CLI).
             )
+            from core.agent.loop._model_switching import validate_session_model_config
+
+            validate_session_model_config(loop, model_settings)
             if resume_state is not None and resume_checkpoint is not None:
                 resume_checkpoint.reopen(resume_state.session_id)
+                conversation.messages.extend(resume_state.messages)
                 loop.restore_from_checkpoint(resume_state)
+            session_admitted = True
 
             # 7. Build prompt
             prompt = request.description
@@ -729,7 +752,7 @@ def _run_agentic(
             )
             return result
         except BaseException:
-            if loop is not None:
+            if loop is not None and session_admitted:
                 await loop.amark_session_error()
             raise
         finally:

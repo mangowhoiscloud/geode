@@ -71,8 +71,13 @@ Model/tool publication restores its previous route and tool bindings if projecti
 fails. Context adaptation may have already committed a valid compaction using the
 previous route; this is not a promise to roll back history or external effects.
 Auxiliary readers consume the loop's immutable model policy and existing credential
-owners. This contract does not extend checkpoint schemas or claim complete
-historical model-policy restoration on resume.
+owners. A resumed checkpoint carries that same non-secret record in
+`state.json.model_settings`. Resume admits it before history/identity/reopen,
+then returns actual `model_config` and `model_config_origin: checkpoint|current`.
+The client adopts the returned selection. Legacy absence keeps the current
+validated selection; malformed present data rejects resume instead of silently
+mixing historical model metadata with current defaults. The existing JSON IPC
+envelope and negotiated feature remain unchanged.
 
 ## Gateway input
 

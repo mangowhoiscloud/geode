@@ -1125,6 +1125,13 @@ class CLIPoller:
             if msg.get("_require_resumable") and state.status not in ("active", "paused"):
                 return {"type": "resume_error", "message": "No resumable session found"}
 
+            from core.agent.loop._model_switching import apply_session_model_config
+
+            candidate = state.model_settings or loop._model_settings.updated(
+                {"model": loop.model, "source": loop._source, "effort": loop._effort}
+            )
+            await apply_session_model_config(loop, candidate, reason="resume")
+
             # Resume-by-id of a terminal (completed/error) instance takes
             # the explicit reopen edge of the session automaton — the
             # per-turn save() would otherwise warn about an implicit reopen.
@@ -1142,10 +1149,6 @@ class CLIPoller:
             set_cognitive_state(loop.cognitive_state)
             set_session_id(state.session_id)
 
-            # Restore model if different
-            if state.model and state.model != loop.model:
-                await loop.update_model_async(state.model, reason="resume")
-
             log.info(
                 "Session resumed: %s (round=%d, messages=%d)",
                 state.session_id,
@@ -1156,7 +1159,9 @@ class CLIPoller:
                 "type": "resumed",
                 "session_id": state.session_id,
                 "round_idx": state.round_idx,
-                "model": state.model,
+                "model": loop.model,
+                "model_config": loop._model_settings.model_dump(),
+                "model_config_origin": "checkpoint" if state.model_settings else "current",
                 "user_input": state.user_input,
                 "message_count": len(state.messages),
                 "cognitive_state": loop.cognitive_state.to_snapshot(),
