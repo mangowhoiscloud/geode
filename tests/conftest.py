@@ -148,10 +148,14 @@ def managed_geode_runtimes(
 @pytest.fixture(autouse=True)
 def _isolate_state_root(
     tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
-) -> None:
+) -> Iterator[None]:
     import core.paths as cp
     from core.memory import session_checkpoint, session_manager
 
+    # get_project_root() caches its first caller's cwd for the process. After
+    # a test's monkeypatch.chdir(tmp_path), that tmp root must not become the
+    # workspace of later tests (IPC workspace admission, BashTool working dir).
+    clear_project_root = cp.get_project_root.cache_clear
     sandbox = tmp_path_factory.mktemp("state-isolation")
     monkeypatch.setattr(cp, "STATE_ROOT", sandbox)
     monkeypatch.setattr(cp, "AUTORESEARCH_STATE_DIR", sandbox / "autoresearch")
@@ -165,6 +169,8 @@ def _isolate_state_root(
     session_dir = sandbox / "sessions"
     monkeypatch.setattr(session_checkpoint, "DEFAULT_SESSION_DIR", session_dir)
     monkeypatch.setattr(session_manager, "_DEFAULT_DB_PATH", session_dir / "sessions.db")
+    yield
+    clear_project_root()
 
 
 @pytest.fixture(autouse=True)
