@@ -83,9 +83,10 @@ Existing GEODE reasoning replay already binds opaque state to provider,
 adapter, and model. This remains the authority; the request builder is shared
 by both GLM adapters rather than duplicating provider rules. `GlmModelSpec`
 holds exact model controls, output bounds, and vision support. Prefix matches
-do not grant future models capabilities. GLM-5.3 generic GEODE efforts
-`none/minimal`, `medium`, and `xhigh` normalize to `low`, `high`, and `max`
-with a warning. Those mappings are GEODE policy, not extra native values.
+do not grant future models capabilities. GLM-5.3 accepts its documented
+native efforts unchanged. Unsupported values such as `none`, `minimal`,
+`medium`, and `xhigh` are rejected before a request rather than mapped to
+another effort or omitted in favor of a provider default.
 
 [OpenCode transform source](https://github.com/anomalyco/opencode/blob/610df0b56674fa0ebcae89093ada08b98731bea6/packages/opencode/src/provider/transform.ts#L1258)
 was pinned to commit `610df0b56674fa0ebcae89093ada08b98731bea6`. Its GLM

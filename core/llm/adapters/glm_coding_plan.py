@@ -106,6 +106,7 @@ class GlmCodingPlanAdapter:
         system: str = "",
         model: str = "",
         max_tokens: int = 1024,
+        effort: str | None = None,
     ) -> TextCompletionResult:
         from core.config import GLM_PRIMARY
 
@@ -115,7 +116,7 @@ class GlmCodingPlanAdapter:
                 messages=(Message(role="user", content=prompt),),
                 system_prompt=system,
                 max_tokens=max_tokens,
-                effort="",
+                effort=effort if effort is not None else "",
             )
         )
         return TextCompletionResult(text=result.text, usage=result.usage)

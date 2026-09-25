@@ -1415,6 +1415,12 @@ OpenRouter는 `openrouter` provider identity와 Chat Completions transport를 �
 
 컴팩션 등 텍스트 요약도 같은 OpenRouter 어댑터를 사용해 캐시 마커, 세션 식별과 사용량을 보존합니다. 알려진 OpenAI reasoning 모델은 선택한 effort를 relay 요청에 전달하며, 다른 모델의 effort 지원을 추정하지 않습니다. 응답 스키마를 요청하면 JSON Schema 형식과 `require_parameters: true`를 함께 전달합니다. 명시적으로 이 옵션을 false로 지정한 호출은 거절합니다. 실제 스키마 지원과 강제 수준은 상위 endpoint에 달려 있고, 로컬 응답 검증도 유지됩니다.
 
+## 선택한 effort 보존
+
+모델 선택 화면에서 확인한 effort는 요청의 값과 같아야 합니다. 프로바이더별 필드명은 달라도 값을 임의로 낮추거나 높이지 않습니다. 선택한 모델이 저장된 값을 지원하지 않으면 설정 변경이나 호출 전에 거절하므로, `/model`에서 지원하는 값을 직접 선택해야 합니다. 역할 탭을 이동하거나 Space로 선택을 추가한 뒤 Enter로 확정해도 primary effort를 보존합니다.
+
+지원되는 OpenAI·Claude·GLM 텍스트 보조 요청에도 명시한 effort를 전달합니다. OpenRouter의 알려진 OpenAI 경로도 같은 값을 전달합니다. effort 제어가 없는 모델은 선택 화면에 조절 기능을 표시하지 않으며, 서로 다른 모델의 같은 effort가 같은 계산량을 뜻하지는 않습니다.
+
 ## 모델 해석 우선순위
 
 강한 쪽이 이깁니다.
@@ -5847,7 +5853,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 
 | 필드 | toml 키 | 타입 / 기본값 | 용도 |
 | --- | --- | --- | --- |
-| `agentic_effort` | `agentic.effort` | str = `"high"` | `low`/`medium`/`high`/`max`/`xhigh`. Anthropic `output_config.effort`, OpenAI `reasoning.effort`로 전달됩니다. xhigh는 Opus 4.7 이상과 Fable 5 전용. |
+| `agentic_effort` | `agentic.effort` | str = `"high"` | 허용 값은 선택한 모델의 공통 스펙과 `/model` 선택 화면을 따릅니다. Anthropic `output_config.effort`, OpenAI `reasoning.effort`, GLM `reasoning_effort`에 같은 값을 전달하며, 지원하지 않는 조합은 호출 전에 거절합니다. |
 | `agentic_loop_time_budget` | `agentic.time_budget` | float = 0.0 | 벽시계 초 단위 예산. 0이면 무제한. |
 | `agentic_thinking_budget` | `agentic.thinking_budget` | int = 0 | 레거시 thinking 토큰 예산. 0이면 비활성. |
 

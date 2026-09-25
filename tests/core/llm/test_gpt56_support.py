@@ -17,6 +17,8 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SLUGS = ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna")
 ALL_IDS = ("gpt-5.6", *SLUGS)
@@ -142,21 +144,19 @@ def test_plugin_allowlists_include_gpt56() -> None:
         assert "gpt-5.6-sol" in text, rel
 
 
-def test_reasoning_effort_clamped_to_spec() -> None:
-    """Effort persists across model switches — the wire must never carry a
-    level the target spec excludes (Codex MCP review finding 1). Below-first
-    clamp: nearest weaker supported level wins."""
+def test_unsupported_reasoning_effort_is_not_replaced() -> None:
     from core.llm.adapters._openai_common import (
-        clamp_reasoning_effort,
         get_openai_model_spec,
+        validate_reasoning_effort,
     )
+    from core.llm.errors import LLMRequestValidationError
 
-    gpt55 = get_openai_model_spec("gpt-5.5")
-    assert clamp_reasoning_effort("max", spec=gpt55) == "xhigh"  # 5.6-only level
-    sol = get_openai_model_spec("gpt-5.6-sol")
-    assert clamp_reasoning_effort("max", spec=sol) == "max"  # supported → untouched
-    assert clamp_reasoning_effort("minimal", spec=sol) == "none"  # below-first rule
-    assert clamp_reasoning_effort(None, spec=sol) is None
+    for model, effort in [("gpt-5.5", "max"), ("gpt-6-sol", "minimal"), ("gpt-6-sol", "typo")]:
+        with pytest.raises(LLMRequestValidationError, match="unsupported"):
+            validate_reasoning_effort(effort, spec=get_openai_model_spec(model))
+    sol = get_openai_model_spec("gpt-6-sol")
+    assert validate_reasoning_effort("max", spec=sol) == "max"
+    assert validate_reasoning_effort(None, spec=sol) is None
 
 
 def test_computer_use_ga_exclusion_is_deliberate() -> None:

@@ -25,6 +25,7 @@ official docs (see ``docs/research/reasoning-depth-audit.md``):
 
 from __future__ import annotations
 
+import pytest
 from core.llm.providers.anthropic import (
     _ADAPTIVE_MODELS,
     _XHIGH_EFFORT_MODELS,
@@ -33,7 +34,7 @@ from core.llm.providers.anthropic import (
 
 
 class TestXHighEffortGate:
-    """B3 — ``xhigh`` is Opus 4.7+ (4.7 / 4.8); clamps to ``"high"`` elsewhere."""
+    """B3 — unsupported ``xhigh`` must not be advertised as a native selection."""
 
     def test_opus_4_8_supports_xhigh(self) -> None:
         assert _supports_xhigh_effort("claude-opus-4-8") is True
@@ -94,14 +95,15 @@ class TestThinkingDisplaySummarized:
             )
             assert kwargs["output_config"]["effort"] == "xhigh"
 
-    def test_adapter_downgrades_xhigh_on_opus_4_6(self) -> None:
+    def test_adapter_rejects_xhigh_on_opus_4_6(self) -> None:
         from core.llm.adapters._anthropic_common import build_create_kwargs
         from core.llm.adapters.base import AdapterCallRequest
+        from core.llm.errors import LLMRequestValidationError
 
-        kwargs = build_create_kwargs(
-            AdapterCallRequest(model="claude-opus-4-6", messages=(), effort="xhigh")
-        )
-        assert kwargs["output_config"]["effort"] == "high"
+        with pytest.raises(LLMRequestValidationError, match="does not support effort"):
+            build_create_kwargs(
+                AdapterCallRequest(model="claude-opus-4-6", messages=(), effort="xhigh")
+            )
 
 
 class TestSignatureRoundTrsubject:

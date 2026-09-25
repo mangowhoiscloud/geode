@@ -111,8 +111,9 @@ class OpenAIPaygAdapter:
         # effort together; keep the same model as the calling session.
         # ref: https://developers.openai.com/api/docs/guides/tools-web-search
         from core.config import OPENAI_PRIMARY
-        from core.llm.adapters._capability_impls import openai_web_search
+        from core.llm.adapters._capability_impls import openai_effort_kwargs, openai_web_search
 
+        openai_effort_kwargs(model or OPENAI_PRIMARY, effort)
         return await openai_web_search(
             self._get_client(),
             query=query,
@@ -141,8 +142,12 @@ class OpenAIPaygAdapter:
         Chat Completions route separately.
         """
         from core.config import OPENAI_PRIMARY
-        from core.llm.adapters._capability_impls import openai_responses_complete_text
+        from core.llm.adapters._capability_impls import (
+            openai_effort_kwargs,
+            openai_responses_complete_text,
+        )
 
+        openai_effort_kwargs(model or OPENAI_PRIMARY, effort)
         return await openai_responses_complete_text(
             self._get_client(),
             prompt=prompt,
@@ -153,8 +158,8 @@ class OpenAIPaygAdapter:
         )
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
-        client = self._get_client()
         kwargs = build_responses_kwargs(req, backend="platform", adapter_name=self.name)
+        client = self._get_client()
         # PR-OAUTH-API-LANES (2026-05-26) — pooled with codex-oauth in
         # the same per-account openai-api lane (OpenAI rate-limits
         # per-account, not per-source).
@@ -183,8 +188,8 @@ class OpenAIPaygAdapter:
         return translate_codex_response(final, accumulated_items=accumulated)
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
-        client = self._get_client()
         kwargs = build_responses_kwargs(req, backend="platform", adapter_name=self.name)
+        client = self._get_client()
         async with client.responses.stream(**kwargs) as stream:
             async for event in translate_responses_stream(stream):
                 yield event

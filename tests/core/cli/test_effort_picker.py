@@ -211,6 +211,28 @@ def test_picker_preserves_legacy_openai_minimal_on_noop_enter(
     assert result.effort == "minimal"
 
 
+def test_openrouter_openai_picker_uses_native_model_efforts() -> None:
+    model = "openrouter/openai/gpt-6-sol"
+    assert supported_efforts(model, "openrouter") == supported_efforts("gpt-6-sol", "openai")
+    assert default_effort(model, "openrouter") == "medium"
+    assert supported_efforts("openrouter/openrouter/auto", "openrouter") == ()
+
+
+def test_picker_marks_unsupported_saved_effort(monkeypatch, capsys) -> None:
+    from core.cli import effort_picker
+
+    monkeypatch.setattr(effort_picker, "_fit_to_width", lambda text: text)
+    effort_picker._render(
+        [("glm-5.3", "glm", "GLM-5.3", "$", True, None)],
+        cursor=0,
+        effort_per_model={"glm-5.3": "medium"},
+        initial_model="glm-5.3",
+    )
+    output = capsys.readouterr().out
+    assert "Medium effort" in output
+    assert "unsupported; choose a supported value" in output
+
+
 @pytest.mark.parametrize(
     ("arrow", "expected"),
     [

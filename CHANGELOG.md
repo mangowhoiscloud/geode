@@ -163,6 +163,11 @@ functional change.
 
 ### Fixed
 
+- Preserve selected reasoning effort through model selection, staged role picks
+  and supported auxiliary requests. Reject unsupported model/effort combinations
+  before dispatch instead of clamping, remapping or silently omitting the value;
+  keep stored primary effort when the picker opens on another role.
+
 - Route OpenRouter text summaries through the existing Chat Completions adapter,
   retaining its model/source identity, cache markers, session affinity and usage.
   Preserve supported OpenAI reasoning effort on this relay and forward requested

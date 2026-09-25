@@ -503,7 +503,109 @@ def test_space_stages_role_pick_without_closing(monkeypatch) -> None:
     )
     assert result.cancelled is False
     assert result.role == "primary"
-    assert result.staged == (("mutator", "claude-haiku-4-5-20251001"),)
+    assert result.staged == (("mutator", "claude-haiku-4-5-20251001", None),)
+
+
+def test_space_staged_primary_effort_reaches_settings(monkeypatch) -> None:
+    from core.cli import commands, effort_picker
+    from core.cli.commands import model as model_cmd
+    from core.cli.commands._state import ModelProfile
+    from core.config import settings
+
+    _, writes = _capture_apply_io(monkeypatch)
+    monkeypatch.setattr(commands, "remove_env", lambda name: False)
+    monkeypatch.setattr(settings, "model", "claude-fable-5")
+    monkeypatch.setattr(settings, "agentic_effort", "high")
+    monkeypatch.setattr(model_cmd, "model_unavailable_reason", lambda *args, **kwargs: None)
+    keys = iter(
+        [
+            effort_picker._KEY_RIGHT,
+            effort_picker._KEY_SPACE,
+            effort_picker._KEY_TAB,
+            effort_picker._KEY_DOWN,
+            effort_picker._KEY_ENTER,
+        ]
+    )
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_render", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda n: None)
+    result = effort_picker.pick_model_and_effort(
+        _PICKER_PROFILES, "claude-fable-5", "high", **_two_role_picker_kwargs()
+    )
+    profiles = [
+        ModelProfile(mid, provider, label, cost)
+        for mid, provider, label, cost, *_ in _PICKER_PROFILES
+    ]
+    model_cmd._apply_picker_result(result, profiles)
+    assert result.staged == (("primary", "claude-fable-5", "xhigh"),)
+    assert settings.agentic_effort == "xhigh"
+    assert ("agentic", "effort", "xhigh", "project") in writes
+
+
+def test_nonprimary_picker_entry_preserves_primary_effort(monkeypatch) -> None:
+    from core.cli import effort_picker
+
+    options = _two_role_picker_kwargs()
+    options["initial_role"] = "mutator"
+    options["role_initial_models"]["mutator"] = "claude-haiku-4-5-20251001"
+    keys = iter([effort_picker._KEY_TAB, effort_picker._KEY_ENTER])
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_render", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda n: None)
+    result = effort_picker.pick_model_and_effort(
+        _PICKER_PROFILES, "claude-haiku-4-5-20251001", "low", **options
+    )
+    assert result.role == "primary"
+    assert result.model_id == "claude-fable-5"
+    assert result.effort == "low"
+
+
+@pytest.mark.parametrize("effort", [None, "minimal"])
+def test_model_switch_rejects_unsupported_effort_before_writes(monkeypatch, effort) -> None:
+    from core.cli import commands
+    from core.cli.commands import model as model_cmd
+    from core.cli.commands._state import ModelProfile
+    from core.config import settings
+
+    _, writes = _capture_apply_io(monkeypatch)
+    monkeypatch.setattr(settings, "model", "gpt-6-sol")
+    monkeypatch.setattr(settings, "agentic_effort", "max")
+    monkeypatch.setattr(model_cmd, "model_unavailable_reason", lambda *args, **kwargs: None)
+    credential_checks = []
+    monkeypatch.setattr(commands, "_check_provider_key", credential_checks.append)
+    model_cmd._apply_model(ModelProfile("gpt-5.5", "openai", "GPT-5.5", "$$"), effort=effort)
+    assert settings.model == "gpt-6-sol"
+    assert settings.agentic_effort == "max"
+    assert writes == []
+    assert credential_checks == []
+
+
+def test_invalid_final_effort_rejects_staged_selections_before_writes(monkeypatch) -> None:
+    from core.cli import commands
+    from core.cli.commands import model as model_cmd
+    from core.cli.commands._state import ModelProfile
+    from core.cli.effort_picker import PickerResult
+    from core.config import settings
+
+    _, writes = _capture_apply_io(monkeypatch)
+    monkeypatch.setattr(settings, "model", "gpt-6-sol")
+    monkeypatch.setattr(settings, "agentic_effort", "max")
+    checks = []
+    monkeypatch.setattr(commands, "_check_provider_key", checks.append)
+    result = PickerResult(
+        model_id="gpt-5.5",
+        effort="max",
+        staged=(("reflection", "claude-sonnet-5", None),),
+    )
+    profiles = [
+        ModelProfile("gpt-5.5", "openai", "GPT-5.5", "$$"),
+        ModelProfile("claude-sonnet-5", "anthropic", "Sonnet 5", "$$"),
+    ]
+    model_cmd._apply_picker_result(result, profiles)
+    assert settings.model == "gpt-6-sol"
+    assert settings.agentic_effort == "max"
+    assert writes == []
+    assert checks == []
 
 
 def test_escape_discards_staged_picks(monkeypatch) -> None:
@@ -547,7 +649,7 @@ def test_apply_picker_result_applies_staged_then_final(monkeypatch) -> None:
         effort="high",
         cancelled=False,
         role="primary",
-        staged=((("mutator"), known[1]),),
+        staged=(("mutator", known[1], None),),
     )
     model_cmd._apply_picker_result(result)
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+from core.llm.errors import LLMRequestValidationError
 from core.llm.providers.glm import build_glm_reasoning_extra_body
 
 
@@ -35,23 +37,19 @@ class TestGlmReasoningGate:
         assert build_glm_reasoning_extra_body("glm-5-turbo") is None
         assert build_glm_reasoning_extra_body("glm-5.2") is not None
 
-    def test_invalid_value_dropped_with_warning(self, monkeypatch, caplog):
-        import logging
-
+    def test_invalid_value_rejected(self, monkeypatch):
         from core.config import settings
 
         monkeypatch.setattr(settings, "glm_reasoning_effort", "turbo", raising=False)
-        with caplog.at_level(logging.WARNING, logger="core.llm.providers.glm"):
-            assert build_glm_reasoning_extra_body("glm-5.2") is None
-        assert any("not a valid z.ai value" in r.getMessage() for r in caplog.records)
+        with pytest.raises(LLMRequestValidationError, match="does not support effort 'turbo'"):
+            build_glm_reasoning_extra_body("glm-5.2")
 
-    def test_case_and_whitespace_normalized(self, monkeypatch):
+    def test_case_and_whitespace_rejected(self, monkeypatch):
         from core.config import settings
 
         monkeypatch.setattr(settings, "glm_reasoning_effort", "  HIGH  ", raising=False)
-        xb = build_glm_reasoning_extra_body("glm-5.2")
-        assert xb is not None
-        assert xb["reasoning_effort"] == "high"
+        with pytest.raises(LLMRequestValidationError, match="does not support effort '  HIGH  '"):
+            build_glm_reasoning_extra_body("glm-5.2")
 
 
 def test_glm_default_is_5_3():

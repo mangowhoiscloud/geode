@@ -374,6 +374,16 @@ def validate_output_tokens(model: str, max_tokens: int) -> None:
         )
 
 
+def anthropic_effort_kwargs(model: str, effort: str | None) -> dict[str, Any]:
+    """Serialize a supported selection without changing its native effort value."""
+    spec = get_anthropic_model_spec(model)
+    if effort is None or spec is None or not spec.effort_values:
+        return {}
+    if effort not in spec.effort_values:
+        raise LLMRequestValidationError(f"{model} does not support effort {effort!r}")
+    return {"output_config": {"effort": effort}}
+
+
 def effective_output_tokens(req: AdapterCallRequest) -> int:
     """Validate and return the actual Messages output cap, including thinking."""
     validate_output_tokens(req.model, req.max_tokens)
@@ -412,14 +422,7 @@ def build_create_kwargs(
         kwargs["temperature"] = 1.0
     elif req.temperature is not None:
         kwargs["temperature"] = req.temperature
-    if spec is not None and spec.effort_values:
-        # Match Claude Code: an unsupported level never increases spend.
-        effort = (
-            "high" if req.effort == "xhigh" and "xhigh" not in spec.effort_values else req.effort
-        )
-        if effort not in spec.effort_values:
-            raise LLMRequestValidationError(f"{req.model} does not support effort {req.effort!r}")
-        kwargs["output_config"] = {"effort": effort}
+    kwargs.update(anthropic_effort_kwargs(req.model, req.effort))
     if req.response_schema is not None:
         if spec is None:
             raise LLMRequestValidationError(f"Structured output is not verified for {req.model}")

@@ -32,7 +32,7 @@ def _field(value: object, name: str, default: object = None) -> Any:
 
 
 def openai_effort_kwargs(model: str, effort: str | None) -> dict[str, Any]:
-    """Serialize an explicit supported effort without the model-switch clamp.
+    """Serialize an explicit supported effort without changing its native value.
 
     Uses the same grounded model registry as the Responses request builder.
     GPT-5.6 Sol max: https://developers.openai.com/api/docs/models/gpt-5.6-sol
@@ -40,11 +40,9 @@ def openai_effort_kwargs(model: str, effort: str | None) -> dict[str, Any]:
     """
     if effort is None:
         return {}
-    from core.llm.adapters._openai_common import get_openai_model_spec
+    from core.llm.adapters._openai_common import get_openai_model_spec, validate_reasoning_effort
 
-    supported = get_openai_model_spec(model).reasoning_effort_values
-    if supported is None or effort not in supported:
-        raise LLMRequestValidationError(f"Reasoning effort {effort!r} is unsupported for {model!r}")
+    validate_reasoning_effort(effort, spec=get_openai_model_spec(model))
     return {"reasoning": {"effort": effort}}
 
 
@@ -98,10 +96,11 @@ async def anthropic_web_search(
     max_results: int,
     model: str,
     adapter_name: str,
+    effort: str | None = None,
     prepare_kwargs: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> WebSearchResult:
     """Anthropic native ``web_search_20260318`` tool on the PAYG API."""
-    from core.llm.adapters._anthropic_common import translate_response
+    from core.llm.adapters._anthropic_common import anthropic_effort_kwargs, translate_response
 
     kwargs: dict[str, Any] = {
         "model": model,
@@ -117,6 +116,7 @@ async def anthropic_web_search(
             }
         ],
         "timeout": ANTHROPIC_WEB_SEARCH_TIMEOUT_S,
+        **anthropic_effort_kwargs(model, effort),
     }
     if prepare_kwargs is not None:
         kwargs = prepare_kwargs(kwargs)
@@ -159,10 +159,15 @@ async def anthropic_complete_text(
     system: str,
     model: str,
     max_tokens: int,
+    effort: str | None = None,
     prepare_kwargs: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> TextCompletionResult:
     """Single-turn Anthropic ``messages.create`` — used by compaction / extraction."""
-    from core.llm.adapters._anthropic_common import translate_response, validate_output_tokens
+    from core.llm.adapters._anthropic_common import (
+        anthropic_effort_kwargs,
+        translate_response,
+        validate_output_tokens,
+    )
 
     validate_output_tokens(model, max_tokens)
     kwargs: dict[str, Any] = {
@@ -170,6 +175,7 @@ async def anthropic_complete_text(
         "max_tokens": max_tokens,
         "messages": [{"role": "user", "content": prompt}],
         "timeout": 60.0,
+        **anthropic_effort_kwargs(model, effort),
     }
     if system:
         kwargs["system"] = system

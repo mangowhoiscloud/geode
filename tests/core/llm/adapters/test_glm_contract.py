@@ -27,10 +27,6 @@ from core.llm.providers.glm import (
         ("low", "low"),
         ("high", "high"),
         ("max", "max"),
-        ("none", "low"),
-        ("minimal", "low"),
-        ("medium", "high"),
-        ("xhigh", "max"),
     ),
 )
 def test_always_on_reasoning_never_sends_disabled(model: str, effort: str, native: str) -> None:
@@ -38,6 +34,14 @@ def test_always_on_reasoning_never_sends_disabled(model: str, effort: str, nativ
         "reasoning_effort": native,
         "thinking": {"type": "enabled"},
     }
+
+
+@pytest.mark.parametrize("effort", ["none", "minimal", "medium", "xhigh", "typo", "MAX"])
+def test_unsupported_glm_effort_rejects_without_remapping(effort: str) -> None:
+    from core.llm.errors import LLMRequestValidationError
+
+    with pytest.raises(LLMRequestValidationError, match="does not support effort"):
+        build_glm_reasoning_extra_body("glm-5.3", effort=effort)
 
 
 def test_model_spec_is_exact_and_request_overrides_setting(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -206,6 +210,7 @@ def test_glm_output_limit_and_tool_free_turn(stream: bool) -> None:
     request = AdapterCallRequest(
         model="glm-5.3",
         messages=(),
+        effort="high",
         max_tokens=200_000,
         tool_choice="none",
         tools=(ToolSpec(name="read", description="Read", input_schema={"type": "object"}),),
@@ -224,6 +229,7 @@ def test_glm_rejects_undocumented_forced_tool_choice(choice: Any) -> None:
     request = AdapterCallRequest(
         model="glm-5.3",
         messages=(),
+        effort="high",
         tool_choice=choice,
         tools=(ToolSpec(name="read", description="Read", input_schema={"type": "object"}),),
     )
@@ -238,7 +244,7 @@ def test_glm_rejects_nonpositive_output_budget(limit: int) -> None:
 
     with pytest.raises(LLMRequestValidationError, match="must be positive"):
         build_glm_chat_kwargs(
-            AdapterCallRequest(model="glm-5.3", messages=(), max_tokens=limit),
+            AdapterCallRequest(model="glm-5.3", messages=(), max_tokens=limit, effort="high"),
             adapter_name="test",
             source="payg",
         )

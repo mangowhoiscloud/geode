@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.llm.adapters.base import AdapterCallRequest, StreamEvent
-
-log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,34 +50,16 @@ def get_glm_model_spec(model: str) -> GlmModelSpec | None:
 def build_glm_reasoning_extra_body(
     model: str, *, effort: str | None = None
 ) -> dict[str, Any] | None:
-    """Translate GEODE effort to the model's documented native controls.
-
-    A request effort takes precedence over the GLM setting. Missing controls
-    leave the server default intact. GLM-5.3 always reasons: generic
-    none/minimal map to low, medium to high, and xhigh to max. These are GEODE
-    normalization decisions, not additional Z.AI API values. Unknown values
-    retain the existing warning-and-omit behavior.
-    """
+    """Preserve documented native effort; only an unset request uses settings."""
     from core.config import settings
+    from core.llm.errors import LLMRequestValidationError
 
     spec = get_glm_model_spec(model)
-    effort = (effort if effort is not None else settings.glm_reasoning_effort).strip().lower()
+    effort = effort if effort is not None else settings.glm_reasoning_effort
     if not effort or spec is None or not spec.reasoning_effort_values:
         return None
-    if spec.always_enabled:
-        normalized = {"none": "low", "minimal": "low", "medium": "high", "xhigh": "max"}.get(
-            effort, effort
-        )
-        if normalized != effort:
-            log.warning("GLM effort %r mapped to %r for %s", effort, normalized, model)
-        effort = normalized
     if effort not in spec.reasoning_effort_values:
-        log.warning(
-            "glm_reasoning_effort=%r is not a valid z.ai value %s — ignoring",
-            effort,
-            spec.reasoning_effort_values,
-        )
-        return None
+        raise LLMRequestValidationError(f"{model} does not support effort {effort!r}")
     return {
         "reasoning_effort": effort,
         "thinking": {

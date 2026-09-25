@@ -13,7 +13,7 @@ as _pkg`` lookup, mirroring the pattern used by ``core/ui/agentic_ui``.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
 from core.cli.commands._state import (
     AGENT_ROLES,
@@ -27,6 +27,9 @@ from core.cli.commands._state import (
 )
 
 log = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from core.cli.effort_picker import PickerResult
 
 
 def _current_model_for_role(role: AgentRole) -> str:
@@ -82,6 +85,25 @@ def _read_toml_value(section: str, key: str) -> str:
         return ""
     value = cursor.get(key)
     return str(value) if value else ""
+
+
+def _effort_selection_error(
+    selected: ModelProfile, effort: str | None, role: AgentRole
+) -> str | None:
+    """Reject incompatible selections before any model or config state changes."""
+    if not role.has_effort:
+        return None
+    from core.cli.effort_picker import supported_efforts
+    from core.config import settings
+
+    levels = supported_efforts(selected.id, selected.provider)
+    value = effort if effort is not None else settings.agentic_effort
+    if levels and value not in levels:
+        return (
+            f"{selected.id} does not support effort {value!r}. "
+            f"Choose one of {', '.join(levels)} in /model; selection unchanged."
+        )
+    return None
 
 
 def _apply_model(
@@ -142,6 +164,10 @@ def _apply_model(
         scope = "global"
     old = _current_model_for_role(role_def)
     old_effort = getattr(settings, "agentic_effort", "high")
+    if effort_error := _effort_selection_error(selected, effort, role_def):
+        _pkg.console.print(f"  [warning]{effort_error}[/warning]")
+        _pkg.console.print()
+        return
     same_model = selected.id == old
     same_effort = not role_def.has_effort or effort is None or effort == old_effort
 
@@ -397,7 +423,9 @@ def _interactive_model_picker() -> None:
     _apply_picker_result(result, model_profiles)
 
 
-def _apply_picker_result(result: Any, model_profiles: list[ModelProfile] | None = None) -> None:
+def _apply_picker_result(
+    result: PickerResult, model_profiles: list[ModelProfile] | None = None
+) -> None:
     """Apply a non-cancelled picker result: staged per-role picks first
     (Space, PR-PICKER-SPACE-STAGE 2026-06-12), then the final Enter pick.
 
@@ -407,15 +435,22 @@ def _apply_picker_result(result: Any, model_profiles: list[ModelProfile] | None 
     """
     if model_profiles is None:
         selected_ids = [result.model_id]
-        selected_ids.extend(mid for _role, mid in getattr(result, "staged", ()) or ())
+        selected_ids.extend(mid for _role, mid, _effort in result.staged)
         model_profiles = get_model_profiles(configured_model_ids=selected_ids)
-    for staged_role, staged_mid in getattr(result, "staged", ()) or ():
-        staged_profile = next((p for p in model_profiles if p.id == staged_mid), None)
-        if staged_profile is None:
-            continue
-        _apply_model(staged_profile, effort=None, role=staged_role)
-    chosen_profile = next(p for p in model_profiles if p.id == result.model_id)
-    _apply_model(chosen_profile, effort=result.effort, role=result.role)
+    selections = [*result.staged, (result.role, result.model_id, result.effort)]
+    profiles = {profile.id: profile for profile in model_profiles}
+    for role, model_id, effort in selections:
+        if model_id in profiles and (
+            error := _effort_selection_error(profiles[model_id], effort, role_by_name(role))
+        ):
+            from core.cli import commands as _pkg
+
+            _pkg.console.print(f"  [warning]{error}[/warning]")
+            _pkg.console.print()
+            return
+    for role, model_id, effort in selections:
+        if model_id in profiles:
+            _apply_model(profiles[model_id], effort=effort, role=role)
 
 
 def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
