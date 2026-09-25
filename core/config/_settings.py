@@ -56,17 +56,22 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # repr=False keeps plain-str keys out of repr()/str() (pytest assertion
+    # output, logs); typesafe_api_key is already masked by SecretStr.
     anthropic_api_key: str = Field(
         default="",
         validation_alias=AliasChoices("anthropic_api_key", "ANTHROPIC_API_KEY"),
+        repr=False,
     )
     openai_api_key: str = Field(
         default="",
         validation_alias=AliasChoices("openai_api_key", "OPENAI_API_KEY"),
+        repr=False,
     )
     openrouter_api_key: str = Field(
         default="",
         validation_alias=AliasChoices("openrouter_api_key", "OPENROUTER_API_KEY"),
+        repr=False,
     )
     typesafe_api_key: SecretStr = Field(
         default=SecretStr(""),
@@ -77,6 +82,7 @@ class Settings(BaseSettings):
     zai_api_key: str = Field(
         default="",
         validation_alias=AliasChoices("zai_api_key", "ZAI_API_KEY"),
+        repr=False,
     )
     # Mirror routing.toml [model.defaults] anthropic; explicit env/TOML wins.
     model: str = "claude-opus-5-5"
