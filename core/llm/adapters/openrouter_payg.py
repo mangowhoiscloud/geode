@@ -170,13 +170,21 @@ class OpenRouterPaygAdapter:
         if req.max_tokens <= 0:
             raise LLMRequestValidationError("OpenRouter max_tokens must be positive")
         extra_body = _openrouter_extra_body(req.provider_options) or {}
-        if (
-            req.effort
-            and model.startswith("openai/")
-            and get_openai_model_spec(model.removeprefix("openai/")).reasoning_effort_values
-            is not None
-        ):
+        openai_spec = (
+            get_openai_model_spec(model.removeprefix("openai/"))
+            if model.startswith("openai/")
+            else None
+        )
+        if req.effort and openai_spec and openai_spec.reasoning_effort_values is not None:
             extra_body.update(openai_effort_kwargs(model.removeprefix("openai/"), req.effort))
+        if openai_spec and not openai_spec.accepts_temperature:
+            if req.temperature not in (None, 1.0):
+                raise LLMRequestValidationError(
+                    f"OpenRouter temperature is unsupported for {model!r}"
+                )
+            # The relay does not advertise Platform's effort=none sampling exception.
+            # Omit GEODE's default sampling value; preserve the selected effort.
+            req = replace(req, temperature=None)
         from core.agent.cognitive_state_ctx import get_session_id
 
         session_id = req.metadata.get("session_id") or get_session_id()
