@@ -43,6 +43,8 @@ class PlanRegistry:
         self._usage: dict[str, PlanUsage] = {}
         # model_pattern -> ordered list of plan_ids
         self._routing: dict[str, list[str]] = {}
+        self._file_plans: dict[str, dict[str, Plan]] = {}
+        self._file_routing: dict[str, dict[str, list[str]]] = {}
         self._lock = threading.Lock()
 
     # --- Plan CRUD ---
@@ -86,11 +88,63 @@ class PlanRegistry:
     def all_routing(self) -> dict[str, list[str]]:
         return {k: list(v) for k, v in self._routing.items()}
 
+    def file_plans(self, source: str) -> dict[str, Plan]:
+        """Return the last file-owned objects for candidate collision validation."""
+        return dict(self._file_plans.get(source, {}))
+
+    def remember_auth_file(
+        self, source: str, plans: list[Plan], routing: dict[str, list[str]]
+    ) -> None:
+        """Track file ownership without taking ownership of unrelated runtime plans."""
+        ids = {plan.id for plan in plans}
+        for other, entries in self._file_plans.items():
+            if other != source:
+                for plan_id in ids:
+                    entries.pop(plan_id, None)
+        for other, entries_routing in self._file_routing.items():
+            if other != source:
+                for model in routing:
+                    entries_routing.pop(model, None)
+        self._file_plans[source] = {plan.id: plan for plan in plans}
+        self._file_routing[source] = {model: list(ids) for model, ids in routing.items()}
+
+    def reconcile_auth_file(
+        self, source: str, plans: list[Plan], routing: dict[str, list[str]]
+    ) -> None:
+        """Replace this file's validated entries, retaining usage and borrowed plans."""
+        with self._lock:
+            previous = self._file_plans.get(source, {})
+            ids = {plan.id for plan in plans}
+            for plan_id, plan in previous.items():
+                if plan_id not in ids and self._plans.get(plan_id) is plan:
+                    self._plans.pop(plan_id)
+                    self._usage.pop(plan_id, None)
+            for model, chain in self._file_routing.get(source, {}).items():
+                if self._routing.get(model) == chain:
+                    self._routing.pop(model)
+            owned: list[Plan] = []
+            for plan in plans:
+                current = self._plans.get(plan.id)
+                if current is not None and previous.get(plan.id) is not current:
+                    continue
+                if current == plan:
+                    plan = current
+                self._plans[plan.id] = plan
+                self._usage.setdefault(plan.id, PlanUsage(plan_id=plan.id))
+                owned.append(plan)
+            owned_routing = {
+                model: list(chain) for model, chain in routing.items() if model not in self._routing
+            }
+            self._routing.update(owned_routing)
+            self.remember_auth_file(source, owned, owned_routing)
+
     def clear(self) -> None:
         with self._lock:
             self._plans.clear()
             self._usage.clear()
             self._routing.clear()
+            self._file_plans.clear()
+            self._file_routing.clear()
 
 
 # Module-level singleton (mirrors ProfileStore lifecycle)
@@ -284,6 +338,11 @@ def _pick_profile_for_plan(
         p for p in store.list_all() if p.plan_id == plan.id and p.is_available
     ]
     if bound:
-        bound.sort(key=lambda p: p.sort_key())
+        order = store.get_auth_order(plan.provider)
+        pinned = store.get_pinned_active(plan.provider)
+        if not order and pinned is not None:
+            order = [pinned.name]
+        ranks = {name: rank for rank, name in enumerate(order)}
+        bound.sort(key=lambda p: (ranks.get(p.name, len(ranks)), p.sort_key()))
         return bound[0]
     return rotator.resolve(plan.provider)

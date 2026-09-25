@@ -163,6 +163,12 @@ functional change.
 
 ### Fixed
 
+- Preserve explicit auth profile pins and priority order across auth.toml writes
+  and fresh-process routing. Validate reload candidates before publication and
+  reconcile deletions only for file-owned entries, retaining managed/environment
+  credentials, unchanged health state and borrowed references. Write auth state
+  atomically and materialize explicit OpenAI/GLM `/key` updates consistently.
+
 - Show only supported model effort choices and require an explicit valid choice
   before confirming or staging an incompatible saved effort. Preserve valid
   selections and cancellation without silently replacing settings. Validate
