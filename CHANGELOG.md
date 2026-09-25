@@ -163,6 +163,14 @@ functional change.
 
 ### Fixed
 
+- Preserve matched earlier-turn tool evidence when judging resumed requests,
+  with historical provenance, privacy protection and ambiguous-ID rejection.
+  Share a bounded text budget across observations so complete short scripts
+  and validation commands survive instead of always truncating inputs at 300
+  characters. Reflection also receives the current approved request while
+  retaining the session's initial goal. Judgment criteria, call budgets and
+  external verifier authority remain unchanged.
+
 - Use the selected model/provider/source and request output reserve for context
   admission. Treat 200K as soft local maintenance, recover boundedly from actual
   provider overflow, and avoid duplicate pre-request compaction decisions.
