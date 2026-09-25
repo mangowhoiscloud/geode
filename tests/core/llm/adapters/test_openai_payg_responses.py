@@ -232,7 +232,7 @@ def test_responses_stream_preserves_native_items_and_terminal_status(
             api_key="fixture", http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond))
         ) as client:
             adapter = OpenAIPaygAdapter() if source == "payg" else CodexOAuthAdapter()
-            monkeypatch.setattr(adapter, "_get_client", lambda: client)
+            monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
             async for event in adapter.astream(_request(model="gpt-6-sol")):
                 emitted.append(event)
 

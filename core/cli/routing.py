@@ -42,6 +42,11 @@ def run_thin_command(
 
         cmd_model(args, client=client)
         return
+    if cmd == "/login" and args.split(maxsplit=1)[:1] == ["source"]:
+        from core.cli.commands.login import cmd_login
+
+        cmd_login(args, client=client)
+        return
     _handle_command(cmd, args, False, command_registry=command_registry)
     if cmd in {"/login", "/key"}:
         response = client.send_command("/login", "refresh")

@@ -193,7 +193,7 @@ def _load_toml_config(
     Returns a dict mapping Settings field names to their values.
     Only keys present in _TOML_TO_SETTINGS are returned.
     """
-    from core.config.toml_edit import resolve_config_toml_path
+    from core.config.toml_edit import read_config_toml, resolve_config_toml_path
 
     gp = resolve_config_toml_path(global_path)
     pp = project_path or PROJECT_CONFIG_PATH
@@ -203,8 +203,7 @@ def _load_toml_config(
         if not path.exists():
             continue
         try:
-            with open(path, "rb") as f:
-                raw = tomllib.load(f)
+            raw = read_config_toml(path)
             flat = _flatten_toml(raw)
             for toml_key, settings_field in _TOML_TO_SETTINGS.items():
                 if toml_key in flat:

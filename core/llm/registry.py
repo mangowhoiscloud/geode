@@ -346,23 +346,8 @@ def provider_specs_for(provider: str) -> tuple[ProviderSpec, ...]:
     return tuple(spec for spec in PROVIDER_VARIANTS.values() if spec.profile.provider == provider)
 
 
-PROVIDER_EQUIVALENCE: dict[str, list[str]] = {
-    "openai": ["openai-codex", "openai"],
-    "openai-codex": ["openai-codex", "openai"],
-    "glm": ["glm-coding", "glm"],
-    "glm-coding": ["glm-coding", "glm"],
-    "anthropic": ["anthropic"],
-}
-
-
-def equivalent_providers(provider: str) -> list[str]:
-    """Return preferred-first variants that share a model family."""
-    return PROVIDER_EQUIVALENCE.get(provider, [provider])
-
-
 __all__ = [
     "CONCRETE_SOURCES",
-    "PROVIDER_EQUIVALENCE",
     "PROVIDER_VARIANTS",
     "SOURCE_ADAPTER",
     "SOURCE_AUTO",
@@ -373,7 +358,6 @@ __all__ = [
     "ProviderProfile",
     "ProviderSpec",
     "TransportSpec",
-    "equivalent_providers",
     "get_provider_spec",
     "list_provider_ids",
     "provider_specs_for",

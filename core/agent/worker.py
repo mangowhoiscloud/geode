@@ -467,7 +467,7 @@ def _run_agentic(
     model_settings = saved_settings or request.model_settings
     if model_settings is None:
         from core.config.session import capture_session_model_config
-        from core.llm.adapters._source_inference import infer_source
+        from core.llm.routing import infer_source
 
         model = request.model or settings.model
         provider = request.provider or _resolve_provider(model)
@@ -475,7 +475,14 @@ def _run_agentic(
             settings,
             model=model,
             effort=request.effort,
-            source=request.source or infer_source(provider),
+            source=request.source
+            or infer_source(
+                provider,
+                model=model,
+                sources=policy_sources.get("provider_routing"),
+                settings=settings,
+            ),
+            sources=policy_sources.get("provider_routing"),
         )
     effective_model = model_settings.model
     effective_provider = _resolve_provider(effective_model)

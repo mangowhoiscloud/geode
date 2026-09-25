@@ -737,7 +737,7 @@ def test_collaboration_e2e_characterizes_depth_and_resume_side_effects(
         executor = ToolExecutor(sub_agent_manager=manager, auto_approve=True, hitl_level=0)
         context = ToolContext(
             session_id="parent-e2e",
-            model="gpt-5.4",
+            model="gpt-6-sol",
             source="subscription",
         )
 

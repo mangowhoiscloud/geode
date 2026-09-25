@@ -60,12 +60,14 @@ class GlmCodingPlanAdapter:
         default_factory=lambda: LoopAffineClientCache("glm-coding-plan"), init=False, repr=False
     )
 
-    def _get_client(self) -> Any:
+    def _get_client(self, model: str = "") -> Any:
         from core.config import GLM_PRIMARY
         from core.llm.model_catalog import require_model_source_available
 
-        require_model_source_available(GLM_PRIMARY, provider=self.provider, source=self.source)
-        api_key, base_url = _resolve_coding_plan_endpoint(self.routing_sources)
+        require_model_source_available(
+            model or GLM_PRIMARY, provider=self.provider, source=self.source
+        )
+        api_key, base_url = _resolve_coding_plan_endpoint(self.routing_sources, model=model)
         if not api_key:
             raise RuntimeError(
                 "GlmCodingPlanAdapter: no GLM Coding Plan profile registered. "
@@ -76,7 +78,7 @@ class GlmCodingPlanAdapter:
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         kwargs = build_glm_chat_kwargs(req, adapter_name=self.name, source=self.source)
-        client = self._get_client()
+        client = self._get_client(req.model)
         try:
             response = await client.chat.completions.create(**kwargs)
         except Exception as exc:
@@ -123,7 +125,7 @@ class GlmCodingPlanAdapter:
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         kwargs = build_glm_chat_kwargs(req, adapter_name=self.name, source=self.source, stream=True)
-        client = self._get_client()
+        client = self._get_client(req.model)
         chunks = await client.chat.completions.create(**kwargs)
         async for event in translate_glm_stream(chunks):
             yield event
@@ -189,7 +191,7 @@ class GlmCodingPlanAdapter:
 
 
 def _resolve_coding_plan_endpoint(
-    routing_sources: PolicySourcePaths | None = None,
+    routing_sources: PolicySourcePaths | None = None, *, model: str = ""
 ) -> tuple[str, str]:
     """Return ``(api_key, base_url)`` for the registered Coding Plan, else
     ``("", "")``.
@@ -200,10 +202,12 @@ def _resolve_coding_plan_endpoint(
     try:
         from core.config import GLM_PRIMARY
         from core.llm.registry import get_provider_spec
-        from core.llm.strategies.plan_registry import resolve_routing
+        from core.llm.routing import resolve_routing
         from core.llm.strategies.plans import PlanKind
 
-        target = resolve_routing(GLM_PRIMARY, sources=routing_sources)
+        target = resolve_routing(
+            model or GLM_PRIMARY, provider="glm", source="subscription", sources=routing_sources
+        )
         if target is None or not target.profile.key:
             return "", ""
         spec = get_provider_spec(target.plan.provider)

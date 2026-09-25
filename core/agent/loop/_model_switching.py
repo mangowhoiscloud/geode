@@ -66,9 +66,9 @@ def _resolve_model_route(
     new_provider = provider or _resolve_provider(model)
     source = loop._source
     if new_provider != loop._provider and not getattr(loop, "_source_explicit", False):
-        from core.llm.adapters._source_inference import infer_source
+        from core.llm.routing import infer_source
 
-        source = infer_source(new_provider)
+        source = infer_source(new_provider, model=model)
     return new_provider, source
 
 
@@ -165,6 +165,17 @@ def validate_session_model_config(loop: AgenticLoop, candidate: SessionModelConf
         is None
     ):
         raise LLMRequestValidationError("The selected judgment route has no usable credentials")
+
+
+def stage_session_model_config(loop: AgenticLoop, candidate: SessionModelConfig) -> bool:
+    """Admit one tool selection for publication after its complete batch."""
+    validate_session_model_config(loop, candidate)
+    if loop._pending_model_settings is not None:
+        raise ValueError("A selection is already pending for this tool batch")
+    if candidate == loop._model_settings:
+        return False
+    loop._pending_model_settings = candidate
+    return True
 
 
 async def apply_session_model_config(

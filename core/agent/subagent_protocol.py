@@ -216,13 +216,18 @@ class SubagentProtocol:
             model = task.model
 
         if model_settings is not None:
-            from core.llm.adapters._source_inference import infer_source
+            from core.llm.routing import infer_source
 
             provider = _resolve_provider(model)
             source = task.source or (
                 model_settings.source
                 if provider == _resolve_provider(model_settings.model)
-                else infer_source(provider)
+                else infer_source(
+                    provider,
+                    model=model,
+                    sources=self.policy_sources.get("provider_routing"),
+                    settings=settings,
+                )
             )
             model_settings = model_settings.updated(
                 {"model": model, "effort": effort, "source": source}

@@ -38,7 +38,7 @@ def test_retired_model_rejected_before_network_or_web_search_replacement(
     adapter = AnthropicPaygAdapter()
     messages = Mock()
     client = SimpleNamespace(base_url="https://api.anthropic.com", messages=messages)
-    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
     with pytest.raises(ModelSourceUnavailableError, match=r"retired.*Anthropic API"):
         asyncio.run(_request(adapter, method, model))
     assert messages.mock_calls == []
@@ -54,7 +54,7 @@ def test_retired_default_rejected_without_silent_replacement(
     adapter = AnthropicPaygAdapter()
     messages = Mock()
     client = SimpleNamespace(base_url="https://api.anthropic.com", messages=messages)
-    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
     with pytest.raises(ModelSourceUnavailableError, match=r"retired.*Anthropic API"):
         asyncio.run(_request(adapter, method, ""))
     assert messages.mock_calls == []
@@ -108,9 +108,10 @@ def test_refreshed_sdk_endpoint_owns_retirement_and_retains_previous_client(
             },
         )
 
-    def build_client(api_key: str) -> anthropic.AsyncAnthropic:
+    def build_client(api_key: str, *, base_url: str | None = None) -> anthropic.AsyncAnthropic:
         return anthropic.AsyncAnthropic(
             api_key=api_key,
+            base_url=base_url,
             auth_token="",
             max_retries=0,
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond)),

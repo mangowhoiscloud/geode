@@ -544,8 +544,10 @@ async def call_llm(
         if classify_retry_error(exc) == "billing":
             raise billing_error_from_exception(
                 exc,
-                model=req.model,
+                model=active_request.model,
                 message="API billing/credit error.",
+                provider=str(active_provider),
+                source=active_source,
                 routing_sources=loop._policy_sources.get("provider_routing"),
             ) from exc
         error_detail = str(exc) or type(exc).__name__

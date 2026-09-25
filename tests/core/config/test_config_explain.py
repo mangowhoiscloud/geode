@@ -90,3 +90,21 @@ def test_os_environ_tops_everything(isolated_layers, monkeypatch: pytest.MonkeyP
 def test_no_warning_when_no_toml_is_masked(isolated_layers) -> None:
     isolated_layers["global_env"].write_text("GEODE_MODEL=gpt-5.5\n")
     assert model_mask_warning() is None
+
+
+def test_empty_dotenv_role_choice_matches_actual_settings(isolated_layers, monkeypatch) -> None:
+    import core.config as cfg
+    from core.config import Settings
+
+    isolated_layers["global_env"].write_text("GEODE_JUDGE_MODEL=\n")
+    isolated_layers["global_toml"].write_text('[llm]\njudge_model="gpt-6-sol"\n')
+    monkeypatch.delenv("GEODE_JUDGE_MODEL", raising=False)
+    monkeypatch.setattr(cfg, "PROJECT_CONFIG_PATH", isolated_layers["project_toml"])
+    candidate = Settings(_env_file=(isolated_layers["project_env"], isolated_layers["global_env"]))
+    cfg._apply_toml_overlay(candidate)
+    monkeypatch.setattr(cfg, "settings", candidate)
+    report = explain_field("judge_model")
+    assert candidate.judge_model == report.effective == ""
+    assert report.winner.layer == "global .env"
+    assert report.winner.value == ""
+    assert any(e.layer == "global config.toml" for e in report.masked_layers)

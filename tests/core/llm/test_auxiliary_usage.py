@@ -265,9 +265,7 @@ def test_native_text_consumers_emit_usage_before_discarding_text(
 
     monkeypatch.setattr(settings, "model", "gpt-5.6-sol")
     monkeypatch.setattr(settings, "learning_extract_model", "gpt-5.6-sol")
-    monkeypatch.setattr(
-        "core.llm.adapters._source_inference.infer_source", lambda provider: "subscription"
-    )
+    monkeypatch.setattr("core.llm.routing.infer_source", lambda provider, **kwargs: "subscription")
     call = AsyncMock(
         return_value=TextCompletionResult(
             text="NONE",
@@ -380,7 +378,9 @@ def test_codex_search_retains_final_usage_without_changing_wire(
 
     adapter = CodexOAuthAdapter()
     monkeypatch.setattr(
-        adapter, "_get_client", lambda: SimpleNamespace(responses=SimpleNamespace(stream=stream))
+        adapter,
+        "_get_client",
+        lambda model="": SimpleNamespace(responses=SimpleNamespace(stream=stream)),
     )
     if empty:
         with pytest.raises(EmptyModelOutputError) as caught:

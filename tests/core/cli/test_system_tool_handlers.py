@@ -49,7 +49,10 @@ def test_status_reads_explicit_request_policy_after_composition(
 
 
 @pytest.mark.parametrize("yield_after_batch", [False, True])
-@pytest.mark.parametrize("role,hint", [("primary", "gpt-6-luna"), ("judgment", "llm")])
+@pytest.mark.parametrize(
+    "role,hint",
+    [("primary", "gpt-6-luna"), ("judgment", "llm"), ("source", "openai openai-codex")],
+)
 def test_registered_selection_commits_after_tool_batch_without_changing_defaults(
     monkeypatch, tmp_path, yield_after_batch, role, hint
 ):
@@ -69,6 +72,8 @@ def test_registered_selection_commits_after_tool_batch_without_changing_defaults
     monkeypatch.setattr(settings, "replan_enabled", False)
     monkeypatch.setattr(settings, "model", "gpt-6-astra")
     monkeypatch.setattr(settings, "judgment_engine", "jev")
+    monkeypatch.setattr(settings, "openai_credential_source", "api_key")
+    monkeypatch.setattr(settings, "forced_login_method", {})
     monkeypatch.setattr(session_state, "_get_readiness", lambda: startup.ReadinessReport())
     handlers = dict(next(group for name, group in cli_handler_groups() if name == "system"))
     requests = []
@@ -88,8 +93,10 @@ def test_registered_selection_commits_after_tool_batch_without_changing_defaults
                     tool_uses=(
                         {
                             "id": "switch",
-                            "name": "switch_model",
-                            "input": {"role": role, "model_hint": hint},
+                            "name": "manage_login" if role == "source" else "switch_model",
+                            "input": {"subcommand": "source", "args": hint}
+                            if role == "source"
+                            else {"role": role, "model_hint": hint},
                         },
                         {"id": "status", "name": "check_status", "input": {}},
                     ),
@@ -107,17 +114,24 @@ def test_registered_selection_commits_after_tool_batch_without_changing_defaults
             effort="high",
             max_rounds=4,
             yield_after_tool_round=yield_after_batch,
-            allowed_tool_names={"switch_model", "check_status"},
+            allowed_tool_names={"switch_model", "manage_login", "check_status"},
             system_prompt_override="Offline selection test.",
             model_settings=SessionModelConfig(
                 model="gpt-6-sol",
                 source="payg",
                 effort="high",
                 judgment_engine="jev" if role == "judgment" else "llm",
+                reflection_model="gpt-6-sol" if role == "source" else "",
+                reflection_source="payg" if role == "source" else "",
+                judge_model="gpt-6-sol" if role == "source" else "",
+                judge_source="payg" if role == "source" else "",
             ),
         ),
     )
     loop._new_adapter = Adapter()
+    if role == "source":
+        target = loop._adapter_registry_snapshot.resolve_for("openai", "subscription")
+        monkeypatch.setattr(target, "acomplete", Adapter().acomplete)
     # Focus on registered tool -> batch boundary -> next physical request.
     # Auxiliary judgment is covered separately by its request-level tests.
     loop._finish_cognitive_tool_round = AsyncMock()
@@ -126,7 +140,13 @@ def test_registered_selection_commits_after_tool_batch_without_changing_defaults
     result = asyncio.run(loop._arun_once("Switch as requested, then check status."))
     assert result.termination_reason == ("tool_use_yield" if yield_after_batch else "natural")
     expected = hint if role == "primary" else "gpt-6-sol"
-    assert (loop.model, loop._source, loop._effort) == (expected, "payg", "high")
+    source = "subscription" if role == "source" else "payg"
+    assert (loop.model, loop._source, loop._effort) == (expected, source, "high")
+    if role == "source":
+        assert loop._new_adapter is target
+        assert loop._model_settings.reflection_source == "subscription"
+        assert loop._model_settings.judge_source == "subscription"
+        assert settings.openai_credential_source == "api_key"
     assert loop._model_settings.judgment_engine == "llm"
     assert loop._pending_model_settings is None
     assert (settings.model, settings.judgment_engine) == ("gpt-6-astra", "jev")
@@ -180,3 +200,11 @@ def test_selection_requires_owner_and_rejects_invalid_candidate(monkeypatch, tmp
     )
     assert result["error_type"] == "validation"
     assert loop._pending_model_settings is None and loop._model_settings is original
+    source_handler = handlers["manage_login"]
+    assert source_handler(subcommand="source", args="openai api_key")["error_type"] == "dependency"
+    for args in ("openai", "openai none", "anthropic oauth", "unknown api_key"):
+        rejected = source_handler(
+            subcommand="source", args=args, _tool_context=ToolContext(agent_loop=loop)
+        )
+        assert rejected["error_type"] == "validation"
+        assert loop._pending_model_settings is None and loop._model_settings is original

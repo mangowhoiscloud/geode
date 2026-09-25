@@ -101,6 +101,70 @@ def test_worker_resume_uses_one_saved_or_current_selection(monkeypatch, tmp_path
     assert result.success and len(observed) == 1
 
 
+@pytest.mark.parametrize("from_parent", [False, True])
+def test_worker_selection_consumes_injected_model_policy(monkeypatch, tmp_path, from_parent):
+    from core.agent.subagent_protocol import SubagentProtocol, SubTask
+    from core.agent.worker import _run_agentic
+    from core.auth.profiles import ProfileStore
+    from core.config import settings
+    from core.config.policy_source import PolicySourcePaths, encode_policy_sources
+    from core.config.session import SessionModelConfig
+    from core.llm.strategies import plan_registry
+    from core.llm.strategies.plans import Plan, PlanKind, default_plan_for_payg
+    from core.wiring import container
+
+    monkeypatch.setattr(container, "_profile_store", ProfileStore())
+    registry = plan_registry.PlanRegistry()
+    payg = default_plan_for_payg("openai", "synthetic")
+    registry.add(payg)
+    registry.add(Plan("codex-default", "openai-codex", PlanKind.SUBSCRIPTION, "Codex", ""))
+    monkeypatch.setattr(plan_registry, "_plan_registry", registry)
+    monkeypatch.setattr(settings, "openai_credential_source", "auto")
+    monkeypatch.setattr(settings, "forced_login_method", {})
+    monkeypatch.setattr(settings, "judge_model", "gpt-6-sol")
+    monkeypatch.setattr("core.wiring.bootstrap.build_worker_hooks", lambda **kwargs: None)
+    path = tmp_path / "routing.json"
+    path.write_text(json.dumps({"gpt-6-sol": [payg.id]}))
+    sources = {
+        "provider_routing": PolicySourcePaths(
+            "TEST_ROUTING_OVERRIDE", explicit_override=path, explicit_override_strict=True
+        )
+    }
+    if from_parent:
+        protocol = SubagentProtocol(set(), 60, 0, None, "parent", sources)
+        parent = SessionModelConfig(
+            model="claude-fable-5-1",
+            effort="low",
+            source="payg",
+            judge_model="gpt-6-luna",
+            judge_source="subscription",
+        )
+        request = protocol.build_worker_request(
+            SubTask("route-child", "inspect", "analyze", model="gpt-6-sol"),
+            model_settings=parent,
+        )
+        expected_judge_source = "subscription"  # An explicit parent auxiliary pin survives.
+    else:
+        request = WorkerRequest(
+            task_id="route-child",
+            model="gpt-6-sol",
+            effort="low",
+            policy_sources=encode_policy_sources(sources),
+        )
+        expected_judge_source = "payg"  # A new auxiliary route uses that same model policy.
+    observed = []
+
+    async def run(loop, _prompt):
+        observed.append(loop._model_settings)
+        assert (loop.model, loop._source, loop._effort) == ("gpt-6-sol", "payg", "low")
+        assert loop._model_settings.judge_source == expected_judge_source
+        return AgenticResult(text="done", termination_reason="natural")
+
+    monkeypatch.setattr(AgenticLoop, "arun", run)
+    result = _run_agentic(WorkerRequest.from_dict(request.to_dict()), _empty_tool_plan_builder)
+    assert result.success and len(observed) == 1
+
+
 def test_worker_invalid_saved_selection_preserves_checkpoint(monkeypatch, tmp_path):
     from core.agent.worker import _run_agentic
     from core.config.session import SessionModelConfig

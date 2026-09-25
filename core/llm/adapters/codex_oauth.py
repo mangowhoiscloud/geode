@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.auth.codex_cli_oauth import codex_auth_path
+from core.config.policy_source import PolicySourcePaths
 from core.llm.adapters._openai_common import (
     build_async_codex_client,
     build_request_image_receipt,
@@ -113,6 +114,7 @@ class CodexOAuthAdapter:
     _token_fingerprint: str = field(default="", init=False, repr=False)
     _token_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
     _model_policy: ModelPolicy | None = field(default=None, init=False, repr=False)
+    routing_sources: PolicySourcePaths | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         from core.config import load_model_policy, settings
@@ -144,10 +146,12 @@ class CodexOAuthAdapter:
         del display_width, display_height  # backend rejects the GA computer tool
         return None
 
-    def _get_client(self) -> Any:
+    def _get_client(self, model: str = "") -> Any:
         from core.llm.providers.codex import _resolve_codex_token_info
 
-        resolved = _resolve_codex_token_info(force_refresh=True)
+        resolved = _resolve_codex_token_info(
+            force_refresh=True, model=model, sources=self.routing_sources
+        )
         if not resolved:
             raise RuntimeError(
                 "CodexOAuthAdapter: ChatGPT OAuth not found. Looked in GEODE "
@@ -197,7 +201,7 @@ class CodexOAuthAdapter:
         """
         self._require_model_allowed(req.model)
         kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
-        client = self._get_client()
+        client = self._get_client(req.model)
         # PR-LEGACY-PROVIDER-REMOVAL (2026-05-28) — pre-send input-shape
         # diagnostic backfilled from the now-deleted
         # ``CodexAgenticAdapter.agentic_call``. The Codex backend rejects
@@ -343,7 +347,7 @@ class CodexOAuthAdapter:
         search_model = model or CODEX_PRIMARY
         self._require_model_allowed(search_model)
         reasoning_kwargs = openai_effort_kwargs(search_model, effort)
-        client = self._get_client()
+        client = self._get_client(search_model)
         text_parts: list[str] = []
         source_urls: list[str] = []
         citation_urls: list[str] = []
@@ -432,7 +436,7 @@ class CodexOAuthAdapter:
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         self._require_model_allowed(req.model)
         kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
-        client = self._get_client()
+        client = self._get_client(req.model)
         async with client.responses.stream(**kwargs) as stream:
             async for event in translate_responses_stream(stream):
                 yield event

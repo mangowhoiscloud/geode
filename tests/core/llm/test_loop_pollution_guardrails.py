@@ -346,7 +346,7 @@ def test_dispatch_tolerates_legacy_adapter_without_model_kwarg(
             return WebSearchResult(query=query, text="legacy ok", adapter_name=self.name)
 
     monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: [_LegacyAdapter()])
-    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda provider: "payg")
+    monkeypatch.setattr("core.llm.routing.infer_source", lambda provider, **kwargs: "payg")
 
     result = asyncio.run(web_search_via_adapters("q", model="claude-opus-4-8"))
     assert result.text == "legacy ok"

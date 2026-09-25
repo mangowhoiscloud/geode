@@ -390,9 +390,9 @@ async def reflect_async(
         # endpoint. The parent AgenticLoop may pass its already-resolved
         # source; otherwise :func:`infer_source` mirrors the main-path
         # default resolution.
-        from core.llm.adapters._source_inference import infer_source
+        from core.llm.routing import infer_source
 
-        resolved_source = source or infer_source(provider)
+        resolved_source = source or infer_source(provider, model=model)
         adapter = resolve_for(normalize_registry_provider(provider), resolved_source)
         tool_summary = _summarise_tool_results(tool_results)
         user_prompt = _build_user_prompt(

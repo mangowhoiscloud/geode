@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
     from core.config import Settings
+    from core.config.policy_source import PolicySourcePaths
 
 
 class SessionModelConfig(BaseModel):
@@ -38,11 +39,16 @@ class SessionModelConfig(BaseModel):
 
 
 def capture_session_model_config(
-    settings: Settings, *, model: str, effort: str, source: str
+    settings: Settings,
+    *,
+    model: str,
+    effort: str,
+    source: str,
+    sources: PolicySourcePaths | None = None,
 ) -> SessionModelConfig:
     """Resolve auxiliary route preferences once, outside pure value validation."""
     from core.config import _resolve_provider
-    from core.llm.adapters._source_inference import infer_source
+    from core.llm.routing import infer_source
 
     reflection = settings.cognitive_reflection_model
     judge = settings.judge_model
@@ -51,9 +57,17 @@ def capture_session_model_config(
         effort=effort,
         source=source,
         reflection_model=reflection,
-        reflection_source=infer_source(_resolve_provider(reflection)) if reflection else "",
+        reflection_source=infer_source(
+            _resolve_provider(reflection), model=reflection, sources=sources, settings=settings
+        )
+        if reflection
+        else "",
         judge_model=judge,
-        judge_source=infer_source(_resolve_provider(judge)) if judge else "",
+        judge_source=infer_source(
+            _resolve_provider(judge), model=judge, sources=sources, settings=settings
+        )
+        if judge
+        else "",
         judgment_engine=settings.judgment_engine,
         jev_provider=settings.jev_provider,
         reflection_max_tokens=settings.cognitive_reflection_max_tokens,

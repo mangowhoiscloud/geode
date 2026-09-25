@@ -87,11 +87,11 @@ def _build_system_handlers(
         }
 
     async def handle_switch_model(**kwargs: Any) -> dict[str, Any]:
-        from core.agent.loop._model_switching import validate_session_model_config
+        from core.agent.loop._model_switching import stage_session_model_config
         from core.cli.commands._state import get_model_profiles
         from core.cli.commands.model import resolve_model_hint
         from core.config import _resolve_provider
-        from core.llm.adapters._source_inference import infer_source
+        from core.llm.routing import infer_source
         from core.tools.base import tool_error
 
         loop = getattr(kwargs.get("_tool_context"), "agent_loop", None)
@@ -127,23 +127,23 @@ def _build_system_handlers(
                     ),
                 )
                 provider = _resolve_provider(selected.id)
-                source = current.source if provider == loop._provider else infer_source(provider)
+                source = (
+                    current.source
+                    if provider == loop._provider
+                    else infer_source(provider, model=selected.id)
+                )
                 candidate = current.updated({"model": selected.id, "source": source})
             else:
                 raise ValueError("Choose primary or judgment")
-            validate_session_model_config(loop, candidate)
-            if loop._pending_model_settings is not None:
-                raise ValueError("A selection is already pending for this tool batch")
-            if candidate == current:
+            if not stage_session_model_config(loop, candidate):
                 return {"status": "applied", "changed": False, "model_config": current.model_dump()}
-            loop._pending_model_settings = candidate
             return {
                 "status": "pending",
                 "scope": "session",
                 "model_config": candidate.model_dump(),
                 "note": "Validated; applies to this session after the complete tool batch.",
             }
-        except ValueError as exc:
+        except (RuntimeError, ValueError) as exc:
             return tool_error(str(exc), error_type="validation")
 
     def handle_set_api_key(**kwargs: Any) -> dict[str, Any]:
@@ -180,13 +180,40 @@ def _build_system_handlers(
         login_args = ""
         if " " in sub_action:
             login_args = sub_action.split(None, 1)[1]
-        return handle_manage_login(subcommand=login_sub, args=login_args)
+        return handle_manage_login(
+            subcommand=login_sub, args=login_args, _tool_context=kwargs.get("_tool_context")
+        )
 
     def handle_manage_login(**kwargs: Any) -> dict[str, Any]:
         """Natural-language entry to /login (Plans + Profiles + OAuth + Routing)."""
 
         sub = (kwargs.get("subcommand") or "status").strip().lower()
         args = (kwargs.get("args") or "").strip()
+        if sub == "source":
+            from core.agent.loop._model_switching import stage_session_model_config
+            from core.cli.commands.login import session_source_changes
+            from core.tools.base import tool_error
+
+            loop = getattr(kwargs.get("_tool_context"), "agent_loop", None)
+            if loop is None:
+                return tool_error(
+                    "Source selection requires an owning session", error_type="dependency"
+                )
+            try:
+                provider, source = args.lower().split()
+                changes = session_source_changes(loop._model_settings, provider, source)
+                if not changes:
+                    raise ValueError("The provider is not used by this session")
+                candidate = loop._model_settings.updated(changes)
+                changed = stage_session_model_config(loop, candidate)
+                return {
+                    "status": "pending" if changed else "applied",
+                    "changed": changed,
+                    "scope": "session",
+                    "model_config": candidate.model_dump(),
+                }
+            except (RuntimeError, ValueError) as exc:
+                return tool_error(str(exc), error_type="validation")
         login_input = "" if sub in ("", "status", "list", "ls") else f"{sub} {args}".strip()
         cmd_login(login_input)
 
