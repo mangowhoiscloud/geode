@@ -58,8 +58,9 @@ def run_thin_command(
 
                 load_auth_toml()
             return
-        if not cmd_login(args):
-            return
+        # A failed mirror write can follow a saved auth.toml, so always send
+        # the value-free refresh; an unchanged file reloads as a no-op.
+        cmd_login(args)
     else:
         _handle_command(cmd, args, False, command_registry=command_registry)
     if cmd in {"/login", "/key"}:

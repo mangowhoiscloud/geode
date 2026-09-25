@@ -135,6 +135,19 @@ class TestSubcommandRouter:
             cmd_login("openai")
             mock_oauth.assert_called_once_with("openai")
 
+    def test_openai_login_reports_malformed_reply_as_login_failure(self) -> None:
+        import json
+
+        _reset_state()
+        malformed = json.JSONDecodeError("Expecting value", "<html>", 0)
+        with (
+            patch("core.auth.oauth_login.login_openai", side_effect=malformed),
+            patch("core.cli.commands.console") as mock_console,
+        ):
+            assert cmd_login("openai") is False
+        text = " ".join(str(c.args[0]) for c in mock_console.print.call_args_list if c.args)
+        assert "Login failed: Expecting value" in text
+
     def test_anthropic_login_prompts_for_api_key(self) -> None:
         _reset_state()
         with patch("core.cli.commands.login._login_anthropic_api_key") as login_api_key:

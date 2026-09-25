@@ -6085,11 +6085,11 @@ env 사이드 채널이 키 몇 개에 붙어 있습니다.`GEODE_HELD_OUT_BENCH
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/auth
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md
 
-GEODE는 구독 경로와 PAYG API 키를 받습니다. 어느 쪽을 쓸지는 `CredentialSource` 하나로 표현됩니다. OpenAI 구독 프로파일과 플랜은 `~/.geode/auth.toml`에, API 키는`~/.geode/.env`에 저장됩니다.
+GEODE는 구독 경로와 PAYG API 키를 받습니다. 어느 쪽을 쓸지는 `CredentialSource` 하나로 표현됩니다. OpenAI 구독 프로파일과 플랜은 `~/.geode/auth.toml`에, API 키는 `~/.geode/.env`에 저장됩니다.
 
 ## 자격 소스
 
-단일 SoT는 `core/config/credential_source.py`의`CredentialSource` StrEnum입니다.
+단일 SoT는 `core/config/credential_source.py`의 `CredentialSource` StrEnum입니다.
 
 | 값 | 의미 |
 | --- | --- |
@@ -6100,9 +6100,9 @@ GEODE는 구독 경로와 PAYG API 키를 받습니다. 어느 쪽을 쓸지는 
 | `oauth` | OpenAI는 Codex OAuth 별칭, Anthropic은 퇴역 오류 입력. |
 | `none` | 해당 프로바이더 비활성 센티널. |
 
-Anthropic과 OpenRouter의 내장 경로는 `api_key`뿐입니다. 과거`claude-cli`/`oauth` 값은 migration 안내를 위해 읽지만 binary나 네트워크 호출 전에 중단됩니다.
+Anthropic과 OpenRouter의 내장 경로는 `api_key`뿐입니다. 과거 `claude-cli`/`oauth` 값은 migration 안내를 위해 읽지만 binary나 네트워크 호출 전에 중단됩니다.
 
-선택은 `[llm] anthropic_credential_source` /`openai_credential_source`(기본 `auto`)에 저장됩니다. `/login source <provider> <type>`은 toml에만 쓰므로 `.env`를 지워도 선택이 살아남습니다. (provider, source) 쌍마다 구체 어댑터가 하나씩 레지스트리에 등록됩니다(`core/llm/adapters/`의`anthropic_payg`, `openai_payg`,`codex_oauth`,`openrouter_payg`,`glm_coding_plan`, `glm_payg`).
+선택은 `[llm] anthropic_credential_source` / `openai_credential_source`(기본 `auto`)에 저장됩니다. `/login source <provider> <type>`은 toml에만 쓰므로 `.env`를 지워도 선택이 살아남습니다. (provider, source) 쌍마다 구체 어댑터가 하나씩 레지스트리에 등록됩니다(`core/llm/adapters/`의 `anthropic_payg`, `openai_payg`, `codex_oauth`, `openrouter_payg`, `glm_coding_plan`, `glm_payg`).
 
 ## /login 대시보드
 
@@ -6113,7 +6113,7 @@ Anthropic과 OpenRouter의 내장 경로는 `api_key`뿐입니다. 과거`claude
 | `/login openai` | ChatGPT 구독 OAuth 로그인. device-code 플로우는 `core/auth/oauth_login.py`이고, 결과는 `auth.toml`에 OAUTH\_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다. |
 | `/login anthropic` | `ANTHROPIC_API_KEY`를 등록하고 `api_key` 경로를 선택합니다. |
 | `/login google` | Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts용 Google Workspace OAuth. 사용자가 만든 Desktop 앱 클라이언트를 가져오며 LLM 프로바이더 자격과 분리됩니다. |
-| `/login add` | 자격 추가. 키 모양(`sk-ant-`, `sk-proj-`, `sk-or-v1-`, GLM {id}.{secret})으로 프로바이더를 추정합니다. |
+| `/login add` | 자격 추가. 메뉴에서 플랜 종류(ChatGPT 구독 또는 PAYG API 키)를 고르고, PAYG는 프로바이더(Anthropic, OpenAI, OpenRouter, GLM)를 고른 뒤 키를 입력합니다. |
 | `/login use` / `remove` | 프로파일 선택과 제거. |
 | `/login route` | 프로바이더와 플랜 라우팅 확인. |
 | `/login quota` | 플랜에 선언된 호출 한도. GEODE는 사용량을 세지 않으므로 현재 사용량은 프로바이더 계정에서 확인합니다. |
@@ -6121,7 +6121,7 @@ Anthropic과 OpenRouter의 내장 경로는 `api_key`뿐입니다. 과거`claude
 
 ## Google Workspace
 
-uv나 GitHub에서 설치한 사용자도 중앙 GEODE OAuth 앱 없이 자신의 Google Cloud Desktop 클라이언트로 연결할 수 있습니다. 권장 진입점은`/login google`입니다. 첫 연결에서는 client JSON 경로와 필요한 서비스 번들을 명시적으로 고릅니다. 자동화하려면 다음처럼 한 줄로 지정할 수 있습니다. Google Cloud 콘솔부터 시작하는 절차는 [Google Workspace 연결 가이드](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace.md)에 있습니다.
+uv나 GitHub에서 설치한 사용자도 중앙 GEODE OAuth 앱 없이 자신의 Google Cloud Desktop 클라이언트로 연결할 수 있습니다. 권장 진입점은 `/login google`입니다. 첫 연결에서는 client JSON 경로와 필요한 서비스 번들을 명시적으로 고릅니다. 자동화하려면 다음처럼 한 줄로 지정할 수 있습니다. Google Cloud 콘솔부터 시작하는 절차는 [Google Workspace 연결 가이드](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace.md)에 있습니다.
 
 ```
 /login google --client-json ~/Downloads/client_secret.json \
@@ -6144,11 +6144,11 @@ uv나 GitHub에서 설치한 사용자도 중앙 GEODE OAuth 앱 없이 자신�
 | 프로세스 메모리 | 짧은 수명의 access token과 expiry. 데몬 auth reload와 logout 때 폐기. |
 | 세션 영속 저장소 | Workspace 도구의 원문 입력·결과는 JSON·SQLite·도구 로그에서 도구 이름을 담은 `_personal_data_omitted` 표식으로 치환하고, 바깥 호출 행만 call id를 유지합니다. 영속 telemetry에는 API 오류 상세를 복사하지 않고, 개인 도구가 포함된 batch는 별도 reflection provider 호출을 건너뜁니다. 별도의 회전형 런타임 로그에는 제한된 Google API 오류 진단이 남을 수 있습니다. 사용자가 직접 쓴 대화문과 모델이 대화문으로 작성한 요약은 일반 세션 보존 정책을 따릅니다. |
 
-Workspace 읽기 결과는 선택한 LLM 프로바이더로 전달될 수 있으므로 매 도구 호출 직전에 개인 데이터 disclosure와 affirmative consent가 뜹니다. 이 승인은 always-allow할 수 없고 headless·서브에이전트에서는 닫힌 채로 거부됩니다. Gmail 전송과 Drive/Docs/Sheets/Tasks/Calendar 변경도 같은 비캐시형 매 호출 승인을 거쳐 HITL 0·권한 건너뛰기로 우회할 수 없습니다. 자세한 스키마와 Hermes 비교는 설계 기록`docs/architecture/google-workspace-oauth.md`에 있습니다.
+Workspace 읽기 결과는 선택한 LLM 프로바이더로 전달될 수 있으므로 매 도구 호출 직전에 개인 데이터 disclosure와 affirmative consent가 뜹니다. 이 승인은 always-allow할 수 없고 headless·서브에이전트에서는 닫힌 채로 거부됩니다. Gmail 전송과 Drive/Docs/Sheets/Tasks/Calendar 변경도 같은 비캐시형 매 호출 승인을 거쳐 HITL 0·권한 건너뛰기로 우회할 수 없습니다. 자세한 스키마와 Hermes 비교는 설계 기록 `docs/architecture/google-workspace-oauth.md`에 있습니다.
 
 ## ChatGPT 자격 가져오기
 
-기본 경로는 `/login openai`가 발급해`~/.geode/auth.toml`에 저장한 자격입니다. 기존`~/.codex/auth.json`도 읽을 수 있지만 이는 자격 가져오기일 뿐이며 GEODE는 Codex CLI를 추론에 실행하지 않습니다.
+기본 경로는 `/login openai`가 발급해 `~/.geode/auth.toml`에 저장한 자격입니다. 기존 `~/.codex/auth.json`도 읽을 수 있지만 이는 자격 가져오기일 뿐이며 GEODE는 Codex CLI를 추론에 실행하지 않습니다.
 
 ## PAYG 키
 

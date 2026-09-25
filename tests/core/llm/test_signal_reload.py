@@ -59,15 +59,17 @@ def test_cli_thin_dispatch_signals_daemon_refresh(
     assert "refresh rejected" in output.get()
 
 
-def test_cli_thin_failed_local_login_does_not_signal_refresh(
+def test_cli_thin_failed_local_login_still_signals_refresh(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """auth.toml may be saved before a mirror write fails; the daemon must reload."""
     monkeypatch.setattr("core.cli.commands.login.cmd_login", Mock(return_value=False))
     client = Mock(spec=IPCClient)
+    client.send_command.return_value = {"status": "ok", "output": ""}
 
     run_thin_command(client, "/login", "set-key ghost sk-test")
 
-    client.send_command.assert_not_called()
+    client.send_command.assert_called_once_with("/login", "refresh")
 
 
 @pytest.mark.parametrize("args", ["", "remove glm-payg", "use-profile openai:work", "refresh"])
@@ -110,11 +112,12 @@ def test_cli_thin_keeps_unrecognized_login_input_local(monkeypatch: pytest.Monke
     local = Mock(return_value=False)
     monkeypatch.setattr("core.cli.commands.login.cmd_login", local)
     client = Mock(spec=IPCClient)
+    client.send_command.return_value = {"status": "ok", "output": ""}
 
     run_thin_command(client, "/login", "sk-pasted-secret-value")
 
     local.assert_called_once_with("sk-pasted-secret-value")
-    client.send_command.assert_not_called()
+    client.send_command.assert_called_once_with("/login", "refresh")
 
 
 def test_cli_thin_reports_lost_daemon_connection(monkeypatch: pytest.MonkeyPatch) -> None:

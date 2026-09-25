@@ -649,8 +649,13 @@ def _login_oauth(target: str) -> None:
         from core.llm.adapters.registry import invalidate_provider_clients
 
         _pkg.console.print()
+        from json import JSONDecodeError
+
         try:
             creds = login_openai()
+        except JSONDecodeError as exc:
+            # A malformed endpoint reply, not a rejected credential.
+            raise ValueError(f"Login failed: {exc}") from exc
         except (ValueError, OSError):
             raise  # Rejected or unsaved credential; cmd_login reports it.
         except Exception as exc:
