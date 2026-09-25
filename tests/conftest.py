@@ -171,9 +171,14 @@ def _isolate_state_root(
 @pytest.fixture(autouse=True)
 def _reset_auth_singletons(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
+    from core import config as _config
     from core.llm.strategies import plan_registry as _pr
     from core.wiring import container as _infra
 
+    # Undoing a patch of the PEP 562 ``settings`` export binds the old object in
+    # the module dict, shadowing the live singleton for later tests. Drop it at
+    # setup: monkeypatch undoes after this fixture's teardown.
+    _config.__dict__.pop("settings", None)
     _infra._profile_store = None
     _infra._profile_rotator = None
     _pr._plan_registry = None
