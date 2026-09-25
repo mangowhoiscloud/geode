@@ -431,9 +431,19 @@ def build_create_kwargs(
             raise LLMRequestValidationError(f"Structured output is not verified for {req.model}")
         if req.response_schema.get("type") != "object":
             raise LLMRequestValidationError("Anthropic response_schema requires an object root")
+        # The API rejects unsupported keywords such as number minimum/maximum;
+        # the SDK moves them into descriptions. Callers still validate bounds.
+        from anthropic import transform_schema
+
+        try:
+            schema = transform_schema(deepcopy(req.response_schema))
+        except (AssertionError, ValueError) as exc:
+            raise LLMRequestValidationError(
+                f"Anthropic response_schema is not supported: {exc}"
+            ) from exc
         kwargs.setdefault("output_config", {})["format"] = {
             "type": "json_schema",
-            "schema": deepcopy(req.response_schema),
+            "schema": schema,
         }
     tc = _translate_tool_choice(req.tool_choice)
     if (
