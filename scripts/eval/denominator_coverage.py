@@ -16,27 +16,122 @@ Rows whose ``change.surface`` is ``analysis-only`` are deterministic aggregates,
 not execution cells. ``cells_per_unit`` comes from the frozen protocol, for
 example 2 when one primary unit is an LLM|Jev pair and 1 for per-cell units.
 
+A repetition aggregate (05 v1 §3.5, 06 §6) has a second gate, run before
+``handoff_tables.py reliability``: every arm's frozen task × repetition plan must be
+observed once per slot, with a known strict outcome and one repetition contract
+(source revision, policy and reset digests, input, task and verifier digests), and
+every task must reach N_i >= n. Any violation exits non-zero with its reasons.
+
 Usage:
     python scripts/eval/denominator_coverage.py <analysis.json> \\
         --run-spec <run-spec.json> --attempts <attempts.jsonl> \\
         --cells-per-unit 2 [--forbid-retries]
+    python scripts/eval/denominator_coverage.py repetitions <phase-dir-r0> <phase-dir-r1> \\
+        --primitive choice --n 2 [--arm-label a=llm]
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from evals.benchmarks.decision_metrics import validate_repetition_matrix
 from scripts.eval.contract import (
     _load_json_object,
     validate_analysis,
     validate_attempts,
     validate_run_spec,
 )
+from scripts.eval.handoff_tables import (
+    RELIABILITY_ARM_FIELDS,
+    RELIABILITY_CONTRACT_FIELDS,
+    reliability_inputs,
+)
 
 ANALYSIS_ONLY_SURFACE = "analysis-only"
+
+
+def check_repetition_matrix(
+    phase_dirs: Sequence[Path],
+    *,
+    n: int,
+    primitive: str,
+    arm_labels: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Frozen repetition plan versus observed rows, per arm; ``covered`` only when clean.
+
+    Rejections are enumerated (``decision_metrics.RepetitionRejection``): N_i < n,
+    duplicate or unplanned repetitions, missing planned slots, contract mismatch and
+    unknown outcomes. A plan that is not a task × repetition product, or a phase
+    whose repetitions contradict its run-spec seed schedule, raises ``ValueError``.
+    """
+    inputs = reliability_inputs(phase_dirs, primitive=primitive, arm_labels=arm_labels)
+    arms: dict[str, Any] = {}
+    for arm in sorted(inputs.plans):
+        tasks, repetitions = inputs.plans[arm]
+        matrix = validate_repetition_matrix(
+            inputs.trials[arm],
+            planned_tasks=tasks,
+            planned_repetitions=repetitions,
+            n=n,
+            contract_fields=RELIABILITY_CONTRACT_FIELDS,
+            arm_contract_fields=RELIABILITY_ARM_FIELDS,
+        )
+        arms[arm] = {
+            "covered": not matrix.rejections,
+            "reasons": [reason.value for reason in matrix.reasons],
+            "rejections": [
+                {"reason": reason.value, "detail": detail} for reason, detail in matrix.rejections
+            ],
+            "planned_tasks": len(matrix.planned_tasks),
+            "planned_repetitions": list(matrix.planned_repetitions),
+            "complete_tasks": len(matrix.complete_tasks),
+            "incomplete_tasks": len(matrix.incomplete_tasks),
+            "expected_repetitions": matrix.expected_repetitions,
+            "observed_repetitions": matrix.observed_repetitions,
+            "valid_repetitions": matrix.valid_repetitions,
+        }
+    return {
+        "covered": all(value["covered"] for value in arms.values()),
+        "n": n,
+        "run_ids": [phase.keys["run_id"] for phase in inputs.phases],
+        "arms": arms,
+    }
+
+
+def _repetitions_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="denominator_coverage.py repetitions",
+        description="Gate a frozen repetition set before pass@n / pass^n aggregation.",
+    )
+    parser.add_argument("phase_dirs", type=Path, nargs="+")
+    parser.add_argument("--n", type=int, required=True)
+    parser.add_argument(
+        "--primitive", required=True, choices=("choice", "noul", "score", "verdict")
+    )
+    parser.add_argument("--arm-label", action="append", default=[])
+    args = parser.parse_args(argv)
+    labels: dict[str, str] = {}
+    for value in args.arm_label:
+        arm, separator, label = value.partition("=")
+        if not separator or not arm or not label:
+            parser.error("--arm-label must use ARM=LABEL")
+        labels[arm] = label
+    try:
+        report = check_repetition_matrix(
+            args.phase_dirs, n=args.n, primitive=args.primitive, arm_labels=labels
+        )
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        print(
+            json.dumps({"covered": False, "error_type": type(error).__name__, "error": str(error)})
+        )
+        return 1
+    print(json.dumps(report, sort_keys=True))
+    return 0 if report["covered"] else 1
 
 
 def check_denominator_coverage(
@@ -132,13 +227,16 @@ def check_denominator_coverage(
 
 
 def main(argv: list[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments[:1] == ["repetitions"]:
+        return _repetitions_main(arguments[1:])
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("analysis", type=Path)
     parser.add_argument("--run-spec", type=Path, required=True)
     parser.add_argument("--attempts", type=Path, required=True)
     parser.add_argument("--cells-per-unit", type=int, required=True)
     parser.add_argument("--forbid-retries", action="store_true")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(arguments)
     try:
         report = check_denominator_coverage(
             args.analysis,

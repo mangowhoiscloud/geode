@@ -188,6 +188,50 @@ tolerance. Selection cost counts every planned order, failures included, and
 keeps unreported usage null. `python -m evals.benchmarks.score_selection
 self-test` exercises the whole path on fakes with zero model dispatches.
 
+### Repetition reliability: auxiliary pass@n and pass^n
+
+Preregistration v1 §3.5 adds auxiliary repetition metrics without changing any
+primary metric, decision rule, model, effort or run count. For task i with N_i
+independent full trials after the frozen reset and c_i strict successes,
+[`decision_metrics.py`](../../evals/benchmarks/decision_metrics.py) computes
+`pass_at_n` = mean_i[1 − C(N_i − c_i, n) / C(N_i, n)] and `pass_hat_n` =
+mean_i[C(c_i, n) / C(N_i, n)] per task first, with equal task weights; a pooled
+success rate is never substituted into 1 − (1 − p)^n or p^n.
+`validate_repetition_matrix` rejects a frozen task × repetition plan with an
+enumerated reason: N_i < n, a duplicate or unplanned repetition, a missing slot,
+a contract mismatch and an unknown outcome. The contract is the source revision,
+the runner-owned `policy_digest` (frozen route, effort, prompts, tools, verifier,
+budget and repair limits) and `reset_digest` (session, file and cache reset), and
+the input, task and verifier digests. Repair rounds, question variants and candidates never count as
+repetitions; an approved replacement takes its original's slot, and the original
+stays preserved. Judged failures stay in the denominator; infrastructure
+invalid, unobserved or evidence-incomplete trials are unknown, so the planned
+aggregate becomes not-measurable rather than a valid-only substitute.
+
+Only U7r0+U7r1 combine repetitions (n = 1, 2 per arm on the same task set).
+U6b has one run per task: pass@1 is its strict success, and pass^2 is written as
+not-measurable (insufficient repetitions). U8 conditions, Score candidates and
+U2s variants are not repetitions. `stability_summary` reports U2s identical-
+question pair consistency and correct-pair consistency apart from the order and
+paraphrase flip rates.
+
+The data path reuses existing receipts. `denominator_coverage.py repetitions`
+gates the frozen set before aggregation and exits non-zero on any rejection.
+`handoff_tables.py reliability` groups `e2e_trials` by (arm, case_id) and writes
+`tables/reliability.jsonl`, one task × arm row with source pointers (run, trial,
+attempt, run-spec digest), and `tables/reliability_summary.json` per arm × n with
+`n`, `planned_tasks`, `complete_tasks`, `incomplete_tasks`, expected, observed
+and valid repetitions and `run_spec_sha256s`. `reliability_metric_rows` emits
+auxiliary `analysis.json` metrics such as `u7_pass_hat_2_arm_b` under the
+unchanged schema: value is the task mean, numerator the sum of per-task ratios
+and denominator the complete task count, bound by JSON pointers into the
+summary; a not-measurable row carries null numerator, denominator and locator.
+`handoff_tables.py --reliability` also attaches the values to `primitive_summary`
+as auxiliary columns. The run-spec and attempt schemas stay closed, so the
+policy and reset digests live only in `freeze.json` cells, the private trial
+receipt and the `e2e_trials` columns. These are observed consistencies of a small frozen repetition, not an
+operating reliability claim.
+
 ### Rejected decisions still have call evidence
 
 The transport completes before typed-answer admission. A malformed Score or

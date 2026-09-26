@@ -25,7 +25,16 @@ Usage:
     python scripts/eval/handoff_tables.py <phase-dir> --out <new-dir> \\
         --primitive choice|noul|score|verdict [--arm-label a=llm --arm-label b=jev] \\
         [--replay-preselected <trial>] [--independent-units N] \\
-        [--billing-export <export.jsonl|export.csv> --billing-source <label>]
+        [--billing-export <export.jsonl|export.csv> --billing-source <label>] \\
+        [--reliability <phase-dir>/tables/reliability_summary.json]
+    python scripts/eval/handoff_tables.py reliability <phase-dir-r0> <phase-dir-r1> \\
+        --out <phase-dir-r1>/tables --unit u7 --primitive choice --n 1 --n 2
+
+``reliability`` combines the e2e_trials rows of one frozen repetition set by
+(arm, case_id) into ``reliability.jsonl`` and ``reliability_summary.json``:
+per-task combinatorial pass@n and pass^n (05 v1 §3.5, 06 §6). Contract digests
+(source revision, policy, reset, input, task and verifier) must match; an
+incomplete, duplicated, unknown or mismatched matrix is written as not-measurable.
 """
 
 from __future__ import annotations
@@ -36,7 +45,9 @@ import hashlib
 import io
 import json
 import math
+import re
 import statistics
+import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -44,6 +55,11 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from evals.benchmarks.decision_metrics import (
+    NOT_MEASURABLE,
+    RepetitionTrial,
+    repetition_reliability,
+)
 from scripts.eval.contract import _strict_json_loads, validate_attempts, validate_run_spec
 
 TABLES = ("call_ledger", "e2e_trials", "e2e_pairs", "primitive_summary")
@@ -84,6 +100,17 @@ _BURDEN = (
     "repaired_success",
 )
 _DEFAULT_ARM_LABELS = {"a": "llm", "b": "jev", "a0": "root_only"}
+# e2e_trials column <- freeze.json cell field. The runner records each cell's policy
+# and reset-boundary digests (decision_metrics.policy_digest / reset_digest), payload
+# and task digests; the private trial receipt repeats them under the same names.
+_CELL_CONTRACT = {
+    "policy_digest": "policy_digest",
+    "reset_digest": "reset_digest",
+    "input_sha256": "case_sha256",
+    "task_checksum": "task_checksum",
+    "verifier_sha256": "verifier_sha256",
+}
+_HEX64 = frozenset("0123456789abcdef")
 
 
 @dataclass
@@ -114,6 +141,13 @@ class _Sources:
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         self.read.setdefault(relative, digest)
         return digest
+
+
+def _digest_or_none(value: Any) -> str | None:
+    """A frozen SHA-256 hex digest, or unknown."""
+    if isinstance(value, str) and len(value) == 64 and set(value) <= _HEX64:
+        return value
+    return None
 
 
 def _count(value: Any) -> int | None:
@@ -691,6 +725,8 @@ def _trial_row(
         "geode_trajectory_sha256": sources.sha(f"{rel}/agent/geode-trajectory.json"),
         "recording_cast_sha256": sources.sha(f"{rel}/agent/recording.cast"),
         "replay_preselected": bool(cell.get("replay_preselected")) or trial in preselected,
+        # Frozen repetition contract (runner-owned freeze.json cell); null when absent.
+        **{column: _digest_or_none(cell.get(field)) for column, field in _CELL_CONTRACT.items()},
         "source_ref": source_ref,
         "source_pointer": "",
         "source_sha256": sources.sha(source_ref),
@@ -877,18 +913,32 @@ def _write_exclusive(path: Path, text: str) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def export_tables(
+@dataclass
+class _Phase:
+    """One closed phase projected in memory: frozen cells, calls and trial rows."""
+
+    phase_dir: Path
+    sources: _Sources
+    run_spec: dict[str, Any]
+    freeze: Any
+    analysis: Any
+    phase: str
+    cells: list[dict[str, Any]]
+    keys: dict[str, Any]
+    calls: list[dict[str, Any]]
+    trials: list[dict[str, Any]]
+    billing_receipt: dict[str, Any] | None
+
+
+def _load_phase(
     phase_dir: Path,
-    out_dir: Path,
     *,
     primitive: str,
     arm_labels: Mapping[str, str] | None = None,
     replay_preselected: Sequence[str] = (),
-    independent_units: int | None = None,
     billing_export: Path | None = None,
     billing_source: str | None = None,
-) -> dict[str, Any]:
-    """Write the four derived tables and a digest manifest into a new directory."""
+) -> _Phase:
     phase_dir = phase_dir.resolve()
     sources = _Sources(phase_dir)
     run_spec = validate_run_spec(phase_dir / "run-spec.json")
@@ -961,50 +1011,97 @@ def export_tables(
         )
         for cell in cells
     ]
+    return _Phase(
+        phase_dir,
+        sources,
+        run_spec,
+        freeze,
+        analysis,
+        phase,
+        cells,
+        keys,
+        calls,
+        trials,
+        billing_receipt,
+    )
+
+
+def _write_table(out_dir: Path, name: str, rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    jsonl = "".join(
+        json.dumps(row, ensure_ascii=False, sort_keys=True, allow_nan=False) + "\n" for row in rows
+    )
+    columns = _columns(rows)
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=columns, lineterminator="\n")
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({column: _csv_value(row.get(column)) for column in columns})
+    return {
+        "table": name,
+        "rows": len(rows),
+        "jsonl": f"{name}.jsonl",
+        "jsonl_sha256": _write_exclusive(out_dir / f"{name}.jsonl", jsonl),
+        "csv": f"{name}.csv",
+        "csv_sha256": _write_exclusive(out_dir / f"{name}.csv", buffer.getvalue()),
+    }
+
+
+def export_tables(
+    phase_dir: Path,
+    out_dir: Path,
+    *,
+    primitive: str,
+    arm_labels: Mapping[str, str] | None = None,
+    replay_preselected: Sequence[str] = (),
+    independent_units: int | None = None,
+    billing_export: Path | None = None,
+    billing_source: str | None = None,
+    reliability: Path | None = None,
+) -> dict[str, Any]:
+    """Write the four derived tables and a digest manifest into a new directory.
+
+    ``reliability`` names a ``reliability_summary.json`` from :func:`export_reliability`
+    over a frozen repetition set that includes this phase. Its pass@n / pass^n values
+    become auxiliary ``primitive_summary`` columns. When the summary already sits in
+    ``out_dir`` the directory may exist; every file is still created exclusively.
+    """
+    loaded = _load_phase(
+        phase_dir,
+        primitive=primitive,
+        arm_labels=arm_labels,
+        replay_preselected=replay_preselected,
+        billing_export=billing_export,
+        billing_source=billing_source,
+    )
+    sources, keys, trials, calls = loaded.sources, loaded.keys, loaded.trials, loaded.calls
     digests = {
         "run_spec_sha256": sources.sha("run-spec.json"),
         "attempts_sha256": sources.sha("attempts.jsonl"),
         "analysis_sha256": sources.sha("analysis.json"),
         "results_sha256": sources.sha("results.json"),
     }
+    summary_rows = _summary_rows(
+        trials,
+        calls,
+        keys,
+        run_spec=loaded.run_spec,
+        analysis=loaded.analysis,
+        independent_units=independent_units,
+        digests=digests,
+    )
+    reliability_input = None
+    if reliability is not None:
+        reliability_input = _attach_reliability(summary_rows, reliability, digests)
     tables = {
         "call_ledger": calls,
         "e2e_trials": trials,
         "e2e_pairs": _pair_rows(trials, keys),
-        "primitive_summary": _summary_rows(
-            trials,
-            calls,
-            keys,
-            run_spec=run_spec,
-            analysis=analysis,
-            independent_units=independent_units,
-            digests=digests,
-        ),
+        "primitive_summary": summary_rows,
     }
-    out_dir.mkdir(parents=True, exist_ok=False)
-    outputs = []
-    for name in TABLES:
-        rows = tables[name]
-        jsonl = "".join(
-            json.dumps(row, ensure_ascii=False, sort_keys=True, allow_nan=False) + "\n"
-            for row in rows
-        )
-        columns = _columns(rows)
-        buffer = io.StringIO()
-        writer = csv.DictWriter(buffer, fieldnames=columns, lineterminator="\n")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({column: _csv_value(row.get(column)) for column in columns})
-        outputs.append(
-            {
-                "table": name,
-                "rows": len(rows),
-                "jsonl": f"{name}.jsonl",
-                "jsonl_sha256": _write_exclusive(out_dir / f"{name}.jsonl", jsonl),
-                "csv": f"{name}.csv",
-                "csv_sha256": _write_exclusive(out_dir / f"{name}.csv", buffer.getvalue()),
-            }
-        )
+    beside_summary = reliability is not None and reliability.resolve().parent == out_dir.resolve()
+    out_dir.mkdir(parents=True, exist_ok=beside_summary)
+    outputs = [_write_table(out_dir, name, tables[name]) for name in TABLES]
+    billing_receipt = loaded.billing_receipt
     if billing_receipt is not None:
         receipt_text = (
             json.dumps(billing_receipt, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
@@ -1016,7 +1113,7 @@ def export_tables(
         "kind": "derived-analysis-tables",
         "generator": "scripts/eval/handoff_tables.py",
         "run_id": keys["run_id"],
-        "phase": phase,
+        "phase": loaded.phase,
         "primitive": primitive,
         "source_revision": keys["source_revision"],
         "inputs": [
@@ -1028,6 +1125,7 @@ def export_tables(
             if billing_receipt
             else None
         ),
+        "reliability_summary": reliability_input,
         "semantics": {
             "null": "unknown or not measured; never zero",
             "csv_empty_cell": "null; use JSONL for exact types",
@@ -1044,6 +1142,296 @@ def export_tables(
     return manifest
 
 
+# ---------------------------------------------------------------------------
+# Repetition reliability (05 v1 §3.5, 06 §6): e2e_trials -> pass@n / pass^n
+# ---------------------------------------------------------------------------
+
+RELIABILITY_SCHEMA = "geode.jev-repetition-reliability@1"
+RELIABILITY_ROWS = "reliability.jsonl"
+RELIABILITY_SUMMARY = "reliability_summary.json"
+# Per-task repetition contract; the arm-scoped subset must agree across tasks too.
+RELIABILITY_CONTRACT_FIELDS = (
+    "source_revision",
+    "policy_digest",
+    "reset_digest",
+    "input_sha256",
+    "task_checksum",
+    "verifier_sha256",
+)
+RELIABILITY_ARM_FIELDS = ("source_revision", "policy_digest", "reset_digest")
+_SEED_REPEAT = re.compile(r"-repeat-(\d+)$")
+# Preregistered arm letters for analysis metric names (A Astra, B Jev, C cascade).
+DEFAULT_ARM_NAMES = {"llm": "a", "jev": "b", "cascade": "c"}
+
+
+@dataclass
+class ReliabilityInputs:
+    """Frozen plan and observed rows of one repetition set, grouped by arm label."""
+
+    phases: list[_Phase]
+    plans: dict[str, tuple[list[str], list[int]]]
+    trials: dict[str, list[RepetitionTrial]]
+    rows: dict[str, list[dict[str, Any]]]
+
+
+def _seed_repetition(run_spec: Mapping[str, Any]) -> int | None:
+    schedule = run_spec["reproduction"]["execution"].get("seed_schedule") or []
+    if len(schedule) != 1:
+        return None
+    match = _SEED_REPEAT.search(str(schedule[0]))
+    return int(match.group(1)) if match else None
+
+
+def reliability_inputs(
+    phase_dirs: Sequence[Path],
+    *,
+    primitive: str,
+    arm_labels: Mapping[str, str] | None = None,
+) -> ReliabilityInputs:
+    """Load every phase of one frozen repetition set and map e2e_trials to repetitions.
+
+    The plan is the union of the frozen cells: per arm, every planned task must have
+    every planned repetition (a task × repetition product), and a phase whose run
+    spec names one repeat seed may only hold that repetition. Strict success is the
+    e2e_trials value for a valid cell; an invalid, aborted, unobserved or
+    evidence-incomplete cell is unknown, never a failure or a success.
+    """
+    if not phase_dirs:
+        raise ValueError("a repetition set needs at least one frozen phase")
+    phases = [_load_phase(path, primitive=primitive, arm_labels=arm_labels) for path in phase_dirs]
+    if len({phase.keys["run_id"] for phase in phases}) != len(phases):
+        raise ValueError("each frozen repetition phase needs its own run spec")
+    planned: dict[str, dict[str, set[int]]] = {}
+    order: dict[str, list[str]] = {}
+    trials: dict[str, list[RepetitionTrial]] = {}
+    rows: dict[str, list[dict[str, Any]]] = {}
+    for phase in phases:
+        seed_repetition = _seed_repetition(phase.run_spec)
+        run_spec_sha256 = phase.sources.sha("run-spec.json")
+        for row in phase.trials:
+            arm, task, repetition = row["arm_label"], row["case_id"], row["repetition"]
+            if not isinstance(task, str) or type(repetition) is not int:
+                raise ValueError(f"{row['trial_name']}: frozen cell lacks case_id or repetition")
+            if seed_repetition is not None and repetition != seed_repetition:
+                raise ValueError(
+                    f"{row['trial_name']}: repetition {repetition} differs from the run "
+                    f"spec seed schedule (repeat {seed_repetition})"
+                )
+            planned.setdefault(arm, {}).setdefault(task, set()).add(repetition)
+            if task not in order.setdefault(arm, []):
+                order[arm].append(task)
+            known = row["validity"] == "valid" and row["outcome"] in ("passed", "failed")
+            success = row["strict_success"] if known else None
+            trials.setdefault(arm, []).append(
+                RepetitionTrial(
+                    task,
+                    repetition,
+                    success if isinstance(success, bool) else None,
+                    {name: row.get(name) for name in RELIABILITY_CONTRACT_FIELDS},
+                    trial_id=str(row["trial_name"]),
+                )
+            )
+            rows.setdefault(arm, []).append({**row, "run_spec_sha256": run_spec_sha256})
+    plans: dict[str, tuple[list[str], list[int]]] = {}
+    for arm, tasks in planned.items():
+        repetitions = sorted(set().union(*tasks.values()))
+        if any(tasks[task] != set(repetitions) for task in tasks):
+            raise ValueError(f"arm {arm}: frozen cells are not a task x repetition product")
+        plans[arm] = (order[arm], repetitions)
+    if len({tuple(sorted(plan[0])) for plan in plans.values()}) > 1:
+        raise ValueError("arms must share one planned task set before A/B comparison")
+    return ReliabilityInputs(phases, plans, trials, rows)
+
+
+def _pointer(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "repetition": row["repetition"],
+        "strict_success": row["strict_success"],
+        "validity": row["validity"],
+        "outcome": row["outcome"],
+        "run_id": row["run_id"],
+        "phase": row["phase"],
+        "trial_name": row["trial_name"],
+        "attempt_id": row["attempt_id"],
+        "attempt_count": row["attempt_count"],
+        "run_spec_sha256": row["run_spec_sha256"],
+        # Relative to that run's phase directory; never a host path.
+        "source_ref": row["source_ref"],
+        "source_sha256": row["source_sha256"],
+    }
+
+
+def export_reliability(
+    phase_dirs: Sequence[Path],
+    out_dir: Path,
+    *,
+    primitive: str,
+    unit: str,
+    ns: Sequence[int] = (1, 2),
+    arm_labels: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Write ``reliability.jsonl`` (task × arm) and ``reliability_summary.json`` (arm × n).
+
+    Run :func:`scripts.eval.denominator_coverage.check_repetition_matrix` first; a
+    rejected matrix is still written here, as not-measurable with enumerated reasons,
+    so the analysis can cite it. No valid-only substitute is produced.
+    """
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_]{0,31}", unit):
+        raise ValueError("unit must be a short lower-case preregistered unit label")
+    inputs = reliability_inputs(phase_dirs, primitive=primitive, arm_labels=arm_labels)
+    arms: dict[str, Any] = {}
+    table: list[dict[str, Any]] = []
+    for arm in sorted(inputs.plans):
+        tasks, repetitions = inputs.plans[arm]
+        report = repetition_reliability(
+            inputs.trials[arm],
+            planned_tasks=tasks,
+            planned_repetitions=repetitions,
+            ns=ns,
+            contract_fields=RELIABILITY_CONTRACT_FIELDS,
+            arm_contract_fields=RELIABILITY_ARM_FIELDS,
+        )
+        arms[arm] = {"planned_repetitions": repetitions, "n": report}
+        complete = {row["task_id"] for row in report[str(ns[0])]["per_task"] if row["complete"]}
+        for task in tasks:
+            members = sorted(
+                (row for row in inputs.rows[arm] if row["case_id"] == task),
+                key=lambda row: (row["repetition"], row["trial_name"]),
+            )
+            counted = [row for row in members if row["strict_success"] is not None]
+            table.append(
+                {
+                    "unit": unit,
+                    "primitive": primitive,
+                    "arm_label": arm,
+                    "case_id": task,
+                    "planned_repetitions": len(repetitions),
+                    "observed_repetitions": len(members),
+                    "trials": len(counted) if task in complete else None,
+                    "successes": sum(row["strict_success"] is True for row in counted)
+                    if task in complete
+                    else None,
+                    "complete": task in complete,
+                    "contract": {
+                        name: sorted({row.get(name) for row in members}, key=str)
+                        for name in RELIABILITY_CONTRACT_FIELDS
+                    },
+                    "repetitions": [_pointer(row) for row in members],
+                }
+            )
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows_text = "".join(
+        json.dumps(row, ensure_ascii=False, sort_keys=True, allow_nan=False) + "\n" for row in table
+    )
+    rows_sha256 = _write_exclusive(out_dir / RELIABILITY_ROWS, rows_text)
+    summary = {
+        "schema": RELIABILITY_SCHEMA,
+        "generator": "scripts/eval/handoff_tables.py reliability",
+        "unit": unit,
+        "primitive": primitive,
+        "ns": list(ns),
+        "definition": {
+            "pass_at_n": "mean_i[1 - C(N_i - c_i, n) / C(N_i, n)]",
+            "pass_hat_n": "mean_i[C(c_i, n) / C(N_i, n)]",
+            "weights": "equal per planned task; never a pooled success rate",
+            "success": "e2e_trials strict_success of a full trial after the frozen reset",
+            "unknown": "invalid, unobserved or evidence-incomplete cells; never 0 or 1",
+            "authority": "06-reliability-lens §3-§6; 05 preregistration v1 §3.5",
+        },
+        "contract_fields": list(RELIABILITY_CONTRACT_FIELDS),
+        "arm_contract_fields": list(RELIABILITY_ARM_FIELDS),
+        "run_spec_sha256s": sorted(
+            {str(phase.sources.sha("run-spec.json")) for phase in inputs.phases}
+        ),
+        "phases": [
+            {
+                "run_id": phase.keys["run_id"],
+                "phase": phase.phase,
+                "source_revision": phase.keys["source_revision"],
+                "run_spec_sha256": phase.sources.sha("run-spec.json"),
+                "attempts_sha256": phase.sources.sha("attempts.jsonl"),
+                "freeze_sha256": phase.sources.sha("freeze.json"),
+            }
+            for phase in inputs.phases
+        ],
+        "rows": {"path": RELIABILITY_ROWS, "sha256": rows_sha256},
+        "arms": arms,
+    }
+    _write_exclusive(
+        out_dir / RELIABILITY_SUMMARY,
+        json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False) + "\n",
+    )
+    return summary
+
+
+def reliability_metric_rows(
+    summary: Mapping[str, Any],
+    *,
+    source_ref: str = f"tables/{RELIABILITY_SUMMARY}",
+    arm_names: Mapping[str, str] = DEFAULT_ARM_NAMES,
+    metrics: Sequence[tuple[str, int]] = (("pass_at", 1), ("pass_at", 2), ("pass_hat", 2)),
+) -> list[dict[str, Any]]:
+    """Auxiliary ``analysis.json`` metric rows bound to the summary by JSON pointers.
+
+    The analysis schema is unchanged: value is the task mean, numerator the sum of
+    per-task ratios and denominator the complete task count. A not-measurable value
+    carries null numerator, denominator and locator. The primary metric and the
+    decision are never touched.
+    """
+    rows: list[dict[str, Any]] = []
+    for arm in sorted(summary["arms"]):
+        letter = arm_names.get(arm, arm)
+        for kind, n in metrics:
+            if kind not in ("pass_at", "pass_hat"):
+                raise ValueError("reliability metrics are pass_at or pass_hat")
+            entry = summary["arms"][arm]["n"].get(str(n))
+            if entry is None:
+                raise ValueError(f"the reliability summary has no n={n}")
+            value = entry[f"{kind}_n"]
+            measured = value["value"] != NOT_MEASURABLE
+            base = f"/arms/{arm}/n/{n}/{kind}_n"
+            rows.append(
+                {
+                    "name": f"{summary['unit']}_{kind}_{n}_arm_{letter}",
+                    "value": value["value"],
+                    "numerator": value["numerator"] if measured else None,
+                    "denominator": value["denominator"] if measured else None,
+                    "unit": "ratio",
+                    "source_ref": source_ref,
+                    "source_locator": {
+                        "value": f"{base}/value",
+                        "numerator": f"{base}/numerator",
+                        "denominator": f"{base}/denominator",
+                    }
+                    if measured
+                    else None,
+                }
+            )
+    return rows
+
+
+def _attach_reliability(
+    rows: list[dict[str, Any]], path: Path, digests: Mapping[str, str | None]
+) -> dict[str, Any]:
+    raw = path.read_bytes()
+    summary = _strict_json_loads(raw.decode("utf-8"), label=path.name)
+    if not isinstance(summary, dict) or summary.get("schema") != RELIABILITY_SCHEMA:
+        raise ValueError("reliability summary has an unknown schema")
+    if digests["run_spec_sha256"] not in summary["run_spec_sha256s"]:
+        raise ValueError("this phase is not part of the reliability summary's frozen set")
+    sha256 = hashlib.sha256(raw).hexdigest()
+    for row in rows:
+        entry = summary["arms"].get(row["arm_label"]) if row["arm_label"] != "all" else None
+        row["reliability_unit"] = summary["unit"] if entry else None
+        for n in summary["ns"]:
+            report = entry["n"][str(n)] if entry else None
+            for kind in ("pass_at", "pass_hat"):
+                row[f"reliability_{kind}_{n}"] = report[f"{kind}_n"]["value"] if report else None
+            row[f"reliability_complete_tasks_n{n}"] = report["complete_tasks"] if report else None
+        row["reliability_summary_sha256"] = sha256 if entry else None
+    return {"path": path.name, "sha256": sha256, "run_spec_sha256s": summary["run_spec_sha256s"]}
+
+
 def _labels(values: Sequence[str]) -> dict[str, str]:
     labels = {}
     for value in values:
@@ -1054,7 +1442,54 @@ def _labels(values: Sequence[str]) -> dict[str, str]:
     return labels
 
 
+def _reliability_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="handoff_tables.py reliability",
+        description="pass@n / pass^n over one frozen repetition set (05 v1 §3.5, 06 §6)",
+    )
+    parser.add_argument("phase_dirs", type=Path, nargs="+")
+    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--unit", required=True, help="preregistered unit label, e.g. u7")
+    parser.add_argument(
+        "--primitive", required=True, choices=("choice", "noul", "score", "verdict")
+    )
+    parser.add_argument("--n", type=int, action="append", dest="ns", required=True)
+    parser.add_argument("--arm-label", action="append", default=[])
+    args = parser.parse_args(argv)
+    try:
+        summary = export_reliability(
+            args.phase_dirs,
+            args.out,
+            primitive=args.primitive,
+            unit=args.unit,
+            ns=args.ns,
+            arm_labels=_labels(args.arm_label),
+        )
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        print(
+            json.dumps({"exported": False, "error_type": type(error).__name__, "error": str(error)})
+        )
+        return 1
+    print(
+        json.dumps(
+            {
+                "exported": True,
+                "unit": summary["unit"],
+                "status": {
+                    arm: {n: entry["status"] for n, entry in value["n"].items()}
+                    for arm, value in summary["arms"].items()
+                },
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments[:1] == ["reliability"]:
+        return _reliability_main(arguments[1:])
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("phase_dir", type=Path)
     parser.add_argument("--out", type=Path, required=True)
@@ -1066,7 +1501,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--independent-units", type=int)
     parser.add_argument("--billing-export", type=Path)
     parser.add_argument("--billing-source")
-    args = parser.parse_args(argv)
+    parser.add_argument(
+        "--reliability", type=Path, help="reliability_summary.json of this phase's frozen set"
+    )
+    args = parser.parse_args(arguments)
     try:
         manifest = export_tables(
             args.phase_dir,
@@ -1077,6 +1515,7 @@ def main(argv: list[str] | None = None) -> int:
             independent_units=args.independent_units,
             billing_export=args.billing_export,
             billing_source=args.billing_source,
+            reliability=args.reliability,
         )
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(

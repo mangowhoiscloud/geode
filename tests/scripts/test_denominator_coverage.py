@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from scripts.eval import contract, denominator_coverage
@@ -127,3 +128,33 @@ def test_cli_reports_without_private_payloads(
     )
     assert code == 1
     assert json.loads(capsys.readouterr().out)["covered"] is False
+
+
+def test_repetition_gate_enumerates_every_rejection(tmp_path: Path) -> None:
+    def phase(rep: int, tag: str, **kwargs: Any) -> Path:
+        return build_phase(
+            tmp_path / f"{tag}-{rep}",
+            repetition=rep,
+            run_id=f"geode-jev-verdict-e2e-{tag}-r{rep}-fixture",
+            **kwargs,
+        )["phase_dir"]
+
+    complete = [phase(0, "ok", mode="complete"), phase(1, "ok", mode="complete")]
+    report = denominator_coverage.check_repetition_matrix(complete, n=2, primitive="noul")
+    assert report["covered"] is True
+    assert report["arms"]["jev"]["expected_repetitions"] == 4
+    unknown = [phase(0, "unk"), phase(1, "unk", mode="complete")]
+    report = denominator_coverage.check_repetition_matrix(unknown, n=2, primitive="noul")
+    assert report["covered"] is False
+    assert report["arms"]["jev"]["reasons"] == ["unknown_outcome"]
+    assert report["arms"]["llm"]["covered"] is True
+    mismatch = [
+        phase(0, "mm", mode="complete"),
+        phase(
+            1, "mm", mode="complete", cell_overrides={("inbox-b", "b"): {"task_checksum": "0" * 64}}
+        ),
+    ]
+    report = denominator_coverage.check_repetition_matrix(mismatch, n=1, primitive="noul")
+    assert report["arms"]["jev"]["reasons"] == ["contract_mismatch"]
+    short = denominator_coverage.check_repetition_matrix(complete[:1], n=2, primitive="noul")
+    assert short["arms"]["llm"]["reasons"] == ["insufficient_repetitions"]

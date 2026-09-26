@@ -9,11 +9,13 @@ is not measurable on the supplied items, never zero.
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import random
 import statistics
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import StrEnum
 from fractions import Fraction
 from typing import Any
 
@@ -849,3 +851,430 @@ def noul_panel_report(
         },
         "decision": _decide(delta, NON_INFERIORITY_MARGIN),
     }
+
+
+# ---------------------------------------------------------------------------
+# U2s stability: identical-question pairs apart from order/paraphrase flips
+# ---------------------------------------------------------------------------
+
+STABILITY_BASE = "rep1"
+STABILITY_REPEAT = "rep2"
+STABILITY_VARIANTS = ("order-rev", "para")
+
+
+def stability_summary(items: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """U2s auxiliary report: pair consistency of the identical question, flips per variant.
+
+    Each item maps ``rep1``, ``rep2``, ``order-rev`` and ``para`` to one planned
+    decision (``None`` = invalid output) and may carry ``gold`` once unsealed.
+
+    - ``pair_consistency``: rep1 and rep2 are both valid and equal (06 §5);
+    - ``pair_correct_consistency``: both repeats equal gold, over items with gold;
+    - ``flip_rate``: per variant, the variant decision differs from rep1 (05 §3.2).
+
+    The same question asked twice is the only repetition here. The order-reversed
+    and paraphrased questions are variants of a different question set: they are
+    never pooled with the repeats, and no pass^4 over four variants is produced.
+    """
+    keys = (STABILITY_BASE, STABILITY_REPEAT, *STABILITY_VARIANTS)
+    if any(not all(key in item for key in keys) for item in items):
+        raise ValueError("every stability item needs rep1, rep2, order-rev and para")
+    consistent = sum(
+        item[STABILITY_BASE] is not None and item[STABILITY_BASE] == item[STABILITY_REPEAT]
+        for item in items
+    )
+    graded = [item for item in items if item.get("gold") is not None]
+    both_correct = sum(
+        item[STABILITY_BASE] == item["gold"] and item[STABILITY_REPEAT] == item["gold"]
+        for item in graded
+    )
+    return {
+        "items": len(items),
+        "pair_consistency": Ratio(consistent, len(items)).as_dict(),
+        "pair_correct_consistency": Ratio(both_correct, len(graded)).as_dict() if graded else None,
+        "flip_rate": {
+            variant: flip_rate([(item[STABILITY_BASE], item[variant]) for item in items]).as_dict()
+            for variant in STABILITY_VARIANTS
+        },
+        "not_reported": "variants are not independent repetitions; no pass^n over them",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Repetition reliability: pass@n and pass^n (05 v1 §3.5, 06 §3-§7)
+# ---------------------------------------------------------------------------
+
+# Every counted repetition of one task must share these digests; the arm-scoped
+# subset must also agree across the arm's tasks (06 §3, §6).
+REPETITION_CONTRACT_FIELDS = (
+    "source_revision",
+    "policy_digest",
+    "reset_digest",
+    "input_sha256",
+    "verifier_sha256",
+)
+ARM_CONTRACT_FIELDS = ("source_revision", "policy_digest", "reset_digest")
+RESET_BOUNDARY_KEYS = ("session", "files", "cache")
+INDEPENDENT_KIND = "trial"
+REPLACEMENT_KIND = "replacement"
+# Rows that live inside one trial or one selection step; never a repetition.
+NON_REPETITION_KINDS = frozenset({"repair_round", "question_variant", "candidate"})
+
+
+class RepetitionRejection(StrEnum):
+    """Why a planned repetition aggregate is not measurable (06 §6-§7)."""
+
+    INSUFFICIENT_REPETITIONS = "insufficient_repetitions"
+    DUPLICATE_REPETITION = "duplicate_repetition"
+    UNPLANNED_REPETITION = "unplanned_repetition"
+    INCOMPLETE_MATRIX = "incomplete_matrix"
+    CONTRACT_MISMATCH = "contract_mismatch"
+    UNKNOWN_OUTCOME = "unknown_outcome"
+
+
+def _canonical_digest(value: Mapping[str, Any]) -> str:
+    encoded = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+    )
+    return hashlib.sha256(encoded.encode()).hexdigest()
+
+
+def reset_digest(boundary: Mapping[str, Any]) -> str:
+    """SHA-256 of one cell's frozen reset boundary (runner-owned ``freeze.json``).
+
+    ``boundary`` states how a fresh trial resets its session store, files and caches,
+    so no earlier answer or Reflection memory reaches a later repetition (06 §3).
+    """
+    if set(boundary) != set(RESET_BOUNDARY_KEYS) or any(
+        boundary[key] in (None, "", {}, []) for key in RESET_BOUNDARY_KEYS
+    ):
+        raise ValueError("a reset boundary must state session, files and cache")
+    return _canonical_digest(boundary)
+
+
+def policy_digest(policy: Mapping[str, Any]) -> str:
+    """SHA-256 of one cell's frozen policy: model route, effort, prompts, tools,
+    verifier, budget and repair limits. Repetitions combine only when it is equal."""
+    if not policy or any(value in (None, "") for value in policy.values()):
+        raise ValueError("a frozen policy must name every setting")
+    return _canonical_digest(policy)
+
+
+def _task_counts(counts: Sequence[tuple[int, int]], n: int) -> None:
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise ValueError("n must be a positive integer")
+    if not counts:
+        raise ValueError("pass@n and pass^n need at least one task")
+    for trials, successes in counts:
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) for value in (trials, successes)
+        ):
+            raise ValueError("task counts must be integers (N_i, c_i)")
+        if not 0 <= successes <= trials:
+            raise ValueError("a task's successes must lie in 0..N_i")
+        if trials < n:
+            raise ValueError(f"a task has N_i={trials} < n={n}; the aggregate is not measurable")
+
+
+def _mean_of_task_ratios(ratios: Sequence[Fraction]) -> Ratio:
+    total = sum(ratios, Fraction(0))
+    return Ratio(float(total), len(ratios))
+
+
+def pass_at_n(counts: Sequence[tuple[int, int]], n: int) -> Ratio:
+    """Equal-weight mean over tasks of 1 − C(N_i − c_i, n) / C(N_i, n).
+
+    ``counts`` holds each task's independent strict-success tally ``(N_i, c_i)``.
+    The per-task combinatorial ratio is computed first; a pooled success rate is
+    never substituted into 1 − (1 − p)^n.
+    """
+    _task_counts(counts, n)
+    return _mean_of_task_ratios(
+        [
+            1 - Fraction(math.comb(trials - successes, n), math.comb(trials, n))
+            for trials, successes in counts
+        ]
+    )
+
+
+def pass_hat_n(counts: Sequence[tuple[int, int]], n: int) -> Ratio:
+    """Equal-weight mean over tasks of C(c_i, n) / C(N_i, n) (τ-bench pass^n)."""
+    _task_counts(counts, n)
+    return _mean_of_task_ratios(
+        [Fraction(math.comb(successes, n), math.comb(trials, n)) for trials, successes in counts]
+    )
+
+
+@dataclass(frozen=True)
+class RepetitionTrial:
+    """One observed row offered to one arm's repetition aggregate.
+
+    ``kind`` is ``trial`` for a full trial after the frozen reset, ``replacement`` for
+    an approved replacement of such a trial (it replaces ``replaces`` in the same
+    slot and never adds a repetition), or a within-trial / within-selection row
+    (``repair_round``, ``question_variant``, ``candidate``) that is never counted.
+    ``strict_success`` is ``None`` when the outcome is unknown: infrastructure
+    invalid, not executed or evidence missing. A judged failure is ``False``.
+    """
+
+    task_id: str
+    repetition: int
+    strict_success: bool | None
+    contract: Mapping[str, Any] = field(default_factory=dict)
+    kind: str = INDEPENDENT_KIND
+    trial_id: str | None = None
+    replaces: str | None = None
+    source: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class RepetitionMatrix:
+    """Validated planned matrix for one arm; ``rejections`` empty means measurable at ``n``."""
+
+    n: int
+    planned_tasks: tuple[str, ...]
+    planned_repetitions: tuple[int, ...]
+    counted: Mapping[str, tuple[RepetitionTrial, ...]]
+    rejections: tuple[tuple[RepetitionRejection, str], ...]
+    complete_tasks: tuple[str, ...]
+    excluded: tuple[RepetitionTrial, ...]
+    superseded: tuple[RepetitionTrial, ...]
+    observed_repetitions: int
+    valid_repetitions: int
+
+    @property
+    def expected_repetitions(self) -> int:
+        return len(self.planned_tasks) * len(self.planned_repetitions)
+
+    @property
+    def incomplete_tasks(self) -> tuple[str, ...]:
+        complete = set(self.complete_tasks)
+        return tuple(task for task in self.planned_tasks if task not in complete)
+
+    @property
+    def reasons(self) -> tuple[RepetitionRejection, ...]:
+        return tuple(dict.fromkeys(reason for reason, _ in self.rejections))
+
+    def counts(self) -> list[tuple[int, int]]:
+        """(N_i, c_i) per planned task in plan order; valid only without rejections."""
+        return [
+            (
+                len(self.counted[task]),
+                sum(row.strict_success is True for row in self.counted[task]),
+            )
+            for task in self.planned_tasks
+        ]
+
+
+def _slot_rows(
+    rows: Sequence[RepetitionTrial],
+    reject: Callable[[RepetitionRejection, str], None],
+) -> tuple[RepetitionTrial | None, list[RepetitionTrial]]:
+    """Resolve one planned slot to its counted row; replacements stand in for originals."""
+    originals = [row for row in rows if row.kind == INDEPENDENT_KIND]
+    replacements = [row for row in rows if row.kind == REPLACEMENT_KIND]
+    if len(originals) > 1:
+        reject(RepetitionRejection.DUPLICATE_REPETITION, "a planned slot has two trials")
+        return None, []
+    if not originals:
+        if replacements:
+            reject(
+                RepetitionRejection.INCOMPLETE_MATRIX,
+                "a replacement has no preserved original trial in its slot",
+            )
+        return None, []
+    original = originals[0]
+    if not replacements:
+        return original, []
+    if len(replacements) > 1:
+        reject(RepetitionRejection.DUPLICATE_REPETITION, "a trial has two replacements")
+        return None, []
+    replacement = replacements[0]
+    if original.trial_id is None or replacement.replaces != original.trial_id:
+        reject(
+            RepetitionRejection.INCOMPLETE_MATRIX,
+            "a replacement does not name the trial it replaces",
+        )
+        return None, []
+    return replacement, [original]
+
+
+def validate_repetition_matrix(
+    trials: Sequence[RepetitionTrial],
+    *,
+    planned_tasks: Sequence[str],
+    planned_repetitions: Sequence[int],
+    n: int,
+    contract_fields: Sequence[str] = REPETITION_CONTRACT_FIELDS,
+    arm_contract_fields: Sequence[str] = ARM_CONTRACT_FIELDS,
+) -> RepetitionMatrix:
+    """Check one arm's frozen task × repetition plan before any pass@n or pass^n.
+
+    Rejections (enumerated, never silently dropped): N_i < n, a duplicate or
+    unplanned repetition, a missing planned slot, a contract digest that differs or
+    is missing, and an unknown outcome. Repair rounds, question variants and
+    candidates are excluded from N; an approved replacement takes its original's
+    slot, which stays preserved in ``superseded``.
+    """
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise ValueError("n must be a positive integer")
+    tasks = tuple(planned_tasks)
+    repetitions = tuple(planned_repetitions)
+    if not tasks or not repetitions:
+        raise ValueError("a repetition plan needs tasks and repetitions")
+    if len(set(tasks)) != len(tasks) or len(set(repetitions)) != len(repetitions):
+        raise ValueError("planned tasks and repetitions must be unique")
+    if not set(arm_contract_fields) <= set(contract_fields):
+        raise ValueError("arm-scoped contract fields must be contract fields")
+    rejections: list[tuple[RepetitionRejection, str]] = []
+
+    def reject(reason: RepetitionRejection, detail: str) -> None:
+        rejections.append((reason, detail))
+
+    excluded: list[RepetitionTrial] = []
+    slots: dict[tuple[str, int], list[RepetitionTrial]] = {}
+    known_kinds = {INDEPENDENT_KIND, REPLACEMENT_KIND, *NON_REPETITION_KINDS}
+    for row in trials:
+        if row.kind not in known_kinds:
+            raise ValueError(f"unknown repetition row kind {row.kind!r}")
+        if row.kind in NON_REPETITION_KINDS:
+            excluded.append(row)
+            continue
+        if row.task_id not in tasks or row.repetition not in repetitions:
+            reject(
+                RepetitionRejection.UNPLANNED_REPETITION,
+                f"{row.task_id} repetition {row.repetition} is outside the frozen plan",
+            )
+            continue
+        slots.setdefault((row.task_id, row.repetition), []).append(row)
+    counted: dict[str, tuple[RepetitionTrial, ...]] = {}
+    superseded: list[RepetitionTrial] = []
+    complete: list[str] = []
+    observed = valid = 0
+    arm_values: dict[str, set[Any]] = {name: set() for name in arm_contract_fields}
+    for task in tasks:
+        rows: list[RepetitionTrial] = []
+        task_ok = True
+        for repetition in repetitions:
+            chosen, replaced = _slot_rows(slots.get((task, repetition), []), reject)
+            superseded.extend(replaced)
+            if chosen is None:
+                task_ok = False
+                if not slots.get((task, repetition)):
+                    reject(
+                        RepetitionRejection.INCOMPLETE_MATRIX,
+                        f"{task} repetition {repetition} was not observed",
+                    )
+                continue
+            observed += 1
+            if chosen.strict_success is None:
+                task_ok = False
+                reject(
+                    RepetitionRejection.UNKNOWN_OUTCOME,
+                    f"{task} repetition {repetition} has an unknown outcome",
+                )
+                continue
+            valid += 1
+            rows.append(chosen)
+        for name in contract_fields:
+            values = {row.contract.get(name) for row in rows}
+            if None in values or "" in values:
+                task_ok = False
+                reject(RepetitionRejection.CONTRACT_MISMATCH, f"{task} lacks {name}")
+            elif len(values) > 1:
+                task_ok = False
+                reject(
+                    RepetitionRejection.CONTRACT_MISMATCH, f"{task} repetitions differ in {name}"
+                )
+            elif name in arm_values:
+                arm_values[name] |= values
+        counted[task] = tuple(rows)
+        if task_ok:
+            complete.append(task)
+    for name, values in arm_values.items():
+        if len(values) > 1:
+            reject(RepetitionRejection.CONTRACT_MISMATCH, f"arm tasks differ in {name}")
+    if len(complete) == len(tasks):
+        short = [task for task in tasks if len(counted[task]) < n]
+        if short:
+            reject(
+                RepetitionRejection.INSUFFICIENT_REPETITIONS,
+                f"{len(short)} task(s) have N_i < n={n}",
+            )
+    return RepetitionMatrix(
+        n=n,
+        planned_tasks=tasks,
+        planned_repetitions=repetitions,
+        counted=counted,
+        rejections=tuple(rejections),
+        complete_tasks=tuple(complete),
+        excluded=tuple(excluded),
+        superseded=tuple(superseded),
+        observed_repetitions=observed,
+        valid_repetitions=valid,
+    )
+
+
+def _reliability_value(matrix: RepetitionMatrix, estimator: Callable[..., Ratio]) -> dict[str, Any]:
+    if matrix.rejections:
+        return {"value": NOT_MEASURABLE, "numerator": None, "denominator": None}
+    return estimator(matrix.counts(), matrix.n).as_dict()
+
+
+def repetition_reliability(
+    trials: Sequence[RepetitionTrial],
+    *,
+    planned_tasks: Sequence[str],
+    planned_repetitions: Sequence[int],
+    ns: Sequence[int] = (1, 2),
+    contract_fields: Sequence[str] = REPETITION_CONTRACT_FIELDS,
+    arm_contract_fields: Sequence[str] = ARM_CONTRACT_FIELDS,
+) -> dict[str, Any]:
+    """pass@n and pass^n for one arm with the provenance fields of 06 §6.
+
+    An incomplete or inconsistent planned matrix makes every n not-measurable with
+    enumerated reasons; N_i < n makes that n not-measurable ("반복 부족"). Values are
+    equal-weight task means, ``numerator`` is the sum of per-task ratios and
+    ``denominator`` the complete task count. Judged failures stay in the denominator.
+    """
+    if not ns or len(set(ns)) != len(ns):
+        raise ValueError("ns must list distinct positive integers")
+    report: dict[str, Any] = {}
+    for n in ns:
+        matrix = validate_repetition_matrix(
+            trials,
+            planned_tasks=planned_tasks,
+            planned_repetitions=planned_repetitions,
+            n=n,
+            contract_fields=contract_fields,
+            arm_contract_fields=arm_contract_fields,
+        )
+        measured = not matrix.rejections
+        report[str(n)] = {
+            "n": n,
+            "status": "measured" if measured else NOT_MEASURABLE,
+            "reasons": [reason.value for reason in matrix.reasons],
+            "rejections": [
+                {"reason": reason.value, "detail": detail} for reason, detail in matrix.rejections
+            ],
+            "pass_at_n": _reliability_value(matrix, pass_at_n),
+            "pass_hat_n": _reliability_value(matrix, pass_hat_n),
+            "planned_tasks": len(matrix.planned_tasks),
+            "complete_tasks": len(matrix.complete_tasks),
+            "incomplete_tasks": len(matrix.incomplete_tasks),
+            "expected_repetitions": matrix.expected_repetitions,
+            "observed_repetitions": matrix.observed_repetitions,
+            "valid_repetitions": matrix.valid_repetitions,
+            "excluded_non_repetition_rows": len(matrix.excluded),
+            "superseded_by_replacement": len(matrix.superseded),
+            "per_task": [
+                {
+                    "task_id": task,
+                    "trials": len(matrix.counted[task]),
+                    "successes": sum(row.strict_success is True for row in matrix.counted[task]),
+                    "complete": task in matrix.complete_tasks,
+                }
+                for task in matrix.planned_tasks
+            ],
+        }
+    return report

@@ -67,6 +67,26 @@ CELLS: list[dict[str, Any]] = [
     },
 ]
 INVALID_TRIAL = "fixture-natural-r0-inbox-b-b"
+INVALID_CELL = ("inbox-b", "b")
+
+
+def _hex(label: str) -> str:
+    return hashlib.sha256(label.encode()).hexdigest()
+
+
+# Frozen repetition contract per arm and case, as a runner writes it into freeze.json.
+POLICY_DIGESTS = {"a": _hex("policy:arm-a"), "b": _hex("policy:arm-b")}
+RESET_DIGEST = _hex("reset:fresh-container-session-cache")
+
+
+def contract_fields(case_id: str, arm: str) -> dict[str, str]:
+    return {
+        "policy_digest": POLICY_DIGESTS[arm],
+        "reset_digest": RESET_DIGEST,
+        "case_sha256": _hex(f"payload:{case_id}"),
+        "task_checksum": _hex(f"task:{case_id}"),
+        "verifier_sha256": _hex(f"verifier:{case_id}"),
+    }
 
 
 def write_json(path: Path, value: Any) -> dict[str, str]:
@@ -109,6 +129,7 @@ def _trial(
     started: datetime,
     judge_provider: str,
     judge_duration_ms: float,
+    passed: bool = True,
 ) -> None:
     trial = phase_dir / "trials" / cell["trial_name"]
     agent = trial / "agent"
@@ -190,7 +211,7 @@ def _trial(
         else dict(truth)
     )
     oracle = {
-        "passed": True,
+        "passed": passed,
         "extra_lookup_count": 0,
         "wrong_target_lookup_count": 0,
         "false_completion_count": 0,
@@ -224,7 +245,7 @@ def _trial(
         "verification_engine": engine,
         "verification_primitive": "noul",
         "valid": True,
-        "passed": True,
+        "passed": passed,
         "error_type": None,
         "elapsed_seconds": 12.5 + cell["index"],
         "termination_reason": "end_turn",
@@ -323,7 +344,7 @@ def _trial(
             "task_name": cell["case_id"],
             "started_at": _iso(started),
             "finished_at": _iso(started + timedelta(seconds=60)),
-            "verifier_result": {"rewards": {"reward": 1.0}},
+            "verifier_result": {"rewards": {"reward": 1.0 if passed else 0.0}},
             "exception_info": None,
         },
     )
@@ -331,7 +352,7 @@ def _trial(
         trial / "verifier" / "verifier-receipt.json",
         {
             "valid": True,
-            "passed": True,
+            "passed": passed,
             "oracle": oracle,
             "native_verify": native_verify,
             "error_type": None,
@@ -342,10 +363,10 @@ def _trial(
         {
             **cell,
             "valid": True,
-            "passed": True,
+            "passed": passed,
             "error_type": None,
             "host_elapsed_seconds": 55.0 + cell["index"],
-            "native_reward": {"reward": 1.0},
+            "native_reward": {"reward": 1.0 if passed else 0.0},
             "semantic_metrics": {
                 "judgment_attempts": 1,
                 "replan_requests": 0,
@@ -404,6 +425,10 @@ def build_phase(
     *,
     mode: str = "incomplete",
     jev_judge_provider: str = "typesafe",
+    repetition: int = 0,
+    run_id: str = RUN_ID,
+    failing: frozenset[tuple[str, str]] = frozenset(),
+    cell_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Write one closed phase.
 
@@ -411,6 +436,10 @@ def build_phase(
     ``complete`` makes all four cells valid with a measured primary.
     ``deselected`` is adversarial: the invalid cell is left unselected while the
     analysis still reports a measured primary against the frozen denominator.
+
+    ``repetition`` names this phase's repeat (one run spec per repeat, 05 §2.2),
+    ``failing`` lists ``(case_id, arm)`` cells whose task oracle fails, and
+    ``cell_overrides`` edits frozen cell fields such as the repetition contract.
     """
     if mode not in {"incomplete", "complete", "deselected"}:
         raise ValueError("unknown fixture mode")
@@ -418,7 +447,7 @@ def build_phase(
     phase_dir.mkdir(parents=True)
     spec = _run_spec()
     workload = ["inbox-a", "inbox-b"]
-    spec["run_id"] = RUN_ID
+    spec["run_id"] = run_id
     spec["created_at"] = _iso(FROZEN_AT)
     spec["preregistration"].update(frozen_at=_iso(FROZEN_AT), live_test_approved=True)
     spec["study"]["primary_metric"] = {
@@ -433,7 +462,7 @@ def build_phase(
         ordered_workload_ids=workload,
         workload_ids_sha256=_workload_hash(workload),
         repetitions=1,
-        seed_schedule=["unseeded-provider-inference-repeat-0"],
+        seed_schedule=[f"unseeded-provider-inference-repeat-{repetition}"],
     )
     spec["artifacts"] = {
         "native_results": "results.json",
@@ -445,6 +474,14 @@ def build_phase(
     }
     write_json(phase_dir / "run-spec.json", spec)
     cells = copy.deepcopy(CELLS)
+    for cell in cells:
+        key = (cell["case_id"], cell["arm"])
+        cell.update(
+            repetition=repetition,
+            trial_name=cell["trial_name"].replace("-r0-", f"-r{repetition}-"),
+            **contract_fields(*key),
+        )
+        cell.update((cell_overrides or {}).get(key, {}))
     write_json(
         phase_dir / "freeze.json",
         {"phase": "natural", "source_revision": REVISION, "cells": cells},
@@ -452,7 +489,9 @@ def build_phase(
     attempts = []
     for cell in cells:
         started = FROZEN_AT + timedelta(minutes=5 + 2 * cell["index"])
-        invalid = mode != "complete" and cell["trial_name"] == INVALID_TRIAL
+        key = (cell["case_id"], cell["arm"])
+        invalid = mode != "complete" and key == INVALID_CELL
+        passed = key not in failing
         if invalid:
             _invalid_trial(phase_dir, cell, started=started)
         else:
@@ -467,6 +506,7 @@ def build_phase(
                 started=started,
                 judge_provider=judge_provider,
                 judge_duration_ms=duration,
+                passed=passed,
             )
         trial = phase_dir / "trials" / cell["trial_name"]
         refs = [
@@ -481,8 +521,8 @@ def build_phase(
             {
                 "schema_id": "geode.eval-attempt@1",
                 "schema_version": 1,
-                "run_id": RUN_ID,
-                "attempt_id": f"{RUN_ID}-a{cell['index']:04}",
+                "run_id": run_id,
+                "attempt_id": f"{run_id}-a{cell['index']:04}",
                 "parent_attempt_id": None,
                 "sequence": cell["index"],
                 "timing": {
@@ -492,10 +532,12 @@ def build_phase(
                     "source_ref": None,
                 },
                 "validity": "invalid" if invalid else "valid",
-                "outcome": "unknown" if invalid else "passed",
+                "outcome": "unknown" if invalid else "passed" if passed else "failed",
                 "change": {
                     "surface": "natural",
-                    "description": f"{cell['case_id']}, arm {cell['arm']}, repeat 0; no retry",
+                    "description": (
+                        f"{cell['case_id']}, arm {cell['arm']}, repeat {repetition}; no retry"
+                    ),
                 },
                 "expected_effect": "Fixture effect.",
                 "observed_result": "Fixture observation.",
@@ -516,7 +558,7 @@ def build_phase(
         phase_dir / "results.json",
         {"phase": "natural", "complete": complete, "primary": primary, "actual_charge_usd": None},
     )
-    aggregate_id = f"{RUN_ID}-aggregate"
+    aggregate_id = f"{run_id}-aggregate"
     aggregate_ref = {"kind": "native-result", **results_ref}
     finished = FROZEN_AT + timedelta(minutes=30)
     attempts.append(
@@ -549,7 +591,7 @@ def build_phase(
         {
             "schema_id": "geode.eval-analysis@1",
             "schema_version": 1,
-            "run_id": RUN_ID,
+            "run_id": run_id,
             "analyzed_at": _iso(finished + timedelta(minutes=1)),
             "run_spec_sha256": _sha(phase_dir / "run-spec.json"),
             "attempts_sha256": _sha(attempts_path),

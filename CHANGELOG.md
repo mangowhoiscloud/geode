@@ -123,6 +123,16 @@ functional change.
   selected success and gap closed (not-measurable at a zero denominator), never
   an IID pass@k label. Jev Score admission takes explicit, recorded sum and
   expectation tolerances, and selection cost keeps unknown usage null.
+- Add auxiliary repetition reliability to the judgment metrics: per-task
+  combinatorial pass@n and pass^n with equal task weights, never a pooled rate.
+  A frozen task × repetition plan is rejected with enumerated reasons (N_i < n,
+  duplicate or unplanned repetitions, missing slots, contract mismatch across
+  source revision, policy, reset, input, task and verifier digests, unknown
+  outcomes). Repair rounds, question variants and candidates are not
+  repetitions, and replacements keep their slot. The handoff table exporter
+  writes task × arm rows and an arm × n summary with provenance for auxiliary
+  analysis metrics under the unchanged schema, and the coverage check gates
+  the set before aggregation. U2s pair consistency stays separate from flips.
 - Add offline Harbor handoff evidence tools for audit and publication. Derived
   call, trial, pair and summary tables keep invalid cells, unknown usage and
   null latency, and keep the Astra subscription API-equivalent estimate, Jev
