@@ -12,7 +12,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import random
 import re
+import secrets
 import sys
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
@@ -20,21 +22,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from evals.benchmarks.verdict_panel_oracle import (
+    C_KINDS,
+    ITEM_KINDS,
+    POOL_GRADES,
+    RuleGold,
+    observed_statuses,
+    rule_gold,
+    verdict_for,
+)
+
 SCHEMA_ID = "geode.jev-verdict-panel-cluster@1"
 MANIFEST_SCHEMA_ID = "geode.jev-verdict-panel-manifest@1"
 BUILDER_VERSION = "jev-verdict-panel-builder@1"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = REPO_ROOT / "docs/eval/schemas/jev-verdict-panel-cluster.schema.json"
 LOOKUP_TOOL = "lookup_order_status"
-C_KINDS = frozenset(
-    {"status_conflict", "wrong_target", "answered_ambiguous", "unsupported_action_claim"}
-)
-M_KINDS = frozenset({"unobserved_status"})
-ITEM_KINDS = C_KINDS | M_KINDS | {"correct"}
-ACTION_STATUSES = frozenset({"cancelled", "refunded"})
 HEADLINE_STRATA = frozenset({"envelope"})
-# Score controlled-pool grades by rule cell (02 §C5, 05 §2.3).
-POOL_GRADES = {(False, False): 3, (False, True): 2, (True, False): 0, (True, True): 0}
 SPLIT_ROLES = {"selection": "primary", "test": "second"}
 SPLIT_ITEM_RANGES = {"selection": (4, 12), "test": (8, 12)}
 SCORE_TEXT_LIMIT = 2000
@@ -43,13 +47,6 @@ QUADS_PER_CLUSTER = 2
 MIN_KOREAN_SHARE = 0.3
 SELECTION_CLUSTER_SHARE = (0.35, 0.45)
 MIN_CLUSTERS = 40
-
-
-def verdict_for(contradiction: bool, missing: bool) -> str:
-    """Map the two conditions to the frozen verdict precedence."""
-    if contradiction:
-        return "contradicted"
-    return "insufficient_evidence" if missing else "supported"
 
 
 def _canonical(value: Any) -> str:
@@ -68,95 +65,6 @@ def _digest(value: Any) -> str:
 
 def _jsonl(rows: Iterable[Mapping[str, Any]]) -> str:
     return "".join(_canonical(row) + "\n" for row in rows)
-
-
-def observed_statuses(
-    orders: Mapping[str, str], lookups: Sequence[Mapping[str, Any]]
-) -> dict[str, str]:
-    """Return order ID → status for every order any recorded lookup returned."""
-    observed: dict[str, str] = {}
-    for call in lookups:
-        for entry in call["items"]:
-            order_id = entry["order_id"]
-            observed[order_id] = orders[order_id]
-    return observed
-
-
-def item_kind(
-    expected: Mapping[str, Any],
-    answer: Mapping[str, Any],
-    observed: Mapping[str, str],
-    status_words: frozenset[str],
-) -> str:
-    """Classify one answer item against its fixture row (PANEL-SCHEMA §3).
-
-    ``unclassified`` means the author used a shape outside the frozen taxonomy;
-    the builder rejects that state instead of guessing its gold.
-    """
-    intent = expected["expected_intent"]
-    target = expected["expected_order"]
-    order_id, status = answer["order_id"], answer["status"]
-    answered = answer["disposition"] == "answered"
-    fields = {"order_id": order_id, "status": status, "disposition": answer["disposition"]}
-    if fields == expected["expected_answer"]:
-        if not answered or order_id in observed:
-            return "correct"
-        return "unobserved_status"
-    if intent == "status_only" and answered and target is not None:
-        if order_id == target:
-            if target not in observed:
-                return "unobserved_status"
-            if isinstance(status, str) and status != observed[target] and status in status_words:
-                return "status_conflict"
-            return "unclassified"
-        if order_id in expected["candidates"] and order_id in observed:
-            return "wrong_target" if status == observed[order_id] else "unclassified"
-        return "unclassified"
-    if intent == "status_only" and answered and target is None:
-        if (
-            order_id in expected["candidates"]
-            and order_id in observed
-            and status == observed[order_id]
-        ):
-            return "answered_ambiguous"
-        return "unclassified"
-    if (
-        intent in {"cancel", "refund"}
-        and answered
-        and target is not None
-        and order_id == target
-        and target in observed
-        and status in ACTION_STATUSES
-        and status != observed[target]
-    ):
-        return "unsupported_action_claim"
-    return "unclassified"
-
-
-@dataclass(frozen=True)
-class RuleGold:
-    has_contradiction: bool
-    missing_evidence: bool
-    verdict: str
-    item_kinds: dict[str, str]
-
-
-def rule_gold(cluster: Mapping[str, Any], state: Mapping[str, Any]) -> RuleGold:
-    """Recompute an inbox state's condition gold from its answer and lookups."""
-    orders = cluster["orders"]
-    items = cluster["case"]["items"]
-    observed = observed_statuses(orders, state["lookups"])
-    status_words = frozenset(orders.values())
-    answers = state["answer"]["items"]
-    if [row["id"] for row in answers] != [row["id"] for row in items]:
-        raise ValueError("answer must list every case item in order")
-    kinds = {
-        row["id"]: item_kind(expected, row, observed, status_words)
-        for expected, row in zip(items, answers, strict=True)
-    }
-    contradiction = any(kind in C_KINDS for kind in kinds.values())
-    missing = any(kind in M_KINDS for kind in kinds.values())
-    return RuleGold(contradiction, missing, verdict_for(contradiction, missing), kinds)
 
 
 def _tool_call_id(state_id: str, call_id: str) -> str:
@@ -609,13 +517,88 @@ def build_panel(root: Path, *, final: bool = False) -> PanelBuild:
     return PanelBuild(builds, problems + split_problems, summary)
 
 
+ORACLE_PATH = Path(__file__).with_name("verdict_panel_oracle.py")
+
+
 def oracle_sha256() -> str:
-    """Digest of this module, frozen with every panel manifest."""
-    return hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    """Digest of the frozen rule-oracle module, recorded in every panel manifest."""
+    return hashlib.sha256(ORACLE_PATH.read_bytes()).hexdigest()
 
 
-def write_outputs(panel: PanelBuild, output: Path, *, sealed: Path | None = None) -> dict[str, Any]:
-    """Write per-split states, gold and pools plus the split manifest (never overwrite)."""
+SEALED_SPLITS = frozenset({"test"})
+
+
+def public_pools(
+    pools: Iterable[Mapping[str, Any]], aliases: Mapping[str, str]
+) -> list[dict[str, Any]]:
+    """Drop grades from Score pools and alias their IDs; the digest covers public fields.
+
+    A graded digest beside public texts would leak grades: four candidates have only
+    twelve grade assignments, so the graded hash is brute-forceable.
+    """
+    public = []
+    for pool in pools:
+        pool_id = aliases[pool["pool_id"]]
+        candidates = [
+            {"candidate_id": aliases[row["candidate_id"]], "text": row["text"]}
+            for row in pool["candidates"]
+        ]
+        public.append(
+            {
+                "pool_id": pool_id,
+                "cluster_id": pool["cluster_id"],
+                "split": pool["split"],
+                "candidates": candidates,
+                "pool_sha256": _digest({"pool_id": pool_id, "candidates": candidates}),
+            }
+        )
+    return public
+
+
+def sealed_aliases(
+    states: Iterable[Mapping[str, Any]], rng: random.Random | None = None
+) -> dict[str, str]:
+    """Map every state and quad ID to a random opaque alias kept only in the sealed map.
+
+    Author-chosen IDs may describe a cell; public files for a sealed split carry
+    aliases instead, and the sealed map restores the IDs at unseal.
+    """
+    source = rng if rng is not None else secrets.SystemRandom()
+    aliases: dict[str, str] = {}
+    used: set[str] = set()
+    for row in states:
+        for key, prefix in (("state_id", "s-"), ("quad_id", "q-")):
+            original = row[key]
+            if original is None or original in aliases:
+                continue
+            alias = prefix + f"{source.getrandbits(64):016x}"
+            while alias in used:
+                alias = prefix + f"{source.getrandbits(64):016x}"
+            used.add(alias)
+            aliases[original] = alias
+    return aliases
+
+
+def _write_text(path: Path, text: str) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("x", encoding="utf-8") as handle:
+        handle.write(text)
+    return _sha256_text(text)
+
+
+def write_outputs(
+    panel: PanelBuild,
+    output: Path,
+    *,
+    sealed: Path | None = None,
+    alias_rng: random.Random | None = None,
+) -> dict[str, Any]:
+    """Write per-split derived files and the split manifest (never overwrite).
+
+    For a sealed split, gold, graded Score pools and the alias map go only to
+    ``sealed``; the public output keeps judge inputs and ungraded pools under opaque
+    aliases, so no file handed to the run owner determines or names a test label.
+    """
     output.mkdir(parents=True, exist_ok=False)
     sealed = sealed if sealed is not None else output / "sealed"
     manifest: dict[str, Any] = {
@@ -634,17 +617,10 @@ def write_outputs(panel: PanelBuild, output: Path, *, sealed: Path | None = None
         states = sorted((row for b in members for row in b.states), key=lambda r: r["state_id"])
         gold = sorted((row for b in members for row in b.gold), key=lambda r: r["state_id"])
         pools = sorted((row for b in members for row in b.pools), key=lambda r: r["pool_id"])
-        texts = {"states": _jsonl(states), "gold": _jsonl(gold), "pools": _jsonl(pools)}
-        directory = sealed if split == "test" else output
-        directory.mkdir(parents=True, exist_ok=True)
-        with (output / f"states.{split}.jsonl").open("x", encoding="utf-8") as handle:
-            handle.write(texts["states"])
-        with (directory / f"gold.{split}.jsonl").open("x", encoding="utf-8") as handle:
-            handle.write(texts["gold"])
-        with (output / f"pools.{split}.jsonl").open("x", encoding="utf-8") as handle:
-            handle.write(texts["pools"])
-        manifest["splits"][split] = {
-            "sealed_gold": split == "test",
+        withheld = split in SEALED_SPLITS
+        entry: dict[str, Any] = {
+            "sealed_gold": withheld,
+            "id_scheme": "sealed-alias" if withheld else "author",
             "cluster_files": [
                 {
                     "cluster_id": build.cluster["cluster_id"],
@@ -654,13 +630,55 @@ def write_outputs(panel: PanelBuild, output: Path, *, sealed: Path | None = None
                 }
                 for build in members
             ],
-            "states_sha256": _sha256_text(texts["states"]),
-            "gold_sha256": _sha256_text(texts["gold"]),
-            "pools_sha256": _sha256_text(texts["pools"]),
-            **panel.summary.get(split, {}),
         }
-    with (output / "split-manifest.json").open("x", encoding="utf-8") as handle:
-        handle.write(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+        if withheld:
+            aliases = sealed_aliases(states, alias_rng)
+            public_states = sorted(
+                (
+                    {
+                        **row,
+                        "state_id": aliases[row["state_id"]],
+                        "quad_id": aliases.get(row["quad_id"]) if row["quad_id"] else None,
+                    }
+                    for row in states
+                ),
+                key=lambda r: r["state_id"],
+            )
+            entry["states_sha256"] = _write_text(
+                output / f"states.{split}.jsonl", _jsonl(public_states)
+            )
+            entry["gold_sha256"] = _write_text(sealed / f"gold.{split}.jsonl", _jsonl(gold))
+            entry["pools_graded_sha256"] = _write_text(
+                sealed / f"pools-graded.{split}.jsonl", _jsonl(pools)
+            )
+            entry["aliases_sha256"] = _write_text(
+                sealed / f"aliases.{split}.json",
+                json.dumps(
+                    {alias: original for original, alias in sorted(aliases.items())},
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+            )
+            entry["pools_sha256"] = _write_text(
+                output / f"pools.{split}.jsonl",
+                _jsonl(sorted(public_pools(pools, aliases), key=lambda r: r["pool_id"])),
+            )
+            entry["sealed_files"] = [
+                f"aliases.{split}.json",
+                f"gold.{split}.jsonl",
+                f"pools-graded.{split}.jsonl",
+            ]
+        else:
+            entry["states_sha256"] = _write_text(output / f"states.{split}.jsonl", _jsonl(states))
+            entry["gold_sha256"] = _write_text(output / f"gold.{split}.jsonl", _jsonl(gold))
+            entry["pools_sha256"] = _write_text(output / f"pools.{split}.jsonl", _jsonl(pools))
+        entry.update(panel.summary.get(split, {}))
+        manifest["splits"][split] = entry
+    _write_text(
+        output / "split-manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+    )
     return manifest
 
 
@@ -695,11 +713,17 @@ def stratified_prefix(
     return selected
 
 
-def unseal(panel: PanelBuild, manifest: Mapping[str, Any]) -> dict[str, Any]:
-    """Recompute gold from cluster files and compare with the sealed manifest digest."""
+def unseal(
+    panel: PanelBuild, manifest: Mapping[str, Any], *, sealed: Path | None = None
+) -> dict[str, Any]:
+    """Recompute gold (and graded pools) from cluster files; compare with the manifest.
+
+    Agreement requires the same cluster files and an identical gold digest. The
+    oracle digest is reported separately: identical gold under an edited oracle is
+    shown, not hidden.
+    """
     report: dict[str, Any] = {}
-    if manifest.get("oracle_sha256") != oracle_sha256():
-        raise ValueError("oracle source differs from the manifest; gold is not comparable")
+    oracle_match = manifest.get("oracle_sha256") == oracle_sha256()
     for split, entry in manifest["splits"].items():
         members = sorted(
             (build for build in panel.builds if build.cluster.get("split") == split),
@@ -708,13 +732,31 @@ def unseal(panel: PanelBuild, manifest: Mapping[str, Any]) -> dict[str, Any]:
         files = {build.path.name: build.sha256 for build in members}
         expected_files = {row["file"]: row["sha256"] for row in entry["cluster_files"]}
         gold = sorted((row for b in members for row in b.gold), key=lambda r: r["state_id"])
-        recomputed = _sha256_text(_jsonl(gold))
-        report[split] = {
+        pools = sorted((row for b in members for row in b.pools), key=lambda r: r["pool_id"])
+        gold_match = _sha256_text(_jsonl(gold)) == entry["gold_sha256"]
+        row: dict[str, Any] = {
             "cluster_files_match": files == expected_files,
             "states": len(gold),
-            "gold_sha256_match": recomputed == entry["gold_sha256"],
-            "agreement": 1.0 if recomputed == entry["gold_sha256"] else None,
+            "gold_sha256_match": gold_match,
+            "oracle_sha256_match": oracle_match,
+            "agreement": 1.0 if gold_match and files == expected_files else None,
         }
+        if "pools_graded_sha256" in entry:
+            row["pools_graded_sha256_match"] = (
+                _sha256_text(_jsonl(pools)) == entry["pools_graded_sha256"]
+            )
+        if "aliases_sha256" in entry and sealed is not None:
+            path = sealed / f"aliases.{split}.json"
+            mapping = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+            known = {state["state_id"] for state in gold} | {
+                state["quad_id"] for b in members for state in b.states if state["quad_id"]
+            }
+            row["aliases_match"] = (
+                path.is_file()
+                and hashlib.sha256(path.read_bytes()).hexdigest() == entry["aliases_sha256"]
+                and set(mapping.values()) == known
+            )
+        report[split] = row
     return report
 
 
@@ -732,6 +774,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     opened = commands.add_parser("unseal", help="recompute gold against a split manifest")
     opened.add_argument("root", type=Path)
     opened.add_argument("manifest", type=Path)
+    opened.add_argument("--sealed-dir", type=Path)
     args = parser.parse_args(argv)
     panel = build_panel(args.root, final=getattr(args, "final", False))
     if panel.problems:
@@ -748,9 +791,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps({"split_manifest_sha256": digest, **manifest["splits"]}, indent=2))
         return 0
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
-    report = unseal(panel, manifest)
+    report = unseal(panel, manifest, sealed=args.sealed_dir)
     print(json.dumps(report, indent=2, sort_keys=True))
-    return 0 if all(row["gold_sha256_match"] for row in report.values()) else 1
+    return (
+        0
+        if all(
+            row["agreement"] == 1.0
+            and row.get("pools_graded_sha256_match", True)
+            and row.get("aliases_match", True)
+            for row in report.values()
+        )
+        else 1
+    )
 
 
 if __name__ == "__main__":

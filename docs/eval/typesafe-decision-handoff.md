@@ -98,9 +98,13 @@ two-factor design of one contradiction defect and one removed observation — pl
 at most two out-of-envelope probes that stay outside headline denominators.
 Rendering reuses `INBOX_SYSTEM`, `inbox_request` and opaque tool-call IDs, so no
 label, identifier or expected field reaches a judge. The builder writes per-split
-states, gold (sealed for the test split), controlled Score pools and a split
-manifest whose digest seeds ordering and bootstrap resampling; `unseal` must
-reproduce the sealed gold digest exactly.
+states, gold, controlled Score pools and a split manifest whose digest seeds
+ordering and bootstrap resampling. For the sealed test split, gold, graded pools
+and a random alias map exist only in the sealed directory; public states and
+ungraded pools carry opaque aliases, and no public digest covers graded content.
+The rule oracle lives in its own hashed module, so builder changes do not alter
+its digest; `unseal` must reproduce the sealed gold digest exactly and reports the
+oracle digest separately.
 
 [`decision_metrics.py`](../../evals/benchmarks/decision_metrics.py) implements the
 pre-registered formulas: accuracy with invalid output as wrong, macro-F1, Brier,

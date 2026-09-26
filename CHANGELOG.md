@@ -132,8 +132,9 @@ functional change.
   structured answer and observed lookups, rejects shapes outside the taxonomy,
   and checks the two-factor quad design. Rendering reuses the runtime inbox
   contract with opaque tool-call IDs. The builder writes per-split states,
-  sealed test gold, controlled Score pools and a split manifest; `unseal` must
-  reproduce the sealed digest exactly.
+  controlled Score pools and a split manifest; test gold, graded test pools and
+  the alias map stay sealed while public test files use opaque aliases and
+  ungraded pools. `unseal` must reproduce the sealed digest exactly.
 - Add pre-registered judgment metrics: accuracy with invalid output as wrong,
   macro-F1, Brier, floored NLL, 10-bin ECE, rank AUROC, risk–coverage, flip rate
   and paired latency with unknown non-positive durations. Source-cluster

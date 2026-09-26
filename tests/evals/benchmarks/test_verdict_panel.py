@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 from evals.benchmarks import verdict_panel as panel
+from evals.benchmarks import verdict_panel_oracle as oracle
 from evals.benchmarks.decision_handoff_runtime import INBOX_SYSTEM, inbox_request
 from evals.benchmarks.decision_verification import _VerificationState
 
@@ -176,14 +177,14 @@ def test_item_kind_taxonomy(
     expected = _cluster_item(intent, target, ["A-100", "B-200"])
     row = dict(zip(("order_id", "status", "disposition"), answer, strict=True))
     status = {key: orders[key] for key in observed}
-    assert panel.item_kind(expected, row, status, frozenset(orders.values())) == kind
+    assert oracle.item_kind(expected, row, status, frozenset(orders.values())) == kind
 
 
 def test_cancelled_action_claim_requires_a_changed_state() -> None:
     orders = {"A-100": "cancelled"}
     expected = _cluster_item("cancel", "A-100", ["A-100"])
     row = {"order_id": "A-100", "status": "cancelled", "disposition": "answered"}
-    assert panel.item_kind(expected, row, orders, frozenset(orders.values())) == "unclassified"
+    assert oracle.item_kind(expected, row, orders, frozenset(orders.values())) == "unclassified"
 
 
 def test_rendering_matches_the_matched_verifier_state_without_labels() -> None:
@@ -355,12 +356,20 @@ def test_build_writes_states_pools_and_sealed_gold_then_unseals(tmp_path: Path) 
     manifest = panel.write_outputs(result, out)
     assert (out / "states.test.jsonl").is_file() and not (out / "gold.test.jsonl").exists()
     assert (out / "sealed/gold.test.jsonl").is_file() and (out / "gold.selection.jsonl").is_file()
+    assert (out / "sealed/pools-graded.test.jsonl").is_file()
     assert manifest["splits"]["test"]["sealed_gold"] is True
+    assert manifest["splits"]["test"]["sealed_files"] == [
+        "aliases.test.json",
+        "gold.test.jsonl",
+        "pools-graded.test.jsonl",
+    ]
     assert manifest["oracle_sha256"] == panel.oracle_sha256()
     states = [json.loads(line) for line in (out / "states.test.jsonl").read_text().splitlines()]
     assert all("has_contradiction" not in row for row in states)
-    report = panel.unseal(panel.build_panel(root), manifest)
+    report = panel.unseal(panel.build_panel(root), manifest, sealed=out / "sealed")
     assert report["test"]["gold_sha256_match"] and report["test"]["agreement"] == 1.0
+    assert report["test"]["pools_graded_sha256_match"] and report["test"]["oracle_sha256_match"]
+    assert report["test"]["aliases_match"] is True
     assert report["selection"]["cluster_files_match"]
     with pytest.raises(FileExistsError):
         panel.write_outputs(result, out)
@@ -433,3 +442,85 @@ def test_cli_check_and_build_exit_codes(tmp_path: Path, capsys: pytest.CaptureFi
     assert panel.main(["build", str(EXAMPLE.parent), str(tmp_path / "out")]) == 0
     manifest = tmp_path / "out/split-manifest.json"
     assert panel.main(["unseal", str(EXAMPLE.parent), str(manifest)]) == 0
+
+
+def _public_files(out: Path, sealed: Path) -> list[Path]:
+    return [path for path in out.rglob("*") if path.is_file() and sealed not in path.parents]
+
+
+def test_public_outputs_never_carry_test_labels(tmp_path: Path) -> None:
+    root = tmp_path / "panel"
+    _write(root, _example(), "selection")
+    _write(root, _as_test_split(_example()), "test")
+    result = panel.build_panel(root)
+    out, sealed = tmp_path / "out", tmp_path / "withheld"
+    panel.write_outputs(result, out, sealed=sealed)
+    assert not any(sealed == parent for path in out.rglob("*") for parent in path.parents)
+    assert sorted(path.name for path in sealed.iterdir()) == [
+        "aliases.test.json",
+        "gold.test.jsonl",
+        "pools-graded.test.jsonl",
+    ]
+    held_ids = {
+        state["state_id"]
+        for build in result.builds
+        if build.cluster["split"] == "test"
+        for state in build.cluster["states"]
+    } | {
+        state["quad_id"]
+        for build in result.builds
+        if build.cluster["split"] == "test"
+        for state in build.cluster["states"]
+        if state["quad_id"]
+    }
+    aliases = json.loads((sealed / "aliases.test.json").read_text())
+    assert set(aliases.values()) == held_ids
+    graded = [
+        json.loads(line) for line in (sealed / "pools-graded.test.jsonl").read_text().splitlines()
+    ]
+    public_text = {path.name: path.read_text() for path in _public_files(out, sealed)}
+    label_keys = (
+        '"grade"',
+        '"has_contradiction"',
+        '"missing_evidence"',
+        '"item_kinds"',
+        '"gold_source"',
+    )
+    for name in ("states.test.jsonl", "pools.test.jsonl"):
+        assert not any(key in public_text[name] for key in label_keys), name
+        assert not any(f'"{identifier}"' in public_text[name] for identifier in held_ids), name
+    # Graded digests are brute-forceable (12 grade assignments per pool): never publish them.
+    for pool in graded:
+        assert all(pool["pool_sha256"] not in text for text in public_text.values())
+    public = [json.loads(line) for line in public_text["pools.test.jsonl"].splitlines()]
+    assert sorted(aliases[row["pool_id"]] for row in public) == sorted(
+        row["pool_id"] for row in graded
+    )
+    for row in public:
+        graded_row = next(pool for pool in graded if pool["pool_id"] == aliases[row["pool_id"]])
+        assert [aliases[c["candidate_id"]] for c in row["candidates"]] == [
+            c["candidate_id"] for c in graded_row["candidates"]
+        ]
+    for row in public:
+        assert all(set(candidate) == {"candidate_id", "text"} for candidate in row["candidates"])
+        assert row["pool_sha256"] == panel._digest(
+            {"pool_id": row["pool_id"], "candidates": row["candidates"]}
+        )
+    selection_pools = public_text["pools.selection.jsonl"]
+    assert '"grade"' in selection_pools  # the unsealed split keeps grades for τ-free Score use
+
+
+def test_unseal_reports_identical_gold_under_a_changed_oracle_digest(tmp_path: Path) -> None:
+    root = tmp_path / "panel"
+    _write(root, _as_test_split(_example()), "test")
+    result = panel.build_panel(root)
+    manifest = panel.write_outputs(result, tmp_path / "out")
+    edited = json.loads(json.dumps(manifest))
+    edited["oracle_sha256"] = "0" * 64
+    report = panel.unseal(panel.build_panel(root), edited)["test"]
+    assert report["oracle_sha256_match"] is False and report["agreement"] == 1.0
+    changed = _as_test_split(_example())
+    _state(changed, "q1a")["author_note"] = "edited after sealing"
+    _write(tmp_path / "moved", changed, "test")
+    moved = panel.unseal(panel.build_panel(tmp_path / "moved"), manifest)["test"]
+    assert moved["cluster_files_match"] is False and moved["agreement"] is None
