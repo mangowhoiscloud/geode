@@ -102,6 +102,18 @@ states, gold (sealed for the test split), controlled Score pools and a split
 manifest whose digest seeds ordering and bootstrap resampling; `unseal` must
 reproduce the sealed gold digest exactly.
 
+[`decision_metrics.py`](../../evals/benchmarks/decision_metrics.py) implements the
+pre-registered formulas: accuracy with invalid output as wrong, macro-F1, Brier,
+NLL (floor 1e-6), 10-bin ECE, rank-based error-detection AUROC with half ties,
+risk–coverage/AURC, flip rate and paired latency medians, with non-positive
+`duration_ms` treated as unknown. Source-cluster percentile bootstrap uses 2,000
+replicates and the seed `int(sha256(split_manifest_sha256 ∥ metric)[:16], 16)`;
+paired rows resample together and unmeasurable replicates are counted, not
+filled. `selection_freeze()` fits temperature per engine and question and the
+offline Choice cascade τ on selection outputs only (maximum coverage within two
+points of the Astra fallback, larger τ on ties, no admissible τ at zero
+coverage); test reports apply the frozen τ and the non-inferiority rules.
+
 The Noul profile explicitly sets `verification_primitive=noul` alongside
 `verification_engine=llm|jev` on the existing `a0` inbox path. The Harbor entry
 point and observation checker expose the corresponding `--verification-primitive`

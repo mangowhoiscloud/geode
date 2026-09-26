@@ -134,6 +134,12 @@ functional change.
   contract with opaque tool-call IDs. The builder writes per-split states,
   sealed test gold, controlled Score pools and a split manifest; `unseal` must
   reproduce the sealed digest exactly.
+- Add pre-registered judgment metrics: accuracy with invalid output as wrong,
+  macro-F1, Brier, floored NLL, 10-bin ECE, rank AUROC, risk–coverage, flip rate
+  and paired latency with unknown non-positive durations. Source-cluster
+  bootstrap intervals use 2,000 manifest-seeded replicates. Selection-only
+  temperature and offline cascade τ fitting produce a frozen selection record;
+  paired Choice and Noul panel reports apply the non-inferiority decisions.
 - Support Claude Opus 5.5's native computer toolset with serial execution,
   toolset-aware result replay and parameter validation before desktop actions.
   Withhold unsupported members; report native action errors and preserve
