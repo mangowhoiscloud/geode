@@ -1363,8 +1363,10 @@ def test_paired_latency_excludes_pacing_waits_from_latency(tmp_path: Path) -> No
         pair = [receipts[(workload_id, engine)][0] for engine in ("llm", "jev")]
         assert all(receipt["latency_s"] < 5 for receipt in pair)
         starts.append(min(r["call_timing"]["dispatched_monotonic_s"] for r in pair))
-    # Pair starts keep the pacing interval (launch stamps trail each start by a few ms).
-    assert all(later - earlier > 29.9 for earlier, later in itertools.pairwise(starts))
+    # Pair starts keep the pacing interval. Launch stamps trail each pair start by the
+    # launch overhead (session files, Jev ledger fsync), which exceeds 0.1 s on slow CI
+    # runners; unpaced starts would sit ~0.03 s apart, so 1 s of slack still separates them.
+    assert all(later - earlier > 29.0 for earlier, later in itertools.pairwise(starts))
 
 
 def test_paired_replacement_stays_inside_its_pair_and_leaves_the_latency_summary(
