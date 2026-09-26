@@ -262,6 +262,12 @@ functional change.
 
 ### Fixed
 
+- Align handoff-table strict success with the preregistered definition. A
+  matched final-verdict trial no longer needs lookup conditions: native reward,
+  admitted decisive judgments, consumed negative feedback and no false
+  completion decide it, while intent helper trials keep the lookup conditions.
+  A separate lookup-inclusive column remains, and a runner's differing strict
+  value is rejected instead of overwritten.
 - Remove first-position bias from best-of selection: every judge failure path
   falls back to the content-addressed candidate, and matched Score ties use the
   preregistered hash of pool and candidate IDs instead of input order.

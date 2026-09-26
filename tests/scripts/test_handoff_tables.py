@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -241,3 +242,134 @@ def test_slot_columns_stay_unknown_without_receipts_and_reject_contradictions(
         receipt.write_text(json.dumps({**original, **edit}))
         with pytest.raises(ValueError, match=message):
             handoff_tables.export_tables(slotted, tmp_path / message[:8], primitive="noul")
+
+
+def _trials(tmp_path: Path, name: str, **kwargs: Any) -> dict[str, dict[str, Any]]:
+    phase = build_phase(tmp_path / name, mode="complete", **kwargs)["phase_dir"]
+    out = tmp_path / f"{name}-tables"
+    handoff_tables.export_tables(phase, out, primitive="choice")
+    return {row["case_id"] + "/" + row["schedule_arm"]: row for row in _rows(out, "e2e_trials")}
+
+
+def test_strict_success_follows_the_preregistered_unit_rule(tmp_path: Path) -> None:
+    violation = frozenset({("inbox-a", "a")})
+    # Verdict unit (matched final verdict): §3.1 strict success has no lookup condition.
+    verdict = _trials(tmp_path, "verdict", extra_lookups=violation)
+    row, clean = verdict["inbox-a/a"], verdict["inbox-b/a"]
+    assert row["strict_rule"] == "verdict" and row["extra_lookup_count"] == 1
+    assert row["strict_success"] is True and row["strict_success_with_lookup"] is False
+    assert row["judgments_admitted"] is True and row["feedback_consumption_complete"] is True
+    assert row["false_completion"] is False
+    assert clean["strict_success"] is True and clean["strict_success_with_lookup"] is True
+    # Intent unit (helper arms): the same extra lookup fails strict success.
+    intent = _trials(tmp_path, "intent", intent=True, extra_lookups=violation)
+    row, clean = intent["inbox-a/a"], intent["inbox-b/a"]
+    assert row["strict_rule"] == "intent" and row["runtime_arm"] == "a"
+    assert row["strict_success"] is False and row["strict_success_with_lookup"] is False
+    assert row["judgments_admitted"] is None  # no matched judgments on helper arms
+    assert clean["strict_success"] is True and clean["strict_success_with_lookup"] is True
+    # A failed task oracle fails both rules.
+    failed = _trials(tmp_path, "failed", intent=True, failing=frozenset({("inbox-b", "b")}))
+    assert failed["inbox-b/b"]["strict_success"] is False
+
+
+def _rewrite_verification(phase: Path, trial: str, edit: Callable[[dict], None]) -> None:
+    path = phase / "trials" / trial / "agent/verification.json"
+    value = json.loads(path.read_text())
+    edit(value)
+    path.write_text(json.dumps(value))
+
+
+def test_verdict_strict_success_needs_admitted_judgments_and_consumed_feedback(
+    tmp_path: Path,
+) -> None:
+    phase = build_phase(tmp_path / "run", mode="complete")["phase_dir"]
+    trial = "fixture-natural-r0-inbox-a-a"
+    negative = {
+        "llm_call_id": "judge-0",
+        "accepted": True,
+        "projected_payload": {"passed": False},
+    }
+
+    def unconsumed(value: dict) -> None:
+        value["judgments"].insert(0, dict(negative))
+
+    _rewrite_verification(phase, trial, unconsumed)
+    out = tmp_path / "unconsumed"
+    handoff_tables.export_tables(phase, out, primitive="noul")
+    row = next(r for r in _rows(out, "e2e_trials") if r["trial_name"] == trial)
+    assert row["feedback_consumption_complete"] is False and row["strict_success"] is False
+
+    def consumed(value: dict) -> None:
+        value["root_requests"] = [{"consumed_feedback": [{"judge_call_id": "judge-0"}]}]
+
+    _rewrite_verification(phase, trial, consumed)
+    out = tmp_path / "consumed"
+    handoff_tables.export_tables(phase, out, primitive="noul")
+    row = next(r for r in _rows(out, "e2e_trials") if r["trial_name"] == trial)
+    assert row["feedback_consumption_complete"] is True and row["strict_success"] is True
+
+    def rejected(value: dict) -> None:
+        value["judgments"][-1]["accepted"] = False
+
+    _rewrite_verification(phase, trial, rejected)
+    out = tmp_path / "rejected"
+    handoff_tables.export_tables(phase, out, primitive="noul")
+    row = next(r for r in _rows(out, "e2e_trials") if r["trial_name"] == trial)
+    assert row["judgments_admitted"] is False and row["strict_success"] is False
+
+
+def test_escalated_cascade_primary_is_not_a_decisive_judgment() -> None:
+    primary = {
+        "llm_call_id": "jev-1",
+        "accepted": True,
+        "projected_payload": {"passed": False},
+        "cascade": {"stage": "primary", "tau": "0.85", "q": 0.6, "admitted": False},
+    }
+    fallback = {
+        "llm_call_id": "llm-1",
+        "accepted": True,
+        "projected_payload": {"passed": True},
+        "cascade": {"stage": "fallback", "tau": "0.85", "primary_call_id": "jev-1"},
+    }
+    components = handoff_tables._strict_components(
+        {"judgments": [primary, fallback], "root_requests": []},
+        {"oracle": {"passed": True}},
+        {},
+        "turn.verify.passed",
+    )
+    assert components == {
+        "judgments_admitted": True,
+        "feedback_consumption_complete": True,
+        "false_completion": False,
+    }
+    false_pass = handoff_tables._strict_components(
+        {"judgments": [fallback]}, {"oracle": {"passed": False}}, {}, "turn.verify.passed"
+    )
+    assert false_pass["false_completion"] is True
+
+
+def test_runner_strict_success_is_checked_never_overwritten(tmp_path: Path) -> None:
+    violation = frozenset({("inbox-a", "a")})
+    agreeing = _trials(
+        tmp_path, "agree", extra_lookups=violation, runner_strict={("inbox-a", "a"): True}
+    )
+    assert agreeing["inbox-a/a"]["runner_strict_success"] is True
+    # A runner that folded the lookup condition into a verdict unit disagrees with §3.1.
+    phase = build_phase(
+        tmp_path / "disagree",
+        mode="complete",
+        extra_lookups=violation,
+        runner_strict={("inbox-a", "a"): False},
+    )["phase_dir"]
+    with pytest.raises(ValueError, match=r"disagrees with the §3\.1 verdict recomputation"):
+        handoff_tables.export_tables(phase, tmp_path / "disagree-tables", primitive="choice")
+    intent = build_phase(
+        tmp_path / "intent",
+        mode="complete",
+        intent=True,
+        extra_lookups=violation,
+        runner_strict={("inbox-a", "a"): True},
+    )["phase_dir"]
+    with pytest.raises(ValueError, match="intent recomputation False"):
+        handoff_tables.export_tables(intent, tmp_path / "intent-tables", primitive="choice")

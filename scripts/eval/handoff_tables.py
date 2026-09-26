@@ -121,6 +121,19 @@ _CONCURRENCY_FIELDS = {
     "concurrent_trials": ("concurrent_trials", "concurrent_trials_active"),
 }
 PAIR_SYNC_MAX_AGENT_START_SKEW_S = 30.0
+# Preregistration §3.1 strict success, chosen by the frozen cell: a matched final-verdict
+# cell (verification_engine set; U0d-U0f, U7, U8) or an intent helper cell (U0c, U6b).
+STRICT_RULES = {
+    "verdict": (
+        "native reward 1, every decisive judgment admitted, every non-final negative "
+        "judgment's feedback consumed by a later root request, no false completion"
+    ),
+    "intent": (
+        "the verdict conditions (admission and consumption where matched judgments exist; "
+        "helper admission and consumption are inbox-oracle checks behind the reward), no "
+        "false-completion item, no wrong-target lookup and no extra lookup"
+    ),
+}
 PRIVATE_RECEIPTS = "private-receipts"
 
 
@@ -238,6 +251,62 @@ def _attach_overlaps(trials: list[dict[str, Any]], calls: Sequence[Mapping[str, 
         trial["overlapping_calls"] = observed if complete and missing == 0 else None
         trial["overlapping_calls_observed"] = observed
         trial["overlapping_calls_missing_intervals"] = missing
+
+
+def _strict_components(
+    verification: Mapping[str, Any],
+    handoff: Mapping[str, Any],
+    verifier: Mapping[str, Any],
+    final_action: Any,
+) -> dict[str, bool | None]:
+    """Judgment admission, feedback consumption and false completion (05 §3.1).
+
+    Matched judgments come from ``agent/verification.json``; an escalated arm C primary
+    never reached the root, so only decision receipts count. Without matched judgments
+    (helper arms) admission and consumption are ``None``, not a success.
+    """
+    admitted: bool | None = None
+    consumed_all: bool | None = None
+    judgments = verification.get("judgments")
+    if isinstance(judgments, list):
+        rows = [row for row in judgments if isinstance(row, dict)]
+        if any(isinstance(row.get("cascade"), dict) for row in rows):
+            from evals.benchmarks.decision_cascade import decision_receipts
+
+            rows = decision_receipts(rows)
+        consumed = {
+            item.get("judge_call_id")
+            for request in verification.get("root_requests") or []
+            if isinstance(request, dict)
+            for item in request.get("consumed_feedback") or []
+            if isinstance(item, dict)
+        }
+        negatives = [
+            row
+            for row in rows[:-1]
+            if row.get("accepted") is True
+            and not _object(row.get("projected_payload")).get("passed")
+        ]
+        admitted = bool(rows) and all(row.get("accepted") is True for row in rows)
+        consumed_all = all(row.get("llm_call_id") in consumed for row in negatives)
+    oracle = _object(verifier.get("oracle")) or _object(handoff.get("oracle"))
+    oracle_passed = oracle.get("passed") if type(oracle.get("passed")) is bool else None
+    false_completion: bool | None
+    if final_action is None:
+        false_completion = None
+    elif final_action != "turn.verify.passed":
+        false_completion = False
+    else:
+        false_completion = None if oracle_passed is None else not oracle_passed
+    return {
+        "judgments_admitted": admitted,
+        "feedback_consumption_complete": consumed_all,
+        "false_completion": false_completion,
+    }
+
+
+def _all_known(checks: Sequence[bool | None]) -> bool | None:
+    return None if any(check is None for check in checks) else all(checks)
 
 
 def _count(value: Any) -> int | None:
@@ -691,21 +760,46 @@ def _trial_row(
     }
     burden = {name: value if isinstance(value, int) else None for name, value in burden.items()}
 
+    rule = "verdict" if isinstance(engine, str) and engine else "intent"
+    components = _strict_components(verification, handoff, verifier, final_action)
+    lookups = [
+        None if burden[name] is None else burden[name] == 0
+        for name in ("wrong_target_lookup_count", "extra_lookup_count")
+    ]
     strict: bool | None = None
+    with_lookup: bool | None = None
     if validity == "valid":
-        checks = (
-            handoff.get("passed"),
+        admitted = components["judgments_admitted"]
+        consumed = components["feedback_consumption_complete"]
+        false_completion = components["false_completion"]
+        checks: list[bool | None] = [
             None if reward is None else reward == 1,
-            None if final_action is None else final_action == "turn.verify.passed",
-            None
-            if burden["wrong_target_lookup_count"] is None
-            else burden["wrong_target_lookup_count"] == 0,
-            None if burden["extra_lookup_count"] is None else burden["extra_lookup_count"] == 0,
-            None
-            if burden["false_completion_count"] is None
-            else burden["false_completion_count"] == 0,
+            None if false_completion is None else not false_completion,
+        ]
+        if rule == "verdict" or verification.get("judgments") is not None:
+            checks += [admitted, consumed]
+        if rule == "intent":
+            count = burden["false_completion_count"]
+            checks += [None if count is None else count == 0, *lookups]
+        strict = _all_known(checks)
+        with_lookup = _all_known([strict, *lookups])
+    # A runner's recorded strict value must equal this §3.1 recomputation; never overwrite.
+    recorded = [
+        value
+        for value in (
+            _object(receipt.get("e2e")).get("strict_success"),
+            semantic.get("strict_success"),
         )
-        strict = None if any(check is None for check in checks) else all(checks)
+        if value is not None
+    ]
+    if any(type(value) is not bool for value in recorded) or len(set(recorded)) > 1:
+        raise ValueError(f"{trial}: the trial receipt records conflicting strict_success values")
+    runner_strict = recorded[0] if recorded else None
+    if runner_strict is not None and runner_strict != strict:
+        raise ValueError(
+            f"{trial}: runner strict_success {runner_strict} disagrees with the §3.1 "
+            f"{rule} recomputation {strict}"
+        )
 
     jev_calls = [call for call in calls if call["provider"] == "typesafe"]
     if label != "jev":
@@ -787,7 +881,11 @@ def _trial_row(
             "turn.verify.passed": "passed",
             "turn.verify.failed": "failed",
         }.get(str(final_action)),
+        "strict_rule": rule,
         "strict_success": strict,
+        "strict_success_with_lookup": with_lookup,
+        "runner_strict_success": runner_strict,
+        **components,
         "jev_decision_status": status,
         "jev_success_credited": (
             label == "jev" and validity == "valid" and outcome == "passed" and status == "admitted"

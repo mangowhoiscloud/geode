@@ -161,6 +161,8 @@ def _trial(
     judge_provider: str,
     judge_duration_ms: float,
     passed: bool = True,
+    extra_lookups: int = 0,
+    runner_strict: bool | None = None,
 ) -> None:
     trial = phase_dir / "trials" / cell["trial_name"]
     agent = trial / "agent"
@@ -243,13 +245,15 @@ def _trial(
     )
     oracle = {
         "passed": passed,
-        "extra_lookup_count": 0,
+        "extra_lookup_count": extra_lookups,
         "wrong_target_lookup_count": 0,
         "false_completion_count": 0,
         "lookup_attempt_count": 1,
         "rejected_lookup_count": 0,
     }
     native_verify = [{"action": "turn.verify.passed", "success": True}]
+    # An intent helper cell has no matched final verdict and runs the helper arm itself.
+    runtime_arm = "a0" if engine else cell["arm"]
     metadata = {
         "source_revision": REVISION,
         "verify_mode": "llm_judge",
@@ -257,7 +261,7 @@ def _trial(
         "verification_engine": engine,
         "verification_primitive": "noul",
         "profile": "decision-handoff",
-        "arm": "a0",
+        "arm": runtime_arm,
         "execution_started": True,
         "error_type": None,
         "finalization_errors": [],
@@ -271,7 +275,7 @@ def _trial(
         "session_id": session,
         "db_path": "/logs/agent/geode-home/projects/-workspace/sessions/sessions.db",
         "source_snapshot_complete": True,
-        "arm": "a0",
+        "arm": runtime_arm,
         "case_id": cell["case_id"],
         "verification_engine": engine,
         "verification_primitive": "noul",
@@ -297,25 +301,26 @@ def _trial(
     )
     write_json(agent / "call-events.json", persisted)
     write_json(agent / "handoff.json", [])
-    write_json(
-        agent / "verification.json",
-        {
-            "inputs": [],
-            "judgments": [
-                {
-                    "engine": engine,
-                    "primitive": "noul",
-                    "llm_call_id": judge_call,
-                    "accepted": True,
-                    "verdict": verdict,
-                    "native_answer": native,
-                    "boolean_projection": dict(truth),
-                }
-            ],
-            "root_requests": [],
-            "root_outputs": [],
-        },
-    )
+    if engine:
+        write_json(
+            agent / "verification.json",
+            {
+                "inputs": [],
+                "judgments": [
+                    {
+                        "engine": engine,
+                        "primitive": "noul",
+                        "llm_call_id": judge_call,
+                        "accepted": True,
+                        "verdict": verdict,
+                        "native_answer": native,
+                        "boolean_projection": dict(truth),
+                    }
+                ],
+                "root_requests": [],
+                "root_outputs": [],
+            },
+        )
     trajectory_events = []
     for ordinal, (kind, payload, call) in enumerate(
         [
@@ -398,12 +403,13 @@ def _trial(
             "error_type": None,
             "host_elapsed_seconds": 55.0 + cell["index"],
             "native_reward": {"reward": 1.0 if passed else 0.0},
+            **({"e2e": {"strict_success": runner_strict}} if runner_strict is not None else {}),
             "semantic_metrics": {
                 "judgment_attempts": 1,
                 "replan_requests": 0,
                 "root_requests_consuming_feedback": 0,
                 "false_completion_count": 0,
-                "extra_lookup_count": 0,
+                "extra_lookup_count": extra_lookups,
                 "wrong_target_lookup_count": 0,
                 "rejected_lookup_count": 0,
                 "lookup_attempt_count": 1,
@@ -462,6 +468,9 @@ def build_phase(
     cell_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
     slots: bool = False,
     observed_judge_latency: bool = False,
+    intent: bool = False,
+    extra_lookups: frozenset[tuple[str, str]] = frozenset(),
+    runner_strict: dict[tuple[str, str], bool] | None = None,
 ) -> dict[str, Any]:
     """Write one closed phase.
 
@@ -475,6 +484,9 @@ def build_phase(
     ``cell_overrides`` edits frozen cell fields such as the repetition contract.
     ``slots`` starts both arms of a case together and writes private trial receipts
     (05 v2 §2.4); ``observed_judge_latency`` replaces the 0.0 placeholder latency.
+    ``intent`` writes intent helper cells (no matched final verdict, 05 §3.1),
+    ``extra_lookups`` gives listed cells one extra lookup, and ``runner_strict``
+    records a runner's strict_success in the trial receipt.
     """
     if mode not in {"incomplete", "complete", "deselected"}:
         raise ValueError("unknown fixture mode")
@@ -516,6 +528,9 @@ def build_phase(
             trial_name=cell["trial_name"].replace("-r0-", f"-r{repetition}-"),
             **contract_fields(*key),
         )
+        if intent:
+            cell["verification_engine"] = None
+            cell["intent_target_engine"] = "llm" if cell["arm"] == "a" else "jev"
         cell.update((cell_overrides or {}).get(key, {}))
     write_json(
         phase_dir / "freeze.json",
@@ -543,6 +558,8 @@ def build_phase(
                 judge_provider=judge_provider,
                 judge_duration_ms=duration,
                 passed=passed,
+                extra_lookups=int(key in extra_lookups),
+                runner_strict=(runner_strict or {}).get(key),
             )
         trial = phase_dir / "trials" / cell["trial_name"]
         refs = [

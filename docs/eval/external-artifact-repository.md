@@ -407,7 +407,12 @@ None of them dispatches a model, pushes a branch or merges a PR.
   `external_account_usage` (always `unknown`) from the private trial receipt, and
   `overlapping_calls` from call-ledger intervals (null unless every interval is
   known). Pair rows keep only same-slot synchronized pairs as
-  `intra_pair_latency_comparable`.
+  `intra_pair_latency_comparable`. `strict_success` follows the preregistered
+  rule of the frozen cell: a matched final-verdict cell needs native reward 1,
+  admitted decisive judgments, consumed negative feedback and no false
+  completion; an intent helper cell also needs no wrong-target or extra lookup.
+  `strict_success_with_lookup` adds the lookup conditions to either rule, and a
+  runner-recorded strict value that differs from the recomputation is rejected.
 - `scripts/eval/handoff_tables.py reliability` combines one frozen repetition
   set's `e2e_trials` by arm and case into `reliability.jsonl` and
   `reliability_summary.json`: per-task pass@n and pass^n with source pointers,
