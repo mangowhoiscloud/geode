@@ -166,6 +166,15 @@ functional change.
   latency report binds the within-pair median Jev − Astra delta with its
   manifest-seeded cluster interval and preregistered decision, and counts the
   excluded pairs by reason. Existing panel units keep their bytes.
+- Add the intent-panel harness (U0c-i, U6a) to the verdict panel runner: a
+  Choice-only unit with `judgment="intent"` sends each family of inbox items to
+  the `analyze_request` helper with the E2E helper's own payload, questions,
+  Astra request and admission; the tool's request and admission steps become
+  shared methods with unchanged bytes. The intent report scores joint intent and
+  target accuracy like the E2E intent runner, counts a rejected helper output as
+  wrong for its whole family, and binds `intent_joint_accuracy_delta` with a
+  family-cluster interval and the non-inferiority decision, the admission ratio
+  and LABEL-RULES strata. Existing panel units keep their bytes.
 - Add auxiliary repetition reliability to the judgment metrics: per-task
   combinatorial pass@n and pass^n with equal task weights, never a pooled rate.
   A frozen task × repetition plan is rejected with enumerated reasons (N_i < n,

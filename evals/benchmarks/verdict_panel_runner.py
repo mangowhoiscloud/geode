@@ -25,6 +25,14 @@ Usage: ``python -m evals.benchmarks.verdict_panel_runner stability --run-spec
 primary and :func:`latency_metric_rows` binds it the same way: ``python -m
 evals.benchmarks.verdict_panel_runner latency --run-spec <spec> --run-dir <dir>
 --split-manifest <manifest> [--gold <jsonl> --aliases <json>] [--record]``.
+
+The I-panel (U0c's admission batches, U6a) is a Choice-only unit with
+``judgment="intent"``: each family is one call per engine to the inbox
+``analyze_request`` helper through :class:`InboxDecisionAdapter`, the same payload,
+questions and admission as the E2E helper. :func:`intent_report` scores joint
+intent and target accuracy after the run: ``python -m
+evals.benchmarks.verdict_panel_runner intent --run-spec <spec> --run-dir <dir>
+--panel <i-panel json> --meta <i-panel-meta.jsonl> [--record]``.
 """
 
 from __future__ import annotations
@@ -51,10 +59,16 @@ import httpx
 import openai
 from pydantic import SecretStr
 
-from evals.benchmarks.decision_handoff import ROOT_MODEL
+from evals.benchmarks.decision_handoff import (
+    INBOX_HELPER_CONTRACT,
+    ROOT_MODEL,
+    InboxDecisionAdapter,
+)
 from evals.benchmarks.decision_metrics import (
+    NON_INFERIORITY_MARGIN,
     NOT_MEASURABLE,
     Interval,
+    Ratio,
     accuracy,
     bootstrap_seed,
     choice_record,
@@ -89,6 +103,11 @@ PAIRED_CONCURRENCY = 2
 # A launch skew above one second is a dispatcher defect that stops the unit (05 §4.3).
 PAIR_SKEW_LIMIT_S = 1.0
 PAIR_LOG = "pair-log.jsonl"
+# What one call judges: the matched V1 verdict on a verification state, or the inbox
+# analyze_request helper's intent and target on a family of items (I-panel: U0c, U6a).
+VERDICT_JUDGMENT = "verdict"
+INTENT_JUDGMENT = "intent"
+JUDGMENTS = (VERDICT_JUDGMENT, INTENT_JUDGMENT)
 
 INVALIDATION_RULES: dict[str, str] = {
     "panel": (
@@ -177,9 +196,10 @@ def workloads_from_states(
 ) -> list[Workload]:
     """Bind frozen workload IDs (``<state_id>`` or ``<state_id>#<variant>``) to states.
 
-    Rows of an authored split (``verdict_panel`` states) and of an external split
-    (e.g. ``states.x1.jsonl``) share this contract: ``state_id``, ``cluster_id``,
-    ``state`` and its canonical ``state_sha256``. Other row fields are ignored.
+    Rows of an authored split (``verdict_panel`` states), of an external split (e.g.
+    ``states.x1.jsonl``) and I-panel families (:func:`intent_panel_rows`) share this
+    contract: ``state_id``, ``cluster_id``, ``state`` and its canonical
+    ``state_sha256``. Other row fields are ignored.
     """
     by_state = {row["state_id"]: row for row in rows}
     workloads = []
@@ -189,12 +209,7 @@ def workloads_from_states(
         if variant not in VARIANTS or state_id not in by_state:
             raise ValueError(f"unknown workload {workload_id!r}")
         row = by_state[state_id]
-        digest = hashlib.sha256(
-            json.dumps(
-                row["state"], ensure_ascii=False, sort_keys=True, separators=(",", ":")
-            ).encode()
-        ).hexdigest()
-        if digest != row["state_sha256"]:
+        if _state_sha256(row["state"]) != row["state_sha256"]:
             raise ValueError(f"state digest mismatch for {state_id}")
         workloads.append(
             Workload(workload_id, state_id, row["cluster_id"], variant, dict(row["state"]))
@@ -202,6 +217,47 @@ def workloads_from_states(
     if len({workload.workload_id for workload in workloads}) != len(workloads):
         raise ValueError("workload IDs must be unique")
     return workloads
+
+
+def _state_sha256(state: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(state, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def intent_panel_rows(panel: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Family rows of an I-panel file (``orders`` + ``cases``) for :func:`workloads_from_states`.
+
+    Every family passes ``validate_inbox_case`` first. Its state keeps only the public
+    items (ID, request, candidates) that ``inbox_request`` shows the root, so no label
+    reaches a model; the family is its own source cluster.
+    """
+    from evals.benchmarks.decision_handoff_runtime import inbox_request, validate_inbox_case
+
+    rows = []
+    for case in panel["cases"]:
+        case_request = inbox_request(case["items"])
+        validate_inbox_case(
+            {"profile": "inbox", "items": case["items"], "request": case_request},
+            panel["orders"],
+        )
+        state = {
+            "items": [
+                {key: item[key] for key in ("id", "request", "candidates")}
+                for item in case["items"]
+            ]
+        }
+        rows.append(
+            {
+                "state_id": case["id"],
+                "cluster_id": case["id"],
+                "state": state,
+                "state_sha256": _state_sha256(state),
+            }
+        )
+    if len({row["state_id"] for row in rows}) != len(rows):
+        raise ValueError("I-panel family IDs repeat")
+    return rows
 
 
 def latin_cells(
@@ -217,9 +273,10 @@ class PanelUnit:
     """One frozen panel unit, keyed by primitive.
 
     ``run_ids`` and ``outputs`` hold ``choice`` and ``noul`` (U0a, U1, U2c/n, U2s:
-    one attempts file per primitive) or ``choice`` alone (U3, X1a, X1). ``mode``
-    ``paired-latency`` is U3: Choice alone with exactly one pair (two calls) in
-    flight.
+    one attempts file per primitive) or ``choice`` alone (U3, X1a, X1, U0c's I-panel
+    batch, U6a). ``mode`` ``paired-latency`` launches A and B together with exactly
+    one pair (two calls) in flight. ``judgment`` ``intent`` sends each family to the
+    inbox ``analyze_request`` helper instead of the matched verifier.
     """
 
     run_ids: Mapping[str, str]
@@ -231,6 +288,7 @@ class PanelUnit:
     paraphrases: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     timeouts: Mapping[str, float] = field(default_factory=lambda: dict(CALL_TIMEOUTS))
     mode: str = LATIN_MODE
+    judgment: str = VERDICT_JUDGMENT
 
     @property
     def primitives(self) -> tuple[_Primitive, ...]:
@@ -244,6 +302,10 @@ class PanelUnit:
             )
         if self.mode not in DISPATCH_MODES:
             raise ValueError(f"unknown panel dispatch mode {self.mode!r}")
+        if self.judgment not in JUDGMENTS:
+            raise ValueError(f"unknown panel judgment {self.judgment!r}")
+        if self.judgment == INTENT_JUDGMENT and keys != {"choice"}:
+            raise ValueError("the intent helper panel runs Choice alone")
         if self.mode == PAIRED_LATENCY_MODE and (
             keys != {"choice"} or self.max_concurrency != PAIRED_CONCURRENCY
         ):
@@ -339,6 +401,10 @@ class PanelRunner:
         self._in_flight = 0
         self._origin = 0.0
         self._lock = asyncio.Lock()
+        if unit.judgment == INTENT_JUDGMENT and any(
+            workload.variant != "base" for workload in self.workloads
+        ):
+            raise ValueError("I-panel families have no question variants")
         if any(workload.variant == "para" for workload in self.workloads):
             from evals.benchmarks.decision_verification import question_variant
 
@@ -347,7 +413,13 @@ class PanelRunner:
 
     def _adapter(
         self, engine: _Engine, primitive: _Primitive, variant: str
-    ) -> MatchedVerifierAdapter:
+    ) -> MatchedVerifierAdapter | InboxDecisionAdapter:
+        if self.unit.judgment == INTENT_JUDGMENT:
+            if engine == "llm":
+                return InboxDecisionAdapter("llm", llm_adapter=self.llm_adapter, receipts=[])
+            return InboxDecisionAdapter(
+                "jev", client=self.jev_client, api_key=self.jev_key, receipts=[]
+            )
         question_variant = variant if variant in {"order-rev", "para"} else "base"
         paraphrase = self.unit.paraphrases.get(primitive) if question_variant == "para" else None
         if engine == "llm":
@@ -1485,6 +1557,326 @@ def latency_metric_rows(
     return rows
 
 
+# ---------------------------------------------------------------------------
+# I-panel intent analysis (preregistration v2.2 §2.2 U0c/U6a, §3.1, §3.3, §3.4)
+# ---------------------------------------------------------------------------
+
+INTENT_SCHEMA_ID = "geode.jev-intent-panel@1"
+INTENT_RESULTS = "intent-results.json"
+INTENT_PRIMARY = "intent_joint_accuracy_delta"  # U6a
+INTENT_ADMISSION_PRIMARY = "intent_panel_admission_admitted_ratio"  # U0c-i
+# LABEL-RULES §4 strata: meta fields, plus whether the labelled target is an order.
+INTENT_STRATA = ("phenomenon", "language", "family_language", "n_candidates", "target")
+_INTENT_ENGINE_METRICS = (
+    ("joint_accuracy", "joint_accuracy"),
+    ("label_accuracy", "intent_accuracy"),
+    ("target_accuracy", "target_accuracy"),
+    ("helper_admitted_ratio", "helper_admitted"),
+)
+
+
+def _intent_decision(interval: Interval) -> str:
+    """05 §3.4 U6a: non-inferiority at five points of joint accuracy."""
+    if interval.lower is not None and interval.lower > -NON_INFERIORITY_MARGIN:
+        return "supported"
+    if interval.upper is not None and interval.upper < -NON_INFERIORITY_MARGIN:
+        return "not-supported"
+    return "mixed"
+
+
+def _intent_item(
+    item: Mapping[str, Any], found: tuple[dict[str, Any], dict[str, Any]] | None
+) -> dict[str, Any]:
+    """One engine's answer to one labelled item, scored like the E2E intent runner."""
+    from evals.benchmarks.decision_handoff_runtime import _inbox_decision_matches
+
+    scored: dict[str, Any] = {
+        "status": "missing" if found is None else found[1].get("status"),
+        "intent": None,
+        "target": None,
+        "intent_correct": False,
+        "target_correct": False,
+        "joint_correct": False,
+    }
+    receipt = found[1].get("receipt") if found is not None else None
+    if scored["status"] != "admitted" or not isinstance(receipt, Mapping):
+        return scored
+    decision = next(
+        (
+            entry
+            for entry in receipt.get("items") or ()
+            if isinstance(entry, Mapping) and entry.get("id") == item["id"]
+        ),
+        None,
+    )
+    if receipt.get("accepted") is not True or decision is None:
+        raise ValueError(f"{item['id']}: an admitted helper answer lacks the item")
+    target = decision.get("target")
+    intent_correct = decision.get("intent") == item["expected_intent"]
+    # The E2E runner's rule: the target must be the labelled source span.
+    target_correct = _inbox_decision_matches(
+        dict(item), {**decision, "intent": item["expected_intent"]}
+    )
+    scored.update(
+        intent=decision.get("intent"),
+        target=target.get("order_id") if isinstance(target, Mapping) else None,
+        intent_correct=intent_correct,
+        target_correct=target_correct,
+        joint_correct=intent_correct and target_correct,
+    )
+    return scored
+
+
+def intent_report(
+    run_dir: Path,
+    workload_ids: Sequence[str],
+    *,
+    panel: Mapping[str, Any],
+    meta: Sequence[Mapping[str, Any]],
+    split_manifest_sha256: str,
+    min_clusters: int = 10,
+) -> dict[str, Any]:
+    """I-panel joint intent and target accuracy from a helper run's attempts and receipts.
+
+    One planned workload is one family, judged by one helper call per engine. An item
+    is joint-correct when the admitted intent equals its label and the admitted target
+    is the labelled source span (``none`` when no single order), scored as the E2E
+    intent runner does. A rejected helper output makes every item of its family wrong
+    for both questions (05 §3.1, LABEL-RULES §4). The primary
+    ``intent_joint_accuracy_delta`` is (Jev − Astra joint-correct items) / planned
+    items, with the family-cluster bootstrap seeded by the I-panel file digest (§3.3)
+    and the §3.4 non-inferiority decision. A missing family call or a selected
+    infrastructure-invalid attempt makes it not-measurable; nothing is filled in.
+    """
+    planned = list(workload_ids)
+    if not planned or len(set(planned)) != len(planned):
+        raise ValueError("an intent plan needs unique family IDs")
+    if not re.fullmatch(r"[0-9a-f]{64}", split_manifest_sha256):
+        raise ValueError("I-panel digest must be a SHA-256 hex string")
+    cases = {case["id"]: case for case in panel["cases"]}
+    if any(family not in cases for family in planned):
+        raise ValueError("every planned family must come from the I-panel file")
+    strata = {(row["family_id"], row["item_id"]): row for row in meta}
+    selected: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]] = {}
+    for row, evidence in _selected_judgments(run_dir, "choice"):
+        engine, family = evidence.get("engine"), evidence.get("workload_id")
+        receipt = evidence.get("receipt")
+        if engine not in _ENGINES or family not in planned:
+            raise ValueError(f"{row['attempt_id']}: {engine} {family} is not planned")
+        if row["validity"] == "valid" and (
+            not isinstance(receipt, Mapping) or receipt.get("contract") != INBOX_HELPER_CONTRACT
+        ):
+            raise ValueError(f"{row['attempt_id']}: not an I-panel helper attempt")
+        key = (str(engine), str(family))
+        if key in selected:
+            raise ValueError(f"{row['attempt_id']}: a planned call is selected twice")
+        selected[key] = (row, evidence)
+    items: list[dict[str, Any]] = []
+    for family in planned:
+        for item in cases[family]["items"]:
+            labels = strata.get((family, item["id"]))
+            if (
+                labels is None
+                or labels.get("gold_intent") != item["expected_intent"]
+                or labels.get("gold_target") != item["expected_order"]
+            ):
+                raise ValueError(f"{family}/{item['id']}: meta row missing or off-label")
+            entry: dict[str, Any] = {
+                "family_id": family,
+                "item_id": item["id"],
+                "cluster_id": family,
+                "gold_intent": item["expected_intent"],
+                "gold_target": item["expected_order"],
+                **{key: labels[key] for key in INTENT_STRATA[:-1]},
+                "target": "none" if item["expected_order"] is None else "order",
+            }
+            for engine in _ENGINES:
+                entry[engine] = _intent_item(item, selected.get((engine, family)))
+            items.append(entry)
+
+    def correct(rows: Sequence[Mapping[str, Any]], engine: str, key: str = "joint_correct") -> int:
+        return sum(bool(row[engine][key]) for row in rows)
+
+    def delta(rows: list[dict[str, Any]]) -> float | None:
+        return (correct(rows, "jev") - correct(rows, "llm")) / len(rows) if rows else None
+
+    reasons = []
+    if any(entry[engine]["status"] == "missing" for entry in items for engine in _ENGINES):
+        reasons.append("incomplete_planned_families")
+    selected_invalid = sum(row["validity"] != "valid" for row, _ in selected.values())
+    if selected_invalid:
+        reasons.append("selected_invalid_attempt")
+    primary: dict[str, Any] = {"name": INTENT_PRIMARY, "unit": "ratio", "reasons": reasons}
+    if reasons:
+        primary.update(_ratio_or_unknown(None), interval=None, decision="invalidated")
+    else:
+        by_family: dict[str, list[dict[str, Any]]] = {}
+        for entry in items:
+            by_family.setdefault(entry["cluster_id"], []).append(entry)
+        interval = cluster_bootstrap(
+            by_family,
+            delta,
+            seed=bootstrap_seed(split_manifest_sha256, INTENT_PRIMARY),
+            min_clusters=min_clusters,
+        )
+        difference = correct(items, "jev") - correct(items, "llm")
+        primary.update(
+            value=difference / len(items),
+            numerator=difference,
+            denominator=len(items),
+            interval=interval.as_dict(),
+            decision=_intent_decision(interval),
+        )
+    engines: dict[str, Any] = {}
+    for engine in _ENGINES:
+        statuses = Counter(
+            selected[(engine, family)][1].get("status")
+            if (engine, family) in selected
+            else "missing"
+            for family in planned
+        )
+        engines[engine] = {
+            "joint_accuracy": Ratio(correct(items, engine), len(items)).as_dict(),
+            "intent_accuracy": Ratio(
+                correct(items, engine, "intent_correct"), len(items)
+            ).as_dict(),
+            "target_accuracy": Ratio(
+                correct(items, engine, "target_correct"), len(items)
+            ).as_dict(),
+            "helper_admitted": Ratio(statuses["admitted"], len(planned)).as_dict(),
+            "helper_calls": dict(sorted(statuses.items())),
+        }
+    admitted = Ratio(
+        sum(engines[engine]["helper_admitted"]["numerator"] for engine in _ENGINES),
+        len(_ENGINES) * len(planned),
+    )
+    strata_report: dict[str, Any] = {}
+    for dimension in INTENT_STRATA:
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for entry in items:
+            groups.setdefault(str(entry[dimension]), []).append(entry)
+        strata_report[dimension] = {
+            value: {
+                "items": len(rows),
+                **{
+                    engine: Ratio(correct(rows, engine), len(rows)).as_dict() for engine in _ENGINES
+                },
+                "joint_accuracy_delta": delta(rows),
+            }
+            for value, rows in sorted(groups.items())
+        }
+    return {
+        "schema_id": INTENT_SCHEMA_ID,
+        "judgment": INTENT_JUDGMENT,
+        "contract": INBOX_HELPER_CONTRACT,
+        "panel_sha256": split_manifest_sha256,
+        "scoring_rule": (
+            "joint: admitted intent equals the label and the admitted target is the "
+            "labelled source span (none when no single order); a rejected helper output "
+            "makes its whole family wrong"
+        ),
+        "decision_rule": (
+            "supported: CI lower bound above -0.05; not-supported: CI upper bound below "
+            "-0.05; mixed otherwise"
+        ),
+        "planned_families": len(planned),
+        "planned_items": len(items),
+        "primary": primary,
+        # U0c-i: admitted helper answers of both engines / planned calls, under the
+        # same completeness rule; supported only when every planned call is admitted.
+        "admission": {
+            "name": INTENT_ADMISSION_PRIMARY,
+            "unit": "ratio",
+            "reasons": reasons,
+            **_ratio_or_unknown(None if reasons else admitted.as_dict()),
+            "decision": "invalidated"
+            if reasons
+            else "supported"
+            if admitted.numerator == admitted.denominator
+            else "not-supported",
+        },
+        "engines": engines,
+        "strata": strata_report,
+        "items": items,
+    }
+
+
+def record_intent_aggregate(run_dir: Path, report: Mapping[str, Any]) -> dict[str, Any]:
+    """Write ``intent-results.json`` and append its selected analysis-only attempt."""
+    reasons = report["primary"]["reasons"]
+    return _record_aggregate(
+        run_dir,
+        INTENT_RESULTS,
+        report,
+        failure_class=reasons[0] if reasons else None,
+        description="Frozen I-panel intent aggregation; zero model dispatches.",
+        expected_effect="Joint intent and target accuracy of both helpers over the families.",
+        observed=(
+            "Every planned family has a selected judgment from both helpers.",
+            "A planned family call is missing or an invalid attempt stays selected.",
+        ),
+    )
+
+
+def intent_metric_rows(
+    report: Mapping[str, Any],
+    *,
+    primary: str = INTENT_PRIMARY,
+    source_ref: str = INTENT_RESULTS,
+) -> list[dict[str, Any]]:
+    """I-panel ``analysis.json`` rows under the unchanged schema, bound by JSON pointers.
+
+    U6a (``primary=intent_joint_accuracy_delta``) gets the delta and the admission
+    ratio; U0c-i (``intent_panel_admission_admitted_ratio``) gets the admission ratio
+    alone, since a secondary row may not carry the delta's negative numerator. Both
+    then get per engine ``<engine>_intent_{joint,label,target}_accuracy`` and
+    ``<engine>_intent_helper_admitted_ratio``, and each LABEL-RULES stratum as
+    ``<engine>_intent_joint_accuracy_<stratum>_<value>``.
+    """
+    admission = _bound_row(
+        INTENT_ADMISSION_PRIMARY,
+        report["admission"],
+        "/admission",
+        unit="ratio",
+        source_ref=source_ref,
+    )
+    if primary == INTENT_PRIMARY:
+        rows = [
+            _bound_row(
+                INTENT_PRIMARY, report["primary"], "/primary", unit="ratio", source_ref=source_ref
+            ),
+            admission,
+        ]
+    elif primary == INTENT_ADMISSION_PRIMARY:
+        rows = [admission]
+    else:
+        raise ValueError(f"unknown I-panel primary {primary!r}")
+    for engine in _ENGINES:
+        rows.extend(
+            _bound_row(
+                f"{engine}_intent_{suffix}",
+                report["engines"][engine][key],
+                f"/engines/{engine}/{key}",
+                unit="ratio",
+                source_ref=source_ref,
+            )
+            for suffix, key in _INTENT_ENGINE_METRICS
+        )
+    for dimension, values in report["strata"].items():
+        for value, block in values.items():
+            rows.extend(
+                _bound_row(
+                    f"{engine}_intent_joint_accuracy_{dimension}_{value}",
+                    block[engine],
+                    f"/strata/{dimension}/{value}/{engine}",
+                    unit="ratio",
+                    source_ref=source_ref,
+                )
+                for engine in _ENGINES
+            )
+    return rows
+
+
 def _stability_main(argv: Sequence[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m evals.benchmarks.verdict_panel_runner stability",
@@ -1552,16 +1944,58 @@ def _latency_main(argv: Sequence[str]) -> int:
     return 0 if report["primary"]["value"] != NOT_MEASURABLE else 1
 
 
+def _intent_main(argv: Sequence[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="python -m evals.benchmarks.verdict_panel_runner intent",
+        description="I-panel intent aggregation from retained helper attempts (no model call).",
+    )
+    parser.add_argument("--run-spec", type=Path, required=True, help="frozen U6a or U0c-i spec")
+    parser.add_argument("--run-dir", type=Path, required=True, help="the helper run directory")
+    parser.add_argument(
+        "--panel", type=Path, required=True, help="I-panel file; its sha256 seeds the interval"
+    )
+    parser.add_argument("--meta", type=Path, required=True, help="i-panel-meta.jsonl")
+    parser.add_argument(
+        "--record", action="store_true", help="write intent-results.json and its aggregate"
+    )
+    # Exit 1 reports a not-measurable primary; the report and rows are still printed.
+    args = parser.parse_args(argv)
+    spec = json.loads(args.run_spec.read_text(encoding="utf-8"))
+    raw = args.panel.read_bytes()
+    meta = [json.loads(line) for line in args.meta.read_text(encoding="utf-8").splitlines() if line]
+    report = intent_report(
+        args.run_dir,
+        spec["reproduction"]["execution"]["ordered_workload_ids"],
+        panel=json.loads(raw),
+        meta=meta,
+        split_manifest_sha256=hashlib.sha256(raw).hexdigest(),
+    )
+    if args.record:
+        record_intent_aggregate(args.run_dir, report)
+    name = spec["study"]["primary_metric"]["name"]
+    primary = report["admission"] if name == INTENT_ADMISSION_PRIMARY else report["primary"]
+    output = {
+        "primary": primary,
+        "engines": report["engines"],
+        "metrics": intent_metric_rows(report, primary=name),
+    }
+    print(json.dumps(output, indent=2, sort_keys=True))
+    return 0 if primary["value"] != NOT_MEASURABLE else 1
+
+
 _COMMANDS: dict[str, Callable[[Sequence[str]], int]] = {
     "stability": _stability_main,
     "latency": _latency_main,
+    "intent": _intent_main,
 }
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     if not arguments or arguments[0] not in _COMMANDS:
-        print("usage: python -m evals.benchmarks.verdict_panel_runner {stability,latency} ...")
+        print(
+            "usage: python -m evals.benchmarks.verdict_panel_runner {stability,latency,intent} ..."
+        )
         return 2
     return _COMMANDS[arguments[0]](arguments[1:])
 

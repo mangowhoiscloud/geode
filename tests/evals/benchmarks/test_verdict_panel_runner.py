@@ -1118,6 +1118,8 @@ def _unit_digests(
                 digests[f"{primitive}/{path.name}"] = _sha(path)
         digests[f"{primitive}/receipts"] = receipts.hexdigest()
     digests["dispatch-log"] = _sha(unit.session_dir / "dispatch-log.jsonl")
+    if (unit.session_dir / "pair-log.jsonl").exists():
+        digests["pair-log"] = _sha(unit.session_dir / "pair-log.jsonl")
     normalized = json.dumps(summary, sort_keys=True).replace(str(tmp_path), "<tmp>")
     digests["summary"] = hashlib.sha256(normalized.encode()).hexdigest()
     return digests
@@ -1130,25 +1132,26 @@ def _timed_run(
     concurrency: int,
     failures: frozenset[int] = frozenset(),
     paraphrases: dict[str, dict[str, Any]] | None = None,
+    primitives: tuple[str, ...] = ("choice", "noul"),
+    unit_options: dict[str, Any] | None = None,
+    latencies: tuple[float, float] = (2.5, 0.75),
 ) -> tuple[dict[str, Any], runner.PanelUnit, dict[str, bytes]]:
     clock = _SimClock()
-    astra = _TimedAstra(clock)
+    astra = _TimedAstra(clock, latency=latencies[0])
     bodies: list[bytes] = []
     unit = runner.PanelUnit(
-        run_ids={
-            "choice": "geode-jev-verdict-panel-test-choice",
-            "noul": "geode-jev-verdict-panel-test-noul",
-        },
-        outputs={"choice": tmp_path / "choice", "noul": tmp_path / "noul"},
+        run_ids={p: f"geode-jev-verdict-panel-test-{p}" for p in primitives},
+        outputs={p: tmp_path / p for p in primitives},
         session_dir=tmp_path / "session",
         pacing_s=1.0,
         max_concurrency=concurrency,
         heartbeat_s=0.01,
         paraphrases=paraphrases or {},
+        **(unit_options or {}),
     )
 
     async def main() -> dict[str, Any]:
-        transport = _timed_jev(clock, bodies, failures=failures)
+        transport = _timed_jev(clock, bodies, latency=latencies[1], failures=failures)
         async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
             return await runner.PanelRunner(
                 unit,
@@ -1229,6 +1232,48 @@ def test_internal_stability_unit_bytes_are_unchanged(tmp_path: Path) -> None:
     inputs["metric-rows"] = json.dumps(rows, sort_keys=True).encode()
     digests = _unit_digests(tmp_path, unit, summary, inputs)
     assert digests == _PRE_0025_STABILITY
+
+
+# sha256 digests recorded at 0a90cf8fe (0025 applied, before 0029) by the same harness.
+_PRE_0029_CHOICE_ONLY: dict[str, dict[str, str]] = {
+    "latin": {
+        "astra-requests": "ad1efd86c4013e7b85d2db4323e01901f1612c5955adef5c117e809f41b6271a",
+        "choice/attempts.jsonl": "84b76c30675288d77e2a4ce01b452ab129ff44c8ffb54f9aaafcd4edcbc0cf20",
+        "choice/receipts": "0fc6e8367df361e3e63c9b13e15fe40ef1b9e6c36140bc4f55f76dea1cdccb42",
+        "dispatch-log": "bed836c8d4ffd8c3abbc2c455aa29c5678a3280af109fa150cf10887508b7898",
+        "jev-requests": "f6e48c7d1b258b1cbe6a44f41dfa0daa2c116fedb4189bdc4243b73859612d62",
+        "summary": "4ae32d52fc4549c61c0518823007a59104acb92144172feaf118c3ded5d55d48",
+    },
+    "paired-latency": {
+        "astra-requests": "ad1efd86c4013e7b85d2db4323e01901f1612c5955adef5c117e809f41b6271a",
+        "choice/attempts.jsonl": "a3b22aaba7c231d4ac571b7ea3859719cb45a4649f3332d2551e1ccc5a398381",
+        "choice/receipts": "471568803032410e7a76ce44194d1043d1f4704e2a99c8c3ce7d499f40333fd9",
+        "dispatch-log": "a74db3d94280ea15aad71255fae0331c699159c90ff6b080ac027f923ecebeec",
+        "jev-requests": "f6e48c7d1b258b1cbe6a44f41dfa0daa2c116fedb4189bdc4243b73859612d62",
+        "pair-log": "00e4070a29b662fff414d4422f63d37250b71106ea3fbdab8cbf710c20f5e289",
+        "summary": "1b778db735e736f95d2a88440fc1f4d70919c10e84a51fc6ce3ac58e0682b91b",
+    },
+}
+
+
+@pytest.mark.parametrize("mode", ["latin", "paired-latency"])
+def test_choice_only_unit_bytes_are_unchanged(tmp_path: Path, mode: str) -> None:
+    rows = _external_rows(6)
+    order = panel.ordered_workload_ids([row["state_id"] for row in rows], "e" * 64)
+    # Synchronous fakes cannot overlap in simulated time, so the paired run keeps the
+    # clock still inside calls (zero skew) and pacing alone advances it.
+    paired = mode == "paired-latency"
+    summary, unit, inputs = _timed_run(
+        tmp_path,
+        runner.workloads_from_states(rows, order),
+        concurrency=2 if paired else 4,
+        primitives=("choice",),
+        unit_options={"mode": mode},
+        latencies=(0.0, 0.0) if paired else (2.5, 0.75),
+    )
+    assert not summary["stopped"] and summary["planned_calls"] == 12
+    digests = _unit_digests(tmp_path, unit, summary, inputs)
+    assert digests == _PRE_0029_CHOICE_ONLY[mode]
 
 
 # ---------------------------------------------------------------------------
@@ -1518,7 +1563,7 @@ def test_paired_replacement_stays_inside_its_pair_and_leaves_the_latency_summary
 
     unit = _choice_unit(tmp_path, mode=runner.PAIRED_LATENCY_MODE, concurrency=2, run_id=U3_RUN)
     summary = _drive(
-        unit, runner.workloads_from_states(rows, order), astra=_SlowAstra(0.01), transport=transport
+        unit, runner.workloads_from_states(rows, order), astra=_SlowAstra(0.04), transport=transport
     )
     assert summary["substitutions"] == 1 and not summary["stopped"]
     assert (
@@ -1543,7 +1588,8 @@ def test_paired_replacement_stays_inside_its_pair_and_leaves_the_latency_summary
     assert report["summary"]["excluded_by_reason"]["replaced_call"] == 1
     assert report["summary"]["comparable_pairs"]["numerator"] == 29
     assert report["primary"]["reasons"] == [] and report["primary"]["interval"]["clusters"] == 10
-    # Jev (4 ms) always completes before Astra (10 ms): the whole interval is below 0 s.
+    # Jev (4 ms) completes well before Astra (40 ms, room for slow CI runners): the whole
+    # interval is below 0 s.
     assert report["primary"]["interval"]["upper"] < 0
     assert report["primary"]["decision"] == "supported"
     spec = _latency_spec(tmp_path / "spec.json", order)
@@ -2008,3 +2054,657 @@ def test_latency_cli_records_the_aggregate_without_a_model(
         )
         == 1
     )
+
+
+# ---------------------------------------------------------------------------
+# I-panel: the inbox analyze_request helper as a Choice-only judgment (U0c, U6a)
+# ---------------------------------------------------------------------------
+
+IPANEL_RUN = "geode-jev-choice-intent-panel-test"
+_IPANEL_TEMPLATES = (
+    ("What's the status of {a}?", "status_only", 0, "explicit_status"),
+    ("I need to cancel {a}, thanks.", "cancel", 0, "explicit_cancel"),
+    ("Please refund {a}.", "refund", 0, "explicit_refund"),
+    ("Not {a}, I meant {b}. What's its status?", "status_only", 1, "correction_status"),
+    ("Where are all my parcels right now?", "status_only", None, "no_mention"),
+)
+
+
+def _ipanel(families: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """A synthetic I-panel in the Run owner's format (``orders`` + ``cases``) and meta rows."""
+    orders: dict[str, str] = {}
+    cases, meta = [], []
+    serial = 100
+    for index in range(families):
+        family_id = f"ip-t{index:02d}"
+        items = []
+        for position, (template, intent, target, phenomenon) in enumerate(_IPANEL_TEMPLATES):
+            ids = []
+            for _ in range(template.count("{")):
+                serial += 1
+                ids.append(f"{'ABCDEFGH'[serial % 8]}-{serial}")
+                orders[ids[-1]] = ("shipped", "cancelled", "processing")[serial % 3]
+            request = template.format(**dict(zip("ab", ids, strict=False)))
+            expected = ids[target] if target is not None else None
+            disposition = (
+                ("answered" if expected else "needs_clarification")
+                if intent == "status_only"
+                else "unsupported"
+            )
+            items.append(
+                {
+                    "id": f"q{position + 1}",
+                    "request": request,
+                    "candidates": ids,
+                    "expected_intent": intent,
+                    "expected_order": expected,
+                    "expected_answer": {
+                        "order_id": expected,
+                        "status": orders[expected] if disposition == "answered" else None,
+                        "disposition": disposition,
+                    },
+                }
+            )
+            meta.append(
+                {
+                    "family_id": family_id,
+                    "item_id": f"q{position + 1}",
+                    "family_language": "en" if index % 2 == 0 else "mixed",
+                    "language": "en",
+                    "n_candidates": len(ids),
+                    "phenomenon": phenomenon,
+                    "gold_intent": intent,
+                    "gold_target": expected,
+                    "gold_target_key": f"order_{target}" if target is not None else "none",
+                    "split": "analysis",
+                }
+            )
+        cases.append({"id": family_id, "items": items})
+    return {"authority": "synthetic", "orders": orders, "cases": cases}, meta
+
+
+def _ipanel_truth(panel_file: dict[str, Any]) -> dict[str, tuple[str, str]]:
+    """Request text -> (intent, target criteria key) from the labels."""
+    from evals.benchmarks.decision_handoff import order_mentions
+
+    truth = {}
+    for case in panel_file["cases"]:
+        for item in case["items"]:
+            keys = {span["order_id"]: key for key, span in order_mentions(item["request"]).items()}
+            truth[item["request"]] = (
+                item["expected_intent"],
+                keys.get(item["expected_order"], "none") if item["expected_order"] else "none",
+            )
+    return truth
+
+
+def _helper_payload(request: AdapterCallRequest) -> dict[str, Any]:
+    from html import unescape
+
+    content = request.messages[0].content
+    assert isinstance(content, str) and content.startswith("<decision_input>")
+    return json.loads(
+        unescape(content.removeprefix("<decision_input>").removesuffix("</decision_input>"))
+    )
+
+
+def _answers(
+    payload: dict[str, Any], truth: dict[str, tuple[str, str]], wrong: set[tuple[str, str]]
+) -> dict[str, str]:
+    """Correct labels except the (request text, question) pairs in ``wrong``."""
+    values = {}
+    for key, item in payload["state"]["items"].items():
+        intent, target = truth[item["request"]]
+        labels = list(payload["questions"][f"{key}_intent"]["criteria"])
+        targets = list(payload["questions"][f"{key}_target"]["criteria"])
+        # A question with a single option (``none`` alone) cannot be answered wrongly.
+        if (item["request"], "intent") in wrong:
+            intent = next((label for label in labels if label != intent), intent)
+        if (item["request"], "target") in wrong:
+            target = next((label for label in targets if label != target), target)
+        values[f"{key}_intent"], values[f"{key}_target"] = intent, target
+    return values
+
+
+class _IntentAstra(_Astra):
+    """Typed Astra helper: labels only; optional wrong answers and a drifted family."""
+
+    def __init__(
+        self,
+        truth: dict[str, tuple[str, str]],
+        *,
+        wrong: set[tuple[str, str]] = frozenset(),
+        drift_on: str | None = None,
+    ) -> None:
+        super().__init__()
+        self.truth, self.wrong, self.drift_on = truth, set(wrong), drift_on
+
+    async def acomplete(self, request: AdapterCallRequest) -> AdapterCallResult:
+        self.requests.append(request)
+        payload = _helper_payload(request)
+        values = _answers(payload, self.truth, self.wrong)
+        drifted = self.drift_on is not None and any(
+            item["request"] == self.drift_on for item in payload["state"]["items"].values()
+        )
+        await asyncio.sleep(0.002)
+        return AdapterCallResult(
+            text=json.dumps(values),
+            usage=UsageSummary(input_tokens=1200, input_tokens_present=True),
+            stop_reason="completed",
+            response_model="gpt-6-sol" if drifted else ROOT_MODEL,
+        )
+
+
+def _intent_jev(
+    truth: dict[str, tuple[str, str]],
+    bodies: list[bytes],
+    *,
+    wrong: set[tuple[str, str]] = frozenset(),
+    bad_sum_on: str | None = None,
+    fail_calls: frozenset[int] = frozenset(),
+) -> Any:
+    async def transport(request: httpx.Request) -> httpx.Response:
+        bodies.append(request.content)
+        await asyncio.sleep(0.001)
+        if len(bodies) in fail_calls:
+            raise httpx.ConnectError("synthetic outage", request=request)
+        payload = json.loads(request.content)
+        values = _answers(payload, truth, set(wrong))
+        answers = {}
+        for question, chosen in values.items():
+            labels = list(payload["questions"][question]["criteria"])
+            rest = (0.2 / (len(labels) - 1)) if len(labels) > 1 else 0.0
+            probabilities = {label: (0.8 if label == chosen else rest) for label in labels}
+            if len(labels) == 1:
+                probabilities = {chosen: 1.0}
+            answers[question] = {
+                "type": "choice",
+                "choice": chosen,
+                "probabilities": probabilities,
+                "confidence": 0.6,
+            }
+        if bad_sum_on is not None and any(
+            item["request"] == bad_sum_on for item in payload["state"]["items"].values()
+        ):
+            first = next(iter(answers.values()))
+            first["probabilities"][first["choice"]] += 0.01  # above the strict 1e-5 bound
+        body = {"model": JEV_MODEL, "usage": {"input_tokens": 900, "output_tokens": 0}}
+        return httpx.Response(200, content=json.dumps({**body, "answers": answers}))
+
+    return transport
+
+
+def _intent_unit(tmp_path: Path, *, mode: str = runner.PAIRED_LATENCY_MODE) -> runner.PanelUnit:
+    return runner.PanelUnit(
+        run_ids={"choice": IPANEL_RUN},
+        outputs={"choice": tmp_path / "choice"},
+        session_dir=tmp_path / "session",
+        pacing_s=0.0,
+        max_concurrency=2 if mode == runner.PAIRED_LATENCY_MODE else 4,
+        heartbeat_s=0.01,
+        mode=mode,
+        judgment=runner.INTENT_JUDGMENT,
+    )
+
+
+def _ipanel_spec(path: Path, family_ids: list[str], items: int, *, admission: bool = False) -> Path:
+    spec: dict[str, Any] = _run_spec()
+    spec["run_id"] = IPANEL_RUN
+    spec["created_at"] = spec["preregistration"]["frozen_at"] = "2026-01-01T00:00:00Z"
+    spec["study"]["primary_metric"] = (
+        {
+            "name": runner.INTENT_ADMISSION_PRIMARY,
+            "unit": "ratio",
+            "direction": "maximize",
+            "aggregation": "admitted helper answers / planned calls",
+            "denominator": 2 * len(family_ids),
+        }
+        if admission
+        else {
+            "name": runner.INTENT_PRIMARY,
+            "unit": "ratio",
+            "direction": "target",
+            "aggregation": "(Jev joint intent+target correct - Astra) / N_items; invalid = wrong",
+            "denominator": items,
+        }
+    )
+    execution = spec["reproduction"]["execution"]
+    execution.update(
+        ordered_workload_ids=family_ids,
+        workload_ids_sha256=_workload_hash(family_ids),
+        max_concurrency=2,
+    )
+    path.write_text(json.dumps(spec), encoding="utf-8")
+    return path
+
+
+def _ipanel_analysis(
+    run_dir: Path, spec: Path, report: dict[str, Any], *, admission: bool = False
+) -> Path:
+    attempts = [json.loads(line) for line in (run_dir / "attempts.jsonl").read_text().splitlines()]
+    selected = [row for row in attempts if row["selected_for_analysis"]]
+    path = run_dir / "analysis.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_id": "geode.eval-analysis@1",
+                "schema_version": 1,
+                "run_id": attempts[0]["run_id"],
+                "analyzed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                "run_spec_sha256": _sha(spec),
+                "attempts_sha256": _sha(run_dir / "attempts.jsonl"),
+                "selected_attempt_ids": [row["attempt_id"] for row in selected],
+                "answer": "Synthetic I-panel helper aggregation; no model was called.",
+                "metrics": runner.intent_metric_rows(
+                    report,
+                    primary=runner.INTENT_ADMISSION_PRIMARY if admission else runner.INTENT_PRIMARY,
+                ),
+                "decision": {
+                    "outcome": "diagnostic-only",
+                    "hypothesis_status": report["admission" if admission else "primary"][
+                        "decision"
+                    ],
+                    "rationale": "Preregistered U6a non-inferiority rule on the family interval.",
+                },
+                "limitations": ["Synthetic designer-style fixture."],
+                "evidence_refs": [ref for row in selected for ref in row["evidence_refs"]],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _run_ipanel(
+    tmp_path: Path,
+    families: int,
+    *,
+    astra: _IntentAstra | None = None,
+    transport: Any = None,
+    mode: str = runner.PAIRED_LATENCY_MODE,
+) -> tuple[dict[str, Any], runner.PanelUnit, dict[str, Any], list[dict[str, Any]], list[str]]:
+    panel_file, meta = _ipanel(families)
+    truth = _ipanel_truth(panel_file)
+    order = panel.ordered_workload_ids([case["id"] for case in panel_file["cases"]], "f" * 64)
+    unit = _intent_unit(tmp_path, mode=mode)
+    summary = _drive(
+        unit,
+        runner.workloads_from_states(runner.intent_panel_rows(panel_file), order),
+        astra=astra or _IntentAstra(truth),
+        transport=transport or _intent_jev(truth, []),
+    )
+    return summary, unit, panel_file, meta, order
+
+
+def test_intent_panel_rows_keep_labels_out_and_bind_each_family(tmp_path: Path) -> None:
+    panel_file, _ = _ipanel(3)
+    rows = runner.intent_panel_rows(panel_file)
+    assert [row["state_id"] for row in rows] == ["ip-t00", "ip-t01", "ip-t02"]
+    assert all(row["cluster_id"] == row["state_id"] for row in rows)
+    for row in rows:
+        assert set(row["state"]) == {"items"}
+        assert all(set(item) == {"id", "request", "candidates"} for item in row["state"]["items"])
+        assert "expected" not in json.dumps(row) and "shipped" not in json.dumps(row)
+    workloads = runner.workloads_from_states(rows, ["ip-t02", "ip-t00"])
+    assert [workload.cluster_id for workload in workloads] == ["ip-t02", "ip-t00"]
+    broken = json.loads(json.dumps(panel_file))
+    broken["cases"][0]["items"][0]["candidates"] = []
+    with pytest.raises(ValueError, match="candidate"):
+        runner.intent_panel_rows(broken)
+    twice = {**panel_file, "cases": [panel_file["cases"][0], panel_file["cases"][0]]}
+    with pytest.raises(ValueError, match="repeat"):
+        runner.intent_panel_rows(twice)
+
+
+def test_intent_unit_needs_choice_alone_and_base_families(tmp_path: Path) -> None:
+    both: dict[str, Any] = {
+        "run_ids": {"choice": "c", "noul": "n"},
+        "outputs": {"choice": tmp_path, "noul": tmp_path},
+    }
+    with pytest.raises(ValueError, match="Choice alone"):
+        runner.PanelUnit(session_dir=tmp_path, judgment=runner.INTENT_JUDGMENT, **both).validate()
+    with pytest.raises(ValueError, match="judgment"):
+        runner.PanelUnit(
+            run_ids={"choice": "c"},
+            outputs={"choice": tmp_path},
+            session_dir=tmp_path,
+            judgment="score",
+        ).validate()
+    panel_file, _ = _ipanel(1)
+    row = runner.intent_panel_rows(panel_file)[0]
+    with pytest.raises(ValueError, match="variants"):
+        runner.PanelRunner(
+            _intent_unit(tmp_path),
+            runner.workloads_from_states([row], ["ip-t00#rep1"]),
+            llm_adapter=_Astra(),
+            jev_client=None,
+            jev_key=None,
+        )
+
+
+def test_panel_and_e2e_helper_send_the_same_request(tmp_path: Path) -> None:
+    """The panel family call and the E2E analyze_request tool ask identical questions."""
+    from core.hooks.system import HookSystem
+    from core.tools.base import ToolContext
+    from evals.benchmarks.decision_handoff import DecisionHandoffTool
+    from evals.benchmarks.decision_handoff_runtime import inbox_request
+
+    panel_file, _ = _ipanel(1)
+    truth = _ipanel_truth(panel_file)
+    summary, unit, _, _, _ = _run_ipanel(tmp_path / "panel", 1)
+    assert summary["counts"]["choice"]["admitted"] == 2
+    panel_astra, panel_bodies = _IntentAstra(truth), []
+    _drive(
+        _intent_unit(tmp_path / "again"),
+        runner.workloads_from_states(runner.intent_panel_rows(panel_file), ["ip-t00"]),
+        astra=panel_astra,
+        transport=_intent_jev(truth, panel_bodies),
+    )
+    items = panel_file["cases"][0]["items"]
+    requests = {item["id"]: item["request"] for item in items}
+    hooks = HookSystem()
+    context = ToolContext(
+        hooks=hooks,
+        session_id="session",
+        turn_id="turn",
+        step_id="step",
+        tool_call_id="helper",
+        provider="openai",
+        source="subscription",
+        model=ROOT_MODEL,
+        effort="xhigh",
+    )
+    e2e_astra, e2e_bodies = _IntentAstra(truth), []
+
+    async def e2e() -> list[dict[str, Any]]:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(_intent_jev(truth, e2e_bodies))
+        ) as client:
+            source = inbox_request(items)
+            return [
+                await DecisionHandoffTool(
+                    source, "a", adapter=e2e_astra, requests=requests
+                ).aexecute(_tool_context=context),
+                await DecisionHandoffTool(
+                    source, "b", client=client, api_key=SecretStr("k"), requests=requests
+                ).aexecute(_tool_context=context),
+            ]
+
+    try:
+        outputs = asyncio.run(e2e())
+    finally:
+        hooks.close()
+    assert all("result" in output for output in outputs)
+    (panel_request,), (e2e_request,) = panel_astra.requests, e2e_astra.requests
+    for name in (
+        "model",
+        "effort",
+        "system_prompt",
+        "messages",
+        "response_schema",
+        "allowed_tool_names",
+        "tools",
+        "tool_choice",
+    ):
+        assert getattr(panel_request, name) == getattr(e2e_request, name), name
+    assert panel_bodies == e2e_bodies and len(panel_bodies) == 1
+    # No fixture label or order status reaches either engine.
+    sent = json.dumps(_helper_payload(panel_request)) + panel_bodies[0].decode()
+    assert "expected" not in sent and "shipped" not in sent and "processing" not in sent
+    receipt = json.loads(
+        (
+            unit.outputs["choice"]
+            / validate_attempts(unit.outputs["choice"] / "attempts.jsonl")[0]["evidence_refs"][0][
+                "path"
+            ]
+        ).read_text()
+    )["receipt"]
+    admitted = (
+        outputs[0]["result"]["items"]
+        if receipt["engine"] == "llm"
+        else outputs[1]["result"]["items"]
+    )
+    assert receipt["contract"] == "analyze_request-inbox" and receipt["items"] == admitted
+
+
+def test_intent_unit_scores_joint_accuracy_with_the_family_interval(tmp_path: Path) -> None:
+    from evals.benchmarks.decision_metrics import bootstrap_seed
+
+    panel_file, meta = _ipanel(12)
+    truth = _ipanel_truth(panel_file)
+    requests = [item["request"] for case in panel_file["cases"] for item in case["items"]]
+    # Astra misses three targets; Jev misses one intent: delta = (57 - 56 ... ) per item.
+    astra = _IntentAstra(
+        truth, wrong={(requests[3], "target"), (requests[8], "target"), (requests[13], "target")}
+    )
+    jev_wrong = {(requests[1], "intent")}
+    bodies: list[bytes] = []
+    order = panel.ordered_workload_ids([case["id"] for case in panel_file["cases"]], "f" * 64)
+    unit = _intent_unit(tmp_path)
+    summary = _drive(
+        unit,
+        runner.workloads_from_states(runner.intent_panel_rows(panel_file), order),
+        astra=astra,
+        transport=_intent_jev(truth, bodies, wrong=jev_wrong),
+    )
+    assert not summary["stopped"] and summary["planned_calls"] == summary["dispatched_calls"] == 24
+    assert summary["mode"] == "paired-latency" and (unit.session_dir / "pair-log.jsonl").is_file()
+    log = [
+        json.loads(line)
+        for line in (unit.session_dir / "dispatch-log.jsonl").read_text().splitlines()
+    ]
+    assert [row["workload_id"] for row in log[::2]] == order  # the frozen family order
+    assert [row["engine"] for row in log[:4]] == ["llm", "jev", "jev", "llm"]
+    # Within-pair helper latency is descriptive here (05 §3.6); the report reads it too.
+    latency = runner.latency_report(unit.outputs["choice"], order, split_manifest_sha256="f" * 64)
+    assert latency["summary"]["comparable_pairs"]["numerator"] == 12
+    report = runner.intent_report(
+        unit.outputs["choice"], order, panel=panel_file, meta=meta, split_manifest_sha256="f" * 64
+    )
+    primary = report["primary"]
+    assert (primary["numerator"], primary["denominator"]) == (2, 60)
+    assert primary["value"] == pytest.approx(2 / 60) and primary["reasons"] == []
+    assert report["engines"]["llm"]["joint_accuracy"] == {
+        "value": 57 / 60,
+        "numerator": 57,
+        "denominator": 60,
+    }
+    assert report["engines"]["jev"]["intent_accuracy"]["numerator"] == 59
+    assert report["engines"]["llm"]["target_accuracy"]["numerator"] == 57
+    assert report["engines"]["jev"]["helper_admitted"] == {
+        "value": 1.0,
+        "numerator": 12,
+        "denominator": 12,
+    }
+    interval = primary["interval"]
+    assert interval["seed"] == bootstrap_seed("f" * 64, "intent_joint_accuracy_delta")
+    assert interval["clusters"] == 12 and interval["replicates"] == 2000
+    assert interval["lower"] > -0.05 and primary["decision"] == "supported"
+    strata = report["strata"]
+    assert set(strata["phenomenon"]) == {row[3] for row in _IPANEL_TEMPLATES}
+    assert strata["target"]["none"]["items"] == 12 and set(strata["n_candidates"]) == {
+        "0",
+        "1",
+        "2",
+    }
+    assert set(strata["family_language"]) == {"en", "mixed"}
+    spec = _ipanel_spec(tmp_path / "spec.json", order, 60)
+    runner.record_intent_aggregate(unit.outputs["choice"], report)
+    rows = {row["name"]: row for row in runner.intent_metric_rows(report)}
+    assert (
+        rows["intent_joint_accuracy_delta"]["source_locator"]["numerator"] == "/primary/numerator"
+    )
+    assert rows["jev_intent_joint_accuracy_phenomenon_correction_status"]["denominator"] == 12
+    assert rows["llm_intent_helper_admitted_ratio"]["value"] == 1.0
+    assert report["admission"]["numerator"] == 24 and report["admission"]["denominator"] == 24
+    assert rows["intent_panel_admission_admitted_ratio"]["source_locator"]["value"] == (
+        "/admission/value"
+    )
+    validate_analysis(
+        _ipanel_analysis(unit.outputs["choice"], spec, report),
+        run_spec_path=spec,
+        attempts_path=unit.outputs["choice"] / "attempts.jsonl",
+    )
+
+
+def test_rejected_helper_output_makes_its_whole_family_wrong(tmp_path: Path) -> None:
+    panel_file, meta = _ipanel(12)
+    truth = _ipanel_truth(panel_file)
+    bad = panel_file["cases"][4]["items"][2]["request"]
+    order = [case["id"] for case in panel_file["cases"]]
+    unit = _intent_unit(tmp_path, mode=runner.LATIN_MODE)
+    summary = _drive(
+        unit,
+        runner.workloads_from_states(runner.intent_panel_rows(panel_file), order),
+        astra=_IntentAstra(truth),
+        transport=_intent_jev(truth, [], bad_sum_on=bad),
+    )
+    assert not summary["stopped"] and summary["counts"]["choice"]["rejected"] == 1
+    rejected = [
+        row
+        for row in validate_attempts(unit.outputs["choice"] / "attempts.jsonl")
+        if row["outcome"] == "failed"
+    ]
+    assert len(rejected) == 1 and rejected[0]["failure_class"] == "invalid_judge_output"
+    report = runner.intent_report(
+        unit.outputs["choice"], order, panel=panel_file, meta=meta, split_manifest_sha256="f" * 64
+    )
+    family = [item for item in report["items"] if item["family_id"] == "ip-t04"]
+    assert all(
+        not item["jev"]["joint_correct"] and item["jev"]["status"] == "rejected" for item in family
+    )
+    assert report["engines"]["jev"]["joint_accuracy"]["numerator"] == 55
+    assert report["engines"]["jev"]["helper_admitted"]["numerator"] == 11
+    assert report["engines"]["jev"]["helper_calls"] == {"admitted": 11, "rejected": 1}
+    assert report["admission"]["numerator"] == 23 and report["admission"]["decision"] == (
+        "not-supported"
+    )
+    assert report["primary"]["numerator"] == -5 and report["primary"]["reasons"] == []
+
+
+def test_intent_transport_and_route_failures_follow_the_panel_rules(tmp_path: Path) -> None:
+    panel_file, meta = _ipanel(12)
+    truth = _ipanel_truth(panel_file)
+    order = [case["id"] for case in panel_file["cases"]]
+    # A transport failure without a response is §4.2; one in 24 planned calls exceeds 2%.
+    unit = _intent_unit(tmp_path / "transport")
+    summary = _drive(
+        unit,
+        runner.workloads_from_states(runner.intent_panel_rows(panel_file), order),
+        astra=_IntentAstra(truth),
+        transport=_intent_jev(truth, [], fail_calls=frozenset({3})),
+    )
+    assert summary["stop_reason"] == "substitution_rate_exceeded"
+    failed = [
+        row
+        for row in validate_attempts(unit.outputs["choice"] / "attempts.jsonl")
+        if row["validity"] == "invalid"
+    ]
+    assert [row["failure_class"] for row in failed] == ["transport_error"]
+    # With 30 families (60 calls) one replacement fits under 2%: it runs inside the pair
+    # and the family is scored once, through the admitted child.
+    wide_file, wide_meta = _ipanel(30)
+    wide_truth = _ipanel_truth(wide_file)
+    wide_order = [case["id"] for case in wide_file["cases"]]
+    wide = _intent_unit(tmp_path / "replaced")
+    summary = _drive(
+        wide,
+        runner.workloads_from_states(runner.intent_panel_rows(wide_file), wide_order),
+        astra=_IntentAstra(wide_truth),
+        transport=_intent_jev(wide_truth, [], fail_calls=frozenset({3})),
+    )
+    assert summary["substitutions"] == 1 and not summary["stopped"]
+    report = runner.intent_report(
+        wide.outputs["choice"],
+        wide_order,
+        panel=wide_file,
+        meta=wide_meta,
+        split_manifest_sha256="f" * 64,
+    )
+    assert report["primary"]["reasons"] == [] and report["primary"]["numerator"] == 0
+    assert report["engines"]["jev"]["joint_accuracy"]["numerator"] == 150
+    assert report["admission"]["numerator"] == 60
+    # A drifted Astra model is a route violation: selected, invalid, unit stopped.
+    drifted = panel_file["cases"][2]["items"][0]["request"]
+    route = _intent_unit(tmp_path / "route")
+    summary = _drive(
+        route,
+        runner.workloads_from_states(runner.intent_panel_rows(panel_file), order),
+        astra=_IntentAstra(truth, drift_on=drifted),
+        transport=_intent_jev(truth, []),
+    )
+    assert summary["stop_reason"] == "route_violation"
+    report = runner.intent_report(
+        route.outputs["choice"], order, panel=panel_file, meta=meta, split_manifest_sha256="f" * 64
+    )
+    assert report["primary"]["reasons"] == [
+        "incomplete_planned_families",
+        "selected_invalid_attempt",
+    ]
+    assert report["primary"]["value"] == "not-measurable"
+    assert report["primary"]["decision"] == "invalidated"
+    spec = _ipanel_spec(tmp_path / "spec.json", order, 60)
+    runner.record_intent_aggregate(route.outputs["choice"], report)
+    aggregate = json.loads(
+        (route.outputs["choice"] / "attempts.jsonl").read_text().splitlines()[-1]
+    )
+    assert aggregate["validity"] == "invalid"
+    assert aggregate["failure_class"] == "incomplete_planned_families"
+    validate_analysis(
+        _ipanel_analysis(route.outputs["choice"], spec, report),
+        run_spec_path=spec,
+        attempts_path=route.outputs["choice"] / "attempts.jsonl",
+    )
+
+
+def test_intent_admission_batch_and_cli(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """U0c's four admission families: 4 x 2 helper calls, admitted ratio, no interval."""
+    summary, unit, panel_file, meta, order = _run_ipanel(tmp_path, 4)
+    assert summary["planned_calls"] == 8 and summary["counts"]["choice"]["admitted"] == 8
+    panel_path = tmp_path / "i-panel.admission.json"
+    panel_path.write_text(json.dumps(panel_file), encoding="utf-8")
+    meta_path = tmp_path / "i-panel-meta.jsonl"
+    meta_path.write_text("".join(json.dumps(row) + "\n" for row in meta), encoding="utf-8")
+    spec = _ipanel_spec(tmp_path / "spec.json", order, 20, admission=True)
+    arguments = [
+        "intent",
+        "--run-spec",
+        str(spec),
+        "--run-dir",
+        str(unit.outputs["choice"]),
+        "--panel",
+        str(panel_path),
+        "--meta",
+        str(meta_path),
+        "--record",
+    ]
+    assert runner.main(arguments) == 0
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["primary"] == {
+        "name": "intent_panel_admission_admitted_ratio",
+        "unit": "ratio",
+        "reasons": [],
+        "value": 1.0,
+        "numerator": 8,
+        "denominator": 8,
+        "decision": "supported",
+    }
+    assert "intent_joint_accuracy_delta" not in {row["name"] for row in printed["metrics"]}
+    recorded = json.loads((unit.outputs["choice"] / runner.INTENT_RESULTS).read_text())
+    assert recorded["panel_sha256"] == _sha(panel_path)
+    assert recorded["primary"]["interval"]["lower"] is None  # four families < ten clusters
+    validate_analysis(
+        _ipanel_analysis(unit.outputs["choice"], spec, recorded, admission=True),
+        run_spec_path=spec,
+        attempts_path=unit.outputs["choice"] / "attempts.jsonl",
+    )
+    with pytest.raises(ValueError, match="unknown I-panel primary"):
+        runner.intent_metric_rows(recorded, primary="other")
+    with pytest.raises(ValueError, match="not planned"):
+        runner.intent_report(
+            unit.outputs["choice"],
+            order[:2],
+            panel=panel_file,
+            meta=meta,
+            split_manifest_sha256="f" * 64,
+        )

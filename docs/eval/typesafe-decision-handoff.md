@@ -183,6 +183,27 @@ excessive skew or no comparable pair makes the primary not-measurable, and
 `record_latency_aggregate` then writes an invalid aggregate so the contract keeps
 it unpublished (`python -m evals.benchmarks.verdict_panel_runner latency`).
 
+The designer-authored intent panel (U0c-i admission batches, U6a) is a Choice-only
+unit with `judgment="intent"`, normally in the paired mode. `intent_panel_rows`
+validates each family with `validate_inbox_case` and keeps only the public item
+IDs, requests and candidates; the family is its own cluster. Each family is one
+call per engine through `InboxDecisionAdapter`, which builds a
+`DecisionHandoffTool` in inbox mode and uses its payload, `{id}_intent` and
+`{id}_target` questions, label-only Astra request and admission without the
+runtime observer, so the panel and the E2E helper ask the same questions. Transport
+exceptions propagate to the runner's existing classification, and an inadmissible
+completion is a V1-style rejection that keeps its usage. `intent_report` scores an
+item jointly correct when the admitted intent matches its label and the admitted
+target is the labelled source span, as the E2E intent runner does; a rejection
+makes every item of its family wrong. It binds `intent_joint_accuracy_delta`
+(Jev − Astra joint-correct items / planned items) with the family-cluster interval
+seeded by the panel file digest and the non-inferiority decision,
+`intent_panel_admission_admitted_ratio` (admitted helper answers / planned calls),
+per-engine intent, target and joint accuracy, and LABEL-RULES strata (phenomenon,
+item and family language, candidate count, `none` target). A missing family call
+or a selected invalid attempt leaves both not-measurable
+(`python -m evals.benchmarks.verdict_panel_runner intent`).
+
 The Noul profile explicitly sets `verification_primitive=noul` alongside
 `verification_engine=llm|jev` on the existing `a0` inbox path. The Harbor entry
 point and observation checker expose the corresponding `--verification-primitive`
