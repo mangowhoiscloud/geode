@@ -114,6 +114,15 @@ functional change.
 
 ### Added
 
+- Add offline Harbor handoff evidence tools for audit and publication. Derived
+  call, trial, pair and summary tables keep invalid cells, unknown usage and
+  null latency, and keep the Astra subscription API-equivalent estimate, Jev
+  tariff estimate and actual billed USD separate; billed USD stays null until a
+  provider export is reconciled by request identity. A denominator coverage
+  check rejects silently deselected planned cells, a reviewed projection stages
+  digest trajectories behind the existing release gate, a pattern scan covers
+  the other public report files, and an exact-merge read-back writes a receipt
+  for artifact PRs. No tool calls a model.
 - Extend System One admission to Score and Noul while preserving Choice-only
   consumers and native usage for completed invalid answers. Add opt-in matched
   candidate scoring and independent-condition verification diagnostics, with

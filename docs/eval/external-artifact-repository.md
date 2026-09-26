@@ -393,6 +393,29 @@ manifest.
 
 The publication is scripted deterministically by `scripts/eval/publish_crucible_artifacts.py` (`stage` copies one run's allowlisted subset and masks the local username; `mask` re-masks an existing tree idempotently). Both refuse sealed material by name and never rewrite an existing run directory.
 
+Harbor decision-handoff runs use five offline tools with the same boundary.
+None of them dispatches a model, pushes a branch or merges a PR.
+
+- `scripts/eval/handoff_tables.py` derives `call_ledger`, `e2e_trials`,
+  `e2e_pairs` and `primitive_summary` from retained receipts. Invalid cells
+  stay rows; unknown usage and a missing or zero-placeholder latency stay null.
+  Astra `subscription_api_equivalent_estimate_usd`, Jev
+  `typesafe_price_estimate_usd` and `actual_billed_usd` stay separate and are
+  never summed; billed USD stays null until a provider export is reconciled by
+  request identity.
+- `scripts/eval/denominator_coverage.py` rejects a measured primary that leaves
+  a planned execution cell unselected without a recorded successor, or that
+  uses fewer or more valid cells than `denominator x cells_per_unit`.
+- `scripts/eval/harbor_publication.py project` marks digest-policy trajectories
+  reviewed only after they equal the projection of the private export, then
+  stages them with replay incompleteness declared.
+- `scripts/eval/harbor_publication.py scan` applies the release gate's secret
+  and identity patterns to the other public report files and prints counts
+  only; it supplements, not replaces, exact-byte review.
+- `scripts/eval/harbor_publication.py readback` checks the merge commit's
+  ordered parents, reviewed tree, append-only destinations, manifest bytes and
+  trajectory releases from that commit's own blobs, and writes a new receipt.
+
 There is intentionally no automatic `rsync` from the whole artifact tree. A
 manifest-first, allowlisted copy keeps new credential files and unopened
 holdouts from becoming public merely because they appeared under a familiar
