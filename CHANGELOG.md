@@ -140,6 +140,12 @@ functional change.
   bootstrap intervals use 2,000 manifest-seeded replicates. Selection-only
   temperature and offline cascade τ fitting produce a frozen selection record;
   paired Choice and Noul panel reports apply the non-inferiority decisions.
+- Add a judgment-level verdict panel runner that calls the matched verifier
+  directly for Choice and Noul on both engines in a Latin-square order, with
+  bounded concurrency, pacing, heartbeat and two attempt files. Panel transport
+  failures without a response are replaced exactly once, a failed replacement or
+  a rate above 2% stops the unit, and quota, harness or route failures stop it.
+  Separate frozen invalidation-rule texts keep the E2E no-replacement rule.
 - Support Claude Opus 5.5's native computer toolset with serial execution,
   toolset-aware result replay and parameter validation before desktop actions.
   Withhold unsupported members; report native action errors and preserve

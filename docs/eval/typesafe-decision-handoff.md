@@ -114,6 +114,19 @@ offline Choice cascade τ on selection outputs only (maximum coverage within two
 points of the Astra fallback, larger τ on ties, no admissible τ at zero
 coverage); test reports apply the frozen τ and the non-inferiority rules.
 
+[`verdict_panel_runner.py`](../../evals/benchmarks/verdict_panel_runner.py) runs a
+panel unit without Harbor or a root loop. Each frozen workload (a state, or a
+`#rep1`, `#rep2`, `#order-rev` or `#para` stability variant) dispatches Astra and Jev
+for Choice and Noul in a 4×4 Latin-square rotation, with at most four concurrent
+calls, fixed pacing, per-call monotonic latency and an event-loop heartbeat.
+Choice and Noul attempts go to their own run directories. Attempts record
+admission, not correctness, until gold is unsealed. `INVALIDATION_RULES` holds
+the two frozen texts: panel transport failures without a response are replaced
+exactly once (unselected parent, child with `parent_attempt_id`), a failed
+replacement or a replacement rate above 2% stops the unit, and quota, harness or
+route failures stop it as selected invalid attempts. E2E keeps its no-replacement
+rule. An optional host Jev spend guard is consulted before every Jev call.
+
 The Noul profile explicitly sets `verification_primitive=noul` alongside
 `verification_engine=llm|jev` on the existing `a0` inbox path. The Harbor entry
 point and observation checker expose the corresponding `--verification-primitive`
