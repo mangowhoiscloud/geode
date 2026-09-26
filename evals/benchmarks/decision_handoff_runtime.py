@@ -1205,6 +1205,7 @@ async def run_arm(
     from core.agent.tool_executor import ToolExecutor
     from core.config import settings
     from core.config.policy_source import EMPTY_POLICY_SOURCES
+    from core.config.session import capture_session_model_config
     from core.hooks.system import HookSystem
     from core.llm.adapters.registry import bootstrap_builtins
     from core.observability.event_store import HookEventStore
@@ -1383,6 +1384,11 @@ async def run_arm(
                 force_include_allowed_tools=True,
                 system_prompt_override=system,
                 response_schema=_inbox_answer_schema() if inbox else ANSWER_SCHEMA,
+                # The frozen arm owns every root-side route: an operator
+                # reflection override must not move Reflection off the root model.
+                model_settings=capture_session_model_config(
+                    settings, model=MODEL, effort="xhigh", source="subscription"
+                ).model_copy(update={"reflection_model": "", "reflection_source": ""}),
             ),
         )
         if root_adapter is not None:

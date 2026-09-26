@@ -226,6 +226,26 @@ def test_admitted_jev_decision_stands_without_astra_dispatch(tmp_path: Path) -> 
     }
 
 
+def test_global_reflection_override_cannot_reroute_the_frozen_arm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "cognitive_reflection_model", "claude-haiku-4-5-20251001")
+    case, _ = _inbox_case()
+    answer, _wrong = _answers(case)
+    result, _evidence, _judge, _payloads = _run_cascade(
+        tmp_path, candidates=[json.dumps(answer)], jev=[jev_body("supported", 0.9)], astra=[]
+    )
+    assert result["valid"] and result["passed"], result
+    reflections = {
+        str(row["model"])
+        for row in result["call_accounting"]
+        if row["purpose"] == "cognitive_reflection"
+    }
+    assert reflections == {ROOT_MODEL}
+
+
 def test_low_q_escalates_once_and_the_root_consumes_astra_feedback(tmp_path: Path) -> None:
     case, _ = _inbox_case()
     answer, wrong = _answers(case)
