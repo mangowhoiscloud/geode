@@ -114,6 +114,11 @@ functional change.
 
 ### Added
 
+- Extend System One admission to Score and Noul while preserving Choice-only
+  consumers and native usage for completed invalid answers. Add opt-in matched
+  candidate scoring and independent-condition verification diagnostics, with
+  fixed action projections and Harbor primitive/receipt checks. Production
+  candidate selection remains unchanged; new live comparisons require a frozen run.
 - Support Claude Opus 5.5's native computer toolset with serial execution,
   toolset-aware result replay and parameter validation before desktop actions.
   Withhold unsupported members; report native action errors and preserve

@@ -1131,6 +1131,7 @@ async def run_arm(
     api_key: SecretStr | None = None,
     intervention: Mapping[str, Any] | None = None,
     verification_engine: str | None = None,
+    verification_primitive: str = "choice",
     verification_adapter: Any = None,
     verification_intervention: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -1158,6 +1159,10 @@ async def run_arm(
         raise ValueError("the frozen comparison owns its engines; global Jev must be disabled")
     if arm not in {"a0", "a", "b"}:
         raise ValueError("unknown arm")
+    if verification_primitive not in {"choice", "noul"} or (
+        verification_primitive == "noul" and verification_engine is None
+    ):
+        raise ValueError("verification primitive requires its matched engine")
     inbox = case.get("profile") == "inbox"
     if case.get("profile") not in {None, "inbox"}:
         raise ValueError("unknown handoff workload profile")
@@ -1280,6 +1285,7 @@ async def run_arm(
 
             judge = MatchedVerifierAdapter(
                 "llm" if verification_engine == "llm" else "jev",
+                primitive="noul" if verification_primitive == "noul" else "choice",
                 llm_adapter=(verification_adapter or resolve_for("openai", "subscription"))
                 if verification_engine == "llm"
                 else None,
@@ -1551,6 +1557,8 @@ async def run_arm(
     }
     if verification_engine is not None:
         metadata["verification_engine"] = verification_engine
+        if verification_primitive == "noul":
+            metadata["verification_primitive"] = verification_primitive
         if verification_intervention is not None:
             metadata["verification_intervention"] = dict(verification_intervention)
         metadata["verification_metrics"] = {
