@@ -48,6 +48,7 @@ from pathlib import Path
 from typing import Any, Literal, Protocol
 
 import httpx
+import openai
 from pydantic import SecretStr
 
 from evals.benchmarks.decision_handoff import ROOT_MODEL
@@ -113,6 +114,40 @@ INVALIDATION_RULES: dict[str, str] = {
         "acceptance."
     ),
 }
+
+
+def call_failure_class(error: BaseException) -> str:
+    """The frozen ``INVALIDATION_RULES["panel"]`` class of a call that raised, not answered.
+
+    One table for the panel runner and the Score-S harness:
+
+    - ``transport_error``, no model response: asyncio, httpx and OpenAI SDK timeouts and
+      connection failures, and HTTP 408 and 5xx. Replaced exactly once (05 §4.2).
+    - ``quota_exhausted``: ``BillingError``, a billing-fatal SDK error, HTTP 402 and
+      every 429. The frozen rules define no transient rate limit, so the 05 §4.3 limit
+      error rule (stop) applies to all of them.
+    - ``harness_error``: HTTP 401 and 403 (credentials), 400 and every other request
+      defect or exception.
+
+    Quota and harness failures are selected invalid attempts that stop the unit.
+    """
+    from core.llm.errors import BillingError, is_billing_fatal
+
+    if isinstance(error, BillingError) or (
+        isinstance(error, Exception) and is_billing_fatal(error)
+    ):
+        return "quota_exhausted"
+    if isinstance(error, httpx.HTTPStatusError):
+        status = error.response.status_code
+    elif isinstance(error, openai.APIStatusError):
+        status = error.status_code
+    elif isinstance(error, TimeoutError | httpx.TransportError | openai.APIConnectionError):
+        return "transport_error"
+    else:
+        return "harness_error"
+    if status == 408 or status >= 500:
+        return "transport_error"
+    return "quota_exhausted" if status in (402, 429) else "harness_error"
 
 
 class UnitStoppedError(RuntimeError):
@@ -431,7 +466,6 @@ class PanelRunner:
         position: int | None = None,
     ) -> tuple[str, dict[str, Any], BaseException | None]:
         from core.llm.adapters.base import AdapterCallRequest, Message
-        from core.llm.errors import BillingError
 
         adapter = self._adapter(engine, primitive, workload.variant)
         request = AdapterCallRequest(
@@ -461,12 +495,8 @@ class PanelRunner:
             result = await asyncio.wait_for(
                 adapter.acomplete(request), timeout=self.unit.timeouts[engine]
             )
-        except BillingError as exc:
-            return "quota_exhausted", self._elapsed(started, call), exc
-        except (TimeoutError, httpx.TransportError, httpx.HTTPStatusError) as exc:
-            return "transport_error", self._elapsed(started, call), exc
-        except Exception as exc:  # harness defect: never substituted
-            return "harness_error", self._elapsed(started, call), exc
+        except Exception as exc:  # only a transport error is ever substituted
+            return call_failure_class(exc), self._elapsed(started, call), exc
         finally:
             self._in_flight -= 1
         timing = self._elapsed(started, call)

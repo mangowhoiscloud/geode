@@ -23,7 +23,7 @@ import pytest
 from core.agent import candidate_sampling
 from core.agent.candidate_sampling import lensed_description
 from core.config import settings
-from core.hooks import HookSystem
+from core.hooks import HookSystem, MiddlewareRegistry
 from core.llm.adapters.base import (
     AdapterBillingType,
     AdapterCallRequest,
@@ -31,6 +31,7 @@ from core.llm.adapters.base import (
     UsageSummary,
 )
 from core.llm.adapters.typesafe import JEV_MODEL, SystemOneAdapter
+from core.llm.errors import BillingError
 from evals.benchmarks import score_selection as ss
 from evals.benchmarks.decision_candidate import CANDIDATE_LEVELS, TIE_RULE_CANDIDATE_ID
 from evals.benchmarks.decision_handoff import ROOT_MODEL
@@ -146,6 +147,7 @@ def _dispatch(
     timings: list[dict[str, Any]] | None = None,
     timeouts: dict[str, float] | None = None,
     jev_failures: Counter[str] | None = None,
+    jev_status: int = 503,
 ) -> _Run:
     monkeypatch.setattr(settings, "llm_max_retries", 1)
     subscription = (subscription_type or _Subscription)(quality, pick)
@@ -160,8 +162,8 @@ def _dispatch(
         bodies.append(body)
         presented = list(body["state"]["candidates"].values())
         if jev_failures is not None and jev_failures[presented[0]] > 0:
-            jev_failures[presented[0]] -= 1  # an HTTP error status: no model response
-            return httpx.Response(503, json={"error": "unavailable"})
+            jev_failures[presented[0]] -= 1  # an HTTP error status: no model answer
+            return httpx.Response(jev_status, json={"error": "synthetic"})
         answers = {
             f"c{index}": _score_answer(min(3.0, quality[text] + (jev_bias if index == 0 else 0)))
             for index, text in enumerate(presented)
@@ -1318,7 +1320,7 @@ def test_failed_replacement_or_replacement_rate_stops_the_unit(
     )
     assert len(failed["replaced_attempts"]) == times - 1
     kind = type(cause).__name__ if cause else "TimeoutError"
-    assert failed["reason"] == f"no response: {kind}"
+    assert failed["reason"] == f"transport_error: {kind}"
     with pytest.raises(ValueError, match=error):
         ss.score_selection(stopped.value.records, pools)
 
@@ -1402,3 +1404,57 @@ def test_a_response_that_breaks_the_contract_is_wrong_and_never_replaced(
 def test_call_timeouts_need_finite_positive_seconds_per_engine(timeouts: dict[str, Any]) -> None:
     with pytest.raises(ValueError, match="finite positive seconds"):
         asyncio.run(ss.dispatch_selection([], [], timeouts=timeouts))
+
+
+_SDK_REQUEST = httpx.Request("POST", "https://codex.invalid/responses")
+
+
+def _sdk(error: type[openai.APIStatusError], status: int) -> openai.APIStatusError:
+    return error("synthetic", response=httpx.Response(status, request=_SDK_REQUEST), body=None)
+
+
+@pytest.mark.parametrize(
+    ("names", "cause", "status", "failure"),
+    [
+        (("jev",), None, 401, "harness_error"),
+        (("jev",), None, 429, "quota_exhausted"),
+        (("jev",), None, 400, "harness_error"),
+        (("astra",), BillingError("weekly limit reached", provider="openai"), 0, "quota_exhausted"),
+        (("listwise",), _sdk(openai.RateLimitError, 429), 0, "quota_exhausted"),
+        (("listwise",), _sdk(openai.AuthenticationError, 401), 0, "harness_error"),
+    ],
+)
+def test_quota_credential_and_request_failures_stop_the_unit_unreplaced(
+    monkeypatch: pytest.MonkeyPatch,
+    names: tuple[str],
+    cause: Exception | None,
+    status: int,
+    failure: str,
+) -> None:
+    pools = _two_candidate_pools(25)  # a replacement would be allowed (2%)
+    _hang(pools, 24, "reverse", 1 if cause else 0, cause)  # the last planned call
+    with pytest.raises(ss.SelectionStoppedError, match="primary is not measurable") as stopped:
+        _dispatch(
+            monkeypatch,
+            pools,
+            _quality(pools),
+            names=names,
+            subscription_type=_Hanging,
+            timeouts=_FAST,
+            jev_failures=None if cause else Counter({_shown(pools, 24, "reverse"): 1}),
+            jev_status=status,
+        )
+    assert stopped.value.reason == failure and len(stopped.value.records) == 25
+    entry = stopped.value.records[-1]["selectors"][names[0]]["orders"]["reverse"]
+    assert (entry["failure"], entry["replaced_attempts"]) == (failure, [])
+    assert entry["reason"].startswith(f"{failure}: ")
+    with pytest.raises(ValueError, match="infrastructure failure"):
+        ss.score_selection(stopped.value.records, pools)
+
+
+def test_a_judge_that_never_reached_a_model_is_a_harness_defect() -> None:
+    watch = ss._FailureWatch(MiddlewareRegistry())
+    with pytest.raises(ss.CallFailureError, match="harness_error: no_model_call"):
+        watch.check("judge call failed: resolver unavailable")
+    watch.executed = True  # a call answered and the judge rejected it: a wrong answer
+    watch.check("judge declined the select_candidate tool")

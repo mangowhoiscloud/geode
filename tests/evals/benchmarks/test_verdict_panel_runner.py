@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import openai
 import pytest
 from core.llm.adapters.base import (
     AdapterBillingType,
@@ -284,6 +285,138 @@ def test_quota_route_and_harness_failures_stop_without_replacement(tmp_path: Pat
 
     broken, _ = _run(tmp_path / "broken", _workloads(), astra=Broken(), concurrency=1)
     assert broken["stop_reason"] == "harness_error"
+
+
+_REQUEST = httpx.Request("POST", "https://provider.invalid/v1")
+
+
+def _http(status: int) -> httpx.HTTPStatusError:
+    return httpx.HTTPStatusError(
+        "synthetic", request=_REQUEST, response=httpx.Response(status, request=_REQUEST)
+    )
+
+
+def _sdk(
+    error: type[openai.APIStatusError], status: int, body: object = None
+) -> openai.APIStatusError:
+    return error("synthetic", response=httpx.Response(status, request=_REQUEST), body=body)
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (TimeoutError(), "transport_error"),
+        (httpx.ConnectError("refused"), "transport_error"),
+        (httpx.ReadTimeout("slow"), "transport_error"),
+        (httpx.RemoteProtocolError("closed without a response"), "transport_error"),
+        (openai.APIConnectionError(request=_REQUEST), "transport_error"),
+        (openai.APITimeoutError(request=_REQUEST), "transport_error"),
+        (_http(408), "transport_error"),
+        (_http(500), "transport_error"),
+        (_http(503), "transport_error"),
+        (_sdk(openai.InternalServerError, 502), "transport_error"),
+        (BillingError("weekly limit reached", provider="openai"), "quota_exhausted"),
+        (_http(402), "quota_exhausted"),
+        (_http(429), "quota_exhausted"),
+        (_sdk(openai.RateLimitError, 429), "quota_exhausted"),
+        (
+            _sdk(openai.PermissionDeniedError, 403, {"error": {"code": "insufficient_quota"}}),
+            "quota_exhausted",
+        ),
+        (_http(401), "harness_error"),
+        (_http(403), "harness_error"),
+        (_sdk(openai.AuthenticationError, 401), "harness_error"),
+        (_http(400), "harness_error"),
+        (_sdk(openai.BadRequestError, 400), "harness_error"),
+        (_http(404), "harness_error"),
+        (KeyError("harness defect"), "harness_error"),
+    ],
+)
+def test_call_failure_class_is_one_table_for_both_runners(
+    error: BaseException, expected: str
+) -> None:
+    assert runner.call_failure_class(error) == expected
+
+
+def _status_at(failures: set[int], status: int) -> Transport:
+    calls = {"count": 0}
+
+    def transport(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        if calls["count"] in failures:
+            return httpx.Response(status, json={"error": "synthetic"})
+        return _default_transport(request)
+
+    return transport
+
+
+class _AstraFails(_Astra):
+    def __init__(self, error: Exception) -> None:
+        super().__init__()
+        self.error: Exception | None = error
+
+    async def acomplete(self, request: AdapterCallRequest) -> AdapterCallResult:
+        error, self.error = self.error, None
+        if error is not None:
+            raise error
+        return await super().acomplete(request)
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        {"astra": openai.APIConnectionError(request=_REQUEST)},
+        {"astra": openai.APITimeoutError(request=_REQUEST)},
+        {"transport": _status_at({3}, 503)},
+        {"transport": _status_at({3}, 408)},
+    ],
+)
+def test_no_response_failures_on_either_route_are_replaced_once(
+    tmp_path: Path, fault: dict[str, Any]
+) -> None:
+    summary, unit = _run(
+        tmp_path,
+        _workloads(("base", "rep1", "rep2")),
+        astra=_AstraFails(fault["astra"]) if "astra" in fault else None,
+        transport=fault.get("transport", _default_transport),
+        concurrency=1,
+    )
+    assert summary["substitutions"] == 1 and not summary["stopped"]
+    rows = _attempts(unit, "choice") + _attempts(unit, "noul")
+    failed = [r for r in rows if r["validity"] == "invalid"]
+    assert len(failed) == 1 and failed[0]["selected_for_analysis"] is False
+    assert failed[0]["failure_class"] == "transport_error"
+    children = [r for r in rows if r["parent_attempt_id"] == failed[0]["attempt_id"]]
+    assert len(children) == 1 and children[0]["validity"] == "valid"
+
+
+@pytest.mark.parametrize(
+    ("fault", "failure"),
+    [
+        ({"transport": _status_at({1}, 401)}, "harness_error"),
+        ({"transport": _status_at({1}, 403)}, "harness_error"),
+        ({"transport": _status_at({1}, 429)}, "quota_exhausted"),
+        ({"transport": _status_at({1}, 400)}, "harness_error"),
+        ({"astra": _sdk(openai.RateLimitError, 429)}, "quota_exhausted"),
+        ({"astra": _sdk(openai.AuthenticationError, 401)}, "harness_error"),
+    ],
+)
+def test_quota_credential_and_request_failures_stop_without_replacement(
+    tmp_path: Path, fault: dict[str, Any], failure: str
+) -> None:
+    summary, unit = _run(
+        tmp_path,
+        _workloads(("base", "rep1", "rep2")),
+        astra=_AstraFails(fault["astra"]) if "astra" in fault else None,
+        transport=fault.get("transport", _default_transport),
+        concurrency=1,
+    )
+    assert summary["stop_reason"] == failure and summary["substitutions"] == 0
+    invalid = [
+        r for r in _attempts(unit, "choice") + _attempts(unit, "noul") if r["validity"] == "invalid"
+    ]
+    assert len(invalid) == 1 and invalid[0]["selected_for_analysis"] is True
+    assert invalid[0]["failure_class"] == failure
 
 
 def test_jev_budget_guard_stops_before_dispatch(tmp_path: Path) -> None:

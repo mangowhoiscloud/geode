@@ -282,6 +282,12 @@ functional change.
 
 ### Fixed
 
+- Classify failed judgment calls with one frozen table in the verdict panel runner
+  and the Score-S harness. An Astra connection failure raised by the OpenAI SDK
+  and HTTP 408 or 5xx are transport failures replaced once; quota (`BillingError`,
+  402, 429), credential (401, 403) and request (400) failures stop the unit
+  instead of being replaced, and Score-S no longer scores quota or harness
+  failures as wrong selections.
 - Align handoff-table strict success with the preregistered definition. A
   matched final-verdict trial no longer needs lookup conditions: native reward,
   admitted decisive judgments, consumed negative feedback and no false

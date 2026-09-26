@@ -131,8 +131,13 @@ admission, not correctness, until gold is unsealed. `INVALIDATION_RULES` holds
 the two frozen texts: panel transport failures without a response are replaced
 exactly once (unselected parent, child with `parent_attempt_id`), a failed
 replacement or a replacement rate above 2% stops the unit, and quota, harness or
-route failures stop it as selected invalid attempts. E2E keeps its no-replacement
-rule. An optional host Jev spend guard is consulted before every Jev call.
+route failures stop it as selected invalid attempts. One table,
+`call_failure_class`, classifies a call that raised for the panel runner and the
+Score-S harness alike: timeouts, connection failures (httpx or the OpenAI SDK) and
+HTTP 408 or 5xx are transport failures; `BillingError`, a billing-fatal SDK error,
+HTTP 402 and every 429 are quota exhaustion (the frozen rules define no transient
+rate limit); HTTP 401 and 403, 400 and any other request defect or exception are
+harness errors. E2E keeps its no-replacement rule. An optional host Jev spend guard is consulted before every Jev call.
 A Choice-only unit (U3, X1a, X1) keys its run ID and output directory by `choice`
 alone and rotates the two Choice cells (even states Astra first, odd states Jev
 first); authored and external splits bind through the same `state_sha256` row
@@ -241,11 +246,12 @@ order), and records return in frozen pool order, byte-identical at any
 concurrency. Per-call latency goes to an optional `timings` list outside the
 records and supports no latency claim. Each call has the panel runner's bound,
 `timeouts={"llm": 180.0, "jev": 60.0}` by default (listwise is an Astra call). A
-call past its bound, or one that ends without a response (connection failure,
-transport exception or HTTP error status, including the OpenAI SDK forms, observed
-below `judge_candidates` by an execution middleware), is a transport failure
-(05 §4.2): it stays in the order's `replaced_attempts`, unselected, and the same
-call runs exactly once more. A response that breaks the contract (parse, schema,
+call past its bound, or one that raised (an execution middleware observes it below
+`judge_candidates`, which would otherwise fall back), takes the panel runner's
+`call_failure_class`. A transport failure (05 §4.2) stays in the order's
+`replaced_attempts`, unselected, and the same call runs exactly once more; quota
+exhaustion and harness defects, including a judge that never reached a model, are
+selected at once and stop the unit. A response that breaks the contract (parse, schema,
 probability sum) is never replaced and stays a wrong answer, as does its fallback. A failed replacement, or a replacement above 2% of planned calls, stays
 selected as `transport_error`, no new call starts, and `SelectionStoppedError`
 carries the records; scoring refuses them because the primary is not measurable.

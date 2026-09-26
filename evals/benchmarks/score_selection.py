@@ -26,9 +26,12 @@ Preregistered rules:
   dispatched (alias) ids. If either order is invalid (``judge_error`` fallback,
   missing or unaccepted receipt) the pool selection is invalid and counts as wrong,
   even when the fallback candidate would pass the task oracle.
-- A call that ends without a response (timeout, connection failure, HTTP error
-  status) is a §4.2 transport failure, not a wrong answer: it is replaced exactly
-  once, and a failed replacement or a replacement rate above 2% stops the unit.
+- A call that raises instead of answering is classified by the panel runner's
+  ``call_failure_class`` (the frozen panel invalidation rules), never a wrong
+  answer: a transport failure without a response (timeout, connection failure,
+  HTTP 408 or 5xx) is replaced exactly once, and a failed replacement or a
+  replacement rate above 2% stops the unit; quota exhaustion and harness defects
+  are selected invalid orders that stop the unit.
 - The listwise operational reference is the mean of per-order hits (0, 0.5, 1); an
   invalid order contributes 0.
 - Natural pools are graded by the existing inbox oracle's per-item answer matches
@@ -63,7 +66,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 import httpx
-import openai
 from core.agent import candidate_sampling
 from core.agent.candidate_sampling import MAX_BEST_OF, candidate_text, lensed_description
 from core.hooks import LlmCallRequest, MiddlewareRegistry, RuntimeEventBus
@@ -793,43 +795,51 @@ def _receipt_failure(judge_error: str, receipts: Sequence[Mapping[str, Any]]) ->
     return None if receipts[0].get("accepted") is True else "receipt_not_accepted"
 
 
-# 05 §4.2 "transport failure without a response", classified as the panel runner does
-# (timeouts, transport errors, HTTP error statuses), plus the OpenAI SDK forms of the
-# same failures that the subscription adapter raises. A response that arrived and broke
-# the contract is not here: its order stays invalid and counts as wrong (§3.1).
-NO_RESPONSE_ERRORS: tuple[type[Exception], ...] = (
-    TimeoutError,
-    httpx.TransportError,
-    httpx.HTTPStatusError,
-    openai.APIConnectionError,
-    openai.APIStatusError,
-)
+# Infrastructure classes of ``verdict_panel_runner.call_failure_class``: never scored.
+INFRASTRUCTURE_FAILURES = frozenset({"transport_error", "quota_exhausted", "harness_error"})
 
 
-class NoResponseError(RuntimeError):
-    """A selector call ended without a model response; dispatch applies 05 §4.2."""
+class CallFailureError(RuntimeError):
+    """A selector call raised instead of answering; ``failure_class`` is the panel class."""
+
+    def __init__(self, failure_class: str, error_type: str) -> None:
+        super().__init__(f"{failure_class}: {error_type}")
+        self.failure_class, self.error_type = failure_class, error_type
 
 
-class _NoResponseWatch:
-    """LLM execution middleware keeping the no-response failure ``judge_candidates`` hides."""
+class _FailureWatch:
+    """LLM execution middleware keeping the call failure ``judge_candidates`` hides.
+
+    A response that arrived and broke the contract raises nothing here: its order stays
+    invalid and counts as wrong (§3.1).
+    """
 
     def __init__(self, registry: MiddlewareRegistry) -> None:
         self.failure: Exception | None = None
+        self.executed = False
         # No middleware timeout of its own: dispatch bounds the whole call.
-        registry.register_llm_execution(self, name="score_no_response_watch", timeout_s=0)
+        registry.register_llm_execution(self, name="score_failure_watch", timeout_s=0)
 
     async def llm_execution(
         self, request: LlmCallRequest, next_call: LlmNextCall
     ) -> AdapterCallResult:
+        self.executed, self.failure = True, None
         try:
             return await next_call(request)
-        except NO_RESPONSE_ERRORS as error:
+        except Exception as error:
             self.failure = error
             raise
 
-    def check(self) -> None:
+    def check(self, judge_error: str) -> None:
+        from evals.benchmarks.verdict_panel_runner import call_failure_class
+
         if self.failure is not None:
-            raise NoResponseError(type(self.failure).__name__) from self.failure
+            raise CallFailureError(
+                call_failure_class(self.failure), type(self.failure).__name__
+            ) from self.failure
+        if judge_error and not self.executed:
+            # The judge failed before any call reached a model (route, request, resolver).
+            raise CallFailureError("harness_error", "no_model_call")
 
 
 @dataclass(frozen=True, slots=True)
@@ -881,7 +891,7 @@ class PointwiseSelector:
         registry.register_llm_request(
             self.matched_adapter(pool, order, receipts), allow_cache_invalidation=True
         )
-        watch = _NoResponseWatch(registry)
+        watch = _FailureWatch(registry)
         verdict = await candidate_sampling.judge_candidates(
             pool.task,
             texts,
@@ -892,7 +902,7 @@ class PointwiseSelector:
             middleware_registry=registry,
             correlation=_correlation(self.session_id, pool, self.name, order),
         )
-        watch.check()
+        watch.check(verdict.judge_error)
         receipt = receipts[0] if len(receipts) == 1 else None
         failure = _receipt_failure(verdict.judge_error, receipts)
         scores: dict[str, Any] | None = None
@@ -953,7 +963,7 @@ class ListwiseSelector:
     async def run(self, pool: FrozenPool, order: str) -> OrderResult:
         ids, texts = _presentation(pool, order)
         registry = MiddlewareRegistry(events=self.events)
-        watch = _NoResponseWatch(registry)
+        watch = _FailureWatch(registry)
         verdict = await candidate_sampling.judge_candidates(
             pool.task,
             texts,
@@ -964,7 +974,7 @@ class ListwiseSelector:
             middleware_registry=registry,
             correlation=_correlation(self.session_id, pool, self.name, order),
         )
-        watch.check()
+        watch.check(verdict.judge_error)
         valid = not verdict.judge_error
         return OrderResult(
             order=order,
@@ -1039,13 +1049,15 @@ async def dispatch_selection(
 
     Each call is bounded like a panel call: ``timeouts`` maps engine to seconds
     (default the panel runner's ``CALL_TIMEOUTS``, llm 180 and jev 60; listwise is an
-    Astra call). A call past its bound, or one that ends without a response
-    (:data:`NO_RESPONSE_ERRORS`), is a transport failure (05 §4.2): it stays in the
-    order's ``replaced_attempts`` (not selected) and the same call runs exactly once
-    more. A failed replacement, or a replacement above 2% of planned calls, stays
-    selected (``failure="transport_error"``) and stops the unit: no new call starts
-    and :class:`SelectionStoppedError` carries the records. A response that breaks
-    the contract is never replaced; its order stays invalid and counts as wrong.
+    Astra call). A call past its bound, or one that raised, takes the panel runner's
+    ``call_failure_class``. A transport failure (05 §4.2) stays in the order's
+    ``replaced_attempts`` (not selected) and the same call runs exactly once more; a
+    failed replacement, or a replacement above 2% of planned calls, stays selected
+    (``failure="transport_error"``) and stops the unit. Quota exhaustion and harness
+    defects are selected at once (``failure`` is the class) and stop the unit. A
+    stopped unit starts no new call and :class:`SelectionStoppedError` carries the
+    records. A response that breaks the contract is never replaced; its order stays
+    invalid and counts as wrong.
     """
     from evals.benchmarks.verdict_panel_runner import (
         CALL_TIMEOUTS,
@@ -1073,17 +1085,17 @@ async def dispatch_selection(
 
     async def timed(
         pool: FrozenPool, selector: Selector, order: str, attempt: int, limit: float
-    ) -> tuple[dict[str, Any] | None, str]:
-        """One dispatch; no entry, and the error type, when no response arrived."""
+    ) -> tuple[dict[str, Any] | None, tuple[str, str]]:
+        """One dispatch; no entry, and (failure class, error type), when the call raised."""
         started = time.monotonic()
         result: dict[str, Any] | None = None
-        error_type = ""
+        failure = ("", "")
         try:
             result = (await asyncio.wait_for(selector.run(pool, order), timeout=limit)).to_json()
         except TimeoutError:
-            error_type = "TimeoutError"
-        except NoResponseError as error:
-            error_type = str(error)
+            failure = ("transport_error", "TimeoutError")
+        except CallFailureError as error:
+            failure = (error.failure_class, error.error_type)
         if timings is not None:
             timings.append(
                 {
@@ -1094,7 +1106,7 @@ async def dispatch_selection(
                     "latency_s": time.monotonic() - started,
                 }
             )
-        return result, error_type
+        return result, failure
 
     async def call(pool: FrozenPool, selector: Selector, order: str) -> dict[str, Any] | None:
         """One planned call under 05 §4.2; ``None`` when the unit stopped before it."""
@@ -1103,25 +1115,27 @@ async def dispatch_selection(
             return None
         limit = limits[selector.engine or "llm"]
         replaced: list[dict[str, Any]] = []
-        reason = "substitution_rate_exceeded"
-        entry, error_type = await timed(pool, selector, order, 0, limit)
-        if entry is None and (substitutions + 1) / planned <= SUBSTITUTION_LIMIT:
-            substitutions += 1
-            replaced.append(
-                {
-                    "failure": "transport_error",
-                    "error_type": error_type,
-                    "timeout_s": limit,
-                    "selected_for_analysis": False,
-                }
-            )
-            reason = "replacement_failed"
-            entry, error_type = await timed(pool, selector, order, 1, limit)
+        entry, (failure, error_type) = await timed(pool, selector, order, 0, limit)
+        reason = failure
+        if failure == "transport_error":
+            reason = "substitution_rate_exceeded"
+            if (substitutions + 1) / planned <= SUBSTITUTION_LIMIT:
+                substitutions += 1
+                replaced.append(
+                    {
+                        "failure": failure,
+                        "error_type": error_type,
+                        "timeout_s": limit,
+                        "selected_for_analysis": False,
+                    }
+                )
+                reason = "replacement_failed"
+                entry, (failure, error_type) = await timed(pool, selector, order, 1, limit)
         if entry is None:
             stop_reason = stop_reason or reason
             ids = _presentation(pool, order)[0]
             failed = OrderResult(
-                order, ids, False, "transport_error", "", None, reason=f"no response: {error_type}"
+                order, ids, False, failure, "", None, reason=f"{failure}: {error_type}"
             )
             entry = failed.to_json()
         return {**entry, "replaced_attempts": replaced}
@@ -1191,10 +1205,10 @@ def _check_orders(entry: Mapping[str, Any], ids: list[str], label: str) -> dict[
     for order, expected in (("forward", ids), ("reverse", ids[::-1])):
         if orders[order].get("candidate_ids") != expected:
             raise ValueError(f"{label}: {order} presentation differs from the frozen pool")
-        if orders[order].get("failure") == "transport_error":
+        if orders[order].get("failure") in INFRASTRUCTURE_FAILURES:
             raise ValueError(
-                f"{label}: a selected transport failure stopped the unit; "
-                "the primary is not measurable (05 §4.2)"
+                f"{label}: a selected infrastructure failure stopped the unit; "
+                "the primary is not measurable (05 §4.2, §4.3)"
             )
     return orders
 
