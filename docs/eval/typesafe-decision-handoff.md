@@ -414,8 +414,25 @@ counts b and c without a p-value; and three-label verdict counts by human label.
 The §3.4 decision is supported, not-supported or mixed, and invalidated when a
 selected infrastructure-invalid attempt or a missing judgment leaves the primary
 not measurable. `x1_metric_rows` binds the analysis rows to `x1-results.json`
-by JSON pointer. Connecting retained Choice-only panel attempts to these records
-follows the Choice-only panel unit.
+by JSON pointer.
+
+`x1_pairs` connects an X1 Choice-only run: it reads the selected panel attempts and
+their digest-checked receipts, pairs Astra and Jev per planned state and rejects a
+judgment outside the frozen plan or one selected twice. A validator-rejected
+judgment is an invalid output (wrong); a selected infrastructure-invalid attempt or
+a missing judgment also names its reason, which makes the primary not measurable.
+The descriptive block (05 §11.4, no further test) adds P(supported) Brier and
+equal-width ECE, raw and at the frozen selection temperature; error-detection
+AUROC with score 1 − q and risk–coverage (AURC, risk at 50% and 80% coverage) on
+the receipt q; the frozen-τ offline cascade (an included Jev decision stands,
+otherwise Astra decides); strata by source split, reviewer count, `<no_answer>` and
+state-length quartile, all taken from inputs; and the dataset's reference verifiers'
+agreement with the human label, which never supports a conclusion. `python -m
+evals.benchmarks.external_binary --run-spec … --choice … --manifest … --states …
+--gold … --selection-freeze … [--reference …] [--record]` prints the rows and, with
+`--record`, writes `x1-results.json` with its selected analysis-only attempt. A test
+makes the gold file unreadable during dispatch and checks that no request carries a
+gold field or a canary token.
 
 ### Rejected decisions still have call evidence
 

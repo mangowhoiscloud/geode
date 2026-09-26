@@ -1,9 +1,9 @@
 """X1 external validation: binary acceptance of Choice verdicts (05 v2.2 §11.3–§11.5).
 
-Analysis step only: nothing here calls a model or reads runner files. Human
-labels (the builder's UV-blind strict-majority ``gold_accept``) are read by
-:func:`load_gold` during analysis, never on the dispatch path.
-Definitions follow ``external/cuavb/README.md`` §4:
+Analysis step only: nothing here calls a model. :func:`x1_pairs` reads the retained
+Choice attempts of an X1 run; human labels (the builder's UV-blind strict-majority
+``gold_accept``) are read by :func:`load_gold` during analysis, never on the dispatch
+path. Definitions follow ``external/cuavb/README.md`` §4:
 
 - decision: an accepted receipt with verdict ``supported`` accepts, an accepted
   receipt with another verdict rejects, an unaccepted receipt is invalid;
@@ -14,28 +14,41 @@ Definitions follow ``external/cuavb/README.md`` §4:
   receipt ``q`` (a binary projection of q would change what τ means).
 
 McNemar reports the discordant counts (b, c) only, without a p-value
-(coordinator decision 12). Metric rows bind to the report by JSON pointer.
+(coordinator decision 12). Descriptive metrics (05 §11.4, no further test):
+P(supported) Brier and ECE, raw and at the frozen temperature; error-detection
+AUROC (score 1 − q) and risk–coverage on the receipt q; the frozen-τ offline
+cascade; strata; and the dataset's reference verifiers' agreement with the human
+label, never a conclusion. Metric rows bind to the report by JSON pointer.
 """
 
 from __future__ import annotations
 
+import argparse
+import bisect
+import hashlib
 import itertools
 import json
+import math
+import statistics
+import sys
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from evals.benchmarks.decision_metrics import (
+    ECE_BINS,
     NON_INFERIORITY_MARGIN,
     NOT_MEASURABLE,
     SELECTION_FREEZE_SCHEMA_ID,
     TAU_GRID,
+    TEMPERATURE_GRID,
     VERDICT_LABELS,
     Ratio,
     bootstrap_seed,
     cluster_bootstrap,
+    temperature_scale_choice,
 )
 
 PREFIX = "x1"
@@ -51,6 +64,16 @@ ROW_METRICS = (
     "balanced_accuracy",
     "accept_auroc",
 )
+DESCRIPTIVE_ROW_METRICS = ("accept_brier", "accept_ece", "error_detection_auroc", "aurc")
+RISK_POINTS = (0.5, 0.8)
+STRATA = ("source_split", "reviewers", "no_answer", "length_quartile")
+# Reference verifiers of the dataset; gpt_eval_score -1 means not evaluated.
+REFERENCE_FIELDS = (
+    "uv_outcome_success",
+    "mm_is_success_legacy",
+    "verifier_is_success_legacy",
+    "gpt_eval_score",
+)
 
 
 @dataclass(frozen=True)
@@ -63,6 +86,7 @@ class BinaryRecord:
     verdict: str | None = None
     p_accept: float | None = None
     q: float | None = None
+    probabilities: Mapping[str, float] | None = None
 
     @property
     def accepted(self) -> bool:
@@ -88,8 +112,30 @@ def binary_record(
     ):
         raise ValueError(f"{item_id}: an accepted receipt needs verdict, probabilities and q")
     return BinaryRecord(
-        item_id, cluster_id, gold_accept, verdict, float(probabilities[ACCEPT]), float(receipt["q"])
+        item_id,
+        cluster_id,
+        gold_accept,
+        verdict,
+        float(probabilities[ACCEPT]),
+        float(receipt["q"]),
+        {label: float(value) for label, value in probabilities.items()},
     )
+
+
+def _mann_whitney(scored: Iterable[tuple[float, bool]]) -> Ratio | None:
+    """U over positive × negative pairs from mean ranks; ties count 0.5, one class is None."""
+    ordered = sorted(scored)
+    positives = sum(label for _, label in ordered)
+    negatives = len(ordered) - positives
+    if not positives or not negatives:
+        return None
+    rank = 0
+    rank_sum = 0.0
+    for _, group in itertools.groupby(ordered, key=lambda row: row[0]):
+        labels = [label for _, label in group]
+        rank_sum += (rank + (len(labels) + 1) / 2) * sum(labels)  # tied rows share a mean rank
+        rank += len(labels)
+    return Ratio(rank_sum - positives * (positives + 1) / 2, positives * negatives)
 
 
 def accept_auroc(records: Sequence[BinaryRecord]) -> Ratio | None:
@@ -98,20 +144,73 @@ def accept_auroc(records: Sequence[BinaryRecord]) -> Ratio | None:
     Valid outputs only. Numerator = U, denominator = positive × negative pairs;
     ``None`` when either class has no valid output.
     """
-    scored = sorted(
+    return _mann_whitney(
         (record.p_accept, record.gold_accept) for record in records if record.p_accept is not None
     )
-    positives = sum(label for _, label in scored)
-    negatives = len(scored) - positives
-    if not positives or not negatives:
-        return None
-    rank = 0
-    rank_sum = 0.0
-    for _, group in itertools.groupby(scored, key=lambda row: row[0]):
-        labels = [label for _, label in group]
-        rank_sum += (rank + (len(labels) + 1) / 2) * sum(labels)  # tied rows share a mean rank
-        rank += len(labels)
-    return Ratio(rank_sum - positives * (positives + 1) / 2, positives * negatives)
+
+
+def error_detection_auroc(records: Sequence[BinaryRecord]) -> Ratio | None:
+    """AUROC of score 1 − q (receipt q) for a wrong valid decision; ties count 0.5 (M7 rule)."""
+    return _mann_whitney(
+        (1 - record.q, not record.correct) for record in records if record.q is not None
+    )
+
+
+def accept_calibration(
+    records: Sequence[BinaryRecord], temperature: float | None = None, bins: int = ECE_BINS
+) -> dict[str, Ratio | None]:
+    """P(supported) Brier and equal-width ECE over valid outputs (README §4).
+
+    Brier = Σ (p − 1[gold])² / n; ECE = Σ_b n_b·|gold rate_b − mean p_b| / n, the last
+    bin closed at 1.0. ``temperature`` first rescales the three-label probabilities
+    with the frozen selection T.
+    """
+    points = []
+    for record in records:
+        if record.p_accept is None:
+            continue
+        p = record.p_accept
+        if temperature is not None and record.probabilities:
+            p = temperature_scale_choice(record.probabilities, temperature)[ACCEPT]
+        points.append((p, record.gold_accept))
+    if not points:
+        return {"accept_brier": None, "accept_ece": None}
+    buckets: list[list[tuple[float, bool]]] = [[] for _ in range(bins)]
+    for p, gold in points:
+        buckets[min(int(p * bins), bins - 1)].append((p, gold))
+    gaps = math.fsum(
+        abs(sum(gold for _, gold in bucket) - math.fsum(p for p, _ in bucket))
+        for bucket in buckets
+        if bucket
+    )  # n_b·|gold rate_b − mean p_b| = |Σ gold − Σ p| within bucket b
+    return {
+        "accept_brier": Ratio(math.fsum((p - gold) ** 2 for p, gold in points), len(points)),
+        "accept_ece": Ratio(gaps, len(points)),
+    }
+
+
+def risk_coverage_summary(records: Sequence[BinaryRecord]) -> dict[str, Any]:
+    """Risk–coverage on the receipt q, as M7's ``risk_coverage`` with binary correctness.
+
+    Valid outputs are accepted by descending q (stable by item ID); coverage counts
+    planned items, risk = wrong accepted / accepted. AURC = Σ risk / planned; a
+    coverage point beyond the valid share is not measurable.
+    """
+    planned = len(records)
+    ordered = sorted(
+        (record for record in records if record.q is not None),
+        key=lambda record: (-(record.q or 0.0), record.item_id),
+    )
+    risks: list[float] = []
+    wrong = 0
+    for accepted, record in enumerate(ordered, start=1):
+        wrong += not record.correct
+        risks.append(wrong / accepted)
+    risk_at: dict[str, float | None] = {}
+    for point in RISK_POINTS:
+        accepted = math.ceil(point * planned - 1e-9)
+        risk_at[f"{point:g}"] = risks[accepted - 1] if 0 < accepted <= len(risks) else None
+    return {"aurc": Ratio(math.fsum(risks), planned) if risks else None, "risk_at": risk_at}
 
 
 def engine_metrics(records: Sequence[BinaryRecord]) -> dict[str, Ratio | None]:
@@ -169,6 +268,116 @@ def _verdicts(records: Sequence[BinaryRecord]) -> dict[str, dict[str, int]]:
     }
 
 
+def offline_cascade(
+    pairs: Sequence[tuple[BinaryRecord, BinaryRecord]], tau: float | None
+) -> dict[str, Any]:
+    """Frozen-τ cascade: an included Jev decision stands, otherwise Astra decides.
+
+    Included = valid Jev output with receipt q ≥ τ; an invalid Astra output is wrong.
+    """
+    if tau is None:
+        return {"tau": None, "accuracy": _measured(None), "coverage": _measured(None)}
+    included = [jev.q is not None and jev.q >= tau for _, jev in pairs]
+    correct = sum(
+        jev.correct if taken else llm.correct
+        for (llm, jev), taken in zip(pairs, included, strict=True)
+    )
+    return {
+        "tau": tau,
+        "accuracy": _measured(Ratio(correct, len(pairs))),
+        "coverage": _measured(Ratio(sum(included), len(pairs))),
+    }
+
+
+def _descriptive(records: Sequence[BinaryRecord], temperature: float | None) -> dict[str, Any]:
+    raw = accept_calibration(records)
+    tempered = (
+        accept_calibration(records, temperature) if temperature is not None else dict.fromkeys(raw)
+    )
+    curve = risk_coverage_summary(records)
+    return {
+        **{name: _measured(value) for name, value in raw.items()},
+        "error_detection_auroc": _measured(error_detection_auroc(records)),
+        "aurc": _measured(curve["aurc"]),
+        "risk_at_coverage": curve["risk_at"],
+        "frozen_t": {
+            "temperature": temperature,
+            **{name: _measured(value) for name, value in tempered.items()},
+        },
+    }
+
+
+def strata_labels(
+    states: Sequence[Mapping[str, Any]], gold_rows: Sequence[Mapping[str, Any]]
+) -> dict[str, dict[str, str]]:
+    """Input strata per state: source split, reviewers (1, 2-3), no answer, length quartile.
+
+    The length is the E2E state measure ``len(json.dumps(state, ensure_ascii=False))``;
+    quartile cuts come from the given states, never from outputs.
+    """
+    reviewers = {str(row["state_id"]): row.get("annotators") for row in gold_rows}
+    lengths = {
+        str(row["state_id"]): len(json.dumps(row["state"], ensure_ascii=False)) for row in states
+    }
+    cuts = statistics.quantiles(lengths.values(), n=4) if len(lengths) > 1 else []
+    labels: dict[str, dict[str, str]] = {}
+    for row in states:
+        state_id = str(row["state_id"])
+        count = reviewers.get(state_id)
+        if type(count) is not int or count < 1:
+            raise ValueError(f"{state_id}: gold lacks its reviewer count")
+        answer = str(row["state"].get("candidate_output", "")).strip()
+        labels[state_id] = {
+            "source_split": str(row.get("source_split") or row.get("stratum")),
+            "reviewers": "1" if count == 1 else "2-3",
+            "no_answer": "yes" if answer == "<no_answer>" else "no",
+            "length_quartile": f"Q{bisect.bisect_left(cuts, lengths[state_id]) + 1}",
+        }
+    return labels
+
+
+def x1_strata(
+    pairs: Sequence[tuple[BinaryRecord, BinaryRecord]], labels: Mapping[str, Mapping[str, str]]
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """Per-stratum binary accuracy of both engines and the paired delta (descriptive)."""
+    result: dict[str, dict[str, dict[str, Any]]] = {}
+    for dimension in STRATA:
+        groups: dict[str, list[tuple[BinaryRecord, BinaryRecord]]] = {}
+        for pair in pairs:
+            groups.setdefault(labels[pair[0].item_id][dimension], []).append(pair)
+        result[dimension] = {}
+        for value, rows in sorted(groups.items()):
+            llm = sum(pair[0].correct for pair in rows)
+            jev = sum(pair[1].correct for pair in rows)
+            result[dimension][value] = {
+                "items": len(rows),
+                "llm": _measured(Ratio(llm, len(rows))),
+                "jev": _measured(Ratio(jev, len(rows))),
+                "delta": _measured(Ratio(jev - llm, len(rows))),
+            }
+    return result
+
+
+def reference_agreement(
+    rows: Sequence[Mapping[str, Any]], gold: Mapping[str, bool]
+) -> dict[str, dict[str, Any]]:
+    """The dataset's reference verifiers against the human label; never a conclusion.
+
+    Planned states only. A null value, or ``gpt_eval_score`` −1 (not evaluated), is left
+    out of that field's denominator.
+    """
+    result: dict[str, dict[str, Any]] = {}
+    for name in REFERENCE_FIELDS:
+        judged = [
+            (row[name], gold[row["state_id"]])
+            for row in rows
+            if row.get("state_id") in gold and row.get(name) in (0, 1)
+        ]
+        agree = sum(int(value) == int(label) for value, label in judged)
+        result[name] = _measured(Ratio(agree, len(judged)))
+    return result
+
+
 def x1_report(
     pairs: Sequence[tuple[BinaryRecord, BinaryRecord]],
     *,
@@ -176,6 +385,9 @@ def x1_report(
     tau: float | None,
     reasons: Sequence[str] = (),
     min_clusters: int = 10,
+    temperatures: Mapping[str, float | None] | None = None,
+    strata: Mapping[str, Mapping[str, str]] | None = None,
+    reference: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Paired Astra (first) vs Jev (second) X1 report with source-cluster intervals.
 
@@ -185,6 +397,8 @@ def x1_report(
     supported when the delta's lower bound is above −0.05 and Jev's P(supported)
     AUROC lower bound is above 0.5, not-supported when the delta's upper bound is
     below −0.05, mixed otherwise; invalidated when the primary is not measurable.
+    ``temperatures`` (frozen selection T per engine), ``strata`` (from
+    :func:`strata_labels`) and ``reference`` rows feed the descriptive block.
     """
     if any(
         llm.item_id != jev.item_id
@@ -269,6 +483,19 @@ def x1_report(
             "b": _measured(Ratio(sum(j.correct and not a.correct for a, j in pairs), planned)),
             "c": _measured(Ratio(sum(a.correct and not j.correct for a, j in pairs), planned)),
         },
+        "descriptive": {
+            "engines": {
+                engine: _descriptive(records, (temperatures or {}).get(engine))
+                for engine, records in (("llm", llm_records), ("jev", jev_records))
+            },
+            "cascade": offline_cascade(pairs, tau),
+            "strata": x1_strata(pairs, strata) if strata is not None else None,
+            "reference_agreement": reference_agreement(
+                reference, {llm.item_id: llm.gold_accept for llm in llm_records}
+            )
+            if reference is not None
+            else None,
+        },
         "decision": decision,
     }
 
@@ -277,9 +504,11 @@ def x1_metric_rows(report: Mapping[str, Any], *, source_ref: str = RESULTS) -> l
     """``analysis.json`` rows bound to the report by JSON pointer.
 
     The primary first, then per engine (Jev, Astra) binary accuracy, FAR, FRR,
-    balanced accuracy and P(supported) AUROC, Jev's frozen-τ coverage and risk, and
-    McNemar b and c over planned items. Unmeasured rows carry ``"not-measurable"``
-    with null numerator, denominator and locator.
+    balanced accuracy and P(supported) AUROC, Jev's frozen-τ coverage and risk,
+    McNemar b and c over planned items, and the descriptive P(supported) Brier and ECE
+    (raw and at the frozen T), error-detection AUROC, AURC and frozen-τ cascade.
+    Unmeasured rows carry ``"not-measurable"`` with null numerator, denominator and
+    locator.
     """
 
     def row(name: str, value: Mapping[str, Any], pointer: str) -> dict[str, Any]:
@@ -311,7 +540,88 @@ def x1_metric_rows(report: Mapping[str, Any], *, source_ref: str = RESULTS) -> l
         )
     for cell in ("b", "c"):
         rows.append(row(f"{PREFIX}_mcnemar_{cell}", report["mcnemar"][cell], f"/mcnemar/{cell}"))
+    descriptive = report["descriptive"]
+    for engine in ("jev", "llm"):
+        block = descriptive["engines"][engine]
+        base = f"/descriptive/engines/{engine}"
+        for metric in DESCRIPTIVE_ROW_METRICS:
+            rows.append(row(f"{PREFIX}_{engine}_{metric}", block[metric], f"{base}/{metric}"))
+        for metric in ("accept_brier", "accept_ece"):
+            name = f"{PREFIX}_{engine}_frozen_t_{metric}"
+            rows.append(row(name, block["frozen_t"][metric], f"{base}/frozen_t/{metric}"))
+    for metric in ("accuracy", "coverage"):
+        value = descriptive["cascade"][metric]
+        rows.append(row(f"{PREFIX}_cascade_{metric}", value, f"/descriptive/cascade/{metric}"))
     return rows
+
+
+def _jsonl(path: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def x1_pairs(
+    run_dir: Path, planned: Sequence[str], gold: Mapping[str, bool], clusters: Mapping[str, str]
+) -> tuple[list[tuple[BinaryRecord, BinaryRecord]], list[str]]:
+    """Pair the retained Choice judgments of an X1 run per planned state (Astra, Jev).
+
+    A validator-rejected judgment is an invalid output (wrong). A selected
+    infrastructure-invalid attempt or a missing judgment is an invalid output too, and
+    its reason makes the primary not measurable. A judgment outside the frozen plan,
+    or one selected twice, is an error.
+    """
+    from evals.benchmarks.verdict_panel_runner import _selected_judgments
+
+    planned_set = set(planned)
+    if len(planned_set) != len(planned) or any("#" in state for state in planned):
+        raise ValueError("X1 workloads are unique state IDs without variants")
+    found: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]] = {}
+    for row, evidence in _selected_judgments(run_dir, "choice"):
+        key = (str(evidence.get("engine")), str(evidence.get("state_id")))
+        if (
+            key[0] not in ("llm", "jev")
+            or key[1] not in planned_set
+            or evidence.get("variant") != "base"
+            or evidence.get("cluster_id") != clusters.get(key[1])
+        ):
+            raise ValueError(f"{row['attempt_id']}: a judgment outside the frozen X1 plan")
+        if key in found:
+            raise ValueError(f"{row['attempt_id']}: a planned judgment is selected twice")
+        found[key] = (row, evidence)
+    reasons: set[str] = set()
+    pairs: list[tuple[BinaryRecord, BinaryRecord]] = []
+    for state in planned:
+        records: list[BinaryRecord] = []
+        for engine in ("llm", "jev"):
+            judged = found.get((engine, state))
+            receipt = None
+            if judged is None:
+                reasons.add("missing_judgment")
+            elif judged[0]["validity"] != "valid":
+                reasons.add("selected_invalid_attempt")
+            else:
+                receipt = judged[1].get("receipt")
+            records.append(binary_record(state, clusters[state], gold[state], receipt))
+        pairs.append((records[0], records[1]))
+    return pairs, sorted(reasons)
+
+
+def record_x1_aggregate(run_dir: Path, report: Mapping[str, Any]) -> dict[str, Any]:
+    """Write ``x1-results.json`` and append its selected analysis-only attempt."""
+    from evals.benchmarks.verdict_panel_runner import _record_aggregate
+
+    reasons = report["primary"]["reasons"]
+    return _record_aggregate(
+        run_dir,
+        RESULTS,
+        report,
+        failure_class=reasons[0] if reasons else None,
+        description="Frozen X1 binary acceptance aggregation; zero model dispatches.",
+        expected_effect="Binary acceptance agreement of both engines with the human label.",
+        observed=(
+            "Every planned state was judged by both engines.",
+            "A planned judgment is missing or an invalid attempt stays selected.",
+        ),
+    )
 
 
 def load_gold(path: Path, planned: Sequence[str]) -> dict[str, bool]:
@@ -343,3 +653,66 @@ def frozen_tau(freeze: Mapping[str, Any]) -> float | None:
     if tau is not None and (type(tau) not in (int, float) or tau not in TAU_GRID):
         raise ValueError("the frozen tau is off the preregistered grid")
     return tau
+
+
+def frozen_temperatures(freeze: Mapping[str, Any]) -> dict[str, float | None]:
+    """The Choice temperature per engine of ``selection-freeze.json`` (``None``: not fitted)."""
+    if freeze.get("schema_id") != SELECTION_FREEZE_SCHEMA_ID:
+        raise ValueError("not a selection freeze document")
+    temperatures = freeze.get("temperatures")
+    choice = temperatures.get("choice") if isinstance(temperatures, Mapping) else None
+    result: dict[str, float | None] = {}
+    for engine in ("llm", "jev"):
+        fit = choice.get(engine) if isinstance(choice, Mapping) else None
+        value = fit.get("temperature") if isinstance(fit, Mapping) else None
+        if value is not None and (type(value) not in (int, float) or value not in TEMPERATURE_GRID):
+            raise ValueError("a frozen temperature is off the preregistered grid")
+        result[engine] = value
+    return result
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="python -m evals.benchmarks.external_binary",
+        description="X1 binary acceptance analysis from retained Choice attempts (no model call).",
+    )
+    parser.add_argument("--run-spec", type=Path, required=True, help="frozen X1 run spec")
+    parser.add_argument("--choice", type=Path, required=True, help="the X1 Choice run directory")
+    parser.add_argument("--manifest", type=Path, required=True, help="split-manifest.x1.json")
+    parser.add_argument("--states", type=Path, required=True, help="states.x1.jsonl")
+    parser.add_argument("--gold", type=Path, required=True, help="gold.x1.jsonl (analysis only)")
+    parser.add_argument("--selection-freeze", type=Path, required=True)
+    parser.add_argument("--reference", type=Path, help="reference.x1.jsonl (descriptive only)")
+    parser.add_argument("--record", action="store_true", help="write results and aggregate")
+    args = parser.parse_args(argv)
+    spec = json.loads(args.run_spec.read_text(encoding="utf-8"))
+    planned = [str(state) for state in spec["reproduction"]["execution"]["ordered_workload_ids"]]
+    states = [row for row in _jsonl(args.states) if row.get("state_id") in set(planned)]
+    if len(states) != len(planned):
+        raise ValueError("the states file does not hold every planned state once")
+    gold = load_gold(args.gold, planned)
+    freeze = json.loads(args.selection_freeze.read_text(encoding="utf-8"))
+    clusters = {str(row["state_id"]): str(row["cluster_id"]) for row in states}
+    pairs, reasons = x1_pairs(args.choice, planned, gold, clusters)
+    report = x1_report(
+        pairs,
+        split_manifest_sha256=hashlib.sha256(args.manifest.read_bytes()).hexdigest(),
+        tau=frozen_tau(freeze),
+        reasons=reasons,
+        temperatures=frozen_temperatures(freeze),
+        strata=strata_labels(states, _jsonl(args.gold)),
+        reference=_jsonl(args.reference) if args.reference else None,
+    )
+    if args.record:
+        record_x1_aggregate(args.choice, report)
+    output = {
+        "primary": report["primary"],
+        "decision": report["decision"],
+        "metrics": x1_metric_rows(report),
+    }
+    print(json.dumps(output, indent=2, sort_keys=True, allow_nan=False))
+    return 0 if not reasons else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

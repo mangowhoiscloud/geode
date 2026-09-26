@@ -204,6 +204,79 @@ def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+ROW_NAMES = [
+    "x1_binary_verdict_accuracy_delta",
+    *(f"x1_{engine}_{metric}" for engine in ("jev", "llm") for metric in x1.ROW_METRICS),
+    "x1_jev_selective_coverage",
+    "x1_jev_selective_risk",
+    "x1_mcnemar_b",
+    "x1_mcnemar_c",
+    *(
+        name
+        for engine in ("jev", "llm")
+        for name in (
+            *(f"x1_{engine}_{metric}" for metric in x1.DESCRIPTIVE_ROW_METRICS),
+            f"x1_{engine}_frozen_t_accept_brier",
+            f"x1_{engine}_frozen_t_accept_ece",
+        )
+    ),
+    "x1_cascade_accuracy",
+    "x1_cascade_coverage",
+]
+
+
+def _x1_spec(path: Path, run_id: str, ids: list[str]) -> Path:
+    spec: dict[str, Any] = _run_spec()
+    spec["run_id"] = run_id
+    spec["created_at"] = spec["preregistration"]["frozen_at"] = "2026-01-01T00:00:00Z"
+    spec["study"]["primary_metric"] = {
+        "name": x1.PRIMARY,
+        "unit": "ratio",
+        "direction": "target",
+        "aggregation": "(Jev binary-correct - Astra binary-correct) / planned states",
+        "denominator": len(ids),
+    }
+    spec["reproduction"]["execution"].update(
+        ordered_workload_ids=ids, workload_ids_sha256=_workload_hash(ids)
+    )
+    path.write_text(json.dumps(spec), encoding="utf-8")
+    return path
+
+
+def _validate(run_dir: Path, spec: Path, rows: list[dict[str, Any]], decision: str) -> None:
+    attempts = run_dir / "attempts.jsonl"
+    selected = [
+        row
+        for row in (json.loads(line) for line in attempts.read_text().splitlines())
+        if row["selected_for_analysis"]
+    ]
+    analysis = run_dir / "analysis.json"
+    analysis.write_text(
+        json.dumps(
+            {
+                "schema_id": "geode.eval-analysis@1",
+                "schema_version": 1,
+                "run_id": selected[0]["run_id"],
+                "analyzed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                "run_spec_sha256": _sha(spec),
+                "attempts_sha256": _sha(attempts),
+                "selected_attempt_ids": [row["attempt_id"] for row in selected],
+                "answer": "Synthetic X1 binary aggregation; no model was called.",
+                "metrics": rows,
+                "decision": {
+                    "outcome": "diagnostic-only",
+                    "hypothesis_status": decision,
+                    "rationale": "External validity check on synthetic records.",
+                },
+                "limitations": ["Synthetic fixture."],
+                "evidence_refs": [ref for row in selected for ref in row["evidence_refs"]],
+            }
+        ),
+        encoding="utf-8",
+    )
+    validate_analysis(analysis, run_spec_path=spec, attempts_path=attempts)
+
+
 @pytest.mark.parametrize("reasons", [[], ["selected_invalid_attempt"]])
 def test_rows_bind_to_the_report_under_the_evaluation_contract(
     tmp_path: Path, reasons: list[str]
@@ -235,54 +308,276 @@ def test_rows_bind_to_the_report_under_the_evaluation_contract(
     }
     attempts = tmp_path / "attempts.jsonl"
     attempts.write_text(json.dumps(attempt) + "\n", encoding="utf-8")
-    spec_doc: dict[str, Any] = _run_spec()
     ids = [llm.item_id for llm, _ in pairs]
-    spec_doc["run_id"] = "geode-jev-x1"
-    spec_doc["created_at"] = spec_doc["preregistration"]["frozen_at"] = "2026-01-01T00:00:00Z"
-    spec_doc["study"]["primary_metric"] = {
-        "name": x1.PRIMARY,
-        "unit": "ratio",
-        "direction": "target",
-        "aggregation": "(Jev binary-correct - Astra binary-correct) / planned states",
-        "denominator": len(ids),
-    }
-    spec_doc["reproduction"]["execution"].update(
-        ordered_workload_ids=ids, workload_ids_sha256=_workload_hash(ids)
-    )
-    spec = tmp_path / "run-spec.json"
-    spec.write_text(json.dumps(spec_doc), encoding="utf-8")
+    spec = _x1_spec(tmp_path / "run-spec.json", "geode-jev-x1", ids)
     rows = x1.x1_metric_rows(report)
-    assert [row["name"] for row in rows] == [
-        "x1_binary_verdict_accuracy_delta",
-        *(f"x1_{engine}_{metric}" for engine in ("jev", "llm") for metric in x1.ROW_METRICS),
-        "x1_jev_selective_coverage",
-        "x1_jev_selective_risk",
-        "x1_mcnemar_b",
-        "x1_mcnemar_c",
-    ]
+    assert [row["name"] for row in rows] == ROW_NAMES
     assert (rows[0]["value"] == NOT_MEASURABLE) is invalid
-    analysis = tmp_path / "analysis.json"
-    analysis.write_text(
+    _validate(tmp_path, spec, rows, report["decision"])
+
+
+# ---------------------------------------------------------------------------
+# Descriptive metrics (05 §11.4), hand-computed on the eight records above
+# ---------------------------------------------------------------------------
+
+
+def test_descriptive_calibration_error_detection_and_risk_coverage() -> None:
+    records = _records()
+    raw = {key: value.as_dict() for key, value in x1.accept_calibration(records).items() if value}
+    # Valid P(supported): (.9, T), (.6, T), (.3, T), (.6, F), (.1, F), (.2, F).
+    assert raw["accept_brier"]["denominator"] == 6
+    assert raw["accept_brier"]["value"] == pytest.approx(1.07 / 6)
+    # Bins 9, 6 (T and F), 3, 1, 2: |Σ gold − Σ p| = .1 + .2 + .7 + .1 + .2.
+    assert raw["accept_ece"]["value"] == pytest.approx(1.3 / 6)
+    same = x1.accept_calibration(records, temperature=1.0)
+    assert same["accept_brier"] == x1.accept_calibration(records)["accept_brier"]
+    sharper = x1.accept_calibration(records, temperature=0.5)["accept_brier"]
+    assert sharper is not None and sharper.value != raw["accept_brier"]["value"]
+    # Score 1 − q; wrong valid decisions score .5 and .4 against .1, .4, .2, .3.
+    auroc = x1.error_detection_auroc(records)
+    assert auroc is not None and (auroc.numerator, auroc.denominator) == (7.5, 8)
+    # By q: .9 ok, .8 ok, .7 ok, .6 ok (x1-1), .6 wrong (x1-4), .5 wrong; planned 8.
+    curve = x1.risk_coverage_summary(records)
+    assert curve["aurc"].denominator == 8
+    assert curve["aurc"].numerator == pytest.approx(0.2 + 2 / 6)
+    assert curve["risk_at"] == {"0.5": 0.0, "0.8": None}  # 80% needs 7 valid outputs
+
+
+def test_offline_cascade_uses_the_frozen_tau_on_the_jev_receipt_q() -> None:
+    def pair(index: int, gold: bool, jev: Any, llm: Any) -> tuple[Any, Any]:
+        return (
+            x1.binary_record(f"x1-{index}", "c", gold, llm),
+            x1.binary_record(f"x1-{index}", "c", gold, jev),
+        )
+
+    right, wrong = _receipt("supported", 0.9, 0.9), _receipt("contradicted", 0.1, 0.9)
+    pairs = [
+        pair(0, True, right, wrong),  # included, Jev right
+        pair(1, True, wrong, right),  # included, Jev wrong: Astra is not consulted
+        pair(2, True, _receipt("supported", 0.5, 0.5), right),  # q below τ: Astra right
+        pair(3, True, None, None),  # invalid Jev, invalid Astra: wrong
+    ]
+    cascade = x1.offline_cascade(pairs, 0.9)
+    assert cascade["coverage"] == {"value": 0.5, "numerator": 2, "denominator": 4}
+    assert cascade["accuracy"] == {"value": 0.5, "numerator": 2, "denominator": 4}
+    assert x1.offline_cascade(pairs, None)["accuracy"]["value"] == NOT_MEASURABLE
+
+
+def _state_row(index: int, *, split: str, answer: str, filler: int) -> dict[str, Any]:
+    state = {
+        "task_contract": "Judge completion.",
+        "original_request": "x" * filler,
+        "candidate_output": answer,
+        "tool_observations": [],
+    }
+    return {
+        "state_id": f"x1-{index}",
+        "cluster_id": f"c{index}",
+        "source_split": split,
+        "state": state,
+    }
+
+
+def test_strata_come_from_inputs_and_reference_agreement_skips_unjudged_rows() -> None:
+    states = [
+        _state_row(0, split="internal", answer="Done.", filler=10),
+        _state_row(1, split="internal", answer="<no_answer>", filler=20),
+        _state_row(2, split="om2w", answer="Done.", filler=30),
+        _state_row(3, split="om2w", answer="Done.", filler=40),
+    ]
+    gold_rows = [
+        {"state_id": f"x1-{i}", "annotators": count} for i, count in enumerate((1, 2, 3, 1))
+    ]
+    labels = x1.strata_labels(states, gold_rows)
+    assert [labels[f"x1-{i}"]["reviewers"] for i in range(4)] == ["1", "2-3", "2-3", "1"]
+    assert [labels[f"x1-{i}"]["no_answer"] for i in range(4)] == ["no", "yes", "no", "no"]
+    assert [labels[f"x1-{i}"]["length_quartile"] for i in range(4)] == ["Q1", "Q2", "Q3", "Q4"]
+    gold = {"x1-0": True, "x1-1": False, "x1-2": True, "x1-3": False}
+    pairs = [
+        (
+            x1.binary_record(state, f"c{i}", gold[state], _receipt("supported", 0.9, 0.9)),
+            x1.binary_record(state, f"c{i}", gold[state], _receipt("contradicted", 0.1, 0.9)),
+        )
+        for i, state in enumerate(gold)
+    ]
+    strata = x1.x1_strata(pairs, labels)
+    assert strata["source_split"]["internal"]["items"] == 2
+    assert strata["source_split"]["om2w"]["jev"] == {"value": 0.5, "numerator": 1, "denominator": 2}
+    assert strata["no_answer"]["yes"]["delta"] == {"value": 1.0, "numerator": 1, "denominator": 1}
+    with pytest.raises(ValueError, match="reviewer count"):
+        x1.strata_labels(states, gold_rows[:3])
+    reference = [
+        {"state_id": "x1-0", "uv_outcome_success": 1, "gpt_eval_score": -1},
+        {"state_id": "x1-1", "uv_outcome_success": 0, "gpt_eval_score": 1},
+        {"state_id": "x1-2", "uv_outcome_success": None, "gpt_eval_score": 0},
+        {"state_id": "x1-3", "uv_outcome_success": 1, "gpt_eval_score": 0},
+        {"state_id": "x1-unplanned", "uv_outcome_success": 1, "gpt_eval_score": 1},
+    ]
+    agreement = x1.reference_agreement(reference, gold)
+    assert agreement["uv_outcome_success"] == {"value": 2 / 3, "numerator": 2, "denominator": 3}
+    assert agreement["gpt_eval_score"] == {"value": 1 / 3, "numerator": 1, "denominator": 3}
+    assert agreement["mm_is_success_legacy"]["value"] == NOT_MEASURABLE
+
+
+def test_frozen_temperatures_come_from_the_selection_freeze() -> None:
+    freeze = {
+        "schema_id": SELECTION_FREEZE_SCHEMA_ID,
+        "temperatures": {"choice": {"llm": {"temperature": 1.4}, "jev": {"temperature": None}}},
+    }
+    assert x1.frozen_temperatures(freeze) == {"llm": 1.4, "jev": None}
+    freeze["temperatures"]["choice"]["jev"] = {"temperature": 1.3}
+    with pytest.raises(ValueError, match="off the preregistered grid"):
+        x1.frozen_temperatures(freeze)
+
+
+# ---------------------------------------------------------------------------
+# Connection to retained Choice-only attempts, gold canary, CLI
+# ---------------------------------------------------------------------------
+
+
+def _gold_file(path: Path, ids: list[str], canary: str) -> dict[str, bool]:
+    gold = {state: index % 2 == 0 for index, state in enumerate(ids)}
+    path.write_text(
+        "".join(
+            json.dumps(
+                {
+                    "state_id": state,
+                    "gold_accept": label,
+                    "majority_outcome": "Correct" if label else "Incorrect",
+                    "votes": {"Correct": int(label), "Incorrect": int(not label)},
+                    "annotators": 1,
+                    "canary": canary,
+                }
+            )
+            + "\n"
+            for state, label in gold.items()
+        ),
+        encoding="utf-8",
+    )
+    return gold
+
+
+def _external_run(
+    tmp_path: Path, count: int = 12, concurrency: int = 4, **drive: Any
+) -> tuple[Any, list[dict[str, Any]], list[str], list[str]]:
+    from evals.benchmarks import verdict_panel as panel
+    from evals.benchmarks import verdict_panel_runner as runner
+
+    from tests.evals.benchmarks import test_verdict_panel_runner as panel_tests
+
+    rows = panel_tests._external_rows(count, clusters=count)
+    order = panel.ordered_workload_ids([row["state_id"] for row in rows], MANIFEST)
+    bodies: list[str] = []
+
+    def transport(request: Any) -> Any:
+        bodies.append(request.content.decode())
+        return panel_tests._default_transport(request)
+
+    unit = panel_tests._choice_unit(tmp_path, concurrency=concurrency)
+    astra = drive.pop("astra", None) or panel_tests._Astra()
+    panel_tests._drive(
+        unit, runner.workloads_from_states(rows, order), astra=astra, transport=transport, **drive
+    )
+    sent = bodies + [
+        json.dumps([request.system_prompt, *(m.content for m in request.messages)])
+        for request in astra.requests
+    ]
+    return unit, rows, order, sent
+
+
+def test_retained_choice_attempts_score_end_to_end_and_never_see_gold(tmp_path: Path) -> None:
+    canary = "GOLD-CANARY-5f1c9e"
+    gold_path = tmp_path / "gold.x1.jsonl"
+    ids = [f"x1-{index:016x}" for index in range(12)]
+    gold = _gold_file(gold_path, ids, canary)
+    gold_path.chmod(0)  # any read on the dispatch path fails
+    try:
+        unit, rows, order, sent = _external_run(tmp_path)
+    finally:
+        gold_path.chmod(0o600)
+    assert sorted(order) == sorted(ids) and len(sent) == 24
+    for token in (canary, "gold_accept", "majority_outcome", '"votes"'):
+        assert not any(token in text for text in sent)
+    clusters = {row["state_id"]: row["cluster_id"] for row in rows}
+    pairs, reasons = x1.x1_pairs(
+        unit.outputs["choice"], order, x1.load_gold(gold_path, order), clusters
+    )
+    assert reasons == [] and [llm.item_id for llm, _ in pairs] == order
+    # The fake Astra always says supported, the fake Jev contradicted.
+    assert all(llm.accepted and not jev.accepted for llm, jev in pairs)
+    assert all(llm.correct == gold[llm.item_id] for llm, _ in pairs)
+    report = x1.x1_report(
+        pairs,
+        split_manifest_sha256=MANIFEST,
+        tau=0.8,
+        temperatures={"llm": 1.0, "jev": 1.0},
+        strata=x1.strata_labels(
+            rows, [json.loads(line) for line in gold_path.read_text().splitlines()]
+        ),
+    )
+    assert report["primary"]["value"] == 0.0 and report["mcnemar"]["b"]["numerator"] == 6
+    x1.record_x1_aggregate(unit.outputs["choice"], report)
+    spec = _x1_spec(tmp_path / "run-spec.json", "geode-jev-external-cuavb-choice-test", order)
+    _validate(unit.outputs["choice"], spec, x1.x1_metric_rows(report), report["decision"])
+
+
+def test_a_stopped_x1_run_is_invalidated_with_its_reasons(tmp_path: Path) -> None:
+    from core.llm.errors import BillingError
+
+    from tests.evals.benchmarks import test_verdict_panel_runner as panel_tests
+
+    astra = panel_tests._AstraFails(BillingError("weekly limit reached", provider="openai"))
+    unit, rows, order, _ = _external_run(tmp_path, astra=astra, concurrency=1)
+    gold = dict.fromkeys(order, True)
+    clusters = {row["state_id"]: row["cluster_id"] for row in rows}
+    pairs, reasons = x1.x1_pairs(unit.outputs["choice"], order, gold, clusters)
+    assert reasons == ["missing_judgment", "selected_invalid_attempt"]
+    report = x1.x1_report(pairs, split_manifest_sha256=MANIFEST, tau=None, reasons=reasons)
+    assert report["primary"]["value"] == NOT_MEASURABLE and report["decision"] == "invalidated"
+    x1.record_x1_aggregate(unit.outputs["choice"], report)
+    spec = _x1_spec(tmp_path / "run-spec.json", "geode-jev-external-cuavb-choice-test", order)
+    _validate(unit.outputs["choice"], spec, x1.x1_metric_rows(report), report["decision"])
+
+
+def test_x1_cli_records_the_aggregate_without_a_model(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    unit, rows, order, _ = _external_run(tmp_path)
+    states = tmp_path / "states.x1.jsonl"
+    states.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    gold = tmp_path / "gold.x1.jsonl"
+    _gold_file(gold, order, "canary")
+    manifest = tmp_path / "split-manifest.x1.json"
+    manifest.write_text('{"unit": "X1"}', encoding="utf-8")
+    freeze = tmp_path / "selection-freeze.json"
+    freeze.write_text(
         json.dumps(
             {
-                "schema_id": "geode.eval-analysis@1",
-                "schema_version": 1,
-                "run_id": "geode-jev-x1",
-                "analyzed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-                "run_spec_sha256": _sha(spec),
-                "attempts_sha256": _sha(attempts),
-                "selected_attempt_ids": [attempt["attempt_id"]],
-                "answer": "Synthetic X1 binary aggregation; no model was called.",
-                "metrics": rows,
-                "decision": {
-                    "outcome": "diagnostic-only",
-                    "hypothesis_status": report["decision"],
-                    "rationale": "External validity check on synthetic records.",
+                "schema_id": SELECTION_FREEZE_SCHEMA_ID,
+                "cascade": {"tau": 0.8},
+                "temperatures": {
+                    "choice": {"llm": {"temperature": 1.0}, "jev": {"temperature": 1.4}}
                 },
-                "limitations": ["Synthetic fixture."],
-                "evidence_refs": [reference],
             }
         ),
         encoding="utf-8",
     )
-    validate_analysis(analysis, run_spec_path=spec, attempts_path=attempts)
+    reference = tmp_path / "reference.x1.jsonl"
+    reference.write_text(
+        "".join(json.dumps({"state_id": s, "uv_outcome_success": 1}) + "\n" for s in order),
+        encoding="utf-8",
+    )
+    spec = _x1_spec(tmp_path / "run-spec.json", "geode-jev-external-cuavb-choice-test", order)
+    argv = [
+        "--run-spec", str(spec), "--choice", str(unit.outputs["choice"]),
+        "--manifest", str(manifest), "--states", str(states), "--gold", str(gold),
+        "--selection-freeze", str(freeze), "--reference", str(reference), "--record",
+    ]  # fmt: skip
+    assert x1.main(argv) == 0
+    printed = json.loads(capsys.readouterr().out)
+    assert [row["name"] for row in printed["metrics"]] == ROW_NAMES
+    results = json.loads((unit.outputs["choice"] / x1.RESULTS).read_text())
+    assert results["descriptive"]["reference_agreement"]["uv_outcome_success"]["numerator"] == 6
+    assert results["descriptive"]["engines"]["jev"]["frozen_t"]["temperature"] == 1.4
+    assert set(results["descriptive"]["strata"]) == set(x1.STRATA)
+    _validate(unit.outputs["choice"], spec, printed["metrics"], printed["decision"])

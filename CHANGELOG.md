@@ -152,7 +152,10 @@ functional change.
   analysis-only report gives the paired accuracy delta with cluster intervals,
   false acceptance and rejection, balanced accuracy, P(supported) AUROC, Jev's
   selective risk at the frozen τ on the receipt q, and McNemar b and c without a
-  p-value, bound to analysis rows.
+  p-value, bound to analysis rows. Retained Choice-only attempts feed it through a
+  command that records the aggregate, and a descriptive block adds calibration
+  (raw and at the frozen temperature), error detection, risk–coverage, the frozen-τ
+  cascade, strata and reference-verifier agreement.
 - Connect U2s stability attempts to the stability metrics: selected panel
   judgments are grouped by engine, primitive and state across the four frozen
   variants, rejected or invalid judgments stay empty decisions, and a missing
