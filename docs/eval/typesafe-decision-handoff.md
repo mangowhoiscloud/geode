@@ -86,6 +86,22 @@ keep question keys, types, labels and code decisions, and both engines receive t
 same order-preserving payload. The Harbor checker recomputes every V1 receipt
 field from the retained raw answer and admits only the base question set.
 
+### Verdict panel inputs
+
+Judgment-level panels use authored inbox clusters validated by
+[`verdict_panel.py`](../../evals/benchmarks/verdict_panel.py) against the
+[cluster schema](schemas/jev-verdict-panel-cluster.schema.json). Gold for inbox
+states is recomputed by a frozen rule oracle from the structured answer and the
+observed lookups; authors' declared cells are only cross-checks, and a shape
+outside the taxonomy is rejected. Each cluster holds two envelope quads — a
+two-factor design of one contradiction defect and one removed observation — plus
+at most two out-of-envelope probes that stay outside headline denominators.
+Rendering reuses `INBOX_SYSTEM`, `inbox_request` and opaque tool-call IDs, so no
+label, identifier or expected field reaches a judge. The builder writes per-split
+states, gold (sealed for the test split), controlled Score pools and a split
+manifest whose digest seeds ordering and bootstrap resampling; `unseal` must
+reproduce the sealed gold digest exactly.
+
 The Noul profile explicitly sets `verification_primitive=noul` alongside
 `verification_engine=llm|jev` on the existing `a0` inbox path. The Harbor entry
 point and observation checker expose the corresponding `--verification-primitive`

@@ -127,6 +127,13 @@ functional change.
   beside it. Criteria-order and paraphrase probes keep keys, labels and code
   decisions; the Harbor checker recomputes every V1 receipt field. Runtime Jev
   parsing keeps its strict tolerance.
+- Add an authored verdict-panel cluster schema and builder. A frozen rule oracle
+  recomputes each inbox state's contradiction and missing-evidence gold from its
+  structured answer and observed lookups, rejects shapes outside the taxonomy,
+  and checks the two-factor quad design. Rendering reuses the runtime inbox
+  contract with opaque tool-call IDs. The builder writes per-split states,
+  sealed test gold, controlled Score pools and a split manifest; `unseal` must
+  reproduce the sealed digest exactly.
 - Support Claude Opus 5.5's native computer toolset with serial execution,
   toolset-aware result replay and parameter validation before desktop actions.
   Withhold unsupported members; report native action errors and preserve
