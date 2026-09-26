@@ -14,9 +14,11 @@ per-turn verify mode. This module owns the two missing pieces:
 - **Judge selection** — one structured-output LLM call (the
   ``select_candidate`` tool) picks the winner among successful
   candidates. Judge failure is an OBSERVABLE fallback, never silent:
-  the verdict falls back to the first successful candidate and carries
-  ``judge_error`` so the caller (and the model reading the tool result)
-  sees that selection degraded.
+  the verdict carries ``judge_error`` so the caller (and the model
+  reading the tool result) sees that selection degraded. The fallback
+  winner is content-addressed (:func:`fallback_index`: smallest SHA-256
+  of the candidate text), so a failed judge never favours whichever
+  candidate happened to finish or be listed first.
 
 Dispatch mirrors ``core/agent/loop/_reflection.py`` (PR-B structured
 tool_use pattern): ``resolve_for`` + ``AdapterCallRequest`` +
@@ -26,8 +28,9 @@ incompatible with extended/adaptive thinking across models).
 
 from __future__ import annotations
 
+import hashlib
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from html import escape
 from typing import Any
@@ -45,7 +48,9 @@ __all__ = [
     "DIVERSITY_LENSES",
     "MAX_BEST_OF",
     "CandidateVerdict",
+    "candidate_content_key",
     "candidate_text",
+    "fallback_index",
     "judge_candidates",
     "lensed_description",
 ]
@@ -110,14 +115,45 @@ class CandidateVerdict:
     """Outcome of one judge pass over N candidate results.
 
     ``judge_error`` empty = the judge actually selected. Non-empty =
-    observable fallback (winner defaults to candidate 0 of the
-    successful set); callers surface it in the tool result so degraded
-    selection is never mistaken for a judged one.
+    observable fallback: the winner is :func:`fallback_index` of the
+    successful set, which depends on candidate content only, never on
+    list position. Callers surface ``judge_error`` in the tool result so
+    degraded selection is never mistaken for a judged one.
     """
 
     winner_index: int
     reason: str
     judge_error: str = ""
+
+
+_FALLBACK_REASON = "fallback: order-invariant content-addressed candidate (smallest sha256)"
+
+
+def candidate_content_key(text: str) -> str:
+    """Return the order-invariant content key of one candidate text.
+
+    SHA-256 hex digest of the UTF-8 bytes. ``surrogatepass`` keeps the key
+    defined (and identical to plain UTF-8 for every valid string) when a
+    decoded tool payload carries a lone surrogate.
+    """
+    return hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def fallback_index(candidates: Sequence[str]) -> int:
+    """Index of the candidate with the smallest :func:`candidate_content_key`.
+
+    Permuting *candidates* selects the same text. Identical texts share a
+    key and resolve to the lowest index; they are equivalent content. An
+    empty sequence keeps index 0 so the never-raise contract holds.
+    """
+    if not candidates:
+        return 0
+    keys = [candidate_content_key(text) for text in candidates]
+    return min(range(len(keys)), key=lambda index: (keys[index], index))
+
+
+def _fallback(candidates: Sequence[str], judge_error: str) -> CandidateVerdict:
+    return CandidateVerdict(fallback_index(candidates), _FALLBACK_REASON, judge_error)
 
 
 def _build_judge_prompt(task_description: str, candidates: list[str]) -> str:
@@ -185,10 +221,11 @@ async def judge_candidates(
     session's main calls (Codex MCP MED, 2026-07-06); ``None`` falls
     back to settings-driven inference like the reflection node.
 
-    Never raises. Every failure path (adapter error, tool declined,
-    non-int / out-of-range index) returns the candidate-0 fallback with
-    ``judge_error`` set — the graceful contract applies at every
-    schema-typed cast, not just the outer try.
+    Never raises. Every failure path (adapter error, no response, tool
+    declined, non-int / out-of-range index) returns the order-invariant
+    :func:`fallback_index` winner with a non-empty ``judge_error`` — the
+    graceful contract applies at every schema-typed cast, not just the
+    outer try. A single candidate returns index 0 without a judge call.
     """
     if len(candidates) == 1:
         return CandidateVerdict(0, "only one successful candidate; judge call skipped")
@@ -238,28 +275,22 @@ async def judge_candidates(
         response, _used_model = await call_with_failover([model], _do_call)
     except Exception as exc:
         log.warning("candidate judge call failed: %s", exc, exc_info=True)
-        return CandidateVerdict(
-            0, "fallback: first successful candidate", f"judge call failed: {exc}"
-        )
+        return _fallback(candidates, f"judge call failed: {exc}")
 
+    if response is None:
+        # The failover loop reports exhausted attempts or a blocked model as
+        # an empty outcome instead of raising; that is not a declined tool.
+        return _fallback(candidates, "judge call failed: no response after failover")
     parsed = _extract_verdict_input(response)
     if parsed is None:
-        return CandidateVerdict(
-            0, "fallback: first successful candidate", "judge declined the select_candidate tool"
-        )
+        return _fallback(candidates, "judge declined the select_candidate tool")
 
     raw_index = parsed.get("winner_index")
     if not isinstance(raw_index, int) or isinstance(raw_index, bool):
-        return CandidateVerdict(
-            0,
-            "fallback: first successful candidate",
-            f"non-integer winner_index: {raw_index!r}",
-        )
+        return _fallback(candidates, f"non-integer winner_index: {raw_index!r}")
     if not 0 <= raw_index < len(candidates):
-        return CandidateVerdict(
-            0,
-            "fallback: first successful candidate",
-            f"winner_index {raw_index} out of range 0..{len(candidates) - 1}",
+        return _fallback(
+            candidates, f"winner_index {raw_index} out of range 0..{len(candidates) - 1}"
         )
 
     raw_reason = parsed.get("reason")

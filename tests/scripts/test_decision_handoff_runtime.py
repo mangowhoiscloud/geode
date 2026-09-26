@@ -26,6 +26,15 @@ from evals.benchmarks import decision_handoff_runtime as runtime
 from scripts.eval import decision_handoff_pilot as pilot
 
 
+def _v1_verdict(label: str) -> dict[str, Any]:
+    """V1 LLM verdict: the label plus a distribution whose argmax is that label."""
+    labels = ("supported", "contradicted", "insufficient_evidence")
+    return {
+        "verdict": label,
+        "probabilities": {key: 0.8 if key == label else 0.1 for key in labels},
+    }
+
+
 @pytest.fixture(autouse=True)
 def _isolated_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     from core import paths
@@ -713,10 +722,12 @@ def _inbox_decisions(
 @pytest.mark.parametrize("engine", ["llm", "jev"])
 @pytest.mark.parametrize("malformed", [False, True])
 @pytest.mark.parametrize("repair_attempts", [1, 2, 3])
+@pytest.mark.parametrize("primitive", ["choice", "noul"])
 def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
     engine: str,
     malformed: bool,
     repair_attempts: int,
+    primitive: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -772,7 +783,19 @@ def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
     labels = iter(verdicts)
     judge = _Adapter(
         [
-            _response("invalid" if malformed else json.dumps({"verdict": value}), input_tokens=20)
+            _response(
+                "invalid"
+                if malformed
+                else json.dumps(
+                    _v1_verdict(value)
+                    if primitive == "choice"
+                    else {
+                        "has_contradiction": 0.9 if value != "supported" else 0.1,
+                        "missing_evidence": 0.9 if value != "supported" else 0.1,
+                    }
+                ),
+                input_tokens=20,
+            )
             for value in verdicts
         ]
     )
@@ -799,6 +822,11 @@ def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
                         },
                         "confidence": 1.0,
                     }
+                }
+                if primitive == "choice"
+                else {
+                    key: {"type": "noul", "noul": float(choice != "supported")}
+                    for key in ("has_contradiction", "missing_evidence")
                 },
             },
         )
@@ -812,12 +840,20 @@ def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
                 orders=orders,
                 root_adapter=root,
                 verification_engine=engine,
+                verification_primitive=primitive,
                 verification_adapter=judge if engine == "llm" else None,
                 client=client,
             )
 
     result = asyncio.run(execute())
     evidence = json.loads((directory / "verification.json").read_text())
+    assert result.get("verification_primitive", "choice") == primitive
+    metadata = json.loads((directory / "runtime-metadata.json").read_text())
+    assert metadata.get("verification_primitive", "choice") == primitive
+    if primitive == "choice":
+        assert "verification_primitive" not in result and "verification_primitive" not in metadata
+    else:
+        assert all(row["primitive"] == "noul" for row in evidence["judgments"])
     attempts = [row for row in result["call_accounting"] if row["purpose"] == "turn_verification"]
     assert len(attempts) == (1 if malformed else min(repair_attempts + 1, 3)), result
     assert all(row["usage"]["input_tokens"] == 20 for row in attempts)
@@ -836,6 +872,9 @@ def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
     else:
         assert result["valid"] and result["passed"], result
         assert "<reflection>" in root.requests[-1].system_prompt
+        if primitive == "noul":
+            assert "correct the contradicted requirement" in root.requests[-1].system_prompt
+            assert "Identify the unsupported requirement" in root.requests[-1].system_prompt
         assert evidence["inputs"][-1]["state"]["candidate_output"] == json.dumps(answer)
         assert len(evidence["inputs"][-1]["state"]["tool_observations"]) == 1
         assert len(evidence["judgments"]) == repair_attempts + 1
@@ -848,6 +887,31 @@ def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
             [{"judge_call_id": row["llm_call_id"], "feedback_sha256": row["feedback_sha256"]}]
             for row in evidence["judgments"][:-1]
         ]
+
+
+@pytest.mark.parametrize("primitive", ["noul", "unknown"])
+def test_verification_primitive_without_engine_rejects_before_bootstrap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, primitive: str
+) -> None:
+    from unittest.mock import Mock
+
+    bootstrap = Mock()
+    monkeypatch.setattr("core.llm.adapters.registry.bootstrap_builtins", bootstrap)
+    case, orders = _inbox_case()
+    root = _root_adapter([])
+    with pytest.raises(ValueError, match="primitive requires its matched engine"):
+        asyncio.run(
+            runtime.run_arm(
+                case,
+                "a0",
+                tmp_path,
+                orders=orders,
+                root_adapter=root,
+                verification_primitive=primitive,
+            )
+        )
+    bootstrap.assert_not_called()
+    assert not root.requests
 
 
 def test_pre_dispatch_verification_error_does_not_reuse_prior_negative_verdict(
@@ -888,7 +952,7 @@ def test_pre_dispatch_verification_error_does_not_reuse_prior_negative_verdict(
             candidate,
         ]
     )
-    judge = _Adapter([_response('{"verdict":"contradicted"}')] * 2)
+    judge = _Adapter([_response(json.dumps(_v1_verdict("contradicted")))] * 2)
     native_verify = verify.verify_turn_async
     attempts = 0
 
@@ -1015,7 +1079,7 @@ def test_candidate_intervention_retains_native_output_and_closes_real_repair(
         "contradicted" if when == "after_observation" else "insufficient_evidence",
         "supported",
     ]
-    judge = _Adapter([_response(json.dumps({"verdict": label})) for label in labels])
+    judge = _Adapter([_response(json.dumps(_v1_verdict(label))) for label in labels])
     answers = iter(labels)
 
     def transport(_request: httpx.Request) -> httpx.Response:

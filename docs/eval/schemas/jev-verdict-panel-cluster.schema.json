@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/schemas/jev-verdict-panel-cluster.schema.json",
+  "title": "GEODE Jev verdict panel source cluster v1",
+  "description": "One authored source cluster: a synthetic read-only order inbox and at most ten verification states over it. Gold for inbox states is recomputed by the rule oracle in evals/benchmarks/verdict_panel.py; declared cells are cross-checks, never labels.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "cluster_id",
+    "split",
+    "author_role",
+    "language",
+    "orders",
+    "case",
+    "states"
+  ],
+  "properties": {
+    "schema_id": {"const": "geode.jev-verdict-panel-cluster@1"},
+    "schema_version": {"const": 1},
+    "cluster_id": {"type": "string", "pattern": "^cl-[a-z0-9][a-z0-9-]{1,38}$"},
+    "split": {"enum": ["selection", "test"]},
+    "author_role": {"enum": ["primary", "second"]},
+    "language": {"enum": ["en", "ko", "mixed"]},
+    "orders": {
+      "type": "object",
+      "minProperties": 2,
+      "maxProperties": 40,
+      "propertyNames": {"pattern": "^[A-Z]-[0-9]{3}$"},
+      "additionalProperties": {"type": "string", "pattern": "^[a-z][a-z_]{1,30}$"}
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "items"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$"},
+        "items": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 24,
+          "items": {"$ref": "#/$defs/inbox_item"}
+        }
+      }
+    },
+    "states": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": {"$ref": "#/$defs/state"}
+    }
+  },
+  "$defs": {
+    "order_id": {"type": "string", "pattern": "^[A-Z]-[0-9]{3}$"},
+    "item_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$"},
+    "inbox_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "request",
+        "candidates",
+        "expected_intent",
+        "expected_order",
+        "expected_answer"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/item_id"},
+        "request": {"type": "string", "minLength": 1, "maxLength": 600},
+        "candidates": {"type": "array", "items": {"$ref": "#/$defs/order_id"}, "maxItems": 4},
+        "expected_intent": {"enum": ["status_only", "cancel", "refund", "other"]},
+        "expected_order": {"anyOf": [{"$ref": "#/$defs/order_id"}, {"type": "null"}]},
+        "expected_answer": {"$ref": "#/$defs/answer_item_fields"}
+      }
+    },
+    "answer_item_fields": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order_id", "status", "disposition"],
+      "properties": {
+        "order_id": {"anyOf": [{"$ref": "#/$defs/order_id"}, {"type": "null"}]},
+        "status": {"type": ["string", "null"], "maxLength": 40},
+        "disposition": {"enum": ["answered", "needs_clarification", "unsupported"]}
+      }
+    },
+    "answer_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "order_id", "status", "disposition"],
+      "properties": {
+        "id": {"$ref": "#/$defs/item_id"},
+        "order_id": {"anyOf": [{"$ref": "#/$defs/order_id"}, {"type": "null"}]},
+        "status": {"type": ["string", "null"], "maxLength": 40},
+        "disposition": {"enum": ["answered", "needs_clarification", "unsupported"]}
+      }
+    },
+    "lookup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["call_id", "items"],
+      "properties": {
+        "call_id": {"type": "string", "pattern": "^t[0-9]{1,2}$"},
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "order_id"],
+            "properties": {
+              "id": {"$ref": "#/$defs/item_id"},
+              "order_id": {"$ref": "#/$defs/order_id"}
+            }
+          }
+        }
+      }
+    },
+    "cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["has_contradiction", "missing_evidence"],
+      "properties": {
+        "has_contradiction": {"type": "boolean"},
+        "missing_evidence": {"type": "boolean"}
+      }
+    },
+    "text_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_contract", "original_request", "candidate_output", "tool_observations"],
+      "properties": {
+        "task_contract": {"type": "string", "minLength": 20, "maxLength": 4000},
+        "original_request": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "candidate_output": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "tool_observations": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tool", "input", "result"],
+            "properties": {
+              "tool": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,40}$"},
+              "input": {"type": "object"},
+              "result": {}
+            }
+          }
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state_id",
+        "kind",
+        "stratum",
+        "quad_id",
+        "declared_cell",
+        "declared_verdict"
+      ],
+      "properties": {
+        "state_id": {"type": "string", "pattern": "^cl-[a-z0-9][a-z0-9-]{1,38}--[a-z0-9][a-z0-9-]{0,30}$"},
+        "kind": {"enum": ["inbox", "text"]},
+        "stratum": {"enum": ["envelope", "style_adversarial", "derivation", "reference_free"]},
+        "quad_id": {
+          "anyOf": [
+            {"type": "string", "pattern": "^cl-[a-z0-9][a-z0-9-]{1,38}--q[0-9]$"},
+            {"type": "null"}
+          ]
+        },
+        "declared_cell": {"$ref": "#/$defs/cell"},
+        "declared_verdict": {"enum": ["supported", "contradicted", "insufficient_evidence"]},
+        "focus_items": {"type": "array", "items": {"$ref": "#/$defs/item_id"}, "minItems": 1, "maxItems": 2},
+        "lookups": {"type": "array", "items": {"$ref": "#/$defs/lookup"}, "maxItems": 6},
+        "answer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["items"],
+          "properties": {"items": {"type": "array", "items": {"$ref": "#/$defs/answer_item"}}}
+        },
+        "candidate_text": {"type": ["string", "null"], "maxLength": 2000},
+        "text_state": {"$ref": "#/$defs/text_state"},
+        "author_note": {"type": "string", "maxLength": 400}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "inbox"}}},
+          "then": {
+            "required": ["focus_items", "lookups", "answer", "candidate_text"],
+            "not": {"required": ["text_state"]}
+          }
+        },
+        {
+          "if": {"properties": {"kind": {"const": "text"}}},
+          "then": {
+            "required": ["text_state"],
+            "not": {"anyOf": [
+              {"required": ["focus_items"]},
+              {"required": ["lookups"]},
+              {"required": ["answer"]},
+              {"required": ["candidate_text"]}
+            ]}
+          }
+        },
+        {
+          "if": {"properties": {"stratum": {"const": "envelope"}}},
+          "then": {
+            "properties": {
+              "kind": {"const": "inbox"},
+              "quad_id": {"type": "string"},
+              "candidate_text": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"stratum": {"const": "style_adversarial"}}},
+          "then": {
+            "properties": {
+              "kind": {"const": "inbox"},
+              "quad_id": {"type": "null"},
+              "candidate_text": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"stratum": {"enum": ["derivation", "reference_free"]}}},
+          "then": {"properties": {"kind": {"const": "text"}, "quad_id": {"type": "null"}}}
+        }
+      ]
+    }
+  }
+}

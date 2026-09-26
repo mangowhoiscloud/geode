@@ -1,4 +1,4 @@
-"""Single-call SystemOne transport and typed Choice admission.
+"""Single-call SystemOne transport and typed primitive admission.
 
 This decision-only adapter is composed by reflection/verification, never offered
 as a root text-generation model. Direct TypeSafe and OpenRouter share the public
@@ -28,6 +28,10 @@ _ENDPOINTS = {
     "openrouter": "https://openrouter.ai/api/v1/systemone",
 }
 _Probability = Annotated[float, Field(strict=True, ge=0, le=1, allow_inf_nan=False)]
+# Runtime admission keeps the historical exact-sum bound. Evaluation callers pass
+# an explicit, recorded tolerance instead of relaxing production parsing.
+STRICT_PROBABILITY_TOLERANCE = 1e-5
+_MAX_PROBABILITY_TOLERANCE = 0.05
 
 
 class _Choice(BaseModel):
@@ -36,6 +40,66 @@ class _Choice(BaseModel):
     choice: str
     probabilities: dict[str, _Probability]
     confidence: _Probability
+
+
+class _Score(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    type: Literal["score"]
+    score: Annotated[float, Field(strict=True, ge=0, le=9, allow_inf_nan=False)]
+    legend: dict[str, Any]
+    probabilities: dict[str, _Probability]
+    confidence: _Probability
+
+
+class _Noul(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    type: Literal["noul"]
+    noul: _Probability
+
+
+def _validate_questions(questions: Any) -> None:
+    if not isinstance(questions, Mapping) or not questions:
+        raise ValueError("SystemOne requires a nonempty question map")
+    for key, question in questions.items():
+        if (
+            not isinstance(key, str)
+            or not isinstance(question, Mapping)
+            or not {"type", "instructions"}
+            <= question.keys()
+            <= {"type", "instructions", "criteria"}
+            or not isinstance(question["instructions"], (str, dict, list))
+        ):
+            raise ValueError("invalid SystemOne question shape")
+        kind = question["type"]
+        criteria = question.get("criteria")
+        if kind == "choice":
+            valid = (
+                isinstance(criteria, dict)
+                and 1 <= len(criteria) <= 255
+                and all(isinstance(option, str) for option in criteria)
+                and all(
+                    value is None or isinstance(value, (str, dict, list))
+                    for value in criteria.values()
+                )
+            )
+        elif kind == "score":
+            valid = (
+                isinstance(criteria, list)
+                and 2 <= len(criteria) <= 10
+                and all(isinstance(level, (str, dict, list)) for level in criteria)
+            )
+        elif kind == "noul":
+            valid = "criteria" not in question or (
+                isinstance(criteria, dict)
+                and criteria.keys() == {"true", "false"}
+                and all(isinstance(value, (str, dict, list)) for value in criteria.values())
+            )
+        else:
+            raise ValueError("unsupported SystemOne question type")
+        if not valid:
+            raise ValueError("invalid SystemOne criteria")
+    # Structured descriptions still need to be finite JSON before dispatch.
+    json.dumps(questions, allow_nan=False)
 
 
 def _safe_identifier(value: Any, api_key: SecretStr) -> str:
@@ -64,6 +128,7 @@ async def _call_systemone(
     provider: str,
     model: str,
 ) -> AdapterCallResult:
+    _validate_questions(payload.get("questions"))
     response = await client.post(
         _ENDPOINTS[provider],
         json={**payload, "model": model},
@@ -123,26 +188,89 @@ async def call_typesafe(
     return await _call_systemone(client, api_key, payload, provider="typesafe", model=JEV_MODEL)
 
 
-def parse_choice_answers(
-    text: str, questions: Mapping[str, Mapping[str, Any]]
+def _tolerance(value: float) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or not 0 < value <= _MAX_PROBABILITY_TOLERANCE
+    ):
+        raise ValueError("decision tolerance must be a small positive number")
+    return float(value)
+
+
+def parse_systemone_answers(
+    text: str,
+    questions: Mapping[str, Mapping[str, Any]],
+    *,
+    sum_tolerance: float = STRICT_PROBABILITY_TOLERANCE,
+    score_tolerance: float = STRICT_PROBABILITY_TOLERANCE,
 ) -> dict[str, dict[str, Any]]:
-    """Require all questions, finite normalized probabilities and an argmax choice."""
+    """Admit exact typed answers against the requested options and ordered levels.
+
+    ``sum_tolerance`` bounds a distribution's distance from one; ``score_tolerance``
+    bounds a Score's distance from its probability-weighted level. Both default to
+    the strict runtime bound.
+    """
+    sum_bound, score_bound = _tolerance(sum_tolerance), _tolerance(score_tolerance)
+    _validate_questions(questions)
     answers = json.loads(text)
     if not isinstance(answers, dict) or answers.keys() != questions.keys():
         raise ValueError("decision fields changed")
     primitives = {}
     for key, question in questions.items():
-        choice = _Choice.model_validate(answers[key])
-        probabilities = choice.probabilities
-        if (
-            probabilities.keys() != question["criteria"].keys()
-            or choice.choice not in probabilities
-            or not math.isclose(sum(probabilities.values()), 1.0, abs_tol=1e-5)
-            or probabilities[choice.choice] != max(probabilities.values())
+        if question["type"] == "noul":
+            primitives[key] = _Noul.model_validate(answers[key]).model_dump()
+            continue
+        answer: _Choice | _Score
+        if question["type"] == "choice":
+            answer = _Choice.model_validate(answers[key])
+            expected_keys = question["criteria"].keys()
+            if answer.choice not in answer.probabilities or answer.probabilities[
+                answer.choice
+            ] != max(answer.probabilities.values()):
+                raise ValueError("invalid choice selection")
+        else:
+            answer = _Score.model_validate(answers[key])
+            legend = {str(index): level for index, level in enumerate(question["criteria"])}
+            expected_keys = legend.keys()
+            if json.dumps(answer.legend, sort_keys=True, allow_nan=False) != json.dumps(
+                legend, sort_keys=True, allow_nan=False
+            ):
+                raise ValueError("score legend changed")
+        if answer.probabilities.keys() != expected_keys or not math.isclose(
+            math.fsum(answer.probabilities.values()), 1.0, rel_tol=0, abs_tol=sum_bound
         ):
-            raise ValueError("invalid choice distribution")
-        primitives[key] = choice.model_dump()
+            raise ValueError("invalid decision distribution")
+        if isinstance(answer, _Score) and (
+            answer.score > len(expected_keys) - 1
+            or not math.isclose(
+                answer.score,
+                math.fsum(
+                    int(level) * probability for level, probability in answer.probabilities.items()
+                ),
+                rel_tol=0,
+                abs_tol=score_bound,
+            )
+        ):
+            raise ValueError("score does not match its distribution")
+        primitives[key] = answer.model_dump()
     return primitives
+
+
+def parse_choice_answers(
+    text: str,
+    questions: Mapping[str, Mapping[str, Any]],
+    *,
+    sum_tolerance: float = STRICT_PROBABILITY_TOLERANCE,
+) -> dict[str, dict[str, Any]]:
+    """Keep Choice-only consumers from admitting another primitive."""
+    if any(
+        not isinstance(question, Mapping) or question.get("type") != "choice"
+        for question in questions.values()
+    ):
+        raise ValueError("choice answers require choice questions")
+    return parse_systemone_answers(text, questions, sum_tolerance=sum_tolerance)
 
 
 class SystemOneAdapter:

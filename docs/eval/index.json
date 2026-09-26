@@ -148,7 +148,7 @@
       "authority": "evidence-storage",
       "path": "docs/eval/external-artifact-repository.md",
       "summary": "Canonical append-only publication and disclosure contract for large GEODE evaluation artifacts.",
-      "sha256": "f906c3f9d8c66a7080a979258fc83b0c734d62e94e2391bdd96403db657436c2",
+      "sha256": "df70967702f2d597a81d99af5441ef0e6c7374e2ae26b06b357e00c28781aa02",
       "triggers": [
         "artifact repository",
         "eval-artifact",
@@ -630,7 +630,7 @@
       "authority": "diagnostic",
       "path": "docs/eval/typesafe-decision-handoff.md",
       "summary": "Matched LLM/Jev final-verdict diagnostics with shared Astra repair, preserved historical handoff cohorts and an independent Harbor task verifier.",
-      "sha256": "4db46e5e79bfccd4a1a39cdadd5dae9254f5573aff9d82a4b1d94a60337b56e5",
+      "sha256": "c3a54b55a5ec5dd28fd66d814003b05facd59d7a7c09a85117b6075ed31f0014",
       "triggers": [
         "classification",
         "confidence",

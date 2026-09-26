@@ -528,19 +528,19 @@
   "packages": {
     "core": {
       "python_files": 418,
-      "python_loc": 129365
+      "python_loc": 129548
     },
     "evals": {
-      "python_files": 100,
-      "python_loc": 34604
+      "python_files": 110,
+      "python_loc": 44824
     },
     "evolve": {
       "python_files": 73,
       "python_loc": 32002
     },
     "tests": {
-      "python_files": 748,
-      "python_loc": 223537
+      "python_files": 764,
+      "python_loc": 236118
     }
   },
   "schema_version": 6,

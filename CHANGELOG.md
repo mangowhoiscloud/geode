@@ -114,6 +114,119 @@ functional change.
 
 ### Added
 
+- Add the Score-S selection harness for frozen best-of pools. Every selector
+  runs once per pool in both presentation orders at the existing judge
+  boundary; dispatch records carry no grades, so sealed pools score only after
+  unsealing through the alias map. Exact ties use the preregistered hash rule,
+  and an invalid order or `judge_error` fallback counts as a wrong selection.
+  Reports use oracle-best selection, regret, pool-random@1, oracle-coverage@4,
+  selected success and gap closed (not-measurable at a zero denominator), never
+  an IID pass@k label. Jev Score admission takes explicit, recorded sum and
+  expectation tolerances, and selection cost keeps unknown usage null. Pools can
+  dispatch up to four at a time with records byte-identical to sequential runs;
+  each call has the panel timeout, and a call that times out or ends without a
+  response is replaced once or stops the unit as a transport failure, while a
+  response that breaks the contract stays a wrong answer. The Score expectation deviation behind the
+  frozen tolerance is exact decimal, so an exact 0.03 or 0.04 no longer freezes
+  one 0.01 step higher.
+- Add Noul 2×2 end-to-end cells on the single existing candidate intervention:
+  a runtime rule oracle recomputes both conditions from the judged state,
+  planned gold must match each cell, labels stay outside payloads, and trial
+  scoring counts unaccepted judgments as wrong.
+- Add an opt-in live cascade arm C for the Choice final verdict: Jev decides
+  when its admitted contract V1 `q` reaches the frozen τ, otherwise the same
+  state escalates once to Astra as a separately observed call. Arm C needs an
+  explicit engine and a τ on the preregistered grid, and the Harbor checker
+  binds every judge call to its route and escalation.
+- Add a host-scoped, hash-chained Jev cost ledger with the $1 program cap, a
+  $0.90 start limit and a sticky $0.95 stop. Missing usage is reserved, never
+  zero. A panel spend guard connects it to the verdict panel runner.
+- Add paired concurrent execution columns to the handoff tables: slot, launch
+  and agent-start skew, pair synchronization, concurrent trials and always
+  unknown shared-account usage come from the private trial receipt, and
+  overlapping calls from call-ledger intervals. Only same-slot synchronized
+  pairs enter intra-pair latency comparison; success analysis keeps every pair.
+- Add X1 binary acceptance scoring for external Choice verdicts: an accepted
+  `supported` verdict accepts, another accepted verdict rejects, and an invalid
+  output is wrong and never an acceptance against the human majority label. The
+  analysis-only report gives the paired accuracy delta with cluster intervals,
+  false acceptance and rejection, balanced accuracy, P(supported) AUROC, Jev's
+  selective risk at the frozen τ on the receipt q, and McNemar b and c without a
+  p-value, bound to analysis rows.
+- Connect U2s stability attempts to the stability metrics: selected panel
+  judgments are grouped by engine, primitive and state across the four frozen
+  variants, rejected or invalid judgments stay empty decisions, and a missing
+  variant leaves the unit not measurable instead of being filled. A recorded
+  aggregate binds `jev_choice_pair_consistency`, flip rates and, after
+  unsealing, correct-pair consistency to analysis rows.
+- Let the verdict panel runner run Choice alone (U3, X1a, X1) on authored or
+  external splits, and add U3's paired latency mode: each state's Astra and Jev
+  calls launch together with one pair in flight, receipts keep monotonic launch
+  and completion times, and a launch skew above one second stops the unit. The
+  latency report binds the within-pair median Jev − Astra delta with its
+  manifest-seeded cluster interval and preregistered decision, and counts the
+  excluded pairs by reason. Existing panel units keep their bytes.
+- Add the intent-panel harness (U0c-i, U6a) to the verdict panel runner: a
+  Choice-only unit with `judgment="intent"` sends each family of inbox items to
+  the `analyze_request` helper with the E2E helper's own payload, questions,
+  Astra request and admission; the tool's request and admission steps become
+  shared methods with unchanged bytes. The intent report scores joint intent and
+  target accuracy like the E2E intent runner, counts a rejected helper output as
+  wrong for its whole family, and binds `intent_joint_accuracy_delta` with a
+  family-cluster interval and the non-inferiority decision, the admission ratio
+  and LABEL-RULES strata. Existing panel units keep their bytes.
+- Add auxiliary repetition reliability to the judgment metrics: per-task
+  combinatorial pass@n and pass^n with equal task weights, never a pooled rate.
+  A frozen task × repetition plan is rejected with enumerated reasons (N_i < n,
+  duplicate or unplanned repetitions, missing slots, contract mismatch across
+  source revision, policy, reset, input, task and verifier digests, unknown
+  outcomes). Repair rounds, question variants and candidates are not
+  repetitions, and replacements keep their slot. The handoff table exporter
+  writes task × arm rows and an arm × n summary with provenance for auxiliary
+  analysis metrics under the unchanged schema, and the coverage check gates
+  the set before aggregation. U2s pair consistency stays separate from flips.
+- Add offline Harbor handoff evidence tools for audit and publication. Derived
+  call, trial, pair and summary tables keep invalid cells, unknown usage and
+  null latency, and keep the Astra subscription API-equivalent estimate, Jev
+  tariff estimate and actual billed USD separate; billed USD stays null until a
+  provider export is reconciled by request identity. A denominator coverage
+  check rejects silently deselected planned cells, a reviewed projection stages
+  digest trajectories behind the existing release gate, a pattern scan covers
+  the other public report files, and an exact-merge read-back writes a receipt
+  for artifact PRs. No tool calls a model.
+- Extend System One admission to Score and Noul while preserving Choice-only
+  consumers and native usage for completed invalid answers. Add opt-in matched
+  candidate scoring and independent-condition verification diagnostics, with
+  fixed action projections and Harbor primitive/receipt checks. Production
+  candidate selection remains unchanged; new live comparisons require a frozen run.
+- Return label probabilities from both matched-verdict engines (contract V1).
+  The Astra arm's structured output carries the verdict and a probability for
+  every label, or each Noul condition's probability of being true. One shared
+  validator admits exact labels, finite probabilities, a 0.025 Choice-sum
+  tolerance and an argmax verdict, and records the historical 1e-5 classification
+  beside it. Criteria-order and paraphrase probes keep keys, labels and code
+  decisions; the Harbor checker recomputes every V1 receipt field. Runtime Jev
+  parsing keeps its strict tolerance.
+- Add an authored verdict-panel cluster schema and builder. A frozen rule oracle
+  recomputes each inbox state's contradiction and missing-evidence gold from its
+  structured answer and observed lookups, rejects shapes outside the taxonomy,
+  and checks the two-factor quad design. Rendering reuses the runtime inbox
+  contract with opaque tool-call IDs. The builder writes per-split states,
+  controlled Score pools and a split manifest; test gold, graded test pools and
+  the alias map stay sealed while public test files use opaque aliases and
+  ungraded pools. `unseal` must reproduce the sealed digest exactly.
+- Add pre-registered judgment metrics: accuracy with invalid output as wrong,
+  macro-F1, Brier, floored NLL, 10-bin ECE, rank AUROC, risk–coverage, flip rate
+  and paired latency with unknown non-positive durations. Source-cluster
+  bootstrap intervals use 2,000 manifest-seeded replicates. Selection-only
+  temperature and offline cascade τ fitting produce a frozen selection record;
+  paired Choice and Noul panel reports apply the non-inferiority decisions.
+- Add a judgment-level verdict panel runner that calls the matched verifier
+  directly for Choice and Noul on both engines in a Latin-square order, with
+  bounded concurrency, pacing, heartbeat and two attempt files. Panel transport
+  failures without a response are replaced exactly once, a failed replacement or
+  a rate above 2% stops the unit, and quota, harness or route failures stop it.
+  Separate frozen invalidation-rule texts keep the E2E no-replacement rule.
 - Support Claude Opus 5.5's native computer toolset with serial execution,
   toolset-aware result replay and parameter validation before desktop actions.
   Withhold unsupported members; report native action errors and preserve
@@ -178,6 +291,35 @@ functional change.
 
 ### Fixed
 
+- Classify failed judgment calls with one frozen table in the verdict panel runner
+  and the Score-S harness. An Astra connection failure raised by the OpenAI SDK
+  and HTTP 408 or 5xx are transport failures replaced once; quota (`BillingError`,
+  402, 429), credential (401, 403) and request (400) failures stop the unit
+  instead of being replaced, and Score-S no longer scores quota or harness
+  failures as wrong selections.
+- Align handoff-table strict success with the preregistered definition. A
+  matched final-verdict trial no longer needs lookup conditions: native reward,
+  admitted decisive judgments, consumed negative feedback and no false
+  completion decide it, while intent helper trials keep the lookup conditions
+  and also need observed helper admission without an LLM fallback and observed
+  consumption of the helper result; an unobserved helper fact stays null.
+  A separate lookup-inclusive column remains, and a runner's differing strict
+  value is rejected instead of overwritten.
+- Remove first-position bias from best-of selection: every judge failure path
+  falls back to the content-addressed candidate, and matched Score ties use the
+  preregistered hash of pool and candidate IDs instead of input order.
+- Keep invalid or aborted evaluation attempts selected for analysis unless
+  exactly one later same-surface attempt replaces them, so an unmeasurable
+  primary cannot be hidden by deselection.
+- Keep unobserved LLM call latency null instead of storing a 0.0 duration.
+  Activity rows move to schema v12; earlier rows may still carry a filled 0.0.
+- Stop the sealed verdict-panel test split from exposing author IDs. Public
+  tool-call IDs were digests of the original state and call IDs, and the public
+  Score pool order was keyed by them, so a public cluster ID let a guessed
+  original ID be confirmed. Both now derive from the random public aliases and
+  call positions only. Sealed gold, graded pools and the alias map are
+  byte-identical; the public test states and pools change, so a held-out
+  rebuild is required.
 - Pass Anthropic structured-output schemas through the SDK's
   `transform_schema` before sending `output_config.format`. The API rejected
   the turn-verification judge schema with HTTP 400 because number

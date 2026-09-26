@@ -41,6 +41,404 @@ inventing missing fields or changing their scores. Passing it does not establish
 per-tool-round reflection scheduling, physical-dispatch completeness, or benchmark
 promotion authority; those require their own frozen evidence and checks.
 
+## Three-primitive extension — implementation contract, not a live result
+
+The shared [System One adapter](../../core/llm/adapters/typesafe.py) admits
+Choice, Score and Noul against their requested question shapes. Existing
+Choice-only consumers still reject other answer types. No new model registry,
+retry layer or production candidate selector is introduced.
+
+| Decision boundary | Matched input and output | Code-owned consequence |
+|---|---|---|
+| Choice intent/target helper | Existing complete-source inbox and exact candidate IDs | The same Astra root consumes labels before selecting a tool |
+| [Score candidate diagnostic](../../evals/benchmarks/decision_candidate.py) | One frozen pool of 2–4 complete text/plan candidates and a shared four-level task-fulfillment rubric | Common maximum score selects a candidate; exact ties take the smallest `sha256(pool_id ␟ candidate_id)` (content hash without IDs), never input order. A judge-error fallback is content-addressed and is not an admitted selection |
+| Noul matched final verification | Two conditions on the same task/candidate/observations: `has_contradiction` and `missing_evidence` | Code prioritizes contradiction, then missing evidence, then supported. If both conditions hold, both fixed repair hints are retained |
+
+Score's Astra arm returns a bounded numeric level; Jev returns the expected
+level and its distribution. Matched final verification uses contract V1 below:
+both engines return probabilities, and both project a Noul condition with
+`p >= 0.5`. The threshold is a diagnostic rule, not a permission grant or a
+validated deployment threshold. Two conditions may both hold; their separate
+questions do not imply statistical independence.
+
+### Matched verification contract V1
+
+The [matched verifier](../../evals/benchmarks/decision_verification.py) asks the
+Astra arm for the Choice verdict plus a probability for every label, or for each
+Noul condition's probability of being true, with no rationale. Jev keeps its
+native SystemOne answers. One shared validator admits both engines:
+
+| Check | Rule |
+|---|---|
+| Fields and labels | Exactly the requested keys; the verdict is a criteria label |
+| Probabilities | Finite numbers in [0, 1] |
+| Choice sum | Within 0.025 of one (`SUM_TOLERANCE`) |
+| Choice verdict | One of the highest-probability labels |
+
+Receipts store the probabilities, `q` (Choice: the maximum label probability;
+Noul: `max(p, 1 - p)` per condition), Jev's separate `confidence`, the admitted
+tolerance and `strict_admitted`, the historical 1e-5 classification of the same
+raw answer. The primary analysis follows the admitted parser; the strict class is
+secondary. Runtime Jev parsing keeps the strict default. `contract_digests()`
+binds the question set, Astra system prompt and response schema for a freeze.
+Criteria-order reversal and an authored paraphrase set are stability probes: they
+keep question keys, types, labels and code decisions, and both engines receive the
+same order-preserving payload. The Harbor checker recomputes every V1 receipt
+field from the retained raw answer and admits only the base question set.
+
+### Verdict panel inputs
+
+Judgment-level panels use authored inbox clusters validated by
+[`verdict_panel.py`](../../evals/benchmarks/verdict_panel.py) against the
+[cluster schema](schemas/jev-verdict-panel-cluster.schema.json). Gold for inbox
+states is recomputed by a frozen rule oracle from the structured answer and the
+observed lookups; authors' declared cells are only cross-checks, and a shape
+outside the taxonomy is rejected. Each cluster holds two envelope quads — a
+two-factor design of one contradiction defect and one removed observation — plus
+at most two out-of-envelope probes that stay outside headline denominators.
+Rendering reuses `INBOX_SYSTEM`, `inbox_request` and opaque tool-call IDs, so no
+label, identifier or expected field reaches a judge. The builder writes per-split
+states, gold, controlled Score pools and a split manifest whose digest seeds
+ordering and bootstrap resampling. For the sealed test split, gold, graded pools
+and a random alias map exist only in the sealed directory; public states and
+ungraded pools carry opaque aliases, and no public digest covers graded content.
+Public tool-call IDs and the public pool order derive from those aliases and call
+positions only, so a public `cluster_id` cannot confirm a guessed author state or
+call ID; gold and graded pools are unchanged by this rendering.
+The rule oracle lives in its own hashed module, so builder changes do not alter
+its digest; `unseal` must reproduce the sealed gold digest exactly and reports the
+oracle digest separately.
+
+[`decision_metrics.py`](../../evals/benchmarks/decision_metrics.py) implements the
+pre-registered formulas: accuracy with invalid output as wrong, macro-F1, Brier,
+NLL (floor 1e-6), 10-bin ECE, rank-based error-detection AUROC with half ties,
+risk–coverage/AURC, flip rate and paired latency medians, with non-positive
+`duration_ms` treated as unknown. Source-cluster percentile bootstrap uses 2,000
+replicates and the seed `int(sha256(split_manifest_sha256 ∥ metric)[:16], 16)`;
+paired rows resample together and unmeasurable replicates are counted, not
+filled. `selection_freeze()` fits temperature per engine and question and the
+offline Choice cascade τ on selection outputs only (maximum coverage within two
+points of the Astra fallback, larger τ on ties, no admissible τ at zero
+coverage); test reports apply the frozen τ and the non-inferiority rules.
+
+[`verdict_panel_runner.py`](../../evals/benchmarks/verdict_panel_runner.py) runs a
+panel unit without Harbor or a root loop. Each frozen workload (a state, or a
+`#rep1`, `#rep2`, `#order-rev` or `#para` stability variant) dispatches Astra and Jev
+for Choice and Noul in a 4×4 Latin-square rotation, with at most four concurrent
+calls, fixed pacing, per-call monotonic latency and an event-loop heartbeat.
+Choice and Noul attempts go to their own run directories. Attempts record
+admission, not correctness, until gold is unsealed. `INVALIDATION_RULES` holds
+the two frozen texts: panel transport failures without a response are replaced
+exactly once (unselected parent, child with `parent_attempt_id`), a failed
+replacement or a replacement rate above 2% stops the unit, and quota, harness or
+route failures stop it as selected invalid attempts. One table,
+`call_failure_class`, classifies a call that raised for the panel runner and the
+Score-S harness alike: timeouts, connection failures (httpx or the OpenAI SDK) and
+HTTP 408 or 5xx are transport failures; `BillingError`, a billing-fatal SDK error,
+HTTP 402 and every 429 are quota exhaustion (the frozen rules define no transient
+rate limit); HTTP 401 and 403, 400 and any other request defect or exception are
+harness errors. E2E keeps its no-replacement rule. An optional host Jev spend guard is consulted before every Jev call.
+A Choice-only unit (U3, X1a, X1) keys its run ID and output directory by `choice`
+alone and rotates the two Choice cells (even states Astra first, odd states Jev
+first); authored and external splits bind through the same `state_sha256` row
+contract. Internal units keep their inputs, attempts, receipts and aggregates
+byte-for-byte.
+
+After a U2s stability unit, `stability_report` reads both retained attempt files
+and their native-result receipts, keeps the selected judgments and groups them by
+(engine, primitive, state_id) over the frozen `#rep1`, `#rep2`, `#order-rev` and
+`#para` workloads. An admitted Choice contributes `receipt.verdict`, an admitted
+Noul the canonical JSON of `receipt.boolean_projection`; a validator rejection or
+a selected invalid attempt is `None`, and a replaced transport failure counts once
+through its child. `decision_metrics.stability_summary` then reports rep1/rep2
+pair consistency separately from the order and paraphrase flip rates. A state
+missing any variant makes that engine and primitive not-measurable, never filled
+in. Each run's primary, `jev_choice_pair_consistency` or
+`jev_noul_pair_consistency`, is also not-measurable while that run keeps a
+selected invalid attempt. `record_stability_aggregate` writes
+`stability-results.json` with a selected analysis-only attempt, and
+`stability_metric_rows` binds `<engine>_<primitive>_pair_consistency`, flip-rate
+and, once gold is unsealed in the same representation,
+`pair_correct_consistency` rows to it under the unchanged analysis schema
+(`python -m evals.benchmarks.verdict_panel_runner stability`).
+
+U3 runs a Choice-only unit in `mode="paired-latency"` with `max_concurrency=2`:
+each state's Astra and Jev calls launch together through `asyncio.gather`, the
+next state starts only after both calls (and any §4.2 replacement) finish, and
+pacing applies between pair starts, outside every latency. The existing per-call
+limits (Astra 180 s, Jev 60 s) remain transport errors. Each receipt keeps
+`call_timing`: launch position, other panel calls in flight, UTC launch and
+completion times and monotonic offsets from the unit start; `latency_s` is the
+monotonic dispatch-to-completion span. `pair-log.jsonl` records each pair's
+launch skew, and a skew above one second stops the unit as a dispatcher defect.
+`latency_report` recomputes the skew from the original launches and reports the
+median of Jev − Astra latency over comparable pairs as
+`paired_median_latency_delta_s`, with the manifest-seeded source-cluster interval
+and the preregistered decision (supported below 0 s, not-supported above 0 s,
+otherwise mixed). A pair with a missing, infrastructure-invalid, replaced or
+V1-rejected side, or an excessive skew, leaves the latency summary with a counted
+reason; with unsealed gold, each engine's accuracy keeps every planned state and
+counts a rejection as wrong. A missing pair, a selected invalid attempt, an
+excessive skew or no comparable pair makes the primary not-measurable, and
+`record_latency_aggregate` then writes an invalid aggregate so the contract keeps
+it unpublished (`python -m evals.benchmarks.verdict_panel_runner latency`).
+
+The designer-authored intent panel (U0c-i admission batches, U6a) is a Choice-only
+unit with `judgment="intent"`, normally in the paired mode. `intent_panel_rows`
+validates each family with `validate_inbox_case` and keeps only the public item
+IDs, requests and candidates; the family is its own cluster. Each family is one
+call per engine through `InboxDecisionAdapter`, which builds a
+`DecisionHandoffTool` in inbox mode and uses its payload, `{id}_intent` and
+`{id}_target` questions, label-only Astra request and admission without the
+runtime observer, so the panel and the E2E helper ask the same questions. Transport
+exceptions propagate to the runner's existing classification, and an inadmissible
+completion is a V1-style rejection that keeps its usage. `intent_report` scores an
+item jointly correct when the admitted intent matches its label and the admitted
+target is the labelled source span, as the E2E intent runner does; a rejection
+makes every item of its family wrong. It binds `intent_joint_accuracy_delta`
+(Jev − Astra joint-correct items / planned items) with the family-cluster interval
+seeded by the panel file digest and the non-inferiority decision,
+`intent_panel_admission_admitted_ratio` (admitted helper answers / planned calls),
+per-engine intent, target and joint accuracy, and LABEL-RULES strata (phenomenon,
+item and family language, candidate count, `none` target). A missing family call
+or a selected invalid attempt leaves both not-measurable
+(`python -m evals.benchmarks.verdict_panel_runner intent`).
+
+The Noul profile explicitly sets `verification_primitive=noul` alongside
+`verification_engine=llm|jev` on the existing `a0` inbox path. The Harbor entry
+point and observation checker expose the corresponding `--verification-primitive`
+flag. Omission retains the historical Choice contract. Contract, runtime outcome,
+native answer, boolean projection and feedback digest must agree; changing the
+primitive after execution fails admission.
+
+Score is an eval-only request middleware at `candidate_judge`, not a Harbor
+workload runner; the Score-S harness below drives it. Generate read-only
+candidates once through existing workers, freeze their complete text and child
+lineage, and use the same pool in both arms. The runtime's 2,000-character
+candidate excerpt bound must not hide part of a candidate. Workers share a
+workspace, so do not concurrently mutate it while generating candidates. Record generation, selector and root continuation
+costs separately; root consumption and a task-owned oracle remain required.
+The surrounding runtime can retry transport failures. A single-dispatch
+diagnostic must freeze the existing `llm_max_retries=1` setting and verify its
+attempt inventory; a no-retry adapter alone does not establish this property.
+
+### Score-S harness: frozen pools in both orders
+
+[`score_selection.py`](../../evals/benchmarks/score_selection.py) runs the Score
+selection units (U0b, U4, U5p/U5s) at the existing judge boundary, without Harbor
+or a root loop. Dispatch and scoring are separate phases. `dispatch_selection`
+runs every selector exactly once per pool and presentation order (forward is the
+frozen order, then reverse) through `judge_candidates`, with the matched adapter
+as task-local middleware; its records carry no grades, so a sealed pool is
+dispatched under its public aliases. `score_selection` joins model-free grades
+after unsealing, through the sealed alias map or graded IDs, and
+`summarize_outcomes` reports explicit numerators and denominators. Natural pools
+come from one `delegate_task(best_of=4)` payload frozen by `freeze_natural_pool`,
+graded by the existing inbox oracle's per-item matches before any selection.
+
+Pointwise selection is the argmax of the mean of both orders' scores; exact ties
+take the smallest `sha256(pool_id ␟ candidate_id)` over the dispatched IDs. If
+either order is invalid — a `judge_error` fallback, or a missing or rejected
+receipt — the pool counts as wrong, even when the runtime's content-addressed
+fallback candidate would pass the task oracle. The operational listwise
+`select_candidate` reference averages its per-order hits.
+
+Reported names follow preregistration v1 §3.2: oracle-best selection over
+planned pools (invalid is wrong), regret over valid selections, order consistency
+and Kendall τ-b between orders, and a per-kind acceptance block with
+pool-random@1, oracle-coverage@4, selected success and gap closed =
+(selected − pool-random@1) / (oracle-coverage@4 − pool-random@1). Gap closed is
+not-measurable when its denominator is 0 and is reported when negative.
+Acceptance is the independent task oracle's success condition: a controlled
+candidate whose rule-oracle verdict is supported (grade 3), or a natural
+candidate whose every inbox item matches; a partial grade or "best in pool" is
+never acceptance. The candidate width 4 is not an IID repetition count, so no
+pass@4 is reported. Jev Score admission reuses the V1 parser bounds:
+`sum_tolerance` and the §4.1 `score_tolerance` are selector parameters (strict by
+default), recorded in each record and receipt beside `strict_admitted`, and every
+order records the observed |score − Σ level·p| from which U0b derives the frozen
+tolerance. The deviation is exact decimal arithmetic on the numbers as written in
+the raw answer, kept rounded up at 1e-15, so the §4.1 ceiling to 0.01 of an exact
+0.03 or 0.04 stays 0.03 or 0.04 (binary floats moved it one step). Selection cost counts every planned order, failures included, and
+keeps unreported usage null. `dispatch_selection(..., max_concurrency=4)` runs up
+to four pools at once for the P track's four-call limit (default 1); a pool's
+selectors and both orders stay sequential, call IDs derive from (selector, pool,
+order), and records return in frozen pool order, byte-identical at any
+concurrency. Per-call latency goes to an optional `timings` list outside the
+records and supports no latency claim. Each call has the panel runner's bound,
+`timeouts={"llm": 180.0, "jev": 60.0}` by default (listwise is an Astra call). A
+call past its bound, or one that raised (an execution middleware observes it below
+`judge_candidates`, which would otherwise fall back), takes the panel runner's
+`call_failure_class`. A transport failure (05 §4.2) stays in the order's
+`replaced_attempts`, unselected, and the same call runs exactly once more; quota
+exhaustion and harness defects, including a judge that never reached a model, are
+selected at once and stop the unit. A response that breaks the contract (parse, schema,
+probability sum) is never replaced and stays a wrong answer, as does its fallback. A failed replacement, or a replacement above 2% of planned calls, stays
+selected as `transport_error`, no new call starts, and `SelectionStoppedError`
+carries the records; scoring refuses them because the primary is not measurable.
+Selection cost counts replaced calls with unknown usage. `python -m
+evals.benchmarks.score_selection self-test` exercises the whole path on fakes with
+zero model dispatches.
+
+### Noul 2×2 E2E cells
+
+[`noul_conditions.py`](../../evals/benchmarks/noul_conditions.py) builds the
+injection cells on the existing single `verification_intervention` per trial and
+scores finished trials against the runtime state the verifier actually judged.
+A rule oracle recomputes both conditions from the frozen inbox contract, the
+candidate text and every successful `lookup_order_status` observation, using the
+panel taxonomy plus one E2E extension: an unobserved cancel or refund claim
+contradicts the contract. Cells are `c1m0` (a status conflict after observation),
+`c0m1` (an early claim before observation), `c1m1` (an unobserved action claim and
+an unobserved status in one candidate) and the `c0m0` control. Planned gold must
+equal the requested cell; labels live in a separate `labels.jsonl`, never in
+payloads. Scoring recomputes gold for every judged state, counts an unaccepted
+judgment as wrong and reports an unmeasurable state with its reason.
+
+### Live cascade arm C (opt-in)
+
+[`decision_cascade.py`](../../evals/benchmarks/decision_cascade.py) adds
+`verification_engine=cascade` to the `a0` inbox path for the Choice verdict only.
+Jev judges each frozen verification state first. Its decision stands only when
+the typed answer is admitted and the contract V1 receipt `q`, the maximum label
+probability, reaches the frozen τ. A rejected answer or `q < τ` escalates once:
+the same state goes to the Astra matched verifier as a new, separately observed
+`turn_verification` call, and that decision reaches the root. A Jev transport
+error is not escalated; it invalidates the trial like any other provider error.
+Escalation faults fail closed with an invalid verifier response and a routing
+failure.
+
+Nothing enables arm C by default. The Harbor agent, container entry point and
+runtime require `--verification-engine cascade` with `--cascade-tau` from the
+pre-registered grid (0.50–0.95 by 0.05, 0.975, 0.99, 1.00), the scoped Jev key
+and the Choice primitive. A selection freeze without an admissible τ does not run
+arm C (`cascade_tau_from_selection` rejects `null`). Receipts share one ordered
+inventory; every primary records `{stage, tau, q, admitted}` and every escalation
+records its primary call ID. The Harbor checker keeps the V1 recomputation of
+each receipt, binds each judge call to the engine of its observed route and
+requires each rejected or below-τ primary to be followed by exactly one adjacent
+same-state Astra call. `q` routes a decision; it is not authority, calibration
+evidence or a Jev success when Astra decided.
+
+CI's `audit` extra resolves Harbor 0.8.0 through `inspect-harbor`, and its Harbor
+0.22 overlay step runs only `test_harbor_docker.py`. The frozen-SDK checker cases
+for arm C, the four Noul cells and the Choice arms skip unless Harbor 0.22.0 is
+importable; run them locally through the overlay interpreter:
+
+```bash
+uv run --offline --with harbor==0.22.0 python -m pytest -q \
+  tests/scripts/test_check_harbor_cascade.py \
+  tests/scripts/test_check_harbor_observations.py -k real_harbor
+```
+
+### Host Jev cost ledger
+
+[`jev_cost_ledger.py`](../../evals/benchmarks/jev_cost_ledger.py) is the single
+host-scoped, append-only guard for the program's Jev spend (preregistration §9).
+Units are admitted only when committed spend plus the unit projection stays
+within the $0.90 start limit; each dispatch reserves its worst case and settles
+the observed input tokens, with missing usage settled in a separate reserve
+column at 25,000 tokens per call, never released as zero. Reaching $0.95 records
+a sticky stop and refuses every later admission and reservation. Records form a
+hash chain with a head anchor, and amounts are published-tariff estimates, not
+invoices. `PanelSpendGuard` implements the verdict panel runner's `JevSpendGuard`
+hook: it reserves before and settles after each Jev call, and a settlement that
+crosses the stop limit keeps its attempt evidence while the next admission is
+refused, so the runner stops before another Jev call.
+
+### Repetition reliability: auxiliary pass@n and pass^n
+
+Preregistration v1 §3.5 adds auxiliary repetition metrics without changing any
+primary metric, decision rule, model, effort or run count. For task i with N_i
+independent full trials after the frozen reset and c_i strict successes,
+[`decision_metrics.py`](../../evals/benchmarks/decision_metrics.py) computes
+`pass_at_n` = mean_i[1 − C(N_i − c_i, n) / C(N_i, n)] and `pass_hat_n` =
+mean_i[C(c_i, n) / C(N_i, n)] per task first, with equal task weights; a pooled
+success rate is never substituted into 1 − (1 − p)^n or p^n.
+`validate_repetition_matrix` rejects a frozen task × repetition plan with an
+enumerated reason: N_i < n, a duplicate or unplanned repetition, a missing slot,
+a contract mismatch and an unknown outcome. The contract is the source revision,
+the runner-owned `policy_digest` (frozen route, effort, prompts, tools, verifier,
+budget and repair limits) and `reset_digest` (session, file and cache reset), and
+the input, task and verifier digests. Repair rounds, question variants and candidates never count as
+repetitions; an approved replacement takes its original's slot, and the original
+stays preserved. Judged failures stay in the denominator; infrastructure
+invalid, unobserved or evidence-incomplete trials are unknown, so the planned
+aggregate becomes not-measurable rather than a valid-only substitute.
+
+Only U7r0+U7r1 combine repetitions (n = 1, 2 per arm on the same task set).
+U6b has one run per task: pass@1 is its strict success, and pass^2 is written as
+not-measurable (insufficient repetitions). U8 conditions, Score candidates and
+U2s variants are not repetitions. `stability_summary` reports U2s identical-
+question pair consistency and correct-pair consistency apart from the order and
+paraphrase flip rates.
+
+The data path reuses existing receipts. `denominator_coverage.py repetitions`
+gates the frozen set before aggregation and exits non-zero on any rejection.
+`handoff_tables.py reliability` groups `e2e_trials` by (arm, case_id) and writes
+`tables/reliability.jsonl`, one task × arm row with source pointers (run, trial,
+attempt, run-spec digest), and `tables/reliability_summary.json` per arm × n with
+`n`, `planned_tasks`, `complete_tasks`, `incomplete_tasks`, expected, observed
+and valid repetitions and `run_spec_sha256s`. `reliability_metric_rows` emits
+auxiliary `analysis.json` metrics such as `u7_pass_hat_2_arm_b` under the
+unchanged schema: value is the task mean, numerator the sum of per-task ratios
+and denominator the complete task count, bound by JSON pointers into the
+summary; a not-measurable row carries null numerator, denominator and locator.
+`handoff_tables.py --reliability` also attaches the values to `primitive_summary`
+as auxiliary columns. The run-spec and attempt schemas stay closed, so the
+policy and reset digests live only in `freeze.json` cells, the private trial
+receipt and the `e2e_trials` columns. These are observed consistencies of a small frozen repetition, not an
+operating reliability claim.
+
+### X1 external validation: binary acceptance
+
+X1 (external validation, 05 v2.2 §11) scores Choice verdicts on converted
+CUAVerifierBench trajectories as binary acceptance in
+`evals.benchmarks.external_binary`, an analysis-only module; nothing on the
+dispatch path reads the labels. `binary_record` maps a panel receipt to a decision: accepted with
+`supported` accepts, accepted with another verdict rejects, and an unaccepted
+receipt is invalid, wrong and never an acceptance. Correct means the decision
+equals the builder's UV-blind human strict-majority `gold_accept`, which
+`load_gold` reads for planned states only during analysis. `x1_report` pairs
+Astra and Jev per state: the primary `x1_binary_verdict_accuracy_delta` =
+(Jev correct − Astra correct) / planned, with source-cluster bootstrap intervals
+for it and for Jev's P(supported) AUROC; per engine binary accuracy, false
+acceptance (over human failures), false rejection (over human successes, invalid
+included), TPR, TNR, balanced accuracy and the Mann–Whitney P(supported) AUROC
+(ties 0.5); Jev's selective coverage and risk at the frozen
+`selection-freeze.json` τ on the receipt's three-label `q`; McNemar discordant
+counts b and c without a p-value; and three-label verdict counts by human label.
+The §3.4 decision is supported, not-supported or mixed, and invalidated when a
+selected infrastructure-invalid attempt or a missing judgment leaves the primary
+not measurable. `x1_metric_rows` binds the analysis rows to `x1-results.json`
+by JSON pointer. Connecting retained Choice-only panel attempts to these records
+follows the Choice-only panel unit.
+
+### Rejected decisions still have call evidence
+
+The transport completes before typed-answer admission. A malformed Score or
+Noul therefore cannot erase reported input/output tokens, response identity or
+the observed call. Selection/verification rejects the answer; existing middleware
+retains the completed usage. Transport failures without reported usage remain
+unknown. Missing cache fields remain unknown, and an input-tariff estimate is
+not an actual charge.
+
+Keep these four responsibilities distinct when explaining the implementation:
+input admission → typed-answer validation → fixed action policy, with completed
+call accounting retained on both the accepted and rejected branches. Offline
+regressions exercise changed question IDs, invalid probabilities/expected score,
+frozen route/effort/tool constraints and rejected-answer accounting. They do not
+demonstrate that a provider returned those errors during a live experiment.
+
+This extension adds no executed Score/Noul results. Freeze the new source,
+questions, candidate pool, order, limits, oracle and replay pair before live
+admission. Preserve historical Choice artifacts unchanged. Slides may describe
+the verified contract with an offline-regression label; performance and recovery
+claims require new paired real-run evidence.
+
+Primary contracts checked 2026-09-25: [Score](https://docs.typesafe.ai/primitives/score),
+[Noul](https://docs.typesafe.ai/primitives/noul), [API](https://docs.typesafe.ai/api).
+
 ## Current evidence disposition — 2026-09-24
 
 The r6 results below are **superseded for claims about the revised,

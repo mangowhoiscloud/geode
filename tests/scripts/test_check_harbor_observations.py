@@ -722,11 +722,18 @@ def _handoff_trial(
     *,
     reflection: bool = False,
     verification_engine: str | None = None,
+    verification_primitive: str = "choice",
+    noul_conditions: tuple[bool, bool] = (False, False),
     native_final: bool = False,
 ) -> dict[str, Any]:
     """Build offline profile evidence through the existing usage/ATIF producers."""
     root = trial["trial_dir"]
     agent = root / "agent"
+    primitive_metadata = (
+        {"verification_primitive": verification_primitive}
+        if verification_primitive != "choice"
+        else {}
+    )
     model = {
         "provider": "openai",
         "label": "gpt-6-astra",
@@ -798,6 +805,7 @@ def _handoff_trial(
             "session_id": "session-1",
             "usage": usage,
             "handoff_call_coverage_complete": True,
+            **primitive_metadata,
             **({"verification_engine": verification_engine} if verification_engine else {}),
             **(
                 {
@@ -848,6 +856,7 @@ def _handoff_trial(
         metadata["effective_verify_mode"] = "llm_judge"
     if verification_engine:
         metadata.update(verify_mode="llm_judge", verification_engine=verification_engine)
+        metadata.update(primitive_metadata)
     runtime.update(usage=usage, tool_definitions=definitions)
     _write(agent / "runtime-result.json", runtime)
     _rewrite(
@@ -868,6 +877,7 @@ def _handoff_trial(
             arm=arm,
             case_sha256="e" * 64,
             required_tools=names,
+            **primitive_metadata,
             **(
                 {"verification_engine": verification_engine, "workload_profile": "inbox"}
                 if verification_engine
@@ -897,7 +907,12 @@ def _handoff_trial(
         tool_definitions=definitions,
     )
     if verification_engine:
-        from evals.benchmarks.decision_verification import _QUESTIONS, _REFLECTIONS
+        from evals.benchmarks.decision_verification import (
+            SUM_TOLERANCE,
+            base_questions,
+            decide_answer,
+            strict_admission,
+        )
 
         judge_id = f"call-{len(purposes)}"
         candidate_id = f"call-{len(purposes) - 1}"
@@ -914,24 +929,49 @@ def _handoff_trial(
                 }
             ],
         }
-        native_answer: dict[str, Any] = (
-            {"verdict": "supported"}
-            if verification_engine == "llm"
-            else {
-                "type": "choice",
-                "choice": "supported",
-                "probabilities": {
-                    "supported": 0.8,
-                    "contradicted": 0.1,
-                    "insufficient_evidence": 0.1,
-                },
-                "confidence": 0.6,
+        primitive = "noul" if verification_primitive == "noul" else "choice"
+        questions = base_questions(primitive)
+        engine = "jev" if verification_engine == "jev" else "llm"
+        if primitive == "noul":
+            probabilities = {
+                key: 0.9 if value else 0.1
+                for key, value in zip(questions, noul_conditions, strict=True)
             }
-        )
-        projected = {"passed": True, "score": 1.0, "reflection": _REFLECTIONS["supported"]}
-        raw_answer = json.dumps(
-            native_answer if verification_engine == "llm" else {"verdict": native_answer}
-        )
+            raw_answer = json.dumps(
+                probabilities
+                if engine == "llm"
+                else {key: {"type": "noul", "noul": value} for key, value in probabilities.items()}
+            )
+        else:
+            distribution = {"supported": 0.8, "contradicted": 0.1, "insufficient_evidence": 0.1}
+            raw_answer = json.dumps(
+                {"verdict": "supported", "probabilities": distribution}
+                if engine == "llm"
+                else {
+                    "verdict": {
+                        "type": "choice",
+                        "choice": "supported",
+                        "probabilities": distribution,
+                        "confidence": 0.6,
+                    }
+                }
+            )
+        decision = decide_answer(engine, primitive, raw_answer, questions)
+        projected = decision["projected_payload"]
+        verdict = decision["verdict"]
+        native_answer = decision["native_answer"]
+        judgment_metadata: dict[str, Any] = {
+            "contract": "v1",
+            "sum_tolerance": SUM_TOLERANCE,
+            "probabilities": decision["probabilities"],
+            "q": decision["q"],
+            "jev_confidence": decision["jev_confidence"],
+            "strict_admitted": strict_admission(engine, primitive, raw_answer, questions),
+        }
+        if primitive == "noul":
+            judgment_metadata.update(
+                primitive="noul", boolean_projection=decision["boolean_projection"]
+            )
         _write(
             agent / "verification.json",
             {
@@ -957,16 +997,17 @@ def _handoff_trial(
                         "response_provider": None if verification_engine == "llm" else "typesafe",
                         "input_sha256": _json_digest(state),
                         "source_sha256": _json_digest(state),
-                        "question_sha256": _json_digest(_QUESTIONS),
+                        "question_sha256": _json_digest(questions),
                         "raw_answer_sha256": hashlib.sha256(raw_answer.encode()).hexdigest(),
                         "raw_answer": raw_answer,
                         "raw_answer_retention": "complete",
                         "accepted": True,
-                        "verdict": "supported",
+                        "verdict": verdict,
                         "native_answer": native_answer,
                         "projected_payload": projected,
                         "feedback_sha256": _json_digest(projected),
                         "error_type": None,
+                        **judgment_metadata,
                     }
                 ],
                 "root_outputs": [
@@ -1014,7 +1055,46 @@ def _handoff_trial(
         "handoff_arm": arm,
         "handoff_case_sha256": "e" * 64,
         **({"verification_engine": verification_engine} if verification_engine else {}),
+        **primitive_metadata,
     }
+
+
+@pytest.mark.parametrize("engine", ["llm", "jev"])
+@pytest.mark.parametrize("conditions", [(False, False), (True, False), (False, True), (True, True)])
+def test_noul_verification_reconstructs_both_conditions(
+    trial: dict[str, Any], model_boundary: Any, engine: str, conditions: tuple[bool, bool]
+) -> None:
+    options = _handoff_trial(
+        trial,
+        "a0",
+        verification_engine=engine,
+        verification_primitive="noul",
+        noul_conditions=conditions,
+    )
+    assert gate.validate_observations(**options)["verification"]["completed_judgments"] == 1
+    with pytest.raises(ValueError, match="treatment mismatch"):
+        gate.validate_observations(**(options | {"verification_primitive": "choice"}))
+
+
+@pytest.mark.parametrize(
+    "field", ["primitive", "boolean_projection", "question_sha256", "projected_payload"]
+)
+def test_noul_verification_rejects_altered_projection(
+    trial: dict[str, Any], model_boundary: Any, field: str
+) -> None:
+    options = _handoff_trial(
+        trial,
+        "a0",
+        verification_engine="jev",
+        verification_primitive="noul",
+        noul_conditions=(True, True),
+    )
+    _rewrite(
+        trial["trial_dir"] / "agent/verification.json",
+        lambda evidence: evidence["judgments"][0].update({field: None}),
+    )
+    with pytest.raises(ValueError, match="verification"):
+        gate.validate_observations(**options)
 
 
 @pytest.mark.parametrize("engine", ["llm", "jev"])
@@ -1187,6 +1267,10 @@ def test_matched_completed_rejection_is_preserved_without_fabricated_repair(
             error_type="invalid_verifier_response",
             verdict=None,
             native_answer=None,
+            probabilities=None,
+            q=None,
+            jev_confidence=None,
+            strict_admitted=None,
             projected_payload=None,
             feedback_sha256=None,
         )
@@ -1271,6 +1355,10 @@ def test_matched_gate_preserves_explicit_raw_omission_only_for_rejected_completi
             error_type="invalid_verifier_response",
             verdict=None,
             native_answer=None,
+            probabilities=None,
+            q=None,
+            jev_confidence=None,
+            strict_admitted=None,
             projected_payload=None,
             feedback_sha256=None,
             raw_answer=None,
@@ -1719,3 +1807,29 @@ def test_real_harbor_handoff_schemas_when_installed(trial, arm):
     if importlib.util.find_spec("harbor") is None:
         pytest.skip("optional Harbor SDK not installed; run in the frozen Harbor environment")
     assert gate.validate_observations(**_handoff_trial(trial, arm))["observation_valid"] is True
+
+
+@pytest.mark.parametrize("engine", ["llm", "jev"])
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("probabilities", {"supported": 1.0}),
+        ("q", 0.5),
+        ("strict_admitted", False),
+        ("contract", "v0"),
+        ("sum_tolerance", 1e-5),
+        ("jev_confidence", 0.9),
+        ("question_variant", "order-rev"),
+    ],
+)
+def test_v1_receipt_fields_are_recomputed_from_the_raw_answer(
+    trial: dict[str, Any], model_boundary: None, engine: str, field: str, value: Any
+) -> None:
+    options = _handoff_trial(trial, "a0", verification_engine=engine)
+    assert gate.validate_observations(**options)["observation_valid"]
+    _rewrite(
+        trial["trial_dir"] / "agent/verification.json",
+        lambda evidence: evidence["judgments"][0].update({field: value}),
+    )
+    with pytest.raises(ValueError, match="verification"):
+        gate.validate_observations(**options)
