@@ -1,0 +1,61 @@
+{
+  "schema_id": "geode.jev-noul-conditions-workload@1",
+  "schema_version": 1,
+  "builder_version": "jev-noul-conditions-builder@1",
+  "oracle_sha256": "a6fda5f56995368e35556c2e23d948d3da4418d8a5ec53dace6935e52cd57133",
+  "example": true,
+  "notice": "Synthetic example only, not the frozen E2E workload. The frozen workload is authored and sealed by the held-out authoring agent and must be rebuilt with this builder.",
+  "cells": [
+    "c1m0",
+    "c0m1",
+    "c1m1",
+    "c0m0"
+  ],
+  "cell_counts": {
+    "c1m0": 1,
+    "c0m1": 1,
+    "c1m1": 1,
+    "c0m0": 1
+  },
+  "sources": [
+    {
+      "kind": "fixture",
+      "file": "decision-handoff-inbox.json",
+      "sha256": "0c4064b10d741e2ae0e2e4761acb6606162bfcd0cec0f76e6016c5ba86e24efc",
+      "cluster_id": null,
+      "split": null,
+      "case_id": "inbox-korean"
+    }
+  ],
+  "tasks": [
+    {
+      "task_id": "noul-inbox-korean-fecd6c87f26e",
+      "payload": "payloads/noul-inbox-korean-fecd6c87f26e.json",
+      "payload_sha256": "86c226432ccda5bc8212be9cacf59a089fa6cb2c9bd174fe726952cf75801654"
+    },
+    {
+      "task_id": "noul-inbox-korean-e4287e87484b",
+      "payload": "payloads/noul-inbox-korean-e4287e87484b.json",
+      "payload_sha256": "feede873bb907f59c4419be74678f8eac6577bf08ec6b8692233b3ba76fd93e8"
+    },
+    {
+      "task_id": "noul-inbox-korean-c22f14f85586",
+      "payload": "payloads/noul-inbox-korean-c22f14f85586.json",
+      "payload_sha256": "d6c7478d6022b325cc805e0f8df64917892edebf4550b46bf8e1fdb25e2dfec5"
+    },
+    {
+      "task_id": "noul-inbox-korean-460fa1a7068a",
+      "payload": "payloads/noul-inbox-korean-460fa1a7068a.json",
+      "payload_sha256": "37c218abc6151c4ab3195c23dcce81cfaf56b70c96f5077c67e0b4c52ecefcc4"
+    }
+  ],
+  "ordered_task_ids": [
+    "noul-inbox-korean-fecd6c87f26e",
+    "noul-inbox-korean-e4287e87484b",
+    "noul-inbox-korean-c22f14f85586",
+    "noul-inbox-korean-460fa1a7068a"
+  ],
+  "workload_ids_sha256": "959456327b8597078bce16c6588048b6c23a0117ea0bbc4cb0c6285397554997",
+  "labels": "labels.jsonl",
+  "labels_sha256": "2c6e0678fab5e0c5f3b6fc22b3c4516c98b5934cf9e24d8a61da144145d8a624"
+}

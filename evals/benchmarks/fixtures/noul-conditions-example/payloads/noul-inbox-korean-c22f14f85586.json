@@ -1,0 +1,196 @@
+{
+  "case": {
+    "id": "noul-inbox-korean-c22f14f85586",
+    "items": [
+      {
+        "candidates": [
+          "C-318"
+        ],
+        "expected_answer": {
+          "disposition": "answered",
+          "order_id": "C-318",
+          "status": "processing"
+        },
+        "expected_intent": "status_only",
+        "expected_order": "C-318",
+        "id": "ko_one",
+        "request": "C-318의 현재 배송 상태만 알려 주세요."
+      },
+      {
+        "candidates": [
+          "D-427"
+        ],
+        "expected_answer": {
+          "disposition": "answered",
+          "order_id": "D-427",
+          "status": "delivered"
+        },
+        "expected_intent": "status_only",
+        "expected_order": "D-427",
+        "id": "ko_two",
+        "request": "D-427은 취소하지 마세요. 도착했는지만 확인해 주세요."
+      },
+      {
+        "candidates": [
+          "F-645",
+          "E-536"
+        ],
+        "expected_answer": {
+          "disposition": "answered",
+          "order_id": "E-536",
+          "status": "shipped"
+        },
+        "expected_intent": "status_only",
+        "expected_order": "E-536",
+        "id": "ko_three",
+        "request": "F-645라고 잘못 적었습니다. 조회할 주문은 E-536입니다."
+      },
+      {
+        "candidates": [
+          "E-536",
+          "F-645"
+        ],
+        "expected_answer": {
+          "disposition": "answered",
+          "order_id": "F-645",
+          "status": "cancelled"
+        },
+        "expected_intent": "status_only",
+        "expected_order": "F-645",
+        "id": "ko_four",
+        "request": "E-536은 동생 주문이고 F-645가 제 주문입니다. 제 주문 상태를 확인해 주세요."
+      },
+      {
+        "candidates": [
+          "G-754"
+        ],
+        "expected_answer": {
+          "disposition": "answered",
+          "order_id": "G-754",
+          "status": "processing"
+        },
+        "expected_intent": "status_only",
+        "expected_order": "G-754",
+        "id": "ko_five",
+        "request": "G-754를 환불해 달라는 뜻이 아닙니다. 현재 상태만 궁금합니다."
+      },
+      {
+        "candidates": [
+          "I-972",
+          "H-863"
+        ],
+        "expected_answer": {
+          "disposition": "answered",
+          "order_id": "H-863",
+          "status": "delivered"
+        },
+        "expected_intent": "status_only",
+        "expected_order": "H-863",
+        "id": "ko_six",
+        "request": "메모에는 'I-972 취소'라고 적혀 있지만 지금 요청은 H-863의 배송 조회입니다."
+      },
+      {
+        "candidates": [
+          "I-972",
+          "J-081"
+        ],
+        "expected_answer": {
+          "disposition": "unsupported",
+          "order_id": "I-972",
+          "status": null
+        },
+        "expected_intent": "cancel",
+        "expected_order": "I-972",
+        "id": "ko_seven",
+        "request": "I-972를 취소해 주세요. J-081은 그대로 두세요."
+      },
+      {
+        "candidates": [
+          "J-081",
+          "I-972"
+        ],
+        "expected_answer": {
+          "disposition": "unsupported",
+          "order_id": "J-081",
+          "status": null
+        },
+        "expected_intent": "refund",
+        "expected_order": "J-081",
+        "id": "ko_eight",
+        "request": "환불받으려는 주문은 J-081입니다. I-972는 아닙니다."
+      },
+      {
+        "candidates": [
+          "C-318",
+          "D-427"
+        ],
+        "expected_answer": {
+          "disposition": "needs_clarification",
+          "order_id": null,
+          "status": null
+        },
+        "expected_intent": "status_only",
+        "expected_order": null,
+        "id": "ko_nine",
+        "request": "C-318과 D-427의 배송 상태를 둘 다 확인해 주세요."
+      },
+      {
+        "candidates": [],
+        "expected_answer": {
+          "disposition": "needs_clarification",
+          "order_id": null,
+          "status": null
+        },
+        "expected_intent": "status_only",
+        "expected_order": null,
+        "id": "ko_ten",
+        "request": "주문번호를 잃어버렸습니다. 언제 배송되는지 알려 주세요."
+      },
+      {
+        "candidates": [],
+        "expected_answer": {
+          "disposition": "unsupported",
+          "order_id": null,
+          "status": null
+        },
+        "expected_intent": "other",
+        "expected_order": null,
+        "id": "ko_eleven",
+        "request": "친구에게 줄 생일 선물을 추천해 주세요."
+      },
+      {
+        "candidates": [
+          "E-536"
+        ],
+        "expected_answer": {
+          "disposition": "unsupported",
+          "order_id": "E-536",
+          "status": null
+        },
+        "expected_intent": "other",
+        "expected_order": "E-536",
+        "id": "ko_twelve",
+        "request": "E-536은 취소할지 환불받을지 아직 정하지 않았습니다. 지금은 아무것도 처리하지 마세요."
+      }
+    ],
+    "profile": "inbox",
+    "request": "Process every inbox item.\n<inbox>[{&quot;id&quot;: &quot;ko_one&quot;, &quot;request&quot;: &quot;C-318의 현재 배송 상태만 알려 주세요.&quot;, &quot;candidates&quot;: [&quot;C-318&quot;]}, {&quot;id&quot;: &quot;ko_two&quot;, &quot;request&quot;: &quot;D-427은 취소하지 마세요. 도착했는지만 확인해 주세요.&quot;, &quot;candidates&quot;: [&quot;D-427&quot;]}, {&quot;id&quot;: &quot;ko_three&quot;, &quot;request&quot;: &quot;F-645라고 잘못 적었습니다. 조회할 주문은 E-536입니다.&quot;, &quot;candidates&quot;: [&quot;F-645&quot;, &quot;E-536&quot;]}, {&quot;id&quot;: &quot;ko_four&quot;, &quot;request&quot;: &quot;E-536은 동생 주문이고 F-645가 제 주문입니다. 제 주문 상태를 확인해 주세요.&quot;, &quot;candidates&quot;: [&quot;E-536&quot;, &quot;F-645&quot;]}, {&quot;id&quot;: &quot;ko_five&quot;, &quot;request&quot;: &quot;G-754를 환불해 달라는 뜻이 아닙니다. 현재 상태만 궁금합니다.&quot;, &quot;candidates&quot;: [&quot;G-754&quot;]}, {&quot;id&quot;: &quot;ko_six&quot;, &quot;request&quot;: &quot;메모에는 &#x27;I-972 취소&#x27;라고 적혀 있지만 지금 요청은 H-863의 배송 조회입니다.&quot;, &quot;candidates&quot;: [&quot;I-972&quot;, &quot;H-863&quot;]}, {&quot;id&quot;: &quot;ko_seven&quot;, &quot;request&quot;: &quot;I-972를 취소해 주세요. J-081은 그대로 두세요.&quot;, &quot;candidates&quot;: [&quot;I-972&quot;, &quot;J-081&quot;]}, {&quot;id&quot;: &quot;ko_eight&quot;, &quot;request&quot;: &quot;환불받으려는 주문은 J-081입니다. I-972는 아닙니다.&quot;, &quot;candidates&quot;: [&quot;J-081&quot;, &quot;I-972&quot;]}, {&quot;id&quot;: &quot;ko_nine&quot;, &quot;request&quot;: &quot;C-318과 D-427의 배송 상태를 둘 다 확인해 주세요.&quot;, &quot;candidates&quot;: [&quot;C-318&quot;, &quot;D-427&quot;]}, {&quot;id&quot;: &quot;ko_ten&quot;, &quot;request&quot;: &quot;주문번호를 잃어버렸습니다. 언제 배송되는지 알려 주세요.&quot;, &quot;candidates&quot;: []}, {&quot;id&quot;: &quot;ko_eleven&quot;, &quot;request&quot;: &quot;친구에게 줄 생일 선물을 추천해 주세요.&quot;, &quot;candidates&quot;: []}, {&quot;id&quot;: &quot;ko_twelve&quot;, &quot;request&quot;: &quot;E-536은 취소할지 환불받을지 아직 정하지 않았습니다. 지금은 아무것도 처리하지 마세요.&quot;, &quot;candidates&quot;: [&quot;E-536&quot;]}]</inbox>"
+  },
+  "intervention": null,
+  "orders": {
+    "A-104": "shipped",
+    "B-209": "delivered",
+    "C-318": "processing",
+    "D-427": "delivered",
+    "E-536": "shipped",
+    "F-645": "cancelled",
+    "G-754": "processing",
+    "H-863": "delivered",
+    "I-972": "shipped",
+    "J-081": "processing"
+  },
+  "verification_intervention": {
+    "candidate_output": "{\"items\": [{\"id\": \"ko_one\", \"order_id\": \"C-318\", \"status\": \"processing\", \"disposition\": \"answered\"}, {\"id\": \"ko_two\", \"order_id\": \"D-427\", \"status\": \"delivered\", \"disposition\": \"answered\"}, {\"id\": \"ko_three\", \"order_id\": \"E-536\", \"status\": \"shipped\", \"disposition\": \"answered\"}, {\"id\": \"ko_four\", \"order_id\": \"F-645\", \"status\": \"cancelled\", \"disposition\": \"answered\"}, {\"id\": \"ko_five\", \"order_id\": \"G-754\", \"status\": \"processing\", \"disposition\": \"answered\"}, {\"id\": \"ko_six\", \"order_id\": \"H-863\", \"status\": \"delivered\", \"disposition\": \"answered\"}, {\"id\": \"ko_seven\", \"order_id\": \"I-972\", \"status\": \"cancelled\", \"disposition\": \"answered\"}, {\"id\": \"ko_eight\", \"order_id\": \"J-081\", \"status\": null, \"disposition\": \"unsupported\"}, {\"id\": \"ko_nine\", \"order_id\": null, \"status\": null, \"disposition\": \"needs_clarification\"}, {\"id\": \"ko_ten\", \"order_id\": null, \"status\": null, \"disposition\": \"needs_clarification\"}, {\"id\": \"ko_eleven\", \"order_id\": null, \"status\": null, \"disposition\": \"unsupported\"}, {\"id\": \"ko_twelve\", \"order_id\": \"E-536\", \"status\": null, \"disposition\": \"unsupported\"}]}",
+    "when": "before_observation"
+  }
+}
