@@ -189,6 +189,12 @@ def _usage_check(
                 (JEV_MODEL, "typesafe", "payg", "none")
                 if (handoff_arm == "b" and purpose == "structured_decision")
                 or (verification_engine == "jev" and purpose == "turn_verification")
+                # Arm C routes are provisional here; _verification_check binds each call.
+                or (
+                    verification_engine == "cascade"
+                    and purpose == "turn_verification"
+                    and row["model"] == JEV_MODEL
+                )
                 else (model["label"], model["provider"], model["route"], model["reasoning"])
             )
             _require(
@@ -389,6 +395,7 @@ def _verification_check(
     primitive: str = "choice",
     intervention_spec: dict[str, Any] | None = None,
     intervention_rows: Any = None,
+    cascade_tau: str | None = None,
 ) -> dict[str, int]:
     """Check call provenance and private-receipt consistency, not independent wire text.
 
@@ -406,6 +413,12 @@ def _verification_check(
     )
 
     _require(primitive in {"choice", "noul"}, "unknown verification primitive")
+    cascade = engine == "cascade"
+    _require(
+        (cascade and primitive == "choice" and cascade_tau is not None)
+        or (not cascade and cascade_tau is None),
+        "arm C requires the Choice verdict and its frozen tau",
+    )
     questions = base_questions("noul" if primitive == "noul" else "choice")
 
     def indexed(rows: Any) -> dict[str, dict[str, Any]]:
@@ -613,6 +626,10 @@ def _verification_check(
         if call_id not in judgments:
             continue  # A transport failure has no completed verdict or recovered usage.
         judgment = judgments[call_id]
+        if cascade:
+            # Each arm C call is judged by the engine of its observed route; the stage
+            # order and tau routing are bound by cascade_stage_summary below.
+            engine = "jev" if observed[call_id].get("model") == JEV_MODEL else "llm"
         native = terminals[observed[call_id]["source_event_id"]]["payload"]
         _require(
             judgment.get("engine") == engine
@@ -743,6 +760,12 @@ def _verification_check(
         _require(
             root_request.get("consumed_feedback") == consumed, "verification feedback mismatch"
         )
+    stages: dict[str, int] = {}
+    if cascade:
+        from evals.benchmarks.decision_cascade import cascade_stage_summary
+
+        assert cascade_tau is not None
+        stages = cascade_stage_summary(judge_ids, inputs, judgments, observed, cascade_tau)
     return {
         "inputs": len(inputs),
         "completed_judgments": len(judgments),
@@ -750,6 +773,7 @@ def _verification_check(
         "omitted_native_answers": sum(
             row["raw_answer_retention"] != "complete" for row in judgments.values()
         ),
+        **({"cascade": stages} if cascade else {}),
     }
 
 
@@ -770,6 +794,7 @@ def validate_observations(
     expected_effective_verify_mode: str | None = None,
     verification_engine: str | None = None,
     verification_primitive: str = "choice",
+    cascade_tau: str | None = None,
 ) -> dict[str, Any]:
     """Validate existing exports, returning only bounded metadata and hashes.
 
@@ -797,10 +822,11 @@ def validate_observations(
         "effective handoff verifier requires its closed source database",
     )
     _require(
-        verification_engine in (None, "llm", "jev")
+        verification_engine in (None, "llm", "jev", "cascade")
         and (verification_engine is None or handoff_arm == "a0")
         and verification_primitive in {"choice", "noul"}
-        and (verification_primitive == "choice" or verification_engine is not None),
+        and (verification_primitive == "choice" or verification_engine is not None)
+        and (verification_engine == "cascade") == (cascade_tau is not None),
         "matched verification requires an explicit lookup-only handoff arm",
     )
     _require(
@@ -893,7 +919,8 @@ def validate_observations(
         _require(contract.get("required_tools") == handoff_tools, "handoff tool contract mismatch")
         _require(
             contract.get("verification_engine") == verification_engine
-            and contract.get("verification_primitive", "choice") == verification_primitive,
+            and contract.get("verification_primitive", "choice") == verification_primitive
+            and contract.get("cascade_tau") == cascade_tau,
             "handoff verification treatment mismatch",
         )
         if verification_engine is not None:
@@ -923,7 +950,8 @@ def validate_observations(
             metadata.get("profile") == "decision-handoff"
             and metadata.get("arm") == handoff_arm
             and metadata.get("verification_engine") == verification_engine
-            and metadata.get("verification_primitive", "choice") == verification_primitive,
+            and metadata.get("verification_primitive", "choice") == verification_primitive
+            and metadata.get("cascade_tau") == cascade_tau,
             "handoff runtime profile/arm mismatch",
         )
         definitions = runtime.get("tool_definitions")
@@ -967,7 +995,8 @@ def validate_observations(
         receipt = json.loads(read(trial_dir / "agent/handoff.json"))
         _require(
             handoff.get("verification_engine") == verification_engine
-            and handoff.get("verification_primitive", "choice") == verification_primitive,
+            and handoff.get("verification_primitive", "choice") == verification_primitive
+            and handoff.get("cascade_tau") == cascade_tau,
             "judge result mismatch",
         )
         _require(
@@ -1035,6 +1064,7 @@ def validate_observations(
             trajectory=full,
             intervention_spec=intervention_spec,
             intervention_rows=intervention_rows,
+            cascade_tau=cascade_tau,
         )
     # The ATIF projector keys results by this exact triple, not bare call_id.
     for kind in ("tool.called", "tool.completed"):
@@ -1197,8 +1227,9 @@ def main(argv: list[str] | None = None) -> int:
         help="reject missing or different request effort on any recorded root/auxiliary call",
     )
     parser.add_argument("--handoff-arm", choices=("a0", "a", "b"))
-    parser.add_argument("--verification-engine", choices=("llm", "jev"))
+    parser.add_argument("--verification-engine", choices=("llm", "jev", "cascade"))
     parser.add_argument("--verification-primitive", choices=("choice", "noul"), default="choice")
+    parser.add_argument("--cascade-tau", help="frozen arm C threshold; required for cascade")
     parser.add_argument(
         "--expected-effective-verify-mode",
         choices=("llm_judge",),

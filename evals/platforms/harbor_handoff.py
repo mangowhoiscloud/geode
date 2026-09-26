@@ -79,6 +79,7 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
         typesafe_key_file: str | None = None,
         verification_engine: str | None = None,
         verification_primitive: str = "choice",
+        cascade_tau: str | None = None,
         **kwargs: Any,
     ) -> None:
         if kwargs.get("prompt_template_path") or kwargs.get("env") or kwargs.get("extra_env"):
@@ -88,18 +89,23 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
             arm not in {"a0", "a", "b"}
             or str(self.model_name).removeprefix("geode/") != "gpt-6-astra"
             or self.effort != "xhigh"
-            or verification_engine not in {None, "llm", "jev"}
+            or verification_engine not in {None, "llm", "jev", "cascade"}
             or verification_primitive not in {"choice", "noul"}
             or (verification_primitive == "noul" and verification_engine is None)
             or self.verify_mode != ("llm_judge" if verification_engine else "rule_based")
             or self.agent_timeout_sec != 180
-            or (arm == "b" or verification_engine == "jev") != (typesafe_key_file is not None)
+            or (arm == "b" or verification_engine in {"jev", "cascade"})
+            != (typesafe_key_file is not None)
             or (verification_engine is not None and arm != "a0")
         ):
             raise ValueError("handoff model, arm, verifier or credential scope mismatch")
+        from evals.benchmarks.decision_cascade import require_cascade_contract
+
+        require_cascade_contract(verification_engine, verification_primitive, cascade_tau)
         self.arm = arm
         self.verification_engine = verification_engine
         self.verification_primitive = verification_primitive
+        self.cascade_tau = cascade_tau
         self.case_file = Path(case_file).resolve(strict=True)
         self.case_sha256 = case_sha256
         self.task = _task(self.case_file, case_sha256)
@@ -177,6 +183,7 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
                     if self.verification_primitive == "noul"
                     else {}
                 ),
+                **({"cascade_tau": self.cascade_tau} if self.cascade_tau is not None else {}),
                 "required_tools": names,
                 "agent_timeout_sec": self.agent_timeout_sec,
                 "profile_scope": "fresh task container; no shell or filesystem tool",
@@ -201,6 +208,8 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
             arguments.extend(("--verification-engine", self.verification_engine))
         if self.verification_primitive == "noul":
             arguments.extend(("--verification-primitive", self.verification_primitive))
+        if self.cascade_tau is not None:
+            arguments.extend(("--cascade-tau", self.cascade_tau))
         try:
             await self.exec_as_agent(
                 environment,
@@ -237,9 +246,10 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
 async def _run_handoff(args: argparse.Namespace) -> int:
     verification_engine = getattr(args, "verification_engine", None)
     verification_primitive = getattr(args, "verification_primitive", "choice")
+    cascade_tau = getattr(args, "cascade_tau", None)
     if args.timeout != 180 or args.arm not in {"a0", "a", "b"}:
         raise ValueError("handoff execution contract mismatch")
-    if verification_engine not in {None, "llm", "jev"} or (
+    if verification_engine not in {None, "llm", "jev", "cascade"} or (
         verification_engine and args.arm != "a0"
     ):
         raise ValueError("matched verification engine or arm mismatch")
@@ -247,6 +257,9 @@ async def _run_handoff(args: argparse.Namespace) -> int:
         verification_primitive == "noul" and verification_engine is None
     ):
         raise ValueError("verification primitive requires its matched engine")
+    from evals.benchmarks.decision_cascade import require_cascade_contract
+
+    require_cascade_contract(verification_engine, verification_primitive, cascade_tau)
     if not Path("/.dockerenv").is_file() or os.environ.get("GEODE_HOME") != f"{_LOGS}/geode-home":
         raise RuntimeError("container-local handoff entry point only")
     if any(value for key, value in os.environ.items() if key.endswith("API_KEY")):
@@ -279,6 +292,7 @@ async def _run_handoff(args: argparse.Namespace) -> int:
             if verification_primitive == "noul"
             else {}
         ),
+        **({"cascade_tau": cascade_tau} if cascade_tau is not None else {}),
         "profile": "decision-handoff",
         "arm": args.arm,
         "execution_started": False,
@@ -315,7 +329,7 @@ async def _run_handoff(args: argparse.Namespace) -> int:
         settings.cost_limit_usd = 0
         secret = None
         execution_stage = "credential_load"
-        if args.arm == "b" or verification_engine == "jev":
+        if args.arm == "b" or verification_engine in {"jev", "cascade"}:
             info = secret_path.lstat()
             if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
                 raise RuntimeError("unsafe TypeSafe credential file")
@@ -338,6 +352,7 @@ async def _run_handoff(args: argparse.Namespace) -> int:
             verification_engine=verification_engine,
             verification_primitive=verification_primitive,
             verification_intervention=value.get("verification_intervention"),
+            cascade_tau=cascade_tau,
         )
     except BaseException as error:
         errors.append({"stage": execution_stage, "error_type": type(error).__name__})
@@ -426,8 +441,9 @@ def main() -> int:
     parser.add_argument("--task-sha256", required=True)
     parser.add_argument("--revision", required=True)
     parser.add_argument("--timeout", type=float, required=True)
-    parser.add_argument("--verification-engine", choices=("llm", "jev"))
+    parser.add_argument("--verification-engine", choices=("llm", "jev", "cascade"))
     parser.add_argument("--verification-primitive", choices=("choice", "noul"), default="choice")
+    parser.add_argument("--cascade-tau", help="frozen arm C threshold; required only for cascade")
     args = parser.parse_args()
     if args.timeout != 180:
         parser.error("the handoff runtime contract requires 180 seconds")

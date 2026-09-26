@@ -612,6 +612,15 @@ class _VerificationComparison:
         self.consumptions: list[dict[str, Any]] = []
         self.intervention = intervention
         self.interventions: list[dict[str, Any]] = []
+        self.failures: list[dict[str, str]] = []
+
+    def decision_receipts(self) -> list[dict[str, Any]]:
+        """Judgments whose projection reached the root, in call order."""
+        return list(self.adapter.receipts)
+
+    def metrics(self) -> dict[str, Any]:
+        """Engine-specific verification metrics; the single-engine comparison adds none."""
+        return {}
 
     async def llm_execution(self, call: Any, next_call: Any) -> Any:
         result = await next_call(call)
@@ -1119,6 +1128,57 @@ def verify_handoff_result(
     )
 
 
+def _matched_verification(
+    engine: str,
+    primitive: str,
+    *,
+    receipt: HandoffReceipt,
+    request: str,
+    system: str,
+    intervention: Mapping[str, Any] | None,
+    client: Any,
+    key: SecretStr | None,
+    llm_adapter: Any,
+    registry: Any,
+    tau: str | None,
+) -> _VerificationComparison:
+    """Build the task-local judge replacement for one explicit comparison engine."""
+    from core.llm.adapters import resolve_for
+
+    from evals.benchmarks.decision_verification import MatchedVerifierAdapter
+
+    judgments: list[dict[str, Any]] = []
+    if engine == "cascade":
+        from evals.benchmarks.decision_cascade import CascadeVerification
+
+        assert tau is not None
+        return CascadeVerification(
+            MatchedVerifierAdapter("jev", client=client, api_key=key, receipts=judgments),
+            MatchedVerifierAdapter(
+                "llm",
+                llm_adapter=llm_adapter or resolve_for("openai", "subscription"),
+                receipts=judgments,
+            ),
+            receipt,
+            request,
+            system,
+            intervention,
+            tau=tau,
+            registry=registry,
+        )
+    judge = MatchedVerifierAdapter(
+        "llm" if engine == "llm" else "jev",
+        primitive="noul" if primitive == "noul" else "choice",
+        llm_adapter=(llm_adapter or resolve_for("openai", "subscription"))
+        if engine == "llm"
+        else None,
+        client=client,
+        api_key=key,
+        receipts=judgments,
+    )
+    return _VerificationComparison(judge, receipt, request, system, intervention)
+
+
 async def run_arm(
     case: dict[str, Any],
     arm: str,
@@ -1134,6 +1194,7 @@ async def run_arm(
     verification_primitive: str = "choice",
     verification_adapter: Any = None,
     verification_intervention: Mapping[str, Any] | None = None,
+    cascade_tau: str | None = None,
 ) -> dict[str, Any]:
     # Imports are late so the CLI child isolates cwd/state before loading core.
     from contextlib import AsyncExitStack
@@ -1174,7 +1235,7 @@ async def run_arm(
         from core.agent.verify import VerifyMode, get_verify_mode
 
         if (
-            verification_engine not in {"llm", "jev"}
+            verification_engine not in {"llm", "jev", "cascade"}
             or arm != "a0"
             or not inbox
             or intervention is not None
@@ -1183,6 +1244,9 @@ async def run_arm(
             raise ValueError("matched verification requires lookup-only inbox and llm_judge")
     elif verification_adapter is not None:
         raise ValueError("verification adapter requires its explicit comparison engine")
+    from evals.benchmarks.decision_cascade import require_cascade_contract
+
+    require_cascade_contract(verification_engine, verification_primitive, cascade_tau)
     if verification_intervention is not None:
         if verification_engine is None:
             raise ValueError("candidate intervention requires matched verification")
@@ -1207,7 +1271,7 @@ async def run_arm(
             resources.callback(_tracker_ctx.reset, tracker_token)
         hooks = HookSystem()
         resources.callback(hooks.close)
-        uses_jev = arm == "b" or verification_engine == "jev"
+        uses_jev = arm == "b" or verification_engine in {"jev", "cascade"}
         if uses_jev and client is None:
             client = httpx.AsyncClient(timeout=30)
             resources.push_async_callback(client.aclose)
@@ -1277,24 +1341,20 @@ async def run_arm(
                     "in one batch. Consume its result before acting. Repeat only if needed; "
                     "do not bypass an analysis error.\n</task_contract>",
                 )
-        verification = None
+        verification: _VerificationComparison | None = None
         if verification_engine is not None:
-            from core.llm.adapters import resolve_for
-
-            from evals.benchmarks.decision_verification import MatchedVerifierAdapter
-
-            judge = MatchedVerifierAdapter(
-                "llm" if verification_engine == "llm" else "jev",
-                primitive="noul" if verification_primitive == "noul" else "choice",
-                llm_adapter=(verification_adapter or resolve_for("openai", "subscription"))
-                if verification_engine == "llm"
-                else None,
+            verification = _matched_verification(
+                verification_engine,
+                verification_primitive,
+                receipt=receipt,
+                request=case["request"],
+                system=system,
+                intervention=verification_intervention,
                 client=client if uses_jev else None,
-                api_key=key if uses_jev else None,
-                receipts=[],
-            )
-            verification = _VerificationComparison(
-                judge, receipt, case["request"], system, verification_intervention
+                key=key if uses_jev else None,
+                llm_adapter=verification_adapter,
+                registry=executor.middleware_registry,
+                tau=cascade_tau,
             )
             executor.middleware_registry.register_llm_request(
                 verification,
@@ -1340,6 +1400,7 @@ async def run_arm(
         error = None
         try:
             result = await asyncio.wait_for(loop.arun(case["request"]), timeout=180)
+            decided = verification.decision_receipts() if verification is not None else []
             judged_hold = bool(
                 result.termination_reason == "external_verification_required"
                 and loop._session_metrics.last_verify_rubric_misses == ("judge_fail",)
@@ -1348,9 +1409,9 @@ async def run_arm(
                 and (
                     verification is None
                     or (
-                        verification.adapter.receipts
-                        and all(row["accepted"] for row in verification.adapter.receipts)
-                        and not verification.adapter.receipts[-1]["projected_payload"]["passed"]
+                        decided
+                        and all(row["accepted"] for row in decided)
+                        and not decided[-1]["projected_payload"]["passed"]
                     )
                 )
             )
@@ -1419,11 +1480,18 @@ async def run_arm(
     if arm != "a0":
         allowed_purposes.add("structured_decision")
 
+    cascade_stages = getattr(verification, "stages", {})
+
     def is_jev(event: Any) -> bool:
         return bool(
             (arm == "b" and event.payload.get("purpose") == "structured_decision")
             or (
                 verification_engine == "jev" and event.payload.get("purpose") == "turn_verification"
+            )
+            or (
+                verification_engine == "cascade"
+                and event.payload.get("purpose") == "turn_verification"
+                and cascade_stages.get(event.llm_call_id) == "jev"
             )
         )
 
@@ -1485,6 +1553,9 @@ async def run_arm(
     ):
         invalid = True
         error = error or "incomplete_verification_intervention"
+    routing_failures = verification.failures if verification is not None else []
+    invalid = invalid or bool(routing_failures)
+    error = error or ("cascade_routing_failure" if routing_failures else None)
     native_verify = [
         {**event.payload, "action": event.action}
         for event in events
@@ -1559,6 +1630,7 @@ async def run_arm(
         metadata["verification_engine"] = verification_engine
         if verification_primitive == "noul":
             metadata["verification_primitive"] = verification_primitive
+        metadata.update({"cascade_tau": cascade_tau} if cascade_tau is not None else {})
         if verification_intervention is not None:
             metadata["verification_intervention"] = dict(verification_intervention)
         metadata["verification_metrics"] = {
@@ -1570,6 +1642,7 @@ async def run_arm(
             if verification
             else 0,
             "tracker_cost_authority": "published-tariff-estimate-not-invoice",
+            **(verification.metrics() if verification else {}),
         }
     _write(directory / "runtime-metadata.json", metadata)
     return {
