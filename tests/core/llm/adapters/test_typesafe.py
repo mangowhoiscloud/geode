@@ -487,3 +487,52 @@ def test_default_transport_is_call_owned_across_event_loops(monkeypatch) -> None
         assert asyncio.run(adapter.acomplete(_request(adapter.model))).stop_reason == "end_turn"
     assert len(clients) == 2 and clients[0] is not clients[1]
     assert all(client.is_closed for client in clients)
+
+
+def test_explicit_tolerances_relax_evaluation_parsing_without_changing_runtime_default() -> None:
+    from core.llm.adapters.typesafe import (
+        STRICT_PROBABILITY_TOLERANCE,
+        parse_choice_answers,
+        parse_systemone_answers,
+    )
+
+    questions = {
+        "verdict": {"type": "choice", "instructions": "Pick one.", "criteria": {"a": "A", "b": "B"}}
+    }
+    rounded = json.dumps(
+        {
+            "verdict": {
+                "type": "choice",
+                "choice": "a",
+                "probabilities": {"a": 0.6, "b": 0.39},
+                "confidence": 0.2,
+            }
+        }
+    )
+    assert STRICT_PROBABILITY_TOLERANCE == 1e-5
+    with pytest.raises(ValueError, match="distribution"):
+        parse_choice_answers(rounded, questions)
+    assert parse_choice_answers(rounded, questions, sum_tolerance=0.025)["verdict"]["choice"] == "a"
+    score_questions = {
+        "s": {"type": "score", "instructions": "Rate.", "criteria": ["low", "mid", "high"]}
+    }
+    shifted = json.dumps(
+        {
+            "s": {
+                "type": "score",
+                "score": 1.02,
+                "legend": {"0": "low", "1": "mid", "2": "high"},
+                "probabilities": {"0": 0.2, "1": 0.6, "2": 0.2},
+                "confidence": 0.3,
+            }
+        }
+    )
+    with pytest.raises(ValueError, match="score does not match"):
+        parse_systemone_answers(shifted, score_questions)
+    assert (
+        parse_systemone_answers(shifted, score_questions, score_tolerance=0.03)["s"]["score"]
+        == 1.02
+    )
+    for bad in (0, -0.01, 0.051, float("nan"), True):
+        with pytest.raises(ValueError, match="tolerance"):
+            parse_systemone_answers(shifted, score_questions, score_tolerance=bad)

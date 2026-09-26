@@ -908,9 +908,10 @@ def _handoff_trial(
     )
     if verification_engine:
         from evals.benchmarks.decision_verification import (
-            _NOUL_QUESTIONS,
-            _QUESTIONS,
-            _REFLECTIONS,
+            SUM_TOLERANCE,
+            base_questions,
+            decide_answer,
+            strict_admission,
         )
 
         judge_id = f"call-{len(purposes)}"
@@ -928,60 +929,49 @@ def _handoff_trial(
                 }
             ],
         }
-        native_answer: dict[str, Any] = (
-            {"verdict": "supported"}
-            if verification_engine == "llm"
-            else {
-                "type": "choice",
-                "choice": "supported",
-                "probabilities": {
-                    "supported": 0.8,
-                    "contradicted": 0.1,
-                    "insufficient_evidence": 0.1,
-                },
-                "confidence": 0.6,
+        primitive = "noul" if verification_primitive == "noul" else "choice"
+        questions = base_questions(primitive)
+        engine = "jev" if verification_engine == "jev" else "llm"
+        if primitive == "noul":
+            probabilities = {
+                key: 0.9 if value else 0.1
+                for key, value in zip(questions, noul_conditions, strict=True)
             }
-        )
-        projected = {"passed": True, "score": 1.0, "reflection": _REFLECTIONS["supported"]}
-        raw_answer = json.dumps(
-            native_answer if verification_engine == "llm" else {"verdict": native_answer}
-        )
-        judgment_metadata: dict[str, Any] = {}
-        questions = _QUESTIONS
-        verdict = "supported"
-        if verification_primitive == "noul":
-            questions = _NOUL_QUESTIONS
-            conditions = dict(zip(questions, noul_conditions, strict=True))
-            native_answer = (
-                conditions
-                if verification_engine == "llm"
+            raw_answer = json.dumps(
+                probabilities
+                if engine == "llm"
+                else {key: {"type": "noul", "noul": value} for key, value in probabilities.items()}
+            )
+        else:
+            distribution = {"supported": 0.8, "contradicted": 0.1, "insufficient_evidence": 0.1}
+            raw_answer = json.dumps(
+                {"verdict": "supported", "probabilities": distribution}
+                if engine == "llm"
                 else {
-                    key: {"type": "noul", "noul": 0.9 if value else 0.1}
-                    for key, value in conditions.items()
+                    "verdict": {
+                        "type": "choice",
+                        "choice": "supported",
+                        "probabilities": distribution,
+                        "confidence": 0.6,
+                    }
                 }
             )
-            verdict = (
-                "contradicted"
-                if noul_conditions[0]
-                else "insufficient_evidence"
-                if noul_conditions[1]
-                else "supported"
+        decision = decide_answer(engine, primitive, raw_answer, questions)
+        projected = decision["projected_payload"]
+        verdict = decision["verdict"]
+        native_answer = decision["native_answer"]
+        judgment_metadata: dict[str, Any] = {
+            "contract": "v1",
+            "sum_tolerance": SUM_TOLERANCE,
+            "probabilities": decision["probabilities"],
+            "q": decision["q"],
+            "jev_confidence": decision["jev_confidence"],
+            "strict_admitted": strict_admission(engine, primitive, raw_answer, questions),
+        }
+        if primitive == "noul":
+            judgment_metadata.update(
+                primitive="noul", boolean_projection=decision["boolean_projection"]
             )
-            reflection = dict(_REFLECTIONS[verdict])
-            if all(noul_conditions):
-                reflection = {
-                    key: _REFLECTIONS["contradicted"][key]
-                    + " "
-                    + _REFLECTIONS["insufficient_evidence"][key]
-                    for key in reflection
-                }
-            projected = {
-                "passed": verdict == "supported",
-                "score": float(verdict == "supported"),
-                "reflection": reflection,
-            }
-            raw_answer = json.dumps(native_answer)
-            judgment_metadata = {"primitive": "noul", "boolean_projection": conditions}
         _write(
             agent / "verification.json",
             {
@@ -1277,6 +1267,10 @@ def test_matched_completed_rejection_is_preserved_without_fabricated_repair(
             error_type="invalid_verifier_response",
             verdict=None,
             native_answer=None,
+            probabilities=None,
+            q=None,
+            jev_confidence=None,
+            strict_admitted=None,
             projected_payload=None,
             feedback_sha256=None,
         )
@@ -1361,6 +1355,10 @@ def test_matched_gate_preserves_explicit_raw_omission_only_for_rejected_completi
             error_type="invalid_verifier_response",
             verdict=None,
             native_answer=None,
+            probabilities=None,
+            q=None,
+            jev_confidence=None,
+            strict_admitted=None,
             projected_payload=None,
             feedback_sha256=None,
             raw_answer=None,
@@ -1809,3 +1807,29 @@ def test_real_harbor_handoff_schemas_when_installed(trial, arm):
     if importlib.util.find_spec("harbor") is None:
         pytest.skip("optional Harbor SDK not installed; run in the frozen Harbor environment")
     assert gate.validate_observations(**_handoff_trial(trial, arm))["observation_valid"] is True
+
+
+@pytest.mark.parametrize("engine", ["llm", "jev"])
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("probabilities", {"supported": 1.0}),
+        ("q", 0.5),
+        ("strict_admitted", False),
+        ("contract", "v0"),
+        ("sum_tolerance", 1e-5),
+        ("jev_confidence", 0.9),
+        ("question_variant", "order-rev"),
+    ],
+)
+def test_v1_receipt_fields_are_recomputed_from_the_raw_answer(
+    trial: dict[str, Any], model_boundary: None, engine: str, field: str, value: Any
+) -> None:
+    options = _handoff_trial(trial, "a0", verification_engine=engine)
+    assert gate.validate_observations(**options)["observation_valid"]
+    _rewrite(
+        trial["trial_dir"] / "agent/verification.json",
+        lambda evidence: evidence["judgments"][0].update({field: value}),
+    )
+    with pytest.raises(ValueError, match="verification"):
+        gate.validate_observations(**options)

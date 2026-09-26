@@ -55,12 +55,36 @@ retry layer or production candidate selector is introduced.
 | Noul matched final verification | Two conditions on the same task/candidate/observations: `has_contradiction` and `missing_evidence` | Code prioritizes contradiction, then missing evidence, then supported. If both conditions hold, both fixed repair hints are retained |
 
 Score's Astra arm returns a bounded numeric level; Jev returns the expected
-level and its distribution. Noul's Astra arm returns two strict booleans; Jev
-returns two probabilities, each projected with `p >= 0.5`. These are different
-native output contracts under a shared task and policy, not a comparison of
-calibrated probabilities. The threshold is a diagnostic rule, not a permission
-grant or a validated deployment threshold. Two conditions may both hold; their
-separate questions do not imply statistical independence.
+level and its distribution. Matched final verification uses contract V1 below:
+both engines return probabilities, and both project a Noul condition with
+`p >= 0.5`. The threshold is a diagnostic rule, not a permission grant or a
+validated deployment threshold. Two conditions may both hold; their separate
+questions do not imply statistical independence.
+
+### Matched verification contract V1
+
+The [matched verifier](../../evals/benchmarks/decision_verification.py) asks the
+Astra arm for the Choice verdict plus a probability for every label, or for each
+Noul condition's probability of being true, with no rationale. Jev keeps its
+native SystemOne answers. One shared validator admits both engines:
+
+| Check | Rule |
+|---|---|
+| Fields and labels | Exactly the requested keys; the verdict is a criteria label |
+| Probabilities | Finite numbers in [0, 1] |
+| Choice sum | Within 0.025 of one (`SUM_TOLERANCE`) |
+| Choice verdict | One of the highest-probability labels |
+
+Receipts store the probabilities, `q` (Choice: the maximum label probability;
+Noul: `max(p, 1 - p)` per condition), Jev's separate `confidence`, the admitted
+tolerance and `strict_admitted`, the historical 1e-5 classification of the same
+raw answer. The primary analysis follows the admitted parser; the strict class is
+secondary. Runtime Jev parsing keeps the strict default. `contract_digests()`
+binds the question set, Astra system prompt and response schema for a freeze.
+Criteria-order reversal and an authored paraphrase set are stability probes: they
+keep question keys, types, labels and code decisions, and both engines receive the
+same order-preserving payload. The Harbor checker recomputes every V1 receipt
+field from the retained raw answer and admits only the base question set.
 
 The Noul profile explicitly sets `verification_primitive=noul` alongside
 `verification_engine=llm|jev` on the existing `a0` inbox path. The Harbor entry

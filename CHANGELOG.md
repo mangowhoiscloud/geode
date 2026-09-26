@@ -119,6 +119,14 @@ functional change.
   candidate scoring and independent-condition verification diagnostics, with
   fixed action projections and Harbor primitive/receipt checks. Production
   candidate selection remains unchanged; new live comparisons require a frozen run.
+- Return label probabilities from both matched-verdict engines (contract V1).
+  The Astra arm's structured output carries the verdict and a probability for
+  every label, or each Noul condition's probability of being true. One shared
+  validator admits exact labels, finite probabilities, a 0.025 Choice-sum
+  tolerance and an argmax verdict, and records the historical 1e-5 classification
+  beside it. Criteria-order and paraphrase probes keep keys, labels and code
+  decisions; the Harbor checker recomputes every V1 receipt field. Runtime Jev
+  parsing keeps its strict tolerance.
 - Support Claude Opus 5.5's native computer toolset with serial execution,
   toolset-aware result replay and parameter validation before desktop actions.
   Withhold unsupported members; report native action errors and preserve

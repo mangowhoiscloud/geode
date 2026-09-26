@@ -28,6 +28,10 @@ _ENDPOINTS = {
     "openrouter": "https://openrouter.ai/api/v1/systemone",
 }
 _Probability = Annotated[float, Field(strict=True, ge=0, le=1, allow_inf_nan=False)]
+# Runtime admission keeps the historical exact-sum bound. Evaluation callers pass
+# an explicit, recorded tolerance instead of relaxing production parsing.
+STRICT_PROBABILITY_TOLERANCE = 1e-5
+_MAX_PROBABILITY_TOLERANCE = 0.05
 
 
 class _Choice(BaseModel):
@@ -184,10 +188,31 @@ async def call_typesafe(
     return await _call_systemone(client, api_key, payload, provider="typesafe", model=JEV_MODEL)
 
 
+def _tolerance(value: float) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or not 0 < value <= _MAX_PROBABILITY_TOLERANCE
+    ):
+        raise ValueError("decision tolerance must be a small positive number")
+    return float(value)
+
+
 def parse_systemone_answers(
-    text: str, questions: Mapping[str, Mapping[str, Any]]
+    text: str,
+    questions: Mapping[str, Mapping[str, Any]],
+    *,
+    sum_tolerance: float = STRICT_PROBABILITY_TOLERANCE,
+    score_tolerance: float = STRICT_PROBABILITY_TOLERANCE,
 ) -> dict[str, dict[str, Any]]:
-    """Admit exact typed answers against the requested options and ordered levels."""
+    """Admit exact typed answers against the requested options and ordered levels.
+
+    ``sum_tolerance`` bounds a distribution's distance from one; ``score_tolerance``
+    bounds a Score's distance from its probability-weighted level. Both default to
+    the strict runtime bound.
+    """
+    sum_bound, score_bound = _tolerance(sum_tolerance), _tolerance(score_tolerance)
     _validate_questions(questions)
     answers = json.loads(text)
     if not isinstance(answers, dict) or answers.keys() != questions.keys():
@@ -214,7 +239,7 @@ def parse_systemone_answers(
             ):
                 raise ValueError("score legend changed")
         if answer.probabilities.keys() != expected_keys or not math.isclose(
-            math.fsum(answer.probabilities.values()), 1.0, rel_tol=0, abs_tol=1e-5
+            math.fsum(answer.probabilities.values()), 1.0, rel_tol=0, abs_tol=sum_bound
         ):
             raise ValueError("invalid decision distribution")
         if isinstance(answer, _Score) and (
@@ -225,7 +250,7 @@ def parse_systemone_answers(
                     int(level) * probability for level, probability in answer.probabilities.items()
                 ),
                 rel_tol=0,
-                abs_tol=1e-5,
+                abs_tol=score_bound,
             )
         ):
             raise ValueError("score does not match its distribution")
@@ -234,7 +259,10 @@ def parse_systemone_answers(
 
 
 def parse_choice_answers(
-    text: str, questions: Mapping[str, Mapping[str, Any]]
+    text: str,
+    questions: Mapping[str, Mapping[str, Any]],
+    *,
+    sum_tolerance: float = STRICT_PROBABILITY_TOLERANCE,
 ) -> dict[str, dict[str, Any]]:
     """Keep Choice-only consumers from admitting another primitive."""
     if any(
@@ -242,7 +270,7 @@ def parse_choice_answers(
         for question in questions.values()
     ):
         raise ValueError("choice answers require choice questions")
-    return parse_systemone_answers(text, questions)
+    return parse_systemone_answers(text, questions, sum_tolerance=sum_tolerance)
 
 
 class SystemOneAdapter:

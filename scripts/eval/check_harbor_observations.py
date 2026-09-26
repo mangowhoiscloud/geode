@@ -395,20 +395,18 @@ def _verification_check(
     This frozen diagnostic rejects repeated logical call IDs, including recovered
     transport attempts. It does not disable the runtime's general retry facility.
     """
-    from core.llm.adapters.typesafe import parse_systemone_answers
     from core.observability.redaction import redact_and_bound_text
     from evals.benchmarks.decision_verification import (
-        _NOUL_QUESTIONS,
-        _QUESTIONS,
-        _REFLECTIONS,
-        _NoulJudgment,
-        _Verdict,
+        CONTRACT_VERSION,
+        SUM_TOLERANCE,
         _VerificationState,
+        base_questions,
+        decide_answer,
+        strict_admission,
     )
-    from evals.benchmarks.typesafe_decision import parse_choice_answers
 
     _require(primitive in {"choice", "noul"}, "unknown verification primitive")
-    questions = _NOUL_QUESTIONS if primitive == "noul" else _QUESTIONS
+    questions = base_questions("noul" if primitive == "noul" else "choice")
 
     def indexed(rows: Any) -> dict[str, dict[str, Any]]:
         _require(isinstance(rows, list), "verification rows missing")
@@ -622,6 +620,9 @@ def _verification_check(
             and judgment.get("input_sha256") == judgment.get("source_sha256") == source_hash
             and judgment.get("question_sha256") == _json_digest(questions)
             and judgment.get("primitive", "choice") == primitive
+            and judgment.get("contract") == CONTRACT_VERSION
+            and judgment.get("sum_tolerance") == SUM_TOLERANCE
+            and "question_variant" not in judgment
             and all(
                 judgment.get(key) == observed[call_id].get(key)
                 for key in ("model", "provider", "source")
@@ -655,7 +656,16 @@ def _verification_check(
                 judgment.get("error_type") == "invalid_verifier_response"
                 and all(
                     judgment.get(key) is None
-                    for key in ("verdict", "native_answer", "projected_payload", "feedback_sha256")
+                    for key in (
+                        "verdict",
+                        "native_answer",
+                        "probabilities",
+                        "q",
+                        "jev_confidence",
+                        "strict_admitted",
+                        "projected_payload",
+                        "feedback_sha256",
+                    )
                 )
                 and judgment.get("boolean_projection") is None,
                 "verification rejection fabricated a verdict",
@@ -664,53 +674,36 @@ def _verification_check(
         _require(judgment.get("accepted") is True, "verification admission missing")
         if not isinstance(raw_answer, str):
             raise ValueError("verification admitted answer has no retained text")
-        conditions = None
-        native_answer: dict[str, Any]
-        if primitive == "noul":
-            if engine == "jev":
-                native_answer = parse_systemone_answers(raw_answer, questions)
-                conditions = _NoulJudgment.model_validate(
-                    {key: answer["noul"] >= 0.5 for key, answer in native_answer.items()}
-                )
-            else:
-                conditions = _NoulJudgment.model_validate_json(raw_answer)
-                native_answer = conditions.model_dump()
-            _require(
-                judgment.get("boolean_projection") == conditions.model_dump(),
-                "verification boolean projection mismatch",
-            )
-            verdict = (
-                "contradicted"
-                if conditions.has_contradiction
-                else "insufficient_evidence"
-                if conditions.missing_evidence
-                else "supported"
-            )
-        elif engine == "jev":
-            answer = parse_choice_answers(raw_answer, _QUESTIONS)
-            verdict = answer["verdict"]["choice"]
-            native_answer = answer["verdict"]
-        else:
-            verdict = _Verdict.model_validate_json(raw_answer).verdict
-            native_answer = {"verdict": verdict}
-        projected = {
-            "passed": verdict == "supported",
-            "score": float(verdict == "supported"),
-            "reflection": _REFLECTIONS[verdict],
-        }
-        if conditions and conditions.has_contradiction and conditions.missing_evidence:
-            projected["reflection"] = {
-                key: _REFLECTIONS["contradicted"][key]
-                + " "
-                + _REFLECTIONS["insufficient_evidence"][key]
-                for key in _REFLECTIONS["contradicted"]
-            }
+        decision = decide_answer(
+            "jev" if engine == "jev" else "llm",
+            "noul" if primitive == "noul" else "choice",
+            raw_answer,
+            questions,
+            sum_tolerance=SUM_TOLERANCE,
+        )
         _require(
-            judgment.get("verdict") == verdict
-            and _json_digest(judgment.get("native_answer")) == _json_digest(native_answer)
+            judgment.get("verdict") == decision["verdict"]
+            and _json_digest(judgment.get("native_answer"))
+            == _json_digest(decision["native_answer"])
+            and _json_digest(judgment.get("probabilities"))
+            == _json_digest(decision["probabilities"])
+            and _json_digest(judgment.get("q")) == _json_digest(decision["q"])
+            and judgment.get("jev_confidence") == decision["jev_confidence"]
+            and judgment.get("strict_admitted")
+            is strict_admission(
+                "jev" if engine == "jev" else "llm",
+                "noul" if primitive == "noul" else "choice",
+                raw_answer,
+                questions,
+            )
             and judgment.get("error_type") is None
-            and _json_digest(judgment.get("projected_payload")) == _json_digest(projected)
-            and judgment.get("feedback_sha256") == _json_digest(projected),
+            and _json_digest(judgment.get("projected_payload"))
+            == _json_digest(decision["projected_payload"])
+            and judgment.get("feedback_sha256") == _json_digest(decision["projected_payload"])
+            and (
+                primitive != "noul"
+                or judgment.get("boolean_projection") == decision["boolean_projection"]
+            ),
             "verification native/projected decision mismatch",
         )
     for call_id, root_request in requests.items():

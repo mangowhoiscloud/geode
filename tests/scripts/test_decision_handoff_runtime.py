@@ -26,6 +26,15 @@ from evals.benchmarks import decision_handoff_runtime as runtime
 from scripts.eval import decision_handoff_pilot as pilot
 
 
+def _v1_verdict(label: str) -> dict[str, Any]:
+    """V1 LLM verdict: the label plus a distribution whose argmax is that label."""
+    labels = ("supported", "contradicted", "insufficient_evidence")
+    return {
+        "verdict": label,
+        "probabilities": {key: 0.8 if key == label else 0.1 for key in labels},
+    }
+
+
 @pytest.fixture(autouse=True)
 def _isolated_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     from core import paths
@@ -778,11 +787,11 @@ def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
                 "invalid"
                 if malformed
                 else json.dumps(
-                    {"verdict": value}
+                    _v1_verdict(value)
                     if primitive == "choice"
                     else {
-                        "has_contradiction": value != "supported",
-                        "missing_evidence": value != "supported",
+                        "has_contradiction": 0.9 if value != "supported" else 0.1,
+                        "missing_evidence": 0.9 if value != "supported" else 0.1,
                     }
                 ),
                 input_tokens=20,
@@ -943,7 +952,7 @@ def test_pre_dispatch_verification_error_does_not_reuse_prior_negative_verdict(
             candidate,
         ]
     )
-    judge = _Adapter([_response('{"verdict":"contradicted"}')] * 2)
+    judge = _Adapter([_response(json.dumps(_v1_verdict("contradicted")))] * 2)
     native_verify = verify.verify_turn_async
     attempts = 0
 
@@ -1070,7 +1079,7 @@ def test_candidate_intervention_retains_native_output_and_closes_real_repair(
         "contradicted" if when == "after_observation" else "insufficient_evidence",
         "supported",
     ]
-    judge = _Adapter([_response(json.dumps({"verdict": label})) for label in labels])
+    judge = _Adapter([_response(json.dumps(_v1_verdict(label))) for label in labels])
     answers = iter(labels)
 
     def transport(_request: httpx.Request) -> httpx.Response:

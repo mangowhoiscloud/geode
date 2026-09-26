@@ -26,7 +26,15 @@ from core.llm.adapters.base import (
 from core.observability.event_store import HookEventStore
 from core.observability.hook_persistence import HookPersistenceSink
 from evals.benchmarks.decision_handoff import JEV_MODEL, ROOT_MODEL
-from evals.benchmarks.decision_verification import MatchedVerifierAdapter
+from evals.benchmarks.decision_verification import (
+    SUM_TOLERANCE,
+    MatchedVerifierAdapter,
+    contract_digests,
+    decide_answer,
+    llm_response_schema,
+    question_variant,
+    strict_admission,
+)
 from pydantic import SecretStr
 
 _Engine = Literal["llm", "jev"]
@@ -67,9 +75,21 @@ def _request(engine: _Engine) -> AdapterCallRequest:
     )
 
 
+def _v1(verdict: str = "supported", top: float = 0.8) -> dict[str, Any]:
+    rest = (1 - top) / 2
+    return {
+        "verdict": verdict,
+        "probabilities": {key: top if key == verdict else rest for key in _VERDICTS},
+    }
+
+
+def _noul_v1(contradiction: float, missing: float) -> str:
+    return json.dumps({"has_contradiction": contradiction, "missing_evidence": missing})
+
+
 def _result(verdict: str = "supported") -> AdapterCallResult:
     return AdapterCallResult(
-        text=json.dumps({"verdict": verdict}),
+        text=json.dumps(_v1(verdict)),
         usage=UsageSummary(
             input_tokens=101,
             output_tokens=9,
@@ -157,8 +177,10 @@ def test_engines_receive_identical_state_criteria_and_feedback(verdict: str) -> 
     assert set(payload["questions"]["verdict"]["criteria"]) == set(_VERDICTS)
     assert request.model == ROOT_MODEL and request.effort == "xhigh"
     assert not request.tools and request.allowed_tool_names == frozenset()
-    assert request.response_schema is not None
-    assert set(request.response_schema["properties"]) == {"verdict"}
+    assert request.response_schema == llm_response_schema("choice")
+    assert set(request.response_schema["properties"]) == {"verdict", "probabilities"}
+    assert request.response_schema["properties"]["probabilities"]["required"] == list(_VERDICTS)
+    assert "probability" in request.system_prompt and "rationale" in request.system_prompt
     assert llm.text == jev.text
     llm_receipt, jev_receipt = llm_receipts[0], jev_receipts[0]
     for field in ("input_sha256", "source_sha256", "question_sha256", "feedback_sha256"):
@@ -166,6 +188,9 @@ def test_engines_receive_identical_state_criteria_and_feedback(verdict: str) -> 
     for receipt in (llm_receipt, jev_receipt):
         assert "primitive" not in receipt and "boolean_projection" not in receipt
         assert receipt["accepted"] and receipt["verdict"] == verdict
+        assert receipt["contract"] == "v1" and receipt["sum_tolerance"] == SUM_TOLERANCE
+        assert receipt["probabilities"][verdict] == pytest.approx(0.8)
+        assert receipt["q"] == pytest.approx(0.8) and receipt["strict_admitted"] is True
         assert receipt["projected_payload"] == json.loads(llm.text)
         assert receipt["llm_call_id"] == "call-1" and receipt["step_id"] == "step-2"
         assert receipt["projected_payload"]["score"] == float(verdict == "supported")
@@ -175,6 +200,8 @@ def test_engines_receive_identical_state_criteria_and_feedback(verdict: str) -> 
         )
     assert jev_receipt["native_answer"]["probabilities"][verdict] == 0.8
     assert jev_receipt["native_answer"]["confidence"] == 0.6
+    assert jev_receipt["jev_confidence"] == 0.6 and llm_receipt["jev_confidence"] is None
+    assert llm_receipt["native_answer"] == _v1(verdict)
     judged = _build_judge_result_from_response(llm, AgenticResult(text="candidate"))
     assert judged.passed == (verdict == "supported")
     assert judged.should_retry == (verdict != "supported")
@@ -202,9 +229,10 @@ def test_noul_engines_share_independent_conditions_and_code_feedback(
     contradiction: bool, missing: bool
 ) -> None:
     conditions = {"has_contradiction": contradiction, "missing_evidence": missing}
-    original = replace(_result(), text=json.dumps(conditions))
-    # Exactly 0.5 is deliberately rejected; the two probabilities need not sum to one.
-    body = _noul_body(0.5 if contradiction else 0.49, 0.5 if missing else 0.49)
+    # Exactly 0.5 projects to true for both engines; probabilities need not sum to one.
+    probabilities = (0.5 if contradiction else 0.49, 0.5 if missing else 0.49)
+    original = replace(_result(), text=_noul_v1(*probabilities))
+    body = _noul_body(*probabilities)
     llm, llm_receipts, native, _ = _complete("llm", primitive="noul", result=original)
     jev, jev_receipts, _, calls = _complete("jev", primitive="noul", body=body)
     request = native.requests[0]
@@ -222,7 +250,7 @@ def test_noul_engines_share_independent_conditions_and_code_feedback(
     assert set(request.response_schema["required"]) == set(conditions)
     assert request.response_schema["additionalProperties"] is False
     assert all(
-        field["type"] == "boolean" for field in request.response_schema["properties"].values()
+        field["type"] == "number" for field in request.response_schema["properties"].values()
     )
     assert request.model == ROOT_MODEL and request.effort == "xhigh"
     assert not request.tools and request.allowed_tool_names == frozenset()
@@ -239,8 +267,13 @@ def test_noul_engines_share_independent_conditions_and_code_feedback(
         assert receipt["projected_payload"]["score"] == float(expected == "supported")
     for field in ("input_sha256", "source_sha256", "question_sha256", "feedback_sha256"):
         assert llm_receipts[0][field] == jev_receipts[0][field]
-    assert llm_receipts[0]["native_answer"] == conditions
+    assert llm_receipts[0]["native_answer"] == dict(zip(conditions, probabilities, strict=True))
     assert jev_receipts[0]["native_answer"] == body["answers"]
+    for receipt in (*llm_receipts, *jev_receipts):
+        assert receipt["probabilities"] == dict(zip(conditions, probabilities, strict=True))
+        assert receipt["q"] == {
+            key: max(value, 1 - value) for key, value in receipt["probabilities"].items()
+        }
     judged = _build_judge_result_from_response(llm, AgenticResult(text="candidate"))
     assert judged.passed == (expected == "supported")
     assert judged.should_retry == (expected != "supported")
@@ -254,10 +287,14 @@ def test_noul_engines_share_independent_conditions_and_code_feedback(
         assert "without inventing evidence" in judged.reflection_hint
 
 
-@pytest.mark.parametrize("value", [0, 1, "true", None, float("nan"), [], {}])
+@pytest.mark.parametrize(
+    "value", [True, False, "0.5", None, float("nan"), float("inf"), [], {}, -0.01, 1.01]
+)
 @pytest.mark.parametrize("field", ["has_contradiction", "missing_evidence"])
-def test_noul_llm_requires_actual_booleans_without_erasing_usage(field: str, value: Any) -> None:
-    answer = {"has_contradiction": False, "missing_evidence": False, field: value}
+def test_noul_llm_requires_finite_probabilities_without_erasing_usage(
+    field: str, value: Any
+) -> None:
+    answer = {"has_contradiction": 0.1, "missing_evidence": 0.1, field: value}
     original = replace(_result(), text=json.dumps(answer))
     result, receipts, native, _ = _complete("llm", primitive="noul", result=original)
     assert len(native.requests) == 1 and result.usage is original.usage
@@ -270,7 +307,7 @@ def test_noul_llm_requires_actual_booleans_without_erasing_usage(field: str, val
 @pytest.mark.parametrize("fault", ["missing", "extra", "wrong_primitive"])
 @pytest.mark.parametrize("engine", ["llm", "jev"])
 def test_noul_requires_exact_two_field_shape(engine: _Engine, fault: str) -> None:
-    answer: dict[str, Any] = {"has_contradiction": False, "missing_evidence": False}
+    answer: dict[str, Any] = {"has_contradiction": 0.1, "missing_evidence": 0.1}
     body = _noul_body()
     if fault == "missing":
         answer.pop("missing_evidence")
@@ -279,7 +316,7 @@ def test_noul_requires_exact_two_field_shape(engine: _Engine, fault: str) -> Non
         answer["reason"] = "unexpected"
         body["answers"]["missing_evidence"]["confidence"] = 0.9
     else:
-        answer = {"verdict": "supported"}
+        answer = _v1()
         body = _body()
     original = replace(_result(), text=json.dumps(answer))
     result, receipts, native, calls = _complete(
@@ -310,11 +347,7 @@ def test_noul_jev_invalid_probability_keeps_completed_usage(field: str, value: A
 
 @pytest.mark.parametrize("primitive", ["choice", "noul"])
 def test_projection_preserves_every_native_result_field_except_text(primitive: _Primitive) -> None:
-    original = (
-        _result()
-        if primitive == "choice"
-        else replace(_result(), text='{"has_contradiction":false,"missing_evidence":false}')
-    )
+    original = _result() if primitive == "choice" else replace(_result(), text=_noul_v1(0.1, 0.2))
     result, receipts, _, _ = _complete("llm", result=original, primitive=primitive)
     for field in fields(AdapterCallResult):
         if field.name != "text":
@@ -331,7 +364,7 @@ def test_projection_preserves_every_native_result_field_except_text(primitive: _
 def test_unretainable_raw_answer_holds_without_erasing_usage(
     fault: str, primitive: _Primitive
 ) -> None:
-    raw = "sk-" + "x" * 24 if fault == "sensitive" else " " * 65_537 + '{"verdict":"supported"}'
+    raw = "sk-" + "x" * 24 if fault == "sensitive" else " " * 65_537 + json.dumps(_v1())
     original = replace(_result(), text=raw)
     result, receipts, native, _ = _complete("llm", result=original, primitive=primitive)
     receipt = receipts[0]
@@ -347,10 +380,24 @@ def test_unretainable_raw_answer_holds_without_erasing_usage(
     [
         "bad JSON",
         "{}",
-        '{"verdict":"unknown"}',
-        '{"verdict":true}',
-        '{"verdict":"supported","reason":"unexpected"}',
         "[]",
+        '{"verdict":"supported"}',
+        json.dumps({**_v1(), "reason": "unexpected"}),
+        json.dumps({**_v1(), "verdict": "unknown"}),
+        json.dumps({**_v1(), "verdict": True}),
+        json.dumps({"verdict": "supported", "probabilities": {"supported": 1.0}}),
+        json.dumps(
+            {
+                "verdict": "supported",
+                "probabilities": {"supported": 0.6, "contradicted": 0.2, "extra": 0.2},
+            }
+        ),
+        json.dumps({**_v1(), "verdict": "contradicted"}),
+        json.dumps(
+            _v1(top=0.9) | {"probabilities": {**_v1(top=0.9)["probabilities"], "supported": 0.93}}
+        ),
+        json.dumps(_v1() | {"probabilities": {**_v1()["probabilities"], "supported": "0.8"}}),
+        json.dumps(_v1() | {"probabilities": {**_v1()["probabilities"], "supported": True}}),
     ],
 )
 def test_invalid_llm_output_fails_closed_without_losing_completed_usage(text: str) -> None:
@@ -381,7 +428,7 @@ def test_completed_native_contract_rejections_do_not_fabricate_repairs(
     }
     original = replace(_result(), **variants[fault])
     if primitive == "noul":
-        original = replace(original, text='{"has_contradiction":false,"missing_evidence":false}')
+        original = replace(original, text=_noul_v1(0.1, 0.1))
     result, receipts, _, _ = _complete("llm", result=original, primitive=primitive)
     assert result.usage is original.usage and not receipts[0]["accepted"]
     judged = _build_judge_result_from_response(result, AgenticResult(text="candidate"))
@@ -547,12 +594,12 @@ def test_existing_terminal_observer_records_one_completed_call(
     hooks = HookSystem()
     store = HookEventStore(tmp_path / "events.db")
     hooks.register_sink(HookPersistenceSink(store, session_key="matched", run_id="test"))
-    original = _result("supported" if valid else "unknown")
+    original = _result("supported") if valid else replace(_result(), text='{"verdict":"unknown"}')
     if primitive == "noul":
         original = replace(
             original,
             text=json.dumps(
-                {"has_contradiction": False if valid else "false", "missing_evidence": False}
+                {"has_contradiction": 0.1 if valid else "false", "missing_evidence": 0.1}
             ),
         )
     native = _Adapter(original)
@@ -583,3 +630,162 @@ def test_existing_terminal_observer_records_one_completed_call(
         assert adapter.receipts[0]["accepted"] is valid
     finally:
         hooks.close()
+
+
+@pytest.mark.parametrize(
+    ("total", "admitted", "strict"),
+    [(1.0, True, True), (0.98, True, False), (1.0249, True, False), (1.026, False, False)],
+)
+@pytest.mark.parametrize("engine", ["llm", "jev"])
+def test_v1_sum_tolerance_admits_rounding_and_records_strict_class(
+    engine: _Engine, total: float, admitted: bool, strict: bool
+) -> None:
+    probabilities = {"supported": total - 0.2, "contradicted": 0.1, "insufficient_evidence": 0.1}
+    if engine == "llm":
+        text = json.dumps({"verdict": "supported", "probabilities": probabilities})
+        result, receipts, _, _ = _complete("llm", result=replace(_result(), text=text))
+    else:
+        body = _body()
+        body["answers"]["verdict"]["probabilities"] = probabilities
+        result, receipts, _, _ = _complete("jev", body=body)
+        text = json.dumps(body["answers"])
+    receipt = receipts[0]
+    assert receipt["accepted"] is admitted
+    assert receipt["strict_admitted"] is (strict if admitted else None)
+    assert strict_admission(engine, "choice", text) is strict
+    if admitted:
+        assert receipt["q"] == pytest.approx(total - 0.2)
+    else:
+        assert result.text == "invalid-verifier-response" and receipt["probabilities"] is None
+
+
+def test_v1_verdict_may_be_any_highest_probability_label() -> None:
+    tied = {"supported": 0.45, "contradicted": 0.45, "insufficient_evidence": 0.1}
+    for verdict in ("supported", "contradicted"):
+        decision = decide_answer(
+            "llm", "choice", json.dumps({"verdict": verdict, "probabilities": tied})
+        )
+        assert decision["verdict"] == verdict and decision["q"] == 0.45
+    with pytest.raises(ValueError):
+        decide_answer(
+            "llm",
+            "choice",
+            json.dumps({"verdict": "insufficient_evidence", "probabilities": tied}),
+        )
+
+
+def test_integer_probabilities_are_admitted_for_the_llm_arm() -> None:
+    text = json.dumps(
+        {
+            "verdict": "contradicted",
+            "probabilities": {"supported": 0, "contradicted": 1, "insufficient_evidence": 0},
+        }
+    )
+    decision = decide_answer("llm", "choice", text)
+    assert decision["verdict"] == "contradicted" and decision["q"] == 1.0
+    assert decide_answer("llm", "noul", _noul_v1(1, 0))["boolean_projection"] == {
+        "has_contradiction": True,
+        "missing_evidence": False,
+    }
+
+
+@pytest.mark.parametrize("primitive", ["choice", "noul"])
+def test_order_reversal_reaches_both_engines_without_changing_labels(
+    primitive: _Primitive,
+) -> None:
+    reversed_questions = question_variant(primitive, "order-rev")
+    base = question_variant(primitive, "base")
+    assert reversed_questions.keys() == base.keys()
+    for key, question in reversed_questions.items():
+        assert list(question["criteria"]) == list(reversed(base[key]["criteria"]))
+        assert question["criteria"] == base[key]["criteria"]
+    receipts: list[dict[str, Any]] = []
+    calls: list[dict[str, Any]] = []
+    native = _Adapter(
+        _result() if primitive == "choice" else replace(_result(), text=_noul_v1(0.2, 0.1))
+    )
+
+    async def run() -> None:
+        def transport(request: httpx.Request) -> httpx.Response:
+            calls.append(json.loads(request.content))
+            return httpx.Response(
+                200, content=json.dumps(_body() if primitive == "choice" else _noul_body(0.2, 0.1))
+            )
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+            for engine in ("llm", "jev"):
+                adapter = (
+                    MatchedVerifierAdapter(
+                        "llm",
+                        primitive=primitive,
+                        llm_adapter=native,
+                        receipts=receipts,
+                        variant="order-rev",
+                    )
+                    if engine == "llm"
+                    else MatchedVerifierAdapter(
+                        "jev",
+                        primitive=primitive,
+                        client=client,
+                        api_key=SecretStr("synthetic-key"),
+                        receipts=receipts,
+                        variant="order-rev",
+                    )
+                )
+                await adapter.acomplete(_request(engine))
+
+    asyncio.run(run())
+    content = native.requests[0].messages[0].content
+    assert isinstance(content, str)
+    llm_payload = json.loads(
+        unescape(content.removeprefix("<verification_input>").removesuffix("</verification_input>"))
+    )
+    for payload in (llm_payload, calls[0]):
+        for key, question in payload["questions"].items():
+            assert list(question["criteria"]) == list(reversed_questions[key]["criteria"])
+    assert all(row["question_variant"] == "order-rev" and row["accepted"] for row in receipts)
+    assert receipts[0]["question_sha256"] == receipts[1]["question_sha256"]
+
+
+def test_paraphrase_must_keep_keys_types_and_labels() -> None:
+    base = question_variant("choice", "base")
+    paraphrase = {
+        "verdict": {
+            "type": "choice",
+            "instructions": "Judge the candidate only against the supplied evidence.",
+            "criteria": {
+                label: f"Paraphrased criterion for {label}."
+                for label in base["verdict"]["criteria"]
+            },
+        }
+    }
+    variant = question_variant("choice", "para", paraphrase)
+    assert variant["verdict"]["instructions"].startswith("Judge the candidate")
+    assert (
+        contract_digests("choice", variant)["question_sha256"]
+        != contract_digests("choice")["question_sha256"]
+    )
+    broken = json.loads(json.dumps(paraphrase))
+    broken["verdict"]["criteria"].pop("supported")
+    for bad in (broken, {"other": paraphrase["verdict"]}, None):
+        with pytest.raises(ValueError):
+            question_variant("choice", "para", bad)
+    with pytest.raises(ValueError):
+        question_variant("choice", "base", paraphrase)
+
+
+def test_contract_digests_bind_questions_prompt_and_schema() -> None:
+    for primitive in ("choice", "noul"):
+        digests = contract_digests(primitive)
+        assert digests["contract"] == "v1"
+        assert len({value for key, value in digests.items() if key != "contract"}) == 4
+    assert contract_digests("choice") != contract_digests("noul")
+
+
+def test_sum_tolerance_is_bounded_between_strict_and_admitted_values() -> None:
+    native = _Adapter(_result())
+    for value in (0.0, 1e-7, 0.03, float("nan")):
+        with pytest.raises(ValueError):
+            MatchedVerifierAdapter("llm", llm_adapter=native, receipts=[], sum_tolerance=value)
+    strict = MatchedVerifierAdapter("llm", llm_adapter=native, receipts=[], sum_tolerance=1e-5)
+    assert strict is not None
