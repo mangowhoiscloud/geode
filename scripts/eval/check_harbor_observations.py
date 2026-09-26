@@ -24,6 +24,7 @@ from html import escape
 from pathlib import Path
 from typing import Any
 
+from core.agent.loop.models import is_successful_task_termination
 from core.llm.agentic_response import parse_tool_input
 from core.observability.trajectory import (
     _digest_private_event_payload,
@@ -370,7 +371,10 @@ def _handoff_final_check(
         handoff.get("termination_reason") == metadata.get("termination_reason")
         and (
             not passed
-            or (metadata.get("termination_reason") == "end_turn" and not metadata.get("error_type"))
+            or (
+                is_successful_task_termination(metadata.get("termination_reason"))
+                and not metadata.get("error_type")
+            )
         ),
         "failed/cancelled handoff cannot claim success",
     )

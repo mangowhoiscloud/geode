@@ -235,7 +235,7 @@ def trial(tmp_path: Path) -> dict[str, Any]:
         "verify_mode": "reflexion",
         "execution_started": True,
         "geode_session_id": "session-1",
-        "termination_reason": "end_turn",
+        "termination_reason": "natural",
         "error_type": None,
         "finalization_errors": [],
         "usage": usage,
@@ -812,7 +812,7 @@ def _handoff_trial(
                     "effective_verify_mode": "llm_judge",
                     "valid": True,
                     "passed": True,
-                    "termination_reason": "end_turn",
+                    "termination_reason": "natural",
                     "oracle": {"passed": True},
                     "native_verify": [{"action": "turn.verify.passed", "success": True}],
                 }
@@ -1385,13 +1385,18 @@ def test_handoff_reflection_is_accounted_without_relabeling_as_root(trial, model
 
 
 @pytest.mark.parametrize("arm", ["a0", "a", "b"])
-def test_handoff_native_final_keeps_astra_route_and_requested_label(trial, model_boundary, arm):
+@pytest.mark.parametrize("termination", ["natural", "forced_text", "actionable_partial"])
+def test_handoff_native_final_keeps_astra_route_and_requested_label(
+    trial, model_boundary, arm, termination
+):
     options = _handoff_trial(trial, arm, reflection=True, native_final=True)
     report = gate.validate_observations(**options)
     assert report["accounting"]["purposes"]["turn_verification"] == 1
     agent = trial["trial_dir"] / "agent"
     metadata = json.loads((agent / "runtime-result.json").read_text())["metadata"]
     handoff = json.loads((agent / "handoff-result.json").read_text())
+    assert handoff["termination_reason"] == metadata["termination_reason"] == "natural"
+    handoff["termination_reason"] = metadata["termination_reason"] = termination
     checked = gate._handoff_final_check(handoff, metadata, metadata["usage"]["recorded_attempts"])
     assert checked == {
         "requested_verify_mode": "rule_based",
@@ -1405,7 +1410,17 @@ def test_handoff_native_final_keeps_astra_route_and_requested_label(trial, model
 
 @pytest.mark.parametrize(
     "fault",
-    ["all_final", "request", "attempt", "verdict", "mode", "invalid", "cancelled", "false_success"],
+    [
+        "all_final",
+        "request",
+        "attempt",
+        "verdict",
+        "mode",
+        "invalid",
+        "cancelled",
+        "termination_mismatch",
+        "false_success",
+    ],
 )
 def test_current_handoff_rejects_missing_final_or_false_success(trial, model_boundary, fault):
     options = _handoff_trial(trial, "b", reflection=True, native_final=True)
@@ -1429,6 +1444,8 @@ def test_current_handoff_rejects_missing_final_or_false_success(trial, model_bou
             handoff["valid"] = False
         elif fault == "cancelled":
             handoff["termination_reason"] = metadata["termination_reason"] = "cancelled"
+        elif fault == "termination_mismatch":
+            metadata["termination_reason"] = "forced_text"
         elif fault == "false_success":
             handoff["native_verify"] = [{"action": "turn.verify.failed"}]
         with pytest.raises(ValueError):
@@ -1440,6 +1457,32 @@ def test_current_handoff_rejects_missing_final_or_false_success(trial, model_bou
             expected_effective_verify_mode="llm_judge",
             source_db=agent / "not_reached.db",
         )
+
+
+@pytest.mark.parametrize(
+    "termination,error",
+    [
+        ("user_cancelled", None),
+        ("llm_error", None),
+        ("external_verification_required", None),
+        ("unknown", None),
+        ("end_turn", None),
+        (None, None),
+        ("natural", "runtime_error"),
+        ("natural", "CancelledError"),
+    ],
+)
+def test_handoff_success_rejects_noncompletion_or_runtime_error(
+    trial, model_boundary, termination, error
+):
+    _handoff_trial(trial, "b", native_final=True)
+    agent = trial["trial_dir"] / "agent"
+    metadata = json.loads((agent / "runtime-result.json").read_text())["metadata"]
+    handoff = json.loads((agent / "handoff-result.json").read_text())
+    handoff["termination_reason"] = metadata["termination_reason"] = termination
+    metadata["error_type"] = error
+    with pytest.raises(ValueError, match="failed/cancelled handoff cannot claim success"):
+        gate._handoff_final_check(handoff, metadata, metadata["usage"]["recorded_attempts"])
 
 
 def test_current_handoff_valid_hold_is_not_success(trial, model_boundary):

@@ -294,6 +294,10 @@ functional change.
 
 ### Fixed
 
+- Validate successful Harbor handoff exports against the runtime task termination
+  contract instead of the provider `end_turn` stop reason. Ordinary `natural`
+  completions retain their final-judge and oracle checks; cancelled, failed,
+  unknown, mismatched or errored terminations cannot claim task success.
 - Classify failed judgment calls with one frozen table in the verdict panel runner
   and the Score-S harness. An Astra connection failure raised by the OpenAI SDK
   and HTTP 408 or 5xx are transport failures replaced once; a 429 without a quota,

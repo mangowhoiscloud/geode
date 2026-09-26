@@ -269,7 +269,7 @@ def _trial(
         "usage": usage,
         "score_authority": "Harbor task verifier, not runtime receipt",
         "geode_session_id": session,
-        "termination_reason": "end_turn",
+        "termination_reason": "natural",
     }
     handoff = {
         "profile": "read-only-decision-handoff",
@@ -284,7 +284,7 @@ def _trial(
         "passed": passed,
         "error_type": None,
         "elapsed_seconds": 12.5 + cell["index"],
-        "termination_reason": "end_turn",
+        "termination_reason": "natural",
         "oracle": oracle,
         "native_verify": native_verify,
         "usage": usage,
