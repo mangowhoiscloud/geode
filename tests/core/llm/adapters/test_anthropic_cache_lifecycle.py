@@ -123,7 +123,7 @@ def test_sdk_cache_ttl_reaches_loop_budget_durable_event_and_harbor(
         end = next(row for row in rows if row.event == HookEvent.LLM_CALL_ENDED.value)
         assert end.payload["usage"]["cache_write_1h_tokens"] == long_write
         assert end.payload["cost_usd"] == pytest.approx(expected)
-        assert end.payload["activity_schema_version"] == 11
+        assert end.payload["activity_schema_version"] == 12
         projected = _summarize_usage(rows)
         assert projected["recorded_attempts"][0]["usage"]["cache_write_1h_tokens"] == long_write
         assert projected["cached_input_tokens"] == 300  # Harbor cache metric remains reads only.

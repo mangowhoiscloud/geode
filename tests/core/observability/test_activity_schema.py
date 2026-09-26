@@ -14,6 +14,8 @@ Pins invariants from
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from core.hooks.system import HookEvent
 from core.observability.activity import (
@@ -22,6 +24,7 @@ from core.observability.activity import (
     LifecycleFailedDetails,
     LifecycleRetriedDetails,
     LifecycleStartedDetails,
+    LLMCallEndedRow,
     LLMCallFailedRow,
     LLMCallRetriedRow,
     SessionStartedRow,
@@ -394,6 +397,52 @@ def test_llm_activity_missing_cache_is_not_observed_zero(usage: dict[str, None])
 
 
 @pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ({}, None),
+        ({"latency_ms": None}, None),
+        ({"latency_ms": 123.5}, 123.5),
+        ({"latency_ms": 0}, 0.0),
+        ({"duration_ms": 45}, 45.0),
+        ({"latency_ms": 12.0, "duration_ms": 99.0}, 12.0),
+        ({"latency_ms": None, "duration_ms": 99.0}, None),
+        ({"latency_ms": True}, None),
+        ({"duration_ms": False}, None),
+        ({"latency_ms": float("nan")}, None),
+        ({"latency_ms": float("inf")}, None),
+        ({"latency_ms": -1.0}, None),
+        ({"duration_ms": -0.5}, None),
+        ({"latency_ms": "12"}, None),
+        ({"latency_ms": 10**400}, None),
+    ],
+)
+def test_llm_activity_latency_is_observed_value_or_null(
+    payload: dict[str, object], expected: float | None
+) -> None:
+    """Unobserved or unusable latency stays null through a JSON round trip.
+
+    ``latency_ms`` wins over legacy ``duration_ms`` whenever it is present.
+    """
+    row = map_hook_to_activity(HookEvent.LLM_CALL_ENDED, payload, run_id="latency")
+    assert isinstance(row, LLMCallEndedRow)
+    stored = json.loads(json.dumps(row.model_dump(mode="json"), allow_nan=False))
+    reparsed = TypeAdapter(TypedActivityRow).validate_python(stored)
+    assert reparsed.schema_version == 12
+    assert reparsed.model_dump()["details"]["duration_ms"] == expected
+
+
+def test_legacy_llm_activity_keeps_its_stored_latency() -> None:
+    """Pre-v12 rows filled an unobserved latency with 0.0; readers branch on version."""
+    row = map_hook_to_activity(HookEvent.LLM_CALL_ENDED, {"latency_ms": 5.0}, run_id="legacy")
+    legacy = row.model_dump(mode="json")
+    legacy["schema_version"] = 11
+    legacy["details"]["duration_ms"] = 0.0
+    reparsed = TypeAdapter(TypedActivityRow).validate_python(legacy)
+    assert reparsed.schema_version == 11
+    assert reparsed.model_dump()["details"]["duration_ms"] == 0.0
+
+
+@pytest.mark.parametrize(
     "purpose",
     [
         "agentic_loop",
@@ -419,7 +468,7 @@ def test_llm_activity_preserves_requested_effort_and_call_purpose(purpose: str) 
         },
         run_id="purpose-test",
     )
-    assert row.schema_version == 11
+    assert row.schema_version == 12
     reparsed = TypeAdapter(TypedActivityRow).validate_python(row.model_dump())
     details = reparsed.model_dump()["details"]
     assert (details["purpose"], details["source"], details["effort"]) == (
@@ -435,7 +484,7 @@ def test_exported_activity_json_schema_includes_structured_decision() -> None:
     schema = TypeAdapter(TypedActivityRow).json_schema()
     details = schema["$defs"]["LLMCallEndedDetails"]
     assert "structured_decision" in details["properties"]["purpose"]["anyOf"][0]["enum"]
-    assert schema["$defs"]["LLMCallEndedRow"]["properties"]["schema_version"]["default"] == 11
+    assert schema["$defs"]["LLMCallEndedRow"]["properties"]["schema_version"]["default"] == 12
 
 
 @pytest.mark.parametrize(

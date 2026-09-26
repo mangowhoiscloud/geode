@@ -192,7 +192,9 @@ def test_m3_malformed_value_still_produces_a_row() -> None:
     value (e.g. ``{"duration_ms": "bad"}``). The original M3 test only
     covered missing fields (which get defaulted). This pins the broader
     contract: malformed *values* must also fall through to
-    ``GenericActivityRow`` so the timeline stays complete."""
+    ``GenericActivityRow`` so the timeline stays complete. LLM terminal
+    latency no longer coerces (schema v12 stores an unusable value as null),
+    so the regression uses the tool terminal builder, which still coerces."""
     with tempfile.TemporaryDirectory() as tmp, run_dir_scope(tmp):
         journal = RunTimeline(
             session_id="gen1-X",
@@ -202,11 +204,11 @@ def test_m3_malformed_value_still_produces_a_row() -> None:
         )
         with run_timeline_scope(journal), _persistent_hooks(Path(tmp)) as hs:
             # ``duration_ms="bad"`` triggers ValueError inside the
-            # _lifecycle_completed builder. Pre-Codex-catch the row
+            # tool terminal builder. Pre-Codex-catch the row
             # would have been dropped entirely.
             hs.trigger(
-                HookEvent.LLM_CALL_ENDED,
-                {"session_id": "s1", "call_id": "c1", "duration_ms": "bad"},
+                HookEvent.TOOL_EXEC_ENDED,
+                {"session_id": "s1", "tool_call_id": "c1", "duration_ms": "bad"},
             )
         rows = _read_rows(Path(tmp) / "events.jsonl")
         assert len(rows) == 1
@@ -214,7 +216,9 @@ def test_m3_malformed_value_still_produces_a_row() -> None:
         # The row landed via GenericActivityRow fall-through (the builder
         # raised ValueError → registry caught it → generic emit).
         # The action keeps the dotted-name convention.
-        assert row["action"] == "llm.call.ended"
+        assert row["action"] == "tool.exec.ended"
+        assert row["payload"]["_generic_projection"] is True
+        assert row["payload"]["_fallback_reason"] == "ValueError"
 
 
 def test_m1_async_mirror_appends_one_row() -> None:

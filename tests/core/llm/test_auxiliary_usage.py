@@ -235,7 +235,7 @@ def test_text_producer_purpose_survives_durable_projection_without_wire_change(
         assert usage["mapping_anomaly_events"] == 0
         assert {row["purpose"] for row in usage["recorded_attempts"]} == {purpose}
         assert {row["effort"] for row in usage["recorded_attempts"]} == {"max"}
-        assert {row.payload["activity_schema_version"] for row in ends} == {11}
+        assert {row.payload["activity_schema_version"] for row in ends} == {12}
         assert usage["input_tokens"] == (23 if outcome == "returned" else None)
         assert usage["cached_input_tokens"] == (0 if outcome == "returned" else None)
         if outcome == "cancelled":

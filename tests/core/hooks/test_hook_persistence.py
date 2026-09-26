@@ -169,7 +169,7 @@ def test_public_extension_audit_uses_sqlite_and_active_timeline_only(
         "step_id": "t-1:step-1",
         "session_generation": 0,
         "verify_attempt": 0,
-        "activity_schema_version": 11,
+        "activity_schema_version": 12,
         "_dispatch_duration_ms": row.payload["_dispatch_duration_ms"],
     }
     assert not (tmp_path / "events.jsonl").exists()
@@ -285,12 +285,56 @@ def test_llm_route_charge_and_usage_survive_durable_projection(tmp_path: Path) -
     assert row.payload["response_provider"] == "OpenInference"
     assert row.payload["routing_strategy"] == "direct"
     assert row.payload["routing_attempt"] == 1
-    assert row.payload["activity_schema_version"] == 11
+    assert row.payload["activity_schema_version"] == 12
     timeline_payload = _read_timeline(tmp_path / "events.jsonl")[0]["payload"]
     assert timeline_payload["response_provider"] == "OpenInference"
     assert timeline_payload["cost_usd"] == 0.00012
-    assert timeline_payload["activity_schema_version"] == 11
+    assert timeline_payload["activity_schema_version"] == 12
     hooks.close()
+
+
+@pytest.mark.parametrize(
+    ("latency", "expected"),
+    [
+        ("missing", None),
+        (None, None),
+        (True, None),
+        (float("nan"), None),
+        (-5.0, None),
+        (42.0, 42.0),
+    ],
+)
+def test_llm_terminal_latency_persists_observed_value_or_null(
+    tmp_path: Path, latency: object, expected: float | None
+) -> None:
+    hooks, _store = _wired_hooks(tmp_path)
+    data: dict[str, object] = {
+        "session_id": "s-latency",
+        "llm_call_id": "call-latency",
+        "llm_attempt_id": "call-latency:attempt-1",
+        "error": None,
+        "usage": {"input_tokens": 3, "output_tokens": 1},
+    }
+    if latency != "missing":
+        data["latency_ms"] = latency
+    try:
+        with run_timeline_scope(_timeline(tmp_path)):
+            hooks.trigger(HookEvent.LLM_CALL_ENDED, data)
+    finally:
+        hooks.close()
+
+    # Reopen the database: an unobserved latency must stay null, never 0.0.
+    durable = HookEventStore(tmp_path / "events.db")
+    try:
+        row = durable.read(event_filter=HookEvent.LLM_CALL_ENDED.value)[0]
+    finally:
+        durable.close()
+    assert "_generic_projection" not in row.payload
+    assert row.payload["duration_ms"] == expected
+    assert row.payload["activity_schema_version"] == 12
+    mirror = _read_timeline(tmp_path / "events.jsonl")[0]
+    validate_record(mirror)
+    assert mirror["payload"]["duration_ms"] == expected
 
 
 @pytest.mark.parametrize("outcome", ["missing", "zero", "positive", "error", "cancel", "empty"])
@@ -395,7 +439,7 @@ def test_structured_decision_observation_survives_durable_and_export_boundaries(
         payload = row.payload
         assert payload["purpose"] == "structured_decision"
         assert payload["source"] == "payg"
-        assert payload["activity_schema_version"] == 11
+        assert payload["activity_schema_version"] == 12
         failed = outcome in {"error", "cancel", "empty"}
         assert row.status == ("failed" if failed else "ok")
         assert payload["success"] is not failed
