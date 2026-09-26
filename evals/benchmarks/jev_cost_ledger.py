@@ -1191,6 +1191,56 @@ class JevCostLedger:
             self.settle(handle.reservation_id, [handle.as_call()])
 
 
+class PanelSpendGuard:
+    """The verdict panel runner's ``JevSpendGuard`` hook, backed by this ledger.
+
+    Admit the unit first (:meth:`JevCostLedger.admit_unit`). ``admit_call``
+    reserves one call before each Jev dispatch; a refusal or a stopped ledger
+    raises, and the runner stops the unit before that call. ``record_call``
+    settles the observed input tokens, or the reserve column when usage is
+    unknown. A settlement that reaches the stop limit is recorded before the
+    ledger stops: the attempt that crossed the limit keeps its evidence, the
+    error is kept in :attr:`exhausted`, and the next admission is refused.
+    """
+
+    def __init__(
+        self,
+        ledger: JevCostLedger,
+        unit_id: str,
+        *,
+        input_tokens_per_call: int = RESERVE_INPUT_TOKENS,
+    ) -> None:
+        self._ledger = ledger
+        self._unit_id = _require_id(unit_id, name="unit_id")
+        self._tokens = _require_int(
+            input_tokens_per_call,
+            name="input_tokens_per_call",
+            minimum=1,
+            maximum=MAX_INPUT_TOKENS_PER_CALL,
+        )
+        self._open: dict[str, str] = {}
+        self.exhausted: JevBudgetExhaustedError | None = None
+
+    def admit_call(self, attempt_id: str) -> None:
+        _require_id(attempt_id, name="attempt_id")
+        if attempt_id in self._open:
+            raise ValueError(f"Jev call {attempt_id} is already admitted")
+        self._open[attempt_id] = self._ledger.reserve(
+            self._unit_id, 1, input_tokens_per_call=self._tokens
+        )
+
+    def record_call(self, attempt_id: str, input_tokens: int | None) -> None:
+        reservation = self._open.pop(attempt_id, None)
+        if reservation is None:
+            raise ValueError(f"Jev call {attempt_id} was not admitted")
+        try:
+            self._ledger.settle(
+                reservation, [{"call_id": attempt_id, "input_tokens": input_tokens}]
+            )
+        except JevBudgetExhaustedError as error:
+            self.exhausted = error
+
+
 class _UsageError(Exception):
     pass
 

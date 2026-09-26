@@ -123,6 +123,18 @@ functional change.
   selected success and gap closed (not-measurable at a zero denominator), never
   an IID pass@k label. Jev Score admission takes explicit, recorded sum and
   expectation tolerances, and selection cost keeps unknown usage null.
+- Add Noul 2×2 end-to-end cells on the single existing candidate intervention:
+  a runtime rule oracle recomputes both conditions from the judged state,
+  planned gold must match each cell, labels stay outside payloads, and trial
+  scoring counts unaccepted judgments as wrong.
+- Add an opt-in live cascade arm C for the Choice final verdict: Jev decides
+  when its admitted contract V1 `q` reaches the frozen τ, otherwise the same
+  state escalates once to Astra as a separately observed call. Arm C needs an
+  explicit engine and a τ on the preregistered grid, and the Harbor checker
+  binds every judge call to its route and escalation.
+- Add a host-scoped, hash-chained Jev cost ledger with the $1 program cap, a
+  $0.90 start limit and a sticky $0.95 stop. Missing usage is reserved, never
+  zero. A panel spend guard connects it to the verdict panel runner.
 - Add auxiliary repetition reliability to the judgment metrics: per-task
   combinatorial pass@n and pass^n with equal task weights, never a pooled rate.
   A frozen task × repetition plan is rejected with enumerated reasons (N_i < n,
@@ -239,6 +251,14 @@ functional change.
 
 ### Fixed
 
+- Remove first-position bias from best-of selection: every judge failure path
+  falls back to the content-addressed candidate, and matched Score ties use the
+  preregistered hash of pool and candidate IDs instead of input order.
+- Keep invalid or aborted evaluation attempts selected for analysis unless
+  exactly one later same-surface attempt replaces them, so an unmeasurable
+  primary cannot be hidden by deselection.
+- Keep unobserved LLM call latency null instead of storing a 0.0 duration.
+  Activity rows move to schema v12; earlier rows may still carry a filled 0.0.
 - Stop the sealed verdict-panel test split from exposing author IDs. Public
   tool-call IDs were digests of the original state and call IDs, and the public
   Score pool order was keyed by them, so a public cluster ID let a guessed

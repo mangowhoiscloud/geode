@@ -191,6 +191,72 @@ tolerance. Selection cost counts every planned order, failures included, and
 keeps unreported usage null. `python -m evals.benchmarks.score_selection
 self-test` exercises the whole path on fakes with zero model dispatches.
 
+### Noul 2×2 E2E cells
+
+[`noul_conditions.py`](../../evals/benchmarks/noul_conditions.py) builds the
+injection cells on the existing single `verification_intervention` per trial and
+scores finished trials against the runtime state the verifier actually judged.
+A rule oracle recomputes both conditions from the frozen inbox contract, the
+candidate text and every successful `lookup_order_status` observation, using the
+panel taxonomy plus one E2E extension: an unobserved cancel or refund claim
+contradicts the contract. Cells are `c1m0` (a status conflict after observation),
+`c0m1` (an early claim before observation), `c1m1` (an unobserved action claim and
+an unobserved status in one candidate) and the `c0m0` control. Planned gold must
+equal the requested cell; labels live in a separate `labels.jsonl`, never in
+payloads. Scoring recomputes gold for every judged state, counts an unaccepted
+judgment as wrong and reports an unmeasurable state with its reason.
+
+### Live cascade arm C (opt-in)
+
+[`decision_cascade.py`](../../evals/benchmarks/decision_cascade.py) adds
+`verification_engine=cascade` to the `a0` inbox path for the Choice verdict only.
+Jev judges each frozen verification state first. Its decision stands only when
+the typed answer is admitted and the contract V1 receipt `q`, the maximum label
+probability, reaches the frozen τ. A rejected answer or `q < τ` escalates once:
+the same state goes to the Astra matched verifier as a new, separately observed
+`turn_verification` call, and that decision reaches the root. A Jev transport
+error is not escalated; it invalidates the trial like any other provider error.
+Escalation faults fail closed with an invalid verifier response and a routing
+failure.
+
+Nothing enables arm C by default. The Harbor agent, container entry point and
+runtime require `--verification-engine cascade` with `--cascade-tau` from the
+pre-registered grid (0.50–0.95 by 0.05, 0.975, 0.99, 1.00), the scoped Jev key
+and the Choice primitive. A selection freeze without an admissible τ does not run
+arm C (`cascade_tau_from_selection` rejects `null`). Receipts share one ordered
+inventory; every primary records `{stage, tau, q, admitted}` and every escalation
+records its primary call ID. The Harbor checker keeps the V1 recomputation of
+each receipt, binds each judge call to the engine of its observed route and
+requires each rejected or below-τ primary to be followed by exactly one adjacent
+same-state Astra call. `q` routes a decision; it is not authority, calibration
+evidence or a Jev success when Astra decided.
+
+CI's `audit` extra resolves Harbor 0.8.0 through `inspect-harbor`, and its Harbor
+0.22 overlay step runs only `test_harbor_docker.py`. The frozen-SDK checker cases
+for arm C, the four Noul cells and the Choice arms skip unless Harbor 0.22.0 is
+importable; run them locally through the overlay interpreter:
+
+```bash
+uv run --offline --with harbor==0.22.0 python -m pytest -q \
+  tests/scripts/test_check_harbor_cascade.py \
+  tests/scripts/test_check_harbor_observations.py -k real_harbor
+```
+
+### Host Jev cost ledger
+
+[`jev_cost_ledger.py`](../../evals/benchmarks/jev_cost_ledger.py) is the single
+host-scoped, append-only guard for the program's Jev spend (preregistration §9).
+Units are admitted only when committed spend plus the unit projection stays
+within the $0.90 start limit; each dispatch reserves its worst case and settles
+the observed input tokens, with missing usage settled in a separate reserve
+column at 25,000 tokens per call, never released as zero. Reaching $0.95 records
+a sticky stop and refuses every later admission and reservation. Records form a
+hash chain with a head anchor, and amounts are published-tariff estimates, not
+invoices. `PanelSpendGuard` implements the verdict panel runner's `JevSpendGuard`
+hook: it reserves before and settles after each Jev call, and a settlement that
+crosses the stop limit keeps its attempt evidence while the next admission is
+refused, so the runner stops before another Jev call.
+
 ### Repetition reliability: auxiliary pass@n and pass^n
 
 Preregistration v1 §3.5 adds auxiliary repetition metrics without changing any

@@ -284,6 +284,32 @@ def test_jev_budget_guard_stops_before_dispatch(tmp_path: Path) -> None:
     assert len(guard.admitted) == 3 and len(guard.recorded) == 3
 
 
+def test_program_ledger_backs_the_runner_guard_and_stops_at_its_limit(tmp_path: Path) -> None:
+    from decimal import Decimal
+
+    from evals.benchmarks.jev_cost_ledger import JevCostLedger, PanelSpendGuard
+
+    ledger = JevCostLedger.create(
+        tmp_path / "jev-ledger.jsonl",
+        cost_limit_usd="0.001",
+        start_limit_usd="0.0002",
+        stop_limit_usd="0.0003",
+    )
+    ledger.admit_unit("u2c-fixture", 20, p95_input_tokens=1)
+    guard = PanelSpendGuard(ledger, "u2c-fixture", input_tokens_per_call=2600)
+    summary, _unit = _run(tmp_path / "run", _workloads(), guard=guard, concurrency=1)
+    # Three settled Jev calls (3 x 2600 x $0.042/M) cross the $0.0003 stop limit.
+    assert summary["stopped"] and summary["stop_reason"].startswith("jev_budget:")
+    assert guard.exhausted is not None and guard.exhausted.reason == "stop_limit_reached"
+    status = ledger.status()
+    assert Decimal(status["estimate_usd_total"]) == Decimal("0.000327600")
+    assert status["units"]["u2c-fixture"]["settled_calls"] == 3
+    assert status["units"]["u2c-fixture"]["open_reservations"] == 0
+    assert status["stopped"] is True
+    with pytest.raises(ValueError, match="was not admitted"):
+        guard.record_call("never-admitted", 1)
+
+
 def test_stability_variants_need_paraphrases_and_reach_both_engines(tmp_path: Path) -> None:
     workloads = _workloads(("order-rev",))
     summary, unit = _run(tmp_path, workloads, concurrency=1)
