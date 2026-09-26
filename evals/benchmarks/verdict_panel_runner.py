@@ -6,15 +6,26 @@ primitive cells), bounded concurrency, pacing, an event-loop heartbeat and the
 panel-only transport-substitution rule. Model clients and credentials stay
 caller-owned; nothing here reads a key. Correctness is scored only after gold is
 unsealed, so attempts record admission, not task success.
+
+After a U2s stability unit, :func:`stability_report` reads the two retained
+attempt files and their native-result receipts, groups the selected judgments by
+(engine, primitive, state_id) and feeds ``decision_metrics.stability_summary``;
+:func:`record_stability_aggregate` and :func:`stability_metric_rows` bind the
+result to an analysis under the unchanged schema (preregistration v2.2 §3.7-3).
+Usage: ``python -m evals.benchmarks.verdict_panel_runner stability --run-spec
+<choice run-spec> --choice <dir> --noul <dir> [--gold <jsonl> --aliases <json>]
+[--record]``.
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import contextlib
 import hashlib
 import json
 import os
+import sys
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -26,7 +37,8 @@ import httpx
 from pydantic import SecretStr
 
 from evals.benchmarks.decision_handoff import ROOT_MODEL
-from evals.benchmarks.decision_verification import MatchedVerifierAdapter
+from evals.benchmarks.decision_metrics import NOT_MEASURABLE, stability_summary
+from evals.benchmarks.decision_verification import VERDICTS, MatchedVerifierAdapter
 from evals.benchmarks.typesafe_decision import JEV_MODEL
 
 _Engine = Literal["llm", "jev"]
@@ -520,3 +532,369 @@ class PanelRunner:
                 for primitive in ("choice", "noul")
             },
         }
+
+
+# ---------------------------------------------------------------------------
+# U2s stability analysis (preregistration v2.2 §3.2 and §3.7-3)
+# ---------------------------------------------------------------------------
+
+STABILITY_VARIANTS = ("rep1", "rep2", "order-rev", "para")
+STABILITY_SCHEMA_ID = "geode.jev-panel-stability@1"
+STABILITY_RESULTS = "stability-results.json"
+STABILITY_PRIMARY = "jev_choice_pair_consistency"
+_PANEL_SURFACE = "judgment-panel"
+_NOUL_KEYS = ("has_contradiction", "missing_evidence")
+
+
+def stability_plan(workload_ids: Sequence[str]) -> list[str]:
+    """Frozen U2s states in dispatch order; each carries rep1, rep2, order-rev and para once."""
+    variants: dict[str, list[str]] = {}
+    for workload_id in workload_ids:
+        state_id, separator, variant = workload_id.partition("#")
+        if not separator or variant not in STABILITY_VARIANTS:
+            raise ValueError(f"{workload_id!r} is not a stability workload")
+        variants.setdefault(state_id, []).append(variant)
+    for state_id, found in variants.items():
+        if sorted(found) != sorted(STABILITY_VARIANTS):
+            raise ValueError(f"{state_id}: plan rep1, rep2, order-rev and para exactly once each")
+    if not variants:
+        raise ValueError("a stability plan needs at least one state")
+    return list(variants)
+
+
+def _canonical_projection(projection: Any) -> str:
+    if (
+        not isinstance(projection, Mapping)
+        or set(projection) != set(_NOUL_KEYS)
+        or any(type(projection[key]) is not bool for key in _NOUL_KEYS)
+    ):
+        raise ValueError("a Noul decision needs both boolean conditions")
+    return json.dumps(
+        {key: projection[key] for key in _NOUL_KEYS}, sort_keys=True, separators=(",", ":")
+    )
+
+
+def stability_decision(primitive: str, evidence: Mapping[str, Any]) -> str | None:
+    """One selected judgment's code-owned decision; ``None`` when it was not admitted.
+
+    Choice gives the admitted verdict and Noul the canonical JSON (sorted keys) of the
+    admitted boolean projection. A validator rejection or an infrastructure-invalid
+    attempt is ``None``: never filled from another call or variant.
+    """
+    receipt = evidence.get("receipt")
+    if (
+        evidence.get("status") != "admitted"
+        or not isinstance(receipt, Mapping)
+        or receipt.get("accepted") is not True
+    ):
+        return None
+    if primitive == "choice":
+        verdict = receipt.get("verdict")
+        if verdict not in VERDICTS:
+            raise ValueError("an admitted Choice receipt lacks its verdict")
+        return str(verdict)
+    return _canonical_projection(receipt.get("boolean_projection"))
+
+
+def gold_decision(primitive: str, gold: Mapping[str, Any]) -> str:
+    """The unsealed gold in the same representation as :func:`stability_decision`."""
+    if primitive == "choice":
+        if gold.get("verdict") not in VERDICTS:
+            raise ValueError("a gold row lacks its verdict")
+        return str(gold["verdict"])
+    return _canonical_projection({key: gold.get(key) for key in _NOUL_KEYS})
+
+
+def load_stability_gold(
+    gold_path: Path, aliases_path: Path | None = None
+) -> dict[str, dict[str, Any]]:
+    """Unsealed gold keyed by the dispatched state ID (the public alias of a sealed split).
+
+    Read only after every U2s attempt has finished (preregistration §3.4).
+    """
+    rows: dict[str, dict[str, Any]] = {}
+    for line in gold_path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            row = json.loads(line)
+            if row["state_id"] in rows:
+                raise ValueError("gold repeats a state")
+            rows[str(row["state_id"])] = row
+    if aliases_path is None:
+        return rows
+    aliases = json.loads(aliases_path.read_text(encoding="utf-8"))
+    return {str(alias): rows[original] for alias, original in aliases.items() if original in rows}
+
+
+def _panel_attempts(run_dir: Path) -> list[dict[str, Any]]:
+    path = run_dir / "attempts.jsonl"
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def _selected_judgments(
+    run_dir: Path, primitive: str
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """Selected panel attempts of one run with their digest-checked native-result receipt."""
+    selected = []
+    for row in _panel_attempts(run_dir):
+        if row["change"]["surface"] != _PANEL_SURFACE or row["selected_for_analysis"] is not True:
+            continue
+        refs = [ref for ref in row["evidence_refs"] if ref["kind"] == "native-result"]
+        if len(refs) != 1:
+            raise ValueError(f"{row['attempt_id']}: one native-result receipt is required")
+        raw = (run_dir / refs[0]["path"]).read_bytes()
+        if hashlib.sha256(raw).hexdigest() != refs[0]["sha256"]:
+            raise ValueError(f"{row['attempt_id']}: receipt digest mismatch")
+        evidence = json.loads(raw)
+        if (
+            evidence.get("attempt_id") != row["attempt_id"]
+            or evidence.get("primitive") != primitive
+        ):
+            raise ValueError(
+                f"{row['attempt_id']}: receipt belongs to another attempt or primitive"
+            )
+        selected.append((row, evidence))
+    return selected
+
+
+def _ratio_or_unknown(value: Mapping[str, Any] | None) -> dict[str, Any]:
+    if value is None:
+        return {"value": NOT_MEASURABLE, "numerator": None, "denominator": None}
+    return {key: value[key] for key in ("value", "numerator", "denominator")}
+
+
+def stability_report(
+    outputs: Mapping[str, Path],
+    workload_ids: Sequence[str],
+    *,
+    gold: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Group selected U2s judgments by (engine, primitive, state_id) into stability items.
+
+    ``outputs`` maps each primitive to its run directory (``attempts.jsonl`` and
+    ``receipts/``); ``workload_ids`` is the frozen ``<state>#<variant>`` order. A state
+    with any variant lacking a selected judgment makes that engine and primitive
+    not-measurable; nothing is filled in. The primary ``jev_choice_pair_consistency``
+    is also not-measurable when the Choice run keeps a selected invalid attempt.
+    """
+    states = stability_plan(workload_ids)
+    if not outputs or set(outputs) - {"choice", "noul"}:
+        raise ValueError("stability outputs are keyed by choice and noul")
+    if gold is not None and any(state_id not in gold for state_id in states):
+        raise ValueError("unsealed gold must cover every planned stability state")
+    runs: dict[str, Any] = {}
+    for primitive in sorted(outputs):
+        cells: dict[tuple[str, str, str], str | None] = {}
+        selected_invalid = 0
+        for row, evidence in _selected_judgments(outputs[primitive], primitive):
+            engine, state_id, variant = (
+                evidence.get("engine"),
+                evidence.get("state_id"),
+                evidence.get("variant"),
+            )
+            key = (str(engine), str(state_id), str(variant))
+            if engine not in ("llm", "jev"):
+                raise ValueError(f"{row['attempt_id']}: unknown engine {engine!r}")
+            if state_id not in states or variant not in STABILITY_VARIANTS:
+                raise ValueError(f"{row['attempt_id']}: {state_id}#{variant} is not planned")
+            if key in cells:
+                raise ValueError(f"{row['attempt_id']}: a planned judgment is selected twice")
+            cells[key] = stability_decision(primitive, evidence)
+            selected_invalid += row["validity"] != "valid"
+        engines: dict[str, Any] = {}
+        for engine in ("llm", "jev"):
+            missing = [
+                f"{state_id}#{variant}"
+                for state_id in states
+                for variant in STABILITY_VARIANTS
+                if (engine, state_id, variant) not in cells
+            ]
+            items = [
+                {
+                    "state_id": state_id,
+                    **{
+                        variant: cells.get((engine, state_id, variant))
+                        for variant in STABILITY_VARIANTS
+                    },
+                    "gold": gold_decision(primitive, gold[state_id]) if gold else None,
+                }
+                for state_id in states
+            ]
+            engines[engine] = {
+                "status": "measured" if not missing else NOT_MEASURABLE,
+                "reasons": [] if not missing else ["missing_variant"],
+                "planned_states": len(states),
+                "missing_variants": missing,
+                "summary": stability_summary(items) if not missing else None,
+                "items": items,
+            }
+        runs[primitive] = {
+            "selected_invalid_attempts": selected_invalid,
+            "complete": selected_invalid == 0
+            and all(entry["summary"] is not None for entry in engines.values()),
+            "engines": engines,
+        }
+    choice = runs.get("choice")
+    reasons: list[str] = []
+    pair: Mapping[str, Any] | None = None
+    if choice is None:
+        reasons.append("choice_run_missing")
+    else:
+        reasons.extend(choice["engines"]["jev"]["reasons"])
+        if choice["selected_invalid_attempts"]:
+            reasons.append("selected_invalid_attempt")
+        if not reasons:
+            pair = choice["engines"]["jev"]["summary"]["pair_consistency"]
+    primary = {"name": STABILITY_PRIMARY, "reasons": reasons, **_ratio_or_unknown(pair)}
+    return {
+        "schema_id": STABILITY_SCHEMA_ID,
+        "variants": list(STABILITY_VARIANTS),
+        "planned_states": len(states),
+        "gold_attached": gold is not None,
+        "decision_rule": (
+            "Choice: admitted receipt.verdict; Noul: canonical JSON of the admitted "
+            "receipt.boolean_projection; a rejection or invalid attempt is null"
+        ),
+        "primary": primary,
+        "runs": runs,
+    }
+
+
+def record_stability_aggregate(
+    run_dir: Path, report: Mapping[str, Any], *, primitive: str
+) -> dict[str, Any]:
+    """Write ``stability-results.json`` and append its selected analysis-only attempt.
+
+    The native-result aggregate lets an analysis bind the primary metric to selected
+    evidence. An incomplete run records an invalid aggregate, so the primary stays
+    not-measurable under the evaluation contract.
+    """
+    rows = _panel_attempts(run_dir)
+    if not rows:
+        raise ValueError("a stability aggregate needs the run's attempts")
+    digest = _write_new(
+        run_dir / STABILITY_RESULTS,
+        json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False) + "\n",
+    )
+    reference = {"kind": "native-result", "path": STABILITY_RESULTS, "sha256": digest}
+    complete = bool(report["runs"][primitive]["complete"])
+    at = _now()
+    run_id = rows[-1]["run_id"]
+    aggregate = {
+        "schema_id": "geode.eval-attempt@1",
+        "schema_version": 1,
+        "run_id": run_id,
+        "attempt_id": f"{run_id}-aggregate",
+        "parent_attempt_id": rows[-1]["attempt_id"],
+        "sequence": len(rows),
+        "timing": {"status": "exact", "started_at": at, "finished_at": at, "source_ref": None},
+        "validity": "valid" if complete else "invalid",
+        "outcome": "mixed" if complete else "unknown",
+        "change": {
+            "surface": "analysis-only",
+            "description": "Frozen U2s stability aggregation; zero model dispatches.",
+        },
+        "expected_effect": "Pair consistency and flip rates over the frozen stability states.",
+        "observed_result": "Every planned variant was judged."
+        if complete
+        else "A planned variant is missing or an invalid attempt stays selected.",
+        "failure_class": None if complete else "incomplete_planned_cells",
+        "error_ref": None,
+        "evidence_refs": [reference],
+        "selected_for_analysis": True,
+    }
+    _append(run_dir / "attempts.jsonl", aggregate)
+    return {"evidence_ref": reference, "aggregate_attempt_id": aggregate["attempt_id"]}
+
+
+def stability_metric_rows(
+    report: Mapping[str, Any], *, primitive: str, source_ref: str = STABILITY_RESULTS
+) -> list[dict[str, Any]]:
+    """``analysis.json`` metric rows under the unchanged schema, bound by JSON pointers.
+
+    Names are ``<engine>_<primitive>_pair_consistency``, ``..._flip_rate_order_rev``,
+    ``..._flip_rate_para`` and, once gold is attached, ``..._pair_correct_consistency``.
+    ``jev_choice_pair_consistency`` comes from the report's primary block. Unmeasured
+    rows carry ``"not-measurable"`` with null numerator, denominator and locator.
+    """
+    run = report["runs"].get(primitive)
+    if run is None:
+        raise ValueError(f"the stability report has no {primitive} run")
+
+    def row(name: str, value: Mapping[str, Any], pointer: str) -> dict[str, Any]:
+        measured = value["value"] != NOT_MEASURABLE
+        return {
+            "name": name,
+            "value": value["value"],
+            "numerator": value["numerator"] if measured else None,
+            "denominator": value["denominator"] if measured else None,
+            "unit": "ratio",
+            "source_ref": source_ref,
+            "source_locator": {
+                key: f"{pointer}/{key}" for key in ("value", "numerator", "denominator")
+            }
+            if measured
+            else None,
+        }
+
+    rows = []
+    for engine in ("jev", "llm"):
+        summary = run["engines"][engine]["summary"]
+        base = f"/runs/{primitive}/engines/{engine}/summary"
+        prefix = f"{engine}_{primitive}"
+        metrics = [("pair_consistency", "pair_consistency")] + [
+            (f"flip_rate_{variant.replace('-', '_')}", f"flip_rate/{variant}")
+            for variant in STABILITY_VARIANTS[2:]
+        ]
+        if report["gold_attached"]:
+            metrics.append(("pair_correct_consistency", "pair_correct_consistency"))
+        for suffix, path in metrics:
+            name = f"{prefix}_{suffix}"
+            if name == report["primary"]["name"]:
+                rows.append(row(name, report["primary"], "/primary"))
+                continue
+            value = summary
+            for part in path.split("/"):
+                value = value[part] if value is not None else None
+            rows.append(row(name, _ratio_or_unknown(value), f"{base}/{path}"))
+    return rows
+
+
+def _stability_main(argv: Sequence[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="python -m evals.benchmarks.verdict_panel_runner stability",
+        description="U2s stability aggregation from retained panel attempts (no model call).",
+    )
+    parser.add_argument("--run-spec", type=Path, required=True, help="frozen U2s run spec")
+    parser.add_argument("--choice", type=Path, required=True)
+    parser.add_argument("--noul", type=Path, required=True)
+    parser.add_argument("--gold", type=Path, help="unsealed gold; only after every U2s attempt")
+    parser.add_argument("--aliases", type=Path, help="sealed alias map for the gold state IDs")
+    parser.add_argument(
+        "--record", action="store_true", help="write results and aggregate attempts per run"
+    )
+    # Exit 1 reports a not-measurable primary; the report and rows are still printed.
+    args = parser.parse_args(argv)
+    spec = json.loads(args.run_spec.read_text(encoding="utf-8"))
+    outputs = {"choice": args.choice, "noul": args.noul}
+    gold = load_stability_gold(args.gold, args.aliases) if args.gold else None
+    report = stability_report(
+        outputs, spec["reproduction"]["execution"]["ordered_workload_ids"], gold=gold
+    )
+    if args.record:
+        for primitive, directory in outputs.items():
+            record_stability_aggregate(directory, report, primitive=primitive)
+    rows = {primitive: stability_metric_rows(report, primitive=primitive) for primitive in outputs}
+    print(json.dumps({"primary": report["primary"], "metrics": rows}, indent=2, sort_keys=True))
+    return 0 if report["primary"]["value"] != NOT_MEASURABLE else 1
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments[:1] != ["stability"]:
+        print("usage: python -m evals.benchmarks.verdict_panel_runner stability ...")
+        return 2
+    return _stability_main(arguments[1:])
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -134,6 +134,23 @@ replacement or a replacement rate above 2% stops the unit, and quota, harness or
 route failures stop it as selected invalid attempts. E2E keeps its no-replacement
 rule. An optional host Jev spend guard is consulted before every Jev call.
 
+After a U2s stability unit, `stability_report` reads both retained attempt files
+and their native-result receipts, keeps the selected judgments and groups them by
+(engine, primitive, state_id) over the frozen `#rep1`, `#rep2`, `#order-rev` and
+`#para` workloads. An admitted Choice contributes `receipt.verdict`, an admitted
+Noul the canonical JSON of `receipt.boolean_projection`; a validator rejection or
+a selected invalid attempt is `None`, and a replaced transport failure counts once
+through its child. `decision_metrics.stability_summary` then reports rep1/rep2
+pair consistency separately from the order and paraphrase flip rates. A state
+missing any variant makes that engine and primitive not-measurable, never filled
+in; the primary `jev_choice_pair_consistency` is also not-measurable while the
+Choice run keeps a selected invalid attempt. `record_stability_aggregate` writes
+`stability-results.json` with a selected analysis-only attempt, and
+`stability_metric_rows` binds `<engine>_<primitive>_pair_consistency`, flip-rate
+and, once gold is unsealed in the same representation,
+`pair_correct_consistency` rows to it under the unchanged analysis schema
+(`python -m evals.benchmarks.verdict_panel_runner stability`).
+
 The Noul profile explicitly sets `verification_primitive=noul` alongside
 `verification_engine=llm|jev` on the existing `a0` inbox path. The Harbor entry
 point and observation checker expose the corresponding `--verification-primitive`

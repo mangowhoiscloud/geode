@@ -140,6 +140,12 @@ functional change.
   unknown shared-account usage come from the private trial receipt, and
   overlapping calls from call-ledger intervals. Only same-slot synchronized
   pairs enter intra-pair latency comparison; success analysis keeps every pair.
+- Connect U2s stability attempts to the stability metrics: selected panel
+  judgments are grouped by engine, primitive and state across the four frozen
+  variants, rejected or invalid judgments stay empty decisions, and a missing
+  variant leaves the unit not measurable instead of being filled. A recorded
+  aggregate binds `jev_choice_pair_consistency`, flip rates and, after
+  unsealing, correct-pair consistency to analysis rows.
 - Add auxiliary repetition reliability to the judgment metrics: per-task
   combinatorial pass@n and pass^n with equal task weights, never a pooled rate.
   A frozen task × repetition plan is rejected with enumerated reasons (N_i < n,
