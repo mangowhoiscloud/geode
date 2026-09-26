@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import openai
 import pytest
 from core.agent import candidate_sampling
 from core.agent.candidate_sampling import lensed_description
@@ -140,9 +141,14 @@ def _dispatch(
     pick: Any = None,
     jev_bias: float = 0.0,
     jev_broken_first: frozenset[str] = frozenset(),
+    max_concurrency: int = 1,
+    subscription_type: type[_Subscription] | None = None,
+    timings: list[dict[str, Any]] | None = None,
+    timeouts: dict[str, float] | None = None,
+    jev_failures: Counter[str] | None = None,
 ) -> _Run:
     monkeypatch.setattr(settings, "llm_max_retries", 1)
-    subscription = _Subscription(quality, pick)
+    subscription = (subscription_type or _Subscription)(quality, pick)
     monkeypatch.setattr(candidate_sampling, "resolve_for", lambda *_args: subscription)
     bodies: list[dict[str, Any]] = []
     events: Counter[str] = Counter()
@@ -153,6 +159,9 @@ def _dispatch(
         body = json.loads(request.content)
         bodies.append(body)
         presented = list(body["state"]["candidates"].values())
+        if jev_failures is not None and jev_failures[presented[0]] > 0:
+            jev_failures[presented[0]] -= 1  # an HTTP error status: no model response
+            return httpx.Response(503, json={"error": "unavailable"})
         answers = {
             f"c{index}": _score_answer(min(3.0, quality[text] + (jev_bias if index == 0 else 0)))
             for index, text in enumerate(presented)
@@ -177,7 +186,13 @@ def _dispatch(
                 "jev": ss.PointwiseSelector("jev", "jev", jev, events=hooks),
                 "listwise": ss.ListwiseSelector("listwise", events=hooks),
             }
-            return await ss.dispatch_selection(pools, [available[name] for name in names])
+            return await ss.dispatch_selection(
+                pools,
+                [available[name] for name in names],
+                max_concurrency=max_concurrency,
+                timings=timings,
+                timeouts=timeouts,
+            )
 
     try:
         records = asyncio.run(run())
@@ -281,6 +296,30 @@ def test_kendall_tau_b_hand_computed(
 )
 def test_score_expectation_tolerance_freeze_rule(observed: float, expected: float) -> None:
     assert ss.score_expectation_tolerance(observed) == expected
+
+
+@pytest.mark.parametrize(
+    ("probabilities", "score", "deviation", "tolerance"),
+    [
+        # Binary arithmetic gave 0.04000000000000001 and froze 0.05 (G-3 F1).
+        ('{"0": 0.97, "1": 0.03}', "0.07", 0.04, 0.04),
+        ('{"1": 1.0}', "1.03", 0.03, 0.03),
+        # 5e-19 above 0.04: the nearest float is 0.04, the exact ceiling is 0.05.
+        (
+            '{"0": 0.9700000000000000005, "1": 0.0299999999999999995}',
+            "0.07",
+            0.040000000000001,
+            0.05,
+        ),
+    ],
+)
+def test_expectation_deviation_is_exact_decimal_from_the_raw_answer(
+    probabilities: str, score: str, deviation: float, tolerance: float
+) -> None:
+    raw = f'{{"c0": {{"type": "score", "score": {score}, "probabilities": {probabilities}}}}}'
+    observed = ss._expectation_deviation({"raw_answer": raw})
+    assert observed == deviation
+    assert observed is not None and ss.score_expectation_tolerance(observed) == tolerance
 
 
 # ---------------------------------------------------------------------------
@@ -1079,3 +1118,287 @@ def test_module_entrypoint_self_test() -> None:
     )
     assert completed.returncode == 0, completed.stderr[-2000:]
     assert json.loads(completed.stdout)["model_dispatches"] == 0
+
+
+class _Interleaving(_Subscription):
+    """Yields inside every call so concurrent pools really interleave; tracks the peak."""
+
+    in_flight = 0
+    peak = 0
+
+    async def acomplete(self, request: AdapterCallRequest) -> AdapterCallResult:
+        type(self).in_flight += 1
+        type(self).peak = max(type(self).peak, type(self).in_flight)
+        try:
+            await asyncio.sleep(0.001)
+            return await super().acomplete(request)
+        finally:
+            type(self).in_flight -= 1
+
+
+def test_concurrent_dispatch_is_byte_identical_to_sequential(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pools = [
+        _pool(f"pool-{index}", {f"{index}a": 0, f"{index}b": 3, f"{index}c": 2, f"{index}d": 0})
+        for index in range(6)
+    ]
+    quality = _quality(pools)
+    broken = frozenset({pools[2].candidates[-1].text})  # one reverse Jev order is invalid
+
+    def pick(texts: list[str]) -> int:
+        return 9 if texts[0] == pools[4].candidates[0].text else 0  # a listwise judge_error
+
+    runs = {}
+    for concurrency in (1, 4):
+        _Interleaving.in_flight = _Interleaving.peak = 0
+        timings: list[dict[str, Any]] = []
+        runs[concurrency] = _dispatch(
+            monkeypatch,
+            pools,
+            quality,
+            pick=pick,
+            jev_broken_first=broken,
+            max_concurrency=concurrency,
+            subscription_type=_Interleaving,
+            timings=timings,
+        )
+        assert len(timings) == len(pools) * 3 * len(ss.ORDERS)
+        assert all(row["latency_s"] >= 0 for row in timings)
+        if concurrency == 1:
+            assert _Interleaving.peak == 1
+        else:
+            assert 1 < _Interleaving.peak <= 4
+    sequential, concurrent = (json.dumps(runs[n].records, sort_keys=True) for n in (1, 4))
+    assert sequential == concurrent
+    assert [record["pool_id"] for record in runs[4].records] == [pool.pool_id for pool in pools]
+    outcomes = [ss.score_selection(runs[n].records, pools) for n in (1, 4)]
+    assert json.dumps(outcomes[0], sort_keys=True) == json.dumps(outcomes[1], sort_keys=True)
+    summaries = [ss.summarize_outcomes(outcome) for outcome in outcomes]
+    assert json.dumps(summaries[0], sort_keys=True) == json.dumps(summaries[1], sort_keys=True)
+    receipt = runs[4].records[2]["selectors"]["jev"]["orders"]["reverse"]["receipt"]
+    assert receipt["correlation"]["llm_call_id"] == "score.jev.pool-2.reverse"
+    with pytest.raises(ValueError, match=r"concurrency is 1\.\.4"):
+        asyncio.run(ss.dispatch_selection(pools, [], max_concurrency=5))
+
+
+class _Hanging(_Subscription):
+    """The next ``hangs[text]`` calls showing ``text`` first never answer, or raise ``error``."""
+
+    hangs: Counter[str] = Counter()
+    seen: list[str] = []
+    error: Exception | None = None
+
+    async def acomplete(self, request: AdapterCallRequest) -> AdapterCallResult:
+        content = request.messages[0].content
+        assert isinstance(content, str)
+        if request.tools:
+            first = _listwise_texts(content)[0]
+        else:
+            payload = json.loads(
+                unescape(content.removeprefix("<scoring_input>").removesuffix("</scoring_input>"))
+            )
+            first = payload["state"]["candidates"]["c0"]
+        type(self).seen.append(first)
+        if type(self).hangs[first] > 0:
+            type(self).hangs[first] -= 1
+            if type(self).error is not None:
+                raise type(self).error
+            await asyncio.sleep(3600)
+        return await super().acomplete(request)
+
+
+_FAST = {"llm": 0.5, "jev": 30.0}
+
+
+def _two_candidate_pools(count: int) -> list[ss.FrozenPool]:
+    return [_pool(f"pool-{index}", {f"{index}a": 0, f"{index}b": 3}) for index in range(count)]
+
+
+def _shown(pools: list[ss.FrozenPool], index: int, order: str) -> str:
+    return pools[index].candidates[ss.order_indices(pools[index], order)[0]].text
+
+
+def _hang(
+    pools: list[ss.FrozenPool], index: int, order: str, times: int, error: Exception | None = None
+) -> None:
+    _Hanging.hangs, _Hanging.seen = Counter({_shown(pools, index, order): times}), []
+    _Hanging.error = error
+
+
+def test_timed_out_call_is_replaced_once_and_records_stay_byte_identical(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pools = _two_candidate_pools(25)  # 50 planned calls: one replacement is exactly 2%
+    runs = {}
+    for concurrency in (1, 4):
+        _hang(pools, 3, "forward", 1)
+        timings: list[dict[str, Any]] = []
+        runs[concurrency] = _dispatch(
+            monkeypatch,
+            pools,
+            _quality(pools),
+            names=("astra",),
+            max_concurrency=concurrency,
+            subscription_type=_Hanging,
+            timings=timings,
+            timeouts=_FAST,
+        )
+        assert len(timings) == 51 and [row["attempt"] for row in timings].count(1) == 1
+    assert json.dumps(runs[1].records, sort_keys=True) == json.dumps(
+        runs[4].records, sort_keys=True
+    )
+    orders = [record["selectors"]["astra"]["orders"] for record in runs[4].records]
+    assert orders[3]["forward"]["valid"] is True
+    assert orders[3]["forward"]["replaced_attempts"] == [
+        {
+            "failure": "transport_error",
+            "error_type": "TimeoutError",
+            "timeout_s": 0.5,
+            "selected_for_analysis": False,
+        }
+    ]
+    assert sum(len(entry["replaced_attempts"]) for pair in orders for entry in pair.values()) == 1
+    summary = ss.summarize_outcomes(ss.score_selection(runs[4].records, pools))
+    assert summary["selector_calls"] == 50  # a replacement fills the same item
+    cost = summary["selectors"]["astra"]["selection_cost"]
+    assert (cost["calls"], cost["input_tokens_missing_calls"]) == (51, 1)
+    assert cost["input_tokens_total"] is None  # the timed-out call's usage is unknown
+
+
+@pytest.mark.parametrize(
+    ("count", "index", "order", "times", "reason", "dispatched", "error", "cause"),
+    [
+        # The replacement times out too: it stays selected on the last planned call.
+        (25, 24, "reverse", 2, "replacement_failed", 51, "primary is not measurable", None),
+        # A refused connection twice is the same no-response failure (coordinator decision).
+        (
+            25,
+            24,
+            "reverse",
+            2,
+            "replacement_failed",
+            51,
+            "primary is not measurable",
+            httpx.ConnectError("refused"),
+        ),
+        # One replacement in 4 planned calls is above 2%: no replacement, nothing new starts.
+        (2, 0, "forward", 1, "substitution_rate_exceeded", 1, "cover every planned pool", None),
+    ],
+)
+def test_failed_replacement_or_replacement_rate_stops_the_unit(
+    monkeypatch: pytest.MonkeyPatch,
+    count: int,
+    index: int,
+    order: str,
+    times: int,
+    reason: str,
+    dispatched: int,
+    error: str,
+    cause: Exception | None,
+) -> None:
+    pools = _two_candidate_pools(count)
+    _hang(pools, index, order, times, cause)
+    with pytest.raises(ss.SelectionStoppedError, match="primary is not measurable") as stopped:
+        _dispatch(
+            monkeypatch,
+            pools,
+            _quality(pools),
+            names=("astra",),
+            subscription_type=_Hanging,
+            timeouts=_FAST,
+        )
+    assert stopped.value.reason == reason
+    assert len(_Hanging.seen) == dispatched
+    failed = stopped.value.records[-1]["selectors"]["astra"]["orders"][order]
+    assert (failed["valid"], failed["failure"], failed["winner_id"]) == (
+        False,
+        "transport_error",
+        None,
+    )
+    assert len(failed["replaced_attempts"]) == times - 1
+    kind = type(cause).__name__ if cause else "TimeoutError"
+    assert failed["reason"] == f"no response: {kind}"
+    with pytest.raises(ValueError, match=error):
+        ss.score_selection(stopped.value.records, pools)
+
+
+@pytest.mark.parametrize(
+    ("names", "cause", "kind"),
+    [
+        (("listwise",), httpx.ConnectError("refused"), "ConnectError"),
+        (
+            ("astra",),
+            openai.APIConnectionError(request=httpx.Request("POST", "https://codex.invalid")),
+            "APIConnectionError",
+        ),
+        (("jev",), None, "HTTPStatusError"),  # the Jev endpoint answers 503
+    ],
+)
+def test_a_call_without_a_response_is_replaced_once_like_a_timeout(
+    monkeypatch: pytest.MonkeyPatch, names: tuple[str], cause: Exception | None, kind: str
+) -> None:
+    pools = _two_candidate_pools(25)  # 50 planned calls: one replacement is exactly 2%
+    _hang(pools, 3, "forward", 1 if cause else 0, cause)
+    run = _dispatch(
+        monkeypatch,
+        pools,
+        _quality(pools),
+        names=names,
+        subscription_type=_Hanging,
+        timeouts=_FAST,
+        jev_failures=None if cause else Counter({_shown(pools, 3, "forward"): 1}),
+    )
+    orders = [record["selectors"][names[0]]["orders"] for record in run.records]
+    assert orders[3]["forward"]["valid"] is True
+    assert orders[3]["forward"]["replaced_attempts"] == [
+        {
+            "failure": "transport_error",
+            "error_type": kind,
+            "timeout_s": _FAST["jev" if names == ("jev",) else "llm"],
+            "selected_for_analysis": False,
+        }
+    ]
+    assert sum(len(entry["replaced_attempts"]) for pair in orders for entry in pair.values()) == 1
+
+
+def test_a_response_that_breaks_the_contract_is_wrong_and_never_replaced(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pools = _two_candidate_pools(25)
+    shown = _shown(pools, 3, "forward")
+
+    def pick(texts: list[str]) -> int:
+        return 9 if texts[0] == shown else 0  # an out-of-range listwise answer
+
+    run = _dispatch(
+        monkeypatch,
+        pools,
+        _quality(pools),
+        names=("jev", "listwise"),
+        pick=pick,
+        jev_broken_first=frozenset({shown}),  # a Jev answer that changes a criterion
+        timeouts=_FAST,
+    )
+    assert len(run.jev_bodies) == len(run.subscription.requests) == 50  # no extra call
+    for name in ("jev", "listwise"):
+        forward = run.records[3]["selectors"][name]["orders"]["forward"]
+        assert (forward["valid"], forward["replaced_attempts"]) == (False, [])
+        assert forward["failure"] != "transport_error"
+    outcomes = ss.score_selection(run.records, pools)[3]["selectors"]
+    assert outcomes["jev"]["valid"] is False and outcomes["jev"]["oracle_best_value"] == 0.0
+    assert outcomes["listwise"]["order_hits"]["forward"] == 0
+
+
+@pytest.mark.parametrize(
+    "timeouts",
+    [
+        {"llm": 180.0},
+        {"llm": 0, "jev": 60.0},
+        {"llm": float("inf"), "jev": 60.0},
+        {"llm": True, "jev": 60.0},
+    ],
+)
+def test_call_timeouts_need_finite_positive_seconds_per_engine(timeouts: dict[str, Any]) -> None:
+    with pytest.raises(ValueError, match="finite positive seconds"):
+        asyncio.run(ss.dispatch_selection([], [], timeouts=timeouts))

@@ -26,6 +26,9 @@ Preregistered rules:
   dispatched (alias) ids. If either order is invalid (``judge_error`` fallback,
   missing or unaccepted receipt) the pool selection is invalid and counts as wrong,
   even when the fallback candidate would pass the task oracle.
+- A call that ends without a response (timeout, connection failure, HTTP error
+  status) is a §4.2 transport failure, not a wrong answer: it is replaced exactly
+  once, and a failed replacement or a replacement rate above 2% stops the unit.
 - The listwise operational reference is the mean of per-order hits (0, 0.5, 1); an
   invalid order contributes 0.
 - Natural pools are graded by the existing inbox oracle's per-item answer matches
@@ -50,6 +53,7 @@ import json
 import math
 import re
 import sys
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from decimal import ROUND_CEILING, Decimal
@@ -58,9 +62,12 @@ from html import unescape
 from pathlib import Path
 from typing import Any, Literal
 
+import httpx
+import openai
 from core.agent import candidate_sampling
 from core.agent.candidate_sampling import MAX_BEST_OF, candidate_text, lensed_description
-from core.hooks import MiddlewareRegistry, RuntimeEventBus
+from core.hooks import LlmCallRequest, MiddlewareRegistry, RuntimeEventBus
+from core.hooks.middleware import LlmNextCall
 from core.llm.adapters.base import (
     AdapterBillingType,
     AdapterCallRequest,
@@ -667,35 +674,53 @@ def score_expectation_tolerance(observed_max: float) -> float:
     return float(max(Decimal("0.03"), rounded))
 
 
+def _written(value: Any) -> Decimal:
+    """A parsed JSON number as the decimal it was written as (a float by its shortest repr)."""
+    return Decimal(repr(value)) if isinstance(value, float) else Decimal(value)
+
+
 def _expectation_deviation(receipt: Mapping[str, Any] | None) -> float | None:
-    """Largest |score - sum(level * p)| in a Score answer, parsed leniently."""
+    """Largest |score - sum(level * p)| in a Score answer, in exact decimal (§4.1).
+
+    Numbers are read as written in the raw answer, parsed leniently. The float kept in
+    records is rounded up at 1e-15, so its 0.01 ceiling equals the exact one (binary
+    arithmetic, or a nearest float just below a boundary, would move it a step).
+    """
     if receipt is None:
         return None
     answers: Any = receipt.get("native_answer")
     raw = receipt.get("raw_answer")
     if isinstance(raw, str):
         try:
-            answers = json.loads(raw)
+            answers = json.loads(raw, parse_float=Decimal)
         except (ValueError, RecursionError):
             answers = receipt.get("native_answer")
-    deviations: list[float] = []
+    deviations: list[Decimal] = []
     for answer in answers.values() if isinstance(answers, dict) else ():
         score = answer.get("score") if isinstance(answer, dict) else None
         probabilities = answer.get("probabilities") if isinstance(answer, dict) else None
         if (
-            not isinstance(score, int | float)
+            not isinstance(score, int | float | Decimal)
             or isinstance(score, bool)
             or not isinstance(probabilities, dict)
         ):
             continue
         try:
-            expected = math.fsum(int(level) * float(p) for level, p in probabilities.items())
-        except (TypeError, ValueError):
+            expected = sum(
+                (Decimal(int(level)) * _written(p) for level, p in probabilities.items()),
+                Decimal(0),
+            )
+            deviation = abs(_written(score) - expected)
+        except (TypeError, ValueError, ArithmeticError):
             continue
-        deviation = abs(float(score) - expected)
-        if math.isfinite(deviation):
+        if deviation.is_finite() and math.isfinite(float(deviation)):
             deviations.append(deviation)
-    return max(deviations) if deviations else None
+    if not deviations:
+        return None
+    observed = max(deviations)
+    if observed < 1:  # the tolerance caps at 0.05; larger values stay as observed
+        observed = observed.quantize(Decimal("1e-15"), rounding=ROUND_CEILING)
+    return float(observed)
 
 
 # ---------------------------------------------------------------------------
@@ -748,8 +773,15 @@ def _presentation(pool: FrozenPool, order: str) -> tuple[tuple[str, ...], list[s
 
 
 def _correlation(session_id: str, pool: FrozenPool, selector: str, order: str) -> dict[str, Any]:
-    # Hook/receipt join keys only; adapters never send request metadata to a model.
-    return {"session_id": session_id, "turn_id": pool.pool_id, "step_id": f"{selector}:{order}"}
+    # Hook/receipt join keys only; adapters never send request metadata to a model. The
+    # call ID derives from the call's identity, so records do not depend on dispatch
+    # timing or concurrency (a random ID would differ run to run).
+    return {
+        "session_id": session_id,
+        "turn_id": pool.pool_id,
+        "step_id": f"{selector}:{order}",
+        "llm_call_id": f"score.{selector}.{pool.pool_id}.{order}"[:128],
+    }
 
 
 def _receipt_failure(judge_error: str, receipts: Sequence[Mapping[str, Any]]) -> str | None:
@@ -759,6 +791,45 @@ def _receipt_failure(judge_error: str, receipts: Sequence[Mapping[str, Any]]) ->
     if len(receipts) != 1:
         return "receipt_missing" if not receipts else "receipt_duplicated"
     return None if receipts[0].get("accepted") is True else "receipt_not_accepted"
+
+
+# 05 §4.2 "transport failure without a response", classified as the panel runner does
+# (timeouts, transport errors, HTTP error statuses), plus the OpenAI SDK forms of the
+# same failures that the subscription adapter raises. A response that arrived and broke
+# the contract is not here: its order stays invalid and counts as wrong (§3.1).
+NO_RESPONSE_ERRORS: tuple[type[Exception], ...] = (
+    TimeoutError,
+    httpx.TransportError,
+    httpx.HTTPStatusError,
+    openai.APIConnectionError,
+    openai.APIStatusError,
+)
+
+
+class NoResponseError(RuntimeError):
+    """A selector call ended without a model response; dispatch applies 05 §4.2."""
+
+
+class _NoResponseWatch:
+    """LLM execution middleware keeping the no-response failure ``judge_candidates`` hides."""
+
+    def __init__(self, registry: MiddlewareRegistry) -> None:
+        self.failure: Exception | None = None
+        # No middleware timeout of its own: dispatch bounds the whole call.
+        registry.register_llm_execution(self, name="score_no_response_watch", timeout_s=0)
+
+    async def llm_execution(
+        self, request: LlmCallRequest, next_call: LlmNextCall
+    ) -> AdapterCallResult:
+        try:
+            return await next_call(request)
+        except NO_RESPONSE_ERRORS as error:
+            self.failure = error
+            raise
+
+    def check(self) -> None:
+        if self.failure is not None:
+            raise NoResponseError(type(self.failure).__name__) from self.failure
 
 
 @dataclass(frozen=True, slots=True)
@@ -810,6 +881,7 @@ class PointwiseSelector:
         registry.register_llm_request(
             self.matched_adapter(pool, order, receipts), allow_cache_invalidation=True
         )
+        watch = _NoResponseWatch(registry)
         verdict = await candidate_sampling.judge_candidates(
             pool.task,
             texts,
@@ -820,6 +892,7 @@ class PointwiseSelector:
             middleware_registry=registry,
             correlation=_correlation(self.session_id, pool, self.name, order),
         )
+        watch.check()
         receipt = receipts[0] if len(receipts) == 1 else None
         failure = _receipt_failure(verdict.judge_error, receipts)
         scores: dict[str, Any] | None = None
@@ -879,6 +952,8 @@ class ListwiseSelector:
 
     async def run(self, pool: FrozenPool, order: str) -> OrderResult:
         ids, texts = _presentation(pool, order)
+        registry = MiddlewareRegistry(events=self.events)
+        watch = _NoResponseWatch(registry)
         verdict = await candidate_sampling.judge_candidates(
             pool.task,
             texts,
@@ -886,9 +961,10 @@ class ListwiseSelector:
             provider="openai",
             source="subscription",
             effort="xhigh",
-            middleware_registry=MiddlewareRegistry(events=self.events),
+            middleware_registry=registry,
             correlation=_correlation(self.session_id, pool, self.name, order),
         )
+        watch.check()
         valid = not verdict.judge_error
         return OrderResult(
             order=order,
@@ -930,41 +1006,164 @@ def _preflight(pools: Sequence[FrozenPool], selectors: Sequence[Selector]) -> No
         raise ValueError("pools failed preflight before any dispatch: " + "; ".join(problems))
 
 
+class SelectionStoppedError(RuntimeError):
+    """A Score-S unit stopped under 05 §4.2; its primary is not measurable.
+
+    ``records`` keeps every dispatched order (a partly dispatched pool keeps its
+    finished orders) so the stopped lineage is preserved; it is never scored.
+    """
+
+    def __init__(self, reason: str, records: list[dict[str, Any]]) -> None:
+        super().__init__(f"Score selection stopped ({reason}); the primary is not measurable")
+        self.reason = reason
+        self.records = records
+
+
 async def dispatch_selection(
-    pools: Sequence[FrozenPool], selectors: Sequence[Selector]
+    pools: Sequence[FrozenPool],
+    selectors: Sequence[Selector],
+    *,
+    max_concurrency: int = 1,
+    timeouts: Mapping[str, float] | None = None,
+    timings: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Run each selector exactly once per pool and order; grades are never read.
 
     Every adapter is constructed in a preflight pass first, so a malformed pool
-    fails before the first dispatch. Records carry no grades.
+    fails before the first dispatch. Records carry no grades. Up to
+    ``max_concurrency`` pools run at once (P track: at most four concurrent calls);
+    inside a pool the selectors and both presentation orders stay sequential, and
+    records return in the frozen pool order, byte-identical at any concurrency.
+    ``timings`` optionally collects per-call latency outside the records; latency is
+    recorded only, never a claim (preregistration §3.6).
+
+    Each call is bounded like a panel call: ``timeouts`` maps engine to seconds
+    (default the panel runner's ``CALL_TIMEOUTS``, llm 180 and jev 60; listwise is an
+    Astra call). A call past its bound, or one that ends without a response
+    (:data:`NO_RESPONSE_ERRORS`), is a transport failure (05 §4.2): it stays in the
+    order's ``replaced_attempts`` (not selected) and the same call runs exactly once
+    more. A failed replacement, or a replacement above 2% of planned calls, stays
+    selected (``failure="transport_error"``) and stops the unit: no new call starts
+    and :class:`SelectionStoppedError` carries the records. A response that breaks
+    the contract is never replaced; its order stays invalid and counts as wrong.
     """
+    from evals.benchmarks.verdict_panel_runner import (
+        CALL_TIMEOUTS,
+        MAX_CONCURRENCY,
+        SUBSTITUTION_LIMIT,
+    )
+
+    if (
+        isinstance(max_concurrency, bool)
+        or not isinstance(max_concurrency, int)
+        or not 1 <= max_concurrency <= MAX_CONCURRENCY
+    ):
+        raise ValueError(f"Score selection concurrency is 1..{MAX_CONCURRENCY}")
+    limits = dict(CALL_TIMEOUTS if timeouts is None else timeouts)
+    if set(limits) != set(CALL_TIMEOUTS) or not all(
+        type(value) in (int, float) and math.isfinite(value) and value > 0
+        for value in limits.values()
+    ):
+        raise ValueError("Score selection timeouts need finite positive seconds for llm and jev")
     _preflight(pools, selectors)
-    records: list[dict[str, Any]] = []
-    for pool in pools:
-        entries: dict[str, Any] = {}
-        for selector in selectors:
-            orders = {order: (await selector.run(pool, order)).to_json() for order in ORDERS}
-            entries[selector.name] = {
-                "type": selector.kind,
-                "engine": selector.engine,
-                "tolerances": getattr(selector, "tolerances", None),
-                "orders": orders,
-            }
-        records.append(
-            {
-                "schema": RECORD_SCHEMA,
-                "pool_id": pool.pool_id,
-                "kind": pool.kind,
-                "cluster_id": pool.cluster_id,
-                "split": pool.split,
-                # Grade-free digests only: a graded digest of four candidates is
-                # brute-forceable, so it never enters a dispatch record.
-                "frozen_pool_sha256": frozen_pool_sha256(pool),
-                "public_pool_sha256": public_pool_sha256(pool),
-                "forward_candidate_ids": [c.candidate_id for c in pool.candidates],
-                "selectors": entries,
-            }
-        )
+    semaphore = asyncio.Semaphore(max_concurrency)
+    planned = len(pools) * len(selectors) * len(ORDERS)
+    substitutions = 0
+    stop_reason: str | None = None
+
+    async def timed(
+        pool: FrozenPool, selector: Selector, order: str, attempt: int, limit: float
+    ) -> tuple[dict[str, Any] | None, str]:
+        """One dispatch; no entry, and the error type, when no response arrived."""
+        started = time.monotonic()
+        result: dict[str, Any] | None = None
+        error_type = ""
+        try:
+            result = (await asyncio.wait_for(selector.run(pool, order), timeout=limit)).to_json()
+        except TimeoutError:
+            error_type = "TimeoutError"
+        except NoResponseError as error:
+            error_type = str(error)
+        if timings is not None:
+            timings.append(
+                {
+                    "pool_id": pool.pool_id,
+                    "selector": selector.name,
+                    "order": order,
+                    "attempt": attempt,
+                    "latency_s": time.monotonic() - started,
+                }
+            )
+        return result, error_type
+
+    async def call(pool: FrozenPool, selector: Selector, order: str) -> dict[str, Any] | None:
+        """One planned call under 05 §4.2; ``None`` when the unit stopped before it."""
+        nonlocal substitutions, stop_reason
+        if stop_reason is not None:
+            return None
+        limit = limits[selector.engine or "llm"]
+        replaced: list[dict[str, Any]] = []
+        reason = "substitution_rate_exceeded"
+        entry, error_type = await timed(pool, selector, order, 0, limit)
+        if entry is None and (substitutions + 1) / planned <= SUBSTITUTION_LIMIT:
+            substitutions += 1
+            replaced.append(
+                {
+                    "failure": "transport_error",
+                    "error_type": error_type,
+                    "timeout_s": limit,
+                    "selected_for_analysis": False,
+                }
+            )
+            reason = "replacement_failed"
+            entry, error_type = await timed(pool, selector, order, 1, limit)
+        if entry is None:
+            stop_reason = stop_reason or reason
+            ids = _presentation(pool, order)[0]
+            failed = OrderResult(
+                order, ids, False, "transport_error", "", None, reason=f"no response: {error_type}"
+            )
+            entry = failed.to_json()
+        return {**entry, "replaced_attempts": replaced}
+
+    async def pool_record(pool: FrozenPool) -> dict[str, Any] | None:
+        async with semaphore:
+            entries: dict[str, Any] = {}
+            for selector in selectors:
+                orders: dict[str, Any] = {}
+                for order in ORDERS:
+                    entry = await call(pool, selector, order)
+                    if entry is not None:
+                        orders[order] = entry
+                if orders:
+                    entries[selector.name] = {
+                        "type": selector.kind,
+                        "engine": selector.engine,
+                        "tolerances": getattr(selector, "tolerances", None),
+                        "orders": orders,
+                    }
+        if not entries:
+            return None
+        return {
+            "schema": RECORD_SCHEMA,
+            "pool_id": pool.pool_id,
+            "kind": pool.kind,
+            "cluster_id": pool.cluster_id,
+            "split": pool.split,
+            # Grade-free digests only: a graded digest of four candidates is
+            # brute-forceable, so it never enters a dispatch record.
+            "frozen_pool_sha256": frozen_pool_sha256(pool),
+            "public_pool_sha256": public_pool_sha256(pool),
+            "forward_candidate_ids": [c.candidate_id for c in pool.candidates],
+            "selectors": entries,
+        }
+
+    # A harness failure in one pool cancels the others, as the sequential loop stopped.
+    async with asyncio.TaskGroup() as group:
+        tasks = [group.create_task(pool_record(pool)) for pool in pools]
+    records = [record for task in tasks if (record := task.result()) is not None]
+    if stop_reason is not None:
+        raise SelectionStoppedError(stop_reason, records)
     return records
 
 
@@ -992,7 +1191,17 @@ def _check_orders(entry: Mapping[str, Any], ids: list[str], label: str) -> dict[
     for order, expected in (("forward", ids), ("reverse", ids[::-1])):
         if orders[order].get("candidate_ids") != expected:
             raise ValueError(f"{label}: {order} presentation differs from the frozen pool")
+        if orders[order].get("failure") == "transport_error":
+            raise ValueError(
+                f"{label}: a selected transport failure stopped the unit; "
+                "the primary is not measurable (05 §4.2)"
+            )
     return orders
+
+
+def _replaced_calls(orders: Mapping[str, Any]) -> int:
+    """Timed-out calls replaced under 05 §4.2 (usage unknown, never selected)."""
+    return sum(len(orders[order].get("replaced_attempts") or ()) for order in ORDERS)
 
 
 def _pointwise_outcome(
@@ -1029,6 +1238,7 @@ def _pointwise_outcome(
         "order_consistent": None,
         "rank_agreement_tau_b": None,
         "selector_calls": len(ORDERS),
+        "replaced_calls": _replaced_calls(orders),
     }
     if forward is not None and reverse is not None:
         mean = {cid: (forward[cid] + reverse[cid]) / 2 for cid in ids}
@@ -1082,6 +1292,7 @@ def _listwise_outcome(
         ),
         "order_consistent": winners["forward"] == winners["reverse"] if valid else None,
         "selector_calls": len(ORDERS),
+        "replaced_calls": _replaced_calls(orders),
     }
 
 
@@ -1189,9 +1400,14 @@ def _ratio(numerator: Fraction | int, denominator: int) -> dict[str, Any]:
 
 
 def _usage_totals(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    """Selection cost of every planned order, failures included; unknown stays null."""
+    """Selection cost of every dispatched call, failures included; unknown stays null.
+
+    A replaced timed-out call (05 §4.2) is a dispatched call without observed usage.
+    """
     usages = [usage for row in rows for usage in row.get("order_usage", {}).values()]
-    totals: dict[str, Any] = {"calls": sum(row["selector_calls"] for row in rows)}
+    totals: dict[str, Any] = {
+        "calls": sum(row["selector_calls"] + row.get("replaced_calls", 0) for row in rows)
+    }
     for counter in ("input_tokens", "output_tokens"):
         values = [usage.get(counter) if usage else None for usage in usages]
         observed = [value for value in values if isinstance(value, int)]
@@ -1533,7 +1749,6 @@ async def self_test() -> dict[str, Any]:
     """Run the full both-order path on fakes: subscription stub + MockTransport Jev."""
     from unittest import mock
 
-    import httpx
     from core.config import settings
     from core.hooks import HookEvent, HookSystem
     from core.hooks.system import HookDispatch

@@ -231,9 +231,27 @@ pass@4 is reported. Jev Score admission reuses the V1 parser bounds:
 `sum_tolerance` and the §4.1 `score_tolerance` are selector parameters (strict by
 default), recorded in each record and receipt beside `strict_admitted`, and every
 order records the observed |score − Σ level·p| from which U0b derives the frozen
-tolerance. Selection cost counts every planned order, failures included, and
-keeps unreported usage null. `python -m evals.benchmarks.score_selection
-self-test` exercises the whole path on fakes with zero model dispatches.
+tolerance. The deviation is exact decimal arithmetic on the numbers as written in
+the raw answer, kept rounded up at 1e-15, so the §4.1 ceiling to 0.01 of an exact
+0.03 or 0.04 stays 0.03 or 0.04 (binary floats moved it one step). Selection cost counts every planned order, failures included, and
+keeps unreported usage null. `dispatch_selection(..., max_concurrency=4)` runs up
+to four pools at once for the P track's four-call limit (default 1); a pool's
+selectors and both orders stay sequential, call IDs derive from (selector, pool,
+order), and records return in frozen pool order, byte-identical at any
+concurrency. Per-call latency goes to an optional `timings` list outside the
+records and supports no latency claim. Each call has the panel runner's bound,
+`timeouts={"llm": 180.0, "jev": 60.0}` by default (listwise is an Astra call). A
+call past its bound, or one that ends without a response (connection failure,
+transport exception or HTTP error status, including the OpenAI SDK forms, observed
+below `judge_candidates` by an execution middleware), is a transport failure
+(05 §4.2): it stays in the order's `replaced_attempts`, unselected, and the same
+call runs exactly once more. A response that breaks the contract (parse, schema,
+probability sum) is never replaced and stays a wrong answer, as does its fallback. A failed replacement, or a replacement above 2% of planned calls, stays
+selected as `transport_error`, no new call starts, and `SelectionStoppedError`
+carries the records; scoring refuses them because the primary is not measurable.
+Selection cost counts replaced calls with unknown usage. `python -m
+evals.benchmarks.score_selection self-test` exercises the whole path on fakes with
+zero model dispatches.
 
 ### Noul 2×2 E2E cells
 

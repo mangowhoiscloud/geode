@@ -122,7 +122,13 @@ functional change.
   Reports use oracle-best selection, regret, pool-random@1, oracle-coverage@4,
   selected success and gap closed (not-measurable at a zero denominator), never
   an IID pass@k label. Jev Score admission takes explicit, recorded sum and
-  expectation tolerances, and selection cost keeps unknown usage null.
+  expectation tolerances, and selection cost keeps unknown usage null. Pools can
+  dispatch up to four at a time with records byte-identical to sequential runs;
+  each call has the panel timeout, and a call that times out or ends without a
+  response is replaced once or stops the unit as a transport failure, while a
+  response that breaks the contract stays a wrong answer. The Score expectation deviation behind the
+  frozen tolerance is exact decimal, so an exact 0.03 or 0.04 no longer freezes
+  one 0.01 step higher.
 - Add Noul 2×2 end-to-end cells on the single existing candidate intervention:
   a runtime rule oracle recomputes both conditions from the judged state,
   planned gold must match each cell, labels stay outside payloads, and trial
