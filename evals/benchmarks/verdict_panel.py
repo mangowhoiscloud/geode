@@ -67,14 +67,27 @@ def _jsonl(rows: Iterable[Mapping[str, Any]]) -> str:
     return "".join(_canonical(row) + "\n" for row in rows)
 
 
-def _tool_call_id(state_id: str, call_id: str) -> str:
+def _tool_call_id(state_key: str, call_key: str) -> str:
     # Opaque: the judge never sees state, quad or cell identifiers.
-    return "tool-" + _sha256_text(state_id + "␟" + call_id)[:12]
+    return "tool-" + _sha256_text(state_key + "␟" + call_key)[:12]
 
 
-def render_state(cluster: Mapping[str, Any], state: Mapping[str, Any]) -> dict[str, Any]:
-    """Return the exact ``_VerificationState`` the matched verifier receives."""
+def render_state(
+    cluster: Mapping[str, Any], state: Mapping[str, Any], *, id_alias: str | None = None
+) -> dict[str, Any]:
+    """Return the exact ``_VerificationState`` the matched verifier receives.
+
+    Tool-call IDs are opaque digests. For a sealed split, ``id_alias`` is the state's
+    random public alias: IDs then derive from that alias and each call's position
+    only, so no public byte is a function of an author-chosen state or call ID
+    (a public ``cluster_id`` would otherwise let a guessed original ID be confirmed).
+    """
     from evals.benchmarks.decision_handoff_runtime import INBOX_SYSTEM, inbox_request
+
+    def tool_id(index: int, author_call_id: str) -> str:
+        if id_alias is not None:
+            return _tool_call_id(id_alias, f"t{index + 1}")
+        return _tool_call_id(state["state_id"], author_call_id)
 
     if state["kind"] == "text":
         text = state["text_state"]
@@ -84,7 +97,7 @@ def render_state(cluster: Mapping[str, Any], state: Mapping[str, Any]) -> dict[s
             "candidate_output": text["candidate_output"],
             "tool_observations": [
                 {
-                    "tool_call_id": _tool_call_id(state["state_id"], f"t{index + 1}"),
+                    "tool_call_id": tool_id(index, f"t{index + 1}"),
                     "tool": row["tool"],
                     "input": row["input"],
                     "result": row["result"],
@@ -100,7 +113,7 @@ def render_state(cluster: Mapping[str, Any], state: Mapping[str, Any]) -> dict[s
         "candidate_output": state["candidate_text"] or answer_text,
         "tool_observations": [
             {
-                "tool_call_id": _tool_call_id(state["state_id"], call["call_id"]),
+                "tool_call_id": tool_id(index, call["call_id"]),
                 "tool": LOOKUP_TOOL,
                 "input": {"items": [dict(entry) for entry in call["items"]]},
                 "result": {
@@ -112,7 +125,7 @@ def render_state(cluster: Mapping[str, Any], state: Mapping[str, Any]) -> dict[s
                     }
                 },
             }
-            for call in state["lookups"]
+            for index, call in enumerate(state["lookups"])
         ],
     }
 
@@ -534,15 +547,20 @@ def public_pools(
     """Drop grades from Score pools and alias their IDs; the digest covers public fields.
 
     A graded digest beside public texts would leak grades: four candidates have only
-    twelve grade assignments, so the graded hash is brute-forceable.
+    twelve grade assignments, so the graded hash is brute-forceable. The public
+    forward order is keyed by the aliases too: an order keyed by author IDs would
+    let a guessed original ID be confirmed against the published sequence.
     """
     public = []
     for pool in pools:
         pool_id = aliases[pool["pool_id"]]
-        candidates = [
-            {"candidate_id": aliases[row["candidate_id"]], "text": row["text"]}
-            for row in pool["candidates"]
-        ]
+        candidates = sorted(
+            (
+                {"candidate_id": aliases[row["candidate_id"]], "text": row["text"]}
+                for row in pool["candidates"]
+            ),
+            key=lambda row: pool_position_key(pool_id, row["candidate_id"]),
+        )
         public.append(
             {
                 "pool_id": pool_id,
@@ -577,6 +595,35 @@ def sealed_aliases(
             used.add(alias)
             aliases[original] = alias
     return aliases
+
+
+def _public_state(
+    row: Mapping[str, Any], aliases: Mapping[str, str], members: Sequence[ClusterBuild]
+) -> dict[str, Any]:
+    """Re-render one sealed-split state under its alias; gold is untouched."""
+    source = next(
+        (build.cluster, state)
+        for build in members
+        for state in build.cluster["states"]
+        if state["state_id"] == row["state_id"]
+    )
+    alias = aliases[row["state_id"]]
+    rendered = render_state(*source, id_alias=alias)
+    encoded = _canonical(rendered)
+    leaks = _leak_problems(source[0], source[1], encoded)
+    if leaks or any(
+        _tool_call_id(source[1]["state_id"], key) in encoded
+        for key in [f"t{index + 1}" for index in range(len(rendered["tool_observations"]))]
+        + [call["call_id"] for call in source[1].get("lookups", [])]
+    ):
+        raise ValueError(f"{alias}: public state still carries an author-derived identifier")
+    return {
+        **row,
+        "state_id": alias,
+        "quad_id": aliases.get(row["quad_id"]) if row["quad_id"] else None,
+        "state": rendered,
+        "state_sha256": _digest(rendered),
+    }
 
 
 def _write_text(path: Path, text: str) -> str:
@@ -634,14 +681,7 @@ def write_outputs(
         if withheld:
             aliases = sealed_aliases(states, alias_rng)
             public_states = sorted(
-                (
-                    {
-                        **row,
-                        "state_id": aliases[row["state_id"]],
-                        "quad_id": aliases.get(row["quad_id"]) if row["quad_id"] else None,
-                    }
-                    for row in states
-                ),
+                (_public_state(row, aliases, members) for row in states),
                 key=lambda r: r["state_id"],
             )
             entry["states_sha256"] = _write_text(

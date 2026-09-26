@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import random
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -498,9 +499,14 @@ def test_public_outputs_never_carry_test_labels(tmp_path: Path) -> None:
     )
     for row in public:
         graded_row = next(pool for pool in graded if pool["pool_id"] == aliases[row["pool_id"]])
-        assert [aliases[c["candidate_id"]] for c in row["candidates"]] == [
+        assert sorted(aliases[c["candidate_id"]] for c in row["candidates"]) == sorted(
             c["candidate_id"] for c in graded_row["candidates"]
-        ]
+        )
+        # The public forward order is keyed by the aliases, never by author IDs.
+        public_ids = [c["candidate_id"] for c in row["candidates"]]
+        assert public_ids == sorted(
+            public_ids, key=lambda cid: panel.pool_position_key(row["pool_id"], cid)
+        )
     for row in public:
         assert all(set(candidate) == {"candidate_id", "text"} for candidate in row["candidates"])
         assert row["pool_sha256"] == panel._digest(
@@ -508,6 +514,72 @@ def test_public_outputs_never_carry_test_labels(tmp_path: Path) -> None:
         )
     selection_pools = public_text["pools.selection.jsonl"]
     assert '"grade"' in selection_pools  # the unsealed split keeps grades for τ-free Score use
+
+
+def _renamed_ids(cluster: dict[str, Any]) -> dict[str, Any]:
+    """Order-preserving new author IDs for states, quads and lookup calls."""
+    renamed = copy.deepcopy(cluster)
+    prefix = renamed["cluster_id"] + "--"
+    for state in renamed["states"]:
+        state["state_id"] = prefix + "z" + state["state_id"].removeprefix(prefix)
+        if state["quad_id"]:
+            state["quad_id"] = prefix + "q" + str(int(state["quad_id"][-1]) + 5)
+        for call in state.get("lookups") or []:
+            call["call_id"] = f"t{int(call['call_id'][1:]) + 40}"
+    return renamed
+
+
+def _sealed_build(root: Path, cluster: dict[str, Any], seed: int) -> tuple[Path, Path]:
+    _write(root / "panel", cluster, "test")
+    out, sealed = root / "out", root / "withheld"
+    panel.write_outputs(
+        panel.build_panel(root / "panel"), out, sealed=sealed, alias_rng=random.Random(seed)
+    )
+    return out, sealed
+
+
+def test_sealed_tool_call_ids_derive_from_aliases_not_author_ids(tmp_path: Path) -> None:
+    held = _as_test_split(_example())
+    out, sealed = _sealed_build(tmp_path, held, seed=7)
+    text = (out / "states.test.jsonl").read_text()
+    # Every digest an attacker could form from author state and call IDs is absent.
+    author = {
+        panel._tool_call_id(state["state_id"], key)
+        for state in held["states"]
+        for key in [f"t{index}" for index in range(1, 50)]
+        + [call["call_id"] for call in state.get("lookups") or []]
+    }
+    assert not any(value in text for value in author)
+    aliases = json.loads((sealed / "aliases.test.json").read_text())
+    by_original = {state["state_id"]: state for state in held["states"]}
+    for row in map(json.loads, text.splitlines()):
+        ids = [obs["tool_call_id"] for obs in row["state"]["tool_observations"]]
+        assert ids == [panel._tool_call_id(row["state_id"], f"t{i + 1}") for i in range(len(ids))]
+        assert row["state_sha256"] == panel._digest(row["state"])
+        # Apart from the opaque IDs, the judge input equals the author-rendered state.
+        original = panel.render_state(held, by_original[aliases[row["state_id"]]])
+        for observation in (*original["tool_observations"], *row["state"]["tool_observations"]):
+            observation.pop("tool_call_id")
+        assert row["state"] == original
+
+
+def test_public_test_outputs_ignore_author_ids_and_gold_is_unchanged(tmp_path: Path) -> None:
+    held = _as_test_split(_example())
+    first = _sealed_build(tmp_path / "author", held, seed=11)
+    second = _sealed_build(tmp_path / "renamed", _renamed_ids(held), seed=11)
+    for name in ("states.test.jsonl", "pools.test.jsonl"):
+        assert (first[0] / name).read_bytes() == (second[0] / name).read_bytes(), name
+
+    def gold_by_alias(out: Path, sealed: Path) -> dict[str, Any]:
+        aliases = {v: k for k, v in json.loads((sealed / "aliases.test.json").read_text()).items()}
+        rows = map(json.loads, (sealed / "gold.test.jsonl").read_text().splitlines())
+        return {aliases[row.pop("state_id")]: row for row in rows}
+
+    assert gold_by_alias(*first) == gold_by_alias(*second)
+    # Gold and graded pools do not depend on the alias draw or on rendering.
+    other = _sealed_build(tmp_path / "reseeded", held, seed=12)
+    for name in ("gold.test.jsonl", "pools-graded.test.jsonl"):
+        assert (first[1] / name).read_bytes() == (other[1] / name).read_bytes(), name
 
 
 def test_unseal_reports_identical_gold_under_a_changed_oracle_digest(tmp_path: Path) -> None:

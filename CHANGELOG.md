@@ -239,6 +239,13 @@ functional change.
 
 ### Fixed
 
+- Stop the sealed verdict-panel test split from exposing author IDs. Public
+  tool-call IDs were digests of the original state and call IDs, and the public
+  Score pool order was keyed by them, so a public cluster ID let a guessed
+  original ID be confirmed. Both now derive from the random public aliases and
+  call positions only. Sealed gold, graded pools and the alias map are
+  byte-identical; the public test states and pools change, so a held-out
+  rebuild is required.
 - Pass Anthropic structured-output schemas through the SDK's
   `transform_schema` before sending `output_config.format`. The API rejected
   the turn-verification judge schema with HTTP 400 because number

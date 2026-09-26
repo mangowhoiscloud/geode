@@ -102,6 +102,9 @@ states, gold, controlled Score pools and a split manifest whose digest seeds
 ordering and bootstrap resampling. For the sealed test split, gold, graded pools
 and a random alias map exist only in the sealed directory; public states and
 ungraded pools carry opaque aliases, and no public digest covers graded content.
+Public tool-call IDs and the public pool order derive from those aliases and call
+positions only, so a public `cluster_id` cannot confirm a guessed author state or
+call ID; gold and graded pools are unchanged by this rendering.
 The rule oracle lives in its own hashed module, so builder changes do not alter
 its digest; `unseal` must reproduce the sealed gold digest exactly and reports the
 oracle digest separately.
