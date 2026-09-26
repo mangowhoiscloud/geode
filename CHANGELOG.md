@@ -114,6 +114,15 @@ functional change.
 
 ### Added
 
+- Add the Score-S selection harness for frozen best-of pools. Every selector
+  runs once per pool in both presentation orders at the existing judge
+  boundary; dispatch records carry no grades, so sealed pools score only after
+  unsealing through the alias map. Exact ties use the preregistered hash rule,
+  and an invalid order or `judge_error` fallback counts as a wrong selection.
+  Reports use oracle-best selection, regret, pool-random@1, oracle-coverage@4,
+  selected success and gap closed (not-measurable at a zero denominator), never
+  an IID pass@k label. Jev Score admission takes explicit, recorded sum and
+  expectation tolerances, and selection cost keeps unknown usage null.
 - Add offline Harbor handoff evidence tools for audit and publication. Derived
   call, trial, pair and summary tables keep invalid cells, unknown usage and
   null latency, and keep the Astra subscription API-equivalent estimate, Jev

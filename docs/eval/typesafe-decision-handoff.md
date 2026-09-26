@@ -51,7 +51,7 @@ retry layer or production candidate selector is introduced.
 | Decision boundary | Matched input and output | Code-owned consequence |
 |---|---|---|
 | Choice intent/target helper | Existing complete-source inbox and exact candidate IDs | The same Astra root consumes labels before selecting a tool |
-| [Score candidate diagnostic](../../evals/benchmarks/decision_candidate.py) | One frozen pool of 2–4 complete text/plan candidates and a shared four-level task-fulfillment rubric | Common maximum score selects a candidate; exact ties keep input order. A judge-error fallback is not an admitted selection |
+| [Score candidate diagnostic](../../evals/benchmarks/decision_candidate.py) | One frozen pool of 2–4 complete text/plan candidates and a shared four-level task-fulfillment rubric | Common maximum score selects a candidate; exact ties take the smallest `sha256(pool_id ␟ candidate_id)` (content hash without IDs), never input order. A judge-error fallback is content-addressed and is not an admitted selection |
 | Noul matched final verification | Two conditions on the same task/candidate/observations: `has_contradiction` and `missing_evidence` | Code prioritizes contradiction, then missing evidence, then supported. If both conditions hold, both fixed repair hints are retained |
 
 Score's Astra arm returns a bounded numeric level; Jev returns the expected
@@ -138,16 +138,55 @@ flag. Omission retains the historical Choice contract. Contract, runtime outcome
 native answer, boolean projection and feedback digest must agree; changing the
 primitive after execution fails admission.
 
-Score is currently an eval-only request middleware at `candidate_judge`, not a
-Harbor workload runner. Generate read-only candidates once through existing
-workers, freeze their complete text and child lineage, and use the same pool in
-both arms. The runtime's 2,000-character candidate excerpt bound must not hide
-part of a candidate. Workers share a workspace, so do not concurrently mutate
-it while generating candidates. Record generation, selector and root continuation
+Score is an eval-only request middleware at `candidate_judge`, not a Harbor
+workload runner; the Score-S harness below drives it. Generate read-only
+candidates once through existing workers, freeze their complete text and child
+lineage, and use the same pool in both arms. The runtime's 2,000-character
+candidate excerpt bound must not hide part of a candidate. Workers share a
+workspace, so do not concurrently mutate it while generating candidates. Record generation, selector and root continuation
 costs separately; root consumption and a task-owned oracle remain required.
 The surrounding runtime can retry transport failures. A single-dispatch
 diagnostic must freeze the existing `llm_max_retries=1` setting and verify its
 attempt inventory; a no-retry adapter alone does not establish this property.
+
+### Score-S harness: frozen pools in both orders
+
+[`score_selection.py`](../../evals/benchmarks/score_selection.py) runs the Score
+selection units (U0b, U4, U5p/U5s) at the existing judge boundary, without Harbor
+or a root loop. Dispatch and scoring are separate phases. `dispatch_selection`
+runs every selector exactly once per pool and presentation order (forward is the
+frozen order, then reverse) through `judge_candidates`, with the matched adapter
+as task-local middleware; its records carry no grades, so a sealed pool is
+dispatched under its public aliases. `score_selection` joins model-free grades
+after unsealing, through the sealed alias map or graded IDs, and
+`summarize_outcomes` reports explicit numerators and denominators. Natural pools
+come from one `delegate_task(best_of=4)` payload frozen by `freeze_natural_pool`,
+graded by the existing inbox oracle's per-item matches before any selection.
+
+Pointwise selection is the argmax of the mean of both orders' scores; exact ties
+take the smallest `sha256(pool_id ␟ candidate_id)` over the dispatched IDs. If
+either order is invalid — a `judge_error` fallback, or a missing or rejected
+receipt — the pool counts as wrong, even when the runtime's content-addressed
+fallback candidate would pass the task oracle. The operational listwise
+`select_candidate` reference averages its per-order hits.
+
+Reported names follow preregistration v1 §3.2: oracle-best selection over
+planned pools (invalid is wrong), regret over valid selections, order consistency
+and Kendall τ-b between orders, and a per-kind acceptance block with
+pool-random@1, oracle-coverage@4, selected success and gap closed =
+(selected − pool-random@1) / (oracle-coverage@4 − pool-random@1). Gap closed is
+not-measurable when its denominator is 0 and is reported when negative.
+Acceptance is the independent task oracle's success condition: a controlled
+candidate whose rule-oracle verdict is supported (grade 3), or a natural
+candidate whose every inbox item matches; a partial grade or "best in pool" is
+never acceptance. The candidate width 4 is not an IID repetition count, so no
+pass@4 is reported. Jev Score admission reuses the V1 parser bounds:
+`sum_tolerance` and the §4.1 `score_tolerance` are selector parameters (strict by
+default), recorded in each record and receipt beside `strict_admitted`, and every
+order records the observed |score − Σ level·p| from which U0b derives the frozen
+tolerance. Selection cost counts every planned order, failures included, and
+keeps unreported usage null. `python -m evals.benchmarks.score_selection
+self-test` exercises the whole path on fakes with zero model dispatches.
 
 ### Rejected decisions still have call evidence
 

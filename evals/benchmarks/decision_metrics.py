@@ -14,6 +14,7 @@ import random
 import statistics
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Any
 
 NLL_FLOOR = 1e-6
@@ -494,25 +495,93 @@ def score_regret(best_grade: int, selected_grade: int | None) -> int | None:
     return None if selected_grade is None else best_grade - selected_grade
 
 
-def natural_pool_summary(pools: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    """pass@1, oracle@N, selected, gap-closed and the non-discriminating share (05 §3.2).
+SCORE_POOL_WIDTH = 4  # best_of=4 candidates per selection step (MAX_BEST_OF)
+NOT_MEASURABLE = "not-measurable"
 
-    Each pool row holds ``accepted`` flags per candidate and ``selected_accepted``
-    (``None`` when the selection was invalid or a fallback).
-    """
-    if not pools:
-        return {"pools": 0}
-    pass1 = math.fsum(sum(p["accepted"]) / len(p["accepted"]) for p in pools) / len(pools)
-    oracle = sum(any(p["accepted"]) for p in pools) / len(pools)
-    selected = sum(p["selected_accepted"] is True for p in pools) / len(pools)
-    gap = oracle - pass1
+
+def _exact_number(value: Fraction) -> int | float:
+    return int(value) if value.denominator == 1 else float(value)
+
+
+def _exact_ratio(numerator: Fraction, denominator: int) -> dict[str, Any]:
     return {
-        "pools": len(pools),
-        "pass_at_1": pass1,
-        "oracle_at_n": oracle,
-        "selected": selected,
-        "gap_closed": (selected - pass1) / gap if gap > 0 else None,
-        "non_discriminating": sum(len(set(p["accepted"])) == 1 for p in pools) / len(pools),
+        "value": float(numerator / denominator) if denominator else None,
+        "numerator": _exact_number(numerator),
+        "denominator": denominator,
+    }
+
+
+def _acceptance_value(value: bool | float | None) -> Fraction:
+    """A selection's acceptance in [0, 1]; ``None`` (invalid or fallback) counts as 0."""
+    if value is None or value is False:
+        return Fraction(0)
+    if value is True:
+        return Fraction(1)
+    if isinstance(value, (int, float)) and math.isfinite(value) and 0 <= value <= 1:
+        return Fraction(value)
+    raise ValueError("a selection acceptance value must lie in [0, 1]")
+
+
+def score_acceptance_summary(
+    acceptable: Sequence[Sequence[bool]],
+    selected: Mapping[str, Sequence[bool | float | None]],
+    *,
+    planned_width: int = SCORE_POOL_WIDTH,
+) -> dict[str, Any]:
+    """Score auxiliary acceptance metrics over planned pools (05 v1 §3.2, 06 §5).
+
+    ``acceptable[i]`` holds one flag per candidate submitted to pool ``i``'s
+    selection, from the independent task oracle's frozen acceptance rule (never a
+    partial grade or "best in pool"). ``selected[name][i]`` is that selector's
+    acceptance on pool ``i``: 0 or 1 for a pointwise pick, the mean of the orders for
+    the listwise reference; ``None`` is an invalid or fallback selection and counts
+    as 0 even when the fallback candidate would pass the task oracle.
+
+    - pool-random@1 = mean over pools of acceptable candidates / pool width;
+    - oracle-coverage@w = share of pools with at least one acceptable candidate;
+    - selected success = mean selected acceptance;
+    - gap closed = (selected − pool-random@1) / (oracle-coverage@w − pool-random@1),
+      not-measurable when the denominator is 0; a negative value is reported.
+
+    The candidate width ``w`` is not an IID repetition count, so none of these is a
+    pass@k estimate.
+    """
+    pools = len(acceptable)
+    if pools == 0:
+        raise ValueError("Score acceptance needs at least one planned pool")
+    if any(not flags for flags in acceptable):
+        raise ValueError("every planned pool needs its candidates' acceptance flags")
+    random_sum = sum((Fraction(sum(flags), len(flags)) for flags in acceptable), Fraction(0))
+    coverage_sum = Fraction(sum(any(flags) for flags in acceptable))
+    headroom = coverage_sum - random_sum
+    widths: dict[str, int] = {}
+    for flags in acceptable:
+        widths[str(len(flags))] = widths.get(str(len(flags)), 0) + 1
+    selectors: dict[str, Any] = {}
+    for name, values in selected.items():
+        if len(values) != pools:
+            raise ValueError(f"{name}: selection values must cover every planned pool")
+        chosen = sum((_acceptance_value(value) for value in values), Fraction(0))
+        gain = chosen - random_sum
+        selectors[name] = {
+            "selected_success": _exact_ratio(chosen, pools),
+            "gap_closed": {
+                "value": float(gain / headroom) if headroom else NOT_MEASURABLE,
+                # Pool counts cancel: both terms are sums over the same planned pools.
+                "numerator": _exact_number(gain) if headroom else None,
+                "denominator": _exact_number(headroom) if headroom else None,
+            },
+        }
+    return {
+        "pools": pools,
+        "planned_width": planned_width,
+        "pool_widths": dict(sorted(widths.items())),
+        "pool_random_at_1": _exact_ratio(random_sum, pools),
+        f"oracle_coverage_at_{planned_width}": _exact_ratio(coverage_sum, pools),
+        "non_discriminating_acceptance": _exact_ratio(
+            Fraction(sum(len(set(flags)) == 1 for flags in acceptable)), pools
+        ),
+        "selectors": selectors,
     }
 
 

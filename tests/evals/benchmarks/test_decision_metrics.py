@@ -254,18 +254,41 @@ def test_score_and_listwise_summaries() -> None:
     assert (top1.numerator, top1.denominator) == (1, 3)
     assert m.score_regret(3, 2) == 1 and m.score_regret(3, None) is None
     assert m.mean_order_hit([[True, False], [True, True], [False, False]]) == pytest.approx(0.5)
-    summary = m.natural_pool_summary(
-        [
-            {"accepted": [True, False, False, False], "selected_accepted": True},
-            {"accepted": [True, True, True, True], "selected_accepted": True},
-            {"accepted": [False, False, False, False], "selected_accepted": None},
-        ]
+    acceptable = [
+        [True, False, False, False],
+        [True, True, True, True],
+        [False, False, False, False],
+    ]
+    summary = m.score_acceptance_summary(
+        acceptable,
+        {
+            "pointwise": [True, True, None],
+            "fallback": [None, None, None],
+            "listwise": [0.5, 1.0, 0.0],
+        },
     )
-    assert summary["pass_at_1"] == pytest.approx((0.25 + 1 + 0) / 3)
-    assert summary["oracle_at_n"] == pytest.approx(2 / 3)
-    assert summary["selected"] == pytest.approx(2 / 3)
-    assert summary["gap_closed"] == pytest.approx((2 / 3 - 1.25 / 3) / (2 / 3 - 1.25 / 3))
-    assert summary["non_discriminating"] == pytest.approx(2 / 3)
+    # 05 v1 §3.2 / 06 §5 names; the candidate width is not an IID repetition count.
+    assert "pass_at_1" not in summary and not any("pass" in key for key in summary)
+    assert summary["pool_random_at_1"]["value"] == pytest.approx((0.25 + 1 + 0) / 3)
+    assert summary["oracle_coverage_at_4"] == {"value": 2 / 3, "numerator": 2, "denominator": 3}
+    assert summary["pool_widths"] == {"4": 3}
+    assert summary["non_discriminating_acceptance"]["numerator"] == 2
+    pointwise = summary["selectors"]["pointwise"]
+    assert pointwise["selected_success"]["value"] == pytest.approx(2 / 3)
+    assert pointwise["gap_closed"]["value"] == pytest.approx((2 - 1.25) / (2 - 1.25))
+    # A failed selector's fallback never scores, and its gap closed is reported negative.
+    fallback = summary["selectors"]["fallback"]
+    assert fallback["selected_success"]["numerator"] == 0
+    assert fallback["gap_closed"]["value"] == pytest.approx(-1.25 / 0.75)
+    assert summary["selectors"]["listwise"]["gap_closed"]["value"] == pytest.approx(0.25 / 0.75)
+    flat = m.score_acceptance_summary([[True, True], [False, False]], {"s": [True, None]})
+    assert flat["selectors"]["s"]["gap_closed"] == {
+        "value": "not-measurable",
+        "numerator": None,
+        "denominator": None,
+    }
+    with pytest.raises(ValueError, match="every planned pool"):
+        m.score_acceptance_summary(acceptable, {"short": [True]})
 
 
 def test_receipt_adapters_keep_inadmissible_output_as_a_wrong_item() -> None:
