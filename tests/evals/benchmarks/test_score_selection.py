@@ -148,6 +148,9 @@ def _dispatch(
     timeouts: dict[str, float] | None = None,
     jev_failures: Counter[str] | None = None,
     jev_status: int = 503,
+    jev_body: dict[str, Any] | None = None,
+    jev_headers: dict[str, str] | None = None,
+    sleep: Any = None,
 ) -> _Run:
     monkeypatch.setattr(settings, "llm_max_retries", 1)
     subscription = (subscription_type or _Subscription)(quality, pick)
@@ -163,7 +166,9 @@ def _dispatch(
         presented = list(body["state"]["candidates"].values())
         if jev_failures is not None and jev_failures[presented[0]] > 0:
             jev_failures[presented[0]] -= 1  # an HTTP error status: no model answer
-            return httpx.Response(jev_status, json={"error": "synthetic"})
+            return httpx.Response(
+                jev_status, json=jev_body or {"error": "synthetic"}, headers=jev_headers
+            )
         answers = {
             f"c{index}": _score_answer(min(3.0, quality[text] + (jev_bias if index == 0 else 0)))
             for index, text in enumerate(presented)
@@ -194,6 +199,7 @@ def _dispatch(
                 max_concurrency=max_concurrency,
                 timings=timings,
                 timeouts=timeouts,
+                **({"sleep": sleep} if sleep is not None else {}),
             )
 
     try:
@@ -1409,18 +1415,32 @@ def test_call_timeouts_need_finite_positive_seconds_per_engine(timeouts: dict[st
 _SDK_REQUEST = httpx.Request("POST", "https://codex.invalid/responses")
 
 
-def _sdk(error: type[openai.APIStatusError], status: int) -> openai.APIStatusError:
-    return error("synthetic", response=httpx.Response(status, request=_SDK_REQUEST), body=None)
+def _sdk(
+    error: type[openai.APIStatusError],
+    status: int,
+    body: object = None,
+    headers: dict[str, str] | None = None,
+) -> openai.APIStatusError:
+    response = httpx.Response(status, request=_SDK_REQUEST, headers=headers)
+    return error("synthetic", response=response, body=body)
+
+
+_QUOTA = {"error": {"code": "insufficient_quota"}}
 
 
 @pytest.mark.parametrize(
     ("names", "cause", "status", "failure"),
     [
         (("jev",), None, 401, "harness_error"),
-        (("jev",), None, 429, "quota_exhausted"),
+        (("jev",), None, 429, "quota_exhausted"),  # with an insufficient_quota code
         (("jev",), None, 400, "harness_error"),
         (("astra",), BillingError("weekly limit reached", provider="openai"), 0, "quota_exhausted"),
-        (("listwise",), _sdk(openai.RateLimitError, 429), 0, "quota_exhausted"),
+        (
+            ("listwise",),
+            _sdk(openai.RateLimitError, 429, {"type": "usage_limit_reached"}),
+            0,
+            "quota_exhausted",
+        ),
         (("listwise",), _sdk(openai.AuthenticationError, 401), 0, "harness_error"),
     ],
 )
@@ -1443,6 +1463,7 @@ def test_quota_credential_and_request_failures_stop_the_unit_unreplaced(
             timeouts=_FAST,
             jev_failures=None if cause else Counter({_shown(pools, 24, "reverse"): 1}),
             jev_status=status,
+            jev_body=_QUOTA if status == 429 else None,
         )
     assert stopped.value.reason == failure and len(stopped.value.records) == 25
     entry = stopped.value.records[-1]["selectors"][names[0]]["orders"]["reverse"]
@@ -1458,3 +1479,88 @@ def test_a_judge_that_never_reached_a_model_is_a_harness_defect() -> None:
         watch.check("judge call failed: resolver unavailable")
     watch.executed = True  # a call answered and the judge rejected it: a wrong answer
     watch.check("judge declined the select_candidate tool")
+
+
+class _Waits(list[float]):
+    """Records requested waits instead of sleeping."""
+
+    async def __call__(self, seconds: float) -> None:
+        self.append(seconds)
+
+
+@pytest.mark.parametrize(
+    ("names", "cause", "headers", "wait"),
+    [
+        (("jev",), None, {"retry-after": "7"}, 7.0),
+        (("jev",), None, None, 30.0),  # no Retry-After
+        (
+            ("listwise",),
+            _sdk(openai.RateLimitError, 429, headers={"retry-after": "600"}),
+            None,
+            120.0,
+        ),
+        (("astra",), _sdk(openai.RateLimitError, 429, headers={"retry-after": "12"}), None, 12.0),
+    ],
+)
+def test_rate_limited_selector_calls_wait_then_are_replaced_once(
+    monkeypatch: pytest.MonkeyPatch,
+    names: tuple[str],
+    cause: Exception | None,
+    headers: dict[str, str] | None,
+    wait: float,
+) -> None:
+    pools = _two_candidate_pools(25)  # 50 planned calls: one replacement is exactly 2%
+    _hang(pools, 3, "forward", 1 if cause else 0, cause)
+    waits = _Waits()
+    timings: list[dict[str, Any]] = []
+    run = _dispatch(
+        monkeypatch,
+        pools,
+        _quality(pools),
+        names=names,
+        subscription_type=_Hanging,
+        timeouts=_FAST,
+        timings=timings,
+        jev_failures=None if cause else Counter({_shown(pools, 3, "forward"): 1}),
+        jev_status=429,
+        jev_headers=headers,
+        sleep=waits,
+    )
+    assert waits == [wait]
+    forward = run.records[3]["selectors"][names[0]]["orders"]["forward"]
+    assert forward["valid"] is True
+    assert forward["replaced_attempts"] == [
+        {
+            "failure": "rate_limited",
+            "error_type": "HTTPStatusError" if cause is None else "RateLimitError",
+            "timeout_s": _FAST["jev" if names == ("jev",) else "llm"],
+            "retry_wait_s": wait,
+            "selected_for_analysis": False,
+        }
+    ]
+    # The wait lies between the two timed attempts, never inside a latency.
+    assert [row["attempt"] for row in timings].count(1) == 1
+    assert max(row["latency_s"] for row in timings) < wait
+
+
+def test_a_second_rate_limit_on_the_replacement_stops_the_selection_unit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pools = _two_candidate_pools(25)
+    waits = _Waits()
+    with pytest.raises(ss.SelectionStoppedError, match="primary is not measurable") as stopped:
+        _dispatch(
+            monkeypatch,
+            pools,
+            _quality(pools),
+            names=("jev",),
+            timeouts=_FAST,
+            jev_failures=Counter({_shown(pools, 24, "reverse"): 2}),
+            jev_status=429,
+            sleep=waits,
+        )
+    assert stopped.value.reason == "replacement_failed" and waits == [30.0]
+    failed = stopped.value.records[-1]["selectors"]["jev"]["orders"]["reverse"]
+    assert failed["failure"] == "rate_limited" and len(failed["replaced_attempts"]) == 1
+    with pytest.raises(ValueError, match="infrastructure failure"):
+        ss.score_selection(stopped.value.records, pools)

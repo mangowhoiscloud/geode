@@ -135,9 +135,11 @@ route failures stop it as selected invalid attempts. One table,
 `call_failure_class`, classifies a call that raised for the panel runner and the
 Score-S harness alike: timeouts, connection failures (httpx or the OpenAI SDK) and
 HTTP 408 or 5xx are transport failures; `BillingError`, a billing-fatal SDK error,
-HTTP 402 and every 429 are quota exhaustion (the frozen rules define no transient
-rate limit); HTTP 401 and 403, 400 and any other request defect or exception are
-harness errors. E2E keeps its no-replacement rule. An optional host Jev spend guard is consulted before every Jev call.
+HTTP 402 and a 429 whose code names a quota, billing, usage or plan limit are quota
+exhaustion; any other 429 is rate limited and, after waiting its Retry-After (30 s
+without one, at most 120 s, outside every measured latency), is replaced once like
+a transport failure under the same 2% limit; HTTP 401 and 403, 400 and any other
+request defect or exception are harness errors. E2E keeps its no-replacement rule. An optional host Jev spend guard is consulted before every Jev call.
 A Choice-only unit (U3, X1a, X1) keys its run ID and output directory by `choice`
 alone and rotates the two Choice cells (even states Astra first, odd states Jev
 first); authored and external splits bind through the same `state_sha256` row
@@ -270,9 +272,10 @@ records and supports no latency claim. Each call has the panel runner's bound,
 call past its bound, or one that raised (an execution middleware observes it below
 `judge_candidates`, which would otherwise fall back), takes the panel runner's
 `call_failure_class`. A transport failure (05 §4.2) stays in the order's
-`replaced_attempts`, unselected, and the same call runs exactly once more; quota
-exhaustion and harness defects, including a judge that never reached a model, are
-selected at once and stop the unit. A response that breaks the contract (parse, schema,
+`replaced_attempts`, unselected, and the same call runs exactly once more, as does
+a rate-limited call after its recorded `retry_wait_s`; quota exhaustion and harness
+defects, including a judge that never reached a model, are selected at once and stop
+the unit. A response that breaks the contract (parse, schema,
 probability sum) is never replaced and stays a wrong answer, as does its fallback. A failed replacement, or a replacement above 2% of planned calls, stays
 selected as `transport_error`, no new call starts, and `SelectionStoppedError`
 carries the records; scoring refuses them because the primary is not measurable.

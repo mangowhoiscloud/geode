@@ -290,9 +290,9 @@ machine-readable artifact is
 | Production Python files (`core/` + `evals/` + `evolve/`) | 601 |
 | Test Python files | 764 |
 | `core/` Python LOC | 129,548 |
-| `evals/` Python LOC | 44,824 |
+| `evals/` Python LOC | 44,888 |
 | `evolve/` Python LOC | 32,002 |
-| Test Python LOC | 236,118 |
+| Test Python LOC | 236,307 |
 | Tool definitions / model executions / valid schemas / policies | 86 / 86 / 86 / 86 (exact) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 6 |

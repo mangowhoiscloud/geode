@@ -144,6 +144,7 @@ def _run(
     guard: _Guard | None = None,
     concurrency: int = 4,
     paraphrases: dict[str, dict[str, Any]] | None = None,
+    clock: Any = None,
 ) -> tuple[dict[str, Any], runner.PanelUnit]:
     unit = runner.PanelUnit(
         run_ids={
@@ -167,6 +168,7 @@ def _run(
                 jev_client=client,
                 jev_key=SecretStr("synthetic-key"),
                 jev_guard=guard,
+                **({"clock": clock, "sleep": clock.sleep} if clock is not None else {}),
             ).run()
 
     return asyncio.run(main()), unit
@@ -290,16 +292,25 @@ def test_quota_route_and_harness_failures_stop_without_replacement(tmp_path: Pat
 _REQUEST = httpx.Request("POST", "https://provider.invalid/v1")
 
 
-def _http(status: int) -> httpx.HTTPStatusError:
-    return httpx.HTTPStatusError(
-        "synthetic", request=_REQUEST, response=httpx.Response(status, request=_REQUEST)
-    )
+_QUOTA = {"error": {"code": "insufficient_quota"}}
+_USAGE_LIMIT = {"error": {"type": "usage_limit_reached", "resets_in_seconds": 3600}}
+
+
+def _http(
+    status: int, body: dict[str, Any] | None = None, headers: dict[str, str] | None = None
+) -> httpx.HTTPStatusError:
+    response = httpx.Response(status, request=_REQUEST, json=body, headers=headers)
+    return httpx.HTTPStatusError("synthetic", request=_REQUEST, response=response)
 
 
 def _sdk(
-    error: type[openai.APIStatusError], status: int, body: object = None
+    error: type[openai.APIStatusError],
+    status: int,
+    body: object = None,
+    headers: dict[str, str] | None = None,
 ) -> openai.APIStatusError:
-    return error("synthetic", response=httpx.Response(status, request=_REQUEST), body=body)
+    response = httpx.Response(status, request=_REQUEST, headers=headers)
+    return error("synthetic", response=response, body=body)
 
 
 @pytest.mark.parametrize(
@@ -317,8 +328,14 @@ def _sdk(
         (_sdk(openai.InternalServerError, 502), "transport_error"),
         (BillingError("weekly limit reached", provider="openai"), "quota_exhausted"),
         (_http(402), "quota_exhausted"),
-        (_http(429), "quota_exhausted"),
-        (_sdk(openai.RateLimitError, 429), "quota_exhausted"),
+        (_http(429, _QUOTA), "quota_exhausted"),
+        (_http(429, _USAGE_LIMIT), "quota_exhausted"),
+        (_http(429, {"error": {"code": "billing_hard_limit_reached"}}), "quota_exhausted"),
+        (_sdk(openai.RateLimitError, 429, {"code": "insufficient_quota"}), "quota_exhausted"),
+        (_sdk(openai.RateLimitError, 429, {"type": "usage_limit_reached"}), "quota_exhausted"),
+        (_http(429), "rate_limited"),
+        (_http(429, {"error": {"code": "rate_limit_exceeded"}}), "rate_limited"),
+        (_sdk(openai.RateLimitError, 429), "rate_limited"),
         (
             _sdk(openai.PermissionDeniedError, 403, {"error": {"code": "insufficient_quota"}}),
             "quota_exhausted",
@@ -338,13 +355,18 @@ def test_call_failure_class_is_one_table_for_both_runners(
     assert runner.call_failure_class(error) == expected
 
 
-def _status_at(failures: set[int], status: int) -> Transport:
+def _status_at(
+    failures: set[int],
+    status: int,
+    body: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+) -> Transport:
     calls = {"count": 0}
 
     def transport(request: httpx.Request) -> httpx.Response:
         calls["count"] += 1
         if calls["count"] in failures:
-            return httpx.Response(status, json={"error": "synthetic"})
+            return httpx.Response(status, json=body or {"error": "synthetic"}, headers=headers)
         return _default_transport(request)
 
     return transport
@@ -395,9 +417,13 @@ def test_no_response_failures_on_either_route_are_replaced_once(
     [
         ({"transport": _status_at({1}, 401)}, "harness_error"),
         ({"transport": _status_at({1}, 403)}, "harness_error"),
-        ({"transport": _status_at({1}, 429)}, "quota_exhausted"),
+        ({"transport": _status_at({1}, 429, _QUOTA)}, "quota_exhausted"),
+        ({"transport": _status_at({1}, 429, _USAGE_LIMIT)}, "quota_exhausted"),
         ({"transport": _status_at({1}, 400)}, "harness_error"),
-        ({"astra": _sdk(openai.RateLimitError, 429)}, "quota_exhausted"),
+        (
+            {"astra": _sdk(openai.RateLimitError, 429, {"code": "insufficient_quota"})},
+            "quota_exhausted",
+        ),
         ({"astra": _sdk(openai.AuthenticationError, 401)}, "harness_error"),
     ],
 )
@@ -417,6 +443,63 @@ def test_quota_credential_and_request_failures_stop_without_replacement(
     ]
     assert len(invalid) == 1 and invalid[0]["selected_for_analysis"] is True
     assert invalid[0]["failure_class"] == failure
+
+
+def _evidence(unit: runner.PanelUnit, row: dict[str, Any]) -> dict[str, Any]:
+    ref = row["evidence_refs"][0]["path"]
+    root = unit.outputs["choice" if row["run_id"].endswith("choice") else "noul"]
+    return json.loads((root / ref).read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize(
+    ("fault", "wait"),
+    [
+        ({"transport": _status_at({3}, 429, headers={"retry-after": "7"})}, 7.0),
+        ({"transport": _status_at({3}, 429)}, 30.0),  # no Retry-After
+        ({"transport": _status_at({3}, 429, headers={"retry-after": "600"})}, 120.0),
+        ({"astra": _sdk(openai.RateLimitError, 429, headers={"retry-after": "12"})}, 12.0),
+    ],
+)
+def test_rate_limited_calls_wait_outside_latency_then_are_replaced_once(
+    tmp_path: Path, fault: dict[str, Any], wait: float
+) -> None:
+    clock = _SimClock()
+    summary, unit = _run(
+        tmp_path,
+        _workloads(("base", "rep1", "rep2")),
+        astra=_AstraFails(fault["astra"]) if "astra" in fault else None,
+        transport=fault.get("transport", _default_transport),
+        concurrency=1,
+        clock=clock,
+    )
+    assert summary["substitutions"] == 1 and not summary["stopped"]
+    assert clock.now == wait  # the only simulated time is the Retry-After wait
+    rows = _attempts(unit, "choice") + _attempts(unit, "noul")
+    failed = [r for r in rows if r["validity"] == "invalid"]
+    assert len(failed) == 1 and failed[0]["failure_class"] == "rate_limited"
+    assert failed[0]["selected_for_analysis"] is False
+    assert _evidence(unit, failed[0])["retry_wait_s"] == wait
+    child = next(r for r in rows if r["parent_attempt_id"] == failed[0]["attempt_id"])
+    assert child["validity"] == "valid" and _evidence(unit, child)["latency_s"] == 0.0
+
+
+def test_a_second_rate_limit_on_the_replacement_stops_the_unit(tmp_path: Path) -> None:
+    clock = _SimClock()
+    summary, unit = _run(
+        tmp_path,
+        _workloads(("base", "rep1", "rep2")),
+        transport=_status_at({3, 4}, 429),
+        concurrency=1,
+        clock=clock,
+    )
+    assert summary["stop_reason"] == "replacement_failed" and clock.now == 30.0
+    invalid = [
+        r for r in _attempts(unit, "choice") + _attempts(unit, "noul") if r["validity"] == "invalid"
+    ]
+    assert [(r["failure_class"], r["selected_for_analysis"]) for r in invalid] == [
+        ("rate_limited", False),
+        ("rate_limited", True),
+    ]
 
 
 def test_jev_budget_guard_stops_before_dispatch(tmp_path: Path) -> None:

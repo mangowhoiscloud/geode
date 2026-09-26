@@ -57,7 +57,7 @@ import math
 import re
 import sys
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from decimal import ROUND_CEILING, Decimal
 from fractions import Fraction
@@ -796,15 +796,17 @@ def _receipt_failure(judge_error: str, receipts: Sequence[Mapping[str, Any]]) ->
 
 
 # Infrastructure classes of ``verdict_panel_runner.call_failure_class``: never scored.
-INFRASTRUCTURE_FAILURES = frozenset({"transport_error", "quota_exhausted", "harness_error"})
+INFRASTRUCTURE_FAILURES = frozenset(
+    {"transport_error", "rate_limited", "quota_exhausted", "harness_error"}
+)
 
 
 class CallFailureError(RuntimeError):
     """A selector call raised instead of answering; ``failure_class`` is the panel class."""
 
-    def __init__(self, failure_class: str, error_type: str) -> None:
+    def __init__(self, failure_class: str, error_type: str, wait_s: float = 0.0) -> None:
         super().__init__(f"{failure_class}: {error_type}")
-        self.failure_class, self.error_type = failure_class, error_type
+        self.failure_class, self.error_type, self.wait_s = failure_class, error_type, wait_s
 
 
 class _FailureWatch:
@@ -831,11 +833,13 @@ class _FailureWatch:
             raise
 
     def check(self, judge_error: str) -> None:
-        from evals.benchmarks.verdict_panel_runner import call_failure_class
+        from evals.benchmarks.verdict_panel_runner import call_failure_class, rate_limit_wait_s
 
         if self.failure is not None:
+            failure_class = call_failure_class(self.failure)
+            wait = rate_limit_wait_s(self.failure) if failure_class == "rate_limited" else 0.0
             raise CallFailureError(
-                call_failure_class(self.failure), type(self.failure).__name__
+                failure_class, type(self.failure).__name__, wait
             ) from self.failure
         if judge_error and not self.executed:
             # The judge failed before any call reached a model (route, request, resolver).
@@ -1036,6 +1040,7 @@ async def dispatch_selection(
     max_concurrency: int = 1,
     timeouts: Mapping[str, float] | None = None,
     timings: list[dict[str, Any]] | None = None,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> list[dict[str, Any]]:
     """Run each selector exactly once per pool and order; grades are never read.
 
@@ -1051,10 +1056,11 @@ async def dispatch_selection(
     (default the panel runner's ``CALL_TIMEOUTS``, llm 180 and jev 60; listwise is an
     Astra call). A call past its bound, or one that raised, takes the panel runner's
     ``call_failure_class``. A transport failure (05 §4.2) stays in the order's
-    ``replaced_attempts`` (not selected) and the same call runs exactly once more; a
-    failed replacement, or a replacement above 2% of planned calls, stays selected
-    (``failure="transport_error"``) and stops the unit. Quota exhaustion and harness
-    defects are selected at once (``failure`` is the class) and stop the unit. A
+    ``replaced_attempts`` (not selected) and the same call runs exactly once more; so
+    does a rate-limited call, after ``sleep`` waits its Retry-After (default 30 s, at
+    most 120 s, outside every latency). A failed replacement, or a replacement above 2%
+    of planned calls, stays selected (``failure`` is the class) and stops the unit.
+    Quota exhaustion and harness defects are selected at once and stop the unit. A
     stopped unit starts no new call and :class:`SelectionStoppedError` carries the
     records. A response that breaks the contract is never replaced; its order stays
     invalid and counts as wrong.
@@ -1062,6 +1068,7 @@ async def dispatch_selection(
     from evals.benchmarks.verdict_panel_runner import (
         CALL_TIMEOUTS,
         MAX_CONCURRENCY,
+        REPLACED_CLASSES,
         SUBSTITUTION_LIMIT,
     )
 
@@ -1085,17 +1092,17 @@ async def dispatch_selection(
 
     async def timed(
         pool: FrozenPool, selector: Selector, order: str, attempt: int, limit: float
-    ) -> tuple[dict[str, Any] | None, tuple[str, str]]:
-        """One dispatch; no entry, and (failure class, error type), when the call raised."""
+    ) -> tuple[dict[str, Any] | None, tuple[str, str, float]]:
+        """One dispatch; no entry, and (class, error type, wait), when the call raised."""
         started = time.monotonic()
         result: dict[str, Any] | None = None
-        failure = ("", "")
+        failure = ("", "", 0.0)
         try:
             result = (await asyncio.wait_for(selector.run(pool, order), timeout=limit)).to_json()
         except TimeoutError:
-            failure = ("transport_error", "TimeoutError")
+            failure = ("transport_error", "TimeoutError", 0.0)
         except CallFailureError as error:
-            failure = (error.failure_class, error.error_type)
+            failure = (error.failure_class, error.error_type, error.wait_s)
         if timings is not None:
             timings.append(
                 {
@@ -1115,22 +1122,26 @@ async def dispatch_selection(
             return None
         limit = limits[selector.engine or "llm"]
         replaced: list[dict[str, Any]] = []
-        entry, (failure, error_type) = await timed(pool, selector, order, 0, limit)
+        entry, (failure, error_type, wait) = await timed(pool, selector, order, 0, limit)
         reason = failure
-        if failure == "transport_error":
+        if failure in REPLACED_CLASSES:
             reason = "substitution_rate_exceeded"
             if (substitutions + 1) / planned <= SUBSTITUTION_LIMIT:
                 substitutions += 1
+                rate_limited = failure == "rate_limited"
                 replaced.append(
                     {
                         "failure": failure,
                         "error_type": error_type,
                         "timeout_s": limit,
+                        **({"retry_wait_s": wait} if rate_limited else {}),
                         "selected_for_analysis": False,
                     }
                 )
                 reason = "replacement_failed"
-                entry, (failure, error_type) = await timed(pool, selector, order, 1, limit)
+                if rate_limited:
+                    await sleep(wait)  # outside every measured latency
+                entry, (failure, error_type, wait) = await timed(pool, selector, order, 1, limit)
         if entry is None:
             stop_reason = stop_reason or reason
             ids = _presentation(pool, order)[0]

@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import email.utils
 import hashlib
 import json
 import math
@@ -92,6 +93,12 @@ CELLS: tuple[tuple[_Engine, _Primitive], ...] = (
 )
 MAX_CONCURRENCY = 4
 SUBSTITUTION_LIMIT = 0.02
+# A rate-limited call waits Retry-After (default 30 s, at most 120 s), then §4.2 applies.
+RATE_LIMIT_WAIT_S = 30.0
+RATE_LIMIT_WAIT_CAP_S = 120.0
+REPLACED_CLASSES = frozenset({"transport_error", "rate_limited"})
+# Provider error codes of a limit no wait lifts: balance, quota, usage or plan caps.
+_LIMIT_CODES = re.compile(r"quota|billing|usage_limit|usage_not_included|plan_limit")
 CALL_TIMEOUTS = {"llm": 180.0, "jev": 60.0}
 VARIANTS = ("base", "rep1", "rep2", "order-rev", "para")
 # Dispatch modes: the Latin-square panel (≤4 calls in flight) and U3's paired
@@ -142,9 +149,10 @@ def call_failure_class(error: BaseException) -> str:
 
     - ``transport_error``, no model response: asyncio, httpx and OpenAI SDK timeouts and
       connection failures, and HTTP 408 and 5xx. Replaced exactly once (05 §4.2).
-    - ``quota_exhausted``: ``BillingError``, a billing-fatal SDK error, HTTP 402 and
-      every 429. The frozen rules define no transient rate limit, so the 05 §4.3 limit
-      error rule (stop) applies to all of them.
+    - ``rate_limited``: HTTP 429 without a limit or billing code. Replaced exactly once
+      after :func:`rate_limit_wait_s` (coordinator decision, 2026-09-27).
+    - ``quota_exhausted``: ``BillingError``, a billing-fatal SDK error, HTTP 402 and a
+      429 whose code names a quota, billing, usage or plan limit.
     - ``harness_error``: HTTP 401 and 403 (credentials), 400 and every other request
       defect or exception.
 
@@ -166,7 +174,41 @@ def call_failure_class(error: BaseException) -> str:
         return "harness_error"
     if status == 408 or status >= 500:
         return "transport_error"
-    return "quota_exhausted" if status in (402, 429) else "harness_error"
+    if status == 429:
+        return "quota_exhausted" if _LIMIT_CODES.search(_error_code(error)) else "rate_limited"
+    return "quota_exhausted" if status == 402 else "harness_error"
+
+
+def _error_code(error: BaseException) -> str:
+    """The provider error code or type of an HTTP error, lower-cased (empty when absent)."""
+    body = getattr(error, "body", None)
+    if not isinstance(body, dict):
+        try:
+            body = error.response.json()  # type: ignore[attr-defined]
+        except Exception:
+            return ""
+    inner = body.get("error") if isinstance(body, dict) else None
+    fields = [body, inner] if isinstance(inner, dict) else [body]
+    return " ".join(str(item.get(key) or "") for item in fields for key in ("code", "type")).lower()
+
+
+def rate_limit_wait_s(error: BaseException) -> float:
+    """Seconds before replacing a rate-limited call: Retry-After, else 30, within 0..120."""
+    headers = getattr(getattr(error, "response", None), "headers", None)
+    raw = headers.get("retry-after") if headers is not None else None
+    wait = RATE_LIMIT_WAIT_S
+    if isinstance(raw, str):
+        try:
+            wait = float(raw)
+        except ValueError:
+            try:  # an HTTP-date
+                when = email.utils.parsedate_to_datetime(raw)
+                wait = (when - datetime.now(UTC)).total_seconds()
+            except (TypeError, ValueError):
+                wait = RATE_LIMIT_WAIT_S
+    if not math.isfinite(wait):
+        wait = RATE_LIMIT_WAIT_S
+    return min(max(wait, 0.0), RATE_LIMIT_WAIT_CAP_S)
 
 
 class UnitStoppedError(RuntimeError):
@@ -649,12 +691,21 @@ class PanelRunner:
                 )
                 calls.append(_call_summary(attempt_id, status, evidence))
                 return calls
-            substitutable = status == "transport_error" and attempt == 0
+            substitutable = status in REPLACED_CLASSES and attempt == 0
             if substitutable and (self.substitutions + 1) / self.planned > SUBSTITUTION_LIMIT:
                 substitutable = False
                 self._stop("substitution_rate_exceeded")
+            wait = (
+                rate_limit_wait_s(error)
+                if substitutable and status == "rate_limited" and error is not None
+                else None
+            )
+            if wait is not None:
+                base["retry_wait_s"] = wait  # outside every measured latency
             base["observed_result"] = (
-                "Transport failure without a response; replaced once on the same input."
+                f"Rate limited without a limit code; replaced once after waiting {wait:g} s."
+                if wait is not None
+                else "Transport failure without a response; replaced once on the same input."
                 if substitutable
                 else f"Infrastructure invalid ({status}); the unit stops."
             )
@@ -677,6 +728,8 @@ class PanelRunner:
                 return calls
             self.substitutions += 1
             parent = attempt_id
+            if wait is not None:
+                await self.sleep(wait)
         return calls
 
     def _stop(self, reason: str) -> None:
