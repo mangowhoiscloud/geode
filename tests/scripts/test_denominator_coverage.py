@@ -38,7 +38,24 @@ def test_complete_measured_primary_is_covered(tmp_path: Path) -> None:
 
 def test_deselected_invalid_cell_cannot_keep_a_measured_primary(tmp_path: Path) -> None:
     phase = build_phase(tmp_path / "run", mode="deselected")["phase_dir"]
-    # The existing validator alone accepts this analysis; the denominator is the gap.
+    # validate_analysis keeps an invalid attempt selected unless exactly one registered
+    # replacement exists; the coverage check runs it first and fails closed as well.
+    with pytest.raises(ValueError, match="must remain selected_for_analysis"):
+        contract.validate_analysis(phase / "analysis.json", **_paths(phase))
+    with pytest.raises(ValueError, match="must remain selected_for_analysis"):
+        denominator_coverage.check_denominator_coverage(
+            phase / "analysis.json", cells_per_unit=2, **_paths(phase)
+        )
+
+
+def test_deselected_valid_cell_is_the_remaining_coverage_gap(tmp_path: Path) -> None:
+    phase = build_phase(tmp_path / "run", mode="complete")["phase_dir"]
+
+    def drop_valid_cell(rows: list[dict]) -> None:
+        rows[0]["selected_for_analysis"] = False
+
+    _rewrite_attempts(phase, drop_valid_cell)
+    # Invalid-attempt retention does not cover a silently deselected valid cell.
     contract.validate_analysis(phase / "analysis.json", **_paths(phase))
     with pytest.raises(ValueError, match="unselected without a recorded successor"):
         denominator_coverage.check_denominator_coverage(

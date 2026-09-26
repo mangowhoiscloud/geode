@@ -1687,6 +1687,174 @@ def test_invalid_selected_attempt_cannot_publish_primary_score(tmp_path: Path) -
     )
 
 
+def _unselected_failure(run_dir: Path, *, validity: str = "invalid") -> dict[str, object]:
+    """An infrastructure-invalid attempt kept on file but left out of the analysis."""
+    attempt = _attempt(run_dir)
+    attempt.update(
+        {
+            "validity": validity,
+            "outcome": "unknown",
+            "failure_class": "transport-failure",
+            "evidence_refs": [
+                _evidence(run_dir / "transport-error.json", kind="error", content="timeout\n")
+            ],
+            "selected_for_analysis": False,
+        }
+    )
+    return attempt
+
+
+def _replacement(
+    run_dir: Path, *, attempt_id: str = "attempt-1", sequence: int = 1
+) -> dict[str, object]:
+    """A later same-surface child that re-runs the failed attempt's input."""
+    child = _attempt(run_dir)
+    child.update(
+        {
+            "attempt_id": attempt_id,
+            "parent_attempt_id": "attempt-0",
+            "sequence": sequence,
+            "timing": {
+                "status": "exact",
+                "started_at": "2026-08-09T00:02:10Z",
+                "finished_at": "2026-08-09T00:02:50Z",
+                "source_ref": None,
+            },
+            "change": {"surface": "baseline", "description": "replacement of attempt-0"},
+        }
+    )
+    return child
+
+
+def _write_replacement_bundle(
+    run_dir: Path, attempts: list[dict[str, object]], selected: list[str]
+) -> tuple[Path, Path, Path, dict[str, object]]:
+    run_spec_path = run_dir / "run-spec.json"
+    attempts_path = run_dir / "attempts.jsonl"
+    analysis_path = run_dir / "analysis.json"
+    _write_json(run_spec_path, _run_spec())
+    attempts_path.write_text(
+        "".join(json.dumps(attempt) + "\n" for attempt in attempts), encoding="utf-8"
+    )
+    analysis = _analysis(run_spec_path, attempts_path, attempts[-1])
+    analysis["selected_attempt_ids"] = selected
+    _write_json(analysis_path, analysis)
+    return run_spec_path, attempts_path, analysis_path, analysis
+
+
+@pytest.mark.parametrize("validity", ["invalid", "aborted"])
+@pytest.mark.parametrize("child", ["no-child", "different-surface-aggregate", "unselected-child"])
+def test_unselected_invalid_attempt_requires_one_selected_replacement(
+    tmp_path: Path, validity: str, child: str
+) -> None:
+    """Invalid cells stay selected; dropping one cannot shrink the analyzed set."""
+    attempts = [_unselected_failure(tmp_path, validity=validity)]
+    if child == "different-surface-aggregate":
+        aggregate = _replacement(tmp_path)
+        aggregate["change"] = {"surface": "analysis-only", "description": "aggregate row"}
+        attempts.append(aggregate)
+    else:
+        if child == "unselected-child":
+            unselected = _replacement(tmp_path)
+            unselected["selected_for_analysis"] = False
+            attempts.append(unselected)
+        # Another selected planned cell with the same surface is not a child.
+        other = _replacement(
+            tmp_path, attempt_id=f"attempt-{len(attempts)}", sequence=len(attempts)
+        )
+        other.update(
+            {"parent_attempt_id": None, "change": {"surface": "baseline", "description": "cell"}}
+        )
+        attempts.append(other)
+    run_spec_path, attempts_path, analysis_path, _analysis_payload = _write_replacement_bundle(
+        tmp_path, attempts, [str(attempts[-1]["attempt_id"])]
+    )
+
+    with pytest.raises(ValueError, match="must remain selected_for_analysis"):
+        contract.validate_analysis(
+            analysis_path,
+            run_spec_path=run_spec_path,
+            attempts_path=attempts_path,
+        )
+
+
+@pytest.mark.parametrize("validity", ["invalid", "aborted"])
+def test_one_selected_same_surface_replacement_may_leave_failure_unselected(
+    tmp_path: Path, validity: str
+) -> None:
+    run_spec_path, attempts_path, analysis_path, _analysis_payload = _write_replacement_bundle(
+        tmp_path,
+        [_unselected_failure(tmp_path, validity=validity), _replacement(tmp_path)],
+        ["attempt-1"],
+    )
+
+    contract.validate_analysis(
+        analysis_path,
+        run_spec_path=run_spec_path,
+        attempts_path=attempts_path,
+    )
+
+
+def test_failed_replacement_stays_selected_and_primary_is_not_measurable(tmp_path: Path) -> None:
+    child = _replacement(tmp_path)
+    child.update(
+        {"validity": "invalid", "outcome": "unknown", "failure_class": "transport-failure"}
+    )
+    run_spec_path, attempts_path, analysis_path, analysis = _write_replacement_bundle(
+        tmp_path, [_unselected_failure(tmp_path), child], ["attempt-1"]
+    )
+    decision = analysis["decision"]
+    assert isinstance(decision, dict)
+    decision.update({"outcome": "inconclusive", "hypothesis_status": "invalidated"})
+    _write_json(analysis_path, analysis)
+
+    with pytest.raises(ValueError, match="cannot publish a primary score"):
+        contract.validate_analysis(
+            analysis_path,
+            run_spec_path=run_spec_path,
+            attempts_path=attempts_path,
+        )
+
+    metrics = analysis["metrics"]
+    assert isinstance(metrics, list)
+    primary = metrics[0]
+    assert isinstance(primary, dict)
+    primary.update(
+        {
+            "value": "not-measurable",
+            "numerator": None,
+            "denominator": None,
+            "source_locator": None,
+        }
+    )
+    _write_json(analysis_path, analysis)
+    contract.validate_analysis(
+        analysis_path,
+        run_spec_path=run_spec_path,
+        attempts_path=attempts_path,
+    )
+
+
+@pytest.mark.parametrize("second_selected", [True, False])
+def test_unselected_failure_allows_exactly_one_replacement(
+    tmp_path: Path, second_selected: bool
+) -> None:
+    second = _replacement(tmp_path, attempt_id="attempt-2", sequence=2)
+    second["selected_for_analysis"] = second_selected
+    run_spec_path, attempts_path, analysis_path, _analysis_payload = _write_replacement_bundle(
+        tmp_path,
+        [_unselected_failure(tmp_path), _replacement(tmp_path), second],
+        ["attempt-1", "attempt-2"] if second_selected else ["attempt-1"],
+    )
+
+    with pytest.raises(ValueError, match="2 same-surface replacements; exactly one is allowed"):
+        contract.validate_analysis(
+            analysis_path,
+            run_spec_path=run_spec_path,
+            attempts_path=attempts_path,
+        )
+
+
 def test_templates_are_valid_json_but_rejected_until_filled() -> None:
     template = contract.EVAL_DIR / "eval-run-spec.template.json"
 
