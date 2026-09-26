@@ -244,6 +244,14 @@ def test_slot_columns_stay_unknown_without_receipts_and_reject_contradictions(
             handoff_tables.export_tables(slotted, tmp_path / message[:8], primitive="noul")
 
 
+_OBSERVED = {
+    "helper_admitted": True,
+    "helper_fallback_used": False,
+    "helper_feedback_consumed": True,
+}
+HELPERS_OK = {(case, arm): dict(_OBSERVED) for case in ("inbox-a", "inbox-b") for arm in "ab"}
+
+
 def _trials(tmp_path: Path, name: str, **kwargs: Any) -> dict[str, dict[str, Any]]:
     phase = build_phase(tmp_path / name, mode="complete", **kwargs)["phase_dir"]
     out = tmp_path / f"{name}-tables"
@@ -262,14 +270,22 @@ def test_strict_success_follows_the_preregistered_unit_rule(tmp_path: Path) -> N
     assert row["false_completion"] is False
     assert clean["strict_success"] is True and clean["strict_success_with_lookup"] is True
     # Intent unit (helper arms): the same extra lookup fails strict success.
-    intent = _trials(tmp_path, "intent", intent=True, extra_lookups=violation)
+    intent = _trials(
+        tmp_path, "intent", intent=True, extra_lookups=violation, helper_fields=HELPERS_OK
+    )
     row, clean = intent["inbox-a/a"], intent["inbox-b/a"]
     assert row["strict_rule"] == "intent" and row["runtime_arm"] == "a"
     assert row["strict_success"] is False and row["strict_success_with_lookup"] is False
     assert row["judgments_admitted"] is None  # no matched judgments on helper arms
     assert clean["strict_success"] is True and clean["strict_success_with_lookup"] is True
     # A failed task oracle fails both rules.
-    failed = _trials(tmp_path, "failed", intent=True, failing=frozenset({("inbox-b", "b")}))
+    failed = _trials(
+        tmp_path,
+        "failed",
+        intent=True,
+        failing=frozenset({("inbox-b", "b")}),
+        helper_fields=HELPERS_OK,
+    )
     assert failed["inbox-b/b"]["strict_success"] is False
 
 
@@ -370,6 +386,61 @@ def test_runner_strict_success_is_checked_never_overwritten(tmp_path: Path) -> N
         intent=True,
         extra_lookups=violation,
         runner_strict={("inbox-a", "a"): True},
+        helper_fields=HELPERS_OK,
     )["phase_dir"]
     with pytest.raises(ValueError, match="intent recomputation False"):
         handoff_tables.export_tables(intent, tmp_path / "intent-tables", primitive="choice")
+
+
+def test_intent_strict_success_needs_observed_helper_admission_and_consumption(
+    tmp_path: Path,
+) -> None:
+    rejected = {**HELPERS_OK, ("inbox-a", "b"): {**_OBSERVED, "helper_admitted": False}}
+    fallback = {**rejected, ("inbox-b", "b"): {**_OBSERVED, "helper_fallback_used": True}}
+    rows = _trials(tmp_path, "helper", intent=True, helper_fields=fallback)
+    # The Jev helper was rejected (or an LLM decided after a Jev failure), yet the root
+    # answered correctly: reward 1 is not strict success (05 §3.1, fallback rule).
+    assert rows["inbox-a/b"]["native_reward"] == 1.0
+    assert rows["inbox-a/b"]["strict_success"] is False
+    assert rows["inbox-b/b"]["helper_fallback_used"] is True
+    assert rows["inbox-b/b"]["strict_success"] is False
+    assert rows["inbox-a/a"]["strict_success"] is True
+    # Unobserved helper facts leave strict success null with a reason, never assumed.
+    missing = {**HELPERS_OK, ("inbox-a", "a"): {"helper_admitted": True}}
+    rows = _trials(tmp_path, "missing", intent=True, helper_fields=missing)
+    row = rows["inbox-a/a"]
+    assert row["strict_success"] is None and row["strict_success_with_lookup"] is None
+    assert row["strict_unobserved"] == [
+        "helper_fallback_used unobserved",
+        "helper_feedback_consumed unobserved",
+    ]
+    rows = _trials(tmp_path, "none", intent=True)
+    assert all(row["strict_success"] is None for row in rows.values())
+    assert rows["inbox-b/a"]["strict_unobserved"][0] == "helper_admitted unobserved"
+
+
+def test_helper_observations_come_from_the_call_ledger_and_must_agree() -> None:
+    oracle = {"checks": {"results_consumed_by_root": True}}
+    jev_ok = {"role": "helper", "provider": "typesafe", "accepted": True, "error_type": None}
+    jev_rejected = {**jev_ok, "accepted": False}
+    llm_after_jev = {**jev_ok, "provider": "openai"}
+    observed = handoff_tables._helper_observations([], [jev_ok], oracle, "jev")
+    assert observed == {
+        "helper_admitted": True,
+        "helper_fallback_used": False,
+        "helper_feedback_consumed": True,
+    }
+    assert (
+        handoff_tables._helper_observations([], [jev_rejected], oracle, "jev")["helper_admitted"]
+        is False
+    )
+    fallback = handoff_tables._helper_observations([], [jev_rejected, llm_after_jev], {}, "jev")
+    assert fallback["helper_fallback_used"] is True
+    assert fallback["helper_feedback_consumed"] is None  # no receipt or oracle observation
+    unknown = handoff_tables._helper_observations([], [{**jev_ok, "accepted": None}], {}, "jev")
+    assert unknown["helper_admitted"] is None
+    assert handoff_tables._helper_observations([], [], {}, "jev")["helper_admitted"] is None
+    with pytest.raises(ValueError, match="helper_admitted"):
+        handoff_tables._helper_observations(
+            [{"helper_admitted": True}], [jev_rejected], oracle, "jev"
+        )

@@ -129,11 +129,15 @@ STRICT_RULES = {
         "judgment's feedback consumed by a later root request, no false completion"
     ),
     "intent": (
-        "the verdict conditions (admission and consumption where matched judgments exist; "
-        "helper admission and consumption are inbox-oracle checks behind the reward), no "
-        "false-completion item, no wrong-target lookup and no extra lookup"
+        "the verdict conditions (admission and consumption where matched judgments exist), "
+        "observed helper admission without fallback and observed consumption of the helper "
+        "result, no false-completion item, no wrong-target lookup and no extra lookup"
     ),
 }
+# Observed helper facts an intent cell needs (05 §3.1): runner receipt fields of these
+# names, else the call ledger (admission, fallback) and the task oracle's consumption
+# check. Unobserved stays null; a Jev failure decided by an LLM is never a Jev success.
+HELPER_FIELDS = ("helper_admitted", "helper_fallback_used", "helper_feedback_consumed")
 PRIVATE_RECEIPTS = "private-receipts"
 
 
@@ -303,6 +307,40 @@ def _strict_components(
         "feedback_consumption_complete": consumed_all,
         "false_completion": false_completion,
     }
+
+
+def _helper_observations(
+    sources: Sequence[Mapping[str, Any]],
+    calls: Sequence[Mapping[str, Any]],
+    oracle: Mapping[str, Any],
+    helper_engine: Any,
+) -> dict[str, bool | None]:
+    """Helper admission, LLM fallback and result consumption, observed or null.
+
+    ``sources`` are runner receipt mappings that may carry :data:`HELPER_FIELDS`; every
+    present value and the ledger-derived value must agree, or the trial is rejected.
+    """
+    helper = [call for call in calls if call.get("role") == "helper"]
+    expected = "typesafe" if helper_engine == "jev" else "openai"
+    consumed = _object(oracle.get("checks")).get("results_consumed_by_root")
+    derived: dict[str, bool | None] = {
+        "helper_admitted": None
+        if not helper or any(call.get("accepted") is None for call in helper)
+        else all(call.get("accepted") is True and not call.get("error_type") for call in helper),
+        "helper_fallback_used": None
+        if not helper or helper_engine not in ("llm", "jev")
+        else any(call.get("provider") != expected for call in helper),
+        "helper_feedback_consumed": consumed if type(consumed) is bool else None,
+    }
+    observed: dict[str, bool | None] = {}
+    for name in HELPER_FIELDS:
+        values = [source.get(name) for source in sources if source.get(name) is not None]
+        if derived[name] is not None:
+            values.append(derived[name])
+        if any(type(value) is not bool for value in values) or len(set(values)) > 1:
+            raise ValueError(f"{name}: receipts and the call ledger disagree")
+        observed[name] = values[0] if values else None
+    return observed
 
 
 def _all_known(checks: Sequence[bool | None]) -> bool | None:
@@ -762,12 +800,23 @@ def _trial_row(
 
     rule = "verdict" if isinstance(engine, str) and engine else "intent"
     components = _strict_components(verification, handoff, verifier, final_action)
+    helper = (
+        _helper_observations(
+            [receipt, _object(receipt.get("e2e")), semantic, private],
+            calls,
+            _object(verifier.get("oracle")) or oracle,
+            cell.get("intent_target_engine") or label,
+        )
+        if rule == "intent"
+        else dict.fromkeys(HELPER_FIELDS)
+    )
     lookups = [
         None if burden[name] is None else burden[name] == 0
         for name in ("wrong_target_lookup_count", "extra_lookup_count")
     ]
     strict: bool | None = None
     with_lookup: bool | None = None
+    unobserved: list[str] = []
     if validity == "valid":
         admitted = components["judgments_admitted"]
         consumed = components["feedback_consumption_complete"]
@@ -780,7 +829,15 @@ def _trial_row(
             checks += [admitted, consumed]
         if rule == "intent":
             count = burden["false_completion_count"]
-            checks += [None if count is None else count == 0, *lookups]
+            fallback = helper["helper_fallback_used"]
+            checks += [
+                None if count is None else count == 0,
+                *lookups,
+                helper["helper_admitted"],
+                None if fallback is None else not fallback,
+                helper["helper_feedback_consumed"],
+            ]
+            unobserved = [name for name in HELPER_FIELDS if helper[name] is None]
         strict = _all_known(checks)
         with_lookup = _all_known([strict, *lookups])
     # A runner's recorded strict value must equal this §3.1 recomputation; never overwrite.
@@ -883,9 +940,12 @@ def _trial_row(
         }.get(str(final_action)),
         "strict_rule": rule,
         "strict_success": strict,
+        # Null strict success names the helper facts that were not observed.
+        "strict_unobserved": [f"{name} unobserved" for name in unobserved] or None,
         "strict_success_with_lookup": with_lookup,
         "runner_strict_success": runner_strict,
         **components,
+        **helper,
         "jev_decision_status": status,
         "jev_success_credited": (
             label == "jev" and validity == "valid" and outcome == "passed" and status == "admitted"

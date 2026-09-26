@@ -163,6 +163,7 @@ def _trial(
     passed: bool = True,
     extra_lookups: int = 0,
     runner_strict: bool | None = None,
+    helper_fields: dict[str, bool] | None = None,
 ) -> None:
     trial = phase_dir / "trials" / cell["trial_name"]
     agent = trial / "agent"
@@ -404,6 +405,7 @@ def _trial(
             "host_elapsed_seconds": 55.0 + cell["index"],
             "native_reward": {"reward": 1.0 if passed else 0.0},
             **({"e2e": {"strict_success": runner_strict}} if runner_strict is not None else {}),
+            **(helper_fields or {}),
             "semantic_metrics": {
                 "judgment_attempts": 1,
                 "replan_requests": 0,
@@ -471,6 +473,7 @@ def build_phase(
     intent: bool = False,
     extra_lookups: frozenset[tuple[str, str]] = frozenset(),
     runner_strict: dict[tuple[str, str], bool] | None = None,
+    helper_fields: dict[tuple[str, str], dict[str, bool]] | None = None,
 ) -> dict[str, Any]:
     """Write one closed phase.
 
@@ -485,8 +488,9 @@ def build_phase(
     ``slots`` starts both arms of a case together and writes private trial receipts
     (05 v2 §2.4); ``observed_judge_latency`` replaces the 0.0 placeholder latency.
     ``intent`` writes intent helper cells (no matched final verdict, 05 §3.1),
-    ``extra_lookups`` gives listed cells one extra lookup, and ``runner_strict``
-    records a runner's strict_success in the trial receipt.
+    ``extra_lookups`` gives listed cells one extra lookup, ``runner_strict``
+    records a runner's strict_success and ``helper_fields`` the runner's observed
+    helper admission, fallback and consumption in the trial receipt.
     """
     if mode not in {"incomplete", "complete", "deselected"}:
         raise ValueError("unknown fixture mode")
@@ -560,6 +564,7 @@ def build_phase(
                 passed=passed,
                 extra_lookups=int(key in extra_lookups),
                 runner_strict=(runner_strict or {}).get(key),
+                helper_fields=(helper_fields or {}).get(key),
             )
         trial = phase_dir / "trials" / cell["trial_name"]
         refs = [

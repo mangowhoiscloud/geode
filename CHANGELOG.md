@@ -265,7 +265,9 @@ functional change.
 - Align handoff-table strict success with the preregistered definition. A
   matched final-verdict trial no longer needs lookup conditions: native reward,
   admitted decisive judgments, consumed negative feedback and no false
-  completion decide it, while intent helper trials keep the lookup conditions.
+  completion decide it, while intent helper trials keep the lookup conditions
+  and also need observed helper admission without an LLM fallback and observed
+  consumption of the helper result; an unobserved helper fact stays null.
   A separate lookup-inclusive column remains, and a runner's differing strict
   value is rejected instead of overwritten.
 - Remove first-position bias from best-of selection: every judge failure path
