@@ -146,6 +146,13 @@ functional change.
   unknown shared-account usage come from the private trial receipt, and
   overlapping calls from call-ledger intervals. Only same-slot synchronized
   pairs enter intra-pair latency comparison; success analysis keeps every pair.
+- Add X1 binary acceptance scoring for external Choice verdicts: an accepted
+  `supported` verdict accepts, another accepted verdict rejects, and an invalid
+  output is wrong and never an acceptance against the human majority label. The
+  analysis-only report gives the paired accuracy delta with cluster intervals,
+  false acceptance and rejection, balanced accuracy, P(supported) AUROC, Jev's
+  selective risk at the frozen τ on the receipt q, and McNemar b and c without a
+  p-value, bound to analysis rows.
 - Connect U2s stability attempts to the stability metrics: selected panel
   judgments are grouped by engine, primitive and state across the four frozen
   variants, rejected or invalid judgments stay empty decisions, and a missing

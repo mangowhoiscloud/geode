@@ -88,8 +88,8 @@ must trace every affected boundary; this table is routing, not an API census.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 600 production Python files,
-763 test Python files,
+The current snapshot records 601 production Python files,
+764 test Python files,
 86 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->

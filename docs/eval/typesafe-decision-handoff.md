@@ -363,6 +363,30 @@ policy and reset digests live only in `freeze.json` cells, the private trial
 receipt and the `e2e_trials` columns. These are observed consistencies of a small frozen repetition, not an
 operating reliability claim.
 
+### X1 external validation: binary acceptance
+
+X1 (external validation, 05 v2.2 §11) scores Choice verdicts on converted
+CUAVerifierBench trajectories as binary acceptance in
+`evals.benchmarks.external_binary`, an analysis-only module; nothing on the
+dispatch path reads the labels. `binary_record` maps a panel receipt to a decision: accepted with
+`supported` accepts, accepted with another verdict rejects, and an unaccepted
+receipt is invalid, wrong and never an acceptance. Correct means the decision
+equals the builder's UV-blind human strict-majority `gold_accept`, which
+`load_gold` reads for planned states only during analysis. `x1_report` pairs
+Astra and Jev per state: the primary `x1_binary_verdict_accuracy_delta` =
+(Jev correct − Astra correct) / planned, with source-cluster bootstrap intervals
+for it and for Jev's P(supported) AUROC; per engine binary accuracy, false
+acceptance (over human failures), false rejection (over human successes, invalid
+included), TPR, TNR, balanced accuracy and the Mann–Whitney P(supported) AUROC
+(ties 0.5); Jev's selective coverage and risk at the frozen
+`selection-freeze.json` τ on the receipt's three-label `q`; McNemar discordant
+counts b and c without a p-value; and three-label verdict counts by human label.
+The §3.4 decision is supported, not-supported or mixed, and invalidated when a
+selected infrastructure-invalid attempt or a missing judgment leaves the primary
+not measurable. `x1_metric_rows` binds the analysis rows to `x1-results.json`
+by JSON pointer. Connecting retained Choice-only panel attempts to these records
+follows the Choice-only panel unit.
+
 ### Rejected decisions still have call evidence
 
 The transport completes before typed-answer admission. A malformed Score or
