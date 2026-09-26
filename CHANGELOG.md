@@ -135,6 +135,11 @@ functional change.
 - Add a host-scoped, hash-chained Jev cost ledger with the $1 program cap, a
   $0.90 start limit and a sticky $0.95 stop. Missing usage is reserved, never
   zero. A panel spend guard connects it to the verdict panel runner.
+- Add paired concurrent execution columns to the handoff tables: slot, launch
+  and agent-start skew, pair synchronization, concurrent trials and always
+  unknown shared-account usage come from the private trial receipt, and
+  overlapping calls from call-ledger intervals. Only same-slot synchronized
+  pairs enter intra-pair latency comparison; success analysis keeps every pair.
 - Add auxiliary repetition reliability to the judgment metrics: per-task
   combinatorial pass@n and pass^n with equal task weights, never a pooled rate.
   A frozen task × repetition plan is rejected with enumerated reasons (N_i < n,

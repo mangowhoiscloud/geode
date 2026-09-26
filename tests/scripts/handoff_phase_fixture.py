@@ -79,6 +79,37 @@ POLICY_DIGESTS = {"a": _hex("policy:arm-a"), "b": _hex("policy:arm-b")}
 RESET_DIGEST = _hex("reset:fresh-container-session-cache")
 
 
+# Paired concurrent slots (05 v2 §2.4): (launch skew, agent start skew) per case.
+SLOT_SKEWS = {"inbox-a": (0.2, 3.5), "inbox-b": (0.4, 42.0)}
+ACCOUNT_FP_PLACEHOLDER = "0123456789ab"
+
+
+def _private_receipt(cell: dict[str, Any], attempt_id: str, run_id: str) -> dict[str, Any]:
+    """Runner-owned private trial receipt; arm b uses the Run draft's alias names."""
+    launch, start = SLOT_SKEWS[cell["case_id"]]
+    receipt: dict[str, Any] = {
+        "schema_id": "jev-v3.private-trial-receipt@1",
+        "run_id": run_id,
+        "attempt_id": attempt_id,
+        "trial_name": cell["trial_name"],
+        "slot_id": f"r{cell['repetition']}-{cell['case_id']}",
+        "position": cell["position"],
+        "codex_account_fp12": ACCOUNT_FP_PLACEHOLDER,
+        "pair_sync": start <= 30,
+        "same_account_external_usage": "unknown",
+        "external_usage_reason": "shared-account-video-session",
+        "policy_digest": cell["policy_digest"],
+        "reset_digest": cell["reset_digest"],
+    }
+    if cell["arm"] == "a":
+        receipt.update(dispatch_skew_s=launch, agent_start_skew_s=start, concurrent_trials=1)
+    else:
+        receipt.update(
+            pair_launch_skew_s=launch, pair_agent_start_skew_s=start, concurrent_trials_active=1
+        )
+    return receipt
+
+
 def contract_fields(case_id: str, arm: str) -> dict[str, str]:
     return {
         "policy_digest": POLICY_DIGESTS[arm],
@@ -429,6 +460,8 @@ def build_phase(
     run_id: str = RUN_ID,
     failing: frozenset[tuple[str, str]] = frozenset(),
     cell_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
+    slots: bool = False,
+    observed_judge_latency: bool = False,
 ) -> dict[str, Any]:
     """Write one closed phase.
 
@@ -440,6 +473,8 @@ def build_phase(
     ``repetition`` names this phase's repeat (one run spec per repeat, 05 §2.2),
     ``failing`` lists ``(case_id, arm)`` cells whose task oracle fails, and
     ``cell_overrides`` edits frozen cell fields such as the repetition contract.
+    ``slots`` starts both arms of a case together and writes private trial receipts
+    (05 v2 §2.4); ``observed_judge_latency`` replaces the 0.0 placeholder latency.
     """
     if mode not in {"incomplete", "complete", "deselected"}:
         raise ValueError("unknown fixture mode")
@@ -488,7 +523,8 @@ def build_phase(
     )
     attempts = []
     for cell in cells:
-        started = FROZEN_AT + timedelta(minutes=5 + 2 * cell["index"])
+        slot = workload.index(cell["case_id"])
+        started = FROZEN_AT + timedelta(minutes=5 + 2 * (slot if slots else cell["index"]))
         key = (cell["case_id"], cell["arm"])
         invalid = mode != "complete" and key == INVALID_CELL
         passed = key not in failing
@@ -499,7 +535,7 @@ def build_phase(
                 jev_judge_provider if cell["verification_engine"] == "jev" else "openai"
             )
             # One Jev judge keeps the durable 0.0 duration placeholder for a missing latency.
-            duration = 0.0 if cell["index"] == 1 else 432.4
+            duration = 0.0 if cell["index"] == 1 and not observed_judge_latency else 432.4
             _trial(
                 phase_dir,
                 cell,
@@ -517,6 +553,11 @@ def build_phase(
             }
             for name in ("result.json", "trial-receipt.json")
         ]
+        if slots:
+            write_json(
+                phase_dir / "private-receipts" / f"{run_id}-a{cell['index']:04}.json",
+                _private_receipt(cell, f"{run_id}-a{cell['index']:04}", run_id),
+            )
         attempts.append(
             {
                 "schema_id": "geode.eval-attempt@1",

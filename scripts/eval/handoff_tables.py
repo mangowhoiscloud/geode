@@ -111,6 +111,17 @@ _CELL_CONTRACT = {
     "verifier_sha256": "verifier_sha256",
 }
 _HEX64 = frozenset("0123456789abcdef")
+# Paired concurrent E2E (05 v2 §2.4, §2.6): e2e_trials column <- private trial receipt
+# field names. The Run receipt draft's names are accepted as aliases; values must agree.
+_CONCURRENCY_FIELDS = {
+    "slot_id": ("slot_id",),
+    "dispatch_skew_s": ("dispatch_skew_s", "pair_launch_skew_s"),
+    "agent_start_skew_s": ("agent_start_skew_s", "pair_agent_start_skew_s"),
+    "pair_sync": ("pair_sync",),
+    "concurrent_trials": ("concurrent_trials", "concurrent_trials_active"),
+}
+PAIR_SYNC_MAX_AGENT_START_SKEW_S = 30.0
+PRIVATE_RECEIPTS = "private-receipts"
 
 
 @dataclass
@@ -148,6 +159,85 @@ def _digest_or_none(value: Any) -> str | None:
     if isinstance(value, str) and len(value) == 64 and set(value) <= _HEX64:
         return value
     return None
+
+
+def _receipt_value(receipt: Mapping[str, Any], column: str) -> Any:
+    names = _CONCURRENCY_FIELDS[column]
+    values = [receipt[name] for name in names if receipt.get(name) is not None]
+    if any(value != values[0] or type(value) is not type(values[0]) for value in values):
+        raise ValueError(f"private trial receipt disagrees on {column} across {names}")
+    return values[0] if values else None
+
+
+def _concurrency(receipt: Mapping[str, Any]) -> dict[str, Any]:
+    """Slot and concurrent-load columns of one paired E2E trial; unknown stays null."""
+    slot = _receipt_value(receipt, "slot_id")
+    if slot is not None and (not isinstance(slot, str) or not slot):
+        raise ValueError("slot_id must be a nonempty string")
+    skews = {}
+    for column in ("dispatch_skew_s", "agent_start_skew_s"):
+        value = _receipt_value(receipt, column)
+        if value is not None and (_number(value) is None or value < 0):
+            raise ValueError(f"{column} must be a non-negative finite number")
+        skews[column] = None if value is None else float(value)
+    sync = _receipt_value(receipt, "pair_sync")
+    if sync is not None and type(sync) is not bool:
+        raise ValueError("pair_sync must be a boolean")
+    start_skew = skews["agent_start_skew_s"]
+    derived = None if start_skew is None else start_skew <= PAIR_SYNC_MAX_AGENT_START_SKEW_S
+    if sync is not None and derived is not None and sync != derived:
+        raise ValueError("pair_sync contradicts the recorded agent start skew")
+    concurrent = _receipt_value(receipt, "concurrent_trials")
+    if concurrent is not None and _count(concurrent) is None:
+        raise ValueError("concurrent_trials must be a non-negative integer")
+    return {
+        "slot_id": slot,
+        **skews,
+        "pair_sync": sync if sync is not None else derived,
+        "concurrent_trials": concurrent,
+        # The shared Codex account's other sessions are unobservable (05 v2 §1.4).
+        "external_account_usage": "unknown",
+    }
+
+
+def _interval(call: Mapping[str, Any]) -> tuple[float, float] | None:
+    end, latency = call.get("occurred_at_utc"), call.get("latency_s")
+    if not isinstance(end, str) or latency is None:
+        return None
+    stop = datetime.fromisoformat(end.replace("Z", "+00:00")).timestamp()
+    return stop - float(latency), stop
+
+
+def _attach_overlaps(trials: list[dict[str, Any]], calls: Sequence[Mapping[str, Any]]) -> None:
+    """Count other trials' calls whose [start, end] overlaps this trial's calls.
+
+    Intervals come from ``call_ledger`` (end time and latency). The count is exact
+    only when every phase call has an interval and every trial's usage is complete;
+    otherwise ``overlapping_calls`` is null and the observed lower count stays beside it.
+    """
+    by_trial: dict[str, list[tuple[float, float] | None]] = {}
+    for call in calls:
+        by_trial.setdefault(str(call["trial_name"]), []).append(_interval(call))
+    complete = all(trial["usage_complete"] for trial in trials)
+    for trial in trials:
+        own = by_trial.get(str(trial["trial_name"]), [])
+        others = [
+            interval
+            for name, intervals in by_trial.items()
+            if name != trial["trial_name"]
+            for interval in intervals
+        ]
+        known = [interval for interval in own if interval is not None]
+        observed = sum(
+            1
+            for other in others
+            if other is not None
+            and any(other[0] < mine[1] and mine[0] < other[1] for mine in known)
+        )
+        missing = (len(own) - len(known)) + sum(other is None for other in others)
+        trial["overlapping_calls"] = observed if complete and missing == 0 else None
+        trial["overlapping_calls_observed"] = observed
+        trial["overlapping_calls_missing_intervals"] = missing
 
 
 def _count(value: Any) -> int | None:
@@ -573,6 +663,9 @@ def _trial_row(
     verification = _object(sources.load(f"{rel}/agent/verification.json"))
     receipts = sources.load(f"{rel}/agent/handoff.json")
     attempt = attempts[-1] if attempts else None
+    private = (
+        _object(sources.load(f"{PRIVATE_RECEIPTS}/{attempt['attempt_id']}.json")) if attempt else {}
+    )
     validity = attempt["validity"] if attempt else None
     outcome = attempt["outcome"] if attempt else None
     engine = cell.get("verification_engine")
@@ -725,8 +818,13 @@ def _trial_row(
         "geode_trajectory_sha256": sources.sha(f"{rel}/agent/geode-trajectory.json"),
         "recording_cast_sha256": sources.sha(f"{rel}/agent/recording.cast"),
         "replay_preselected": bool(cell.get("replay_preselected")) or trial in preselected,
-        # Frozen repetition contract (runner-owned freeze.json cell); null when absent.
-        **{column: _digest_or_none(cell.get(field)) for column, field in _CELL_CONTRACT.items()},
+        # Frozen repetition contract (runner-owned freeze.json cell, else the private
+        # trial receipt under the same name); null when absent.
+        **{
+            column: _digest_or_none(cell.get(field)) or _digest_or_none(private.get(field))
+            for column, field in _CELL_CONTRACT.items()
+        },
+        **_concurrency(private),
         "source_ref": source_ref,
         "source_pointer": "",
         "source_sha256": sources.sha(source_ref),
@@ -768,6 +866,19 @@ def _pair_rows(
         )
         row["pair_complete"] = complete
         a, b = (llm[0], jev[0]) if len(llm) == 1 and len(jev) == 1 else ({}, {})
+        # Paired concurrent execution (05 v2 §2.4, §3.6): only a synchronized pair of the
+        # same slot enters the intra-pair latency summary; success analysis keeps all.
+        slots = {a.get("slot_id"), b.get("slot_id")}
+        row["slot_id"] = a.get("slot_id") if len(slots) == 1 else None
+        row["same_slot"] = None if None in slots else len(slots) == 1
+        syncs = [a.get("pair_sync"), b.get("pair_sync")]
+        row["pair_sync"] = False if False in syncs else True if syncs == [True, True] else None
+        for name in ("dispatch_skew_s", "agent_start_skew_s"):
+            skews = [value for value in (a.get(name), b.get(name)) if value is not None]
+            row[name] = max(skews) if len(skews) == 2 else None
+        row["intra_pair_latency_comparable"] = bool(
+            complete and row["same_slot"] is True and row["pair_sync"] is True
+        )
         row["llm_passed"] = a.get("outcome") == "passed" if a.get("validity") == "valid" else None
         row["jev_passed"] = b.get("outcome") == "passed" if b.get("validity") == "valid" else None
         row["success_delta"] = int(row["jev_passed"]) - int(row["llm_passed"]) if complete else None
@@ -815,7 +926,8 @@ def _summary_rows(
         name
         for name in (trials[0].keys() if trials else [])
         if name.endswith(("_total", "_observed_sum", "_missing_calls", "_calls"))
-        and not name.startswith("judge_")
+        # Per-trial timing and concurrency counts are not additive usage totals.
+        and not name.startswith(("judge_", "overlapping_"))
     ]
     for label in [*labels, "all"]:
         members = list(trials) if label == "all" else [t for t in trials if t["arm_label"] == label]
@@ -1011,6 +1123,7 @@ def _load_phase(
         )
         for cell in cells
     ]
+    _attach_overlaps(trials, calls)
     return _Phase(
         phase_dir,
         sources,

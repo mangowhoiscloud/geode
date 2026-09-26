@@ -402,7 +402,12 @@ None of them dispatches a model, pushes a branch or merges a PR.
   Astra `subscription_api_equivalent_estimate_usd`, Jev
   `typesafe_price_estimate_usd` and `actual_billed_usd` stay separate and are
   never summed; billed USD stays null until a provider export is reconciled by
-  request identity.
+  request identity. For paired concurrent runs, trial rows add `slot_id`,
+  `dispatch_skew_s`, `agent_start_skew_s`, `pair_sync`, `concurrent_trials` and
+  `external_account_usage` (always `unknown`) from the private trial receipt, and
+  `overlapping_calls` from call-ledger intervals (null unless every interval is
+  known). Pair rows keep only same-slot synchronized pairs as
+  `intra_pair_latency_comparable`.
 - `scripts/eval/handoff_tables.py reliability` combines one frozen repetition
   set's `e2e_trials` by arm and case into `reliability.jsonl` and
   `reliability_summary.json`: per-task pass@n and pass^n with source pointers,

@@ -183,3 +183,61 @@ def test_billing_reconciliation_rejects_duplicate_or_mismatched_identity() -> No
             export_sha256="0" * 64,
             source="fixture",
         )
+
+
+def test_paired_slot_columns_come_from_private_receipts(tmp_path: Path) -> None:
+    phase = build_phase(tmp_path / "run", mode="complete", slots=True, observed_judge_latency=True)[
+        "phase_dir"
+    ]
+    out = _export(tmp_path, phase_dir=phase)
+    trials = {row["trial_name"]: row for row in _rows(out, "e2e_trials")}
+    llm, jev = trials["fixture-natural-r0-inbox-a-a"], trials["fixture-natural-r0-inbox-a-b"]
+    assert llm["slot_id"] == jev["slot_id"] == "r0-inbox-a"
+    assert (llm["dispatch_skew_s"], llm["agent_start_skew_s"], llm["pair_sync"]) == (0.2, 3.5, True)
+    # Arm b's receipt uses the Run draft names (pair_launch_skew_s, ...): same columns.
+    assert (jev["dispatch_skew_s"], jev["agent_start_skew_s"], jev["concurrent_trials"]) == (
+        0.2,
+        3.5,
+        1,
+    )
+    assert all(row["external_account_usage"] == "unknown" for row in trials.values())
+    # Both arms of a slot start together: every call overlaps the sibling's three calls;
+    # slots run sequentially, so no call of the other slot overlaps.
+    assert all(row["overlapping_calls"] == 3 for row in trials.values())
+    assert all(row["overlapping_calls_missing_intervals"] == 0 for row in trials.values())
+    pairs = {row["case_id"]: row for row in _rows(out, "e2e_pairs")}
+    synced, late = pairs["inbox-a"], pairs["inbox-b"]
+    assert (synced["same_slot"], synced["pair_sync"]) == (True, True)
+    assert synced["intra_pair_latency_comparable"] is True
+    assert synced["judge_latency_s_delta"] is not None
+    assert (late["pair_sync"], late["agent_start_skew_s"]) == (False, 42.0)
+    assert late["intra_pair_latency_comparable"] is False  # success analysis keeps it
+    assert late["success_delta"] == 0
+    for table in handoff_tables.TABLES:
+        text = (out / f"{table}.jsonl").read_text()
+        assert "codex_account_fp12" not in text and "0123456789ab" not in text
+
+
+def test_slot_columns_stay_unknown_without_receipts_and_reject_contradictions(
+    tmp_path: Path,
+) -> None:
+    phase = build_phase(tmp_path / "run")["phase_dir"]
+    out = _export(tmp_path, phase_dir=phase)
+    for row in _rows(out, "e2e_trials"):
+        assert row["slot_id"] is None and row["pair_sync"] is None
+        assert row["external_account_usage"] == "unknown"
+        # A 0.0 latency placeholder and an invalid cell leave the overlap count unknown.
+        assert row["overlapping_calls"] is None and row["overlapping_calls_observed"] == 0
+    for row in _rows(out, "e2e_pairs"):
+        assert row["pair_sync"] is None and row["intra_pair_latency_comparable"] is False
+    slotted = build_phase(tmp_path / "slots", mode="complete", slots=True)["phase_dir"]
+    receipt = next((slotted / "private-receipts").glob("*a0000.json"))
+    original = json.loads(receipt.read_text())
+    for edit, message in (
+        ({"pair_launch_skew_s": 0.9}, "disagrees on dispatch_skew_s"),
+        ({"pair_sync": False}, "contradicts the recorded agent start skew"),
+        ({"agent_start_skew_s": -1}, "non-negative"),
+    ):
+        receipt.write_text(json.dumps({**original, **edit}))
+        with pytest.raises(ValueError, match=message):
+            handoff_tables.export_tables(slotted, tmp_path / message[:8], primitive="noul")
