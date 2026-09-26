@@ -411,10 +411,13 @@ None of them dispatches a model, pushes a branch or merges a PR.
   rule of the frozen cell: a matched final-verdict cell needs native reward 1,
   admitted decisive judgments, consumed negative feedback and no false
   completion; an intent helper cell also needs no wrong-target or extra lookup
-  and observed `helper_admitted`, no `helper_fallback_used` and
-  `helper_feedback_consumed` (runner receipt fields, else the call ledger and the
-  task oracle's consumption check). An unobserved helper fact leaves strict
-  success null with `strict_unobserved` reasons; it is never assumed.
+  and observed `helper_admitted` (the task oracle's `decision_succeeded`), no
+  `helper_fallback_used` (a terminal helper call answered by any provider, model or
+  response model other than the arm's helper route; null when calls and helper
+  results do not pair up) and `helper_feedback_consumed` (every helper result
+  reached a later root request). Runner receipt values must equal this
+  derivation. An unobserved helper fact leaves strict success null with
+  `strict_unobserved` reasons; it is never assumed.
   `strict_success_with_lookup` adds the lookup conditions to either rule, and a
   runner-recorded strict value that differs from the recomputation is rejected.
 - `scripts/eval/handoff_tables.py reliability` combines one frozen repetition

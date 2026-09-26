@@ -55,6 +55,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from evals.benchmarks.decision_handoff import JEV_MODEL, ROOT_MODEL
 from evals.benchmarks.decision_metrics import (
     NOT_MEASURABLE,
     RepetitionTrial,
@@ -135,9 +136,13 @@ STRICT_RULES = {
     ),
 }
 # Observed helper facts an intent cell needs (05 §3.1): runner receipt fields of these
-# names, else the call ledger (admission, fallback) and the task oracle's consumption
-# check. Unobserved stays null; a Jev failure decided by an LLM is never a Jev success.
+# names (``helper_observation`` in the trial receipt), derived again from the retained
+# oracle, handoff receipts and terminal call events. Unobserved stays null; a Jev
+# failure decided by another route is never a Jev success.
 HELPER_FIELDS = ("helper_admitted", "helper_fallback_used", "helper_feedback_consumed")
+# The arm's helper route: a helper call answered by any other (provider, model), or
+# reporting another response model, is a fallback (same provider included).
+HELPER_ROUTES = {"jev": ("typesafe", JEV_MODEL), "llm": ("openai", ROOT_MODEL)}
 PRIVATE_RECEIPTS = "private-receipts"
 
 
@@ -311,26 +316,63 @@ def _strict_components(
 
 def _helper_observations(
     sources: Sequence[Mapping[str, Any]],
-    calls: Sequence[Mapping[str, Any]],
+    receipts: Any,
+    events: Any,
     oracle: Mapping[str, Any],
     helper_engine: Any,
 ) -> dict[str, bool | None]:
-    """Helper admission, LLM fallback and result consumption, observed or null.
+    """Helper admission, route fallback and result consumption, observed or null.
 
-    ``sources`` are runner receipt mappings that may carry :data:`HELPER_FIELDS`; every
-    present value and the ledger-derived value must agree, or the trial is rejected.
+    The derivation is the intent runner's (Build-B ``helper_observation``): admission is
+    the task oracle's ``decision_succeeded``; consumption means every ``analyze_request``
+    result id reached a later root request; fallback compares every terminal
+    ``structured_decision`` call's (provider, model, response_model) with the arm's
+    helper route and stays null when calls and helper results do not pair up or a
+    route field is empty. ``sources`` are runner receipt mappings that may carry the
+    same fields; every present value must agree with the derivation.
     """
-    helper = [call for call in calls if call.get("role") == "helper"]
-    expected = "typesafe" if helper_engine == "jev" else "openai"
-    consumed = _object(oracle.get("checks")).get("results_consumed_by_root")
-    derived: dict[str, bool | None] = {
-        "helper_admitted": None
-        if not helper or any(call.get("accepted") is None for call in helper)
-        else all(call.get("accepted") is True and not call.get("error_type") for call in helper),
-        "helper_fallback_used": None
-        if not helper or helper_engine not in ("llm", "jev")
-        else any(call.get("provider") != expected for call in helper),
-        "helper_feedback_consumed": consumed if type(consumed) is bool else None,
+    checks = _object(oracle.get("checks"))
+    admitted = checks.get("decision_succeeded")
+    consumed: bool | None = None
+    fallback: bool | None = None
+    if isinstance(receipts, list):
+        rows = [row for row in receipts if isinstance(row, dict)]
+        helpers = [
+            row
+            for row in rows
+            if row.get("kind") == "tool_result" and row.get("tool") == "analyze_request"
+        ]
+        roots = [row for row in rows if row.get("kind") == "root_request"]
+        if helpers:
+            consumed = all(
+                any(h.get("tool_call_id") in (root.get("tool_result_ids") or []) for root in roots)
+                for h in helpers
+            )
+        route = HELPER_ROUTES.get(str(helper_engine))
+        if isinstance(events, list) and route is not None:
+            answered = [
+                _object(event.get("payload"))
+                for event in events
+                if isinstance(event, dict)
+                and event.get("action") == "llm.call.ended"
+                and _object(event.get("payload")).get("purpose") == "structured_decision"
+            ]
+            provider, model = route
+            if (
+                helpers
+                and len(answered) == len(helpers)
+                and all(payload.get("provider") and payload.get("model") for payload in answered)
+            ):
+                fallback = any(
+                    payload["provider"] != provider
+                    or payload["model"] != model
+                    or payload.get("response_model") not in (None, model)
+                    for payload in answered
+                )
+    derived = {
+        "helper_admitted": admitted if type(admitted) is bool else None,
+        "helper_fallback_used": fallback,
+        "helper_feedback_consumed": consumed,
     }
     observed: dict[str, bool | None] = {}
     for name in HELPER_FIELDS:
@@ -338,7 +380,7 @@ def _helper_observations(
         if derived[name] is not None:
             values.append(derived[name])
         if any(type(value) is not bool for value in values) or len(set(values)) > 1:
-            raise ValueError(f"{name}: receipts and the call ledger disagree")
+            raise ValueError(f"{name}: runner receipts and the retained evidence disagree")
         observed[name] = values[0] if values else None
     return observed
 
@@ -802,8 +844,15 @@ def _trial_row(
     components = _strict_components(verification, handoff, verifier, final_action)
     helper = (
         _helper_observations(
-            [receipt, _object(receipt.get("e2e")), semantic, private],
-            calls,
+            [
+                receipt,
+                _object(receipt.get("helper_observation")),
+                _object(receipt.get("e2e")),
+                semantic,
+                private,
+            ],
+            receipts,
+            sources.load(f"{rel}/agent/call-events.json"),
             _object(verifier.get("oracle")) or oracle,
             cell.get("intent_target_engine") or label,
         )

@@ -148,7 +148,7 @@
       "authority": "evidence-storage",
       "path": "docs/eval/external-artifact-repository.md",
       "summary": "Canonical append-only publication and disclosure contract for large GEODE evaluation artifacts.",
-      "sha256": "7c536f151348db44091f44dd699a1a07b1d7d0fd04876b677c23714d1cf4868d",
+      "sha256": "df70967702f2d597a81d99af5441ef0e6c7374e2ae26b06b357e00c28781aa02",
       "triggers": [
         "artifact repository",
         "eval-artifact",

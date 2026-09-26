@@ -419,28 +419,113 @@ def test_intent_strict_success_needs_observed_helper_admission_and_consumption(
     assert rows["inbox-b/a"]["strict_unobserved"][0] == "helper_admitted unobserved"
 
 
-def test_helper_observations_come_from_the_call_ledger_and_must_agree() -> None:
-    oracle = {"checks": {"results_consumed_by_root": True}}
-    jev_ok = {"role": "helper", "provider": "typesafe", "accepted": True, "error_type": None}
-    jev_rejected = {**jev_ok, "accepted": False}
-    llm_after_jev = {**jev_ok, "provider": "openai"}
-    observed = handoff_tables._helper_observations([], [jev_ok], oracle, "jev")
-    assert observed == {
-        "helper_admitted": True,
-        "helper_fallback_used": False,
-        "helper_feedback_consumed": True,
+def _runner_reference(
+    arm: str, oracle: dict[str, Any], handoff: Any, events: Any
+) -> dict[str, bool | None]:
+    """The intent runner's helper_observation (Build-B B2 runner.py), restated verbatim."""
+    route = {"a": ("openai", "gpt-6-astra"), "b": ("typesafe", "jev-1.13.0")}
+    checks = oracle.get("checks") if isinstance(oracle.get("checks"), dict) else {}
+    admitted = checks.get("decision_succeeded")
+    fallback = consumed = None
+    if isinstance(handoff, list):
+        helpers = [
+            r
+            for r in handoff
+            if r.get("kind") == "tool_result" and r.get("tool") == "analyze_request"
+        ]
+        roots = [r for r in handoff if r.get("kind") == "root_request"]
+        if helpers:
+            consumed = all(
+                any(h.get("tool_call_id") in (root.get("tool_result_ids") or []) for root in roots)
+                for h in helpers
+            )
+        if isinstance(events, list):
+            answered = [
+                e.get("payload") or {}
+                for e in events
+                if isinstance(e, dict)
+                and e.get("action") == "llm.call.ended"
+                and (e.get("payload") or {}).get("purpose") == "structured_decision"
+            ]
+            provider, model = route[arm]
+            if (
+                helpers
+                and len(answered) == len(helpers)
+                and all(p.get("provider") and p.get("model") for p in answered)
+            ):
+                fallback = any(
+                    p["provider"] != provider
+                    or p["model"] != model
+                    or p.get("response_model") not in (None, model)
+                    for p in answered
+                )
+    return {
+        "helper_admitted": admitted if type(admitted) is bool else None,
+        "helper_fallback_used": fallback,
+        "helper_feedback_consumed": consumed,
     }
-    assert (
-        handoff_tables._helper_observations([], [jev_rejected], oracle, "jev")["helper_admitted"]
-        is False
-    )
-    fallback = handoff_tables._helper_observations([], [jev_rejected, llm_after_jev], {}, "jev")
-    assert fallback["helper_fallback_used"] is True
-    assert fallback["helper_feedback_consumed"] is None  # no receipt or oracle observation
-    unknown = handoff_tables._helper_observations([], [{**jev_ok, "accepted": None}], {}, "jev")
-    assert unknown["helper_admitted"] is None
-    assert handoff_tables._helper_observations([], [], {}, "jev")["helper_admitted"] is None
-    with pytest.raises(ValueError, match="helper_admitted"):
-        handoff_tables._helper_observations(
-            [{"helper_admitted": True}], [jev_rejected], oracle, "jev"
-        )
+
+
+def _helper_inputs(arm: str, **changes: Any) -> tuple[dict, list, list]:
+    provider, model = {"a": ("openai", "gpt-6-astra"), "b": ("typesafe", "jev-1.13.0")}[arm]
+    oracle = {"checks": {"decision_succeeded": changes.pop("admitted", True)}}
+    helpers = [
+        {"kind": "tool_result", "tool": "analyze_request", "tool_call_id": f"h{i}"}
+        for i in range(2)
+    ]
+    root = {"kind": "root_request", "tool_result_ids": changes.pop("consumed_ids", ["h0", "h1"])}
+    payload = {
+        "purpose": "structured_decision",
+        "provider": provider,
+        "model": model,
+        "response_model": model,
+    }
+    payloads = [dict(payload), {**payload, **changes.pop("second", {})}]
+    events = [{"action": "llm.call.ended", "payload": p} for p in payloads]
+    events += [{"action": "llm.call.ended", "payload": {"purpose": "agentic_loop"}}]
+    return oracle, [*helpers, root], events[: changes.pop("events", 3)]
+
+
+@pytest.mark.parametrize("arm", ["a", "b"])
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {},
+        {"admitted": False},
+        {"consumed_ids": ["h0"]},
+        {"second": {"provider": "openai"}},
+        {"second": {"model": "gpt-6-sol"}},
+        {"second": {"response_model": "jev-1.12.0"}},
+        {"second": {"response_model": "gpt-6-sol"}},
+        {"second": {"response_model": None}},
+        {"second": {"provider": ""}},
+        {"events": 1},
+    ],
+)
+def test_helper_observations_equal_the_runner_definition(arm: str, changes: dict) -> None:
+    oracle, handoff, events = _helper_inputs(arm, **dict(changes))
+    engine = {"a": "llm", "b": "jev"}[arm]
+    table = handoff_tables._helper_observations([], handoff, events, oracle, engine)
+    assert table == _runner_reference(arm, oracle, handoff, events)
+    # The runner's recorded values on the same input are accepted, never overwritten.
+    recorded = {key: value for key, value in table.items() if value is not None}
+    assert handoff_tables._helper_observations([recorded], handoff, events, oracle, engine) == table
+
+
+def test_helper_fallback_is_a_route_mismatch_and_unpaired_events_are_null() -> None:
+    oracle, handoff, events = _helper_inputs("b")
+    observe = handoff_tables._helper_observations
+    assert observe([], handoff, events, oracle, "jev")["helper_fallback_used"] is False
+    # Same provider, another model answered: a fallback from the arm's route.
+    _, _, other_model = _helper_inputs("b", second={"response_model": "jev-1.12.0"})
+    assert observe([], handoff, other_model, oracle, "jev")["helper_fallback_used"] is True
+    _, _, astra = _helper_inputs("a", second={"model": "gpt-6-sol", "response_model": None})
+    assert observe([], handoff, astra, oracle, "llm")["helper_fallback_used"] is True
+    # Events that do not pair with helper results, or an empty route field, stay null.
+    _, _, unpaired = _helper_inputs("b", events=1)
+    assert observe([], handoff, unpaired, oracle, "jev")["helper_fallback_used"] is None
+    _, _, blank = _helper_inputs("b", second={"provider": ""})
+    assert observe([], handoff, blank, oracle, "jev")["helper_fallback_used"] is None
+    assert observe([], [], events, oracle, "jev")["helper_feedback_consumed"] is None
+    with pytest.raises(ValueError, match="helper_fallback_used"):
+        observe([{"helper_fallback_used": True}], handoff, events, oracle, "jev")
