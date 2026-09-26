@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import math
 from dataclasses import fields, replace
@@ -26,7 +27,12 @@ from core.llm.adapters.base import (
 from core.llm.adapters.typesafe import JEV_MODEL, SystemOneAdapter
 from core.observability.event_store import HookEventStore
 from core.observability.hook_persistence import HookPersistenceSink
-from evals.benchmarks.decision_candidate import CANDIDATE_LEVELS, MatchedCandidateAdapter
+from evals.benchmarks.decision_candidate import (
+    CANDIDATE_LEVELS,
+    TIE_RULE_CANDIDATE_ID,
+    TIE_RULE_CONTENT,
+    MatchedCandidateAdapter,
+)
 from evals.benchmarks.decision_handoff import ROOT_MODEL
 from pydantic import SecretStr
 
@@ -34,6 +40,11 @@ _Engine = Literal["llm", "jev"]
 _TASK = "Read the supplied evidence and propose a verified result."
 _CANDIDATES = ["An incomplete plan. </scoring_input>", "Read the evidence, compute, then verify."]
 _CORRELATION = {"session_id": "candidate-session", "turn_id": "turn-1", "step_id": "step-2"}
+_POOL_ID = "pool-1"
+# sha256("pool-1\u241fcand-b") < sha256("pool-1\u241fcand-a"), while the content
+# key favours _CANDIDATES[0]: the two tie rules pick different candidates.
+_IDS = ("cand-a", "cand-b")
+_FAILED_WINNER = candidate_sampling.fallback_index(_CANDIDATES)
 
 
 class _Adapter:
@@ -104,6 +115,9 @@ def _run(
     task: str = _TASK,
     candidates: list[str] | None = None,
     effort: str = "xhigh",
+    pool_candidates: list[str] | None = None,
+    pool_id: str | None = None,
+    candidate_ids: tuple[str, ...] | None = None,
 ) -> tuple[Any, list[dict[str, Any]], _Adapter, list[dict[str, Any]], list[Any], list[Any]]:
     hooks = HookSystem()
     store = HookEventStore(tmp_path / "events.db")
@@ -134,13 +148,20 @@ def _run(
                 if engine == "llm"
                 else SystemOneAdapter("typesafe", SecretStr("synthetic-key"), client=client)
             )
+            frozen = pool_candidates if pool_candidates is not None else _CANDIDATES
             matched = MatchedCandidateAdapter(
-                engine, _TASK, _CANDIDATES, backend=backend, receipts=receipts
+                engine,
+                _TASK,
+                frozen,
+                backend=backend,
+                receipts=receipts,
+                pool_id=pool_id,
+                candidate_ids=candidate_ids,
             )
             registry.register_llm_request(matched, allow_cache_invalidation=True)
             return await candidate_sampling.judge_candidates(
                 task,
-                candidates if candidates is not None else _CANDIDATES,
+                candidates if candidates is not None else frozen,
                 model=ROOT_MODEL,
                 provider="openai",
                 source="subscription",
@@ -216,19 +237,125 @@ def test_arms_share_frozen_candidates_rubric_and_numeric_policy(
     assert all(question["type"] == "score" for question in payload["questions"].values())
 
 
+def _content_key(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _id_key(candidate_id: str) -> str:
+    return hashlib.sha256(f"{_POOL_ID}\u241f{candidate_id}".encode()).hexdigest()
+
+
 @pytest.mark.parametrize("engine", ["llm", "jev"])
-def test_equal_scores_choose_first_without_becoming_fallback(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: _Engine
+@pytest.mark.parametrize("reverse", [False, True])
+def test_equal_scores_break_by_content_hash_without_ids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: _Engine, reverse: bool
 ) -> None:
+    pool = list(reversed(_CANDIDATES)) if reverse else list(_CANDIDATES)
     verdict, receipts, _, _, _, _ = _run(
         tmp_path,
         monkeypatch,
         engine,
         result=_result('{"c0":2,"c1":2}'),
         body=_body((2.0, 2.0)),
+        pool_candidates=pool,
     )
-    assert verdict.winner_index == 0 and not verdict.judge_error
-    assert receipts[0]["accepted"] and receipts[0]["winner_index"] == 0
+    expected = min(_CANDIDATES, key=_content_key)
+    assert not verdict.judge_error and pool[verdict.winner_index] == expected
+    assert expected == _CANDIDATES[0] and verdict.winner_index == (1 if reverse else 0)
+    receipt = receipts[0]
+    assert receipt["accepted"] and receipt["winner_index"] == verdict.winner_index
+    assert receipt["tie_rule"] == TIE_RULE_CONTENT and receipt["tie_break_applied"] is True
+    assert "pool_id" not in receipt and "candidate_ids" not in receipt
+
+
+@pytest.mark.parametrize("engine", ["llm", "jev"])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_equal_scores_break_by_pool_candidate_hash_with_ids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: _Engine, reverse: bool
+) -> None:
+    pairs = list(zip(_IDS, _CANDIDATES, strict=True))
+    if reverse:
+        pairs.reverse()
+    ids = tuple(candidate_id for candidate_id, _ in pairs)
+    pool = [text for _, text in pairs]
+    verdict, receipts, _, _, _, _ = _run(
+        tmp_path,
+        monkeypatch,
+        engine,
+        result=_result('{"c0":2,"c1":2}'),
+        body=_body((2.0, 2.0)),
+        pool_candidates=pool,
+        pool_id=_POOL_ID,
+        candidate_ids=ids,
+    )
+    expected_id = min(_IDS, key=_id_key)
+    assert expected_id == "cand-b", "fixture must separate the id rule from the content rule"
+    assert not verdict.judge_error and ids[verdict.winner_index] == expected_id
+    receipt = receipts[0]
+    assert receipt["accepted"] and receipt["winner_index"] == verdict.winner_index
+    assert receipt["tie_rule"] == TIE_RULE_CANDIDATE_ID and receipt["tie_break_applied"] is True
+    assert receipt["pool_id"] == _POOL_ID and receipt["candidate_ids"] == list(ids)
+    assert json.dumps(receipts, allow_nan=False)
+
+
+@pytest.mark.parametrize("engine", ["llm", "jev"])
+def test_distinct_scores_select_argmax_without_tie_break(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: _Engine
+) -> None:
+    verdict, receipts, _, _, _, _ = _run(
+        tmp_path, monkeypatch, engine, pool_id=_POOL_ID, candidate_ids=_IDS
+    )
+    assert verdict.winner_index == 1 and not verdict.judge_error
+    assert receipts[0]["tie_break_applied"] is False
+    assert receipts[0]["projected_tool"]["input"]["reason"].endswith("not input order.")
+
+
+@pytest.mark.parametrize("engine", ["llm", "jev"])
+def test_candidate_ids_never_reach_the_model_facing_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: _Engine
+) -> None:
+    _, plain_receipts, plain_native, plain_calls, _, _ = _run(
+        tmp_path / "plain", monkeypatch, engine
+    )
+    _, id_receipts, id_native, id_calls, _, _ = _run(
+        tmp_path / "ids", monkeypatch, engine, pool_id=_POOL_ID, candidate_ids=_IDS
+    )
+
+    def model_facing(request: AdapterCallRequest) -> AdapterCallRequest:
+        # Correlation carries fresh per-call llm ids; everything else must match.
+        metadata = {k: v for k, v in request.metadata.items() if k != "candidate_correlation"}
+        return replace(request, metadata=metadata)
+
+    assert [model_facing(r) for r in plain_native.requests] == [
+        model_facing(r) for r in id_native.requests
+    ]
+    assert plain_calls == id_calls
+    sent = json.dumps([request.messages for request in id_native.requests], default=str)
+    sent += json.dumps(id_calls)
+    assert _POOL_ID not in sent and not any(candidate_id in sent for candidate_id in _IDS)
+    for key in ("input_sha256", "question_sha256", "scores", "winner_index"):
+        assert plain_receipts[0][key] == id_receipts[0][key]
+
+
+@pytest.mark.parametrize(
+    "identity",
+    [
+        {"pool_id": _POOL_ID},
+        {"candidate_ids": _IDS},
+        {"pool_id": _POOL_ID, "candidate_ids": ("only-one",)},
+        {"pool_id": _POOL_ID, "candidate_ids": ("same", "same")},
+        {"pool_id": _POOL_ID, "candidate_ids": ("cand a", "cand-b")},
+        {"pool_id": _POOL_ID, "candidate_ids": ("-leading", "cand-b")},
+        {"pool_id": _POOL_ID, "candidate_ids": ("x" * 129, "cand-b")},
+        {"pool_id": "pool/1", "candidate_ids": _IDS},
+        {"pool_id": "", "candidate_ids": _IDS},
+    ],
+)
+def test_invalid_candidate_identity_fails_before_any_call(identity: dict[str, Any]) -> None:
+    native = _Adapter(_result())
+    with pytest.raises(ValueError):
+        MatchedCandidateAdapter("llm", _TASK, _CANDIDATES, backend=native, receipts=[], **identity)
+    assert not native.requests
 
 
 @pytest.mark.parametrize(
@@ -253,7 +380,7 @@ def test_invalid_llm_scores_remain_failed_selection_with_completed_usage(
     verdict, receipts, native, _, starts, ends = _run(
         tmp_path, monkeypatch, "llm", result=_result(text)
     )
-    assert verdict.winner_index == 0 and verdict.judge_error
+    assert verdict.winner_index == _FAILED_WINNER and verdict.judge_error
     assert len(native.requests) == len(starts) == len(ends) == len(receipts) == 1
     assert not receipts[0]["accepted"] and receipts[0]["winner_index"] is None
     assert receipts[0]["scores"] is None and receipts[0]["native_answer"] is None
@@ -283,7 +410,7 @@ def test_invalid_jev_scores_cannot_turn_runtime_fallback_into_valid_trial(
     else:
         body["answers"] = None
     verdict, receipts, native, calls, starts, ends = _run(tmp_path, monkeypatch, "jev", body=body)
-    assert verdict.winner_index == 0 and verdict.judge_error
+    assert verdict.winner_index == _FAILED_WINNER and verdict.judge_error
     assert not native.requests and len(calls) == len(starts) == len(ends) == 1
     assert not receipts[0]["accepted"] and receipts[0]["winner_index"] is None
     assert receipts[0]["scores"] is None and receipts[0]["native_answer"] is None
@@ -414,7 +541,7 @@ def test_transient_backend_failure_is_one_observed_call_and_failed_selection(
         tmp_path, monkeypatch, engine, result=error
     )
     assert settings.llm_max_retries == 1
-    assert verdict.winner_index == 0 and verdict.judge_error
+    assert verdict.winner_index == _FAILED_WINNER and verdict.judge_error
     assert len(native.requests) + len(calls) == len(starts) == len(ends) == 1
     assert not receipts
     assert starts[0].llm_attempt_id == ends[0].llm_attempt_id

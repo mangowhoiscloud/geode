@@ -5,11 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
+from collections.abc import Sequence
 from dataclasses import replace
 from html import escape
 from typing import Any, Literal
 
-from core.agent.candidate_sampling import MAX_BEST_OF, _build_judge_prompt
+from core.agent.candidate_sampling import MAX_BEST_OF, _build_judge_prompt, candidate_content_key
 from core.hooks.middleware import LlmCallRequest
 from core.llm.adapters.base import (
     AdapterCallRequest,
@@ -32,6 +34,13 @@ CANDIDATE_LEVELS = [
 ]
 
 
+# Exact score ties never fall back to input order (preregistered R4 rule).
+TIE_SEPARATOR = "\u241f"
+TIE_RULE_CANDIDATE_ID = "min sha256(pool_id + U+241F + candidate_id)"
+TIE_RULE_CONTENT = "min sha256(candidate_text)"
+_SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
+
+
 def _encoded(value: Any) -> str:
     return json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
@@ -42,6 +51,21 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(_encoded(value).encode()).hexdigest()
 
 
+def is_safe_candidate_id(value: object) -> bool:
+    """Accept only short receipt-safe identifiers; they never reach a model."""
+    return (
+        isinstance(value, str)
+        and _SAFE_ID.fullmatch(value) is not None
+        and redact_secrets(value) == value
+        and "apikey_" not in value
+    )
+
+
+def candidate_tie_key(pool_id: str, candidate_id: str) -> str:
+    """Preregistered exact-tie key ``sha256(pool_id + U+241F + candidate_id)``; smallest wins."""
+    return hashlib.sha256(f"{pool_id}{TIE_SEPARATOR}{candidate_id}".encode()).hexdigest()
+
+
 class MatchedCandidateAdapter:
     """Score one frozen pool, then project the shared argmax to ``select_candidate``.
 
@@ -49,6 +73,12 @@ class MatchedCandidateAdapter:
     default runtime selection and execution permissions remain unchanged. The caller
     owns the backend/client, receipts and observation sink. Invalid scores leave the
     runtime's explicit judge_error fallback visible; they never count as a valid trial.
+
+    Exact score ties resolve to the smallest :func:`candidate_tie_key` when the caller
+    supplies ``pool_id`` and ``candidate_ids`` (one per candidate, in presentation
+    order), otherwise to the smallest content key ``sha256(candidate_text)``. Neither
+    rule depends on input order. Identifiers go to receipts only; the model-facing
+    payload and prompts are byte-identical with or without them.
     """
 
     def __init__(
@@ -59,6 +89,8 @@ class MatchedCandidateAdapter:
         *,
         backend: LLMAdapter,
         receipts: list[dict[str, Any]],
+        pool_id: str | None = None,
+        candidate_ids: Sequence[str] | None = None,
     ) -> None:
         expected_route = ("openai", "subscription") if engine == "llm" else ("typesafe", "payg")
         if engine not in {"llm", "jev"} or (backend.provider, backend.source) != expected_route:
@@ -75,12 +107,29 @@ class MatchedCandidateAdapter:
             raise ValueError(
                 "a complete nonempty candidate pool within the runtime excerpt bound is required"
             )
+        if (pool_id is None) != (candidate_ids is None):
+            raise ValueError("pool_id and candidate_ids must be supplied together")
+        ids = None if candidate_ids is None else tuple(candidate_ids)
+        if ids is not None and (
+            not is_safe_candidate_id(pool_id)
+            or len(ids) != len(candidates)
+            or len(set(ids)) != len(ids)
+            or not all(is_safe_candidate_id(value) for value in ids)
+        ):
+            raise ValueError("candidate identities must be unique safe ids, one per candidate")
         self.provider, self.source = backend.provider, backend.source
         self.billing_type = backend.billing_type
         self.name = f"matched-candidate-{engine}"
         self.model = ROOT_MODEL if engine == "llm" else JEV_MODEL
         self.receipts = receipts
         self._engine, self._backend = engine, backend
+        self._pool_id, self._candidate_ids = pool_id, ids
+        if pool_id is not None and ids is not None:
+            self._tie_rule = TIE_RULE_CANDIDATE_ID
+            self._tie_keys = [candidate_tie_key(pool_id, value) for value in ids]
+        else:
+            self._tie_rule = TIE_RULE_CONTENT
+            self._tie_keys = [candidate_content_key(text) for text in candidates]
         self._expected_prompt = _build_judge_prompt(task, candidates)
         self._payload: dict[str, Any] = {
             "state": {
@@ -207,8 +256,13 @@ class MatchedCandidateAdapter:
             "scores": None,
             "native_answer": None,
             "winner_index": None,
+            "tie_rule": self._tie_rule,
+            "tie_break_applied": None,
             "error_type": "invalid_candidate_scores",
         }
+        if self._pool_id is not None and self._candidate_ids is not None:
+            receipt["pool_id"] = self._pool_id
+            receipt["candidate_ids"] = list(self._candidate_ids)
         try:
             if (
                 empty
@@ -243,20 +297,26 @@ class MatchedCandidateAdapter:
                 for value in scores.values()
             ):
                 raise ValueError("invalid numeric candidate score")
-            # Stable input order resolves exact ties identically in both arms.
-            winner = max(range(len(scores)), key=lambda index: scores[f"c{index}"])
+            # Exact ties resolve by the preregistered hash key, never by input order.
+            best = max(scores.values())
+            tied = [index for index in range(len(scores)) if scores[f"c{index}"] == best]
+            winner = min(tied, key=lambda index: (self._tie_keys[index], index))
             receipt.update(
                 accepted=True,
                 scores=scores,
                 native_answer=answer,
                 winner_index=winner,
+                tie_break_applied=len(tied) > 1,
                 error_type=None,
             )
             projected = {
                 "name": "select_candidate",
                 "input": {
                     "winner_index": winner,
-                    "reason": "Highest task-fulfillment score; input order breaks exact ties.",
+                    "reason": (
+                        "Highest task-fulfillment score; exact ties use the frozen hash rule, "
+                        "not input order."
+                    ),
                 },
             }
             receipt["projected_tool"] = projected
