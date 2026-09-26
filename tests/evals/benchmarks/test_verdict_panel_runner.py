@@ -436,15 +436,17 @@ def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _stability_spec(path: Path, run_id: str, workload_ids: list[str]) -> Path:
+def _stability_spec(
+    path: Path, run_id: str, workload_ids: list[str], primary: str = runner.STABILITY_PRIMARY
+) -> Path:
     spec: dict[str, Any] = _run_spec()
     spec["run_id"] = run_id
     spec["created_at"] = spec["preregistration"]["frozen_at"] = "2026-01-01T00:00:00Z"
     spec["study"]["primary_metric"] = {
-        "name": runner.STABILITY_PRIMARY,
+        "name": primary,
         "unit": "ratio",
         "direction": "maximize",
-        "aggregation": "Jev Choice rep1/rep2 both valid and equal / planned states",
+        "aggregation": "Jev rep1/rep2 both valid and equal / planned states",
         "denominator": len({workload.partition("#")[0] for workload in workload_ids}),
     }
     execution = spec["reproduction"]["execution"]
@@ -526,19 +528,20 @@ def test_u2s_runner_attempts_feed_stability_summary_and_bind_the_primary(
     }
     for primitive in ("choice", "noul"):
         spec = _stability_spec(
-            tmp_path / f"{primitive}-spec.json", unit.run_ids[primitive], workload_ids
+            tmp_path / f"{primitive}-spec.json",
+            unit.run_ids[primitive],
+            workload_ids,
+            runner.STABILITY_PRIMARIES[primitive],
         )
         runner.record_stability_aggregate(unit.outputs[primitive], report, primitive=primitive)
         rows = runner.stability_metric_rows(report, primitive=primitive)
-        if primitive == "noul":
-            continue  # the Noul run's own primary is set by its frozen run spec
         names = [row["name"] for row in rows]
         assert names[:3] == [
-            "jev_choice_pair_consistency",
-            "jev_choice_flip_rate_order_rev",
-            "jev_choice_flip_rate_para",
+            f"jev_{primitive}_pair_consistency",
+            f"jev_{primitive}_flip_rate_order_rev",
+            f"jev_{primitive}_flip_rate_para",
         ]
-        assert rows[0]["source_locator"]["value"] == "/primary/value"
+        assert rows[0]["source_locator"]["value"] == f"/runs/{primitive}/primary/value"
         validate_analysis(
             _stability_analysis(unit.outputs[primitive], spec, rows),
             run_spec_path=spec,
@@ -729,6 +732,30 @@ def test_u2s_invalid_and_rejected_judgments_are_none_and_replacements_count_once
     assert report["runs"]["noul"]["selected_invalid_attempts"] == 1
     assert report["runs"]["noul"]["complete"] is False
     assert report["runs"]["choice"]["complete"] is True
+    # The Noul run's primary stays not-measurable under its selected invalid attempt,
+    # while the descriptive summary above keeps the None decision.
+    assert report["runs"]["noul"]["primary"] == {
+        "name": "jev_noul_pair_consistency",
+        "reasons": ["selected_invalid_attempt"],
+        "value": "not-measurable",
+        "numerator": None,
+        "denominator": None,
+    }
+    noul_rows = {row["name"]: row for row in runner.stability_metric_rows(report, primitive="noul")}
+    assert noul_rows["jev_noul_pair_consistency"]["value"] == "not-measurable"
+    assert noul_rows["llm_noul_pair_consistency"]["value"] == 1.0
+    spec = _stability_spec(
+        tmp_path / "noul-spec.json",
+        "geode-jev-verdict-panel-stability-noul",
+        _plan(states),
+        "jev_noul_pair_consistency",
+    )
+    runner.record_stability_aggregate(outputs["noul"], report, primitive="noul")
+    validate_analysis(
+        _stability_analysis(outputs["noul"], spec, list(noul_rows.values())),
+        run_spec_path=spec,
+        attempts_path=outputs["noul"] / "attempts.jsonl",
+    )
 
 
 def test_u2s_missing_variant_is_not_measurable_and_never_filled(tmp_path: Path) -> None:

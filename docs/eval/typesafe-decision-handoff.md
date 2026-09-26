@@ -143,8 +143,9 @@ a selected invalid attempt is `None`, and a replaced transport failure counts on
 through its child. `decision_metrics.stability_summary` then reports rep1/rep2
 pair consistency separately from the order and paraphrase flip rates. A state
 missing any variant makes that engine and primitive not-measurable, never filled
-in; the primary `jev_choice_pair_consistency` is also not-measurable while the
-Choice run keeps a selected invalid attempt. `record_stability_aggregate` writes
+in. Each run's primary, `jev_choice_pair_consistency` or
+`jev_noul_pair_consistency`, is also not-measurable while that run keeps a
+selected invalid attempt. `record_stability_aggregate` writes
 `stability-results.json` with a selected analysis-only attempt, and
 `stability_metric_rows` binds `<engine>_<primitive>_pair_consistency`, flip-rate
 and, once gold is unsealed in the same representation,

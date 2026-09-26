@@ -542,6 +542,8 @@ STABILITY_VARIANTS = ("rep1", "rep2", "order-rev", "para")
 STABILITY_SCHEMA_ID = "geode.jev-panel-stability@1"
 STABILITY_RESULTS = "stability-results.json"
 STABILITY_PRIMARY = "jev_choice_pair_consistency"
+# Each U2s run's frozen primary (05 v2.2: Choice; coordinator 2026-09-27: Noul).
+STABILITY_PRIMARIES = {"choice": STABILITY_PRIMARY, "noul": "jev_noul_pair_consistency"}
 _PANEL_SURFACE = "judgment-panel"
 _NOUL_KEYS = ("has_contradiction", "missing_evidence")
 
@@ -727,24 +729,30 @@ def stability_report(
                 "summary": stability_summary(items) if not missing else None,
                 "items": items,
             }
+        reasons = list(engines["jev"]["reasons"])
+        if selected_invalid:
+            reasons.append("selected_invalid_attempt")
+        pair = None if reasons else engines["jev"]["summary"]["pair_consistency"]
         runs[primitive] = {
             "selected_invalid_attempts": selected_invalid,
             "complete": selected_invalid == 0
             and all(entry["summary"] is not None for entry in engines.values()),
+            # The run's primary follows the evaluation contract: not measurable while a
+            # variant is missing or an invalid attempt stays selected.
+            "primary": {
+                "name": STABILITY_PRIMARIES[primitive],
+                "reasons": reasons,
+                **_ratio_or_unknown(pair),
+            },
             "engines": engines,
         }
     choice = runs.get("choice")
-    reasons: list[str] = []
-    pair: Mapping[str, Any] | None = None
-    if choice is None:
-        reasons.append("choice_run_missing")
-    else:
-        reasons.extend(choice["engines"]["jev"]["reasons"])
-        if choice["selected_invalid_attempts"]:
-            reasons.append("selected_invalid_attempt")
-        if not reasons:
-            pair = choice["engines"]["jev"]["summary"]["pair_consistency"]
-    primary = {"name": STABILITY_PRIMARY, "reasons": reasons, **_ratio_or_unknown(pair)}
+    primary = (
+        dict(choice["primary"])
+        if choice is not None
+        else {"name": STABILITY_PRIMARY, "reasons": ["choice_run_missing"]}
+        | _ratio_or_unknown(None)
+    )
     return {
         "schema_id": STABILITY_SCHEMA_ID,
         "variants": list(STABILITY_VARIANTS),
@@ -813,7 +821,8 @@ def stability_metric_rows(
 
     Names are ``<engine>_<primitive>_pair_consistency``, ``..._flip_rate_order_rev``,
     ``..._flip_rate_para`` and, once gold is attached, ``..._pair_correct_consistency``.
-    ``jev_choice_pair_consistency`` comes from the report's primary block. Unmeasured
+    Each run's primary (``jev_choice_pair_consistency``, ``jev_noul_pair_consistency``)
+    comes from that run's primary block. Unmeasured
     rows carry ``"not-measurable"`` with null numerator, denominator and locator.
     """
     run = report["runs"].get(primitive)
@@ -849,8 +858,8 @@ def stability_metric_rows(
             metrics.append(("pair_correct_consistency", "pair_correct_consistency"))
         for suffix, path in metrics:
             name = f"{prefix}_{suffix}"
-            if name == report["primary"]["name"]:
-                rows.append(row(name, report["primary"], "/primary"))
+            if name == run["primary"]["name"]:
+                rows.append(row(name, run["primary"], f"/runs/{primitive}/primary"))
                 continue
             value = summary
             for part in path.split("/"):
