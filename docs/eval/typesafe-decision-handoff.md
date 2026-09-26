@@ -133,6 +133,11 @@ exactly once (unselected parent, child with `parent_attempt_id`), a failed
 replacement or a replacement rate above 2% stops the unit, and quota, harness or
 route failures stop it as selected invalid attempts. E2E keeps its no-replacement
 rule. An optional host Jev spend guard is consulted before every Jev call.
+A Choice-only unit (U3, X1a, X1) keys its run ID and output directory by `choice`
+alone and rotates the two Choice cells (even states Astra first, odd states Jev
+first); authored and external splits bind through the same `state_sha256` row
+contract. Internal units keep their inputs, attempts, receipts and aggregates
+byte-for-byte.
 
 After a U2s stability unit, `stability_report` reads both retained attempt files
 and their native-result receipts, keeps the selected judgments and groups them by
@@ -151,6 +156,27 @@ selected invalid attempt. `record_stability_aggregate` writes
 and, once gold is unsealed in the same representation,
 `pair_correct_consistency` rows to it under the unchanged analysis schema
 (`python -m evals.benchmarks.verdict_panel_runner stability`).
+
+U3 runs a Choice-only unit in `mode="paired-latency"` with `max_concurrency=2`:
+each state's Astra and Jev calls launch together through `asyncio.gather`, the
+next state starts only after both calls (and any §4.2 replacement) finish, and
+pacing applies between pair starts, outside every latency. The existing per-call
+limits (Astra 180 s, Jev 60 s) remain transport errors. Each receipt keeps
+`call_timing`: launch position, other panel calls in flight, UTC launch and
+completion times and monotonic offsets from the unit start; `latency_s` is the
+monotonic dispatch-to-completion span. `pair-log.jsonl` records each pair's
+launch skew, and a skew above one second stops the unit as a dispatcher defect.
+`latency_report` recomputes the skew from the original launches and reports the
+median of Jev − Astra latency over comparable pairs as
+`paired_median_latency_delta_s`, with the manifest-seeded source-cluster interval
+and the preregistered decision (supported below 0 s, not-supported above 0 s,
+otherwise mixed). A pair with a missing, infrastructure-invalid, replaced or
+V1-rejected side, or an excessive skew, leaves the latency summary with a counted
+reason; with unsealed gold, each engine's accuracy keeps every planned state and
+counts a rejection as wrong. A missing pair, a selected invalid attempt, an
+excessive skew or no comparable pair makes the primary not-measurable, and
+`record_latency_aggregate` then writes an invalid aggregate so the contract keeps
+it unpublished (`python -m evals.benchmarks.verdict_panel_runner latency`).
 
 The Noul profile explicitly sets `verification_primitive=noul` alongside
 `verification_engine=llm|jev` on the existing `a0` inbox path. The Harbor entry

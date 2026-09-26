@@ -146,6 +146,13 @@ functional change.
   variant leaves the unit not measurable instead of being filled. A recorded
   aggregate binds `jev_choice_pair_consistency`, flip rates and, after
   unsealing, correct-pair consistency to analysis rows.
+- Let the verdict panel runner run Choice alone (U3, X1a, X1) on authored or
+  external splits, and add U3's paired latency mode: each state's Astra and Jev
+  calls launch together with one pair in flight, receipts keep monotonic launch
+  and completion times, and a launch skew above one second stops the unit. The
+  latency report binds the within-pair median Jev − Astra delta with its
+  manifest-seeded cluster interval and preregistered decision, and counts the
+  excluded pairs by reason. Existing panel units keep their bytes.
 - Add auxiliary repetition reliability to the judgment metrics: per-task
   combinatorial pass@n and pass^n with equal task weights, never a pooled rate.
   A frozen task × repetition plan is rejected with enumerated reasons (N_i < n,
