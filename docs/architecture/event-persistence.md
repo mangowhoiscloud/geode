@@ -95,6 +95,13 @@ feedback can be intentionally bounded before it becomes a runtime event.
 Existing stored rows and immutable trajectories are not rewritten or promoted
 by this change. Payload byte limits still include the metadata overhead.
 
+Stored payload hashes cover capture metadata as well as content. Recoverability
+checks first verify that complete stored hash, then compare the content hash
+without the reserved capture metadata. A whole-payload truncation summary keeps
+both anchors; legacy summaries retain their existing content-hash interpretation.
+Metadata changes must not masquerade as lost content, and metadata tampering
+must still fail stored-record integrity checks.
+
 Automatic `runtime_event_refs` are built by the hook-event store's read-only
 reader. Each reference covers one session and one persisted `schema_version`;
 a session containing v3 and v5 rows receives two references with those actual

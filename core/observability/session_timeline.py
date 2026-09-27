@@ -1315,7 +1315,30 @@ def bound_session_payload(
         "original_bytes": size,
         "keys": list(result)[: active.max_collection_items],
         "payload_hash": sha256(encoded.encode("utf-8")).hexdigest(),
+        "content_sha256": session_payload_content_sha256(result),
     }
+
+
+def session_payload_content_sha256(payload: Mapping[str, Any]) -> str:
+    """Hash retained content independently of known capture bookkeeping.
+
+    The row's ``payload_hash`` still authenticates every stored byte, including
+    this metadata. Unknown metadata remains content rather than being erased.
+    """
+    content = dict(payload)
+    capture = content.get("_capture_quality")
+    if (
+        isinstance(capture, Mapping)
+        and set(capture) == {"version", "content_reduced"}
+        and type(capture.get("version")) is int
+        and capture.get("version") == 1
+        and type(capture.get("content_reduced")) is bool
+    ):
+        del content["_capture_quality"]
+    encoded = json.dumps(
+        content, ensure_ascii=False, separators=(",", ":"), sort_keys=True, allow_nan=False
+    )
+    return sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def _bounded_value(value: Any, policy: SessionEventPolicy, *, depth: int) -> Any:
@@ -1585,5 +1608,6 @@ __all__ = [
     "bound_session_payload",
     "current_session_timeline",
     "ensure_session_event_schema",
+    "session_payload_content_sha256",
     "set_current_session_timeline",
 ]

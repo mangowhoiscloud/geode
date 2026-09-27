@@ -300,6 +300,8 @@ functional change.
   truncation markers in bounded verification feedback do not invalidate a
   faithful replay. Preserve conservative legacy checks and real clipping,
   redaction, omitted content, and nested reduction evidence.
+  Keep content recovery hashes separate from full stored-payload integrity so
+  capture metadata preserves exact session and offloaded-result recovery.
 - Compare SystemOne probability sums and Score expectations, and matched LLM
   Choice sums, using the exact decimal representations of validated numbers.
   Inclusive tolerance boundaries no longer reject valid decisions due to binary
