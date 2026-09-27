@@ -163,7 +163,7 @@ function EvaluationGuide({ ko }: { ko: boolean }) {
         <li><a href={`${jevV3Packet}/SCORING.md`}>{ko ? "누가 무엇을 채점하는가" : "Scoring authorities and denominators"}</a>{" · "}<a href={`${jevV3Packet}/units.json`}>{ko ? "27개 단위와 계보별 근거" : "27-unit evidence and lineage index"}</a></li>
         <li><a href={`${jevV3Packet}/REPRODUCE.md`}>{ko ? "무결성 확인·오프라인 재계산·새 실행" : "Integrity checks, offline recomputation and new runs"}</a>{" · "}<a href={`${jevV3Packet}/corrections/numeric-parser-20260928/README.md`}>{ko ? "U4·X2 교정 재채점" : "U4/X2 corrected reanalysis"}</a></li>
         <li><a href={`${jevV3Packet}/analyses/u8n-observed-pairs-20260928/README.md`}>{ko ? "E8 U8n 사후 완성 쌍 분석과 후보 판정 재계산" : "E8 U8n post-hoc complete-pair analysis and candidate recomputation"}</a></li>
-        <li><a href="https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/jev-v3-study-20260927.md">{ko ? "소스·공개 범위 기록" : "Source and disclosure record"}</a>{" · "}<a href="https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/jev-verdict-publication-20260924.md">{ko ? "별도 M4–M6 파일럿" : "Separate M4–M6 pilot"}</a></li>
+        <li><a href="https://github.com/mangowhoiscloud/geode/blob/f0a5ce10cdb87e9738ff41e6e09dfbbfbb97a8f2/docs/eval/jev-v3-study-20260927.md">{ko ? "소스·공개 범위 기록" : "Source and disclosure record"}</a>{" · "}<a href="https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/jev-verdict-publication-20260924.md">{ko ? "별도 M4–M6 파일럿" : "Separate M4–M6 pilot"}</a></li>
       </ul>
       <p>{ko
         ? "공개 투영본과 원 native 파일의 해시는 구분합니다. 점수 재계산, 파일 무결성 확인, 새 모델 실행도 다른 활동입니다. 비공개 추론·인증·머신 식별자는 공개하지 않으며, Mind2Web test 본문은 재배포하지 않습니다. −10 pp 마진의 업무 손실·서비스 목표 근거와 실제 청구액은 확인되지 않았습니다."

@@ -2281,7 +2281,7 @@ geode-eval audit-agreement --help
 -   [누가 무엇을 채점하는가](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/SCORING.md) · [27개 단위와 계보별 근거](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/units.json)
 -   [무결성 확인·오프라인 재계산·새 실행](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/REPRODUCE.md) · [U4·X2 교정 재채점](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/corrections/numeric-parser-20260928/README.md)
 -   [E8 U8n 사후 완성 쌍 분석과 후보 판정 재계산](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/analyses/u8n-observed-pairs-20260928/README.md)
--   [소스·공개 범위 기록](https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/jev-v3-study-20260927.md) · [별도 M4–M6 파일럿](https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/jev-verdict-publication-20260924.md)
+-   [소스·공개 범위 기록](https://github.com/mangowhoiscloud/geode/blob/f0a5ce10cdb87e9738ff41e6e09dfbbfbb97a8f2/docs/eval/jev-v3-study-20260927.md) · [별도 M4–M6 파일럿](https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/jev-verdict-publication-20260924.md)
 
 공개 투영본과 원 native 파일의 해시는 구분합니다. 점수 재계산, 파일 무결성 확인, 새 모델 실행도 다른 활동입니다. 비공개 추론·인증·머신 식별자는 공개하지 않으며, Mind2Web test 본문은 재배포하지 않습니다. −10 pp 마진의 업무 손실·서비스 목표 근거와 실제 청구액은 확인되지 않았습니다.
 
