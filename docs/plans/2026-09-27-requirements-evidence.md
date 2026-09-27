@@ -79,9 +79,11 @@ concurrency modes or deployed services. No live external effects were tested.
    owner, update the code-to-doc map and functional changelog.
 6. Run targeted behavior checks, static gates and source/link checks; review
    the fixed diff independently. Required CI must pass on the actual PR head.
-7. Merge feature → develop and, after inspecting the accumulated promotion
-   diff, develop → main through the repository guard; verify merge parents.
-   This does not authorize a package release or service restart.
+7. Follow the rollout ordering below before feature → develop admission. Only
+   after that boundary is cleared may the authorized GitFlow proceed through
+   the repository guard, with current-head CI and verified merge parents.
+   Do not advance the existing main promotion while rollout ownership remains
+   unresolved. No package release or service restart is included.
 
 Deletion is confined to the unsound coverage inference and obsolete template
 instructions. It does not remove historical logs, stored v1 preflight payloads,
@@ -89,6 +91,43 @@ plans, evaluation attempts, acceptance tests, or another session's workspace.
 Current readers treat ledger payloads as observations; the outer EvidenceRow
 schema remains v2. New nested preflight payloads use v2 and only the new field.
 No legacy writer or compatibility alias is needed for this internal producer.
+
+## Rollout ordering and integration hold
+
+The user clarified during implementation that an active develop-based rollout
+takes precedence over this refactor. The refactor remains isolated on
+`codex/requirements-evidence-20260927`, originally allocated from fetched
+`develop@049516995ca4`; no protected branch has been modified by this task.
+
+- [PR #3442](https://github.com/mangowhoiscloud/geode/pull/3442) is Draft pending
+  rollout clearance. Green checks alone do not clear this ordering condition.
+- The active `GEODE Jev-Astra 롤아웃` task uses
+  [PR #3441](https://github.com/mangowhoiscloud/geode/pull/3441), inspected at
+  `7f32ff272d1b07a6404c593e74dad727857e0bd8`. Its description explicitly forbids
+  merge while the experimental source is frozen. This refactor does not grant
+  permission to merge that PR, change its pins, or rewrite run evidence.
+- Once the rollout owner resolves its integration hold, incorporate the admitted
+  changes first. If #3441 is deferred/excluded instead, that must be an explicit
+  disposition; do not infer it from successful CI or the passage of time.
+- Fetch the resulting `develop` and merge it into this existing topic branch.
+  Preserve both histories; no rebase, cherry-pick into the experiment, or edits
+  to another worktree. Regenerate affected mirrors, inspect the resulting diff,
+  run affected regressions and fresh required PR CI, then make #3442 ready.
+- Leave the existing [main promotion #3434](https://github.com/mangowhoiscloud/geode/pull/3434)
+  to the resolved integration order. At inspection it already represented 45
+  merged feature PRs and 401 changed files, beyond this refactor's own scope.
+
+A non-mutating worktree preview (`git merge-tree --write-tree --name-only`,
+refactor `691d5686090b` versus #3441 `7f32ff272d1b`) found six shared paths:
+`CHANGELOG.md`, `docs/architecture/extensibility-roadmap.md`,
+`docs/architecture/official-docs-generation.md`, `site/public/llms-full.txt`,
+`site/src/data/geode/architecture-baseline.json`, and
+`site/src/data/geode/changelog.ts`. It returned the expected conflict exit 1
+for the generated roadmap LOC cells, architecture JSON, and changelog mirror.
+No branch or working tree was changed by this preview. Resolve source content
+first and use `architecture_baseline.py --update`, site `sync-stats`, build and
+`export-md`; do not hand-merge generated metrics. Absence of textual runtime
+conflicts is not evidence that the refactor preserves a frozen live experiment.
 
 ## Verification and progress
 
