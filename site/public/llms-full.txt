@@ -2265,6 +2265,26 @@ geode-eval audit-agreement --help
 
 [Judge 차원과 해석](https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions.md) · [사람과 judge의 일치도 구현](https://github.com/mangowhoiscloud/geode/blob/main/core/audit/judge_agreement.py)
 
+## Jev v3: 본실험 결과와 채점 근거
+
+2026-09-27 본실험은 판정 정확도, 확률과 오류 선별, 호출 지연, 실제 과제 완료를 27개 등록 단위로 구분합니다. 앞선 M4–M6 파일럿과 본실험의 분모를 합치지 않습니다. 연구 자료는 geode-eval-artifacts PR #46으로 공개됐으며, 2026-09-28 원격 재확인을 마쳤습니다. 아래 링크는 검증한 공개 커밋 3bcf4044eb5c2411dd48122d672aef72a83fb30e에 고정됩니다. 자료 공개와 새 실험 수행은 구분합니다.
+
+최신 U4·X2 값은 저장 응답 전체 행렬을 확인한 사후 수치 검사기 교정 분석입니다. U4는 Jev 59/80 대 Astra 79/80, 차이 −25.00 pp, 95% CI \[−35.23, −16.25\]입니다. X2는 196/240 대 226/240, −12.50 pp, CI \[−17.22, −8.04\]입니다. 새 모델 호출 없이 기존 정답·분모·군집·seed·재표집 규칙을 유지했고, 원 등록 결과는 별도로 보존했습니다. U4의 기준 미달과 X2의 비열등성 미입증은 그대로입니다.
+
+의도·대상 패널의 216/220 대 220/220은 등록한 −5 pp 기준을 충족했지만 설계자 저작 패널의 관측입니다. E7은 같은 12과제를 A/B/C로 두 번씩 수행해 72/72 strict 성공했으나 C의 judge fallback은 0회였습니다. 이 결과는 새로운 72과제의 성공이나 재검토 분기의 효용을 입증하지 않습니다. Noul의 기존 의미 실패, I5의 계약 전달 결함, E6의 무효 중단과 후속 계보도 함께 보존합니다.
+
+원래 source5의 U8n은 사전 gate 실패 뒤 36셀 모두 미실행으로 남았습니다. 별도 source7/E8 후속은 U0e admission 2/2를 통과한 뒤 U8n 36셀 중 24셀에서 중단됐습니다. A는 12개 유효 성공, B는 11개 유효 전달 실패와 주입 증거 오류로 인한 1개 무효였고, 나머지 12셀은 미실행입니다. 원 27개 등록 단위와 36셀·18쌍·6원천 계획을 보존하며, E8 주지표도 not-measurable과 분자·분모 null로 유지합니다.
+
+중단 뒤 양쪽이 유효하게 끝난 11쌍·22셀·4원천만 별도 기술통계로 분석했습니다. 무효 B와 그 짝인 성공 A는 함께 제외했습니다. 생성과 수리는 양쪽 모두 Astra가 맡았고, Astra 판정 A는 11/11 strict·recovered 성공으로 전달됐습니다. Jev Noul 판정 B의 마지막 후보도 기존 과제 oracle를 11/11 통과했지만, Jev가 계속 근거 부족으로 판정해 11/11의 전달이 보류됐습니다. B의 native strict·recovered는 0/11로 유지합니다. 관측된 문제는 정답과 근거를 갖춘 수리 후보의 오거부이며, 후보 정답을 최종 전달 성공으로 바꾸지 않습니다. 중단 뒤 선택된 4원천 표본이므로 신뢰구간·비열등성·인과 효과·모집단 일반화를 제시하지 않으며 추가 U8n 모델 실행은 계획하지 않습니다.
+
+-   [한국어 결과 해석](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/INTERPRETATION.ko.md) · [영문 결과 해석](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/INTERPRETATION.md)
+-   [누가 무엇을 채점하는가](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/SCORING.md) · [27개 단위와 계보별 근거](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/units.json)
+-   [무결성 확인·오프라인 재계산·새 실행](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/REPRODUCE.md) · [U4·X2 교정 재채점](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/corrections/numeric-parser-20260928/README.md)
+-   [E8 U8n 사후 완성 쌍 분석과 후보 판정 재계산](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/analyses/u8n-observed-pairs-20260928/README.md)
+-   [소스·공개 범위 기록](https://github.com/mangowhoiscloud/geode/blob/f0a5ce10cdb87e9738ff41e6e09dfbbfbb97a8f2/docs/eval/jev-v3-study-20260927.md) · [별도 M4–M6 파일럿](https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/jev-verdict-publication-20260924.md)
+
+공개 투영본과 원 native 파일의 해시는 구분합니다. 점수 재계산, 파일 무결성 확인, 새 모델 실행도 다른 활동입니다. 비공개 추론·인증·머신 식별자는 공개하지 않으며, Mind2Web test 본문은 재배포하지 않습니다. −10 pp 마진의 업무 손실·서비스 목표 근거와 실제 청구액은 확인되지 않았습니다.
+
 ## .eval은 Petri 전용 파일이 아닙니다
 
 Eval은 평가 절차를 뜻하고, .eval은 Inspect가 저장하는 평가 로그 형식입니다. Petri는 Inspect 위에서 동작하므로 이 형식을 사용합니다. 모델·실행 설정, 샘플, 메시지와 점수를 함께 읽되, 파일이 존재하거나 실행 상태가 success라고 해서 모든 샘플의 답이 정답이라는 뜻은 아닙니다. [Inspect 로그 계약](https://inspect.aisi.org.uk/eval-logs.html)

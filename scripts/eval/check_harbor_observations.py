@@ -33,6 +33,7 @@ from core.observability.trajectory import (
 from evals.benchmarks.decision_handoff import JEV_MODEL, ROOT_MODEL
 from evals.benchmarks.decision_handoff_runtime import (
     INBOX_SYSTEM,
+    NATIVE_INTERVENTION_CONTENT_POLICY,
     _json_digest,
     handoff_call_coverage_complete,
 )
@@ -417,6 +418,10 @@ def _verification_check(
     )
 
     _require(primitive in {"choice", "noul"}, "unknown verification primitive")
+    _require(
+        evidence.get("intervention_failures", []) == [],
+        "verification intervention evidence failure",
+    )
     cascade = engine == "cascade"
     _require(
         (cascade and primitive == "choice" and cascade_tau is not None)
@@ -492,6 +497,30 @@ def _verification_check(
         prefix = intervention.get("receipt_prefix_length")
         native_output = intervention.get("native")
         effective = intervention.get("effective")
+        if "native_content_policy" in intervention:
+            _require(
+                intervention["native_content_policy"] == NATIVE_INTERVENTION_CONTENT_POLICY
+                and re.fullmatch(r"[0-9a-f]{64}", str(intervention.get("native_original_sha256")))
+                and isinstance(native_output, dict),
+                "verification intervention native projection malformed",
+            )
+            for field in ("codex_output_items", "reasoning_items"):
+                items = native_output.get(field)
+                _require(isinstance(items, list), "verification intervention items malformed")
+                for item in items:
+                    _require(isinstance(item, dict), "verification intervention item malformed")
+                    if item.get("type") == "reasoning" and "encrypted_content" in item:
+                        digest = item["encrypted_content"]
+                        if digest is None:
+                            continue
+                        _require(
+                            isinstance(digest, dict)
+                            and set(digest) == {"sha256", "bytes"}
+                            and re.fullmatch(r"[0-9a-f]{64}", str(digest["sha256"]))
+                            and type(digest["bytes"]) is int
+                            and digest["bytes"] >= 0,
+                            "verification intervention ciphertext digest malformed",
+                        )
         _require(
             injected_id in roots
             and type(prefix) is int
