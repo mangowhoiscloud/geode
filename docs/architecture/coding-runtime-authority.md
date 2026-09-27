@@ -49,6 +49,30 @@ The fixed rules are:
 
 ## Authority matrix
 
+### Routing suggestions and execution evidence
+
+[`task_preflight.py`](../../core/agent/task_preflight.py) classifies request text
+heuristically. Its nested v2 payload exposes `suggested_evidence` and routing
+notes as advisory context, not product requirements or acceptance criteria.
+Existing v1 observations remain historical data; no stored payload is rewritten.
+
+[`EvidenceLedger`](../../core/agent/evidence_ledger.py) records redacted
+preflight, final-result, approval and verification-policy observations with
+session/turn/call identity. A final row can contain an error. Payload hashes
+support correlation, not authenticated or tamper-proof evidence. Row presence
+does not verify a side effect; the old `evidence_check` presence inference is
+retired. Verify/PostVerify/Stop and their evidence references retain their
+separate completion-policy authority.
+
+Finalization writes timeline, JSONL evidence and checkpoint through independent
+owners, without a shared transaction. Evidence writes are best-effort diagnostics.
+The JSONL append helper serializes threads within one process; it does not
+promise cross-process coordination or power-loss durability. Atomic file replace
+prevents partial replacement visibility, but does not establish a transaction
+with external effects or a fully crash-tested recovery contract. Stronger claims
+need explicit failure/retry scope and authoritative target readback. See the
+[backend claim audit and acceptance plan](../plans/2026-09-27-requirements-evidence.md).
+
 ### Worker admission and failure boundary (Unreleased)
 
 The legacy callback path in `SubAgentManager` binds the handler signature before

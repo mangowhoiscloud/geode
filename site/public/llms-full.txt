@@ -1153,6 +1153,8 @@ Unreleased: 프로필·프로젝트 기억·학습·저장 규칙의 데이터�
 
 실행 표면이 바인딩되지 않으면 CLI라고 추측하지 않고 플랫폼 힌트를 생략합니다. 명시된 표면도 사용 가능한 도구나 샌드박스 권한을 보증하지 않습니다. 모델·도구 그래프가 바뀌면 이전 preflight 힌트를 무효화하고 시스템 프롬프트를 다시 조립합니다. 필수 검증 조건은 별도 상태로 유지됩니다.
 
+작업 preflight는 요청의 키워드와 현재 도구를 바탕으로 한 참고 정보입니다.`suggested_evidence`는 요구사항이나 완료 판정이 아니며, 이전 턴의 기록이나 최종 응답의 존재만으로 작업 성공을 판단하지 않습니다. 실제 완료 정책은 Verify/PostVerify/Stop 경로가 담당합니다.
+
 ## 레이어 조립: build\_system\_prompt
 
 호출 직전 조립은 `core/agent/system_prompt.py`의 `build_system_prompt(model)`이 담당합니다. 실제 문자열은 정적 prefix 뒤에 `<dynamic_context>` 경계 마커를 붙이는 형태입니다.

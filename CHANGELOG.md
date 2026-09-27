@@ -63,6 +63,11 @@ functional change.
 
 ### Changed
 
+- Treat heuristic task-preflight evidence as advisory suggestions in nested
+  schema v2. Remove the session-wide row-presence check that mislabeled routing
+  guesses as evidence requirements and could reuse another turn's records.
+  Preserve final errors, observation history, and Verify/PostVerify/Stop policy.
+
 - Resolve new-session credential policy and per-model plan accounts through one
   routing owner. Preserve each live session's concrete API/Subscription source,
   pass model-specific credentials and endpoints to SDK calls, and reject
