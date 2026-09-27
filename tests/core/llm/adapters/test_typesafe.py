@@ -536,3 +536,52 @@ def test_explicit_tolerances_relax_evaluation_parsing_without_changing_runtime_d
     for bad in (0, -0.01, 0.051, float("nan"), True):
         with pytest.raises(ValueError, match="tolerance"):
             parse_systemone_answers(shifted, score_questions, score_tolerance=bad)
+
+
+@pytest.mark.parametrize(
+    ("score", "bound", "accepted"),
+    [
+        (1.03, 0.03, True),
+        (0.97, 0.03, True),
+        (1.0299999999999998, 0.03, True),
+        (1.0300000000000002, 0.03, False),
+        (0.9699999999999999, 0.03, False),
+        (1.00001, 1e-5, True),
+        (1.0000100000000003, 1e-5, False),
+    ],
+)
+def test_score_tolerance_includes_decimal_boundary_without_extra_slack(
+    score: float, bound: float, accepted: bool
+) -> None:
+    answer = {**SCORE_ANSWER, "score": score, "probabilities": {"0": 0.2, "1": 0.6, "2": 0.2}}
+    text = json.dumps({"s": answer})
+    if accepted:
+        assert parse_systemone_answers(text, {"s": SCORE_QUESTION}, score_tolerance=bound) == {
+            "s": answer
+        }
+    else:
+        with pytest.raises(ValueError, match="score does not match"):
+            parse_systemone_answers(text, {"s": SCORE_QUESTION}, score_tolerance=bound)
+
+
+@pytest.mark.parametrize(
+    ("remaining", "bound", "accepted"),
+    [
+        (0.175, 0.025, True),
+        (0.225, 0.025, True),
+        (0.17499999999999996, 0.025, False),
+        (0.22500000000000003, 0.025, False),
+        (0.20001, 1e-5, True),
+        (0.20001000000000002, 1e-5, False),
+    ],
+)
+def test_probability_sum_tolerance_includes_decimal_boundary_without_extra_slack(
+    remaining: float, bound: float, accepted: bool
+) -> None:
+    answer = deepcopy(ANSWERS)
+    answer["decision"]["probabilities"]["unknown"] = remaining
+    if accepted:
+        assert parse_choice_answers(json.dumps(answer), QUESTIONS, sum_tolerance=bound) == answer
+    else:
+        with pytest.raises(ValueError, match="distribution"):
+            parse_choice_answers(json.dumps(answer), QUESTIONS, sum_tolerance=bound)

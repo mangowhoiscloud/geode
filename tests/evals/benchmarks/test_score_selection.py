@@ -790,7 +790,11 @@ def test_judge_error_fallback_is_wrong_even_when_the_fallback_is_acceptable(
 
 
 def _tolerance_run(
-    monkeypatch: pytest.MonkeyPatch, pool: ss.FrozenPool, **tolerances: float
+    monkeypatch: pytest.MonkeyPatch,
+    pool: ss.FrozenPool,
+    *,
+    drift: float = 0.02,
+    **tolerances: float,
 ) -> list[dict[str, Any]]:
     monkeypatch.setattr(settings, "llm_max_retries", 1)
     # The judge boundary resolves its default route first; the matched adapter replaces it.
@@ -801,10 +805,10 @@ def _tolerance_run(
         body = json.loads(request.content)
         answers = {}
         for key, text in body["state"]["candidates"].items():
-            answer = _score_answer(float(text.endswith("3.")) * 3)
-            # Provider rounding drift of 0.02 from the probability-weighted level.
-            drift = -0.02 if answer["score"] >= 3 else 0.02
-            answer["score"] = round(answer["score"] + drift, 6)
+            answer = _score_answer(3.0 if text.endswith("3.") else 1.0)
+            # Include a decimal boundary whose binary subtraction exceeds the bound.
+            shift = -drift if answer["score"] >= 3 else drift
+            answer["score"] = round(answer["score"] + shift, 6)
             answers[key] = answer
         return httpx.Response(
             200,
@@ -821,8 +825,10 @@ def _tolerance_run(
     return asyncio.run(run())
 
 
+@pytest.mark.parametrize("drift", [0.02, 0.03])
 def test_jev_score_tolerance_reuses_the_v1_parser_bound_and_is_recorded(
     monkeypatch: pytest.MonkeyPatch,
+    drift: float,
 ) -> None:
     pool = ss.FrozenPool(
         "pool-tol",
@@ -832,14 +838,16 @@ def test_jev_score_tolerance_reuses_the_v1_parser_bound_and_is_recorded(
             ss.PoolCandidate("t1", "Candidate grade 0.", 0),
         ),
     )
-    strict = _tolerance_run(monkeypatch, pool)[0]["selectors"]["jev"]
+    strict = _tolerance_run(monkeypatch, pool, drift=drift)[0]["selectors"]["jev"]
     assert strict["tolerances"] == {"sum_tolerance": 1e-05, "score_tolerance": 1e-05}
     for order in strict["orders"].values():
         assert not order["valid"] and order["failure"] == "judge_error"
         assert order["receipt"]["accepted"] is False
         assert order["receipt"]["error_type"] == "invalid_candidate_scores"
-    assert strict["orders"]["forward"]["expectation_deviation"] == pytest.approx(0.02)
-    frozen = _tolerance_run(monkeypatch, pool, sum_tolerance=0.025, score_tolerance=0.03)
+    assert strict["orders"]["forward"]["expectation_deviation"] == pytest.approx(drift)
+    frozen = _tolerance_run(
+        monkeypatch, pool, drift=drift, sum_tolerance=0.025, score_tolerance=0.03
+    )
     entry = frozen[0]["selectors"]["jev"]
     assert entry["tolerances"] == {"sum_tolerance": 0.025, "score_tolerance": 0.03}
     for order in entry["orders"].values():

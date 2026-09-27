@@ -659,6 +659,40 @@ def test_v1_sum_tolerance_admits_rounding_and_records_strict_class(
         assert result.text == "invalid-verifier-response" and receipt["probabilities"] is None
 
 
+@pytest.mark.parametrize("engine", ["llm", "jev"])
+@pytest.mark.parametrize(
+    ("middle", "admitted", "strict"),
+    [
+        (0.175, True, False),
+        (0.225, True, False),
+        (0.17499999999999996, False, False),
+        (0.22500000000000003, False, False),
+        (0.19999, True, True),
+        (0.20001, True, True),
+        (0.19998999999999997, True, False),
+        (0.20001000000000002, True, False),
+    ],
+)
+def test_matched_choice_engines_share_decimal_sum_boundary(
+    engine: _Engine, middle: float, admitted: bool, strict: bool
+) -> None:
+    probabilities = {"supported": 0.6, "contradicted": middle, "insufficient_evidence": 0.2}
+    if engine == "llm":
+        text = json.dumps({"verdict": "supported", "probabilities": probabilities})
+        result, receipts, _, _ = _complete("llm", result=replace(_result(), text=text))
+    else:
+        body = _body()
+        body["answers"]["verdict"]["probabilities"] = probabilities
+        result, receipts, _, _ = _complete("jev", body=body)
+    receipt = receipts[0]
+    assert receipt["accepted"] is admitted
+    assert receipt["strict_admitted"] is (strict if admitted else None)
+    if admitted:
+        assert receipt["probabilities"] == probabilities and receipt["q"] == 0.6
+    else:
+        assert result.text == "invalid-verifier-response" and receipt["probabilities"] is None
+
+
 def test_v1_verdict_may_be_any_highest_probability_label() -> None:
     tied = {"supported": 0.45, "contradicted": 0.45, "insufficient_evidence": 0.1}
     for verdict in ("supported", "contradicted"):

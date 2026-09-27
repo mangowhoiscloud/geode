@@ -296,6 +296,11 @@ functional change.
 
 ### Fixed
 
+- Compare SystemOne probability sums and Score expectations, and matched LLM
+  Choice sums, using the exact decimal representations of validated numbers.
+  Inclusive tolerance boundaries no longer reject valid decisions due to binary
+  rounding; genuine excesses, invalid types and non-finite values still fail
+  admission, with the same sum boundary for both matched engines.
 - Pass the explicitly configured Harbor handoff time budget through to both
   the root loop and its enclosing deadline, retaining the 180-second default.
   Reject non-finite or non-positive budgets and record the effective budget

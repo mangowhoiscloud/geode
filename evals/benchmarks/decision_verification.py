@@ -15,6 +15,7 @@ import math
 import re
 from collections.abc import Mapping
 from dataclasses import replace
+from fractions import Fraction
 from html import escape
 from typing import Any, Literal
 
@@ -337,7 +338,9 @@ def _parse_llm_answer(
     if not isinstance(probabilities, dict) or set(probabilities) != set(labels):
         raise ValueError("probability labels changed")
     parsed = {label: _probability(probabilities[label]) for label in labels}
-    if not math.isclose(math.fsum(parsed.values()), 1.0, rel_tol=0, abs_tol=sum_tolerance):
+    # Match SystemOne admission on the same validated numbers' decimal values.
+    total = sum((Fraction(str(value)) for value in parsed.values()), Fraction(0))
+    if abs(total - 1) > Fraction(str(sum_tolerance)):
         raise ValueError("invalid decision distribution")
     if parsed[verdict] != max(parsed.values()):
         raise ValueError("verdict is not an argmax label")

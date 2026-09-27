@@ -12,6 +12,7 @@ import math
 import re
 from collections.abc import Mapping
 from dataclasses import replace
+from fractions import Fraction
 from typing import Annotated, Any, Literal
 
 import httpx
@@ -210,9 +211,11 @@ def parse_systemone_answers(
 
     ``sum_tolerance`` bounds a distribution's distance from one; ``score_tolerance``
     bounds a Score's distance from its probability-weighted level. Both default to
-    the strict runtime bound.
+    the strict runtime bound. Compare validated numbers' decimal representations
+    exactly so binary rounding neither excludes the boundary nor adds slack.
     """
-    sum_bound, score_bound = _tolerance(sum_tolerance), _tolerance(score_tolerance)
+    sum_bound = Fraction(str(_tolerance(sum_tolerance)))
+    score_bound = Fraction(str(_tolerance(score_tolerance)))
     _validate_questions(questions)
     answers = json.loads(text)
     if not isinstance(answers, dict) or answers.keys() != questions.keys():
@@ -238,20 +241,24 @@ def parse_systemone_answers(
                 legend, sort_keys=True, allow_nan=False
             ):
                 raise ValueError("score legend changed")
-        if answer.probabilities.keys() != expected_keys or not math.isclose(
-            math.fsum(answer.probabilities.values()), 1.0, rel_tol=0, abs_tol=sum_bound
+        probabilities = {
+            level: Fraction(str(probability)) for level, probability in answer.probabilities.items()
+        }
+        if (
+            probabilities.keys() != expected_keys
+            or abs(sum(probabilities.values(), Fraction(0)) - 1) > sum_bound
         ):
             raise ValueError("invalid decision distribution")
         if isinstance(answer, _Score) and (
             answer.score > len(expected_keys) - 1
-            or not math.isclose(
-                answer.score,
-                math.fsum(
-                    int(level) * probability for level, probability in answer.probabilities.items()
-                ),
-                rel_tol=0,
-                abs_tol=score_bound,
+            or abs(
+                Fraction(str(answer.score))
+                - sum(
+                    (int(level) * probability for level, probability in probabilities.items()),
+                    Fraction(0),
+                )
             )
+            > score_bound
         ):
             raise ValueError("score does not match its distribution")
         primitives[key] = answer.model_dump()
