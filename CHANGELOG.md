@@ -296,6 +296,10 @@ functional change.
 
 ### Fixed
 
+- Record canonical session payload capture reductions explicitly so literal
+  truncation markers in bounded verification feedback do not invalidate a
+  faithful replay. Preserve conservative legacy checks and real clipping,
+  redaction, omitted content, and nested reduction evidence.
 - Compare SystemOne probability sums and Score expectations, and matched LLM
   Choice sums, using the exact decimal representations of validated numbers.
   Inclusive tolerance boundaries no longer reject valid decisions due to binary

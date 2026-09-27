@@ -1982,6 +1982,33 @@ def test_truncated_private_content_invalidates_replay_without_losing_evidence(
         assert (directory / filename).is_file()
 
 
+def test_native_bounded_feedback_does_not_invalidate_complete_handoff(tmp_path: Path) -> None:
+    case = _case("negated-cancel-en")
+    directory = tmp_path / "bounded-feedback"
+    directory.mkdir()
+    root = _root_adapter(_root_responses(case)[1:])
+    root.native_verdict = _response(
+        json.dumps(
+            {
+                "passed": True,
+                "score": 1.0,
+                "reflection": {
+                    "observation": "x" * 461,
+                    "lesson": "Retain observed evidence",
+                    "next_check": "Keep the independent oracle authoritative",
+                },
+            }
+        )
+    )
+    result = asyncio.run(runtime.run_arm(case, "a0", directory, root_adapter=root))
+    assert result["oracle"]["passed"]
+    assert result["valid"] and result["passed"] and result["source_snapshot_complete"]
+    private = json.loads((directory / "trajectory.private.json").read_text())
+    turn = next(row for row in private["events"] if row["kind"] == "turn.completed")
+    assert "…[truncated:61]" in turn["payload"]["verify"]["reason"]
+    assert private["integrity"]["replay_complete"]
+
+
 @pytest.mark.parametrize("arm", ["a0", "a", "b"])
 def test_real_handoff_preserves_action_replay_through_native_projectors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, arm: str

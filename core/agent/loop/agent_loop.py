@@ -290,6 +290,7 @@ class AgenticLoop:
         self._current_step_snapshot: StepSnapshot | None = None
         self._verify_root_turn_id = ""
         self._verify_root_user_input = ""
+        self._user_input_capture_reduced = False
         self._verify_attempt = 0
         self._verify_attempt_results: list[AgenticResult] = []
         self._verification_evidence_refs: list[dict[str, Any]] = []
@@ -612,7 +613,9 @@ class AgenticLoop:
         # Durable history: session generation + this turn's user message.
         if self._timeline is not None:
             self._timeline.record_session_start(model=self.model, provider=self._provider)
-            self._timeline.record_user_message(user_input)
+            self._timeline.record_user_message(
+                user_input, content_reduced=self._user_input_capture_reduced
+            )
 
         # fresh per-session adapter usage counter → SESSION_ENDED adapter_usage
         from core.llm.adapters.dispatch import begin_session_adapter_tracking
