@@ -408,7 +408,11 @@ None of them dispatches a model, pushes a branch or merges a PR.
   `overlapping_calls` from call-ledger intervals (null unless every interval is
   known). Pair rows keep only same-slot synchronized pairs as
   `intra_pair_latency_comparable`. `strict_success` follows the preregistered
-  rule of the frozen cell: a matched final-verdict cell needs native reward 1,
+  rule of the frozen cell. An explicit `intent_target_engine` identifies a
+  helper cell even when `verification_engine` repeats its route; a conflicting
+  route alias or a simultaneous matched `verification_primitive` is rejected.
+  Legacy cells without that helper identity retain the engine-presence rule.
+  A matched final-verdict cell needs native reward 1,
   admitted decisive judgments, consumed negative feedback and no false
   completion; an intent helper cell also needs no wrong-target or extra lookup
   and observed `helper_admitted` (the task oracle's `decision_succeeded`), no
