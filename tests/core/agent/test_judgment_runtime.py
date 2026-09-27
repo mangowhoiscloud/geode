@@ -54,7 +54,11 @@ def test_round_then_terminal_dispatch_once_with_native_usage_and_no_synthetic_be
         ConversationContext(),
         ToolExecutor(middleware_registry=registry),
         hooks=hooks,
-        config=AgenticLoopConfig(source="payg", session_id="judgment"),
+        config=AgenticLoopConfig(
+            source="payg",
+            session_id="judgment",
+            system_prompt_override="Task contract: report the observed value without modifying it.",
+        ),
         model="claude-sonnet-4-6",
         provider="anthropic",
         quiet=True,
@@ -156,6 +160,7 @@ def test_round_then_terminal_dispatch_once_with_native_usage_and_no_synthetic_be
         result = asyncio.run(run())
         assert len(requests) == 2
         final_evidence = requests[1]["state"]["tool_observations"]
+        assert "Task contract: report the observed value without modifying it." in final_evidence
         assert len(final_evidence) > 12_000
         assert "Final actual observation: value 7." in final_evidence
         assert final_evidence.index("Final actual observation: value 7.") > 12_000
