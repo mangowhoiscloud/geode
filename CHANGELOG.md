@@ -296,6 +296,11 @@ functional change.
 
 ### Fixed
 
+- Preserve explicitly configured task instructions in bounded, redacted final
+  verification context. Distinguish earlier repair attempts for the same request
+  from retained observations that predate it, without forwarding ambient system
+  memory or changing the verifier's acceptance rules.
+
 - Preserve intent-helper strict-success rules in offline Harbor table exports
   when a frozen cell repeats its helper route as `verification_engine`.
   Reject conflicting frozen identities, retain unknown helper evidence and
