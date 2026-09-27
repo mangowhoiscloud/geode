@@ -289,6 +289,69 @@ def test_strict_success_follows_the_preregistered_unit_rule(tmp_path: Path) -> N
     assert failed["inbox-b/b"]["strict_success"] is False
 
 
+@pytest.mark.parametrize("helper_state", ["accepted", "rejected", "missing", "extra_lookup"])
+def test_intent_engine_alias_keeps_helper_strict_rule(tmp_path: Path, helper_state: str) -> None:
+    # The private runner freezes the helper route under both names. Its runtime
+    # still runs helper arms a/b, with no matched final-verdict judgments.
+    fields = (
+        None
+        if helper_state == "missing"
+        else {
+            key: {**value, "helper_admitted": helper_state != "rejected"}
+            for key, value in HELPERS_OK.items()
+        }
+    )
+    expected = None if helper_state == "missing" else helper_state == "accepted"
+    phase = build_phase(
+        tmp_path / "run",
+        mode="complete",
+        intent=True,
+        helper_fields=fields,
+        extra_lookups=frozenset(HELPERS_OK) if helper_state == "extra_lookup" else frozenset(),
+        runner_strict=None if expected is None else dict.fromkeys(HELPERS_OK, expected),
+    )["phase_dir"]
+    freeze_path = phase / "freeze.json"
+    freeze = json.loads(freeze_path.read_text())
+    for cell in freeze["cells"]:
+        cell["verification_engine"] = cell["intent_target_engine"]
+        handoff_path = phase / "trials" / cell["trial_name"] / "agent/handoff-result.json"
+        handoff = json.loads(handoff_path.read_text())
+        handoff.pop("verification_primitive")
+        handoff_path.write_text(json.dumps(handoff))
+    freeze_path.write_text(json.dumps(freeze))
+    out = tmp_path / "tables"
+    handoff_tables.export_tables(phase, out, primitive="choice")
+    rows = _rows(out, "e2e_trials")
+    assert {row["arm_label"] for row in rows} == {"llm", "jev"}
+    assert len(rows) == 4
+    for row in rows:
+        assert row["strict_rule"] == "intent"
+        assert row["strict_success"] is expected
+        assert row["runner_strict_success"] is expected
+        assert row["judgments_admitted"] is None
+        assert row["verification_primitive"] is None
+
+
+@pytest.mark.parametrize(
+    "conflict",
+    [
+        {"verification_engine": "cascade"},
+        {"verification_engine": "jev"},
+        {"verification_primitive": "choice"},
+        {"verification_primitive": "noul"},
+        {"intent_target_engine": "unknown"},
+    ],
+)
+def test_intent_cell_rejects_conflicting_frozen_identity(tmp_path: Path, conflict: dict) -> None:
+    phase = build_phase(tmp_path / "run", mode="complete", intent=True)["phase_dir"]
+    path = phase / "freeze.json"
+    freeze = json.loads(path.read_text())
+    freeze["cells"][0].update(conflict)
+    path.write_text(json.dumps(freeze))
+    with pytest.raises(ValueError, match="conflicting intent helper identity"):
+        handoff_tables.export_tables(phase, tmp_path / "tables", primitive="choice")
+
+
 def _rewrite_verification(phase: Path, trial: str, edit: Callable[[dict], None]) -> None:
     path = phase / "trials" / trial / "agent/verification.json"
     value = json.loads(path.read_text())
