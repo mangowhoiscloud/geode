@@ -110,6 +110,7 @@ async def _apply_user_prompt_hook(
             rounds=0,
         )
     effective = outcome.invocation.payload.get("user_input")
+    loop._user_input_capture_reduced = outcome.payload_reduced
     return (effective if isinstance(effective, str) else user_input), None
 
 
@@ -133,6 +134,7 @@ async def _begin_turn(
     loop._pre_execution_retry_errors.clear()
     loop._turn_id = f"t-{uuid.uuid4().hex[:12]}"
     loop._turn_state = TurnState(turn_id=loop._turn_id)
+    loop._user_input_capture_reduced = False
     loop._current_step_snapshot = None
     if loop._timeline is not None:
         loop._timeline.bind_turn(

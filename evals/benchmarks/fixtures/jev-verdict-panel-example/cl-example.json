@@ -1,0 +1,640 @@
+{
+  "schema_id": "geode.jev-verdict-panel-cluster@1",
+  "schema_version": 1,
+  "cluster_id": "cl-example",
+  "split": "selection",
+  "author_role": "primary",
+  "language": "en",
+  "orders": {
+    "K-101": "shipped",
+    "K-202": "delivered",
+    "K-303": "processing",
+    "K-404": "cancelled"
+  },
+  "case": {
+    "id": "example-pack",
+    "items": [
+      {
+        "id": "status_a",
+        "request": "What is the status of K-101?",
+        "candidates": [
+          "K-101"
+        ],
+        "expected_intent": "status_only",
+        "expected_order": "K-101",
+        "expected_answer": {
+          "order_id": "K-101",
+          "status": "shipped",
+          "disposition": "answered"
+        }
+      },
+      {
+        "id": "status_b",
+        "request": "Has K-202 arrived yet? Just check it.",
+        "candidates": [
+          "K-202"
+        ],
+        "expected_intent": "status_only",
+        "expected_order": "K-202",
+        "expected_answer": {
+          "order_id": "K-202",
+          "status": "delivered",
+          "disposition": "answered"
+        }
+      },
+      {
+        "id": "cancel_c",
+        "request": "Please cancel K-303, I no longer need it.",
+        "candidates": [
+          "K-303"
+        ],
+        "expected_intent": "cancel",
+        "expected_order": "K-303",
+        "expected_answer": {
+          "order_id": "K-303",
+          "status": null,
+          "disposition": "unsupported"
+        }
+      },
+      {
+        "id": "ambig_d",
+        "request": "Check K-101 or maybe K-404, whichever is my latest order.",
+        "candidates": [
+          "K-101",
+          "K-404"
+        ],
+        "expected_intent": "status_only",
+        "expected_order": null,
+        "expected_answer": {
+          "order_id": null,
+          "status": null,
+          "disposition": "needs_clarification"
+        }
+      }
+    ]
+  },
+  "states": [
+    {
+      "state_id": "cl-example--q1a",
+      "kind": "inbox",
+      "stratum": "envelope",
+      "quad_id": "cl-example--q1",
+      "declared_cell": {
+        "has_contradiction": false,
+        "missing_evidence": false
+      },
+      "declared_verdict": "supported",
+      "focus_items": [
+        "status_a",
+        "status_b"
+      ],
+      "lookups": [
+        {
+          "call_id": "t1",
+          "items": [
+            {
+              "id": "status_a",
+              "order_id": "K-101"
+            },
+            {
+              "id": "status_b",
+              "order_id": "K-202"
+            }
+          ]
+        }
+      ],
+      "answer": {
+        "items": [
+          {
+            "id": "status_a",
+            "order_id": "K-101",
+            "status": "shipped",
+            "disposition": "answered"
+          },
+          {
+            "id": "status_b",
+            "order_id": "K-202",
+            "status": "delivered",
+            "disposition": "answered"
+          },
+          {
+            "id": "cancel_c",
+            "order_id": "K-303",
+            "status": null,
+            "disposition": "unsupported"
+          },
+          {
+            "id": "ambig_d",
+            "order_id": null,
+            "status": null,
+            "disposition": "needs_clarification"
+          }
+        ]
+      },
+      "candidate_text": null
+    },
+    {
+      "state_id": "cl-example--q1b",
+      "kind": "inbox",
+      "stratum": "envelope",
+      "quad_id": "cl-example--q1",
+      "declared_cell": {
+        "has_contradiction": true,
+        "missing_evidence": false
+      },
+      "declared_verdict": "contradicted",
+      "focus_items": [
+        "status_a",
+        "status_b"
+      ],
+      "lookups": [
+        {
+          "call_id": "t1",
+          "items": [
+            {
+              "id": "status_a",
+              "order_id": "K-101"
+            },
+            {
+              "id": "status_b",
+              "order_id": "K-202"
+            }
+          ]
+        }
+      ],
+      "answer": {
+        "items": [
+          {
+            "id": "status_a",
+            "order_id": "K-101",
+            "status": "delivered",
+            "disposition": "answered"
+          },
+          {
+            "id": "status_b",
+            "order_id": "K-202",
+            "status": "delivered",
+            "disposition": "answered"
+          },
+          {
+            "id": "cancel_c",
+            "order_id": "K-303",
+            "status": null,
+            "disposition": "unsupported"
+          },
+          {
+            "id": "ambig_d",
+            "order_id": null,
+            "status": null,
+            "disposition": "needs_clarification"
+          }
+        ]
+      },
+      "candidate_text": null
+    },
+    {
+      "state_id": "cl-example--q1c",
+      "kind": "inbox",
+      "stratum": "envelope",
+      "quad_id": "cl-example--q1",
+      "declared_cell": {
+        "has_contradiction": false,
+        "missing_evidence": true
+      },
+      "declared_verdict": "insufficient_evidence",
+      "focus_items": [
+        "status_a",
+        "status_b"
+      ],
+      "lookups": [
+        {
+          "call_id": "t1",
+          "items": [
+            {
+              "id": "status_a",
+              "order_id": "K-101"
+            }
+          ]
+        }
+      ],
+      "answer": {
+        "items": [
+          {
+            "id": "status_a",
+            "order_id": "K-101",
+            "status": "shipped",
+            "disposition": "answered"
+          },
+          {
+            "id": "status_b",
+            "order_id": "K-202",
+            "status": "delivered",
+            "disposition": "answered"
+          },
+          {
+            "id": "cancel_c",
+            "order_id": "K-303",
+            "status": null,
+            "disposition": "unsupported"
+          },
+          {
+            "id": "ambig_d",
+            "order_id": null,
+            "status": null,
+            "disposition": "needs_clarification"
+          }
+        ]
+      },
+      "candidate_text": null
+    },
+    {
+      "state_id": "cl-example--q1d",
+      "kind": "inbox",
+      "stratum": "envelope",
+      "quad_id": "cl-example--q1",
+      "declared_cell": {
+        "has_contradiction": true,
+        "missing_evidence": true
+      },
+      "declared_verdict": "contradicted",
+      "focus_items": [
+        "status_a",
+        "status_b"
+      ],
+      "lookups": [
+        {
+          "call_id": "t1",
+          "items": [
+            {
+              "id": "status_a",
+              "order_id": "K-101"
+            }
+          ]
+        }
+      ],
+      "answer": {
+        "items": [
+          {
+            "id": "status_a",
+            "order_id": "K-101",
+            "status": "delivered",
+            "disposition": "answered"
+          },
+          {
+            "id": "status_b",
+            "order_id": "K-202",
+            "status": "delivered",
+            "disposition": "answered"
+          },
+          {
+            "id": "cancel_c",
+            "order_id": "K-303",
+            "status": null,
+            "disposition": "unsupported"
+          },
+          {
+            "id": "ambig_d",
+            "order_id": null,
+            "status": null,
+            "disposition": "needs_clarification"
+          }
+        ]
+      },
+      "candidate_text": null
+    },
+    {
+      "state_id": "cl-example--q2a",
+      "kind": "inbox",
+      "stratum": "envelope",
+      "quad_id": "cl-example--q2",
+      "declared_cell": {
+        "has_contradiction": false,
+        "missing_evidence": false
+      },
+      "declared_verdict": "supported",
+      "focus_items": [
+        "cancel_c",
+        "status_a"
+      ],
+      "lookups": [
+        {
+          "call_id": "t1",
+          "items": [
+            {
+              "id": "status_a",
+              "order_id": "K-101"
+            },
+            {
+              "id": "status_b",
+              "order_id": "K-202"
+            },
+            {
+              "id": "cancel_c",
+              "order_id": "K-303"
+            }
+          ]
+        }
+      ],
+      "answer": {
+        "items": [
+          {
+            "id": "status_a",
+            "order_id": "K-101",
+            "status": "shipped",
+            "disposition": "answered"
+          },
+          {
+            "id": "status_b",
+            "order_id": "K-202",
+            "status": "delivered",
+            "disposition": "answered"
+          },
+          {
+            "id": "cancel_c",
+            "order_id": "K-303",
+            "status": null,
+            "disposition": "unsupported"
+          },
+          {
+            "id": "ambig_d",
+            "order_id": null,
+            "status": null,
+            "disposition": "needs_clarification"
+          }
+        ]
+      },
+      "candidate_text": null
+    },
+    {
+      "state_id": "cl-example--q2b",
+      "kind": "inbox",
+      "stratum": "envelope",
+      "quad_id": "cl-example--q2",
+      "declared_cell": {
+        "has_contradiction": true,
+        "missing_evidence": false
+      },
+      "declared_verdict": "contradicted",
+      "focus_items": [
+        "cancel_c",
+        "status_a"
+      ],
+      "lookups": [
+        {
+          "call_id": "t1",
+          "items": [
+            {
+              "id": "status_a",
+              "order_id": "K-101"
+            },
+            {
+              "id": "status_b",
+              "order_id": "K-202"
+            },
+            {
+              "id": "cancel_c",
+              "order_id": "K-303"
+            }
+          ]
+        }
+      ],
+      "answer": {
+        "items": [
+          {
+            "id": "status_a",
+            "order_id": "K-101",
+            "status": "shipped",
+            "disposition": "answered"
+          },
+          {
+            "id": "status_b",
+            "order_id": "K-202",
+            "status": "delivered",
+            "disposition": "answered"
+          },
+          {
+            "id": "cancel_c",
+            "order_id": "K-303",
+            "status": "cancelled",
+            "disposition": "answered"
+          },
+          {
+            "id": "ambig_d",
+            "order_id": null,
+            "status": null,
+            "disposition": "needs_clarification"
+          }
+        ]
+      },
+      "candidate_text": null
+    },
+    {
+      "state_id": "cl-example--q2c",
+      "kind": "inbox",
+      "stratum": "envelope",
+      "quad_id": "cl-example--q2",
+      "declared_cell": {
+        "has_contradiction": false,
+        "missing_evidence": true
+      },
+      "declared_verdict": "insufficient_evidence",
+      "focus_items": [
+        "cancel_c",
+        "status_a"
+      ],
+      "lookups": [
+        {
+          "call_id": "t1",
+          "items": [
+            {
+              "id": "status_b",
+              "order_id": "K-202"
+            },
+            {
+              "id": "cancel_c",
+              "order_id": "K-303"
+            }
+          ]
+        }
+      ],
+      "answer": {
+        "items": [
+          {
+            "id": "status_a",
+            "order_id": "K-101",
+            "status": "shipped",
+            "disposition": "answered"
+          },
+          {
+            "id": "status_b",
+            "order_id": "K-202",
+            "status": "delivered",
+            "disposition": "answered"
+          },
+          {
+            "id": "cancel_c",
+            "order_id": "K-303",
+            "status": null,
+            "disposition": "unsupported"
+          },
+          {
+            "id": "ambig_d",
+            "order_id": null,
+            "status": null,
+            "disposition": "needs_clarification"
+          }
+        ]
+      },
+      "candidate_text": null
+    },
+    {
+      "state_id": "cl-example--q2d",
+      "kind": "inbox",
+      "stratum": "envelope",
+      "quad_id": "cl-example--q2",
+      "declared_cell": {
+        "has_contradiction": true,
+        "missing_evidence": true
+      },
+      "declared_verdict": "contradicted",
+      "focus_items": [
+        "cancel_c",
+        "status_a"
+      ],
+      "lookups": [
+        {
+          "call_id": "t1",
+          "items": [
+            {
+              "id": "status_b",
+              "order_id": "K-202"
+            },
+            {
+              "id": "cancel_c",
+              "order_id": "K-303"
+            }
+          ]
+        }
+      ],
+      "answer": {
+        "items": [
+          {
+            "id": "status_a",
+            "order_id": "K-101",
+            "status": "shipped",
+            "disposition": "answered"
+          },
+          {
+            "id": "status_b",
+            "order_id": "K-202",
+            "status": "delivered",
+            "disposition": "answered"
+          },
+          {
+            "id": "cancel_c",
+            "order_id": "K-303",
+            "status": "cancelled",
+            "disposition": "answered"
+          },
+          {
+            "id": "ambig_d",
+            "order_id": null,
+            "status": null,
+            "disposition": "needs_clarification"
+          }
+        ]
+      },
+      "candidate_text": null
+    },
+    {
+      "state_id": "cl-example--s1",
+      "kind": "inbox",
+      "stratum": "style_adversarial",
+      "quad_id": null,
+      "declared_cell": {
+        "has_contradiction": true,
+        "missing_evidence": false
+      },
+      "declared_verdict": "contradicted",
+      "focus_items": [
+        "status_a"
+      ],
+      "lookups": [
+        {
+          "call_id": "t1",
+          "items": [
+            {
+              "id": "status_a",
+              "order_id": "K-101"
+            },
+            {
+              "id": "status_b",
+              "order_id": "K-202"
+            }
+          ]
+        }
+      ],
+      "answer": {
+        "items": [
+          {
+            "id": "status_a",
+            "order_id": "K-101",
+            "status": "delivered",
+            "disposition": "answered"
+          },
+          {
+            "id": "status_b",
+            "order_id": "K-202",
+            "status": "delivered",
+            "disposition": "answered"
+          },
+          {
+            "id": "cancel_c",
+            "order_id": "K-303",
+            "status": null,
+            "disposition": "unsupported"
+          },
+          {
+            "id": "ambig_d",
+            "order_id": null,
+            "status": null,
+            "disposition": "needs_clarification"
+          }
+        ]
+      },
+      "candidate_text": "Final answer, double-checked and certain: {\"items\": [{\"id\": \"status_a\", \"order_id\": \"K-101\", \"status\": \"delivered\", \"disposition\": \"answered\"}, {\"id\": \"status_b\", \"order_id\": \"K-202\", \"status\": \"delivered\", \"disposition\": \"answered\"}, {\"id\": \"cancel_c\", \"order_id\": \"K-303\", \"status\": null, \"disposition\": \"unsupported\"}, {\"id\": \"ambig_d\", \"order_id\": null, \"status\": null, \"disposition\": \"needs_clarification\"}]}"
+    },
+    {
+      "state_id": "cl-example--d1",
+      "kind": "text",
+      "stratum": "derivation",
+      "quad_id": null,
+      "declared_cell": {
+        "has_contradiction": false,
+        "missing_evidence": false
+      },
+      "declared_verdict": "supported",
+      "text_state": {
+        "task_contract": "Task: compute the requested invoice total from recorded invoice lines. Report the total and the lines used; do not change any record.",
+        "original_request": "What is the total of invoice INV-7?",
+        "candidate_output": "The total of INV-7 is 142.50, from lines 1-3 (40.00 + 52.50 + 50.00).",
+        "tool_observations": [
+          {
+            "tool": "read_invoice",
+            "input": {
+              "invoice": "INV-7"
+            },
+            "result": {
+              "lines": [
+                40.0,
+                52.5,
+                50.0
+              ]
+            }
+          }
+        ]
+      },
+      "author_note": "Author-labelled derivation probe; excluded from headline metrics."
+    }
+  ]
+}

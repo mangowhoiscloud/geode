@@ -647,3 +647,166 @@ def test_resolved_adapter_is_subscription_only_and_no_target_is_data(
         assert len(adapter.requests) == 1
     finally:
         hooks.close()
+
+
+# ---------------------------------------------------------------------------
+# Byte regression: the E2E helper keeps its requests, admission and outputs
+# ---------------------------------------------------------------------------
+
+_INBOX_REQUESTS = {
+    "q1": "What's the status of A-100?",
+    "q2": "Not C-174, I meant D-211. What's its status?",
+    "q3": "주문번호 없이 배송 상태가 궁금해요.",
+}
+_OBSERVED_KEYS = ("adapter", "effort", "error", "model", "provider", "purpose", "source", "usage")
+
+
+def _inbox_body(*, drift: float = 0.0) -> dict[str, Any]:
+    answers: dict[str, Any] = {}
+    for key, text in _INBOX_REQUESTS.items():
+        answers[f"{key}_intent"] = {
+            "type": "choice",
+            "choice": "status_only",
+            "probabilities": {
+                "status_only": 0.7 + drift,
+                "cancel": 0.1,
+                "refund": 0.1,
+                "other": 0.1,
+            },
+            "confidence": 0.6,
+        }
+        mentions = [*decision_handoff.order_mentions(text), "none"]
+        chosen = mentions[-2] if len(mentions) > 1 else "none"
+        answers[f"{key}_target"] = {
+            "type": "choice",
+            "choice": chosen,
+            "probabilities": {
+                label: (0.9 if label == chosen else 0.1 / (len(mentions) - 1))
+                if len(mentions) > 1
+                else 1.0
+                for label in mentions
+            },
+            "confidence": 0.8,
+        }
+    return {
+        "model": JEV_MODEL,
+        "usage": {"input_tokens": 900, "output_tokens": 0},
+        "answers": answers,
+    }
+
+
+def _inbox_values(outside: bool = False) -> str:
+    values: dict[str, str] = {}
+    for key, text in _INBOX_REQUESTS.items():
+        mentions = [*decision_handoff.order_mentions(text), "none"]
+        values[f"{key}_intent"] = "status_only"
+        values[f"{key}_target"] = mentions[-2] if len(mentions) > 1 else "none"
+    if outside:
+        values["q1_target"] = "order_9"
+    return json.dumps(values)
+
+
+_HELPER_SCENARIOS: dict[str, tuple[Literal["a", "b"], bool, Any]] = {
+    "a-single-ok": ("a", False, _result()),
+    "b-single-ok": ("b", False, _body()),
+    "a-single-refusal": (
+        "a",
+        False,
+        replace(
+            _result(),
+            codex_output_items=(
+                {"type": "message", "content": [{"type": "refusal", "refusal": "no"}]},
+            ),
+        ),
+    ),
+    "a-inbox-ok": ("a", True, _result(_inbox_values())),
+    "b-inbox-ok": ("b", True, _inbox_body()),
+    "a-inbox-outside": ("a", True, _result(_inbox_values(outside=True))),
+    "a-inbox-drift": ("a", True, replace(_result(_inbox_values()), response_model="gpt-6-sol")),
+    "b-inbox-sum": ("b", True, _inbox_body(drift=0.02)),
+    "b-inbox-503": ("b", True, httpx.Response(503, json={"error": "busy"})),
+    "b-inbox-connect": ("b", True, httpx.ConnectError("synthetic outage")),
+}
+
+
+def _helper_bytes(arm: Literal["a", "b"], inbox: bool, outcome: Any) -> bytes:
+    hooks = HookSystem()
+    observed: list[dict[str, Any]] = []
+    hooks.subscribe(HookEvent.LLM_CALL_ENDED, lambda _event, data: observed.append(data))
+    bodies: list[bytes] = []
+
+    def transport(request: httpx.Request) -> httpx.Response:
+        bodies.append(request.method.encode() + b" " + str(request.url).encode() + b"\n")
+        bodies.append(request.content)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        if isinstance(outcome, httpx.Response):
+            return outcome
+        return httpx.Response(200, json=outcome)
+
+    adapter = _Adapter(outcome) if arm == "a" else None
+    source = decision_handoff_inbox_source() if inbox else _SOURCE
+
+    async def run() -> dict[str, Any]:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+            tool = DecisionHandoffTool(
+                source,
+                arm,
+                requests=_INBOX_REQUESTS if inbox else None,
+                adapter=adapter,
+                client=client if arm == "b" else None,
+                api_key=SecretStr("synthetic-test-key") if arm == "b" else None,
+            )
+            return await tool.aexecute(_tool_context=_context(hooks))
+
+    try:
+        output = asyncio.run(run())
+    finally:
+        hooks.close()
+    requests = [
+        {
+            "model": request.model,
+            "effort": request.effort,
+            "system_prompt": request.system_prompt,
+            "messages": [[message.role, message.content] for message in request.messages],
+            "response_schema": request.response_schema,
+            "allowed_tool_names": sorted(request.allowed_tool_names or ()),
+            "metadata": request.metadata,
+        }
+        for request in (adapter.requests if adapter is not None else [])
+    ]
+    events = [{key: data.get(key) for key in _OBSERVED_KEYS} for data in observed]
+    return json.dumps(
+        {"output": output, "astra": requests, "events": events}, sort_keys=True, default=str
+    ).encode() + b"".join(bodies)
+
+
+def decision_handoff_inbox_source() -> str:
+    from evals.benchmarks.decision_handoff_runtime import inbox_request
+
+    return inbox_request(
+        [{"id": key, "request": text, "candidates": []} for key, text in _INBOX_REQUESTS.items()]
+    )
+
+
+# sha256 digests recorded at 0a90cf8fe (before 0029) by this same harness.
+_PRE_0029_HELPER: dict[str, str] = {
+    "a-inbox-drift": "87aea5b565be3a5992cf95a3b6353aa3ba208fff04bcbc07d69e3b6ffe5bed3c",
+    "a-inbox-ok": "3dd9a99dbf24d4d4920107b9f501db78efad218fac63627dce0b38040752bdae",
+    "a-inbox-outside": "87aea5b565be3a5992cf95a3b6353aa3ba208fff04bcbc07d69e3b6ffe5bed3c",
+    "a-single-ok": "3387cb88a73f991ccb6e7e5f9fd7af79416375ee480bdd5f36b861f2c46f513b",
+    "a-single-refusal": "7263f38d22799482b84f896f989349c0c44fea12b86f9f29a76c26050907944d",
+    "b-inbox-503": "e947f8c353eca01ae6b14974e12d13832bde28613e96766f57bf394d5f4bbfe5",
+    "b-inbox-connect": "fac3a49abbf83dd6801a8f5b711ca9a8ec9f97d2a023ae1d36194ddf20d1bf1c",
+    "b-inbox-ok": "65bb446e0aed2737b1a05aee36ad5bbfb8d61fa3bfa5f8936f332b30a64d90d7",
+    "b-inbox-sum": "d0c9084acec8326cf7b3528dc3c69f94f1c53f2ec80339b82f8c5fe34e46fdfd",
+    "b-single-ok": "6e822064b494a58df72f8c2777a2dc218069f736a6667e9ef5ad00c5d1cccd45",
+}
+
+
+def test_helper_requests_admission_and_outputs_are_unchanged() -> None:
+    digests = {
+        name: hashlib.sha256(_helper_bytes(arm, inbox, outcome)).hexdigest()
+        for name, (arm, inbox, outcome) in _HELPER_SCENARIOS.items()
+    }
+    assert digests == _PRE_0029_HELPER

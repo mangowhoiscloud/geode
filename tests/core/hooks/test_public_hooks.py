@@ -34,6 +34,66 @@ def _async_test(func: Callable[[], Awaitable[None]]) -> Callable[[], None]:
     return run
 
 
+@pytest.mark.parametrize("rewritten", [False, True])
+@pytest.mark.parametrize("length", [20, 5_000])
+def test_input_capture_provenance_distinguishes_rewrite_from_sanitizer_loss(
+    rewritten: bool,
+    length: int,
+) -> None:
+    registry = HookRegistry()
+    text = "x" * length
+    if rewritten:
+        registry.register(
+            HookName.USER_PROMPT_SUBMIT,
+            lambda _invocation: HookDecision(
+                action=HookAction.REWRITE, updates={"user_input": text}
+            ),
+            name="rewrite",
+        )
+    outcome = asyncio.run(
+        registry.invoke(
+            HookName.USER_PROMPT_SUBMIT,
+            payload={"user_input": "initial" if rewritten else text},
+        )
+    )
+    assert outcome.payload_reduced is (length > 4_096)
+    assert outcome.invocation.payload["user_input"].startswith("x" * min(length, 4_096))
+    assert not outcome.blocked and not outcome.handler_errors
+
+
+def test_rejected_rewrite_cannot_mark_unchanged_input_as_capture_loss() -> None:
+    registry = HookRegistry()
+    registry.register(
+        HookName.USER_PROMPT_SUBMIT,
+        lambda _invocation: HookDecision(
+            action=HookAction.REWRITE, updates={"user_input": 42, "extra": "x" * 10_000}
+        ),
+        name="invalid-rewrite",
+    )
+    outcome = asyncio.run(
+        registry.invoke(HookName.USER_PROMPT_SUBMIT, payload={"user_input": "original"})
+    )
+    assert outcome.invocation.payload == {"user_input": "original"}
+    assert outcome.handler_errors and not outcome.decisions
+    assert outcome.payload_reduced is False
+
+
+def test_hook_capture_records_opaque_omission_without_comparing_it_successfully() -> None:
+    class Opaque:
+        def __eq__(self, other):
+            raise ValueError("opaque comparison")
+
+    outcome = asyncio.run(
+        HookRegistry().invoke(
+            HookName.PRE_TOOL_USE,
+            payload={"tool_name": "test", "arguments": {"opaque": Opaque()}},
+        )
+    )
+    assert outcome.payload_reduced is True
+    assert outcome.invocation.payload["arguments"]["opaque"] == {"_omitted_type": "Opaque"}
+    assert not outcome.handler_errors
+
+
 def test_public_hook_allowlist_and_current_version_are_explicit() -> None:
     assert [hook.value for hook in HookName] == [
         "UserPromptSubmit",

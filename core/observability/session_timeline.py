@@ -29,7 +29,7 @@ from itertools import islice
 from pathlib import Path
 from typing import Any, Literal
 
-from core.observability.redaction import redact_and_bound_text, redact_secrets
+from core.observability.redaction import payload_changed, redact_and_bound_text, redact_secrets
 from core.tools.computer_observation import sanitize_computer_payload
 
 log = logging.getLogger(__name__)
@@ -360,7 +360,9 @@ class SessionEventStore:
         if not stored_source:
             raise ValueError("session event requires a non-empty source")
         generation = max(1, int(event.session_generation))
-        payload = bound_session_payload(event.payload, policy=self._policy)
+        payload = bound_session_payload(
+            event.payload, policy=self._policy, capture_metadata=event.source != "legacy_jsonl"
+        )
         payload_json = json.dumps(
             payload,
             ensure_ascii=False,
@@ -788,11 +790,18 @@ class SessionTimeline:
             },
         )
 
-    def record_user_message(self, text: str) -> None:
+    def record_user_message(self, text: str, *, content_reduced: bool = False) -> None:
         self._record(
             SessionEventKind.USER_MESSAGE,
             role="user",
-            payload={"content": text},
+            payload={
+                "content": text,
+                **(
+                    {"_capture_quality": {"version": 1, "content_reduced": True}}
+                    if content_reduced
+                    else {}
+                ),
+            },
         )
 
     def record_assistant_message(self, text: str) -> None:
@@ -1261,11 +1270,36 @@ def bound_session_payload(
     payload: Mapping[str, Any],
     *,
     policy: SessionEventPolicy | None = None,
+    capture_metadata: bool = False,
 ) -> dict[str, Any]:
-    """Redact secrets and bound a session-history payload."""
+    """Redact secrets and bound a session-history payload.
+
+    Canonical writes attest whether this capture changed the supplied payload.
+    This distinguishes stored loss from literal markers in runtime feedback.
+    Existing capture reductions survive subsequent export; legacy payloads do
+    not gain a completeness attestation merely by being read or exported.
+    """
     active = policy or SessionEventPolicy()
-    bounded = _bounded_value(sanitize_computer_payload(dict(payload)), active, depth=0)
+    original = dict(payload)
+    sanitized = sanitize_computer_payload(original)
+    bounded = _bounded_value(sanitized, active, depth=0)
     result = bounded if isinstance(bounded, dict) else {"value": bounded}
+    content_reduced = payload_changed(original, sanitized) or payload_changed(sanitized, bounded)
+    if capture_metadata or content_reduced or "_capture_quality" in original:
+        previous = original.get("_capture_quality")
+        previous_complete = (
+            isinstance(previous, dict)
+            and set(previous) == {"version", "content_reduced"}
+            and type(previous.get("version")) is int
+            and previous.get("version") == 1
+            and previous.get("content_reduced") is False
+        )
+        result["_capture_quality"] = {
+            "version": 1,
+            "content_reduced": (
+                ("_capture_quality" in original and not previous_complete) or content_reduced
+            ),
+        }
     encoded = json.dumps(
         result,
         ensure_ascii=False,
@@ -1281,7 +1315,30 @@ def bound_session_payload(
         "original_bytes": size,
         "keys": list(result)[: active.max_collection_items],
         "payload_hash": sha256(encoded.encode("utf-8")).hexdigest(),
+        "content_sha256": session_payload_content_sha256(result),
     }
+
+
+def session_payload_content_sha256(payload: Mapping[str, Any]) -> str:
+    """Hash retained content independently of known capture bookkeeping.
+
+    The row's ``payload_hash`` still authenticates every stored byte, including
+    this metadata. Unknown metadata remains content rather than being erased.
+    """
+    content = dict(payload)
+    capture = content.get("_capture_quality")
+    if (
+        isinstance(capture, Mapping)
+        and set(capture) == {"version", "content_reduced"}
+        and type(capture.get("version")) is int
+        and capture.get("version") == 1
+        and type(capture.get("content_reduced")) is bool
+    ):
+        del content["_capture_quality"]
+    encoded = json.dumps(
+        content, ensure_ascii=False, separators=(",", ":"), sort_keys=True, allow_nan=False
+    )
+    return sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def _bounded_value(value: Any, policy: SessionEventPolicy, *, depth: int) -> Any:
@@ -1297,15 +1354,32 @@ def _bounded_value(value: Any, policy: SessionEventPolicy, *, depth: int) -> Any
         return {"_omitted_type": "bytes", "size": len(value)}
     if isinstance(value, Mapping):
         result: dict[str, Any] = {}
-        items = list(islice(value.items(), policy.max_collection_items))
+        has_capture = "_capture_quality" in value
+        items = list(
+            islice(
+                ((key, item) for key, item in value.items() if key != "_capture_quality"),
+                policy.max_collection_items,
+            )
+        )
         for raw_key, item in items:
             key = redact_and_bound_text(raw_key, 128)
             if key.lower() in _SENSITIVE_PAYLOAD_KEYS:
                 result[key] = "<REDACTED>"
             else:
                 result[key] = _bounded_value(item, policy, depth=depth + 1)
-        if len(value) > policy.max_collection_items:
-            result["_truncated_items"] = len(value) - policy.max_collection_items
+        data_count = len(value) - int(has_capture)
+        if data_count > policy.max_collection_items:
+            result["_truncated_items"] = data_count - policy.max_collection_items
+        if has_capture:
+            capture = value["_capture_quality"]
+            complete = (
+                isinstance(capture, Mapping)
+                and set(capture) == {"version", "content_reduced"}
+                and type(capture.get("version")) is int
+                and capture.get("version") == 1
+                and capture.get("content_reduced") is False
+            )
+            result["_capture_quality"] = {"version": 1, "content_reduced": not complete}
         return result
     if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
         items = list(islice(value, policy.max_collection_items))
@@ -1408,6 +1482,9 @@ def _legacy_row_to_event(
         "summary",
     }
     payload = {key: value for key, value in row.items() if key not in reserved}
+    if "_capture_quality" in payload:
+        # A legacy row cannot grant itself a new canonical completeness claim.
+        payload["_capture_quality"] = {"version": 1, "content_reduced": True}
     payload["_legacy"] = {
         "event": legacy_kind,
         "line_number": line_number,
@@ -1531,5 +1608,6 @@ __all__ = [
     "bound_session_payload",
     "current_session_timeline",
     "ensure_session_event_schema",
+    "session_payload_content_sha256",
     "set_current_session_timeline",
 ]

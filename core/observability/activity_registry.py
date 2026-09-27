@@ -14,6 +14,7 @@ malformed payload — never a routine destination.
 from __future__ import annotations
 
 import logging
+import math
 import re
 import time
 from collections.abc import Callable, Mapping
@@ -251,6 +252,22 @@ def _tool_exec_ended(data: dict[str, Any], run_id: str) -> ActivityRowBase:
     )
 
 
+def _observed_latency_ms(data: Mapping[str, Any]) -> float | None:
+    """Return the observed attempt latency; absent or malformed values stay unknown.
+
+    ``latency_ms`` is the observer key; legacy ``duration_ms`` is read only when
+    ``latency_ms`` is absent. A missing latency is never stored as 0.0.
+    """
+    value = data["latency_ms"] if "latency_ms" in data else data.get("duration_ms")
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    try:
+        latency = float(value)
+    except OverflowError:
+        return None
+    return latency if math.isfinite(latency) and latency >= 0 else None
+
+
 def _llm_call_ended(data: dict[str, Any], run_id: str) -> ActivityRowBase:
     """Project one LLM attempt without retaining raw provider error text."""
     identifier = str(
@@ -295,7 +312,7 @@ def _llm_call_ended(data: dict[str, Any], run_id: str) -> ActivityRowBase:
         entity_id=identifier,
         task_id=str(data["task_id"]) if data.get("task_id") else None,
         details=LLMCallEndedDetails(
-            duration_ms=float(data.get("latency_ms", data.get("duration_ms", 0.0)) or 0.0),
+            duration_ms=_observed_latency_ms(data),
             success=bool(data.get("success", not bool(error))),
             model=_text("model"),
             provider=_text("provider"),

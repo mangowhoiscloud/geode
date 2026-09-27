@@ -393,6 +393,53 @@ manifest.
 
 The publication is scripted deterministically by `scripts/eval/publish_crucible_artifacts.py` (`stage` copies one run's allowlisted subset and masks the local username; `mask` re-masks an existing tree idempotently). Both refuse sealed material by name and never rewrite an existing run directory.
 
+Harbor decision-handoff runs use these offline tools with the same boundary.
+None of them dispatches a model, pushes a branch or merges a PR.
+
+- `scripts/eval/handoff_tables.py` derives `call_ledger`, `e2e_trials`,
+  `e2e_pairs` and `primitive_summary` from retained receipts. Invalid cells
+  stay rows; unknown usage and a missing or zero-placeholder latency stay null.
+  Astra `subscription_api_equivalent_estimate_usd`, Jev
+  `typesafe_price_estimate_usd` and `actual_billed_usd` stay separate and are
+  never summed; billed USD stays null until a provider export is reconciled by
+  request identity. For paired concurrent runs, trial rows add `slot_id`,
+  `dispatch_skew_s`, `agent_start_skew_s`, `pair_sync`, `concurrent_trials` and
+  `external_account_usage` (always `unknown`) from the private trial receipt, and
+  `overlapping_calls` from call-ledger intervals (null unless every interval is
+  known). Pair rows keep only same-slot synchronized pairs as
+  `intra_pair_latency_comparable`. `strict_success` follows the preregistered
+  rule of the frozen cell: a matched final-verdict cell needs native reward 1,
+  admitted decisive judgments, consumed negative feedback and no false
+  completion; an intent helper cell also needs no wrong-target or extra lookup
+  and observed `helper_admitted` (the task oracle's `decision_succeeded`), no
+  `helper_fallback_used` (a terminal helper call answered by any provider, model or
+  response model other than the arm's helper route; null when calls and helper
+  results do not pair up) and `helper_feedback_consumed` (every helper result
+  reached a later root request). Runner receipt values must equal this
+  derivation. An unobserved helper fact leaves strict success null with
+  `strict_unobserved` reasons; it is never assumed.
+  `strict_success_with_lookup` adds the lookup conditions to either rule, and a
+  runner-recorded strict value that differs from the recomputation is rejected.
+- `scripts/eval/handoff_tables.py reliability` combines one frozen repetition
+  set's `e2e_trials` by arm and case into `reliability.jsonl` and
+  `reliability_summary.json`: per-task pass@n and pass^n with source pointers,
+  contract digests and run-spec digests. An incomplete, duplicated, unknown or
+  mismatched matrix is written as not-measurable, never as a valid-only rate.
+- `scripts/eval/denominator_coverage.py` rejects a measured primary that leaves
+  a planned execution cell unselected without a recorded successor, or that
+  uses fewer or more valid cells than `denominator x cells_per_unit`. Its
+  `repetitions` mode gates a frozen repetition set before aggregation and exits
+  non-zero on any enumerated rejection.
+- `scripts/eval/harbor_publication.py project` marks digest-policy trajectories
+  reviewed only after they equal the projection of the private export, then
+  stages them with replay incompleteness declared.
+- `scripts/eval/harbor_publication.py scan` applies the release gate's secret
+  and identity patterns to the other public report files and prints counts
+  only; it supplements, not replaces, exact-byte review.
+- `scripts/eval/harbor_publication.py readback` checks the merge commit's
+  ordered parents, reviewed tree, append-only destinations, manifest bytes and
+  trajectory releases from that commit's own blobs, and writes a new receipt.
+
 There is intentionally no automatic `rsync` from the whole artifact tree. A
 manifest-first, allowlisted copy keeps new credential files and unopened
 holdouts from becoming public merely because they appeared under a familiar
