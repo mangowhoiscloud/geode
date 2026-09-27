@@ -22,9 +22,8 @@ export default function Page() {
               또는 macOS helper입니다. Provider-native computer surface는
               스크린샷을 해당 provider wire로 돌려주지만, normal function tool인{" "}
               <code>computer_use</code>는 base64를 생략하고 compact observation만
-              반환합니다. Function-tool 경로의 시각적 좌표 선택은 활성
-              provider/source에 호환되는 grounding이 있을 때만 <code>locate</code>로
-              수행합니다.
+              반환합니다. 현재 function-tool 경로의 자동 좌표 선택인{" "}
+              <code>locate</code>는 모든 provider/source에서 사용할 수 없습니다.
             </p>
 
             <h2>동작 방식</h2>
@@ -45,13 +44,22 @@ computer_use ←────── compact observation(base64 omitted) ◄┘`}<
               <code>screenshot</code>, <code>click</code>,{" "}
               <code>double_click</code>, <code>type</code>, <code>key</code>,{" "}
               <code>scroll</code>, <code>move</code>, <code>drag</code>,{" "}
-              <code>wait</code>와 클릭 변형들입니다. 모르는 action은 지원 목록과
-              함께 오류로 돌아갑니다.
+              <code>wait</code>와 클릭 변형들입니다. 지원하지 않는 action은
+              실행 전에 오류로 돌아갑니다.
             </p>
             <p>
-              좌표는 타깃 공간과 실제 화면 사이를 양방향 스케일링합니다. 모델은{" "}
-              <code>display_width_px=1280, display_height_px=800</code> 기준으로
-              좌표를 내고, 하네스가 실제 해상도로 변환합니다.
+              좌표는 1280×800 스크린샷 공간과 실제 화면 사이를 양방향
+              스케일링합니다. 기존 Anthropic 도구는 display 필드로 크기를
+              선언하고, Opus 5.5의 <code>computer_toolset_20260801</code>은
+              스크린샷에서 크기를 읽습니다. 도구 결과에도 toolset 식별자를 보존합니다.
+            </p>
+            <p>
+              새 toolset은 순차 호출을 요청합니다. 구현되지 않은 <code>zoom</code>,{" "}
+              <code>hold_key</code>, <code>left_mouse_down</code>,{" "}
+              <code>left_mouse_up</code>은 노출하지 않습니다. 좌표·키·대기 시간은
+              실행 전에 검증하고, 생략된 클릭 좌표는 관측한 커서 위치를 사용합니다.
+              예상하지 못한 복수 동작 응답은 실행을 차단하되 사용량과 실패 원인을
+              기록합니다. 프로토콜 회귀 검사는 실제 데스크톱 조작 성공을 뜻하지 않습니다.
             </p>
 
             <h2>구조를 먼저 읽고, 스크린샷은 나중에</h2>
@@ -112,9 +120,9 @@ driver = "helper"
               ChatGPT subscription처럼 native surface를 받지 않는 backend에는
               같은 하네스를 normal function tool <code>computer_use</code>로
               노출합니다. 이 경로는 다른 provider로 몰래 fallback하지 않습니다.
-              OpenAI subscription source에 visual grounding을 별도로 구성하지
-              않았다면 <code>capture</code>는 가능하지만 <code>locate</code>는
-              dependency error로 중단되며, browser DOM·playwriter·{" "}
+              <code>capture</code>는 가능하지만 <code>locate</code>는 활성
+              provider/source를 표시하는 dependency error로 중단됩니다.
+              미검증 GLM 자동 grounding 경로는 제거했으며, browser DOM·playwriter·{" "}
               <code>ui_probe</code> 같은 source-safe 구조 경로를 선택해야 합니다.
             </p>
 
@@ -170,9 +178,8 @@ driver = "helper"
               pyautogui or the macOS helper. Provider-native computer surfaces
               return screenshots on their provider wire. The normal function
               tool <code>computer_use</code> instead omits base64 and returns a
-              compact observation. Visual target selection on that path uses{" "}
-              <code>locate</code> only when compatible grounding exists for the
-              active provider/source.
+              compact observation. Automatic target selection through{" "}
+              <code>locate</code> is currently unavailable for every provider/source.
             </p>
 
             <h2>How it runs</h2>
@@ -193,14 +200,23 @@ computer_use ←────── compact observation(base64 omitted) ◄┘`}<
               actions: <code>screenshot</code>, <code>click</code>,{" "}
               <code>double_click</code>, <code>type</code>, <code>key</code>,{" "}
               <code>scroll</code>, <code>move</code>, <code>drag</code>,{" "}
-              <code>wait</code>, plus the click variants. Unknown actions return
-              an error with the supported list.
+              <code>wait</code>, plus the click variants. Unsupported actions return
+              an error before execution.
             </p>
             <p>
-              Coordinates scale both ways between the target space and the real
-              screen: the model addresses a{" "}
-              <code>display_width_px=1280, display_height_px=800</code> canvas,
-              and the harness converts to the actual resolution.
+              Coordinates scale between the 1280×800 screenshot space and the real
+              screen. Legacy Anthropic tools declare display fields; Opus 5.5’s{" "}
+              <code>computer_toolset_20260801</code> reads geometry from the screenshots.
+              Tool results retain the toolset identity.
+            </p>
+            <p>
+              The new toolset requests serial calls and withholds unimplemented{" "}
+              <code>zoom</code>, <code>hold_key</code>, <code>left_mouse_down</code> and{" "}
+              <code>left_mouse_up</code> members. Coordinates, keys and wait duration
+              are validated before execution; an omitted click coordinate uses the
+              observed cursor. Unexpected multiple-action responses are rejected
+              while retaining usage and the failure reason. Protocol regressions
+              do not establish successful live desktop actions.
             </p>
 
             <h2>Read structure first, screenshot later</h2>
@@ -266,9 +282,10 @@ driver = "helper"
               Backends that do not accept it, including the ChatGPT subscription
               route, receive the same harness as the normal{" "}
               <code>computer_use</code> function tool. That path never silently
-              falls across providers. Without separately configured visual
-              grounding for the OpenAI subscription source, <code>capture</code>
-              works but <code>locate</code> returns a dependency error; choose a
+              falls across providers. <code>capture</code> works, but{" "}
+              <code>locate</code> returns a dependency error identifying the active
+              provider/source. The unverified automatic GLM grounding route has
+              been removed; choose a
               source-safe structural path such as browser DOM, playwriter, or{" "}
               <code>ui_probe</code> instead.
             </p>

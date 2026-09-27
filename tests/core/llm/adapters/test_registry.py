@@ -465,11 +465,15 @@ def test_builtin_registrations_pin_profile_credential_transport() -> None:
         if record.provider_spec is not None
     }
     assert actual == {
-        "anthropic-payg": ("anthropic", "settings", "anthropic-messages"),
-        "openai-payg": ("openai", "settings", "openai-platform-responses"),
-        "openrouter-payg": ("openrouter", "settings", "openrouter-chat-completions"),
+        "anthropic-payg": ("anthropic", "payg-profile-or-settings", "anthropic-messages"),
+        "openai-payg": ("openai", "payg-profile-or-settings", "openai-platform-responses"),
+        "openrouter-payg": (
+            "openrouter",
+            "payg-profile-or-settings",
+            "openrouter-chat-completions",
+        ),
         "codex-oauth": ("openai-codex", "codex-oauth", "openai-codex-responses"),
-        "glm-payg": ("glm", "settings", "glm-payg-chat-completions"),
+        "glm-payg": ("glm", "payg-profile-or-settings", "glm-payg-chat-completions"),
         "glm-coding-plan": (
             "glm-coding",
             "profile-store",

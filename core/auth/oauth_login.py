@@ -13,11 +13,11 @@ from __future__ import annotations
 import json
 import logging
 import time
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.auth.codex_cli_oauth import codex_auth_path
 from core.auth.jwt_claims import decode_jwt_claims
 
 log = logging.getLogger(__name__)
@@ -119,108 +119,6 @@ def chatgpt_plan_label(plan_type: str | None) -> str:
     return f"ChatGPT {normalised.title()}"
 
 
-def resolve_local_chatgpt_plan_label() -> str:
-    """Resolve the operator's *current* ChatGPT plan label from local JWTs.
-
-    Walks the two well-known token sources GEODE reads at runtime:
-
-    1. ``~/.codex/auth.json`` (external Codex CLI token — preferred,
-       this is what production smoke runs typically use).
-    2. GEODE profile store via :func:`reconcile_plan_tier_from_stored_jwt`
-       (in-process Plan registry).
-
-    Returns the human label from :func:`chatgpt_plan_label`. Falls back
-    to the generic "ChatGPT subscription" string when nothing is
-    readable — never raises, never blocks startup / build / CLI render.
-
-    Used by hub builders, login UX, and any other display layer that
-    needs the operator's actual plan name instead of the pre-fix
-    "Plus" hard-code.
-    """
-    # Source 1: external Codex CLI auth file (most common).
-    codex_auth = codex_auth_path()
-    try:
-        raw = codex_auth.read_text(encoding="utf-8")
-        payload = json.loads(raw)
-        token = (
-            payload.get("tokens", {}).get("id_token", "")
-            or payload.get("tokens", {}).get("access_token", "")
-            or ""
-        )
-        slug = _plan_type_from_token(token) if token else ""
-        if slug:
-            return chatgpt_plan_label(slug)
-    except (OSError, json.JSONDecodeError, ValueError, TypeError):
-        pass
-
-    # Source 2: GEODE-issued OAuth profile. Container not built
-    # (standalone CLI / pytest) → silently fall through to the generic
-    # label so callers never see an empty string.
-    import contextlib
-
-    with contextlib.suppress(Exception):
-        from core.wiring.container import ensure_profile_store
-
-        store = ensure_profile_store()
-        profile = store.get(f"{_GEODE_OPENAI_PLAN_ID}:user")
-        token = (profile.key if profile else "") or ""
-        slug = _plan_type_from_token(token) if token else ""
-        if slug:
-            return chatgpt_plan_label(slug)
-
-    return chatgpt_plan_label("")
-
-
-def reconcile_plan_tier_from_stored_jwt() -> tuple[str, str] | None:
-    """Re-decode the stored OpenAI OAuth JWT and sync ``subscription_tier``.
-
-    The user's ChatGPT plan can change between logins (Plus → Pro → Max,
-    etc.). The Plan's ``subscription_tier`` is set on login but stays
-    frozen if the user only refreshes their access token via
-    ``refresh_token`` flow. This re-extracts ``chatgpt_plan_type`` from
-    the live JWT and updates both the Plan and the profile metadata.
-
-    Returns ``(old, new)`` tuple if a drift was reconciled, ``None``
-    when no GEODE OAuth profile exists or the tier matches.
-    """
-    try:
-        from core.llm.strategies.plan_registry import get_plan_registry
-        from core.wiring.container import ensure_profile_store
-    except Exception:
-        return None
-
-    registry = get_plan_registry()
-    plan = registry.get(_GEODE_OPENAI_PLAN_ID)
-    store = ensure_profile_store()
-    profile = store.get(f"{_GEODE_OPENAI_PLAN_ID}:user") if plan else None
-    if plan is None or profile is None or not profile.key:
-        return None
-
-    fresh = _plan_type_from_token(profile.key)
-    if not fresh:
-        return None
-    stored = plan.subscription_tier or ""
-    if fresh == stored:
-        return None
-
-    plan.subscription_tier = fresh
-    if profile.metadata is not None:
-        profile.metadata["plan_type"] = fresh
-    try:
-        from core.auth.auth_toml import save_auth_toml
-
-        save_auth_toml()
-    except Exception:
-        log.debug("auth.toml persist after tier drift skipped", exc_info=True)
-    log.info(
-        "OpenAI plan tier reconciled from JWT: %s → %s (plan=%s)",
-        stored or "(unset)",
-        fresh,
-        plan.id,
-    )
-    return (stored, fresh)
-
-
 def _migrate_legacy_auth_json_if_present() -> dict[str, Any]:
     """One-shot migration of pre-v0.50.2 ``~/.geode/auth.json``.
 
@@ -248,67 +146,62 @@ def _migrate_legacy_auth_json_if_present() -> dict[str, Any]:
 
 
 def _persist_oauth_to_authtoml(creds: dict[str, Any]) -> None:
-    """Write Codex device-code creds into ``~/.geode/auth.toml`` SOT."""
-    try:
-        from core.auth.auth_toml import save_auth_toml
-        from core.auth.profiles import AuthProfile, CredentialType
-        from core.llm.strategies.plan_registry import get_plan_registry
-        from core.llm.strategies.plans import Plan, PlanKind
-        from core.wiring.container import ensure_profile_store
-    except Exception:  # pragma: no cover — import-time defensive
-        log.debug("auth.toml persistence skipped — Plan modules unavailable")
-        return
+    """Write Codex device-code creds into ``~/.geode/auth.toml`` SOT.
 
-    registry = get_plan_registry()
-    plan = registry.get(_GEODE_OPENAI_PLAN_ID) or Plan(
-        id=_GEODE_OPENAI_PLAN_ID,
-        provider="openai-codex",
-        kind=PlanKind.OAUTH_BORROWED,
-        display_name="OpenAI (ChatGPT subscription, GEODE OAuth)",
-        base_url="https://chatgpt.com/backend-api/codex",
-        auth_type="oauth_external",
-        subscription_tier=str(creds.get("plan_type") or "") or None,
-    )
-    registry.add(plan)
+    The plan tier follows the token being written, so a changed subscription
+    is recorded with the credential rather than when the file is read.
+    """
+    from core.auth.auth_toml import auth_file_transaction
+    from core.auth.profiles import AuthProfile, CredentialType
+    from core.llm.strategies.plans import Plan, PlanKind
 
-    store = ensure_profile_store()
-    profile_name = f"{plan.id}:user"
-    expires_at = float(creds.get("expires_at", 0.0) or 0.0)
-    existing = store.get(profile_name)
-    if existing is not None:
-        existing.key = str(creds.get("access_token", ""))
-        existing.refresh_token = str(creds.get("refresh_token", ""))
-        existing.expires_at = expires_at
-        existing.plan_id = plan.id
-        existing.error_count = 0
-        existing.cooldown_until = 0.0
-        existing.metadata.update(
-            {
-                "account_id": creds.get("account_id", ""),
-                "email": creds.get("email", ""),
-                "plan_type": creds.get("plan_type", ""),
-                "source": "geode-device-code",
-            }
-        )
-    else:
-        store.add(
-            AuthProfile(
-                name=profile_name,
-                provider=plan.provider,
-                credential_type=CredentialType.OAUTH,
-                key=str(creds.get("access_token", "")),
-                refresh_token=str(creds.get("refresh_token", "")),
-                expires_at=expires_at,
-                plan_id=plan.id,
-                metadata={
-                    "account_id": creds.get("account_id", ""),
-                    "email": creds.get("email", ""),
-                    "plan_type": creds.get("plan_type", ""),
-                    "source": "geode-device-code",
-                },
+    tier = str(creds.get("plan_type") or "") or None
+    metadata = {
+        "account_id": creds.get("account_id", ""),
+        "email": creds.get("email", ""),
+        "plan_type": creds.get("plan_type", ""),
+        "source": "geode-device-code",
+    }
+    with auth_file_transaction() as (registry, store):
+        current = registry.get(_GEODE_OPENAI_PLAN_ID)
+        plan = (
+            Plan(
+                id=_GEODE_OPENAI_PLAN_ID,
+                provider="openai-codex",
+                kind=PlanKind.OAUTH_BORROWED,
+                display_name="OpenAI (ChatGPT subscription, GEODE OAuth)",
+                base_url="https://chatgpt.com/backend-api/codex",
+                auth_type="oauth_external",
+                subscription_tier=tier,
             )
+            if current is None
+            else replace(current, subscription_tier=tier or current.subscription_tier)
         )
-    save_auth_toml()
+        registry.add(plan)
+        profile_name = f"{plan.id}:user"
+        expires_at = float(creds.get("expires_at", 0.0) or 0.0)
+        existing = store.get(profile_name)
+        if existing is not None:
+            existing.key = str(creds.get("access_token", ""))
+            existing.refresh_token = str(creds.get("refresh_token", ""))
+            existing.expires_at = expires_at
+            existing.plan_id = plan.id
+            existing.error_count = 0
+            existing.cooldown_until = 0.0
+            existing.metadata.update(metadata)
+        else:
+            store.add(
+                AuthProfile(
+                    name=profile_name,
+                    provider=plan.provider,
+                    credential_type=CredentialType.OAUTH,
+                    key=str(creds.get("access_token", "")),
+                    refresh_token=str(creds.get("refresh_token", "")),
+                    expires_at=expires_at,
+                    plan_id=plan.id,
+                    metadata=metadata,
+                )
+            )
 
 
 def _load_auth_store() -> dict[str, Any]:
@@ -328,8 +221,7 @@ def _load_auth_store() -> dict[str, Any]:
                 log.warning("Failed to persist legacy OAuth creds to auth.toml", exc_info=True)
         return legacy if isinstance(legacy, dict) else {"version": 1, "providers": {}}
 
-    # Re-build a json-shaped view from the auth.toml SOT for legacy callers
-    # like get_auth_status().
+    # Re-build a json-shaped view from the auth.toml SOT for legacy callers.
     try:
         from core.llm.strategies.plan_registry import get_plan_registry
         from core.wiring.container import ensure_profile_store
@@ -521,48 +413,6 @@ def login_openai() -> dict[str, Any]:
     )
 
     return creds
-
-
-def get_auth_status() -> list[dict[str, Any]]:
-    """Get status of all stored OAuth credentials."""
-    results: list[dict[str, Any]] = []
-    store = _load_auth_store()
-
-    for provider, creds in store.get("providers", {}).items():
-        expires_at = creds.get("expires_at", 0)
-        remaining = expires_at - time.time() if expires_at else 0
-        results.append(
-            {
-                "provider": provider,
-                "email": creds.get("email", ""),
-                "plan_type": creds.get("plan_type", ""),
-                "source": creds.get("source", ""),
-                "expires_in": f"{remaining / 3600:.1f}h" if remaining > 0 else "expired",
-                "status": "active" if remaining > 0 else "expired",
-            }
-        )
-
-    # Also check external CLI tokens
-    try:
-        from core.auth.codex_cli_oauth import read_codex_cli_credentials
-
-        codex_creds = read_codex_cli_credentials()
-        if codex_creds:
-            remaining = codex_creds["expires_at"] - time.time()
-            results.append(
-                {
-                    "provider": "openai (imported ChatGPT credential)",
-                    "email": "",
-                    "plan_type": "",
-                    "source": "~/.codex/auth.json",
-                    "expires_in": f"{remaining / 3600:.1f}h" if remaining > 0 else "expired",
-                    "status": "active" if remaining > 0 else "expired",
-                }
-            )
-    except Exception:
-        log.debug("External CLI token check failed", exc_info=True)
-
-    return results
 
 
 def read_geode_openai_credentials() -> dict[str, Any] | None:

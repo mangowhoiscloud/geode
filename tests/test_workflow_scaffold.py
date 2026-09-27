@@ -16,6 +16,58 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text()
 
 
+@pytest.mark.parametrize("full", ["true", "false", "", "unknown", None, True])
+@pytest.mark.parametrize("result", ["success", "failure", "cancelled", "skipped"])
+def test_test_reducer_requires_all_shards_and_explicit_classification(
+    tmp_path: Path, full: object, result: str
+) -> None:
+    job = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]["test"]
+    needs = {
+        "changes": {"result": "success", "outputs": {"full_tests": full}},
+        "test_shards": {"result": result},
+        "test_contracts": {"result": result},
+    }
+    checked = subprocess.run(  # noqa: S603 - real reducer predicate, synthetic job outcomes
+        ["/bin/bash", "-e", "-c", job["steps"][0]["run"]],
+        env=os.environ
+        | {"TEST_NEEDS": json.dumps(needs), "GITHUB_OUTPUT": str(tmp_path / "output")},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    expected = (full == "true" and result == "success") or (full == "false" and result == "skipped")
+    assert (checked.returncode == 0) is expected, checked.stderr
+
+
+def test_test_shards_preserve_full_coverage_and_contract_checks() -> None:
+    jobs = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]
+    shards = jobs["test_shards"]
+    assert shards["strategy"] == {"fail-fast": False, "matrix": {"shard": [0, 1, 2, 3]}}
+    assert "continue-on-error" not in shards
+    run = next(
+        step["run"] for step in shards["steps"] if step.get("name", "").startswith("Run tests")
+    )
+    for flag in ("-n auto", "--dist=loadfile", "--cov=core", "--cov=evals", "--cov=evolve"):
+        assert flag in run
+    assert "-c pyproject.toml --rootdir=." in run
+    assert "--cov-fail-under=0" in run
+    upload = shards["steps"][-1]
+    assert upload["if"] == "${{ always() }}" and upload["with"]["include-hidden-files"] is True
+    reducer = jobs["test"]["steps"][-1]["run"]
+    assert reducer.index("scripts/ci_test_shards.py") < reducer.index("coverage combine")
+    assert "coverage report --show-missing" in reducer and "--fail-under" not in reducer
+    names = {step.get("name") for step in jobs["test_contracts"]["steps"]}
+    assert {
+        "Architecture behavior contracts",
+        "Architecture performance contracts",
+        "Architecture performance baseline",
+        "Architecture performance failure profile",
+        "Extension change-surface contracts",
+        "Build and inspect package artifacts",
+        "Native Harbor 0.22 Docker contracts (no containers or model calls)",
+    } <= names
+
+
 @pytest.mark.parametrize(
     "result", ["success", "failure", "cancelled", "skipped", "neutral", "pending", ""]
 )
@@ -25,7 +77,7 @@ def test_merge_gate_executes_actual_predicate_and_rejects_non_success(result: st
     assert gate["if"] == "${{ always() }}"
     assert set(gate["needs"]) == {"changes", "lint", "typecheck", "test", "security"}
     needs: dict[str, dict[str, object]] = {key: {"result": "success"} for key in gate["needs"]}
-    needs["changes"]["outputs"] = {"code": "true", "docs": "false"}
+    needs["changes"]["outputs"] = {"code": "true", "docs": "false", "full_tests": "true"}
     needs["test"]["result"] = result
     script = gate["steps"][0]["run"]
     checked = subprocess.run(  # noqa: S603 - execute the tracked gate against synthetic results
@@ -38,15 +90,19 @@ def test_merge_gate_executes_actual_predicate_and_rejects_non_success(result: st
     assert (checked.returncode == 0) is (result == "success"), checked.stderr
 
 
-@pytest.mark.parametrize("missing", ["test", "classification", "docs_classification", "all"])
+@pytest.mark.parametrize(
+    "missing", ["test", "classification", "docs_classification", "full_tests_classification", "all"]
+)
 def test_merge_gate_rejects_absent_evidence(missing: str) -> None:
     gate = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]["gate"]
     needs: dict[str, dict[str, object]] = {key: {"result": "success"} for key in gate["needs"]}
-    needs["changes"]["outputs"] = {"code": "false", "docs": "false"}
+    needs["changes"]["outputs"] = {"code": "false", "docs": "false", "full_tests": "false"}
     if missing == "classification":
         del needs["changes"]["outputs"]
     elif missing == "docs_classification":
-        needs["changes"]["outputs"] = {"code": "false"}
+        del needs["changes"]["outputs"]["docs"]
+    elif missing == "full_tests_classification":
+        del needs["changes"]["outputs"]["full_tests"]
     elif missing == "all":
         needs.clear()
     else:
@@ -60,6 +116,42 @@ def test_merge_gate_rejects_absent_evidence(missing: str) -> None:
     assert checked.returncode != 0
 
 
+@pytest.mark.parametrize("classification", ["true", "false", "", "unknown", None, True])
+def test_merge_gate_requires_explicit_full_test_classification(classification: object) -> None:
+    gate = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]["gate"]
+    needs = {key: {"result": "success"} for key in gate["needs"]}
+    needs["changes"]["outputs"] = {"code": "true", "docs": "true", "full_tests": classification}
+    checked = subprocess.run(  # noqa: S603 - tracked predicate with synthetic classifications
+        ["/bin/bash", "-e", "-c", gate["steps"][0]["run"]],
+        env=os.environ | {"GATE_NEEDS": json.dumps(needs)},
+        capture_output=True,
+        check=False,
+    )
+    assert (checked.returncode == 0) is (classification in ("true", "false"))
+
+
+@pytest.mark.parametrize("base_sha", ["a" * 40, "", "0" * 40, "a" * 39, "main", "a" * 40 + "\n"])
+def test_push_change_detection_rejects_missing_or_invalid_base(base_sha: str) -> None:
+    steps = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]["changes"]["steps"]
+    validate = next(step for step in steps if step.get("name") == "Validate push comparison base")
+    dispatch = next(step for step in steps if step.get("id") == "filter")
+    assert steps.index(validate) < steps.index(dispatch)
+    assert validate["if"] == "github.event_name == 'push'"
+    assert validate["env"]["PUSH_BASE_SHA"] == "${{ github.event.before }}"
+    assert (
+        dispatch["with"]["base"]
+        == "${{ github.event_name == 'push' && github.event.before || '' }}"
+    )
+    assert "token" not in dispatch["with"]
+    checked = subprocess.run(  # noqa: S603 - tracked validation against synthetic push metadata
+        ["/bin/bash", "-e", "-c", validate["run"]],
+        env=os.environ | {"PUSH_BASE_SHA": base_sha},
+        capture_output=True,
+        check=False,
+    )
+    assert (checked.returncode == 0) is (base_sha == "a" * 40)
+
+
 def test_required_pages_checks_have_no_pull_request_path_filter() -> None:
     workflow = yaml.safe_load(_read(".github/workflows/pages.yml"))
     # PyYAML's YAML 1.1 loader resolves the unquoted Actions key 'on' as True.
@@ -69,6 +161,55 @@ def test_required_pages_checks_have_no_pull_request_path_filter() -> None:
     assert "ready_for_review" in trigger["types"]
     assert workflow["jobs"]["lint"].get("if") is None
     assert workflow["jobs"]["build"].get("if") is None
+
+
+@pytest.mark.parametrize(
+    ("event", "target", "before", "expected"),
+    [
+        ("pull_request", "develop", "", "refs/remotes/origin/develop"),
+        ("pull_request", "main", "", "refs/remotes/origin/main"),
+        ("push", "develop", "a" * 40, "a" * 40),
+        ("push", "main", "b" * 40, "b" * 40),
+        ("push", "develop", "", None),
+        ("push", "develop", "0" * 40, None),
+        ("push", "develop", "main", None),
+    ],
+)
+def test_legacy_ratchet_uses_event_comparison_base(
+    tmp_path: Path, event: str, target: str, before: str, expected: str | None
+) -> None:
+    steps = yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"]["lint"]["steps"]
+    step = next(step for step in steps if step.get("name") == "Legacy import ratchet")
+    assert step["env"] == {
+        "LEGACY_EVENT_MODE": "${{ github.event_name }}",
+        "LEGACY_PR_BASE_REF": "refs/remotes/origin/${{ github.base_ref || github.ref_name }}",
+        "LEGACY_PUSH_BASE_REF": "${{ github.event.before }}",
+    }
+    uv = tmp_path / "uv"
+    uv.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n', encoding="utf-8")
+    uv.chmod(0o755)
+    result = subprocess.run(  # noqa: S603 - tracked workflow with an inert uv argument probe
+        ["/bin/bash", "-e", "-c", step["run"]],
+        env=os.environ
+        | {
+            "PATH": f"{tmp_path}:/usr/bin:/bin",
+            "LEGACY_EVENT_MODE": event,
+            "LEGACY_PR_BASE_REF": f"refs/remotes/origin/{target}",
+            "LEGACY_PUSH_BASE_REF": before,
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert (result.returncode == 0) is (expected is not None), result.stderr
+    if expected is not None:
+        assert result.stdout.splitlines() == [
+            "run",
+            "python",
+            "scripts/check_legacy_imports.py",
+            "--base-ref",
+            expected,
+        ]
 
 
 def test_runtime_markdown_and_skills_trigger_code_verification() -> None:

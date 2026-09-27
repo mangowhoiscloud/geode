@@ -76,8 +76,8 @@ def test_login_providers_renders_equivalence_classes(capsys: pytest.CaptureFixtu
     assert "openai-codex" in out and "openai" in out
     assert "glm-coding" in out and "glm" in out
 
-    # Equivalence map header must be present
-    assert "Equivalence map" in out
+    # Source alternatives header must be present
+    assert "Source alternatives" in out
 
 
 def test_login_providers_dedupes_equivalent_class_entries(
@@ -92,8 +92,8 @@ def test_login_providers_dedupes_equivalent_class_entries(
     out = capsys.readouterr().out
 
     # The "→" arrow joins the entry-point to its member list. Count the
-    # arrows after the "Equivalence map" header.
-    _, _, after = out.partition("Equivalence map")
+    # arrows after the "Source alternatives" header.
+    _, _, after = out.partition("Source alternatives")
     # Each multi-member class adds one arrow line; we expect 2 classes
     # (openai + glm) post-dedup. A regression that re-renders the same
     # list under sibling keys would show 4 arrows.

@@ -35,35 +35,14 @@ export default function Page() {
               없습니다. 요청·응답 셰이핑은 프로토콜이 정의한 provider-agnostic
               타입(<code>AdapterCallRequest</code>,{" "}
               <code>AdapterCallResult</code>)을 어댑터 내부에서 SDK 페이로드로
-              번역하는 일입니다. <code>AnthropicPaygAdapter</code>(
-              <code>core/llm/adapters/anthropic_payg.py</code>)가 PAYG 경로의
-              참조 구현입니다.
+              번역하는 일입니다. PAYG 경로의 실제 구현은{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/blob/main/core/llm/adapters/anthropic_payg.py">
+                <code>AnthropicPaygAdapter</code>
+              </a>
+              를 참고하십시오. 이 구현의 <code>_clients</code>,{" "}
+              <code>_get_client()</code>, <code>acomplete()</code>에서 루프별
+              클라이언트 선택과 요청·응답 변환을 확인할 수 있습니다.
             </p>
-            <pre>{`# core/llm/adapters/acme_payg.py
-from dataclasses import dataclass, field
-from typing import Any
-from core.llm.adapters.base import (
-    SOURCE_PAYG, AdapterBillingType,
-    AdapterCallRequest, AdapterCallResult,
-    UsageSummary,
-)
-
-@dataclass
-class AcmePaygAdapter:
-    name: str = "acme-payg"
-    provider: str = "acme"
-    source: str = SOURCE_PAYG
-    billing_type: AdapterBillingType = AdapterBillingType.API
-    _client: Any = field(default=None, init=False, repr=False)
-
-    async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
-        client = self._get_client()
-        raw = await client.create(...)  # translate req -> SDK payload
-        return AdapterCallResult(
-            text=raw.text,
-            usage=UsageSummary(input_tokens=..., output_tokens=...),
-            stop_reason=raw.stop_reason,
-        )`}</pre>
             <p>
               스트리밍과 introspection은 필수가 아닙니다. 지원하는 표면만{" "}
               <code>StreamingCapable</code>,{" "}
@@ -86,6 +65,21 @@ class AcmePaygAdapter:
               <code>(provider, source)</code> 쌍이 정확히 하나의 어댑터에
               매칭되도록 강제하므로, 같은 쌍을 둘 등록하면 invariant 위반으로
               곧바로 실패합니다.
+            </p>
+            <p>
+              내장 어댑터의 <code>LoopAffineClientCache</code>는 같은 이벤트 루프의
+              세션들이 SDK 연결을 공유하도록 합니다. 키 교체는 다음 호출의 연결을
+              바꾸며, 진행 중 요청의 이전 연결은 닫지 않습니다. 현재·이전 연결은
+              해당 루프가 종료될 때 작업과 스트림 정리가 끝난 뒤 함께 닫힙니다.
+              개별 런타임 종료는 다른 세션의 연결을 닫지 않습니다. 이전 연결은
+              루프 수명까지 보관되며 교체 횟수에 대한 별도 상한은 없습니다.
+              외부에서 루프를 소유한다면 작업 종료 후 루프를 닫기 전에
+              <code>core.llm.loop_affinity.drain_current_loop_clients()</code>를
+              await하십시오. 종료 실패 연결은 같은 루프가 살아 있는 동안 재시도할 수
+              있도록 보존합니다. 이미 닫힌 루프의 연결을 다른 루프에서 정리하지는
+              않습니다. 캐시 밖에서 전달한 연결의 정리는 원래 소유자 책임입니다.
+              IPC 작업 스레드의 종료 대기가 만료되면 소유권을 유지하고 재시작을
+              거부합니다. 최종 정리 오류도 데몬 종료 호출자에게 전달합니다.
             </p>
             <pre>{`# acme-geode-adapter/pyproject.toml
 [project.entry-points."geode.llm_adapters"]
@@ -248,35 +242,14 @@ if isinstance(a, EnvironmentDiagnosticCapable):
               an adapter. Request and response shaping is the work of translating
               the protocol&apos;s provider-agnostic types (<code>AdapterCallRequest</code>,{" "}
               <code>AdapterCallResult</code>) to SDK payloads inside the adapter.{" "}
-              <code>AnthropicPaygAdapter</code> in{" "}
-              <code>core/llm/adapters/anthropic_payg.py</code> is the reference for
-              the PAYG path.
+              For the working PAYG implementation, read{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/blob/main/core/llm/adapters/anthropic_payg.py">
+                <code>AnthropicPaygAdapter</code>
+              </a>
+              . Its <code>_clients</code>, <code>_get_client()</code>, and{" "}
+              <code>acomplete()</code> show loop-specific client selection and
+              request/response translation.
             </p>
-            <pre>{`# core/llm/adapters/acme_payg.py
-from dataclasses import dataclass, field
-from typing import Any
-from core.llm.adapters.base import (
-    SOURCE_PAYG, AdapterBillingType,
-    AdapterCallRequest, AdapterCallResult,
-    UsageSummary,
-)
-
-@dataclass
-class AcmePaygAdapter:
-    name: str = "acme-payg"
-    provider: str = "acme"
-    source: str = SOURCE_PAYG
-    billing_type: AdapterBillingType = AdapterBillingType.API
-    _client: Any = field(default=None, init=False, repr=False)
-
-    async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
-        client = self._get_client()
-        raw = await client.create(...)  # translate req -> SDK payload
-        return AdapterCallResult(
-            text=raw.text,
-            usage=UsageSummary(input_tokens=..., output_tokens=...),
-            stop_reason=raw.stop_reason,
-        )`}</pre>
             <p>
               Streaming and introspection are optional. Implement only the
               structural capabilities you support: <code>StreamingCapable</code>,{" "}
@@ -298,6 +271,24 @@ class AcmePaygAdapter:
               <code>(provider, source)</code> pair matches exactly one adapter, so
               registering two for the same pair fails loudly as an invariant
               violation.
+            </p>
+            <p>
+              Built-in adapters use <code>LoopAffineClientCache</code> to share
+              SDK clients among sessions on the same event loop. Credential
+              rotation selects a fresh client for later calls while in-flight
+              calls keep their previous client. The loop owner closes current
+              and retired clients after its work and streams settle, before
+              closing the loop. An individual runtime shutdown leaves shared
+              clients open. Retired clients remain until loop teardown, without
+              a separate rotation-count limit. External loop owners should
+              await <code>core.llm.loop_affinity.drain_current_loop_clients()</code>
+              after their work finishes and before closing the loop. Failed closes
+              remain retryable while that loop is alive; a closed loop cannot
+              transfer cleanup to another loop. Clients
+              supplied outside the cache remain their original owner&apos;s responsibility.
+              If an IPC worker exceeds its shutdown wait, its owner retains it
+              and rejects restart. Final cleanup errors reach the daemon shutdown
+              caller.
             </p>
             <pre>{`# acme-geode-adapter/pyproject.toml
 [project.entry-points."geode.llm_adapters"]

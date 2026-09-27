@@ -47,7 +47,7 @@ def test_agentic_loop_captures_registry_generation_for_lifetime(
         first_loop = AgenticLoop(
             ConversationContext(),
             ToolExecutor(action_handlers={}),
-            config=AgenticLoopConfig(source="payg", disable_settings_drift=True),
+            config=AgenticLoopConfig(source="payg"),
             model="claude-opus-4-8",
             provider="anthropic",
             quiet=True,
@@ -58,7 +58,7 @@ def test_agentic_loop_captures_registry_generation_for_lifetime(
         second_loop = AgenticLoop(
             ConversationContext(),
             ToolExecutor(action_handlers={}),
-            config=AgenticLoopConfig(source="payg", disable_settings_drift=True),
+            config=AgenticLoopConfig(source="payg"),
             model="claude-opus-4-8",
             provider="anthropic",
             quiet=True,

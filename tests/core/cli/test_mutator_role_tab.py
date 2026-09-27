@@ -56,7 +56,7 @@ def test_current_model_for_mutator_reads_toml_when_set(
         '[self_improving_loop.autoresearch.mutator]\ndefault_model = "claude-haiku-4-5-20251001"\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(fake_toml))
     role = role_by_name("mutator")
     assert model_mod._current_model_for_role(role) == "claude-haiku-4-5-20251001"
 
@@ -71,7 +71,7 @@ def test_current_model_for_mutator_returns_empty_when_unset(
 
     fake_toml = tmp_path / "config.toml"
     fake_toml.write_text("[other_section]\nkey = 'value'\n", encoding="utf-8")
-    monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(fake_toml))
     role = role_by_name("mutator")
     assert model_mod._current_model_for_role(role) == ""
 
@@ -83,7 +83,7 @@ def test_current_model_for_mutator_returns_empty_when_toml_missing(
     from core.cli.commands import model as model_mod
     from core.cli.commands._state import role_by_name
 
-    monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", tmp_path / "absent.toml")
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "absent.toml"))
     role = role_by_name("mutator")
     assert model_mod._current_model_for_role(role) == ""
 
@@ -96,7 +96,7 @@ def test_read_toml_value_handles_malformed_toml(
 
     fake_toml = tmp_path / "config.toml"
     fake_toml.write_text("[broken section\nkey = value\n", encoding="utf-8")
-    monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(fake_toml))
     assert (
         model_mod._read_toml_value("self_improving_loop.autoresearch.mutator", "default_model")
         == ""

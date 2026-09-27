@@ -56,6 +56,51 @@ def test_orphan_worktree_fails(tmp_path: Path) -> None:
     assert "missing .owner" in result.stderr
 
 
+def test_empty_owner_worktree_fails(tmp_path: Path) -> None:
+    worktree = tmp_path / ".claude" / "worktrees" / "unowned"
+    worktree.mkdir(parents=True)
+    (worktree / ".owner").write_text(" \n")
+    result = run_check(tmp_path)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "unowned" in result.stderr
+
+
+def test_assert_write_workspace_requires_owned_topic_worktree(tmp_path: Path) -> None:
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)  # noqa: S603,S607
+
+    def assert_workspace(cwd: Path) -> int:
+        return subprocess.run(  # noqa: S603
+            [sys.executable, str(SCRIPT), "assert-write-workspace"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False,
+        ).returncode
+
+    git("init", "-q", "-b", "main")
+    git(
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@example.invalid",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "init",
+    )
+    worktree = tmp_path / ".claude" / "worktrees" / "task"
+    git("worktree", "add", "-q", str(worktree), "-b", "feature/task")
+
+    assert assert_workspace(tmp_path) == 1  # main checkout
+    assert assert_workspace(worktree) == 1  # missing .owner
+    (worktree / ".owner").write_text("\n")
+    assert assert_workspace(worktree) == 1  # empty .owner
+    (worktree / ".owner").write_text("session=x task_id=task\n")
+    assert assert_workspace(worktree) == 0
+
+
 def test_valid_worktree_passes(tmp_path: Path) -> None:
     worktree = tmp_path / ".claude" / "worktrees" / "valid"
     worktree.mkdir(parents=True)

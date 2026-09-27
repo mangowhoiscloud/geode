@@ -27,11 +27,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.auth.codex_cli_oauth import codex_auth_path
+from core.config.policy_source import PolicySourcePaths
 from core.llm.adapters._openai_common import (
     build_async_codex_client,
     build_request_image_receipt,
     build_responses_kwargs,
     translate_codex_response,
+    translate_responses_stream,
 )
 from core.llm.adapters.base import (
     SOURCE_SUBSCRIPTION,
@@ -112,6 +114,7 @@ class CodexOAuthAdapter:
     _token_fingerprint: str = field(default="", init=False, repr=False)
     _token_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
     _model_policy: ModelPolicy | None = field(default=None, init=False, repr=False)
+    routing_sources: PolicySourcePaths | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         from core.config import load_model_policy, settings
@@ -143,15 +146,17 @@ class CodexOAuthAdapter:
         del display_width, display_height  # backend rejects the GA computer tool
         return None
 
-    def _get_client(self) -> Any:
+    def _get_client(self, model: str = "") -> Any:
         from core.llm.providers.codex import _resolve_codex_token_info
 
-        resolved = _resolve_codex_token_info(force_refresh=True)
+        resolved = _resolve_codex_token_info(
+            force_refresh=True, model=model, sources=self.routing_sources
+        )
         if not resolved:
             raise RuntimeError(
                 "CodexOAuthAdapter: ChatGPT OAuth not found. Looked in GEODE "
                 f"ProfileStore ('openai-codex' profile) and {codex_auth_path()}. "
-                "Run ``/login openai`` in GEODE or ``codex auth login`` in the "
+                "Run ``/login openai`` in GEODE or ``codex login`` in the "
                 "Codex CLI to provision credentials, or use the openai-payg adapter."
             )
         with self._token_lock:
@@ -195,8 +200,8 @@ class CodexOAuthAdapter:
         forwards them to :attr:`AgenticResponse.codex_reasoning_items`.
         """
         self._require_model_allowed(req.model)
-        client = self._get_client()
         kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
+        client = self._get_client(req.model)
         # PR-LEGACY-PROVIDER-REMOVAL (2026-05-28) — pre-send input-shape
         # diagnostic backfilled from the now-deleted
         # ``CodexAgenticAdapter.agentic_call``. The Codex backend rejects
@@ -342,7 +347,7 @@ class CodexOAuthAdapter:
         search_model = model or CODEX_PRIMARY
         self._require_model_allowed(search_model)
         reasoning_kwargs = openai_effort_kwargs(search_model, effort)
-        client = self._get_client()
+        client = self._get_client(search_model)
         text_parts: list[str] = []
         source_urls: list[str] = []
         citation_urls: list[str] = []
@@ -430,15 +435,11 @@ class CodexOAuthAdapter:
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         self._require_model_allowed(req.model)
-        client = self._get_client()
         kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
+        client = self._get_client(req.model)
         async with client.responses.stream(**kwargs) as stream:
-            async for event in stream:
-                ev_type = getattr(event, "type", "")
-                if ev_type.endswith("output_text.delta"):
-                    yield StreamEvent(kind="text", payload={"text": getattr(event, "delta", "")})
-                elif ev_type == "response.completed":
-                    yield StreamEvent(kind="stop", payload={"stop_reason": "completed"})
+            async for event in translate_responses_stream(stream):
+                yield event
 
     def test_environment(self) -> EnvironmentReport:
         from core.llm.providers.codex import resolve_codex_token
@@ -456,7 +457,7 @@ class CodexOAuthAdapter:
                 ),
                 hints=(
                     "Run ``/login openai`` inside GEODE to provision the ChatGPT OAuth profile,",
-                    "or ``codex auth login`` in the Codex CLI to use the external token.",
+                    "or ``codex login`` in the Codex CLI to use the external token.",
                 ),
             )
         return EnvironmentReport(
@@ -466,19 +467,16 @@ class CodexOAuthAdapter:
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import CODEX_FALLBACK_CHAIN, CODEX_PRIMARY
-        from core.llm.model_catalog import model_source_unavailable_reason, model_spec_for_adapter
+        from core.llm.model_catalog import model_ids_for_source, model_spec_for_adapter
 
-        ids = [CODEX_PRIMARY, *CODEX_FALLBACK_CHAIN]
-        seen: set[str] = set()
-        out: list[ModelSpec] = []
-        for mid in ids:
-            if mid in seen or model_source_unavailable_reason(
-                mid, provider=self.provider, source=self.source
-            ):
-                continue
-            seen.add(mid)
-            out.append(model_spec_for_adapter(mid, provider=self.provider))
-        return out
+        return [
+            model_spec_for_adapter(mid, provider=self.provider)
+            for mid in model_ids_for_source(
+                provider=self.provider,
+                source=self.source,
+                configured=(CODEX_PRIMARY, *CODEX_FALLBACK_CHAIN),
+            )
+        ]
 
     def detect_credential(self) -> CredentialDetection | None:
         from core.llm.providers.codex import resolve_codex_token

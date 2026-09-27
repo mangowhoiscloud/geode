@@ -164,21 +164,13 @@ def test_g_e_settings_model_default_matches_routing_toml_anthropic() -> None:
     )
 
 
-def test_g_e_settings_model_default_uses_current_4_8_family() -> None:
-    """Belt-and-suspenders: pin the *generation* (claude-opus-4-8) of the
-    field default so a future routing.toml edit that silently rolls the
-    runtime primary forward also updates ``_settings.py``. If we ever do an
-    intentional bump, this test changes alongside the model literal
-    (PR-RUNTIME-OPUS-4-8 bumped 4-7 → 4-8).
-
-    Compares the class-level default (env-immune) — see sibling test for
-    the routing.toml↔Settings parity assertion.
-    """
+def test_g_e_settings_model_default_uses_current_generation() -> None:
+    """Pin the intentional September 24 default independently of user overrides."""
     from core.config._settings import Settings
 
     settings_default = Settings.model_fields["model"].default
-    assert settings_default.startswith("claude-opus-4-8"), (
+    assert settings_default == "claude-opus-5-5", (
         f"G-E watcher: Settings.model default is {settings_default!r} — "
-        "expected claude-opus-4-8 family. If this is an intentional bump, "
+        "expected claude-opus-5-5. If this is an intentional bump, "
         "update this test together with routing.toml + _settings.py."
     )

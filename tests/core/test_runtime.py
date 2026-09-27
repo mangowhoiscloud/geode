@@ -100,6 +100,30 @@ class TestGeodeRuntimeCreate:
         runtime = GeodeRuntime.create("Demo Subject", phase="scoring", log_dir=tmp_path)
         assert runtime.session_key == "subject:demo_subject:scoring"
 
+    @pytest.mark.parametrize("failure_during_creation", [False, True])
+    def test_runtime_cleanup_preserves_other_runtime_mcp(
+        self, tmp_path: Path, failure_during_creation: bool
+    ) -> None:
+        from core.wiring import bootstrap
+
+        active = GeodeRuntime.create("active", log_dir=tmp_path / "active")
+        client = MagicMock()
+        active.mcp_manager._pool.clients["test"] = client
+        if failure_during_creation:
+            with (
+                patch.object(bootstrap, "build_skill_registry", side_effect=ValueError("skills")),
+                pytest.raises(ValueError, match="skills"),
+            ):
+                GeodeRuntime.create("failed", log_dir=tmp_path / "failed")
+        else:
+            other = GeodeRuntime.create("other", log_dir=tmp_path / "other")
+            assert other.mcp_manager is not active.mcp_manager
+            other.shutdown()
+        client.close.assert_not_called()
+        assert active.mcp_manager.connected_count == 1
+        active.shutdown()
+        client.close.assert_called_once()
+
     def test_feature_composition_is_explicit_and_identity_preserving(
         self,
         tmp_path: Path,
@@ -449,3 +473,130 @@ class TestRuntimeTaskGraph:
         runtime.reset_task_graph()
         assert runtime.task_graph is not old_graph
         assert runtime.task_graph.task_count == 0
+
+
+class TestRuntimeFailureCleanup:
+    @pytest.mark.parametrize("failure", [OSError("disk full"), asyncio.CancelledError("cancelled")])
+    def test_partial_core_failure_closes_constructed_owners(
+        self, tmp_path: Path, failure: BaseException
+    ) -> None:
+        from core.wiring import bootstrap
+
+        captured: dict[str, object] = {}
+        original_hooks = bootstrap.build_hooks
+
+        def build_hooks(**kwargs: object) -> object:
+            result = original_hooks(**kwargs)
+            captured["hooks"], captured["store"], _ = result
+            return result
+
+        with (
+            patch.object(bootstrap, "build_hooks", side_effect=build_hooks),
+            patch.object(bootstrap, "build_middleware_registry", side_effect=failure),
+            pytest.raises(type(failure)) as caught,
+        ):
+            GeodeRuntime.create("failed", log_dir=tmp_path)
+        assert caught.value is failure
+        assert captured["hooks"].closed is True
+        assert captured["store"].closed is True
+        replacement = GeodeRuntime.create("replacement", log_dir=tmp_path)
+        assert replacement.event_store.closed is False
+        replacement.shutdown()
+
+    @pytest.mark.parametrize("stage", ["tools", "registry"])
+    def test_failed_creation_releases_prior_stages_and_can_recreate(
+        self, tmp_path: Path, stage: str
+    ) -> None:
+        from core.wiring import bootstrap
+        from core.wiring import container as infra
+        from core.wiring import scheduling as scheduling_wiring
+
+        captured: dict[str, object] = {}
+        build_core = GeodeRuntime._build_core
+        build_scheduling = scheduling_wiring.build_scheduling
+        failure = RuntimeError(f"{stage} failed")
+
+        def core(*args: object, **kwargs: object) -> object:
+            result = build_core(*args, **kwargs)
+            captured.update(result)
+            return result
+
+        def scheduling(**kwargs: object) -> object:
+            result = build_scheduling(**kwargs)
+            captured.update(result)
+            return result
+
+        target = bootstrap if stage == "tools" else infra
+        method = "build_skill_registry" if stage == "tools" else "build_default_registry"
+        with (
+            patch.object(GeodeRuntime, "_build_core", side_effect=core),
+            patch.object(scheduling_wiring, "build_scheduling", side_effect=scheduling),
+            patch.object(target, method, side_effect=failure),
+            patch.object(bootstrap, "build_config_watcher", return_value=MagicMock()) as watcher,
+            patch.object(bootstrap, "build_mcp_manager", return_value=MagicMock()) as mcp,
+            pytest.raises(RuntimeError) as caught,
+        ):
+            GeodeRuntime.create("failed", log_dir=tmp_path)
+        assert caught.value is failure
+        assert captured["hooks"].closed is True
+        assert captured["event_store"].closed is True
+        watcher.return_value.stop.assert_called_once()
+        mcp.return_value.shutdown.assert_called_once()
+        if stage == "registry":
+            assert captured["scheduler_service"].is_running is False
+            assert captured["trigger_manager"].is_scheduler_running is False
+        replacement = GeodeRuntime.create("replacement", log_dir=tmp_path)
+        replacement.shutdown()
+        assert replacement._shutdown is True
+
+    def test_secondary_rollback_failure_preserves_primary(self, tmp_path: Path) -> None:
+        primary = asyncio.CancelledError("cancelled initialization")
+        watcher = MagicMock()
+        watcher.stop.side_effect = KeyboardInterrupt("secondary cleanup interruption")
+        hooks = HookSystem()
+        staged = {"hooks": hooks, "dreaming_service": MagicMock(), "config_watcher": watcher}
+        with (
+            patch.object(GeodeRuntime, "_build_core", return_value=staged),
+            patch.object(GeodeRuntime, "_build_tools", side_effect=primary),
+            pytest.raises(asyncio.CancelledError) as caught,
+        ):
+            GeodeRuntime.create("failed", log_dir=tmp_path)
+        assert caught.value is primary
+        assert hooks.closed is True
+        staged["dreaming_service"].close.assert_called_once()
+
+    @pytest.mark.parametrize("method", ["save", "stop"])
+    def test_scheduler_failure_does_not_skip_cleanup_and_shutdown_retries(
+        self, tmp_path: Path, method: str
+    ) -> None:
+        runtime = GeodeRuntime.create("retry", log_dir=tmp_path)
+        actual = getattr(runtime.scheduler_service, method)
+        with patch.object(runtime.scheduler_service, method, side_effect=OSError("failure")):
+            runtime.shutdown()
+        assert runtime._shutdown is False
+        assert runtime.hooks.closed is True
+        assert runtime.event_store.closed is True
+        if method == "save":
+            assert runtime.scheduler_service.is_running is False
+        with patch.object(runtime.scheduler_service, method, wraps=actual) as retried:
+            runtime.shutdown()
+        retried.assert_called_once()
+        assert runtime._shutdown is True
+
+    def test_shutdown_cancellation_cleans_siblings_and_preserves_first_exception(
+        self, tmp_path: Path
+    ) -> None:
+        runtime = GeodeRuntime.create("cancel", log_dir=tmp_path)
+        primary = asyncio.CancelledError("first cancellation")
+        with (
+            patch.object(runtime.config_watcher, "stop", side_effect=primary),
+            patch.object(runtime.scheduler_service, "save", side_effect=KeyboardInterrupt()),
+            pytest.raises(asyncio.CancelledError) as caught,
+        ):
+            runtime.shutdown()
+        assert caught.value is primary
+        assert runtime.scheduler_service.is_running is False
+        assert runtime.hooks.closed is True
+        assert runtime._shutdown is False
+        runtime.shutdown()
+        assert runtime._shutdown is True

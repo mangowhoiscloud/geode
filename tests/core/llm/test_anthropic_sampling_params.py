@@ -12,7 +12,7 @@ from core.llm.adapters.base import AdapterCallRequest, Message
 
 def _req(**overrides: object) -> AdapterCallRequest:
     base: dict = {
-        "model": "claude-sonnet-5",
+        "model": "claude-haiku-4-5-20251001",
         "system_prompt": "static rules",
         "messages": (Message(role="user", content="hi"),),
         "max_tokens": 512,
@@ -49,7 +49,9 @@ def test_adaptive_model_omits_sampling_and_sets_display() -> None:
     assert kwargs["output_config"]["effort"]
 
 
-def test_stream_kwargs_omit_thinking_and_stops() -> None:
-    kwargs = build_stream_kwargs(_req(thinking_budget=2048, stop_sequences=("x",)))
-    assert "thinking" not in kwargs
-    assert "stop_sequences" not in kwargs
+def test_stream_kwargs_preserve_thinking_and_stops() -> None:
+    request = _req(thinking_budget=2048, stop_sequences=("x",))
+    kwargs = build_stream_kwargs(request)
+    assert kwargs == build_create_kwargs(request)
+    assert kwargs["thinking"]["budget_tokens"] == 2048
+    assert kwargs["stop_sequences"] == ["x"]

@@ -162,7 +162,7 @@ def _install_stubs(monkeypatch: pytest.MonkeyPatch, stubs: list[Any]) -> None:
 
 
 def _force_payg_first(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda provider: "payg")
+    monkeypatch.setattr("core.llm.routing.infer_source", lambda provider, **kwargs: "payg")
 
 
 def _no_backoff(monkeypatch: pytest.MonkeyPatch) -> None:

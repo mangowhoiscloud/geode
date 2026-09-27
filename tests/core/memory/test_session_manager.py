@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import time
 from collections.abc import Callable
 from functools import partial
@@ -19,6 +20,34 @@ def mgr(tmp_path: Path) -> SessionManager:
     m = SessionManager(db_path=db)
     yield m  # type: ignore[misc]
     m.close()
+
+
+@pytest.mark.parametrize("failure", ["pragma", "schema"])
+def test_constructor_closes_connection_when_initialization_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    opened: list[sqlite3.Connection] = []
+    original_connect = sqlite3.connect
+
+    def authorize(action: int, arg1: str | None, *_args: object) -> int:
+        if (failure == "pragma" and action == sqlite3.SQLITE_PRAGMA and arg1 == "journal_mode") or (
+            failure == "schema" and action == sqlite3.SQLITE_CREATE_TABLE and arg1 == "sessions"
+        ):
+            return sqlite3.SQLITE_DENY
+        return sqlite3.SQLITE_OK
+
+    def connect(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+        conn = original_connect(*args, **kwargs)
+        conn.set_authorizer(authorize)
+        opened.append(conn)
+        return conn
+
+    monkeypatch.setattr("core.memory.session_manager.sqlite3.connect", connect)
+    with pytest.raises(sqlite3.DatabaseError, match="not authorized"):
+        SessionManager(tmp_path / "failed.db")
+    assert len(opened) == 1
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        opened[0].execute("SELECT 1")
 
 
 def _make_meta(

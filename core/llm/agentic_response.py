@@ -128,6 +128,7 @@ class ResponseUsage:
     cache_creation_tokens: int = 0
     cache_read_tokens: int = 0
     reported_cost_usd: float | None = None
+    cache_creation_1h_tokens: int | None = None
 
 
 @dataclass
@@ -280,6 +281,9 @@ def normalize_anthropic(response: Any) -> AgenticResponse:
             output_tokens=response.usage.output_tokens,
             thinking_tokens=thinking_tok,
             cache_creation_tokens=cache_create,
+            cache_creation_1h_tokens=getattr(
+                getattr(response.usage, "cache_creation", None), "ephemeral_1h_input_tokens", None
+            ),
             cache_read_tokens=cache_read,
         )
 

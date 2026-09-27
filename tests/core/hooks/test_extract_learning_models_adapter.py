@@ -1,26 +1,4 @@
-"""Regression pin for PR-EXTRACT-LEARNING-MODELS-ADAPTER (2026-05-28).
-
-Two Phase 2 deferred sites from PR-ADAPTER-PATTERN-UNIFICATION (#1832)
-finally migrated to the adapter registry's
-``complete_text_via_adapters`` dispatch:
-
-1. ``core/hooks/llm_extract_learning.py`` — the TURN_COMPLETED hook
-   that distills learning patterns from agent turns. Previously
-   instantiated bare ``openai.OpenAI`` / ``anthropic.Anthropic`` sync
-   clients with a hand-rolled 2-provider fallback. Now async +
-   capability-based dispatch.
-2. ``core/agent/loop/models.py::_context_exhausted_message`` — the
-   one-shot Haiku call that translates the context-exhausted notice
-   into the user's language. Previously ``anthropic.Anthropic`` only —
-   silently returned the English ``_EXHAUSTED_FALLBACK`` for any
-   operator without an Anthropic key (the entire localisation point
-   defeated). Now async + model-routed dispatch.
-
-Both sites become async; their loop-phase call paths for the context-exhausted
-message and ``HookSystem.trigger_async``
-at ``_lifecycle.py:351`` for the extraction handler) are already in
-async contexts so the migration is signature-only at the boundary.
-"""
+"""Learning dispatch and context-exhausted terminal boundary regressions."""
 
 from __future__ import annotations
 
@@ -228,7 +206,7 @@ def test_extract_session_cursor_and_quota_do_not_bleed_between_sessions(
 
 
 # ---------------------------------------------------------------------------
-# models._context_exhausted_message — async + adapter dispatch
+# models._context_exhausted_message — async compatibility, no provider dispatch
 # ---------------------------------------------------------------------------
 
 
@@ -236,21 +214,6 @@ def test_context_exhausted_message_is_async() -> None:
     from core.agent.loop.models import _context_exhausted_message
 
     assert inspect.iscoroutinefunction(_context_exhausted_message)
-
-
-def test_models_no_longer_imports_anthropic_directly() -> None:
-    """Source-level pin — the legacy direct ``anthropic.Anthropic``
-    instantiation that silently returned ``_EXHAUSTED_FALLBACK`` for
-    OAuth-only operators is gone."""
-    src = (Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "models.py").read_text(
-        encoding="utf-8"
-    )
-    assert "import anthropic" not in src, (
-        "models.py must not instantiate anthropic.Anthropic directly — "
-        "dispatch through complete_text_via_adapters instead."
-    )
-    assert "anthropic.Anthropic(" not in src
-    assert "complete_text_via_adapters" in src
 
 
 def test_context_exhausted_call_sites_are_awaited() -> None:
@@ -278,13 +241,53 @@ def test_context_exhausted_call_sites_are_awaited() -> None:
     assert all({"hooks", "correlation"} <= {kw.arg for kw in call.keywords} for call in calls)
 
 
-def test_context_exhausted_dispatch_uses_settings_model_route() -> None:
-    """Context-exhausted localisation must follow the configured model
-    route instead of trying an Anthropic-first fallback order."""
-    src = (Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "models.py").read_text(
-        encoding="utf-8"
+@pytest.mark.parametrize("credential_source", ["api_key", "none", "oauth"])
+def test_context_exhausted_terminal_preserves_history_without_model_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    credential_source: str,
+) -> None:
+    from core.agent.conversation import ConversationContext
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig, _guards
+    from core.agent.tool_executor import ToolExecutor
+    from core.config import settings
+    from core.memory.session_checkpoint import SessionCheckpoint
+
+    loop = AgenticLoop(
+        ConversationContext(),
+        ToolExecutor(action_handlers={}, auto_approve=True),
+        config=AgenticLoopConfig(source="payg"),
+        model="gpt-5.6-sol",
+        provider="openai",
+        quiet=True,
     )
-    assert "_resolve_provider(model)" in src
-    assert "prefer_provider=provider" in src
-    assert "prefer_source=source" in src
-    assert "provider_order" not in src
+    loop._session_id = "exhausted-session"
+    loop._checkpoint = SessionCheckpoint(tmp_path / "sessions")
+    messages = [
+        {"role": "user", "content": "Preserve my unfinished request."},
+        {"role": "assistant", "content": "Partial work to keep."},
+    ]
+    monkeypatch.setattr(settings, "model", "claude-sonnet-4-6")
+    monkeypatch.setattr(settings, "anthropic_credential_source", credential_source)
+    dispatch = AsyncMock(return_value=SimpleNamespace(text="Automatically reset."))
+    monkeypatch.setattr("core.llm.adapters.dispatch.complete_text_via_adapters", dispatch)
+    loop._call_llm = AsyncMock(side_effect=AssertionError("Terminal must not call a model"))
+
+    result = asyncio.run(_guards._finalize_context_exhausted(loop, "Continue", messages, 2))
+
+    assert result.termination_reason is TerminationReason.CONTEXT_EXHAUSTED
+    assert result.error == "context_exhausted"
+    assert "exhausted" in result.text.lower()
+    assert "new" in result.text.lower()
+    assert "reset" not in result.text.lower()
+    assert loop.context.messages == messages
+    checkpoint = loop._checkpoint.load(loop._session_id)
+    assert checkpoint is not None
+    assert [(message["role"], message["content"]) for message in checkpoint.messages] == [
+        (message["role"], message["content"]) for message in messages
+    ]
+    assert checkpoint.model == "gpt-5.6-sol"
+    assert checkpoint.status == "active"
+    assert checkpoint.round_idx == 3
+    dispatch.assert_not_awaited()
+    loop._call_llm.assert_not_awaited()

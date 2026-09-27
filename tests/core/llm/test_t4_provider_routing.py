@@ -4,7 +4,7 @@
 - SoT: provider-routing.json (in-repo + operator-local)
 - Sources: explicit override + operator-local + packaged candidates
 - Reader: core/llm/strategies/provider_routing_policy.py
-- Entry: core/llm/strategies/plan_registry.py:resolve_routing (explicit-chain branch)
+- Entry: core/llm/routing.py:resolve_routing (explicit-chain branch)
 - Env: GEODE_PROVIDER_ROUTING_OVERRIDE + GEODE_PROVIDER_ROUTING_STRICT
 """
 
@@ -168,22 +168,22 @@ def test_apply_returns_new_list_not_alias() -> None:
 # Wiring ----------------------------------------------------------------------
 
 
-def test_plan_registry_module_imports_reader_and_apply() -> None:
+def test_routing_owner_imports_reader_and_apply() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    src = (repo_root / "core/llm/strategies/plan_registry.py").read_text(encoding="utf-8")
+    src = (repo_root / "core/llm/routing.py").read_text(encoding="utf-8")
     assert "_load_provider_routing_override" in src
     assert "apply_provider_routing_policy" in src
 
 
-def test_plan_registry_uses_apply_before_iterating_chain() -> None:
+def test_routing_owner_uses_apply_before_iterating_chain() -> None:
     """resolve_routing 의 explicit-chain branch 가 registry.get_routing 대신
     apply_provider_routing_policy() 의 결과를 iterate 해야 함."""
     repo_root = Path(__file__).resolve().parents[3]
-    src = (repo_root / "core/llm/strategies/plan_registry.py").read_text(encoding="utf-8")
+    src = (repo_root / "core/llm/routing.py").read_text(encoding="utf-8")
     assert "apply_provider_routing_policy(" in src
     # The output of apply is what gets iterated for plan lookup.
     apply_idx = src.find("apply_provider_routing_policy(")
-    iter_idx = src.find("for plan_id in routed_plan_ids:")
+    iter_idx = src.find("for plan_id in ids:")
     assert 0 < apply_idx < iter_idx
 
 

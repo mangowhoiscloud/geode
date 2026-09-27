@@ -597,7 +597,9 @@ class FullscreenThinCli:
                 from core.cli.routing import RunLocation, lookup
 
                 spec = lookup(cmd, self.command_registry)
-                if spec is not None and spec.location is RunLocation.DAEMON_STREAM:
+                if spec is not None and spec.location is RunLocation.THIN:
+                    self._run_local_command(cmd, args)
+                elif spec is not None and spec.location is RunLocation.DAEMON_STREAM:
                     response = self.client.send_command_streaming(
                         cmd,
                         args,
@@ -623,6 +625,32 @@ class FullscreenThinCli:
                 self.state.approval_pending = False
             self._set_status("")
             self._stop_status_ticker()
+
+    def _run_local_command(self, cmd: str, args: str) -> None:
+        """Give local pickers/login prompts the terminal while the TUI is suspended."""
+        import asyncio
+        from functools import partial
+
+        from core.cli.routing import run_thin_command
+        from core.ui.console import capture_output
+
+        action = partial(
+            run_thin_command, self.client, cmd, args, command_registry=self.command_registry
+        )
+        app = self._app
+        if app is not None and app.is_running and app.loop is not None:
+            from prompt_toolkit.application import run_in_terminal
+            from prompt_toolkit.application.current import set_app
+
+            async def run() -> None:
+                with set_app(app):
+                    await run_in_terminal(action, in_executor=True)
+
+            asyncio.run_coroutine_threadsafe(run(), app.loop).result()
+        else:
+            with capture_output() as output:
+                action()
+            self._handle_command_response({"status": "ok", "output": output.getvalue()})
 
     def _app_exit_threadsafe(self) -> None:
         app = self._app

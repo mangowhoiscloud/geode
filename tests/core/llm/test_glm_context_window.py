@@ -53,13 +53,19 @@ def test_glm_5_2_in_model_picker() -> None:
     assert idx["glm-5.2"].provider == "glm"
 
 
-def test_glm_5_2_effort_classification_always_on() -> None:
-    """glm-5.2 classified always-on (no effort knob surfaced) — the GLM
-    adapter does not send thinking/reasoning_effort, so a toggle would be a
-    picker-vs-adapter disconnect (see spec §4)."""
+def test_glm_5_2_picker_exposes_documented_effort_range() -> None:
+    """The picker exposes the same native effort range the adapter accepts."""
     from core.cli.effort_picker import supported_efforts
 
-    assert supported_efforts("glm-5.2", "glm") == ()
+    assert supported_efforts("glm-5.2", "glm") == (
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+    )
 
 
 def test_glm_5_2_routes_to_glm_provider() -> None:

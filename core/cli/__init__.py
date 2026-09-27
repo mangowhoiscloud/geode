@@ -94,9 +94,6 @@ def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None
 
 _LOCAL_COMMANDS = frozenset({"/help", "/fleet"})
 
-# Commands that need TTY interaction locally, then relay the result to serve
-_TTY_LOCAL_COMMANDS = frozenset({"/model"})
-
 
 def _fullscreen_enabled(env_value: str | None, *, stdin_isatty: bool) -> bool:
     """Return whether the experimental full-screen CLI should start."""
@@ -151,7 +148,7 @@ def _thin_interactive_loop(
 
     client = IPCClient()
     if not client.connect():
-        console.print("  [error]Failed to connect to serve[/error]")
+        console.print(f"  [error]{client.last_error or 'Failed to connect to serve'}[/error]")
         return
 
     console.print(f"  [muted]session {client.session_id} · connected[/muted]")
@@ -238,35 +235,6 @@ def _thin_interactive_loop(
                         break
                     continue
 
-                # /model (no args): interactive picker locally, then relay
-                if cmd in _TTY_LOCAL_COMMANDS and not args:
-                    if cmd == "/model":
-                        import sys as _sys
-
-                        from core.cli.commands import _interactive_model_picker
-
-                        if _sys.stdin.isatty():
-                            _interactive_model_picker()
-                            # Relay to serve (suppress — picker already printed)
-                            from core.config import settings
-
-                            client.send_command("/model", settings.model)
-                        else:
-                            response = client.send_command(cmd, args)
-                            output = response.get("output", "")
-                            if output:
-                                _sys.stdout.write(output)
-                                _sys.stdout.flush()
-                    else:
-                        response = client.send_command(cmd, args)
-                        output = response.get("output", "")
-                        if output:
-                            import sys as _sys
-
-                            _sys.stdout.write(output)
-                            _sys.stdout.flush()
-                    continue
-
                 # /clear: auto-force in IPC mode (no stdin for confirmation on serve)
                 if cmd == "/clear" and "--force" not in args:
                     args = (args + " --force").strip()
@@ -280,17 +248,12 @@ def _thin_interactive_loop(
 
                 _spec = _lookup_spec(cmd, command_registry)
                 if _spec is not None and _spec.location is RunLocation.THIN:
+                    from core.cli.routing import run_thin_command
+
                     try:
-                        _handle_command(cmd, args, False, command_registry=command_registry)
+                        run_thin_command(client, cmd, args, command_registry=command_registry)
                     except (SystemExit, EOFError):
                         break
-                    # Notify daemon to reload auth state if this command
-                    # may have written to ~/.geode/auth.toml.
-                    if cmd in ("/login", "/key"):
-                        import contextlib
-
-                        with contextlib.suppress(Exception):
-                            client.send_command("/login", "refresh")
                     continue
 
                 if _spec is not None and _spec.location is RunLocation.DAEMON_STREAM:

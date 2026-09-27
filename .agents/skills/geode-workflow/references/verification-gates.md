@@ -11,6 +11,9 @@ Once the required checks pass, reuse results for unchanged code, configuration,
 and verification environment. Repeat or broaden only after changes, failures,
 or unresolved concerns. Record the tested revision or diff and exact commands.
 Required remote CI must still pass on the actual PR head before merge.
+When changing CI selection or sharding, retain the intended test collection and
+current coverage gate; missing or invalid results must fail the aggregate check.
+The [CI workflow](../../../../.github/workflows/ci.yml) owns executable selection.
 
 ## Failure-to-rule review
 
@@ -35,6 +38,16 @@ incident logs into every prompt or adding a new ledger.
   whitespace only when formatting is not the contract; parsed syntax, command
   identifiers, and prompt hashes remain exact. Reuse passing evidence only
   under the unchanged-input conditions above.
+
+Classify a red result before repair: product behavior, fixture branch/signature,
+operator environment leakage, stale expectation, or command/collection failure.
+For wiring and ownership changes, exercise the real entry and owner, faking the
+external boundary rather than the result under test. Assert required source
+context and inputs in the actual generated request, including missing or mutated
+input counterexamples; an always-successful fake does not establish delivery to
+the consumer. Isolate local credentials, configuration and network for offline
+tests; an accidental fallback is not the intended oracle. Keep failed and
+replacement results separate with exit status.
 
 These are GEODE procedures, not a new framework or mandatory reviewer personas.
 For squash integration, stale merge guards, and uncertain merge receipts, use
@@ -121,6 +134,37 @@ and unavailable site tooling do not establish a full pass.
 Live provider checks require explicit user approval. Without approval, mark
 ambiguous provider acceptance as `live_test_required` and keep the production
 path guarded.
+
+For authorized E2E or Harbor validation, follow [geode-eval](../../geode-eval/SKILL.md)
+and its catalog, frozen spec and native/verifier formats. Bind the executed
+source/environment, model/provider/source, task identity, authorization and
+budget. Inspect the selected native trial, image/platform and installed cleanup
+contract; a job summary or prepared launcher does not prove task completion.
+A model-free oracle establishes infrastructure evidence, not provider success.
+
+Preflight the full request produced by the real runtime and installed SDK at
+an offline transport boundary, including composed system text, tools, middleware
+and SDK defaults. Check the guard against those serialized bytes; fixture-only
+requests and token estimates do not establish wire admission.
+
+For an integration-gated campaign, use [GitFlow](../../geode-gitflow/SKILL.md)
+to verify exact-head required CI and completed develop merges before freezing
+the fetched develop SHA for live execution. A locally passing candidate is not
+that integrated source.
+
+For a new harness/export path, exercise its writer with a model-free staged
+bundle and the existing `validate-run-bundle`, not only `validate-run-spec`.
+Declared native, trajectory and verifier paths must resolve to compatible files;
+inspect producer destinations before freezing them. Preserve originals when
+retrospective metadata correction is needed.
+
+Include summary, judge, retry and failed-call consumption where they occur.
+Verify a spending guard's actual host/container scope and keep it around the
+owned execution through cleanup; model settings alone do not enforce a budget.
+Subscription usage is neither an inferred zero charge nor API entitlement.
+Connect native outputs and verifier receipts to attempts by paths and digests.
+Keep mock/serialization checks, provider acceptance, cache/charge evidence and
+verifier-backed completion distinct; report missing observations as unknown.
 
 ## Independent Review
 

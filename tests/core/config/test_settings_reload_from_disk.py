@@ -25,11 +25,7 @@ from pydantic import ValidationError
 
 @pytest.fixture(autouse=True)
 def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Isolate lazy facade state and ``GEODE_*`` environment overrides."""
-    import core.config as cfg
-
-    # Other tests may patch the lazy attribute; exercise its real lookup here.
-    monkeypatch.delitem(cfg.__dict__, "settings", raising=False)
+    """Isolate ``GEODE_*`` environment overrides."""
     for key in list(os.environ):
         if key.startswith("GEODE_"):
             monkeypatch.delenv(key, raising=False)
@@ -114,7 +110,7 @@ def test_invalid_toml_preserves_live_settings_and_recovers(
 
     monkeypatch.setitem(Settings.model_config, "env_file", None)
     toml_path = tmp_path / "config.toml"
-    monkeypatch.setattr(cfg, "GLOBAL_CONFIG_PATH", toml_path)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(toml_path))
     monkeypatch.setattr(cfg, "PROJECT_CONFIG_PATH", tmp_path / "absent.toml")
     current = Settings(model="previous-model", agentic_effort="low")
     monkeypatch.setattr(cfg, "_settings_instance", current)
@@ -211,3 +207,23 @@ def test_create_session_bridges_effort_to_loop(monkeypatch: pytest.MonkeyPatch) 
     assert loop_high._effort == "high"
     # Prior loop preserved its captured value (no auto-revert side effect).
     assert loop_low._effort == "low"
+
+
+def test_monkeypatch_undo_pins_lazy_settings_export() -> None:
+    """Arrange the next test: undo rebinds the PEP 562 export to its old object."""
+    import core.config as cfg
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("core.config.settings", object())
+    # Bool-only asserts: a Settings repr would print credential fields on failure.
+    pinned = "settings" in vars(cfg)
+    assert pinned, "monkeypatch undo no longer rebinds the lazy export"
+
+
+def test_lazy_settings_export_follows_authority_reset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The root conftest drops the inherited binding before this test's fixtures."""
+    import core.config as cfg
+
+    monkeypatch.setattr(cfg, "_settings_instance", None)
+    live = cfg.settings is cfg._get_settings()
+    assert live, "core.config.settings kept a binding from an earlier test"

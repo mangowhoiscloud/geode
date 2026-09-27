@@ -53,5 +53,5 @@ swiftc \
   -framework ApplicationServices \
   -framework CoreGraphics
 
-codesign --force --sign - "$APP_DIR" >/dev/null 2>&1 || true
+codesign --force --sign - "$APP_DIR"
 echo "$BIN"

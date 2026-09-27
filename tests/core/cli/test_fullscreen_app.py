@@ -461,3 +461,38 @@ def test_approval_request_resolves_from_key_decision() -> None:
 
     assert result["decision"] == "y"
     assert app.state.approval_pending is False
+
+
+def test_local_model_picker_suspends_fullscreen_terminal(monkeypatch) -> None:
+    import asyncio
+
+    from prompt_toolkit.application.current import get_app
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+
+    seen = []
+    app = FullscreenThinCli(_Client())
+
+    def collect(client, cmd, args, **kwargs):
+        seen.append((client is app.client, cmd, args, get_app()._running_in_terminal))
+
+    monkeypatch.setattr("core.cli.routing.run_thin_command", collect)
+
+    async def run():
+        with create_pipe_input() as terminal_input:
+            app.app.input = terminal_input
+            app.app.output = DummyOutput()
+            app.app.renderer.output = app.app.output
+            task = asyncio.create_task(app.app.run_async())
+            try:
+                while not app.app.is_running:
+                    await asyncio.sleep(0)
+                await asyncio.wait_for(asyncio.to_thread(app._run_text, "/model"), 3)
+            finally:
+                if app.app.is_running:
+                    app.app.exit()
+                await task
+
+    asyncio.run(run())
+    assert seen == [(True, "/model", "", True)]
+    assert not app.state.busy

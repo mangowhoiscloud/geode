@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import re
+import shlex
 import subprocess
 import tomllib
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -87,6 +89,20 @@ def test_release_checks_lock_before_uv_and_probes_installed_daemon() -> None:
     assert "query_serve_version" in smoke
     assert "timeout_s=30.0" in smoke
     assert "cleanup_daemon" in smoke
+
+
+@pytest.mark.parametrize("name", ["ci", "pages", "install-smoke", "petri-publish"])
+def test_ci_project_sync_rejects_uncommitted_lock_updates(name: str) -> None:
+    workflow = yaml.safe_load((WORKFLOW_PATH.parent / f"{name}.yml").read_text())
+    commands = [
+        shlex.split(line)
+        for job in workflow["jobs"].values()
+        for step in job["steps"]
+        for line in step.get("run", "").splitlines()
+        if line.strip().startswith("uv sync")
+    ]
+    assert commands, f"{name} has no project environment sync"
+    assert all("--locked" in command for command in commands)
 
 
 def test_pypi_oidc_is_isolated_from_public_verification() -> None:

@@ -9,9 +9,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import ceil
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from core.llm.adapters.base import AdapterCallRequest
 
 DEFAULT_CONTEXT_WINDOW_TOKENS = 200_000
 
+# Local maintenance preference, not a universal provider/rate-limit boundary.
+# Retain the historical name for callers; crossing it never establishes overflow.
 ABSOLUTE_TOKEN_CEILING = 200_000
 TOKEN_ESTIMATE_CHARS_PER_TOKEN = 4
 DEFAULT_TOOLS_OVERHEAD_TOKENS = 10_000
@@ -102,10 +108,17 @@ class ContextBudgetPolicy:
     safety_margin: float
     default_tools_overhead_tokens: int
     absolute_ceiling_tokens: int
+    provider: str = ""
+    source: str = ""
+    max_input_tokens: int | None = None
+    context_origin: Literal["provider_catalog", "client_default", "fallback", "override"] = (
+        "fallback"
+    )
 
     @property
     def effective_prompt_budget_tokens(self) -> int:
-        return max(self.context_window - self.output_reserve_tokens, 1)
+        planned = max(self.context_window - self.output_reserve_tokens, 1)
+        return min(planned, self.max_input_tokens) if self.max_input_tokens is not None else planned
 
     @property
     def warning_threshold_pct(self) -> float:
@@ -190,27 +203,6 @@ class ContextBudgetPolicy:
         return max(AGGRESSIVE_KEEP_RECENT_FLOOR, self.resolve_keep_recent(requested) // 2)
 
 
-def _resolve_context_window(model: str, context_window: int | None = None) -> int:
-    # Floor at 1 — a zero/negative window (bad catalog entry or caller bug)
-    # must degrade to tiny-budget behaviour, never a ZeroDivisionError in
-    # check_context's usage-percentage math.
-    if context_window is not None:
-        return max(1, int(context_window))
-    try:
-        from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
-
-        window = MODEL_CONTEXT_WINDOW.get(model, DEFAULT_CONTEXT_WINDOW_TOKENS)
-    except (TypeError, ValueError, AttributeError):
-        return DEFAULT_CONTEXT_WINDOW_TOKENS
-    # Trust only real positive ints — a mocked module (tests patch
-    # sys.modules['core.llm.token_tracker']) or a garbage catalog entry
-    # otherwise coerces to a 1-token window and every loop turn trips
-    # context-exhausted before its actual assertion.
-    if not isinstance(window, int) or isinstance(window, bool) or window < 1:
-        return DEFAULT_CONTEXT_WINDOW_TOKENS
-    return window
-
-
 def _resolve_tier(context_window: int) -> ContextBudgetTier:
     for tier in CONTEXT_BUDGET_TIERS:
         if tier.matches(context_window):
@@ -227,16 +219,66 @@ def resolve_context_budget_policy(
     model: str = "unknown",
     *,
     context_window: int | None = None,
+    provider: str | None = None,
+    source: str | None = None,
+    output_reserve_tokens: int | None = None,
 ) -> ContextBudgetPolicy:
-    """Resolve model/window-derived context policy."""
+    """Resolve one route's conservative planning policy, not account entitlement."""
+    from core.llm.model_catalog import get_model_catalog_spec
 
-    resolved_window = _resolve_context_window(model, context_window)
+    spec = get_model_catalog_spec(model, provider, source=source)
+    resolved_window = spec.context_window
+    if context_window is not None:
+        resolved_window = max(1, int(context_window))
+        if spec.max_context_window is not None:
+            resolved_window = min(resolved_window, spec.max_context_window)
+    if output_reserve_tokens is not None and output_reserve_tokens < 0:
+        raise ValueError("output_reserve_tokens must be non-negative")
     return ContextBudgetPolicy(
         model=model,
         context_window=resolved_window,
         tier=_resolve_tier(resolved_window),
-        output_reserve_tokens=_resolve_output_reserve(resolved_window),
+        output_reserve_tokens=(
+            _resolve_output_reserve(resolved_window)
+            if output_reserve_tokens is None
+            else output_reserve_tokens
+        ),
         safety_margin=SAFETY_MARGIN_MULTIPLIER,
         default_tools_overhead_tokens=DEFAULT_TOOLS_OVERHEAD_TOKENS,
         absolute_ceiling_tokens=ABSOLUTE_TOKEN_CEILING,
+        provider=spec.provider,
+        source=spec.source,
+        max_input_tokens=spec.max_input_tokens,
+        context_origin="override" if context_window is not None else spec.context_origin,
+    )
+
+
+def resolve_request_context_budget(
+    request: AdapterCallRequest, *, provider: str, source: str
+) -> ContextBudgetPolicy:
+    """Use the provider's wire output arithmetic for the final selected request.
+
+    Codex omits its output cap. Its reserve remains an explicit local default,
+    not a claim about the subscription backend's output allowance.
+    """
+    from core.llm.model_catalog import normalize_model_provider
+
+    provider = normalize_model_provider(provider)
+    output: int | None = request.max_tokens
+    if provider == "openai":
+        from core.llm.adapters._openai_common import effective_output_tokens
+
+        output = effective_output_tokens(
+            request, backend="codex" if source == "subscription" else "platform"
+        )
+    elif provider == "anthropic":
+        from core.llm.adapters._anthropic_common import effective_output_tokens as anthropic_output
+
+        output = anthropic_output(request)
+    elif provider == "glm":
+        from core.llm.providers.glm import effective_output_tokens as glm_output
+
+        output = glm_output(request)
+    return resolve_context_budget_policy(
+        request.model, provider=provider, source=source, output_reserve_tokens=output
     )

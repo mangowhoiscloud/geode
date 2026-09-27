@@ -3,16 +3,25 @@
 from __future__ import annotations
 
 import sys
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.cli.ipc_client import IPCClient
 
 from core.config.judgment import configure_judgment, judgment_status, resolve_judgment_route
 
 
-def cmd_judgment(args: str, *, interactive: bool = True) -> dict[str, Any]:
+def cmd_judgment(
+    args: str, *, interactive: bool = True, client: IPCClient | None = None
+) -> dict[str, Any]:
     """Select LLM/Jev without changing the generative root model or its effort."""
     from core.cli import commands as package
     from core.config import settings
 
+    active = client.model_config if client is not None else {}
+    current = judgment_status(
+        engine=active.get("judgment_engine"), provider=active.get("jev_provider")
+    )
     selection = args.strip().lower()
     if not selection and interactive and sys.stdin.isatty():
         from core.cli.effort_picker import pick_model_and_effort
@@ -34,25 +43,40 @@ def cmd_judgment(args: str, *, interactive: bool = True) -> dict[str, Any]:
                     None,
                 )
             )
-        current = judgment_status()
-        active = current["provider"] if current["effective_engine"] == "jev" else "llm"
-        result = pick_model_and_effort(profiles, active, "", role_has_effort={"primary": False})
+        active_profile = current["provider"] if current["effective_engine"] == "jev" else "llm"
+        result = pick_model_and_effort(
+            profiles, active_profile, "", role_has_effort={"primary": False}
+        )
         if result.cancelled:
             return {"status": "cancelled", **current}
         selection = result.model_id
     if not selection or selection == "status":
-        status = {"status": "ok", **judgment_status()}
+        status = {"status": "ok", **current}
     elif selection in {"llm", "jev", "typesafe", "openrouter"}:
         try:
+            from core.config.judgment import validate_judgment_selection
+
+            engine = "llm" if selection == "llm" else "jev"
+            selected_provider = selection if selection in {"typesafe", "openrouter"} else None
+            candidate = validate_judgment_selection(engine, provider=selected_provider)
+            if client is not None:
+                response = client.apply_model_config(
+                    {
+                        "judgment_engine": candidate.judgment_engine,
+                        "jev_provider": candidate.jev_provider,
+                    }
+                )
+                if response.get("status") != "applied":
+                    raise ValueError(str(response.get("message", "Session change rejected")))
+                package.console.print("  Session judgment applied; saving defaults.")
             status = {
                 "status": "ok",
-                **configure_judgment(
-                    "llm" if selection == "llm" else "jev",
-                    provider=selection if selection in {"typesafe", "openrouter"} else None,
-                ),
+                **configure_judgment(engine, provider=selected_provider, admitted=candidate),
             }
         except (ValueError, OSError) as exc:
-            status = {"status": "error", "error": str(exc), **judgment_status()}
+            if isinstance(exc, OSError) and client is not None:
+                package.console.print("  Session applied, but saving judgment defaults failed.")
+            status = {"status": "error", "error": str(exc), **current}
     else:
         status = {"status": "error", "error": "Choose llm, jev, typesafe, or openrouter"}
     if status["status"] == "error":

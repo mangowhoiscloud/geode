@@ -31,12 +31,8 @@ These tests pin:
 3. The ranker's voter SubTasks set ``effort="none"`` so the codex-oauth
    adapter forwards ``reasoning.effort="none"`` to the gpt-5.5 backend
    and gpt-5.5 emits the verdict directly without encrypted reasoning.
-4. Every gpt-5.x spec admits ``"none"`` in ``reasoning_effort_values``
-   so the voter wire above remains valid for any operator-pinned
-   gpt-5.x model. (The OpenAI generic enum admits ``"minimal"`` as
-   well, but per-model docs for gpt-5.4 / gpt-5.5 do not — GEODE
-   does NOT advertise ``"minimal"`` on those specs to avoid handing
-   operators a value the server would reject at runtime.)
+4. Models with documented disabled reasoning retain ``none``; the retired
+   subscription GPT-5.3-Codex API model keeps its supported low-to-xhigh range.
 """
 
 from __future__ import annotations
@@ -194,17 +190,16 @@ def test_ranker_voter_subtasks_still_pin_response_schema() -> None:
 
 
 def test_gpt5_family_spec_supports_none_effort() -> None:
-    """Sprint G (2026-05-26) — every gpt-5.x spec must list ``"none"``
-    in ``reasoning_effort_values`` so the voter pathway can disable
-    reasoning entirely. The ``"minimal"`` value the OpenAI generic
-    enum admits is intentionally NOT added across gpt-5.x — per-model
-    docs for gpt-5.4 / gpt-5.5 list only (none, low, medium, high,
-    xhigh) and adding ``"minimal"`` would let operators select an
-    effort the server rejects at runtime. (Codex MCP catch, 2026-05-26.)
-    """
+    """Reasoning can be disabled only on models whose public contract allows it."""
     from core.llm.adapters._openai_common import get_openai_model_spec
 
-    for model_id in ("gpt-5.3-codex", "gpt-5.4", "gpt-5.4-mini", "gpt-5.5"):
+    for model_id in ("gpt-5.4", "gpt-5.4-mini", "gpt-5.5"):
         spec = get_openai_model_spec(model_id)
         assert spec.reasoning_effort_values is not None, model_id
         assert "none" in spec.reasoning_effort_values, model_id
+    assert get_openai_model_spec("gpt-5.3-codex").reasoning_effort_values == (
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+    )

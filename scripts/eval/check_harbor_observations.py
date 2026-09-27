@@ -24,6 +24,7 @@ from html import escape
 from pathlib import Path
 from typing import Any
 
+from core.agent.loop.models import is_successful_task_termination
 from core.llm.agentic_response import parse_tool_input
 from core.observability.trajectory import (
     _digest_private_event_payload,
@@ -178,11 +179,9 @@ def _usage_check(
                 "recorded attempt model/provider/route mismatch",
             )
         else:
-            admitted_purposes = {"agentic_loop", "cognitive_reflection"}
+            admitted_purposes = {"agentic_loop", "cognitive_reflection", "turn_verification"}
             if handoff_arm != "a0":
                 admitted_purposes.add("structured_decision")
-            if verification_engine is not None:
-                admitted_purposes.add("turn_verification")
             _require(
                 purpose in admitted_purposes,
                 "handoff attempt purpose mismatch",
@@ -191,6 +190,12 @@ def _usage_check(
                 (JEV_MODEL, "typesafe", "payg", "none")
                 if (handoff_arm == "b" and purpose == "structured_decision")
                 or (verification_engine == "jev" and purpose == "turn_verification")
+                # Arm C routes are provisional here; _verification_check binds each call.
+                or (
+                    verification_engine == "cascade"
+                    and purpose == "turn_verification"
+                    and row["model"] == JEV_MODEL
+                )
                 else (model["label"], model["provider"], model["route"], model["reasoning"])
             )
             _require(
@@ -236,7 +241,12 @@ def _usage_check(
 
 
 def _reconcile_usage_source(
-    path: Path, usage: dict[str, Any], sessions: set[str], full: dict[str, Any]
+    path: Path,
+    usage: dict[str, Any],
+    sessions: set[str],
+    full: dict[str, Any],
+    *,
+    native_verify: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Compare the complete retained source, not only the exported end IDs.
 
@@ -279,6 +289,14 @@ def _reconcile_usage_source(
             "source hook payload hash mismatch",
         )
     expected = _summarize_usage([_row_to_event(row) for row in rows])
+    if native_verify is not None:
+        verdicts = [
+            {**event.payload, "action": event.action}
+            for row in reversed(rows)
+            for event in (_row_to_event(row),)
+            if event.action in {"turn.verify.passed", "turn.verify.failed"}
+        ]
+        _require(verdicts == native_verify, "source/export native verification mismatch")
     # Producers may traverse the same retained rows in either chronological order.
     _require(
         sorted(usage["recorded_attempts"], key=lambda row: row["source_event_id"])
@@ -311,6 +329,65 @@ def _reconcile_usage_source(
     }
 
 
+def _handoff_final_check(
+    handoff: dict[str, Any], metadata: dict[str, Any], attempts: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Require a performed semantic final check, separately from task correctness."""
+    _require(
+        handoff.get("effective_verify_mode")
+        == metadata.get("effective_verify_mode")
+        == "llm_judge",
+        "handoff effective verifier missing/mismatched",
+    )
+    _require(handoff.get("valid") is True, "handoff execution is not admitted")
+    judges = [row for row in attempts if row.get("purpose") == "turn_verification"]
+    _require(
+        judges and all(not row.get("error_type") for row in judges), "final judge missing/failed"
+    )
+    verdicts = handoff.get("native_verify")
+    if (
+        not isinstance(verdicts, list)
+        or not verdicts
+        or not all(
+            isinstance(row, dict)
+            and row.get("action") in {"turn.verify.passed", "turn.verify.failed"}
+            for row in verdicts
+        )
+    ):
+        raise ValueError("native final verification missing/malformed")
+    native_passed = verdicts[-1]["action"] == "turn.verify.passed"
+    _require(
+        not native_passed or verdicts[-1].get("success") is True, "native pass is inconsistent"
+    )
+    oracle = handoff.get("oracle")
+    if not isinstance(oracle, dict) or type(oracle.get("passed")) is not bool:
+        raise ValueError("handoff oracle missing")
+    passed = handoff.get("passed")
+    _require(
+        type(passed) is bool and passed == (native_passed and oracle["passed"]),
+        "handoff success contradicts final verification/oracle",
+    )
+    _require(
+        handoff.get("termination_reason") == metadata.get("termination_reason")
+        and (
+            not passed
+            or (
+                is_successful_task_termination(metadata.get("termination_reason"))
+                and not metadata.get("error_type")
+            )
+        ),
+        "failed/cancelled handoff cannot claim success",
+    )
+    return {
+        "requested_verify_mode": metadata["verify_mode"],
+        "effective_verify_mode": metadata["effective_verify_mode"],
+        "judge_attempts": len(judges),
+        "native_verdicts": len(verdicts),
+        "native_passed": native_passed,
+        "task_passed": passed,
+    }
+
+
 def _verification_check(
     evidence: dict[str, Any],
     *,
@@ -319,8 +396,10 @@ def _verification_check(
     attempts: list[dict[str, Any]],
     call_events: Any,
     trajectory: dict[str, Any],
+    primitive: str = "choice",
     intervention_spec: dict[str, Any] | None = None,
     intervention_rows: Any = None,
+    cascade_tau: str | None = None,
 ) -> dict[str, int]:
     """Check call provenance and private-receipt consistency, not independent wire text.
 
@@ -329,12 +408,22 @@ def _verification_check(
     """
     from core.observability.redaction import redact_and_bound_text
     from evals.benchmarks.decision_verification import (
-        _QUESTIONS,
-        _REFLECTIONS,
-        _Verdict,
+        CONTRACT_VERSION,
+        SUM_TOLERANCE,
         _VerificationState,
+        base_questions,
+        decide_answer,
+        strict_admission,
     )
-    from evals.benchmarks.typesafe_decision import parse_choice_answers
+
+    _require(primitive in {"choice", "noul"}, "unknown verification primitive")
+    cascade = engine == "cascade"
+    _require(
+        (cascade and primitive == "choice" and cascade_tau is not None)
+        or (not cascade and cascade_tau is None),
+        "arm C requires the Choice verdict and its frozen tau",
+    )
+    questions = base_questions("noul" if primitive == "noul" else "choice")
 
     def indexed(rows: Any) -> dict[str, dict[str, Any]]:
         _require(isinstance(rows, list), "verification rows missing")
@@ -541,12 +630,20 @@ def _verification_check(
         if call_id not in judgments:
             continue  # A transport failure has no completed verdict or recovered usage.
         judgment = judgments[call_id]
+        if cascade:
+            # Each arm C call is judged by the engine of its observed route; the stage
+            # order and tau routing are bound by cascade_stage_summary below.
+            engine = "jev" if observed[call_id].get("model") == JEV_MODEL else "llm"
         native = terminals[observed[call_id]["source_event_id"]]["payload"]
         _require(
             judgment.get("engine") == engine
             and judgment.get("step_id") == request.get("step_id")
             and judgment.get("input_sha256") == judgment.get("source_sha256") == source_hash
-            and judgment.get("question_sha256") == _json_digest(_QUESTIONS)
+            and judgment.get("question_sha256") == _json_digest(questions)
+            and judgment.get("primitive", "choice") == primitive
+            and judgment.get("contract") == CONTRACT_VERSION
+            and judgment.get("sum_tolerance") == SUM_TOLERANCE
+            and "question_variant" not in judgment
             and all(
                 judgment.get(key) == observed[call_id].get(key)
                 for key in ("model", "provider", "source")
@@ -580,32 +677,54 @@ def _verification_check(
                 judgment.get("error_type") == "invalid_verifier_response"
                 and all(
                     judgment.get(key) is None
-                    for key in ("verdict", "native_answer", "projected_payload", "feedback_sha256")
-                ),
+                    for key in (
+                        "verdict",
+                        "native_answer",
+                        "probabilities",
+                        "q",
+                        "jev_confidence",
+                        "strict_admitted",
+                        "projected_payload",
+                        "feedback_sha256",
+                    )
+                )
+                and judgment.get("boolean_projection") is None,
                 "verification rejection fabricated a verdict",
             )
             continue
         _require(judgment.get("accepted") is True, "verification admission missing")
         if not isinstance(raw_answer, str):
             raise ValueError("verification admitted answer has no retained text")
-        if engine == "jev":
-            answer = parse_choice_answers(raw_answer, _QUESTIONS)
-            verdict = answer["verdict"]["choice"]
-            native_answer = answer["verdict"]
-        else:
-            verdict = _Verdict.model_validate_json(raw_answer).verdict
-            native_answer = {"verdict": verdict}
-        projected = {
-            "passed": verdict == "supported",
-            "score": float(verdict == "supported"),
-            "reflection": _REFLECTIONS[verdict],
-        }
+        decision = decide_answer(
+            "jev" if engine == "jev" else "llm",
+            "noul" if primitive == "noul" else "choice",
+            raw_answer,
+            questions,
+            sum_tolerance=SUM_TOLERANCE,
+        )
         _require(
-            judgment.get("verdict") == verdict
-            and _json_digest(judgment.get("native_answer")) == _json_digest(native_answer)
+            judgment.get("verdict") == decision["verdict"]
+            and _json_digest(judgment.get("native_answer"))
+            == _json_digest(decision["native_answer"])
+            and _json_digest(judgment.get("probabilities"))
+            == _json_digest(decision["probabilities"])
+            and _json_digest(judgment.get("q")) == _json_digest(decision["q"])
+            and judgment.get("jev_confidence") == decision["jev_confidence"]
+            and judgment.get("strict_admitted")
+            is strict_admission(
+                "jev" if engine == "jev" else "llm",
+                "noul" if primitive == "noul" else "choice",
+                raw_answer,
+                questions,
+            )
             and judgment.get("error_type") is None
-            and _json_digest(judgment.get("projected_payload")) == _json_digest(projected)
-            and judgment.get("feedback_sha256") == _json_digest(projected),
+            and _json_digest(judgment.get("projected_payload"))
+            == _json_digest(decision["projected_payload"])
+            and judgment.get("feedback_sha256") == _json_digest(decision["projected_payload"])
+            and (
+                primitive != "noul"
+                or judgment.get("boolean_projection") == decision["boolean_projection"]
+            ),
             "verification native/projected decision mismatch",
         )
     for call_id, root_request in requests.items():
@@ -645,6 +764,12 @@ def _verification_check(
         _require(
             root_request.get("consumed_feedback") == consumed, "verification feedback mismatch"
         )
+    stages: dict[str, int] = {}
+    if cascade:
+        from evals.benchmarks.decision_cascade import cascade_stage_summary
+
+        assert cascade_tau is not None
+        stages = cascade_stage_summary(judge_ids, inputs, judgments, observed, cascade_tau)
     return {
         "inputs": len(inputs),
         "completed_judgments": len(judgments),
@@ -652,6 +777,7 @@ def _verification_check(
         "omitted_native_answers": sum(
             row["raw_answer_retention"] != "complete" for row in judgments.values()
         ),
+        **({"cascade": stages} if cascade else {}),
     }
 
 
@@ -669,7 +795,10 @@ def validate_observations(
     handoff_arm: str | None = None,
     handoff_case_sha256: str | None = None,
     expected_verify_mode: str | None = None,
+    expected_effective_verify_mode: str | None = None,
     verification_engine: str | None = None,
+    verification_primitive: str = "choice",
+    cascade_tau: str | None = None,
 ) -> dict[str, Any]:
     """Validate existing exports, returning only bounded metadata and hashes.
 
@@ -689,8 +818,19 @@ def validate_observations(
     )
     agent_name = "geode-handoff" if handoff_arm is not None else "geode-runtime"
     _require(
-        verification_engine in (None, "llm", "jev")
-        and (verification_engine is None or handoff_arm == "a0"),
+        expected_effective_verify_mode in (None, "llm_judge")
+        and (
+            expected_effective_verify_mode is None
+            or (handoff_arm is not None and source_db is not None)
+        ),
+        "effective handoff verifier requires its closed source database",
+    )
+    _require(
+        verification_engine in (None, "llm", "jev", "cascade")
+        and (verification_engine is None or handoff_arm == "a0")
+        and verification_primitive in {"choice", "noul"}
+        and (verification_primitive == "choice" or verification_engine is not None)
+        and (verification_engine == "cascade") == (cascade_tau is not None),
         "matched verification requires an explicit lookup-only handoff arm",
     )
     _require(
@@ -782,7 +922,9 @@ def validate_observations(
         )
         _require(contract.get("required_tools") == handoff_tools, "handoff tool contract mismatch")
         _require(
-            contract.get("verification_engine") == verification_engine,
+            contract.get("verification_engine") == verification_engine
+            and contract.get("verification_primitive", "choice") == verification_primitive
+            and contract.get("cascade_tau") == cascade_tau,
             "handoff verification treatment mismatch",
         )
         if verification_engine is not None:
@@ -811,7 +953,9 @@ def validate_observations(
         _require(
             metadata.get("profile") == "decision-handoff"
             and metadata.get("arm") == handoff_arm
-            and metadata.get("verification_engine") == verification_engine,
+            and metadata.get("verification_engine") == verification_engine
+            and metadata.get("verification_primitive", "choice") == verification_primitive
+            and metadata.get("cascade_tau") == cascade_tau,
             "handoff runtime profile/arm mismatch",
         )
         definitions = runtime.get("tool_definitions")
@@ -843,6 +987,7 @@ def validate_observations(
         handoff_arm=handoff_arm,
         verification_engine=verification_engine,
     )
+    final_verification = None
     if handoff_arm is not None:
         handoff = document("agent/handoff-result.json")
         _require(
@@ -852,13 +997,20 @@ def validate_observations(
             "handoff result call coverage missing/inconsistent",
         )
         receipt = json.loads(read(trial_dir / "agent/handoff.json"))
-        _require(handoff.get("verification_engine") == verification_engine, "judge result mismatch")
+        _require(
+            handoff.get("verification_engine") == verification_engine
+            and handoff.get("verification_primitive", "choice") == verification_primitive
+            and handoff.get("cascade_tau") == cascade_tau,
+            "judge result mismatch",
+        )
         _require(
             isinstance(receipt, list)
             and all(isinstance(row, dict) for row in receipt)
             and handoff_call_coverage_complete(receipt, usage["recorded_attempts"]),
             "handoff dispatch/attempt coverage mismatch",
         )
+        if expected_effective_verify_mode is not None:
+            final_verification = _handoff_final_check(handoff, metadata, usage["recorded_attempts"])
     uniform_effort = (
         accounting["observed_efforts"] == {model["reasoning"]: accounting["attempts"]}
         and accounting["unknown_metadata_attempts"] == 0
@@ -907,6 +1059,7 @@ def validate_observations(
         verification = _verification_check(
             document("agent/verification.json"),
             engine=verification_engine,
+            primitive=verification_primitive,
             receipt=json.loads(captured[trial_dir / "agent/handoff.json"]),
             attempts=usage["recorded_attempts"],
             call_events=_strict_json_loads(
@@ -915,6 +1068,7 @@ def validate_observations(
             trajectory=full,
             intervention_spec=intervention_spec,
             intervention_rows=intervention_rows,
+            cascade_tau=cascade_tau,
         )
     # The ATIF projector keys results by this exact triple, not bare call_id.
     for kind in ("tool.called", "tool.completed"):
@@ -943,7 +1097,13 @@ def validate_observations(
         # The database belongs to this exact isolated trial, not a host-wide store.
         _require(source_db.resolve().is_relative_to(trial_dir.resolve()), "source outside trial")
         read(source_db)
-        source_reconciliation = _reconcile_usage_source(source_db, usage, sessions, full)
+        source_reconciliation = _reconcile_usage_source(
+            source_db,
+            usage,
+            sessions,
+            full,
+            native_verify=handoff["native_verify"] if final_verification is not None else None,
+        )
     atif = document("agent/trajectory.json")
     atif_model = _harbor_model("trajectories", "Trajectory")
     expected_atif = _atif_trajectory_from_geode(
@@ -1020,6 +1180,7 @@ def validate_observations(
         "replay_status": "tool-actions-observed" if tools else "no-tool-action-observed",
         "accounting": accounting,
         "source_reconciliation": source_reconciliation,
+        **({"final_verification": final_verification} if final_verification is not None else {}),
         **({"verification": verification} if verification is not None else {}),
         "timing": timing,
         "limits": [
@@ -1070,7 +1231,17 @@ def main(argv: list[str] | None = None) -> int:
         help="reject missing or different request effort on any recorded root/auxiliary call",
     )
     parser.add_argument("--handoff-arm", choices=("a0", "a", "b"))
-    parser.add_argument("--verification-engine", choices=("llm", "jev"))
+    parser.add_argument("--verification-engine", choices=("llm", "jev", "cascade"))
+    parser.add_argument("--verification-primitive", choices=("choice", "noul"), default="choice")
+    parser.add_argument("--cascade-tau", help="frozen arm C threshold; required for cascade")
+    parser.add_argument(
+        "--expected-effective-verify-mode",
+        choices=("llm_judge",),
+        help=(
+            "current handoff final-check contract; requires --source-db; "
+            "omitted preserves historical evidence"
+        ),
+    )
     parser.add_argument(
         "--expected-verify-mode",
         choices=("llm_judge", "reflexion"),

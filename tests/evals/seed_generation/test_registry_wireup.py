@@ -24,10 +24,7 @@ from evals.seed_generation.picker import pick_bindings
 
 @pytest.fixture(autouse=True)
 def _isolate_voter_overrides(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "evals.seed_generation.picker.GLOBAL_CONFIG_TOML",
-        tmp_path / "config.toml",
-    )
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "config.toml"))
     monkeypatch.setattr(
         "evals.seed_generation.picker.GLOBAL_SEED_PIPELINE_TOML",
         tmp_path / "seed_generation.toml",

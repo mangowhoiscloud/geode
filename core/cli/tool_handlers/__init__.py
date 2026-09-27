@@ -53,10 +53,6 @@ def cli_handler_groups(
     scheduler_service: Any = None,
 ) -> tuple[tuple[str, UniqueEntries[str, Any]], ...]:
     """Return callbacks that deliberately cross into CLI interaction state."""
-    from core.cli import _get_readiness
-
-    readiness = _get_readiness()
-    force_dry = readiness.force_dry_run if readiness else True
     return (
         ("plan", _build_plan_handlers()),
         ("goal", _build_goal_handlers()),
@@ -65,7 +61,7 @@ def cli_handler_groups(
         ("memory", _build_memory_handlers(project_memory)),
         (
             "system",
-            _build_system_handlers(readiness, force_dry, mcp_manager, command_registry),
+            _build_system_handlers(mcp_manager, command_registry),
         ),
         ("execution", _build_execution_handlers(scheduler_service)),
         ("context", _build_context_handlers()),

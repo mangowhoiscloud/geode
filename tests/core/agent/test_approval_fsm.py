@@ -724,6 +724,10 @@ class TestIPCApprovalRoundTrip:
             writer = _FakeStreamWriter()
             endpoint = _AsyncClientEndpoint(asyncio.get_running_loop(), writer)  # type: ignore[arg-type]
 
+            # This pump test starts after admission; handshake behavior has its
+            # own actual-session IPC coverage.
+            endpoint.session_model_config_applied = True
+
             class _FakeServices:
                 lane_queue = None
 
@@ -792,6 +796,7 @@ class TestIPCApprovalRoundTrip:
             writer = _FakeStreamWriter()
             endpoint = _AsyncClientEndpoint(loop, writer)  # type: ignore[arg-type]
             reader = asyncio.StreamReader()
+            endpoint.session_model_config_applied = True
 
             class _FakeServices:
                 def create_session(self, *args: Any, **kwargs: Any) -> tuple[Any, Any]:

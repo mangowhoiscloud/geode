@@ -16,6 +16,7 @@ tool_use/tool_result pair gets compacted without splitting the pair.
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 from itertools import pairwise
 from types import SimpleNamespace
 from typing import Any
@@ -382,13 +383,196 @@ def _build_long_conversation(turns: int) -> list[dict[str, Any]]:
     return msgs
 
 
-def test_anthropic_short_circuits():
+def test_unknown_anthropic_model_short_circuits():
     msgs = _build_long_conversation(30)
     new_msgs, did = asyncio.run(
-        compact_conversation(msgs, provider="anthropic", model="claude-opus-4-7")
+        compact_conversation(msgs, provider="anthropic", model="claude-unverified")
     )
     assert did is False
     assert new_msgs is msgs
+
+
+def test_repeated_compaction_keeps_latest_user_correction_verbatim(monkeypatch):
+    correction = " Keep the corrected acceptance criterion, not the earlier plan. "
+    text = "a" * 4300 + correction + "z" * (6258 - 4300 - len(correction))
+    latest = {"role": "user", "content": text, "metadata": {"origin": "user_input"}}
+    messages = [latest, *_build_long_conversation(10)]
+    summary = AsyncMock(return_value="The earlier plan remains active.")
+    monkeypatch.setattr(compaction, "_call_summarize", summary)
+
+    for _ in range(3):
+        messages, changed = asyncio.run(
+            compact_conversation(messages, "openai", "gpt-5.6-sol", keep_recent=4)
+        )
+        assert changed
+        assert messages.count(latest) == 1
+        assert any(message.get("content") == text for message in messages)
+    assert len(text) == 6258
+    assert correction not in summary.await_args_list[0].args[0]
+
+
+def test_compaction_keeps_distinct_equal_user_turns_in_retained_order(monkeypatch):
+    messages = _build_long_conversation(10)
+    for index in (-4, -2):
+        messages[index] = {
+            "role": "user",
+            "content": "Continue",
+            "metadata": {"origin": "user_input"},
+        }
+    monkeypatch.setattr(compaction, "_call_summarize", AsyncMock(return_value="Summary"))
+
+    result, changed = asyncio.run(
+        compact_conversation(messages, "openai", "gpt-5.6-sol", keep_recent=4)
+    )
+
+    assert changed
+    assert result[-4:] == messages[-4:]
+    assert result[-4] is messages[-4]
+    assert result[-2] is messages[-2]
+
+
+@pytest.mark.parametrize("change", ["append", "replace", "edit", "append_native"])
+def test_compaction_checks_history_before_publishing_summary(monkeypatch, tmp_path, change):
+    from core.memory.session_manager import SessionManager
+
+    messages = _build_long_conversation(10)
+    incoming = {"role": "user", "content": "A new task", "metadata": {"origin": "user_input"}}
+    if change == "append_native":
+        incoming = {"role": "assistant", "content": [{"type": "compaction", "content": "native"}]}
+    manager = SessionManager(tmp_path / "sessions.db")
+
+    async def exercise():
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        async def summarize(*_args, **_kwargs):
+            entered.set()
+            await release.wait()
+            return "Summary of the original history"
+
+        monkeypatch.setattr(compaction, "_call_summarize", summarize)
+        task = asyncio.create_task(
+            compact_conversation(
+                messages,
+                "anthropic" if change == "append_native" else "openai",
+                "claude-opus-4-7" if change == "append_native" else "gpt-5.6-sol",
+                keep_recent=4,
+                session_id="s1",
+                session_manager=manager,
+            )
+        )
+        await asyncio.wait_for(entered.wait(), timeout=2)
+        if change in {"append", "append_native"}:
+            messages.append(incoming)
+        elif change == "replace":
+            messages[:] = [incoming]
+        else:
+            messages[0]["content"] = "The original message was corrected"
+        current = deepcopy(messages)
+        release.set()
+        if change == "append":
+            result, changed = await task
+            assert changed
+            assert result[-5:] == current[-5:]
+            assert result.count(incoming) == 1
+        else:
+            with pytest.raises(compaction.StaleCompactionError, match="changed during compaction"):
+                await task
+        assert messages == current
+
+    try:
+        asyncio.run(exercise())
+        artifacts = manager.list_context_artifacts(session_id="s1", kinds=("compaction_summary",))
+        assert len(artifacts) == (1 if change == "append" else 0)
+    finally:
+        manager.close()
+
+
+@pytest.mark.parametrize("model", ["claude-haiku-4-5", "claude-opus-4-5", "claude-opus-4-7"])
+def test_known_anthropic_plain_history_can_compact(monkeypatch, model):
+    summary = AsyncMock(return_value="Client summary")
+    monkeypatch.setattr(compaction, "_call_summarize", summary)
+    messages = _build_long_conversation(10)
+
+    result, changed = asyncio.run(
+        compact_conversation(messages, "anthropic", model, source="subscription", keep_recent=4)
+    )
+
+    assert changed
+    assert result[-4:] == messages[-4:]
+    summary.assert_awaited_once()
+    assert summary.await_args.args[1:3] == ("anthropic", model)
+    assert summary.await_args.kwargs["source"] == "subscription"
+
+
+@pytest.mark.parametrize("position", [0, -1])
+@pytest.mark.parametrize("field", ["content", "anthropic_content"])
+def test_native_anthropic_compaction_history_remains_unchanged(monkeypatch, position, field):
+    summary = AsyncMock(return_value="Must not replace a native summary")
+    monkeypatch.setattr(compaction, "_call_summarize", summary)
+    messages = _build_long_conversation(10)
+    messages[position] = {
+        "role": "assistant",
+        "content": "",
+        field: [{"type": "compaction", "content": "native"}],
+    }
+    original = deepcopy(messages)
+
+    result, changed = asyncio.run(
+        compact_conversation(messages, "anthropic", "claude-opus-4-7", keep_recent=4)
+    )
+
+    assert not changed
+    assert result is messages
+    assert messages == original
+    summary.assert_not_awaited()
+
+
+@pytest.mark.parametrize("model", ["claude-haiku-4-5", "claude-fable-5-1"])
+def test_anthropic_compaction_preserves_signed_raw_tool_pair(monkeypatch, model):
+    from core.llm.adapters._anthropic_common import build_create_kwargs, build_messages
+    from core.llm.adapters.base import AdapterCallRequest, Message
+
+    raw = [
+        {"type": "thinking", "thinking": "private reasoning", "signature": "signed-original"},
+        {"type": "tool_use", "id": "signed_call", "name": "read_file", "input": {"path": "x"}},
+    ]
+    assistant = {"role": "assistant", "content": "", "anthropic_content": raw}
+    tool_result = _make_tool_result_msg("signed_call", "original result")
+    messages = [*_build_long_conversation(5), assistant, tool_result]
+    original = deepcopy(messages)
+    monkeypatch.setattr(compaction, "_call_summarize", AsyncMock(return_value="Summary"))
+
+    result, changed = asyncio.run(compact_conversation(messages, "anthropic", model, keep_recent=1))
+    assert changed
+    assert result[-2:] == [assistant, tool_result]
+    request = AdapterCallRequest(
+        model=model,
+        messages=[
+            Message(
+                role=m["role"],
+                content=m["content"],
+                anthropic_content=tuple(m.get("anthropic_content", ())),
+            )
+            for m in result
+        ],
+    )
+    wire = build_create_kwargs(request)
+    assert build_messages(request)[-2:] == [
+        {"role": "assistant", "content": raw},
+        tool_result,
+    ]
+    # Normal cache annotation may decorate tool_use, never the signed thinking.
+    assert wire["messages"][-2]["content"][0] == raw[0]
+    assert {
+        k: v for k, v in wire["messages"][-2]["content"][1].items() if k != "cache_control"
+    } == raw[1]
+    assert wire["messages"][-1]["role"] == tool_result["role"]
+    assert {
+        k: v for k, v in wire["messages"][-1]["content"][0].items() if k != "cache_control"
+    } == tool_result["content"][0]
+    if model == "claude-fable-5-1":
+        assert wire["thinking"]["block_binding"] == {"prefix_mismatch_behavior": "drop_block"}
+    assert messages == original
 
 
 def test_too_short_to_compact_no_op():
@@ -673,7 +857,7 @@ def test_summary_source_is_inferred_only_when_not_pinned(
 ) -> None:
     infer = Mock(return_value="payg")
     dispatch = AsyncMock(return_value=SimpleNamespace(text="SUMMARY"))
-    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", infer)
+    monkeypatch.setattr("core.llm.routing.infer_source", infer)
     monkeypatch.setattr("core.llm.adapters.dispatch.complete_text_via_adapters", dispatch)
     asyncio.run(
         compact_conversation(
@@ -695,8 +879,13 @@ def test_truncate_middle_with_zero_tail_does_not_append_full_input() -> None:
 def test_module_exports_stable():
     expected = {
         "COMPACTION_MARKER",
+        "StaleCompactionError",
+        "can_compact_conversation",
         "compact_conversation",
         "find_safe_boundary",
+        "has_native_compaction",
+        "is_user_input_message",
+        "preserve_latest_user_input",
         "repair_tool_pairs",
         "strip_orphan_tool_results",
     }

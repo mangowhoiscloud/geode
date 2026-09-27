@@ -135,16 +135,13 @@ class TestAdaptivePrune:
 class TestUsagePctUncapped:
     def test_usage_pct_exceeds_100(self):
         """usage_pct should reflect actual value, not capped at 100."""
+        from core.orchestration.context_budget import resolve_context_budget_policy
         from core.orchestration.context_monitor import check_context
 
         msgs = [_make_msg("user", "x" * 400_000)]
-        # Patch at the import source inside check_context
-        with patch(
-            "core.llm.token_tracker.MODEL_CONTEXT_WINDOW",
-            {"tiny-model": 10_000},
-        ):
-            metrics = check_context(msgs, "tiny-model")
-            assert metrics.usage_pct > 100.0
+        policy = resolve_context_budget_policy("tiny-model", context_window=10_000)
+        metrics = check_context(msgs, "tiny-model", policy=policy)
+        assert metrics.usage_pct > 100.0
 
 
 # ---------------------------------------------------------------------------

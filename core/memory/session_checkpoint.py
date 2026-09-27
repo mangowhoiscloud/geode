@@ -15,12 +15,13 @@ import json
 import logging
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from core.config.session import SessionModelConfig
 from core.memory.atomic_write import atomic_write_json
 from core.tools.computer_observation import sanitize_computer_payload
 from core.tools.personal_data import sanitize_personal_data_payload
@@ -111,6 +112,7 @@ class SessionState:
     # ``_lifecycle.collect_guard_state``, restored by ``restore_loop_state``.
     loop_guards: dict[str, Any] = field(default_factory=dict)
     pending_verification: dict[str, Any] = field(default_factory=dict)
+    model_settings: SessionModelConfig | None = None
 
 
 class SessionCheckpoint:
@@ -164,6 +166,8 @@ class SessionCheckpoint:
             "loop_guards": state.loop_guards,
             "pending_verification": state.pending_verification,
         }
+        if state.model_settings is not None:
+            data["model_settings"] = state.model_settings.model_dump()
         state_file = session_path / "state.json"
 
         with self._status_lock():
@@ -254,6 +258,13 @@ class SessionCheckpoint:
 
         try:
             data = json.loads(state_file.read_text(encoding="utf-8"))
+            # Absence is legacy; a present invalid record must never fall back
+            # to today's defaults or partially restore historical identity.
+            model_settings = (
+                SessionModelConfig.model_validate(data["model_settings"])
+                if "model_settings" in data
+                else None
+            )
 
             msg_file = session_path / "messages.json"
             state_updated_at_raw = data.get("updated_at")
@@ -292,6 +303,7 @@ class SessionCheckpoint:
                 round_idx=data.get("round_idx", 0),
                 model=data.get("model", ""),
                 provider=data.get("provider", "anthropic"),
+                model_settings=model_settings,
                 status=normalize_status(data.get("status", SessionStatus.PAUSED)),
                 messages=messages,
                 tool_log=tool_log,
@@ -565,21 +577,20 @@ class SessionCheckpoint:
         try:
             from core.memory.session_manager import SessionManager, SessionMeta
 
-            mgr = SessionManager(self._dir / "sessions.db")
-            mgr.upsert(
-                SessionMeta(
-                    session_id=state.session_id,
-                    created_at=state.created_at,
-                    updated_at=state.updated_at,
-                    status=state.status,
-                    model=state.model,
-                    provider=state.provider,
-                    user_input=state.user_input,
-                    round_count=state.round_idx,
-                    message_count=message_count,
+            with closing(SessionManager(self._dir / "sessions.db")) as mgr:
+                mgr.upsert(
+                    SessionMeta(
+                        session_id=state.session_id,
+                        created_at=state.created_at,
+                        updated_at=state.updated_at,
+                        status=state.status,
+                        model=state.model,
+                        provider=state.provider,
+                        user_input=state.user_input,
+                        round_count=state.round_idx,
+                        message_count=message_count,
+                    )
                 )
-            )
-            mgr.close()
         except Exception:
             log.debug("Failed to sync session to SQLite index", exc_info=True)
 

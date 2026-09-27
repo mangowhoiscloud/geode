@@ -729,20 +729,25 @@ class TestModelProfiles:
     def test_glm_profiles_present(self):
         from core.cli.commands import get_model_profiles
 
-        ids = [p.id for p in get_model_profiles()]
+        ids = [p.id for p in get_model_profiles(openai_source="payg")]
         assert GLM_PRIMARY in ids
-        assert "glm-5-turbo" in ids
+        assert {"glm-5.3", "glm-5.3-flash", "glm-5.3-flashx"} <= set(ids)
+        assert "glm-5-turbo" not in ids
         assert "glm-4.7-flash" in ids
 
     def test_glm_profiles_provider(self):
         from core.cli.commands import get_model_profiles
+        from core.llm.model_catalog import MODEL_OFFERINGS
 
         # v0.53.0 — provider labels are CANONICAL provider IDs (lowercase
         # `glm`), matching /login dashboard + auth.toml. Pre-fix used
         # capitalised "GLM" which diverged from the dispatch key.
-        glm_profiles = [p for p in get_model_profiles() if p.provider == "glm"]
-        assert len(glm_profiles) == 4
-        assert "glm-5.2" in {p.id for p in glm_profiles}
+        glm_profiles = [p for p in get_model_profiles(openai_source="payg") if p.provider == "glm"]
+        assert {p.id for p in glm_profiles} == {
+            offering.id
+            for offering in MODEL_OFFERINGS
+            if offering.provider == "glm" and "payg" in offering.sources
+        }
 
 
 class TestSetupProjectMemory:

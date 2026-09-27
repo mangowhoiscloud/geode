@@ -228,6 +228,7 @@ def save_checkpoint(
             round_idx=round_idx,
             model=loop.model,
             provider=loop._provider,
+            model_settings=loop._model_settings,
             status="active",
             messages=loop.context.messages,
             tool_log=loop._tool_processor.tool_log,

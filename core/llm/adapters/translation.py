@@ -213,6 +213,7 @@ def agentic_response_from_adapter_result(result: AdapterCallResult) -> AgenticRe
         output_tokens=result.usage.output_tokens,
         thinking_tokens=result.usage.reasoning_tokens,
         cache_creation_tokens=result.usage.cache_write_tokens,
+        cache_creation_1h_tokens=result.usage.cache_write_1h_tokens,
         cache_read_tokens=result.usage.cached_input_tokens,
         reported_cost_usd=result.usage.reported_cost_usd,
     )

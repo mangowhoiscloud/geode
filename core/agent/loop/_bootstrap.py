@@ -11,6 +11,7 @@ from typing import Any
 
 from core.agent.error_recovery import ErrorRecoveryStrategy
 from core.agent.tool_executor import ToolCallProcessor
+from core.config.session import SessionModelConfig
 from core.ui.agentic_ui import OperationLogger
 
 
@@ -28,7 +29,6 @@ class AgenticLoopConfig:
     parent_session_id: str = ""
     system_suffix: str = ""
     system_prompt_override: str | None = None
-    disable_settings_drift: bool = False
     allowed_tool_names: set[str] | None = None
     force_include_allowed_tools: bool = False
     source: str = ""
@@ -37,6 +37,7 @@ class AgenticLoopConfig:
     allow_actionable_partial_on_empty: bool = False
     yield_after_tool_round: bool = False
     user_profile: Any = None
+    model_settings: SessionModelConfig | None = None
 
 
 def initialize_runtime(
@@ -51,10 +52,29 @@ def initialize_runtime(
     source = config.source
     loop._source_explicit = bool(source)
     if not source:
-        from core.llm.adapters._source_inference import infer_source
+        from core.llm.routing import infer_source
 
-        source = infer_source(loop._provider)
+        source = infer_source(
+            loop._provider, model=loop.model, sources=loop._policy_sources.get("provider_routing")
+        )
     loop._source = source
+    from core.config import settings
+    from core.config.session import capture_session_model_config
+
+    loop._model_settings = config.model_settings or capture_session_model_config(
+        settings,
+        model=loop.model,
+        effort=loop._effort,
+        source=source,
+        sources=loop._policy_sources.get("provider_routing"),
+    )
+    if (loop._model_settings.model, loop._model_settings.effort, loop._model_settings.source) != (
+        loop.model,
+        loop._effort,
+        source,
+    ):
+        raise ValueError("Session model configuration does not match the constructor route")
+    loop._pending_model_settings = None
     loop._allowed_tool_names = config.allowed_tool_names
     loop._force_include_allowed_tools = config.force_include_allowed_tools
 

@@ -2,7 +2,8 @@
 
 The probe uses the production-resolved adapters, appends one JSONL row per
 attempt, and stops on the first failed wire or response contract. Re-running
-with the same output file skips prior passes and retries the failed pair.
+with the same output file skips only matching route/revision passes. Older
+rows remain unchanged; a different route or revision is a new measurement.
 """
 
 from __future__ import annotations
@@ -11,11 +12,16 @@ import argparse
 import asyncio
 import hashlib
 import json
+import os
+import re
+import shutil
+import subprocess
 import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
@@ -28,6 +34,8 @@ SYSTEM_PROMPT = "Follow the user's output instruction exactly."
 
 def visible_effort_surface(
     model_ids: tuple[str, ...] = (),
+    *,
+    configured_model_ids: tuple[str, ...] = (),
 ) -> tuple[tuple[str, str, str], ...]:
     """Return picker order as ``(model, provider, effort)`` rows."""
     from core.cli.commands._state import get_model_profiles
@@ -35,7 +43,7 @@ def visible_effort_surface(
 
     surface = tuple(
         (profile.id, profile.provider, effort)
-        for profile in get_model_profiles()
+        for profile in get_model_profiles(configured_model_ids=(*configured_model_ids, *model_ids))
         for effort in supported_efforts(profile.id, profile.provider)
     )
     if not model_ids:
@@ -48,14 +56,24 @@ def visible_effort_surface(
 
 
 def _wire_effort(request: Any, provider: str, source: str) -> str | None:
-    if provider == "anthropic":
+    if provider == "anthropic" and source == "payg":
         from core.llm.adapters._anthropic_common import build_create_kwargs
 
-        return build_create_kwargs(request).get("output_config", {}).get("effort")
+        value = build_create_kwargs(request).get("output_config", {}).get("effort")
+        return value if isinstance(value, str) else None
+
+    if provider == "glm" and source in {"payg", "subscription"}:
+        from core.llm.providers.glm import build_glm_reasoning_extra_body
+
+        controls = build_glm_reasoning_extra_body(request.model, effort=request.effort)
+        return controls.get("reasoning_effort") if controls else None
+
+    if provider != "openai" or source not in {"payg", "subscription"}:
+        raise ValueError(f"no wire effort oracle for {provider}/{source}")
 
     from core.llm.adapters._openai_common import build_responses_kwargs
 
-    return (
+    value = (
         build_responses_kwargs(
             request,
             backend="codex" if source == "subscription" else "platform",
@@ -64,33 +82,180 @@ def _wire_effort(request: Any, provider: str, source: str) -> str | None:
         .get("reasoning", {})
         .get("effort")
     )
+    return value if isinstance(value, str) else None
 
 
-def _passed_keys(output: Path) -> set[tuple[str, str]]:
+async def _openrouter_wire_effort(request: Any, adapter: Any) -> str | None:
+    """Observe the selected adapter's SDK body without credentials or a network call.
+
+    This checks local serialization only; the later real adapter response owns
+    server acceptance. Never project an OpenRouter request through Responses.
+    """
+    from unittest.mock import patch
+
+    import httpx
+    from core.llm.adapters.openrouter_payg import OpenRouterPaygAdapter
+    from openai import AsyncOpenAI
+
+    if not isinstance(adapter, OpenRouterPaygAdapter) or adapter.source != "payg":
+        raise ValueError("no wire effort oracle for this OpenRouter adapter")
+    bodies: list[dict[str, Any]] = []
+
+    def capture(wire: httpx.Request) -> httpx.Response:
+        if wire.method != "POST" or wire.url.path != "/api/v1/chat/completions":
+            raise ValueError("unexpected OpenRouter serialization endpoint")
+        bodies.append(json.loads(wire.content))
+        return httpx.Response(
+            200,
+            json={
+                "id": "probe-serialization-only",
+                "object": "chat.completion",
+                "created": 0,
+                "model": bodies[-1]["model"],
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": ""},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                },
+            },
+        )
+
+    async with AsyncOpenAI(
+        api_key="serialization-only",
+        base_url="https://openrouter.invalid/api/v1",
+        max_retries=0,
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(capture)),
+    ) as client:
+        with patch.object(adapter, "_get_client", return_value=client):
+            await adapter.acomplete(request)
+    if len(bodies) != 1 or bodies[0].get("model") != request.model.removeprefix("openrouter/"):
+        raise ValueError("OpenRouter serialization did not preserve the selected model")
+    value = bodies[0].get("reasoning", {}).get("effort")
+    return value if isinstance(value, str) else None
+
+
+def _adapter_base_url(adapter: Any, model: str = "") -> str | None:
+    """Read the selected endpoint without constructing a live SDK client."""
+    from core import config
+    from core.llm.registry import get_provider_spec
+
+    if adapter.name == "openai-payg":
+        spec = get_provider_spec("openai")
+        if spec is None:
+            raise ValueError("OpenAI provider contract is missing")
+        raw = os.environ.get("OPENAI_BASE_URL", spec.default_base_url)
+    elif adapter.name == "anthropic-payg":
+        spec = get_provider_spec("anthropic")
+        if spec is None:
+            raise ValueError("Anthropic provider contract is missing")
+        raw = os.environ.get("ANTHROPIC_BASE_URL", spec.default_base_url)
+    elif adapter.name == "codex-oauth":
+        raw = config.CODEX_BASE_URL
+    elif adapter.name == "glm-payg":
+        raw = config.GLM_PAYG_BASE_URL
+    elif adapter.name == "glm-coding-plan":
+        # Its resolver reads the selected profile/key; no read-only endpoint
+        # owner exists. Keep the attempt, but do not reuse an unknown route.
+        return None
+    elif adapter.name == "openrouter-payg":
+        spec = get_provider_spec("openrouter")
+        if spec is None:
+            raise ValueError("OpenRouter provider contract is missing")
+        raw = spec.default_base_url
+    else:
+        raise ValueError("no endpoint oracle for this adapter")
+    if model:
+        from core.llm.routing import resolve_routing
+
+        target = resolve_routing(
+            model,
+            provider=adapter.provider,
+            source=adapter.source,
+            sources=getattr(adapter, "routing_sources", None),
+            base_url=raw,
+        )
+        if target is not None:
+            raw = target.base_url
+    parts = urlsplit(raw)
+    if (
+        parts.scheme not in {"http", "https"}
+        or not parts.hostname
+        or parts.username is not None
+        or parts.password is not None
+        or parts.query
+        or parts.fragment
+    ):
+        raise ValueError("endpoint identity must be an HTTP URL without credentials/query/fragment")
+    return raw.rstrip("/")
+
+
+def _measurement_key(row: dict[str, Any]) -> tuple[str, ...] | None:
+    values = tuple(
+        row.get(field)
+        for field in (
+            "provider",
+            "adapter",
+            "adapter_source",
+            "adapter_base_url",
+            "model",
+            "requested_effort",
+            "producer_revision",
+        )
+    )
+    if row.get("schema") != SCHEMA or not all(isinstance(v, str) and v for v in values):
+        return None
+    return tuple(str(value) for value in values)
+
+
+def _passed_keys(output: Path) -> set[tuple[str, ...]]:
     if not output.exists():
         return set()
-    passed: set[tuple[str, str]] = set()
+    passed: set[tuple[str, ...]] = set()
     for line_number, line in enumerate(output.read_text(encoding="utf-8").splitlines(), 1):
         try:
             row = json.loads(line)
         except json.JSONDecodeError as exc:
             raise ValueError(f"invalid JSONL at {output}:{line_number}") from exc
-        if row.get("status") == "pass":
-            passed.add((str(row["model"]), str(row["requested_effort"])))
+        if not isinstance(row, dict):
+            raise ValueError(f"invalid measurement at {output}:{line_number}")
+        key = _measurement_key(row)
+        if (
+            key is not None
+            and row.get("status") == "pass"
+            and row.get("wire_effort") == row.get("requested_effort")
+        ):
+            passed.add(key)
     return passed
+
+
+def _require_producer_revision(revision: str) -> None:
+    """Reject a mislabeled or tracked-dirty checkout before resume or dispatch."""
+    if not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise ValueError("producer revision must be a full commit SHA")
+    git = shutil.which("git")
+    if git is None:
+        raise RuntimeError("git is required to validate producer revision")
+    head = subprocess.check_output(  # noqa: S603 — fixed argv, resolved git executable
+        [git, "rev-parse", "HEAD"], cwd=_REPO_ROOT, text=True
+    ).strip()
+    if revision != head:
+        raise ValueError("producer revision does not match the current checkout")
+    subprocess.run(  # noqa: S603 — fixed argv, resolved git executable
+        [git, "diff", "--quiet", "HEAD", "--"], cwd=_REPO_ROOT, check=True
+    )
 
 
 def _append(output: Path, row: dict[str, Any]) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
-
-
-def _reasoning_tokens(raw_response: Any) -> int | None:
-    usage = getattr(raw_response, "usage", None)
-    details = getattr(usage, "output_tokens_details", None)
-    value = getattr(details, "reasoning_tokens", None)
-    return int(value) if value is not None else None
 
 
 async def _acomplete_with_runtime_retry(
@@ -139,19 +304,38 @@ async def measure(
     producer_revision: str,
     model_ids: tuple[str, ...] = (),
 ) -> int:
-    from core.llm.adapters._source_inference import infer_source
     from core.llm.adapters.base import AdapterCallRequest, Message
     from core.llm.adapters.registry import bootstrap_builtins, resolve_for
+    from core.llm.routing import infer_source
+
+    _require_producer_revision(producer_revision)
+    from core.cli.commands._state import AGENT_ROLES
+    from core.cli.commands.model import _current_model_for_role
 
     bootstrap_builtins()
-    surface = visible_effort_surface(model_ids)
+    surface = visible_effort_surface(
+        model_ids,
+        configured_model_ids=tuple(_current_model_for_role(role) for role in AGENT_ROLES),
+    )
     adapters = {
-        provider: resolve_for(provider, infer_source(provider)) for _, provider, _ in surface
+        (model, provider): resolve_for(provider, infer_source(provider, model=model))
+        for model, provider, _ in surface
     }
     passed = _passed_keys(output)
 
     for ordinal, (model, provider, effort) in enumerate(surface, 1):
-        if (model, effort) in passed:
+        adapter = adapters[(model, provider)]
+        identity = {
+            "schema": SCHEMA,
+            "producer_revision": producer_revision,
+            "model": model,
+            "provider": provider,
+            "adapter": adapter.name,
+            "adapter_source": adapter.source,
+            "adapter_base_url": _adapter_base_url(adapter, model),
+            "requested_effort": effort,
+        }
+        if _measurement_key(identity) in passed:
             print(f"SKIP {ordinal:02d}/{len(surface)} {model} effort={effort}", flush=True)
             continue
 
@@ -164,23 +348,20 @@ async def measure(
         )
         started_at = datetime.now(UTC).isoformat()
         started = time.perf_counter()
-        adapter = adapters[provider]
-        wire_effort = _wire_effort(request, provider, adapter.source)
+        wire_effort = (
+            await _openrouter_wire_effort(request, adapter)
+            if provider == "openrouter"
+            else _wire_effort(request, provider, adapter.source)
+        )
         common = {
-            "schema": SCHEMA,
-            "producer_revision": producer_revision,
+            **identity,
             "ordinal": ordinal,
             "surface_size": len(surface),
-            "model": model,
-            "provider": provider,
-            "adapter": adapter.name,
-            "adapter_source": adapter.source,
-            "requested_effort": effort,
             "wire_effort": wire_effort,
             "started_at": started_at,
         }
         if wire_effort != effort:
-            row = {
+            row: dict[str, Any] = {
                 **common,
                 "status": "fail",
                 "failure_stage": "wire",
@@ -213,7 +394,9 @@ async def measure(
                 "input_tokens": result.usage.input_tokens,
                 "output_tokens": result.usage.output_tokens,
                 "cached_input_tokens": result.usage.cached_input_tokens,
-                "reasoning_tokens": _reasoning_tokens(result.raw_response),
+                "reasoning_tokens": (
+                    result.usage.reasoning_tokens if result.usage.reasoning_tokens_present else None
+                ),
                 "reasoning_item_count": len(result.reasoning_items),
                 "reasoning_summary_count": len(result.reasoning_summaries),
                 "response_text": text,

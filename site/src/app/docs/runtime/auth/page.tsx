@@ -18,13 +18,13 @@ export default function Page() {
               GEODE는 구독 경로와 PAYG API 키를 받습니다. 어느 쪽을
               쓸지는 <code>CredentialSource</code> 하나로 표현됩니다.
               OpenAI 구독 프로파일과 플랜은 <code>~/.geode/auth.toml</code>에, API 키는
-              <code>~/.geode/.env</code>에 저장됩니다.
+              {" "}<code>~/.geode/.env</code>에 저장됩니다.
             </p>
 
             <h2>자격 소스</h2>
             <p>
               단일 SoT는 <code>core/config/credential_source.py</code>의
-              <code>CredentialSource</code> StrEnum입니다.
+              {" "}<code>CredentialSource</code> StrEnum입니다.
             </p>
             <table>
               <thead>
@@ -41,28 +41,30 @@ export default function Page() {
             </table>
             <p>
               Anthropic과 OpenRouter의 내장 경로는 <code>api_key</code>뿐입니다. 과거
-              <code>claude-cli</code>/<code>oauth</code> 값은 migration 안내를
+              {" "}<code>claude-cli</code>/<code>oauth</code> 값은 migration 안내를
               위해 읽지만 binary나 네트워크 호출 전에 중단됩니다.
             </p>
             <p>
               선택은 <code>[llm] anthropic_credential_source</code> /
-              <code>openai_credential_source</code>(기본 <code>auto</code>)에
+              {" "}<code>openai_credential_source</code>(기본 <code>auto</code>)에
               저장됩니다. <code>/login source &lt;provider&gt; &lt;type&gt;</code>은
               toml에만 쓰므로 <code>.env</code>를 지워도 선택이 살아남습니다.
               (provider, source) 쌍마다 구체 어댑터가 하나씩 레지스트리에
-              등록됩니다(<code>core/llm/adapters/</code>의
-              <code>anthropic_payg</code>, <code>openai_payg</code>,
-              <code>codex_oauth</code>,
-              <code>openrouter_payg</code>,
+              등록됩니다(<code>core/llm/adapters/</code>의{" "}
+              <code>anthropic_payg</code>, <code>openai_payg</code>,{" "}
+              <code>codex_oauth</code>, <code>openrouter_payg</code>,{" "}
               <code>glm_coding_plan</code>, <code>glm_payg</code>).
             </p>
 
             <h2>/login 대시보드</h2>
             <p>
               세션 안의 <code>/login</code>은 플랜과 자격을 한 화면에서
-              관리합니다(<code>core/cli/commands/login.py</code>). thin
-              CLI에서 로컬로 실행되고, 끝나면 데몬에 인증 상태 리로드를
-              알립니다.
+              관리합니다(<code>core/cli/commands/login.py</code>). 키 입력과
+              브라우저 로그인(<code>add</code>, <code>set-key</code>, <code>openai</code>,
+              {" "}<code>anthropic</code>, <code>google</code>)과 <code>source</code>는
+              thin CLI에서 실행합니다. 키는 저장한 뒤 데몬에 리로드를 알립니다. 조회와
+              plan·프로파일 변경은 실행 중인 상태를 가진 데몬이 처리합니다. 저장하지
+              못한 변경은 성공으로 표시하지 않습니다.
             </p>
             <table>
               <thead>
@@ -72,10 +74,10 @@ export default function Page() {
                 <tr><td><code>/login openai</code></td><td>ChatGPT 구독 OAuth 로그인. device-code 플로우는 <code>core/auth/oauth_login.py</code>이고, 결과는 <code>auth.toml</code>에 OAUTH_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다.</td></tr>
                 <tr><td><code>/login anthropic</code></td><td><code>ANTHROPIC_API_KEY</code>를 등록하고 <code>api_key</code> 경로를 선택합니다.</td></tr>
                 <tr><td><code>/login google</code></td><td>Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts용 Google Workspace OAuth. 사용자가 만든 Desktop 앱 클라이언트를 가져오며 LLM 프로바이더 자격과 분리됩니다.</td></tr>
-                <tr><td><code>/login add</code></td><td>자격 추가. 키 모양(<code>sk-ant-</code>, <code>sk-proj-</code>, <code>sk-or-v1-</code>, GLM {`{id}.{secret}`})으로 프로바이더를 추정합니다.</td></tr>
+                <tr><td><code>/login add</code></td><td>자격 추가. 메뉴에서 플랜 종류(ChatGPT 구독 또는 PAYG API 키)를 고르고, PAYG는 프로바이더(Anthropic, OpenAI, OpenRouter, GLM)를 고른 뒤 키를 입력합니다.</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>프로파일 선택과 제거.</td></tr>
                 <tr><td><code>/login route</code></td><td>프로바이더와 플랜 라우팅 확인.</td></tr>
-                <tr><td><code>/login quota</code></td><td>구독 쿼터 상태.</td></tr>
+                <tr><td><code>/login quota</code></td><td>플랜에 선언된 호출 한도. GEODE는 사용량을 세지 않으므로 현재 사용량은 프로바이더 계정에서 확인합니다.</td></tr>
                 <tr><td><code>/login source &lt;provider&gt; &lt;type&gt;</code></td><td>자격 소스 영속화. config.toml <code>[llm]</code>에 기록.</td></tr>
               </tbody>
             </table>
@@ -84,7 +86,7 @@ export default function Page() {
             <p>
               uv나 GitHub에서 설치한 사용자도 중앙 GEODE OAuth 앱 없이 자신의
               Google Cloud Desktop 클라이언트로 연결할 수 있습니다. 권장 진입점은
-              <code>/login google</code>입니다. 첫 연결에서는 client JSON 경로와
+              {" "}<code>/login google</code>입니다. 첫 연결에서는 client JSON 경로와
               필요한 서비스 번들을 명시적으로 고릅니다. 자동화하려면 다음처럼
               한 줄로 지정할 수 있습니다. Google Cloud 콘솔부터 시작하는 절차는{" "}
               <a href="/geode/docs/run/google-workspace">Google Workspace 연결 가이드</a>에
@@ -129,14 +131,14 @@ export default function Page() {
               닫힌 채로 거부됩니다. Gmail 전송과 Drive/Docs/Sheets/Tasks/Calendar
               변경도 같은 비캐시형 매 호출 승인을 거쳐 HITL 0·권한 건너뛰기로
               우회할 수 없습니다. 자세한 스키마와 Hermes 비교는 설계 기록
-              <code>docs/architecture/google-workspace-oauth.md</code>에 있습니다.
+              {" "}<code>docs/architecture/google-workspace-oauth.md</code>에 있습니다.
             </p>
 
             <h2>ChatGPT 자격 가져오기</h2>
             <p>
               기본 경로는 <code>/login openai</code>가 발급해
-              <code>~/.geode/auth.toml</code>에 저장한 자격입니다. 기존
-              <code>~/.codex/auth.json</code>도 읽을 수 있지만 이는 자격
+              {" "}<code>~/.geode/auth.toml</code>에 저장한 자격입니다. 기존
+              {" "}<code>~/.codex/auth.json</code>도 읽을 수 있지만 이는 자격
               가져오기일 뿐이며 GEODE는 Codex CLI를 추론에 실행하지 않습니다.
             </p>
 
@@ -152,9 +154,9 @@ OPENAI_API_KEY=sk-proj-...
 OPENROUTER_API_KEY=sk-or-v1-...
 ZAI_API_KEY={id}.{secret}`}</pre>
             <p>
-              GLM은 엔드포인트가 둘입니다. Coding Plan(구독 과금)과
-              PAYG(종량 과금)이고, Coding Plan 키를 PAYG 경로에 쓰면 구독
-              쿼터를 조용히 우회해 종량 과금됩니다.
+              GLM은 PAYG API 키 경로를 지원합니다. 2026-09-24 Coding Plan 정책은
+              공식 지원 도구로 사용을 제한하며 GEODE 사용 자격은 확인되지 않았습니다.
+              기존 구독 프로필은 보존하되 실행을 차단하고, PAYG로 자동 전환하지 않습니다.
             </p>
 
             <h2>실패 모드</h2>
@@ -201,13 +203,13 @@ ZAI_API_KEY={id}.{secret}`}</pre>
               GEODE accepts ChatGPT subscription OAuth and provider PAYG API keys.
               The choice is expressed by a single <code>CredentialSource</code>.
               GEODE-managed OpenAI plans and profiles persist in
-              <code>~/.geode/auth.toml</code>, and API keys in <code>~/.geode/.env</code>.
+              {" "}<code>~/.geode/auth.toml</code>, and API keys in <code>~/.geode/.env</code>.
             </p>
 
             <h2>Credential sources</h2>
             <p>
               The single SoT is the <code>CredentialSource</code> StrEnum in
-              <code>core/config/credential_source.py</code>.
+              {" "}<code>core/config/credential_source.py</code>.
             </p>
             <table>
               <thead>
@@ -224,30 +226,32 @@ ZAI_API_KEY={id}.{secret}`}</pre>
             </table>
             <p>
               Anthropic and OpenRouter have one built-in source: <code>api_key</code>. Historical
-              <code>claude-cli</code>/<code>oauth</code> values are read only to
+              {" "}<code>claude-cli</code>/<code>oauth</code> values are read only to
               emit a migration error before binary or network dispatch.
             </p>
             <p>
               The choice persists as <code>[llm]
               anthropic_credential_source</code> /
-              <code>openai_credential_source</code> (default
-              <code>auto</code>). <code>/login source &lt;provider&gt;
+              {" "}<code>openai_credential_source</code> (default
+              {" "}<code>auto</code>). <code>/login source &lt;provider&gt;
               &lt;type&gt;</code> writes toml only, so the choice survives a
-              <code>.env</code> wipe. Each (provider, source) pair maps to one
+              {" "}<code>.env</code> wipe. Each (provider, source) pair maps to one
               concrete adapter in the registry
-              (<code>core/llm/adapters/</code>: <code>anthropic_payg</code>,
-              <code>openai_payg</code>, <code>codex_oauth</code>,
-              <code>openrouter_payg</code>,
-              <code>glm_coding_plan</code>,
+              (<code>core/llm/adapters/</code>: <code>anthropic_payg</code>,{" "}
+              <code>openai_payg</code>, <code>codex_oauth</code>,{" "}
+              <code>openrouter_payg</code>, <code>glm_coding_plan</code>,{" "}
               <code>glm_payg</code>).
             </p>
 
             <h2>The /login dashboard</h2>
             <p>
               In-session <code>/login</code> manages plans and credentials on
-              one screen (<code>core/cli/commands/login.py</code>). It runs
-              locally in the thin CLI and notifies the daemon to reload auth
-              state when it finishes.
+              one screen (<code>core/cli/commands/login.py</code>). Key entry and
+              browser logins (<code>add</code>, <code>set-key</code>, <code>openai</code>,
+              {" "}<code>anthropic</code>, <code>google</code>) and <code>source</code>
+              {" "}run in the thin CLI; saved keys then ask the daemon to reload. Views
+              and plan or profile changes run in the daemon, which owns the live state. A
+              change that could not be saved is not reported as a success.
             </p>
             <table>
               <thead>
@@ -257,10 +261,10 @@ ZAI_API_KEY={id}.{secret}`}</pre>
                 <tr><td><code>/login openai</code></td><td>ChatGPT subscription OAuth login. The device-code flow lives in <code>core/auth/oauth_login.py</code>; the result lands in <code>auth.toml</code> as an OAUTH_BORROWED plan plus profile pair.</td></tr>
                 <tr><td><code>/login anthropic</code></td><td>Registers <code>ANTHROPIC_API_KEY</code> and selects the <code>api_key</code> route.</td></tr>
                 <tr><td><code>/login google</code></td><td>Google Workspace OAuth for Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts. Imports a user-owned Desktop app client and stays separate from LLM-provider credentials.</td></tr>
-                <tr><td><code>/login add</code></td><td>Add a credential. The provider is sniffed from the key shape (<code>sk-ant-</code>, <code>sk-proj-</code>, <code>sk-or-v1-</code>, GLM {`{id}.{secret}`}).</td></tr>
+                <tr><td><code>/login add</code></td><td>Add a credential. A menu picks the plan kind (ChatGPT subscription or PAYG API key); for PAYG, pick the provider (Anthropic, OpenAI, OpenRouter, GLM), then enter the key.</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>Select and remove profiles.</td></tr>
                 <tr><td><code>/login route</code></td><td>Inspect provider and plan routing.</td></tr>
-                <tr><td><code>/login quota</code></td><td>Subscription quota state.</td></tr>
+                <tr><td><code>/login quota</code></td><td>Declared plan call limits. GEODE does not count usage; check current usage in the provider account.</td></tr>
                 <tr><td><code>/login source &lt;provider&gt; &lt;type&gt;</code></td><td>Persist the credential source into config.toml <code>[llm]</code>.</td></tr>
               </tbody>
             </table>
@@ -286,15 +290,15 @@ ZAI_API_KEY={id}.{secret}`}</pre>
 /login google logout user@example.com`}</pre>
             <p>
               Authentication uses the system browser, a random
-              <code>127.0.0.1</code> port, Authorization Code + PKCE S256, and
+              {" "}<code>127.0.0.1</code> port, Authorization Code + PKCE S256, and
               state validation. Google does not support incremental auth for
               Desktop apps, so adding a service reauthorizes the union of old
               and new bundles for the targeted active account. GEODE refuses
               to save a different browser identity; connect a second identity
               with <code>--new-account</code>. To narrow a grant, provide the
               complete bundle set to keep together with
-              <code>--replace-services</code>.
-              <code>gmail-read</code> is a Restricted scope and
+              {" "}<code>--replace-services</code>.
+              {" "}<code>gmail-read</code> is a Restricted scope and
               is excluded from the recommended set. Drive, Docs, and Sheets use
               the non-sensitive <code>drive.file</code> scope, limiting GEODE to
               files it creates or that are
@@ -318,7 +322,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
               mutations use the same non-cacheable per-invocation gate; HITL 0
               and skip-permissions cannot bypass it. The full schema and Hermes
               comparison are in the architecture record
-              <code>docs/architecture/google-workspace-oauth.md</code>.
+              {" "}<code>docs/architecture/google-workspace-oauth.md</code>.
             </p>
 
             <h2>ChatGPT credential import</h2>
@@ -332,8 +336,8 @@ ZAI_API_KEY={id}.{secret}`}</pre>
             <h2>PAYG keys</h2>
             <p>
               API keys are secrets, so they live on the
-              <code>~/.geode/.env</code> layer. Onboarding and
-              <code>/login</code> key writes follow this contract
+              {" "}<code>~/.geode/.env</code> layer. Onboarding and
+              {" "}<code>/login</code> key writes follow this contract
               (<code>upsert_env</code> in <code>core/config/env_io.py</code>).
             </p>
             <pre>{`# ~/.geode/.env
@@ -342,9 +346,10 @@ OPENAI_API_KEY=sk-proj-...
 OPENROUTER_API_KEY=sk-or-v1-...
 ZAI_API_KEY={id}.{secret}`}</pre>
             <p>
-              GLM has two endpoints: Coding Plan (subscription-billed) and
-              PAYG (metered). A Coding Plan key pointed at the PAYG path
-              silently bypasses the subscription quota and bills metered.
+              GLM supports the PAYG API-key route. The Coding Plan policy checked on
+              2026-09-24 restricts use to supported tools; GEODE admission is
+              unestablished. Existing subscription profiles remain readable,
+              execution is blocked, and billing never switches to PAYG automatically.
             </p>
 
             <h2>Failure modes</h2>

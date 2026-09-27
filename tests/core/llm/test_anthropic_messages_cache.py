@@ -162,7 +162,7 @@ class TestNonMutation:
 )
 def test_n_breakpoints_bound(n: int):
     # 20 single-block messages = 20 blocks, == lookback window → short-history
-    # path keeps the original "last n" behaviour, so exactly min(n, 20) marks.
+    # path keeps the original "last n" behaviour, with one slot reserved for the system prefix.
     msgs = [{"role": "user", "content": f"m{i}"} for i in range(20)]
     out = apply_messages_cache_control(msgs, n_breakpoints=n)
     marked = sum(
@@ -170,7 +170,7 @@ def test_n_breakpoints_bound(n: int):
         for m in out
         if isinstance(m["content"], list) and m["content"] and m["content"][-1].get("cache_control")
     )
-    assert marked == min(n, 20)
+    assert marked == min(n, 3)
 
 
 class TestBreakpointSpreading:

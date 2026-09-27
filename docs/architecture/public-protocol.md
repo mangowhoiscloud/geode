@@ -15,10 +15,11 @@ public merely because they gain a field or enum member.
 ## CLI IPC
 
 The thin CLI and `CLIPoller` keep the existing flat line-delimited JSON shape.
-The v1 fields are additive, so an old peer can ignore them:
+The v1 envelope remains additive; applying session model settings requires the
+negotiated `session_model_config` feature:
 
 ```json
-{"type":"session","session_id":"cli-1234","version":"1.0.23","protocol_version":"geode.ipc.v1","features":["bounded_json","request_correlation","stable_events"]}
+{"type":"session","session_id":"cli-1234","version":"1.0.23","protocol_version":"geode.ipc.v1","features":["bounded_json","request_correlation","stable_events","session_model_config"]}
 ```
 
 The client answers with the same version and its offered feature list in
@@ -38,6 +39,53 @@ never delivered to the active request.
 The socket is local and mode `0600`. User prompts and model results therefore
 remain intact rather than being redacted in transit. The envelope and receive
 buffers are capped at 1 MiB to prevent unbounded allocation.
+
+### Session model settings
+
+The initial `client_capability.model_config` contains the bounded, non-secret
+`core/config/session.py:SessionModelConfig`: primary model, native effort,
+concrete adapter source, explicit reflection/judge model and source, reflection
+output limit, action/reflection temperatures, and judgment preferences. Credential
+source policies and key material are not concrete sources or IPC payload fields.
+Empty auxiliary model/source pairs inherit the current primary route.
+
+`CLIPoller` resolves and validates the complete candidate before applying it to
+one loop. It replies `ack` with `status: applied` and the actual `model_config`
+only after adoption succeeds. The reply also identifies the existing `workspace`
+and `checkpoint_directory`. A sibling/outside workspace or a nested project is
+rejected; an ordinary descendant uses the daemon's root, without changing cwd.
+Clients without the feature must restart/upgrade and reconnect; codec-level v0
+readability does not authorize a session with silently ignored settings.
+
+Named, picker, and fullscreen `/model` choices use the same `command` envelope
+and a bounded `model_config` patch. The existing session lane serializes changes;
+`command_result.status: applied` precedes client-side default persistence. Rejected
+admission writes no defaults. A later disk-write failure reports that the live
+selection was applied but saving defaults failed. `project`/`global` scope selects
+future defaults, never an implicit broadcast to other live sessions. Mutator
+choices retain their separate next-run owner. Cancellation sends no patch, and
+terminal capability refreshes contain no model policy, so a following prompt
+cannot reapply stale client defaults.
+
+The registered `switch_model` tool uses the same candidate validation and session
+owner. Its `pending` result means admission succeeded; adoption happens only after
+the complete tool batch, before the next primary request or external tool-round
+yield. Sibling tools retain the current step's selection. An interrupted batch's
+proposal is not saved or replayed on a new turn. `check_status` reads the actual
+session record. Tool selections do not persist project/global defaults; no-op
+settings-drift synchronization and its unused constructor option were removed.
+
+Model/tool publication restores its previous route and tool bindings if projection
+fails. Context adaptation may have already committed a valid compaction using the
+previous route; this is not a promise to roll back history or external effects.
+Auxiliary readers consume the loop's immutable model policy and existing credential
+owners. A resumed checkpoint carries that same non-secret record in
+`state.json.model_settings`. Resume admits it before history/identity/reopen,
+then returns actual `model_config` and `model_config_origin: checkpoint|current`.
+The client adopts the returned selection. Legacy absence keeps the current
+validated selection; malformed present data rejects resume instead of silently
+mixing historical model metadata with current defaults. The existing JSON IPC
+envelope and negotiated feature remain unchanged.
 
 ## Gateway input
 
@@ -65,7 +113,7 @@ expand that ABI.
 
 Golden v0/v1 IPC greetings live under `tests/fixtures/protocol/`. Protocol
 tests pin negotiation, unknown-field preservation, event names, and size
-failure. Integration tests pin old field-less compatibility and exact request
-correlation through a real Unix socket. Gateway tests pin envelope bounds and
+failure. Integration tests pin explicit unsupported-peer rejection, successful and failed
+session adoption, and exact request correlation through a real Unix socket. Gateway tests pin envelope bounds and
 processor correlation; public-hook tests pin exact names and both schema
 versions.

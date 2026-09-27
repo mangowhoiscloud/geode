@@ -127,7 +127,7 @@ class RetryOutcome[T]:
 
 
 _TERMINAL_ERRORS = frozenset(
-    {"auth", "bad_request", "billing", "context_overflow", "stream_interrupted"}
+    {"auth", "bad_request", "billing", "context_overflow", "invalid_response", "stream_interrupted"}
 )
 _TRANSIENT_ERRORS = frozenset({"connection", "rate_limit", "server", "timeout"})
 _MAX_SERVER_RETRY_AFTER_S = 60.0
@@ -383,6 +383,8 @@ def _notify_failure(provider: str, exc: Exception) -> None:
 def _resolve_plan_for_billing_error(
     model: str,
     *,
+    provider: str = "",
+    source: str | None = None,
     routing_sources: Any | None = None,
 ) -> dict[str, str]:
     """Resolve Plan metadata for a model so BillingError carries context.
@@ -392,9 +394,9 @@ def _resolve_plan_for_billing_error(
     Empty values when routing fails (caller falls back to generic msg).
     """
     try:
-        from core.llm.strategies.plan_registry import resolve_routing
+        from core.llm.routing import resolve_routing
 
-        target = resolve_routing(model, sources=routing_sources)
+        target = resolve_routing(model, provider=provider, source=source, sources=routing_sources)
         if target is None:
             return {}
         plan = target.plan
@@ -581,10 +583,14 @@ def billing_error_from_exception(
     model: str,
     message: str,
     routing_sources: Any | None,
+    provider: str = "",
+    source: str | None = None,
 ) -> BillingError:
     from core.llm.errors import BillingError, extract_billing_message
 
-    plan_meta = _resolve_plan_for_billing_error(model, routing_sources=routing_sources)
+    plan_meta = _resolve_plan_for_billing_error(
+        model, provider=provider, source=source, routing_sources=routing_sources
+    )
     return BillingError(
         extract_billing_message(exc) or message,
         provider=plan_meta.get("provider", ""),

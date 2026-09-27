@@ -727,7 +727,6 @@ def _default_llm_call(
     # Step J-b.2 (Path-B API path) — resolve_for + acomplete.
     from core.config import settings as _settings
     from core.llm.adapters import resolve_for
-    from core.llm.adapters._source_inference import infer_source
     from core.llm.adapters.base import (
         SOURCE_PAYG,
         SOURCE_SUBSCRIPTION,
@@ -736,6 +735,7 @@ def _default_llm_call(
     )
     from core.llm.adapters.registry import normalize_registry_provider
     from core.llm.router import call_with_failover
+    from core.llm.routing import infer_source
 
     # PR-SOURCE-ROUTING (2026-05-28) — for the unpinned ``auto`` source, mirror the
     # AgenticLoop main-path resolution via ``infer_source`` (subscription-first when
@@ -750,7 +750,7 @@ def _default_llm_call(
         if source == "api_key"
         else SOURCE_SUBSCRIPTION
         if source == "openai-codex"
-        else infer_source(provider)
+        else infer_source(provider, model=model)
     )
     adapter = resolve_for(normalize_registry_provider(provider), resolved_source)
     mutator_temperature = _settings.temperature_self_improving_mutation

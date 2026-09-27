@@ -117,7 +117,7 @@ def _install_stubs(monkeypatch: pytest.MonkeyPatch, stubs: list[Any]) -> None:
 def _force_payg_first(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pin :func:`infer_source` to always return ``"payg"`` so the source
     preference is deterministic across machines (PAYG → subscription)."""
-    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda provider: "payg")
+    monkeypatch.setattr("core.llm.routing.infer_source", lambda provider, **kwargs: "payg")
 
 
 # ---------------------------------------------------------------------------
@@ -345,8 +345,8 @@ def test_web_search_via_adapters_model_derives_single_route(
     """When only model is provided, dispatch derives that model's provider
     and source. It does not scan unrelated providers."""
     monkeypatch.setattr(
-        "core.llm.adapters._source_inference.infer_source",
-        lambda provider: "subscription" if provider == "openai" else "payg",
+        "core.llm.routing.infer_source",
+        lambda provider, **kwargs: "subscription" if provider == "openai" else "payg",
     )
     _install_stubs(
         monkeypatch,
@@ -395,7 +395,7 @@ def test_complete_text_via_adapters_model_derives_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A model-derived route selects that model's provider/source only."""
-    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda _p: "payg")
+    monkeypatch.setattr("core.llm.routing.infer_source", lambda _p, **kwargs: "payg")
     _install_stubs(
         monkeypatch,
         [

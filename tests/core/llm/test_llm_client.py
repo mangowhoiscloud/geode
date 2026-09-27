@@ -63,7 +63,8 @@ class TestStripFences:
 class TestCalculateCost:
     def test_known_model_opus(self):
         cost = calculate_cost(ANTHROPIC_PRIMARY, 1000, 500)
-        expected = 1000 * (5.0 / 1_000_000) + 500 * (25.0 / 1_000_000)
+        assert ANTHROPIC_PRIMARY == "claude-opus-5-5"
+        expected = 1000 * (4.0 / 1_000_000) + 500 * (20.0 / 1_000_000)
         assert abs(cost - expected) < 1e-10
 
     def test_known_model_haiku(self):
@@ -78,9 +79,10 @@ class TestCalculateCost:
         assert calculate_cost(ANTHROPIC_PRIMARY, 0, 0) == 0.0
 
     def test_gpt_model(self):
-        # v0.52.4 — OPENAI_PRIMARY is now gpt-5.5 (input $5/1M, output $30/1M)
+        # Published default-model rates at the 2026-09-24 refresh.
         cost = calculate_cost(OPENAI_PRIMARY, 1000, 1000)
-        expected = 1000 * (5.00 / 1_000_000) + 1000 * (30.0 / 1_000_000)
+        assert OPENAI_PRIMARY == "gpt-6-sol"
+        expected = 1000 * (2.0 / 1_000_000) + 1000 * (10.0 / 1_000_000)
         assert abs(cost - expected) < 1e-10
 
 

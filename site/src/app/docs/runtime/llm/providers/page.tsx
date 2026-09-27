@@ -53,6 +53,43 @@ export default function Page() {
               사용합니다.
             </p>
 
+            <p>
+              컴팩션 등 텍스트 요약도 같은 OpenRouter 어댑터를 사용해 캐시 마커,
+              세션 식별과 사용량을 보존합니다. 알려진 OpenAI reasoning 모델은
+              선택한 effort를 relay 요청에 전달하며, 다른 모델의 effort 지원을
+              추정하지 않습니다. 응답 스키마를 요청하면 JSON Schema 형식과{" "}
+              <code>require_parameters: true</code>를 함께 전달합니다. 명시적으로
+              이 옵션을 false로 지정한 호출은 거절합니다. 실제 스키마 지원과
+              강제 수준은 상위 endpoint에 달려 있고, 로컬 응답 검증도 유지됩니다.
+            </p>
+            <p>
+              알려진 OpenAI reasoning 경로는 기본 temperature를 전송하지 않고,
+              지원하지 않는 사용자 지정 값을 호출 전에 거절합니다. 이 relay에서는
+              <code>effort=none</code>도 sampling 지원을 의미하지 않습니다.
+              선택한 effort와 공급자 제한은 그대로 유지합니다.
+            </p>
+
+            <h2>선택한 effort 보존</h2>
+            <p>
+              모델 선택 화면에서 확인한 effort는 요청의 값과 같아야 합니다.
+              프로바이더별 필드명은 달라도 값을 임의로 낮추거나 높이지 않습니다.
+              선택한 모델이 저장된 값을 지원하지 않으면 설정 변경이나 호출 전에
+              거절하므로, <code>/model</code>에서 지원하는 값을 직접 선택해야 합니다.
+              역할 탭을 이동하거나 Space로 선택을 추가한 뒤 Enter로 확정해도
+              primary effort를 보존합니다.
+              선택 화면에는 지원되는 값만 표시하며, 저장된 값이 맞지 않으면
+              방향키로 유효한 값을 고르기 전까지 Enter·Space 확정을 막습니다.
+              취소하면 기존 설정은 유지됩니다.
+              Reflection 모델은 primary effort를 상속하므로, 함께 고른 모델과
+              effort의 호환성도 저장 전에 검사합니다.
+            </p>
+            <p>
+              지원되는 OpenAI·Claude·GLM 텍스트 보조 요청에도 명시한 effort를
+              전달합니다. OpenRouter의 알려진 OpenAI 경로도 같은 값을 전달합니다.
+              effort 제어가 없는 모델은 선택 화면에 조절 기능을 표시하지 않으며,
+              서로 다른 모델의 같은 effort가 같은 계산량을 뜻하지는 않습니다.
+            </p>
+
             <h2>모델 해석 우선순위</h2>
             <p>강한 쪽이 이깁니다.</p>
             <pre>{`CLI 인자
@@ -197,6 +234,50 @@ export default function Page() {
               and billing authority cannot silently cross. Provider-reported
               charge and final serving route enter the common usage/event path;
               static model pricing is used only when no charge was reported.
+            </p>
+
+            <p>
+              Text summaries, including compaction, reuse the same OpenRouter
+              adapter, preserving cache markers, session identity and usage.
+              Known OpenAI reasoning models forward the selected effort through
+              this relay; other models do not inherit an assumed effort contract.
+              Requested response schemas use JSON Schema response formatting and{" "}
+              <code>require_parameters: true</code>. An explicit false value is
+              rejected. Actual schema support and enforcement remain endpoint
+              dependent, and local response validation still applies. See the
+              official <a href="https://openrouter.ai/docs/guides/best-practices/reasoning-tokens">reasoning controls</a>
+              {" "}and <a href="https://openrouter.ai/docs/guides/features/structured-outputs">structured output contract</a>
+              {" "}and <a href="https://openrouter.ai/api/v1/models">per-model reasoning metadata</a>
+              {" "}(checked September 25, 2026; account acceptance remains separate).
+            </p>
+            <p>
+              Known OpenAI reasoning routes omit the default temperature and
+              reject unsupported custom values before dispatch. On this relay,
+              <code>effort=none</code> does not imply sampling support. Selected
+              effort and provider constraints stay unchanged. See the official{" "}
+              <a href="https://openrouter.ai/docs/guides/routing/provider-selection#requiring-providers-to-support-all-parameters">parameter routing policy</a>.
+            </p>
+
+            <h2>Preserving selected effort</h2>
+            <p>
+              The effort confirmed in the model picker must match the request.
+              Provider field names may differ; GEODE does not silently raise or
+              lower the value. Unsupported stored model/effort combinations are
+              rejected before changing settings or dispatching a request. Select
+              a supported value in <code>/model</code>. Switching role tabs and
+              staging a pick with Space preserve primary effort.
+              Only supported choices are displayed. An incompatible saved value
+              requires an explicit arrow selection before Enter or Space can
+              confirm it; cancelling preserves the existing configuration.
+              Reflection inherits primary effort, so the selected model and
+              effort combinations are checked together before saving.
+            </p>
+            <p>
+              Supported OpenAI, Claude and GLM auxiliary text requests preserve
+              explicit effort, as do known OpenAI models routed through OpenRouter.
+              Models without an effort control do not expose a picker control.
+              Identical effort labels across different models do not imply equal
+              compute usage.
             </p>
 
             <h2>Model resolution precedence</h2>

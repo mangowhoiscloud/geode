@@ -116,7 +116,7 @@ def test_runtime_model_switch_re_resolves_path_b_adapter(
     """
     from core.agent.loop._model_switching import _apply_model_update
 
-    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda provider: "payg")
+    monkeypatch.setattr("core.llm.routing.infer_source", lambda provider, **kwargs: "payg")
 
     loop = _make_loop(provider="anthropic")
     assert loop._new_adapter is not None

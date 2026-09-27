@@ -61,7 +61,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
 
-from core.paths import GLOBAL_CONFIG_TOML, GLOBAL_SEED_PIPELINE_TOML
+from core.config.toml_edit import resolve_config_toml_path
+from core.paths import GLOBAL_SEED_PIPELINE_TOML
 
 from evals.seed_generation.manifest import (
     SeedGenerationManifest,
@@ -188,7 +189,7 @@ def load_user_overrides(
     """Load per-role overrides — config.toml first, legacy file as fallback.
 
     CSP-15 (v0.99.39) — config SoT consolidation. The canonical surface is
-    ``~/.geode/config.toml`` with the following schema, mirroring the
+    the resolved global config TOML with the following schema, mirroring the
     Session 66 ``[self_improving_loop.petri.<role>]`` consolidation:
 
     .. code-block:: toml
@@ -216,7 +217,7 @@ def load_user_overrides(
         return _load_overrides_from_file(Path(path))
 
     # 1. Canonical SoT: ~/.geode/config.toml [seed_generation.role.*]
-    canonical_overrides = _load_config_toml_seed_overrides(GLOBAL_CONFIG_TOML)
+    canonical_overrides = _load_config_toml_seed_overrides(resolve_config_toml_path())
     if canonical_overrides:
         return canonical_overrides
 
@@ -473,7 +474,8 @@ def pick_bindings(
         :func:`load_manifest`'s result (with its lru_cache).
     overrides
         Per-role override map as returned by :func:`load_user_overrides`.
-        Defaults to reading :data:`GLOBAL_SEED_PIPELINE_TOML`. Pass
+        Defaults to the resolved global config TOML, with
+        :data:`GLOBAL_SEED_PIPELINE_TOML` as the legacy fallback. Pass
         ``{}`` explicitly to ignore the override file (used by tests).
     auto_probe
         When False, skip the OAuth credential probe and resolve any
@@ -540,7 +542,7 @@ def pick_bindings(
     # ``[[seed_generation.judge_panel.voters]]`` array in
     # ``~/.geode/config.toml`` it replaces the bundled manifest's
     # voter list entirely. Empty / missing → bundled manifest stays.
-    voter_overrides = _load_config_toml_voter_overrides(GLOBAL_CONFIG_TOML)
+    voter_overrides = _load_config_toml_voter_overrides(resolve_config_toml_path())
     voter_specs = voter_overrides if voter_overrides is not None else manifest.judge_panel.voters
     voters: list[VoterBinding] = []
     for voter in voter_specs:

@@ -45,7 +45,7 @@ from unittest.mock import patch
 
 import pytest
 from core.auth.profiles import AuthProfile, CredentialType
-from core.llm.strategies.plan_registry import resolve_routing
+from core.llm.routing import resolve_routing
 from core.llm.strategies.plans import Plan, PlanKind
 
 # ---------------------------------------------------------------------------
@@ -443,54 +443,10 @@ def test_update_model_swaps_adapter_on_provider_change(
     assert stub._tool_processor._model == "claude-opus-4-7"
 
 
-def test_drift_sync_is_a_no_op_after_drift_cut(
+def test_explicit_model_update_marks_prompt_dirty(
     isolated_auth, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """PR-DRIFT-CUT (2026-05-24) — ``sync_model_from_settings_async``
-    no longer rewrites ``loop.model``. Pre-PR the helper compared
-    ``loop.model`` against ``settings.model`` and called
-    ``update_model_async`` to swap back, which silently reverted the
-    operator's most-recent ``/model`` choice (the CLI process writes
-    settings to disk while the daemon's in-memory copy stays stale).
-    The function is now a permanent no-op — operators must invoke
-    ``/model`` themselves.
-    """
-    from unittest.mock import AsyncMock, MagicMock
-
-    import core.agent.loop._model_switching as _ms
-    from core.config import settings
-
-    stub = MagicMock()
-    stub.model = "gpt-5.5"
-    stub._disable_settings_drift = False
-    stub.update_model_async = AsyncMock()
-    stub._drift_target_is_healthy = MagicMock(return_value=True)
-
-    original_model = settings.model
-    object.__setattr__(settings, "model", "claude-opus-4-6")
-    try:
-        result = asyncio.run(_ms.sync_model_from_settings_async(stub))
-    finally:
-        object.__setattr__(settings, "model", original_model)
-
-    assert result is False, "drift sync must be a permanent no-op"
-    stub.update_model_async.assert_not_awaited()
-
-
-def test_update_model_marks_prompt_dirty_so_escalation_rebuilds(
-    isolated_auth, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """v0.52.5 contract: update_model must set ``_prompt_dirty = True``.
-
-    Any caller that updates the model directly (user-initiated /model
-    switch, drift sync) must trigger a system_prompt rebuild on the
-    next round. Pre-fix the rebuild only happened when
-    ``_sync_model_from_settings_async()`` returned True, so direct
-    update_model() callers left the model card pinned to the previous
-    model. v0.90.0 removed the auto-escalation path that originally
-    motivated this guard, but the same invariant still protects the
-    user-initiated /model switch path.
-    """
+    """An explicit model change invalidates the current model card."""
     from unittest.mock import MagicMock
 
     import core.agent.loop as _loop_mod
@@ -513,12 +469,11 @@ def test_update_model_marks_prompt_dirty_so_escalation_rebuilds(
         lambda p, s: MagicMock(),
     )
 
-    asyncio.run(stub.update_model_async("gpt-5.3-codex", reason="failure_escalation"))
+    asyncio.run(stub.update_model_async("gpt-5.3-codex", reason="user_switch"))
 
     assert stub._prompt_dirty is True, (
         "update_model must set _prompt_dirty when model changes — "
-        "without this, escalation leaves the system prompt pinned to the "
-        "previously-failed model card."
+        "without this, an explicit switch leaves the previous model card."
     )
 
 

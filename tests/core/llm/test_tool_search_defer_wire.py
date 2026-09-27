@@ -265,6 +265,6 @@ def test_adapter_gates_on_actual_client_endpoint(monkeypatch, base_url, deferred
     create = AsyncMock(return_value=SimpleNamespace(content=[], usage=None))
     client = SimpleNamespace(base_url=base_url, messages=SimpleNamespace(create=create))
     adapter = AnthropicPaygAdapter()
-    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+    monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
     asyncio.run(adapter.acomplete(_live_request(TOOL_DEFER_THRESHOLD + 5)))
     assert any(tool.get("defer_loading") for tool in create.call_args.kwargs["tools"]) is deferred

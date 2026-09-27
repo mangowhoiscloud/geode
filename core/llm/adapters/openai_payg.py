@@ -1,11 +1,10 @@
 """OpenAIPaygAdapter — PAYG (API-key) path to OpenAI models.
 
 Layer 3 adapter for OpenAI provider, source=payg. Owns its own
-``AsyncOpenAI`` client bound explicitly to ``OPENAI_API_KEY`` — bypasses the
-module-level singleton in ``core.llm.providers.openai`` which routes through
-``ProfileRotator`` and would prefer an OAuth profile if one existed. Codex
-MCP review 2026-05-23 flagged that singleton sharing as a BLOCKER for source
-isolation.
+``AsyncOpenAI`` client bound to a same-endpoint API-key/PAYG profile or the
+existing settings key. Subscription and OAuth profiles never supply this
+route's credential. A changed selection retires the client without closing
+requests that still use it.
 
 Pair with :class:`CodexOAuthAdapter` (same provider, OAuth path).
 
@@ -21,16 +20,20 @@ are Responses-only. Chat Completions now lives only on the GLM adapters
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
+from core.config.policy_source import PolicySourcePaths
 from core.llm.adapters._openai_common import (
     build_async_openai_client,
     build_responses_kwargs,
     openai_computer_tool_param,
     translate_codex_response,
+    translate_responses_stream,
 )
 from core.llm.adapters.base import (
     SOURCE_PAYG,
@@ -45,6 +48,7 @@ from core.llm.adapters.base import (
     WebSearchResult,
 )
 from core.llm.loop_affinity import LoopAffineClientCache
+from core.llm.routing import resolve_routing
 from core.orchestration.openai_api_lane import acquire_openai_api_lane_async
 
 log = logging.getLogger(__name__)
@@ -58,9 +62,8 @@ class OpenAIPaygAdapter:
     provider: str = "openai"
     source: str = SOURCE_PAYG
     billing_type: AdapterBillingType = AdapterBillingType.API
-    # PR-ADAPTER-PATTERN-UNIFICATION — Responses API web_search hosted tool
-    # works on the PAYG endpoint. The Codex backend subscription endpoint
-    # does not advertise web_search support (frontier audit 2026-05-28).
+    # Responses web search is supported on this API-key route; subscription
+    # support and request shaping remain owned by CodexOAuthAdapter.
     supports_web_search: bool = True
     supports_text_completion: bool = True
     # ComputerUseCapable — the GA ``{type: "computer"}`` tool is injected on the
@@ -92,17 +95,40 @@ class OpenAIPaygAdapter:
         del display_width, display_height  # GA {type:"computer"} is bare
         return openai_computer_tool_param()
 
-    def _get_client(self) -> Any:
-        from core.config import settings
+    routing_sources: PolicySourcePaths | None = field(default=None, repr=False)
 
-        api_key = settings.openai_api_key
+    def _credential(self, model: str = "") -> tuple[str, str, str]:
+        """Read the selected PAYG key, endpoint and non-secret provenance."""
+        from core.config import settings
+        from core.llm.registry import get_provider_spec
+
+        spec = get_provider_spec(self.provider)
+        if spec is None:
+            raise RuntimeError("PAYG provider composition is not registered")
+        base_url = os.environ.get("OPENAI_BASE_URL") or spec.default_base_url
+        target = resolve_routing(
+            model,
+            provider=self.provider,
+            source=self.source,
+            base_url=base_url,
+            sources=self.routing_sources,
+        )
+        if target is not None:
+            return target.profile.key, target.base_url, f"auth profile:{target.profile.name}"
+        return settings.openai_api_key, base_url, "settings.openai_api_key"
+
+    def _get_client(self, model: str = "") -> Any:
+        api_key, base_url, _ = self._credential(model)
         if not api_key:
             raise RuntimeError(
                 "OpenAIPaygAdapter: OPENAI_API_KEY not set. PAYG path requires "
                 "an explicit API key — set ``openai_api_key`` in settings or use "
                 "the codex-oauth adapter instead."
             )
-        return self._clients.get(lambda: build_async_openai_client(api_key))
+        return self._clients.get(
+            lambda: build_async_openai_client(api_key, base_url=base_url),
+            identity=hashlib.sha256(f"{base_url}\0{api_key}".encode()).hexdigest(),
+        )
 
     async def aweb_search(
         self, query: str, *, max_results: int = 5, model: str = "", effort: str | None = None
@@ -111,10 +137,11 @@ class OpenAIPaygAdapter:
         # effort together; keep the same model as the calling session.
         # ref: https://developers.openai.com/api/docs/guides/tools-web-search
         from core.config import OPENAI_PRIMARY
-        from core.llm.adapters._capability_impls import openai_web_search
+        from core.llm.adapters._capability_impls import openai_effort_kwargs, openai_web_search
 
+        openai_effort_kwargs(model or OPENAI_PRIMARY, effort)
         return await openai_web_search(
-            self._get_client(),
+            self._get_client(model or OPENAI_PRIMARY),
             query=query,
             max_results=max_results,
             model=model or OPENAI_PRIMARY,
@@ -137,14 +164,18 @@ class OpenAIPaygAdapter:
         (per developers.openai.com/api/docs) and the same API the Codex
         backend speaks — sharing it here keeps the per-provider request
         shape uniform with the agent loop's main ``acomplete`` path.
-        Chat Completions stays only on GLM adapters where z.ai's
-        OpenAI-compatibility surface lacks Responses support.
+        GLM adapters preserve their documented account-compatible
+        Chat Completions route separately.
         """
         from core.config import OPENAI_PRIMARY
-        from core.llm.adapters._capability_impls import openai_responses_complete_text
+        from core.llm.adapters._capability_impls import (
+            openai_effort_kwargs,
+            openai_responses_complete_text,
+        )
 
+        openai_effort_kwargs(model or OPENAI_PRIMARY, effort)
         return await openai_responses_complete_text(
-            self._get_client(),
+            self._get_client(model or OPENAI_PRIMARY),
             prompt=prompt,
             system=system,
             model=model or OPENAI_PRIMARY,
@@ -153,8 +184,8 @@ class OpenAIPaygAdapter:
         )
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
-        client = self._get_client()
         kwargs = build_responses_kwargs(req, backend="platform", adapter_name=self.name)
+        client = self._get_client(req.model)
         # PR-OAUTH-API-LANES (2026-05-26) — pooled with codex-oauth in
         # the same per-account openai-api lane (OpenAI rate-limits
         # per-account, not per-source).
@@ -183,20 +214,15 @@ class OpenAIPaygAdapter:
         return translate_codex_response(final, accumulated_items=accumulated)
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
-        client = self._get_client()
         kwargs = build_responses_kwargs(req, backend="platform", adapter_name=self.name)
+        client = self._get_client(req.model)
         async with client.responses.stream(**kwargs) as stream:
-            async for event in stream:
-                ev_type = getattr(event, "type", "")
-                if ev_type.endswith("output_text.delta"):
-                    yield StreamEvent(kind="text", payload={"text": getattr(event, "delta", "")})
-                elif ev_type == "response.completed":
-                    yield StreamEvent(kind="stop", payload={"stop_reason": "completed"})
+            async for event in translate_responses_stream(stream):
+                yield event
 
     def test_environment(self) -> EnvironmentReport:
-        from core.config import settings
-
-        if not settings.openai_api_key:
+        api_key, _, _ = self._credential()
+        if not api_key:
             return EnvironmentReport(
                 ok=False,
                 checks=(("openai_api_key", "missing"),),
@@ -207,32 +233,32 @@ class OpenAIPaygAdapter:
             )
         return EnvironmentReport(
             ok=True,
-            checks=(("openai_api_key", f"set ({len(settings.openai_api_key)} chars)"),),
+            checks=(("openai_api_key", f"set ({len(api_key)} chars)"),),
         )
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import OPENAI_FALLBACK_CHAIN, OPENAI_PRIMARY
-        from core.llm.model_catalog import model_spec_for_adapter
+        from core.llm.model_catalog import model_ids_for_source, model_spec_for_adapter
 
-        ids = [OPENAI_PRIMARY, *OPENAI_FALLBACK_CHAIN]
-        seen: set[str] = set()
-        models: list[ModelSpec] = []
-        for mid in ids:
-            if mid in seen:
-                continue
-            seen.add(mid)
-            models.append(model_spec_for_adapter(mid, provider=self.provider))
-        return models
+        return [
+            model_spec_for_adapter(mid, provider=self.provider)
+            for mid in model_ids_for_source(
+                provider=self.provider,
+                source=self.source,
+                configured=(OPENAI_PRIMARY, *OPENAI_FALLBACK_CHAIN),
+            )
+        ]
 
     def detect_credential(self) -> CredentialDetection | None:
-        from core.config import OPENAI_PRIMARY, settings
+        from core.config import OPENAI_PRIMARY
 
-        if not settings.openai_api_key:
+        api_key, _, source_path = self._credential()
+        if not api_key:
             return None
         return CredentialDetection(
             model=OPENAI_PRIMARY,
             provider=self.provider,
-            source_path="settings.openai_api_key",
+            source_path=source_path,
         )
 
 

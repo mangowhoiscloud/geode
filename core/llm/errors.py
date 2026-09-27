@@ -38,6 +38,8 @@ if TYPE_CHECKING:
         RateLimitError as LLMRateLimitError,
     )
 
+    from core.llm.adapters.base import AdapterCallResult
+
 # v0.88.0 — explicit ``__all__`` re-export list.  Mypy's
 # ``--no-implicit-reexport`` rule otherwise fails on
 # ``from core.llm.errors import LLMRateLimitError`` because the alias is
@@ -53,6 +55,7 @@ __all__ = [
     "LLMInternalServerError",
     "LLMRateLimitError",
     "LLMRequestValidationError",
+    "LLMResponseValidationError",
     "LLMTimeoutError",
     "ModelSourceUnavailableError",
     "StreamInterruptedError",
@@ -121,6 +124,14 @@ _ANTHROPIC_BILLING_TYPES: frozenset[str] = frozenset(
 
 class LLMRequestValidationError(ValueError):
     """Invalid local request that retries or model fallback cannot repair."""
+
+
+class LLMResponseValidationError(RuntimeError):
+    """A completed provider response was rejected before any tool execution."""
+
+    def __init__(self, message: str, *, completed_result: AdapterCallResult) -> None:
+        super().__init__(message)
+        self.completed_result = completed_result
 
 
 class ModelSourceUnavailableError(LLMRequestValidationError):
@@ -267,6 +278,11 @@ _ERROR_CLASSIFICATION: dict[str, tuple[str, str, str]] = {
         "Context window exceeded. Compacting conversation.",
     ),
     "bad_request": ("bad_request", "error", "Invalid request. Check tool schemas or input."),
+    "invalid_response": (
+        "invalid_response",
+        "error",
+        "Provider response failed validation before tool execution. Retry manually or use /model.",
+    ),
     "stream_interrupted": (
         "stream_interrupted",
         "error",
@@ -292,6 +308,8 @@ def classify_llm_error(exc: Exception) -> tuple[str, str, str]:
         return _ERROR_CLASSIFICATION["billing"]
     if isinstance(exc, LLMRequestValidationError):
         return _ERROR_CLASSIFICATION["bad_request"]
+    if isinstance(exc, LLMResponseValidationError):
+        return _ERROR_CLASSIFICATION["invalid_response"]
     if isinstance(exc, StreamInterruptedError):
         # Raised by the retry boundary (core/llm/fallback.py) when a
         # transient death happened AFTER visible output was surfaced —
@@ -603,6 +621,7 @@ _CONTEXT_OVERFLOW_CODES: frozenset[str] = frozenset(
         "context_length_exceeded",  # OpenAI
         "prompt_too_long",  # Anthropic
         "context_window_exceeded",  # GLM / future
+        "1261",  # Z.AI: prompt/history exceeds the model's maximum input length
     }
 )
 
@@ -615,7 +634,9 @@ _CONTEXT_OVERFLOW_RE = re.compile(
     r"context\s+length\s+exceeded|"
     r"context\s+window\s+exceeded|"
     r"maximum\s+context\s+length|"
-    r"prompt\s+is\s+too\s+long|"
+    r"prompt\s+(?:is\s+)?too\s+long|"
+    r"(?:the\s+)?length\s+of\s+(?:the\s+)?history\s+messages\s+"
+    r"exceeds\s+(?:the\s+)?maximum\s+length|"
     # "prompt exceeds the model's context window of 200000 tokens" —
     # tolerate up to 3 natural-language words between "exceeds" and
     # "context" so possessives ("the model's") + adjectives ("the

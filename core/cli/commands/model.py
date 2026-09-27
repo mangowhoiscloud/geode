@@ -13,7 +13,7 @@ as _pkg`` lookup, mirroring the pattern used by ``core/ui/agentic_ui``.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
 from core.cli.commands._state import (
     AGENT_ROLES,
@@ -28,8 +28,35 @@ from core.cli.commands._state import (
 
 log = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from core.cli.effort_picker import PickerResult
+    from core.cli.ipc_client import IPCClient
 
-def _current_model_for_role(role: AgentRole) -> str:
+
+def resolve_model_hint(hint: str, profiles: list[ModelProfile]) -> ModelProfile:
+    """Resolve the same explicit model notation for slash commands and tools."""
+    if hint.isdigit():
+        index = int(hint) - 1
+        if 0 <= index < len(profiles):
+            return profiles[index]
+        raise ValueError(f"Invalid number: {hint} (1-{len(profiles)})")
+    for profile in profiles:
+        if profile.id == hint:
+            return profile
+    if hint.startswith("openrouter/"):
+        from core.llm.providers.openrouter import to_openrouter_model_id
+
+        return ModelProfile(hint, "openrouter", to_openrouter_model_id(hint), "var")
+    normalized = hint.lower().replace("-", "").replace(" ", "").replace("_", "")
+    if normalized:
+        for profile in profiles:
+            for value in (profile.id, profile.label):
+                if normalized in value.lower().replace("-", "").replace(" ", "").replace("_", ""):
+                    return profile
+    raise ValueError(f"Unknown model: {hint}")
+
+
+def _current_model_for_role(role: AgentRole, client: IPCClient | None = None) -> str:
     """Read the current model id for ``role`` from ``settings`` (or the
     role-specific toml section when the role has no Settings attr).
 
@@ -46,13 +73,17 @@ def _current_model_for_role(role: AgentRole) -> str:
     """
     from core.config import settings
 
+    if client is not None:
+        field = {"primary": "model", "reflection": "reflection_model"}.get(role.name)
+        if field is not None and field in client.model_config:
+            return str(client.model_config[field])
     if not role.settings_field:
         return _read_toml_value(role.toml_section, role.toml_key)
     return getattr(settings, role.settings_field, "") or ""
 
 
 def _read_toml_value(section: str, key: str) -> str:
-    """Read ``[<section>] <key>`` from ``~/.geode/config.toml``.
+    """Read ``[<section>] <key>`` from the resolved global config TOML.
 
     Returns ``""`` when the file is missing, the section is missing,
     the key is missing, or any parse error occurs — the picker
@@ -62,12 +93,10 @@ def _read_toml_value(section: str, key: str) -> str:
     ``settings_field=""``)."""
     import tomllib
 
-    from core.paths import GLOBAL_CONFIG_TOML
+    from core.config.toml_edit import read_config_toml
 
-    if not GLOBAL_CONFIG_TOML.is_file():
-        return ""
     try:
-        data = tomllib.loads(GLOBAL_CONFIG_TOML.read_text(encoding="utf-8"))
+        data = read_config_toml()
     except (OSError, tomllib.TOMLDecodeError):
         return ""
     cursor: object = data
@@ -83,40 +112,114 @@ def _read_toml_value(section: str, key: str) -> str:
     return str(value) if value else ""
 
 
+def _effort_selection_error(
+    selected: ModelProfile,
+    effort: str | None,
+    role: AgentRole,
+    *,
+    primary_effort: str | None = None,
+    reflection_model: str | None = None,
+) -> str | None:
+    """Reject incompatible selections before any model or config state changes."""
+    if not role.has_effort and role.name != "reflection":
+        return None
+    from core.cli.effort_picker import supported_efforts
+    from core.config import _resolve_provider, settings
+
+    levels = supported_efforts(selected.id, selected.provider)
+    value = primary_effort
+    if value is None:
+        value = effort if role.has_effort and effort is not None else settings.agentic_effort
+    if levels and value not in levels:
+        inherited = "inherited " if role.name == "reflection" else ""
+        return (
+            f"{selected.id} does not support {inherited}effort {value!r}. "
+            f"Choose one of {', '.join(levels)} in /model; selection unchanged."
+        )
+    if role.name == "primary":
+        reflected = (
+            reflection_model
+            if reflection_model is not None
+            else settings.cognitive_reflection_model
+        )
+        if reflected:
+            levels = supported_efforts(reflected, _resolve_provider(reflected))
+            if levels and value not in levels:
+                return (
+                    f"Reflection model {reflected} does not support inherited effort {value!r}. "
+                    "Choose a compatible primary effort or reflection model; selection unchanged."
+                )
+    return None
+
+
+def _model_selection_error(
+    selected: ModelProfile,
+    effort: str | None,
+    role: AgentRole,
+    *,
+    primary_effort: str | None = None,
+    reflection_model: str | None = None,
+    source: str | None = None,
+) -> str | None:
+    """Run existing admission checks before any row in a selection is written."""
+    from core.cli import commands as _pkg
+    from core.config import settings
+
+    effective_source = source if source is not None else _openai_source_for_role(role)
+    reason = model_unavailable_reason(selected.id, source=effective_source)
+    if reason is not None:
+        return reason
+    if error := _effort_selection_error(
+        selected,
+        effort,
+        role,
+        primary_effort=primary_effort,
+        reflection_model=reflection_model,
+    ):
+        return error
+    if role.name != "primary" or (
+        selected.id == _current_model_for_role(role)
+        and (effort is None or effort == settings.agentic_effort)
+    ):
+        return None
+    ctx = _pkg.get_conversation_context()
+    if ctx is not None and ctx.messages:
+        from core.orchestration.context_budget import resolve_context_budget_policy
+        from core.orchestration.context_monitor import estimate_message_tokens
+
+        current_tokens = estimate_message_tokens(ctx.messages)
+        policy = resolve_context_budget_policy(
+            selected.id, provider=selected.provider, source=effective_source
+        )
+        if current_tokens > policy.warning_tokens:
+            return (
+                f"Context guard: {current_tokens:,} tokens exceeds {selected.label}'s "
+                f"{policy.tier.name}-tier warning budget ({policy.warning_tokens:,} tokens). "
+                "Run /compact or /clear first, then retry /model."
+            )
+    return None
+
+
 def _apply_model(
     selected: ModelProfile,
     *,
     effort: str | None = None,
     role: str = "primary",
     scope: str = "project",
+    primary_effort: str | None = None,
+    reflection_model: str | None = None,
+    admitted: bool = False,
 ) -> None:
     """Apply a model selection — update settings + .env + config.toml.
 
-    v0.59.0 — accepts an optional ``effort`` parameter coming from the
-    two-axis picker (``effort_picker.pick_model_and_effort``). When
-    set, persists to ``settings.agentic_effort`` + ``GEODE_AGENTIC_EFFORT``
-    env var so the next AgenticLoop turn picks it up via
-    ``_sync_model_from_settings`` (same hot-swap pathway as the model
-    field). ``None`` means "no effort knob applies for this model" —
-    leave the existing setting untouched.
+    The connected CLI validates and adopts the same candidate through the
+    session owner before persisting defaults here. ``admitted`` skips repeated
+    admission after that ACK; an I/O error cannot be reported as durable success.
+    Standalone callers keep the original preference-only behavior.
 
-    PR-A (2026-05-21) — ``role`` selects which agent's model knob is
-    updated. ``"primary"`` (default) writes ``settings.model`` + ``[llm]
-    primary_model``; ``"reflection"`` writes the PR-3 C-2 override knob
-    (``settings.cognitive_reflection_model`` + ``[cognitive]
-    reflection_model``); when empty, reflection inherits the active loop
-    model/provider/source. Effort is *only* applied when the role declares
-    ``has_effort=True`` — the reflection node has no effort axis.
-
-    ``scope`` picks the durable config target (precedence: CLI > env >
-    project ``.geode/config.toml`` > global ``~/.geode/config.toml`` >
-    routing default). ``"project"`` (default) persists the *primary*
-    switch to the session's project config **only** — the global
-    ``GEODE_MODEL`` env is intentionally NOT written, since env outranks
-    the project TOML and would leak a per-workspace choice to every
-    project + shadow the project ``primary_model`` on reload. ``"global"``
-    writes ``~/.geode/config.toml`` + ``GEODE_MODEL`` env. Non-primary
-    roles (reflection / mutator) are daemon-global and always write env.
+    Primary defaults use the requested project/global scope. Reflection and
+    mutator defaults retain their existing global scope; global persistence is
+    not a broadcast to other running loops.
 
     Includes context window guard: blocks downgrade when current context
     exceeds the target model's tiered warning budget (ContextBudgetPolicy;
@@ -129,25 +232,24 @@ def _apply_model(
     from core.config.env_io import upsert_config_toml
 
     role_def = role_by_name(role)
-    reason = model_unavailable_reason(selected.id, source=_openai_source_for_role(role_def))
-    if reason is not None:
-        _pkg.console.print(f"  [warning]{reason}[/warning]")
-        _pkg.console.print()
-        return
-
-    # PR-PICKER-ROLE-SCOPE (2026-06-12) — non-primary roles are
-    # daemon-global: their READERS consult the GLOBAL config only
-    # (`_read_toml_value` → GLOBAL_CONFIG_TOML; the self-improving
-    # runner's `load_self_improving_loop_config` → GEODE_CONFIG_TOML or
-    # GLOBAL_CONFIG_TOML). The previous default scope="project" wrote a
-    # mutator/reflection pick into the PROJECT toml where neither reader
-    # ever looked — the pick appeared to vanish (picker re-rendered
-    # "(inherits Settings.model)" and the runner kept the old model).
-    # Write-read parity: non-primary always persists to global.
+    # Non-primary picks retain global scope. Global reads and writes share
+    # the GEODE_CONFIG_TOML resolver, including roles without a Settings field.
     if role_def.name != "primary":
         scope = "global"
     old = _current_model_for_role(role_def)
     old_effort = getattr(settings, "agentic_effort", "high")
+    if not admitted and (
+        selection_error := _model_selection_error(
+            selected,
+            effort,
+            role_def,
+            primary_effort=primary_effort,
+            reflection_model=reflection_model,
+        )
+    ):
+        _pkg.console.print(f"  [warning]{selection_error}[/warning]")
+        _pkg.console.print()
+        return
     same_model = selected.id == old
     same_effort = not role_def.has_effort or effort is None or effort == old_effort
 
@@ -158,36 +260,8 @@ def _apply_model(
         _pkg.console.print()
         return
 
-    _pkg._check_provider_key(selected)
-
-    # --- Context Window Guard --- (primary only — reflection runs in
-    # a clean-context sandbox per PR-3 C-2 design, so the main loop's
-    # context size doesn't constrain its model choice).
-    if role_def.name == "primary":
-        ctx = _pkg.get_conversation_context()
-        if ctx is not None and ctx.messages:
-            from core.orchestration.context_budget import resolve_context_budget_policy
-            from core.orchestration.context_monitor import estimate_message_tokens
-
-            current_tokens = estimate_message_tokens(ctx.messages)
-            # Consume the same tiered ContextBudgetPolicy the loop uses, not a
-            # bare 80% literal — small windows warn earlier, large windows keep
-            # the absolute ceiling (Codex LOW follow-up on PR-CONTEXT-BUDGET).
-            policy = resolve_context_budget_policy(selected.id)
-            threshold = policy.warning_tokens
-
-            if current_tokens > threshold:
-                _pkg.console.print()
-                _pkg.console.print(
-                    f"  [warning]Context guard: {current_tokens:,} tokens "
-                    f"exceeds {selected.label}'s {policy.tier.name}-tier warning "
-                    f"budget ({threshold:,} tokens)[/warning]"
-                )
-                _pkg.console.print(
-                    "  [muted]Run /compact or /clear first, then retry /model.[/muted]"
-                )
-                _pkg.console.print()
-                return
+    if not admitted:
+        _pkg._check_provider_key(selected)
 
     # Model picker choices persist to config.toml only. 3-codebase consensus
     # (Hermes/Codex/Claude Code) is that durable picker choices belong in
@@ -236,16 +310,14 @@ def _apply_model(
         if _pkg.remove_env("GEODE_AGENTIC_EFFORT"):
             _pkg.console.print("  [muted]removed stale GEODE_AGENTIC_EFFORT from .env[/muted]")
 
-    # The daemon command boundary applies the primary model after this
-    # settings write. Direct loop.update_model_async() during tool execution
-    # caused adapter swap mid-call → crash.
-    # Reflection model is read lazily inside ``_maybe_reflect`` so no
-    # hot-swap plumbing is needed there.
+    # Active-session application is owned by the admitted IPC boundary.
+    # This function only saves defaults in the client process.
 
     role_tag = "" if role_def.name == "primary" else f"  [muted]({role_def.label})[/muted]"
-    from core.paths import GLOBAL_CONFIG_TOML, PROJECT_CONFIG_TOML
+    from core.config.toml_edit import resolve_config_toml_path
+    from core.paths import PROJECT_CONFIG_TOML
 
-    scope_path = str(GLOBAL_CONFIG_TOML) if scope == "global" else str(PROJECT_CONFIG_TOML)
+    scope_path = str(resolve_config_toml_path() if scope == "global" else PROJECT_CONFIG_TOML)
     scope_tag = f"  [muted]· {scope} ({scope_path})[/muted]"
     if not same_model and role_def.has_effort and effort is not None:
         _pkg.console.print(
@@ -273,9 +345,10 @@ def _apply_model(
         )
     if not same_model:
         where = "this project" if scope == "project" else "all projects"
+        activation = "the next run" if not role_def.settings_field else "future sessions"
         _pkg.console.print(
-            f"  [muted]Scope: {where}. Applies to new sessions — "
-            "restart `geode` to pick it up.[/muted]"
+            f"  [muted]Default scope: {where}; used by {activation}. "
+            "Other active sessions are unchanged.[/muted]"
         )
     _pkg.console.print()
 
@@ -312,28 +385,56 @@ def _openai_source_for_role(role: AgentRole) -> str | None:
     return {"api_key": "payg", "openai-codex": "subscription"}.get(source)
 
 
-def _model_available_for_role(model_id: str, role: AgentRole) -> bool:
-    source = _openai_source_for_role(role)
+def _selection_source(model_id: str, role: AgentRole, client: IPCClient | None) -> str | None:
+    """Keep the live billing route within a provider, including inherited roles."""
+    from core.config import _resolve_provider
+
+    field = {"primary": "model", "reflection": "reflection_model"}.get(role.name)
+    if client is not None and field is not None and model_id:
+        active_model = client.model_config.get(field)
+        source_field = "source" if role.name == "primary" else "reflection_source"
+        if not active_model:
+            active_model = client.model_config.get("model")
+            source_field = "source"
+        if active_model and _resolve_provider(model_id) == _resolve_provider(active_model):
+            return str(client.model_config[source_field])
+    return _openai_source_for_role(role)
+
+
+def _model_available_for_role(
+    model_id: str, role: AgentRole, client: IPCClient | None = None
+) -> bool:
+    source = _selection_source(model_id, role, client)
     return model_available(model_id) if source is None else model_available(model_id, source=source)
 
 
-def _picker_profiles(role_initial_models: dict[str, str]) -> list[ModelProfile]:
-    # One shared list spans every tab. A role explicitly pinned to PAYG must
-    # retain its API-valid choices even when the primary uses a subscription.
-    source = "payg" if any(_openai_source_for_role(r) == "payg" for r in AGENT_ROLES) else None
+def _picker_profiles(
+    role_initial_models: dict[str, str], client: IPCClient | None = None
+) -> list[ModelProfile]:
+    # A shared list may include multiple sources; each role's admission still
+    # checks its concrete route. Keep an active PAYG model manageable.
+    source = (
+        "payg"
+        if any(
+            _selection_source(role_initial_models[r.name], r, client) == "payg" for r in AGENT_ROLES
+        )
+        else None
+    )
     return get_model_profiles(
         configured_model_ids=role_initial_models.values(), openai_source=source
     )
 
 
-def _role_model_availability(model_profiles: list[ModelProfile]) -> dict[str, dict[str, bool]]:
+def _role_model_availability(
+    model_profiles: list[ModelProfile], client: IPCClient | None = None
+) -> dict[str, dict[str, bool]]:
     return {
-        role.name: {p.id: _model_available_for_role(p.id, role) for p in model_profiles}
+        role.name: {p.id: _model_available_for_role(p.id, role, client) for p in model_profiles}
         for role in AGENT_ROLES
     }
 
 
-def _interactive_model_picker() -> None:
+def _interactive_model_picker(*, client: IPCClient | None = None) -> None:
     """Two-axis interactive picker — model (↑↓) + effort level (←→).
 
     v0.59.0 — replaces the legacy single-axis ``TerminalMenu`` with the
@@ -353,8 +454,8 @@ def _interactive_model_picker() -> None:
     from core.config import settings
 
     _ensure_profiles_hydrated()
-    role_initial_models = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
-    model_profiles = _picker_profiles(role_initial_models)
+    role_initial_models = {r.name: _current_model_for_role(r, client) for r in AGENT_ROLES}
+    model_profiles = _picker_profiles(role_initial_models, client)
     profiles = [
         (
             p.id,
@@ -368,16 +469,20 @@ def _interactive_model_picker() -> None:
     ]
     role_tabs = [(r.name, r.label, r.description) for r in AGENT_ROLES]
     role_has_effort = {r.name: r.has_effort for r in AGENT_ROLES}
-    current_effort = getattr(settings, "agentic_effort", "high")
+    current_effort = (
+        client.model_config.get("effort", settings.agentic_effort)
+        if client is not None
+        else settings.agentic_effort
+    )
     result = pick_model_and_effort(
         profiles,
-        settings.model,
+        role_initial_models["primary"],
         current_effort,
         roles=role_tabs,
         initial_role="primary",
         role_initial_models=role_initial_models,
         role_has_effort=role_has_effort,
-        role_model_availability=_role_model_availability(model_profiles),
+        role_model_availability=_role_model_availability(model_profiles, client),
     )
     if result.cancelled:
         # M5 — surface the "login first" path explicitly when the user
@@ -387,7 +492,8 @@ def _interactive_model_picker() -> None:
         # assume the latter.
         _pkg.console.print("  [muted]Cancelled[/muted]")
         reason = model_unavailable_reason(
-            result.model_id, source=_openai_source_for_role(role_by_name(result.role))
+            result.model_id,
+            source=_selection_source(result.model_id, role_by_name(result.role), client),
         )
         if reason:
             _pkg.console.print(f"  [warning]{reason}[/warning]")
@@ -399,10 +505,16 @@ def _interactive_model_picker() -> None:
         _pkg.console.print()
         return
 
-    _apply_picker_result(result, model_profiles)
+    _apply_picker_result(result, model_profiles, client=client)
 
 
-def _apply_picker_result(result: Any, model_profiles: list[ModelProfile] | None = None) -> None:
+def _apply_picker_result(
+    result: PickerResult,
+    model_profiles: list[ModelProfile] | None = None,
+    *,
+    client: IPCClient | None = None,
+    scope: str = "project",
+) -> None:
     """Apply a non-cancelled picker result: staged per-role picks first
     (Space, PR-PICKER-SPACE-STAGE 2026-06-12), then the final Enter pick.
 
@@ -410,20 +522,99 @@ def _apply_picker_result(result: Any, model_profiles: list[ModelProfile] | None 
     (``_apply_model`` with the matching role) so the operator can set
     Primary + Reflection + Mutator in ONE picker session.
     """
+    from core.config import settings
+
     if model_profiles is None:
         selected_ids = [result.model_id]
-        selected_ids.extend(mid for _role, mid in getattr(result, "staged", ()) or ())
+        selected_ids.extend(mid for _role, mid, _effort in result.staged)
         model_profiles = get_model_profiles(configured_model_ids=selected_ids)
-    for staged_role, staged_mid in getattr(result, "staged", ()) or ():
-        staged_profile = next((p for p in model_profiles if p.id == staged_mid), None)
-        if staged_profile is None:
+    selections = [*result.staged, (result.role, result.model_id, result.effort)]
+    profiles = {profile.id: profile for profile in model_profiles}
+    active = client.model_config if client is not None else {}
+    primary_effort = active.get("effort", settings.agentic_effort)
+    reflection_model = active.get("reflection_model", settings.cognitive_reflection_model)
+    for role, model_id, effort in selections:
+        if model_id not in profiles:
             continue
-        _apply_model(staged_profile, effort=None, role=staged_role)
-    chosen_profile = next(p for p in model_profiles if p.id == result.model_id)
-    _apply_model(chosen_profile, effort=result.effort, role=result.role)
+        if role == "primary" and effort is not None:
+            primary_effort = effort
+        elif role == "reflection":
+            reflection_model = model_id
+    for role, model_id, effort in selections:
+        if model_id in profiles and (
+            error := _model_selection_error(
+                profiles[model_id],
+                effort,
+                role_by_name(role),
+                primary_effort=primary_effort,
+                reflection_model=reflection_model,
+                source=_selection_source(model_id, role_by_name(role), client),
+            )
+        ):
+            from core.cli import commands as _pkg
+
+            _pkg.console.print(f"  [warning]{error}[/warning]")
+            _pkg.console.print()
+            return
+    if client is not None:
+        from core.cli import commands as package
+        from core.config import _resolve_provider
+        from core.llm.routing import infer_source
+
+        changes: dict[str, object] = {}
+        for role, model_id, _effort in selections:
+            if role == "primary":
+                changes.update(
+                    model=model_id,
+                    effort=primary_effort,
+                    source=(
+                        _selection_source(model_id, role_by_name(role), client)
+                        or infer_source(_resolve_provider(model_id), model=model_id)
+                    ),
+                )
+            elif role == "reflection":
+                changes.update(
+                    reflection_model=model_id,
+                    reflection_source=(
+                        _selection_source(model_id, role_by_name(role), client)
+                        or infer_source(_resolve_provider(model_id), model=model_id)
+                        if model_id
+                        else ""
+                    ),
+                )
+        if changes:
+            response = client.apply_model_config(changes)
+            if response.get("status") != "applied":
+                package.console.print(
+                    f"  [warning]{response.get('message', 'Session change rejected')}[/warning]"
+                )
+                return
+            package.console.print("  Session selection applied.")
+    try:
+        for role, model_id, effort in selections:
+            if model_id in profiles:
+                _apply_model(
+                    profiles[model_id],
+                    effort=effort,
+                    role=role,
+                    scope=scope,
+                    primary_effort=primary_effort,
+                    reflection_model=reflection_model,
+                    admitted=client is not None,
+                )
+    except OSError:
+        if client is not None:
+            from core.cli import commands as package
+
+            package.console.print(
+                "  [warning]Session applied, but saving defaults failed.[/warning]"
+            )
+        raise
 
 
-def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
+def _interactive_model_picker_for_role(
+    role_def: AgentRole, *, client: IPCClient | None = None
+) -> None:
     """PR-A — picker entered with ``initial_role=role_def.name``.
 
     Same UI as :func:`_interactive_model_picker` but the tab strip is
@@ -437,8 +628,8 @@ def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
     from core.config import settings
 
     _ensure_profiles_hydrated()
-    role_initial_models = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
-    model_profiles = _picker_profiles(role_initial_models)
+    role_initial_models = {r.name: _current_model_for_role(r, client) for r in AGENT_ROLES}
+    model_profiles = _picker_profiles(role_initial_models, client)
     profiles = [
         (
             p.id,
@@ -452,8 +643,12 @@ def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
     ]
     role_tabs = [(r.name, r.label, r.description) for r in AGENT_ROLES]
     role_has_effort = {r.name: r.has_effort for r in AGENT_ROLES}
-    current_for_focus = role_initial_models.get(role_def.name) or settings.model
-    current_effort = getattr(settings, "agentic_effort", "high")
+    current_for_focus = role_initial_models.get(role_def.name) or role_initial_models["primary"]
+    current_effort = (
+        client.model_config.get("effort", settings.agentic_effort)
+        if client is not None
+        else settings.agentic_effort
+    )
     result = pick_model_and_effort(
         profiles,
         current_for_focus,
@@ -462,21 +657,22 @@ def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
         initial_role=role_def.name,
         role_initial_models=role_initial_models,
         role_has_effort=role_has_effort,
-        role_model_availability=_role_model_availability(model_profiles),
+        role_model_availability=_role_model_availability(model_profiles, client),
     )
     if result.cancelled:
         _pkg.console.print("  [muted]Cancelled[/muted]")
         reason = model_unavailable_reason(
-            result.model_id, source=_openai_source_for_role(role_by_name(result.role))
+            result.model_id,
+            source=_selection_source(result.model_id, role_by_name(result.role), client),
         )
         if reason:
             _pkg.console.print(f"  [warning]{reason}[/warning]")
         _pkg.console.print()
         return
-    _apply_picker_result(result, model_profiles)
+    _apply_picker_result(result, model_profiles, client=client)
 
 
-def cmd_model(args: str) -> None:
+def cmd_model(args: str, *, client: IPCClient | None = None) -> None:
     """Handle /model command (OpenClaw Auth Profile Rotation pattern).
 
     /model                       → interactive picker (this project)
@@ -493,7 +689,8 @@ def cmd_model(args: str) -> None:
         switch is scoped to the current workspace.
       * ``/model global <name>`` → writes ``~/.geode/config.toml``, inherited
         by every project without its own override.
-    Either way the change applies to *new* sessions (restart ``geode``).
+    Scope controls persisted defaults. A connected CLI also applies the explicit
+    choice to its own session; other active sessions retain their selections.
     """
     from core.cli import commands as _pkg
 
@@ -502,7 +699,7 @@ def cmd_model(args: str) -> None:
     if arg == "judgment" or arg.startswith("judgment "):
         from core.cli.commands.judgment import cmd_judgment
 
-        cmd_judgment(arg.removeprefix("judgment").strip())
+        cmd_judgment(arg.removeprefix("judgment").strip(), client=client)
         return
 
     # ``/model global <…>`` — switch the user-global default instead of the
@@ -529,7 +726,10 @@ def cmd_model(args: str) -> None:
             role_name = first
             arg = rest.strip()
     role_def = role_by_name(role_name)
-    role_source = _openai_source_for_role(role_def)
+    current_model = _current_model_for_role(role_def, client)
+    if not current_model and client is not None:
+        current_model = str(client.model_config.get("model", ""))
+    role_source = _selection_source(current_model, role_def, client)
 
     # ``/model global`` with no model — the interactive picker applies to the
     # project scope, so global needs an explicit model id/number.
@@ -551,7 +751,7 @@ def cmd_model(args: str) -> None:
             # Track each registered role's current pick so the list
             # marks all of them in one render — matches the
             # multi-tab picker's "Primary / Reflection" semantics.
-            role_currents = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
+            role_currents = {r.name: _current_model_for_role(r, client) for r in AGENT_ROLES}
             model_profiles = get_model_profiles(
                 configured_model_ids=role_currents.values(), openai_source=role_source
             )
@@ -560,12 +760,14 @@ def cmd_model(args: str) -> None:
                     f"{r.label[0]}←" for r in AGENT_ROLES if role_currents[r.name] == p.id
                 )
                 marker = f"  [muted]{role_marks}[/muted]" if role_marks else ""
-                reason = model_unavailable_reason(p.id, source=role_source)
+                reason = model_unavailable_reason(
+                    p.id, source=_selection_source(p.id, role_def, client)
+                )
                 avail = (
                     "  [warning](unavailable on selected source)[/warning]"
                     if reason
                     else ""
-                    if _model_available_for_role(p.id, role_def)
+                    if _model_available_for_role(p.id, role_def, client)
                     else "  [muted](login required)[/muted]"
                 )
                 forced = forced_login_method_for(p.provider)
@@ -581,73 +783,48 @@ def cmd_model(args: str) -> None:
             _pkg.console.print()
             return
         if role_name == "primary":
-            _interactive_model_picker()
+            _interactive_model_picker(client=client)
         else:
             # Single-role picker invocation — render the picker with
             # the role-tab axis but anchored on the requested role.
-            _interactive_model_picker_for_role(role_def)
+            _interactive_model_picker_for_role(role_def, client=client)
         return
 
-    # Resolve by number or name
-    selected: ModelProfile | None = None
-
-    reason = None if arg.isdigit() else model_unavailable_reason(arg, source=role_source)
+    # Resolve by number or name.
+    reason = (
+        None
+        if arg.isdigit()
+        else model_unavailable_reason(arg, source=_selection_source(arg, role_def, client))
+    )
     if reason is not None:
         _pkg.console.print(f"  [warning]{reason}[/warning]")
         _pkg.console.print()
         return
 
-    role_currents = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
+    role_currents = {r.name: _current_model_for_role(r, client) for r in AGENT_ROLES}
     model_profiles = get_model_profiles(
         configured_model_ids=role_currents.values(), openai_source=role_source
     )
-    if arg.isdigit():
-        idx = int(arg) - 1
-        if 0 <= idx < len(model_profiles):
-            selected = model_profiles[idx]
-        else:
-            _pkg.console.print(
-                f"  [warning]Invalid number: {arg} (1-{len(model_profiles)})[/warning]"
-            )
-            _pkg.console.print()
-            return
-    else:
-        selected = {profile.id: profile for profile in model_profiles}.get(arg)
-        if not selected and arg.startswith("openrouter/"):
-            try:
-                from core.llm.providers.openrouter import to_openrouter_model_id
-
-                upstream_model = to_openrouter_model_id(arg)
-            except ValueError as exc:
-                _pkg.console.print(f"  [warning]{exc}[/warning]")
-                _pkg.console.print()
-                return
-            selected = ModelProfile(arg, "openrouter", upstream_model, "var")
-        if not selected:
-            arg_norm = arg.lower().replace("-", "").replace(" ", "").replace("_", "")
-            for p in model_profiles:
-                id_norm = p.id.lower().replace("-", "").replace(" ", "").replace("_", "")
-                label_norm = p.label.lower().replace("-", "").replace(" ", "").replace("_", "")
-                if arg_norm in id_norm or arg_norm in label_norm:
-                    selected = p
-                    break
-
-    if not selected:
-        _pkg.console.print(f"  [warning]Unknown model: {arg}[/warning]")
+    try:
+        selected = resolve_model_hint(arg, model_profiles)
+    except ValueError as exc:
+        _pkg.console.print(f"  [warning]{exc}[/warning]")
         _pkg.console.print("  [muted]Available:[/muted]", end="")
-        for p in model_profiles:
-            _pkg.console.print(f" [muted]{p.id}[/muted]", end="")
+        for profile in model_profiles:
+            _pkg.console.print(f" [muted]{profile.id}[/muted]", end="")
         _pkg.console.print()
         _pkg.console.print()
         return
 
-    reason = model_unavailable_reason(selected.id, source=role_source)
+    reason = model_unavailable_reason(
+        selected.id, source=_selection_source(selected.id, role_def, client)
+    )
     if reason is not None:
         _pkg.console.print(f"  [warning]{reason}[/warning]")
         _pkg.console.print()
         return
 
-    if not _model_available_for_role(selected.id, role_def):
+    if not _model_available_for_role(selected.id, role_def, client):
         # M5 — explicit /model <name> can still trip the credential
         # path. Surface the "login required" hint *before* applying so
         # the user doesn't see settings flip then immediately get the
@@ -664,4 +841,14 @@ def cmd_model(args: str) -> None:
         _pkg.console.print()
         return
 
-    _apply_model(selected, role=role_def.name, scope=scope)
+    if client is None:
+        _apply_model(selected, role=role_def.name, scope=scope)
+    else:
+        from core.cli.effort_picker import PickerResult
+
+        _apply_picker_result(
+            PickerResult(model_id=selected.id, effort=None, role=role_def.name),
+            model_profiles,
+            client=client,
+            scope=scope,
+        )

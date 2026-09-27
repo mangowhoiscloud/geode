@@ -8,7 +8,10 @@ import logging
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.hooks import RuntimeEventBus
 
 from core.extensions import (
     ExtensionDecision,
@@ -37,28 +40,11 @@ log = logging.getLogger(__name__)
 ADAPTER_ONLY_MCP_SERVERS = _ADAPTER_ONLY_MCP_SERVERS
 _GLOBAL_DOTENV_PATH = GLOBAL_ENV_FILE
 
-_mcp_hooks: Any = None
 
-
-def set_mcp_hooks(hooks: Any) -> None:
-    """Inject HookSystem for MCP server lifecycle events."""
-    global _mcp_hooks
-    _mcp_hooks = hooks
-
-
-def clear_mcp_hooks(expected: Any) -> bool:
-    """Clear the binding only when it still points at ``expected``."""
-    global _mcp_hooks
-    if _mcp_hooks is not expected:
-        return False
-    _mcp_hooks = None
-    return True
-
-
-def _fire_mcp_hook(event: Any, data: dict[str, Any]) -> None:
+def _fire_mcp_hook(hooks: RuntimeEventBus | None, event: Any, data: dict[str, Any]) -> None:
     from core.hooks.dispatch import fire_hook
 
-    fire_hook(_mcp_hooks, event, data)
+    fire_hook(hooks, event, data)
 
 
 class MCPServerManager:
@@ -69,6 +55,8 @@ class MCPServerManager:
         config_path: Path | None = None,
         *,
         extension_policy: ExtensionPolicy | None = None,
+        hooks: RuntimeEventBus | None = None,
+        process_signals: bool = True,
     ) -> None:
         path = config_path or (get_project_root() / ".claude" / "mcp_servers.json")
         self._catalog = MCPConfigCatalog(
@@ -76,7 +64,7 @@ class MCPServerManager:
             global_env_path=lambda: _GLOBAL_DOTENV_PATH,
             project_root=lambda: get_project_root(),
         )
-        self._trace = MCPTraceStore(lambda event, data: _fire_mcp_hook(event, data))
+        self._trace = MCPTraceStore(lambda event, data: _fire_mcp_hook(hooks, event, data))
         self._pool = MCPConnectionPool(
             self._catalog,
             client_factory=lambda **kwargs: StdioMCPClient(**kwargs),
@@ -94,7 +82,7 @@ class MCPServerManager:
             get_client=lambda name: self._get_client(name),
             respawn=lambda name: self._respawn_after_death(name),
         )
-        self._lifecycle = MCPLifecycle(lambda: _is_main_thread())
+        self._lifecycle = MCPLifecycle(lambda: process_signals and _is_main_thread())
 
     @property
     def server_count(self) -> int:
@@ -102,13 +90,14 @@ class MCPServerManager:
 
     @property
     def connected_count(self) -> int:
-        return len(self._pool.clients)
+        return sum(1 for client in list(self._pool.clients.values()) if client.is_connected())
 
     def startup(
         self,
         *,
         on_progress: Callable[[int, int, str], None] | None = None,
     ) -> int:
+        self._lifecycle.shutdown_called = False
         if not self._catalog.servers:
             self.load_config()
         connected = self._connect_all(on_progress=on_progress)
@@ -119,10 +108,10 @@ class MCPServerManager:
     def shutdown(self) -> None:
         if self._lifecycle.shutdown_called:
             return
-        self._lifecycle.shutdown_called = True
         log.info("MCP shutdown initiated")
         self.close_all()
         self._uninstall_signal_handlers()
+        self._lifecycle.shutdown_called = True
         log.info("MCP shutdown complete")
 
     def load_config(self) -> int:
@@ -236,6 +225,7 @@ class MCPServerManager:
         return self._pool.connect_all(connector=self._get_client, on_progress=on_progress)
 
     def _get_client(self, server_name: str) -> StdioMCPClient | None:
+        self._lifecycle.shutdown_called = False
         return self._pool.get_client(server_name)
 
     def _respawn_after_death(self, server_name: str) -> StdioMCPClient | None:

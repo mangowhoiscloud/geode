@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from core.config.policy_source import PolicySourcePaths
+from core.llm.adapters._capability_impls import openai_effort_kwargs
 from core.llm.adapters._openai_common import (
+    _is_openai_strict_compatible,
     build_async_openai_client,
     build_chat_completion_kwargs,
+    get_openai_model_spec,
     translate_chat_response,
 )
 from core.llm.adapters.base import (
@@ -18,9 +23,13 @@ from core.llm.adapters.base import (
     AdapterCallRequest,
     AdapterCallResult,
     EnvironmentReport,
+    Message,
+    TextCompletionResult,
 )
+from core.llm.errors import LLMRequestValidationError
 from core.llm.loop_affinity import LoopAffineClientCache
 from core.llm.providers.openrouter import to_openrouter_model_id
+from core.llm.routing import resolve_routing
 
 log = logging.getLogger(__name__)
 
@@ -109,17 +118,39 @@ class OpenRouterPaygAdapter:
     provider: str = "openrouter"
     source: str = SOURCE_PAYG
     billing_type: AdapterBillingType = AdapterBillingType.CREDITS
+    supports_text_completion: bool = True
     _clients: LoopAffineClientCache = field(
         default_factory=lambda: LoopAffineClientCache("openrouter-payg"),
         init=False,
         repr=False,
     )
 
-    def _get_client(self) -> Any:
+    routing_sources: PolicySourcePaths | None = field(default=None, repr=False)
+
+    def _credential(self, model: str = "") -> tuple[str, str, str]:
+        """Read the selected PAYG key, endpoint and non-secret provenance."""
         from core.config import settings
         from core.llm.registry import get_provider_spec
 
-        api_key = settings.openrouter_api_key
+        spec = get_provider_spec(self.provider)
+        if spec is None:
+            raise RuntimeError("PAYG provider composition is not registered")
+        base_url = spec.default_base_url
+        target = resolve_routing(
+            model,
+            provider=self.provider,
+            source=self.source,
+            base_url=base_url,
+            sources=self.routing_sources,
+        )
+        if target is not None:
+            return target.profile.key, target.base_url, f"auth profile:{target.profile.name}"
+        return settings.openrouter_api_key, base_url, "settings.openrouter_api_key"
+
+    def _get_client(self, model: str = "") -> Any:
+        from core.llm.registry import get_provider_spec
+
+        api_key, base_url, _ = self._credential(model)
         if not api_key:
             raise RuntimeError(
                 "OpenRouterPaygAdapter: OPENROUTER_API_KEY not set. "
@@ -132,14 +163,59 @@ class OpenRouterPaygAdapter:
         return self._clients.get(
             lambda: build_async_openai_client(
                 api_key,
-                base_url=spec.default_base_url,
+                base_url=base_url,
                 default_headers=headers,
+            ),
+            identity=hashlib.sha256(f"{base_url}\0{api_key}".encode()).hexdigest(),
+        )
+
+    async def acomplete_text(
+        self,
+        prompt: str,
+        *,
+        system: str = "",
+        model: str = "",
+        max_tokens: int = 1024,
+        effort: str | None = None,
+    ) -> TextCompletionResult:
+        result = await self.acomplete(
+            AdapterCallRequest(
+                model=model,
+                messages=(Message(role="user", content=prompt),),
+                system_prompt=system,
+                max_tokens=max_tokens,
+                effort=effort or "",
             )
         )
+        return TextCompletionResult(text=result.text, usage=result.usage)
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         model = to_openrouter_model_id(req.model)
-        extra_body = _openrouter_extra_body(req.provider_options)
+        if req.max_tokens <= 0:
+            raise LLMRequestValidationError("OpenRouter max_tokens must be positive")
+        extra_body = _openrouter_extra_body(req.provider_options) or {}
+        openai_spec = (
+            get_openai_model_spec(model.removeprefix("openai/"))
+            if model.startswith("openai/")
+            else None
+        )
+        if req.effort and openai_spec and openai_spec.reasoning_effort_values is not None:
+            extra_body.update(openai_effort_kwargs(model.removeprefix("openai/"), req.effort))
+        if openai_spec and not openai_spec.accepts_temperature:
+            if req.temperature not in (None, 1.0):
+                raise LLMRequestValidationError(
+                    f"OpenRouter temperature is unsupported for {model!r}"
+                )
+            # The relay does not advertise Platform's effort=none sampling exception.
+            # Omit GEODE's default sampling value; preserve the selected effort.
+            req = replace(req, temperature=None)
+        from core.agent.cognitive_state_ctx import get_session_id
+
+        session_id = req.metadata.get("session_id") or get_session_id()
+        if isinstance(session_id, str) and session_id:
+            # Remote affinity must follow the logical session, not changing
+            # system text or an SDK client's transport lifetime.
+            extra_body["session_id"] = "geode-" + hashlib.sha256(session_id.encode()).hexdigest()
         kwargs = build_chat_completion_kwargs(
             req,
             model=model,
@@ -147,8 +223,61 @@ class OpenRouterPaygAdapter:
             adapter_name=self.name,
             extra_body=extra_body,
         )
+        if req.response_schema is not None:
+            if req.response_schema.get("type") != "object" or "anyOf" in req.response_schema:
+                raise LLMRequestValidationError(
+                    "OpenRouter response_schema requires an object root without anyOf"
+                )
+            policy = extra_body.setdefault("provider", {})
+            if policy.get("require_parameters") is False:
+                raise LLMRequestValidationError(
+                    "OpenRouter response_schema requires provider.require_parameters=true"
+                )
+            policy["require_parameters"] = True
+            kwargs["extra_body"] = extra_body
+            kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": str(req.response_schema.get("title") or "response"),
+                    "strict": _is_openai_strict_compatible(req.response_schema),
+                    "schema": req.response_schema,
+                },
+            }
+        if model.startswith("anthropic/claude-"):
+            from core.llm.adapters._anthropic_common import _cache_shaped_system
+            from core.llm.providers.anthropic import (
+                apply_messages_cache_control,
+                validate_cache_controls,
+            )
+
+            messages = kwargs["messages"]
+            if req.system_prompt:
+                messages[0]["content"] = _cache_shaped_system(req.system_prompt)
+            # Chat carries the system marker inside messages; reserve only
+            # tool slots here to avoid counting the same system marker twice.
+            reserved = validate_cache_controls(messages=[], tools=kwargs.get("tools"))
+            kwargs["messages"] = apply_messages_cache_control(
+                messages, reserved_breakpoints=reserved
+            )
+            validate_cache_controls(messages=kwargs["messages"], tools=kwargs.get("tools"))
+        elif (
+            model.startswith("openai/")
+            and get_openai_model_spec(model.removeprefix("openai/")).supports_explicit_prompt_cache
+        ):
+            from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
+
+            static, boundary, dynamic = req.system_prompt.partition(PROMPT_CACHE_BOUNDARY)
+            if boundary and static.strip():
+                kwargs["messages"][0]["content"] = [
+                    {
+                        "type": "text",
+                        "text": static,
+                        "prompt_cache_breakpoint": {"mode": "explicit"},
+                    },
+                    {"type": "text", "text": boundary + dynamic},
+                ]
         try:
-            response = await self._get_client().chat.completions.create(**kwargs)
+            response = await self._get_client(req.model).chat.completions.create(**kwargs)
         except Exception as exc:
             log.warning(
                 "openrouter-payg: request failed model=%s error_type=%s",
@@ -168,9 +297,8 @@ class OpenRouterPaygAdapter:
         )
 
     def test_environment(self) -> EnvironmentReport:
-        from core.config import settings
-
-        if not settings.openrouter_api_key:
+        api_key, _, _ = self._credential()
+        if not api_key:
             return EnvironmentReport(
                 ok=False,
                 checks=(("openrouter_api_key", "missing"),),
@@ -178,7 +306,7 @@ class OpenRouterPaygAdapter:
             )
         return EnvironmentReport(
             ok=True,
-            checks=(("openrouter_api_key", f"set ({len(settings.openrouter_api_key)} chars)"),),
+            checks=(("openrouter_api_key", f"set ({len(api_key)} chars)"),),
         )
 
 

@@ -262,15 +262,21 @@ class SharedServices:
         # its separate opt-in; every other headless denial remains enforced.
         bound_tool_plan = self.bound_tool_plan
         profile_denied_tools: frozenset[str] = frozenset()
+        from core.llm.routing import infer_source
+
         provider = _resolve_provider(settings.model)
+        source = infer_source(
+            provider,
+            model=settings.model,
+            sources=(self.policy_sources or {}).get("provider_routing"),
+        )
         if bound_tool_plan is not None:
             from core.agent.loop._tool_factory import project_bound_tool_plan
-            from core.llm.adapters._source_inference import infer_source
 
             bound_tool_plan = project_bound_tool_plan(
                 bound_tool_plan,
                 provider=provider,
-                source=infer_source(provider),
+                source=source,
                 policy_sources=self.policy_sources,
             )
             from core.tools.policy import apply_profile_policy, load_profile_policy
@@ -363,6 +369,7 @@ class SharedServices:
                 time_budget_s=time_budget,
                 cost_budget=self._cost_budget,
                 effort=settings.agentic_effort,
+                source=source,
                 system_suffix=system_suffix,
                 allowed_tool_names=allowed_tool_names,
                 session_id=session_id,

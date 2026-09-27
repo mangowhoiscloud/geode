@@ -10,6 +10,8 @@ lenses + judge selection, exposed as ``delegate_task``'s opt-in
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import itertools
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,9 +23,14 @@ from core.agent.candidate_sampling import (
     DIVERSITY_LENSES,
     MAX_BEST_OF,
     CandidateVerdict,
+    fallback_index,
     judge_candidates,
     lensed_description,
 )
+
+# sha256("b") = 3e23e816... < sha256("a") = ca978112..., so the
+# content-addressed fallback over ["a", "b"] is index 1, not position 0.
+_AB_FALLBACK = 1
 
 # ---------------------------------------------------------------------------
 # Diversity lenses
@@ -110,8 +117,9 @@ def test_judge_selects_winner(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_judge_decline_falls_back_observably(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_judge_dispatch(monkeypatch, _judge_response(None))
     verdict = asyncio.run(judge_candidates("t", ["a", "b"], model="m"))
-    assert verdict.winner_index == 0
+    assert verdict.winner_index == _AB_FALLBACK == fallback_index(["a", "b"])
     assert "declined" in verdict.judge_error
+    assert "content-addressed" in verdict.reason
 
 
 @pytest.mark.parametrize(
@@ -132,7 +140,7 @@ def test_judge_provider_json_input(
     _patch_judge_dispatch(monkeypatch, _judge_response(payload))
     verdict = asyncio.run(judge_candidates("t", ["a", "b"], model="m"))
     if expected is None:
-        assert verdict.winner_index == 0
+        assert verdict.winner_index == _AB_FALLBACK
         assert verdict.judge_error
     else:
         assert verdict == expected
@@ -141,15 +149,17 @@ def test_judge_provider_json_input(
 def test_judge_out_of_range_index_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_judge_dispatch(monkeypatch, _judge_response({"winner_index": 9, "reason": "x"}))
     verdict = asyncio.run(judge_candidates("t", ["a", "b"], model="m"))
-    assert verdict.winner_index == 0
+    assert verdict.winner_index == _AB_FALLBACK
     assert "out of range" in verdict.judge_error
 
 
 def test_judge_bool_index_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
     """bool is an int subclass — True must not select candidate 1."""
     _patch_judge_dispatch(monkeypatch, _judge_response({"winner_index": True, "reason": "x"}))
-    verdict = asyncio.run(judge_candidates("t", ["a", "b"], model="m"))
-    assert verdict.winner_index == 0
+    # ["b", "a"] puts the content-addressed fallback at index 0, so an
+    # accepted True (== 1) would be distinguishable from the fallback.
+    verdict = asyncio.run(judge_candidates("t", ["b", "a"], model="m"))
+    assert verdict.winner_index == 0 == fallback_index(["b", "a"])
     assert "non-integer" in verdict.judge_error
 
 
@@ -161,8 +171,72 @@ def test_judge_llm_failure_never_raises(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(cs, "resolve_for", lambda _p, _s: SimpleNamespace())
     monkeypatch.setattr(cs, "_resolve_provider", lambda _m: "anthropic")
     verdict = asyncio.run(judge_candidates("t", ["a", "b"], model="m"))
-    assert verdict.winner_index == 0
+    assert verdict.winner_index == _AB_FALLBACK
     assert "judge call failed" in verdict.judge_error
+
+
+def test_fallback_index_is_content_addressed() -> None:
+    texts = ["alpha", "beta", "gamma", "delta"]
+    keys = [hashlib.sha256(text.encode("utf-8")).hexdigest() for text in texts]
+    assert fallback_index(texts) == keys.index(min(keys))
+    assert cs.candidate_content_key("alpha") == keys[0]
+    # Identical texts are equivalent content: the lowest index wins.
+    duplicate = texts[keys.index(min(keys))]
+    assert fallback_index(["zeta", duplicate, duplicate]) == 1
+    assert fallback_index([]) == 0
+    assert fallback_index(["\ud800 lone surrogate", "valid"]) in {0, 1}
+
+
+def _patch_failure_path(monkeypatch: pytest.MonkeyPatch, path: str) -> None:
+    monkeypatch.setattr(cs, "resolve_for", lambda _p, _s: SimpleNamespace())
+    monkeypatch.setattr(cs, "_resolve_provider", lambda _m: "anthropic")
+    payloads: dict[str, Any] = {
+        "declined": None,
+        "non_integer": {"winner_index": "1", "reason": "x"},
+        "bool": {"winner_index": True, "reason": "x"},
+        "out_of_range": {"winner_index": 7, "reason": "x"},
+        "negative": {"winner_index": -1, "reason": "x"},
+    }
+
+    async def _dispatch(models: list[str], _do_call: Any) -> tuple[Any, str | None]:
+        if path == "call_error":
+            raise RuntimeError("adapter down")
+        if path == "no_response":
+            return None, None
+        return _judge_response(payloads[path]), models[0]
+
+    monkeypatch.setattr(cs, "call_with_failover", _dispatch)
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["call_error", "no_response", "declined", "non_integer", "bool", "out_of_range", "negative"],
+)
+@pytest.mark.parametrize(
+    "texts", [["alpha", "beta", "gamma", "delta"], ["same", "same", "other", "fourth"]]
+)
+def test_every_failure_path_selects_the_same_text_under_permutation(
+    monkeypatch: pytest.MonkeyPatch, path: str, texts: list[str]
+) -> None:
+    """R4: a failed judge must not favour whichever candidate is listed first."""
+    _patch_failure_path(monkeypatch, path)
+    expected = min(texts, key=lambda text: hashlib.sha256(text.encode()).hexdigest())
+    selected: set[str] = set()
+    for permutation in itertools.permutations(texts):
+        verdict = asyncio.run(judge_candidates("t", list(permutation), model="m"))
+        assert verdict.judge_error, "every fallback must stay observable"
+        assert "content-addressed" in verdict.reason
+        selected.add(permutation[verdict.winner_index])
+    assert selected == {expected}
+
+
+def test_no_response_after_failover_is_not_reported_as_declined(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_failure_path(monkeypatch, "no_response")
+    verdict = asyncio.run(judge_candidates("t", ["a", "b"], model="m"))
+    assert verdict.winner_index == _AB_FALLBACK
+    assert verdict.judge_error == "judge call failed: no response after failover"
 
 
 # ---------------------------------------------------------------------------

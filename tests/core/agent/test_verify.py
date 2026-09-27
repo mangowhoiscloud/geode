@@ -392,11 +392,13 @@ def test_effective_mode_off_passthrough(monkeypatch: pytest.MonkeyPatch) -> None
 def test_lifecycle_finalize_records_verify(monkeypatch: pytest.MonkeyPatch) -> None:
     """The production finalization path records the built-in verdict."""
     from core.agent.loop import _lifecycle
+    from core.config.session import SessionModelConfig
 
     result = _make_result(text="", tool_calls=[])  # rule-based: empty_turn
     loop = SimpleNamespace(
         _hook_registry=HookRegistry(),
         model="gpt-6-astra",
+        _model_settings=SessionModelConfig(model="gpt-6-astra", effort="high", source="payg"),
         _verify_root_user_input="Return an observed result.",
         _call_llm=AsyncMock(
             return_value=SimpleNamespace(

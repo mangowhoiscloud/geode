@@ -44,6 +44,12 @@ def _bound_builder(**_kwargs):
 
 _TEST_WORKER_MODULE = "core.worker"
 
+_NATIVE_COMPUTER_MODELS = (
+    ("claude-sonnet-4-5", "computer_20250124"),
+    ("claude-opus-5", "computer_20251124"),
+    ("claude-opus-5-5", "computer_toolset_20260801"),
+)
+
 
 class TestSessionMode:
     """SessionMode enum values and completeness."""
@@ -488,12 +494,15 @@ class TestSharedServicesCreateSession:
             {},
         )
 
+    @pytest.mark.parametrize(("model", "computer_type"), _NATIVE_COMPUTER_MODELS)
     @pytest.mark.parametrize(
         ("mode", "computer_visible"),
         [(SessionMode.DAEMON, False), (SessionMode.REPL, True)],
     )
     def test_session_denial_reaches_native_computer_wire(
         self,
+        model: str,
+        computer_type: str,
         mode: SessionMode,
         computer_visible: bool,
         monkeypatch: pytest.MonkeyPatch,
@@ -516,6 +525,7 @@ class TestSharedServicesCreateSession:
                     stop_reason="completed",
                 )
 
+        monkeypatch.setattr(settings, "model", model)
         monkeypatch.setattr(settings, "gateway_allow_computer_use", False)
         services = SharedServices(
             bound_tool_plan=_bound_plan("keep"),
@@ -538,10 +548,14 @@ class TestSharedServicesCreateSession:
 
         tools = captured.get("tools", [])
         assert isinstance(tools, list)
-        assert any(tool.get("name") == "computer" for tool in tools) is computer_visible
+        native_types = {tool_type for _, tool_type in _NATIVE_COMPUTER_MODELS}
+        advertised_types = [tool.get("type") for tool in tools if tool.get("type") in native_types]
+        assert advertised_types == ([computer_type] if computer_visible else [])
 
+    @pytest.mark.parametrize("model", [model for model, _ in _NATIVE_COMPUTER_MODELS])
     def test_session_without_computer_handler_never_advertises_native_computer(
         self,
+        model: str,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from core.config import settings
@@ -562,6 +576,7 @@ class TestSharedServicesCreateSession:
                     stop_reason="completed",
                 )
 
+        monkeypatch.setattr(settings, "model", model)
         monkeypatch.setattr(settings, "gateway_allow_computer_use", False)
         services = SharedServices(bound_tool_plan=_bound_plan("keep"))
         with patch("core.config.reload_settings_from_disk"):
@@ -581,7 +596,8 @@ class TestSharedServicesCreateSession:
 
         tools = captured.get("tools", [])
         assert isinstance(tools, list)
-        assert not any(tool.get("name") == "computer" for tool in tools)
+        native_types = {tool_type for _, tool_type in _NATIVE_COMPUTER_MODELS}
+        assert not any(tool.get("type") in native_types for tool in tools)
 
     def test_system_suffix_passed(self, services: SharedServices) -> None:
         _, loop = services.create_session(SessionMode.DAEMON, system_suffix="gateway instructions")

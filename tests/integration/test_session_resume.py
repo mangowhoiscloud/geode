@@ -226,6 +226,7 @@ class TestCheckpointSaveFromAgenticLoop:
         cp = SessionCheckpoint(session_dir=session_dir)
         state = cp.load(loop._session_id)
         assert state is not None
+        assert state.model_settings == loop._model_settings
         assert state.cognitive_state["goal"] == "hello"
         assert state.cognitive_state["round_count"] == 1
         assert state.cognitive_state["last_action"] == "tools: read"

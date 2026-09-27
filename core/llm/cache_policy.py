@@ -4,21 +4,10 @@ Mutator picks how many trailing-message ``cache_control`` breakpoints to
 apply on Anthropic API calls (the ``n_breakpoints`` argument to
 :func:`core.llm.providers.anthropic.apply_messages_cache_control`).
 
-**Trade-off**:
-
-- Higher ``n_breakpoints`` (up to 3) — more turns of the rolling history
-  window are cached → higher cache-hit rate on long multi-turn loops.
-  But each breakpoint carries a ``$0.10/MTok`` overhead on the cached
-  block whether the call hits or misses the cache.
-- Lower (0-1) — fewer breakpoints, lower per-call overhead, lower cache
-  hit rate. Right choice for short tasks where the history doesn't
-  amortize the overhead.
-
-Cache hits reduce per-call cost and latency. This used to target the
-``ux_means`` fitness axis (``token_cost_norm`` + ``latency_norm``); that
-axis was removed in PR-MARGIN-FITNESS-SCALE (2026-05-30) — fitness is now
-pure Petri dim aggregate, so this remains a cost/latency knob with no
-dedicated fitness lever.
+Breakpoints themselves have no fee. They choose which prefixes are written
+and can later be reused; token writes and reads use their documented tariffs.
+The useful count depends on stable content and the provider lookback window,
+not an assumed fixed per-breakpoint overhead.
 
 **SoT schema** (모든 field optional):
 
@@ -53,7 +42,7 @@ log = logging.getLogger(__name__)
 _FIELD_MESSAGES_BREAKPOINTS = "messages_breakpoints"
 
 # Anthropic의 4-breakpoint hard cap minus 1 for the system block — agentic
-# adapter spends 1-2 on the static system prefix (STATIC + DYNAMIC split).
+# adapter spends one on the static system prefix.
 _MAX_BREAKPOINTS = 3
 _MIN_BREAKPOINTS = 0
 

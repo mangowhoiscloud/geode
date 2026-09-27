@@ -93,14 +93,36 @@ edge, and the warning plus its pinned test keep the edge visible.
 
 ## What the machine state contains
 
-A checkpoint is a COMPLETE machine snapshot (v0.99.328 contract):
-conversation messages (SQLite SoT), `cognitive_state`, model/provider,
-and `loop_guards` — the guard counters the conversation does not carry
-(overthinking streak, LLM-failure counter, diversity tracker,
-`ConvergenceDetector`, low-confidence replan arm). The single resume
-surgery is `AgenticLoop.restore_from_checkpoint(state)`; `apply_guard_state`
-uses replacement semantics so a legacy checkpoint resets — never
-inherits — a reused loop's counters.
+A checkpoint retains conversation messages (SQLite SoT), `cognitive_state`,
+model/provider compatibility metadata, and `loop_guards` — the counters the
+conversation does not carry. New checkpoints also store `model_settings`, the
+same bounded, non-secret `SessionModelConfig` used by the live loop. It includes
+the concrete source, native effort and auxiliary model policy; no credentials,
+whole-Settings snapshot or workspace/instruction copy is stored.
+
+IPC, gateway and serve-owned Goal continuation validate/adopt that record through
+`apply_session_model_config(..., reason="resume")` before replacing history,
+restoring machine identity or reopening the checkpoint. This path never invokes
+model-switch compaction or appends a switch acknowledgement. Worker resume builds
+its loop and tool projection from the same saved record, validates admission,
+then publishes history and reopens. Rejected worker admission does not mark the
+historical checkpoint as an execution error.
+
+An absent `model_settings` field is an explicit legacy case: keep the currently
+validated selection rather than combine an old model with today's source/effort.
+A present malformed record is rejected, including explicit null. IPC returns
+`model_config_origin: checkpoint|current` and the actual applied `model_config`;
+the thin client updates its displayed selection from that response. Existing
+model/provider metadata alone is not sufficient to reconstruct historical routing.
+
+Fresh child requests carry the same record through ToolContext → SubAgentManager
+→ WorkerRequest → AgenticLoopConfig. Explicit task model/effort/source and an
+AgentDefinition's model keep their existing precedence; otherwise the parent
+selection and auxiliary policy survive the subprocess boundary. Saved-record
+resume takes precedence over fresh-request defaults. `restore_from_checkpoint`
+still owns machine identity and guard restoration; legacy guard counters reset
+rather than inheriting another session's state. These ordering guarantees do not
+roll back external effects or make all stores one transaction.
 
 ## Read path (deterministic precedence)
 

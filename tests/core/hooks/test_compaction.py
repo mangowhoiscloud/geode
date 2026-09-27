@@ -51,13 +51,14 @@ class TestBuildSummaryInput:
 
 
 # ---------------------------------------------------------------------------
-# compact_conversation — skip for Anthropic
+# compact_conversation — native histories retain their provider-owned summary
 # ---------------------------------------------------------------------------
 
 
 class TestCompactConversation:
-    def test_anthropic_skip(self):
+    def test_native_anthropic_history_skip(self):
         msgs = [{"role": "user", "content": "hi"}] * 20
+        msgs.append({"role": "assistant", "content": [{"type": "compaction", "content": "native"}]})
         result, did_compact = asyncio.run(
             compact_conversation(msgs, provider="anthropic", model="claude-opus-4-6")
         )

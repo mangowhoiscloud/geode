@@ -86,7 +86,7 @@ def test_context_management_injected_for_supported_model() -> None:
     assert "compact-2026-01-12" in beta
 
 
-def test_context_management_absent_for_unsupported_model() -> None:
+def test_haiku_supports_context_editing_without_compaction() -> None:
     kwargs = build_create_kwargs(
         AdapterCallRequest(
             model="claude-haiku-4-5",
@@ -95,7 +95,10 @@ def test_context_management_absent_for_unsupported_model() -> None:
             max_tokens=64,
         )
     )
-    assert "context_management" not in (kwargs.get("extra_body") or {})
+    assert kwargs["extra_body"]["context_management"]["edits"] == [
+        {"type": "clear_tool_uses_20250919", "keep": {"type": "tool_uses", "value": 5}}
+    ]
+    assert "compact-2026-01-12" not in kwargs["extra_headers"]["anthropic-beta"]
 
 
 def test_beta_merge_never_clobbers_existing_tokens() -> None:
@@ -130,9 +133,14 @@ def test_native_web_tools_injected_when_opted_in(monkeypatch: pytest.MonkeyPatch
     from core.config import settings
 
     monkeypatch.setattr(settings, "anthropic_native_web_tools", True, raising=False)
-    names = [t.get("name") for t in build_create_kwargs(_tool_req())["tools"]]
+    tools = build_create_kwargs(_tool_req())["tools"]
+    names = [t.get("name") for t in tools]
     assert "web_search" in names and "web_fetch" in names
     assert names.count("web_search") == 1, "dedup by name"
+    assert {t["type"] for t in tools if "type" in t} == {
+        "web_search_20260318",
+        "web_fetch_20260318",
+    }
 
     # A tool-free completion stays tool-free even when opted in.
     bare = build_create_kwargs(_req("s"))
@@ -159,8 +167,25 @@ def test_native_web_tools_respect_explicit_allowlist(monkeypatch: pytest.MonkeyP
     assert "web_search" not in names
 
 
+@pytest.mark.parametrize("model", ["claude-opus-5", "claude-opus-5-5"])
+def test_hosted_fetch_requires_published_model_support(
+    model: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dataclasses import replace
+
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "anthropic_native_web_tools", True)
+    req = _tool_req(model)
+    names = [t.get("name") for t in build_create_kwargs(req)["tools"]]
+    assert "web_search" in names
+    assert "web_fetch" not in names
+    denied = replace(req, denied_tool_names=frozenset({"web_search"}))
+    assert "web_search" not in [t.get("name") for t in build_create_kwargs(denied)["tools"]]
+
+
 def test_native_web_tools_skipped_on_unsupported_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``web_*_20260209`` 400s on models outside the documented set — the
+    """Hosted web tools stay off for models outside the documented set — the
     budget-lane haiku must never receive it."""
     from core.config import settings
 

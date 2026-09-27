@@ -45,13 +45,6 @@ def test_codex_oauth_builder_pins_max_retries_zero() -> None:
     )
 
 
-def test_legacy_glm_provider_singleton_pins_max_retries_zero() -> None:
-    src = (Path(__file__).resolve().parents[3] / "core" / "llm" / "providers" / "glm.py").read_text(
-        encoding="utf-8"
-    )
-    assert "max_retries=0" in src
-
-
 def test_anthropic_adapter_keeps_max_retries_zero() -> None:
     """Parity pin — Anthropic adapter had this invariant from day 1
     (``_anthropic_common.py:60``). A future refactor that drops it would

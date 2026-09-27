@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import Mock
 
+import pytest
 from core.cli.tool_handlers import _build_system_handlers
 
 
 def _handler():
-    handlers = _build_system_handlers(force_dry=True, readiness=MagicMock(), mcp_manager=None)
+    handlers = _build_system_handlers(mcp_manager=None)
     return handlers["manage_login"]
 
 
@@ -46,7 +47,7 @@ class TestToolDefinition:
 
 class TestHandlerWired:
     def test_handler_is_registered(self) -> None:
-        handlers = _build_system_handlers(force_dry=True, readiness=MagicMock(), mcp_manager=None)
+        handlers = _build_system_handlers(mcp_manager=None)
         assert "manage_login" in handlers
 
     def test_status_returns_structured_snapshot(self) -> None:
@@ -97,18 +98,22 @@ class TestRouting:
         # Redirect auth.toml to tmp so the test never touches ~/.geode
         monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
 
-        # Pre-register a plan via the registry so set-key has a target
+        # Store a plan so set-key has a target
+        from core.auth.auth_toml import save_auth_toml
         from core.llm.strategies.plan_registry import get_plan_registry
         from core.llm.strategies.plans import GLM_CODING_TIERS
 
         registry = get_plan_registry()
         registry.add(GLM_CODING_TIERS["lite"])
+        save_auth_toml()
 
         result = _handler()(subcommand="set-key", args="glm-coding-lite zai-xx-1234567890")
         assert result["status"] == "ok"
 
         bound = [p for p in result["profiles"] if p["plan_id"] == "glm-coding-lite"]
         assert bound, "set-key did not bind a profile to the plan"
+        assert "zai-xx-1234567890" in (tmp_path / "auth.toml").read_text()
+        assert "zai-xx-1234567890" not in json.dumps(result)
 
 
 class TestVerdictPerOwnProvider:
@@ -156,3 +161,22 @@ class TestVerdictPerOwnProvider:
         finally:
             for name in ("openai-codex:user", "openai:work", "anthropic:work"):
                 store.remove(name)
+
+
+class TestOutcome:
+    def test_rejected_change_is_a_tool_error(self) -> None:
+        result = _handler()(subcommand="use", args="ghost-plan")
+        assert result.get("status") != "ok"
+        assert "Unknown plan: ghost-plan" in result["error"]
+
+    @pytest.mark.parametrize("subcommand", ["openai", "anthropic", "add"])
+    def test_interactive_login_is_returned_to_the_user(
+        self, subcommand: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        run = Mock(side_effect=AssertionError("interactive login must not start in the daemon"))
+        monkeypatch.setattr("core.cli.commands.login.run_login", run)
+
+        result = _handler()(subcommand=subcommand)
+
+        assert f"/login {subcommand}" in result["error"]
+        run.assert_not_called()

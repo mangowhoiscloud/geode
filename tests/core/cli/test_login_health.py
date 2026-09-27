@@ -17,6 +17,7 @@ Contracts pinned here:
 3. ``/login health`` with no profile lists every profile's verdict.
 4. ``/login health <profile>`` narrows to that profile.
 5. ``/login health <unknown>`` prints a warning + how-to-list hint.
+   Each profile is judged once, against its own provider.
 6. Empty store path prints the "no profiles" hint, never crashes.
 """
 
@@ -123,6 +124,9 @@ def test_login_health_lists_all_profiles(capsys: pytest.CaptureFixture[str]) -> 
     out = capsys.readouterr().out
     assert "anthropic:work" in out
     assert "openai:payg" in out
+    # Each profile is judged once, against its own provider.
+    assert out.count("anthropic:work") == 1 and out.count("openai:payg") == 1
+    assert "provider_mismatch" not in out
     # Section header surfaces so the operator knows what the block means.
     assert "Eligibility" in out
 
@@ -150,11 +154,11 @@ def test_login_health_narrows_to_single_profile(capsys: pytest.CaptureFixture[st
 
 
 def test_login_health_unknown_profile_warns(capsys: pytest.CaptureFixture[str]) -> None:
-    from core.cli.commands.login import _login_health
+    from core.cli.commands.login import cmd_login
 
     store = _build_store()
     with _patch_health(store):
-        _login_health("does-not-exist")
+        assert cmd_login("health does-not-exist") is False
 
     out = capsys.readouterr().out
     assert "No profile named" in out

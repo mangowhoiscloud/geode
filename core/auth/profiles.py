@@ -149,11 +149,21 @@ class ProfileStore:
         # entry from X1 is automatically the first element of any list
         # set here (``set_auth_order`` keeps the two surfaces in sync).
         self._auth_order: dict[str, list[str]] = {}  # provider → ordered profile names
+        # File snapshots own only the objects they published. A replacement
+        # supplied by another owner is never deleted by a later file reload.
+        self._file_profiles: dict[str, dict[str, AuthProfile]] = {}
+        self._file_preferences: dict[str, tuple[dict[str, str], dict[str, list[str]]]] = {}
 
-    def add(self, profile: AuthProfile) -> None:
-        """Add a profile. If no active profile exists for the provider, set it."""
+    def add(self, profile: AuthProfile, *, activate: bool = False) -> None:
+        """Add a profile, optionally recording an explicit operator selection.
+
+        Hydration preserves existing preferences. Explicit credential entry uses
+        the same pin/order owner as selecting an existing profile.
+        """
         self._profiles[profile.name] = profile
-        if profile.provider not in self._active:
+        if activate:
+            self.set_active(profile.name)
+        elif profile.provider not in self._active:
             self._active[profile.provider] = profile.name
 
     def get(self, name: str) -> AuthProfile | None:
@@ -170,6 +180,11 @@ class ProfileStore:
                 self._active[profile.provider] = remaining[0].name
             else:
                 self._active.pop(profile.provider, None)
+        order = [item for item in self.get_auth_order(profile.provider) if item != name]
+        if self.get_auth_order(profile.provider):
+            self.set_auth_order(profile.provider, order)
+        elif self._pinned_active.get(profile.provider) == name:
+            self._pinned_active.pop(profile.provider, None)
         return True
 
     def list_all(self) -> list[AuthProfile]:
@@ -290,6 +305,8 @@ class ProfileStore:
             raise KeyError(f"Profile '{name}' not found")
         self._active[profile.provider] = name
         self._pinned_active[profile.provider] = name
+        # A new explicit single-profile choice supersedes the previous order.
+        self._auth_order.pop(profile.provider, None)
 
     def get_active(self, provider: str) -> AuthProfile | None:
         """Get the active profile for a provider.
@@ -363,11 +380,70 @@ class ProfileStore:
         self._auth_order.pop(provider, None)
         self._pinned_active.pop(provider, None)
 
+    def auth_preferences(self) -> tuple[dict[str, str], dict[str, list[str]]]:
+        """Return explicit choices, excluding automatic active-profile tracking."""
+        return dict(self._pinned_active), {p: list(names) for p, names in self._auth_order.items()}
+
+    def file_profiles(self, source: str) -> dict[str, AuthProfile]:
+        """Return this file's last published objects for identity-safe reconciliation."""
+        return dict(self._file_profiles.get(source, {}))
+
+    def remember_auth_file(
+        self,
+        source: str,
+        profiles: list[AuthProfile],
+        pins: dict[str, str],
+        orders: dict[str, list[str]],
+    ) -> None:
+        """Record ownership only after a successful file write or publication."""
+        names = {profile.name for profile in profiles}
+        for other, entries in self._file_profiles.items():
+            if other != source:
+                for name in names:
+                    entries.pop(name, None)
+        for other, (other_pins, other_orders) in self._file_preferences.items():
+            if other != source:
+                for provider in pins.keys() | orders.keys():
+                    other_pins.pop(provider, None)
+                    other_orders.pop(provider, None)
+        self._file_profiles[source] = {profile.name: profile for profile in profiles}
+        self._file_preferences[source] = (dict(pins), {p: list(v) for p, v in orders.items()})
+
+    def reconcile_auth_file(
+        self,
+        source: str,
+        profiles: list[AuthProfile],
+        pins: dict[str, str],
+        orders: dict[str, list[str]],
+    ) -> None:
+        """Publish a validated candidate without mutating borrowed profile objects."""
+        previous = self._file_profiles.get(source, {})
+        names = {profile.name for profile in profiles}
+        old_pins, old_orders = self._file_preferences.get(source, ({}, {}))
+        for provider, name in old_pins.items():
+            if self._pinned_active.get(provider) == name:
+                self._pinned_active.pop(provider, None)
+        for provider, order in old_orders.items():
+            if self._auth_order.get(provider) == order:
+                self._auth_order.pop(provider, None)
+        for name, profile in previous.items():
+            if name not in names and self.get(name) is profile:
+                self.remove(name)
+        for profile in profiles:
+            self.add(profile)
+        for name in pins.values():
+            self.set_active(name)
+        for provider, order in orders.items():
+            self.set_auth_order(provider, order)
+        self.remember_auth_file(source, profiles, pins, orders)
+
     def clear(self) -> None:
         self._profiles.clear()
         self._active.clear()
         self._pinned_active.clear()
         self._auth_order.clear()
+        self._file_profiles.clear()
+        self._file_preferences.clear()
 
     def __len__(self) -> int:
         return len(self._profiles)

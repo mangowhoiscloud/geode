@@ -16,7 +16,11 @@ OAuth device-code prompt 가 IPC 모드에서 안 보이던 v0.51 버그의 근�
 from __future__ import annotations
 
 import inspect
+import subprocess
+import sys
+import textwrap
 from importlib import import_module
+from pathlib import Path
 
 from core.cli.routing import COMMAND_REGISTRY, CommandSpec, RunLocation, lookup
 
@@ -46,6 +50,50 @@ def test_thin_commands_handler_paths_are_importable() -> None:
         module_path, attr = spec.handler_path.split(":")
         mod = import_module(module_path)
         assert hasattr(mod, attr), f"{name}: {spec.handler_path} not importable"
+
+
+def test_daemon_handler_imports_stay_outside_cli(tmp_path: Path) -> None:
+    # String-based handlers bypass static import contracts. A fresh interpreter
+    # catches direct and transitive CLI imports without already-loaded modules.
+    script = textwrap.dedent("""
+        import importlib.abc
+        import importlib
+        import sys
+
+        sys.path.insert(0, sys.argv[1])
+
+        class RejectCLI(importlib.abc.MetaPathFinder):
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname == "core.cli" or fullname.startswith("core.cli."):
+                    raise AssertionError(f"Daemon handler imported CLI: {fullname}")
+
+        sys.meta_path.insert(0, RejectCLI())
+        from core.slash_routing import COMMAND_REGISTRY, RunLocation
+
+        checked = []
+        for name, spec in COMMAND_REGISTRY.items():
+            if spec.location is RunLocation.THIN or not spec.handler_path:
+                continue
+            module, attribute = spec.handler_path.split(":")
+            assert callable(getattr(importlib.import_module(module), attribute)), name
+            checked.append(name)
+        assert checked, "No daemon handler import was verified"
+        """)
+    result = subprocess.run(  # noqa: S603 - isolated interpreter, tracked registry
+        [sys.executable, "-I", "-B", "-c", script, str(Path(__file__).resolve().parents[3])],
+        cwd=tmp_path,
+        env={
+            "GEODE_HOME": str(tmp_path),
+            "GEODE_STATE_ROOT": str(tmp_path / "state"),
+            "GEODE_AUTH_TOML": str(tmp_path / "auth.toml"),
+            "CODEX_HOME": str(tmp_path / "codex"),
+        },
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_thin_commands_do_not_depend_on_ipc_writer() -> None:

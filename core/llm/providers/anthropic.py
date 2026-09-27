@@ -304,18 +304,10 @@ def _emit_retry_activity(
 def _static_system_cache_control() -> dict[str, str]:
     """``cache_control`` for the stable static system prefix (agentic adapter).
 
-    The static prefix — everything before ``<dynamic_context>`` — is
-    byte-identical across every turn of an agentic loop, so it benefits most
-    from the **1-hour TTL**: GA as of 2026-06, enabled by ``ttl: "1h"`` on the
-    ephemeral ``cache_control`` (no beta header). The 2x write premium amortizes
-    after ~3 cache reads, which any multi-turn loop clears immediately. The
-    5-minute default would expire between turns whenever tool execution exceeds
-    5 min, forcing a fresh write every resume.
-
-    Kill switch: ``settings.prompt_cache_extended_ttl`` (set False → 5-minute
-    ephemeral default). One-shot call shapes (``system_with_cache``) and the
-    dynamic / no-boundary blocks keep the 5-minute default — only the reused
-    static prefix earns the extended TTL.
+    The stable prefix can request a 1-hour TTL for gaps longer than five
+    minutes. Frequent hits already refresh the default 5-minute TTL for free;
+    the 2x write price is justified by reuse cadence, not the number of turns.
+    ``settings.prompt_cache_extended_ttl=False`` selects the 5-minute default.
 
     SDK: ``anthropic.types.CacheControlEphemeralParam`` exposes optional ``ttl``
     (verified 0.100.0).
@@ -329,43 +321,110 @@ def _static_system_cache_control() -> dict[str, str]:
 
 
 # Anthropic allows up to 4 cache_control breakpoints per request.  The agentic
-# adapter already uses 1-2 on the system block (STATIC/DYNAMIC split).  Keep 3
+# adapter uses one on the static system block. Keep 3
 # slots for the messages array — Hermes "system_and_3" strategy.
 MAX_MESSAGE_CACHE_BREAKPOINTS = 3
 
-# Anthropic's cache lookup walks back at most this many content blocks from a
-# breakpoint to find a prior cached entry (verified against the prompt-caching
-# guide, 2026-06). When a single agentic turn appends more than this many
-# tool_use/tool_result blocks, breakpoints clustered on the last few messages
-# all fall outside the window on the next turn → silent full miss. Spread the
-# message breakpoints ~``_CACHE_BREAKPOINT_BLOCK_STRIDE`` blocks apart so the
-# newest breakpoint can always reach a prior entry. ref:
-# https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+# Keep the existing conservative raw-block spacing heuristic. The current API
+# groups consecutive tool_use/tool_result blocks into one lookup position;
+# this local count is not a cache-hit guarantee or a tokenizer simulation.
 _CACHE_LOOKBACK_BLOCKS = 20
 _CACHE_BREAKPOINT_BLOCK_STRIDE = 18  # under the 20-block window, with margin
 
 
 def _content_block_count(content: Any) -> int:
-    """Number of content blocks a message contributes to the lookback window."""
+    """Raw block count used by the conservative placement heuristic."""
     if isinstance(content, list):
         return len(content)
     return 1 if content else 0
 
 
-def _is_markable(content: Any) -> bool:
-    """Whether :func:`apply_messages_cache_control` would actually attach a
-    breakpoint to this message (mirrors its empty-text guards).
+# SDK ContentBlockParam / BetaContentBlockParam members accepting cache_control. Opaque thinking
+# blocks stay in replay unchanged and are cached only behind an eligible block.
+_CACHEABLE_BLOCK_TYPES = frozenset(
+    {
+        "text",
+        "image",
+        "document",
+        "search_result",
+        "tool_use",
+        "tool_result",
+        "server_tool_use",
+        "web_search_tool_result",
+        "web_fetch_tool_result",
+        "code_execution_tool_result",
+        "bash_code_execution_tool_result",
+        "text_editor_code_execution_tool_result",
+        "tool_search_tool_result",
+        "container_upload",
+        "mid_conv_system",
+        "compaction",
+        "advisor_tool_result",
+        "mcp_tool_use",
+        "mcp_tool_result",
+    }
+)
 
-    An empty message is skipped at mark time, so selecting it as a breakpoint
-    target would waste a slot (and, for the anchor, leave the newest turn
-    uncached). Only markable messages should be selected.
-    """
+
+def _is_cacheable_block(block: Any) -> bool:
+    return (
+        isinstance(block, dict)
+        and isinstance(block.get("type"), str)
+        and block.get("type") in _CACHEABLE_BLOCK_TYPES
+        and (block.get("type") != "text" or bool(block.get("text")))
+    )
+
+
+def _is_markable(content: Any) -> bool:
+    """Whether the final block accepts a new marker without changing replay."""
     if isinstance(content, str):
         return bool(content)
-    if isinstance(content, list) and content:
-        last = content[-1]
-        return not (isinstance(last, dict) and last.get("type") == "text" and not last.get("text"))
-    return False
+    return bool(
+        isinstance(content, list)
+        and content
+        and _is_cacheable_block(content[-1])
+        and "cache_control" not in content[-1]
+    )
+
+
+def validate_cache_controls(
+    *,
+    messages: list[dict[str, Any]],
+    system: Any = "",
+    tools: list[dict[str, Any]] | None = None,
+) -> int:
+    """Validate explicit markers in wire order and return occupied slots."""
+    from core.llm.errors import LLMRequestValidationError
+
+    blocks = [(block, False) for block in tools or []]
+    if isinstance(system, list):
+        blocks.extend((block, True) for block in system)
+    for message in messages:
+        content = message.get("content")
+        if isinstance(content, list):
+            blocks.extend((block, True) for block in content)
+    count = 0
+    seen_short_ttl = False
+    for block, require_content_type in blocks:
+        if not isinstance(block, dict) or "cache_control" not in block:
+            continue
+        control = block["cache_control"]
+        if require_content_type and not _is_cacheable_block(block):
+            raise LLMRequestValidationError("Anthropic cache_control requires a cacheable block")
+        if (
+            not isinstance(control, dict)
+            or control.get("type") != "ephemeral"
+            or control.get("ttl", "5m") not in ("5m", "1h")
+        ):
+            raise LLMRequestValidationError("Invalid Anthropic cache_control type or TTL")
+        is_short = control.get("ttl", "5m") == "5m"
+        if seen_short_ttl and not is_short:
+            raise LLMRequestValidationError("Anthropic 1h cache markers must precede 5m markers")
+        seen_short_ttl |= is_short
+        count += 1
+    if count > 4:
+        raise LLMRequestValidationError("Anthropic supports at most 4 cache breakpoints")
+    return count
 
 
 def _select_breakpoint_targets(
@@ -375,11 +434,10 @@ def _select_breakpoint_targets(
     """Indices of non-system messages to mark with ``cache_control``.
 
     Short histories (total content blocks ≤ ``_CACHE_LOOKBACK_BLOCKS``) keep the
-    original "last ``n`` adjacent messages" behaviour — the whole history fits in
-    one lookback window, so spreading buys nothing. Long histories spread the
-    breakpoints ~``_CACHE_BREAKPOINT_BLOCK_STRIDE`` blocks apart (anchoring the
-    newest markable message) so each breakpoint stays within the 20-block window
-    of its predecessor across turns.
+    original "last ``n`` adjacent messages" behaviour. Long histories spread
+    breakpoints ~``_CACHE_BREAKPOINT_BLOCK_STRIDE`` raw blocks apart, anchoring
+    the newest markable message. Provider lookup positions can group content
+    differently, so this placement heuristic cannot guarantee reuse across turns.
 
     Distance is measured in **content blocks from each message's final block**
     (where the breakpoint physically sits), counting every block in between —
@@ -428,21 +486,14 @@ def apply_messages_cache_control(
     messages: list[dict[str, Any]],
     *,
     n_breakpoints: int = MAX_MESSAGE_CACHE_BREAKPOINTS,
+    reserved_breakpoints: int = 1,
 ) -> list[dict[str, Any]]:
     """Return a copy of *messages* with ephemeral cache_control on up to
     *n_breakpoints* non-system messages' final content block.
 
-    Placement (see :func:`_select_breakpoint_targets`): short histories keep
-    the original "last ``n`` adjacent messages" strategy; long histories
-    (> 20 content blocks) spread the breakpoints ~18 blocks apart so the newest
-    one stays within Anthropic's 20-block lookback window of its predecessor
-    across turns — otherwise a single tool-heavy turn pushes every clustered
-    breakpoint out of the window and the whole rolling cache silently misses.
-
-    Mirrors Hermes ``apply_anthropic_cache_control`` (system_and_3) and
-    OpenClaw ``applyAnthropicCacheControlToMessages``.  Used by the agentic
-    adapter to extend prompt caching from the system block to the rolling
-    history window, reducing cost in long multi-turn loops.
+    Short histories select adjacent trailing blocks; long histories retain
+    the existing raw-block spacing heuristic. Provider prefix equality, token
+    minimums, TTL and lookup rules determine actual hits.
 
     The function is non-mutating: returns a new list with shallow copies of
     the targeted messages and their last block.  String-content messages are
@@ -451,16 +502,44 @@ def apply_messages_cache_control(
     Args:
         messages: Anthropic-format messages list (role + content).
         n_breakpoints: Max number of trailing non-system messages to mark.
-            Default 3 (Anthropic's 4-breakpoint cap minus 1 for system).
+            Default 3; existing markers consume this request's remaining slots.
+        reserved_breakpoints: Slots already occupied by system/tools (default 1).
 
     Returns:
         New messages list ready for ``messages.create``.
     """
-    if not messages or n_breakpoints <= 0:
+    from core.llm.errors import LLMRequestValidationError
+
+    if not isinstance(n_breakpoints, int) or isinstance(n_breakpoints, bool) or n_breakpoints < 0:
+        raise LLMRequestValidationError("Anthropic message cache budget must be nonnegative")
+    if (
+        not isinstance(reserved_breakpoints, int)
+        or isinstance(reserved_breakpoints, bool)
+        or not 0 <= reserved_breakpoints <= 4
+    ):
+        raise LLMRequestValidationError("Anthropic reserved cache slots must be between 0 and 4")
+    occupied = validate_cache_controls(messages=messages)
+    if occupied + reserved_breakpoints > 4:
+        raise LLMRequestValidationError("Anthropic supports at most 4 cache breakpoints")
+    available = min(n_breakpoints, 4 - reserved_breakpoints - occupied)
+    if not messages or available == 0:
         return list(messages)
 
     out: list[dict[str, Any]] = list(messages)
-    targets = _select_breakpoint_targets(out, n_breakpoints)
+    # New markers use 5m: do not insert one ahead of an explicit 1h marker.
+    last_long_ttl = max(
+        (
+            i
+            for i, message in enumerate(messages)
+            if isinstance(message.get("content"), list)
+            and any(
+                isinstance(block, dict) and block.get("cache_control", {}).get("ttl") == "1h"
+                for block in message["content"]
+            )
+        ),
+        default=-1,
+    )
+    targets = [i for i in _select_breakpoint_targets(out, available) if i >= last_long_ttl]
 
     for i in targets:
         msg = dict(out[i])
@@ -557,50 +636,23 @@ _API_ALLOWED_KEYS = frozenset(
     {"name", "description", "input_schema", "cache_control", "type", "strict", "defer_loading"}
 )
 
-# Models that support server-side context management + compaction beta.
-# Haiku 4.5 (2025-10-01) predates compact-2026-01-12 and rejects the beta
-# header with a 400 whose message contains "context" — misclassified as
-# context_overflow.  Only 1M-context models are known to support it.
-# Opus 4.8 (claude-opus-4-8) ships with a 1M context window and Claude Code
-# runs it under server-side compaction, so it inherits the same contract.
-# PR-DRIFT-ANCHORS (2026-06-10) — set contents live in the single SoT
-# ``core/llm/model_capabilities.py``; this alias keeps the local name the
-# rest of this module (and its tests) read.
+# Derived from the same verified records used by the adapter and effort picker.
 _CONTEXT_MGMT_MODELS: frozenset[str] = ANTHROPIC_CONTEXT_MGMT_MODELS
-
-# Adaptive thinking models (Opus 4.6+).  Sampling parameters
-# (temperature/top_p/top_k) are rejected with 400 starting from Opus 4.7
-# (https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-7
-# #sampling-parameters-removed) and are also rejected by Opus 4.6 when
-# adaptive thinking is on.  Omit them entirely on these models.
-# Opus 4.8 continues the 4.6+ adaptive-thinking contract (the effort knob —
-# incl. ``xhigh`` — only exists for adaptive models, and this session runs
-# claude-opus-4-8 under adaptive thinking; see _XHIGH_EFFORT_MODELS note).
 _ADAPTIVE_MODELS: frozenset[str] = ANTHROPIC_ADAPTIVE_MODELS
-
-# v0.56.0 R4-mini — Opus 4.7 supports the new ``xhigh`` effort level (one
-# step above ``high``); 4.6 / Sonnet 4.6 reject it with 400. Mirrors
-# Hermes ``anthropic_adapter.py:49-53`` substring-based gate. Anthropic
-# explicitly recommends ``xhigh`` as the starting effort for Opus 4.7
-# coding/agentic workloads (platform.claude.com/docs/en/build-with-claude/
-# effort) — but only the GEODE caller can opt in by setting
-# ``agentic.effort = "xhigh"``; we never auto-upgrade ``high → xhigh``.
-# Opus 4.8 (claude-opus-4-8) accepts ``xhigh`` — confirmed live: Claude Code
-# configures this model with "xhigh effort" by default (the /model selector
-# emits it). ctx7 platform docs only index up to the 4.6/4.7 family pages, so
-# the 4.8-specific acceptance is grounded by the running harness rather than a
-# doc page.
 _XHIGH_EFFORT_MODELS: frozenset[str] = ANTHROPIC_XHIGH_MODELS
 
 
 def _supports_xhigh_effort(model: str) -> bool:
-    """Return True if the model accepts ``output_config.effort = "xhigh"``."""
-    return model in _XHIGH_EFFORT_MODELS
+    """Return whether the verified model accepts xhigh effort."""
+    from core.llm.model_capabilities import get_anthropic_model_spec
+
+    spec = get_anthropic_model_spec(model)
+    return spec is not None and "xhigh" in spec.effort_values
 
 
 _ANTHROPIC_NATIVE_TOOLS: list[dict[str, Any]] = [
-    {"type": "web_search_20260209", "name": "web_search", "allowed_callers": ["direct"]},
-    {"type": "web_fetch_20260209", "name": "web_fetch", "allowed_callers": ["direct"]},
+    {"type": "web_search_20260318", "name": "web_search", "allowed_callers": ["direct"]},
+    {"type": "web_fetch_20260318", "name": "web_fetch", "allowed_callers": ["direct"]},
 ]
 
 # Hosted tool-search tool (PR-TOOL-SEARCH-WIRE, 2026-06-13). Official
@@ -732,10 +784,6 @@ def is_computer_use_enabled() -> bool:
 
 # This module is a low-level utility layer (clients, retry, quota, cache
 # helpers, native-tool shaping) consumed by ``core/llm/adapters``.
-# Context management
-# (``_CONTEXT_MGMT_MODELS``) and native web_search/web_fetch injection
-# (``_ANTHROPIC_NATIVE_TOOLS``) — were live-verified on the Messages API
-# (context-mgmt 200 with merged beta tokens; web_search 200 with a real
-# ``server_tool_use`` round) and now run on the live builders in
-# ``core/llm/adapters/_anthropic_common.py``. This module keeps the constants
-# as the low-level SoT.
+# Context management and native web tools are injected by the builders in
+# ``core/llm/adapters/_anthropic_common.py``. The current documented contracts
+# and offline verification boundary live in the provider refresh research note.

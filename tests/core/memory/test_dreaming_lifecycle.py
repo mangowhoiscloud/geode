@@ -246,9 +246,7 @@ def test_cancellation_during_sync_prelude_prevents_dispatch_and_artifact_write(
         return SimpleNamespace(text="synthetic summary")
 
     monkeypatch.setattr("core.llm.adapters.dispatch.complete_text_via_adapters", dispatch)
-    monkeypatch.setattr(
-        "core.llm.adapters._source_inference.infer_source", lambda _p: "subscription"
-    )
+    monkeypatch.setattr("core.llm.routing.infer_source", lambda _p, **kwargs: "subscription")
     if stage == "artifact_preparation":
 
         def estimate(_messages: Any) -> int:
@@ -299,9 +297,7 @@ def test_actual_dream_result_retains_bounded_storage_error_for_drain(
         return SimpleNamespace(text="synthetic summary")
 
     monkeypatch.setattr("core.llm.adapters.dispatch.complete_text_via_adapters", dispatch)
-    monkeypatch.setattr(
-        "core.llm.adapters._source_inference.infer_source", lambda _p: "subscription"
-    )
+    monkeypatch.setattr("core.llm.routing.infer_source", lambda _p, **kwargs: "subscription")
     owner = DreamingService(session_manager=Session())
     thread = owner.dream_session_background("synthetic", model="synthetic")
     thread.join(1)

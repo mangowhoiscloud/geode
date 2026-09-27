@@ -1139,7 +1139,6 @@ class TestAgenticLoop:
 
         with (
             patch.object(loop, "_call_llm", side_effect=fail_with_step),
-            patch.object(_context, "aggressive_context_recovery", new=AsyncMock(return_value=0)),
             patch("asyncio.sleep", new=AsyncMock(return_value=None)),
         ):
             result = asyncio.run(loop.arun("test"))
@@ -1159,12 +1158,12 @@ class TestAgenticLoop:
             for payload in retry_payloads
         } == {("turn-retry:step-1", 4, 2)}
 
-    def test_context_recovery_does_not_reset_retry_budget(
+    def test_transient_retry_does_not_compact_history(
         self,
         context: ConversationContext,
         executor: ToolExecutor,
     ) -> None:
-        """Successful compaction stays inside the configured total-attempt budget."""
+        """Unrelated transient failures preserve history and stop at the retry cap."""
         from unittest.mock import AsyncMock
 
         from core.agent.loop import _context
@@ -1173,13 +1172,14 @@ class TestAgenticLoop:
         failed_call = AsyncMock(return_value=None)
         with (
             patch.object(loop, "_call_llm", new=failed_call),
-            patch.object(_context, "aggressive_context_recovery", new=AsyncMock(return_value=1)),
+            patch.object(_context, "aggressive_context_recovery", new=AsyncMock()) as recovery,
             patch("asyncio.sleep", new=AsyncMock(return_value=None)),
         ):
             result = asyncio.run(loop.arun("test"))
 
         assert result.error == "model_action_required"
         assert failed_call.await_count == loop._LLM_RETRY_CAP
+        recovery.assert_not_awaited()
 
     def test_context_preserved(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test that conversation context is maintained across runs."""
@@ -1434,7 +1434,7 @@ class TestAgenticLoop:
         loop = AgenticLoop(context, executor, quiet=True)
 
         mock_response = MagicMock()
-        mock_response.usage = MagicMock(input_tokens=500, output_tokens=200, reported_cost_usd=None)
+        mock_response.usage = ResponseUsage(input_tokens=500, output_tokens=200)
 
         loop._track_usage(mock_response)
 
@@ -1465,7 +1465,7 @@ class TestAgenticLoop:
         hooks.register(HookEvent.COST_LIMIT_EXCEEDED, record, name="cost_limit")
         loop = AgenticLoop(context, executor, hooks=hooks, quiet=True)
         mock_response = MagicMock()
-        mock_response.usage = MagicMock(
+        mock_response.usage = ResponseUsage(
             input_tokens=500_000,
             output_tokens=200_000,
             thinking_tokens=0,
@@ -1514,10 +1514,11 @@ class TestAgenticLoop:
         loop = AgenticLoop(context, executor, quiet=True)
 
         mock_response = MagicMock()
-        mock_response.usage = MagicMock(
+        mock_response.usage = ResponseUsage(
             input_tokens=100,
             output_tokens=50,
             cache_creation_tokens=20,
+            cache_creation_1h_tokens=10,
             cache_read_tokens=80,
             thinking_tokens=10,
             reported_cost_usd=None,
@@ -1529,6 +1530,7 @@ class TestAgenticLoop:
         assert last.input_tokens == 100
         assert last.output_tokens == 50
         assert last.cache_creation_tokens == 20
+        assert last.cache_creation_1h_tokens == 10
         assert last.cache_read_tokens == 80
         assert last.thinking_tokens == 10
 

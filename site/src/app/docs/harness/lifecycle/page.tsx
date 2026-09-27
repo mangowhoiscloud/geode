@@ -70,6 +70,12 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유`}</pre>
               명시적으로 주입되어야 합니다. ContextVar는 요청 식별, 진단,
               요청 로컬 상태와 캐시에만 사용합니다.
             </p>
+            <p>
+              생성 중 실패하면 그 단계까지 만든 자원을 정리하고 원래 오류를
+              전달합니다. 물리적 turn의 세션 식별과 어댑터 사용량 상태는 최종
+              관측을 마친 뒤 이전 바인딩으로 복원되며, 실패나 취소에도 같은
+              정리 경로를 거칩니다.
+            </p>
 
             <h2>데몬이 호스팅하는 것</h2>
             <ul>
@@ -85,11 +91,26 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유`}</pre>
               상태를 저장한 뒤 연결을 닫습니다 (<code>core/cli/typer_serve.py</code>).
             </p>
             <pre>{`1. RuntimeEvent.SHUTDOWN_STARTED 발화
-2. IPC 소켓 닫기 (신규 클라이언트 차단)
+2. IPC 신규 연결 차단 + 게이트웨이 입력 정지
 3. 활성 세션 drain (최대 30초)
-4. 스케줄러 save + stop
-5. MCP 종료
-6. 게이트웨이 정지`}</pre>
+4. CLI poller + webhook 종료
+5. 런타임 소유 작업·watcher·스케줄러·MCP 종료
+6. 훅과 이벤트 저장소 닫기`}</pre>
+            <p>
+              스케줄러 저장 실패도 나머지 자원 정리를 막지 않습니다. 런타임은
+              불완전한 종료를 재시도할 수 있게 유지하고, 데몬은 종료 실패를
+              표시합니다. 실행 자체가 정상 반환했어도 정리가 끝나지 않으면
+              종료 코드는 1입니다. 기존 실행 오류나 취소가 있다면 그 원인이
+              정리 오류로 바뀌지 않습니다.
+            </p>
+            <p>
+              각 런타임은 별도 MCP manager를 만들고 알림·캘린더·게이트웨이에
+              같은 인스턴스를 전달합니다. 다른 런타임의 생성 실패나 종료가
+              이 연결을 닫지 않으며, 런타임 manager는 프로세스 신호 핸들러를
+              변경하지 않습니다. 종료에 실패한 연결은 재시도를 위해 보존합니다.
+              연결 생성 중 실패해도 같은 소유자가 정리하며, 자식 프로세스의
+              종료를 확인한 뒤 파이프와 작업 디렉터리를 해제합니다.
+            </p>
 
             <h2>실패 모드</h2>
             <table>
@@ -185,6 +206,12 @@ geode serve (daemon)  ←  one GeodeRuntime owns everything`}</pre>
               ContextVars are limited to request identity, diagnostics,
               request-local state, and caches.
             </p>
+            <p>
+              Failed construction releases the resources created so far and
+              preserves the original error. Each physical turn restores its
+              caller&apos;s session attribution and adapter usage state after
+              final observation, including failure and cancellation paths.
+            </p>
 
             <h2>What the daemon hosts</h2>
             <ul>
@@ -201,11 +228,27 @@ geode serve (daemon)  ←  one GeodeRuntime owns everything`}</pre>
               (<code>core/cli/typer_serve.py</code>).
             </p>
             <pre>{`1. fire RuntimeEvent.SHUTDOWN_STARTED
-2. close the IPC socket (no new clients)
+2. stop IPC admission and gateway ingress
 3. drain active sessions (up to 30s)
-4. scheduler save + stop
-5. MCP shutdown
-6. gateway stop`}</pre>
+4. close CLI poller and webhook server
+5. close runtime-owned workers, watcher, scheduler and MCP
+6. close hooks and event storage`}</pre>
+            <p>
+              Scheduler persistence failure does not skip the remaining cleanup.
+              The runtime keeps incomplete teardown retryable, and the daemon
+              reports it as incomplete. When execution otherwise returns normally,
+              incomplete cleanup exits with code 1. An existing execution error
+              or cancellation remains the primary failure.
+            </p>
+            <p>
+              Each runtime owns a separate MCP manager and passes that instance
+              to its notification, calendar and gateway consumers. Another
+              runtime&apos;s construction failure or shutdown cannot close these
+              connections. Runtime managers leave process signal handlers alone;
+              failed connection closes remain available for retry.
+              The same owner retains failed connection attempts. Child exit must
+              be confirmed before releasing pipes and the working directory.
+            </p>
 
             <h2>Failure modes</h2>
             <table>

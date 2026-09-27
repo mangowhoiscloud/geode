@@ -11,15 +11,10 @@ future drift can't re-hardcode a single tier.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 from core.auth.jwt_claims import decode_jwt_claims
-from core.auth.oauth_login import (
-    _plan_type_from_token,
-    chatgpt_plan_label,
-    resolve_local_chatgpt_plan_label,
-)
+from core.auth.oauth_login import _plan_type_from_token, chatgpt_plan_label
 
 
 class TestChatgptPlanLabel:
@@ -127,70 +122,3 @@ class TestDecodeJwtClaims:
 
     def test_single_segment_token(self) -> None:
         assert decode_jwt_claims("only-one-segment") == {}
-
-
-class TestResolveLocalLabel:
-    """Live resolution from disk — covers both Codex CLI auth.json and
-    GEODE profile store paths. Uses monkeypatch + tmp_path to keep the
-    test deterministic (operator's actual JWT remains untouched)."""
-
-    def test_falls_back_to_generic_when_no_token_anywhere(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """No codex auth file + no GEODE profile → generic label."""
-        # Re-route HOME so the real ~/.codex/auth.json isn't read
-        monkeypatch.setenv("HOME", str(tmp_path))
-        monkeypatch.delenv("CODEX_HOME", raising=False)
-        # Hard-fail the profile store import so source-2 falls through
-        import core.wiring.container
-
-        monkeypatch.setattr(
-            core.wiring.container,
-            "ensure_profile_store",
-            lambda: (_ for _ in ()).throw(RuntimeError("test: container disabled")),
-        )
-        assert resolve_local_chatgpt_plan_label() == "ChatGPT subscription"
-
-    @pytest.mark.parametrize("override", [False, True])
-    def test_reads_codex_cli_auth_json(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, override: bool
-    ) -> None:
-        """Synthetic codex auth.json with prolite plan → resolved label."""
-        import base64
-
-        payload = {
-            "https://api.openai.com/auth": {
-                "chatgpt_plan_type": "prolite",
-            }
-        }
-        encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
-        fake_token = f"hdr.{encoded}.sig"
-        codex_dir = tmp_path / ("custom-codex" if override else ".codex")
-        codex_dir.mkdir()
-        (codex_dir / "auth.json").write_text(
-            json.dumps({"tokens": {"id_token": fake_token}}), encoding="utf-8"
-        )
-        monkeypatch.setenv("HOME", str(tmp_path))
-        monkeypatch.delenv("CODEX_HOME", raising=False)
-        if override:
-            monkeypatch.setenv("CODEX_HOME", str(codex_dir))
-        assert resolve_local_chatgpt_plan_label() == "ChatGPT Pro Lite"
-
-    def test_malformed_codex_auth_falls_through(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """Malformed auth.json must not crash, must fall through to source-2
-        (and from there to generic when container is disabled)."""
-        codex_dir = tmp_path / ".codex"
-        codex_dir.mkdir()
-        (codex_dir / "auth.json").write_text("not json at all", encoding="utf-8")
-        monkeypatch.setenv("HOME", str(tmp_path))
-        monkeypatch.delenv("CODEX_HOME", raising=False)
-        import core.wiring.container
-
-        monkeypatch.setattr(
-            core.wiring.container,
-            "ensure_profile_store",
-            lambda: (_ for _ in ()).throw(RuntimeError("test: container disabled")),
-        )
-        assert resolve_local_chatgpt_plan_label() == "ChatGPT subscription"

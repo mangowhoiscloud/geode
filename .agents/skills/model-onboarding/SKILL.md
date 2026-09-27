@@ -15,13 +15,23 @@ runtime. Establish the current contract for every change:
    exact model ID, API surface, context/output limits, supported controls,
    authentication route, retirement date, and pricing when cost accounting is
    affected. Record the source and retrieval date in the PR.
-3. Separate model capability from account policy and route availability. Do
-   not infer support from a similar model name or an SDK type alone.
+3. Separate model capability, the effective provider/source route, account
+   policy and tool authority. Trace selection through the actual request and
+   durable usage readers, including overrides, model changes and resume when
+   affected. A similar name, SDK type or another billing route is not support.
 4. Add the smallest characterization that fails on a stale ID, missing
    capability, or wrong route. Run provider tests without live calls; live or
    paid probes require explicit user approval.
 5. Update `CHANGELOG.md` and user-facing model docs when behavior changes, then
    follow the repository workflow and GitFlow gates.
+
+Load only the owners affected by the change: the
+[provider grounding reference](../geode-workflow/references/provider-grounding.md)
+for route, context, pricing and cache contracts;
+[lifecycle conventions](../../../docs/architecture/naming-conventions.md#33-construction-and-lifecycle)
+for SDK/resource ownership; and the
+[verification reference](../geode-workflow/references/verification-gates.md#live-tests)
+for authorized live checks. Keep model values in their existing catalog/docs.
 
 For usage/cache field or cost changes, load the
 [usage accounting contract](../../../docs/architecture/usage-accounting.md)

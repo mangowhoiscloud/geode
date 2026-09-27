@@ -108,4 +108,4 @@ def test_local_only_serve_exits_when_cli_socket_cannot_start() -> None:
             timeout=20,
         )
     assert proc.returncode != 0
-    assert "CLI channel failed to start; daemon stopped." in proc.stdout
+    assert "CLI channel failed to start." in proc.stdout

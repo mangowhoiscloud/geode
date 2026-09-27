@@ -23,7 +23,7 @@ the very next ``gpt-5.5`` turn surfaced
    "Switch to a different model with ``/model``" — the wrong action
    (switching model still hits the same depleted bucket).
 
-The fix introduces :func:`core.llm.adapters._source_inference.infer_source`
+The fix introduces :func:`core.llm.routing.infer_source`
 which consults the ``{provider}_credential_source`` setting + ProfileStore
 so OAuth-registered providers promote to ``"subscription"`` by default;
 threads it through the AgenticLoop default + the two hard-coded sub-loops;
@@ -38,7 +38,6 @@ from pathlib import Path
 
 import pytest
 from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
-from core.llm.adapters._source_inference import infer_source
 from core.llm.adapters.base import SOURCE_PAYG, SOURCE_SUBSCRIPTION, AdapterBillingType
 from core.llm.registry import (
     PROVIDER_VARIANTS,
@@ -47,6 +46,7 @@ from core.llm.registry import (
     ProviderSpec,
     TransportSpec,
 )
+from core.llm.routing import infer_source
 
 # ---------------------------------------------------------------------------
 # Layer 1 — infer_source resolution priority
@@ -77,7 +77,7 @@ def _patch_store(monkeypatch: pytest.MonkeyPatch, store: ProfileStore | None) ->
         return store
 
     monkeypatch.setattr(
-        "core.llm.adapters._source_inference.ensure_profile_store",
+        "core.llm.routing.ensure_profile_store",
         _fake,
         raising=False,
     )
@@ -85,6 +85,7 @@ def _patch_store(monkeypatch: pytest.MonkeyPatch, store: ProfileStore | None) ->
     import core.wiring.container as _container
 
     monkeypatch.setattr(_container, "ensure_profile_store", _fake)
+    monkeypatch.setattr(_container, "_profile_store", store)
 
 
 def test_infer_source_explicit_oauth_setting_wins(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -161,14 +162,15 @@ def test_infer_source_auto_with_only_payg_profile_stays_payg(
     assert infer_source("openai") == SOURCE_PAYG
 
 
-def test_infer_source_unknown_provider_falls_back_to_payg(
+def test_unknown_provider_rejects_while_declared_empty_api_route_stays_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Providers GEODE doesn't gate (e.g. glm) keep the historical payg default."""
     _patch_settings(monkeypatch, openai_credential_source="oauth")
-    _patch_store(monkeypatch, None)
+    _patch_store(monkeypatch, _stub_store([]))
     assert infer_source("glm") == SOURCE_PAYG
-    assert infer_source("unknown") == SOURCE_PAYG
+    with pytest.raises(RuntimeError, match="no registered credential route"):
+        infer_source("unknown")
 
 
 def test_infer_source_consumes_credential_route_metadata(
@@ -287,7 +289,7 @@ def test_agentic_loop_default_source_no_longer_payg_literal() -> None:
         "the depleted PAYG endpoint."
     )
     # The inference call must be present.
-    assert "infer_source(loop._provider)" in loop_source, (
+    assert "infer_source( loop._provider, model=loop.model" in " ".join(loop_source.split()), (
         "loop bootstrap no longer consults infer_source — the "
         "credential_source setting + ProfileStore OAuth presence will be "
         "ignored when source is unspecified."
@@ -305,7 +307,7 @@ def test_reflection_node_no_longer_hardcodes_payg() -> None:
         "_reflection.py still hard-codes the payg source — subscription-only "
         "operators reflect through the depleted PAYG endpoint."
     )
-    assert "infer_source(provider)" in reflection_source, (
+    assert "infer_source(provider, model=model)" in reflection_source, (
         "_reflection.py no longer threads infer_source through reflection dispatch."
     )
 
@@ -323,7 +325,7 @@ def test_self_improving_runner_no_longer_hardcodes_payg() -> None:
     assert 'resolve_for(_normalize_provider_for_registry(provider), "payg")' not in runner_source, (
         "runner.py still hard-codes the payg source on the mutator path."
     )
-    assert "infer_source(provider)" in runner_source, (
+    assert "infer_source(provider, model=model)" in runner_source, (
         "runner.py no longer threads infer_source through the mutator dispatch."
     )
 

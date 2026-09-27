@@ -209,8 +209,116 @@ def test_docs_only_owner_checks_do_not_enable_full_runtime_tests() -> None:
     assert docs_step["if"] == "needs.changes.outputs.docs == 'true'"
     assert "scripts/check_official_docs.py --check-map" in docs_step["run"]
     assert "tests/test_workflow_scaffold.py" in docs_step["run"]
-    full_test = next(step for step in jobs["test"]["steps"] if "--cov=core" in step.get("run", ""))
-    assert full_test["if"] == "needs.changes.outputs.code == 'true'"
+    full_test = next(
+        step for step in jobs["test_shards"]["steps"] if "--cov=core" in step.get("run", "")
+    )
+    assert jobs["test_shards"]["if"] == "needs.changes.outputs.full_tests == 'true'"
+    assert "--dist=loadfile" in full_test["run"]
+
+
+_DOCS_ONLY_PATHS = (
+    "README.md",
+    "README.ko.md",
+    "CHANGELOG.md",
+    "CLAUDE.md",
+    "docs/workflow.md",
+    "docs/scaffold-skills.md",
+    "docs/architecture/official-docs-generation.md",
+    "docs/architecture/extensibility-roadmap.md",
+    "site/src/data/geode/sot.ts",
+    "site/src/data/geode/changelog.ts",
+    "site/src/data/geode/architecture-baseline.json",
+    "site/public/llms.txt",
+    "site/public/llms-full.txt",
+)
+_CONFLICT_DOC_PATHS = (
+    "docs/architecture/extensibility-roadmap.md",
+    "site/src/data/geode/architecture-baseline.json",
+    "CHANGELOG.md",
+    "site/src/data/geode/changelog.ts",
+)
+
+
+@pytest.mark.parametrize(
+    ("paths", "full_tests"),
+    [
+        *(([path], False) for path in _DOCS_ONLY_PATHS),
+        (_CONFLICT_DOC_PATHS, False),
+        ((*_CONFLICT_DOC_PATHS, "core/agent/loop/agent_loop.py"), True),
+        *(
+            ([path], True)
+            for path in (
+                "tests/test_workflow_scaffold.py",
+                "scripts/architecture_baseline.py",
+                "pyproject.toml",
+                "uv.lock",
+                ".github/workflows/ci.yml",
+                "site/package-lock.json",
+                "site/src/app/docs/runtime/llm/page.tsx",
+                "AGENTS.md",
+                "GEODE.md",
+                ".geode/skills/reviewer/SKILL.md",
+                ".agents/skills/geode-workflow/SKILL.md",
+                "core/llm/prompts/router.md",
+                "docs/eval/index.json",
+                "docs/architecture/context-var-lifecycles.json",
+                "docs/architecture/new-schema.json",
+                "docs/unknown.md",
+                ".unknown",
+            )
+        ),
+    ],
+)
+def test_full_runtime_tests_skip_only_exact_documentation_paths(
+    paths: tuple[str, ...] | list[str], full_tests: bool
+) -> None:
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    changes = workflow["jobs"]["changes"]
+    step = next(step for step in changes["steps"] if step.get("id") == "filter")
+    assert changes["outputs"]["full_tests"] == "${{ steps.filter.outputs.full_tests }}"
+    assert step["with"]["predicate-quantifier"] == "some-with-excludes"
+    # PR detection must keep the action's complete PR-base API diff.
+    assert "token" not in step["with"]
+    assert step["with"]["base"] == "${{ github.event_name == 'push' && github.event.before || '' }}"
+    filters = yaml.safe_load(step["with"]["filters"])
+    patterns = filters["full_tests"]
+    assert [pattern for pattern in patterns if not pattern.startswith("!")] == ["**"]
+    assert {pattern[1:] for pattern in patterns if pattern.startswith("!")} == set(_DOCS_ONLY_PATHS)
+    # These deliberately exact exclusions need no second glob implementation.
+    actual = any(f"!{path}" not in patterns for path in paths)
+    assert actual is full_tests
+    for path in _DOCS_ONLY_PATHS:
+        assert any(fnmatch.fnmatchcase(path, pattern) for pattern in filters["docs"])
+
+
+def test_documentation_fast_path_keeps_required_jobs_and_owner_checks() -> None:
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    jobs = workflow["jobs"]
+    assert jobs["test"]["name"] == "Test" and jobs["gate"]["name"] == "Gate"
+    assert jobs["test"]["if"] == "${{ always() }}"
+    assert set(jobs["test"]["needs"]) == {"changes", "test_contracts", "test_shards"}
+    for name in ("test_contracts", "test_shards"):
+        assert jobs[name]["if"] == "needs.changes.outputs.full_tests == 'true'"
+    test_steps = jobs["test"]["steps"]
+    assert test_steps[0]["name"] == "Require complete test prerequisites"
+    for step in test_steps[1:]:
+        assert step["if"] == "steps.prerequisites.outputs.full_tests == 'true'"
+    for name, command in (
+        ("Generated architecture baseline", "scripts/architecture_baseline.py --check"),
+        ("Architecture roadmap invariants", "scripts/check_architecture_roadmap.py"),
+    ):
+        step = next(step for step in jobs["lint"]["steps"] if step.get("name") == name)
+        assert step["if"] == "needs.changes.outputs.code == 'true'"
+        assert command in step["run"]
+    filters = yaml.safe_load(
+        next(step for step in jobs["changes"]["steps"] if step.get("id") == "filter")["with"][
+            "filters"
+        ]
+    )
+    assert all(
+        any(fnmatch.fnmatchcase(path, pattern) for pattern in filters["code"])
+        for path in _CONFLICT_DOC_PATHS
+    )
 
 
 def test_petri_bundle_json_parses() -> None:

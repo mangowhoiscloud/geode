@@ -85,6 +85,7 @@ class GoalContinuationHost:
                 return None
 
             from core.agent.conversation import ConversationContext
+            from core.agent.loop._model_switching import apply_session_model_config
             from core.observability.session_metrics import session_metrics_scope
 
             conversation = (
@@ -96,7 +97,6 @@ class GoalContinuationHost:
                 session_id=current.session_id,
                 component="goal_continuation",
             ):
-                conversation.messages = list(state.messages)
                 _, loop = self._services.create_session(
                     self._session_mode,
                     conversation=conversation,
@@ -108,9 +108,12 @@ class GoalContinuationHost:
                     time_budget_override=self._time_budget_s,
                     session_id=current.session_id,
                 )
+                candidate = state.model_settings or loop._model_settings.updated(
+                    {"model": loop.model, "source": loop._source, "effort": loop._effort}
+                )
+                await apply_session_model_config(loop, candidate, reason="resume")
+                conversation.messages = list(state.messages)
                 loop.restore_from_checkpoint(state)
-                if state.model and state.model != loop.model:
-                    await loop.update_model_async(state.model, reason="resume")
                 result = await loop.acontinue_goal(trigger="serve_idle")
             latest = self._goals.get(current.session_id)
             self._remember(latest or current)

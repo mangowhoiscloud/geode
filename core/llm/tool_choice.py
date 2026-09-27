@@ -6,8 +6,12 @@ Different LLM providers expect different ``tool_choice`` shapes:
   ``{"type": "auto"|"any"|"tool"|"none", "name"?: "..."}``
 - **OpenAI Responses API**: string or flat dict.
   ``"auto" | "none" | "required" | {"type": "function", "name": "..."}``
-- **GLM / OpenRouter Chat Completions** (OpenAI-compat): string or nested dict.
+- **Chat Completions wire format**: string or nested dict.
   ``"auto" | "none" | "required" | {"type": "function", "function": {"name": "..."}}``
+
+These are serialization shapes, not capability claims. GLM admission permits
+only automatic selection and enforces no-tool turns by omitting definitions
+in its provider builder.
 
 Prior to v0.93, each adapter inlined its own conversion (anthropic.py:482-484,
 openai.py:507, glm.py:190), which (a) duplicated logic 3× and (b) failed
@@ -81,7 +85,7 @@ def _to_openai(choice: ToolChoice | None) -> str | dict[str, Any] | None:
     return t if isinstance(t, str) else "auto"
 
 
-def _to_glm(choice: ToolChoice | None) -> str | dict[str, Any] | None:
+def _to_chat_completions(choice: ToolChoice | None) -> str | dict[str, Any] | None:
     """Chat Completions nested shape: string or
     ``{"type": "function", "function": {"name": "X"}}``.
     """
@@ -112,5 +116,5 @@ def normalize(provider: str, choice: ToolChoice | None) -> str | dict[str, Any] 
     if p in ("openai", "codex"):
         return _to_openai(choice)
     if p in ("glm", "openrouter"):
-        return _to_glm(choice)
+        return _to_chat_completions(choice)
     return choice

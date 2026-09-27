@@ -32,7 +32,17 @@ class _Services:
 
 
 def _loop(tmp_path: Path) -> Any:
-    from core.config import settings
+    from core.config import _resolve_provider, settings
+    from core.config.session import capture_session_model_config
+    from core.llm.adapters.registry import active_registry_snapshot
+    from core.llm.routing import infer_source
+
+    policy = capture_session_model_config(
+        settings,
+        model=settings.model,
+        effort=settings.agentic_effort,
+        source=infer_source(_resolve_provider(settings.model), model=settings.model),
+    )
 
     plan_payload = json.dumps(
         {
@@ -64,9 +74,14 @@ def _loop(tmp_path: Path) -> Any:
         projection_path=tmp_path / "events.jsonl",
     )
     loop = SimpleNamespace(
-        model=settings.model,
-        _provider="",
-        _source="",
+        model=policy.model,
+        _provider=_resolve_provider(policy.model),
+        _effort=policy.effort,
+        _source=policy.source,
+        _model_settings=policy,
+        _adapter_registry_snapshot=active_registry_snapshot(),
+        _checkpoint=None,
+        executor=SimpleNamespace(_bash=SimpleNamespace(_working_dir=str(Path.cwd()))),
         _session_id="slash-e2e",
         _quiet=True,
         _op_logger=SimpleNamespace(_quiet=True),
@@ -98,6 +113,8 @@ def test_real_slash_input_routes_goal_plan_grill_and_geo(tmp_path: Path) -> None
     client = IPCClient(socket_path)
     try:
         assert client.connect()
+        assert "session_model_config" in client.features
+        assert client.model_config == loop._model_settings.model_dump()
 
         goal_set = client.send_command("/goal", "Ship the GEO path precisely")
         assert goal_set["status"] == "ok"

@@ -43,6 +43,22 @@ def _event_filter_variants(event_filter: str) -> list[str]:
 # v5 (R3.1, 2026-08-21): operational rows gained indexed physical step
 # correlation. Older rows remain readable because the column is additive.
 EVENT_SCHEMA_VERSION = 5
+_EVENT_SCHEMA_FAMILY = "geode.hook-event"
+
+# The reference binds this indexed projection, not raw private payloads or the
+# entire SQLite file. Preserve row versions across additive schema migrations.
+_REFERENCE_COLUMNS = (
+    "id",
+    "schema_version",
+    "session_id",
+    "event",
+    "payload_hash",
+    "turn_id",
+    "step_id",
+    "tool_call_id",
+    "llm_call_id",
+    "llm_attempt_id",
+)
 
 _CREATE_HOOK_EVENTS_TABLE_SQL = """\
 CREATE TABLE IF NOT EXISTS hook_events (
@@ -521,6 +537,69 @@ class HookEventStore:
             raise RuntimeError("HookEventStore is closed")
 
 
+def read_hook_event_references(
+    db_path: Path,
+    session_ids: Sequence[str],
+) -> tuple[dict[str, Any], ...]:
+    """Digest stored hook cohorts by session and actual row schema, read-only.
+
+    Pre-v5 tables have no physical step column; their missing step normalizes
+    to the same empty value that the additive migration supplies. A table
+    without the required correlation/version columns cannot establish a ref.
+    """
+    if not db_path.is_file() or not session_ids:
+        return ()
+    conn = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    try:
+        columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(hook_events)")}
+        if not (set(_REFERENCE_COLUMNS) - {"step_id"}).issubset(columns):
+            return ()
+        query = (
+            "SELECT id, schema_version, session_id, event, payload_hash, turn_id, "
+            "step_id, tool_call_id, llm_call_id, llm_attempt_id "
+            "FROM hook_events WHERE session_id = ? ORDER BY id"
+            if "step_id" in columns
+            else "SELECT id, schema_version, session_id, event, payload_hash, turn_id, "
+            "'' AS step_id, tool_call_id, llm_call_id, llm_attempt_id "
+            "FROM hook_events WHERE session_id = ? ORDER BY id"
+        )
+        references: list[dict[str, Any]] = []
+        for session_id in dict.fromkeys(session_ids):
+            rows = conn.execute(query, (session_id,)).fetchall()
+            cohorts: dict[int, list[dict[str, Any]]] = {}
+            for row in rows:
+                version = row["schema_version"]
+                if type(version) is not int or version <= 0:
+                    raise ValueError("hook event schema_version must be a positive integer")
+                if version >= 5 and "step_id" not in columns:
+                    raise ValueError("hook event schema v5+ requires the step_id column")
+                cohorts.setdefault(version, []).append(dict(row))
+            for version, cohort in cohorts.items():
+                canonical = json.dumps(
+                    cohort,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                    allow_nan=False,
+                ).encode("utf-8")
+                digest = sha256(canonical).hexdigest()
+                references.append(
+                    {
+                        "kind": "runtime_event",
+                        "schema_id": f"{_EVENT_SCHEMA_FAMILY}@{version}",
+                        "authority": "GEODE local runtime hook event store",
+                        "reference": f"hook-events-sha256:{digest}",
+                        "session_id": session_id,
+                        "record_count": len(cohort),
+                        "sha256": digest,
+                    }
+                )
+        return tuple(references)
+    finally:
+        conn.close()
+
+
 def _bounded_payload_json(payload: dict[str, Any], policy: EventRetentionPolicy) -> str:
     bounded = bound_event_payload(payload, policy=policy)
     encoded = json.dumps(
@@ -641,4 +720,5 @@ __all__ = [
     "PersistedHookEvent",
     "bound_event_payload",
     "ensure_event_schema",
+    "read_hook_event_references",
 ]

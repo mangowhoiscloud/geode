@@ -154,6 +154,21 @@ class TestProfileStore:
         assert store.get("test:default") is p
         assert len(store) == 1
 
+    def test_hydration_preserves_pin_and_order_until_explicit_selection(self):
+        store = ProfileStore()
+        first = self._make_profile("a:first")
+        next_profile = self._make_profile("a:next")
+        store.add(first)
+        store.set_auth_order("anthropic", [first.name])
+        store.add(next_profile)
+        assert store.get_pinned_active("anthropic") is first
+        assert store.get_auth_order("anthropic") == [first.name]
+
+        store.add(next_profile, activate=True)
+        assert store.get_active("anthropic") is next_profile
+        assert store.get_pinned_active("anthropic") is next_profile
+        assert store.get_auth_order("anthropic") == []
+
     def test_remove(self):
         store = ProfileStore()
         store.add(self._make_profile())

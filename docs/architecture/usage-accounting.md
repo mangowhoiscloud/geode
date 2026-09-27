@@ -14,7 +14,7 @@ billing store or retroactively repair published benchmark evidence.
 | Producer / owner | Input / output | Cache read / write | Reader |
 |---|---|---|---|
 | OpenAI Responses in [`_openai_common.py`](../../core/llm/adapters/_openai_common.py) | `input_tokens` / `output_tokens` | `input_tokens_details.cached_tokens` / `input_tokens_details.cache_write_tokens` | `UsageSummary` |
-| Anthropic in [`_anthropic_common.py`](../../core/llm/adapters/_anthropic_common.py) | `input_tokens` / `output_tokens` | `cache_read_input_tokens` / `cache_creation_input_tokens` | `UsageSummary` |
+| Anthropic in [`_anthropic_common.py`](../../core/llm/adapters/_anthropic_common.py) | Top-level usage, or complete same-model `iterations` when native compaction occurred | Same authority for cache reads, creation and TTL subsets | `UsageSummary` |
 | [`UsageSummary`](../../core/llm/adapters/base.py) | `input_tokens` / `output_tokens` | `cached_input_tokens` / `cache_write_tokens` | Adapter translation and durable call events; each counter has a presence flag |
 | [`ResponseUsage`](../../core/llm/agentic_response.py), then [`LLMUsage`](../../core/llm/token_tracker.py) | `input_tokens` / `output_tokens` | `cache_read_tokens` / `cache_creation_tokens` | Loop, accumulator, final result, UI |
 | [`UsageRecord`](../../core/llm/usage_store.py) | `in` / `out` | `cache_r` / `cache_w` | Legacy monthly JSONL and usage history |
@@ -24,6 +24,18 @@ billing store or retroactively repair published benchmark evidence.
 The provider's input convention is retained; identical field names do not
 establish identical denominators. Reasoning is an output breakdown, not an
 additional charge. Harbor's cache metric is reads, never reads plus writes.
+
+Anthropic's [threshold-compaction usage contract](https://platform.claude.com/docs/en/build-with-claude/compaction-threshold)
+excludes compaction sampling from top-level usage. When a new compaction
+iteration is present, the adapter aggregates the reported same-model message
+and compaction iterations instead of adding them to the top-level total.
+Requests with a native compaction edit use the SDK beta stream accumulator
+to preserve these iterations for the shared response translator. Other streams
+retain their existing SDK route; complete responses and streams share accounting.
+Replaying an existing compaction block does not itself add another charge.
+Missing iteration fields remain unknown, including thinking and TTL breakdowns;
+unsupported mixed-model usage is not priced under one model's tariff.
+This does not repair historical records or the legacy presence limitations below.
 
 ## Zero, missing, and coverage
 
@@ -53,6 +65,9 @@ additional charge. Harbor's cache metric is reads, never reads plus writes.
   the legacy tracker's accounting for failed attempts.
 - `ResponseUsage`, `LLMUsage` and the legacy JSONL still default or omit zero
   cache fields. They do not preserve field-level absence end to end.
+  Main-loop pricing can therefore remain a partial estimate when cache detail
+  is absent, even though durable token fields retain null. Neither that number
+  nor the legacy zero default establishes complete billed consumption.
 - Harbor joins durable starts/ends by attempt ID within the exact session.
   Complete pairing and reported fields are required for its scoped totals;
   incomplete or missing fields remain null. `*_observed_sum` is partial
@@ -68,8 +83,12 @@ additional charge. Harbor's cache metric is reads, never reads plus writes.
   observation path; parsing a declined or malformed response does not erase
   its usage. Native text/compaction, learning extraction and hosted search
   pass their event bus explicitly to the same observation helper. Capability
-  calls on supported OpenAI reasoning models now carry the inherited effort
-  through the actual request and observation helper. Other capability backends
+  calls on supported OpenAI reasoning models carry the inherited effort
+  through the actual request and observation helper. This includes text calls
+  through the explicit `openrouter/openai/<model>` route: they reuse the
+  OpenRouter completion adapter and retain `openrouter/payg` attribution and
+  provider-reported charge, rather than direct OpenAI billing authority.
+  Other capability backends
   retain their existing policies and unknown effort; no cross-provider effort
   equivalence is claimed. The direct Responses request path retains its
   model-switch clamp; for example, an unsupported `max` on GPT-5.5 can become
@@ -128,12 +147,18 @@ The price catalogue owns exact model aliases and validates finite nonnegative
 rates and positive integer context limits. Above a documented long-context
 threshold, the entire request uses its input/cache and output multipliers;
 the exact threshold remains in the standard tier. These are current standard
-API estimates. Cache-write TTL splits, service tiers, regions and tool fees
-are not retained by the legacy tracker. The 2026-09-24 model and source audit
+API estimates. Known Anthropic 1-hour writes are retained as the optional subset
+`cache_write_1h_tokens` (`cache_creation_1h_tokens` in the loop/tracker and
+`cache_w_1h` in legacy monthly JSONL). The standard 2x input tariff applies to
+that subset; other writes retain the 5-minute tariff. Missing legacy TTL
+splits remain null and use the prior 5-minute estimate, without asserting
+that those writes had a 5-minute TTL. Service tiers, regions and tool fees
+remain outside this estimate. The 2026-09-24 model and source audit
 lives in [the provider inventory](../research/provider-refresh-20260924.md).
 
 `TokenTracker.record()` preserves finite nonnegative `reported_cost_usd`,
-including zero; otherwise it estimates from model prices. Its legacy output
+including zero; otherwise it estimates from model prices. Both paths validate
+the one-hour write subset before updating the accumulator or monthly file. Its legacy output
 does not retain the price revision or which cost source won. API-price
 estimates are not subscription invoices. `UsageRecord.source` identifies a
 producer, not the account's billing route.
@@ -194,6 +219,13 @@ uses the existing response ID for provider correlation and an explicitly sourced
 input-only tariff in USD and US cents. Output tokens remain observed usage even
 when their rate is zero. Derived tariff value, account-credit consumption and
 actual cash billing are separate authorities; missing provider charge stays null.
+
+Activity schema version 11 adds the optional 1-hour write subset to durable
+LLM call usage. Version 10 and earlier rows read it as null; explicit zero is
+preserved. Harbor retains it in each recorded attempt, while its native cache
+metric continues to count reads only. Provider retention is separate from the
+local SDK client lifetime: closing a client does not evict provider prefixes.
+See the [cache lifecycle audit](../research/anthropic-cache-lifecycle-20260924.md).
 
 ## Existing data contracts and publication
 

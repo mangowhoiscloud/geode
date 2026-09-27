@@ -211,6 +211,132 @@ def test_payload_redacts_secrets_and_preserves_typed_tool_arguments(tmp_path: Pa
     encoded = json.dumps(stored.payload)
     assert "sk-secret-value" not in encoded
     assert "REDACTED" in encoded
+    assert stored.payload["_capture_quality"]["content_reduced"] is True
+
+
+@pytest.mark.parametrize(
+    ("payload", "policy"),
+    [
+        ({"content": "x" * 101}, SessionEventPolicy(max_string_chars=100)),
+        ({"authorization": "private"}, SessionEventPolicy()),
+        ({"items": list(range(4))}, SessionEventPolicy(max_collection_items=2)),
+        ({"nested": {"nested": {"value": "x"}}}, SessionEventPolicy(max_depth=2)),
+        ({"content": "x" * 1000}, SessionEventPolicy(max_payload_bytes=200)),
+    ],
+)
+def test_caller_capture_metadata_cannot_hide_real_storage_reductions(
+    tmp_path: Path,
+    payload: dict,
+    policy: SessionEventPolicy,
+) -> None:
+    from core.observability.trajectory import trajectory_from_session, verify_trajectory_integrity
+
+    store = SessionEventStore(tmp_path / "sessions.db", policy=policy)
+    store.append(
+        SessionEventWrite(
+            session_id="s-loss",
+            turn_id="t-loss",
+            kind=SessionEventKind.USER_MESSAGE,
+            payload={**payload, "_capture_quality": {"version": 1, "content_reduced": False}},
+        )
+    )
+    store.append(SessionEventWrite(session_id="s-loss", kind=SessionEventKind.SESSION_ENDED))
+    trajectory = trajectory_from_session("s-loss", db_path=tmp_path / "sessions.db")
+    assert not verify_trajectory_integrity(trajectory)["replay_complete"]
+
+
+@pytest.mark.parametrize("count", [256, 257])
+@pytest.mark.parametrize("nested", [False, True])
+def test_capture_metadata_does_not_consume_the_data_collection_budget(count, nested):
+    from core.observability.session_timeline import bound_session_payload
+    from core.observability.trajectory import build_trajectory
+
+    data = {f"field-{index}": index for index in range(count)}
+    captured = bound_session_payload(data, capture_metadata=True)
+    rebound = bound_session_payload(
+        {"wrapped": captured} if nested else captured, capture_metadata=True
+    )
+    trajectory = build_trajectory(
+        trajectory_id="collection-boundary",
+        source={"harness": "test", "session": "s"},
+        events=[{"kind": "event.test", "payload": rebound}],
+        outcome={},
+        privacy={},
+        provenance={},
+    )
+    assert trajectory["integrity"]["replay_complete"] is (count == 256)
+
+
+def test_capture_quality_survives_optional_run_event_projection(tmp_path):
+    from core.observability.record_paths import read_event_stream
+    from core.observability.record_schema import validate_record
+
+    timeline = SessionTimeline(
+        "s-projection-capture",
+        db_path=tmp_path / "sessions.db",
+        projection_path=tmp_path / "events.jsonl",
+    )
+    timeline.bind_turn("t-capture")
+    timeline.record_user_message("bounded input", content_reduced=True)
+    raw = json.loads((tmp_path / "events.jsonl").read_text())
+    validate_record(raw)
+    assert raw["payload"]["_capture_quality"] == {"version": 1, "content_reduced": True}
+    [normalized] = read_event_stream(tmp_path)
+    assert normalized["_capture_quality"] == raw["payload"]["_capture_quality"]
+
+
+@pytest.mark.parametrize("reserved", [False, True])
+def test_opaque_equality_failure_remains_omitted_capture(tmp_path, reserved):
+    class Opaque:
+        def __eq__(self, other):
+            raise ValueError("opaque comparison")
+
+    from core.observability.trajectory import trajectory_from_session
+
+    payload = (
+        {"_capture_quality": {"version": 1, "content_reduced": Opaque()}}
+        if reserved
+        else {"value": Opaque()}
+    )
+    store = SessionEventStore(tmp_path / "sessions.db")
+    stored = store.append(
+        SessionEventWrite(
+            session_id="s-opaque",
+            turn_id="t-opaque",
+            kind=SessionEventKind.USER_MESSAGE,
+            payload=payload,
+        )
+    )
+    assert stored.payload["_capture_quality"]["content_reduced"] is True
+    store.append(SessionEventWrite(session_id="s-opaque", kind=SessionEventKind.SESSION_ENDED))
+    trajectory = trajectory_from_session("s-opaque", db_path=tmp_path / "sessions.db")
+    assert not trajectory["integrity"]["replay_complete"]
+
+
+@pytest.mark.parametrize("spoof", [False, True])
+def test_legacy_import_cannot_promote_unattested_clipped_content(tmp_path, spoof):
+    from core.observability.trajectory import trajectory_from_session
+
+    rows = [
+        {
+            "event": "user_message",
+            "ts": 1,
+            "session_id": "s-legacy-loss",
+            "turn_id": "t-legacy",
+            "text": "previously clipped …[truncated:61]",
+        },
+        {"event": "session_end", "ts": 2, "session_id": "s-legacy-loss"},
+    ]
+    if spoof:
+        rows[0]["_capture_quality"] = {"version": 1, "content_reduced": False}
+    original = "\n".join(json.dumps(row) for row in rows)
+    path = tmp_path / "legacy.jsonl"
+    path.write_text(original)
+    store = SessionEventStore(tmp_path / "sessions.db")
+    assert store.import_legacy_jsonl(path) == 2
+    assert path.read_text() == original
+    trajectory = trajectory_from_session("s-legacy-loss", db_path=tmp_path / "sessions.db")
+    assert not trajectory["integrity"]["replay_complete"]
 
 
 def test_schema_constrained_fields_match_sqlite_and_projection(tmp_path: Path) -> None:

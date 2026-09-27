@@ -3,7 +3,8 @@
 Pins: model/effort/credential_source picks persist to config.toml ONLY
 (no .env writes — hazards H3/H4/H6), stale env lines are cleaned up by
 the writers, the credential_source toml rows are read back (H7 closed),
-and API-key writes legitimately stay on the .env layer.
+API-key writes legitimately stay on the .env layer, and Settings repr/str
+never render API-key values.
 """
 
 from __future__ import annotations
@@ -120,7 +121,27 @@ def test_credential_source_toml_rows_are_read_back(
 
     global_toml = tmp_path / "config.toml"
     global_toml.write_text('[llm]\nanthropic_credential_source = "subscription"\n')
-    monkeypatch.setattr(config_mod, "GLOBAL_CONFIG_PATH", global_toml)
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(global_toml))
     monkeypatch.setattr(config_mod, "PROJECT_CONFIG_PATH", tmp_path / "absent.toml")
     values = _load_toml_config()
     assert values.get("anthropic_credential_source") == "subscription"
+
+
+def test_settings_repr_and_str_hide_credential_values() -> None:
+    """Failing pytest assertions and logs render Settings via repr(); keys stay out."""
+    from core.config._settings import Settings
+
+    sentinels = {
+        name: f"sentinel-{name}"
+        for name in Settings.model_fields
+        if name.endswith(("_api_key", "_token", "_secret", "_password"))
+    }
+    assert {"anthropic_api_key", "openai_api_key", "openrouter_api_key", "zai_api_key"} <= set(
+        sentinels
+    )
+
+    settings = Settings(_env_file=None, **sentinels)
+
+    assert settings.anthropic_api_key == "sentinel-anthropic_api_key"  # callers keep a plain str
+    for rendered in (repr(settings), str(settings)):
+        assert [value for value in sentinels.values() if value in rendered] == []

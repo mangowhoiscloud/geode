@@ -347,7 +347,12 @@ def _trajectory_quality(events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             and not call_id
         ):
             missing_control_call_ids += 1
-        if _payload_has_quality_issue(event.get("payload")):
+        payload = event.get("payload")
+        capture = payload.get("_capture_quality") if isinstance(payload, Mapping) else None
+        explicit_capture = isinstance(payload, Mapping) and "_capture_quality" in payload
+        if (explicit_capture and not _capture_is_complete(capture)) or _payload_has_quality_issue(
+            payload, explicit_capture=explicit_capture
+        ):
             payload_issue_events += 1
 
     orphan_calls = sum(open_calls.values())
@@ -438,8 +443,20 @@ def _declared_replay_reduction_reasons(
     return reasons
 
 
-def _payload_has_quality_issue(value: Any) -> bool:
+def _capture_is_complete(value: Any) -> bool:
+    return (
+        isinstance(value, Mapping)
+        and set(value) == {"version", "content_reduced"}
+        and type(value.get("version")) is int
+        and value.get("version") == 1
+        and value.get("content_reduced") is False
+    )
+
+
+def _payload_has_quality_issue(value: Any, *, explicit_capture: bool = False) -> bool:
     if isinstance(value, Mapping):
+        if "_capture_quality" in value and not _capture_is_complete(value["_capture_quality"]):
+            return True
         if any(
             key in value
             for key in (
@@ -454,11 +471,21 @@ def _payload_has_quality_issue(value: Any) -> bool:
             )
         ):
             return True
-        return any(_payload_has_quality_issue(item) for item in value.values())
+        return any(
+            _payload_has_quality_issue(item, explicit_capture=explicit_capture)
+            for item in value.values()
+        )
     if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
-        return any(_payload_has_quality_issue(item) for item in value)
-    return isinstance(value, str) and (
-        "…[truncated:" in value or value in {"<REDACTED>", "[REDACTED]"}
+        return any(
+            _payload_has_quality_issue(item, explicit_capture=explicit_capture) for item in value
+        )
+    # Pre-attestation captures used only inline strings to signal some losses.
+    # Keep that conservative legacy contract; new canonical captures carry an
+    # explicit producer attestation and may faithfully retain literal markers.
+    return (
+        not explicit_capture
+        and isinstance(value, str)
+        and ("…[truncated:" in value or value in {"<REDACTED>", "[REDACTED]"})
     )
 
 
@@ -565,6 +592,7 @@ def trajectory_from_sessions(
     trajectory_class: Sequence[str] = ("dialogue", "tool", "lifecycle"),
 ) -> dict[str, Any]:
     """Build one validated trajectory from one or more canonical sessions."""
+    from core.observability.event_store import read_hook_event_references
     from core.observability.session_timeline import SessionEventStore
 
     ordered_session_ids = list(dict.fromkeys(str(value) for value in session_ids if value))
@@ -589,7 +617,7 @@ def trajectory_from_sessions(
             incompleteness.append(f"session {session_id} reports canonical write failures")
         if terminal_payload.get("runtime_observation_status") in {"degraded", "unavailable"}:
             incompleteness.append(f"session {session_id} reports incomplete runtime observation")
-    automatic_runtime_refs = _runtime_event_references(
+    automatic_runtime_refs = read_hook_event_references(
         Path(runtime_event_db_path) if runtime_event_db_path is not None else store.db_path,
         ordered_session_ids,
     )
@@ -643,66 +671,6 @@ def _verification_evidence_references(
     return _dedupe_external_references(references)
 
 
-def _runtime_event_references(
-    db_path: Path,
-    session_ids: Sequence[str],
-) -> tuple[dict[str, Any], ...]:
-    """Bind indexed hook-event cohorts without embedding the private store."""
-    if not db_path.is_file() or not session_ids:
-        return ()
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
-    try:
-        columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(hook_events)").fetchall()}
-        required = {
-            "id",
-            "event",
-            "payload_hash",
-            "session_id",
-            "turn_id",
-            "tool_call_id",
-            "llm_call_id",
-            "llm_attempt_id",
-        }
-        if not required.issubset(columns):
-            return ()
-        references: list[dict[str, Any]] = []
-        for session_id in session_ids:
-            rows = conn.execute(
-                """\
-                SELECT id, event, payload_hash, turn_id, tool_call_id,
-                       llm_call_id, llm_attempt_id
-                FROM hook_events
-                WHERE session_id = ?
-                ORDER BY id
-                """,
-                (session_id,),
-            ).fetchall()
-            if not rows:
-                continue
-            canonical = json.dumps(
-                [dict(row) for row in rows],
-                ensure_ascii=False,
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode("utf-8")
-            digest = sha256(canonical).hexdigest()
-            references.append(
-                {
-                    "kind": "runtime_event",
-                    "schema_id": "geode.hook-event@3",
-                    "authority": "GEODE local runtime hook event store",
-                    "reference": f"hook-events-sha256:{digest}",
-                    "session_id": session_id,
-                    "record_count": len(rows),
-                    "sha256": digest,
-                }
-            )
-        return tuple(references)
-    finally:
-        conn.close()
-
-
 def _digest_private_event_payload(
     kind: str,
     payload: Mapping[str, Any],
@@ -710,6 +678,7 @@ def _digest_private_event_payload(
     """Allowlist structural fields and digest every other benchmark payload."""
     protected = dict(payload)
     structural = {
+        "_capture_quality",
         "model",
         "provider",
         "status",

@@ -23,6 +23,8 @@ Both live in this module so the bilateral wiring stays grep-visible.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from typing import TYPE_CHECKING
 
@@ -43,14 +45,8 @@ _active_tool_call_id: ContextVar[str] = ContextVar("geode_active_tool_call_id", 
 # format). Naming matches the AgenticLoop constructor kwarg so the
 # data shape is unambiguous. Empty string = top-level loop.
 #
-# TODO(PR-F-followup): Same-task nested spawn (A → B → A) is NOT
-# covered by PR-4's lifetime comment below — that comment talks
-# about repeated arun() in the same task and separate asyncio
-# tasks. If a top-level loop A spawns child B *in the same task*
-# (not subprocess), B's bind would leak back into A until A's next
-# arun() re-binds. Add Token-based reset (``ContextVar.set`` returns
-# a Token; pair with ``ContextVar.reset(token)`` in a try/finally)
-# when this path becomes a documented use case.
+# Each physical turn restores its caller's bindings, including same-task
+# nested execution, after final observation or exception/cancellation.
 _active_parent_session_key: ContextVar[str] = ContextVar(
     "geode_active_parent_session_key", default=""
 )
@@ -65,6 +61,26 @@ _active_parent_session_key: ContextVar[str] = ContextVar(
 _active_parent_session_id: ContextVar[str] = ContextVar(
     "geode_active_parent_session_id", default=""
 )
+
+
+@contextmanager
+def preserve_cognitive_context() -> Iterator[None]:
+    """Restore the caller's attribution after one physical agent turn."""
+    state = _active_state.set(_active_state.get())
+    session = _active_session_id.set(_active_session_id.get())
+    turn = _active_turn_id.set(_active_turn_id.get())
+    tool = _active_tool_call_id.set(_active_tool_call_id.get())
+    parent_key = _active_parent_session_key.set(_active_parent_session_key.get())
+    parent_id = _active_parent_session_id.set(_active_parent_session_id.get())
+    try:
+        yield
+    finally:
+        _active_parent_session_id.reset(parent_id)
+        _active_parent_session_key.reset(parent_key)
+        _active_tool_call_id.reset(tool)
+        _active_turn_id.reset(turn)
+        _active_session_id.reset(session)
+        _active_state.reset(state)
 
 
 def get_cognitive_state() -> CognitiveState | None:
@@ -158,6 +174,7 @@ __all__ = [
     "get_session_id",
     "get_tool_call_id",
     "get_turn_id",
+    "preserve_cognitive_context",
     "reset_tool_call_id",
     "set_cognitive_state",
     "set_parent_session_id",

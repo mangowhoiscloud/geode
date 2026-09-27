@@ -9,8 +9,8 @@ from core.slash_routing import CommandSpec, RunLocation
 
 def build_geo_prompt(arg: str, *, skill_registry: Any, agentic_ref: Any) -> str:
     """Render the bundled GEO skill for the shared AgenticLoop."""
-    from core.cli.commands.skills import build_skill_prompt
     from core.observability.session_timeline import SessionEventKind
+    from core.skills.skills import build_skill_prompt
 
     from evals.geo import GeoStore
 

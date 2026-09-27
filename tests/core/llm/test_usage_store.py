@@ -265,6 +265,7 @@ class TestUsageRecordExtensionFields:
         assert rec.input_tokens == 1200
         # Extension fields default to 0 / "" — no KeyError, no crash
         assert rec.cache_creation_tokens == 0
+        assert rec.cache_creation_1h_tokens is None
         assert rec.cache_read_tokens == 0
         assert rec.thinking_tokens == 0
         assert rec.role == ""
@@ -287,6 +288,7 @@ class TestUsageRecordExtensionFields:
         )
         restored = UsageRecord.from_json(original.to_json())
         assert restored.cache_creation_tokens == 6740
+        assert restored.cache_creation_1h_tokens is None
         assert restored.role == "judge"
         assert restored.source == "petri_eval"
         assert restored.eval_id == original.eval_id

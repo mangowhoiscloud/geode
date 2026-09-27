@@ -308,7 +308,9 @@ class DreamingService:
 
         def run() -> None:
             try:
-                asyncio.run(execute())
+                from core.async_runtime import run_process_coroutine
+
+                run_process_coroutine(execute())
             except asyncio.CancelledError:
                 pass  # Actual adapter terminals are recorded before cancellation unwinds.
             except TimeoutError:
@@ -375,7 +377,6 @@ class DreamingService:
         session_id: str = "",
     ) -> str | None:
         try:
-            from core.llm.adapters._source_inference import infer_source
             from core.llm.adapters.dispatch import (
                 AdapterDispatchError,
                 AdapterUnavailableError,
@@ -383,9 +384,10 @@ class DreamingService:
             )
             from core.llm.adapters.registry import normalize_registry_provider
             from core.llm.errors import BillingError
+            from core.llm.routing import infer_source
 
             canonical_provider = normalize_registry_provider(provider)
-            resolved_source = infer_source(canonical_provider)
+            resolved_source = infer_source(canonical_provider, model=model)
             max_tokens = self._policy.summary_output_tokens()
             await self._cancellation_checkpoint()
             result = await complete_text_via_adapters(

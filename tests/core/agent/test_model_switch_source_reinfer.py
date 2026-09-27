@@ -67,8 +67,8 @@ def _patched_resolution(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         raising=False,
     )
     monkeypatch.setattr(
-        "core.llm.adapters._source_inference.infer_source",
-        lambda provider: "subscription",
+        "core.llm.routing.infer_source",
+        lambda provider, **kwargs: "subscription",
     )
     monkeypatch.setattr("core.ui.agentic_ui.update_session_model", lambda model: None)
     return calls
@@ -118,7 +118,7 @@ def test_same_provider_switch_does_not_touch_source(
     def _boom(provider: str) -> str:
         raise AssertionError("infer_source must not run on a same-provider switch")
 
-    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", _boom)
+    monkeypatch.setattr("core.llm.routing.infer_source", _boom)
     loop = _FakeLoop(provider="anthropic", source="payg", explicit=False)
 
     _model_switching._apply_model_update(loop, "claude-haiku-4-5-20251001")  # type: ignore[arg-type]
@@ -135,3 +135,47 @@ def test_agentic_loop_records_source_explicitness() -> None:
 
     src = inspect.getsource(_bootstrap.initialize_runtime)
     assert "_source_explicit" in src
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+def test_adaptation_and_dispatch_share_one_resolved_target_route(
+    monkeypatch: pytest.MonkeyPatch, explicit: bool
+) -> None:
+    import asyncio
+    from unittest.mock import AsyncMock, Mock, patch
+
+    from core.agent.conversation import ConversationContext
+    from core.agent.loop import AgenticLoop
+    from core.agent.tool_executor import ToolExecutor
+
+    context = ConversationContext()
+    context.messages = [{"role": "user", "content": "x" * 800_000}]
+    loop = AgenticLoop(
+        model="glm-5",
+        provider="zhipuai",
+        source="payg",
+        context=context,
+        tool_executor=ToolExecutor(),
+    )
+    loop._source_explicit = explicit
+    inference = Mock(return_value="subscription")
+    monkeypatch.setattr("core.llm.routing.infer_source", inference)
+
+    async def summarize(messages: Any, **kwargs: Any) -> tuple[list[dict[str, Any]], bool]:
+        assert loop.model == "glm-5"
+        assert kwargs["provider"] == "zhipuai"
+        assert kwargs["source"] == "payg"
+        assert kwargs["policy"].provider == "openai"
+        assert kwargs["policy"].source == "subscription"
+        # If dispatch re-infers after this await, it would choose a different route.
+        inference.return_value = "payg"
+        return [{"role": "user", "content": "summary"}], True
+
+    summary = AsyncMock(side_effect=summarize)
+    with patch("core.orchestration.compaction.compact_conversation", summary):
+        asyncio.run(loop.update_model_async("gpt-5.6-sol"))
+    assert summary.await_count == (0 if explicit else 1)
+    assert inference.call_count == (0 if explicit else 1)
+    assert loop._source == ("payg" if explicit else "subscription")
+    assert loop._new_adapter is not None
+    assert loop._new_adapter.source == loop._source

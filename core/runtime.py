@@ -23,7 +23,9 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Callable
+from contextlib import ExitStack
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -72,6 +74,16 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 DEFAULT_SESSION_TTL = 3600.0  # 1 hour
+
+
+def _rollback_resource(name: str, close: Callable[[], object]) -> None:
+    """Release a staged owner without replacing its construction failure."""
+    try:
+        close()
+    except BaseException as exc:
+        log.warning("Runtime construction cleanup failed: %s (%s)", name, type(exc).__name__)
+
+
 # ---------------------------------------------------------------------------
 # Config dataclasses — group __init__ parameters by concern
 # ---------------------------------------------------------------------------
@@ -302,118 +314,121 @@ class GeodeRuntime:
             user_profile=user_profile,
         )
 
-        # Stage 2: Tools, MCP, Skills
-        tools = cls._build_tools(bootstrap, core["hooks"], session_key=session_key)
-        from core.config import settings
-        from core.hooks.plugins.notification_hook.hook import register_notification_hooks
+        with ExitStack() as rollback:
+            rollback.callback(_rollback_resource, "hooks", core["hooks"].close)
+            rollback.callback(_rollback_resource, "dreaming", core["dreaming_service"].close)
+            rollback.callback(_rollback_resource, "config watcher", core["config_watcher"].stop)
+            # Stage 2: Tools, MCP, Skills
+            tools = cls._build_tools(bootstrap, core["hooks"], session_key=session_key)
+            rollback.callback(_rollback_resource, "MCP manager", tools["mcp_manager"].shutdown)
+            from core.config import settings
+            from core.hooks.plugins.notification_hook.hook import register_notification_hooks
 
-        register_notification_hooks(
-            core["hooks"],
-            channel=settings.notification_channel,
-            recipient=settings.notification_recipient,
-            notification=tools["notification"],
-        )
+            register_notification_hooks(
+                core["hooks"],
+                channel=settings.notification_channel,
+                recipient=settings.notification_recipient,
+                notification=tools["notification"],
+            )
 
-        # Stage 3: Memory + Scheduling
-        memory, scheduling = cls._build_memory_and_scheduling(
-            bootstrap,
-            core["hooks"],
-            core["session_store"],
-            core["event_store"],
-            session_key=session_key,
-            subject_id=subject_id,
-            scheduling_registrar=scheduling_registrar,
-            scheduler_callback=scheduler_callback,
-            user_profile=user_profile,
-        )
+            # Stage 3: Memory + Scheduling
+            memory, scheduling = cls._build_memory_and_scheduling(
+                bootstrap,
+                core["hooks"],
+                core["session_store"],
+                core["event_store"],
+                session_key=session_key,
+                subject_id=subject_id,
+                scheduling_registrar=scheduling_registrar,
+                scheduler_callback=scheduler_callback,
+                user_profile=user_profile,
+            )
+            rollback.callback(cls._stop_staged_scheduling, scheduling)
 
-        from core.tools.memory_tools import MemoryToolServices
+            from core.tools.memory_tools import MemoryToolServices
 
-        memory_services = MemoryToolServices(
-            session_store=core["session_store"],
-            project_memory=memory["project_memory"],
-            organization_memory=memory["organization_memory"],
-            hooks=core["hooks"],
-        )
-        tool_registry = infra.build_default_registry(
-            memory_services=memory_services,
-            notification=tools["notification"],
-        )
-
-        log.info(
-            "GeodeRuntime created: subject=%s, key=%s, tools=%d, lanes=%s",
-            subject_id,
-            session_key,
-            len(tool_registry),
-            core["lane_queue"].list_lanes(),
-        )
-
-        # Stage 4: Assembly
-        from core.scheduler.calendar_bridge import CalendarSchedulerBridge
-
-        calendar_bridge = (
-            CalendarSchedulerBridge(scheduling["scheduler_service"], tools["calendar"])
-            if scheduling.get("scheduler_service") is not None and tools["calendar"] is not None
-            else None
-        )
-        from core.llm.adapters.registry import registry_snapshot
-
-        extension_decisions = (
-            *core["hooks"].extension_decisions,
-            *registry_snapshot().report.extensions,
-            *tools["mcp_manager"].extension_decisions,
-            *tools["skill_registry"].extension_decisions,
-        )
-        core_config = RuntimeCoreConfig(
-            execution=RuntimeExecutionConfig(
-                hooks=core["hooks"],
-                hook_registry=core["hook_registry"],
-                middleware_registry=core["middleware_registry"],
-                policy_chain=core["policy_chain"],
-                tool_registry=tool_registry,
-                lane_queue=core["lane_queue"],
-                activity_sink_provider=activity_sink_provider,
-            ),
-            persistence=RuntimePersistenceConfig(
+            memory_services = MemoryToolServices(
                 session_store=core["session_store"],
-                event_store=core["event_store"],
                 project_memory=memory["project_memory"],
                 organization_memory=memory["organization_memory"],
-                context_assembler=memory["context_assembler"],
-                offload_store=tools["offload_store"],
-            ),
-            lifecycle=RuntimeLifecycleConfig(
-                config_watcher=core["config_watcher"],
-                hook_metrics=core["hook_metrics"],
-                dreaming_service=core["dreaming_service"],
-                **scheduling,
-            ),
-            integration=RuntimeIntegrationConfig(
-                mcp_manager=tools["mcp_manager"],
-                skill_registry=tools["skill_registry"],
-                policy_sources=resolved_policy_sources,
-                calendar=tools["calendar"],
+                hooks=core["hooks"],
+            )
+            tool_registry = infra.build_default_registry(
+                memory_services=memory_services,
                 notification=tools["notification"],
-                calendar_bridge=calendar_bridge,
-                extension_decisions=extension_decisions,
-            ),
-            authentication=RuntimeAuthenticationConfig(
-                profile_store=core["profile_store"],
-                profile_rotator=core["profile_rotator"],
-                cooldown_tracker=core["cooldown_tracker"],
-                user_profile=memory["user_profile"],
-                readiness=tools["readiness"],
-            ),
-            identity=RuntimeIdentityConfig(session_key=session_key, subject_id=subject_id),
-        )
-        try:
+            )
+
+            log.info(
+                "GeodeRuntime created: subject=%s, key=%s, tools=%d, lanes=%s",
+                subject_id,
+                session_key,
+                len(tool_registry),
+                core["lane_queue"].list_lanes(),
+            )
+
+            # Stage 4: Assembly
+            from core.scheduler.calendar_bridge import CalendarSchedulerBridge
+
+            calendar_bridge = (
+                CalendarSchedulerBridge(scheduling["scheduler_service"], tools["calendar"])
+                if scheduling.get("scheduler_service") is not None and tools["calendar"] is not None
+                else None
+            )
+            from core.llm.adapters.registry import registry_snapshot
+
+            extension_decisions = (
+                *core["hooks"].extension_decisions,
+                *registry_snapshot().report.extensions,
+                *tools["mcp_manager"].extension_decisions,
+                *tools["skill_registry"].extension_decisions,
+            )
+            core_config = RuntimeCoreConfig(
+                execution=RuntimeExecutionConfig(
+                    hooks=core["hooks"],
+                    hook_registry=core["hook_registry"],
+                    middleware_registry=core["middleware_registry"],
+                    policy_chain=core["policy_chain"],
+                    tool_registry=tool_registry,
+                    lane_queue=core["lane_queue"],
+                    activity_sink_provider=activity_sink_provider,
+                ),
+                persistence=RuntimePersistenceConfig(
+                    session_store=core["session_store"],
+                    event_store=core["event_store"],
+                    project_memory=memory["project_memory"],
+                    organization_memory=memory["organization_memory"],
+                    context_assembler=memory["context_assembler"],
+                    offload_store=tools["offload_store"],
+                ),
+                lifecycle=RuntimeLifecycleConfig(
+                    config_watcher=core["config_watcher"],
+                    hook_metrics=core["hook_metrics"],
+                    dreaming_service=core["dreaming_service"],
+                    **scheduling,
+                ),
+                integration=RuntimeIntegrationConfig(
+                    mcp_manager=tools["mcp_manager"],
+                    skill_registry=tools["skill_registry"],
+                    policy_sources=resolved_policy_sources,
+                    calendar=tools["calendar"],
+                    notification=tools["notification"],
+                    calendar_bridge=calendar_bridge,
+                    extension_decisions=extension_decisions,
+                ),
+                authentication=RuntimeAuthenticationConfig(
+                    profile_store=core["profile_store"],
+                    profile_rotator=core["profile_rotator"],
+                    cooldown_tracker=core["cooldown_tracker"],
+                    user_profile=memory["user_profile"],
+                    readiness=tools["readiness"],
+                ),
+                identity=RuntimeIdentityConfig(session_key=session_key, subject_id=subject_id),
+            )
             instance = cls(core_config)
             instance.run_id = run_id
             instance.task_graph = memory["task_graph"]
+            rollback.pop_all()
             return instance
-        except BaseException:
-            cls._stop_staged_scheduling(scheduling)
-            raise
 
     @staticmethod
     def _build_core(
@@ -434,52 +449,57 @@ class GeodeRuntime:
         from core.memory.dreaming import DreamingService
 
         hooks = RuntimeEventBus()
-        hook_registry = HookRegistry(events=hooks)
-        dreaming_service = DreamingService(hooks=hooks)
-        hooks, event_store, hook_metrics = bootstrap.build_hooks(
-            session_key=session_key,
-            run_id=run_id,
-            log_dir=log_dir,
-            activity_sink_provider=activity_sink_provider,
-            feature_hook_registrar=feature_hook_registrar,
-            user_profile=user_profile,
-            hooks=hooks,
-            hook_registry=hook_registry,
-            dreaming_service=dreaming_service,
-        )
-        middleware_registry = (
-            bootstrap.build_middleware_registry(events=hooks)
-            if middleware_builder is None
-            else middleware_builder(events=hooks, policy_sources=policy_sources)
-        )
-        session_store = bootstrap.build_session_store(session_ttl=session_ttl)
-        policy_chain = infra.build_default_policies()
-        profile_store, profile_rotator, cooldown_tracker = infra.build_auth()
-        # PR-LLMCLIENTPORT-COLLAPSE (2026-05-28) — was
-        # ``infra.build_llm_adapters(...)`` whose sole production effect was
-        # registering the five LLMAdapter built-ins. Call the registry bootstrap
-        # directly now; the legacy ``set_llm_callable`` ContextVar chain that
-        # surrounded it had no production consumer.
-        from core.llm.adapters.registry import bootstrap_builtins
+        with ExitStack() as rollback:
+            rollback.callback(_rollback_resource, "hooks", hooks.close)
+            hook_registry = HookRegistry(events=hooks)
+            dreaming_service = DreamingService(hooks=hooks)
+            rollback.callback(_rollback_resource, "dreaming", dreaming_service.close)
+            hooks, event_store, hook_metrics = bootstrap.build_hooks(
+                session_key=session_key,
+                run_id=run_id,
+                log_dir=log_dir,
+                activity_sink_provider=activity_sink_provider,
+                feature_hook_registrar=feature_hook_registrar,
+                user_profile=user_profile,
+                hooks=hooks,
+                hook_registry=hook_registry,
+                dreaming_service=dreaming_service,
+            )
+            middleware_registry = (
+                bootstrap.build_middleware_registry(events=hooks)
+                if middleware_builder is None
+                else middleware_builder(events=hooks, policy_sources=policy_sources)
+            )
+            session_store = bootstrap.build_session_store(session_ttl=session_ttl)
+            policy_chain = infra.build_default_policies()
+            profile_store, profile_rotator, cooldown_tracker = infra.build_auth()
+            # PR-LLMCLIENTPORT-COLLAPSE (2026-05-28) — was
+            # ``infra.build_llm_adapters(...)`` whose sole production effect was
+            # registering the five LLMAdapter built-ins. Call the registry bootstrap
+            # directly now; the legacy ``set_llm_callable`` ContextVar chain that
+            # surrounded it had no production consumer.
+            from core.llm.adapters.registry import bootstrap_builtins
 
-        bootstrap_builtins(policy_sources=policy_sources)
-        config_watcher = bootstrap.build_config_watcher(hooks=hooks)
-        lane_queue = infra.build_default_lanes()
-        return {
-            "hooks": hooks,
-            "dreaming_service": dreaming_service,
-            "hook_registry": hook_registry,
-            "middleware_registry": middleware_registry,
-            "event_store": event_store,
-            "hook_metrics": hook_metrics,
-            "session_store": session_store,
-            "policy_chain": policy_chain,
-            "profile_store": profile_store,
-            "profile_rotator": profile_rotator,
-            "cooldown_tracker": cooldown_tracker,
-            "config_watcher": config_watcher,
-            "lane_queue": lane_queue,
-        }
+            bootstrap_builtins(policy_sources=policy_sources)
+            config_watcher = bootstrap.build_config_watcher(hooks=hooks)
+            rollback.callback(_rollback_resource, "config watcher", config_watcher.stop)
+            lane_queue = infra.build_default_lanes()
+            rollback.pop_all()
+            return {
+                "hooks": hooks,
+                "dreaming_service": dreaming_service,
+                "hook_registry": hook_registry,
+                "middleware_registry": middleware_registry,
+                "event_store": event_store,
+                "hook_metrics": hook_metrics,
+                "session_store": session_store,
+                "policy_chain": policy_chain,
+                "profile_store": profile_store,
+                "profile_rotator": profile_rotator,
+                "cooldown_tracker": cooldown_tracker,
+                "config_watcher": config_watcher,
+                "lane_queue": lane_queue,
+            }
 
     @staticmethod
     def _build_tools(
@@ -491,23 +511,22 @@ class GeodeRuntime:
         """Stage 2: Build MCP, skills, readiness, plugins, tool offload."""
         from core.wiring import adapters as adapter_wiring
 
-        mcp_manager = bootstrap.build_mcp_manager()
-        from core.mcp.manager import clear_mcp_hooks, set_mcp_hooks
-
-        set_mcp_hooks(hooks)
-        hooks.add_owner_cleanup("mcp_hooks", clear_mcp_hooks)
-        skill_registry = bootstrap.build_skill_registry()
-        readiness = bootstrap.build_readiness()
-        offload_store = bootstrap.build_tool_offload(session_id=session_key, hooks=hooks)
-        notification, calendar = adapter_wiring.build_plugins()
-        return {
-            "mcp_manager": mcp_manager,
-            "skill_registry": skill_registry,
-            "readiness": readiness,
-            "offload_store": offload_store,
-            "notification": notification,
-            "calendar": calendar,
-        }
+        mcp_manager = bootstrap.build_mcp_manager(hooks=hooks)
+        with ExitStack() as rollback:
+            rollback.callback(_rollback_resource, "MCP manager", mcp_manager.shutdown)
+            skill_registry = bootstrap.build_skill_registry()
+            readiness = bootstrap.build_readiness()
+            offload_store = bootstrap.build_tool_offload(session_id=session_key, hooks=hooks)
+            notification, calendar = adapter_wiring.build_plugins(mcp_manager=mcp_manager)
+            rollback.pop_all()
+            return {
+                "mcp_manager": mcp_manager,
+                "skill_registry": skill_registry,
+                "readiness": readiness,
+                "offload_store": offload_store,
+                "notification": notification,
+                "calendar": calendar,
+            }
 
     @staticmethod
     def _build_memory_and_scheduling(
@@ -563,16 +582,10 @@ class GeodeRuntime:
         """Roll back scheduler threads when staged runtime assembly fails."""
         scheduler_service = scheduling.get("scheduler_service")
         if scheduler_service is not None:
-            try:
-                scheduler_service.stop()
-            except Exception:
-                log.warning("Staged scheduler rollback failed", exc_info=True)
+            _rollback_resource("scheduler", scheduler_service.stop)
         trigger_manager = scheduling.get("trigger_manager")
         if trigger_manager is not None:
-            try:
-                trigger_manager.stop_scheduler()
-            except Exception:
-                log.warning("Staged trigger rollback failed", exc_info=True)
+            _rollback_resource("trigger manager", trigger_manager.stop_scheduler)
 
     # ------------------------------------------------------------------
     # Instance methods
@@ -666,38 +679,45 @@ class GeodeRuntime:
 
         return health
 
-    def shutdown(self, *, background_timeout_s: float = 5.0) -> None:
-        """Clean shutdown of background components."""
+    def shutdown(self, *, background_timeout_s: float = 5.0) -> bool:
+        """Attempt every owner; logged failures remain retryable.
+
+        Preserve the best-effort ordinary-error contract for callers already
+        unwinding a primary failure. Dream worker join failures and process/task
+        interruptions propagate only after the remaining owners are attempted.
+        """
         if self._shutdown:
-            return
-        self._shutdown = True
-        background_error: BaseException | None = None
+            return True
+        cleanups: list[tuple[str, Callable[[], object]]] = []
         if self.dreaming_service is not None:
-            try:
-                self.dreaming_service.close(timeout_s=background_timeout_s)
-            except BaseException as exc:
-                background_error = exc
-        try:
-            self.config_watcher.stop()
-        except Exception:
-            log.warning("Config watcher shutdown failed", exc_info=True)
-        if self.scheduler_service:
-            try:
-                self.scheduler_service.save()
-                self.scheduler_service.stop()
-            except Exception:
-                log.warning("Scheduler service shutdown failed", exc_info=True)
-        if self.trigger_manager:
-            try:
-                self.trigger_manager.stop_scheduler()
-            except Exception:
-                log.warning("Trigger manager shutdown failed", exc_info=True)
+            cleanups.append(
+                ("dreaming", partial(self.dreaming_service.close, timeout_s=background_timeout_s))
+            )
+        cleanups.append(("config watcher", self.config_watcher.stop))
+        if self.scheduler_service is not None:
+            cleanups.extend(
+                (
+                    ("scheduler save", self.scheduler_service.save),
+                    ("scheduler stop", self.scheduler_service.stop),
+                )
+            )
+        if self.trigger_manager is not None:
+            cleanups.append(("trigger manager", self.trigger_manager.stop_scheduler))
         if self.mcp_manager is not None:
+            cleanups.append(("MCP manager", self.mcp_manager.shutdown))
+        cleanups.append(("hooks", self.hooks.close))
+
+        failed = False
+        interruption: BaseException | None = None
+        for name, close in cleanups:
             try:
-                self.mcp_manager.shutdown()
-            except Exception:
-                log.warning("MCP manager shutdown failed", exc_info=True)
-        self.hooks.close()
-        if background_error is not None:
-            self._shutdown = False  # A failed join must not become a successful idempotent retry.
-            raise background_error
+                close()
+            except BaseException as exc:
+                failed = True
+                log.warning("Runtime shutdown failed: %s (%s)", name, type(exc).__name__)
+                if interruption is None and (name == "dreaming" or not isinstance(exc, Exception)):
+                    interruption = exc
+        self._shutdown = not failed
+        if interruption is not None:
+            raise interruption
+        return self._shutdown

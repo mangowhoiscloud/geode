@@ -196,6 +196,7 @@ class UsageSummary:
     input_tokens_present: bool = False
     output_tokens_present: bool = False
     reasoning_tokens_present: bool = False
+    cache_write_1h_tokens: int | None = None
 
     def __post_init__(self) -> None:
         """Reject malformed provider billing before it reaches budget logic."""
@@ -208,6 +209,13 @@ class UsageSummary:
         ):
             if getattr(self, name) > 0:
                 object.__setattr__(self, f"{name}_present", True)
+        long_write = self.cache_write_1h_tokens
+        if long_write is not None and (
+            isinstance(long_write, bool)
+            or not isinstance(long_write, int)
+            or not 0 <= long_write <= self.cache_write_tokens
+        ):
+            raise ValueError("cache_write_1h_tokens must be a nonnegative subset of cache writes")
         cost = self.reported_cost_usd
         if cost is None:
             return

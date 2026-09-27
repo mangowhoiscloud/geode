@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import time
 
 import pytest
@@ -22,6 +23,74 @@ class TestSessionState:
 
 
 class TestSessionCheckpoint:
+    def test_model_settings_roundtrip_and_legacy_absence(self, tmp_path):
+        import json
+
+        from core.config.session import SessionModelConfig
+
+        cp = SessionCheckpoint(tmp_path)
+        policy = SessionModelConfig(
+            model="gpt-6-sol",
+            effort="low",
+            source="subscription",
+            judge_model="gpt-6-luna",
+            judge_source="payg",
+            reflection_model="gpt-6-sol",
+            reflection_source="subscription",
+            reflection_max_tokens=321,
+            temperature_reflection=0.5,
+        )
+        cp.save(SessionState(session_id="policy", model_settings=policy))
+        loaded = cp.load("policy")
+        assert loaded is not None and loaded.model_settings == policy
+        data = json.loads((tmp_path / "policy/state.json").read_text())
+        assert data["model_settings"] == policy.model_dump()
+        del data["model_settings"]
+        (tmp_path / "policy/state.json").write_text(json.dumps(data))
+        legacy = cp.load("policy")
+        assert legacy is not None and legacy.model_settings is None
+
+    @pytest.mark.parametrize("invalid", [None, {}, {"model": "gpt-6-sol", "api_key": "fake"}])
+    def test_present_invalid_model_settings_do_not_become_legacy(self, tmp_path, invalid):
+        import json
+
+        from pydantic import ValidationError
+
+        cp = SessionCheckpoint(tmp_path)
+        cp.save(SessionState(session_id="invalid"))
+        path = tmp_path / "invalid/state.json"
+        data = json.loads(path.read_text())
+        data["model_settings"] = invalid
+        path.write_text(json.dumps(data))
+        with pytest.raises(ValidationError):
+            cp.load("invalid")
+
+    def test_failed_index_write_closes_its_connection_and_keeps_checkpoint(
+        self, tmp_path, monkeypatch
+    ):
+        from core.memory.session_manager import SessionManager
+
+        connections = []
+
+        def fail_upsert(manager, _meta):
+            connections.append(manager._conn)
+            raise sqlite3.OperationalError("injected index failure")
+
+        monkeypatch.setattr(SessionManager, "upsert", fail_upsert)
+        cp = SessionCheckpoint(tmp_path / "session")
+        cp.save(
+            SessionState(session_id="failed-index", messages=[{"role": "user", "content": "x"}])
+        )
+
+        assert len(connections) == 1
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            connections[0].execute("SELECT 1")
+        restored = cp.load("failed-index")
+        assert restored is not None
+        assert len(restored.messages) == 1
+        assert restored.messages[0]["role"] == "user"
+        assert restored.messages[0]["content"] == "x"
+
     def test_save_and_load(self, tmp_path):
         cp = SessionCheckpoint(tmp_path / "session")
         state = SessionState(

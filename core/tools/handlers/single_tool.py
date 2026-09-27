@@ -219,7 +219,11 @@ def _build_computer_use_handler() -> UniqueEntries[str, Any]:
     executor path. Each handler checks ``GEODE_COMPUTER_USE_ENABLED`` at call
     time and returns a structured permission error when disabled.
     """
-    from core.tools.computer_use import ComputerUseHarness, execute_emulated_computer_use
+    from core.tools.computer_use import (
+        ComputerUseHarness,
+        execute_emulated_computer_use,
+        execute_native_computer_use,
+    )
 
     harness = ComputerUseHarness()
 
@@ -240,12 +244,7 @@ def _build_computer_use_handler() -> UniqueEntries[str, Any]:
         actions = kwargs.get("actions")
         if isinstance(actions, list):
             return await _run_batched_actions(harness, kwargs)
-        # ``pop`` (not ``get``) — ``aexecute(action, **kwargs)`` passes
-        # ``action`` positionally, so leaving it in ``kwargs`` raised
-        # "got multiple values for argument 'action'" on every non-default
-        # call (the tool was never live-exercised, so the crash stayed latent).
-        action = kwargs.pop("action", "screenshot")
-        return await harness.aexecute(action, **kwargs)
+        return await execute_native_computer_use(harness, **kwargs)
 
     async def handle_computer_use(**kwargs: Any) -> dict[str, Any]:
         from core.llm.providers.anthropic import is_computer_use_enabled

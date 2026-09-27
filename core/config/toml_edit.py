@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import os
 import re
+import tomllib
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from core.paths import GLOBAL_CONFIG_TOML
 
@@ -35,6 +37,20 @@ def resolve_config_toml_path(explicit: Path | str | None = None) -> Path:
         return Path(explicit).expanduser()
     env = os.environ.get("GEODE_CONFIG_TOML", "").strip()
     return Path(env).expanduser() if env else GLOBAL_CONFIG_TOML
+
+
+def read_config_toml(path: Path | str | None = None) -> dict[str, Any]:
+    """Read one config document; callers own layer precedence and error policy.
+
+    Missing optional files are empty. Malformed or unreadable files raise so
+    strict consumers cannot mistake an invalid configuration for an empty one.
+    """
+    resolved = resolve_config_toml_path(path)
+    try:
+        with resolved.open("rb") as stream:
+            return tomllib.load(stream)
+    except FileNotFoundError:
+        return {}
 
 
 def toml_escape(value: str) -> str:

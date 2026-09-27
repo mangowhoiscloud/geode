@@ -241,6 +241,7 @@ def test_runtime_config_pins_role_models_and_absolute_policy(
     from core.agent.tool_executor import ToolExecutor
     from core.agent.worker import WorkerRequest, _run_agentic
     from core.config import settings
+    from core.llm.adapters.registry import registry_snapshot
     from core.server.supervised.services import SessionMode, SharedServices
     from core.tools.composition import compose_tool_plan
 
@@ -256,6 +257,7 @@ def test_runtime_config_pins_role_models_and_absolute_policy(
     def fake_loop(_conversation, executor, **_kwargs):
         executors.append(executor)
         return SimpleNamespace(
+            _adapter_registry_snapshot=registry_snapshot(),
             arun=AsyncMock(return_value=AgenticResult(text="ok", termination_reason="unknown")),
             amark_session_completed=AsyncMock(),
             amark_session_error=AsyncMock(),

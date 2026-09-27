@@ -643,6 +643,39 @@ def validate_attempts(path: Path) -> list[dict[str, Any]]:
     return attempts
 
 
+def _validate_invalid_attempt_retention(path: Path, attempts: list[dict[str, Any]]) -> None:
+    """Keep invalid and aborted attempts selected unless one registered replacement exists.
+
+    Unselecting an invalid attempt would shrink the analyzed set and hide an
+    unmeasurable primary. The only exception is a pre-registered replacement:
+    exactly one later attempt names it as ``parent_attempt_id``, keeps the same
+    ``change.surface`` and is itself selected. A different-surface child, such as
+    an aggregate row, is not a replacement; a second same-surface child is an
+    extra replacement and is rejected whether or not it is selected.
+    """
+    for index, attempt in enumerate(attempts):
+        if attempt["validity"] not in {"invalid", "aborted"} or attempt["selected_for_analysis"]:
+            continue
+        attempt_id = str(attempt["attempt_id"])
+        replacements = [
+            later
+            for later in attempts[index + 1 :]
+            if later["parent_attempt_id"] == attempt_id
+            and later["change"]["surface"] == attempt["change"]["surface"]
+        ]
+        if len(replacements) > 1:
+            raise ValueError(
+                f"{path}: unselected {attempt['validity']} attempt {attempt_id} has "
+                f"{len(replacements)} same-surface replacements; exactly one is allowed"
+            )
+        if not replacements or replacements[0]["selected_for_analysis"] is not True:
+            raise ValueError(
+                f"{path}: {attempt['validity']} attempt {attempt_id} must remain "
+                "selected_for_analysis unless exactly one later selected attempt with the "
+                "same change.surface replaces it through parent_attempt_id"
+            )
+
+
 def validate_analysis(path: Path, *, run_spec_path: Path, attempts_path: Path) -> None:
     _reject_placeholders(path)
     analysis = _load_json_object(path)
@@ -682,6 +715,7 @@ def validate_analysis(path: Path, *, run_spec_path: Path, attempts_path: Path) -
         message = f"{path}: public evaluation sidecars contain a machine-local path"
         raise ValueError(message)
 
+    _validate_invalid_attempt_retention(attempts_path, attempts)
     selected = {
         str(attempt["attempt_id"]) for attempt in attempts if attempt["selected_for_analysis"]
     }

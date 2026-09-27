@@ -168,6 +168,28 @@ It:
 - reconstructs `recording.cast` from the finalized ATIF trace and binds it to
   the source with `recording.receipt.json`.
 
+For bounded diagnostics, optional agent kwargs `max_tokens` and `max_rounds`
+accept positive integers. Omission retains the existing 32768 output-token
+request and unlimited action rounds. The final two permitted rounds request
+text-only wrap-up, so a tool-use diagnostic needs at least three rounds.
+The output request ceiling also applies to wrap-up and turn-verification
+calls; cognitive reflection retains its own
+`cognitive.reflection_max_tokens` setting. OpenAI's API route sends
+`max_output_tokens`, while the subscription backend omits that unsupported
+parameter. These settings therefore do not establish a whole-runtime token or
+dollar hard cap: auxiliary calls, retries, inputs and route-specific behavior
+must be accounted for at dispatch before paid execution.
+
+The thin adapter binds cognitive-reflection middleware to the same session
+event sink as the main loop. Its durable attempt totals include completed
+reflection calls; the recorded-attempt scope remains distinct from whole-runtime
+coverage and actual account charges.
+
+The provider V1 E2E/Harbor validation revision remains provisional until all
+implementation changes are complete and its source, routes and budget are
+frozen. Adding these controls or passing offline transport tests is not a live
+provider result, subscription-entitlement check or Harbor verifier receipt.
+
 Harbor's job layout permits `agent/recording.cast`, but its contents are owned
 by each agent implementation. Terminus-2 performs a raw asciinema capture;
 GEODE and the instrumented native Codex adapter instead emit an asciicast v2

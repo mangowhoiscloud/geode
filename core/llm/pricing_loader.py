@@ -53,6 +53,7 @@ class ModelPrice:
     long_context_threshold: int | None = None
     long_context_input_multiplier: float = 1.0
     long_context_output_multiplier: float = 1.0
+    cache_write_1h: float | None = None
 
     def for_input_tokens(self, input_tokens: int) -> ModelPrice:
         """Apply the published full-request tier above its strict threshold."""
@@ -64,6 +65,11 @@ class ModelPrice:
             output=self.output * self.long_context_output_multiplier,
             cache_read=self.cache_read * self.long_context_input_multiplier,
             cache_write=self.cache_write * self.long_context_input_multiplier,
+            cache_write_1h=(
+                self.cache_write_1h * self.long_context_input_multiplier
+                if self.cache_write_1h is not None
+                else None
+            ),
             long_context_threshold=None,
         )
 
@@ -84,6 +90,7 @@ def _derive_anthropic(
         cache_read=inp * 0.1 if cached_mtok is None else cached_mtok / 1_000_000,
         cache_read_known=True,
         cache_write_known=True,
+        cache_write_1h=inp * 2,
     )
 
 

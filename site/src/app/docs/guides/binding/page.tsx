@@ -51,6 +51,8 @@ time_budget_s = 90`}</pre>
               <code>allowed_tools</code>는 그 채널에서 허용할 도구를 제한하며(빈
               리스트는 전체 허용),{" "}
               <code>time_budget_s</code>는 메시지당 wall-clock 예산을 지정합니다.
+              시간 예산은 0 이상의 유한한 수, 횟수 제한은 0 이상의 정수여야
+              합니다. 숫자 필드에 불리언은 사용할 수 없습니다.
               <code>auto_respond=false</code>는 처리를 계속하고 세션은 저장하되
               채널로 최종 텍스트를 보내지 않습니다. 헤드리스 denylist는 바인딩
               allowlist보다 항상 우선합니다.
@@ -86,8 +88,18 @@ time_budget_s = 90`}</pre>
               <code>config.toml</code>이 바뀔 때마다입니다.{" "}
               <code>ConfigWatcher</code>가 파일 변경을 감지해{" "}
               <code>load_bindings_from_config</code>를 다시 부르므로 serve를
-              재시작하지 않아도 새 바인딩이 적용됩니다. 리로드 시 기존 바인딩
-              리스트는 비워지고 config의 규칙으로 다시 채워집니다.
+              재시작하지 않아도 새 바인딩이 적용됩니다. 파일 삭제나 교체도
+              감지하며, 전역·프로젝트 설정을 합친 후보를 검증한 뒤 바인딩을
+              한 번에 교체합니다. 읽기·파싱·검증에 실패하면 기존 바인딩을
+              유지하고 debounce 이후 재시도합니다. 삭제된 파일의 규칙은
+              제거되고, 합쳐진 규칙이 빈 배열이면 모든 바인딩을 해제합니다.
+              함수에 규칙이 없는 설정을 직접 전달하면 기존 바인딩을 유지하고,
+              <code>rules = []</code>를 명시하면 해제합니다. 채널 ID가 없는
+              규칙은 건너뛰지만, 비어 있지 않은 후보의 모든 규칙이 이 사유로
+              제외되면 실패로 처리합니다. serve 종료 시 감시자도 종료합니다.
+              실행 중인 콜백 때문에 종료가 지연되면 오류를 보고하고 이전
+              감시자가 끝날 때까지 중복 시작을 차단합니다.
+              poller 구성과 serve 실행 기본값 변경은 재시작 후 적용됩니다.
             </p>
 
             <h2>확인</h2>
@@ -161,7 +173,9 @@ time_budget_s = 90`}</pre>
               <code>allowed_tools</code> restricts which tools are permitted in that
               channel (an empty list means all tools), and{" "}
               <code>time_budget_s</code> sets the per-message wall-clock budget,
-              falling back to the gateway-level default when omitted. Setting{" "}
+              falling back to the gateway-level default when omitted. Budgets must
+              be finite nonnegative numbers; count limits must be nonnegative
+              integers. Boolean values are rejected for numeric fields. Setting{" "}
               <code>auto_respond=false</code> still processes and persists the turn but
               suppresses the final outbound channel message. The headless denylist
               always outranks the binding allowlist. These fields
@@ -196,8 +210,18 @@ time_budget_s = 90`}</pre>
               <code>core/wiring/adapters.py</code>) and again whenever{" "}
               <code>config.toml</code> changes. A <code>ConfigWatcher</code> detects
               the file change and re-invokes <code>load_bindings_from_config</code>,
-              so new bindings apply without restarting serve. On reload the existing
-              binding list is cleared and refilled from the config rules.
+              so new bindings apply without restarting serve. Deletion and
+              replacement also trigger reload. The merged global/project candidate
+              is validated before bindings are replaced together. Read, parse or
+              validation failures retain the previous bindings and retry after
+              debounce. Rules from deleted files disappear; an empty merged rule
+              list revokes all bindings. Direct calls without rules leave existing
+              bindings unchanged; explicit <code>rules = []</code> clears them.
+              Rules without channel IDs are skipped, but a nonempty candidate with
+              no usable rules is rejected. Stopping serve also stops the watcher.
+              A callback that delays shutdown produces an error; a second watcher
+              cannot start until the previous one exits.
+              Poller configuration and serve execution defaults require a restart.
             </p>
 
             <h2>Verify</h2>

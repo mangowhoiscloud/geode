@@ -22,9 +22,14 @@ wiring tests land alongside the emit-site augmentation in that follow-up.
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
+import threading
 import time
+from contextlib import closing
 from pathlib import Path
+from typing import Any
+from unittest.mock import Mock
 
 import pytest
 from core.memory.session_manager import SessionManager
@@ -36,7 +41,7 @@ def tmp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Isolate ``sessions.db`` to ``tmp_path`` and reset the module
     cache so each test starts from a fresh connection."""
     db = tmp_path / "sessions.db"
-    SessionManager(db_path=db)  # bootstrap schema
+    SessionManager(db_path=db).close()
     monkeypatch.setattr(
         "core.memory.session_manager._get_default_db_path",
         lambda: db,
@@ -44,6 +49,172 @@ def tmp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     ars._reset_for_tests(db_path=db)
     yield db
     ars._reset_for_tests()
+
+
+def test_schema_bootstrap_connection_is_closed(
+    tmp_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    closed: list[sqlite3.Connection] = []
+
+    class TrackedManager(SessionManager):
+        def close(self) -> None:
+            closed.append(self._conn)
+            super().close()
+
+    monkeypatch.setattr("core.memory.session_manager.SessionManager", TrackedManager)
+    ars.record_agent_session_end(agent_id="s-bootstrap")
+    assert len(closed) == 1
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        closed[0].execute("SELECT 1")
+    assert ars.get_agent_runtime_state("s-bootstrap") is not None
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        sqlite3.OperationalError("WAL setup failed"),
+        KeyboardInterrupt(),
+        SystemExit(17),
+        asyncio.CancelledError(),
+    ],
+    ids=["sqlite_error", "keyboard_interrupt", "system_exit", "cancelled"],
+)
+def test_failed_connection_setup_is_closed_and_retryable(
+    tmp_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    failure: BaseException,
+) -> None:
+    class FailedSetupConnection(sqlite3.Connection):
+        close_calls = 0
+
+        def execute(self, sql: str, parameters: Any = (), /) -> sqlite3.Cursor:
+            if sql == "PRAGMA journal_mode=WAL":
+                raise failure
+            return super().execute(sql, parameters)
+
+        def close(self) -> None:
+            self.close_calls += 1
+            super().close()
+
+    bootstrap = Mock()
+    with closing(sqlite3.connect(":memory:", factory=FailedSetupConnection)) as connection:
+        with monkeypatch.context() as scoped:
+            scoped.setattr(
+                "core.memory.session_manager.SessionManager", Mock(return_value=bootstrap)
+            )
+            scoped.setattr(ars.sqlite3, "connect", Mock(return_value=connection))
+            if isinstance(failure, Exception):
+                assert ars.get_agent_runtime_state("s-failed") is None
+                assert "failed to open sessions.db" in caplog.text
+            else:
+                with pytest.raises(type(failure)) as raised:
+                    ars.get_agent_runtime_state("s-failed")
+                assert raised.value is failure
+        assert connection.close_calls == 1
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            connection.execute("SELECT 1")
+    bootstrap.close.assert_called_once_with()
+    assert ars._CONN is None
+    acquired = ars._LOCK.acquire(blocking=False)
+    if acquired:
+        ars._LOCK.release()
+    assert acquired
+    ars.record_agent_session_end(agent_id="s-retry")
+    assert ars.get_agent_runtime_state("s-retry") is not None
+
+
+def test_close_is_idempotent_and_active_callers_can_reopen(tmp_db: Path) -> None:
+    ars.accumulate_tokens_and_cost(agent_id="s-close", input_tokens=7, output_tokens=3)
+    connection = ars._CONN
+    assert connection is not None
+    ars.close_runtime_state()
+    ars.close_runtime_state()
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        connection.execute("SELECT 1")
+    ars.accumulate_tokens_and_cost(agent_id="s-close", input_tokens=5, output_tokens=2)
+    state = ars.get_agent_runtime_state("s-close")
+    assert state is not None
+    assert (state.total_input_tokens, state.total_output_tokens) == (12, 5)
+
+
+@pytest.mark.parametrize("failure", ["statement", "commit", "rollback"])
+def test_failed_write_cannot_leak_into_a_later_commit(tmp_db: Path, failure: str) -> None:
+    ars.record_agent_session_end(agent_id="seed")
+    connection = ars._CONN
+    assert connection is not None
+
+    def authorize(action: int, arg1: str | None, *_args: object) -> int:
+        if action == sqlite3.SQLITE_TRANSACTION and (
+            arg1 == "COMMIT" or (failure == "rollback" and arg1 == "ROLLBACK")
+        ):
+            return sqlite3.SQLITE_DENY
+        return sqlite3.SQLITE_OK
+
+    if failure == "statement":
+        connection.execute(
+            "CREATE TEMP TRIGGER reject_runtime_insert AFTER INSERT ON agent_runtime_state "
+            "WHEN NEW.agent_id = 'failed' BEGIN SELECT RAISE(FAIL, 'injected failure'); END"
+        )
+    else:
+        connection.set_authorizer(authorize)
+
+    ars.accumulate_tokens_and_cost(agent_id="failed", input_tokens=10, output_tokens=2)
+    if failure == "rollback":
+        assert ars._CONN is None
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            connection.execute("SELECT 1")
+    else:
+        assert not connection.in_transaction
+        connection.set_authorizer(None)
+    assert ars.get_agent_runtime_state("failed") is None
+    ars.accumulate_tokens_and_cost(agent_id="later", input_tokens=3, output_tokens=1)
+    with closing(sqlite3.connect(tmp_db)) as reader:
+        assert reader.execute(
+            "SELECT agent_id, total_input_tokens FROM agent_runtime_state "
+            "WHERE agent_id IN ('failed', 'later')"
+        ).fetchall() == [("later", 3)]
+
+
+def test_shutdown_cannot_close_a_writer_connection_mid_operation(
+    tmp_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    acquired = threading.Event()
+    proceed = threading.Event()
+    original = ars._get_conn
+
+    def pause_after_connection_acquired() -> sqlite3.Connection | None:
+        connection = original()
+        acquired.set()
+        assert proceed.wait(timeout=5)
+        return connection
+
+    monkeypatch.setattr(ars, "_get_conn", pause_after_connection_acquired)
+    writer = threading.Thread(
+        target=ars.accumulate_tokens_and_cost,
+        kwargs={"agent_id": "s-race", "input_tokens": 11, "output_tokens": 4},
+    )
+    closer = threading.Thread(target=ars.close_runtime_state)
+    writer.start()
+    try:
+        assert acquired.wait(timeout=5)
+        unlocked = ars._LOCK.acquire(blocking=False)
+        if unlocked:
+            ars._LOCK.release()
+        assert not unlocked, "Shutdown must not acquire a connection still owned by a writer"
+        closer.start()
+    finally:
+        proceed.set()
+        writer.join(timeout=5)
+        if closer.ident is not None:
+            closer.join(timeout=5)
+    assert not writer.is_alive() and not closer.is_alive()
+    assert ars._CONN is None
+    with closing(sqlite3.connect(tmp_db)) as conn:
+        assert conn.execute(
+            "SELECT total_input_tokens, total_output_tokens FROM agent_runtime_state "
+            "WHERE agent_id = 's-race'"
+        ).fetchone() == (11, 4)
 
 
 class TestSchemaBootstrap:

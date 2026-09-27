@@ -181,9 +181,6 @@ def test_login_show_status_renders_plan_label(capsys: pytest.CaptureFixture[str]
     # branch doesn't trip on attribute errors.
     fake_registry.list_all = lambda: [fake_registry._plans["glm-coding-lite"]]  # type: ignore[attr-defined]
     fake_registry.all_routing = lambda: {}  # type: ignore[attr-defined]
-    fake_registry.usage_for = lambda plan_id: type(  # type: ignore[attr-defined]
-        "U", (), {"weighted_calls": 0.0, "remaining_in_window": lambda self, plan: 0}
-    )()
     # ``_login_show_status`` reads quota off the plan; the fake has none,
     # so it must not break the bullet — patch ``plan.quota`` to None.
     fake_registry._plans["glm-coding-lite"].quota = None  # type: ignore[attr-defined]
@@ -192,7 +189,6 @@ def test_login_show_status_renders_plan_label(capsys: pytest.CaptureFixture[str]
     with (
         patch("core.wiring.container.ensure_profile_store", return_value=store),
         patch("core.llm.strategies.plan_registry.get_plan_registry", return_value=fake_registry),
-        patch("core.auth.oauth_login.get_auth_status", return_value=[]),
     ):
         _login_show_status()
 

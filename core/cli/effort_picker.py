@@ -11,10 +11,9 @@ Per-provider effort enum is grounded in each provider's official docs
 (see ``platform.claude.com/docs/en/build-with-claude/effort``,
 ``openai-python/src/openai/types/shared/reasoning_effort.py``,
 ``codex-rs/protocol/src/openai_models.rs:43-51``,
-``docs.z.ai/guides/capabilities/thinking-mode``). GLM uses a binary
-``thinking.type`` (enabled/disabled) rather than a graded effort —
-the picker shows two levels for GLM hybrids; for always-on models the
-effort line shows ``[fixed]`` and arrow keys are no-op.
+``docs.z.ai/guides/capabilities/thinking-mode``). The picker reads the same
+per-model contracts as request shaping. GLM-5.2 and GLM-5.3 have distinct
+effort ranges; an unverified model shows ``[fixed]``.
 
 Raw-tty input. Up/Down moves between models, Left/Right cycles the
 focused model's valid effort range, Enter confirms, q/ESC cancels.
@@ -27,45 +26,8 @@ import sys
 from dataclasses import dataclass
 
 from core.llm.adapters._openai_common import get_openai_model_spec
-from core.llm.model_capabilities import (
-    ANTHROPIC_ADAPTIVE_MODELS,
-    ANTHROPIC_XHIGH_MODELS,
-)
-
-# ---------------------------------------------------------------------------
-# Per-provider effort enum table
-# ---------------------------------------------------------------------------
-
-_ANTHROPIC_ADAPTIVE_EFFORTS = ("low", "medium", "high", "max", "xhigh")
-_GLM_HYBRID_EFFORTS = ("disabled", "enabled")
-
-# PR-DRIFT-ANCHORS (2026-06-10) — the capability sets live in the single
-# SoT ``core/llm/model_capabilities.py`` (the former "Keep these in sync"
-# comment is retired along with the literal copies): the picker surfaces
-# exactly the knobs the adapter request-shaping accepts, by construction.
-_ANTHROPIC_ADAPTIVE_MODELS = ANTHROPIC_ADAPTIVE_MODELS
-_ANTHROPIC_XHIGH_MODELS = ANTHROPIC_XHIGH_MODELS
-
-_GLM_HYBRID_MODELS = frozenset(
-    {"glm-4.6", "glm-4.6v", "glm-4.5", "glm-4.5v", "glm-4.5-air", "glm-4.5-flash"}
-)
-_GLM_ALWAYS_ON_MODELS = frozenset(
-    {
-        # glm-5.2 has a thinking enable/disable + reasoning_effort knob, but the
-        # GLM adapter (glm_payg / glm_coding_plan) does not send those params
-        # (supports_thinking=False), so surfacing a toggle here would be a
-        # picker-vs-adapter disconnect. Classify always-on like the rest of
-        # GLM-5.x until the adapter wires thinking through (deferred follow-up).
-        "glm-5.2",
-        "glm-5.1",
-        "glm-5",
-        "glm-5-turbo",
-        "glm-5v-turbo",
-        "glm-4.7",
-        "glm-4.7-flash",
-        "glm-4.7-flashx",
-    }
-)
+from core.llm.model_capabilities import get_anthropic_model_spec
+from core.llm.providers.glm import get_glm_model_spec
 
 
 def supported_efforts(model: str, provider: str) -> tuple[str, ...]:
@@ -74,42 +36,30 @@ def supported_efforts(model: str, provider: str) -> tuple[str, ...]:
     Empty tuple = "no effort knob" → picker shows ``[fixed]``.
     """
     if provider == "anthropic":
-        if model in _ANTHROPIC_ADAPTIVE_MODELS:
-            if model in _ANTHROPIC_XHIGH_MODELS:
-                return _ANTHROPIC_ADAPTIVE_EFFORTS
-            return _ANTHROPIC_ADAPTIVE_EFFORTS[:-1]
-        return ()
+        spec = get_anthropic_model_spec(model)
+        return spec.effort_values if spec is not None else ()
+    if provider == "openrouter" and model.startswith("openrouter/openai/"):
+        model = model.removeprefix("openrouter/openai/")
+        provider = "openai"
     if provider in ("openai", "openai-codex"):
         return get_openai_model_spec(model).reasoning_effort_values or ()
     if provider == "glm":
-        if model in _GLM_HYBRID_MODELS:
-            return _GLM_HYBRID_EFFORTS
-        if model in _GLM_ALWAYS_ON_MODELS:
-            return ()
-        return ()
+        glm_spec = get_glm_model_spec(model)
+        return glm_spec.reasoning_effort_values if glm_spec is not None else ()
     return ()
 
 
 def default_effort(model: str, provider: str) -> str | None:
-    """The API default for the model — mirrors what the API uses when
-    the caller doesn't specify."""
-    levels = supported_efforts(model, provider)
-    if not levels:
+    """Use the same model contract as request shaping."""
+    if not supported_efforts(model, provider):
         return None
     if provider == "anthropic":
-        # Anthropic API default is "high" per platform.claude.com docs.
-        # Opus 4.7+ official guidance recommends "xhigh" as the *starting
-        # point* for coding/agentic — surface it as the default for the
-        # xhigh-capable models (4.7 / 4.8) so the picker shows what the
-        # model actually wants.
-        if model in _ANTHROPIC_XHIGH_MODELS:
-            return "xhigh"
-        return "high"
-    if provider in ("openai", "openai-codex"):
-        return "medium"
+        spec = get_anthropic_model_spec(model)
+        return spec.default_effort if spec is not None else None
     if provider == "glm":
-        return "enabled"
-    return levels[0]
+        glm_spec = get_glm_model_spec(model)
+        return glm_spec.default_effort if glm_spec is not None else None
+    return "medium"
 
 
 def cycle_effort(current: str, levels: tuple[str, ...], direction: int) -> str:
@@ -119,12 +69,17 @@ def cycle_effort(current: str, levels: tuple[str, ...], direction: int) -> str:
     try:
         idx = levels.index(current)
     except ValueError:
-        # Migration bridge for OpenAI configs persisted before ``minimal``
-        # left the current-model contract. It sat between ``none`` and ``low``;
-        # preserve that ordering so the first explicit arrow input never moves
-        # opposite to the requested direction.
-        if current == "minimal" and "none" in levels and "low" in levels:
-            return "low" if direction > 0 else "none"
+        # A persisted unsupported value can sit between native levels.
+        # Move only on explicit arrow input, in the requested direction without
+        # turning a first left-arrow press into a higher effort.
+        order = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
+        if current in order and all(level in order for level in levels):
+            index = order.index(current)
+            if direction > 0:
+                return next((level for level in levels if order.index(level) > index), levels[-1])
+            return next(
+                (level for level in reversed(levels) if order.index(level) < index), levels[0]
+            )
         return levels[len(levels) // 2]
     return levels[(idx + direction) % len(levels)]
 
@@ -135,8 +90,17 @@ def cycle_effort(current: str, levels: tuple[str, ...], direction: int) -> str:
 
 _MODEL_DESCRIPTIONS: dict[str, str] = {
     # Anthropic
+    "claude-fable-5-1": "Fable 5.1 · demanding reasoning · 1M context",
+    "claude-opus-5-5": "Opus 5.5 · agentic coding · 1M context",
+    "claude-opus-5": "Opus 5 · adaptive thinking · 1M context",
+    "claude-sonnet-5": "Sonnet 5 · speed and intelligence · 1M context",
+    "gpt-6-sol": "GPT-6 Sol · coding and everyday work · API + subscription",
+    "gpt-6-luna": "GPT-6 Luna · efficient routine work · API + subscription",
+    "glm-5.3": "GLM-5.3 · reasoning · 1M context",
+    "glm-5.3-flash": "GLM-5.3 Flash · multimodal · 1M context",
+    "glm-5.3-flashx": "GLM-5.3 FlashX · multimodal · PAYG",
     "claude-fable-5": "Fable 5 with 1M context · Frontier reasoning, always-on thinking",
-    "claude-opus-4-8": "Opus 4.8 with 1M context · Most capable for complex work",
+    "claude-opus-4-8": "Opus 4.8 · prior generation · 1M context",
     "claude-opus-4-7": "Opus 4.7 with 1M context · High-capability reasoning",
     "claude-opus-4-6": "Opus 4.6 · Strong general-purpose reasoning",
     "claude-sonnet-4-6": "Sonnet 4.6 · Best for everyday tasks",
@@ -155,8 +119,8 @@ _MODEL_DESCRIPTIONS: dict[str, str] = {
     "openrouter/openrouter/auto": "Dynamic model route · variable provider and cost",
     # GLM
     "glm-5.2": "GLM-5.2 · flagship reasoning · 1M-capable, automatic caching",
-    "glm-5.1": "GLM-5.1 · always-on reasoning",
-    "glm-5-turbo": "GLM-5 Turbo · faster + cheaper",
+    "glm-5.1": "GLM-5.1 · hybrid reasoning",
+    "glm-5-turbo": "GLM-5 Turbo · historical configured model",
     "glm-4.7-flash": "GLM-4.7 Flash · low-latency tier",
 }
 
@@ -207,7 +171,7 @@ class PickerResult:
     PR-PICKER-SPACE-STAGE (2026-06-12) — ``staged`` carries per-role
     picks applied with Space WITHOUT closing the picker (operator:
     three role tabs, Enter-only meant one pick per open). Each entry is
-    ``(role_name, model_id)``; the final Enter pick is still
+    ``(role_name, model_id, effort)``; the final Enter pick is still
     ``(role, model_id)`` and is NOT duplicated into ``staged``. Esc /
     q discards staged picks (``cancelled=True`` + empty ``staged``).
     """
@@ -216,7 +180,7 @@ class PickerResult:
     effort: str | None  # None → no effort knob applies for this model
     cancelled: bool = False
     role: str = "primary"
-    staged: tuple[tuple[str, str], ...] = ()
+    staged: tuple[tuple[str, str, str | None], ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -432,20 +396,24 @@ def _render(
     cur_mid, cur_prov, _cur_label, _cur_cost, _cur_avail, _cur_forced = profiles[cursor]
     levels = supported_efforts(cur_mid, cur_prov)
     current = effort_per_model.get(cur_mid)
-    default = default_effort(cur_mid, cur_prov)
     if not levels:
         out.write("  \033[2m· No effort knob for this model\033[0m\n")
     else:
-        sym = effort_symbol(current or default or "")
-        name = effort_label(current or default or "")
-        suffix = " (default)" if current == default else ""
-        out.write(
-            _fit_to_width(
-                f"  \033[1;36m{sym}\033[0m {name} effort\033[2m{suffix}\033[0m"
-                f"  \033[2m← → to adjust\033[0m"
-            )
-            + "\n"
+        options = "  ".join(
+            f"\033[1;36m{effort_symbol(level)} {effort_label(level)}\033[0m"
+            if level == current
+            else effort_label(level)
+            for level in levels
         )
+        out.write(_fit_to_width(f"  Effort: {options}  \033[2m← → to choose\033[0m") + "\n")
+        if current not in levels:
+            out.write(
+                _fit_to_width(
+                    f"  Saved effort {current!r} is unsupported; choose with ← → before confirming."
+                )
+                + "\n"
+            )
+            lines += 1
     lines += 1
 
     out.write(_fit_to_width(f"\n  \033[2m{confirm_hint}\033[0m") + "\n")
@@ -522,18 +490,16 @@ def pick_model_and_effort(
     )
 
     effort_per_model: dict[str, str | None] = {}
+    effort_model = role_initial_models.get("primary", current_model)
     for mid, prov, *_rest in profiles:
         levels = supported_efforts(mid, prov)
         if not levels:
             effort_per_model[mid] = None
             continue
-        # ``minimal`` was accepted and persisted by older OpenAI picker
-        # contracts. Keep it on the currently selected row so reopening the
-        # picker and pressing Enter remains a no-op during migration. It stays
-        # out of ``levels``: the first explicit arrow-key adjustment moves to
-        # the current model's supported contract.
-        preserve_legacy_minimal = prov in ("openai", "openai-codex") and current_effort == "minimal"
-        if mid == current_model and (current_effort in levels or preserve_legacy_minimal):
+        # Opening and confirming the current model must not rewrite explicit
+        # effort. Unsupported saved values remain separate from the choices;
+        # only explicit arrow input selects a supported value.
+        if mid == effort_model:
             effort_per_model[mid] = current_effort
         else:
             effort_per_model[mid] = default_effort(mid, prov)
@@ -541,7 +507,7 @@ def pick_model_and_effort(
     role_has_effort = dict(role_has_effort or {})
     # PR-PICKER-SPACE-STAGE (2026-06-12) — picks applied with Space per
     # role; returned on Enter, discarded on Esc/q.
-    staged_picks: dict[str, str] = {}
+    staged_picks: dict[str, tuple[str, str | None]] = {}
     initial_for_render = role_initial_models.get(role_names[role_cursor], current_model)
     show_effort = role_has_effort.get(role_names[role_cursor], True)
 
@@ -553,6 +519,12 @@ def pick_model_and_effort(
             (mid, prov, label, cost, availability.get(mid, available), forced)
             for mid, prov, label, cost, available, forced in profiles
         ]
+
+    def effort_is_selectable(model: str, provider: str) -> bool:
+        if not role_has_effort.get(role_names[role_cursor], True):
+            return True
+        levels = supported_efforts(model, provider)
+        return not levels or effort_per_model.get(model) in levels
 
     line_count = _render(
         profiles_for_role(),
@@ -598,16 +570,22 @@ def pick_model_and_effort(
                     cancelled=True,
                     role=role_names[role_cursor],
                 )
+            if not effort_is_selectable(chosen_mid, chosen_prov):
+                continue
             _clear_lines(line_count)
             final_role = role_names[role_cursor]
             return PickerResult(
                 model_id=chosen_mid,
-                effort=effort_per_model.get(chosen_mid),
+                effort=(
+                    effort_per_model.get(chosen_mid)
+                    if role_has_effort.get(final_role, True)
+                    else None
+                ),
                 cancelled=False,
                 role=final_role,
                 staged=tuple(
-                    (role_name, mid)
-                    for role_name, mid in staged_picks.items()
+                    (role_name, mid, staged_effort)
+                    for role_name, (mid, staged_effort) in staged_picks.items()
                     if role_name != final_role
                 ),
             )
@@ -617,12 +595,17 @@ def pick_model_and_effort(
             # can be set in one picker session (Enter-only closed after
             # a single pick). The tab strip's per-role marker updates
             # immediately via role_initial_models; Esc discards.
-            staged_mid, _prov, _label, _cost, staged_available, _forced = profiles_for_role()[
+            staged_mid, staged_prov, _label, _cost, staged_available, _forced = profiles_for_role()[
                 cursor
             ]
-            if staged_available:
+            if staged_available and effort_is_selectable(staged_mid, staged_prov):
                 staged_role = role_names[role_cursor]
-                staged_picks[staged_role] = staged_mid
+                staged_picks[staged_role] = (
+                    staged_mid,
+                    effort_per_model.get(staged_mid)
+                    if role_has_effort.get(staged_role, True)
+                    else None,
+                )
                 role_initial_models[staged_role] = staged_mid
         elif key == _KEY_TAB and len(role_names) > 1:
             role_cursor = (role_cursor + 1) % len(role_names)

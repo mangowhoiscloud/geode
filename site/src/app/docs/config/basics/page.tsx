@@ -143,10 +143,15 @@ export default function Page() {
             </p>
             <p>
               <code>GEODE_CONFIG_TOML</code> env 변수는 전역
-              <code>config.toml</code>의 경로를 바꿉니다. C-4부터 메인 설정
-              로더(<code>core/config/__init__.py</code>)와 self-improving
-              로더(<code>core/config/self_improving.py</code>)가 같은 경로를
-              읽습니다. 프로젝트 toml은 그 위에 그대로 얹힙니다.
+              <code>config.toml</code>의 경로를 바꿉니다. 메인 설정 로더,
+              <code>geode config explain</code>, <code>/model</code>의 전역
+              읽기·저장·확인 화면은 같은 경로 해석 함수를 사용합니다.
+              MCP 서버 로딩, 게이트웨이 읽기·변경 감시, seed 역할·투표자
+              설정도 이 전역 경로를 따릅니다.
+              프로젝트 범위로 저장하면 <code>.geode/config.toml</code>에
+              기록되며, 프로젝트 toml은 전역 설정 위에 그대로 얹힙니다.
+              <code>geode-eval config migrate-petri-toml</code>의 미리보기와
+              <code>--yes</code> 저장도 같은 전역 경로를 사용합니다.
             </p>
 
             <h2>geode config explain</h2>
@@ -232,9 +237,9 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
                   <td>의도된 동작입니다. 시크릿은 전역에 두고, 프로젝트는 전역에 없는 키만 채웁니다. <code>geode config explain &lt;KEY&gt;</code>로 WINNER 층을 확인하세요.</td>
                 </tr>
                 <tr>
-                  <td><code>GEODE_CONFIG_TOML</code>이 일부 로더에만 적용</td>
-                  <td>C-4 이전에는 self-improving 로더만 인식</td>
-                  <td>업그레이드합니다. <code>geode config explain</code>이 실제로 읽은 경로를 보고합니다.</td>
+                  <td>대체 전역 경로에서 <code>/model</code> 선택이 남지 않음</td>
+                  <td>구 버전 피커가 기본 전역 파일에 기록</td>
+                  <td>업그레이드하고 저장 확인 화면의 경로와 <code>geode config explain</code>의 전역 경로를 비교합니다.</td>
                 </tr>
               </tbody>
             </table>
@@ -385,12 +390,15 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
             </p>
             <p>
               The <code>GEODE_CONFIG_TOML</code> env var redirects the global
-              <code>config.toml</code> path. Since C-4 both the main settings
-              loader (<code>core/config/__init__.py</code>) and the
-              self-improving loader
-              (<code>core/config/self_improving.py</code>) honor it, so the
-              variable has one meaning. The project toml still overlays on
-              top.
+              <code>config.toml</code> path. The main settings loader,
+              <code>geode config explain</code>, and global <code>/model</code>
+              reads, writes, and confirmation use the same path resolver.
+              MCP server loading, gateway reads and change watching, and seed
+              role and voter overrides also use this global path.
+              Project-scoped picks still write to <code>.geode/config.toml</code>,
+              and the project TOML continues to override global settings.
+              The <code>geode-eval config migrate-petri-toml</code> preview and
+              <code>--yes</code> write use that same global destination.
             </p>
 
             <h2>geode config explain</h2>
@@ -480,9 +488,9 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
                   <td>This is intended. Keep secrets in the global file; the project file only fills keys global lacks. Run <code>geode config explain &lt;KEY&gt;</code> to see the WINNER layer.</td>
                 </tr>
                 <tr>
-                  <td><code>GEODE_CONFIG_TOML</code> only applies to some loaders</td>
-                  <td>Before C-4 only the self-improving loader honored it</td>
-                  <td>Upgrade. <code>geode config explain</code> reports the path actually read.</td>
+                  <td>A global <code>/model</code> pick disappears with a redirected config</td>
+                  <td>An older picker wrote to the default global file</td>
+                  <td>Upgrade and compare the save-confirmation path with the global path in <code>geode config explain</code>.</td>
                 </tr>
               </tbody>
             </table>

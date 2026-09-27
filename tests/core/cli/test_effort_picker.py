@@ -11,7 +11,7 @@ Pinned 2026-04-28 against:
   - OpenAI Responses effort enum: the explicit per-model registry in
     `core.llm.adapters._openai_common` (the picker and wire share one contract)
   - GLM thinking enum: docs.z.ai/guides/capabilities/thinking-mode
-    (binary enabled/disabled)
+    (per-model graded effort; unknown models stay fixed)
 """
 
 from __future__ import annotations
@@ -29,11 +29,11 @@ from core.cli.effort_picker import (
 class TestAnthropicEnum:
     def test_opus_4_8_includes_xhigh(self) -> None:
         levels = supported_efforts("claude-opus-4-8", "anthropic")
-        assert levels == ("low", "medium", "high", "max", "xhigh")
+        assert levels == ("low", "medium", "high", "xhigh", "max")
 
     def test_opus_4_7_includes_xhigh(self) -> None:
         levels = supported_efforts("claude-opus-4-7", "anthropic")
-        assert levels == ("low", "medium", "high", "max", "xhigh")
+        assert levels == ("low", "medium", "high", "xhigh", "max")
 
     def test_opus_4_6_excludes_xhigh(self) -> None:
         levels = supported_efforts("claude-opus-4-6", "anthropic")
@@ -50,15 +50,13 @@ class TestAnthropicEnum:
         assert levels == ()
 
     def test_default_is_high(self) -> None:
-        # Anthropic API default is "high" per platform.claude.com docs.
-        # Opus 4.7+ official guidance recommends xhigh as the *starting
-        # point* for coding/agentic — picker surfaces xhigh as the
-        # default for the xhigh-capable Opus models (4.7 / 4.8); sonnet
-        # and Opus 4.6 stay on high.
-        assert default_effort("claude-opus-4-8", "anthropic") == "xhigh"
-        assert default_effort("claude-opus-4-7", "anthropic") == "xhigh"
+        # Defaults follow each model's request contract, not UI recommendations.
+        assert default_effort("claude-opus-4-8", "anthropic") == "high"
+        assert default_effort("claude-opus-4-7", "anthropic") == "high"
         assert default_effort("claude-sonnet-4-6", "anthropic") == "high"
         assert default_effort("claude-opus-4-6", "anthropic") == "high"
+        assert default_effort("claude-opus-5-5", "anthropic") == "medium"
+        assert default_effort("claude-fable-5-1", "anthropic") == "high"
 
 
 class TestOpenAIResponsesEnum:
@@ -93,10 +91,22 @@ class TestOpenAIResponsesEnum:
 
 
 class TestGLMEnum:
-    def test_hybrid_models_have_binary_enum(self) -> None:
+    def test_legacy_models_do_not_offer_unimplemented_binary_control(self) -> None:
         for model in ("glm-4.6", "glm-4.5", "glm-4.5-air"):
-            levels = supported_efforts(model, "glm")
-            assert levels == ("disabled", "enabled"), f"{model}: {levels}"
+            assert supported_efforts(model, "glm") == ()
+
+    def test_current_models_expose_native_efforts(self) -> None:
+        assert supported_efforts("glm-5.2", "glm") == (
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+        )
+        for model in ("glm-5.3", "glm-5.3-flash", "glm-5.3-flashx"):
+            assert supported_efforts(model, "glm") == ("low", "high", "max")
 
     def test_always_on_models_no_knob(self) -> None:
         """Always-on GLM thinking models silently ignore disabled —
@@ -109,8 +119,10 @@ class TestGLMEnum:
         assert supported_efforts("glm-4", "glm") == ()
         assert supported_efforts("unknown", "glm") == ()
 
-    def test_default_is_enabled(self) -> None:
-        assert default_effort("glm-4.6", "glm") == "enabled"
+    def test_default_is_model_specific(self) -> None:
+        assert default_effort("glm-4.6", "glm") is None
+        assert default_effort("glm-5.2", "glm") == "max"
+        assert default_effort("glm-5.3", "glm") == "max"
 
 
 class TestCycleEffort:
@@ -136,11 +148,9 @@ class TestCycleEffort:
         assert cycle_effort("anything", (), -1) == "anything"
 
     def test_unknown_current_snaps_to_middle(self) -> None:
-        """Switching models (e.g., from gpt-5.5 to claude-opus-4-7)
-        with current="none" → snap to the new model's middle level."""
-        levels = ("low", "medium", "high", "max", "xhigh")
-        # "none" is not in the Anthropic enum
-        result = cycle_effort("none", levels, +1)
+        """A value with no known ordering retains the middle-level fallback."""
+        levels = ("low", "medium", "high", "xhigh", "max")
+        result = cycle_effort("unrecognized", levels, +1)
         assert result in levels  # snapped to something valid
         assert result == levels[len(levels) // 2]  # middle
 
@@ -157,7 +167,7 @@ class TestPerProviderEnumIntegrity:
     def test_every_profile_has_supported_efforts_callable(self) -> None:
         from core.cli.commands import get_model_profiles
 
-        for p in get_model_profiles():
+        for p in get_model_profiles(openai_source="payg"):
             levels = supported_efforts(p.id, p.provider)
             assert isinstance(levels, tuple)
             # Every level should be a non-empty string
@@ -166,7 +176,7 @@ class TestPerProviderEnumIntegrity:
     def test_default_either_in_enum_or_none(self) -> None:
         from core.cli.commands import get_model_profiles
 
-        for p in get_model_profiles():
+        for p in get_model_profiles(openai_source="payg"):
             levels = supported_efforts(p.id, p.provider)
             d = default_effort(p.id, p.provider)
             if not levels:
@@ -177,16 +187,17 @@ class TestPerProviderEnumIntegrity:
                 assert d in levels, f"{p.id} ({p.provider}): default={d} not in {levels}"
 
 
-def test_picker_preserves_legacy_openai_minimal_on_noop_enter(
+def test_picker_rejects_legacy_openai_minimal_on_enter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Opening and confirming a persisted legacy value must not rewrite it."""
+    """Enter cannot confirm a stale value; cancel preserves the saved setting."""
     from core.cli import effort_picker
 
     profiles: list[tuple[str, str, str, str, bool, str | None]] = [
         ("gpt-5.4", "openai", "GPT-5.4", "$$", True, None),
     ]
-    monkeypatch.setattr(effort_picker, "_read_key", lambda: effort_picker._KEY_ENTER)
+    keys = iter([effort_picker._KEY_ENTER, effort_picker._KEY_QUIT])
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
     monkeypatch.setattr(effort_picker, "_render", lambda *args, **kwargs: 0)
     monkeypatch.setattr(effort_picker, "_clear_lines", lambda lines: None)
 
@@ -196,9 +207,34 @@ def test_picker_preserves_legacy_openai_minimal_on_noop_enter(
         current_effort="minimal",
     )
 
-    assert result.cancelled is False
+    assert result.cancelled is True
     assert result.model_id == "gpt-5.4"
     assert result.effort == "minimal"
+
+
+def test_openrouter_openai_picker_uses_native_model_efforts() -> None:
+    model = "openrouter/openai/gpt-6-sol"
+    assert supported_efforts(model, "openrouter") == supported_efforts("gpt-6-sol", "openai")
+    assert default_effort(model, "openrouter") == "medium"
+    assert supported_efforts("openrouter/openrouter/auto", "openrouter") == ()
+
+
+def test_picker_marks_unsupported_saved_effort(monkeypatch, capsys) -> None:
+    from core.cli import effort_picker
+
+    monkeypatch.setattr(effort_picker, "_fit_to_width", lambda text: text)
+    effort_picker._render(
+        [("glm-5.3", "glm", "GLM-5.3", "$", True, None)],
+        cursor=0,
+        effort_per_model={"glm-5.3": "medium"},
+        initial_model="glm-5.3",
+    )
+    output = capsys.readouterr().out
+    choices, hint = output.split("  Effort: ", 1)[1].split("\n", 1)
+    assert all(level in choices for level in ("Low", "High", "Max"))
+    assert "Medium" not in choices
+    assert "\033[1;36m" not in choices
+    assert "Saved effort 'medium' is unsupported" in hint
 
 
 @pytest.mark.parametrize(
@@ -241,7 +277,7 @@ def test_active_off_catalog_openai_model_enter_is_a_noop(
     from core.cli.commands._state import get_model_profiles
 
     with patch.object(core.config, "OPENAI_PRIMARY", "gpt-5.6-sol"):
-        rows = get_model_profiles(configured_model_ids=("gpt-5.2",))
+        rows = get_model_profiles(configured_model_ids=("gpt-5.2",), openai_source="payg")
     profiles = [(row.id, row.provider, row.label, row.cost, True, None) for row in rows]
 
     monkeypatch.setattr(effort_picker, "_read_key", lambda: effort_picker._KEY_ENTER)
@@ -264,12 +300,88 @@ def test_configured_rows_are_deduplicated_across_default_and_roles() -> None:
     from core.cli.commands._state import get_model_profiles
 
     with patch.object(core.config, "OPENAI_PRIMARY", "gpt-5.2"):
-        rows = get_model_profiles(configured_model_ids=("gpt-5.2", "gpt-5.1", "gpt-5.1", ""))
+        rows = get_model_profiles(
+            configured_model_ids=("gpt-5.2", "gpt-5.1", "gpt-5.1", ""), openai_source="payg"
+        )
 
     ids = [row.id for row in rows]
     assert ids.count("gpt-5.2") == 1
     assert ids.count("gpt-5.1") == 1
     assert next(row for row in rows if row.id == "gpt-5.1").provider == "openai"
+
+
+@pytest.mark.parametrize("current_effort", ["none", "minimal", "medium", "xhigh"])
+@pytest.mark.parametrize("navigate", [False, True])
+def test_picker_requires_arrow_after_invalid_glm_enter(
+    monkeypatch: pytest.MonkeyPatch, current_effort: str, navigate: bool
+) -> None:
+    from core.cli import effort_picker
+
+    profiles = [
+        ("glm-5.3", "glm", "GLM-5.3", "$", True, None),
+        ("glm-5.2", "glm", "GLM-5.2", "$", True, None),
+    ]
+    keys = iter(
+        ([effort_picker._KEY_DOWN, effort_picker._KEY_UP] if navigate else [])
+        + [effort_picker._KEY_ENTER, effort_picker._KEY_RIGHT, effort_picker._KEY_ENTER]
+    )
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_render", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda lines: None)
+    result = effort_picker.pick_model_and_effort(profiles, "glm-5.3", current_effort)
+    assert result.cancelled is False
+    assert result.model_id == "glm-5.3"
+    assert (
+        result.effort
+        == {"none": "low", "minimal": "low", "medium": "high", "xhigh": "max"}[current_effort]
+    )
+    assert list(keys) == []
+
+
+@pytest.mark.parametrize(
+    ("current", "left", "right"),
+    [
+        ("none", "low", "low"),
+        ("minimal", "low", "low"),
+        ("medium", "low", "high"),
+        ("xhigh", "high", "max"),
+    ],
+)
+@pytest.mark.parametrize("direction", [-1, 1])
+def test_picker_moves_generic_glm_effort_in_arrow_direction(
+    monkeypatch: pytest.MonkeyPatch, current: str, left: str, right: str, direction: int
+) -> None:
+    from core.cli import effort_picker
+
+    keys = iter(
+        [
+            effort_picker._KEY_LEFT if direction < 0 else effort_picker._KEY_RIGHT,
+            effort_picker._KEY_ENTER,
+        ]
+    )
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_render", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda lines: None)
+    result = effort_picker.pick_model_and_effort(
+        [("glm-5.3", "glm", "GLM-5.3", "$", True, None)], "glm-5.3", current
+    )
+    assert result.effort == (left if direction < 0 else right)
+
+
+@pytest.mark.parametrize("openai_source", ["payg", "subscription"])
+def test_configured_glm_default_uses_its_own_source(
+    monkeypatch: pytest.MonkeyPatch, openai_source: str
+) -> None:
+    import core.config as cfg
+    from core.cli.commands._state import get_model_profiles, model_unavailable_reason
+
+    monkeypatch.setattr(cfg, "GLM_PRIMARY", "glm-custom")
+    rows = get_model_profiles(openai_source=openai_source)
+    matching = [row for row in rows if row.id == "glm-custom"]
+    assert len(matching) == 1
+    assert matching[0].label == "glm-custom (Configured)"
+    assert model_unavailable_reason(matching[0].id) is None
+    assert cfg.GLM_PRIMARY == "glm-custom"
 
 
 class TestRenderVersionHeader:
@@ -289,3 +401,23 @@ class TestRenderVersionHeader:
         out = capsys.readouterr().out
         assert f"GEODE v{__version__}" in out
         assert "Select model" in out
+
+
+@pytest.mark.parametrize("current_effort", ["low", "high", "max"])
+def test_picker_renders_all_supported_efforts_and_preserves_noop_enter(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], current_effort: str
+) -> None:
+    from core.cli import effort_picker
+
+    monkeypatch.setattr(effort_picker, "_fit_to_width", lambda text: text)
+    keys = iter([effort_picker._KEY_ENTER])
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda lines: None)
+    result = effort_picker.pick_model_and_effort(
+        [("glm-5.3", "glm", "GLM-5.3", "$", True, None)], "glm-5.3", current_effort
+    )
+    choices = capsys.readouterr().out.split("  Effort: ", 1)[1].split("\n", 1)[0]
+    assert all(level in choices for level in ("Low", "High", "Max"))
+    assert choices.count("\033[1;36m") == 1
+    assert result.effort == current_effort
+    assert result.cancelled is False

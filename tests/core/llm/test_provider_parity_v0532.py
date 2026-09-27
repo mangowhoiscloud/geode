@@ -150,7 +150,7 @@ def test_gpt_5_5_model_profile_uses_resolver_family() -> None:
     from core.config import _resolve_provider
     from core.llm.adapters.registry import normalize_registry_provider
 
-    profiles = {p.id: p for p in get_model_profiles()}
+    profiles = {p.id: p for p in get_model_profiles(openai_source="payg")}
     assert "gpt-5.5" in profiles, "gpt-5.5 must be in the model picker list"
     assert profiles["gpt-5.5"].provider == normalize_registry_provider(
         _resolve_provider("gpt-5.5")
@@ -169,7 +169,7 @@ def test_all_model_profiles_match_resolver_family() -> None:
     from core.llm.adapters.registry import normalize_registry_provider
 
     mismatches: list[tuple[str, str, str]] = []
-    for profile in get_model_profiles():
+    for profile in get_model_profiles(openai_source="payg"):
         resolved = normalize_registry_provider(_resolve_provider(profile.id))
         if profile.provider != resolved:
             mismatches.append((profile.id, profile.provider, resolved))

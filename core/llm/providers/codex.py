@@ -20,8 +20,12 @@ import hashlib
 import logging
 import time
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from core.auth.jwt_claims import decode_jwt_claims
+
+if TYPE_CHECKING:
+    from core.config.policy_source import PolicySourcePaths
 
 log = logging.getLogger(__name__)
 
@@ -102,7 +106,9 @@ def build_codex_oauth_headers(token: str) -> dict[str, str]:
     return headers
 
 
-def _resolve_codex_token_info(*, force_refresh: bool = False) -> _ResolvedCodexToken | None:
+def _resolve_codex_token_info(
+    *, force_refresh: bool = False, model: str = "", sources: PolicySourcePaths | None = None
+) -> _ResolvedCodexToken | None:
     """Resolve Codex OAuth token with cache metadata.
 
     v0.52.4 — checks two sources, GEODE-issued first:
@@ -122,6 +128,18 @@ def _resolve_codex_token_info(*, force_refresh: bool = False) -> _ResolvedCodexT
     pool resync pattern: when the backing auth store changes, stale
     runtime entries are replaced instead of kept until process restart.
     """
+    from core.config import CODEX_BASE_URL
+    from core.llm.routing import resolve_routing
+
+    target = resolve_routing(model, provider="openai", source="subscription", sources=sources)
+    if target is not None:
+        if target.base_url.rstrip("/") != CODEX_BASE_URL.rstrip("/"):
+            raise RuntimeError("Codex plan endpoint does not match the subscription backend")
+        return _ResolvedCodexToken(
+            token=target.profile.key,
+            source=f"profile:{target.profile.name}",
+            expires_at=float(target.profile.expires_at or 0.0),
+        )
     try:
         from core.wiring.container import get_profile_store
 

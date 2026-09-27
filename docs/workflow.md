@@ -34,6 +34,12 @@ it and parallel work can improve time or quality. Do not force delegation by
 call count or invent unavailable tools. Report outcomes concisely; routine
 monitoring reports meaningful changes, completion, failure, or needed input.
 
+A delegated agent returns its changed revision (branch and head SHA), the
+checks it ran with command and tested revision, unresolved issues, and log
+locations. The parent runs the integration checks it needs on that revision
+but does not replay the child's exploration. Once independent work is handed
+to another session, the parent stops working that scope.
+
 ## Core Loop
 
 1. **Scope**: confirm branch, dirty files, objective, and unrelated work.

@@ -89,7 +89,7 @@ def migrate_petri_toml(
         "--yes",
         "-y",
         help=(
-            "Append the migration plan to ~/.geode/config.toml. "
+            "Append the migration plan to the resolved global config TOML. "
             "Without this flag the command prints the snippets and exits "
             "(dry-run preview)."
         ),
@@ -97,11 +97,11 @@ def migrate_petri_toml(
 ) -> None:
     """Move petri.* sections from ~/.geode/petri.toml into
     ``[self_improving_loop.autoresearch.<role>]`` sections of
-    ``~/.geode/config.toml`` (control-layer SoT, Step J-b.1).
+    the global config TOML (``GEODE_CONFIG_TOML`` or ``~/.geode/config.toml``).
 
     Dry-run by default — prints the TOML snippets the operator should
     append. With --yes, the snippets are appended to
-    ~/.geode/config.toml (creating it if absent). The legacy file
+    the resolved global config (creating it if absent). The legacy file
     is left intact in both modes so the operator can roll back; deleting
     it is the operator's call after verifying the new path resolves.
 
@@ -110,7 +110,7 @@ def migrate_petri_toml(
     the legacy ``petri.<role>`` namespace) — prevents accidental
     double-write on re-run.
     """
-    from core.paths import GLOBAL_CONFIG_TOML
+    from core.config.toml_edit import resolve_config_toml_path
 
     from evals.petri.user_overrides import migration_plan_from_petri_toml
 
@@ -120,18 +120,19 @@ def migrate_petri_toml(
         raise typer.Exit(code=0)
 
     rendered = _render_petri_sections(plan)
+    target = resolve_config_toml_path()
 
     if not yes:
         _console.print(
             "# Migration plan from ~/.geode/petri.toml → "
-            "~/.geode/config.toml [self_improving_loop.autoresearch.<role>]"
+            f"{target} [self_improving_loop.autoresearch.<role>]",
+            markup=False,
         )
         _console.print("# Re-run with --yes to append automatically.")
         _console.print("")
         _console.print(rendered, markup=False, highlight=False)
         raise typer.Exit(code=0)
 
-    target = GLOBAL_CONFIG_TOML
     try:
         existing_roles = _config_already_has_petri_section(target)
     except tomllib.TOMLDecodeError as exc:

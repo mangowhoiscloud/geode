@@ -136,7 +136,7 @@ jobs:
 
       - name: Sync dev group (zipfile-zstd for validator)
         working-directory: ${{ github.workspace }}
-        run: uv sync
+        run: uv sync --locked
 
       - name: Validate docs/self-improving/petri-bundle (deep — pre-build gate)
         working-directory: ${{ github.workspace }}

@@ -15,6 +15,7 @@ from core.orchestration.isolated_execution import IsolationResult
 
 if TYPE_CHECKING:
     from core.agent.worker import WorkerRequest
+    from core.config.session import SessionModelConfig
     from core.skills.agents import AgentRegistry
 
 log = logging.getLogger(__name__)
@@ -162,6 +163,7 @@ class SubagentProtocol:
         *,
         default_model: str = "",
         default_effort: str = "",
+        model_settings: SessionModelConfig | None = None,
         emit_activity: bool = False,
         resume: bool = False,
     ) -> WorkerRequest:
@@ -190,14 +192,18 @@ class SubagentProtocol:
                 role, [definition["name"] for definition in load_all_tool_definitions()]
             )
 
-        effort = task.effort or default_effort or settings.agentic_effort
+        effort = (
+            task.effort
+            or default_effort
+            or (model_settings.effort if model_settings else settings.agentic_effort)
+        )
 
         agent = self.resolve_agent(task)
         agent_name = ""
         system_prompt = ""
         allowed_tools: list[str] = []
         toolkit = ""
-        model = default_model or settings.model
+        model = default_model or (model_settings.model if model_settings else settings.model)
         if agent is not None:
             agent_name = str(agent.get("agent_name", ""))
             system_prompt = str(agent.get("system_prompt", ""))
@@ -208,6 +214,24 @@ class SubagentProtocol:
                 model = str(agent["model"])
         if task.model:
             model = task.model
+
+        if model_settings is not None:
+            from core.llm.routing import infer_source
+
+            provider = _resolve_provider(model)
+            source = task.source or (
+                model_settings.source
+                if provider == _resolve_provider(model_settings.model)
+                else infer_source(
+                    provider,
+                    model=model,
+                    sources=self.policy_sources.get("provider_routing"),
+                    settings=settings,
+                )
+            )
+            model_settings = model_settings.updated(
+                {"model": model, "effort": effort, "source": source}
+            )
 
         description = task.description
         if role is not None:
@@ -241,7 +265,8 @@ class SubagentProtocol:
             toolkit=toolkit,
             parent_session_key=self.parent_session_key or parent_session_id,
             parent_session_id=parent_session_id,
-            source=task.source,
+            source=model_settings.source if model_settings else task.source,
+            model_settings=model_settings,
             policy_sources=encode_policy_sources(self.policy_sources),
             response_schema=task.response_schema,
             emit_activity=emit_activity,

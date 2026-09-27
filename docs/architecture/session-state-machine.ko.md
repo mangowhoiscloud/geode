@@ -81,13 +81,33 @@ COMPLETED, ERROR}; PAUSED → {ACTIVE, PAUSED, COMPLETED, ERROR}(재파킹
 
 ## 머신 상태의 내용물
 
-체크포인트는 완전한 머신 스냅샷이다(v0.99.328 계약): 대화 메시지
-(SQLite SoT), `cognitive_state`, 모델/프로바이더, 그리고 대화가 담지
-못하는 가드 카운터 `loop_guards`(overthinking 스트릭, LLM 실패 카운터,
-diversity 트래커, `ConvergenceDetector`, low-confidence replan arm).
-단일 resume 수술은 `AgenticLoop.restore_from_checkpoint(state)`이고,
-`apply_guard_state`는 교체 시맨틱이라 레거시 체크포인트가 재사용 루프의
-카운터를 상속하지 않고 리셋한다.
+체크포인트는 대화 메시지(SQLite SoT), `cognitive_state`, 모델/프로바이더
+호환 메타데이터와 `loop_guards`를 보존합니다. 새 체크포인트의
+`model_settings`는 실행 중 루프와 같은 비밀값 없는 `SessionModelConfig`입니다.
+구체적인 과금 경로, native effort, 보조 모델 정책을 담으며 자격 증명이나 전체
+Settings, workspace·지침 파일은 복사하지 않습니다.
+
+IPC·gateway·serve의 Goal 자동 재개는
+`apply_session_model_config(..., reason="resume")`로 먼저
+설정을 검증·적용하고 그 뒤에 대화 이력·머신 식별자·checkpoint 상태를 복원합니다.
+이 경로는 모델 변경용 compaction이나 확인 메시지를 생성하지 않습니다. worker도
+저장된 동일 record로 루프와 도구 구성을 만든 뒤 admission이 성공해야 이력을
+연결하고 checkpoint를 다시 엽니다. 거절된 worker admission은 과거 checkpoint를
+실행 오류 상태로 바꾸지 않습니다.
+
+`model_settings` 필드가 없으면 legacy로 구분하여 현재 검증된 선택을 유지합니다.
+과거 모델 이름에 현재 source/effort를 섞어 복원하지 않습니다. 필드가 있으나
+잘못됐거나 null이면 거절합니다. IPC 응답의 `model_config_origin`은
+`checkpoint` 또는 `current`이며, thin client는 실제 적용된 `model_config`로
+화면의 선택을 갱신합니다.
+
+새 child는 ToolContext → SubAgentManager → WorkerRequest → AgenticLoopConfig로
+같은 record를 전달합니다. 명시 task model/effort/source와 AgentDefinition 모델의
+기존 우선순위를 유지하고, 나머지는 부모의 선택과 보조 정책을 상속합니다.
+resume에는 저장된 record가 새 요청 기본값보다 우선합니다. 머신 식별자와 가드
+복원은 계속 `restore_from_checkpoint`가 담당하며 legacy 가드는 다른 세션 값을
+상속하지 않고 리셋합니다. 이 순서는 외부 효과를 되돌리거나 여러 저장소를 하나의
+transaction으로 만드는 보장은 아닙니다.
 
 ## 읽기 경로 (결정론 우선순위)
 

@@ -76,7 +76,6 @@ def test_each_slash_command_emits_an_isolated_typed_trajectory(
         ToolExecutor(action_handlers=handlers, auto_approve=True, hitl_level=0),
         config=AgenticLoopConfig(
             session_id=f"slash-typed-{surface}",
-            disable_settings_drift=True,
             max_rounds=20,
         ),
         model="gpt-5.6-luna",
