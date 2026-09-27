@@ -349,6 +349,38 @@ hook: it reserves before and settles after each Jev call, and a settlement that
 crosses the stop limit keeps its attempt evidence while the next admission is
 refused, so the runner stops before another Jev call.
 
+The initial/default program cap remains $1. An operator-authorized increase uses
+`python -m evals.benchmarks.jev_cost_ledger amend <ledger> --cost-limit-usd <cap>
+--start-limit-usd <start> --stop-limit-usd <stop> --approval-reference <reference>
+--approval-sha256 <digest>`. This appends a `limits_amended` record with schema
+`geode.jev-cost-limits-amendment@1`, its previous/new USD limits, and a digest-bound
+reference to retained approval evidence. The caller owns approval verification;
+the ledger validates the reference's form and never reads credentials or approval
+content. Every limit must be finite, positive, exactly representable at 1e-9 USD,
+ordered and nondecreasing; at least one must increase, and the cost limit must
+cover existing committed spend including reservations. Replay updates only the
+effective limits. The legacy header, all consumption, missing-token/open reserves
+and any sticky stop remain unchanged. Status distinguishes the initial program
+cap, effective cap and amendment count. Readers predating this record reject an
+amended ledger, so later runs must pin the updated owner; archived evidence and
+its original header are not rewritten. The 25,000-token reservation is an operator
+assumption, not a provider input maximum or an invoice guarantee.
+
+### Explicit handoff time budgets
+
+The shared `run_arm` retains a 180-second default and accepts a finite positive
+`root_budget_s`. The Harbor adapter passes its explicit `agent_timeout_sec`
+through the existing `--timeout` argument to this value. Both the loop's time
+budget and the enclosing `asyncio.wait_for` consume it; runtime and finalization
+metadata record it. A larger host timeout alone does not change the root budget.
+
+Freeze the selected value and the separate Harbor/setup/verifier/watchdog
+deadlines before a new run. Budget changes can alter the runtime's remaining-time
+instructions, verification reserve and tool cutoff, so report them as a new
+execution policy rather than only extra waiting. Models, effort, six-round
+limits and verification continuation depth remain independent. Historical
+180-second results are not rewritten or combined with a changed-budget cohort.
+
 ### Repetition reliability: auxiliary pass@n and pass^n
 
 Preregistration v1 §3.5 adds auxiliary repetition metrics without changing any

@@ -506,6 +506,66 @@ def test_global_jev_cannot_override_the_frozen_comparison(
     assert not root.requests
 
 
+@pytest.mark.parametrize("budget", [True, 0, -1, float("nan"), float("inf"), "540", 10**1000])
+def test_invalid_root_budget_precedes_provider_dispatch(tmp_path: Path, budget: Any) -> None:
+    root = _root_adapter([])
+    with pytest.raises(ValueError, match="root_budget_s"):
+        asyncio.run(
+            runtime.run_arm(
+                _case("negated-cancel-en"), "a0", tmp_path, root_adapter=root, root_budget_s=budget
+            )
+        )
+    assert not root.requests
+    assert not list(tmp_path.glob("*.json"))
+
+
+@pytest.mark.parametrize("budget", [None, 540.0])
+def test_root_budget_binds_loop_deadline_and_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, budget: float | None
+) -> None:
+    from core.agent.loop import AgenticLoop
+
+    native_arun = AgenticLoop.arun
+    native_wait_for = asyncio.wait_for
+    seen: dict[str, Any] = {}
+    deadlines: list[float | None] = []
+
+    async def arun(loop: Any, *args: Any, **kwargs: Any) -> Any:
+        seen.update(
+            budget=loop._time_budget_s,
+            rounds=loop.max_rounds,
+            repairs=loop._verify_continuation_budget,
+            model=loop.model,
+            effort=loop._effort,
+        )
+        return await native_arun(loop, *args, **kwargs)
+
+    async def wait_for(awaitable: Any, timeout: float | None) -> Any:
+        deadlines.append(timeout)
+        return await native_wait_for(awaitable, timeout)
+
+    monkeypatch.setattr(AgenticLoop, "arun", arun)
+    monkeypatch.setattr(asyncio, "wait_for", wait_for)
+    case = _case("negated-cancel-en")
+    root = _root_adapter(_root_responses(case)[1:])
+    options = {} if budget is None else {"root_budget_s": budget}
+    result = asyncio.run(runtime.run_arm(case, "a0", tmp_path, root_adapter=root, **options))
+    expected = 180.0 if budget is None else budget
+    assert seen == {
+        "budget": expected,
+        "rounds": 6,
+        "repairs": 2,
+        "model": "gpt-6-astra",
+        "effort": "xhigh",
+    }
+    assert deadlines[0] == expected
+    assert f"Total root wall-time budget: {expected:.0f} seconds" in root.requests[0].system_prompt
+    assert result["valid"] and result["passed"]
+    assert result["root_budget_s"] == expected
+    metadata = json.loads((tmp_path / "runtime-metadata.json").read_text())
+    assert metadata["root_budget_s"] == expected
+
+
 @pytest.mark.parametrize("malformed", [False, True])
 def test_native_final_judgment_distinguishes_semantic_hold_from_invalid_response(
     tmp_path: Path, malformed: bool

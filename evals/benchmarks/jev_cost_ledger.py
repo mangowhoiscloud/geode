@@ -32,8 +32,10 @@ subscription calls at API-equivalent rates, so a positive in-container limit
 would stop on charges that were never billed while still not reserving Jev
 spend. Model settings do not enforce this budget; this host ledger does. For
 the same reason the ledger never reads 0 as "unlimited": creating or opening
-one requires a positive, finite cost limit no larger than
-:data:`PROGRAM_CAP_USD`.
+one requires a positive, finite initial cost limit no larger than
+:data:`PROGRAM_CAP_USD`. An explicitly authorized :meth:`JevCostLedger.amend_limits`
+can raise the effective limits without changing that header or any prior record.
+It never clears a stop, missing-token reserves or open reservations.
 
 Amounts
 -------
@@ -69,7 +71,7 @@ outputs or credentials.
 
 CLI
 ---
-``python -m evals.benchmarks.jev_cost_ledger {init,status,admit,reserve,settle}``
+``python -m evals.benchmarks.jev_cost_ledger {init,status,amend,admit,reserve,settle}``
 prints one JSON object on stdout. Exit codes:
 
 * 0: success.
@@ -108,6 +110,7 @@ from evals.benchmarks.decision_handoff_runtime import (
 
 SCHEMA_ID = "geode.jev-cost-ledger@1"
 ANCHOR_SCHEMA_ID = "geode.jev-cost-ledger-head@1"
+AMENDMENT_SCHEMA_ID = "geode.jev-cost-limits-amendment@1"
 PROGRAM_CAP_USD = Decimal("1.00")
 START_LIMIT_USD = Decimal("0.90")
 STOP_LIMIT_USD = Decimal("0.95")
@@ -171,6 +174,9 @@ _RECORD_FIELDS = {
         }
     ),
     "stop": frozenset({"reason", "reservation_id", "committed_usd"}),
+    "limits_amended": frozenset(
+        {"schema_id", "previous_limits", "limits", "approval_reference", "approval_sha256"}
+    ),
 }
 _CALL_FIELDS = frozenset({"call_id", "input_tokens", "estimate_usd", "reserve_usd"})
 _P95_SOURCES = frozenset({"explicit", "earlier_units", "reserve_default"})
@@ -259,7 +265,7 @@ def _parse_money(value: object, *, name: str) -> Decimal:
     return Decimal(value)
 
 
-def _require_usd(value: object, *, name: str) -> Decimal:
+def _require_usd(value: object, *, name: str, authorized_amendment: bool = False) -> Decimal:
     """Parse a positive, finite USD limit; 0 is refused, never read as unlimited."""
     if isinstance(value, bool) or not isinstance(value, Decimal | int | str):
         raise ValueError(f"{name} must be a Decimal, int or decimal string")
@@ -271,24 +277,38 @@ def _require_usd(value: object, *, name: str) -> Decimal:
         raise ValueError(
             f"{name} must be positive and finite; GEODE reads cost_limit_usd = 0 as disabled"
         )
-    if amount > PROGRAM_CAP_USD:
+    if not authorized_amendment and amount > PROGRAM_CAP_USD:
         raise ValueError(f"{name} exceeds the program cap of {PROGRAM_CAP_USD} USD")
+    if amount >= Decimal("1e15"):
+        raise ValueError(f"{name} exceeds the ledger's 15-digit USD representation")
     if amount != amount.quantize(USD_QUANTUM, context=_CTX):
         raise ValueError(f"{name} must be a multiple of {format(USD_QUANTUM, 'f')} USD")
     return amount.quantize(USD_QUANTUM, context=_CTX)
 
 
 def _validated_limits(
-    cost: object, start: object, stop: object
+    cost: object, start: object, stop: object, *, authorized_amendment: bool = False
 ) -> tuple[Decimal, Decimal, Decimal]:
-    cost_limit = _require_usd(cost, name="cost_limit_usd")
-    start_limit = _require_usd(start, name="start_limit_usd")
-    stop_limit = _require_usd(stop, name="stop_limit_usd")
+    cost_limit = _require_usd(
+        cost, name="cost_limit_usd", authorized_amendment=authorized_amendment
+    )
+    start_limit = _require_usd(
+        start, name="start_limit_usd", authorized_amendment=authorized_amendment
+    )
+    stop_limit = _require_usd(
+        stop, name="stop_limit_usd", authorized_amendment=authorized_amendment
+    )
     if not start_limit <= stop_limit <= cost_limit:
         raise ValueError(
             "limits must satisfy 0 < start_limit_usd <= stop_limit_usd <= cost_limit_usd"
         )
     return cost_limit, start_limit, stop_limit
+
+
+def _require_approval(reference: object, digest: object) -> None:
+    _require_id(reference, name="approval_reference")
+    if not isinstance(digest, str) or not _SHA256.fullmatch(digest):
+        raise ValueError("approval_sha256 must be a lowercase SHA-256 digest")
 
 
 def nearest_rank_p95(values: Sequence[int]) -> int:
@@ -411,6 +431,28 @@ class _State:
     known_input_tokens: list[int] = field(default_factory=list)
     units: dict[str, _Unit] = field(default_factory=dict)
     stop_reasons: list[str] = field(default_factory=list)
+    limits_amendments: int = 0
+
+    def limits(self) -> dict[str, str]:
+        return dict(
+            zip(
+                _LIMIT_FIELDS,
+                map(_money, (self.cost_limit, self.start_limit, self.stop_limit)),
+                strict=True,
+            )
+        )
+
+    def check_amended_limits(self, limits: tuple[Decimal, Decimal, Decimal]) -> None:
+        previous = (self.cost_limit, self.start_limit, self.stop_limit)
+        _check(
+            all(new >= old for new, old in zip(limits, previous, strict=True)),
+            "amended limits cannot decrease",
+        )
+        _check(limits != previous, "amended limits must raise at least one limit")
+        _check(
+            limits[0] >= self.committed_usd,
+            "amended cost limit cannot be below committed spend and reservations",
+        )
 
     @property
     def records(self) -> int:
@@ -479,12 +521,32 @@ class _State:
                 self._apply_reservation(record)
             elif kind == "settlement":
                 self._apply_settlement(record)
+            elif kind == "limits_amended":
+                self._apply_limits_amended(record)
             else:
                 self._apply_stop(record)
         # A consistently re-hashed forgery can carry any JSON type; never let it escape
         # as anything other than an integrity failure.
         except (ValueError, TypeError) as error:
             raise JevLedgerIntegrityError(f"record {record.get('seq')}: {error}") from error
+
+    def _apply_limits_amended(self, record: dict[str, Any]) -> None:
+        _check(record["schema_id"] == AMENDMENT_SCHEMA_ID, "unknown amendment schema")
+        _require_approval(record["approval_reference"], record["approval_sha256"])
+        _check(record["previous_limits"] == self.limits(), "previous limits do not replay")
+        raw = record["limits"]
+        _check(isinstance(raw, dict) and set(raw) == set(_LIMIT_FIELDS), "bad amended limits")
+        limits = _validated_limits(
+            *(_parse_money(raw[key], name=key) for key in _LIMIT_FIELDS),
+            authorized_amendment=True,
+        )
+        _check(
+            raw == dict(zip(_LIMIT_FIELDS, map(_money, limits), strict=True)),
+            "amended limits are not canonical",
+        )
+        self.check_amended_limits(limits)
+        self.cost_limit, self.start_limit, self.stop_limit = limits
+        self.limits_amendments += 1
 
     def _apply_admission(self, record: dict[str, Any], *, admitted: bool) -> None:
         unit_id = _require_id(record["unit_id"], name="unit_id")
@@ -862,6 +924,9 @@ def _status(state: _State) -> dict[str, Any]:
         "model": JEV_MODEL,
         "cost_authority": COST_AUTHORITY,
         "price_reference_checked_at": PRICE_REFERENCE["typesafe"]["checked_at"],
+        "initial_program_cap_usd": _money(PROGRAM_CAP_USD),
+        "effective_program_cap_usd": _money(max(PROGRAM_CAP_USD, state.cost_limit)),
+        "limits_amendments": state.limits_amendments,
         "cost_limit_usd": _money(state.cost_limit),
         "start_limit_usd": _money(state.start_limit),
         "stop_limit_usd": _money(state.stop_limit),
@@ -1021,6 +1086,43 @@ class JevCostLedger:
         """JSON-ready totals for run-log lines; money is fixed-point USD strings."""
         with _locked(self._path, exclusive=False) as fd:
             return _status(self._verified(fd))
+
+    def amend_limits(
+        self,
+        *,
+        cost_limit_usd: Decimal | int | str,
+        start_limit_usd: Decimal | int | str,
+        stop_limit_usd: Decimal | int | str,
+        approval_reference: str,
+        approval_sha256: str,
+    ) -> dict[str, Any]:
+        """Append an operator-authorized increase; preserve all consumption and stops.
+
+        The caller owns authorization. The reference and digest bind its retained,
+        non-secret approval evidence; this method does not authenticate the operator
+        or read that evidence. Earlier ledger readers reject the new record kind.
+        """
+        limits = _validated_limits(
+            cost_limit_usd, start_limit_usd, stop_limit_usd, authorized_amendment=True
+        )
+        _require_approval(approval_reference, approval_sha256)
+
+        def decide(state: _State) -> _Outcome:
+            state.check_amended_limits(limits)
+            return _Outcome(
+                [
+                    {
+                        "kind": "limits_amended",
+                        "schema_id": AMENDMENT_SCHEMA_ID,
+                        "previous_limits": state.limits(),
+                        "limits": dict(zip(_LIMIT_FIELDS, map(_money, limits), strict=True)),
+                        "approval_reference": approval_reference,
+                        "approval_sha256": approval_sha256,
+                    }
+                ]
+            )
+
+        return dict(self._transact(decide).written[0])
 
     def admit_unit(
         self,
@@ -1263,6 +1365,13 @@ def _parser() -> argparse.ArgumentParser:
     init.add_argument("--stop-limit-usd", default=str(STOP_LIMIT_USD))
     status = commands.add_parser("status", help="verify the ledger and print its totals")
     status.add_argument("ledger", type=Path)
+    amend = commands.add_parser("amend", help="append an explicitly authorized limit increase")
+    amend.add_argument("ledger", type=Path)
+    amend.add_argument("--cost-limit-usd", required=True)
+    amend.add_argument("--start-limit-usd", required=True)
+    amend.add_argument("--stop-limit-usd", required=True)
+    amend.add_argument("--approval-reference", required=True)
+    amend.add_argument("--approval-sha256", required=True)
     admit = commands.add_parser("admit", help="admit a unit or record its refusal")
     admit.add_argument("ledger", type=Path)
     admit.add_argument("--unit-id", required=True)
@@ -1344,7 +1453,15 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         return {"status": ledger.status()}
     ledger = JevCostLedger.open(args.ledger)
     result: dict[str, Any] = {}
-    if args.command == "admit":
+    if args.command == "amend":
+        result["record"] = ledger.amend_limits(
+            cost_limit_usd=args.cost_limit_usd,
+            start_limit_usd=args.start_limit_usd,
+            stop_limit_usd=args.stop_limit_usd,
+            approval_reference=args.approval_reference,
+            approval_sha256=args.approval_sha256,
+        )
+    elif args.command == "admit":
         result["record"] = ledger.admit_unit(
             args.unit_id, args.planned_jev_calls, p95_input_tokens=args.p95_input_tokens
         )

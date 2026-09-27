@@ -6,6 +6,7 @@ import asyncio
 import copy
 import hashlib
 import json
+import math
 import os
 import re
 import time
@@ -1179,6 +1180,19 @@ def _matched_verification(
     return _VerificationComparison(judge, receipt, request, system, intervention)
 
 
+def validate_root_budget_s(value: object) -> float:
+    """Require an explicit finite wall-time budget shared by root and repairs."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError("root_budget_s must be a finite positive number")
+    try:
+        budget = float(value)
+    except (OverflowError, ValueError):
+        raise ValueError("root_budget_s must be a finite positive number") from None
+    if not math.isfinite(budget) or budget <= 0:
+        raise ValueError("root_budget_s must be a finite positive number")
+    return budget
+
+
 async def run_arm(
     case: dict[str, Any],
     arm: str,
@@ -1195,7 +1209,9 @@ async def run_arm(
     verification_adapter: Any = None,
     verification_intervention: Mapping[str, Any] | None = None,
     cascade_tau: str | None = None,
+    root_budget_s: float = 180.0,
 ) -> dict[str, Any]:
+    root_budget_s = validate_root_budget_s(root_budget_s)
     # Imports are late so the CLI child isolates cwd/state before loading core.
     from contextlib import AsyncExitStack
 
@@ -1379,7 +1395,7 @@ async def run_arm(
                 source="subscription",
                 effort="xhigh",
                 max_rounds=6,
-                time_budget_s=180,
+                time_budget_s=root_budget_s,
                 allowed_tool_names=set(names),
                 force_include_allowed_tools=True,
                 system_prompt_override=system,
@@ -1405,7 +1421,7 @@ async def run_arm(
         result = None
         error = None
         try:
-            result = await asyncio.wait_for(loop.arun(case["request"]), timeout=180)
+            result = await asyncio.wait_for(loop.arun(case["request"]), timeout=root_budget_s)
             decided = verification.decision_receipts() if verification is not None else []
             judged_hold = bool(
                 result.termination_reason == "external_verification_required"
@@ -1626,6 +1642,7 @@ async def run_arm(
         "case_id": case["id"],
         "model": MODEL,
         "effort": "xhigh",
+        "root_budget_s": root_budget_s,
         "source": "subscription",
         "runtime_scope": "isolated-AgenticLoop-not-default-GeodeRuntime-services",
         "handoff_call_coverage_complete": call_coverage_complete,

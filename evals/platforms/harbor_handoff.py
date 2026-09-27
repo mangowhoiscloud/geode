@@ -17,6 +17,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from evals.benchmarks.decision_handoff_runtime import validate_root_budget_s
 from evals.platforms.harbor_runtime import (
     _INSTALL,
     _LOGS,
@@ -84,6 +85,7 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
     ) -> None:
         if kwargs.get("prompt_template_path") or kwargs.get("env") or kwargs.get("extra_env"):
             raise ValueError("handoff profile forbids prompt templates and extra environment")
+        kwargs["agent_timeout_sec"] = validate_root_budget_s(kwargs.get("agent_timeout_sec"))
         super().__init__(*args, **kwargs)
         if (
             arm not in {"a0", "a", "b"}
@@ -93,7 +95,6 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
             or verification_primitive not in {"choice", "noul"}
             or (verification_primitive == "noul" and verification_engine is None)
             or self.verify_mode != ("llm_judge" if verification_engine else "rule_based")
-            or self.agent_timeout_sec != 180
             or (arm == "b" or verification_engine in {"jev", "cascade"})
             != (typesafe_key_file is not None)
             or (verification_engine is not None and arm != "a0")
@@ -244,10 +245,11 @@ class GeodeHandoffHarborAgent(GeodeRuntimeHarborAgent):
 
 
 async def _run_handoff(args: argparse.Namespace) -> int:
+    root_budget_s = validate_root_budget_s(args.timeout)
     verification_engine = getattr(args, "verification_engine", None)
     verification_primitive = getattr(args, "verification_primitive", "choice")
     cascade_tau = getattr(args, "cascade_tau", None)
-    if args.timeout != 180 or args.arm not in {"a0", "a", "b"}:
+    if args.arm not in {"a0", "a", "b"}:
         raise ValueError("handoff execution contract mismatch")
     if verification_engine not in {None, "llm", "jev", "cascade"} or (
         verification_engine and args.arm != "a0"
@@ -284,6 +286,7 @@ async def _run_handoff(args: argparse.Namespace) -> int:
 
     metadata: dict[str, Any] = {
         "source_revision": args.revision,
+        "root_budget_s": root_budget_s,
         "verify_mode": "llm_judge" if verification_engine else "rule_based",
         "effective_verify_mode": None,
         **({"verification_engine": verification_engine} if verification_engine else {}),
@@ -353,6 +356,7 @@ async def _run_handoff(args: argparse.Namespace) -> int:
             verification_primitive=verification_primitive,
             verification_intervention=value.get("verification_intervention"),
             cascade_tau=cascade_tau,
+            root_budget_s=root_budget_s,
         )
     except BaseException as error:
         errors.append({"stage": execution_stage, "error_type": type(error).__name__})
@@ -445,8 +449,10 @@ def main() -> int:
     parser.add_argument("--verification-primitive", choices=("choice", "noul"), default="choice")
     parser.add_argument("--cascade-tau", help="frozen arm C threshold; required only for cascade")
     args = parser.parse_args()
-    if args.timeout != 180:
-        parser.error("the handoff runtime contract requires 180 seconds")
+    try:
+        validate_root_budget_s(args.timeout)
+    except ValueError as error:
+        parser.error(str(error))
     return asyncio.run(_run_handoff(args))
 
 

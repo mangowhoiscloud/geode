@@ -138,9 +138,11 @@ functional change.
   state escalates once to Astra as a separately observed call. Arm C needs an
   explicit engine and a τ on the preregistered grid, and the Harbor checker
   binds every judge call to its route and escalation.
-- Add a host-scoped, hash-chained Jev cost ledger with the $1 program cap, a
+- Add a host-scoped, hash-chained Jev cost ledger with the default $1 program cap, a
   $0.90 start limit and a sticky $0.95 stop. Missing usage is reserved, never
-  zero. A panel spend guard connects it to the verdict panel runner.
+  zero. Explicit operator amendments can raise limits with a retained approval
+  reference and digest while preserving the header, consumption, reservations,
+  and sticky stops. A panel spend guard connects it to the verdict panel runner.
 - Add paired concurrent execution columns to the handoff tables: slot, launch
   and agent-start skew, pair synchronization, concurrent trials and always
   unknown shared-account usage come from the private trial receipt, and
@@ -294,6 +296,10 @@ functional change.
 
 ### Fixed
 
+- Pass the explicitly configured Harbor handoff time budget through to both
+  the root loop and its enclosing deadline, retaining the 180-second default.
+  Reject non-finite or non-positive budgets and record the effective budget
+  without changing model, effort, round, or verification-repair limits.
 - Validate successful Harbor handoff exports against the runtime task termination
   contract instead of the provider `end_turn` stop reason. Ordinary `natural`
   completions retain their final-judge and oracle checks; cancelled, failed,

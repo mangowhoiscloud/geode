@@ -108,7 +108,7 @@ def test_container_cli_transfers_tau_and_scoped_jev_key(
             "--revision",
             trial.args.revision,
             "--timeout",
-            "180",
+            "540",
             "--verification-engine",
             "cascade",
             "--cascade-tau",
@@ -120,6 +120,7 @@ def test_container_cli_transfers_tau_and_scoped_jev_key(
     assert kwargs["verification_engine"] == "cascade"
     assert kwargs["cascade_tau"] == "0.85"
     assert kwargs["verification_primitive"] == "choice"
+    assert kwargs["root_budget_s"] == 540
     metadata = json.loads((trial.path / "runtime-result.json").read_text())["metadata"]
     assert metadata["cascade_tau"] == "0.85"
     assert metadata["verify_mode"] == "llm_judge"

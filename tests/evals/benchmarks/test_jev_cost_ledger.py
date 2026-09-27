@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 from evals.benchmarks.decision_handoff_runtime import JEV_MODEL, MODEL, PRICE_REFERENCE, _accounting
 from evals.benchmarks.jev_cost_ledger import (
+    AMENDMENT_SCHEMA_ID,
     EXIT_INTEGRITY,
     EXIT_INVALID,
     EXIT_OK,
@@ -223,6 +224,201 @@ def test_create_is_exclusive_owner_only_and_writes_the_header(path: Path) -> Non
 def test_spec_names_alias_the_error_classes() -> None:
     assert JevBudgetRefused is JevBudgetRefusedError
     assert JevBudgetExhausted is JevBudgetExhaustedError
+
+
+AMENDED_LIMITS = {
+    "cost_limit_usd": "2.35",
+    "start_limit_usd": "2.115",
+    "stop_limit_usd": "2.2325",
+    "approval_reference": "operator-approval-20260927.json",
+    "approval_sha256": "a" * 64,
+}
+
+
+def test_amend_preserves_prefix_unknowns_and_open_reservations_for_x2(path: Path) -> None:
+    ledger = _sample(path)
+    ledger.admit_unit("X2", 480)
+    with pytest.raises(JevBudgetRefusedError, match="reservation_exceeds_cost_limit"):
+        ledger.reserve("X2", 960)
+    prefix = path.read_bytes()
+    before = ledger.status()
+    record = ledger.amend_limits(**AMENDED_LIMITS)
+    assert path.read_bytes().startswith(prefix)
+    assert record["kind"] == "limits_amended"
+    assert record["schema_id"] == AMENDMENT_SCHEMA_ID
+    assert record["previous_limits"]["cost_limit_usd"] == "1.000000000"
+    assert _records(path)[0]["program_cap_usd"] == "1.000000000"
+    reopened = JevCostLedger.open(path)
+    after = reopened.status()
+    for key in (
+        "committed_usd",
+        "estimate_usd_total",
+        "settled_reserve_usd",
+        "open_reserved_usd",
+        "open_reservations",
+        "settled_calls",
+        "known_token_calls",
+        "missing_token_calls",
+        "units",
+    ):
+        assert after[key] == before[key]
+    assert after["missing_token_calls"] == 1
+    assert after["open_reservations"] == 1
+    assert after["limits_amendments"] == 1
+    assert after["effective_program_cap_usd"] == "2.350000000"
+    assert after["start_limit_usd"] == "2.115000000"
+    assert after["stop_limit_usd"] == "2.232500000"
+    reservation = reopened.reserve("X2", 960)
+    assert reopened.status()["open_reserved_usd"] == "1.009050000"
+    reopened.settle(reservation, [{"call_id": "x2:1", "input_tokens": None}])
+    assert reopened.status()["missing_token_calls"] == 2
+    assert path.read_bytes().startswith(prefix)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("cost_limit_usd", "0"),
+        ("cost_limit_usd", "-2"),
+        ("cost_limit_usd", "NaN"),
+        ("cost_limit_usd", "sNaN"),
+        ("cost_limit_usd", "Infinity"),
+        ("cost_limit_usd", "1e100000"),
+        ("cost_limit_usd", "1000000000000000"),
+        ("cost_limit_usd", True),
+        ("cost_limit_usd", 2.35),
+        ("cost_limit_usd", "2.3500000001"),
+        ("cost_limit_usd", "0.99"),
+        ("start_limit_usd", "0.89"),
+        ("stop_limit_usd", "0.94"),
+        ("stop_limit_usd", "2.4"),
+        ("start_limit_usd", "2.3"),
+        ("approval_reference", ""),
+        ("approval_reference", "approval\nforged"),
+        ("approval_reference", "a" * 257),
+        ("approval_sha256", ""),
+        ("approval_sha256", "A" * 64),
+        ("approval_sha256", "not-a-digest"),
+    ],
+)
+def test_bad_amendment_changes_no_bytes(path: Path, field: str, value: Any) -> None:
+    ledger = _sample(path)
+    original = path.read_bytes(), Path(f"{path}.head").read_bytes()
+    with pytest.raises(ValueError):
+        ledger.amend_limits(**{**AMENDED_LIMITS, field: value})
+    assert (path.read_bytes(), Path(f"{path}.head").read_bytes()) == original
+
+
+def test_amendment_cannot_lower_current_limits_or_reapply_a_stale_increase(path: Path) -> None:
+    ledger = JevCostLedger.create(path)
+    other = JevCostLedger.open(path)
+    ledger.amend_limits(**AMENDED_LIMITS)
+    prefix = path.read_bytes()
+    with pytest.raises(ValueError, match="raise at least one"):
+        other.amend_limits(**AMENDED_LIMITS)
+    with pytest.raises(ValueError, match="cannot decrease"):
+        other.amend_limits(**{**AMENDED_LIMITS, "cost_limit_usd": "2.3"})
+    assert path.read_bytes() == prefix
+
+
+@pytest.mark.parametrize("stop_reason", ["stop_limit_reached", "reservation_overrun"])
+def test_amend_does_not_clear_sticky_stop(path: Path, stop_reason: str) -> None:
+    ledger = JevCostLedger.create(path, **SMALL)
+    ledger.admit_unit("U", 1, p95_input_tokens=1)
+    reservation = ledger.reserve("U", input_tokens_per_call=950)
+    calls = [{"call_id": None, "input_tokens": 950}]
+    if stop_reason == "reservation_overrun":
+        calls = [{"call_id": None, "input_tokens": 1}] * 2
+    with pytest.raises(JevBudgetExhaustedError):
+        ledger.settle(reservation, calls)
+    before = ledger.status()
+    ledger.amend_limits(**AMENDED_LIMITS)
+    reopened = JevCostLedger.open(path)
+    assert reopened.status()["stopped"] is True
+    assert reopened.status()["stop_reasons"] == [stop_reason]
+    assert reopened.status()["committed_usd"] == before["committed_usd"]
+    with pytest.raises(JevBudgetRefusedError, match="ledger_stopped"):
+        reopened.reserve("U")
+
+
+def test_amendment_cannot_ignore_observed_overrun_consumption(path: Path) -> None:
+    ledger = JevCostLedger.create(path)
+    ledger.admit_unit("U", 8, p95_input_tokens=1)
+    reservation = ledger.reserve("U", 8)
+    with pytest.raises(JevBudgetExhaustedError):
+        ledger.settle(reservation, [{"call_id": None, "input_tokens": 10_000_000}] * 8)
+    assert ledger.status()["committed_usd"] == "3.360000000"
+    prefix = path.read_bytes()
+    with pytest.raises(ValueError, match="below committed"):
+        ledger.amend_limits(**AMENDED_LIMITS)
+    assert path.read_bytes() == prefix
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("previous_limits", {}),
+        ("schema_id", "unknown@1"),
+        ("approval_reference", ""),
+        ("approval_sha256", "bad"),
+        ("limits", None),
+        (
+            "limits",
+            {
+                "cost_limit_usd": "2.350000000",
+                "start_limit_usd": "0.890000000",
+                "stop_limit_usd": "2.232500000",
+            },
+        ),
+        (
+            "limits",
+            {
+                "cost_limit_usd": "02.350000000",
+                "start_limit_usd": "2.115000000",
+                "stop_limit_usd": "2.232500000",
+            },
+        ),
+    ],
+)
+def test_rehashed_amendment_forgery_is_rejected(path: Path, field: str, value: Any) -> None:
+    ledger = _sample(path)
+    ledger.amend_limits(**AMENDED_LIMITS)
+    records = _records(path)
+    records[-1][field] = value
+    _rewrite(path, records)
+    with pytest.raises(JevLedgerIntegrityError):
+        JevCostLedger.open(path)
+
+
+def test_cli_amend_requires_explicit_approval_and_exposes_effective_limits(
+    capsys: pytest.CaptureFixture[str], path: Path
+) -> None:
+    JevCostLedger.create(path)
+    args = [
+        "amend",
+        path,
+        "--cost-limit-usd",
+        "2.35",
+        "--start-limit-usd",
+        "2.115",
+        "--stop-limit-usd",
+        "2.2325",
+    ]
+    prefix = path.read_bytes()
+    assert _cli(capsys, *args)[0] == EXIT_INVALID
+    assert path.read_bytes() == prefix
+    code, payload = _cli(
+        capsys,
+        *args,
+        "--approval-reference",
+        "operator-approval.json",
+        "--approval-sha256",
+        "a" * 64,
+    )
+    assert code == EXIT_OK
+    assert payload["record"]["kind"] == "limits_amended"
+    assert payload["status"]["effective_program_cap_usd"] == "2.350000000"
+    assert path.read_bytes().startswith(prefix)
 
 
 def test_admission_boundary_is_inclusive_and_stops_new_units_at_the_start_limit(
