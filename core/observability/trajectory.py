@@ -1301,7 +1301,7 @@ def _preflight(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Per-run environment snapshot — GEODE's analogue of Codex ``turn_context``.
 
     ``task_preflight`` is 18.4% of all transcript rows (185,688 of 1,009,468) and
-    records the capability graph and required evidence the run started under. It
+    records the capability graph and advisory routing context for the run. It
     is not conversation, so it stays out of the message list, but dropping it
     loses the answer to "what was this run configured to do".
     """
