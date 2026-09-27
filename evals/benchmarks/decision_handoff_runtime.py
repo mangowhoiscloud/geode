@@ -593,6 +593,46 @@ def handoff_call_coverage_complete(
     )
 
 
+NATIVE_INTERVENTION_CONTENT_POLICY = "reasoning-encrypted-content-sha256-v1"
+
+
+def _native_intervention_evidence(result: Any) -> tuple[dict[str, Any], str]:
+    """Digest only typed provider ciphertext; reject unsafe readable evidence."""
+    from core.observability.redaction import redact_secrets
+
+    native = {
+        "text": result.text,
+        "tool_uses": copy.deepcopy(list(result.tool_uses)),
+        "stop_reason": result.stop_reason,
+        "codex_output_items": copy.deepcopy(list(result.codex_output_items)),
+        "reasoning_items": copy.deepcopy(list(result.reasoning_items)),
+        "reasoning_summaries": list(result.reasoning_summaries),
+        "assistant_phase": result.assistant_phase,
+    }
+    original_sha256 = _json_digest(native)
+    for field in ("codex_output_items", "reasoning_items"):
+        for item in native[field]:
+            if not isinstance(item, dict):
+                raise ValueError("malformed native provider item")
+            if item.get("type") == "reasoning" and "encrypted_content" in item:
+                encrypted = item["encrypted_content"]
+                if encrypted is None:
+                    continue  # SDK null denotes absent ciphertext, not malformed content.
+                if not isinstance(encrypted, str):
+                    raise ValueError("malformed native reasoning ciphertext")
+                raw = encrypted.encode("utf-8")
+                # The native provider object stays untouched. This receipt is an
+                # evidence projection, never a provider continuation/replay item.
+                item["encrypted_content"] = {
+                    "sha256": hashlib.sha256(raw).hexdigest(),
+                    "bytes": len(raw),
+                }
+    encoded = json.dumps(native, ensure_ascii=False, allow_nan=False)
+    if redact_secrets(encoded) != encoded or "apikey_" in encoded:
+        raise ValueError("unsafe native intervention evidence")
+    return native, original_sha256
+
+
 class _VerificationComparison:
     """Task-local judge replacement; preserve full evidence and actual repair inputs."""
 
@@ -613,6 +653,7 @@ class _VerificationComparison:
         self.consumptions: list[dict[str, Any]] = []
         self.intervention = intervention
         self.interventions: list[dict[str, Any]] = []
+        self.intervention_failures: list[dict[str, Any]] = []
         self.failures: list[dict[str, str]] = []
 
     def decision_receipts(self) -> list[dict[str, Any]]:
@@ -637,20 +678,20 @@ class _VerificationComparison:
                     or (fault["when"] == "after_observation" and observed and not result.tool_uses)
                 )
             ):
-                from core.observability.redaction import redact_secrets
-
-                native = {
-                    "text": result.text,
-                    "tool_uses": copy.deepcopy(list(result.tool_uses)),
-                    "stop_reason": result.stop_reason,
-                    "codex_output_items": copy.deepcopy(list(result.codex_output_items)),
-                    "reasoning_items": copy.deepcopy(list(result.reasoning_items)),
-                    "reasoning_summaries": list(result.reasoning_summaries),
-                    "assistant_phase": result.assistant_phase,
-                }
-                encoded = json.dumps(native, ensure_ascii=False, allow_nan=False)
-                if redact_secrets(encoded) != encoded or "apikey_" in encoded:
-                    raise ValueError("unsafe native intervention evidence")
+                try:
+                    native, original_sha256 = _native_intervention_evidence(result)
+                except (TypeError, ValueError) as exc:
+                    # Middleware preserves a completed provider call on failure.
+                    # Retain only bounded attribution, not the rejected payload or
+                    # exception message, and keep the experiment invalid thereafter.
+                    self.intervention_failures.append(
+                        {
+                            "llm_call_id": call.correlation.get("llm_call_id"),
+                            "stage": "native-evidence",
+                            "error_type": type(exc).__name__,
+                        }
+                    )
+                    raise
                 effective = {"text": fault["candidate_output"], "tool_uses": []}
                 self.interventions.append(
                     {
@@ -661,6 +702,8 @@ class _VerificationComparison:
                         "receipt_prefix_length": len(self.receipt.rows),
                         "native": native,
                         "native_sha256": _json_digest(native),
+                        "native_original_sha256": original_sha256,
+                        "native_content_policy": NATIVE_INTERVENTION_CONTENT_POLICY,
                         "effective": effective,
                         "effective_sha256": _json_digest(effective),
                     }
@@ -1575,6 +1618,9 @@ async def run_arm(
     ):
         invalid = True
         error = error or "incomplete_verification_intervention"
+    if verification is not None and verification.intervention_failures:
+        invalid = True
+        error = error or "verification_intervention_evidence_failure"
     routing_failures = verification.failures if verification is not None else []
     invalid = invalid or bool(routing_failures)
     error = error or ("cascade_routing_failure" if routing_failures else None)
@@ -1620,6 +1666,7 @@ async def run_arm(
                 "judgments": verification.adapter.receipts,
                 "root_requests": verification.consumptions,
                 "root_outputs": verification.roots,
+                "intervention_failures": verification.intervention_failures,
             },
         )
     if injection is not None:

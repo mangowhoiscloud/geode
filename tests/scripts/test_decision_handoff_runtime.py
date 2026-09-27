@@ -1080,8 +1080,9 @@ def test_candidate_fault_never_replaces_noncompleted_provider_result(stop: str) 
 
 @pytest.mark.parametrize("engine", ["llm", "jev"])
 @pytest.mark.parametrize("when", ["before_observation", "after_observation"])
+@pytest.mark.parametrize("reasoning_shape", ["absent", "opaque", "sdk-null"])
 def test_candidate_intervention_retains_native_output_and_closes_real_repair(
-    engine: str, when: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    engine: str, when: str, reasoning_shape: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from scripts.eval.check_harbor_observations import _verification_check
 
@@ -1112,6 +1113,43 @@ def test_candidate_intervention_retains_native_output_and_closes_real_repair(
         codex_output_items=({"type": "message", "content": [{"text": json.dumps(answer)}]},),
         response_id="native-candidate-1",
     )
+    ciphertext = "synthetic-opaque-sk-" + "a" * 32
+    reasoning = {"type": "reasoning", "encrypted_content": ciphertext, "summary": []}
+    if reasoning_shape == "sdk-null":
+        from core.llm.adapters._openai_common import translate_codex_response
+        from openai.types.responses import ResponseReasoningItem
+
+        translated = translate_codex_response(
+            SimpleNamespace(
+                output=[ResponseReasoningItem(id="rs_synthetic", type="reasoning", summary=[])],
+                status="completed",
+                usage=SimpleNamespace(input_tokens=10, output_tokens=2),
+            )
+        )
+        assert translated.codex_output_items[0]["encrypted_content"] is None
+        assert "encrypted_content" not in translated.reasoning_items[0]
+        output_items, reasoning_items = translated.codex_output_items, translated.reasoning_items
+    else:
+        if reasoning_shape == "absent":
+            reasoning.pop("encrypted_content")
+        output_items, reasoning_items = (reasoning,), (reasoning,)
+    lookup = replace(lookup, codex_output_items=output_items, reasoning_items=reasoning_items)
+    native_candidate = replace(
+        native_candidate,
+        codex_output_items=(*output_items, *native_candidate.codex_output_items),
+        reasoning_items=reasoning_items,
+    )
+    displaced = native_candidate if when == "after_observation" else lookup
+    original_evidence = {
+        "text": displaced.text,
+        "tool_uses": list(displaced.tool_uses),
+        "stop_reason": displaced.stop_reason,
+        "codex_output_items": list(displaced.codex_output_items),
+        "reasoning_items": list(displaced.reasoning_items),
+        "reasoning_summaries": list(displaced.reasoning_summaries),
+        "assistant_phase": displaced.assistant_phase,
+    }
+    original_sha256 = runtime._json_digest(original_evidence)
     plan = _response(
         json.dumps(
             {
@@ -1186,6 +1224,23 @@ def test_candidate_intervention_retains_native_output_and_closes_real_repair(
     interventions = json.loads((directory / "intervention.json").read_text())
     assert len(interventions) == 1
     record = interventions[0]
+    assert evidence["intervention_failures"] == []
+    assert record["native_content_policy"] == runtime.NATIVE_INTERVENTION_CONTENT_POLICY
+    assert record["native_original_sha256"] == original_sha256
+    assert runtime._json_digest(original_evidence) == original_sha256  # no provider mutation
+    assert record["native_sha256"] == runtime._json_digest(record["native"])
+    assert record["effective_sha256"] == runtime._json_digest(record["effective"])
+    if reasoning_shape == "opaque":
+        assert ciphertext not in json.dumps(interventions)
+        for field in ("codex_output_items", "reasoning_items"):
+            assert record["native"][field][0]["encrypted_content"] == {
+                "sha256": hashlib.sha256(ciphertext.encode()).hexdigest(),
+                "bytes": len(ciphertext.encode()),
+            }
+        assert record["native_sha256"] != original_sha256
+    else:
+        assert record["native_sha256"] == original_sha256
+        assert record["native"]["codex_output_items"] == list(displaced.codex_output_items)
     assert record["native"]["text"] == (
         native_candidate.text if when == "after_observation" else ""
     )
@@ -1237,9 +1292,145 @@ def test_candidate_intervention_retains_native_output_and_closes_real_repair(
         interventions * 2,
         [{**record, "native_sha256": "0" * 64}],
         [{**record, "effective": {"text": "changed", "tool_uses": []}}],
+        [{**record, "native_content_policy": "unknown"}],
+        [{**record, "native_original_sha256": "missing"}],
     ):
         with pytest.raises(ValueError, match="intervention"):
             _verification_check(evidence, **(options | {"intervention_rows": broken}))
+    # The checker still accepts the older unversioned evidence shape.
+    if reasoning_shape != "opaque":
+        legacy = {
+            k: v
+            for k, v in record.items()
+            if k not in {"native_content_policy", "native_original_sha256"}
+        }
+        assert (
+            _verification_check(evidence, **(options | {"intervention_rows": [legacy]}))[
+                "completed_judgments"
+            ]
+            == 2
+        )
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["text", "tool_input", "tool_arguments", "summary", "reasoning_summaries", "untyped", "nested"],
+)
+def test_candidate_intervention_rejects_secrets_outside_typed_ciphertext(field: str) -> None:
+    secret = "sk-" + "s" * 32
+    response = _response("safe candidate")
+    if field == "text":
+        response = replace(response, text=secret)
+    elif field == "tool_input":
+        response = replace(response, tool_uses=(_call("lookup", "lookup-1", {"token": secret}),))
+    elif field == "tool_arguments":
+        response = replace(
+            response,
+            codex_output_items=(
+                {"type": "function_call", "arguments": json.dumps({"token": secret})},
+            ),
+        )
+    elif field == "summary":
+        response = replace(
+            response,
+            reasoning_items=(
+                {"type": "reasoning", "encrypted_content": "opaque", "summary": [{"text": secret}]},
+            ),
+        )
+    elif field == "reasoning_summaries":
+        response = replace(response, reasoning_summaries=(secret,))
+    elif field == "untyped":
+        response = replace(response, codex_output_items=({"encrypted_content": secret},))
+    else:
+        response = replace(
+            response,
+            tool_uses=(
+                _call("lookup", "lookup-1", {"type": "reasoning", "encrypted_content": secret}),
+            ),
+        )
+    with pytest.raises(ValueError, match="unsafe native intervention evidence"):
+        runtime._native_intervention_evidence(response)
+
+
+@pytest.mark.parametrize("malformed", [42, {"text": "sk-" + "s" * 32}])
+def test_candidate_intervention_rejects_nonstring_ciphertext(malformed: Any) -> None:
+    with pytest.raises(ValueError, match="malformed native reasoning ciphertext"):
+        runtime._native_intervention_evidence(
+            replace(
+                _response(),
+                reasoning_items=({"type": "reasoning", "encrypted_content": malformed},),
+            )
+        )
+
+
+def test_candidate_evidence_failure_is_exported_and_invalid_without_provider_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts.eval.check_harbor_observations import _verification_check
+
+    case, orders = _inbox_case()
+    answer = json.dumps(
+        {"items": [{"id": item["id"], **item["expected_answer"]} for item in case["items"]]}
+    )
+    root = _root_adapter(
+        [
+            _response(
+                calls=(
+                    _call(
+                        "lookup_order_status",
+                        "lookup-1",
+                        {
+                            "items": [
+                                {"id": item["id"], "order_id": item["expected_order"]}
+                                for item in case["items"]
+                                if item["expected_answer"]["disposition"] == "answered"
+                            ]
+                        },
+                    ),
+                )
+            ),
+            _response(answer),
+        ]
+    )
+    judge = _Adapter([_response(json.dumps(_v1_verdict("supported")))])
+    secret = "sk-" + "s" * 32
+
+    def reject(_result: Any) -> Any:
+        raise TypeError(secret)
+
+    monkeypatch.setattr(runtime, "_native_intervention_evidence", reject)
+    directory = tmp_path / "failed-intervention"
+    directory.mkdir()
+    result = asyncio.run(
+        runtime.run_arm(
+            case,
+            "a0",
+            directory,
+            orders=orders,
+            root_adapter=root,
+            verification_engine="llm",
+            verification_adapter=judge,
+            verification_intervention={"when": "before_observation", "candidate_output": answer},
+        )
+    )
+    evidence = json.loads((directory / "verification.json").read_text())
+    assert not result["valid"] and not result["passed"]
+    assert result["error_type"] == "incomplete_verification_intervention"
+    assert len(root.requests) == 2
+    assert len(evidence["root_requests"]) == 2
+    assert evidence["intervention_failures"] == [
+        {
+            "llm_call_id": evidence["root_requests"][0]["llm_call_id"],
+            "stage": "native-evidence",
+            "error_type": "TypeError",
+        }
+    ]
+    assert secret not in json.dumps(evidence)
+    assert json.loads((directory / "intervention.json").read_text()) == []
+    with pytest.raises(ValueError, match="intervention evidence failure"):
+        _verification_check(
+            evidence, engine="llm", receipt=[], attempts=[], call_events=[], trajectory={}
+        )
 
 
 async def _run_inbox(
