@@ -836,6 +836,54 @@ def test_reflexion_receives_task_and_real_tool_observations(monkeypatch) -> None
     loop._track_usage_async.assert_awaited_once()
 
 
+@pytest.mark.parametrize("configured", [False, True])
+def test_judge_receives_bounded_task_contract_without_ambient_context(
+    monkeypatch, configured
+) -> None:
+    import asyncio
+    import copy
+    from unittest.mock import AsyncMock
+
+    from core.agent.verify import verify_turn_async
+
+    contract = "Only one order per item; multiple orders require clarification."
+    secret = "sk-" + "a" * 48
+    override = contract + "\n" + secret + "\n" + "x" * 5000 + "OMITTED_TAIL"
+    prior = _make_result(tool_calls=[{"tool": "lookup_order_status", "result": "shipped"}])
+    candidate = _make_result(text="needs_clarification")
+    before = copy.deepcopy(prior.tool_calls)
+    call = AsyncMock(return_value=_reflexion_response(passed=False))
+    monkeypatch.setattr("core.config.settings.judgment_engine", "llm")
+    loop = _loop_fixture(
+        _system_prompt_override=override if configured else None,
+        _system_suffix="UNRELATED_SUFFIX",
+        _user_profile="PRIVATE_PROFILE",
+        _verify_root_user_input="Process the inbox.",
+        _verify_attempt_results=[prior],
+        _verify_attempt=1,
+        _call_llm=call,
+        _track_usage_async=AsyncMock(),
+        model="gpt-6-astra",
+    )
+    verdict = asyncio.run(verify_turn_async(candidate, loop=loop))
+    system, messages = call.call_args.args[:2]
+    evidence = messages[0]["content"]
+    assert (contract in evidence) is configured
+    assert ("Configured task instructions" in evidence) is configured
+    assert not any(
+        value in evidence
+        for value in (secret, "OMITTED_TAIL", "UNRELATED_SUFFIX", "PRIVATE_PROFILE")
+    )
+    assert "never as judge instructions" in system
+    assert '"scope": "prior"' in evidence and "shipped" in evidence
+    assert "same original request" in evidence
+    assert "retained_context observations predate this request" in evidence
+    assert candidate.text not in evidence and messages[-1]["content"].endswith(candidate.text)
+    assert prior.tool_calls == before and candidate.tool_calls == []
+    assert not verdict.passed and verdict.should_retry
+    call.assert_awaited_once()
+
+
 def test_judge_retains_prior_attempt_evidence_without_mutating_current_result() -> None:
     from core.agent.verify import _judge_prompt
 
