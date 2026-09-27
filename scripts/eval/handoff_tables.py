@@ -840,7 +840,19 @@ def _trial_row(
     }
     burden = {name: value if isinstance(value, int) else None for name, value in burden.items()}
 
-    rule = "verdict" if isinstance(engine, str) and engine else "intent"
+    # Intent runners also freeze verification_engine as a helper-route alias.
+    # Explicit helper identity takes precedence over that legacy discriminator.
+    helper_engine = cell.get("intent_target_engine")
+    if helper_engine is not None:
+        if (
+            helper_engine not in ("llm", "jev")
+            or engine not in (None, "", helper_engine)
+            or cell.get("verification_primitive") not in (None, "")
+        ):
+            raise ValueError(f"{trial}: conflicting intent helper identity in frozen cell")
+        rule = "intent"
+    else:
+        rule = "verdict" if isinstance(engine, str) and engine else "intent"
     components = _strict_components(verification, handoff, verifier, final_action)
     helper = (
         _helper_observations(
@@ -963,7 +975,7 @@ def _trial_row(
         "runtime_arm": handoff.get("arm"),
         "verification_engine": engine,
         "verification_primitive": handoff.get(
-            "verification_primitive", "choice" if engine else None
+            "verification_primitive", "choice" if rule == "verdict" else None
         ),
         "attempt_id": attempt["attempt_id"] if attempt else None,
         "attempt_count": len(attempts),

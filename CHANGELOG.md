@@ -296,6 +296,11 @@ functional change.
 
 ### Fixed
 
+- Preserve intent-helper strict-success rules in offline Harbor table exports
+  when a frozen cell repeats its helper route as `verification_engine`.
+  Reject conflicting frozen identities, retain unknown helper evidence and
+  runner-result agreement checks, and leave matched-verdict rules unchanged.
+
 - Record canonical session payload capture reductions explicitly so literal
   truncation markers in bounded verification feedback do not invalidate a
   faithful replay. Preserve conservative legacy checks and real clipping,
