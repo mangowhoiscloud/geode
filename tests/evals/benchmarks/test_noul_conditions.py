@@ -9,6 +9,7 @@ import itertools
 import json
 import stat
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -887,14 +888,22 @@ def test_offline_run_of_the_both_conditions_cell_scores_against_runtime_state(
     root = _Scripted(
         [
             # The injected candidate replaces this first native completion.
-            _response(
-                calls=(
-                    {
-                        "id": "lookup-native",
-                        "name": "lookup_order_status",
-                        "input": {"items": batch},
-                    },
-                )
+            replace(
+                _response(
+                    calls=(
+                        {
+                            "id": "lookup-native",
+                            "name": "lookup_order_status",
+                            "input": {"items": batch},
+                        },
+                    )
+                ),
+                reasoning_items=(
+                    {"type": "reasoning", "encrypted_content": "synthetic-sk-" + "n" * 32},
+                ),
+                codex_output_items=(
+                    {"type": "reasoning", "encrypted_content": "synthetic-sk-" + "n" * 32},
+                ),
             ),
             _response(json.dumps(plan)),
             _response(
@@ -956,6 +965,11 @@ def test_offline_run_of_the_both_conditions_cell_scores_against_runtime_state(
     assert result["valid"] and result["passed"], result
     evidence = json.loads((directory / "verification.json").read_text())
     assert evidence["inputs"][0]["state"]["tool_observations"] == []
+    assert evidence["intervention_failures"] == []
+    interventions = json.loads((directory / "intervention.json").read_text())
+    assert len(interventions) == 1
+    assert interventions[0]["native_content_policy"] == runtime.NATIVE_INTERVENTION_CONTENT_POLICY
+    assert "synthetic-sk-" not in json.dumps(interventions)
     report = noul.score_trial(evidence, payload)
     first, last = report["judgments"][0], report["judgments"][-1]
     assert report["primitive"] == "noul" and len(report["judgments"]) == 2

@@ -296,6 +296,11 @@ functional change.
 
 ### Fixed
 
+- Hash only typed provider reasoning ciphertext in candidate-intervention
+  evidence, preserving the original response digest and strict secret checks
+  on readable text and tool arguments. Export bounded intervention failures
+  and reject affected trials without retrying completed provider calls.
+
 - Preserve explicitly configured task instructions in bounded, redacted final
   verification context. Distinguish earlier repair attempts for the same request
   from retained observations that predate it, without forwarding ambient system
