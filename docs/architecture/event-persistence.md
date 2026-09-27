@@ -69,14 +69,38 @@ reason values are removed at the shared persistence boundary. A future
 preference dataset must establish its own human-authority and candidate-target
 contract instead of treating this telemetry row as a chosen/rejected label.
 
-Every trajectory recomputes data-quality facts rather than trusting producer
-claims: event-ID uniqueness, contiguous ordinals, session/turn/call correlation
-coverage, tool call/result pairing, orphan counts, and truncated/corrupt/omitted
-payload counts. These live under `integrity.quality`. Missing call/turn
-correlation or orphaned tools force `scope_complete=false`; lossy payload
-markers force `replay_complete=false`. `complete` remains the conservative
-replay-completeness compatibility alias, and both failure classes carry
-explicit reasons.
+Every trajectory recomputes event-ID uniqueness, contiguous ordinals,
+session/turn/call correlation coverage, tool call/result pairing, orphan counts,
+and payload-quality counts under `integrity.quality`. Missing call/turn
+correlation or orphaned tools force `scope_complete=false`; lost, corrupt, or
+omitted payloads force `replay_complete=false`. `complete` remains the
+conservative replay-completeness compatibility alias, and both failure classes
+carry explicit reasons.
+
+New canonical writes reserve payload `_capture_quality` for a versioned
+`content_reduced` fact. The session store records actual sanitization or
+bounding changes and preserves prior capture reductions, including nested
+ones. The user-input hook also carries its actual sanitization loss through
+the loop into the user-message capture. A caller cannot suppress a new loss by
+supplying `content_reduced=false`. The trajectory reader requires the exact
+supported metadata shape and still checks structural loss markers; arbitrary
+text such as a literal `…[truncated:61]` is not itself loss in an attested
+capture. Legacy rows without this metadata retain conservative string-marker
+checks, and legacy import cannot grant itself a new completeness attestation.
+
+This fact describes fidelity to the runtime payload supplied for capture,
+including explicitly propagated earlier capture loss. It does not promise
+that every upstream provider response was retained: for example, verification
+feedback can be intentionally bounded before it becomes a runtime event.
+Existing stored rows and immutable trajectories are not rewritten or promoted
+by this change. Payload byte limits still include the metadata overhead.
+
+Stored payload hashes cover capture metadata as well as content. Recoverability
+checks first verify that complete stored hash, then compare the content hash
+without the reserved capture metadata. A whole-payload truncation summary keeps
+both anchors; legacy summaries retain their existing content-hash interpretation.
+Metadata changes must not masquerade as lost content, and metadata tampering
+must still fail stored-record integrity checks.
 
 Automatic `runtime_event_refs` are built by the hook-event store's read-only
 reader. Each reference covers one session and one persisted `schema_version`;

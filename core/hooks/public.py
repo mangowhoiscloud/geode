@@ -22,7 +22,7 @@ from enum import StrEnum
 from typing import Any
 
 from core.hooks.system import RuntimeEvent, RuntimeEventBus
-from core.observability.redaction import redact_secrets
+from core.observability.redaction import payload_changed, redact_secrets
 
 log = logging.getLogger(__name__)
 
@@ -464,6 +464,8 @@ class HookOutcome:
     decisions: tuple[HookDecision, ...] = ()
     handler_errors: tuple[str, ...] = ()
     decision_sources: tuple[str, ...] = ()
+    # Internal capture provenance; not part of the public invocation envelope.
+    payload_reduced: bool = False
 
     @property
     def blocked(self) -> bool:
@@ -548,6 +550,7 @@ class HookRegistry:
         """Invoke handlers sequentially and compose permitted rewrites."""
         resolved = HookName(hook)
         sanitized_payload = _sanitize_payload(payload or {})
+        payload_reduced = payload_changed(dict(payload or {}), sanitized_payload)
         self._validate_payload(resolved, sanitized_payload)
         invocation = HookInvocation(
             name=resolved,
@@ -580,12 +583,15 @@ class HookRegistry:
                 if decision is None:
                     continue
                 self._validate_decision(resolved, decision)
+                unsanitized_updates = decision.updates
                 decision = _sanitize_decision(decision)
                 if decision.action is HookAction.REWRITE:
-                    updated_invocation = invocation.with_payload(
-                        {**dict(invocation.payload), **dict(decision.updates)}
-                    )
+                    updated_payload = {**dict(invocation.payload), **dict(decision.updates)}
+                    updated_invocation = invocation.with_payload(updated_payload)
                     self._validate_payload(resolved, updated_invocation.payload)
+                    payload_reduced |= payload_changed(
+                        unsanitized_updates, decision.updates
+                    ) or payload_changed(updated_payload, updated_invocation.payload)
                     invocation = updated_invocation
                 decisions.append(decision)
                 decision_sources.append(handler.name)
@@ -625,6 +631,7 @@ class HookRegistry:
             decisions=tuple(decisions),
             handler_errors=tuple(errors),
             decision_sources=tuple(decision_sources),
+            payload_reduced=payload_reduced,
         )
 
     @staticmethod

@@ -213,6 +213,13 @@ feedback; the repair hint is consumed once by the next continuation.
 The advisory replanner receives the runtime failure instruction separately from
 its bounded 1,500-character candidate observation. XML-escaped data cannot
 replace those boundaries, and a long candidate cannot truncate the instruction.
+Final judgment also receives the explicitly configured system override as a
+redacted, bounded task contract, rather than rebuilding the full system prompt
+or forwarding ambient memory and suffixes. This is execution-context data, not
+permission to change the judge's own rules. Observations labeled `prior` and
+`current` belong to the same original request's verification chain;
+`retained_context` predates that request. Earlier repair evidence is not a newly
+performed check, but may still support the current candidate when applicable.
 Harbor's external verifier remains benchmark score authority. New measurements
 must freeze this mode before execution, without supplying hidden test answers.
 The Harbor host validates but preserves the requested verifier wire value;

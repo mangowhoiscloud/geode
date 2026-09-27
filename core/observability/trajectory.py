@@ -347,7 +347,12 @@ def _trajectory_quality(events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             and not call_id
         ):
             missing_control_call_ids += 1
-        if _payload_has_quality_issue(event.get("payload")):
+        payload = event.get("payload")
+        capture = payload.get("_capture_quality") if isinstance(payload, Mapping) else None
+        explicit_capture = isinstance(payload, Mapping) and "_capture_quality" in payload
+        if (explicit_capture and not _capture_is_complete(capture)) or _payload_has_quality_issue(
+            payload, explicit_capture=explicit_capture
+        ):
             payload_issue_events += 1
 
     orphan_calls = sum(open_calls.values())
@@ -438,8 +443,20 @@ def _declared_replay_reduction_reasons(
     return reasons
 
 
-def _payload_has_quality_issue(value: Any) -> bool:
+def _capture_is_complete(value: Any) -> bool:
+    return (
+        isinstance(value, Mapping)
+        and set(value) == {"version", "content_reduced"}
+        and type(value.get("version")) is int
+        and value.get("version") == 1
+        and value.get("content_reduced") is False
+    )
+
+
+def _payload_has_quality_issue(value: Any, *, explicit_capture: bool = False) -> bool:
     if isinstance(value, Mapping):
+        if "_capture_quality" in value and not _capture_is_complete(value["_capture_quality"]):
+            return True
         if any(
             key in value
             for key in (
@@ -454,11 +471,21 @@ def _payload_has_quality_issue(value: Any) -> bool:
             )
         ):
             return True
-        return any(_payload_has_quality_issue(item) for item in value.values())
+        return any(
+            _payload_has_quality_issue(item, explicit_capture=explicit_capture)
+            for item in value.values()
+        )
     if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
-        return any(_payload_has_quality_issue(item) for item in value)
-    return isinstance(value, str) and (
-        "…[truncated:" in value or value in {"<REDACTED>", "[REDACTED]"}
+        return any(
+            _payload_has_quality_issue(item, explicit_capture=explicit_capture) for item in value
+        )
+    # Pre-attestation captures used only inline strings to signal some losses.
+    # Keep that conservative legacy contract; new canonical captures carry an
+    # explicit producer attestation and may faithfully retain literal markers.
+    return (
+        not explicit_capture
+        and isinstance(value, str)
+        and ("…[truncated:" in value or value in {"<REDACTED>", "[REDACTED]"})
     )
 
 
@@ -651,6 +678,7 @@ def _digest_private_event_payload(
     """Allowlist structural fields and digest every other benchmark payload."""
     protected = dict(payload)
     structural = {
+        "_capture_quality",
         "model",
         "provider",
         "status",

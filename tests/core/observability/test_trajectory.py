@@ -512,6 +512,100 @@ def test_trajectory_integrity_rejects_false_producer_claims():
         verify_trajectory_integrity(trajectory)
 
 
+@pytest.mark.parametrize("text", ["quoted …[truncated:61] text", "<REDACTED>", "[REDACTED]"])
+def test_canonical_capture_preserves_literal_markers_without_claiming_loss(tmp_path, text):
+    from core.observability.session_timeline import SessionTimeline
+
+    timeline = SessionTimeline("s-literal", db_path=tmp_path / "sessions.db")
+    timeline.bind_turn("t-literal")
+    timeline.record_user_message(text)
+    timeline.record_session_end()
+    trajectory = trajectory_from_session("s-literal", db_path=timeline.db_path)
+    message = next(row for row in trajectory["events"] if row["kind"] == "message.user")
+    assert message["payload"]["content"] == text
+    assert trajectory["integrity"]["quality"]["payload_issue_events"] == 0
+    assert verify_trajectory_integrity(trajectory)["replay_complete"]
+
+
+def test_native_bounded_verification_feedback_has_complete_capture(tmp_path):
+    from core.agent.verify import _parse_judge_payload
+    from core.observability.session_timeline import SessionTimeline
+
+    passed, _, reason = _parse_judge_payload(
+        json.dumps(
+            {
+                "passed": False,
+                "score": 0.1,
+                "reflection": {
+                    "observation": "x" * 461,
+                    "lesson": "Keep evidence",
+                    "next_check": "Verify again",
+                },
+            }
+        )
+    )
+    assert not passed and "…[truncated:61]" in reason
+    timeline = SessionTimeline("s-feedback", db_path=tmp_path / "sessions.db")
+    timeline.bind_turn("t-feedback")
+    timeline.record_turn_complete(
+        termination_reason="external_verification_required",
+        rounds=1,
+        tool_call_count=0,
+        verify={"passed": False, "reason": reason, "reflection_hint": reason},
+    )
+    timeline.record_session_end()
+    trajectory = trajectory_from_session("s-feedback", db_path=timeline.db_path)
+    turn = next(row for row in trajectory["events"] if row["kind"] == "turn.completed")
+    assert turn["payload"]["verify"]["reason"] == reason
+    assert turn["payload"]["verify"]["passed"] is False
+    assert verify_trajectory_integrity(trajectory)["replay_complete"]
+
+
+@pytest.mark.parametrize("capture", [None, {}, {"version": 9, "content_reduced": False}])
+def test_unattested_or_unknown_captures_keep_conservative_marker_gate(capture):
+    payload = {"content": "previously clipped …[truncated:61]"}
+    if capture is not None:
+        payload["_capture_quality"] = capture
+    trajectory = build_trajectory(
+        trajectory_id="legacy-loss",
+        source={"harness": "test", "session": "s-legacy"},
+        events=[{"kind": "message.user", "turn_id": "t-legacy", "payload": payload}],
+        outcome={},
+        provenance={},
+        privacy={},
+    )
+    assert not verify_trajectory_integrity(trajectory)["replay_complete"]
+    if capture is None:
+        assert "_capture_quality" not in trajectory["events"][0]["payload"]
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_capture_cannot_erase_prior_reduction_on_reexport(tmp_path, nested):
+    from core.observability.session_timeline import (
+        SessionEventKind,
+        SessionEventPolicy,
+        SessionEventStore,
+        SessionEventWrite,
+        bound_session_payload,
+    )
+
+    prior = bound_session_payload(
+        {"content": "x" * 101}, policy=SessionEventPolicy(max_string_chars=100)
+    )
+    store = SessionEventStore(tmp_path / "sessions.db")
+    store.append(
+        SessionEventWrite(
+            session_id="s-prior",
+            turn_id="t-prior",
+            kind=SessionEventKind.USER_MESSAGE,
+            payload={"wrapped": prior} if nested else prior,
+        )
+    )
+    store.append(SessionEventWrite(session_id="s-prior", kind=SessionEventKind.SESSION_ENDED))
+    trajectory = trajectory_from_session("s-prior", db_path=tmp_path / "sessions.db")
+    assert not verify_trajectory_integrity(trajectory)["replay_complete"]
+
+
 def test_dated_publication_trajectory_normalizes_without_rewrite():
     legacy = {
         "schema_id": "geode.trajectory@2026-07-31",

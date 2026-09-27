@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from core.observability.session_timeline import SessionEventStore
+from core.observability.session_timeline import SessionEventStore, session_payload_content_sha256
 from core.orchestration.tool_offload import ToolResultOffloadStore
 
 
@@ -89,10 +89,14 @@ def _classify(
             or event.payload_hash != reference.stored_payload_sha256
         ):
             return ContextRecoveryReceipt(reference, RecoveryStatus.CORRUPT, "session-event")
-        if event.payload_hash == reference.content_sha256:
+        if reference.content_sha256 in (
+            event.payload_hash,
+            session_payload_content_sha256(event.payload),
+        ):
             return ContextRecoveryReceipt(reference, RecoveryStatus.EXACT, "session-event")
         if event.payload.get("_truncated") is True and (
-            event.payload.get("payload_hash") != reference.content_sha256
+            event.payload.get("content_sha256", event.payload.get("payload_hash"))
+            != reference.content_sha256
         ):
             return ContextRecoveryReceipt(reference, RecoveryStatus.CORRUPT, "session-event")
 

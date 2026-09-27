@@ -6,6 +6,7 @@ import asyncio
 import copy
 import hashlib
 import json
+import math
 import os
 import re
 import time
@@ -592,6 +593,46 @@ def handoff_call_coverage_complete(
     )
 
 
+NATIVE_INTERVENTION_CONTENT_POLICY = "reasoning-encrypted-content-sha256-v1"
+
+
+def _native_intervention_evidence(result: Any) -> tuple[dict[str, Any], str]:
+    """Digest only typed provider ciphertext; reject unsafe readable evidence."""
+    from core.observability.redaction import redact_secrets
+
+    native = {
+        "text": result.text,
+        "tool_uses": copy.deepcopy(list(result.tool_uses)),
+        "stop_reason": result.stop_reason,
+        "codex_output_items": copy.deepcopy(list(result.codex_output_items)),
+        "reasoning_items": copy.deepcopy(list(result.reasoning_items)),
+        "reasoning_summaries": list(result.reasoning_summaries),
+        "assistant_phase": result.assistant_phase,
+    }
+    original_sha256 = _json_digest(native)
+    for field in ("codex_output_items", "reasoning_items"):
+        for item in native[field]:
+            if not isinstance(item, dict):
+                raise ValueError("malformed native provider item")
+            if item.get("type") == "reasoning" and "encrypted_content" in item:
+                encrypted = item["encrypted_content"]
+                if encrypted is None:
+                    continue  # SDK null denotes absent ciphertext, not malformed content.
+                if not isinstance(encrypted, str):
+                    raise ValueError("malformed native reasoning ciphertext")
+                raw = encrypted.encode("utf-8")
+                # The native provider object stays untouched. This receipt is an
+                # evidence projection, never a provider continuation/replay item.
+                item["encrypted_content"] = {
+                    "sha256": hashlib.sha256(raw).hexdigest(),
+                    "bytes": len(raw),
+                }
+    encoded = json.dumps(native, ensure_ascii=False, allow_nan=False)
+    if redact_secrets(encoded) != encoded or "apikey_" in encoded:
+        raise ValueError("unsafe native intervention evidence")
+    return native, original_sha256
+
+
 class _VerificationComparison:
     """Task-local judge replacement; preserve full evidence and actual repair inputs."""
 
@@ -612,6 +653,16 @@ class _VerificationComparison:
         self.consumptions: list[dict[str, Any]] = []
         self.intervention = intervention
         self.interventions: list[dict[str, Any]] = []
+        self.intervention_failures: list[dict[str, Any]] = []
+        self.failures: list[dict[str, str]] = []
+
+    def decision_receipts(self) -> list[dict[str, Any]]:
+        """Judgments whose projection reached the root, in call order."""
+        return list(self.adapter.receipts)
+
+    def metrics(self) -> dict[str, Any]:
+        """Engine-specific verification metrics; the single-engine comparison adds none."""
+        return {}
 
     async def llm_execution(self, call: Any, next_call: Any) -> Any:
         result = await next_call(call)
@@ -627,20 +678,20 @@ class _VerificationComparison:
                     or (fault["when"] == "after_observation" and observed and not result.tool_uses)
                 )
             ):
-                from core.observability.redaction import redact_secrets
-
-                native = {
-                    "text": result.text,
-                    "tool_uses": copy.deepcopy(list(result.tool_uses)),
-                    "stop_reason": result.stop_reason,
-                    "codex_output_items": copy.deepcopy(list(result.codex_output_items)),
-                    "reasoning_items": copy.deepcopy(list(result.reasoning_items)),
-                    "reasoning_summaries": list(result.reasoning_summaries),
-                    "assistant_phase": result.assistant_phase,
-                }
-                encoded = json.dumps(native, ensure_ascii=False, allow_nan=False)
-                if redact_secrets(encoded) != encoded or "apikey_" in encoded:
-                    raise ValueError("unsafe native intervention evidence")
+                try:
+                    native, original_sha256 = _native_intervention_evidence(result)
+                except (TypeError, ValueError) as exc:
+                    # Middleware preserves a completed provider call on failure.
+                    # Retain only bounded attribution, not the rejected payload or
+                    # exception message, and keep the experiment invalid thereafter.
+                    self.intervention_failures.append(
+                        {
+                            "llm_call_id": call.correlation.get("llm_call_id"),
+                            "stage": "native-evidence",
+                            "error_type": type(exc).__name__,
+                        }
+                    )
+                    raise
                 effective = {"text": fault["candidate_output"], "tool_uses": []}
                 self.interventions.append(
                     {
@@ -651,6 +702,8 @@ class _VerificationComparison:
                         "receipt_prefix_length": len(self.receipt.rows),
                         "native": native,
                         "native_sha256": _json_digest(native),
+                        "native_original_sha256": original_sha256,
+                        "native_content_policy": NATIVE_INTERVENTION_CONTENT_POLICY,
                         "effective": effective,
                         "effective_sha256": _json_digest(effective),
                     }
@@ -1119,6 +1172,70 @@ def verify_handoff_result(
     )
 
 
+def _matched_verification(
+    engine: str,
+    primitive: str,
+    *,
+    receipt: HandoffReceipt,
+    request: str,
+    system: str,
+    intervention: Mapping[str, Any] | None,
+    client: Any,
+    key: SecretStr | None,
+    llm_adapter: Any,
+    registry: Any,
+    tau: str | None,
+) -> _VerificationComparison:
+    """Build the task-local judge replacement for one explicit comparison engine."""
+    from core.llm.adapters import resolve_for
+
+    from evals.benchmarks.decision_verification import MatchedVerifierAdapter
+
+    judgments: list[dict[str, Any]] = []
+    if engine == "cascade":
+        from evals.benchmarks.decision_cascade import CascadeVerification
+
+        assert tau is not None
+        return CascadeVerification(
+            MatchedVerifierAdapter("jev", client=client, api_key=key, receipts=judgments),
+            MatchedVerifierAdapter(
+                "llm",
+                llm_adapter=llm_adapter or resolve_for("openai", "subscription"),
+                receipts=judgments,
+            ),
+            receipt,
+            request,
+            system,
+            intervention,
+            tau=tau,
+            registry=registry,
+        )
+    judge = MatchedVerifierAdapter(
+        "llm" if engine == "llm" else "jev",
+        primitive="noul" if primitive == "noul" else "choice",
+        llm_adapter=(llm_adapter or resolve_for("openai", "subscription"))
+        if engine == "llm"
+        else None,
+        client=client,
+        api_key=key,
+        receipts=judgments,
+    )
+    return _VerificationComparison(judge, receipt, request, system, intervention)
+
+
+def validate_root_budget_s(value: object) -> float:
+    """Require an explicit finite wall-time budget shared by root and repairs."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError("root_budget_s must be a finite positive number")
+    try:
+        budget = float(value)
+    except (OverflowError, ValueError):
+        raise ValueError("root_budget_s must be a finite positive number") from None
+    if not math.isfinite(budget) or budget <= 0:
+        raise ValueError("root_budget_s must be a finite positive number")
+    return budget
+
+
 async def run_arm(
     case: dict[str, Any],
     arm: str,
@@ -1131,9 +1248,13 @@ async def run_arm(
     api_key: SecretStr | None = None,
     intervention: Mapping[str, Any] | None = None,
     verification_engine: str | None = None,
+    verification_primitive: str = "choice",
     verification_adapter: Any = None,
     verification_intervention: Mapping[str, Any] | None = None,
+    cascade_tau: str | None = None,
+    root_budget_s: float = 180.0,
 ) -> dict[str, Any]:
+    root_budget_s = validate_root_budget_s(root_budget_s)
     # Imports are late so the CLI child isolates cwd/state before loading core.
     from contextlib import AsyncExitStack
 
@@ -1143,6 +1264,7 @@ async def run_arm(
     from core.agent.tool_executor import ToolExecutor
     from core.config import settings
     from core.config.policy_source import EMPTY_POLICY_SOURCES
+    from core.config.session import capture_session_model_config
     from core.hooks.system import HookSystem
     from core.llm.adapters.registry import bootstrap_builtins
     from core.observability.event_store import HookEventStore
@@ -1158,6 +1280,10 @@ async def run_arm(
         raise ValueError("the frozen comparison owns its engines; global Jev must be disabled")
     if arm not in {"a0", "a", "b"}:
         raise ValueError("unknown arm")
+    if verification_primitive not in {"choice", "noul"} or (
+        verification_primitive == "noul" and verification_engine is None
+    ):
+        raise ValueError("verification primitive requires its matched engine")
     inbox = case.get("profile") == "inbox"
     if case.get("profile") not in {None, "inbox"}:
         raise ValueError("unknown handoff workload profile")
@@ -1169,7 +1295,7 @@ async def run_arm(
         from core.agent.verify import VerifyMode, get_verify_mode
 
         if (
-            verification_engine not in {"llm", "jev"}
+            verification_engine not in {"llm", "jev", "cascade"}
             or arm != "a0"
             or not inbox
             or intervention is not None
@@ -1178,6 +1304,9 @@ async def run_arm(
             raise ValueError("matched verification requires lookup-only inbox and llm_judge")
     elif verification_adapter is not None:
         raise ValueError("verification adapter requires its explicit comparison engine")
+    from evals.benchmarks.decision_cascade import require_cascade_contract
+
+    require_cascade_contract(verification_engine, verification_primitive, cascade_tau)
     if verification_intervention is not None:
         if verification_engine is None:
             raise ValueError("candidate intervention requires matched verification")
@@ -1202,7 +1331,7 @@ async def run_arm(
             resources.callback(_tracker_ctx.reset, tracker_token)
         hooks = HookSystem()
         resources.callback(hooks.close)
-        uses_jev = arm == "b" or verification_engine == "jev"
+        uses_jev = arm == "b" or verification_engine in {"jev", "cascade"}
         if uses_jev and client is None:
             client = httpx.AsyncClient(timeout=30)
             resources.push_async_callback(client.aclose)
@@ -1272,23 +1401,20 @@ async def run_arm(
                     "in one batch. Consume its result before acting. Repeat only if needed; "
                     "do not bypass an analysis error.\n</task_contract>",
                 )
-        verification = None
+        verification: _VerificationComparison | None = None
         if verification_engine is not None:
-            from core.llm.adapters import resolve_for
-
-            from evals.benchmarks.decision_verification import MatchedVerifierAdapter
-
-            judge = MatchedVerifierAdapter(
-                "llm" if verification_engine == "llm" else "jev",
-                llm_adapter=(verification_adapter or resolve_for("openai", "subscription"))
-                if verification_engine == "llm"
-                else None,
+            verification = _matched_verification(
+                verification_engine,
+                verification_primitive,
+                receipt=receipt,
+                request=case["request"],
+                system=system,
+                intervention=verification_intervention,
                 client=client if uses_jev else None,
-                api_key=key if uses_jev else None,
-                receipts=[],
-            )
-            verification = _VerificationComparison(
-                judge, receipt, case["request"], system, verification_intervention
+                key=key if uses_jev else None,
+                llm_adapter=verification_adapter,
+                registry=executor.middleware_registry,
+                tau=cascade_tau,
             )
             executor.middleware_registry.register_llm_request(
                 verification,
@@ -1312,11 +1438,16 @@ async def run_arm(
                 source="subscription",
                 effort="xhigh",
                 max_rounds=6,
-                time_budget_s=180,
+                time_budget_s=root_budget_s,
                 allowed_tool_names=set(names),
                 force_include_allowed_tools=True,
                 system_prompt_override=system,
                 response_schema=_inbox_answer_schema() if inbox else ANSWER_SCHEMA,
+                # The frozen arm owns every root-side route: an operator
+                # reflection override must not move Reflection off the root model.
+                model_settings=capture_session_model_config(
+                    settings, model=MODEL, effort="xhigh", source="subscription"
+                ).model_copy(update={"reflection_model": "", "reflection_source": ""}),
             ),
         )
         if root_adapter is not None:
@@ -1333,7 +1464,8 @@ async def run_arm(
         result = None
         error = None
         try:
-            result = await asyncio.wait_for(loop.arun(case["request"]), timeout=180)
+            result = await asyncio.wait_for(loop.arun(case["request"]), timeout=root_budget_s)
+            decided = verification.decision_receipts() if verification is not None else []
             judged_hold = bool(
                 result.termination_reason == "external_verification_required"
                 and loop._session_metrics.last_verify_rubric_misses == ("judge_fail",)
@@ -1342,9 +1474,9 @@ async def run_arm(
                 and (
                     verification is None
                     or (
-                        verification.adapter.receipts
-                        and all(row["accepted"] for row in verification.adapter.receipts)
-                        and not verification.adapter.receipts[-1]["projected_payload"]["passed"]
+                        decided
+                        and all(row["accepted"] for row in decided)
+                        and not decided[-1]["projected_payload"]["passed"]
                     )
                 )
             )
@@ -1413,11 +1545,18 @@ async def run_arm(
     if arm != "a0":
         allowed_purposes.add("structured_decision")
 
+    cascade_stages = getattr(verification, "stages", {})
+
     def is_jev(event: Any) -> bool:
         return bool(
             (arm == "b" and event.payload.get("purpose") == "structured_decision")
             or (
                 verification_engine == "jev" and event.payload.get("purpose") == "turn_verification"
+            )
+            or (
+                verification_engine == "cascade"
+                and event.payload.get("purpose") == "turn_verification"
+                and cascade_stages.get(event.llm_call_id) == "jev"
             )
         )
 
@@ -1479,6 +1618,12 @@ async def run_arm(
     ):
         invalid = True
         error = error or "incomplete_verification_intervention"
+    if verification is not None and verification.intervention_failures:
+        invalid = True
+        error = error or "verification_intervention_evidence_failure"
+    routing_failures = verification.failures if verification is not None else []
+    invalid = invalid or bool(routing_failures)
+    error = error or ("cascade_routing_failure" if routing_failures else None)
     native_verify = [
         {**event.payload, "action": event.action}
         for event in events
@@ -1521,6 +1666,7 @@ async def run_arm(
                 "judgments": verification.adapter.receipts,
                 "root_requests": verification.consumptions,
                 "root_outputs": verification.roots,
+                "intervention_failures": verification.intervention_failures,
             },
         )
     if injection is not None:
@@ -1543,6 +1689,7 @@ async def run_arm(
         "case_id": case["id"],
         "model": MODEL,
         "effort": "xhigh",
+        "root_budget_s": root_budget_s,
         "source": "subscription",
         "runtime_scope": "isolated-AgenticLoop-not-default-GeodeRuntime-services",
         "handoff_call_coverage_complete": call_coverage_complete,
@@ -1551,6 +1698,9 @@ async def run_arm(
     }
     if verification_engine is not None:
         metadata["verification_engine"] = verification_engine
+        if verification_primitive == "noul":
+            metadata["verification_primitive"] = verification_primitive
+        metadata.update({"cascade_tau": cascade_tau} if cascade_tau is not None else {})
         if verification_intervention is not None:
             metadata["verification_intervention"] = dict(verification_intervention)
         metadata["verification_metrics"] = {
@@ -1562,6 +1712,7 @@ async def run_arm(
             if verification
             else 0,
             "tracker_cost_authority": "published-tariff-estimate-not-invoice",
+            **(verification.metrics() if verification else {}),
         }
     _write(directory / "runtime-metadata.json", metadata)
     return {

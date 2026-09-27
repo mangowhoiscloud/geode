@@ -160,7 +160,7 @@ class ActivityRowBase(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: int = 11
+    schema_version: int = 12
     """Row-schema version (PR-OBS-CONTRACT, 2026-06-13). Bump when a
     field is added/renamed/retyped on any row class so JSONL re-readers
     can branch on shape instead of guessing from key presence.
@@ -179,7 +179,8 @@ class ActivityRowBase(BaseModel):
     v8: turn-final verification has its own bounded call purpose.
     v9: native text helpers retain their producer-specific call purpose.
     v10: nested classification/extraction calls retain structured_decision purpose.
-    v11: known 1-hour cache writes remain separate from total cache writes."""
+    v11: known 1-hour cache writes remain separate from total cache writes.
+    v12: LLM call terminal latency stays null when unobserved instead of 0.0."""
 
     ts: float
     run_id: str
@@ -302,10 +303,16 @@ class LLMRequestImageReceiptDetails(BaseModel):
 
 
 class LLMCallEndedDetails(LifecycleCompletedDetails):
-    """Durable billing and serving-route evidence for one model attempt."""
+    """Durable billing and serving-route evidence for one model attempt.
+
+    ``duration_ms`` is the observed attempt latency; ``None`` means the latency
+    was not observed. Rows before schema v12 stored an unobserved latency as 0.0.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    # Deliberately widens the inherited float: None is "not observed", never 0.0.
+    duration_ms: float | None = None  # type: ignore[assignment]
     model: str | None = None
     provider: str | None = None
     adapter: str | None = None

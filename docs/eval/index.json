@@ -11,7 +11,7 @@
     "trajectory": "core/observability/schemas/trajectory.schema.json",
     "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
   },
-  "document_count": 26,
+  "document_count": 27,
   "documents": [
     {
       "id": "agent-world-comparison",
@@ -148,7 +148,7 @@
       "authority": "evidence-storage",
       "path": "docs/eval/external-artifact-repository.md",
       "summary": "Canonical append-only publication and disclosure contract for large GEODE evaluation artifacts.",
-      "sha256": "f906c3f9d8c66a7080a979258fc83b0c734d62e94e2391bdd96403db657436c2",
+      "sha256": "d1e98122dcab3cbc24646c6abb9a13c15f0600e7322442d79d04e3140a24fc3a",
       "triggers": [
         "artifact repository",
         "eval-artifact",
@@ -246,6 +246,29 @@
       ],
       "contracts": [
         "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
+      "id": "jev-v3-study-20260927",
+      "family": "typesafe-decision-handoff",
+      "title": "Jev v3: study evidence and scoring",
+      "kind": "ledger",
+      "status": "reference",
+      "authority": "diagnostic",
+      "path": "docs/eval/jev-v3-study-20260927.md",
+      "summary": "Source-bound Jev v3 component and end-to-end study, retained failure lineages, parser-corrected reanalysis and independently checkable public evidence.",
+      "sha256": "5d25853aa9e079f94a10298cd568c37b775093883347e21de3ac985178920695",
+      "triggers": [
+        "astra",
+        "jev",
+        "publication",
+        "reproduction",
+        "scoring",
+        "verifier"
+      ],
+      "contracts": [
+        "docs/eval/external-artifact-repository.md",
+        "docs/eval/typesafe-decision-handoff.md"
       ]
     },
     {
@@ -630,7 +653,7 @@
       "authority": "diagnostic",
       "path": "docs/eval/typesafe-decision-handoff.md",
       "summary": "Matched LLM/Jev final-verdict diagnostics with shared Astra repair, preserved historical handoff cohorts and an independent Harbor task verifier.",
-      "sha256": "4db46e5e79bfccd4a1a39cdadd5dae9254f5573aff9d82a4b1d94a60337b56e5",
+      "sha256": "9e931eb33cf77ad293fded794c304afd7597106441e5a74589c35b097292b9e3",
       "triggers": [
         "classification",
         "confidence",

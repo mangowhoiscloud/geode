@@ -48,3 +48,15 @@ def redact_and_bound_text(value: Any, max_chars: int) -> str:
     if len(text) <= max_chars:
         return text
     return text[:max_chars] + f"…[truncated:{len(text) - max_chars}]"
+
+
+def payload_changed(before: Any, after: Any) -> bool:
+    """Compare capture inputs conservatively, including opaque ``Any`` values.
+
+    Sanitizers own conversion errors. Only an equality failure is treated as
+    unknown reduction; it must not turn an omitted opaque value into full capture.
+    """
+    try:
+        return bool(after != before)
+    except Exception:
+        return True

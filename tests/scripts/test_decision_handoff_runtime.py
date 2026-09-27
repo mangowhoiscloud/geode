@@ -26,6 +26,15 @@ from evals.benchmarks import decision_handoff_runtime as runtime
 from scripts.eval import decision_handoff_pilot as pilot
 
 
+def _v1_verdict(label: str) -> dict[str, Any]:
+    """V1 LLM verdict: the label plus a distribution whose argmax is that label."""
+    labels = ("supported", "contradicted", "insufficient_evidence")
+    return {
+        "verdict": label,
+        "probabilities": {key: 0.8 if key == label else 0.1 for key in labels},
+    }
+
+
 @pytest.fixture(autouse=True)
 def _isolated_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     from core import paths
@@ -497,6 +506,66 @@ def test_global_jev_cannot_override_the_frozen_comparison(
     assert not root.requests
 
 
+@pytest.mark.parametrize("budget", [True, 0, -1, float("nan"), float("inf"), "540", 10**1000])
+def test_invalid_root_budget_precedes_provider_dispatch(tmp_path: Path, budget: Any) -> None:
+    root = _root_adapter([])
+    with pytest.raises(ValueError, match="root_budget_s"):
+        asyncio.run(
+            runtime.run_arm(
+                _case("negated-cancel-en"), "a0", tmp_path, root_adapter=root, root_budget_s=budget
+            )
+        )
+    assert not root.requests
+    assert not list(tmp_path.glob("*.json"))
+
+
+@pytest.mark.parametrize("budget", [None, 540.0])
+def test_root_budget_binds_loop_deadline_and_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, budget: float | None
+) -> None:
+    from core.agent.loop import AgenticLoop
+
+    native_arun = AgenticLoop.arun
+    native_wait_for = asyncio.wait_for
+    seen: dict[str, Any] = {}
+    deadlines: list[float | None] = []
+
+    async def arun(loop: Any, *args: Any, **kwargs: Any) -> Any:
+        seen.update(
+            budget=loop._time_budget_s,
+            rounds=loop.max_rounds,
+            repairs=loop._verify_continuation_budget,
+            model=loop.model,
+            effort=loop._effort,
+        )
+        return await native_arun(loop, *args, **kwargs)
+
+    async def wait_for(awaitable: Any, timeout: float | None) -> Any:
+        deadlines.append(timeout)
+        return await native_wait_for(awaitable, timeout)
+
+    monkeypatch.setattr(AgenticLoop, "arun", arun)
+    monkeypatch.setattr(asyncio, "wait_for", wait_for)
+    case = _case("negated-cancel-en")
+    root = _root_adapter(_root_responses(case)[1:])
+    options = {} if budget is None else {"root_budget_s": budget}
+    result = asyncio.run(runtime.run_arm(case, "a0", tmp_path, root_adapter=root, **options))
+    expected = 180.0 if budget is None else budget
+    assert seen == {
+        "budget": expected,
+        "rounds": 6,
+        "repairs": 2,
+        "model": "gpt-6-astra",
+        "effort": "xhigh",
+    }
+    assert deadlines[0] == expected
+    assert f"Total root wall-time budget: {expected:.0f} seconds" in root.requests[0].system_prompt
+    assert result["valid"] and result["passed"]
+    assert result["root_budget_s"] == expected
+    metadata = json.loads((tmp_path / "runtime-metadata.json").read_text())
+    assert metadata["root_budget_s"] == expected
+
+
 @pytest.mark.parametrize("malformed", [False, True])
 def test_native_final_judgment_distinguishes_semantic_hold_from_invalid_response(
     tmp_path: Path, malformed: bool
@@ -713,10 +782,12 @@ def _inbox_decisions(
 @pytest.mark.parametrize("engine", ["llm", "jev"])
 @pytest.mark.parametrize("malformed", [False, True])
 @pytest.mark.parametrize("repair_attempts", [1, 2, 3])
+@pytest.mark.parametrize("primitive", ["choice", "noul"])
 def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
     engine: str,
     malformed: bool,
     repair_attempts: int,
+    primitive: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -772,7 +843,19 @@ def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
     labels = iter(verdicts)
     judge = _Adapter(
         [
-            _response("invalid" if malformed else json.dumps({"verdict": value}), input_tokens=20)
+            _response(
+                "invalid"
+                if malformed
+                else json.dumps(
+                    _v1_verdict(value)
+                    if primitive == "choice"
+                    else {
+                        "has_contradiction": 0.9 if value != "supported" else 0.1,
+                        "missing_evidence": 0.9 if value != "supported" else 0.1,
+                    }
+                ),
+                input_tokens=20,
+            )
             for value in verdicts
         ]
     )
@@ -799,6 +882,11 @@ def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
                         },
                         "confidence": 1.0,
                     }
+                }
+                if primitive == "choice"
+                else {
+                    key: {"type": "noul", "noul": float(choice != "supported")}
+                    for key in ("has_contradiction", "missing_evidence")
                 },
             },
         )
@@ -812,12 +900,20 @@ def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
                 orders=orders,
                 root_adapter=root,
                 verification_engine=engine,
+                verification_primitive=primitive,
                 verification_adapter=judge if engine == "llm" else None,
                 client=client,
             )
 
     result = asyncio.run(execute())
     evidence = json.loads((directory / "verification.json").read_text())
+    assert result.get("verification_primitive", "choice") == primitive
+    metadata = json.loads((directory / "runtime-metadata.json").read_text())
+    assert metadata.get("verification_primitive", "choice") == primitive
+    if primitive == "choice":
+        assert "verification_primitive" not in result and "verification_primitive" not in metadata
+    else:
+        assert all(row["primitive"] == "noul" for row in evidence["judgments"])
     attempts = [row for row in result["call_accounting"] if row["purpose"] == "turn_verification"]
     assert len(attempts) == (1 if malformed else min(repair_attempts + 1, 3)), result
     assert all(row["usage"]["input_tokens"] == 20 for row in attempts)
@@ -836,6 +932,9 @@ def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
     else:
         assert result["valid"] and result["passed"], result
         assert "<reflection>" in root.requests[-1].system_prompt
+        if primitive == "noul":
+            assert "correct the contradicted requirement" in root.requests[-1].system_prompt
+            assert "Identify the unsupported requirement" in root.requests[-1].system_prompt
         assert evidence["inputs"][-1]["state"]["candidate_output"] == json.dumps(answer)
         assert len(evidence["inputs"][-1]["state"]["tool_observations"]) == 1
         assert len(evidence["judgments"]) == repair_attempts + 1
@@ -848,6 +947,31 @@ def test_matched_verdict_uses_real_repair_and_preserves_failed_usage(
             [{"judge_call_id": row["llm_call_id"], "feedback_sha256": row["feedback_sha256"]}]
             for row in evidence["judgments"][:-1]
         ]
+
+
+@pytest.mark.parametrize("primitive", ["noul", "unknown"])
+def test_verification_primitive_without_engine_rejects_before_bootstrap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, primitive: str
+) -> None:
+    from unittest.mock import Mock
+
+    bootstrap = Mock()
+    monkeypatch.setattr("core.llm.adapters.registry.bootstrap_builtins", bootstrap)
+    case, orders = _inbox_case()
+    root = _root_adapter([])
+    with pytest.raises(ValueError, match="primitive requires its matched engine"):
+        asyncio.run(
+            runtime.run_arm(
+                case,
+                "a0",
+                tmp_path,
+                orders=orders,
+                root_adapter=root,
+                verification_primitive=primitive,
+            )
+        )
+    bootstrap.assert_not_called()
+    assert not root.requests
 
 
 def test_pre_dispatch_verification_error_does_not_reuse_prior_negative_verdict(
@@ -888,7 +1012,7 @@ def test_pre_dispatch_verification_error_does_not_reuse_prior_negative_verdict(
             candidate,
         ]
     )
-    judge = _Adapter([_response('{"verdict":"contradicted"}')] * 2)
+    judge = _Adapter([_response(json.dumps(_v1_verdict("contradicted")))] * 2)
     native_verify = verify.verify_turn_async
     attempts = 0
 
@@ -956,8 +1080,9 @@ def test_candidate_fault_never_replaces_noncompleted_provider_result(stop: str) 
 
 @pytest.mark.parametrize("engine", ["llm", "jev"])
 @pytest.mark.parametrize("when", ["before_observation", "after_observation"])
+@pytest.mark.parametrize("reasoning_shape", ["absent", "opaque", "sdk-null"])
 def test_candidate_intervention_retains_native_output_and_closes_real_repair(
-    engine: str, when: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    engine: str, when: str, reasoning_shape: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from scripts.eval.check_harbor_observations import _verification_check
 
@@ -988,6 +1113,43 @@ def test_candidate_intervention_retains_native_output_and_closes_real_repair(
         codex_output_items=({"type": "message", "content": [{"text": json.dumps(answer)}]},),
         response_id="native-candidate-1",
     )
+    ciphertext = "synthetic-opaque-sk-" + "a" * 32
+    reasoning = {"type": "reasoning", "encrypted_content": ciphertext, "summary": []}
+    if reasoning_shape == "sdk-null":
+        from core.llm.adapters._openai_common import translate_codex_response
+        from openai.types.responses import ResponseReasoningItem
+
+        translated = translate_codex_response(
+            SimpleNamespace(
+                output=[ResponseReasoningItem(id="rs_synthetic", type="reasoning", summary=[])],
+                status="completed",
+                usage=SimpleNamespace(input_tokens=10, output_tokens=2),
+            )
+        )
+        assert translated.codex_output_items[0]["encrypted_content"] is None
+        assert "encrypted_content" not in translated.reasoning_items[0]
+        output_items, reasoning_items = translated.codex_output_items, translated.reasoning_items
+    else:
+        if reasoning_shape == "absent":
+            reasoning.pop("encrypted_content")
+        output_items, reasoning_items = (reasoning,), (reasoning,)
+    lookup = replace(lookup, codex_output_items=output_items, reasoning_items=reasoning_items)
+    native_candidate = replace(
+        native_candidate,
+        codex_output_items=(*output_items, *native_candidate.codex_output_items),
+        reasoning_items=reasoning_items,
+    )
+    displaced = native_candidate if when == "after_observation" else lookup
+    original_evidence = {
+        "text": displaced.text,
+        "tool_uses": list(displaced.tool_uses),
+        "stop_reason": displaced.stop_reason,
+        "codex_output_items": list(displaced.codex_output_items),
+        "reasoning_items": list(displaced.reasoning_items),
+        "reasoning_summaries": list(displaced.reasoning_summaries),
+        "assistant_phase": displaced.assistant_phase,
+    }
+    original_sha256 = runtime._json_digest(original_evidence)
     plan = _response(
         json.dumps(
             {
@@ -1015,7 +1177,7 @@ def test_candidate_intervention_retains_native_output_and_closes_real_repair(
         "contradicted" if when == "after_observation" else "insufficient_evidence",
         "supported",
     ]
-    judge = _Adapter([_response(json.dumps({"verdict": label})) for label in labels])
+    judge = _Adapter([_response(json.dumps(_v1_verdict(label))) for label in labels])
     answers = iter(labels)
 
     def transport(_request: httpx.Request) -> httpx.Response:
@@ -1062,6 +1224,23 @@ def test_candidate_intervention_retains_native_output_and_closes_real_repair(
     interventions = json.loads((directory / "intervention.json").read_text())
     assert len(interventions) == 1
     record = interventions[0]
+    assert evidence["intervention_failures"] == []
+    assert record["native_content_policy"] == runtime.NATIVE_INTERVENTION_CONTENT_POLICY
+    assert record["native_original_sha256"] == original_sha256
+    assert runtime._json_digest(original_evidence) == original_sha256  # no provider mutation
+    assert record["native_sha256"] == runtime._json_digest(record["native"])
+    assert record["effective_sha256"] == runtime._json_digest(record["effective"])
+    if reasoning_shape == "opaque":
+        assert ciphertext not in json.dumps(interventions)
+        for field in ("codex_output_items", "reasoning_items"):
+            assert record["native"][field][0]["encrypted_content"] == {
+                "sha256": hashlib.sha256(ciphertext.encode()).hexdigest(),
+                "bytes": len(ciphertext.encode()),
+            }
+        assert record["native_sha256"] != original_sha256
+    else:
+        assert record["native_sha256"] == original_sha256
+        assert record["native"]["codex_output_items"] == list(displaced.codex_output_items)
     assert record["native"]["text"] == (
         native_candidate.text if when == "after_observation" else ""
     )
@@ -1113,9 +1292,145 @@ def test_candidate_intervention_retains_native_output_and_closes_real_repair(
         interventions * 2,
         [{**record, "native_sha256": "0" * 64}],
         [{**record, "effective": {"text": "changed", "tool_uses": []}}],
+        [{**record, "native_content_policy": "unknown"}],
+        [{**record, "native_original_sha256": "missing"}],
     ):
         with pytest.raises(ValueError, match="intervention"):
             _verification_check(evidence, **(options | {"intervention_rows": broken}))
+    # The checker still accepts the older unversioned evidence shape.
+    if reasoning_shape != "opaque":
+        legacy = {
+            k: v
+            for k, v in record.items()
+            if k not in {"native_content_policy", "native_original_sha256"}
+        }
+        assert (
+            _verification_check(evidence, **(options | {"intervention_rows": [legacy]}))[
+                "completed_judgments"
+            ]
+            == 2
+        )
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["text", "tool_input", "tool_arguments", "summary", "reasoning_summaries", "untyped", "nested"],
+)
+def test_candidate_intervention_rejects_secrets_outside_typed_ciphertext(field: str) -> None:
+    secret = "sk-" + "s" * 32
+    response = _response("safe candidate")
+    if field == "text":
+        response = replace(response, text=secret)
+    elif field == "tool_input":
+        response = replace(response, tool_uses=(_call("lookup", "lookup-1", {"token": secret}),))
+    elif field == "tool_arguments":
+        response = replace(
+            response,
+            codex_output_items=(
+                {"type": "function_call", "arguments": json.dumps({"token": secret})},
+            ),
+        )
+    elif field == "summary":
+        response = replace(
+            response,
+            reasoning_items=(
+                {"type": "reasoning", "encrypted_content": "opaque", "summary": [{"text": secret}]},
+            ),
+        )
+    elif field == "reasoning_summaries":
+        response = replace(response, reasoning_summaries=(secret,))
+    elif field == "untyped":
+        response = replace(response, codex_output_items=({"encrypted_content": secret},))
+    else:
+        response = replace(
+            response,
+            tool_uses=(
+                _call("lookup", "lookup-1", {"type": "reasoning", "encrypted_content": secret}),
+            ),
+        )
+    with pytest.raises(ValueError, match="unsafe native intervention evidence"):
+        runtime._native_intervention_evidence(response)
+
+
+@pytest.mark.parametrize("malformed", [42, {"text": "sk-" + "s" * 32}])
+def test_candidate_intervention_rejects_nonstring_ciphertext(malformed: Any) -> None:
+    with pytest.raises(ValueError, match="malformed native reasoning ciphertext"):
+        runtime._native_intervention_evidence(
+            replace(
+                _response(),
+                reasoning_items=({"type": "reasoning", "encrypted_content": malformed},),
+            )
+        )
+
+
+def test_candidate_evidence_failure_is_exported_and_invalid_without_provider_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts.eval.check_harbor_observations import _verification_check
+
+    case, orders = _inbox_case()
+    answer = json.dumps(
+        {"items": [{"id": item["id"], **item["expected_answer"]} for item in case["items"]]}
+    )
+    root = _root_adapter(
+        [
+            _response(
+                calls=(
+                    _call(
+                        "lookup_order_status",
+                        "lookup-1",
+                        {
+                            "items": [
+                                {"id": item["id"], "order_id": item["expected_order"]}
+                                for item in case["items"]
+                                if item["expected_answer"]["disposition"] == "answered"
+                            ]
+                        },
+                    ),
+                )
+            ),
+            _response(answer),
+        ]
+    )
+    judge = _Adapter([_response(json.dumps(_v1_verdict("supported")))])
+    secret = "sk-" + "s" * 32
+
+    def reject(_result: Any) -> Any:
+        raise TypeError(secret)
+
+    monkeypatch.setattr(runtime, "_native_intervention_evidence", reject)
+    directory = tmp_path / "failed-intervention"
+    directory.mkdir()
+    result = asyncio.run(
+        runtime.run_arm(
+            case,
+            "a0",
+            directory,
+            orders=orders,
+            root_adapter=root,
+            verification_engine="llm",
+            verification_adapter=judge,
+            verification_intervention={"when": "before_observation", "candidate_output": answer},
+        )
+    )
+    evidence = json.loads((directory / "verification.json").read_text())
+    assert not result["valid"] and not result["passed"]
+    assert result["error_type"] == "incomplete_verification_intervention"
+    assert len(root.requests) == 2
+    assert len(evidence["root_requests"]) == 2
+    assert evidence["intervention_failures"] == [
+        {
+            "llm_call_id": evidence["root_requests"][0]["llm_call_id"],
+            "stage": "native-evidence",
+            "error_type": "TypeError",
+        }
+    ]
+    assert secret not in json.dumps(evidence)
+    assert json.loads((directory / "intervention.json").read_text()) == []
+    with pytest.raises(ValueError, match="intervention evidence failure"):
+        _verification_check(
+            evidence, engine="llm", receipt=[], attempts=[], call_events=[], trajectory={}
+        )
 
 
 async def _run_inbox(
@@ -1856,6 +2171,33 @@ def test_truncated_private_content_invalidates_replay_without_losing_evidence(
     assert private["events"][-1]["kind"] == "session.ended"
     for filename in ("trajectory.json", "session-events.json", "call-events.json", "handoff.json"):
         assert (directory / filename).is_file()
+
+
+def test_native_bounded_feedback_does_not_invalidate_complete_handoff(tmp_path: Path) -> None:
+    case = _case("negated-cancel-en")
+    directory = tmp_path / "bounded-feedback"
+    directory.mkdir()
+    root = _root_adapter(_root_responses(case)[1:])
+    root.native_verdict = _response(
+        json.dumps(
+            {
+                "passed": True,
+                "score": 1.0,
+                "reflection": {
+                    "observation": "x" * 461,
+                    "lesson": "Retain observed evidence",
+                    "next_check": "Keep the independent oracle authoritative",
+                },
+            }
+        )
+    )
+    result = asyncio.run(runtime.run_arm(case, "a0", directory, root_adapter=root))
+    assert result["oracle"]["passed"]
+    assert result["valid"] and result["passed"] and result["source_snapshot_complete"]
+    private = json.loads((directory / "trajectory.private.json").read_text())
+    turn = next(row for row in private["events"] if row["kind"] == "turn.completed")
+    assert "…[truncated:61]" in turn["payload"]["verify"]["reason"]
+    assert private["integrity"]["replay_complete"]
 
 
 @pytest.mark.parametrize("arm", ["a0", "a", "b"])
