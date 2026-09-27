@@ -11,7 +11,7 @@
     "trajectory": "core/observability/schemas/trajectory.schema.json",
     "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
   },
-  "document_count": 26,
+  "document_count": 27,
   "documents": [
     {
       "id": "agent-world-comparison",
@@ -246,6 +246,29 @@
       ],
       "contracts": [
         "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
+      "id": "jev-v3-study-20260927",
+      "family": "typesafe-decision-handoff",
+      "title": "Jev v3: study evidence and scoring",
+      "kind": "ledger",
+      "status": "reference",
+      "authority": "diagnostic",
+      "path": "docs/eval/jev-v3-study-20260927.md",
+      "summary": "Source-bound Jev v3 component and end-to-end study, retained failure lineages, parser-corrected reanalysis and independently checkable public evidence.",
+      "sha256": "5d25853aa9e079f94a10298cd568c37b775093883347e21de3ac985178920695",
+      "triggers": [
+        "astra",
+        "jev",
+        "publication",
+        "reproduction",
+        "scoring",
+        "verifier"
+      ],
+      "contracts": [
+        "docs/eval/external-artifact-repository.md",
+        "docs/eval/typesafe-decision-handoff.md"
       ]
     },
     {

@@ -3,6 +3,9 @@ import { docsPageHref } from "@/lib/geode-docs/navigation";
 
 export const metadata = { title: "Verification and evaluation · GEODE Docs" };
 
+// Artifact PR #46 merge, verified by the September 28, 2026 remote read-back.
+const jevV3Packet = "https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927";
+
 function EvaluationGuide({ ko }: { ko: boolean }) {
   const docsHref = (slug: string) => `/geode${docsPageHref(slug, ko ? "ko" : "en")}`;
   const authorities = [
@@ -138,6 +141,33 @@ function EvaluationGuide({ ko }: { ko: boolean }) {
         <pre>{`geode-eval audit-agreement --help`}</pre>
         <p><a href={docsHref("petri/judge-dimensions")}>{ko ? "Judge 차원과 해석" : "Judge dimensions and interpretation"}</a>{" · "}<a href="https://github.com/mangowhoiscloud/geode/blob/main/core/audit/judge_agreement.py">{ko ? "사람과 judge의 일치도 구현" : "Human–judge agreement implementation"}</a></p>
       </details>
+
+      <h2 id="jev-v3-study">{ko ? "Jev v3: 본실험 결과와 채점 근거" : "Jev v3: study results and scoring evidence"}</h2>
+      <p>{ko
+        ? "2026-09-27 본실험은 판정 정확도, 확률과 오류 선별, 호출 지연, 실제 과제 완료를 27개 등록 단위로 구분합니다. 앞선 M4–M6 파일럿과 본실험의 분모를 합치지 않습니다. 연구 자료는 geode-eval-artifacts PR #46으로 공개됐으며, 2026-09-28 원격 재확인을 마쳤습니다. 아래 링크는 검증한 공개 커밋 3bcf4044eb5c2411dd48122d672aef72a83fb30e에 고정됩니다. 자료 공개와 새 실험 수행은 구분합니다."
+        : "The September 27, 2026 study separates judgment accuracy, probability/error ranking, call latency and actual task completion across 27 registered units. It does not pool the earlier M4–M6 pilot into those denominators. The study packet was published through geode-eval-artifacts PR #46 and its remote read-back completed on September 28, 2026. The links below are pinned to verified public commit 3bcf4044eb5c2411dd48122d672aef72a83fb30e. Publication does not constitute a new experiment."}</p>
+      <p>{ko
+        ? "최신 U4·X2 값은 저장 응답 전체 행렬을 확인한 사후 수치 검사기 교정 분석입니다. U4는 Jev 59/80 대 Astra 79/80, 차이 −25.00 pp, 95% CI [−35.23, −16.25]입니다. X2는 196/240 대 226/240, −12.50 pp, CI [−17.22, −8.04]입니다. 새 모델 호출 없이 기존 정답·분모·군집·seed·재표집 규칙을 유지했고, 원 등록 결과는 별도로 보존했습니다. U4의 기준 미달과 X2의 비열등성 미입증은 그대로입니다."
+        : "The latest U4/X2 values come from a post-hoc numeric-parser correction across the retained full matrices. U4 is Jev 59/80 versus Astra 79/80, a −25.00 pp difference, 95% CI [−35.23, −16.25]. X2 is 196/240 versus 226/240, −12.50 pp, CI [−17.22, −8.04]. No new model calls were made; labels, denominators, clusters, seeds and resampling rules stayed fixed. Original preregistered results remain separate. U4 still fails its criterion; X2 still does not establish non-inferiority."}</p>
+      <p>{ko
+        ? "의도·대상 패널의 216/220 대 220/220은 등록한 −5 pp 기준을 충족했지만 설계자 저작 패널의 관측입니다. E7은 같은 12과제를 A/B/C로 두 번씩 수행해 72/72 strict 성공했으나 C의 judge fallback은 0회였습니다. 이 결과는 새로운 72과제의 성공이나 재검토 분기의 효용을 입증하지 않습니다. Noul의 기존 의미 실패, I5의 계약 전달 결함, E6의 무효 중단과 후속 계보도 함께 보존합니다."
+        : "The intent/target panel's 216/220 versus 220/220 met its registered −5 pp margin on designer-authored items. E7 ran the same 12 tasks in A/B/C twice, with 72/72 strict successes but zero C judge fallbacks. This is neither 72 new tasks nor evidence of escalation benefit. Earlier Noul semantic failure, I5's contract-delivery defect, E6's invalid interruption and subsequent lineages remain visible."}</p>
+      <p>{ko
+        ? "원래 source5의 U8n은 사전 gate 실패 뒤 36셀 모두 미실행으로 남았습니다. 별도 source7/E8 후속은 U0e admission 2/2를 통과한 뒤 U8n 36셀 중 24셀에서 중단됐습니다. A는 12개 유효 성공, B는 11개 유효 전달 실패와 주입 증거 오류로 인한 1개 무효였고, 나머지 12셀은 미실행입니다. 원 27개 등록 단위와 36셀·18쌍·6원천 계획을 보존하며, E8 주지표도 not-measurable과 분자·분모 null로 유지합니다."
+        : "The original source5 U8n retained all 36 cells as unexecuted after its prerequisite gate failed. The separate source7/E8 follow-up passed U0e admission 2/2, then stopped U8n after 24 of 36 cells. A had 12 valid successes; B had 11 valid delivery failures and one injection-evidence invalid cell. The remaining 12 cells never started. The original 27 registered units and the 36-cell/18-pair/six-source plan remain intact; E8's primary remains not-measurable with null numerator and denominator."}</p>
+      <p>{ko
+        ? "중단 뒤 양쪽이 유효하게 끝난 11쌍·22셀·4원천만 별도 기술통계로 분석했습니다. 무효 B와 그 짝인 성공 A는 함께 제외했습니다. 생성과 수리는 양쪽 모두 Astra가 맡았고, Astra 판정 A는 11/11 strict·recovered 성공으로 전달됐습니다. Jev Noul 판정 B의 마지막 후보도 기존 과제 oracle를 11/11 통과했지만, Jev가 계속 근거 부족으로 판정해 11/11의 전달이 보류됐습니다. B의 native strict·recovered는 0/11로 유지합니다. 관측된 문제는 정답과 근거를 갖춘 수리 후보의 오거부이며, 후보 정답을 최종 전달 성공으로 바꾸지 않습니다. 중단 뒤 선택된 4원천 표본이므로 신뢰구간·비열등성·인과 효과·모집단 일반화를 제시하지 않으며 추가 U8n 모델 실행은 계획하지 않습니다."
+        : "A separate post-hoc description includes the 11 complete valid pairs: 22 cells from four sources. The invalid B cell and its successful A partner are excluded together. Astra performed execution and repair in both arms. Astra-judged A delivered 11/11 strict/recovered successes. Jev-Noul-judged B's last candidates also passed the existing task oracle 11/11, but Jev kept reporting missing evidence and held all 11 deliveries. B's native strict/recovered result remains 0/11. The observed failure was false rejection of correct, supported repaired candidates; candidate correctness does not replace delivered success. This four-source sample was selected after the stop, so no interval, non-inferiority claim, causal estimate or population generalization is reported. No further U8n model run is planned."}</p>
+      <ul>
+        <li><a href={`${jevV3Packet}/INTERPRETATION.ko.md`}>{ko ? "한국어 결과 해석" : "Korean interpretation"}</a>{" · "}<a href={`${jevV3Packet}/INTERPRETATION.md`}>{ko ? "영문 결과 해석" : "English interpretation"}</a></li>
+        <li><a href={`${jevV3Packet}/SCORING.md`}>{ko ? "누가 무엇을 채점하는가" : "Scoring authorities and denominators"}</a>{" · "}<a href={`${jevV3Packet}/units.json`}>{ko ? "27개 단위와 계보별 근거" : "27-unit evidence and lineage index"}</a></li>
+        <li><a href={`${jevV3Packet}/REPRODUCE.md`}>{ko ? "무결성 확인·오프라인 재계산·새 실행" : "Integrity checks, offline recomputation and new runs"}</a>{" · "}<a href={`${jevV3Packet}/corrections/numeric-parser-20260928/README.md`}>{ko ? "U4·X2 교정 재채점" : "U4/X2 corrected reanalysis"}</a></li>
+        <li><a href={`${jevV3Packet}/analyses/u8n-observed-pairs-20260928/README.md`}>{ko ? "E8 U8n 사후 완성 쌍 분석과 후보 판정 재계산" : "E8 U8n post-hoc complete-pair analysis and candidate recomputation"}</a></li>
+        <li><a href="https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/jev-v3-study-20260927.md">{ko ? "소스·공개 범위 기록" : "Source and disclosure record"}</a>{" · "}<a href="https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/jev-verdict-publication-20260924.md">{ko ? "별도 M4–M6 파일럿" : "Separate M4–M6 pilot"}</a></li>
+      </ul>
+      <p>{ko
+        ? "공개 투영본과 원 native 파일의 해시는 구분합니다. 점수 재계산, 파일 무결성 확인, 새 모델 실행도 다른 활동입니다. 비공개 추론·인증·머신 식별자는 공개하지 않으며, Mind2Web test 본문은 재배포하지 않습니다. −10 pp 마진의 업무 손실·서비스 목표 근거와 실제 청구액은 확인되지 않았습니다."
+        : "Public projection digests and original native digests are distinct. Recomputing scores, checking file integrity and making new model calls are different activities. Private reasoning, credentials and machine identities are withheld; Mind2Web test text is not redistributed. A business-loss/service-objective derivation for the −10 pp margin and actual invoices remain unestablished."}</p>
 
       <h2>{ko ? ".eval은 Petri 전용 파일이 아닙니다" : ".eval is not exclusive to Petri"}</h2>
       <p>
