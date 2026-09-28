@@ -361,6 +361,19 @@ Final local gates after those corrections:
   every unchanged limit (median import 220 ms, create/shutdown 1,109 ms).
   These machine-local measurements do not establish application speedups.
 
+The first remote head (`a4ebfa798`) exposed further integration regressions.
+The approval contracts distinguished stale ACK/async-close doubles from real
+callback-abort connection retention and malformed-frame diagnostic loss.
+The fixes preserve renderer recovery, approved execution, terminal ACK, worker
+denial, owner cancellation and no continuation. The exact CI architecture
+behavior group then passed 294 cases locally, with 65 related IPC regressions.
+Two other shards exposed over-redaction of ordinary retained task context
+(`Archived key: violet-signal`). The shared redactor now requires a credential
+label or known key format instead of treating every bare `key` label as secret;
+explicit credential masking remains covered. The redaction/logging, judgment,
+model-split and reflection groups passed after the correction. Original remote
+failures remain separate from these local repair results and the next-head CI.
+
 These results are local, offline behavior/structure evidence. Exact-head
 remote CI, reviewed merge receipts and release-channel verification are still
 required and are reported with their actual completed runs.

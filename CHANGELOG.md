@@ -314,6 +314,8 @@ functional change.
 - Preserve request-correlated IPC failures through terminal rendering, including
   failed stream delivery and incomplete operations. Keep cancellation scoped to
   its request and distinguish transport loss from confirmed completion.
+  Deliver malformed-frame errors before closing and disconnect abandoned
+  approval streams. Preserve ordinary task lookup keys during credential redaction.
   Error logs retain bounded request/session/category metadata; one shared
   scrubber covers known and labelled credentials across logs and error surfaces.
 - Keep async hooks on their owning event loop and dispose of coroutine results

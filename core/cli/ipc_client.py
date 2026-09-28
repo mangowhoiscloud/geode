@@ -436,10 +436,10 @@ class IPCClient:
                 on_approval_end=on_approval_end,
                 on_approval_request=on_approval_request,
             )
-        except KeyboardInterrupt:
-            # The legacy blocking CLI has no continuing reader after Ctrl+C.
-            # EOF cancels this connection's task; do not leave it running or
-            # claim a terminal outcome that this client has not observed.
+        except BaseException:
+            # An interrupted reader or failed rendering/approval callback leaves
+            # this response unconsumed. EOF cancels this connection's task;
+            # do not leave it running or reuse the unfinished response stream.
             self._disconnect()
             raise
         finally:

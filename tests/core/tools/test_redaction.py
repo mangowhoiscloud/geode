@@ -110,6 +110,11 @@ class TestRedactSecrets:
         assert redact_secrets(redacted) == redacted
         assert "status=failed" in redacted
 
+    def test_noncredential_keys_remain_available_to_task_consumers(self) -> None:
+        text = "Archived key: violet-signal; lookup key=customer_id; sort key: name"
+        assert redact_secrets(text) == text
+        assert redact_secrets("api_key=opaque-value") == "api_key=[REDACTED]"
+
 
 class TestRedactionIntegration:
     """Test redaction wired into BashTool.to_tool_result."""

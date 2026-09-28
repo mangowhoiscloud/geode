@@ -40,7 +40,7 @@ _AUTHORIZATION_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _CREDENTIAL_FIELD_PATTERN = re.compile(
-    r"(\b(?:[a-z0-9_]*api[_-]?key|access_token|refresh_token|id_token|client_secret|password|token|key|secret)"
+    r"(\b(?:[a-z0-9_]*api[_-]?key|access_token|refresh_token|id_token|client_secret|password|token|secret)"
     r"[\"']?\s*[:=]\s*)"
     r"(\[REDACTED\]|\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'|[^\s&,;\]}\"']+)",
     re.IGNORECASE,

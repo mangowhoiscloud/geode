@@ -646,9 +646,12 @@ class CLIPoller:
                         return
                     try:
                         msg = decode_message(line.rstrip(b"\n"))
-                    except IPCProtocolError:
-                        await _enqueue({"type": "_invalid_json"})
-                        continue
+                    except IPCProtocolError as exc:
+                        # The malformed frame has no trustworthy request identity.
+                        # Report the failed connection before EOF discards queued
+                        # work, then let finally deny approval and cancel its task.
+                        await endpoint.send_json_async(ipc_error_response(exc))
+                        return
                     if msg.get("type") == "approval_response":
                         endpoint.feed_approval_response(
                             str(msg.get("decision", "n")),
@@ -684,11 +687,6 @@ class CLIPoller:
                     log.info("CLI client disconnected")
                     break
                 try:
-                    if msg.get("type") == "_invalid_json":
-                        await endpoint.send_json_async(
-                            ipc_error_response("Invalid JSON", error_type="protocol")
-                        )
-                        continue
                     endpoint.set_request_id(msg.get("request_id"))
                     active_id = str(msg.get("request_id", ""))
                     active_type = str(msg.get("type", ""))
