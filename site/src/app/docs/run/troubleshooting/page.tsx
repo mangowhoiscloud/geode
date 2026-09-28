@@ -27,13 +27,18 @@ export default function Page() {
 2. geode about                # EFFECTIVE 모델, 경로, 소켓, 마스킹 경고
 3. geode config explain model # 레이어별 후보와 WINNER
 4. pkill -f "geode serve"     # 오래된 데몬 정리 후 재진입
-5. geode setup -r             # 그래도 안 되면 설정을 처음부터`}</pre>
+5. geode setup -r             # ~/.geode/.env 삭제 후 설정 마법사 재실행`}</pre>
             <p>
-              <code>geode config explain</code>은 한 설정 키에 대해 os.environ,
-              프로젝트 .env, 전역 .env, 프로젝트 config.toml, 전역 config.toml,
-              코드 기본값 순서로 후보를 표로 보여주고 어느 레이어가 이기는지
-              표시합니다 (<code>core/config/explain.py</code>). 검증은 항상
+              <code>geode config explain</code>은 한 설정 키의 레이어별 후보를
+              표로 보여주고 어느 레이어가 이기는지 표시합니다
+              (<code>core/config/explain.py</code>). 레이어 순서는{" "}
+              <a href="/geode/docs/config/basics">설정 기초</a>에 있습니다. 검증은 항상
               실효값 기준이며 <code>geode about</code>에서 확인합니다.
+            </p>
+            <p>
+              5단계는 <code>~/.geode/.env</code>와 dry-run 마커만 지우고 설정
+              마법사를 다시 실행합니다. <code>~/.geode/auth.toml</code>의 API 키는
+              남고, <code>.env</code>에 둔 연동 토큰은 사라집니다.
             </p>
 
             <h2>증상, 원인, 해법</h2>
@@ -69,8 +74,8 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>MCP 도구가 안 보임</td>
-                  <td>MCP 서버 연결 실패</td>
-                  <td><code>/mcp</code>로 서버 상태와 도구 목록을 확인합니다. <code>/status</code>에도 MCP 블록이 있습니다.</td>
+                  <td>MCP 서버 연결 실패, 또는 신뢰하지 않은 폴더라 프로젝트 서버를 건너뜀</td>
+                  <td><code>/mcp</code>로 서버 상태와 도구 목록을 확인합니다. <code>/status</code>에도 MCP 블록이 있습니다. 프로젝트에 정의한 서버는 <a href="/geode/docs/config/basics#project-trust">신뢰한 폴더</a>에서만 로드됩니다.</td>
                 </tr>
                 <tr>
                   <td><code>MCP_SERVER_FAILED</code> 로그가 반복됨</td>
@@ -133,14 +138,20 @@ export default function Page() {
 2. geode about                # EFFECTIVE model, paths, socket, mask warning
 3. geode config explain model # per-layer candidates and the WINNER
 4. pkill -f "geode serve"     # clear stale daemons, then re-enter
-5. geode setup -r             # last resort: redo setup`}</pre>
+5. geode setup -r             # delete ~/.geode/.env, rerun setup`}</pre>
             <p>
               <code>geode config explain</code> prints, for one settings key,
-              the candidates from os.environ, project .env, global .env, project
-              config.toml, global config.toml, and the code default, marking
-              exactly one WINNER (<code>core/config/explain.py</code>). Always
+              the candidate from each layer and marks exactly one WINNER
+              (<code>core/config/explain.py</code>). The layer order is in{" "}
+              <a href="/geode/docs/config/basics">Configuration basics</a>. Always
               verify against the effective value: <code>geode about</code> is
               the answer, not the contents of config.toml.
+            </p>
+            <p>
+              Step 5 deletes only <code>~/.geode/.env</code> and the dry-run
+              marker, then reruns the setup wizard. API keys in{" "}
+              <code>~/.geode/auth.toml</code> survive; integration tokens kept in{" "}
+              <code>.env</code> are lost.
             </p>
 
             <h2>Symptom, cause, fix</h2>
@@ -176,8 +187,8 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>MCP tools missing</td>
-                  <td>An MCP server failed to connect</td>
-                  <td><code>/mcp</code> shows server state and tools; <code>/status</code> carries an MCP block too.</td>
+                  <td>An MCP server failed to connect, or the folder is untrusted and project servers were skipped</td>
+                  <td><code>/mcp</code> shows server state and tools; <code>/status</code> carries an MCP block too. Servers defined by a project load only in a <a href="/geode/docs/config/basics#project-trust">trusted folder</a>.</td>
                 </tr>
                 <tr>
                   <td><code>MCP_SERVER_FAILED</code> repeats in logs</td>

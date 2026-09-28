@@ -38,12 +38,13 @@ uv tool install -e . --force`}</pre>
             <p>
               <code>geode setup</code>이 자격을 잡아줍니다. ChatGPT 구독
               OAuth(<code>~/.codex/auth.json</code>)가 있으면 API 키를 묻기 전에
-              먼저 감지합니다. 시크릿은 <code>~/.geode/.env</code>에, 모델 선택
-              같은 동작 설정은 <code>~/.geode/config.toml</code>에 저장됩니다.
-              .env에 모델을 적는 방식은 더 이상 쓰지 않습니다.
+              먼저 감지합니다. 입력한 키는 <code>~/.geode/auth.toml</code>에
+              저장됩니다(<a href="/geode/docs/runtime/auth">인증과 OAuth</a>). 모델
+              선택 같은 설정이 어느 파일에 저장되는지는{" "}
+              <a href="/geode/docs/config/basics">설정 기초</a>에 있습니다.
             </p>
             <pre>{`geode setup        # 처음 설정
-geode setup -r     # 처음부터 다시`}</pre>
+geode setup -r     # ~/.geode/.env 삭제 후 마법사 재실행`}</pre>
 
             <h2>3. 첫 대화</h2>
             <p>
@@ -80,7 +81,7 @@ geode setup -r     # 처음부터 다시`}</pre>
                 <tr>
                   <td>외부 채널 메시지가 들어오지 않음</td>
                   <td>gateway 비활성</td>
-                  <td>로컬 대화는 그대로 동작합니다. 외부 채널도 쓰려면 <code>GEODE_GATEWAY_ENABLED=true</code>를 설정합니다.</td>
+                  <td>로컬 대화는 그대로 동작합니다. 외부 채널도 쓰려면 <a href="/geode/docs/harness/serve-gateway#start-stop">게이트웨이를 켭니다</a>.</td>
                 </tr>
                 <tr>
                   <td>응답이 비거나 끊김</td>
@@ -102,7 +103,7 @@ geode setup -r     # 처음부터 다시`}</pre>
               <li><code>geode about</code>. 실제로 어떤 모델과 경로가 잡혀 있는지 확인합니다.</li>
               <li><code>geode config explain model</code>. 설정이 어디서 가려지는지 봅니다.</li>
               <li><code>pkill -f &quot;geode serve&quot;</code> 후 재진입. 데몬을 새로 띄웁니다.</li>
-              <li><code>geode setup -r</code>. 그래도 안 되면 설정을 처음부터 다시 합니다.</li>
+              <li><code>geode setup -r</code>. <code>~/.geode/.env</code>와 dry-run 마커만 지우고 마법사를 다시 실행합니다. <code>auth.toml</code>의 키는 남고, <code>.env</code>에 둔 연동 토큰은 사라집니다.</li>
             </ol>
 
             <h2>업데이트와 삭제</h2>
@@ -168,13 +169,14 @@ uv tool install -e . --force`}</pre>
             <p>
               <code>geode setup</code> wires your credentials. It detects a
               ChatGPT subscription OAuth (<code>~/.codex/auth.json</code>)
-              before asking for API keys. Secrets land in
-              <code>~/.geode/.env</code>; behavior settings such as the model
-              choice live in <code>~/.geode/config.toml</code>. Putting a model
-              in .env is no longer how persistence works.
+              before asking for API keys. Keys you enter are saved to{" "}
+              <code>~/.geode/auth.toml</code> (see{" "}
+              <a href="/geode/docs/runtime/auth">Auth and OAuth</a>). For where
+              the model choice and other settings are saved, see{" "}
+              <a href="/geode/docs/config/basics">Configuration basics</a>.
             </p>
             <pre>{`geode setup        # first-time setup
-geode setup -r     # start over`}</pre>
+geode setup -r     # delete ~/.geode/.env, rerun the wizard`}</pre>
 
             <h2>3. First conversation</h2>
             <p>
@@ -211,7 +213,7 @@ geode setup -r     # start over`}</pre>
                 <tr>
                   <td>External channel messages do not arrive</td>
                   <td>Gateway disabled</td>
-                  <td>Local chat still works. Set <code>GEODE_GATEWAY_ENABLED=true</code> to also run external channels.</td>
+                  <td>Local chat still works. To also run external channels, <a href="/geode/docs/harness/serve-gateway#start-stop">enable the gateway</a>.</td>
                 </tr>
                 <tr>
                   <td>Empty or broken replies</td>
@@ -233,7 +235,7 @@ geode setup -r     # start over`}</pre>
               <li><code>geode about</code>. What model and paths are actually in effect.</li>
               <li><code>geode config explain model</code>. Where a setting is being masked.</li>
               <li><code>pkill -f &quot;geode serve&quot;</code>, then re-enter. Fresh daemon.</li>
-              <li><code>geode setup -r</code>. If all else fails, redo setup from scratch.</li>
+              <li><code>geode setup -r</code>. Deletes only <code>~/.geode/.env</code> and the dry-run marker, then reruns the wizard. Keys in <code>auth.toml</code> stay; integration tokens kept in <code>.env</code> are lost.</li>
             </ol>
 
             <h2>Update and uninstall</h2>

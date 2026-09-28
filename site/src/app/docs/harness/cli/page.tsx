@@ -254,7 +254,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>geode &quot;...&quot;</code>가 No such command</td><td>원샷 미지원</td><td>bare <code>geode</code>로 REPL에 들어가 자유 텍스트를 입력합니다.</td></tr>
-                <tr><td>외부 채널 메시지가 들어오지 않음</td><td><code>gateway_enabled</code> 꺼짐</td><td>로컬 REPL은 그대로 동작합니다. Slack/Discord/Telegram도 쓰려면 <code>~/.geode/.env</code>에 <code>GEODE_GATEWAY_ENABLED=true</code>를 추가합니다.</td></tr>
+                <tr><td>외부 채널 메시지가 들어오지 않음</td><td><code>gateway_enabled</code> 꺼짐</td><td>로컬 REPL은 그대로 동작합니다. Slack/Discord/Telegram도 쓰려면 <a href="/geode/docs/harness/serve-gateway#start-stop">게이트웨이를 켭니다</a>.</td></tr>
                 <tr><td>배너 모델과 응답 모델 불일치</td><td>오래된 데몬 둘 이상이 소켓을 두고 경합</td><td><code>pkill -f &quot;geode serve&quot;</code> 후 재진입합니다. <code>ps aux | grep</code>은 긴 경로가 잘려 못 잡습니다.</td></tr>
                 <tr><td><code>geode seeds assemble</code>이 exit 2</td><td>wheel 설치에는 <code>scripts/</code>가 없음</td><td>repo 체크아웃에서 실행합니다.</td></tr>
               </tbody>
@@ -517,7 +517,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>geode &quot;...&quot;</code> says No such command</td><td>One-shots are not supported</td><td>Enter the REPL with bare <code>geode</code> and type free text there.</td></tr>
-                <tr><td>External channel messages do not arrive</td><td><code>gateway_enabled</code> is off</td><td>The local REPL still works. To also use Slack/Discord/Telegram, add <code>GEODE_GATEWAY_ENABLED=true</code> to <code>~/.geode/.env</code>.</td></tr>
+                <tr><td>External channel messages do not arrive</td><td><code>gateway_enabled</code> is off</td><td>The local REPL still works. To also use Slack/Discord/Telegram, <a href="/geode/docs/harness/serve-gateway#start-stop">enable the gateway</a>.</td></tr>
                 <tr><td>Banner model differs from the answering model</td><td>Multiple stale daemons fight over the socket</td><td><code>pkill -f &quot;geode serve&quot;</code>, then re-enter. <code>ps aux | grep</code> truncates the long path and misses them.</td></tr>
                 <tr><td><code>geode seeds assemble</code> exits 2</td><td>Wheel installs ship no <code>scripts/</code></td><td>Run from a repo checkout.</td></tr>
               </tbody>

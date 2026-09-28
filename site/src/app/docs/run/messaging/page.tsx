@@ -62,18 +62,8 @@ export default function Page() {
             <pre>{`# 1) 두 토큰을 시크릿 레이어에 저장
 echo 'SLACK_BOT_TOKEN=xoxb-...' >> ~/.geode/.env
 echo 'SLACK_APP_TOKEN=xapp-...' >> ~/.geode/.env
-echo 'GEODE_GATEWAY_ENABLED=true' >> ~/.geode/.env
 
-# 2) binding 규칙 선언 (.geode/config.toml)
-#    channel_id가 없는 규칙은 안전상 건너뜁니다
-[gateway]
-pollers = ["slack"]
-allow_computer_use = false
-
-[[gateway.bindings.rules]]
-channel = "slack"
-channel_id = "C0ABCDEF1"
-require_mention = true
+# 2) 게이트웨이를 켜고 이 채널의 binding 규칙 선언 (아래 문서 참고)
 
 # 3) Slack 채널에서 /invite @geode 후 데몬 재시작
 pkill -f "geode serve"
@@ -82,9 +72,14 @@ geode serve &
 # 4) 점검
 geode doctor slack`}</pre>
             <p>
-              binding 필드 각각의 의미와 검증 방법은{" "}
+              게이트웨이 켜기는{" "}
+              <a href="/geode/docs/harness/serve-gateway#start-stop">Serve와 게이트웨이</a>에,
+              binding 규칙의 형식, 필드 의미, 검증 방법은{" "}
               <a href="/geode/docs/guides/binding">바인딩 설정 가이드</a>에
-              있습니다. <code>geode doctor slack</code>은 앱 토큰, 봇 scope, 각
+              있습니다. 프로젝트 <code>.geode/config.toml</code>의{" "}
+              <code>[gateway]</code> 표는{" "}
+              <a href="/geode/docs/config/basics#project-trust">신뢰한 폴더</a>에서만
+              읽습니다. <code>geode doctor slack</code>은 앱 토큰, 봇 scope, 각
               binding의 채널 멤버십과 클릭 가능한 채널 링크까지 검사합니다.
             </p>
 
@@ -234,18 +229,8 @@ allowed_tools = ["computer", "read_file"]`}</pre>
             <pre>{`# 1) put both tokens on the secrets layer
 echo 'SLACK_BOT_TOKEN=xoxb-...' >> ~/.geode/.env
 echo 'SLACK_APP_TOKEN=xapp-...' >> ~/.geode/.env
-echo 'GEODE_GATEWAY_ENABLED=true' >> ~/.geode/.env
 
-# 2) declare a binding (.geode/config.toml)
-#    a rule without channel_id is skipped for safety
-[gateway]
-pollers = ["slack"]
-allow_computer_use = false
-
-[[gateway.bindings.rules]]
-channel = "slack"
-channel_id = "C0ABCDEF1"
-require_mention = true
+# 2) enable the gateway and declare a binding for the channel (see the docs below)
 
 # 3) run /invite @geode in Slack, then restart the daemon
 pkill -f "geode serve"
@@ -254,8 +239,13 @@ geode serve &
 # 4) check
 geode doctor slack`}</pre>
             <p>
-              Field semantics and verification live in the{" "}
-              <a href="/geode/docs/guides/binding">binding guide</a>.{" "}
+              Enabling the gateway is covered in{" "}
+              <a href="/geode/docs/harness/serve-gateway#start-stop">Serve and gateway</a>;
+              the binding format, field semantics, and verification live in the{" "}
+              <a href="/geode/docs/guides/binding">binding guide</a>. The{" "}
+              <code>[gateway]</code> table in a project{" "}
+              <code>.geode/config.toml</code> is read only in a{" "}
+              <a href="/geode/docs/config/basics#project-trust">trusted folder</a>.{" "}
               <code>geode doctor slack</code> validates the app token, bot
               scopes, membership for every binding, and prints clickable
               channel links.

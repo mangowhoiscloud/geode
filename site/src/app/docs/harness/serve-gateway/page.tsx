@@ -73,17 +73,19 @@ export default function Page() {
               (<code>core/server/supervised/services.py</code>).
             </p>
 
-            <h2>시작과 종료</h2>
+            <h2 id="start-stop">시작과 종료</h2>
             <p>
               <code>geode serve</code>는 <code>gateway_enabled</code>가 꺼져도
               CLI IPC와 스케줄러를 시작합니다. 외부 채널도 운영하려면
-              <code>~/.geode/.env</code>에 <code>GEODE_GATEWAY_ENABLED=true</code>를
-              추가합니다. 대화만 한다면 bare <code>geode</code>가 데몬을
-              자동으로 시작합니다.
+              아래처럼 <code>~/.geode/config.toml</code>에서 게이트웨이를
+              켭니다. <code>GEODE_GATEWAY_ENABLED=true</code> export는 그
+              셸에서 띄운 serve에만 적용되는 세션 override입니다. 대화만
+              한다면 bare <code>geode</code>가 데몬을 자동으로 시작합니다.
             </p>
-            <pre>{`# 게이트웨이 켜기
-echo 'GEODE_GATEWAY_ENABLED=true' >> ~/.geode/.env
-geode serve            # 포그라운드, --poll은 poll 기반 receiver 주기
+            <pre>{`# ~/.geode/config.toml
+[gateway]
+enabled = true`}</pre>
+            <pre>{`geode serve            # 포그라운드, --poll은 poll 기반 receiver 주기
 
 # 살아 있는지 확인
 pgrep -f "geode serve"
@@ -100,18 +102,12 @@ geode serve &`}</pre>
             <h2>binding 설정</h2>
             <p>
               어느 채널이 GEODE를 깨울 수 있는지는 binding 규칙이 결정합니다.
-              규칙 작성법은 <a href="/geode/docs/guides/binding">바인딩 설정
-              가이드</a>에서 다루고, 형식만 요약하면 이렇습니다.
+              규칙 형식과 작성법은 <a href="/geode/docs/guides/binding">바인딩 설정
+              가이드</a>에 있습니다. 프로젝트 <code>.geode/config.toml</code>의{" "}
+              <code>[gateway]</code> 표는{" "}
+              <a href="/geode/docs/config/basics#project-trust">신뢰한 폴더</a>에서만
+              읽습니다.
             </p>
-            <pre>{`# .geode/config.toml
-[gateway]
-pollers = ["slack"]          # 띄울 receiver 등록명
-time_budget_s = 120          # 메시지당 wall-clock 기본값
-
-[[gateway.bindings.rules]]
-channel = "slack"
-channel_id = "C0ABCDEF1"     # 필수. 비어 있으면 규칙이 건너뜀
-require_mention = true`}</pre>
 
             <h2>실환경 검증</h2>
             <p>
@@ -135,7 +131,7 @@ require_mention = true`}</pre>
                 <tr>
                   <td>외부 채널 메시지가 들어오지 않음</td>
                   <td><code>gateway_enabled</code> 꺼짐</td>
-                  <td>CLI IPC는 계속 동작합니다. 외부 채널도 쓰려면 <code>GEODE_GATEWAY_ENABLED=true</code>를 설정합니다.</td>
+                  <td>CLI IPC는 계속 동작합니다. 외부 채널도 쓰려면 <code>~/.geode/config.toml</code>에 <code>[gateway] enabled = true</code>를 설정하고 serve를 재시작합니다.</td>
                 </tr>
                 <tr>
                   <td>메시지에 반응이 없음</td>
@@ -155,12 +151,11 @@ require_mention = true`}</pre>
               </tbody>
             </table>
             <p>
-              Receivers do not forward whole platform payloads. They select the
-              required fields into a <code>geode.gateway.v1</code>{" "}
-              <code>InboundMessage</code>. Content is capped at 64 KiB, JSON
-              metadata at 32 KiB, and the platform message ID remains the
-              correlation ID through response processing. Unknown upstream
-              fields are ignored at this projection boundary.
+              receiver는 플랫폼 payload 전체를 넘기지 않고 필요한 필드만 골라{" "}
+              <code>geode.gateway.v1</code> <code>InboundMessage</code>로
+              만듭니다. 본문은 64 KiB, JSON 메타데이터는 32 KiB로 제한되고,
+              플랫폼 메시지 ID는 응답 처리가 끝날 때까지 상관 ID로 유지됩니다.
+              이 경계에서 알 수 없는 상위 필드는 무시합니다.
             </p>
             <p>
               데몬 로그는 <code>~/.geode/logs/serve.log</code>에 10MB 단위 5개
@@ -230,17 +225,19 @@ require_mention = true`}</pre>
               (<code>core/server/supervised/services.py</code>).
             </p>
 
-            <h2>Start and stop</h2>
+            <h2 id="start-stop">Start and stop</h2>
             <p>
               <code>geode serve</code> starts CLI IPC and the scheduler while{" "}
               <code>gateway_enabled</code> is off. To operate external channels,
-              add <code>GEODE_GATEWAY_ENABLED=true</code> to{" "}
-              <code>~/.geode/.env</code>. For chat only, bare <code>geode</code>
-              auto-starts the daemon.
+              enable the gateway in <code>~/.geode/config.toml</code> as below.
+              Exporting <code>GEODE_GATEWAY_ENABLED=true</code> is a session
+              override that applies only to a serve started from that shell.
+              For chat only, bare <code>geode</code> auto-starts the daemon.
             </p>
-            <pre>{`# enable the gateway
-echo 'GEODE_GATEWAY_ENABLED=true' >> ~/.geode/.env
-geode serve            # foreground; --poll tunes poll-based receivers
+            <pre>{`# ~/.geode/config.toml
+[gateway]
+enabled = true`}</pre>
+            <pre>{`geode serve            # foreground; --poll tunes poll-based receivers
 
 # is it alive?
 pgrep -f "geode serve"
@@ -258,18 +255,11 @@ geode serve &`}</pre>
             <h2>Binding configuration</h2>
             <p>
               Binding rules decide which channels can wake GEODE. The{" "}
-              <a href="/geode/docs/guides/binding">binding guide</a> covers rule
-              authoring; the shape in brief:
+              <a href="/geode/docs/guides/binding">binding guide</a> covers the
+              rule format and authoring. The <code>[gateway]</code> table in a
+              project <code>.geode/config.toml</code> is read only in a{" "}
+              <a href="/geode/docs/config/basics#project-trust">trusted folder</a>.
             </p>
-            <pre>{`# .geode/config.toml
-[gateway]
-pollers = ["slack"]          # receiver registration names
-time_budget_s = 120          # default wall-clock per message
-
-[[gateway.bindings.rules]]
-channel = "slack"
-channel_id = "C0ABCDEF1"     # required; an empty id skips the rule
-require_mention = true`}</pre>
 
             <h2>Live verification</h2>
             <p>
@@ -294,7 +284,7 @@ require_mention = true`}</pre>
                 <tr>
                   <td>External channel messages do not arrive</td>
                   <td><code>gateway_enabled</code> is off</td>
-                  <td>CLI IPC keeps working. Set <code>GEODE_GATEWAY_ENABLED=true</code> to also run external channels.</td>
+                  <td>CLI IPC keeps working. To also run external channels, set <code>[gateway] enabled = true</code> in <code>~/.geode/config.toml</code> and restart serve.</td>
                 </tr>
                 <tr>
                   <td>No reaction to messages</td>
@@ -313,6 +303,14 @@ require_mention = true`}</pre>
                 </tr>
               </tbody>
             </table>
+            <p>
+              Receivers do not forward whole platform payloads. They select the
+              required fields into a <code>geode.gateway.v1</code>{" "}
+              <code>InboundMessage</code>. Content is capped at 64 KiB, JSON
+              metadata at 32 KiB, and the platform message ID remains the
+              correlation ID through response processing. Unknown upstream
+              fields are ignored at this projection boundary.
+            </p>
             <p>
               Daemon logs rotate at <code>~/.geode/logs/serve.log</code>, five
               files of 10MB each

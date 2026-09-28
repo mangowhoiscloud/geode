@@ -20,12 +20,6 @@
 │   ├── anime-ip.md          # 패턴: *cowboy*, *ghost*, *evangelion*
 │   └── indie-steam.md       # 패턴: *satisfactory*, *factorio*
 │
-├── vault/                   # 영구 산출물 (자동 삭제 없음)
-│   ├── reports/             # 생성된 분석 리포트 (md/html/json)
-│   ├── research/            # 심층 리서치 결과물
-│   ├── profile/             # 사용자 경력 프로필, 이력서
-│   └── applications/        # 입사 지원 추적
-│
 ├── skills/                  # Runtime Skills (20개 도메인 특화 프롬프트 주입)
 │   ├── arxiv-digest/        # AI 논문 자동 검색 및 요약
 │   ├── daily-briefing/      # 아침 뉴스/트렌드 요약
@@ -33,9 +27,12 @@
 │   ├── job-hunter/          # 채용공고 검색 + 매칭 분석
 │   └── ...
 │
-├── result_cache/            # 파이프라인 결과 LRU 캐시 (SHA-256 key, 24h TTL)
+├── scheduled_tasks.json     # Scheduler job 저장소 (atomic JSON)
+├── scheduler_logs/          # job별 scheduler 실행 이력 (JSONL)
 └── user_profile/            # Tier 0.5: 사용자 아이덴티티 + 선호 설정
 ```
+
+`config.toml`의 MCP 서버, gateway 바인딩, 권한을 넓히는 키는 해당 폴더에서 `geode config trust`를 실행한 뒤에만 적용됩니다. 자세한 내용은 [프로젝트 신뢰](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust)를 참고하세요.
 
 ## Context 계층 구조
 
@@ -85,10 +82,10 @@ GeodeRuntime.assemble_context()  # 명시적 facade
 |--------|------|-----|----------|-------------|
 | `memory/PROJECT.md` | Project | 영구 | 최대 50개, LRU 제거 | 파이프라인 완료 |
 | `rules/` | Project | 영구 | 수동 | 에이전트가 반복 패턴에서 자동 생성 |
-| `vault/` | Project | 영구 | 삭제 없음 | 리포트 생성, 리서치 완료 |
-| `result_cache/` | Project | 24h | SHA-256 중복 제거, TTL 제거 | 파이프라인 완료 |
+| `~/.geode/vault/{profile,research,applications,general}/` | Global | 영구 | 삭제 없음 | 리포트 생성, 리서치 완료 |
+| `~/.geode/projects/<id>/result_cache/` | Project (사용자 전용) | 없음 | 메모리 LRU (8개 subject) | 파이프라인 완료 |
 | `skills/` | Project | 영구 | 수동 리로드 | 사용자 또는 에이전트 생성 |
-| `config.toml` | Project | 영구 | Hot-reload (chokidar 300ms debounce) | 사용자 편집 |
+| `config.toml` | Project | 영구 | Gateway 바인딩 hot-reload (polling, 300ms debounce) | 사용자 편집 |
 
 ## 런타임 Context 소스 (`.geode/` 외부)
 
@@ -97,8 +94,7 @@ GeodeRuntime.assemble_context()  # 명시적 facade
 | GEODE.md | 프로젝트 루트 | T0 SOUL 아이덴티티 |
 | `~/.geode/user_profile/` | Global | T0.5 사용자 선호 설정 |
 | `~/.geode/.env` | Global | 파일 기반 시크릿 정본. 기존 프로세스 export가 우선 |
-| `.env` | 프로젝트 루트 | 전역 시크릿과 프로세스 export에 없는 키만 보충 |
-| `~/.geode/scheduler/jobs.json` | Global | Scheduler 상태 (atomic JSON) |
+| `.env` | 프로젝트 루트 | 신뢰한 폴더에서만 읽음. 전역 시크릿과 프로세스 export에 없는 키만 보충 |
 | `~/.geode/cli.sock` | Global | IPC socket (serve daemon) |
 
 ## 4-Layer Stack에서의 Context
