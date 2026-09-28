@@ -26,8 +26,11 @@ class TestGeodeInit:
             result = runner.invoke(app, ["init"])
 
         assert result.exit_code == 0, result.output
-        for subdir in ["snapshots", "reports", "result_cache", "models", "sessions"]:
+        for subdir in ["memory", "rules", "skills", "reports"]:
             assert (tmp_path / ".geode" / subdir).is_dir()
+        # Legacy locations would shadow ~/.geode/vault and the project journal.
+        for subdir in ["vault", "journal", "snapshots", "result_cache", "sessions"]:
+            assert not (tmp_path / ".geode" / subdir).exists()
 
     def test_creates_config_toml(self, tmp_path, monkeypatch):
         """init creates .geode/config.toml with template content."""

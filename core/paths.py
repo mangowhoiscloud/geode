@@ -688,7 +688,7 @@ def get_project_data_dir(workspace_path: str | Path | None = None) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Project-scoped user directories (session, journal, snapshots)
+# Project-scoped user directories (session, journal)
 # ---------------------------------------------------------------------------
 
 
@@ -700,11 +700,6 @@ def get_project_journal_dir(workspace_path: str | Path | None = None) -> Path:
 def get_project_sessions_dir(workspace_path: str | Path | None = None) -> Path:
     """Sessions directory: ``~/.geode/projects/{id}/sessions/``."""
     return get_project_data_dir(workspace_path) / "sessions"
-
-
-def get_project_snapshots_dir(workspace_path: str | Path | None = None) -> Path:
-    """Snapshots directory: ``~/.geode/projects/{id}/snapshots/``."""
-    return get_project_data_dir(workspace_path) / "snapshots"
 
 
 def resolve_pending_asks_dir(workspace_path: str | Path | None = None) -> Path:
@@ -723,10 +718,8 @@ def resolve_pending_asks_dir(workspace_path: str | Path | None = None) -> Path:
 # Old paths (pre-v0.31) stored these under {workspace}/.geode/
 _OLD_JOURNAL_DIR = PROJECT_GEODE_DIR / "journal"
 _OLD_SESSION_DIR = PROJECT_GEODE_DIR / "session"
-_OLD_SNAPSHOT_DIR = PROJECT_GEODE_DIR / "snapshots"
 _OLD_RESULT_CACHE_DIR = PROJECT_GEODE_DIR / "result_cache"
 _OLD_VAULT_DIR = PROJECT_GEODE_DIR / "vault"
-_OLD_MODELS_DIR = PROJECT_GEODE_DIR / "models"
 
 
 def resolve_journal_dir(workspace_path: str | Path | None = None) -> Path:
@@ -810,7 +803,6 @@ def ensure_directories() -> None:
         project_data,
         project_data / "journal",
         project_data / "sessions",
-        project_data / "snapshots",
         project_data / "result_cache",
     ]
     for d in project_user_dirs:

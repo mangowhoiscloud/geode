@@ -41,6 +41,8 @@ TRUST_REQUIRED_KEYS: frozenset[str] = frozenset(
         "cost.limit_usd",
         "gateway.allow_computer_use",
         "gateway.enabled",
+        "gateway.max_concurrent",
+        "gateway.poll_interval_s",
         "llm.model_policy_path",
         "notification.channel",
         "notification.recipient",

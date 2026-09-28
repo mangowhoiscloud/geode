@@ -87,6 +87,12 @@ functional change.
   nothing read. Layout migration v5 moves an existing
   `~/.geode/identity/career.toml` to `~/.geode/user_profile/career.toml`, the
   file the profile loader uses, unless that file already exists.
+- `geode init` now creates only the live project folders (`memory`, `rules`,
+  `skills`, `reports`). Its empty legacy `.geode/vault/` and `.geode/journal/`
+  subfolders won the backward-compatibility fallback, so vault artifacts and the
+  execution journal landed in the project instead of `~/.geode/` while the
+  global folders were still empty. Bootstrap also stops creating the unused
+  `snapshots/` folder.
 
 ### Security
 

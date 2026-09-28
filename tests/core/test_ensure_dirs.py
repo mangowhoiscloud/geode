@@ -77,7 +77,7 @@ class TestEnsureDirectories:
         assert proj_data.is_dir()
         assert (proj_data / "journal").is_dir()
         assert (proj_data / "sessions").is_dir()
-        assert (proj_data / "snapshots").is_dir()
+        assert not (proj_data / "snapshots").exists()  # nothing writes snapshots
         assert (proj_data / "result_cache").is_dir()
 
     def test_idempotent(self, clean_dirs: Path) -> None:

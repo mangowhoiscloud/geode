@@ -92,33 +92,14 @@ def init(
     if created_mem:
         console.print("  Created .geode/memory/ + .geode/rules/ structure")
 
-    # 3. .geode/ directories
+    # 3. .geode/ directories — the live project tier only. Journal, sessions,
+    # vault and caches live under ~/.geode/; an empty legacy .geode/vault/ or
+    # .geode/journal/ here would win core.paths._resolve_with_fallback over them.
     geode_dirs = [
-        # Agent memory (git-tracked)
         Path(".geode/memory"),
         Path(".geode/rules"),
-        # C1: Project config
-        Path(".geode/project"),
-        # C2: Journal (append-only execution history)
-        Path(".geode/journal"),
-        Path(".geode/journal/transcripts"),
-        # V0: Vault (purpose-routed artifact storage)
-        Path(".geode/vault/profile"),
-        Path(".geode/vault/research"),
-        Path(".geode/vault/applications"),
-        Path(".geode/vault/general"),
-        # C3: Session (checkpoints, resumable)
-        Path(".geode/session"),
-        # C4: Plan (goals, pending tasks)
-        Path(".geode/plan"),
-        # Cache + outputs
-        Path(".geode/cache"),
+        Path(".geode/skills"),
         Path(".geode/reports"),
-        Path(".geode/snapshots"),
-        Path(".geode/models"),
-        # Legacy compat
-        Path(".geode/sessions"),
-        Path(".geode/result_cache"),
     ]
     for d in geode_dirs:
         d.mkdir(parents=True, exist_ok=True)
