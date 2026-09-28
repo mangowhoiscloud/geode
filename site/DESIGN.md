@@ -38,6 +38,18 @@ deployment proof.
 
 ## 1. Visual Theme & Atmosphere
 
+### Jev research artifact exception (operator-approved 2026-09-28)
+
+`/research/jev/` preserves the approved film's light slide canvas, embedded
+typography and existing preview controls as a scoped research artifact. This
+is not a site light mode or permission to restyle landing/docs. Keep the
+preview's build navigation, explicit KO/EN selection and language-matched PDF
+download. Strip private production notes and local links; preserve research
+failures and limitations. The user chose the existing six-track music edition,
+including its track credits and cover art, without a claim of verified rights
+documentation. Keep the final film on its approved external host. Only the
+approved asset allowlist and its font licenses may accompany the artifact.
+
 **Mood**: a modern dark developer surface keyed to the GEODE character — a rose axolotl explorer with a gold headlamp and an aqua magnifier (`public/images/geode-*.png`). Cool near-black substrate with a violet undertone, one saturated signature accent (rose) carried everywhere as low-opacity tints, gold reserved for action, aqua for information. Reads like a well-lit terminal, not a leather desk.
 
 **Adjectives**: cool dark, signature-tinted, character-grounded, restrained, single-substrate.

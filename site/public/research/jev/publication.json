@@ -1,0 +1,881 @@
+{
+  "schema": "jev-report-publication-v1",
+  "status": "prepared-not-published",
+  "source_sha256": "708b2e7b6526c1c6ed4b8aa6c4dafea6618308ca6bed80724eb4b11ac8417e8a",
+  "html_sha256": "73658576441c26a056644f4fc07dc5f4eb374e760e8816c374c35e46a36df013",
+  "generator_sha256": "46d3eddbd3989ddf9a4ac21c5d70c2a5b9939f6b4e42043275cbe063b3a2b351",
+  "evidence_readme": "https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/README.md",
+  "date": "2026-09-28",
+  "video_url": null,
+  "video_sha256": null,
+  "report_audio_streams": 0,
+  "music_publication": "User selected the existing six-track music edition; the report preserves its credits and cover art",
+  "rights_documentation_verified": false,
+  "assets": [
+    {
+      "path": "assets/nemzzz-locked-in-spotify.jpg",
+      "sha256": "5df7e8bdc3831bb1826197cca5266e873bae68242e21384c6035954f16c34336",
+      "bytes": 55434
+    },
+    {
+      "path": "assets/typesafe-official-symbol.svg",
+      "sha256": "def1903ebf835384c76cd1c423c4ccd182e85a94973c9d091549b1dc0930ac6b",
+      "bytes": 1469
+    },
+    {
+      "path": "assets/geodi-dot.svg",
+      "sha256": "00c76b8563a9061e1f27e84853822431d61cb0aac3eb614f5d663959181e0889",
+      "bytes": 2036
+    },
+    {
+      "path": "assets/locked-in-240.jpg",
+      "sha256": "93e832a887de0af51d5fae89176c6129d1602e9388c8b7c12eed73da84f5b8f7",
+      "bytes": 8090
+    },
+    {
+      "path": "assets/replay-comparison-first.png",
+      "sha256": "b53fbdba3f92ae891a88e9386cd3b7724b235545ec2526118e5603a7799df99a",
+      "bytes": 95575
+    },
+    {
+      "path": "assets/replay-comparison.mp4",
+      "sha256": "cc337a2d0d04c697109c340ac50a89644f74d9b261d4f8e95f46a95202da6fba",
+      "bytes": 1761911
+    },
+    {
+      "path": "assets/replay-result-hold-first.png",
+      "sha256": "b93438b2798693bc542fc1d663b067f8cacb164137c2ab1237e5a205c109ce93",
+      "bytes": 414205
+    },
+    {
+      "path": "assets/replay-result-hold-en.png",
+      "sha256": "85607af324e86f90febb78c7ec614bd48fa6444334524fd4b3a8bd8bc775f35e",
+      "bytes": 411839
+    },
+    {
+      "path": "assets/replay-result-hold.mp4",
+      "sha256": "693abbe8a29c6ca8e747951b0329f71a07a8c19cea0dd779c21acba81a706585",
+      "bytes": 135847
+    },
+    {
+      "path": "assets/replay-result-hold-en.mp4",
+      "sha256": "8c0178dcb66c65afb7ed64f247dab5db4be554a978abc0c875f3b1178e4f7330",
+      "bytes": 135537
+    },
+    {
+      "path": "assets/u8c-a.mp4",
+      "sha256": "6d2706528ca171ce81e0dece6c5cd13dae6f52d425185047d2dd8094feaac0d1",
+      "bytes": 3169494
+    },
+    {
+      "path": "assets/u8c-b.mp4",
+      "sha256": "3466fd90793ea7f14fdb148e9a688ed81dfbdbd6bd3452006a0ff797984d557f",
+      "bytes": 3088140
+    },
+    {
+      "path": "assets/i6-natural-a.mp4",
+      "sha256": "6e43af95ec7d03cd239e79c0d1b7aec20f4c059587635addd73573d7e9cc68c3",
+      "bytes": 3390515
+    },
+    {
+      "path": "assets/i6-natural-b.mp4",
+      "sha256": "5d46df2ffd7b5d7ad2ba960a9f0447b49d2c57c04d2173162a9299ac2bdedacb",
+      "bytes": 3051927
+    },
+    {
+      "path": "assets/u8n-a.mp4",
+      "sha256": "2af39d01bcbbdbce5b6c594a2c96814b5f9a14edb06bd9b902e5f84667a291f4",
+      "bytes": 3446898
+    },
+    {
+      "path": "assets/u8n-b.mp4",
+      "sha256": "bae3760a379a69ef5bdf0b7e1182b468babc974bc87ce8d841cb1afb708c4535",
+      "bytes": 3403355
+    },
+    {
+      "path": "assets/fonts/SourceHanSerifKR-Bold.otf",
+      "sha256": "2856453de29abbc2f1fdffc6b45fec88167ed204e8ae9bc8c4bd0475b4d9a7dc",
+      "bytes": 7910576
+    },
+    {
+      "path": "assets/fonts/STIXTwoText.ttf",
+      "sha256": "7962b8b7811e6a896c9a91a0bccbb5241047770eb24d4997c5cb5fe21d5c0df2",
+      "bytes": 418956
+    },
+    {
+      "path": "assets/fonts/Pretendard-Regular.otf",
+      "sha256": "3ffbacde6ab8411f1d2db54bb9b1f0b3ee2a738932033722cf0388c06aed1c93",
+      "bytes": 1574352
+    },
+    {
+      "path": "assets/fonts/Pretendard-Bold.otf",
+      "sha256": "2e91915fab54df71cc9598ebf608b2bdb54c6fe3c066ac61dff0bc44fca71cc7",
+      "bytes": 1576660
+    },
+    {
+      "path": "assets/fonts/Pretendard-Medium.otf",
+      "sha256": "d39e50e4bb52b4993b6a4eeb821a171254745bd824446af01e1f616b89fface0",
+      "bytes": 1584068
+    },
+    {
+      "path": "assets/fonts/Pretendard-SemiBold.otf",
+      "sha256": "c89bc43027dc7cde5726e96223376f8eec09302b2fc1f8147fd5b57cfc376118",
+      "bytes": 1583704
+    },
+    {
+      "path": "assets/fonts/Pretendard-ExtraBold.otf",
+      "sha256": "c35fe941b7568d52a96010561540e47f9d3948dfde66ba25bc1908233e0a40cd",
+      "bytes": 1568512
+    },
+    {
+      "path": "assets/fonts/IBMPlexSans-Regular.woff2",
+      "sha256": "ba711a3085ff9f27440b6b9c4550cfc47c97bf36591d5da958b975bb3add8c1a",
+      "bytes": 63020
+    },
+    {
+      "path": "assets/fonts/IBMPlexSans-Medium.woff2",
+      "sha256": "5660f8a658f8bb50dbc005232f885eadffd2bc1c235c4f6fbb63469d1f9cde6d",
+      "bytes": 66740
+    },
+    {
+      "path": "assets/fonts/IBMPlexSans-SemiBold.woff2",
+      "sha256": "f78048030eab62e860efa39a0df79e2e5581bf122eb95b9bc42c0b8a4988d205",
+      "bytes": 67060
+    },
+    {
+      "path": "assets/fonts/IBMPlexSans-Bold.woff2",
+      "sha256": "fa7130d854a660b39a7fc9e6e0f2dc23dba5f1346e2adea3e1fe37b6d884133d",
+      "bytes": 63012
+    },
+    {
+      "path": "assets/fonts/IBMPlexSansKR-Regular.woff2",
+      "sha256": "055a35664c3c3965161c92292504c5633ba9604ec904edc1ed799bf2a436276d",
+      "bytes": 438540
+    },
+    {
+      "path": "assets/fonts/IBMPlexSansKR-Medium.woff2",
+      "sha256": "c00dcd8a9c32a6b6ab8c6b3119e68b3d7aa6eba6f4441d5493019cc019dcdd1e",
+      "bytes": 439816
+    },
+    {
+      "path": "assets/fonts/IBMPlexSansKR-SemiBold.woff2",
+      "sha256": "5ad7db28ba74d59fe14c260205c62ddb701320f4f098d8a45ef2757bebc29666",
+      "bytes": 434484
+    },
+    {
+      "path": "assets/fonts/IBMPlexSansKR-Bold.woff2",
+      "sha256": "cf874a368dc2c2c0e4d1933c35611b849e48942023bfdd1fa11128475dbc4860",
+      "bytes": 370492
+    },
+    {
+      "path": "assets/fonts/IBMPlexMono-Regular.woff2",
+      "sha256": "ba204497f16b6d334cee9d1e963a831b73e3a56e1d6300a8489d18df7214b350",
+      "bytes": 49248
+    },
+    {
+      "path": "assets/fonts/IBMPlexMono-Bold.woff2",
+      "sha256": "ea576f38d05cc44cca48c45314984beb8cc1d2b886f58e1dce99f15dc344eb1d",
+      "bytes": 50380
+    },
+    {
+      "path": "assets/fonts/Pretendard-OFL.txt",
+      "sha256": "82e9c8a4b203261f10ddba1296422d64914ff3d4b7bd8a12896d03f0f088d70a",
+      "bytes": 4816
+    },
+    {
+      "path": "assets/fonts/SourceHanSerif-OFL.txt",
+      "sha256": "9ff5bb567e1b92c801fc1069e5fbf992ff8efccacb9db94e5959a5b3ba9bb903",
+      "bytes": 4463
+    },
+    {
+      "path": "assets/fonts/STIX-OFL.txt",
+      "sha256": "0c8825913b60d858aacdb33c4ca6660a7d64b0d6464702efbb19313f5765861a",
+      "bytes": 4519
+    },
+    {
+      "path": "assets/fonts/IBM-Plex-LICENSE.txt",
+      "sha256": "7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da",
+      "bytes": 4456
+    }
+  ],
+  "pdfs": [
+    {
+      "language": "ko",
+      "file": "report-ko.pdf",
+      "sha256": "d96e2cb46dc4ecf3298228f513750d40f854530fb2b7b46cc754ff66a11350a4",
+      "bytes": 20018876,
+      "pages": [
+        {
+          "scene_id": "cover",
+          "build": 1
+        },
+        {
+          "scene_id": "contents",
+          "build": 1
+        },
+        {
+          "scene_id": "contents",
+          "build": 2
+        },
+        {
+          "scene_id": "jev-contract",
+          "build": 1
+        },
+        {
+          "scene_id": "jev-public-design",
+          "build": 1
+        },
+        {
+          "scene_id": "jev-public-design",
+          "build": 2
+        },
+        {
+          "scene_id": "v21-question",
+          "build": 1
+        },
+        {
+          "scene_id": "env-map",
+          "build": 1
+        },
+        {
+          "scene_id": "runtime",
+          "build": 1
+        },
+        {
+          "scene_id": "runtime",
+          "build": 2
+        },
+        {
+          "scene_id": "jev-boundaries",
+          "build": 1
+        },
+        {
+          "scene_id": "jev-boundaries",
+          "build": 2
+        },
+        {
+          "scene_id": "meta-contract",
+          "build": 1
+        },
+        {
+          "scene_id": "agents-guide",
+          "build": 1
+        },
+        {
+          "scene_id": "worktree-lifecycle",
+          "build": 1
+        },
+        {
+          "scene_id": "measurement",
+          "build": 1
+        },
+        {
+          "scene_id": "measurement",
+          "build": 2
+        },
+        {
+          "scene_id": "measurement",
+          "build": 3
+        },
+        {
+          "scene_id": "e2e-ledger",
+          "build": 1
+        },
+        {
+          "scene_id": "adoption",
+          "build": 1
+        },
+        {
+          "scene_id": "outputs",
+          "build": 1
+        },
+        {
+          "scene_id": "recovery-comparison",
+          "build": 1
+        },
+        {
+          "scene_id": "confidence-check",
+          "build": 1
+        },
+        {
+          "scene_id": "replay-full",
+          "build": 1
+        },
+        {
+          "scene_id": "replay-comparison",
+          "build": 1
+        },
+        {
+          "scene_id": "rlcd",
+          "build": 1
+        },
+        {
+          "scene_id": "rlcd",
+          "build": 2
+        },
+        {
+          "scene_id": "encoding",
+          "build": 1
+        },
+        {
+          "scene_id": "clm-reuse",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-comparison",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-delivery-contract",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-delivery-contract",
+          "build": 2
+        },
+        {
+          "scene_id": "v3-delivery-contract",
+          "build": 3
+        },
+        {
+          "scene_id": "v21-data-map",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-data-map",
+          "build": 2
+        },
+        {
+          "scene_id": "v21-synthetic",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-activity",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-track-gates",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-track-gates",
+          "build": 2
+        },
+        {
+          "scene_id": "v21-track-gates",
+          "build": 3
+        },
+        {
+          "scene_id": "v21-sealing",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-sealing",
+          "build": 2
+        },
+        {
+          "scene_id": "v22-reading-guide",
+          "build": 1
+        },
+        {
+          "scene_id": "v22-reading-guide",
+          "build": 2
+        },
+        {
+          "scene_id": "v22-reading-guide",
+          "build": 3
+        },
+        {
+          "scene_id": "v3-m7-design",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-noul",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-intent-panel",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-score",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-score",
+          "build": 2
+        },
+        {
+          "scene_id": "v3-ext-verify",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-ext-verify",
+          "build": 2
+        },
+        {
+          "scene_id": "v3-ext-select",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-ext-select",
+          "build": 2
+        },
+        {
+          "scene_id": "v3-latency",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-latency",
+          "build": 2
+        },
+        {
+          "scene_id": "v21-cost",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-stability",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-stability",
+          "build": 2
+        },
+        {
+          "scene_id": "v3-calibration",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-calibration",
+          "build": 2
+        },
+        {
+          "scene_id": "v3-cascade",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-cascade",
+          "build": 2
+        },
+        {
+          "scene_id": "v3-e2e-slots",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-e2e-natural",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-e2e-injected",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-e2e-injected",
+          "build": 2
+        },
+        {
+          "scene_id": "replay-u8c",
+          "build": 1
+        },
+        {
+          "scene_id": "v22-noul-context",
+          "build": 1
+        },
+        {
+          "scene_id": "v22-noul-context",
+          "build": 2
+        },
+        {
+          "scene_id": "v22-noul-outcome",
+          "build": 1
+        },
+        {
+          "scene_id": "v22-noul-outcome",
+          "build": 2
+        },
+        {
+          "scene_id": "replay-u8n",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-intent",
+          "build": 1
+        },
+        {
+          "scene_id": "replay-i6-natural",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-operating-scope",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-public-evidence-map",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-reproduction-paths",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-agent-review-guide",
+          "build": 1
+        },
+        {
+          "scene_id": "references",
+          "build": 1
+        },
+        {
+          "scene_id": "production-references",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-conclusion",
+          "build": 1
+        }
+      ]
+    },
+    {
+      "language": "en",
+      "file": "report-en.pdf",
+      "sha256": "33db0af3f50d60658c8b2bf9421f07d871f6ae787fc8723f8e47a86f8486ea87",
+      "bytes": 18237712,
+      "pages": [
+        {
+          "scene_id": "cover",
+          "build": 1
+        },
+        {
+          "scene_id": "contents",
+          "build": 1
+        },
+        {
+          "scene_id": "contents",
+          "build": 2
+        },
+        {
+          "scene_id": "jev-contract",
+          "build": 1
+        },
+        {
+          "scene_id": "jev-public-design",
+          "build": 1
+        },
+        {
+          "scene_id": "jev-public-design",
+          "build": 2
+        },
+        {
+          "scene_id": "v21-question",
+          "build": 1
+        },
+        {
+          "scene_id": "env-map",
+          "build": 1
+        },
+        {
+          "scene_id": "runtime",
+          "build": 1
+        },
+        {
+          "scene_id": "runtime",
+          "build": 2
+        },
+        {
+          "scene_id": "jev-boundaries",
+          "build": 1
+        },
+        {
+          "scene_id": "jev-boundaries",
+          "build": 2
+        },
+        {
+          "scene_id": "meta-contract",
+          "build": 1
+        },
+        {
+          "scene_id": "agents-guide",
+          "build": 1
+        },
+        {
+          "scene_id": "worktree-lifecycle",
+          "build": 1
+        },
+        {
+          "scene_id": "measurement",
+          "build": 1
+        },
+        {
+          "scene_id": "measurement",
+          "build": 2
+        },
+        {
+          "scene_id": "measurement",
+          "build": 3
+        },
+        {
+          "scene_id": "e2e-ledger",
+          "build": 1
+        },
+        {
+          "scene_id": "adoption",
+          "build": 1
+        },
+        {
+          "scene_id": "outputs",
+          "build": 1
+        },
+        {
+          "scene_id": "recovery-comparison",
+          "build": 1
+        },
+        {
+          "scene_id": "confidence-check",
+          "build": 1
+        },
+        {
+          "scene_id": "replay-full",
+          "build": 1
+        },
+        {
+          "scene_id": "replay-comparison",
+          "build": 1
+        },
+        {
+          "scene_id": "rlcd",
+          "build": 1
+        },
+        {
+          "scene_id": "rlcd",
+          "build": 2
+        },
+        {
+          "scene_id": "encoding",
+          "build": 1
+        },
+        {
+          "scene_id": "clm-reuse",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-comparison",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-delivery-contract",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-delivery-contract",
+          "build": 2
+        },
+        {
+          "scene_id": "v3-delivery-contract",
+          "build": 3
+        },
+        {
+          "scene_id": "v21-data-map",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-data-map",
+          "build": 2
+        },
+        {
+          "scene_id": "v21-synthetic",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-activity",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-track-gates",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-track-gates",
+          "build": 2
+        },
+        {
+          "scene_id": "v21-track-gates",
+          "build": 3
+        },
+        {
+          "scene_id": "v21-sealing",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-sealing",
+          "build": 2
+        },
+        {
+          "scene_id": "v22-reading-guide",
+          "build": 1
+        },
+        {
+          "scene_id": "v22-reading-guide",
+          "build": 2
+        },
+        {
+          "scene_id": "v22-reading-guide",
+          "build": 3
+        },
+        {
+          "scene_id": "v3-m7-design",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-noul",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-intent-panel",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-score",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-score",
+          "build": 2
+        },
+        {
+          "scene_id": "v3-ext-verify",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-ext-verify",
+          "build": 2
+        },
+        {
+          "scene_id": "v3-ext-select",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-ext-select",
+          "build": 2
+        },
+        {
+          "scene_id": "v3-latency",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-latency",
+          "build": 2
+        },
+        {
+          "scene_id": "v21-cost",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-stability",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-stability",
+          "build": 2
+        },
+        {
+          "scene_id": "v3-calibration",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-calibration",
+          "build": 2
+        },
+        {
+          "scene_id": "v3-cascade",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-cascade",
+          "build": 2
+        },
+        {
+          "scene_id": "v3-e2e-slots",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-e2e-natural",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-e2e-injected",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-e2e-injected",
+          "build": 2
+        },
+        {
+          "scene_id": "replay-u8c",
+          "build": 1
+        },
+        {
+          "scene_id": "v22-noul-context",
+          "build": 1
+        },
+        {
+          "scene_id": "v22-noul-context",
+          "build": 2
+        },
+        {
+          "scene_id": "v22-noul-outcome",
+          "build": 1
+        },
+        {
+          "scene_id": "v22-noul-outcome",
+          "build": 2
+        },
+        {
+          "scene_id": "replay-u8n",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-intent",
+          "build": 1
+        },
+        {
+          "scene_id": "replay-i6-natural",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-operating-scope",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-public-evidence-map",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-reproduction-paths",
+          "build": 1
+        },
+        {
+          "scene_id": "v3-agent-review-guide",
+          "build": 1
+        },
+        {
+          "scene_id": "references",
+          "build": 1
+        },
+        {
+          "scene_id": "production-references",
+          "build": 1
+        },
+        {
+          "scene_id": "v21-conclusion",
+          "build": 1
+        }
+      ]
+    }
+  ],
+  "unverified": [
+    "Final visual review",
+    "Video export identity",
+    "Public URL readback"
+  ],
+  "total_bytes": 79662350
+}

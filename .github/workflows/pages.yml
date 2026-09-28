@@ -255,6 +255,7 @@ jobs:
             site/out/about/index.html
             'site/out/docs/**/*.html'
             'site/out/portfolio/**/*.html'
+            'site/out/research/**/*.html'
           fail: true
           jobSummary: true
           output: lychee-report.md

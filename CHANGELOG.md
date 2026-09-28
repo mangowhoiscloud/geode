@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- Prepare a source-pinned Jev report packager that reuses the approved bilingual
+  slide preview, excludes private production files, and exports every
+  settled build to language-matched PDFs. The package receipt separates source,
+  asset and rendered-file identities; preparation does not claim publication.
+
 ### Infrastructure
 
 - Partition the complete pytest collection into four file-preserving CI shards,
