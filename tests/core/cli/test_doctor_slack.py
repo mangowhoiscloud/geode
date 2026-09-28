@@ -116,6 +116,7 @@ class TestCheckBindings:
     def _isolate_global_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Keep binding diagnostics independent of the operator's config."""
         monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "absent-global.toml"))
+        monkeypatch.setattr("core.config.project_trust.is_project_trusted", lambda root=None: True)
 
     def test_valid_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)

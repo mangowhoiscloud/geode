@@ -103,10 +103,13 @@ v1.0.30은 TypeSafe 또는 OpenRouter를 통한 Jev 판정을 지원합니다.
 | `~/.geode/auth.toml` | GEODE가 관리하는 제공자 자격 증명과 계정 정보 |
 | `~/.geode/.env` | 선택적으로 사용하는 환경변수 자격 증명과 연동 시크릿 |
 | `~/.geode/config.toml` | 사용자 공통 동작 기본값 |
-| `./.geode/config.toml` | 프로젝트별 동작 설정 |
+| `./.geode/config.toml`, `./.env` | 프로젝트별 설정. 권한을 넓히는 키는 신뢰한 폴더에서만 적용 |
+| `~/.geode/trusted_projects.toml` | `geode config trust`로 신뢰한 폴더 목록 |
 | `~/.geode/` | 런타임 상태, 세션, 진단 기록, 비공개 산출물 |
 
-프로젝트 동작 설정은 사용자 기본값보다 우선합니다. 자격 증명은 선택한
+프로젝트 동작 설정은 사용자 기본값보다 우선합니다. 저장소에 들어 있는 `.env`,
+MCP 서버, 게이트웨이 설정, 권한을 넓히는 키(샌드박스, computer use, 웹훅,
+저장 경로)는 그 폴더에서 `geode config trust`를 실행한 뒤에만 적용됩니다. 자격 증명은 선택한
 모델·소스·계정에 따라서도 결정되므로 모든 설정을 하나의 우선순위 목록으로
 설명할 수는 없습니다. Google Workspace OAuth는 별도의
 [계정·키링 저장소](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace/)를

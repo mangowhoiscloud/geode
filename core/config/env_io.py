@@ -68,14 +68,18 @@ def load_env_files(*, skip_behavior_keys: bool = False) -> None:
 
     from dotenv import dotenv_values
 
+    from core.config.project_trust import project_files_allowed
     from core.paths import GLOBAL_ENV_FILE
 
     inherited = frozenset(os.environ)
     # Project first, global LAST so a non-empty global value overwrites the
     # project's (global is the authoritative secret store); empty / inherited
     # values are skipped below, so a project key only fills a global gap.
+    # A workspace .env joins only for a trusted folder (core.config.project_trust).
     for env_file in (Path(".env"), GLOBAL_ENV_FILE):
         if not env_file.exists():
+            continue
+        if env_file != GLOBAL_ENV_FILE and not project_files_allowed(".env"):
             continue
         env_file.chmod(0o600)
         for key, val in dotenv_values(str(env_file)).items():

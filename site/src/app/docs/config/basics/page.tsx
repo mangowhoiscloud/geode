@@ -33,7 +33,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>프로젝트 <code>.env</code> (cwd)</td>
-                  <td>프로젝트 시크릿 층. 전역에 없는 키만 채우며 전역 키를 덮지 못합니다 (Hermes, 2026-06-15). 시크릿은 전역에 두는 것이 기본입니다.</td>
+                  <td>프로젝트 시크릿 층. 신뢰한 폴더에서만 읽습니다. 전역에 없는 키만 채우며 전역 키를 덮지 못합니다 (Hermes, 2026-06-15). 시크릿은 전역에 두는 것이 기본입니다.</td>
                 </tr>
                 <tr>
                   <td><code>~/.geode/config.toml</code></td>
@@ -41,7 +41,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td><code>.geode/config.toml</code></td>
-                  <td>프로젝트 동작 설정. 전역 toml을 덮습니다. <code>/model</code>의 기본 저장 위치입니다.</td>
+                  <td>프로젝트 동작 설정. 전역 toml을 덮습니다. 권한을 넓히는 키는 신뢰한 폴더에서만 적용됩니다. <code>/model</code>의 기본 저장 위치입니다.</td>
                 </tr>
                 <tr>
                   <td><code>core/config/routing.toml</code></td>
@@ -113,6 +113,28 @@ export default function Page() {
               고정되고 runtime health의 <code>extensions</code>에서 확인됩니다.
             </p>
 
+            <h2 id="project-trust">프로젝트 신뢰</h2>
+            <p>
+              저장소는 <code>.geode/config.toml</code>, <code>.env</code>,
+              <code>.claude/mcp_servers.json</code>을 함께 담아 올 수 있습니다.
+              GEODE는 폴더를 신뢰하기 전까지 권한을 넓히는 프로젝트 설정을
+              적용하지 않습니다. 프로젝트 <code>.env</code>, 프로젝트 MCP 서버와
+              게이트웨이 설정, 샌드박스·computer use·웹훅·알림·저장 경로 같은
+              키가 여기에 해당합니다. 모델 선택처럼 권한과 무관한 키와
+              <code>[policy.org] denied_tools</code> 같은 제한은 바로 적용됩니다.
+            </p>
+            <pre>{`geode config trust              # 현재 폴더 신뢰
+geode config trust --list       # 신뢰한 폴더 목록
+geode config trust PATH --revoke`}</pre>
+            <p>
+              신뢰 기록은 <code>~/.geode/trusted_projects.toml</code>(0600)에만
+              저장되므로 저장소가 스스로를 신뢰할 수 없습니다.
+              <code>hitl.dangerously_skip_permissions</code>와
+              <code>computer_use.helper_path</code>는 신뢰한 폴더에서도
+              프로젝트 설정으로 읽지 않습니다. 무시된 항목은 경고 로그와
+              <code>geode config explain</code>에 표시됩니다.
+            </p>
+
             <h2>해석 사다리</h2>
             <p>
               모든 Settings 필드는 같은 사다리를 탑니다. 위가 이깁니다
@@ -120,8 +142,8 @@ export default function Page() {
             </p>
             <pre>{`1. os.environ            셸 export. 세션 한정 수동 override
 2. 전역 .env             ~/.geode/.env (시크릿 권위)
-3. 프로젝트 .env          cwd의 .env (전역에 없는 키만 채움)
-4. 프로젝트 config.toml   .geode/config.toml
+3. 프로젝트 .env          cwd의 .env (신뢰한 폴더만. 전역에 없는 키만 채움)
+4. 프로젝트 config.toml   .geode/config.toml (권한 키는 신뢰한 폴더만)
 5. 전역 config.toml      ~/.geode/config.toml
 6. 코드 기본값`}</pre>
             <p>
@@ -237,6 +259,11 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
                   <td>의도된 동작입니다. 시크릿은 전역에 두고, 프로젝트는 전역에 없는 키만 채웁니다. <code>geode config explain &lt;KEY&gt;</code>로 WINNER 층을 확인하세요.</td>
                 </tr>
                 <tr>
+                  <td>프로젝트 <code>.env</code>, MCP 서버, 샌드박스 설정이 적용되지 않음</td>
+                  <td>신뢰하지 않은 폴더. 시작할 때 &quot;until you run `geode config trust`&quot; 경고가 남습니다</td>
+                  <td>저장소 내용을 확인한 뒤 그 폴더에서 <code>geode config trust</code>를 실행하고 새 세션을 엽니다.</td>
+                </tr>
+                <tr>
                   <td>대체 전역 경로에서 <code>/model</code> 선택이 남지 않음</td>
                   <td>구 버전 피커가 기본 전역 파일에 기록</td>
                   <td>업그레이드하고 저장 확인 화면의 경로와 <code>geode config explain</code>의 전역 경로를 비교합니다.</td>
@@ -274,7 +301,7 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
                 </tr>
                 <tr>
                   <td>Project <code>.env</code> (cwd)</td>
-                  <td>Project secrets layer. Fills only the keys the global file lacks; it never shadows a global key (Hermes, 2026-06-15). Keep secrets in the global file by default.</td>
+                  <td>Project secrets layer, read only in a trusted folder. Fills only the keys the global file lacks; it never shadows a global key (Hermes, 2026-06-15). Keep secrets in the global file by default.</td>
                 </tr>
                 <tr>
                   <td><code>~/.geode/config.toml</code></td>
@@ -282,7 +309,7 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
                 </tr>
                 <tr>
                   <td><code>.geode/config.toml</code></td>
-                  <td>Project behavior settings. Outranks the global toml. Default write target of <code>/model</code>.</td>
+                  <td>Project behavior settings. Outranks the global toml; keys that widen capability apply only in a trusted folder. Default write target of <code>/model</code>.</td>
                 </tr>
                 <tr>
                   <td><code>core/config/routing.toml</code></td>
@@ -356,6 +383,29 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
               appear under <code>extensions</code> in runtime health.
             </p>
 
+            <h2 id="project-trust">Project trust</h2>
+            <p>
+              A repository can ship <code>.geode/config.toml</code>,
+              <code>.env</code> and <code>.claude/mcp_servers.json</code>. Until
+              you trust the folder, GEODE does not apply project settings that
+              widen what the agent may do: the project <code>.env</code>, project
+              MCP servers and gateway config, and keys such as the sandbox mode,
+              computer use, webhooks, notifications and storage paths. Keys that
+              grant nothing, such as the model choice, and restrictions such as
+              <code>[policy.org] denied_tools</code> apply immediately.
+            </p>
+            <pre>{`geode config trust              # trust the current folder
+geode config trust --list       # list trusted folders
+geode config trust PATH --revoke`}</pre>
+            <p>
+              Trust lives only in <code>~/.geode/trusted_projects.toml</code>
+              (0600), so a repository cannot trust itself.
+              <code>hitl.dangerously_skip_permissions</code> and
+              <code>computer_use.helper_path</code> are never read from project
+              config, even in a trusted folder. Ignored entries appear in a
+              warning log and in <code>geode config explain</code>.
+            </p>
+
             <h2>The resolution ladder</h2>
             <p>
               Every Settings field rides the same ladder. Higher wins
@@ -363,8 +413,8 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
             </p>
             <pre>{`1. os.environ            shell exports. session-scoped manual override
 2. global .env           ~/.geode/.env (authoritative secrets)
-3. project .env          .env in the cwd (fills only keys global lacks)
-4. project config.toml   .geode/config.toml
+3. project .env          .env in the cwd (trusted folders only; fills only keys global lacks)
+4. project config.toml   .geode/config.toml (capability keys: trusted folders only)
 5. global config.toml    ~/.geode/config.toml
 6. code default`}</pre>
             <p>
@@ -486,6 +536,11 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
                   <td>A secret set in the project <code>.env</code> is ignored and the global value wins</td>
                   <td>The global <code>~/.geode/.env</code> holds the same key, and global is authoritative (Hermes, 2026-06-15)</td>
                   <td>This is intended. Keep secrets in the global file; the project file only fills keys global lacks. Run <code>geode config explain &lt;KEY&gt;</code> to see the WINNER layer.</td>
+                </tr>
+                <tr>
+                  <td>The project <code>.env</code>, MCP servers or sandbox setting do not apply</td>
+                  <td>The folder is not trusted. Startup logs a warning ending in &quot;until you run `geode config trust`&quot;</td>
+                  <td>Review the repository, run <code>geode config trust</code> in that folder, and open a new session.</td>
                 </tr>
                 <tr>
                   <td>A global <code>/model</code> pick disappears with a redirected config</td>

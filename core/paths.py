@@ -328,6 +328,8 @@ def _stringify_relative(path: Path) -> str:
 # Global config & credentials
 GLOBAL_CONFIG_TOML = GEODE_HOME / "config.toml"
 GLOBAL_ENV_FILE = GEODE_HOME / ".env"
+# Folders whose .geode/config.toml and .env the user trusts (core.config.project_trust).
+TRUSTED_PROJECTS_FILE = GEODE_HOME / "trusted_projects.toml"
 GLOBAL_DRY_RUN_MARKER = GEODE_HOME / ".dry-run-opt-in"
 
 # Petri audit runtime logs — single SoT (PR-CLEANUP-D2, 2026-06-10).

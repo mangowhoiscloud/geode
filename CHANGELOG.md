@@ -68,6 +68,24 @@ functional change.
 
 - Refine the homepage and documentation reader without changing research content or routes: replace nested disclosure navigation with direct area selection and visible chapter headings, add keyboard-accessible mobile navigation dialogs with unframed header controls, and keep comparison limits, design background and evidence records directly readable.
 
+### Security
+
+- Gate workspace-supplied configuration behind folder trust. Until
+  `geode config trust` records the folder in `~/.geode/trusted_projects.toml`,
+  GEODE ignores the project `.env` (Settings, daemon promotion and MCP
+  `${VAR}` expansion), project MCP servers and gateway config, and project
+  `config.toml` keys that widen capability or redirect data (sandbox mode,
+  computer use, webhooks, notifications, storage and policy paths, cost limit,
+  scheduler auto-start). `hitl.dangerously_skip_permissions` and
+  `computer_use.helper_path` are never read from project config. A project
+  server could previously replace an operator-granted MCP server's command
+  under the same name. Restrictions such as `[policy.org] denied_tools` still
+  apply without trust. Folders that relied on a project `.env` or these keys
+  need one `geode config trust`.
+- `geode config explain` now reads API-key fields from their real variables
+  (for example `ANTHROPIC_API_KEY`) and reports only whether a secret is set,
+  instead of printing the effective key.
+
 ## [1.0.30] - 2026-09-28
 
 ### Infrastructure

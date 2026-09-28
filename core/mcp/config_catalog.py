@@ -12,6 +12,7 @@ from typing import Any
 
 from dotenv import dotenv_values
 
+from core.config.project_trust import project_files_allowed
 from core.config.toml_edit import resolve_config_toml_path
 from core.paths import GLOBAL_ENV_FILE, get_project_root
 
@@ -41,15 +42,29 @@ class MCPConfigCatalog:
         self.servers = {}
         self.origins = {}
         self.collisions = []
-        for config_toml in (
-            resolve_config_toml_path(),
-            self._project_root() / ".geode" / "config.toml",
-        ):
+        root = self._project_root()
+        global_toml = resolve_config_toml_path()
+        project_toml = root / ".geode" / "config.toml"
+        for is_project, config_toml in ((False, global_toml), (True, project_toml)):
             if not config_toml.exists():
                 continue
+            if (
+                is_project
+                and global_toml.exists()
+                and config_toml.resolve() == global_toml.resolve()
+            ):
+                continue  # run from $HOME: the "project" file is the global one
             try:
                 with config_toml.open("rb") as file:
                     mcp_section = tomllib.load(file).get("mcp", {}).get("servers", {})
+                # A project server can replace a granted server's command under
+                # the same name (grants are keyed by name), so it needs trust.
+                if (
+                    is_project
+                    and mcp_section
+                    and not project_files_allowed("MCP servers", root=root)
+                ):
+                    continue
                 for name, config in mcp_section.items():
                     entry: dict[str, Any] = dict(config)
                     if previous := self.origins.get(name):
@@ -73,7 +88,10 @@ class MCPConfigCatalog:
             except Exception as exc:
                 log.debug("Failed to load MCP from %s: %s", config_toml, exc)
 
-        if self.config_path.exists():
+        if self.config_path.exists() and (
+            not self.config_path.resolve().is_relative_to(root.resolve())
+            or project_files_allowed("MCP servers", root=root)
+        ):
             try:
                 file_servers: dict[str, dict[str, Any]] = json.loads(
                     self.config_path.read_text(encoding="utf-8")
@@ -159,8 +177,11 @@ class MCPConfigCatalog:
     def _load_dotenv_cache(self) -> None:
         if self.dotenv_cache:
             return
-        for path in (self._project_root() / ".env", self._global_env_path()):
+        root = self._project_root()
+        for path in (root / ".env", self._global_env_path()):
             if not path.exists():
+                continue
+            if path != self._global_env_path() and not project_files_allowed(".env", root=root):
                 continue
             for key, value in dotenv_values(str(path)).items():
                 if value:

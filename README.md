@@ -102,10 +102,13 @@ for credentials, usage, and the scope of each judgment.
 | `~/.geode/auth.toml` | GEODE-managed provider credentials and account metadata |
 | `~/.geode/.env` | Optional environment credentials and integration secrets |
 | `~/.geode/config.toml` | User-wide behavior defaults |
-| `./.geode/config.toml` | Project behavior overrides |
+| `./.geode/config.toml`, `./.env` | Project overrides; capability keys apply only in a trusted folder |
+| `~/.geode/trusted_projects.toml` | Folders you trusted with `geode config trust` |
 | `~/.geode/` | Runtime state, sessions, diagnostics, and private artifacts |
 
-Project behavior overrides user defaults. Credential resolution also depends
+Project behavior overrides user defaults. A repository's `.env`, MCP servers,
+gateway config, and keys that widen capability (sandbox, computer use,
+webhooks, storage paths) apply only after `geode config trust` in that folder. Credential resolution also depends
 on the selected model, source, and account; it is not one flat settings ladder.
 Google Workspace OAuth has its own
 [account and keyring storage](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace/).

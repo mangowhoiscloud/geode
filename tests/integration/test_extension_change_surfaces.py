@@ -203,6 +203,9 @@ def test_mcp_server_is_added_from_only_project_configuration(
     )
     monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "global.toml"))
     monkeypatch.setattr("core.mcp.manager.get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        "core.config.project_trust.is_project_trusted", lambda root=None: True
+    )  # a trusted project folder
 
     manager = MCPServerManager(
         config_path=config,

@@ -13,7 +13,12 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import AliasChoices, Field, SecretStr, ValidationInfo, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    DotEnvSettingsSource,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 from core.config.credential_source import (
     CLAUDE_CLI_RETIRED_MESSAGE,
@@ -55,6 +60,26 @@ class Settings(BaseSettings):
         env_file=(".env", str(GLOBAL_ENV_FILE)),
         extra="ignore",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        # A workspace .env can supply credentials and GEODE_* controls, so it
+        # joins the dotenv layer only for a trusted folder. An explicit
+        # ``_env_file`` argument is left as given.
+        if isinstance(
+            dotenv_settings, DotEnvSettingsSource
+        ) and dotenv_settings.env_file == settings_cls.model_config.get("env_file"):
+            from core.config.project_trust import dotenv_files
+
+            dotenv_settings = DotEnvSettingsSource(settings_cls, env_file=dotenv_files())
+        return init_settings, env_settings, dotenv_settings, file_secret_settings
 
     # repr=False keeps plain-str keys out of repr()/str() (pytest assertion
     # output, logs); typesafe_api_key is already masked by SecretStr.

@@ -7,6 +7,10 @@ Config Cascade (priority high → low):
   4. Global TOML: ~/.geode/config.toml
   5. Code defaults
 
+The project layers (``.geode/config.toml``, ``.env``) are workspace-supplied:
+keys that widen capability apply only in a folder the user trusted with
+``geode config trust`` (:mod:`core.config.project_trust`).
+
 The :class:`Settings` class lives in :mod:`core.config._settings` so the heavy
 ``pydantic_settings`` import tree only loads when an instance is actually
 requested. Module-level constants (``ANTHROPIC_PRIMARY`` etc.) and lightweight
@@ -193,18 +197,25 @@ def _load_toml_config(
     Returns a dict mapping Settings field names to their values.
     Only keys present in _TOML_TO_SETTINGS are returned.
     """
+    from core.config.project_trust import filter_project_keys
     from core.config.toml_edit import read_config_toml, resolve_config_toml_path
 
     gp = resolve_config_toml_path(global_path)
     pp = project_path or PROJECT_CONFIG_PATH
     merged: dict[str, Any] = {}
 
-    for path in (gp, pp):  # global first (lower prio), project second (higher)
+    # global first (lower prio), project second (higher)
+    for is_project, path in ((False, gp), (True, pp)):
         if not path.exists():
+            continue
+        # Run from $HOME, ./.geode/config.toml IS the global file: not a project.
+        if is_project and gp.exists() and path.resolve() == gp.resolve():
             continue
         try:
             raw = read_config_toml(path)
             flat = _flatten_toml(raw)
+            if is_project:
+                flat = filter_project_keys(flat, root=path.resolve().parent.parent)
             for toml_key, settings_field in _TOML_TO_SETTINGS.items():
                 if toml_key in flat:
                     merged[settings_field] = flat[toml_key]

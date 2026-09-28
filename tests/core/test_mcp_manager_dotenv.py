@@ -45,6 +45,9 @@ def test_mcp_env_resolution_project_env_fills_global_gap(
     project_env.write_text("MCP_TOKEN=project\n", encoding="utf-8")
     monkeypatch.setattr(manager_mod, "_GLOBAL_DOTENV_PATH", global_env)
     monkeypatch.setattr(manager_mod, "get_project_root", lambda: project)
+    monkeypatch.setattr(
+        "core.config.project_trust.is_project_trusted", lambda root=None: True
+    )  # a trusted project folder
     monkeypatch.delenv("MCP_TOKEN", raising=False)
 
     manager = MCPServerManager(config_path=tmp_path / "mcp_servers.json")
