@@ -13,7 +13,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v1.0.30 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.31 — Autonomous Agent Runtime + Evaluation Substrate
 
 GEODE is a Python agent runtime for research, file work, and scheduled tasks.
 Its agentic loop calls tools, reads their results, and continues the task.
@@ -79,7 +79,7 @@ for source selection, credential precedence, and account routing.
 
 ### Optional Jev judgments
 
-v1.0.30 supports Jev judgments through TypeSafe or OpenRouter. Configure a
+GEODE supports Jev judgments through TypeSafe or OpenRouter. Configure a
 usable credential, then select the judgment route explicitly:
 
 ```text

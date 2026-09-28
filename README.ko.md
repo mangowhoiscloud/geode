@@ -13,7 +13,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v1.0.30 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.31 — Autonomous Agent Runtime + Evaluation Substrate
 
 GEODE는 리서치, 파일 작업, 예약 작업을 위한 Python 에이전트 런타임입니다.
 에이전트는 도구를 호출하고 결과를 읽으며 작업을 이어갑니다.
@@ -79,7 +79,7 @@ GEODE가 관리하는 제공자 키와 OAuth 계정은 `~/.geode/auth.toml`에 �
 
 ### Jev 판정 선택
 
-v1.0.30은 TypeSafe 또는 OpenRouter를 통한 Jev 판정을 지원합니다.
+GEODE는 TypeSafe 또는 OpenRouter를 통한 Jev 판정을 지원합니다.
 사용할 자격 증명을 설정한 뒤 판정 경로를 명시적으로 선택합니다.
 
 ```text

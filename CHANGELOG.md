@@ -47,6 +47,17 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.31] - 2026-09-29
+
+This release applies a repository's own configuration only after you trust the
+folder, and folds configuration and state locations that had drifted apart back
+into the files GEODE reads. A project `.env`, project MCP servers, a project
+`[gateway]` table and capability-widening `config.toml` keys now wait for
+`geode config trust`, which records the folder in `~/.geode/config.toml`;
+folders that relied on them need that one command. It also restores credential
+detection in `geode setup`, `geode doctor` and the REPL, which in 1.0.30 read
+every credential as missing.
+
 ### Added
 
 - Prepare a source-pinned Jev report packager that reuses the approved bilingual
