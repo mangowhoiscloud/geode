@@ -113,7 +113,7 @@ Google Workspace OAuth has its own
 ```bash
 geode about                    # Effective model, paths, and daemon status
 geode doctor                   # Diagnose local setup and credential availability
-geode config explain MODEL     # Show the layers behind a behavior setting
+geode config explain model     # Show the layers behind a behavior setting
 geode update --dry-run          # Preview the update path
 geode update                   # Registry install: newest compatible patch
 geode update --latest          # Explicitly allow minor/major registry upgrades
@@ -135,7 +135,7 @@ zero cost. See [usage accounting](docs/architecture/usage-accounting.md).
 - **Authentication failure:** inspect `/login status`, then sign in or replace
   the key through `/login`. Do not paste credentials into diagnostics or issues.
 - **Unexpected model or setting:** inspect `geode about`, `/model`, and
-  `geode config explain MODEL`; running sessions retain admitted settings.
+  `geode config explain model`; running sessions retain admitted settings.
 - **Daemon connection failure:** run `geode doctor` and check the configured
   Unix socket and `~/.geode/logs/serve.log`. Identify the owning process before
   stopping it; another session may be using it.

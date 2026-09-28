@@ -115,7 +115,7 @@ v1.0.30은 TypeSafe 또는 OpenRouter를 통한 Jev 판정을 지원합니다.
 ```bash
 geode about                    # 실효 모델, 경로, 데몬 상태
 geode doctor                   # 로컬 설정과 자격 증명 가용성 진단
-geode config explain MODEL     # 동작 설정을 결정한 층 확인
+geode config explain model     # 동작 설정을 결정한 층 확인
 geode update --dry-run          # 업데이트 경로 미리 보기
 geode update                   # 레지스트리 설치: 호환되는 최신 패치
 geode update --latest          # 레지스트리 설치: 마이너·메이저 업데이트 허용
@@ -138,7 +138,7 @@ geode update --latest          # 레지스트리 설치: 마이너·메이저 �
 - **인증 실패:** `/login status`를 확인한 뒤 `/login`으로 다시 로그인하거나
   키를 교체합니다. 자격 증명을 진단 자료나 이슈에 붙여넣지 마세요.
 - **모델·설정이 예상과 다름:** `geode about`, `/model`,
-  `geode config explain MODEL`을 확인합니다. 실행 중인 세션은 적용된 설정을
+  `geode config explain model`을 확인합니다. 실행 중인 세션은 적용된 설정을
   유지합니다.
 - **데몬 연결 실패:** `geode doctor`, 설정된 Unix 소켓,
   `~/.geode/logs/serve.log`를 확인합니다. 다른 세션이 사용 중일 수 있으므로
