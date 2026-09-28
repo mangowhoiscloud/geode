@@ -31,7 +31,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v1.0.29 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.30 — Autonomous Agent Runtime + Evaluation Substrate
 
 A general-purpose runtime for autonomous tool work. You ask in plain language;
 GEODE plans, calls tools, and reports, for one prompt or a long-running session.
@@ -53,13 +53,20 @@ sustained self-improvement.
 
 ## One distribution, three boundaries
 
-v1.0.29 preserves incomplete-call evidence in runtime and Harbor accounting
-and requires CI, install smoke, and Pages checks before merging. The
-[runtime SOUL](GEODE.md) keeps behavioral guidance; the per-request model card
-reports catalog metadata, with detailed guidance in the bundled `geode-context`
-skill. See [prompt assembly](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-system)
-and [usage accounting](docs/architecture/usage-accounting.md): catalog API rates
-are not subscription invoices or proof of account access.
+v1.0.30 adds credential-gated Jev judgment selection while preserving the
+chosen generative model and effort, together with opt-in evaluation tools for
+matched decisions, candidate selection and cascades. Reflection runs after
+each tool-result round and before final delivery, with semantic final
+verification; configurations that previously skipped these checks may make
+more judgment calls. Auth-file transactions, session admission and IPC now
+preserve the distinction between saved credentials, applied settings,
+completed work and verified outcomes. Updated provider, context and cache
+contracts retain observed failures and unknown usage. Shared runtime and
+contributor guidance makes backend authority and async ownership explicit;
+heuristic preflight remains advisory. See [authentication](https://mangowhoiscloud.github.io/geode/docs/ops/oauth),
+[prompt assembly](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-system)
+and [usage accounting](docs/architecture/usage-accounting.md). Evaluation tooling
+and tariff estimates do not establish comparative performance or actual billing.
 
 The `geode-agent` wheel ships four commands without turning the installed
 package into a writable workspace:
