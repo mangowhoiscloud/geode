@@ -96,10 +96,10 @@ export function BenchmarkComparison() {
         )}
       </p>
 
-      <details className="mt-6 max-w-3xl text-sm leading-relaxed text-[var(--ink-2)]">
-        <summary className="min-h-11 cursor-pointer py-3 text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--acc-artifact)]">
+      <section className="landing-evidence-limits">
+        <h3>
           {t(locale, "제외된 작업과 비교 한계", "Exclusions and comparison limits")}
-        </summary>
+        </h3>
         <p className="mt-3">
           {t(
             locale,
@@ -114,7 +114,7 @@ export function BenchmarkComparison() {
             "Infrastructure-invalid trials were not converted into semantic zeroes. Harbor exposed no shared seed control. The run spanned several days; timing, provider capacity, and credential-principal effects cannot be separated from harness effects.",
           )}
         </p>
-      </details>
+      </section>
 
       <ul className="mt-5 flex flex-wrap gap-x-6 gap-y-1 text-sm">
         {sourceLinks.map(([label, url]) => (

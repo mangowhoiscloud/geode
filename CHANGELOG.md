@@ -47,6 +47,27 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- Prepare a source-pinned Jev report packager that reuses the approved bilingual
+  slide preview, excludes private production files, and exports every
+  settled build to language-matched PDFs. The package receipt separates source,
+  asset and rendered-file identities; preparation does not claim publication.
+  The reader at `/resaerch/jev-system1-offloading/` separates navigation from
+  language/PDF controls, offers direct scene selection without nested disclosures,
+  and reuses verified PDF bytes when only its chrome changes.
+  New PDF editions can independently reuse digest-verified assets from an
+  approved package without depending on missing private replay aliases.
+  The corrected v23 source supplies 81 pages per language. A keyboard-contained
+  source sheet preserves citation IDs and historical boundaries without adding
+  an inline link wall or changing the verified PDFs.
+  The Pages runner supplies ffprobe so replay audio-stream verification remains
+  mandatory in clean CI environments.
+
+### Changed
+
+- Refine the homepage and documentation reader without changing research content or routes: replace nested disclosure navigation with direct area selection and visible chapter headings, add keyboard-accessible mobile navigation dialogs with unframed header controls, and keep comparison limits, design background and evidence records directly readable.
+
 ## [1.0.30] - 2026-09-28
 
 ### Infrastructure

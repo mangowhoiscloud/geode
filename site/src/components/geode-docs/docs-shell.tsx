@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Menu } from "lucide-react";
 import { useLayoutEffect, useRef, type ReactNode, type CSSProperties } from "react";
 import { GeodiSprite } from "@/components/geode/geodi-sprite";
 import { useLocale, useSetLocale, t } from "@/components/geode/locale-context";
@@ -161,12 +162,12 @@ export function DocsShell({
 }) {
   const locale = useLocale();
   const sidebarRef = useRememberedSidebarScroll(slug);
-  const mobileNavRef = useRef<HTMLDetailsElement>(null);
+  const mobileNavRef = useRef<HTMLDialogElement>(null);
+  const mobileNavButton = useRef<HTMLButtonElement>(null);
   const closeMobileNav = () => {
     const menu = mobileNavRef.current;
     if (!menu) return;
-    menu.open = false;
-    menu.querySelector("summary")?.focus();
+    menu.close();
   };
   const displayTitle = titleKo ? t(locale, titleKo, title) : title;
   const displaySummary =
@@ -219,12 +220,23 @@ export function DocsShell({
         </div>
       </header>
 
-      <details key={slug} ref={mobileNavRef} className="docs-mobile-nav" onKeyDown={(event) => {
-        if (event.key === "Escape" && mobileNavRef.current?.open) closeMobileNav();
-      }}>
-        <summary>{t(locale, "문서 탐색", "Browse docs")}<span>{displayTitle}</span></summary>
-        <div className="docs-mobile-nav-content"><DocsNavigation slug={slug} onNavigate={closeMobileNav} /></div>
-      </details>
+      <div className="docs-mobile-nav">
+        <button ref={mobileNavButton} type="button" aria-haspopup="dialog" aria-controls="docs-mobile-dialog"
+          onClick={() => mobileNavRef.current?.showModal()}>
+          <Menu size={18} strokeWidth={1.5} aria-hidden="true" />
+          <span>{t(locale, "문서 탐색", "Browse docs")}</span>
+        </button>
+        <span>{displayTitle}</span>
+      </div>
+      <dialog key={slug} ref={mobileNavRef} id="docs-mobile-dialog" className="docs-mobile-dialog"
+        aria-labelledby="docs-mobile-title" onClose={() => mobileNavButton.current?.focus()}
+        onClick={event => { if (event.target === event.currentTarget) closeMobileNav(); }}>
+        <div className="docs-mobile-dialog-body">
+          <div className="docs-mobile-heading"><h2 id="docs-mobile-title">{t(locale, "문서 탐색", "Browse docs")}</h2>
+            <button type="button" onClick={closeMobileNav}>{t(locale, "닫기", "Close")}</button></div>
+          <div className="docs-mobile-nav-content"><DocsNavigation slug={slug} onNavigate={closeMobileNav} /></div>
+        </div>
+      </dialog>
 
       <div className="docs-layout">
         <aside

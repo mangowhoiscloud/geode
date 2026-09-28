@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/verify-terminal-replay.mjs && next build",
+    "build": "node scripts/test-jev-report-export.mjs && node scripts/verify-terminal-replay.mjs && next build",
     "start": "next start",
     "lint": "eslint --max-warnings=0",
     "sync-stats": "node scripts/sync-stats.mjs",

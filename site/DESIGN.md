@@ -17,12 +17,26 @@ palette and character, with a dark reading substrate, visible navigation,
 recorded Task/Tool/Result evidence, and install choices. Release labels read
 `generatedSOT`; historical measurements retain their measured version.
 
-The docs shell projects the existing sitemap into four reader tasks. Native
-disclosures expose topics and Experimental Loop chapters; title/summary/path
-filtering works in the sidebar, mobile drawer, and index. The sitemap remains
+The docs shell projects the existing sitemap into four directly selectable
+reader areas. Topics and Experimental Loop chapters use visible headings, not
+nested triangle disclosures; title/summary/path filtering searches all areas
+in the sidebar, mobile dialog, and index. The sitemap remains
 the sole route and previous/next authority. Preserve bilingual routes,
 Markdown twins, keyboard focus and explicit language queries. Do not introduce
 another navigation catalog, a UI dependency, or a site-wide CSS reset.
+Mobile navigation uses a native dialog with explicit Close, Escape dismissal,
+focus restoration and a separately scrollable list. Header actions use an
+unframed icon and label, a 44px hit target, and a compact neutral keyboard-focus
+outline; do not stack a colored ring around a permanent button border. Destination rows use
+neutral titles with existing sitemap summaries; reserve color for selected
+state and focus, not a wall of aqua underlines. Non-selected areas remain in
+the HTML so Markdown exports retain the complete document index. Both inline
+labels and descriptions include real whitespace for copying and accessibility.
+The homepage's comparison limits, documentation index's design background,
+benchmark records, Judge guidance and seed-run records stay directly readable.
+Apple's [sheet guidance](https://developer.apple.com/design/human-interface-guidelines/sheets)
+and [Linear's UI hierarchy](https://linear.app/now/how-we-redesigned-the-linear-ui)
+inform the restrained controls; these are local web patterns, not vendor components.
 
 Benchmark charts disclose the common denominator and uncertainty. The native
 Terminal-Bench replay and recovered cache/phase evidence remain intact; neither
@@ -37,6 +51,61 @@ links, replay navigation, overflow and console errors. A local preview is not
 deployment proof.
 
 ## 1. Visual Theme & Atmosphere
+
+### Jev research artifact exception (operator-approved 2026-09-28)
+
+`/resaerch/jev-system1-offloading/` (the operator's literal path) preserves the
+approved film's light slide canvas and embedded typography as a scoped artifact. This
+is not a site light mode or permission to restyle landing/docs. Keep the
+preview's build navigation, explicit KO/EN selection and language-matched PDF
+download. Strip private production notes and local links; preserve research
+failures and limitations. The user chose the existing six-track music edition,
+including its track credits and cover art, without a claim of verified rights
+documentation. Keep the final film on its approved external host. Only the
+approved asset allowlist and its font licenses may accompany the artifact.
+
+The outer reader is redesign-preserve, for external technical reviewers:
+DESIGN_VARIANCE 4, MOTION_INTENSITY 2, VISUAL_DENSITY 4. Keep a compact header
+with GEODE return, report title, explicit language state and one filled neutral
+PDF action. Group Contents, overview, motion and step navigation near the canvas;
+align labels horizontally and vertically, use the existing cool-neutral film
+tokens and Pretendard/mono assets, 4px controls within 6px groups, and targets
+of at least 44 CSS px. Mobile explicitly wraps the header and navigation. Preserve
+focus, hover, disabled states, reduced motion, build API and scene hashes.
+The 224px desktop scene panel is a flat, directly selectable list from the
+existing slide inventory, not another navigation catalog. Below 1024px the
+same list opens in a native dialog with explicit Close and Escape behavior.
+The compact canvas toolbar stays visible while scrolling its content area.
+Do not use triangular disclosures or nested accordions in the reader. Slide
+progressive builds remain unchanged. Keep the footer's source entry singular.
+At the user's request, sources open in a native modal right sheet: 600px on
+desktop and viewport-fit on mobile, with a fixed title/Close row and only the
+content scrolling. Escape, backdrop and Close return focus to the entry button;
+Tab stays inside, background scrolling and slide keyboard shortcuts are isolated.
+The `#readerSources` deep link opens the same sheet. This source panel separates
+pinned study records, TypeSafe documentation, related research, and design
+references. Use quiet ID/title columns, no citation pills or cards. Preserve
+each destination and reference ID, and distinguish unlinked historical records
+outside the public package instead of styling them as available downloads.
+No new theme, font, library, marketing hero or card decoration is authorized.
+The design reference is [Linear's first-party UI redesign](https://linear.app/now/how-we-redesigned-the-linear-ui):
+chrome/content separation, alignment, restrained chroma and navigation hierarchy.
+[getdesign.md's Linear analysis](https://getdesign.md/linear.app/design-md) is an
+independent visual reference, not an official component system or endorsement.
+Apple's first-party [toolbars](https://developer.apple.com/design/human-interface-guidelines/toolbars),
+[segmented controls](https://developer.apple.com/design/human-interface-guidelines/segmented-controls),
+[buttons](https://developer.apple.com/design/human-interface-guidelines/buttons),
+and [sidebars](https://developer.apple.com/design/human-interface-guidelines/sidebars)
+inform the logical action groups, equal-width language options, visible
+selection and discoverable scene panel. Our 44px web targets adapt the native
+44pt guidance; they are not the same unit. The 12/16/24px spacing, 18/16px title,
+13px controls and 12px secondary text are local choices, not copied Apple or
+Linear tokens. No official Apple CSS, Liquid Glass or Linear component claim.
+The source sheet borrows the explicit Close and one-sheet-at-a-time principles
+from [Apple's sheet guidance](https://developer.apple.com/design/human-interface-guidelines/sheets).
+Its browser focus, inert background and Escape behavior use the native
+[`dialog` contract](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/dialog),
+not an imitation of an Apple component.
 
 **Mood**: a modern dark developer surface keyed to the GEODE character — a rose axolotl explorer with a gold headlamp and an aqua magnifier (`public/images/geode-*.png`). Cool near-black substrate with a violet undertone, one saturated signature accent (rose) carried everywhere as low-opacity tints, gold reserved for action, aqua for information. Reads like a well-lit terminal, not a leather desk.
 

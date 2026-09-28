@@ -72,8 +72,14 @@ def test_landing_keeps_native_navigation_and_reduced_motion() -> None:
         assert f'id="{anchor}"' in landing
     assert 'id="run"' in run
     assert 'href="#main-content"' in landing
-    assert '<details className="landing-mobile-menu">' in landing
-    assert 'closest("details")?.removeAttribute("open")' in landing
+    assert "<details" not in landing
+    assert 'aria-haspopup="dialog" aria-controls="landing-menu"' in landing
+    assert '<dialog ref={menuRef} id="landing-menu"' in landing
+    assert 'aria-labelledby="landing-menu-title"' in landing
+    assert "menuRef.current?.showModal()" in landing
+    assert "onClose={() => menuButtonRef.current?.focus()}" in landing
+    assert 'event.target.closest("a")' in landing
+    assert "menuRef.current?.close();" in landing
     assert "focus-visible" in css
     assert "prefers-reduced-motion: reduce" in css
     assert "scroll-behavior: auto" in css

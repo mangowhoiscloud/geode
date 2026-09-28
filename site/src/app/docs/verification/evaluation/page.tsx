@@ -142,8 +142,8 @@ function EvaluationGuide({ ko }: { ko: boolean }) {
           {" · "}<a href="https://github.com/mangowhoiscloud/geode/blob/main/core/agent/verify.py">{ko ? "턴 검증 구현" : "Turn-verification implementation"}</a>
         </li>
       </ul>
-      <details>
-        <summary>{ko ? "Judge를 믿기 전에 확인할 것" : "Before trusting a judge"}</summary>
+      <section>
+        <h3>{ko ? "Judge를 믿기 전에 확인할 것" : "Before trusting a judge"}</h3>
         <ul>
           <li>{ko ? "judge 모델·버전·경로, rubric 원본, 점수 방향, seed, transcript 범위를 고정합니다. 높은 점수가 좋은지는 차원마다 다릅니다." : "Pin the judge model/version/route, rubric, score direction, seeds and transcript scope. Whether higher is better differs by dimension."}</li>
           <li>{ko ? "같은 공급자의 모델을 역할만 나눠 쓰면 독립 평가가 아닙니다. 경고나 보정 계수가 있다고 편향이 사라지지도 않습니다." : "Splitting roles across one provider's models is not independent evaluation, and a warning or correction factor does not remove bias."}</li>
@@ -152,7 +152,7 @@ function EvaluationGuide({ ko }: { ko: boolean }) {
         </ul>
         <pre>{`geode-eval audit-agreement --help`}</pre>
         <p><a href={docsHref("petri/judge-dimensions")}>{ko ? "Judge 차원과 해석" : "Judge dimensions and interpretation"}</a>{" · "}<a href="https://github.com/mangowhoiscloud/geode/blob/main/core/audit/judge_agreement.py">{ko ? "사람-judge 일치도 구현" : "Human–judge agreement implementation"}</a></p>
-      </details>
+      </section>
 
       <h2 id="jev-v3-study">{ko ? "Jev v3 본실험" : "Jev v3 study"}</h2>
       <p>{ko

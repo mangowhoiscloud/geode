@@ -30,7 +30,10 @@ export default function DocsIndex() {
             </div>
             <ul>{group.entrySlugs.map((slug) => {
               const page = findPage(slug)!.page;
-              return <li key={slug}><Link href={docsPageHref(slug, locale)}>{t(locale, page.titleKo, page.title)}</Link></li>;
+              return <li key={slug}><Link href={docsPageHref(slug, locale)}>
+                <span className="docs-task-title">{t(locale, page.titleKo, page.title)}</span>{" "}
+                <span className="docs-task-description">{t(locale, page.summaryKo ?? "", page.summary ?? "")}</span>
+              </Link></li>;
             })}</ul>
           </div>
         ))}
@@ -38,12 +41,11 @@ export default function DocsIndex() {
 
       <section className="docs-index-directory">
         <h2>{t(locale, "전체 문서", "All documentation")}</h2>
-        <p>{t(locale, "주제를 펼쳐 문서를 찾거나 제목·요약·경로로 범위를 좁히세요.", "Open a topic or narrow the directory by title, summary, or path.")}</p>
+        <p>{t(locale, "분야를 선택하거나 제목·요약·경로로 문서를 찾으세요.", "Choose an area or find documents by title, summary, or path.")}</p>
         <DocsNavigation slug="" directory />
       </section>
 
-      <details className="docs-index-background">
-        <summary>{t(locale, "GEODE의 개념과 설계 배경", "GEODE concepts and design background")}</summary>
+      <section className="docs-index-background" aria-label={t(locale, "GEODE의 개념과 설계 배경", "GEODE concepts and design background")}>
       <Bi
         ko={
           <>
@@ -266,7 +268,7 @@ export default function DocsIndex() {
           </>
         }
       />
-      </details>
+      </section>
     </DocsShell>
   );
 }
