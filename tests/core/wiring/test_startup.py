@@ -611,7 +611,7 @@ class TestReadinessProfileStatus:
         assert report.has_profile is False
         profile_cap = next(c for c in report.capabilities if c.name == "User Profile")
         assert profile_cap.available is False
-        assert "/profile" in profile_cap.reason
+        assert "geode init" in profile_cap.reason  # /profile does not exist
 
     def test_profile_load_exception_handled(self, tmp_path: Path):
         """If FileBasedUserProfile raises, profile shows as unavailable."""

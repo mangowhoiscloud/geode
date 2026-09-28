@@ -103,6 +103,10 @@ functional change.
   redirected output.
 - `geode init` creates the `~/.geode/.env` template with mode 0600, and the
   template notes that a project `.env` applies only in a trusted folder.
+- The thin CLI shows a failed turn's diagnostic (for example a ChatGPT usage
+  limit with the next step) instead of the bare `model_action_required` code,
+  and the welcome screen points a missing user profile to `geode init` rather
+  than the nonexistent `/profile` command.
 
 ### Security
 

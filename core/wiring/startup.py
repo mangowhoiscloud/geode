@@ -238,7 +238,7 @@ def check_readiness(project_root: Path | None = None) -> ReadinessReport:
             Capability(
                 name="User Profile",
                 available=profile_exists,
-                reason="" if profile_exists else "run /profile to set up",
+                reason="" if profile_exists else "run `geode init` to create it",
             )
         )
     except Exception:
