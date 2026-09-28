@@ -1,17 +1,10 @@
-"""OAuth login flows — `/login openai` device-code flow.
+"""Native OpenAI device-code login, persisted through the auth.toml owner.
 
-Grounded from Hermes Agent hermes_cli/auth.py:3054-3196.
-
-v0.50.2: Stores credentials in ``~/.geode/auth.toml`` (the v0.50.0 SOT)
-as an ``OAUTH_BORROWED`` Plan + Profile pair. The legacy
-``~/.geode/auth.json`` file is auto-absorbed on first read and renamed
-to ``auth.json.migrated.bak`` so we don't keep two stores in sync.
+External Codex CLI credentials have a separate read-only owner in codex_cli_oauth.
 """
 
 from __future__ import annotations
 
-import json
-import logging
 import time
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -19,8 +12,6 @@ from pathlib import Path
 from typing import Any
 
 from core.auth.jwt_claims import decode_jwt_claims
-
-log = logging.getLogger(__name__)
 
 # OpenAI Codex OAuth constants (from Hermes Agent)
 _ISSUER = "https://auth.openai.com"
@@ -32,9 +23,6 @@ _DEVICE_CALLBACK = f"{_ISSUER}/deviceauth/callback"
 _DEVICE_PAGE = f"{_ISSUER}/codex/device"
 _MAX_WAIT_S = 15 * 60  # 15 minutes
 
-# Legacy auth store path — kept only for one-shot migration into auth.toml.
-LEGACY_AUTH_STORE_PATH = Path.home() / ".geode" / "auth.json"
-
 
 def auth_store_path() -> Path:
     """Resolve the *current* auth store path (``~/.geode/auth.toml``).
@@ -45,10 +33,6 @@ def auth_store_path() -> Path:
     from core.auth.auth_toml import auth_toml_path
 
     return auth_toml_path()
-
-
-# Public compatibility import. Runtime reads resolve through auth_store_path().
-AUTH_STORE_PATH = auth_store_path()
 
 
 # Plan ID we use for any OAuth token GEODE itself issued (vs. external
@@ -119,42 +103,25 @@ def chatgpt_plan_label(plan_type: str | None) -> str:
     return f"ChatGPT {normalised.title()}"
 
 
-def _migrate_legacy_auth_json_if_present() -> dict[str, Any]:
-    """One-shot migration of pre-v0.50.2 ``~/.geode/auth.json``.
-
-    Returns the parsed legacy payload (so callers can immediately seed the
-    Plan registry with it) and renames the file to ``.migrated.bak`` so
-    subsequent boots skip the work. Empty dict on no-op.
-    """
-    if not LEGACY_AUTH_STORE_PATH.exists():
-        return {}
-    try:
-        raw = json.loads(LEGACY_AUTH_STORE_PATH.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            return {}
-    except (json.JSONDecodeError, OSError):
-        log.warning("Legacy auth.json unreadable; skipping migration")
-        return {}
-
-    bak_path = LEGACY_AUTH_STORE_PATH.with_suffix(".json.migrated.bak")
-    try:
-        LEGACY_AUTH_STORE_PATH.rename(bak_path)
-        log.info("Migrated legacy auth.json → %s (one-shot)", bak_path)
-    except OSError:
-        log.warning("Could not rename %s; leaving in place", LEGACY_AUTH_STORE_PATH)
-    return raw
-
-
 def _persist_oauth_to_authtoml(creds: dict[str, Any]) -> None:
     """Write Codex device-code creds into ``~/.geode/auth.toml`` SOT.
 
     The plan tier follows the token being written, so a changed subscription
     is recorded with the credential rather than when the file is read.
     """
-    from core.auth.auth_toml import auth_file_transaction
+    from core.auth.auth_toml import auth_file_transaction, auth_toml_path
     from core.auth.profiles import AuthProfile, CredentialType
+    from core.config import CODEX_BASE_URL
+    from core.llm.strategies.plan_registry import get_plan_registry
     from core.llm.strategies.plans import Plan, PlanKind
+    from core.wiring.container import ensure_profile_store
 
+    access_token = creds.get("access_token")
+    refresh_token = creds.get("refresh_token", "")
+    if not isinstance(access_token, str) or not access_token.strip():
+        raise ValueError("OAuth access token must be a nonempty string")
+    if not isinstance(refresh_token, str):
+        raise ValueError("OAuth refresh token must be a string")
     tier = str(creds.get("plan_type") or "") or None
     metadata = {
         "account_id": creds.get("account_id", ""),
@@ -162,8 +129,30 @@ def _persist_oauth_to_authtoml(creds: dict[str, Any]) -> None:
         "plan_type": creds.get("plan_type", ""),
         "source": "geode-device-code",
     }
-    with auth_file_transaction() as (registry, store):
+    live = ensure_profile_store()
+    live_registry = get_plan_registry()
+    with auth_file_transaction(registry=live_registry, store=live) as (registry, store):
+        source = str(auth_toml_path().resolve())
+        profile_name = f"{_GEODE_OPENAI_PLAN_ID}:user"
+        live_profile = live.get(profile_name)
+        if live_profile is not None and (
+            live_profile.managed_by
+            or live.file_profiles(source).get(profile_name) is not live_profile
+        ):
+            raise ValueError("OAuth credential name belongs to another owner")
+        live_plan = live_registry.get(_GEODE_OPENAI_PLAN_ID)
+        if live_plan is not None and (
+            live_registry.file_plans(source).get(_GEODE_OPENAI_PLAN_ID) is not live_plan
+        ):
+            raise ValueError("OAuth plan name belongs to another owner")
         current = registry.get(_GEODE_OPENAI_PLAN_ID)
+        if current is not None and (
+            current.provider != "openai-codex"
+            or current.kind is not PlanKind.OAUTH_BORROWED
+            or current.auth_type != "oauth_external"
+            or current.base_url.rstrip("/") != CODEX_BASE_URL.rstrip("/")
+        ):
+            raise ValueError("Existing OAuth plan conflicts with the Codex login route")
         plan = (
             Plan(
                 id=_GEODE_OPENAI_PLAN_ID,
@@ -178,12 +167,21 @@ def _persist_oauth_to_authtoml(creds: dict[str, Any]) -> None:
             else replace(current, subscription_tier=tier or current.subscription_tier)
         )
         registry.add(plan)
-        profile_name = f"{plan.id}:user"
         expires_at = float(creds.get("expires_at", 0.0) or 0.0)
         existing = store.get(profile_name)
+        if existing is not None and (
+            existing.provider != "openai-codex"
+            or existing.credential_type is not CredentialType.OAUTH
+            or existing.managed_by
+            or (
+                existing.base_url_override is not None
+                and existing.base_url_override.rstrip("/") != CODEX_BASE_URL.rstrip("/")
+            )
+        ):
+            raise ValueError("Existing profile conflicts with the Codex login route")
         if existing is not None:
-            existing.key = str(creds.get("access_token", ""))
-            existing.refresh_token = str(creds.get("refresh_token", ""))
+            existing.key = access_token
+            existing.refresh_token = refresh_token
             existing.expires_at = expires_at
             existing.plan_id = plan.id
             existing.error_count = 0
@@ -195,74 +193,42 @@ def _persist_oauth_to_authtoml(creds: dict[str, Any]) -> None:
                     name=profile_name,
                     provider=plan.provider,
                     credential_type=CredentialType.OAUTH,
-                    key=str(creds.get("access_token", "")),
-                    refresh_token=str(creds.get("refresh_token", "")),
+                    key=access_token,
+                    refresh_token=refresh_token,
                     expires_at=expires_at,
                     plan_id=plan.id,
                     metadata=metadata,
                 )
             )
-
-
-def _load_auth_store() -> dict[str, Any]:
-    """Read OAuth credentials, preferring auth.toml but falling back to legacy.
-
-    On first call after upgrade we still see ``~/.geode/auth.json``: parse
-    it once, write its `providers.openai` entry into auth.toml, and rename
-    the legacy file so the next read goes through the new SOT only.
-    """
-    legacy = _migrate_legacy_auth_json_if_present()
-    if legacy:
-        openai_creds = legacy.get("providers", {}).get("openai")
-        if isinstance(openai_creds, dict) and openai_creds.get("access_token"):
-            try:
-                _persist_oauth_to_authtoml(openai_creds)
-            except Exception:
-                log.warning("Failed to persist legacy OAuth creds to auth.toml", exc_info=True)
-        return legacy if isinstance(legacy, dict) else {"version": 1, "providers": {}}
-
-    # Re-build a json-shaped view from the auth.toml SOT for legacy callers.
-    try:
-        from core.llm.strategies.plan_registry import get_plan_registry
-        from core.wiring.container import ensure_profile_store
-    except Exception:  # pragma: no cover
-        return {"version": 1, "providers": {}}
-
-    registry = get_plan_registry()
-    plan = registry.get(_GEODE_OPENAI_PLAN_ID)
-    store = ensure_profile_store()
-    profile = store.get(f"{_GEODE_OPENAI_PLAN_ID}:user") if plan else None
-    if profile is None:
-        return {"version": 1, "providers": {}}
-    md = profile.metadata or {}
-    return {
-        "version": 1,
-        "providers": {
-            "openai": {
-                "access_token": profile.key,
-                "refresh_token": profile.refresh_token,
-                "expires_at": profile.expires_at,
-                "account_id": md.get("account_id", ""),
-                "email": md.get("email", ""),
-                "plan_type": md.get("plan_type", ""),
-                "source": md.get("source", "geode-device-code"),
-            }
-        },
-    }
-
-
-def _save_auth_store(data: dict[str, Any]) -> None:
-    """Persist Codex OAuth creds via ``~/.geode/auth.toml`` (v0.50.2 SOT).
-
-    Kept for backwards-compatible call sites — extracts the openai entry
-    and routes it through the Plan registry.
-    """
-    creds = (data or {}).get("providers", {}).get("openai") or {}
-    if creds.get("access_token"):
-        _persist_oauth_to_authtoml(creds)
+        store.set_active(profile_name)
 
 
 def login_openai() -> dict[str, Any]:
+    """Run one device login per auth store; reject an overlapping attempt."""
+    import fcntl
+
+    from core.ui.agentic_ui import emit_oauth_login_failed
+
+    path = auth_store_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.with_name(f".{path.name}.login.lock").open("a+") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ValueError("An OpenAI login is already in progress for this auth store") from exc
+        try:
+            return _login_openai()
+        except KeyboardInterrupt:
+            emit_oauth_login_failed("OpenAI ChatGPT", "cancelled by user")
+            return {}
+        except Exception as exc:
+            emit_oauth_login_failed("OpenAI ChatGPT", f"login failed ({type(exc).__name__})")
+            raise
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def _login_openai() -> dict[str, Any]:
     """Run OpenAI Codex device code OAuth flow.
 
     Returns credential dict on success, raises on failure.
@@ -295,7 +261,6 @@ def login_openai() -> dict[str, Any]:
     # Step 2: Surface the code to the user via IPC events (v0.51.1).
     # The thin-client renderer translates these into an in-place rich prompt.
     from core.ui.agentic_ui import (
-        emit_oauth_login_failed,
         emit_oauth_login_pending,
         emit_oauth_login_started,
     )
@@ -311,29 +276,24 @@ def login_openai() -> dict[str, Any]:
     start = time.monotonic()
     code_resp = None
 
-    try:
-        with httpx.Client(timeout=httpx.Timeout(15.0)) as client:
-            while time.monotonic() - start < _MAX_WAIT_S:
-                time.sleep(poll_interval)
-                poll_resp = client.post(
-                    _DEVICE_TOKEN_URL,
-                    json={"device_auth_id": device_auth_id, "user_code": user_code},
-                    headers={"Content-Type": "application/json"},
-                )
-                if poll_resp.status_code == 200:
-                    code_resp = poll_resp.json()
-                    break
-                if poll_resp.status_code in (403, 404):
-                    elapsed = int(time.monotonic() - start)
-                    emit_oauth_login_pending(_PROVIDER_LABEL, elapsed)
-                    continue
-                raise RuntimeError(f"Polling returned status {poll_resp.status_code}")
-    except KeyboardInterrupt:
-        emit_oauth_login_failed(_PROVIDER_LABEL, "cancelled by user")
-        return {}
+    with httpx.Client(timeout=httpx.Timeout(15.0)) as client:
+        while time.monotonic() - start < _MAX_WAIT_S:
+            time.sleep(poll_interval)
+            poll_resp = client.post(
+                _DEVICE_TOKEN_URL,
+                json={"device_auth_id": device_auth_id, "user_code": user_code},
+                headers={"Content-Type": "application/json"},
+            )
+            if poll_resp.status_code == 200:
+                code_resp = poll_resp.json()
+                break
+            if poll_resp.status_code in (403, 404):
+                elapsed = int(time.monotonic() - start)
+                emit_oauth_login_pending(_PROVIDER_LABEL, elapsed)
+                continue
+            raise RuntimeError(f"Polling returned status {poll_resp.status_code}")
 
     if code_resp is None:
-        emit_oauth_login_failed(_PROVIDER_LABEL, "timed out after 15 minutes")
         raise RuntimeError("Login timed out after 15 minutes")
 
     # Step 4: Exchange authorization code for tokens
@@ -366,14 +326,16 @@ def login_openai() -> dict[str, Any]:
     access_token = tokens.get("access_token", "")
     refresh_token = tokens.get("refresh_token", "")
 
-    if not access_token:
+    if not isinstance(access_token, str) or not access_token.strip():
         raise RuntimeError("Token exchange did not return an access_token")
 
     # Extract account info from JWT (uses decode_jwt_claims helper —
     # any decode failure returns {} so the unpacks below resolve to "").
     payload = decode_jwt_claims(access_token)
-    auth_claim = payload.get("https://api.openai.com/auth", {}) or {}
-    profile_claim = payload.get("https://api.openai.com/profile", {}) or {}
+    auth_claim = payload.get("https://api.openai.com/auth", {})
+    profile_claim = payload.get("https://api.openai.com/profile", {})
+    auth_claim = auth_claim if isinstance(auth_claim, dict) else {}
+    profile_claim = profile_claim if isinstance(profile_claim, dict) else {}
     account_id = str(auth_claim.get("chatgpt_account_id", "") or "")
     plan_type = str(auth_claim.get("chatgpt_plan_type", "") or "")
     email = str(profile_claim.get("email", "") or "")
@@ -392,12 +354,8 @@ def login_openai() -> dict[str, Any]:
         "source": "geode-device-code",
     }
 
-    # Save to ~/.geode/auth.toml (v0.50.2 SOT — _save_auth_store internally
-    # routes via auth_toml.save_auth_toml + plan registry).
-    store = _load_auth_store()
-    store.setdefault("providers", {})
-    store["providers"]["openai"] = creds
-    _save_auth_store(store)
+    # Publish through the auth file transaction before reporting success.
+    _persist_oauth_to_authtoml(creds)
 
     from core.ui.agentic_ui import emit_oauth_login_success
 
@@ -413,30 +371,3 @@ def login_openai() -> dict[str, Any]:
     )
 
     return creds
-
-
-def read_geode_openai_credentials() -> dict[str, Any] | None:
-    """Read OpenAI credentials from ~/.geode/auth.json.
-
-    Returns None if not found or expired.
-    """
-    store = _load_auth_store()
-    creds = store.get("providers", {}).get("openai")
-    if not creds:
-        return None
-
-    access_token = creds.get("access_token", "")
-    if not access_token:
-        return None
-
-    expires_at = creds.get("expires_at", 0)
-    if expires_at and time.time() > expires_at:
-        log.info("GEODE auth.json OpenAI token expired")
-        return None
-
-    return {
-        "access_token": access_token,
-        "refresh_token": creds.get("refresh_token", ""),
-        "expires_at": float(expires_at),
-        "account_id": creds.get("account_id", ""),
-    }

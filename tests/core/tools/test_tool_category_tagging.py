@@ -166,7 +166,7 @@ class TestCategoryMembershsubject:
 
     def test_model_tools(self) -> None:
         m = self._category_map()
-        for name in ("switch_model", "set_api_key", "manage_auth"):
+        for name in ("switch_model", "manage_login"):
             assert m.get(name) == "model", f"{name} should be model"
 
     def test_data_tools(self) -> None:
@@ -208,8 +208,7 @@ class TestCostTierMembershsubject:
             "general_web_search",
             "memory_save",
             "note_save",
-            "set_api_key",
-            "manage_auth",
+            "manage_login",
             "generate_data",
             "schedule_job",
             "trigger_event",

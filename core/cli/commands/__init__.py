@@ -26,7 +26,7 @@ Names re-exported at the package level keep the legacy import path
 sites identified by the migration audit. ``console``, ``_upsert_env``,
 ``_mask_key``, ``_is_glm_key``, ``_check_provider_key``,
 ``_get_cost_budget``, ``_set_cost_budget``,
-``_seed_payg_plan_from_key``, ``_mcp_add``, ``_skills_add``,
+``_mcp_add``, ``_skills_add``,
 ``get_conversation_context``,
 ``set_conversation_context``, ``cmd_login`` are addressable on the
 package because tests monkey-patch them via the legacy dotted path
@@ -64,7 +64,7 @@ from ._state import (
 )
 from .cost import _budget_bar, _get_cost_budget, _set_cost_budget, cmd_cost
 from .goal import cmd_goal
-from .key import _check_provider_key, _seed_payg_plan_from_key, cmd_key
+from .key import _check_provider_key, cmd_key
 from .login import (
     _login_add_interactive,
     _login_help,
@@ -114,7 +114,6 @@ __all__ = [
     "_login_use",
     "_mask_key",
     "_mcp_add",
-    "_seed_payg_plan_from_key",
     "_set_cost_budget",
     "_skills_add",
     "_upsert_env",

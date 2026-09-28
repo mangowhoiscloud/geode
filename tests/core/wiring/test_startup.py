@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from core.cli.onboarding import detect_api_key, dry_run_opted_in, env_setup_wizard
+from core.cli.onboarding import dry_run_opted_in, env_setup_wizard
 from core.config import ANTHROPIC_PRIMARY, GLM_PRIMARY, OPENAI_PRIMARY
 from core.wiring.startup import (
     Capability,
@@ -62,147 +62,16 @@ class TestReadinessReport:
 
 
 class TestCheckReadiness:
-    def test_without_api_key(self, tmp_path: Path):
-        with (
-            patch("core.config.settings") as mock_settings,
-            patch("core.wiring.startup.detect_subscription_oauth", return_value=None),
-            patch("core.wiring.startup._has_available_profile", return_value=False),
-        ):
-            _no_keys_mock(mock_settings)
+    @pytest.mark.parametrize("available", [False, True])
+    def test_readiness_uses_the_shared_credential_route(self, tmp_path, available):
+        with patch("core.wiring.startup.has_available_llm_credential", return_value=available):
             report = check_readiness(tmp_path)
-
-        assert report.has_api_key is False
-        assert report.force_dry_run is True
-
-        # Should have LLM Analysis capability marked unavailable
-        llm_cap = next(c for c in report.capabilities if c.name == "LLM Analysis")
-        assert llm_cap.available is False
-
-    def test_oauth_only_not_dry_run(self, tmp_path: Path):
-        """Codex-CLI OAuth-only operator (no raw key) is NOT forced to dry-run."""
-        with (
-            patch("core.config.settings") as mock_settings,
-            patch(
-                "core.wiring.startup.detect_subscription_oauth",
-                return_value="openai-codex",
-            ),
-        ):
-            _no_keys_mock(mock_settings)
-            report = check_readiness(tmp_path)
-
-        assert report.has_api_key is True
-        assert report.blocked is False
-        assert report.force_dry_run is False
-        llm_cap = next(c for c in report.capabilities if c.name == "LLM Analysis")
-        assert llm_cap.available is True
-
-    def test_geode_login_profile_not_dry_run(self, tmp_path: Path):
-        """A GEODE-owned /login profile (no raw key, no Codex-CLI OAuth) still
-        counts as a usable credential — readiness mirrors dispatch eligibility."""
-        from unittest.mock import MagicMock
-
-        usable_profile = MagicMock()
-        usable_profile.key = "oauth-access-token-real-jwt-value"  # real, non-placeholder
-        fake_store = MagicMock()
-        fake_store.list_available.return_value = [usable_profile]
-        with (
-            patch("core.config.settings") as mock_settings,
-            patch("core.wiring.startup.detect_subscription_oauth", return_value=None),
-            patch("core.wiring.container.ensure_profile_store", return_value=fake_store),
-        ):
-            _no_keys_mock(mock_settings)
-            report = check_readiness(tmp_path)
-
-        assert report.has_api_key is True
-        assert report.blocked is False
-        assert report.force_dry_run is False
-        llm_cap = next(c for c in report.capabilities if c.name == "LLM Analysis")
-        assert llm_cap.available is True
-
-    def test_placeholder_profile_does_not_unblock(self, tmp_path: Path):
-        """A profile seeded from a placeholder env value (`sk-ant-...`) is
-        `is_available` but is NOT a real credential — it must not pass readiness
-        when the raw-key path rejects it (mirrors `_has_any_llm_key`)."""
-        from unittest.mock import MagicMock
-
-        placeholder_profile = MagicMock()
-        placeholder_profile.key = "sk-ant-..."
-        fake_store = MagicMock()
-        fake_store.list_available.return_value = [placeholder_profile]
-        with (
-            patch("core.config.settings") as mock_settings,
-            patch("core.wiring.startup.detect_subscription_oauth", return_value=None),
-            patch("core.wiring.container.ensure_profile_store", return_value=fake_store),
-        ):
-            _no_keys_mock(mock_settings)
-            report = check_readiness(tmp_path)
-
-        assert report.has_api_key is False
-        assert report.force_dry_run is True
-
-    def test_no_credential_anywhere_is_dry_run(self, tmp_path: Path):
-        """No raw key, no Codex-CLI OAuth, and an empty ProfileStore → dry-run."""
-        from unittest.mock import MagicMock
-
-        empty_store = MagicMock()
-        empty_store.list_available.return_value = []
-        with (
-            patch("core.config.settings") as mock_settings,
-            patch("core.wiring.startup.detect_subscription_oauth", return_value=None),
-            patch("core.wiring.container.ensure_profile_store", return_value=empty_store),
-        ):
-            _no_keys_mock(mock_settings)
-            report = check_readiness(tmp_path)
-
-        assert report.has_api_key is False
-        assert report.force_dry_run is True
-
-    def test_with_anthropic_key(self, tmp_path: Path):
-        with patch("core.config.settings") as mock_settings:
-            _no_keys_mock(mock_settings)
-            mock_settings.anthropic_api_key = "sk-ant-real-key-here"
-            report = check_readiness(tmp_path)
-
-        assert report.has_api_key is True
-        assert report.force_dry_run is False
-
-        llm_cap = next(c for c in report.capabilities if c.name == "LLM Analysis")
-        assert llm_cap.available is True
-
-    def test_with_openai_key_only(self, tmp_path: Path):
-        """ANY provider key unblocks — OpenAI alone should suffice."""
-        with patch("core.config.settings") as mock_settings:
-            _no_keys_mock(mock_settings)
-            mock_settings.openai_api_key = "sk-proj-real-key-here"
-            report = check_readiness(tmp_path)
-
-        assert report.has_api_key is True
-        assert report.blocked is False
-
-    def test_with_glm_key_only(self, tmp_path: Path):
-        """ANY provider key unblocks — GLM alone should suffice."""
-        with patch("core.config.settings") as mock_settings:
-            _no_keys_mock(mock_settings)
-            mock_settings.zai_api_key = "abc12345.def67890"
-            report = check_readiness(tmp_path)
-
-        assert report.has_api_key is True
-        assert report.blocked is False
-
-    def test_placeholder_key_treated_as_missing(self, tmp_path: Path):
-        with (
-            patch("core.config.settings") as mock_settings,
-            patch("core.wiring.startup.detect_subscription_oauth", return_value=None),
-            patch("core.wiring.startup._has_available_profile", return_value=False),
-        ):
-            mock_settings.anthropic_api_key = "sk-ant-..."
-            mock_settings.openai_api_key = "sk-..."
-            mock_settings.openrouter_api_key = "sk-or-v1-..."
-            mock_settings.zai_api_key = "..."
-            report = check_readiness(tmp_path)
-
-        assert report.has_api_key is False
-        assert report.force_dry_run is True
+        assert report.has_api_key is available
+        assert report.blocked is not available
+        assert report.force_dry_run is not available
+        assert (
+            next(c for c in report.capabilities if c.name == "LLM Analysis").available is available
+        )
 
     def test_env_file_check(self, tmp_path: Path):
         with patch("core.config.settings") as mock_settings:
@@ -256,57 +125,6 @@ class TestCheckReadiness:
         assert dry_run_cap.available is True
 
 
-class TestDetectApiKey:
-    """Test natural-language API key detection."""
-
-    def test_anthropic_key(self):
-        result = detect_api_key("sk-ant-api03-abcdefghij1234567890")
-        assert result is not None
-        assert result[0] == "anthropic"
-        assert result[1] == "ANTHROPIC_API_KEY"
-
-    def test_openai_proj_key(self):
-        result = detect_api_key("sk-proj-abcdefghij1234567890")
-        assert result is not None
-        assert result[0] == "openai"
-
-    def test_openrouter_key(self):
-        result = detect_api_key("sk-or-v1-abcdefghij1234567890")
-        assert result == (
-            "openrouter",
-            "OPENROUTER_API_KEY",
-            "sk-or-v1-abcdefghij1234567890",
-        )
-
-    def test_openai_sk_key(self):
-        result = detect_api_key("sk-abcdefghij1234567890ABCD")
-        assert result is not None
-        assert result[0] == "openai"
-
-    def test_glm_key(self):
-        result = detect_api_key("abc12345def.ghijklmn12345")
-        assert result is not None
-        assert result[0] == "glm"
-        assert result[1] == "ZAI_API_KEY"
-
-    def test_normal_text_not_detected(self):
-        assert detect_api_key("Hello world") is None
-        assert detect_api_key("Project Atlas 분석해줘") is None
-        assert detect_api_key("") is None
-
-    def test_short_key_not_detected(self):
-        assert detect_api_key("sk-short") is None
-
-    def test_email_not_detected(self):
-        """Email addresses must not be misdetected as GLM keys."""
-        assert detect_api_key("user@example.org") is None
-        assert detect_api_key("user@example.com") is None
-
-    def test_email_with_trailing_text_not_detected(self):
-        """Email with Korean suffix must not be misdetected."""
-        assert detect_api_key("user@example.org이야.") is None
-
-
 class TestEnvSetupWizard:
     """v0.54.0 — three-branch menu (1: subscription / 2: API key / 3: skip)."""
 
@@ -324,25 +142,23 @@ class TestEnvSetupWizard:
             patch("core.config.settings") as mock_settings,
         ):
             _no_keys_mock(mock_settings)
-            mock_console.input.side_effect = ["2", "", "", ""]
-            result = env_setup_wizard()
+            mock_console.input.return_value = "2"
+            with patch("getpass.getpass", return_value=""):
+                result = env_setup_wizard()
         assert result is False
 
     def test_wizard_sets_key_via_path_b(self, tmp_path):
         """User picks Path B and enters an Anthropic key."""
         with (
             patch("core.cli.onboarding.console") as mock_console,
-            patch("core.cli.onboarding._upsert_env"),
+            patch("core.auth.auth_toml.save_api_key") as save,
             patch("core.config.settings") as mock_settings,
         ):
             _no_keys_mock(mock_settings)
-            mock_console.input.side_effect = [
-                "2",  # menu — API key path
-                "sk-ant-test-key-12345678",  # Anthropic
-                "",  # OpenAI skip
-                "",  # ZhipuAI skip
-            ]
-            result = env_setup_wizard()
+            mock_console.input.return_value = "2"
+            with patch("getpass.getpass", side_effect=["sk-ant-test-key-12345678", "", ""]):
+                result = env_setup_wizard()
+        save.assert_called_once_with("sk-ant-test-key-12345678", provider="anthropic")
         assert result is True
 
     def test_wizard_handles_ctrl_c(self, tmp_path):
@@ -356,29 +172,15 @@ class TestEnvSetupWizard:
             result = env_setup_wizard()
         assert result is False
 
-    def test_wizard_path_a_subscription(self, tmp_path):
-        """Path A — user chose subscription; OAuth detected on probe."""
+    @pytest.mark.parametrize("success", [True, False])
+    def test_wizard_subscription_uses_native_login(self, success):
         with (
-            patch("core.cli.onboarding.console") as mock_console,
-            patch("core.cli.onboarding.detect_subscription_oauth", return_value="openai-codex"),
-            patch("core.config.settings") as mock_settings,
+            patch("core.cli.onboarding.console") as console,
+            patch("core.cli.commands.cmd_login", return_value=success) as login,
         ):
-            _no_keys_mock(mock_settings)
-            mock_console.input.side_effect = ["1", ""]  # menu, then Enter on prompt
-            result = env_setup_wizard()
-        assert result is True
-
-    def test_wizard_path_a_no_oauth_found(self, tmp_path):
-        """Path A — user chose subscription but no token at ~/.codex/auth.json."""
-        with (
-            patch("core.cli.onboarding.console") as mock_console,
-            patch("core.cli.onboarding.detect_subscription_oauth", return_value=None),
-            patch("core.config.settings") as mock_settings,
-        ):
-            _no_keys_mock(mock_settings)
-            mock_console.input.side_effect = ["1", ""]
-            result = env_setup_wizard()
-        assert result is False
+            console.input.return_value = "1"
+            assert env_setup_wizard() is success
+        login.assert_called_once_with("openai")
 
     def test_wizard_skip_path_explicitly(self, tmp_path):
         """Path C — user chose skip (dry-run). Returns True so wizard
@@ -417,7 +219,6 @@ def test_welcome_does_not_repeat_wizard_after_dry_run_opt_in():
         patch("core.cli.welcome._render_welcome_brand"),
         patch("core.cli.welcome.auto_generate_env"),
         patch("core.wiring.startup._has_any_llm_key", return_value=False),
-        patch("core.wiring.startup.detect_subscription_oauth", return_value=None),
         patch("core.cli.welcome.dry_run_opted_in", return_value=True),
         patch("core.cli.welcome.env_setup_wizard") as wizard,
         patch("core.cli.welcome.check_readiness", return_value=report),
@@ -431,7 +232,7 @@ def test_welcome_does_not_repeat_wizard_after_dry_run_opt_in():
     wizard.assert_not_called()
 
 
-def test_welcome_clears_dry_run_opt_in_when_oauth_is_detected():
+def test_welcome_clears_dry_run_opt_in_when_stored_route_is_available():
     """A discovered credential makes a previous skip choice stale."""
     from core.cli.welcome import _welcome_screen
 
@@ -439,8 +240,7 @@ def test_welcome_clears_dry_run_opt_in_when_oauth_is_detected():
     with (
         patch("core.cli.welcome._render_welcome_brand"),
         patch("core.cli.welcome.auto_generate_env"),
-        patch("core.wiring.startup._has_any_llm_key", return_value=False),
-        patch("core.wiring.startup.detect_subscription_oauth", return_value="openai-codex"),
+        patch("core.wiring.startup._has_any_llm_key", return_value=True),
         patch("core.cli.welcome.clear_dry_run_opt_in") as clear_opt_in,
         patch("core.cli.welcome.check_readiness", return_value=report),
         patch("core.cli.welcome._render_readiness_compact"),
@@ -472,39 +272,6 @@ def test_welcome_clears_dry_run_opt_in_when_api_key_is_detected():
         _welcome_screen()
 
     clear_opt_in.assert_called_once_with()
-
-
-class TestDetectSubscriptionOAuth:
-    """v0.54.0 — proactive Codex CLI OAuth detection (Anthropic excluded by ToS)."""
-
-    def test_no_credentials_returns_none(self):
-        with patch("core.auth.codex_cli_oauth.read_codex_cli_credentials", return_value=None):
-            from core.wiring.startup import detect_subscription_oauth
-
-            assert detect_subscription_oauth() is None
-
-    def test_returns_provider_id_on_success(self):
-        from core.wiring.startup import detect_subscription_oauth
-
-        fake_creds = {"access_token": "tok-abc", "refresh_token": "rt", "expires_at": 9999999999.0}
-        with (
-            patch(
-                "core.auth.codex_cli_oauth.read_codex_cli_credentials",
-                return_value=fake_creds,
-            ),
-            patch("core.wiring.startup.log"),
-        ):
-            result = detect_subscription_oauth()
-        assert result == "openai-codex"
-
-    def test_swallows_probe_errors(self):
-        with patch(
-            "core.auth.codex_cli_oauth.read_codex_cli_credentials",
-            side_effect=OSError("nope"),
-        ):
-            from core.wiring.startup import detect_subscription_oauth
-
-            assert detect_subscription_oauth() is None
 
 
 class TestIsPlaceholder:

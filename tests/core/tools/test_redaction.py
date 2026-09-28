@@ -68,6 +68,10 @@ class TestRedactSecrets:
         assert "xapp-" not in result
         assert "[REDACTED]" in result
 
+    def test_slack_app_token_preserves_legacy_full_value_masking(self) -> None:
+        text = "opaque rejection xapp-1-ABCDEFGHIJKL_mnopqrstuv/xyzzzzzz"
+        assert redact_secrets(text) == "opaque rejection [REDACTED]"
+
     def test_plain_text_unchanged(self) -> None:
         text = "Hello world, this is normal text without any secrets."
         assert redact_secrets(text) == text
@@ -95,6 +99,21 @@ class TestRedactSecrets:
         """sk- followed by fewer than 20 chars should not be redacted."""
         text = "sk-short"
         assert redact_secrets(text) == text
+
+    def test_labelled_credentials_can_cross_multiple_redaction_boundaries(self) -> None:
+        text = (
+            'api_key=opaque-secret refresh_token="opaque-refresh" status=failed\n'
+            "Authorization: Bearer opaque-bearer"
+        )
+        redacted = redact_secrets(text)
+        assert "opaque" not in redacted
+        assert redact_secrets(redacted) == redacted
+        assert "status=failed" in redacted
+
+    def test_noncredential_keys_remain_available_to_task_consumers(self) -> None:
+        text = "Archived key: violet-signal; lookup key=customer_id; sort key: name"
+        assert redact_secrets(text) == text
+        assert redact_secrets("api_key=opaque-value") == "api_key=[REDACTED]"
 
 
 class TestRedactionIntegration:
@@ -137,3 +156,44 @@ class TestRedactionIntegration:
         )
         tool_result = bash.to_tool_result(result)
         assert tool_result["stdout"] == "hello world"
+
+
+class TestLegacyCredentialScrubbing:
+    """Keep the retired scrubber's behavior at the shared redaction owner."""
+
+    def test_scrub_openai_key(self):
+        msg = "Authentication failed: sk-proj-abcdef1234567890XYZ"
+        result = redact_secrets(msg)
+        assert "sk-proj" not in result
+        assert "[REDACTED]" in result
+
+    def test_scrub_github_pat(self):
+        msg = "Rate limit exceeded for ghp_1234567890abcdefABCDEF"
+        result = redact_secrets(msg)
+        assert "ghp_" not in result
+
+    def test_scrub_bearer_token(self):
+        msg = "Invalid header: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.abc123"
+        result = redact_secrets(msg)
+        assert "eyJhbGci" not in result
+
+    def test_scrub_slack_token(self):
+        msg = "Slack error: xoxb-1234-5678-abcdefghij/klmnop"
+        result = redact_secrets(msg)
+        assert "xoxb-" not in result
+
+    def test_scrub_query_params(self):
+        msg = "Request to https://api.example.com?api_key=abcdef1234567890&foo=bar"
+        result = redact_secrets(msg)
+        assert "abcdef1234" not in result
+        assert "foo=bar" in result
+
+    def test_no_scrub_clean_text(self):
+        msg = "Connection timed out after 30 seconds"
+        assert redact_secrets(msg) == msg
+
+    def test_scrub_multiple_patterns(self):
+        msg = "Failed with sk-test-abc1234567890xyz and Bearer tok_longvalue1234"
+        result = redact_secrets(msg)
+        assert "sk-test" not in result
+        assert "tok_longvalue" not in result

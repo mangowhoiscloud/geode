@@ -324,6 +324,7 @@ class FullscreenThinCli:
         self._app: Application[Any] | None = None
         self._stream_started = False
         self._approval_event: threading.Event | None = None
+        self._closed = False
         self._approval_decision = "n"
         self._status_tick_stop = threading.Event()
         self._status_tick_thread: threading.Thread | None = None
@@ -478,8 +479,7 @@ class FullscreenThinCli:
             if self.state.approval_pending:
                 self._resolve_approval("n")
                 return
-            self._append_event("Interrupted")
-            self._set_status("")
+            self._cancel_current_request()
 
         @kb.add("c-d")
         def _exit(event: Any) -> None:
@@ -488,7 +488,15 @@ class FullscreenThinCli:
         return kb
 
     def run(self) -> None:
-        self.app.run()
+        try:
+            self.app.run()
+        finally:
+            with self._lock:
+                self._closed = True
+                pending = self.state.approval_pending
+            if pending:
+                self._resolve_approval("n")
+            self._stop_status_ticker()
 
     def _invalidate(self) -> None:
         app = self._app
@@ -661,18 +669,35 @@ class FullscreenThinCli:
         except Exception:
             self._append_event("Exit requested")
 
+    def _cancel_current_request(self) -> None:
+        if self.state.busy:
+            if self.client.cancel_current():
+                self._set_status("Cancelling")
+            else:
+                self._append_event("Cancellation unavailable", "The request may still be running")
+
     def _handle_command_response(self, response: dict[str, Any]) -> None:
+        from core.ipc_protocol import is_ipc_error
+
         output = str(response.get("output", "") or "")
         if output:
             self._append(output)
-        if response.get("status") == "error":
+        if is_ipc_error(response):
             self._append_event("Error", str(response.get("message", "Command failed")), error=True)
         if response.get("should_break"):
             self._app_exit_threadsafe()
 
     def _handle_prompt_response(self, response: dict[str, Any]) -> None:
-        if response.get("type") == "error":
-            self._append_event("Error", str(response.get("message", "Unknown error")), error=True)
+        from core.ipc_protocol import is_ipc_error
+
+        if is_ipc_error(response):
+            message = (
+                response.get("message") or response.get("error") or response.get("termination")
+            )
+            self._append_event("Error", str(message or "Unknown error"), error=True)
+            return
+        if response.get("status") == "cancelled" or response.get("termination") == "user_cancelled":
+            self._append_event("Cancelled", str(response.get("message", "")))
             return
         text = str(response.get("text", "") or "")
         if text and not self._stream_started:
@@ -830,13 +855,15 @@ class FullscreenThinCli:
         tool = str(msg.get("tool_name", "?"))
         detail = str(msg.get("detail", "") or "").replace("\n", " ")
         with self._lock:
+            if self._closed:
+                return "n"
             self.state.approval_pending = True
             self.state.approval_detail = f"{tool}: {_truncate(detail, 120)}"
             self._approval_decision = "n"
-            self._approval_event = threading.Event()
+            event = threading.Event()
+            self._approval_event = event
         self._append_event("Approval", self.state.approval_detail)
         self._set_status("Approval required", "press y allow, n deny, a always")
-        event = self._approval_event
         event.wait()
         return self._approval_decision
 

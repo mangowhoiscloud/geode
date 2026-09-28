@@ -419,42 +419,10 @@ def model_unavailable_reason(model_id: str, *, source: str | None = None) -> str
 
 
 def model_available(model_id: str, *, source: str | None = None) -> bool:
-    """Return True if `model_id` has a usable credential route.
+    """Compatibility facade for the request-routing availability inspector."""
+    from core.llm.routing import model_available as route_available
 
-    Uses admission's model-aware source and the same account selector as SDK
-    requests. Bare Settings/environment credentials remain adapter-owned. An
-    unavailable explicit plan never falls through to them or another source.
-
-    Used by the ``/model`` picker (M5) to flag entries whose provider
-    has no authenticated profile yet — so the user sees *why* a model
-    won't switch instead of selecting it and bouncing off the
-    ``_check_provider_key`` warning. Returns ``False`` defensively when
-    routing raises so a broken plan registry does not lock the picker.
-    """
-    try:
-        from core.config import _resolve_provider
-        from core.config.runtime_policy_sources import build_policy_source_bundle
-        from core.llm.adapters.base import CredentialDetectionCapable, EnvironmentDiagnosticCapable
-        from core.llm.adapters.registry import resolve_for
-        from core.llm.routing import infer_source, resolve_routing
-
-        sources = build_policy_source_bundle().get("provider_routing")
-        provider = _resolve_provider(model_id)
-        source = (
-            source
-            if source is not None
-            else infer_source(provider, model=model_id, sources=sources)
-        )
-        if model_unavailable_reason(model_id, source=source) is not None:
-            return False
-        if resolve_routing(model_id, provider=provider, source=source, sources=sources) is not None:
-            return True
-        adapter = resolve_for(provider, source)
-        if isinstance(adapter, CredentialDetectionCapable):
-            return adapter.detect_credential() is not None
-        return isinstance(adapter, EnvironmentDiagnosticCapable) and adapter.test_environment().ok
-    except Exception:
-        return False
+    return route_available(model_id, source=source)
 
 
 # v0.99.19 M2 — surface ``settings.forced_login_method`` per provider in

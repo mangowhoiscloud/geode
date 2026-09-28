@@ -30,7 +30,10 @@ def _wire_openai_credentials(monkeypatch: pytest.MonkeyPatch, *, oauth: bool, pa
         (payg, "openai", PlanKind.PAYG, CredentialType.API_KEY),
     ):
         if enabled:
-            registry.add(Plan(provider, provider, kind, provider, "https://offline.example.test"))
+            from core.config import CODEX_BASE_URL
+
+            endpoint = CODEX_BASE_URL if provider == "openai-codex" else "https://api.openai.com/v1"
+            registry.add(Plan(provider, provider, kind, provider, endpoint))
             store.add(
                 AuthProfile(
                     name=f"{provider}-offline",

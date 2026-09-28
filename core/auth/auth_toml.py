@@ -45,6 +45,7 @@ import os
 import tomllib
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +65,65 @@ def auth_toml_path() -> Path:
     # expanduser so GEODE_AUTH_TOML=~/x resolves (PR-PATH-MODERNIZE — consistency
     # with GEODE_CONFIG_TOML / GEODE_DIAGNOSTICS_LOG / GEODE_HOME).
     return Path(override).expanduser() if override else DEFAULT_AUTH_TOML
+
+
+def save_api_key(key: str, *, provider: str = "", plan_id: str = "") -> Plan:
+    """Validate and commit an operator key before publishing its active profile.
+
+    Interactive entry points share this file owner; externally supplied environment
+    credentials remain independent fallbacks. Replacing a profile keeps credentials
+    already borrowed by an in-flight request unchanged.
+    """
+    from core.llm.registry import SOURCE_PAYG, get_provider_spec
+    from core.llm.strategies.plans import default_plan_for_payg
+    from core.wiring.container import ensure_profile_store
+
+    if not key or any(char.isspace() for char in key):
+        raise ValueError("API key must be nonempty and contain no whitespace.")
+    if bool(provider) == bool(plan_id):
+        raise ValueError("Specify one provider or registered plan.")
+    if provider:
+        spec = get_provider_spec(provider)
+        if spec is None or spec.credential.source != SOURCE_PAYG:
+            raise ValueError("Provider requires a supported PAYG API-key route.")
+    live = ensure_profile_store()
+    with auth_file_transaction(store=live) as (registry, store):
+        if plan_id:
+            plan = registry.get(plan_id)
+            if plan is None:
+                raise ValueError(f"Unknown plan: {plan_id} (use /login add first)")
+            if plan.provider == "openai-codex":
+                raise ValueError("ChatGPT subscription credentials require /login openai.")
+        else:
+            plan = registry.get(f"{provider}-payg") or default_plan_for_payg(provider, key)
+            if plan.provider != provider or plan.kind is not PlanKind.PAYG:
+                raise ValueError("Existing PAYG plan conflicts with the requested provider.")
+            registry.add(plan)
+        name = f"{plan.id}:user"
+        current = live.get(name)
+        if current is not None and (
+            current.managed_by
+            or live.file_profiles(str(auth_toml_path().resolve())).get(name) is not current
+        ):
+            raise ValueError("Credential name belongs to another owner; use its login provider.")
+        existing = store.get(name)
+        if existing is not None and (
+            existing.managed_by or existing.credential_type != CredentialType.API_KEY
+        ):
+            raise ValueError("Managed credentials must be changed through their login provider.")
+        profile = (
+            replace(existing, key=key, error_count=0, cooldown_until=0.0)
+            if existing is not None
+            else AuthProfile(
+                name=name,
+                provider=plan.provider,
+                credential_type=CredentialType.API_KEY,
+                key=key,
+                plan_id=plan.id,
+            )
+        )
+        store.add(profile, activate=True)
+    return plan
 
 
 # ---------------------------------------------------------------------------
@@ -413,8 +473,10 @@ def auth_file_transaction(
     The thin CLI, daemon and workers each hold an in-memory copy and write the
     whole file. The block edits a candidate read from the current file under one
     lock, so a stale copy cannot revive removed entries or restore rotated
-    tokens. A rejected change or failed write raises and leaves both the file
-    and the live stores unchanged. Environment and imported CLI credentials are
+    tokens. A rejected candidate or failed write leaves the file and live stores
+    unchanged. If subsequent live reconciliation is rejected, the saved file
+    remains and the error explicitly requests refresh; it is not rolled back.
+    Environment and imported CLI credentials are
     not file-owned and are absent from the candidate. Not reentrant: a nested
     transaction on the same file waits on its own lock.
     """

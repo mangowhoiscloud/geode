@@ -81,7 +81,7 @@ class TestOrgPolicy:
         assert len(o.to_policies()) == 0
 
     def test_org_denied_tools(self):
-        o = OrgPolicy(org_id="nexon", denied_tools={"run_bash", "set_api_key"})
+        o = OrgPolicy(org_id="nexon", denied_tools={"run_bash", "manage_login"})
         policies = o.to_policies()
         assert len(policies) == 1
         assert policies[0].priority == 5
@@ -205,12 +205,12 @@ class TestPolicyChainIntegration:
 
     def test_org_denied_tools_block_in_chain(self):
         """Org-denied tools should be blocked regardless of mode."""
-        org = OrgPolicy(org_id="strict", denied_tools={"run_bash", "set_api_key"})
+        org = OrgPolicy(org_id="strict", denied_tools={"run_bash", "manage_login"})
         chain = build_6layer_chain(org=org)
-        all_tools = ["run_bash", "set_api_key", "memory_search", "web_search"]
+        all_tools = ["run_bash", "manage_login", "memory_search", "web_search"]
         filtered = chain.filter_tools(all_tools, mode="full_pipeline")
         assert "run_bash" not in filtered
-        assert "set_api_key" not in filtered
+        assert "manage_login" not in filtered
         assert "memory_search" in filtered
 
     def test_profile_no_expensive_blocks_expensive_tools(self):
@@ -233,7 +233,7 @@ class TestPolicyChainIntegration:
 
     def test_mode_policy_combined_with_org(self):
         """Mode-based + org policies combine: both restrictions apply."""
-        org = OrgPolicy(org_id="team", denied_tools={"set_api_key"})
+        org = OrgPolicy(org_id="team", denied_tools={"manage_login"})
         mode_pol = ToolPolicy(
             name="dry_run_block",
             mode="dry_run",
@@ -241,8 +241,8 @@ class TestPolicyChainIntegration:
             priority=100,
         )
         chain = build_6layer_chain(org=org, mode_policies=[mode_pol])
-        # In dry_run mode: set_api_key blocked by org, run_analyst by mode
-        tools = ["set_api_key", "run_analyst", "memory_search"]
+        # In dry_run mode: manage_login blocked by org, run_analyst by mode
+        tools = ["manage_login", "run_analyst", "memory_search"]
         filtered = chain.filter_tools(tools, mode="dry_run")
         assert filtered == ["memory_search"]
 

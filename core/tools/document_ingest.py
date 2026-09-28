@@ -605,6 +605,36 @@ def _local_text_backend(
     )
 
 
+def _pdf_payg_credentials(
+    provider: str, model: str, fallback_key: str
+) -> tuple[str, str] | dict[str, Any]:
+    """Keep this explicit PDF API's account and endpoint on the PAYG route."""
+    from core.llm.registry import get_provider_spec
+    from core.llm.routing import resolve_routing
+    from core.wiring.container import ensure_profile_store
+
+    try:
+        ensure_profile_store()
+        spec = get_provider_spec(provider)
+        if spec is None:
+            raise RuntimeError(f"Unknown PDF provider: {provider}")
+        base_url = (
+            os.environ.get(f"{provider.upper()}_BASE_URL")
+            if provider in {"anthropic", "openai"}
+            else None
+        ) or spec.default_base_url
+        target = resolve_routing(model, provider=provider, source="payg", base_url=base_url)
+        if target is not None:
+            return target.profile.key, target.base_url
+        return fallback_key, base_url
+    except RuntimeError as exc:
+        return tool_error(
+            f"PDF credential route unavailable: {exc}",
+            error_type="dependency",
+            hint="Inspect /login and the model's PAYG plan before retrying.",
+        )
+
+
 def _openai_pdf_backend(
     pdf_path: Path, *, prompt: str, model: str, timeout_s: int, page_selection: _PageSelection
 ) -> _IngestedDocument | dict[str, Any]:
@@ -614,7 +644,14 @@ def _openai_pdf_backend(
         return tool_error("openai SDK not installed", error_type="dependency")
     from core.config import OPENAI_PRIMARY, settings
 
-    api_key = settings.openai_api_key or os.environ.get("OPENAI_API_KEY", "")
+    credentials = _pdf_payg_credentials(
+        "openai",
+        model or OPENAI_PRIMARY,
+        settings.openai_api_key or os.environ.get("OPENAI_API_KEY", ""),
+    )
+    if isinstance(credentials, dict):
+        return credentials
+    api_key, base_url = credentials
     if not api_key:
         return tool_error(
             "OPENAI_API_KEY is not configured",
@@ -637,7 +674,9 @@ def _openai_pdf_backend(
                         "page_range": page_selection.label(),
                     },
                 )
-            client = openai.OpenAI(api_key=api_key, timeout=timeout_s, max_retries=0)
+            client = openai.OpenAI(
+                api_key=api_key, base_url=base_url, timeout=timeout_s, max_retries=0
+            )
             file_data = _pdf_data_uri(selected_pdf)
             filename = (
                 pdf_path.name
@@ -703,7 +742,14 @@ def _claude_pdf_backend(
         return tool_error("anthropic SDK not installed", error_type="dependency")
     from core.config import ANTHROPIC_PRIMARY, settings
 
-    api_key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+    credentials = _pdf_payg_credentials(
+        "anthropic",
+        model or ANTHROPIC_PRIMARY,
+        settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", ""),
+    )
+    if isinstance(credentials, dict):
+        return credentials
+    api_key, base_url = credentials
     if not api_key:
         return tool_error(
             "ANTHROPIC_API_KEY is not configured",
@@ -741,7 +787,9 @@ def _claude_pdf_backend(
             _PageSelection((chunk,)) for chunk in _split_ranges_by_size(ranges, chunk_size)
         ]
 
-    client = anthropic.Anthropic(api_key=api_key, timeout=timeout_s, max_retries=0)
+    client = anthropic.Anthropic(
+        api_key=api_key, base_url=base_url, timeout=timeout_s, max_retries=0
+    )
     documents: list[_IngestedDocument] = []
     for selection in selections:
         single = _claude_pdf_single_request(
@@ -883,7 +931,12 @@ def _zhipu_ocr_backend(
         return tool_error("httpx not installed", error_type="dependency")
     from core.config import settings
 
-    api_key = settings.zai_api_key or os.environ.get("ZAI_API_KEY", "")
+    credentials = _pdf_payg_credentials(
+        "glm", model or "glm-ocr", settings.zai_api_key or os.environ.get("ZAI_API_KEY", "")
+    )
+    if isinstance(credentials, dict):
+        return credentials
+    api_key, base_url = credentials
     if not api_key:
         return tool_error(
             "ZAI_API_KEY is not configured",
@@ -916,6 +969,7 @@ def _zhipu_ocr_backend(
     if not ranges:
         data = _zhipu_ocr_request(
             api_key=api_key,
+            base_url=base_url,
             pdf_path=pdf_path,
             model=model,
             timeout_s=timeout_s,
@@ -932,6 +986,7 @@ def _zhipu_ocr_backend(
     for start, end in chunks:
         data = _zhipu_ocr_request(
             api_key=api_key,
+            base_url=base_url,
             pdf_path=pdf_path,
             model=model,
             timeout_s=timeout_s,
@@ -948,6 +1003,7 @@ def _zhipu_ocr_backend(
             ):
                 retry_data = _zhipu_ocr_request(
                     api_key=api_key,
+                    base_url=base_url,
                     pdf_path=pdf_path,
                     model=model,
                     timeout_s=timeout_s,
@@ -1015,6 +1071,7 @@ def _zhipu_ocr_backend(
 def _zhipu_ocr_request(
     *,
     api_key: str,
+    base_url: str,
     pdf_path: Path,
     model: str,
     timeout_s: int,
@@ -1030,7 +1087,7 @@ def _zhipu_ocr_request(
         payload["end_page_id"] = end_page
     try:
         response = httpx.post(
-            "https://api.z.ai/api/paas/v4/layout_parsing",
+            f"{base_url.rstrip('/')}/layout_parsing",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json=payload,
             timeout=timeout_s,

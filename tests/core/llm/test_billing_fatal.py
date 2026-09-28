@@ -4,7 +4,7 @@ The v0.52.1 incident: GLM 429 with code 1113 ("Insufficient balance") was
 classified as retryable RateLimitError, causing the fallback loop to
 hammer all 4 GLM models × 5 retries × exp-backoff = ~40s per LLM call.
 Same shape applies to OpenAI ``insufficient_quota`` and Anthropic
-``permission_error``.
+``billing_error``.
 
 This invariant pins:
   1. ``is_billing_fatal()`` correctly identifies the 3 SDK shapes.
@@ -64,9 +64,14 @@ def test_openai_billing_hard_limit_is_billing_fatal() -> None:
     assert is_billing_fatal(exc) is True
 
 
-def test_anthropic_permission_error_is_billing_fatal() -> None:
-    exc = _make_exc_with_body({"type": "permission_error", "message": "billing denied"})
+def test_anthropic_billing_error_is_billing_fatal() -> None:
+    exc = _make_exc_with_body({"type": "billing_error", "message": "billing denied"})
     assert is_billing_fatal(exc) is True
+
+
+def test_anthropic_permission_error_does_not_imply_billing() -> None:
+    exc = _make_exc_with_body({"type": "permission_error", "message": "resource access denied"})
+    assert is_billing_fatal(exc) is False
 
 
 def test_transient_429_is_not_billing_fatal() -> None:

@@ -295,10 +295,8 @@ class TestWriteDenialWithFallback:
         result = _write_denial_with_fallback("calendar_create_event")
         assert "calendar_list_events" in result["fallback_hint"]
 
-    def test_set_api_key(self):
-        result = _write_denial_with_fallback("set_api_key")
-        # v0.50.1: denial hint now points users at the unified /login command
-        # (set_api_key is a thin alias for the legacy /key paste path).
+    def test_manage_login(self):
+        result = _write_denial_with_fallback("manage_login")
         assert "/login" in result["fallback_hint"]
 
     def test_all_write_tools_have_fallbacks(self):

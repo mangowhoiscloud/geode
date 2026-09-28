@@ -38,8 +38,8 @@ def test_model_available_true_when_resolve_routing_returns_target() -> None:
     from core.cli.commands import _state
 
     with patch(
-        "core.llm.routing.resolve_routing",
-        return_value=MagicMock(),  # any non-None RoutingTarget stand-in
+        "core.llm.adapters.anthropic_payg.resolve_routing",
+        return_value=MagicMock(profile=MagicMock(key="synthetic-key")),
     ):
         assert _state.model_available("claude-opus-4-7") is True
 

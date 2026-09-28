@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from core.agent.conversation import ConversationContext
@@ -12,6 +14,7 @@ from core.agent.loop import AgenticLoop, AgenticLoopConfig
 from core.agent.loop._context import build_system_prompt
 from core.agent.tool_executor import ToolExecutor
 from core.config.policy_source import PolicySourceBundle, PolicySourcePaths
+from core.llm.adapters.base import AdapterCallResult, UsageSummary
 from core.llm.prompts import AGENTIC_SUFFIX
 
 
@@ -121,7 +124,7 @@ def test_skill_slot_does_not_replace_literal_context_data(monkeypatch: pytest.Mo
 def test_common_suffix_survives_prompt_mode_boundaries(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
 ) -> None:
-    """Exercise real loop assembly; no model call or completion decision is made."""
+    """Exercise assembly and adapter dispatch without a live provider or compliance claim."""
     for variable in ("GEODE_WRAPPER_OVERRIDE", "GEODE_PERSONA", "GEODE_AUDIT_UNRESTRICTED"):
         monkeypatch.delenv(variable, raising=False)
     if mode == "persona_off":
@@ -162,3 +165,34 @@ def test_common_suffix_survives_prompt_mode_boundaries(
         assert prompt.startswith("AGENT_DEFINITION_BODY\n")
     else:
         assert prompt.index(AGENTIC_SUFFIX) < prompt.index("<dynamic_context>")
+
+    # The actual request builder, context-budget admission and middleware path
+    # must retain the authored contract before the adapter consumes it.
+    adapter = SimpleNamespace(
+        name="offline-prompt-capture",
+        provider=loop._provider,
+        source=loop._source,
+        acomplete=AsyncMock(
+            return_value=AdapterCallResult(
+                text="Captured.",
+                usage=UsageSummary(),
+                stop_reason="end_turn",
+            )
+        ),
+    )
+    loop._new_adapter = adapter
+    user_text = "Keep this user-provided text unchanged: 취소 관측."
+    response = asyncio.run(
+        loop._call_llm(
+            prompt,
+            [{"role": "user", "content": user_text}],
+            allow_tools=False,
+        )
+    )
+    assert response is not None
+    adapter.acomplete.assert_awaited_once()
+    request = adapter.acomplete.await_args.args[0]
+    assert request.system_prompt.count(AGENTIC_SUFFIX) == 1
+    code_contract = AGENTIC_SUFFIX.split("## Code changes\n", 1)[1].split("\n## ", 1)[0].strip()
+    assert code_contract in request.system_prompt
+    assert request.messages[-1].content == user_text

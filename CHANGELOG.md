@@ -63,6 +63,21 @@ functional change.
 
 ### Changed
 
+- Add code-change conduct to the shared agentic prompt and contributor entry
+  point: async ownership, backend authority, preserved errors and redacted
+  diagnostics, with observed cancellation and terminal persistence boundaries.
+
+- Consolidate operator API-key entry in the auth-file owner with hidden terminal
+  prompts, preserving externally supplied environment credentials. Remove
+  duplicate environment/settings writes, the retired `set_api_key` and
+  `manage_auth` model tools, and the unused global profile-tracking path.
+  `manage_login` accepts nonsecret inspection and selection only.
+
+- Treat heuristic task-preflight evidence as advisory suggestions in nested
+  schema v2. Remove the session-wide row-presence check that mislabeled routing
+  guesses as evidence requirements and could reuse another turn's records.
+  Preserve final errors, observation history, and Verify/PostVerify/Stop policy.
+
 - Resolve new-session credential policy and per-model plan accounts through one
   routing owner. Preserve each live session's concrete API/Subscription source,
   pass model-specific credentials and endpoints to SDK calls, and reject
@@ -296,6 +311,30 @@ functional change.
 
 ### Fixed
 
+- Preserve request-correlated IPC failures through terminal rendering, including
+  failed stream delivery and incomplete operations. Keep cancellation scoped to
+  its request and distinguish transport loss from confirmed completion.
+  Deliver malformed-frame errors before closing and disconnect abandoned
+  approval streams. Preserve ordinary task lookup keys during credential redaction.
+  Error logs retain bounded request/session/category metadata; one shared
+  scrubber covers known and labelled credentials across logs and error surfaces.
+- Keep async hooks on their owning event loop and dispose of coroutine results
+  returned by synchronous hooks after timeout. Preserve primary worker failures
+  when checkpoint cleanup also fails; failed scheduled finalization no longer
+  invokes a successful completion callback.
+- Classify permanent provider HTTP rejections as terminal request failures,
+  preserving timeout/conflict/rate-limit retries. Anthropic permission errors no
+  longer become billing guidance. Login failures retain their actual tool-error
+  category, and native OAuth rejects conflicting profile endpoints before write.
+
+- Preserve session authority across credential and recovery failures. Shared
+  key persistence rejects provider/owner conflicts and failed writes without
+  publishing a new credential. Readiness and status follow actual routing and
+  eligibility. External OAuth caches reflect replacement/deletion and reject
+  stale publication; native login serializes attempts per store. Resume rebinds
+  final and approval evidence to the selected session. Failed checkpoint status
+  writes no longer advance the index, transition event or active pointer.
+
 - Hash only typed provider reasoning ciphertext in candidate-intervention
   evidence, preserving the original response digest and strict secret checks
   on readable text and tool arguments. Export bounded intervention failures
@@ -404,8 +443,7 @@ functional change.
   ChatGPT plan tier is recorded with the tokens. Thin clients read and change
   login state through the daemon, keeping only key entry and browser logins
   local, and daemon `/login` results carry the command outcome; a local login
-  always asks the daemon to reload, even when a later `.env` or config mirror
-  write fails. The dashboard, `/login health` and `manage_login` share one
+  asks the daemon to reload independently of local persistence. The dashboard, `/login health` and `manage_login` share one
   key-free snapshot that judges each credential against its own provider. Plan
   quotas show declared limits only because calls were never counted;
   `manage_login` returns interactive logins to the user. New installs with an

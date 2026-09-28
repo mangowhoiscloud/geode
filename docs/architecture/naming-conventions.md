@@ -30,9 +30,50 @@ The guide records two kinds of evidence without confusing them:
   Follow them for new work unless the local subsystem has a stronger reason.
   A historical outlier is evidence to inspect, not a template to copy.
 
-When this prose conflicts with an executable gate, the gate wins and this file
-must be corrected in the same change. When no rule exists, inspect the nearest
-canonical siblings before introducing a new pattern.
+Executable configuration owns how a gate runs, not the authority to redefine
+the intended behavior. When code, tests, and a requirement disagree, identify
+the owning contract and decide whether implementation, assertion, or requirement
+needs correction. Record an intentional requirement change and its reason;
+never rewrite the requirement merely to describe a failing implementation.
+When no rule exists, inspect canonical siblings before introducing a pattern.
+
+### Requirements, plans, and evidence
+
+These roles may share an issue or PR; separate files are not mandatory:
+
+| Role | Authority and limit |
+|---|---|
+| Product requirement | User problem, intended outcome, scope, non-goals, and preserved behavior; a PRD is an optional format. |
+| Design contract | Ownership, interfaces, invariants, failure and recovery behavior. |
+| Execution plan | Implementation order, decisions, progress, and resumption context; neither execution permission nor proof of completion. |
+| Test/evaluation specification | Observable acceptance conditions and their checker; identifies which part of the requirement is measured. |
+| Execution evidence | Revision, inputs/environment, observed artifacts/results, failures, and limits; a status label or planned check is not an executed check. |
+
+Use a PR-sized brief for bounded changes. Maintain a durable plan for work that
+needs cross-session recovery or substantial research. Prototype uncertain
+behavior within a stated scope; preserve authorization, validation, and failure
+boundaries from the start. Do not require PRD-first development, a particular
+filename, or a minimum number of frontier precedents. Development plans do not
+imply a runtime Plan-and-Execute architecture.
+
+Review three questions separately: contract conformance, usefulness on actual
+tasks, and validity of the comparison. A unit-test pass does not establish
+product value; a component count or self-reported completion does not establish
+either. For scaffold additions or removal, name the observed failure, the
+consumer, and the comparison needed for an effectiveness claim. Hold task,
+model/configuration, environment, tools, budget, and checker fixed where the
+claim requires it; preserve failed attempts. Remove obsolete scaffolding one
+bounded change at a time, retaining its acceptance behavior or documenting the
+intentional change. No live performance claim follows from offline checks.
+
+For backend claims, trace request/turn/session identity through producer →
+record → reader → decision. Distinguish requested, admitted, executed, persisted,
+and verified states. A log row, successful transport, or nonempty response is
+not proof of the requested side effect. Name transaction/retry/durability scope
+and readback authority before claiming atomicity, recovery, or exactly-once
+execution. Heuristic routing and model judgments cannot silently become product
+requirements or independent verification. See the
+[research and scoped backend audit](../plans/2026-09-27-requirements-evidence.md).
 
 ## Evidence snapshot
 
@@ -301,6 +342,11 @@ identifiers.
 - Every setter/binder has an explicit reset or teardown path.
 - I/O-facing provider and runtime APIs are async-native. A sync wrapper belongs
   only at a real CLI, SDK, or compatibility boundary.
+- Async callers await the domain owner on its existing loop; do not bounce
+  through a sync wrapper that creates or blocks another loop. Offload genuinely
+  synchronous work with explicit ownership. Cancelling the waiter does not stop
+  its thread: dispose of late coroutine results, observe failures, and do not
+  report rollback or completion from cancellation acknowledgement alone.
 - A background task has an owner, cancellation path, and awaited shutdown.
 - Close files, clients, subprocesses, and database resources in `finally`, a
   context manager, or the owning lifecycle's shutdown method.
@@ -378,6 +424,19 @@ separate axes; never advance one as a proxy for another.
   credentials. Use the existing redaction helpers.
 - Do not silently convert an exception into an empty success. A recoverable
   result must encode its error type and recovery guidance explicitly.
+- Keep error categories with their actual decision owner: LLM retry categories
+  in `core/llm/errors.py` / `fallback.py`, tool failures in `core/tools/base.py`,
+  and transport envelopes in `core/ipc_protocol.py`. Preserve an existing
+  category across IPC; the CLI renders the backend outcome rather than parsing
+  message wording to infer success or retry. A transport acknowledgement is
+  not a completed operation. Lost replies leave application unconfirmed and
+  must not cause automatic replay of a mutation.
+- At an IPC failure, include the supplied `request_id`, `session_id`, command
+  name, error category and exception class in bounded log metadata. Do not log
+  command arguments, credentials or arbitrary request payloads. The shared
+  `core/observability/redaction.py` scrubber covers known key formats and
+  explicitly labelled credentials; it cannot identify every unlabelled opaque
+  value. Apply it before error text crosses a wire, display or durable sink.
 - Register cleanup when a resource is acquired, before publishing its owner.
   Failed construction releases only the resources it created; successful
   construction transfers that responsibility to the established lifetime owner.
@@ -503,6 +562,8 @@ Before finalizing a code change, answer:
 6. Does the test sit at the boundary most likely to disconnect?
 7. Did every generated mirror and changelog obligation follow its source?
 8. Were the exact targeted and broad gates reported without hiding exit codes?
+9. Are intended behavior, plan, acceptance criteria, and observed evidence
+   distinguishable, with backend identity and failure boundaries traced?
 
 If a decision does not fit this guide, document the exception in the PR and
 update this file only when the exception is intended to become a reusable

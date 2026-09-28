@@ -6,10 +6,8 @@ and could not tell whether the daemon had picked up the new plan or
 profile. The reload now reports totals plus every added and removed
 entry; a rejected file is a failure, not an empty change list.
 
-L4 — pre-fix ``/key`` (no args) printed a single muted line and
-redirected to ``/login``. The migration table is now inline so the
-legacy command becomes self-documenting (operator learns the new
-surface without grepping the changelog).
+L4 — ``/key`` without arguments routes to login and names the supported
+hidden-input entry points without soliciting a credential in chat.
 """
 
 from __future__ import annotations
@@ -118,14 +116,14 @@ def test_login_refresh_failure_warns(capsys: pytest.CaptureFixture[str]) -> None
 # ---------------------------------------------------------------------------
 
 
-def test_cmd_key_noargs_prints_migration_guide(capsys: pytest.CaptureFixture[str]) -> None:
+def test_cmd_key_noargs_routes_to_hidden_login(capsys: pytest.CaptureFixture[str]) -> None:
     from core.cli.commands.key import cmd_key
 
     with patch("core.cli.commands.cmd_login") as fake_login:
-        cmd_key("")
+        assert cmd_key("") is False
         fake_login.assert_called_once_with("")
 
     out = capsys.readouterr().out
-    assert "Migration guide" in out
     assert "/login add" in out
     assert "/login set-key" in out
+    assert "<api-key>" not in out

@@ -11,8 +11,15 @@ from pydantic import SecretStr
 
 @pytest.fixture
 def judgment_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
+    from core.auth.profiles import ProfileStore
+    from core.llm.strategies import plan_registry
+    from core.wiring import container
+
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "config.toml"))
+    monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
+    monkeypatch.setattr(container, "_profile_store", ProfileStore())
+    monkeypatch.setattr(plan_registry, "_plan_registry", plan_registry.PlanRegistry())
     for name in (
         "GEODE_JUDGMENT_ENGINE",
         "GEODE_JEV_PROVIDER",
@@ -49,6 +56,32 @@ def test_provider_preference_and_secret_free_status(judgment_config: Settings) -
     assert "credential" not in str(judgment_status())
     judgment_config.openrouter_api_key = ""
     assert resolve_judgment_route(judgment_config) is None
+
+
+def test_file_key_enables_jev_and_rotation_preserves_borrowed_route(
+    judgment_config: Settings,
+) -> None:
+    from core.auth.auth_toml import save_api_key
+
+    save_api_key("synthetic-first", provider="openrouter")
+    assert configure_judgment("jev", provider="openrouter")["effective_engine"] == "jev"
+    before = resolve_judgment_route(judgment_config)
+    assert before is not None and before[1].get_secret_value() == "synthetic-first"
+    save_api_key("synthetic-second", provider="openrouter")
+    after = resolve_judgment_route(judgment_config)
+    assert after is not None and after[1].get_secret_value() == "synthetic-second"
+    assert before[1].get_secret_value() == "synthetic-first"
+    assert judgment_config.openrouter_api_key == ""
+    assert "synthetic" not in str(judgment_status())
+
+
+def test_file_key_does_not_bypass_forced_login_policy(judgment_config: Settings) -> None:
+    from core.auth.auth_toml import save_api_key
+
+    save_api_key("synthetic-key", provider="openrouter")
+    judgment_config.forced_login_method = {"openrouter": "subscription"}
+    with pytest.raises(RuntimeError, match="does not support source"):
+        resolve_judgment_route(judgment_config, engine="jev", provider="openrouter")
 
 
 def test_persist_switch_without_changing_root_or_effort(

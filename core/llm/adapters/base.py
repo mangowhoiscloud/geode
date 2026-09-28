@@ -432,6 +432,13 @@ class CredentialDetectionCapable(Protocol):
     def detect_credential(self) -> CredentialDetection | None: ...
 
 
+@runtime_checkable
+class ModelCredentialDetectionCapable(Protocol):
+    """Inspect a model's account and endpoint with the adapter's request resolver."""
+
+    def detect_model_credential(self, model: str) -> CredentialDetection | None: ...
+
+
 @dataclass(frozen=True)
 class WebSearchResult:
     """Single web_search call result — provider-agnostic.
@@ -586,6 +593,7 @@ __all__ = [
     "EnvironmentReport",
     "LLMAdapter",
     "Message",
+    "ModelCredentialDetectionCapable",
     "ModelListingCapable",
     "ModelSpec",
     "QuotaInspectionCapable",

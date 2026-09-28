@@ -173,19 +173,21 @@ def create_mcp_server(
         """Get pipeline health status."""
         from core import __version__
         from core.config import settings
+        from core.llm.routing import model_available
+        from core.wiring.startup import has_available_llm_credential
 
-        # ``*_configured`` historically meant "API key present", which
-        # under-reports health for OAuth/CLI-lane setups (the common case:
-        # both read false while the agent runs fine on subscription auth).
-        # Keep the legacy keys but scope them honestly as api_key bits, and
-        # add the effective credential-source picks so a client can tell
-        # "no API key" apart from "not authenticated at all".
+        # Compatibility fields describe local route availability, including
+        # stored accounts. Hydrate before inspecting the selected model too.
+        # No network authentication is performed by health.
+        anthropic_available = has_available_llm_credential("anthropic")
+        openai_available = has_available_llm_credential("openai")
         return {
             "version": __version__,
             "model": settings.model,
+            "model_available": model_available(settings.model),
             "ensemble_mode": settings.ensemble_mode,
-            "anthropic_configured": bool(settings.anthropic_api_key),
-            "openai_configured": bool(settings.openai_api_key),
+            "anthropic_configured": anthropic_available,
+            "openai_configured": openai_available,
             "anthropic_credential_source": settings.anthropic_credential_source,
             "openai_credential_source": settings.openai_credential_source,
         }

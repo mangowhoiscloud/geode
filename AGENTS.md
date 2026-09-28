@@ -47,6 +47,7 @@ sandboxing remain separate. The shared-file pattern follows the
 | Architecture/extensibility program | [Extensibility roadmap](docs/architecture/extensibility-roadmap.md), the single execution SOT for GAP IDs, order, status, acceptance, and closure evidence |
 | Package ownership | [Package classification](docs/architecture/package-classification.md) |
 | Coding-agent state, recovery, workspace/process limits | [Coding runtime authority](docs/architecture/coding-runtime-authority.md) before adding a record or store |
+| Async execution, IPC, auth ownership, errors, and logging | [Code conventions](docs/architecture/naming-conventions.md) §§3.3 and 5, then [runtime authority](docs/architecture/coding-runtime-authority.md); trace the real producer and consuming boundary |
 | Model/provider support, OAuth, capabilities | `core/llm/model_catalog.py`, provider/adapters call path, and `.agents/skills/model-onboarding/` |
 | Prompt text or assembly | `.agents/skills/prompt-writing/`, `core/agent/system_prompt.py`, and loop context assembly |
 | Usage/cache/cost and artifact accounting | [Usage accounting](docs/architecture/usage-accounting.md) and the workflow observability reference |
@@ -88,9 +89,9 @@ must trace every affected boundary; this table is routing, not an API census.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 601 production Python files,
-764 test Python files,
-86 tool definitions, and
+The current snapshot records 599 production Python files,
+765 test Python files,
+84 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->
 
@@ -125,6 +126,13 @@ do not turn an incident-specific fix into an unconditional rule for every task.
    grouped config, or `ToolContext`; reserve `ContextVar` for request-local
    identity, diagnostics, state, and caches. See the workflow's
    [contract checks](docs/workflow.md#contract-checks) for boundary verification.
+   Prefer async-native runtime I/O on its owning event loop; keep unavoidable
+   synchronous extensions at explicit, owned offload boundaries. Cancellation
+   acknowledgement is not observed termination or rollback. Backend owners
+   decide credentials, permissions, and durable session state; CLI/IPC carry
+   validated intent and outcomes. Preserve typed failures across those boundaries,
+   use shared redaction and bounded correlation fields, and report completion
+   only after required terminal persistence and cleanup succeed.
 4. **Preserve prompt boundaries.** `GEODE.md` is the runtime SOUL surface, not
    a contributor rulebook. Use the prompt-writing skill for authored text;
    GEODE's local style is English metadata/behavioral clauses rather than

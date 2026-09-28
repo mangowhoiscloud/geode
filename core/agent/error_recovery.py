@@ -28,8 +28,6 @@ _EXCLUDED_TOOLS: frozenset[str] = frozenset(
         "computer_use",
         "memory_save",
         "note_save",
-        "set_api_key",
-        "manage_auth",
         "manage_login",
     }
 )

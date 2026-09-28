@@ -55,7 +55,7 @@ def test_cli_thin_dispatch_signals_daemon_refresh(
         call.local(args) if cmd == "/login" else call.local(cmd, args, False, command_registry=None)
     )
     assert calls.mock_calls == [local, call.relay("/login", "refresh")]
-    assert "daemon refresh failed" in output.get()
+    assert "Daemon credential refresh failed" in output.get()
     assert "refresh rejected" in output.get()
 
 

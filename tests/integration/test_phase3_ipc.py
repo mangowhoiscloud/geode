@@ -399,7 +399,12 @@ class TestCLIPoller:
             )
         )
 
-        assert result == {"type": "resume_error", "message": "No resumable session found"}
+        assert result == {
+            "type": "resume_error",
+            "message": "No resumable session found",
+            "status": "error",
+            "error_type": "not_found",
+        }
         checkpoint.reopen.assert_not_called()
 
     def test_async_prompt_runner_isolates_ui_state_per_task(self) -> None:
@@ -778,6 +783,7 @@ class TestCLIChannelIntegration:
                 "request_correlation",
                 "stable_events",
                 "session_model_config",
+                "request_cancellation",
             }
             client.close()
         finally:
@@ -854,6 +860,8 @@ class TestCLIChannelIntegration:
             unknown = client._recv_for(unknown_id)
             assert unknown == {
                 "type": "error",
+                "status": "error",
+                "error_type": "protocol",
                 "message": "Unknown message type: future_request",
                 "request_id": unknown_id,
             }

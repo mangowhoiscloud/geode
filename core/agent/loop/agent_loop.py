@@ -974,11 +974,47 @@ class AgenticLoop:
         from core.llm.adapters.registry import use_registry_snapshot
 
         with use_registry_snapshot(self._adapter_registry_snapshot):
-            return await _goal.run(
-                self,
-                user_input,
-                verify_continuation=_verify_continuation,
-            )
+            try:
+                return await _goal.run(
+                    self,
+                    user_input,
+                    verify_continuation=_verify_continuation,
+                )
+            except asyncio.CancelledError:
+                turn = self._turn_state
+                if (
+                    turn is not None
+                    and turn.turn_id == self._turn_id
+                    and turn.termination_reason is None
+                ):
+                    round_idx = turn.round_index
+                    cancelled = _guards._terminal_result(
+                        self,
+                        TerminationReason.USER_CANCELLED,
+                        "",
+                        rounds=round_idx + 1,
+                        tool_calls=list(self._tool_processor.tool_log),
+                    )
+                    try:
+                        await asyncio.wait_for(
+                            self._afinalize_and_return(
+                                cancelled,
+                                user_input,
+                                round_idx,
+                            ),
+                            timeout=5.0,
+                        )
+                    except Exception as exc:
+                        # A cleanup/persistence failure cannot replace cancellation.
+                        log.warning(
+                            "Cancelled turn finalization failed",
+                            extra={
+                                "session_id": self._session_id,
+                                "error_type": type(exc).__name__,
+                            },
+                            exc_info=True,
+                        )
+                raise
 
     async def acontinue_goal(
         self,

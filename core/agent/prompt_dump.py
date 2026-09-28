@@ -113,23 +113,25 @@ def measure_tokens_anthropic(prompt: str) -> int | None:
     tokenizer is used as the single reference ruler across all dumped
     models (cross-vendor counts differ; one ruler keeps deltas comparable).
     """
-    from core.config import settings
-
-    api_key = getattr(settings, "anthropic_api_key", "")
-    if not api_key:
-        return None
     try:
         import anthropic
 
-        client = anthropic.Anthropic(api_key=api_key, max_retries=0)
         from core.config import ANTHROPIC_PRIMARY
+        from core.config.env_io import is_placeholder
+        from core.llm.adapters.anthropic_payg import AnthropicPaygAdapter
+        from core.llm.routing import infer_source
 
-        counted = client.messages.count_tokens(
-            model=ANTHROPIC_PRIMARY,
-            system=prompt,
-            messages=[{"role": "user", "content": "."}],
-        )
-        return int(counted.input_tokens)
+        infer_source("anthropic", model=ANTHROPIC_PRIMARY)
+        api_key, base_url, _ = AnthropicPaygAdapter()._credential(ANTHROPIC_PRIMARY)
+        if not api_key or is_placeholder(api_key):
+            return None
+        with anthropic.Anthropic(api_key=api_key, base_url=base_url, max_retries=0) as client:
+            counted = client.messages.count_tokens(
+                model=ANTHROPIC_PRIMARY,
+                system=prompt,
+                messages=[{"role": "user", "content": "."}],
+            )
+            return int(counted.input_tokens)
     except Exception:  # network/credential failure → estimate fallback
         return None
 

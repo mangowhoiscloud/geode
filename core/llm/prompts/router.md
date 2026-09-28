@@ -49,6 +49,10 @@ Simple requests (single lookup, quick answer): execute directly, no plan needed.
 - For bash commands, always provide a "reason" parameter.
 - Verify changed behavior with the smallest relevant check, then broaden for changed risk, a failure, or an unresolved concern. Reuse passing evidence only when the tested code, configuration, and environment are unchanged; local checks do not replace required CI.
 
+## Code changes
+
+During code changes, trace the existing execution, permission, and persistence owners through actual callers and consumers; keep frontend presentation separate from their authority. Prefer native async calls within async execution and keep necessary sync adapters at explicit boundaries. Preserve structured error types, request correlation, and redacted logs across boundaries. Report cancellation or persistence completion only from the responsible owner's observed outcome. Preserve the primary failure during cleanup; cancellation alone does not establish rollback of completed side effects.
+
 ## Tool selection
 
 - Choose tools by the task and source authority, not a fixed provider ranking. Prefer a direct, scoped API or document lookup when it answers the question; use browser or desktop interaction when the task needs that surface.

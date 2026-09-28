@@ -177,11 +177,6 @@ def test_zhipu_payload_uses_layout_parsing_contract(
     pdf = _fake_pdf(tmp_path)
     monkeypatch.setenv("ZAI_API_KEY", "test-key")
 
-    class _Settings:
-        zai_api_key = ""
-
-    monkeypatch.setattr("core.config.settings", _Settings())
-
     captured: dict[str, Any] = {}
 
     class _Response:
@@ -223,11 +218,6 @@ def test_zhipu_payload_uses_layout_parsing_contract(
 def test_zhipu_page_range_is_chunked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pdf = _fake_pdf(tmp_path)
     monkeypatch.setenv("ZAI_API_KEY", "test-key")
-
-    class _Settings:
-        zai_api_key = ""
-
-    monkeypatch.setattr("core.config.settings", _Settings())
 
     captured: list[dict[str, Any]] = []
 
@@ -286,11 +276,6 @@ def test_zhipu_all_pages_requires_known_page_count(
     monkeypatch.setattr(mod.importlib.util, "find_spec", lambda name: object())
     monkeypatch.setattr(mod, "_pdf_page_count", lambda path: None)
 
-    class _Settings:
-        zai_api_key = ""
-
-    monkeypatch.setattr("core.config.settings", _Settings())
-
     result = mod._zhipu_ocr_backend(
         pdf,
         model="glm-ocr",
@@ -326,3 +311,78 @@ def test_document_ingest_is_wired() -> None:
         "DocumentIngestTool",
     )
     assert "document_ingest" in WRITE_TOOLS
+
+
+@pytest.mark.parametrize(
+    "provider,model,backend",
+    [
+        ("openai", "gpt-6-sol", "openai_pdf"),
+        ("anthropic", "claude-fable-5-1", "claude_pdf"),
+        ("glm", "glm-ocr", "zhipu_ocr"),
+    ],
+)
+def test_provider_backend_uses_auth_profile_key_and_matching_endpoint(
+    tmp_path, monkeypatch, provider, model, backend
+):
+
+    from core.auth.auth_toml import save_api_key
+    from core.auth.profiles import ProfileStore
+    from core.llm.strategies import plan_registry
+    from core.wiring import container
+
+    store, registry = ProfileStore(), plan_registry.PlanRegistry()
+    monkeypatch.setattr(container, "_profile_store", store)
+    monkeypatch.setattr(plan_registry, "_plan_registry", registry)
+    plan = save_api_key("synthetic-file-key", provider=provider)
+    endpoint = f"https://{provider}.example/api/v1"
+    store.list_all()[0].base_url_override = endpoint
+    registry.set_routing(model, [plan.id])
+    pdf = _fake_pdf(tmp_path)
+    captured = {}
+
+    def client_factory(**kwargs):
+        captured.update(kwargs)
+        response = SimpleNamespace(output_text="# PDF", model_dump=lambda: {})
+        return SimpleNamespace(responses=SimpleNamespace(create=lambda **_: response))
+
+    if provider == "openai":
+        monkeypatch.setattr("openai.OpenAI", client_factory)
+    elif provider == "anthropic":
+        monkeypatch.setattr("anthropic.Anthropic", client_factory)
+        monkeypatch.setattr(
+            mod,
+            "_claude_pdf_single_request",
+            lambda **_: mod._IngestedDocument(backend=backend, markdown="# PDF", pages=["# PDF"]),
+        )
+    else:
+
+        def fake_post(url, **kwargs):
+            captured.update(url=url, **kwargs)
+            return SimpleNamespace(
+                raise_for_status=lambda: None, json=lambda: {"md_results": "# PDF"}
+            )
+
+        monkeypatch.setattr("httpx.post", fake_post)
+    monkeypatch.setattr(mod, "_pdf_page_count", lambda _: 1)
+    result = mod._run_backend(
+        backend,
+        pdf_path=pdf,
+        prompt="read",
+        model=model,
+        timeout_s=10,
+        page_selection=mod._PageSelection(),
+        page_chunk_size=None,
+    )
+    assert not isinstance(result, dict)
+    if provider == "glm":
+        assert captured["url"] == f"{endpoint}/layout_parsing"
+        assert captured["headers"]["Authorization"] == "Bearer synthetic-file-key"
+    else:
+        assert captured["api_key"] == "synthetic-file-key"
+        assert captured["base_url"] == endpoint
+
+    # The model's explicit unavailable plan must not silently use a raw key.
+    store.list_all()[0].disabled = True
+    route = mod._pdf_payg_credentials(provider, model, "synthetic-env-fallback")
+    assert isinstance(route, dict)
+    assert route["error_type"] == "dependency"
