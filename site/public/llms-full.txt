@@ -15,51 +15,53 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs.md
 
 GEODE를 설치하고 프로바이더를 선택해 첫 작업을 실행합니다.
 
--   [빠른 시작](https://mangowhoiscloud.github.io/geode/docs/quick-start.md)
--   [경로 선택](https://mangowhoiscloud.github.io/geode/docs/run/pick-path.md)
--   [GEODE가 작업을 처리하는 흐름](https://mangowhoiscloud.github.io/geode/docs/overview/how-it-runs.md)
+-   [빠른 시작GEODE를 설치하고 몇 분 안에 첫 작업을 실행합니다.](https://mangowhoiscloud.github.io/geode/docs/quick-start.md)
+-   [경로 선택구독, API 키, 무료 경로 중에서 상황에 맞는 것을 고르는 방법입니다.](https://mangowhoiscloud.github.io/geode/docs/run/pick-path.md)
+-   [GEODE가 작업을 처리하는 흐름요청 하나가 처음부터 끝까지 어떻게 흐르는지 따라갑니다. CLI 작업, 게이트웨이 메시지, 예약된 자기개선 실행이 모두 같은 코어를 지납니다.](https://mangowhoiscloud.github.io/geode/docs/overview/how-it-runs.md)
 
 ## 사용과 확장
 
 명령을 찾고 작업을 예약하거나 도구를 추가합니다.
 
--   [CLI와 슬래시 명령](https://mangowhoiscloud.github.io/geode/docs/harness/cli.md)
--   [작업 예약](https://mangowhoiscloud.github.io/geode/docs/run/schedule.md)
--   [도구 작성](https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool.md)
+-   [CLI와 슬래시 명령전체 레퍼런스입니다. 모든 geode 명령, thin/daemon 라우팅이 붙은 슬래시 명령, geode-mcp 표면까지 다룹니다.](https://mangowhoiscloud.github.io/geode/docs/harness/cli.md)
+-   [작업 예약자연어와 cron을 jitter와 함께 씁니다. 일일 리포트를 명령 한 줄로 예약합니다.](https://mangowhoiscloud.github.io/geode/docs/run/schedule.md)
+-   [도구 작성도구를 정의하고 등록한 뒤 권한 정책으로 게이트를 거는 방법입니다.](https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool.md)
 
 ## 설정과 운영
 
 자격 증명과 서비스를 설정하고 비용과 실행 오류를 확인합니다.
 
--   [설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)
--   [프로바이더 설정](https://mangowhoiscloud.github.io/geode/docs/run/providers.md)
--   [문제 해결](https://mangowhoiscloud.github.io/geode/docs/run/troubleshooting.md)
+-   [설정 기초설정이 어디에 있고, 어떻게 로드되고, override가 어떻게 결정되는지 설명합니다.](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)
+-   [프로바이더 설정Anthropic, OpenAI, GLM의 자격 증명 위치와 ChatGPT 구독 OAuth, 폴백 체인을 다룹니다.](https://mangowhoiscloud.github.io/geode/docs/run/providers.md)
+-   [문제 해결흔한 실패 모드와 살펴볼 곳입니다. 로그, 훅, runlog를 봅니다.](https://mangowhoiscloud.github.io/geode/docs/run/troubleshooting.md)
 
 ## 내부 구조와 평가 근거
 
 런타임 계약과 평가 근거를 읽고 코드베이스를 탐색합니다.
 
--   [안쪽 agentic 루프](https://mangowhoiscloud.github.io/geode/docs/architecture/agentic-loop.md)
--   [Terminal-Bench 2.1](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md)
--   [아키텍처 심화](https://mangowhoiscloud.github.io/geode/docs/develop/architecture.md)
+-   [안쪽 agentic 루프while(tool\_use) 기본 단위입니다. 한 턴이 어떻게 돌고, 어떤 경로로 끝나는지 설명합니다.](https://mangowhoiscloud.github.io/geode/docs/architecture/agentic-loop.md)
+-   [Terminal-Bench 2.1GPT-5.6 Sol·max effort로 Harbor에서 GEODE와 native Codex를 비교한 실험입니다. 대응 결과, 제외 기준, 불확실성과 고정된 공개 증거를 함께 읽습니다.](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md)
+-   [아키텍처 심화서브시스템 지도와 추천 읽기 순서를 데이터 흐름 추적으로 풀어냅니다.](https://mangowhoiscloud.github.io/geode/docs/develop/architecture.md)
 
 ## 전체 문서
 
-주제를 펼쳐 문서를 찾거나 제목·요약·경로로 범위를 좁히세요.
+분야를 선택하거나 제목·요약·경로로 문서를 찾으세요.
 
 문서 찾기
 
 분류·제목·요약·경로에서 찾습니다.
 
+시작하기사용과 확장설정과 운영내부 구조와 평가 근거
+
 ## 시작하기
 
-개요
+### 개요
 
 -   [GEODE 소개안쪽의 agentic 루프로 일을 처리하고, 바깥쪽 루프로 스스로를 개선하는 자율 실행 에이전트입니다. 무엇을 하는지, 누구를 위한 것인지, 다음에 어디로 갈지 안내합니다.](https://mangowhoiscloud.github.io/geode/docs.md)
 -   [GEODE가 작업을 처리하는 흐름요청 하나가 처음부터 끝까지 어떻게 흐르는지 따라갑니다. CLI 작업, 게이트웨이 메시지, 예약된 자기개선 실행이 모두 같은 코어를 지납니다.](https://mangowhoiscloud.github.io/geode/docs/overview/how-it-runs.md)
 -   [5-계층 스택Model, Runtime, Harness, Agent, Self-Improving. 각 계층이 무엇을 맡고, 책임이 어디서 끝나는지 설명합니다.](https://mangowhoiscloud.github.io/geode/docs/architecture/overview.md)
 
-시작하기
+### 시작하기
 
 -   [빠른 시작GEODE를 설치하고 몇 분 안에 첫 작업을 실행합니다.](https://mangowhoiscloud.github.io/geode/docs/quick-start.md)
 -   [경로 선택구독, API 키, 무료 경로 중에서 상황에 맞는 것을 고르는 방법입니다.](https://mangowhoiscloud.github.io/geode/docs/run/pick-path.md)
@@ -69,7 +71,7 @@ GEODE를 설치하고 프로바이더를 선택해 첫 작업을 실행합니다
 
 ## 사용과 확장
 
-가이드
+### 가이드
 
 -   [도구 작성도구를 정의하고 등록한 뒤 권한 정책으로 게이트를 거는 방법입니다.](https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool.md)
 -   [훅과 미들웨어 등록가장 좁은 권한을 고르고 공유 인스턴스 하나를 등록한 뒤 프로덕션 경계의 timeout과 실패 동작을 검증합니다.](https://mangowhoiscloud.github.io/geode/docs/guides/register-hook.md)
@@ -80,7 +82,7 @@ GEODE를 설치하고 프로바이더를 선택해 첫 작업을 실행합니다
 
 ## 설정과 운영
 
-설정
+### 설정
 
 -   [설정 기초설정이 어디에 있고, 어떻게 로드되고, override가 어떻게 결정되는지 설명합니다.](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)
 -   [config.toml 레퍼런스영역별로 묶은 모든 설정 키입니다. Settings 필드, routing.toml, self-improving 루프 섹션을 다룹니다.](https://mangowhoiscloud.github.io/geode/docs/config/reference.md)
@@ -91,7 +93,7 @@ GEODE를 설치하고 프로바이더를 선택해 첫 작업을 실행합니다
 -   [프롬프트 해싱의도하지 않은 drift가 생기면 빌드를 깨뜨리는 프롬프트 해시 핀입니다.](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-hashing.md)
 -   [MCP 서버MCP의 양면입니다. 외부 서버를 붙이는 클라이언트와 GEODE가 출하하는 서버 geode-mcp를 다룹니다.](https://mangowhoiscloud.github.io/geode/docs/runtime/tools/mcp.md)
 
-GEODE 운영
+### GEODE 운영
 
 -   [Serve와 게이트웨이serve 데몬의 메신저 게이트웨이를 운영합니다. poller, binding 라우팅, lane queue를 다룹니다.](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md)
 -   [메신저 연동게이트웨이 어댑터로 GEODE를 Slack, Discord, Telegram에 연결합니다.](https://mangowhoiscloud.github.io/geode/docs/run/messaging.md)
@@ -105,7 +107,7 @@ GEODE 운영
 
 ## 내부 구조와 평가 근거
 
-핵심 개념
+### 핵심 개념
 
 -   [두 개의 루프나머지 문서가 기대는 멘탈 모델입니다. 안쪽 agentic 루프가 작업을 처리하고, 바깥쪽 루프가 작업을 처리하는 시스템 자체를 다듬습니다.](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops.md)
 -   [안쪽 agentic 루프while(tool\_use) 기본 단위입니다. 한 턴이 어떻게 돌고, 어떤 경로로 끝나는지 설명합니다.](https://mangowhoiscloud.github.io/geode/docs/architecture/agentic-loop.md)
@@ -120,13 +122,15 @@ GEODE 운영
 -   [서브에이전트 오케스트레이션서브에이전트를 격리된 워커 프로세스로 병렬 레인에서 띄웁니다. 부모는 요약만 받고, 쓰기 권한은 툴킷 구성으로 통제합니다.](https://mangowhoiscloud.github.io/geode/docs/runtime/orchestration.md)
 -   [스킬도구와 구분되는, 사용자가 호출하는 스킬입니다. 발견, 라이프사이클, override를 다룹니다.](https://mangowhoiscloud.github.io/geode/docs/runtime/skills.md)
 
-Experimental Loop탐색과 선택
+### Experimental Loop
+
+#### 탐색과 선택
 
 -   [스캐폴드 탐색스캐폴드를 변이하고 Petri로 측정한 뒤, 불확실성을 고려한 fitness margin으로 승격하거나 되돌립니다. 모델 가중치는 바꾸지 않습니다.](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md)
 -   [Crucible 제한형 탐색동결된 admission, paired 평가, CAS 전진, 별도 sealed-test 경계를 갖춘 제한형 private search 루프입니다.](https://mangowhoiscloud.github.io/geode/docs/capabilities/outer-loop.md)
 -   [계보와 좌표이 루프가 self-evolving agents 문헌에서 어디에 위치하는지 짚습니다. 새로운 primitive가 아니라, 알려진 조각들을 정직하게 재조합한 결과입니다.](https://mangowhoiscloud.github.io/geode/docs/capabilities/lineage.md)
 
-측정과 판정
+#### 측정과 판정
 
 -   [검증과 평가런타임 수락, 과제 verifier, Petri LLM-as-a-judge, 사람과의 보정, Inspect .eval 기록의 권한을 구분합니다.](https://mangowhoiscloud.github.io/geode/docs/verification/evaluation.md)
 -   [Petri × GEODEAnthropic Alignment Science의 평가 프레임워크를 GEODE 에이전트 위에 얹어 루프의 측정 계층으로 씁니다.](https://mangowhoiscloud.github.io/geode/docs/petri/overview.md)
@@ -134,24 +138,24 @@ Experimental Loop탐색과 선택
 -   [감사 실행geode-eval audit, 또는 raw 경로인 inspect eval을 씁니다. 모델 역할, 차원 세트, seeds, 턴 예산을 고릅니다. 기본은 dry-run입니다.](https://mangowhoiscloud.github.io/geode/docs/petri/run.md)
 -   [Judge 차원22개 judge 차원의 점수 방향과 사람의 라벨을 통한 보정, 별도 18개 차원의 fitness 선택 정책을 설명합니다.](https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions.md)
 
-시나리오 생성
+#### 시나리오 생성
 
 -   [Seed Scenario Generation평가용 scenario corpus를 키우는 9-역할 생성 루프입니다. supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer로 이어집니다.](https://mangowhoiscloud.github.io/geode/docs/capabilities/co-scientist.md)
 -   [Seed 파이프라인세대마다 seed 코퍼스를 다시 구성합니다. picker, orchestrator, manifest, 비용 미리보기와 frontier-band 생존자 선택을 다룹니다.](https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipeline.md)
 
-공개 결과
+#### 공개 결과
 
 -   [Seed 생성 런세대별 대시보드입니다. 런마다 생존 후보, 토큰, 메타리뷰, 다음 세대 prior를 보여줍니다.](https://mangowhoiscloud.github.io/geode/docs/petri/seeds.md)
 -   [감사 트랜스크립트공개된 번들 스냅샷에 포함된 감사 트랜스크립트를 확인합니다. 새 실행 기록은 별도로 게시해야 합니다.](https://mangowhoiscloud.github.io/geode/docs/petri/bundle.md)
 
-벤치마크
+### 벤치마크
 
 -   [GEO 가시성고정 workload와 digest-bound receipt로 F/R/C/P/A/Q/O를 분리 측정하며 단일 GEO 점수를 만들지 않는 계약입니다.](https://mangowhoiscloud.github.io/geode/docs/benchmarks/geo.md)
 -   [Terminal-Bench 2.1GPT-5.6 Sol·max effort로 Harbor에서 GEODE와 native Codex를 비교한 실험입니다. 대응 결과, 제외 기준, 불확실성과 고정된 공개 증거를 함께 읽습니다.](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md)
 -   [Tau2GEODE의 tau2-bench 실측입니다. native user-simulator 트랙 headline, verifier-backed run 기록 전체, 원본 simulation 로그 링크를 담습니다.](https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2.md)
 -   [MCPMarkGEODE의 MCPMark 실측입니다. Verified available-services headline, 서비스 coverage와 blocker, run 기록 전체, 원본 run 로그 링크를 담습니다.](https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark.md)
 
-레퍼런스
+### 레퍼런스
 
 -   [프론티어 비교GEODE가 Claude Code, Codex CLI, OpenClaw, Hermes에서 무엇을 빌려오고, 어디서 갈라지는지 정리합니다. 계보 속 GEODE의 좌표를 짚는 레퍼런스 진입점입니다.](https://mangowhoiscloud.github.io/geode/docs/reference/frontier-comparison.md)
 -   [외부 참고GEODE가 인용하는 frontier 에이전트 시스템, 디자인 표준, 선행 작업입니다. 루프 뒤에 있는 self-evolving agents 계보입니다.](https://mangowhoiscloud.github.io/geode/docs/reference/external-references.md)
@@ -164,7 +168,7 @@ Experimental Loop탐색과 선택
 -   [CHANGELOGmain push마다 CHANGELOG.md에서 동기화되는 전체 버전 이력입니다.](https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md)
 -   [Petri 번들 격리publish 워크플로우, validator, hygiene ratchet의 운영자 레퍼런스입니다.](https://mangowhoiscloud.github.io/geode/docs/reference/petri-bundle-isolation.md)
 
-개발과 아키텍처
+### 개발과 아키텍처
 
 -   [아키텍처 심화서브시스템 지도와 추천 읽기 순서를 데이터 흐름 추적으로 풀어냅니다.](https://mangowhoiscloud.github.io/geode/docs/develop/architecture.md)
 -   [시스템 색인모든 서브시스템과 파일 경로입니다. 평면 카탈로그입니다.](https://mangowhoiscloud.github.io/geode/docs/architecture/system-index.md)
@@ -175,11 +179,9 @@ Experimental Loop탐색과 선택
 -   [릴리스와 PyPI 라이프사이클버전 위치, 검증된 GitHub·PyPI 승격, rebuild 주기를 다룹니다.](https://mangowhoiscloud.github.io/geode/docs/ops/release-pypi-lifecycle.md)
 -   [백로그 처분조용히 삭제하는 대신 흔적을 남기며 아이디어를 정리합니다.](https://mangowhoiscloud.github.io/geode/docs/ops/backlog-dispose.md)
 
-코드베이스 지도
+### 코드베이스 지도
 
 -   [레이어 아키텍처 그래프저장소를 특정 시점에 스냅숏한 지도입니다. 분석된 14개 레이어를 파일 수 크기로, 레이어를 가로지르는 import 의존을 엣지로 그리고, 7단계 읽기 투어를 덧붙입니다. 손으로 그린 것이 아니라 Understand-Anything가 만든 것입니다.](https://mangowhoiscloud.github.io/geode/docs/codebase-map/layer-graph.md)
-
-GEODE의 개념과 설계 배경
 
 ## GEODE는 무엇인가
 

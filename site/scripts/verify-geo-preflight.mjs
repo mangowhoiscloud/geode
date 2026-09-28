@@ -13,6 +13,7 @@ const expectedPaths = [
   "",
   "about",
   "portfolio",
+  "benchmarks/terminal-bench/replay",
   ...pages.map(({ slug }) => `docs${slug ? `/${slug}` : ""}`),
 ];
 

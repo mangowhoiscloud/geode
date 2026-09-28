@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Changed\n\n- Refine the homepage and documentation reader without changing research content or routes: replace nested disclosure navigation with direct area selection and visible chapter headings, add keyboard-accessible mobile navigation dialogs, and keep comparison limits and design background directly readable."
   },
   {
     "version": "1.0.30",
