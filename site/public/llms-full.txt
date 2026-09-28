@@ -2194,110 +2194,101 @@ min_interval_minutes = 60
 URL: https://mangowhoiscloud.github.io/geode/docs/verification/evaluation
 Markdown: https://mangowhoiscloud.github.io/geode/docs/verification/evaluation.md
 
-에이전트가 끝났다고 말한 것, 과제 테스트를 통과한 것, judge가 행동을 좋게 평가한 것은 서로 다른 관측입니다. GEODE의 결과를 읽을 때도 이 판정들을 하나의 성공 표시로 합치지 않아야 합니다.
+에이전트의 완료 선언, 과제 테스트 통과, judge의 좋은 평가는 각각 다른 것을 관측합니다. 이 페이지는 GEODE에서 누가 무엇을 근거로 판정하는지, 그 결과를 어디까지 믿을 수 있는지 정리합니다.
 
-## 무엇을, 누가 판정하나요?
+## 누가 무엇을 판정하나
 
-같은 실행을 보더라도 판정의 범위와 권한은 다릅니다.
+같은 실행도 판정 주체마다 보는 증거와 권한이 다릅니다.
 
-| 판정 | 입력 증거 | 결정과 한계 |
+| 판정 | 입력 증거 | 결정과 범위 |
 | --- | --- | --- |
-| 런타임의 턴 검증 | 턴 출력, 도구 호출 기록, 설정된 규칙·훅 | 턴을 수락하거나 제한된 후속 작업을 요청하고, 외부 검토를 위해 결과를 보류할 수도 있습니다. 외부 과제의 정답 판정이 아닙니다. |
-| 벤치마크 verifier | 과제가 소유한 테스트와 실행 후 환경 상태 | 해당 과제의 기준에 따라 reward를 냅니다. 테스트 범위를 넘는 안전성·일반 능력은 보장하지 않습니다. |
-| Petri LLM-as-a-judge | 감사 transcript와 차원별 rubric | 관찰한 행동을 차원별로 채점합니다. 모델의 판단이며 실제 상태 검사나 사람의 정답 라벨과 같지 않습니다. |
-| 아티팩트 무결성 검사 | 스키마, SHA-256, 실행·호출 ID와 기록 범위 | 같은 증거를 읽는지, 기록이 연결되는지 확인합니다. 무결성 통과는 과제 성공이나 높은 점수를 뜻하지 않습니다. |
+| 런타임 턴 검증 | 턴 출력, 도구 호출 기록, 설정된 규칙·훅 | 턴을 수락하거나, 제한된 후속 작업을 요청하거나, 외부 검토로 보류합니다. 외부 과제의 정답 판정은 아닙니다. |
+| 벤치마크 verifier | 과제가 소유한 테스트와 실행 후 환경 상태 | 과제 기준으로 reward를 냅니다. 테스트가 다루는 범위까지만 말해 줍니다. |
+| Petri LLM-as-a-judge | 감사 transcript와 차원별 rubric | 관찰한 행동을 차원별로 채점합니다. 모델의 판단이며, 상태 검사나 사람의 정답 라벨과는 다릅니다. |
+| 아티팩트 무결성 검사 | 스키마, SHA-256, 실행·호출 ID, 기록 범위 | 같은 증거를 읽는지, 기록끼리 연결되는지 확인합니다. 통과해도 과제 성공이나 점수를 뜻하지는 않습니다. |
 
-## Eval은 판정 하나보다 넓습니다
+## 평가 한 번의 구성
 
-1.  실행 전에 질문, 과제, 모델·경로, 예산, 반복 수, 지표와 제외 규칙을 run-spec에 고정합니다.
-2.  각 시도의 실제 실행은 attempts와 native result에 남기고, trajectory는 행동 기록을 연결합니다.
-3.  과제 verifier 또는 rubric 기반 judge가 목적에 맞는 점수를 냅니다. 둘을 함께 쓰면 결과도 따로 기록합니다.
-4.  분석은 고정된 선택 규칙으로 분자·분모와 불확실성을 계산합니다. 외부 루프의 승격은 별도의 게이트가 결정합니다.
+1.  실행 전에 질문, 과제, 모델·경로, 예산, 반복 수, 지표, 제외 규칙을 run-spec에 고정합니다.
+2.  시도마다 attempt와 native result를 남기고, trajectory로 행동 기록을 잇습니다.
+3.  과제 verifier나 rubric 기반 judge가 점수를 냅니다. 둘 다 쓰면 결과를 따로 기록합니다.
+4.  분석은 고정된 선택 규칙으로 분자·분모와 불확실성을 계산하고, 승격은 별도 게이트가 정합니다.
 
-유효하게 실행했지만 틀린 결과는 reward 0일 수 있습니다. 인프라 오류, 미실행, 누락 라벨은 같은 0이 아닙니다. 재시도와 제외를 숨기지 않고 원래 시도에 연결하며, 누락된 판정을 성공·실패로 추정하지 않습니다. [평가 데이터 계약](https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/data-model.md)
+0에도 종류가 있습니다. 정상 실행 후 틀린 답은 reward 0이지만, 인프라 오류·미실행·누락 라벨은 0이 아닌 별도 상태로 남깁니다. 재시도와 제외는 원래 시도에 연결해 기록합니다. [평가 데이터 계약](https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/data-model.md)
 
-## Petri의 judge와 런타임 self-judge
+## 런타임 턴 검증
 
-Petri에서는 auditor가 seed에 따라 감사 상황을 탐색하고, target이 응답하며, judge가 transcript를 rubric으로 채점합니다. judge가 과제 환경을 다시 실행해서 정답을 검증하는 구조는 아닙니다. [Petri 공식 설명](https://github.com/meridianlabs-ai/inspect_petri)
+`core/agent/verify.py`의 `llm_judge`가 기본 최종 검증 경로입니다. 코드가 먼저 빈 실행과 운영자 조치 필요 여부를 확인하고, 선택된 LLM 또는 Jev가 완료 근거를 판정합니다. 예전 off·rule\_based·reflexion 설정은 경고와 함께 이 경로로 해석합니다. 이 판정은 Petri의 외부 감사 점수와 별개입니다.
 
-`core/agent/verify.py`의 `llm_judge`는 기본 최종 의미 검증 경로입니다. 빈 실행·운영자 조치 여부를 코드로 먼저 검사하고, 선택된 LLM 또는 Jev가 완료 근거를 판정합니다. 기존 off·rule\_based·reflexion 설정은 경고와 함께 이 공통 경로로 해석합니다. 내부 판정을 Petri의 외부 감사 점수로 사용하지 않습니다.
+Unreleased: 판정 엔진 선택과 매 라운드 Reflection은 소스 체크아웃 기준이며, 패키지 배포에는 아직 없습니다.
 
-### LLM과 Jev 선택
+런타임 판정의 동작 규칙
 
-Unreleased: 이 선택 기능과 매 라운드·최종 Reflection 정책은 소스 체크아웃 기준이며, 패키지 배포와 구분합니다.
+| 항목 | 동작 |
+| --- | --- |
+| 판정 엔진 | 기본은 LLM입니다. /model judgment에서 Jev를 고르면 TypeSafe 또는 OpenRouter 키로 매 라운드와 최종 후보를 판정하고, 키가 없으면 LLM을 계속 씁니다. judge\_model로 다른 공급자 모델을 써도 주 실행 경로와 도구 권한은 바뀌지 않습니다. |
+| 출력 계약 | judge는 작업 스키마를 물려받지 않고 passed, score와 observation / lesson / next\_check를 반환합니다. 잘못된 JSON·점수, judge 호출 실패는 verification\_error(passed=false, score=0, should\_retry=false)로 기록하고 구조 검사 통과로 대신하지 않습니다. 이 0은 벤치마크 reward가 아니라 내부 검토 오류 값입니다. |
+| 수정 루프 | Reflection은 도구 결과가 나온 매 라운드와 최종 응답 전에 실행합니다. 수정은 원래 마감 안에서 최대 두 번이며, 남은 시간이 3분의 1(최대 300초) 이하면 첫 후보를 검토에 올립니다. 개인정보(REDACT)·시간·비용 가드는 유지되고, 건너뛴 검토는 통과가 아닙니다. |
+| 근거 범위 | 최근 관측 12개를 총 16,000자(필드당 최대 6,000자)로 전달하고 잘린 부분을 표시합니다. 재개한 요청은 이전 턴의 실제 호출·결과 쌍도 포함합니다. 이미지는 별도 창으로 보내고, 후보의 주장·압축 요약·내부 추론은 도구 증거로 쓰지 않습니다. |
+| 후보 선택 | 성공한 후보끼리 상대 평가합니다. 선택이 실패하면 judge\_error를 남기고 첫 성공 후보를 쓰는데, 이 대체는 검증 통과가 아닙니다. |
+| 사용량 | judge와 reflection의 토큰·캐시·비용은 TokenTracker와 비용 가드에 한 번 기록하며, 모델이 도구를 거절하거나 잘못 응답해도 관측된 사용량은 남습니다. 공급자가 보고한 비용과 가격표 추정은 실제 청구액이 아닙니다. |
+| confidence | CognitiveState의 confidence는 작업 진행에 대한 믿음이며 verifier 점수가 아닙니다. 마지막으로 갱신한 라운드를 함께 저장하고, NaN·무한대는 받지 않습니다. |
 
-판정 엔진은 기본 LLM입니다. /model judgment에서 Jev를 선택하면 설정된 TypeSafe 또는 OpenRouter 키로 매 라운드와 최종 후보를 판정합니다. 키가 없으면 LLM 경로를 유지하며, 키 등록 자체는 활성화가 아닙니다. 자연어로 판정 엔진 변경을 요청해도 같은 설정 경로를 사용합니다. 주 실행 모델과 effort, 도구 실행 권한은 바뀌지 않습니다.
+Jev는 생성 모델 선택 목록에 없습니다. 전용 System One API가 텍스트 상태와 유한한 선택지를 받아 분류와 분포를 돌려주고, 이 분포는 confidence나 실행 허가로 쓰이지 않습니다. 이미지가 필요한 근거는 텍스트만으로 통과시키지 않고, 실패한 호출은 다른 엔진의 결과로 메우지 않습니다. [TypeSafe System One](https://docs.typesafe.ai/api) · [OpenRouter System One](https://openrouter.ai/docs/guides/community/typesafe-sdk) · [설정 규약](https://mangowhoiscloud.github.io/geode/docs/config/reference.md)
 
-Jev는 생성 모델 선택기에 들어가지 않습니다. System One 전용 API로 준비된 텍스트 상태와 유한한 선택지를 전달하고, 분류 결과와 분포를 받습니다. 이 분포를 CognitiveState의 confidence나 실행 허가로 바꾸지 않습니다. 이미지가 필수 근거이면 텍스트 전용 판정으로 통과시키지 않으며, 호출 실패도 다른 엔진의 성공으로 대체하지 않습니다.
+### 알려진 한계
 
-[TypeSafe System One](https://docs.typesafe.ai/api) · [OpenRouter System One](https://openrouter.ai/docs/guides/community/typesafe-sdk) · [설정 규약](https://mangowhoiscloud.github.io/geode/docs/config/reference.md)
+-   judge는 후보의 주장보다 근거를 먼저 보고, 풀리지 않는 모호함에는 재검사를 요청하도록 설정돼 있습니다. 그렇다고 오판이 없어지지는 않습니다.
+-   Reflexion은 verdict와 continuation을 기록하지만, 다음 요청이 힌트를 실제로 소비했는지 묶는 digest·event는 아직 없습니다. 성능 개선 효과도 측정되지 않았습니다.
+-   2026-09-13 G-code 개발 검증에서 최종 후보의 신규 5회는 모두 공식 verifier를 통과했지만, 내부 judge가 첫 후보를 모두 수락해 수정은 한 번도 일어나지 않았습니다. 앞선 후보의 오수락 사례와 함께 읽어야 합니다. [G-code 개발 검증 기록](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md#gcode-development-gate) · [턴 검증 구현](https://github.com/mangowhoiscloud/geode/blob/main/core/agent/verify.py)
 
-잘못된 JSON, 필드 타입, 점수와 judge 호출 실패는 verification\_error로 기록합니다. passed=false, score=0, should\_retry=false이며, rule\_based 성공으로 대체하지 않습니다. 이 0은 검토 오류를 나타내는 내부 값이지 벤치마크 reward가 아닙니다.
+Judge를 믿기 전에 확인할 것
 
-최종 judge는 작업 결과의 출력 스키마를 물려받지 않습니다. llm\_judge는 passed / score와 observation / lesson / next\_check 피드백을 요구하고, 이 피드백으로 저장할 판정 사유를 만듭니다. 이전 reflexion 설정도 이 경로로 해석합니다. CognitiveState의 confidence는 별도의 작업 진행 판단이며 verifier 점수가 아닙니다. NaN과 무한대는 신뢰도로 받아들이지 않고, 복원 시에는 미상으로 두며 갱신 시에는 이전 값을 유지합니다.
-
-judge\_model을 별도 공급자의 모델로 지정하면 해당 모델의 어댑터로 검증을 요청합니다. 주 실행 모델의 경로는 바뀌지 않으며 이 호출에는 작업 도구를 주지 않습니다. CognitiveState에는 confidence를 마지막으로 갱신한 라운드도 저장합니다. 이전 세션에 이 정보가 없으면 미상으로 표시하며, 오래된 값을 새 관측처럼 표시하지 않습니다. Reflection 도구의 응답은 클라이언트에서 타입과 유한한 값을 검사합니다. 공급자에 전달되지 않는 strict 옵션으로 서버 측 보장을 주장하지 않습니다.
-
-best-of-N 후보 선택은 성공한 후보 사이의 상대 평가입니다. 공급자가 도구 입력을 객체 또는 JSON 문자열로 반환하더라도 동일하게 해석합니다. 잘못된 입력이나 선택 실패는 judge\_error를 남기고 첫 성공 후보로 돌아가므로, 이 대체 선택을 검증 성공으로 해석하지 않습니다.
-
-Reflection은 별도 실행 모드가 아니라 공통 피드백·수정 경로입니다. 판단 엔진 선택과 분리하며, Jev를 자동으로 선택하지 않습니다. LLM judge를 선택하면 원래 요청, 후보, 제한된 최근 tool 결과와 이미 관찰한 이미지를 검토합니다. 짧은 응답이나 복구한 tool 오류만으로 후보를 탈락시키지 않습니다. 최초 예산 안에서 최대 두 번 수정합니다. 남은 시간이 전체의 3분의 1(최대 300초) 이하이면 다음 모델 호출에서 첫 후보 검토를 요청합니다. 진행 중인 호출을 이 시점에 강제 중단하지는 않습니다. Judge usage는 기존 TokenTracker에 기록합니다. 최종 벤치 점수는 여전히 외부 verifier가 판정합니다. [현재 턴 검증 구현](https://github.com/mangowhoiscloud/geode/blob/main/core/agent/verify.py)
-
-Reflection은 도구 결과를 반영한 매 라운드와 최종 응답 전에 수행합니다. 최종 후보에서는 별도 인지 호출을 중복하지 않고 최종 판정 한 번으로 검토합니다. 개인정보·REDACT 보호, 남은 시간·비용 가드는 유지하며, 건너뛴 검토를 성공으로 기록하지 않습니다. 새 사용자 입력만으로 보호 상태를 해제하지 않고 재개 시에도 유지합니다. 잘못된 hypotheses 목록은 기존 상태를 지우지 않습니다.
-
-완료된 인지 reflection의 토큰·캐시·비용은 기존 tracker와 비용 가드에 한 번 반영합니다. 모델이 도구 호출을 거절하거나 잘못된 응답을 반환해도 관측된 사용량은 남습니다. 실제 공급자를 호출하지 않은 middleware 응답이나 사용량을 받기 전에 중단된 호출을 유료 호출로 만들지는 않습니다. 공급자 보고 비용과 가격표 기반 추정은 실제 청구서와 구분해야 합니다.
-
-이미지 근거는 텍스트 tool 기록과 별도로 선택해, 파일 쓰기나 계획 갱신 때문에 밀려나지 않도록 합니다. 이전 시도와 현재 시도의 관측, 전달하지 못한 이미지도 구분합니다. 이전 자료가 여전히 유용할 수는 있지만 수정 후 새로 확인한 증거와 같지는 않습니다.
-
-재개한 요청의 검증에는 보존된 이전 턴의 실제 도구 호출·결과 쌍도 포함합니다. 호출 ID가 모호하거나 짝이 없으면 제외하고, 이전 관측을 새 검증 시도로 표시하지 않습니다. 최근 12개 관측의 입력·결과는 총 16,000자, 필드당 최대 6,000자 안에서 공간을 나누며 절단을 표시합니다. 후보의 주장·압축 요약·내부 추론은 도구 증거로 승격하지 않습니다. Reflection에는 현재 승인된 요청과 세션 최초 요청을 구분해 전달하며, 개인정보와 이미지 제한은 유지합니다.
-
-관측 근거를 먼저, 후보의 주장을 마지막에 제시합니다. 동일한 값을 쓰고 다시 읽은 일관성이나 실패한 위임은 독립 검증이 아닙니다. 근거로 해소되지 않는 모호함은 통과시키지 말고, 구별 가능한 재검사를 요청하도록 judge를 구성합니다. 이 지시만으로 오판이 사라졌다고 주장하지 않습니다.
-
-Reflexion의 verdict와 continuation 기록은 있지만, 다음 요청에서 힌트를 소비했음을 결속하는 digest/event는 아직 없습니다. 이 기록만으로 힌트 소비까지 전 과정이 실측됐거나 성능 개선 효과가 입증됐다고 주장하지 않습니다.
-
-2026-09-13 G-code 개발 검증에서는 최종 후보의 신규 5회가 공식 verifier를 모두 통과했습니다. 다만 내부 judge가 첫 후보를 모두 수락해 repair는 발생하지 않았습니다. 앞선 후보의 오수락 사례, 실행 조건과 관측 범위를 함께 읽어야 합니다. [G-code 개발 검증 기록](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md#gcode-development-gate)
-
-Judge를 믿기 전에 확인할 항목
-
--   Judge 모델·버전·경로, rubric 원본, 점수 방향, seed와 transcript 범위를 고정합니다. 높은 점수가 좋은지는 차원마다 확인합니다.
--   같은 공급자의 모델을 역할별로 나눴다고 평가가 독립적이라고 단정하지 않습니다. 경고나 보정 계수의 존재만으로 편향이 제거되지는 않습니다.
--   사람이 judge 점수를 보기 전에 동일 rubric으로 라벨을 매기고, 불일치 사례와 차원별 표본 수를 함께 봅니다.
--   GEODE에는 blind labeling과 weighted Cohen’s kappa·ordinal Krippendorff’s alpha를 계산하는 audit-agreement 경로가 있습니다. 기능이 있다는 사실과 실제 라벨로 신뢰도를 입증했다는 사실은 구분합니다.
+-   judge 모델·버전·경로, rubric 원본, 점수 방향, seed, transcript 범위를 고정합니다. 높은 점수가 좋은지는 차원마다 다릅니다.
+-   같은 공급자의 모델을 역할만 나눠 쓰면 독립 평가가 아닙니다. 경고나 보정 계수가 있다고 편향이 사라지지도 않습니다.
+-   사람이 judge 점수를 보기 전에 같은 rubric으로 라벨을 달고, 불일치 사례와 차원별 표본 수를 함께 봅니다.
+-   audit-agreement 경로로 blind labeling, weighted Cohen’s kappa, ordinal Krippendorff’s alpha를 계산할 수 있습니다. 도구가 있다는 것과 실제 라벨로 신뢰도를 보였다는 것은 다른 일입니다.
 
 ```
 geode-eval audit-agreement --help
 ```
 
-[Judge 차원과 해석](https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions.md) · [사람과 judge의 일치도 구현](https://github.com/mangowhoiscloud/geode/blob/main/core/audit/judge_agreement.py)
+[Judge 차원과 해석](https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions.md) · [사람-judge 일치도 구현](https://github.com/mangowhoiscloud/geode/blob/main/core/audit/judge_agreement.py)
 
-## Jev v3: 본실험 결과와 채점 근거
+## Jev v3 본실험
 
-2026-09-27 본실험은 판정 정확도, 확률과 오류 선별, 호출 지연, 실제 과제 완료를 27개 등록 단위로 구분합니다. 앞선 M4–M6 파일럿과 본실험의 분모를 합치지 않습니다. 연구 자료는 geode-eval-artifacts PR #46으로 공개됐으며, 2026-09-28 원격 재확인을 마쳤습니다. 아래 링크는 검증한 공개 커밋 3bcf4044eb5c2411dd48122d672aef72a83fb30e에 고정됩니다. 자료 공개와 새 실험 수행은 구분합니다.
+2026-09-27 본실험은 판정 정확도, 확률과 오류 선별, 호출 지연, 실제 과제 완료를 27개 등록 단위로 나눠 측정했습니다. 앞선 M4–M6 파일럿과는 분모를 합치지 않습니다. 자료는 geode-eval-artifacts PR #46으로 공개했고(2026-09-28 원격 재확인), 아래 링크는 공개 커밋 3bcf4044eb5c2411dd48122d672aef72a83fb30e에 고정돼 있습니다.
 
-최신 U4·X2 값은 저장 응답 전체 행렬을 확인한 사후 수치 검사기 교정 분석입니다. U4는 Jev 59/80 대 Astra 79/80, 차이 −25.00 pp, 95% CI \[−35.23, −16.25\]입니다. X2는 196/240 대 226/240, −12.50 pp, CI \[−17.22, −8.04\]입니다. 새 모델 호출 없이 기존 정답·분모·군집·seed·재표집 규칙을 유지했고, 원 등록 결과는 별도로 보존했습니다. U4의 기준 미달과 X2의 비열등성 미입증은 그대로입니다.
+주요 결과. 앞 수치가 Jev, 뒤 수치가 Astra이고 구간은 95% CI입니다.
 
-의도·대상 패널의 216/220 대 220/220은 등록한 −5 pp 기준을 충족했지만 설계자 저작 패널의 관측입니다. E7은 같은 12과제를 A/B/C로 두 번씩 수행해 72/72 strict 성공했으나 C의 judge fallback은 0회였습니다. 이 결과는 새로운 72과제의 성공이나 재검토 분기의 효용을 입증하지 않습니다. Noul의 기존 의미 실패, I5의 계약 전달 결함, E6의 무효 중단과 후속 계보도 함께 보존합니다.
+| 단위 | 대상 | 결과 | 차이 | 해석 |
+| --- | --- | --- | --- | --- |
+| U4 | Score 통제 풀 | 59/80 · 79/80 | −25.00 pp \[−35.23, −16.25\] | 기준 미달 |
+| X2 | Mind2Web 후보 선택 | 196/240 · 226/240 | −12.50 pp \[−17.22, −8.04\] | 비열등성 미입증 |
+| 의도·대상 | 설계자가 만든 패널 | 216/220 · 220/220 | −5 pp 기준 안 | 기준 충족 |
+| E7 | 같은 12과제, A/B/C × 2회 | 72/72 strict | C의 judge fallback 0회 | 재검토 분기의 효용은 미확인 |
+| E8 | U8n 주입 후속 | 36셀 중 24셀에서 중단 | 주지표 not-measurable | 아래 사후 분석 참고 |
 
-원래 source5의 U8n은 사전 gate 실패 뒤 36셀 모두 미실행으로 남았습니다. 별도 source7/E8 후속은 U0e admission 2/2를 통과한 뒤 U8n 36셀 중 24셀에서 중단됐습니다. A는 12개 유효 성공, B는 11개 유효 전달 실패와 주입 증거 오류로 인한 1개 무효였고, 나머지 12셀은 미실행입니다. 원 27개 등록 단위와 36셀·18쌍·6원천 계획을 보존하며, E8 주지표도 not-measurable과 분자·분모 null로 유지합니다.
-
-중단 뒤 양쪽이 유효하게 끝난 11쌍·22셀·4원천만 별도 기술통계로 분석했습니다. 무효 B와 그 짝인 성공 A는 함께 제외했습니다. 생성과 수리는 양쪽 모두 Astra가 맡았고, Astra 판정 A는 11/11 strict·recovered 성공으로 전달됐습니다. Jev Noul 판정 B의 마지막 후보도 기존 과제 oracle를 11/11 통과했지만, Jev가 계속 근거 부족으로 판정해 11/11의 전달이 보류됐습니다. B의 native strict·recovered는 0/11로 유지합니다. 관측된 문제는 정답과 근거를 갖춘 수리 후보의 오거부이며, 후보 정답을 최종 전달 성공으로 바꾸지 않습니다. 중단 뒤 선택된 4원천 표본이므로 신뢰구간·비열등성·인과 효과·모집단 일반화를 제시하지 않으며 추가 U8n 모델 실행은 계획하지 않습니다.
+-   U4·X2는 저장된 응답 전체에 수치 파서 교정을 적용한 사후 재채점입니다. 새 모델 호출은 없고 정답·분모·군집·seed·재표집 규칙은 그대로이며, 원래 등록 결과는 따로 보존합니다.
+-   E8: 원 계획(source5)의 U8n은 선행 gate 실패로 실행되지 않았습니다. 별도 후속(source7)은 U0e admission 2/2를 통과한 뒤 24셀에서 멈췄습니다(A 유효 성공 12, B 유효 전달 실패 11과 주입 증거 오류로 무효 1, 미실행 12).
+-   E8 사후 분석(양쪽이 유효한 11쌍, 4개 원천, 두 arm 모두 Astra가 생성·수리): Astra 판정(A)은 11/11을 전달했습니다. Jev Noul 판정(B)은 마지막 후보가 과제 oracle을 11/11 통과했는데도 근거 부족으로 모두 보류해 native strict가 0/11입니다. 맞는 수리 후보를 거부한 셈입니다. 중단 뒤 고른 표본이라 구간이나 일반화는 제시하지 않고, U8n을 더 돌릴 계획은 없습니다.
+-   Noul의 이전 의미 실패, I5의 계약 전달 결함, E6의 무효 중단도 공개 자료에 계보째 남아 있습니다.
 
 -   [한국어 결과 해석](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/INTERPRETATION.ko.md) · [영문 결과 해석](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/INTERPRETATION.md)
 -   [누가 무엇을 채점하는가](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/SCORING.md) · [27개 단위와 계보별 근거](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/units.json)
 -   [무결성 확인·오프라인 재계산·새 실행](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/REPRODUCE.md) · [U4·X2 교정 재채점](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/corrections/numeric-parser-20260928/README.md)
--   [E8 U8n 사후 완성 쌍 분석과 후보 판정 재계산](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/analyses/u8n-observed-pairs-20260928/README.md)
+-   [E8 U8n 사후 완성 쌍 분석](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/analyses/u8n-observed-pairs-20260928/README.md)
 -   [소스·공개 범위 기록](https://github.com/mangowhoiscloud/geode/blob/f0a5ce10cdb87e9738ff41e6e09dfbbfbb97a8f2/docs/eval/jev-v3-study-20260927.md) · [별도 M4–M6 파일럿](https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/jev-verdict-publication-20260924.md)
 
-공개 투영본과 원 native 파일의 해시는 구분합니다. 점수 재계산, 파일 무결성 확인, 새 모델 실행도 다른 활동입니다. 비공개 추론·인증·머신 식별자는 공개하지 않으며, Mind2Web test 본문은 재배포하지 않습니다. −10 pp 마진의 업무 손실·서비스 목표 근거와 실제 청구액은 확인되지 않았습니다.
+공개 자료는 투영본 해시와 원 native 해시를 따로 적고, 비공개 추론·인증 정보·머신 식별자·Mind2Web test 본문은 싣지 않았습니다. −10 pp 마진의 업무상 근거와 실제 청구액은 아직 확인되지 않았습니다.
 
-## .eval은 Petri 전용 파일이 아닙니다
+## .eval 파일
 
-Eval은 평가 절차를 뜻하고, .eval은 Inspect가 저장하는 평가 로그 형식입니다. Petri는 Inspect 위에서 동작하므로 이 형식을 사용합니다. 모델·실행 설정, 샘플, 메시지와 점수를 함께 읽되, 파일이 존재하거나 실행 상태가 success라고 해서 모든 샘플의 답이 정답이라는 뜻은 아닙니다. [Inspect 로그 계약](https://inspect.aisi.org.uk/eval-logs.html)
+.eval은 Inspect의 평가 로그 형식이고, Petri는 Inspect 위에서 돌아서 이 형식을 씁니다. 파일이 있거나 상태가 success여도 모든 답이 맞았다는 뜻은 아니니 설정·샘플·메시지·점수를 함께 읽습니다. Harbor 결과 JSON, .eval, GEODE trajectory는 원본대로 두고 실행 ID와 SHA-256으로 잇습니다. 새 judge 라벨은 파생 평가로 따로 남깁니다. [Inspect 로그 계약](https://inspect.aisi.org.uk/eval-logs.html)
 
-Harbor의 결과 JSON, Inspect의 .eval, GEODE trajectory를 하나의 형식으로 강제 변환하지 않습니다. 각 원본을 보존하고 실행 ID와 SHA-256으로 연결합니다. 새로운 judge 라벨은 별도 파생 평가로 남기며, 공개된 과거 reward나 원본 transcript를 덮어쓰지 않습니다.
+## Terminal-Bench 결과 읽기
 
-## Terminal-Bench 결과를 읽을 때
-
-이 사이트의 Sol/max 비교는 task verifier와 고정된 결과 선택 규칙으로 읽습니다. Petri judge가 이 성공률을 채점한 것은 아닙니다. 이후 transcript에 LLM judge를 추가하더라도 행동 진단이라는 별도 질문·rubric·예산으로 등록해야 하며, 기존 성공률에 섞지 않습니다.
+이 사이트의 Sol/max 비교는 과제 verifier와 고정된 결과 선택 규칙으로 계산했으며, Petri judge 점수가 아닙니다. transcript에 LLM judge를 더하려면 별도의 질문·rubric·예산으로 등록하고, 기존 통과율과 섞지 않습니다.
 
 [Terminal-Bench 2.1](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md) · [Petri × GEODE](https://mangowhoiscloud.github.io/geode/docs/petri/overview.md) · [관측성과 기록 품질](https://mangowhoiscloud.github.io/geode/docs/verification/observability.md) · [증거 게시 절차](https://mangowhoiscloud.github.io/geode/docs/guides/publish-trajectory.md)
 
