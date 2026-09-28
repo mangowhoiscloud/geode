@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
+from dataclasses import replace
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from core.auth.credential_cache import (
     CredentialCache,
@@ -25,7 +27,11 @@ from core.auth.credential_cache import (
 )
 from core.auth.jwt_claims import decode_jwt_claims
 
+if TYPE_CHECKING:
+    from core.auth.profiles import ProfileStore
+
 log = logging.getLogger(__name__)
+_profile_sync_lock = threading.Lock()
 
 
 def codex_auth_path() -> Path:
@@ -118,16 +124,12 @@ def read_codex_cli_credentials(
 
     Returns None if Codex CLI is not logged in.
     """
-    hit, cached = _cache.get_if_valid(force_refresh=force_refresh)
-    if hit:
-        result_cached: CodexCliCredentials | None = cached
-        return result_cached
 
-    # Read outside lock (file I/O)
-    data = _read_from_file()
-    mtime = _cache.get_file_mtime()
-    parsed = _parse_codex_credentials(data) if data else None
-    _cache.update(parsed, mtime)
+    def read() -> CodexCliCredentials | None:
+        data = _read_from_file()
+        return _parse_codex_credentials(data) if data else None
+
+    parsed: CodexCliCredentials | None = _cache.read(read, force_refresh=force_refresh)
 
     if parsed:
         is_expired = time.time() > parsed["expires_at"]
@@ -142,3 +144,45 @@ def read_codex_cli_credentials(
 def refresh_codex_cli_token(profile: Any) -> bool:
     """Re-read token from Codex CLI's storage (managed refresh)."""
     return refresh_managed_token("Codex CLI", read_codex_cli_credentials, profile)
+
+
+def sync_codex_cli_profile(
+    store: ProfileStore | None, *, force_refresh: bool = False
+) -> CodexCliCredentials | None:
+    """Refresh only the external owner's profiles before selecting a request account."""
+    from core.auth.profiles import AuthProfile, CredentialType
+
+    with _profile_sync_lock:
+        creds = read_codex_cli_credentials(force_refresh=force_refresh)
+        if store is None:
+            return creds
+        imported = [
+            profile
+            for profile in store.list_by_provider("openai-codex")
+            if profile.managed_by == "codex-cli"
+        ]
+        if not creds:
+            for profile in imported:
+                if store.get(profile.name) is profile:
+                    store.remove(profile.name)
+            return None
+        if not imported:
+            name = "openai-codex:codex-cli"
+            # A native profile with this name belongs to a different owner.
+            if store.get(name) is not None:
+                return creds
+            imported = [
+                AuthProfile(name, "openai-codex", CredentialType.OAUTH, managed_by="codex-cli")
+            ]
+        for profile in imported:
+            # Replacement preserves references already borrowed by an in-flight call.
+            refreshed = replace(
+                profile,
+                key=creds["access_token"],
+                refresh_token=creds.get("refresh_token", ""),
+                expires_at=creds.get("expires_at", 0.0),
+                metadata={**profile.metadata, "account_id": creds.get("account_id", "")},
+            )
+            if refreshed != profile:
+                store.add(refreshed)
+        return creds

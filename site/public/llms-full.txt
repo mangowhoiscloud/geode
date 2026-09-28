@@ -2,7 +2,7 @@
 
 > GEODE is an autonomous agent runtime and evaluation substrate: an inner agentic loop runs tasks (research, analysis, automation, scheduling), while an experimental safety-gated outer loop mutates and evaluates scaffold candidates.
 
-Version v1.0.29. Last sync 2026-09-14. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
+Version v1.0.30. Last sync 2026-09-28. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
 
 ## Overview . 개요
 
@@ -1141,6 +1141,8 @@ GEODE의 프롬프트는 두 단으로 관리됩니다. 디스크의 마크다�
 
 `ROUTER_SYSTEM`은 응답 서술을,`AGENTIC_SUFFIX`는 요청 범위·완료·실패·증거·도구 사용의 공통 계약을 담습니다. 도구 선택은 고정된 업체 순위가 아니라 현재 도구와 출처에 따릅니다. 상세 조사 절차는 필요할 때`deep-researcher` 스킬로 읽습니다. 로컬 검증 성공은 원격 CI 성공이나 배포 권한을 대신하지 않습니다.
 
+코드 수정 시에는 기존 소유자와 호출 경로를 먼저 확인하고 비동기 네이티브 실행, 명시적 동기 작업 경계, 구조화된 오류와 비밀정보 제거를 따릅니다. 취소 접수는 종료나 부작용 취소를 뜻하지 않으며, 필요한 상태 저장과 정리가 성공해야 완료로 보고합니다. 상세 개발 규약은 공유`AGENTS.md`와 컨벤션 문서가 소유합니다. 프롬프트는 이 행동을 안내하며 실행 권한이나 저장 성공을 강제하는 장치는 아닙니다.
+
 ## 드리프트 감지: 해시 핀
 
 import 시점에 각 상수의 sha256\[:12\] 해시를 계산해 `PROMPT_VERSIONS`에 노출합니다. 핀 대상은 `ROUTER_SYSTEM`, `AGENTIC_SUFFIX`, `REVIEWER_SYSTEM`입니다. `verify_prompt_integrity()`가 라이브 해시를 `_PINNED_HASHES`와 비교하고, CI가 이 함수를 게이트로 씁니다. 프롬프트를 바꾸면 핀을 다시 박아야 하므로, 모든 프롬프트 변경이 리뷰 가능한 코드 변경이 됩니다. 재핀 워크플로는 [프롬프트 해싱](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-hashing.md)을 참고합니다.
@@ -1152,6 +1154,8 @@ import 시점에 각 상수의 sha256\[:12\] 해시를 계산해 `PROMPT_VERSION
 Unreleased: 프로필·프로젝트 기억·학습·저장 규칙의 데이터는 XML 문자로 이스케이프합니다. 후보 평가와 reflection도 작업·상태·관측을 별도 데이터 영역으로 전달합니다. 태그는 내용의 경계를 표현할 뿐, 권한 검사나 프롬프트 주입 방어의 성공을 보장하지 않습니다.
 
 실행 표면이 바인딩되지 않으면 CLI라고 추측하지 않고 플랫폼 힌트를 생략합니다. 명시된 표면도 사용 가능한 도구나 샌드박스 권한을 보증하지 않습니다. 모델·도구 그래프가 바뀌면 이전 preflight 힌트를 무효화하고 시스템 프롬프트를 다시 조립합니다. 필수 검증 조건은 별도 상태로 유지됩니다.
+
+작업 preflight는 요청의 키워드와 현재 도구를 바탕으로 한 참고 정보입니다.`suggested_evidence`는 요구사항이나 완료 판정이 아니며, 이전 턴의 기록이나 최종 응답의 존재만으로 작업 성공을 판단하지 않습니다. 실제 완료 정책은 Verify/PostVerify/Stop 경로가 담당합니다.
 
 ## 레이어 조립: build\_system\_prompt
 
@@ -3567,6 +3571,10 @@ finally:
 
 row는 event, dispatch mode, status, handler error count, actor/action/entity, bounded payload hash를 가집니다. payload의 문자열·collection·깊이·전체 bytes에 상한이 있고 secret pattern을 redaction합니다.
 
+## 오류 로그
+
+텍스트와 JSON 로그는 요청 ID·세션 ID·명령 이름·오류 분류·예외 타입을 제한된 길이로 보존합니다. 명령 인자나 임의의 요청 본문은 추가 필드로 기록하지 않습니다. 공통 마스킹은 알려진 키 형식과 인증 헤더, API 키·OAuth 토큰처럼 이름이 명시된 값을 가립니다. 이름이나 형식을 알 수 없는 비밀 값까지 식별하지는 못하므로 원문 인증정보를 기록하면 안 됩니다. 로그의 요청 ID는 진단용 연결 정보이며 작업 완료 증거가 아닙니다.
+
 ## 보존과 수명주기
 
 -   high-volume 7일, standard 30일, audit 180일
@@ -5898,7 +5906,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 
 `engine = "llm"`이 기본입니다. `engine = "jev"`로 선택하고 TypeSafe 또는 OpenRouter 키가 있을 때 Jev 판정을 사용합니다. `provider = "auto"`는 TypeSafe 키를 먼저 확인하며 `typesafe`나 `openrouter`로 고정할 수 있습니다. 키가 없으면 LLM 경로를 유지합니다. `/model judgment` 선택창과 `/model judgment llm|jev|typesafe|openrouter`가 같은 설정을 저장하며, 상위 환경변수·프로젝트 설정이 가리면 변경을 거부하고 해당 층을 표시합니다.
 
-키는 `TYPESAFE_API_KEY` 또는 `OPENROUTER_API_KEY`로 로컬 `.env`에만 둡니다. 키만 등록해도 Jev가 자동 활성화되지는 않습니다. 요청 실패 시 다른 공급자로 재시도하지 않습니다.
+TypeSafe는 `TYPESAFE_API_KEY` 환경 입력을 사용합니다. OpenRouter는 `/login add`로 등록한 인증 또는 `OPENROUTER_API_KEY` 환경 입력을 사용합니다. 키만 등록해도 Jev가 자동 활성화되지는 않습니다. 요청 실패 시 다른 공급자로 재시도하지 않습니다.
 
 ### \[cognitive\]
 
@@ -5933,7 +5941,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 
 | 필드 | 타입 / 기본값 | 용도 |
 | --- | --- | --- |
-| `anthropic_api_key` / `openai_api_key` / `zai_api_key` | str = `""` | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `ZAI_API_KEY`로 별칭됩니다. 시크릿이므로 `.env` 층에 둡니다. |
+| `anthropic_api_key` / `openai_api_key` / `zai_api_key` | str = `""` | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `ZAI_API_KEY`로 별칭됩니다. 외부 환경 입력이며, `/login`으로 등록한 키는 `auth.toml`에 별도로 저장됩니다. |
 | `ensemble_mode` | str = `"single"` | `single` 또는 `cross` 멀티 LLM 모드. |
 | `forced_login_method` | dict = {} | 프로바이더별 인증 방식 강제(`{"openai": "apikey"}`). 기본은 구독 우선. |
 
@@ -6105,7 +6113,7 @@ env 사이드 채널이 키 몇 개에 붙어 있습니다.`GEODE_HELD_OUT_BENCH
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/auth
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md
 
-GEODE는 구독 경로와 PAYG API 키를 받습니다. 어느 쪽을 쓸지는 `CredentialSource` 하나로 표현됩니다. OpenAI 구독 프로파일과 플랜은 `~/.geode/auth.toml`에, API 키는 `~/.geode/.env`에 저장됩니다.
+GEODE는 구독 경로와 PAYG API 키를 받습니다. 어느 쪽을 쓸지는 `CredentialSource` 하나로 표현됩니다. GEODE에서 등록한 구독 자격과 API 키, 플랜은 `~/.geode/auth.toml`에 저장됩니다. 외부 환경 변수와 기존 `.env` 키는 별도 입력으로 계속 읽습니다.
 
 ## 자격 소스
 
@@ -6128,10 +6136,12 @@ Anthropic과 OpenRouter의 내장 경로는 `api_key`뿐입니다. 과거 `claud
 
 세션 안의 `/login`은 플랜과 자격을 한 화면에서 관리합니다(`core/cli/commands/login.py`). 키 입력과 브라우저 로그인(`add`, `set-key`, `openai`, `anthropic`, `google`)과 `source`는 thin CLI에서 실행합니다. 키는 저장한 뒤 데몬에 리로드를 알립니다. 조회와 plan·프로파일 변경은 실행 중인 상태를 가진 데몬이 처리합니다. 저장하지 못한 변경은 성공으로 표시하지 않습니다.
 
+`/login add`, `/login anthropic`, 온보딩과 레거시 `/key`는 같은 인증 저장 함수를 사용하며`.env`나 전역 설정에 키를 복사하지 않습니다. 저장 실패는 기존 자격을 유지하고, 별도 프로세스의 리로드 실패는 따로 표시합니다. 모델 도구 `manage_login`은 비밀값 없는 조회·선택만 받습니다. 기본 키 등록은 터미널의 숨김 입력으로 진행하며, 기존 `/key …`와 `/login set-key <plan> <key>` 명시 입력도 호환됩니다. 폐기된`set_api_key`와 `manage_auth` 도구는 제거했습니다.
+
 | 서브커맨드 | 동작 |
 | --- | --- |
 | `/login openai` | ChatGPT 구독 OAuth 로그인. device-code 플로우는 `core/auth/oauth_login.py`이고, 결과는 `auth.toml`에 OAUTH\_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다. |
-| `/login anthropic` | `ANTHROPIC_API_KEY`를 등록하고 `api_key` 경로를 선택합니다. |
+| `/login anthropic` | 숨김 입력으로 Anthropic PAYG 키를 등록합니다. 세션 소스 선택은 바꾸지 않습니다. |
 | `/login google` | Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts용 Google Workspace OAuth. 사용자가 만든 Desktop 앱 클라이언트를 가져오며 LLM 프로바이더 자격과 분리됩니다. |
 | `/login add` | 자격 추가. 메뉴에서 플랜 종류(ChatGPT 구독 또는 PAYG API 키)를 고르고, PAYG는 프로바이더(Anthropic, OpenAI, OpenRouter, GLM)를 고른 뒤 키를 입력합니다. |
 | `/login use` / `remove` | 프로파일 선택과 제거. |
@@ -6172,7 +6182,7 @@ Workspace 읽기 결과는 선택한 LLM 프로바이더로 전달될 수 있으
 
 ## PAYG 키
 
-API 키는 시크릿이므로 `~/.geode/.env` 층에 삽니다. 온보딩과 `/login`의 키 기록이 이 계약을 따릅니다 (`core/config/env_io.py`의 `upsert_env`).
+대화형 등록은 권한 0600의 `auth.toml`에 저장합니다.`/login set-key <plan-id>`는 기존 플랜의 키를 숨김 입력으로 바꿉니다. 자동화나 외부 비밀 관리 도구에서 공급하는 환경 변수도 지원합니다. 기존 환경 파일을 자동으로 삭제하거나 옮기지는 않습니다.
 
 ```
 # ~/.geode/.env
@@ -6188,7 +6198,7 @@ GLM은 PAYG API 키 경로를 지원합니다. 2026-09-24 Coding Plan 정책은 
 
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
-| 응답이 비거나 401 | 토큰 만료 또는 키 무효 | `geode doctor`로 자격 상태를 보고 `/login`으로 갱신합니다. Codex 쪽은 `codex login`을 다시 실행합니다. |
+| 응답이 비거나 401 | 토큰 만료 또는 키 무효 | `geode doctor`로 확인한 뒤, GEODE 구독은 `/login openai`, PAYG는 `/login set-key <plan-id>`, 외부 Codex 자격은 `codex login`으로 갱신합니다. |
 | 소스를 바꿨는데 그대로 | 구버전의 `GEODE_*_CREDENTIAL_SOURCE` env 줄이 마스크 | `geode config explain anthropic_credential_source`로 WINNER 층을 확인하고 그 줄을 지웁니다. |
 | 서브프로세스에서 `AdapterNotFoundError` | 어댑터 레지스트리는 프로세스 단위인데 부트스트랩 누락 | 워커가 `core.llm.adapters.registry.bootstrap_builtins()`를 호출하는지 확인합니다. |
 | 구독이 있는데 PAYG로 과금 | `auto`가 OAuth를 못 찾고 키로 해석 | OpenAI는 `/login route`와 `/login quota`를 확인하고 `openai-codex`로 고정합니다. Anthropic은 `api_key`만 지원합니다. |
@@ -6207,37 +6217,27 @@ GLM은 PAYG API 키 경로를 지원합니다. 2026-09-24 Coding Plan 정책은 
 URL: https://mangowhoiscloud.github.io/geode/docs/ops/oauth
 Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/oauth.md
 
-토큰 회전의 코드 홈은 `core/auth/`입니다. 프로파일과 플랜의 SoT는 `~/.geode/auth.toml`(`core/auth/auth_toml.py`,`core/auth/profiles.py`)이고, 호출마다 어느 프로파일을 쓸지와 언제 갱신할지는`core/auth/rotation.py`의`ProfileRotator`가 정합니다.
+GEODE가 등록한 API 키와 ChatGPT 로그인 자격은`~/.geode/auth.toml`에 저장됩니다. 터미널은 키 입력과 로그인 안내를 맡고, `core/auth/`가 검증과 저장을 맡습니다. 모델은 비밀값 없는 상태를 조회하고 허용된 선택을 요청할 수 있습니다.
 
-## 선택과 갱신 규칙
+## 저장과 적용
 
-| 규칙 | 동작 |
-| --- | --- |
-| 타입 우선 선택 | oauth > token > api\_key 순으로 고르고, 같은 타입 안에서는 LRU로 돌립니다. |
-| 선제 갱신 | 관리형(managed) 토큰은 만료 120초 이내면 외부 저장소에서 다시 읽습니다. Hermes의 skew 상수를 그대로 빌렸습니다. |
-| 401 자동 갱신 | 인증 실패(401/403) 시 쿨다운을 적용하기 전에 한 번 더 다시 읽고, 토큰이 바뀌었으면 오류 카운트를 리셋합니다. |
-| 쿨다운 | `calculate_cooldown_ms`가 오류 횟수에 따라 쿨다운을 키웁니다. 키별 상태는 `core/auth/cooldown.py`의 `CooldownTracker`가 보관합니다. |
+인증 파일 변경은 프로세스 간 잠금 안에서 최신 파일을 다시 읽고 후보를 검증한 뒤 교체합니다. 저장이 성공해야 현재 프로세스에 적용합니다. 다른 프로세스는 `/login refresh`로 다시 읽습니다. 제거된 파일 소유 항목도 반영하며, 환경 변수와 외부 관리 자격은 각각의 소유권을 유지합니다. 저장 후 현재 프로세스의 적용이 충돌하면 저장 완료와 적용 실패를 구분하여 갱신을 안내합니다.
 
-`/login openai`으로 발급한 ChatGPT 자격은 GEODE가`~/.geode/auth.toml`에서 직접 관리합니다. 기존`~/.codex/auth.json`을 가져온 프로파일만 외부 저장소를 재독하며, 어느 경우에도 Codex CLI를 추론에 실행하지 않습니다.
+## 요청과 토큰
 
-## 운영 시 알아둘 것
+-   세션이 선택한 프로바이더·과금 소스를 유지하면서 실제 요청의 플랜과 자격을 선택합니다. 키 교체가 진행 중인 요청의 자격을 바꾸지는 않습니다.
+-   외부 Codex 파일에서 가져온 자격은 그 파일이 소유합니다. 다음 조회·요청에서 교체와 삭제를 반영하며 Codex CLI를 추론에 실행하지 않습니다.
+-   GEODE의 ChatGPT device-code 로그인은 같은 저장소에서 한 번에 하나만 진행합니다. 실패·취소는 완료로 처리하지 않으며, 저장이 끝나야 로그인 성공을 반환합니다.
+-   만료된 GEODE 자격은 `/login openai`로 다시 로그인합니다. 외부 Codex 자격은 해당 클라이언트에서 갱신합니다. 오래된 GEODE `auth.json` 자동 이관은 제거했으며 파일은 그대로 보존합니다.
 
--   thin CLI에서 `/login`을 마치면 데몬이 auth 상태를 다시 읽습니다. 이 리로드는 추가 전용입니다. 제거된 항목은 캐시된 싱글톤에서 즉시 빠지지 않으므로, 프로파일을 지운 뒤 확실히 하려면 데몬을 재시작합니다.
--   Codex의 선제 5시간 스로틀을 우회하려면`GEODE_CODEX_OAUTH_POLL_DISABLED=1`을 켭니다. 구독 버킷으로 바로 떨어집니다.
--   `core/llm/credentials.py`의`resolve_provider_key`(OAuth 우선, API 키 폴백)는 deprecated입니다. 어댑터 레지스트리의 소스별 명시 자격이 대체이고, v1.0.0 제거 대상입니다.
+## 상태 표시의 범위
 
-## 실패 모드
+모델 가용성과 시작 준비 상태는 실제 라우팅·정책·자격의 적격성을 확인합니다. 키 문자열의 존재만으로 성공을 표시하지 않습니다. 이 검사는 오프라인 선택 가능성이며 공급자 서버의 키 유효성이나 남은 할당량을 확인하는 네트워크 검사는 아닙니다. 프로파일의 오류·쿨다운 필드는 선택에 반영되지만, 모든 실제 SDK 호출의 성공·실패를 연결하는 자동 건강도 추적은 제공하지 않습니다. 과거 전역 프로파일 추적 코드와 그에 의존한 자동 갱신 주장은 제거했습니다.
 
-| 증상 | 원인 | 해법 |
-| --- | --- | --- |
-| 한 프로파일만 계속 401 | 외부 저장소의 토큰 자체가 만료 | Codex는 `codex login`으로 원본 토큰을 갱신합니다. Anthropic은 `ANTHROPIC_API_KEY`를 교체합니다. |
-| 호출이 점점 뜸해짐 | 반복 실패로 쿨다운 에스컬레이션 | 원인 자격을 고치면 성공 콜백이 쿨다운을 리셋합니다. |
-| 프로파일을 지웠는데 계속 쓰임 | 데몬 리로드가 추가 전용 | 데몬을 재시작합니다. |
+저장소 전체 복원이나 외부 효과의 exactly-once 실행을 인증 파일의 원자적 교체만으로 보장하지 않습니다. 복구 후에는 실제 자격 소스와 세션 선택을 함께 확인합니다.
 
-## 다음
-
--   [인증과 OAuth](https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md). 자격 소스와 /login 표면.
--   [프로바이더 설정](https://mangowhoiscloud.github.io/geode/docs/run/providers.md). 처음 자격을 붙이는 절차.
+-   [인증과 OAuth](https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md)
+-   [프로바이더 설정](https://mangowhoiscloud.github.io/geode/docs/run/providers.md)
 
 ---
 
@@ -6851,6 +6851,8 @@ geode (thin CLI)  ── Unix socket IPC (~/.geode/cli.sock) ──→  geode se
 
 bare `geode`는 환영 화면을 띄우고 소켓을 조사한 뒤, 데몬이 없으면 자동 기동합니다(`start_serve_if_needed`, `core/cli/ipc_client.py`). 동시 기동 경합은 pidfile flock이 막습니다. 그 뒤 thin REPL이 IPC로 붙습니다. 프로토콜은 최대 1 MiB의 줄 단위 JSON인 `geode.ipc.v1`이고 서버 쪽 상대는 `CLIPoller`(`core/server/ipc_server/poller.py`)입니다. 연결 시 지원 기능의 교집합을 협상하고, 각 요청 ID가 스트림·구조화 이벤트·최종 응답에 그대로 붙습니다. v0 envelope는 계속 읽을 수 있지만 세션 설정 적용 기능이 없는 구버전 peer는 실행 전에 명시적으로 거절합니다.
 
+입력과 화면은 CLI가, 실행과 세션 상태는 데몬이 소유합니다. 대화형 로그인은 터미널에서 수행하며 데몬이 브라우저나 비밀 입력을 대신 열지 않습니다. 오류·취소·완료를 구분해 전달하고, 연결이 끊겨 결과를 확인할 수 없으면 같은 작업을 자동으로 재실행하지 않습니다. 요청 취소는 지원 기능을 협상한 뒤 해당 요청 ID에만 적용됩니다. 취소 접수는 작업 종료나 이미 실행한 외부 변경의 복구를 의미하지 않습니다.
+
 ## 환영 화면과 라이브 상태
 
 bare `geode`가 띄우는 환영 화면은 `core/cli/welcome.py`의 `_welcome_screen`이 그립니다. 먼저 Geodi 브랜드 블록(`core/ui/mascot.py`의 `render_mascot`)이 나옵니다. 손으로 찍은 픽셀아트 Geodi(로즈 아졸로틀, `core/ui/geodi_art.py`)를 truecolor 하프블록 스프라이트로 그리고, 오른쪽에 `◆ GEODE v{version}` 마크, `모델 · cwd`, `/help for commands · type naturally` 힌트, 그리고 라우팅이 초기화돼 있으면 활성 플랜/쿼터 한 줄을 붙입니다. 이어서 `.env` 자동 생성, ChatGPT 구독 OAuth 감지, readiness 점검(문제만 표시 — 조용하면 정상), 프로젝트 기억과 사용자 프로파일 초기화가 돌아갑니다.
@@ -7373,9 +7375,9 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 601 |
-| 테스트 Python 파일 | 764 |
-| 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
+| 프로덕션 Python 파일 | 599 |
+| 테스트 Python 파일 | 765 |
+| 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 84 / 84 / 84 / 84 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |
 | 프로덕션 ContextVar | 25 |

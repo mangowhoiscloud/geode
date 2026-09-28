@@ -70,15 +70,17 @@ second SQL row or run-event projection.
 
 ## 5. Auth profile wiring
 
-| Item | Previous | Current | Reference |
-|---|---|---|---|
-| `mark_used()` | `credentials.py:31` | unchanged | - |
-| `mark_success()` | not called | called after fallback success | OpenClaw `markAuthProfileGood` |
-| `mark_failure()` | not called | called after fallback failure | OpenClaw `markAuthProfileFailure` |
-| `mark_failure(is_auth_error=True)` | not called | called after auth-error classification | Hermes `_is_auth_error` |
-| Profile tracking | none | `_last_profile[provider]` | OpenClaw `lastGood[provider]` |
-| 401 auto-refresh | definition only | `_try_managed_refresh()` via `mark_failure` | Hermes `handle_401` |
-| Proactive refresh | definition only | re-read 120 seconds before expiry in `resolve()` | Hermes `REFRESH_SKEW` |
+The prior table inferred live adapter feedback from a deprecated resolver.
+The 2026-09-28 caller audit found no production caller of that resolver; its
+provider-global last-profile map and fallback notification wrappers were removed.
+
+| State | Actual consumer and limit |
+|---|---|
+| Profile eligibility and explicit order/pin | Routing selects a concrete provider/source/profile; stored expiry/cooldown constrain eligibility. |
+| SDK credential | Adapter resolves the request's credentials; client replacement preserves already borrowed requests. |
+| Imported Codex credential | The external store remains authoritative; refresh/read reconciles its managed profile. |
+| Success/failure counters | Profile methods remain available, but active adapters do not attribute every request outcome to a profile. Do not claim live adaptive health scoring from those methods. |
+| Auth error retry | The retry primitive can consume an explicit refresh callback; a provider label alone does not identify a credential owner. |
 
 ## 6. Credential scrubbing
 
@@ -98,5 +100,5 @@ second SQL row or run-event projection.
 | `_notify_failure()` | `_bump_server_error()` | `markAuthProfileFailure()` |
 | `_is_auth_error()` | `_is_auth_error()` | `classifyFailoverReason()` |
 | `_resolve_rotator_provider()` | N/A | `resolveAuthProfileOrder()` |
-| `scrub_credentials()` | `_CREDENTIAL_PATTERN` | N/A |
+| `redact_secrets()` | Shared known-format and labelled-credential patterns; CLI, tool errors and log formatters | N/A |
 | `register_refresher()` | `handle_401()` | `refreshProviderOAuthCredentialWithPlugin()` |

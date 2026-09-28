@@ -542,8 +542,7 @@ class TestToolExecutor:
     def test_write_tools_classification(self) -> None:
         assert "memory_save" in WRITE_TOOLS
         assert "note_save" in WRITE_TOOLS
-        assert "set_api_key" in WRITE_TOOLS
-        assert "manage_auth" in WRITE_TOOLS
+        assert "manage_login" in WRITE_TOOLS
 
     def test_update_plan_is_serialized_without_becoming_a_write_gate(self) -> None:
         assert ToolCallProcessor._classify_tier("update_plan") == 3
@@ -1297,36 +1296,6 @@ class TestAgenticLoop:
         assert "check_status" in tool_names
         assert "run_bash" in tool_names
         assert "delegate_task" in tool_names
-
-    def test_key_gate_blocks_without_key(self) -> None:
-        """Test key_registration_gate returns None on /quit."""
-        from unittest.mock import patch as _patch
-
-        from core.cli.onboarding import key_registration_gate
-
-        with _patch("core.cli.onboarding.console") as mock_console:
-            mock_console.input.return_value = "/quit"
-            result = key_registration_gate()
-            assert result is None
-
-    def test_key_gate_accepts_valid_key(self) -> None:
-        """Test key_registration_gate accepts pasted API key."""
-        from unittest.mock import patch as _patch
-
-        from core.cli.onboarding import key_registration_gate
-
-        with (
-            _patch("core.cli.onboarding.console") as mock_console,
-            _patch("core.cli.onboarding._upsert_env"),
-            _patch("core.cli.onboarding.settings") as mock_settings,
-        ):
-            mock_settings.anthropic_api_key = ""
-            mock_settings.openai_api_key = ""
-            mock_settings.openrouter_api_key = ""
-            mock_settings.zai_api_key = ""
-            mock_console.input.return_value = "sk-ant-test-key-12345678"
-            result = key_registration_gate()
-            assert result == "sk-ant-test-key-12345678"
 
     def test_get_agentic_tools_no_registry(self) -> None:
         """get_agentic_tools without registry returns base tools."""

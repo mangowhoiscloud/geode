@@ -17,8 +17,9 @@ export default function Page() {
             <p>
               GEODE는 구독 경로와 PAYG API 키를 받습니다. 어느 쪽을
               쓸지는 <code>CredentialSource</code> 하나로 표현됩니다.
-              OpenAI 구독 프로파일과 플랜은 <code>~/.geode/auth.toml</code>에, API 키는
-              {" "}<code>~/.geode/.env</code>에 저장됩니다.
+              GEODE에서 등록한 구독 자격과 API 키, 플랜은
+              {" "}<code>~/.geode/auth.toml</code>에 저장됩니다. 외부 환경 변수와
+              기존 <code>.env</code> 키는 별도 입력으로 계속 읽습니다.
             </p>
 
             <h2>자격 소스</h2>
@@ -66,13 +67,22 @@ export default function Page() {
               plan·프로파일 변경은 실행 중인 상태를 가진 데몬이 처리합니다. 저장하지
               못한 변경은 성공으로 표시하지 않습니다.
             </p>
+            <p>
+              <code>/login add</code>, <code>/login anthropic</code>, 온보딩과
+              레거시 <code>/key</code>는 같은 인증 저장 함수를 사용하며
+              <code>.env</code>나 전역 설정에 키를 복사하지 않습니다. 저장 실패는
+              기존 자격을 유지하고, 별도 프로세스의 리로드 실패는 따로 표시합니다.
+              모델 도구 <code>manage_login</code>은 비밀값 없는 조회·선택만 받습니다.
+              기본 키 등록은 터미널의 숨김 입력으로 진행하며, 기존 <code>/key …</code>와 <code>/login set-key &lt;plan&gt; &lt;key&gt;</code> 명시 입력도 호환됩니다. 폐기된
+              <code>set_api_key</code>와 <code>manage_auth</code> 도구는 제거했습니다.
+            </p>
             <table>
               <thead>
                 <tr><th>서브커맨드</th><th>동작</th></tr>
               </thead>
               <tbody>
                 <tr><td><code>/login openai</code></td><td>ChatGPT 구독 OAuth 로그인. device-code 플로우는 <code>core/auth/oauth_login.py</code>이고, 결과는 <code>auth.toml</code>에 OAUTH_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다.</td></tr>
-                <tr><td><code>/login anthropic</code></td><td><code>ANTHROPIC_API_KEY</code>를 등록하고 <code>api_key</code> 경로를 선택합니다.</td></tr>
+                <tr><td><code>/login anthropic</code></td><td>숨김 입력으로 Anthropic PAYG 키를 등록합니다. 세션 소스 선택은 바꾸지 않습니다.</td></tr>
                 <tr><td><code>/login google</code></td><td>Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts용 Google Workspace OAuth. 사용자가 만든 Desktop 앱 클라이언트를 가져오며 LLM 프로바이더 자격과 분리됩니다.</td></tr>
                 <tr><td><code>/login add</code></td><td>자격 추가. 메뉴에서 플랜 종류(ChatGPT 구독 또는 PAYG API 키)를 고르고, PAYG는 프로바이더(Anthropic, OpenAI, OpenRouter, GLM)를 고른 뒤 키를 입력합니다.</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>프로파일 선택과 제거.</td></tr>
@@ -144,9 +154,10 @@ export default function Page() {
 
             <h2>PAYG 키</h2>
             <p>
-              API 키는 시크릿이므로 <code>~/.geode/.env</code> 층에 삽니다.
-              온보딩과 <code>/login</code>의 키 기록이 이 계약을 따릅니다
-              (<code>core/config/env_io.py</code>의 <code>upsert_env</code>).
+              대화형 등록은 권한 0600의 <code>auth.toml</code>에 저장합니다.
+              <code>/login set-key &lt;plan-id&gt;</code>는 기존 플랜의 키를 숨김 입력으로
+              바꿉니다. 자동화나 외부 비밀 관리 도구에서 공급하는 환경 변수도 지원합니다.
+              기존 환경 파일을 자동으로 삭제하거나 옮기지는 않습니다.
             </p>
             <pre>{`# ~/.geode/.env
 ANTHROPIC_API_KEY=sk-ant-...
@@ -168,7 +179,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
                 <tr>
                   <td>응답이 비거나 401</td>
                   <td>토큰 만료 또는 키 무효</td>
-                  <td><code>geode doctor</code>로 자격 상태를 보고 <code>/login</code>으로 갱신합니다. Codex 쪽은 <code>codex login</code>을 다시 실행합니다.</td>
+                  <td><code>geode doctor</code>로 확인한 뒤, GEODE 구독은 <code>/login openai</code>, PAYG는 <code>/login set-key &lt;plan-id&gt;</code>, 외부 Codex 자격은 <code>codex login</code>으로 갱신합니다.</td>
                 </tr>
                 <tr>
                   <td>소스를 바꿨는데 그대로</td>
@@ -202,8 +213,9 @@ ZAI_API_KEY={id}.{secret}`}</pre>
             <p>
               GEODE accepts ChatGPT subscription OAuth and provider PAYG API keys.
               The choice is expressed by a single <code>CredentialSource</code>.
-              GEODE-managed OpenAI plans and profiles persist in
-              {" "}<code>~/.geode/auth.toml</code>, and API keys in <code>~/.geode/.env</code>.
+              GEODE-managed subscription credentials, API keys, and plans persist in
+              {" "}<code>~/.geode/auth.toml</code>. Externally supplied environment
+              variables and existing <code>.env</code> keys remain separate inputs.
             </p>
 
             <h2>Credential sources</h2>
@@ -253,13 +265,24 @@ ZAI_API_KEY={id}.{secret}`}</pre>
               and plan or profile changes run in the daemon, which owns the live state. A
               change that could not be saved is not reported as a success.
             </p>
+            <p>
+              <code>/login add</code>, <code>/login anthropic</code>, onboarding,
+              and legacy <code>/key</code> share one auth persistence function.
+              They do not copy keys into <code>.env</code> or global settings.
+              A failed write preserves existing credentials; a separate process reload
+              failure is reported independently. The model&apos;s <code>manage_login</code>
+              tool accepts nonsecret inspection and selection only. Default key registration uses hidden terminal input; existing explicit
+              <code>/key …</code> and <code>/login set-key &lt;plan&gt; &lt;key&gt;</code>
+              forms remain supported. Retired <code>set_api_key</code> and
+              <code>manage_auth</code> tools have been removed.
+            </p>
             <table>
               <thead>
                 <tr><th>Subcommand</th><th>Behavior</th></tr>
               </thead>
               <tbody>
                 <tr><td><code>/login openai</code></td><td>ChatGPT subscription OAuth login. The device-code flow lives in <code>core/auth/oauth_login.py</code>; the result lands in <code>auth.toml</code> as an OAUTH_BORROWED plan plus profile pair.</td></tr>
-                <tr><td><code>/login anthropic</code></td><td>Registers <code>ANTHROPIC_API_KEY</code> and selects the <code>api_key</code> route.</td></tr>
+                <tr><td><code>/login anthropic</code></td><td>Registers an Anthropic PAYG key through hidden input; preserves session source selection.</td></tr>
                 <tr><td><code>/login google</code></td><td>Google Workspace OAuth for Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts. Imports a user-owned Desktop app client and stays separate from LLM-provider credentials.</td></tr>
                 <tr><td><code>/login add</code></td><td>Add a credential. A menu picks the plan kind (ChatGPT subscription or PAYG API key); for PAYG, pick the provider (Anthropic, OpenAI, OpenRouter, GLM), then enter the key.</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>Select and remove profiles.</td></tr>
@@ -335,10 +358,11 @@ ZAI_API_KEY={id}.{secret}`}</pre>
 
             <h2>PAYG keys</h2>
             <p>
-              API keys are secrets, so they live on the
-              {" "}<code>~/.geode/.env</code> layer. Onboarding and
-              {" "}<code>/login</code> key writes follow this contract
-              (<code>upsert_env</code> in <code>core/config/env_io.py</code>).
+              Interactive registration writes <code>auth.toml</code> with mode 0600.
+              <code>/login set-key &lt;plan-id&gt;</code> updates a registered plan
+              through hidden input. Automation and external secret managers may still
+              supply environment variables. Existing environment files are neither
+              deleted nor migrated automatically.
             </p>
             <pre>{`# ~/.geode/.env
 ANTHROPIC_API_KEY=sk-ant-...
@@ -361,7 +385,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
                 <tr>
                   <td>Empty replies or 401</td>
                   <td>Expired token or invalid key</td>
-                  <td>Check credentials with <code>geode doctor</code>, refresh with <code>/login</code>. For Codex, rerun <code>codex login</code>.</td>
+                  <td>Inspect with <code>geode doctor</code>. Renew GEODE subscription credentials with <code>/login openai</code>, PAYG keys with <code>/login set-key &lt;plan-id&gt;</code>, and external Codex credentials with <code>codex login</code>.</td>
                 </tr>
                 <tr>
                   <td>Source switch does not stick</td>

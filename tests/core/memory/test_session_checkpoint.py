@@ -194,6 +194,40 @@ class TestSessionCheckpoint:
         assert loaded is not None
         assert loaded.status == "completed"
 
+    @pytest.mark.parametrize("method", ["mark_completed", "mark_paused", "mark_error", "reopen"])
+    def test_failed_status_write_preserves_authority_and_projections(
+        self, tmp_path, monkeypatch, method
+    ):
+        from contextlib import closing
+
+        from core.memory.session_manager import SessionManager
+
+        cp = SessionCheckpoint(tmp_path / "session")
+        cp.save(SessionState(session_id="status-failure"))
+        if method == "reopen":
+            cp.mark_completed("status-failure")
+        status = cp.current_status("status-failure")
+        state_file = cp.session_dir / "status-failure" / "state.json"
+        active_file = cp.session_dir / "active.json"
+        ledger_file = cp.session_dir / "transitions.jsonl"
+        state_before = state_file.read_bytes()
+        active_before = active_file.read_bytes() if active_file.exists() else None
+        ledger_before = ledger_file.read_bytes()
+
+        def fail_write(*_args, **_kwargs):
+            raise OSError("injected status write failure")
+
+        monkeypatch.setattr("core.memory.session_checkpoint.atomic_write_json", fail_write)
+        with pytest.raises(OSError, match="injected status write failure"):
+            getattr(cp, method)("status-failure")
+
+        assert state_file.read_bytes() == state_before
+        assert cp.current_status("status-failure") == status
+        assert (active_file.read_bytes() if active_file.exists() else None) == active_before
+        assert ledger_file.read_bytes() == ledger_before
+        with closing(SessionManager(cp.session_dir / "sessions.db")) as manager:
+            assert manager.get("status-failure").status == status
+
     def test_list_resumable(self, tmp_path):
         cp = SessionCheckpoint(tmp_path / "session")
         cp.save(SessionState(session_id="active-1", status="active"))

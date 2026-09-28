@@ -1,22 +1,8 @@
-"""``/login`` slash command — unified credentials/plans command (v0.50.0+).
-
-Hosts ``cmd_login`` plus the ``_login_*`` subcommand helpers (
-``_login_help``, ``_login_show_status``, ``_login_add_interactive``,
-``_login_oauth``, ``_login_set_key``, ``_login_use``, ``_login_remove``,
-``_login_route``, ``_login_quota``). Extracted from the monolithic
-``core/cli/commands.py`` (Tier 3 #9) — every function body is preserved
-byte-identical from the legacy module.
-
-Tests that monkeypatch ``core.cli.commands.console`` /
-``core.cli.commands._upsert_env`` / ``core.cli.commands._mask_key`` reach
-the call sites here through the deferred ``import core.cli.commands as
-_pkg`` lookup, mirroring the pattern used by ``core/ui/agentic_ui``.
-"""
+"""Terminal login input and rendering over the shared authentication owners."""
 
 from __future__ import annotations
 
 import logging
-from dataclasses import replace
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from simple_term_menu import TerminalMenu
@@ -69,7 +55,7 @@ def cmd_login(args: str, *, client: IPCClient | None = None) -> bool:
 
         /login                — show plans, profiles, routing, declared quotas
         /login add            — interactive wizard (kind → provider → key/OAuth)
-        /login set-key <plan> <key>
+        /login set-key <plan> [key]
         /login use <plan>     — pin a plan as the active one for its provider
         /login remove <plan>
         /login route <model> <plan> [<plan>...]
@@ -80,27 +66,21 @@ def cmd_login(args: str, *, client: IPCClient | None = None) -> bool:
     from rich.markup import escape
 
     from core.cli import commands as _pkg
+    from core.observability.redaction import redact_secrets
 
     try:
         run_login(args, client=client)
     except ValueError as exc:
-        _pkg.console.print(f"  [warning]{escape(str(exc))}[/warning]\n")
+        _pkg.console.print(f"  [warning]{escape(redact_secrets(str(exc)))}[/warning]\n")
     except OSError as exc:
-        _pkg.console.print(f"  [error]Credential change not saved: {escape(str(exc))}[/error]\n")
+        _pkg.console.print(
+            f"  [error]Credential change failed: {escape(redact_secrets(str(exc)))}[/error]\n"
+        )
     else:
         return True
     return False
 
 
-# Views and nonsecret changes of daemon-owned state; a thin client relays only
-# these, so terminal input and anything else it cannot classify stay local.
-DAEMON_LOGIN_SUBCOMMANDS = frozenset(
-    {
-        *("status", "list", "ls", "quota", "health", "providers", "provider"),
-        *("use", "use-profile", "useprofile", "profile-use", "order", "route"),
-        *("remove", "rm", "delete", "refresh", "help", "?"),
-    }
-)
 # Flows that read keys or wait for a browser in the user's terminal.
 INTERACTIVE_LOGIN_SUBCOMMANDS = frozenset({"add", "new", "google", *_PROVIDER_ALIASES})
 
@@ -116,10 +96,20 @@ def run_login(args: str, *, client: IPCClient | None = None) -> None:
     sub = parts[0].lower()
     rest = parts[1] if len(parts) > 1 else ""
 
+    if sub in ("status", "list", "ls") and rest.strip().lower() == "google":
+        sub, rest = "google", "status"
     if sub == "google":
-        from core.cli.commands.google_login import cmd_login_google
+        from core.auth.google_oauth import GoogleOAuthError
+        from core.cli.commands.google_login import run_login_google
 
-        cmd_login_google(rest)
+        try:
+            completed = run_login_google(rest)
+        except (EOFError, KeyboardInterrupt):
+            completed = False
+        except GoogleOAuthError as exc:
+            raise ValueError(f"Google login failed: {exc}") from exc
+        if not completed:
+            raise ValueError("Google login cancelled")
         return
 
     # Provider-as-parameter dispatch: ``/login openai`` /
@@ -132,11 +122,6 @@ def run_login(args: str, *, client: IPCClient | None = None) -> None:
         return
 
     if sub in ("status", "list", "ls"):
-        if rest.strip().lower() == "google":
-            from core.cli.commands.google_login import render_google_status
-
-            render_google_status()
-            return
         _login_show_status()
         return
     if sub in ("add", "new"):
@@ -251,11 +236,11 @@ def _login_help() -> None:
         "\n"
         "  [label]/login[/label]                       Show all plans, profiles, routing\n"
         "  [label]/login openai[/label]                OAuth flow (ChatGPT subscription quota)\n"
-        "  [label]/login anthropic[/label]             Explain Anthropic API-key setup\n"
+        "  [label]/login anthropic[/label]             Hidden Anthropic API-key setup\n"
         "  [label]/login google[/label]                Google Workspace OAuth (BYO client)\n"
         "  [label]/login add[/label]                   Interactive wizard\n"
         "  [label]/login source[/label] <prov> <type>   Pick credential source per provider\n"
-        "  [label]/login set-key[/label] <plan> <key>  Update a plan's API key\n"
+        "  [label]/login set-key[/label] <plan> [key] Update a plan's key (hidden if omitted)\n"
         "  [label]/login use[/label] <plan>            Pin a plan as active for its provider\n"
         "  [label]/login use-profile[/label] <name>    Pin a profile as active for its provider\n"
         "  [label]/login order[/label] [<provider>]    Show effective profile order per provider\n"
@@ -271,7 +256,7 @@ def _login_help() -> None:
         "  [muted]  ok               — profile passes every check, ready to dispatch[/muted]\n"
         "  [muted]  missing_key      — key/token field is empty; rerun add or set-key[/muted]\n"
         "  [muted]  expired          — OAuth token past expires_at; refresh via the[/muted]\n"
-        "  [muted]                     owning CLI (`codex`) and rerun /login[/muted]\n"
+        "  [muted]                     owning login (/login openai or external Codex)[/muted]\n"
         "  [muted]  cooling_down     — consecutive failures tripped backoff; wait for[/muted]\n"
         "  [muted]                     cooldown or run /login health <profile> for ETA[/muted]\n"
         "  [muted]  disabled         — manually disabled (`/login remove` to delete)[/muted]\n"
@@ -437,7 +422,7 @@ def _login_show_status() -> None:
     if not plans and not profiles and not google_accounts:
         _pkg.console.print("  [muted]No plans or credentials registered yet.[/muted]")
         _pkg.console.print(
-            "  [muted]Run /login add to register a plan, or paste an API key.[/muted]"
+            "  [muted]Run /login add in your terminal to register a credential.[/muted]"
         )
         _pkg.console.print()
         return
@@ -530,12 +515,11 @@ def _login_add_interactive(_args: str) -> None:
     Mirrors OpenClaw setup wizard (`prompter.select` levels) collapsed
     into a single CLI command so existing users can run it any time.
     """
+    import getpass
     import sys
 
-    from core.auth.auth_toml import auth_file_transaction
-    from core.auth.profiles import AuthProfile, CredentialType
+    from core.auth.auth_toml import save_api_key
     from core.cli import commands as _pkg
-    from core.llm.strategies.plans import default_plan_for_payg
 
     if not sys.stdin.isatty():
         raise ValueError(
@@ -550,7 +534,6 @@ def _login_add_interactive(_args: str) -> None:
             "ChatGPT subscription (Codex sign-in)",
         ),
         ("payg", "Pay-as-you-go API key (Anthropic, OpenAI, OpenRouter, GLM PAYG)"),
-        ("oauth", "OAuth borrowed (Codex CLI)"),
     ]
     menu = TerminalMenu(
         [label for _, label in kinds],
@@ -560,8 +543,7 @@ def _login_add_interactive(_args: str) -> None:
     )
     idx = menu.show()
     if idx is None:
-        _pkg.console.print("  [muted]Cancelled[/muted]\n")
-        return
+        raise ValueError("Credential entry cancelled")
     kind_id = kinds[idx][0]
 
     if kind_id == "subscription":
@@ -582,52 +564,21 @@ def _login_add_interactive(_args: str) -> None:
         )
         pidx = pmenu.show()
         if pidx is None:
-            _pkg.console.print("  [muted]Cancelled[/muted]\n")
-            return
+            raise ValueError("Credential entry cancelled")
         provider = providers[pidx][0]
         try:
-            key = _pkg.console.input(f"  [label]{providers[pidx][1]} API key:[/label] ").strip()
-        except (KeyboardInterrupt, EOFError):
-            _pkg.console.print("\n  [muted]Cancelled[/muted]\n")
-            return
+            # allow-direct-io: terminal-owned secret input stays hidden.
+            key = getpass.getpass(f"  {providers[pidx][1]} API key (hidden): ").strip()
+        except (KeyboardInterrupt, EOFError) as exc:
+            raise ValueError("Credential entry cancelled") from exc
         if not key:
-            _pkg.console.print("  [warning]No key provided.[/warning]\n")
-            return
-        plan = default_plan_for_payg(provider, key)
-        with auth_file_transaction() as (registry, store):
-            registry.add(plan)
-            store.add(
-                AuthProfile(
-                    name=f"{plan.id}:user",
-                    provider=provider,
-                    credential_type=CredentialType.API_KEY,
-                    key=key,
-                    plan_id=plan.id,
-                ),
-                activate=True,
-            )
-        # Mirror to settings + .env so legacy fallbacks keep working
-        from core.config import settings
-
-        env_field_map = {
-            "anthropic": ("anthropic_api_key", "ANTHROPIC_API_KEY"),
-            "openai": ("openai_api_key", "OPENAI_API_KEY"),
-            "openrouter": ("openrouter_api_key", "OPENROUTER_API_KEY"),
-            "glm": ("zai_api_key", "ZAI_API_KEY"),
-        }
-        if provider in env_field_map:
-            field_name, env_var = env_field_map[provider]
-            object.__setattr__(settings, field_name, key)
-            _pkg._upsert_env(env_var, key)
+            raise ValueError("No key provided")
+        plan = save_api_key(key, provider=provider)
         clear_dry_run_opt_in()
         _pkg.console.print(
             f"  [success]Registered[/success] {plan.display_name}  "
             f"[muted](key {_pkg._mask_key(key)})[/muted]\n"
         )
-        return
-
-    if kind_id == "oauth":
-        _login_oauth("openai")
         return
 
 
@@ -686,22 +637,23 @@ def _format_credential_source_label(provider: str, source: str) -> str:
     """Human-readable label for the ``source`` picker — pulls live
     subscription info from provider-owned state rather than baking
     plan names into the code."""
-    import os
-
     if source == "auto":
         return "auto-detect from configured credentials"
     if source == "none":
         return "disabled"
     if source == "api_key":
-        env_var = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
-        suffix = "(set)" if os.environ.get(env_var) else "(env not set)"
-        return f"{env_var} {suffix}"
+        from core.llm.registry import get_provider_spec
+        from core.llm.routing import model_available
+
+        spec = get_provider_spec(provider)
+        available = bool(spec and model_available(spec.profile.default_model(), source="payg"))
+        return "PAYG API key (available)" if available else "PAYG API key (unavailable)"
     if source in ("oauth", "openai-codex"):
         from core.llm.providers.codex import get_codex_oauth_metadata
 
         meta = get_codex_oauth_metadata()
         if meta is None:
-            return "(no Codex auth.json detected)"
+            return "(no ChatGPT subscription credential available)"
         from core.auth.oauth_login import chatgpt_plan_label
 
         plan_type = meta.get("plan_type")
@@ -786,38 +738,24 @@ def _login_source(args: str, *, client: IPCClient | None = None) -> None:
 
     parts = args.split()
     if len(parts) != 2:
-        _pkg.console.print("  [warning]Usage: /login source <provider> <type>[/warning]")
-        _pkg.console.print(
-            f"  [muted]providers: {', '.join(_VALID_CREDENTIAL_PROVIDERS)}   "
-            f"types: {', '.join(_VALID_CREDENTIAL_SOURCES)}[/muted]"
+        raise ValueError(
+            "Usage: /login source <provider> <type>; "
+            f"providers: {', '.join(_VALID_CREDENTIAL_PROVIDERS)}; "
+            f"types: {', '.join(_VALID_CREDENTIAL_SOURCES)}"
         )
-        _pkg.console.print()
-        return
     provider, source = parts[0].lower(), parts[1].lower()
     if provider not in _VALID_CREDENTIAL_PROVIDERS:
-        _pkg.console.print(
-            f"  [warning]unknown provider: {provider} "
-            f"(use one of {', '.join(_VALID_CREDENTIAL_PROVIDERS)})[/warning]"
-        )
-        _pkg.console.print()
-        return
+        raise ValueError(f"Unknown provider; use one of {', '.join(_VALID_CREDENTIAL_PROVIDERS)}")
     if source == "claude-cli" or (provider == "anthropic" and source == "oauth"):
         from core.config.credential_source import CLAUDE_CLI_RETIRED_MESSAGE
 
-        _pkg.console.print(f"  [warning]{CLAUDE_CLI_RETIRED_MESSAGE}[/warning]\n")
-        return
+        raise ValueError(CLAUDE_CLI_RETIRED_MESSAGE)
     if source not in _VALID_CREDENTIAL_SOURCES:
-        _pkg.console.print(
-            f"  [warning]unknown type: {source} "
-            f"(use one of {', '.join(_VALID_CREDENTIAL_SOURCES)})[/warning]"
+        raise ValueError(
+            f"Unknown credential source; use one of {', '.join(_VALID_CREDENTIAL_SOURCES)}"
         )
-        _pkg.console.print()
-        return
     if source == "openai-codex" and provider != "openai":
-        _pkg.console.print(
-            f"  [warning]{source} is not a credential source for {provider}.[/warning]\n"
-        )
-        return
+        raise ValueError(f"{source} is not a credential source for {provider}")
     try:
         from core.llm.routing import infer_source
 
@@ -841,9 +779,8 @@ def _login_source(args: str, *, client: IPCClient | None = None) -> None:
                     raise ValueError(str(response.get("message", "Session source rejected")))
                 _pkg.console.print("  Session source applied; saving future defaults.")
         _persist_credential_source(provider, source)
-    except (RuntimeError, ValueError, OSError) as exc:
-        _pkg.console.print(f"  [warning]Credential source not saved: {exc}[/warning]\n")
-        return
+    except RuntimeError as exc:
+        raise ValueError(f"Credential source rejected: {exc}") from exc
     label = _format_credential_source_label(provider, source)
     _pkg.console.print(
         f"  [success]✓[/success] {provider} credential source → "
@@ -855,104 +792,45 @@ def _login_source(args: str, *, client: IPCClient | None = None) -> None:
 
 
 def _login_anthropic_api_key() -> None:
-    """Prompt for an Anthropic API key and persist its runtime sources.
-
-    Tier 0 (PAYG) — ``sk-ant-api…`` saved under the
-    ``anthropic-payg-geode`` plan + profile. No refresh logic, no
-    expiry; the key is treated as a single long-lived credential
-    identical in shape to ``ANTHROPIC_API_KEY`` env loading.
-    """
+    """Prompt in the terminal; persist with the same owner as /login add."""
     import getpass
-    from datetime import UTC, datetime
 
-    from core.auth.auth_toml import auth_file_transaction
-    from core.auth.profiles import AuthProfile, CredentialType
+    from core.auth.auth_toml import save_api_key
     from core.cli import commands as _pkg
-    from core.config import settings
-    from core.llm.adapters.registry import invalidate_provider_clients
-    from core.llm.strategies.plans import Plan, PlanKind
 
     try:
-        # allow-direct-io: thin handler — getpass hides typed input from screen.
-        api_key = getpass.getpass("  Paste sk-ant-… key (hidden): ").strip()
-    except (EOFError, KeyboardInterrupt):
-        _pkg.console.print("  [muted]Cancelled.[/muted]\n")
-        return
-
+        # allow-direct-io: terminal-owned secret input stays hidden.
+        api_key = getpass.getpass("  Anthropic API key (hidden): ").strip()
+    except (EOFError, KeyboardInterrupt) as exc:
+        raise ValueError("Credential entry cancelled") from exc
     if not api_key:
-        _pkg.console.print("  [warning]Empty key — aborted.[/warning]\n")
-        return
-    if not api_key.startswith("sk-ant-"):
-        _pkg.console.print("  [warning]Key does not look like sk-ant-… — saving anyway.[/warning]")
-
-    plan_id = "anthropic-payg-geode"
-    with auth_file_transaction() as (registry, store):
-        plan = registry.get(plan_id) or Plan(
-            id=plan_id,
-            provider="anthropic",
-            kind=PlanKind.PAYG,
-            display_name="Anthropic (PAYG)",
-            base_url="https://api.anthropic.com",
-            auth_type="x-api-key",
-        )
-        registry.add(plan)
-        profile = AuthProfile(
-            name=f"{plan_id}:user",
-            provider="anthropic",
-            credential_type=CredentialType.API_KEY,
-            key=api_key,
-            plan_id=plan.id,
-            expires_at=0.0,
-            metadata={"last_refresh": datetime.now(UTC).isoformat().replace("+00:00", "Z")},
-        )
-        store.add(profile, activate=True)
-    settings.anthropic_api_key = api_key
-    _pkg._upsert_env("ANTHROPIC_API_KEY", api_key)
-    _persist_credential_source("anthropic", "api_key")
-    invalidate_provider_clients("anthropic")
+        raise ValueError("No key provided")
+    save_api_key(api_key, provider="anthropic")
     clear_dry_run_opt_in()
-
-    _pkg.console.print()
-    _pkg.console.print("  [success]✓ Anthropic API key saved.[/success]")
-    _pkg.console.print("  [muted]Stored: ~/.geode/.env and ~/.geode/auth.toml[/muted]\n")
+    _pkg.console.print("  [success]Anthropic API key saved to auth.toml.[/success]\n")
 
 
 def _login_set_key(rest: str) -> None:
-    from core.auth.auth_toml import auth_file_transaction
-    from core.auth.profiles import AuthProfile, CredentialType
+    """Update a registered plan; omitted key uses hidden terminal input."""
+    import getpass
+
+    from core.auth.auth_toml import save_api_key
     from core.cli import commands as _pkg
 
     parts = rest.split(None, 1)
-    if len(parts) < 2:
-        raise ValueError("Usage: /login set-key <plan-id> <api-key>")
-    plan_id, key = parts[0], parts[1].strip()
-    with auth_file_transaction() as (registry, store):
-        plan = registry.get(plan_id)
-        if plan is None:
-            raise ValueError(f"Unknown plan: {plan_id} (use /login add first)")
-        name = f"{plan.id}:user"
-        existing = store.get(name)
-        profile = (
-            replace(existing, key=key, error_count=0, cooldown_until=0.0)
-            if existing is not None
-            else AuthProfile(
-                name=name,
-                provider=plan.provider,
-                credential_type=CredentialType.API_KEY,
-                key=key,
-                plan_id=plan.id,
-            )
-        )
-        store.add(profile, activate=True)
-    if plan.provider == "glm-coding":
-        from core.llm.adapters.registry import invalidate_provider_clients
-
-        invalidate_provider_clients("glm")
+    if not parts:
+        raise ValueError("Usage: /login set-key <plan-id> [api-key]")
+    if len(parts) == 2:
+        key = parts[1].strip()
+    else:
+        try:
+            # allow-direct-io: terminal-owned secret input stays hidden.
+            key = getpass.getpass("  API key (hidden): ").strip()
+        except (EOFError, KeyboardInterrupt) as exc:
+            raise ValueError("Credential entry cancelled") from exc
+    plan = save_api_key(key, plan_id=parts[0])
     clear_dry_run_opt_in()
-    _pkg.console.print(
-        f"  [success]Updated key[/success] for {plan.display_name}  "
-        f"[muted]({_pkg._mask_key(key)})[/muted]\n"
-    )
+    _pkg.console.print(f"  [success]Updated key[/success] for {plan.display_name}\n")
 
 
 def _login_use(rest: str) -> None:
@@ -1210,7 +1088,7 @@ def _login_quota() -> None:
 _HEALTH_SUGGESTIONS: dict[str, str] = {
     "ok": "Ready to dispatch.",
     "missing_key": "Key/token is empty. Run `/login add` (interactive) or "
-    "`/login set-key <plan> <key>` to populate.",
+    "`/login set-key <plan> [key]` to populate.",
     "expired": "OAuth token past expires_at. Re-run `codex login` and then "
     "`/login refresh` so GEODE "
     "picks the new token up.",

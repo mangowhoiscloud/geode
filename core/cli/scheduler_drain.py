@@ -113,50 +113,50 @@ async def drain_scheduler_queue(
                             # gate parks the checkpoint as PAUSED; every other
                             # terminal marks it COMPLETED. (getattr-guarded:
                             # tests drive stub loops without these methods.)
-                            try:
-                                termination = (
-                                    getattr(r, "termination_reason", "") if r is not None else ""
-                                )
-                                if termination in {
-                                    "user_clarification_needed",
-                                    "external_verification_required",
-                                }:
-                                    if termination == "user_clarification_needed":
-                                        from core.memory.pending_ask import (
-                                            apublish_clarification_ask,
-                                        )
-
-                                        await apublish_clarification_ask(
-                                            r.text,
-                                            session_id=getattr(_loop, "_session_id", ""),
-                                            source=f"scheduled:{_jid}",
-                                            notification=getattr(services, "notification", None),
-                                        )
-                                    _mark_paused_async = getattr(
-                                        _loop, "amark_session_paused", None
+                            termination = (
+                                getattr(r, "termination_reason", "") if r is not None else ""
+                            )
+                            if termination in {
+                                "user_clarification_needed",
+                                "external_verification_required",
+                            }:
+                                if termination == "user_clarification_needed":
+                                    from core.memory.pending_ask import (
+                                        apublish_clarification_ask,
                                     )
-                                    if callable(_mark_paused_async):
-                                        await _mark_paused_async()
-                                    else:
-                                        _mark_paused = getattr(_loop, "mark_session_paused", None)
-                                        if callable(_mark_paused):
-                                            _mark_paused()
+
+                                    await apublish_clarification_ask(
+                                        r.text,
+                                        session_id=getattr(_loop, "_session_id", ""),
+                                        source=f"scheduled:{_jid}",
+                                        notification=getattr(services, "notification", None),
+                                    )
+                                _mark_paused_async = getattr(_loop, "amark_session_paused", None)
+                                if callable(_mark_paused_async):
+                                    await _mark_paused_async()
                                 else:
-                                    await _loop.amark_session_completed()
+                                    _mark_paused = getattr(_loop, "mark_session_paused", None)
+                                    if callable(_mark_paused):
+                                        _mark_paused()
+                            else:
+                                await _loop.amark_session_completed()
+                            if _cb:
+                                _cb(r, job_id=_jid)
+                        except Exception as exc:
+                            if isinstance(exc, TimeoutError):
+                                log.warning("Scheduler job %s timed out after 300s", _jid)
+                            else:
+                                log.warning(
+                                    "Scheduler job %s execution failed", _jid, exc_info=True
+                                )
+                            try:
+                                await _loop.amark_session_error()
                             except Exception:
                                 log.warning(
-                                    "Pending-ask publish failed for job %s",
+                                    "Scheduler job %s error-state persistence failed",
                                     _jid,
                                     exc_info=True,
                                 )
-                            if _cb:
-                                _cb(r, job_id=_jid)
-                        except TimeoutError:
-                            log.warning("Scheduler job %s timed out after 300s", _jid)
-                            await _loop.amark_session_error()
-                        except Exception:
-                            log.warning("Scheduler job %s execution failed", _jid, exc_info=True)
-                            await _loop.amark_session_error()
                         finally:
                             _glob.manual_release(_key)
                             _sess.manual_release(_key)

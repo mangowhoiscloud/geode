@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import anthropic
 import httpx
+import openai
 import pytest
 from core.llm.errors import classify_llm_error
 
@@ -14,6 +15,25 @@ def _fake_anthropic_response(status_code: int) -> httpx.Response:
         status_code=status_code,
         request=httpx.Request("POST", "https://api.anthropic.com/v1/messages"),
     )
+
+
+@pytest.mark.parametrize("sdk", [anthropic, openai], ids=["anthropic", "openai"])
+@pytest.mark.parametrize(
+    ("error_name", "status"),
+    [("PermissionDeniedError", 403), ("NotFoundError", 404), ("UnprocessableEntityError", 422)],
+)
+def test_permanent_sdk_rejection_is_not_unknown(sdk, error_name, status) -> None:
+    exc = getattr(sdk, error_name)(
+        "Resource access rejected",
+        response=_fake_anthropic_response(status),
+        body={"error": {"type": "permission_error"}} if status == 403 else None,
+    )
+
+    category, severity, hint = classify_llm_error(exc)
+
+    assert category == "bad_request"
+    assert severity == "error"
+    assert "access" in hint
 
 
 class TestClassifyAnthropicSdkErrorsUnchanged:

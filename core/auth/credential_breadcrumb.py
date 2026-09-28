@@ -38,8 +38,8 @@ _NEXT_ACTION: dict[ProfileRejectReason, str] = {
         "or call manage_login(subcommand='use', args='<other-plan>') to switch"
     ),
     ProfileRejectReason.MISSING_KEY: (
-        "no API key registered — call manage_login(subcommand='set-key', "
-        "args='<plan-id> <key>') after asking the user for one"
+        "no API key registered — ask the user to run `/login add` in their terminal; "
+        "never request or pass a key in chat"
     ),
 }
 
@@ -60,8 +60,8 @@ def format(
     if not verdicts:
         return (
             f"[system] credential note: no profiles registered for provider "
-            f"'{attempted_provider}'. Call manage_login(subcommand='add') "
-            "to register one, or surface this to the user."
+            f"'{attempted_provider}'. Ask the user to run `/login add` in their terminal; "
+            "never request or pass a key in chat."
         )
 
     eligible = [v for v in verdicts if v.eligible]

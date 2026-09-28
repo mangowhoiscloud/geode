@@ -1,4 +1,4 @@
-"""Task preflight routing based on GEODE's capability graph."""
+"""Advisory keyword routing based on GEODE's capability graph."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ class TaskPreflight(TypedDict):
     schema_version: int
     task_kinds: list[TaskKind]
     recommended_tools: list[str]
-    required_evidence: list[str]
+    suggested_evidence: list[str]
     route_notes: list[str]
     warnings: list[str]
 
@@ -76,7 +76,7 @@ def _gui_fallback_tools(visible: set[str]) -> list[str]:
 
 
 def plan_task_preflight(user_input: str, graph: CapabilityGraph) -> TaskPreflight:
-    """Return a provider-aware execution preflight for a user request."""
+    """Suggest available routes without defining task acceptance criteria."""
     kinds = classify_task(user_input)
     features = graph["features"]
     visible = set(graph["visible_tools"])
@@ -135,10 +135,10 @@ def plan_task_preflight(user_input: str, graph: CapabilityGraph) -> TaskPrefligh
         if tool not in deduped:
             deduped.append(tool)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "task_kinds": kinds,
         "recommended_tools": deduped,
-        "required_evidence": sorted(set(evidence)),
+        "suggested_evidence": sorted(set(evidence)),
         "route_notes": notes,
         "warnings": warnings,
     }
@@ -148,12 +148,16 @@ def render_preflight_hint(preflight: TaskPreflight) -> str:
     """Render a short system-prompt hint. Empty when no routing signal exists."""
     if preflight["task_kinds"] == ["general"] and not preflight["warnings"]:
         return ""
-    lines = ["<geode_task_preflight>"]
+    lines = [
+        "<geode_task_preflight>",
+        "Authority: keyword-based routing suggestions, not task requirements or verification.",
+        "Use only suggestions relevant to the request and observed context.",
+    ]
     lines.append(f"task_kinds: {', '.join(preflight['task_kinds'])}")
     if preflight["recommended_tools"]:
         lines.append(f"recommended_tools: {', '.join(preflight['recommended_tools'])}")
-    if preflight["required_evidence"]:
-        lines.append(f"required_evidence: {', '.join(preflight['required_evidence'])}")
+    if preflight["suggested_evidence"]:
+        lines.append(f"suggested_evidence: {', '.join(preflight['suggested_evidence'])}")
     for note in preflight["route_notes"][:4]:
         lines.append(f"note: {note}")
     for warning in preflight["warnings"][:3]:

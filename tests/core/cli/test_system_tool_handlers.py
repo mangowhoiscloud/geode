@@ -8,21 +8,10 @@ from core.cli.tool_handlers import cli_handler_groups
 from core.wiring import startup
 
 
-@pytest.mark.parametrize("credential", ["api", "subscription", "profile"])
-def test_status_tracks_credentials_without_cli_bootstrap(
-    credential: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_status_tracks_credentials_without_cli_bootstrap(monkeypatch: pytest.MonkeyPatch) -> None:
     available = False
     monkeypatch.setattr(session_state, "_get_readiness", lambda: None)
-    monkeypatch.setattr(startup, "_has_any_llm_key", lambda: available and credential == "api")
-    monkeypatch.setattr(
-        startup,
-        "detect_subscription_oauth",
-        lambda: "openai" if available and credential == "subscription" else None,
-    )
-    monkeypatch.setattr(
-        startup, "_has_available_profile", lambda: available and credential == "profile"
-    )
+    monkeypatch.setattr(startup, "has_available_llm_credential", lambda provider=None: available)
     handlers = dict(next(group for name, group in cli_handler_groups() if name == "system"))
     status = handlers["check_status"]
 

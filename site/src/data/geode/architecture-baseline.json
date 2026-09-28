@@ -409,7 +409,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 12,
-      "file_loc": 1146,
+      "file_loc": 1182,
       "method_count": 39,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -419,7 +419,7 @@
     },
     "SubAgentManager": {
       "constructor_arg_count": 18,
-      "file_loc": 861,
+      "file_loc": 859,
       "method_count": 17,
       "path": "core/agent/sub_agent.py"
     }
@@ -527,8 +527,8 @@
   },
   "packages": {
     "core": {
-      "python_files": 418,
-      "python_loc": 129699
+      "python_files": 416,
+      "python_loc": 129452
     },
     "evals": {
       "python_files": 110,
@@ -539,8 +539,8 @@
       "python_loc": 32002
     },
     "tests": {
-      "python_files": 764,
-      "python_loc": 237778
+      "python_files": 765,
+      "python_loc": 239234
     }
   },
   "schema_version": 6,
@@ -571,7 +571,7 @@
       ],
       "unknown_always_loaded_names": []
     },
-    "definition_count": 86,
+    "definition_count": 84,
     "definition_names": [
       "accept_result",
       "arxiv_search",
@@ -616,7 +616,6 @@
       "interrupt_agent",
       "list_agents",
       "llms_txt_index",
-      "manage_auth",
       "manage_context",
       "manage_login",
       "manage_rule",
@@ -640,7 +639,6 @@
       "send_message",
       "send_notification",
       "session_search",
-      "set_api_key",
       "show_help",
       "spawn_agent",
       "switch_model",
@@ -669,7 +667,7 @@
       "doctor_slack",
       "recall_tool_result"
     ],
-    "execution_registration_count": 89,
+    "execution_registration_count": 87,
     "execution_registration_names": [
       "accept_result",
       "arxiv_search",
@@ -716,7 +714,6 @@
       "interrupt_agent",
       "list_agents",
       "llms_txt_index",
-      "manage_auth",
       "manage_context",
       "manage_login",
       "manage_rule",
@@ -741,7 +738,6 @@
       "send_message",
       "send_notification",
       "session_search",
-      "set_api_key",
       "show_help",
       "spawn_agent",
       "switch_model",
@@ -761,7 +757,7 @@
       "web_fetch",
       "write_file"
     ],
-    "handler_registration_count": 81,
+    "handler_registration_count": 79,
     "handler_registration_names": [
       "accept_result",
       "arxiv_search",
@@ -804,7 +800,6 @@
       "grep_files",
       "install_mcp_server",
       "llms_txt_index",
-      "manage_auth",
       "manage_context",
       "manage_login",
       "manage_rule",
@@ -827,7 +822,6 @@
       "seed_debate_turn",
       "send_notification",
       "session_search",
-      "set_api_key",
       "show_help",
       "switch_model",
       "task_create",
@@ -887,7 +881,6 @@
       "grep_files": "delegated",
       "install_mcp_server": "mcp",
       "llms_txt_index": "delegated",
-      "manage_auth": "system",
       "manage_context": "context",
       "manage_login": "system",
       "manage_rule": "memory",
@@ -910,7 +903,6 @@
       "seed_debate_turn": "eval-seed",
       "send_notification": "notification",
       "session_search": "memory",
-      "set_api_key": "system",
       "show_help": "system",
       "switch_model": "system",
       "task_create": "task",
@@ -928,7 +920,7 @@
       "web_fetch": "delegated",
       "write_file": "delegated"
     },
-    "model_execution_registration_count": 86,
+    "model_execution_registration_count": 84,
     "model_execution_registration_names": [
       "accept_result",
       "arxiv_search",
@@ -973,7 +965,6 @@
       "interrupt_agent",
       "list_agents",
       "llms_txt_index",
-      "manage_auth",
       "manage_context",
       "manage_login",
       "manage_rule",
@@ -997,7 +988,6 @@
       "send_message",
       "send_notification",
       "session_search",
-      "set_api_key",
       "show_help",
       "spawn_agent",
       "switch_model",
@@ -1017,7 +1007,7 @@
       "web_fetch",
       "write_file"
     ],
-    "policy_registration_count": 86,
+    "policy_registration_count": 84,
     "policy_registration_names": [
       "accept_result",
       "arxiv_search",
@@ -1062,7 +1052,6 @@
       "interrupt_agent",
       "list_agents",
       "llms_txt_index",
-      "manage_auth",
       "manage_context",
       "manage_login",
       "manage_rule",
@@ -1086,7 +1075,6 @@
       "send_message",
       "send_notification",
       "session_search",
-      "set_api_key",
       "show_help",
       "spawn_agent",
       "switch_model",
@@ -1106,7 +1094,7 @@
       "web_fetch",
       "write_file"
     ],
-    "schema_count": 86,
+    "schema_count": 84,
     "schema_errors": [],
     "schema_names": [
       "accept_result",
@@ -1152,7 +1140,6 @@
       "interrupt_agent",
       "list_agents",
       "llms_txt_index",
-      "manage_auth",
       "manage_context",
       "manage_login",
       "manage_rule",
@@ -1176,7 +1163,6 @@
       "send_message",
       "send_notification",
       "session_search",
-      "set_api_key",
       "show_help",
       "spawn_agent",
       "switch_model",

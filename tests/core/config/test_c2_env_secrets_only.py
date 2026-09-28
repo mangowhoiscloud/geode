@@ -3,7 +3,7 @@
 Pins: model/effort/credential_source picks persist to config.toml ONLY
 (no .env writes — hazards H3/H4/H6), stale env lines are cleaned up by
 the writers, the credential_source toml rows are read back (H7 closed),
-API-key writes legitimately stay on the .env layer, and Settings repr/str
+External secrets may use .env; operator API keys use auth.toml. Settings repr/str
 never render API-key values.
 """
 
@@ -101,15 +101,6 @@ def test_model_picker_source_has_no_env_write() -> None:
     assert "_upsert_env(role_def.env_var" not in src
     assert '_upsert_env("GEODE_AGENTIC_EFFORT"' not in src
     assert "remove_env(role_def.env_var)" in src  # stale-mask cleanup present
-
-
-def test_login_source_is_toml_only() -> None:
-    src = (
-        Path(__file__).resolve().parents[3] / "core" / "cli" / "commands" / "login.py"
-    ).read_text(encoding="utf-8")
-    assert "_upsert_env(env_var, source)" not in src
-    # API-key write (secrets) must REMAIN on the env layer
-    assert "_upsert_env(env_var, key)" in src
 
 
 def test_credential_source_toml_rows_are_read_back(

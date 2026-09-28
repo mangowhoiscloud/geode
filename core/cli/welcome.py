@@ -52,20 +52,12 @@ def _welcome_screen() -> None:
     # Auto-generate .env from .env.example (placeholder → empty)
     auto_generate_env()
 
-    # v0.54.0 — proactive subscription OAuth detection. If the user already
-    # ran ``codex auth login``, GEODE picks up the token from
-    # ``~/.codex/auth.json`` and skips the wizard entirely.
-    from core.wiring.startup import _has_any_llm_key, detect_subscription_oauth
+    from core.wiring.startup import _has_any_llm_key
 
     if _has_any_llm_key():
         clear_dry_run_opt_in()
-    else:
-        oauth_provider = detect_subscription_oauth()
-        if oauth_provider:
-            clear_dry_run_opt_in()
-            console.print(f"  [success]OAuth detected: {oauth_provider}[/success]\n")
-        elif not dry_run_opted_in():
-            env_setup_wizard()
+    elif not dry_run_opted_in():
+        env_setup_wizard()
 
     # OpenClaw gateway:startup — readiness check
     readiness = check_readiness()

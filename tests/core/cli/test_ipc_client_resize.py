@@ -8,7 +8,8 @@ def test_send_prompt_refreshes_client_capability_before_prompt(monkeypatch) -> N
     client._sock = object()  # truthy sentinel; no real socket needed
     sent: list[dict] = []
     monkeypatch.setattr(client, "_send", lambda payload: sent.append(payload))
-    monkeypatch.setattr(client, "_recv", lambda: {"type": "result", "text": ""})
+    responses = iter([{"type": "ack", "status": "applied"}, {"type": "result", "text": ""}])
+    monkeypatch.setattr(client, "_recv", lambda: next(responses))
 
     result = client.send_prompt("hello")
 

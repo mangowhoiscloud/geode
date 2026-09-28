@@ -1,8 +1,7 @@
 """bootstrap doctor — diagnostic checks for the first-run surface.
 
 Verifies the things a beginner would otherwise have to debug by hand:
-Python version, ``geode`` on PATH, ``~/.geode/.env`` state, Codex CLI
-OAuth credentials, registered ProfileStore profiles, serve daemon
+Python version, ``geode`` on PATH, locally available credential routes, serve daemon
 status, IPC socket presence, and install drift (PATH shadow between
 multiple ``geode`` binaries, daemon/CLI version parity, ``[audit]``
 extra presence).
@@ -110,87 +109,23 @@ def _check_geode_on_path() -> CheckResult:
     )
 
 
-def _check_env_file() -> CheckResult:
-    from core.paths import GLOBAL_ENV_FILE  # PR-CLEANUP-D2 anchor
-
-    env_path = GLOBAL_ENV_FILE
-    ok = env_path.exists()
-    return CheckResult(
-        name="~/.geode/.env",
-        ok=ok,
-        detail=f"{env_path} ({'present' if ok else 'absent'})",
-        fix="" if ok else "Run `geode setup` to create one",
-    )
-
-
-def _check_codex_oauth() -> CheckResult:
-    """Check Codex CLI OAuth token (Path A)."""
-    try:
-        from core.auth.codex_cli_oauth import read_codex_cli_credentials
-
-        creds = read_codex_cli_credentials()
-    except Exception as exc:
-        return CheckResult(
-            name="Codex CLI OAuth",
-            ok=False,
-            detail=f"probe failed: {exc}",
-            fix="Run `codex auth login` to sign in with your ChatGPT account",
-        )
-
-    if not creds:
-        return CheckResult(
-            name="Codex CLI OAuth",
-            ok=False,
-            detail="no token at ~/.codex/auth.json",
-            fix="Optional. Run `codex auth login` if you have a ChatGPT subscription",
-        )
-
-    import time
-
-    expires_at = float(creds.get("expires_at", 0))
-    expired = time.time() > expires_at if expires_at else False
-    if expired:
-        return CheckResult(
-            name="Codex CLI OAuth",
-            ok=False,
-            detail="token expired",
-            fix="Run `codex auth login` to refresh",
-        )
-    account = creds.get("account_id", "unknown")
-    return CheckResult(
-        name="Codex CLI OAuth",
-        ok=True,
-        detail=f"valid (account={account})",
-    )
-
-
 def _check_profile_store() -> CheckResult:
-    """Confirm at least one usable profile is registered."""
-    try:
-        from core.wiring.container import ensure_profile_store
+    """Inspect request routes, not merely the presence of stored key bytes."""
+    from core.config import settings
+    from core.llm.routing import model_available
+    from core.wiring.startup import has_available_llm_credential
 
-        store = ensure_profile_store()
-        profiles = [p for p in store.list_all() if p.key]
-    except Exception as exc:
-        return CheckResult(
-            name="ProfileStore",
-            ok=False,
-            detail=f"load failed: {exc}",
-            fix="Run `geode setup` to register a credential",
-        )
-
-    if not profiles:
-        return CheckResult(
-            name="ProfileStore",
-            ok=False,
-            detail="no usable profiles",
-            fix="Run `geode setup` to add a ChatGPT subscription OAuth or API key credential",
-        )
-    summary = ", ".join(sorted({p.provider for p in profiles}))
+    available = has_available_llm_credential()
+    selected = model_available(settings.model)
     return CheckResult(
-        name="ProfileStore",
-        ok=True,
-        detail=f"{len(profiles)} profile(s) — providers: {summary}",
+        name="LLM credential routes",
+        ok=available,
+        detail=(
+            f"usable route: {'yes' if available else 'no'}; "
+            f"selected model {settings.model}: {'available' if selected else 'unavailable'} "
+            "(local inspection; upstream acceptance not tested)"
+        ),
+        fix="" if available else "Run `geode setup` or inspect `/login` and source policy",
     )
 
 
@@ -611,8 +546,6 @@ def run_bootstrap_doctor() -> BootstrapReport:
     report.checks.append(_check_geode_on_path())
     report.checks.append(_check_path_install_shadow())
     report.checks.append(_check_local_bin_on_path())
-    report.checks.append(_check_env_file())
-    report.checks.append(_check_codex_oauth())
     report.checks.append(_check_profile_store())
     report.checks.append(_check_bash_sandbox())
     report.checks.append(_check_desktop_computer_use())

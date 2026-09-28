@@ -128,8 +128,13 @@ def _resolve_codex_token_info(
     pool resync pattern: when the backing auth store changes, stale
     runtime entries are replaced instead of kept until process restart.
     """
+    from core.auth.codex_cli_oauth import sync_codex_cli_profile
     from core.config import CODEX_BASE_URL
     from core.llm.routing import resolve_routing
+    from core.wiring.container import get_profile_store
+
+    store = get_profile_store()
+    creds = sync_codex_cli_profile(store, force_refresh=force_refresh)
 
     target = resolve_routing(model, provider="openai", source="subscription", sources=sources)
     if target is not None:
@@ -141,9 +146,6 @@ def _resolve_codex_token_info(
             expires_at=float(target.profile.expires_at or 0.0),
         )
     try:
-        from core.wiring.container import get_profile_store
-
-        store = get_profile_store()
         if store is not None:
             # v0.52.5 — two passes so a GEODE-issued OAuth token
             # (managed_by="") wins over a borrowed Codex CLI token
@@ -174,9 +176,6 @@ def _resolve_codex_token_info(
         log.debug("GEODE openai-codex profile lookup failed", exc_info=True)
 
     try:
-        from core.auth.codex_cli_oauth import read_codex_cli_credentials
-
-        creds = read_codex_cli_credentials(force_refresh=force_refresh)
         if creds:
             resolved = _ResolvedCodexToken(
                 token=creds["access_token"],

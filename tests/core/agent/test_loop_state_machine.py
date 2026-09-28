@@ -249,6 +249,52 @@ def test_restore_loop_state_is_the_single_surgery():
     assert dst._session_metrics.time_budget_total_s == 0.0
 
 
+@pytest.mark.parametrize("enabled", [True, False])
+def test_resume_rebinds_final_and_approval_evidence_without_changing_history(
+    tmp_path, monkeypatch, enabled
+):
+    import json
+
+    from core.agent.approval import ApprovalRecord
+    from core.agent.evidence_ledger import EvidenceLedger
+    from core.agent.tool_executor import ToolExecutor
+
+    monkeypatch.setattr(
+        "core.agent.evidence_ledger.default_evidence_path",
+        lambda session_id: tmp_path / f"{session_id}.jsonl",
+    )
+    loop = _fake_loop()
+    loop.executor = ToolExecutor()
+    loop._turn_id = "old-turn"
+    old = EvidenceLedger.for_session("old") if enabled else None
+    loop._evidence_ledger = old
+    loop.executor.attach_evidence_ledger(old)
+    if old is not None:
+        old.append_final(result=SimpleNamespace(), turn_id="old-turn")
+    before = (tmp_path / "old.jsonl").read_bytes() if enabled else b""
+
+    state = SessionState(session_id="resumed")
+    _lifecycle.restore_loop_state(loop, state)
+    ledger = loop._evidence_ledger
+    assert loop.executor._approval._evidence_ledger is ledger
+    if not enabled:
+        assert ledger is None and not list(tmp_path.iterdir())
+        return
+
+    loop._turn_id = "resumed-turn"
+    loop.executor._approval.record_transition(
+        ApprovalRecord(tool_name="run_bash", category="write"), "denied"
+    )
+    ledger.append_final(result=SimpleNamespace(error="failed"))
+    _lifecycle.restore_loop_state(loop, state)
+    assert loop._evidence_ledger is ledger  # Same-session resume retains its owner.
+    rows = [json.loads(line) for line in (tmp_path / "resumed.jsonl").read_text().splitlines()]
+    assert [row["kind"] for row in rows] == ["hitl_approval", "final_result"]
+    assert all(row["session_id"] == "resumed" and row["turn_id"] == "resumed-turn" for row in rows)
+    assert rows[-1]["payload"]["error"] == "failed"
+    assert (tmp_path / "old.jsonl").read_bytes() == before
+
+
 def test_checkpoint_persists_loop_guards(tmp_path):
     cp = SessionCheckpoint(tmp_path / "sessions")
     guards = {

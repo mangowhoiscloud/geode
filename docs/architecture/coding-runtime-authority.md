@@ -49,6 +49,76 @@ The fixed rules are:
 
 ## Authority matrix
 
+### Routing suggestions and execution evidence
+
+[`task_preflight.py`](../../core/agent/task_preflight.py) classifies request text
+heuristically. Its nested v2 payload exposes `suggested_evidence` and routing
+notes as advisory context, not product requirements or acceptance criteria.
+Existing v1 observations remain historical data; no stored payload is rewritten.
+
+[`EvidenceLedger`](../../core/agent/evidence_ledger.py) records redacted
+preflight, final-result, approval and verification-policy observations with
+session/turn/call identity. A final row can contain an error. Payload hashes
+support correlation, not authenticated or tamper-proof evidence. Row presence
+does not verify a side effect; the old `evidence_check` presence inference is
+retired. Verify/PostVerify/Stop and their evidence references retain their
+separate completion-policy authority.
+
+When a loop resumes a different session, final-result and executor approval
+writers bind to that session's ledger together. Previous files remain history;
+same-session resume keeps the current ledger, and a disabled ledger stays disabled.
+
+Finalization writes timeline, JSONL evidence and checkpoint through independent
+owners, without a shared transaction. Evidence writes are best-effort diagnostics.
+The JSONL append helper serializes threads within one process; it does not
+promise cross-process coordination or power-loss durability. Atomic file replace
+prevents partial replacement visibility, but does not establish a transaction
+with external effects or a fully crash-tested recovery contract. Stronger claims
+need explicit failure/retry scope and authoritative target readback. See the
+[backend claim audit and acceptance plan](../plans/2026-09-27-requirements-evidence.md).
+
+### Credentials and session activation
+
+`auth_file_transaction` serializes file-owned auth changes across CLI, daemon
+and worker processes, validates the latest candidate, writes it atomically,
+then publishes it to the current process. It is a shared transaction helper,
+not a single daemon writer. Interactive/browser login still runs locally and
+asks the daemon to refresh. Settings/credential-source defaults and an admitted
+live session remain distinct authorities.
+
+`save_api_key` is the backend owner for `/login`, legacy `/key`, and onboarding
+key writes. It validates, commits `auth.toml`, and publishes a fresh profile;
+there is no settings or `.env` mirror. Externally supplied environment credentials
+remain separate inputs. Key input belongs to the terminal; the model-facing
+`manage_login` accepts nonsecret inspection/selection only. Retired `set_api_key`
+and `manage_auth` tools no longer exist. Primary write failure retains the previous
+key. Cross-process refresh is a separate operation, not simultaneous activation.
+Existing SDK client tests verify the next request's credential while preserving
+borrowed clients until event-loop drain. Saving a credential does not change a
+session's selected billing source or authorize a different provider.
+
+For checkpoint status transitions, `state.json` is authoritative. A failed
+JSON write propagates before the SQLite index, transition observation or active
+pointer advances. An index failure after JSON publication remains best-effort
+projection failure, not rollback of the authoritative state.
+
+### CLI, IPC and async ownership
+
+| Boundary | Owner and decision |
+|---|---|
+| Terminal input and display | CLI gathers hidden credentials, terminal capabilities and operator decisions. It renders backend error/cancel/result fields; rendered output does not establish successful persistence. Interactive browser/input login is rejected at daemon admission. |
+| Credential persistence | Shared auth functions validate ownership and serialize read/validate/write/publish. The CLI may invoke this owner locally; this is not a single-daemon-writer claim. A subsequent daemon refresh is a distinct outcome. |
+| Active session and request | `CLIPoller` admits model/source/permission configuration and runs the request with its correlation ID. Capability changes stay in the connection's context; execution tasks inherit it. |
+| Wire transport | `core/ipc_protocol.py` owns bounded envelopes and feature negotiation. The endpoint observes queued stream writes before terminal delivery; transport failure is not application success. The client closes failed connections and never automatically replays an unconfirmed mutation. |
+| Cancellation | The client targets one negotiated request ID; the server cancels only connection-owned prompt/streaming work. Acknowledgement means cancellation was requested. The runtime owns turn finalization, and prior external effects remain in place. |
+| Diagnostics | Error producers supply bounded request/session/command/category/class metadata. Logs, timeline and checkpoint retain separate delivery and persistence authority. |
+
+Runtime I/O follows the existing async owner. Native async hooks execute on
+that loop; synchronous extensions remain in an executor with copied request
+context and disposal of late coroutine results. Cancelling a waiter cannot
+forcibly stop a Python thread. Worker error cleanup preserves the primary
+failure; scheduled completion callbacks require successful terminal persistence.
+
 ### Worker admission and failure boundary (Unreleased)
 
 The legacy callback path in `SubAgentManager` binds the handler signature before

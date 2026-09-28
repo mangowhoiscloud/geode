@@ -51,6 +51,15 @@ export default function Page() {
               거절합니다.
             </p>
 
+            <p>
+              입력과 화면은 CLI가, 실행과 세션 상태는 데몬이 소유합니다.
+              대화형 로그인은 터미널에서 수행하며 데몬이 브라우저나 비밀 입력을
+              대신 열지 않습니다. 오류·취소·완료를 구분해 전달하고, 연결이 끊겨
+              결과를 확인할 수 없으면 같은 작업을 자동으로 재실행하지 않습니다.
+              요청 취소는 지원 기능을 협상한 뒤 해당 요청 ID에만 적용됩니다.
+              취소 접수는 작업 종료나 이미 실행한 외부 변경의 복구를 의미하지 않습니다.
+            </p>
+
             <h2>환영 화면과 라이브 상태</h2>
             <p>
               bare <code>geode</code>가 띄우는 환영 화면은{" "}
@@ -297,6 +306,16 @@ export default function Page() {
               request ID follows the stream, structured events, and terminal
               response. Legacy v0 envelopes remain readable, but peers without
               session-setting admission are explicitly rejected before execution.
+            </p>
+
+            <p>
+              The CLI owns input and display; the daemon owns execution and live
+              session state. Interactive login remains terminal-owned rather
+              than opening a browser or secret prompt inside the daemon.
+              Errors, cancellation and completion remain distinct. Connection
+              loss leaves the outcome unconfirmed and never triggers automatic
+              replay. Negotiated cancellation targets one request ID; accepting
+              it does not establish termination or rollback earlier external effects.
             </p>
 
             <h2>Welcome screen and live status</h2>

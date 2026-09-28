@@ -16,9 +16,7 @@ from unittest.mock import patch
 from core.cli.doctor_bootstrap import (
     BootstrapReport,
     CheckResult,
-    _check_codex_oauth,
     _check_desktop_computer_use,
-    _check_env_file,
     _check_geode_on_path,
     _check_local_bin_on_path,
     _check_profile_store,
@@ -50,82 +48,26 @@ class TestCheckGeodeOnPath:
         assert "uv tool install" in result.fix
 
 
-class TestCheckEnvFile:
-    def test_present(self, tmp_path):
-        env_path = tmp_path / ".env"
-        env_path.write_text("ANTHROPIC_API_KEY=sk-ant-test")
-        with patch("core.paths.GLOBAL_ENV_FILE", env_path):
-            result = _check_env_file()
-        assert result.ok is True
-
-    def test_absent(self, tmp_path):
-        # PR-CLEANUP-D2 — patch the core.paths anchor, not Path.expanduser.
-        env_path = tmp_path / "missing" / ".env"
-        with patch("core.paths.GLOBAL_ENV_FILE", env_path):
-            result = _check_env_file()
-        assert result.ok is False
-        assert "geode setup" in result.fix
-
-
-class TestCheckCodexOAuth:
-    def test_no_credentials(self):
-        with patch("core.auth.codex_cli_oauth.read_codex_cli_credentials", return_value=None):
-            result = _check_codex_oauth()
-        assert result.ok is False
-        assert "Optional" in result.fix
-
-    def test_valid_credentials(self):
-        # Far-future expiry
-        creds = {"access_token": "tok", "expires_at": 9999999999.0, "account_id": "acct-x"}
-        with patch(
-            "core.auth.codex_cli_oauth.read_codex_cli_credentials",
-            return_value=creds,
-        ):
-            result = _check_codex_oauth()
-        assert result.ok is True
-        assert "acct-x" in result.detail
-
-    def test_expired_token(self):
-        creds = {"access_token": "tok", "expires_at": 1.0, "account_id": "acct-x"}
-        with patch(
-            "core.auth.codex_cli_oauth.read_codex_cli_credentials",
-            return_value=creds,
-        ):
-            result = _check_codex_oauth()
-        assert result.ok is False
-        assert "expired" in result.detail
-        assert "codex auth login" in result.fix
-
-    def test_probe_failure_doesnt_crash(self):
-        with patch(
-            "core.auth.codex_cli_oauth.read_codex_cli_credentials",
-            side_effect=OSError("boom"),
-        ):
-            result = _check_codex_oauth()
-        assert result.ok is False
-
-
 class TestCheckProfileStore:
-    def test_no_profiles(self):
-        from unittest.mock import MagicMock
-
-        empty_store = MagicMock()
-        empty_store.list_all.return_value = []
-        with patch("core.wiring.container.ensure_profile_store", return_value=empty_store):
+    def test_no_routes(self):
+        with (
+            patch("core.wiring.startup.has_available_llm_credential", return_value=False),
+            patch("core.llm.routing.model_available", return_value=False),
+        ):
             result = _check_profile_store()
         assert result.ok is False
         assert "geode setup" in result.fix
+        assert "selected model" in result.detail
 
-    def test_with_profile(self):
-        from unittest.mock import MagicMock
-
-        profile = MagicMock(provider="openai-codex", key="tok-abc")
-        store = MagicMock()
-        store.list_all.return_value = [profile]
-        with patch("core.wiring.container.ensure_profile_store", return_value=store):
+    def test_available_route_with_unavailable_selected_model(self):
+        with (
+            patch("core.wiring.startup.has_available_llm_credential", return_value=True),
+            patch("core.llm.routing.model_available", return_value=False),
+        ):
             result = _check_profile_store()
         assert result.ok is True
-        assert "openai-codex" in result.detail
+        assert "unavailable" in result.detail
+        assert "upstream acceptance not tested" in result.detail
 
 
 class TestCheckServeSocket:

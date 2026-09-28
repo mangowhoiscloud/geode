@@ -119,7 +119,12 @@ class TestReadCodexCredentials:
         assert result is not None
         assert result["access_token"] == "override-token"
 
-    def test_file_read_success(self):
+    def test_file_read_success(self, tmp_path, monkeypatch):
+        import core.auth.codex_cli_oauth as module
+
+        auth = tmp_path / "auth.json"
+        auth.write_text("{}")
+        monkeypatch.setattr(module, "_cache", module.CredentialCache(auth))
         fake_data = {
             "tokens": {
                 "access_token": "file-token",
@@ -144,7 +149,13 @@ class TestReadCodexCredentials:
             result = read_codex_cli_credentials(force_refresh=True)
         assert result is None
 
-    def test_cache_hit(self):
+    def test_cache_hit(self, tmp_path, monkeypatch):
+        import core.auth.codex_cli_oauth as module
+
+        auth = tmp_path / "auth.json"
+        auth.write_text("{}")
+        monkeypatch.setattr(module, "codex_auth_path", lambda: auth)
+        monkeypatch.setattr(module, "_cache", module.CredentialCache(lambda: auth))
         fake_data = {
             "tokens": {
                 "access_token": "cached",
@@ -212,3 +223,120 @@ class TestRefreshCodexToken:
             return_value=creds,
         ):
             assert refresh_codex_cli_token(profile) is False
+
+
+def test_deleted_external_file_invalidates_cache(tmp_path, monkeypatch) -> None:
+    import core.auth.codex_cli_oauth as module
+
+    auth = tmp_path / "auth.json"
+    auth.write_text(json.dumps({"tokens": {"access_token": "old", "refresh_token": "r"}}))
+    monkeypatch.setattr(module, "_cache", module.CredentialCache(lambda: auth))
+    monkeypatch.setattr(module, "codex_auth_path", lambda: auth)
+    assert module.read_codex_cli_credentials()["access_token"] == "old"
+    auth.unlink()
+    assert module.read_codex_cli_credentials() is None
+
+
+def test_concurrent_reads_publish_in_order_and_invalidation_waits(tmp_path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from core.auth.credential_cache import CredentialCache
+
+    auth = tmp_path / "auth.json"
+    auth.write_text("old")
+    cache = CredentialCache(auth)
+    read_started, finish_read, second_started = Event(), Event(), Event()
+
+    def slow_read():
+        value = auth.read_text()
+        read_started.set()
+        assert finish_read.wait(5)
+        return value
+
+    def fresh_read():
+        second_started.set()
+        return cache.read(auth.read_text, force_refresh=True)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        old = pool.submit(cache.read, slow_read)
+        assert read_started.wait(5)
+        auth.write_text("new")
+        new = pool.submit(fresh_read)
+        assert second_started.wait(5)
+        finish_read.set()
+        assert old.result(5) == "new"
+        assert new.result(5) == "new"
+    assert cache.read(lambda: pytest.fail("fresh snapshot should be cached")) == "new"
+
+    read_started.clear()
+    finish_read.clear()
+    second_started.clear()
+
+    def invalidate():
+        second_started.set()
+        cache.invalidate()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        old = pool.submit(cache.read, slow_read, force_refresh=True)
+        assert read_started.wait(5)
+        invalidation = pool.submit(invalidate)
+        assert second_started.wait(5)
+        finish_read.set()
+        old.result(5)
+        invalidation.result(5)
+    assert cache.read(lambda: "reread") == "reread"
+
+
+def test_stale_refresh_does_not_overwrite_changed_profile() -> None:
+    from core.auth.credential_cache import refresh_managed_token
+    from core.auth.profiles import AuthProfile, CredentialType
+
+    profile = AuthProfile("external", "openai-codex", CredentialType.OAUTH, key="old")
+
+    def read(**kwargs):
+        profile.key = "newer"
+        return {"access_token": "stale", "refresh_token": "old-refresh"}
+
+    assert refresh_managed_token("Codex CLI", read, profile) is False
+    assert profile.key == "newer"
+
+
+@pytest.mark.parametrize("change", ["delete", "replace-twice"])
+def test_unstable_file_never_returns_old_credentials(tmp_path, change):
+    from core.auth.credential_cache import CredentialCache
+
+    auth = tmp_path / "auth.json"
+    auth.write_text("old")
+    cache = CredentialCache(auth)
+    calls = 0
+
+    def read():
+        nonlocal calls
+        value = auth.read_text()
+        calls += 1
+        if change == "delete":
+            auth.unlink()
+        else:
+            auth.write_text("new" * (calls + 1))
+        return value
+
+    assert cache.read(read) is None
+    assert calls <= 2
+
+
+def test_unchanged_external_snapshot_preserves_profile_and_health(monkeypatch):
+    from core.auth.codex_cli_oauth import sync_codex_cli_profile
+    from core.auth.profiles import ProfileStore
+
+    store = ProfileStore()
+    creds = {"access_token": "same", "refresh_token": "r", "expires_at": 9999999999}
+    monkeypatch.setattr("core.auth.codex_cli_oauth.read_codex_cli_credentials", lambda **_: creds)
+    sync_codex_cli_profile(store, force_refresh=True)
+    profile = store.get("openai-codex:codex-cli")
+    profile.error_count = 2
+    profile.cooldown_until = time.time() + 60
+    sync_codex_cli_profile(store, force_refresh=True)
+    assert store.get(profile.name) is profile
+    assert profile.error_count == 2
+    assert profile.is_cooling_down

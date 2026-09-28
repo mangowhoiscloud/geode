@@ -8,6 +8,7 @@ only the actions allowed for the selected :class:`HookName`.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import copy
 import hashlib
 import inspect
@@ -22,7 +23,7 @@ from enum import StrEnum
 from typing import Any
 
 from core.hooks.system import RuntimeEvent, RuntimeEventBus
-from core.observability.redaction import payload_changed, redact_secrets
+from core.observability.redaction import payload_changed, redact_and_bound_text, redact_secrets
 
 log = logging.getLogger(__name__)
 
@@ -602,7 +603,11 @@ class HookRegistry:
             except Exception as exc:
                 outcome = "error"
                 reason = type(exc).__name__
-                errors.append(f"{handler.name}: {exc}")
+                errors.append(
+                    redact_and_bound_text(
+                        f"{handler.name}: {str(exc) or reason}", _MAX_STRING_CHARS
+                    )
+                )
             except BaseException as exc:
                 outcome = "error"
                 reason = type(exc).__name__
@@ -637,11 +642,37 @@ class HookRegistry:
     @staticmethod
     async def _call(handler: _RegisteredHook, invocation: HookInvocation) -> HookDecision | None:
         async def run() -> HookDecision | None:
-            # A synchronous extension must not own the runtime event-loop
-            # thread. ``to_thread`` also propagates ContextVars. Calling an
-            # async function there only creates its coroutine object; the
-            # coroutine itself is still awaited and cancelled on this loop.
-            value = await asyncio.to_thread(handler.handler, invocation)
+            # Create async coroutines on their owning loop. A timed-out
+            # thread dispatch can otherwise discard a never-awaited coroutine.
+            async_handler = inspect.iscoroutinefunction(
+                handler.handler
+            ) or inspect.iscoroutinefunction(type(handler.handler).__call__)
+            if async_handler:
+                value = handler.handler(invocation)
+            else:
+                # Sync extensions stay off-loop with their request context.
+                # Keep the future alive after timeout so a late coroutine
+                # result is closed instead of discarded without an await.
+                future = asyncio.get_running_loop().run_in_executor(
+                    None, contextvars.copy_context().run, handler.handler, invocation
+                )
+
+                def discard_late_result(completed: asyncio.Future[Any]) -> None:
+                    try:
+                        late = completed.result()
+                    except BaseException as exc:
+                        log.debug("Timed-out hook finished with %s", type(exc).__name__)
+                        return
+                    if inspect.iscoroutine(late):
+                        late.close()
+                    elif isinstance(late, asyncio.Future):
+                        late.cancel()
+
+                try:
+                    value = await asyncio.shield(future)
+                except asyncio.CancelledError:
+                    future.add_done_callback(discard_late_result)
+                    raise
             if inspect.isawaitable(value):
                 return await value
             return value

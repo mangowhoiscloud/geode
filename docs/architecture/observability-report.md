@@ -45,6 +45,22 @@ The planes deliberately overlap in correlation, not in authority:
 The tables and counts below remain the April audit snapshot and should not be
 used as current implementation inventory.
 
+### Error diagnostics (September 28 audit)
+
+`core/observability/logging_config.py` owns text/JSON log rendering. Error
+producers supply `request_id`, `session_id`, `command`, `error_type`, and
+`exception_type`; both formatters preserve only those bounded extra fields.
+JSON logs retain the exception class and a scrubbed traceback when supplied.
+Arbitrary extras and request bodies are not serialized. These supplied IDs
+provide local correlation, not automatic OTel trace/span propagation.
+
+The shared text scrubber covers known credential formats and explicitly
+labelled API keys, OAuth tokens, passwords and authorization headers. The
+duplicated auth scrubber is removed. Unlabelled opaque secrets cannot be
+recognized in arbitrary text, so producers still avoid logging credentials.
+Formatting and redaction checks are not proof of end-to-end telemetry delivery
+or task completion; the record owners above retain their distinct authority.
+
 ---
 
 ## System Inventory (17 systems)
@@ -241,7 +257,8 @@ agent/error_recovery.py
 
 **Tracked:** RecoveryResult (recovered, attempts[], strategy_used, duration_ms)
 
-**Excluded tools:** run_bash, memory_save, note_save, set_api_key, manage_auth
+**Excluded tools include:** run_bash, memory_save, note_save, manage_login.
+The runtime exclusion set in `core/agent/error_recovery.py` is authoritative.
 
 ---
 

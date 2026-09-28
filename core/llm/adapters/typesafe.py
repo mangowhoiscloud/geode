@@ -128,10 +128,11 @@ async def _call_systemone(
     *,
     provider: str,
     model: str,
+    endpoint: str | None = None,
 ) -> AdapterCallResult:
     _validate_questions(payload.get("questions"))
     response = await client.post(
-        _ENDPOINTS[provider],
+        endpoint or _ENDPOINTS[provider],
         json={**payload, "model": model},
         headers={"Authorization": f"Bearer {api_key.get_secret_value()}"},
         follow_redirects=False,
@@ -287,7 +288,12 @@ class SystemOneAdapter:
     billing_type = AdapterBillingType.API
 
     def __init__(
-        self, provider: str, api_key: SecretStr, *, client: httpx.AsyncClient | None = None
+        self,
+        provider: str,
+        api_key: SecretStr,
+        base_url: str | None = None,
+        *,
+        client: httpx.AsyncClient | None = None,
     ) -> None:
         if provider not in _ENDPOINTS or not api_key.get_secret_value().strip():
             raise ValueError("SystemOne requires a configured decision route")
@@ -295,6 +301,11 @@ class SystemOneAdapter:
         self.name = f"{provider}-systemone"
         self.model = JEV_MODEL if provider == "typesafe" else OPENROUTER_JEV_MODEL
         self._api_key = api_key
+        self._endpoint = (
+            f"{base_url.rstrip('/')}/systemone"
+            if provider == "openrouter" and base_url
+            else _ENDPOINTS[provider]
+        )
         # An injected client stays caller-owned, including its event loop and
         # lifetime. Production creates and closes a fresh client for each call.
         self._injected_client = client
@@ -330,11 +341,17 @@ class SystemOneAdapter:
                 payload,
                 provider=self.provider,
                 model=self.model,
+                endpoint=self._endpoint,
             )
         else:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 result = await _call_systemone(
-                    client, self._api_key, payload, provider=self.provider, model=self.model
+                    client,
+                    self._api_key,
+                    payload,
+                    provider=self.provider,
+                    model=self.model,
+                    endpoint=self._endpoint,
                 )
         model_matches = result.response_model == self.model or (
             self.provider == "openrouter"

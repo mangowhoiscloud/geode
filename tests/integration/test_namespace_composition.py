@@ -380,7 +380,7 @@ def test_evaluation_composition_compiles_one_lossless_immutable_plan(
     assert policies["run_bash"].effect is ToolEffect.EXECUTE
     assert policies["edit_file"].effect is ToolEffect.MUTATE
     assert policies["gmail_send"].effect is ToolEffect.COMMUNICATE
-    assert policies["manage_auth"].effect is ToolEffect.ADMINISTRATIVE
+    assert policies["manage_login"].effect is ToolEffect.ADMINISTRATIVE
     assert policies["gmail_search"].data_class is DataClassification.PERSONAL
     assert policies["gmail_search"].persistence is PersistenceRule.REDACT
     assert policies["gmail_search"].approval is ApprovalPolicy.PER_INVOCATION

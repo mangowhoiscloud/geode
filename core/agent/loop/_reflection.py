@@ -500,7 +500,7 @@ async def _reflect_with_jev(
     *,
     current_request: str,
     task_context: str,
-    route: tuple[str, SecretStr],
+    route: tuple[str, SecretStr, str | None],
     middleware_registry: Any | None,
     correlation: Mapping[str, Any] | None,
 ) -> None:

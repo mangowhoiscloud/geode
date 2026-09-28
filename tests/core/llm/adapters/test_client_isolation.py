@@ -547,3 +547,94 @@ def test_actual_completion_uses_model_plan_account_and_endpoint(
             await drain_current_loop_clients()
 
     asyncio.run(scenario())
+
+
+def test_external_codex_login_and_logout_reach_retained_adapter(tmp_path, monkeypatch):
+    from core.auth.codex_cli_oauth import invalidate_cache
+    from core.llm.adapters.codex_oauth import CodexOAuthAdapter
+
+    store = ProfileStore()
+    monkeypatch.setattr(container, "_profile_store", store)
+    monkeypatch.setattr(container, "_profile_rotator", ProfileRotator(store))
+    plan_registry.reset_plan_registry()
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    auth = tmp_path / "auth.json"
+
+    def write(token):
+        auth.write_text(json.dumps({"tokens": {"access_token": token, "refresh_token": "r"}}))
+
+    write("external-old")
+    imported = AuthProfile(
+        "openai-codex:codex-cli",
+        "openai-codex",
+        CredentialType.OAUTH,
+        key="external-old",
+        managed_by="codex-cli",
+        expires_at=9999999999,
+    )
+    store.add(imported)
+    observed = []
+
+    def build(token):
+        def respond(request):
+            observed.append(request.headers["authorization"])
+            return httpx.Response(200, json={"data": [], "object": "list"})
+
+        return openai.AsyncOpenAI(
+            api_key=token,
+            base_url="https://chatgpt.com/backend-api/codex",
+            http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond)),
+        )
+
+    monkeypatch.setattr("core.llm.adapters.codex_oauth.build_async_codex_client", build)
+    captured = CodexOAuthAdapter()
+    invalidate_cache()
+
+    async def scenario():
+        before = captured._get_client()
+        try:
+            await before.models.list()
+            write("external-new")
+            after = captured._get_client()
+            await after.models.list()
+            assert after is not before
+            assert not before.is_closed()
+            assert imported.key == "external-old"
+            assert store.get(imported.name).key == "external-new"
+            auth.unlink()
+            with pytest.raises(RuntimeError, match="OAuth not found"):
+                captured._get_client()
+            assert store.get(imported.name) is None
+        finally:
+            await drain_current_loop_clients()
+        assert before.is_closed()
+
+    asyncio.run(scenario())
+    assert observed == ["Bearer external-old", "Bearer external-new"]
+
+
+def test_external_codex_sync_preserves_native_owner_and_explicit_plan(tmp_path, monkeypatch):
+    from core.auth.codex_cli_oauth import sync_codex_cli_profile
+    from core.auth.oauth_login import _persist_oauth_to_authtoml
+    from core.llm.providers.codex import _resolve_codex_token_info
+
+    store = container.ensure_profile_store()
+    _persist_oauth_to_authtoml({"access_token": "native-token", "expires_at": 9999999999})
+    native = store.get("openai-codex-geode:user")
+    registry = plan_registry.get_plan_registry()
+    registry.set_routing("test-codex", ["openai-codex-geode"])
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    auth = tmp_path / "auth.json"
+    auth.write_text(json.dumps({"tokens": {"access_token": "external", "refresh_token": "r"}}))
+    assert _resolve_codex_token_info(model="test-codex", force_refresh=True).token == "native-token"
+    auth.unlink()
+    assert _resolve_codex_token_info(model="test-codex", force_refresh=True).token == "native-token"
+    assert store.get(native.name) is native
+    # An operator-owned name is not overwritten merely because it resembles an import.
+    collision = AuthProfile(
+        "openai-codex:codex-cli", "openai-codex", CredentialType.OAUTH, key="owned"
+    )
+    store.add(collision)
+    auth.write_text(json.dumps({"tokens": {"access_token": "external", "refresh_token": "r"}}))
+    sync_codex_cli_profile(store, force_refresh=True)
+    assert store.get(collision.name) is collision

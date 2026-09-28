@@ -56,6 +56,14 @@ export default function Page() {
               <code>deep-researcher</code> 스킬로 읽습니다. 로컬 검증 성공은
               원격 CI 성공이나 배포 권한을 대신하지 않습니다.
             </p>
+            <p>
+              코드 수정 시에는 기존 소유자와 호출 경로를 먼저 확인하고 비동기 네이티브
+              실행, 명시적 동기 작업 경계, 구조화된 오류와 비밀정보 제거를 따릅니다.
+              취소 접수는 종료나 부작용 취소를 뜻하지 않으며, 필요한 상태 저장과
+              정리가 성공해야 완료로 보고합니다. 상세 개발 규약은 공유
+              <code>AGENTS.md</code>와 컨벤션 문서가 소유합니다. 프롬프트는 이
+              행동을 안내하며 실행 권한이나 저장 성공을 강제하는 장치는 아닙니다.
+            </p>
 
             <h2>드리프트 감지: 해시 핀</h2>
             <p>
@@ -93,6 +101,12 @@ export default function Page() {
               권한을 보증하지 않습니다. 모델·도구 그래프가 바뀌면 이전
               preflight 힌트를 무효화하고 시스템 프롬프트를 다시 조립합니다.
               필수 검증 조건은 별도 상태로 유지됩니다.
+            </p>
+            <p>
+              작업 preflight는 요청의 키워드와 현재 도구를 바탕으로 한 참고 정보입니다.
+              <code>suggested_evidence</code>는 요구사항이나 완료 판정이 아니며,
+              이전 턴의 기록이나 최종 응답의 존재만으로 작업 성공을 판단하지 않습니다.
+              실제 완료 정책은 Verify/PostVerify/Stop 경로가 담당합니다.
             </p>
 
             <h2>레이어 조립: build_system_prompt</h2>
@@ -260,6 +274,16 @@ export default function Page() {
               when needed. Local verification does not establish remote CI
               success or authorize publication.
             </p>
+            <p>
+              For code changes, the shared suffix directs inspection of existing
+              owners and callers, async-native execution, explicit synchronous
+              boundaries, structured errors, and secret redaction. Cancellation
+              acknowledgement does not establish termination or rollback;
+              completion requires the relevant persistence and cleanup to succeed.
+              Shared <code>AGENTS.md</code> and convention documents own detailed
+              contributor rules. Prompt guidance does not enforce permissions or
+              successful storage.
+            </p>
 
             <h2>Drift detection: hash pins</h2>
             <p>
@@ -298,6 +322,13 @@ export default function Page() {
               tool or sandbox permissions. Changing the model/tool graph clears
               the old preflight hint and rebuilds the system prompt; required
               verification conditions remain in their separate state.
+            </p>
+            <p>
+              Task preflight provides advisory context from request keywords
+              and available tools. Its <code>suggested_evidence</code> field is
+              neither a requirement nor a completion verdict. Prior-turn records
+              or a final response alone do not prove success; completion policy
+              remains with Verify/PostVerify/Stop.
             </p>
 
             <h2>Layer assembly: build_system_prompt</h2>

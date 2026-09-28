@@ -22,6 +22,7 @@ from core.llm.adapters.base import (
     AdapterBillingType,
     AdapterCallRequest,
     AdapterCallResult,
+    CredentialDetection,
     EnvironmentReport,
     Message,
     TextCompletionResult,
@@ -308,6 +309,14 @@ class OpenRouterPaygAdapter:
             ok=True,
             checks=(("openrouter_api_key", f"set ({len(api_key)} chars)"),),
         )
+
+    def detect_model_credential(self, model: str) -> CredentialDetection | None:
+        from core.config.env_io import is_placeholder
+
+        api_key, _, source_path = self._credential(model)
+        if not api_key or is_placeholder(api_key):
+            return None
+        return CredentialDetection(model=model, provider=self.provider, source_path=source_path)
 
 
 __all__ = ["OpenRouterPaygAdapter"]

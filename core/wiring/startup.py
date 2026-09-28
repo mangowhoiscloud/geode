@@ -8,14 +8,14 @@ processes (serve, IPC poller) can call it without an attached TTY.
 
 Public surface:
   * ``auto_generate_env`` — copy ``.env.example`` to ``.env`` (placeholder safe)
-  * ``detect_subscription_oauth`` — Codex CLI OAuth probe
   * ``check_readiness`` / ``ReadinessReport`` / ``Capability`` — gateway:startup data
   * ``setup_project_memory`` / ``setup_user_profile`` — first-run scaffolding
 
 Detects environment readiness:
-  ANY usable credential — raw key / Codex-CLI OAuth / stored profile
-                       → full mode (LLM enabled)
-  None                 → caller surfaces the wizard
+  Any locally usable model credential route → full mode (LLM enabled)
+  None                                      → caller surfaces the wizard
+
+Availability is inspected locally; upstream credential acceptance is not tested.
 """
 
 from __future__ import annotations
@@ -101,104 +101,50 @@ def _is_placeholder(value: str) -> bool:
     return is_placeholder(value)
 
 
-def _has_any_llm_key() -> bool:
-    """Check if ANY LLM provider API key is configured."""
-    from core.config import settings
+def has_available_llm_credential(provider: str | None = None) -> bool:
+    """Inspect whether any known model has a usable route for this provider.
 
-    if settings.anthropic_api_key and not _is_placeholder(settings.anthropic_api_key):
-        return True
-    if settings.openai_api_key and not _is_placeholder(settings.openai_api_key):
-        return True
-    if settings.openrouter_api_key and not _is_placeholder(settings.openrouter_api_key):
-        return True
-    return bool(settings.zai_api_key and not _is_placeholder(settings.zai_api_key))
-
-
-def _has_available_profile() -> bool:
-    """True if the ProfileStore holds any usable (``is_available``) credential.
-
-    Covers credential origins the raw-key and Codex-CLI probes miss — chiefly
-    GEODE-owned ``/login`` profiles (``openai-codex-geode``, Anthropic API keys,
-    ``glm`` …) hydrated from ``~/.geode/auth.toml``. Mirrors the dispatch
-    eligibility filter (``is_available``) so readiness and the actual call
-    path agree on what counts as usable.
-
-    Applies the same placeholder rule as ``_has_any_llm_key`` so a stale
-    ``ANTHROPIC_API_KEY=sk-ant-...`` cannot yield an ``is_available`` profile
-    that passes here while the raw-key path rejects it. OAuth access-token keys are real, so they
-    pass. Best-effort: ``ensure_profile_store`` self-builds, but any failure
-    (pre-hydration, IO) is treated as no signal.
+    This startup boundary hydrates persisted accounts once. The routing owner
+    checks model plans, source policy and account eligibility without a live call.
     """
     try:
+        from core.config import _resolve_provider, settings
+        from core.llm.adapters.registry import active_registry_snapshot, normalize_registry_provider
+        from core.llm.model_catalog import MODEL_OFFERINGS
+        from core.llm.routing import model_available
         from core.wiring.container import ensure_profile_store
 
+        ensure_profile_store()
+        defaults = (
+            registration.provider_spec.profile.default_model()
+            for registration in active_registry_snapshot().registrations.values()
+            if registration.provider_spec is not None
+        )
+        candidates = dict.fromkeys(
+            (
+                settings.model,
+                *defaults,
+                *(entry.id for entry in MODEL_OFFERINGS),
+                "openrouter/openrouter/auto",  # dynamic route, no finite offering catalog
+            )
+        )
         return any(
-            p.key and not _is_placeholder(p.key) for p in ensure_profile_store().list_available()
+            model_available(model)
+            for model in candidates
+            if model
+            and (
+                provider is None
+                or normalize_registry_provider(_resolve_provider(model)) == provider
+            )
         )
     except Exception:
-        log.debug("ProfileStore readiness probe failed", exc_info=True)
+        log.debug("Credential route inspection failed", exc_info=True)
         return False
 
 
-# ---------------------------------------------------------------------------
-# Proactive subscription OAuth detection (v0.54.0)
-# ---------------------------------------------------------------------------
-
-
-def detect_subscription_oauth() -> str | None:
-    """Detect a usable subscription-OAuth credential before any wizard runs.
-
-    Supports importing ChatGPT subscription credentials owned by Codex CLI
-    (Plus / Pro / Business / Edu / Enterprise).
-
-    Returns the provider variant id (``"openai-codex"``) when an imported token is
-    present. This is expiry-blind: the credential owner keeps its access token
-    refreshed, so an expired-looking cached token is still usable — and the
-    dispatch path (``resolve_codex_token``) treats it the same way, so
-    readiness and the call path agree. Best-effort profile registration into
-    the ProfileStore follows. Returns ``None`` otherwise.
-    """
-    try:
-        from core.auth.codex_cli_oauth import read_codex_cli_credentials
-    except ImportError:
-        return None
-
-    try:
-        creds = read_codex_cli_credentials()
-    except Exception:
-        log.debug("Codex CLI OAuth probe failed", exc_info=True)
-        return None
-    if not creds or not creds.get("access_token"):
-        return None
-
-    # The Codex CLI credential is real; ensure ProfileStore knows about it.
-    # ``build_auth()`` already registers it at startup, but on first run we
-    # may need to seed an empty store right after detection.
-    try:
-        from core.auth.profiles import AuthProfile, CredentialType
-        from core.wiring.container import ensure_profile_store
-
-        store = ensure_profile_store()
-        existing = next(
-            (p for p in store.list_all() if p.provider == "openai-codex" and p.key),
-            None,
-        )
-        if existing is None:
-            store.add(
-                AuthProfile(
-                    name="openai-codex:codex-cli",
-                    provider="openai-codex",
-                    credential_type=CredentialType.OAUTH,
-                    key=creds["access_token"],
-                    refresh_token=creds.get("refresh_token", ""),
-                    expires_at=creds.get("expires_at", 0.0),
-                    managed_by="codex-cli",
-                )
-            )
-    except Exception:
-        log.debug("Profile registration after OAuth detection failed", exc_info=True)
-
-    return "openai-codex"
+def _has_any_llm_key() -> bool:
+    """Legacy onboarding name; includes stored and managed credential routes."""
+    return has_available_llm_credential()
 
 
 # ---------------------------------------------------------------------------
@@ -235,22 +181,13 @@ class ReadinessReport:
 def check_readiness(project_root: Path | None = None) -> ReadinessReport:
     """Check system readiness (OpenClaw gateway:startup pattern).
 
-    ANY provider key (Anthropic/OpenAI/ZhipuAI) unblocks full mode.
+    Any usable model route unblocks full mode; no network authentication is attempted.
     """
     root = project_root or Path(".")
     report = ReadinessReport()
 
-    # 1. Credential check — full mode is unblocked by ANY of three origins,
-    #    so an operator with no raw key in .env is never wrongly forced into
-    #    dry-run: (a) a raw provider key, (b) a Codex-CLI subscription OAuth
-    #    login (~/.codex/auth.json), (c) any usable profile in the
-    #    ProfileStore (GEODE-owned /login creds in ~/.geode/auth.toml). The
-    #    later probes run only when the cheaper checks fail (short-circuit),
-    #    keeping the raw-key path free of the OAuth probe's ProfileStore
-    #    side-effect and the profile-store build.
-    has_key = _has_any_llm_key()
-    oauth_provider = detect_subscription_oauth() if not has_key else None
-    has_credential = has_key or oauth_provider is not None or _has_available_profile()
+    # Read the same route/eligibility decision as model selection and requests.
+    has_credential = _has_any_llm_key()
     report.has_api_key = has_credential
     if has_credential:
         report.capabilities.append(Capability(name="LLM Analysis", available=True))

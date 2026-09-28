@@ -139,3 +139,38 @@ def test_run_failure_marks_error():
     action_queue.put(("job1", "boom", True, ""))
     asyncio.run(_drain_and_settle(action_queue, services))
     assert services.loops[0].status_marks == ["error"]
+
+
+def test_failed_terminal_persistence_cannot_report_scheduler_completion(monkeypatch):
+    completed = []
+    released = []
+
+    class FailingPersistence(_FakeLoop):
+        async def amark_session_completed(self):
+            raise OSError("completion write failed")
+
+        async def amark_session_error(self):
+            raise OSError("error write also failed")
+
+    services = _FakeServices(SimpleNamespace(termination_reason="natural", text="done"))
+    loop = FailingPersistence(services._result)
+    monkeypatch.setattr(services, "create_session", lambda *_args, **_kwargs: (None, loop))
+    monkeypatch.setattr(_FakeLane, "manual_release", lambda _self, key: released.append(key))
+    action_queue: queue.Queue = queue.Queue()
+    action_queue.put(("job1", "run", True, ""))
+
+    async def run():
+        await drain_scheduler_queue(
+            action_queue=action_queue,
+            services=services,
+            session_lane=_FakeLane(),
+            global_lane=_FakeLane(),
+            force_isolated=True,
+            on_complete=lambda *args, **kwargs: completed.append(args),
+        )
+        # A secondary persistence error must not escape as an unobserved task.
+        await asyncio.gather(*list(_INFLIGHT_SCHEDULED_TASKS))
+
+    asyncio.run(run())
+    assert completed == []
+    assert released == ["sched:job1", "sched:job1"]

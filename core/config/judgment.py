@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 def resolve_judgment_route(
     config: Settings, *, engine: str | None = None, provider: str | None = None
-) -> tuple[str, SecretStr] | None:
+) -> tuple[str, SecretStr, str | None] | None:
     """Resolve Jev once per call; a missing key retains the LLM route.
 
     The returned key is private transport input, never an operator/status field.
@@ -25,13 +25,29 @@ def resolve_judgment_route(
     preference = provider if provider is not None else config.jev_provider
     providers = ("typesafe", "openrouter") if preference == "auto" else (preference,)
     for route_provider in providers:
-        key = (
-            config.typesafe_api_key.get_secret_value()
-            if route_provider == "typesafe"
-            else config.openrouter_api_key
-        ).strip()
+        base_url = None
+        if route_provider == "typesafe":
+            key = config.typesafe_api_key.get_secret_value()
+        else:
+            from core.llm.adapters.typesafe import OPENROUTER_JEV_MODEL
+            from core.llm.registry import get_provider_spec
+            from core.llm.routing import infer_source, resolve_routing
+
+            spec = get_provider_spec("openrouter")
+            if spec is None:
+                raise RuntimeError("OpenRouter provider composition is not registered")
+            source = infer_source("openrouter", model=OPENROUTER_JEV_MODEL, settings=config)
+            target = resolve_routing(
+                OPENROUTER_JEV_MODEL,
+                provider="openrouter",
+                source=source,
+                base_url=spec.default_base_url,
+            )
+            key = target.profile.key if target is not None else config.openrouter_api_key
+            base_url = target.base_url if target is not None else spec.default_base_url
+        key = key.strip()
         if key and not is_placeholder(key):
-            return route_provider, SecretStr(key)
+            return route_provider, SecretStr(key), base_url
     return None
 
 
@@ -60,9 +76,7 @@ def validate_judgment_selection(engine: str, *, provider: str | None = None) -> 
     updates = {"judgment_engine": engine, "jev_provider": provider or settings.jev_provider}
     candidate = type(settings).model_validate({**settings.model_dump(), **updates})
     if engine == "jev" and resolve_judgment_route(candidate) is None:
-        raise ValueError(
-            "Jev requires TYPESAFE_API_KEY or OPENROUTER_API_KEY for the selected route"
-        )
+        raise ValueError("Jev requires a TypeSafe key or a usable OpenRouter API-key route")
     for field, value in updates.items():
         report = explain_field(field)
         winner = report.winner

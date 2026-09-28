@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-import inspect
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
+import pytest
 from core.agent.capability_graph import build_capability_graph, graph_summary, supported_features
 from core.agent.evidence_ledger import EvidenceLedger
-from core.agent.loop import _phases, _response, agent_loop
+from core.agent.loop import _context, _lifecycle, agent_loop
+from core.agent.loop.models import AgenticResult
 from core.agent.task_preflight import classify_task, plan_task_preflight, render_preflight_hint
 from core.memory.atomic_write import read_jsonl
 from core.tools.computer_observation import build_action_event, evaluate_trajectory
@@ -66,8 +69,10 @@ def test_task_preflight_routes_pdf_gui_research_code() -> None:
     assert "computer_use" in preflight["recommended_tools"]
     assert "ui_probe" in preflight["recommended_tools"]
     assert "browser_snapshot" in preflight["recommended_tools"]
-    assert "source_url" in preflight["required_evidence"]
-    assert "gui_trajectory" in preflight["required_evidence"]
+    assert preflight["schema_version"] == 2
+    assert "source_url" in preflight["suggested_evidence"]
+    assert "gui_trajectory" in preflight["suggested_evidence"]
+    assert "required_evidence" not in preflight
     rendered = render_preflight_hint(preflight)
     assert "computer_use" in rendered
     assert "visual locate is not source-safe" in rendered
@@ -142,64 +147,49 @@ def test_gui_trajectory_eval_scores_recoverable_trace() -> None:
     )
 
 
-def test_agentic_loop_wires_preflight_and_capability_refresh() -> None:
-    arun_src = inspect.getsource(agent_loop.AgenticLoop._arun_once)
-    input_src = inspect.getsource(_phases.prepare_input)
-    helper_src = inspect.getsource(agent_loop.AgenticLoop._prepare_task_preflight)
-    refresh_src = inspect.getsource(_response.refresh_tools)
-
-    assert "_phases.prepare_input" in arun_src
-    assert "_prepare_task_preflight" in input_src
-    assert "plan_task_preflight" in helper_src
-    assert "append_preflight" in helper_src
-    assert "render_preflight_hint" in helper_src
-    assert "build_capability_graph" in refresh_src
-
-
-def test_evidence_check_row_reports_present_and_missing(tmp_path) -> None:
-    """Trajectory audit 2026-07-03 — the evidence_check row compares the
-    preflight-declared ``required_evidence`` against the kinds actually
-    appended, resolving the two aliased names (preflight → task_preflight,
-    final_answer → final_result)."""
-    from types import SimpleNamespace
-
-    graph = build_capability_graph(
+@pytest.mark.parametrize(
+    ("user_input", "suggested_kind", "suggested_evidence"),
+    [
+        ("Update the requirements document", "pdf", "document_ingest"),
+        ("Explain the context window", "gui", "gui_trajectory"),
+    ],
+)
+def test_preflight_keyword_matches_remain_advisory_in_prompt_and_ledger(
+    user_input: str, suggested_kind: str, suggested_evidence: str
+) -> None:
+    """A lexical match cannot supply the user's requirements or a verdict."""
+    loop = object.__new__(agent_loop.AgenticLoop)
+    loop._capability_graph = build_capability_graph(
         model="gpt-5.5",
         provider="openai",
         source="subscription",
-        visible_tool_names={"web_fetch", "general_web_search"},
+        visible_tool_names={"ingest_pdf"},
         computer_use_enabled=False,
     )
-    preflight = plan_task_preflight("research the latest agent papers", graph)
-    assert "source_url" in preflight["required_evidence"]
+    loop._evidence_ledger = EvidenceLedger(session_id="s-preflight")
+    loop._timeline = None
 
-    ledger = EvidenceLedger(session_id="s-check", path=tmp_path / "evidence.jsonl")
-    ledger.append_preflight(capability_graph=graph_summary(graph), preflight=preflight)
-    ledger.append_final(
-        result=SimpleNamespace(tool_calls=[], termination_reason="natural", rounds=1, error=None)
-    )
+    hint = loop._prepare_task_preflight(user_input)
+    prompt = _context.inject_runtime_hints("<dynamic_context>\n</dynamic_context>", hint)
+    row = loop._evidence_ledger.rows[0]
+    recorded = row["payload"]["preflight"]
 
-    row = ledger.append_evidence_check(required_evidence=preflight["required_evidence"])
-
-    assert row["kind"] == "evidence_check"
-    assert "preflight" in row["payload"]["present"]
-    assert "final_answer" in row["payload"]["present"]
-    assert "source_url" in row["payload"]["missing"]
-    assert "task_preflight" in row["payload"]["recorded_kinds"]
-    written = read_jsonl(ledger.path)
-    assert written[-1]["kind"] == "evidence_check"
-    assert written[-1]["payload"]["missing"] == ["source_url"]
+    assert row["kind"] == "task_preflight"
+    assert recorded["schema_version"] == 2
+    assert recorded["task_kinds"] == [suggested_kind]
+    assert suggested_evidence in recorded["suggested_evidence"]
+    assert "required_evidence" not in recorded
+    assert "suggested_evidence:" in prompt
+    assert "keyword-based routing suggestions, not task requirements or verification" in prompt
+    assert prompt.index(hint) < prompt.index("</dynamic_context>")
 
 
-def test_finalize_appends_evidence_check_after_final_row(tmp_path) -> None:
-    """``_prepare_final_result`` closes the declared → recorded → verified
-    chain: the evidence_check row lands AFTER final_result so the declared
-    ``final_answer`` requirement can match the just-written final row."""
-    from types import SimpleNamespace
-
-    from core.agent.loop import _lifecycle
-    from core.agent.loop.models import AgenticResult
-
+@pytest.mark.parametrize(
+    ("termination_reason", "error"), [("natural", None), ("billing_error", "billing_error")]
+)
+def test_finalize_records_outcome_without_inferring_evidence_coverage(
+    tmp_path, termination_reason: str, error: str | None
+) -> None:
     graph = build_capability_graph(
         model="gpt-5.5",
         provider="openai",
@@ -208,56 +198,46 @@ def test_finalize_appends_evidence_check_after_final_row(tmp_path) -> None:
         computer_use_enabled=False,
     )
     preflight = plan_task_preflight("최신 에이전트 트렌드 조사해줘", graph)
-
-    ledger = EvidenceLedger(session_id="s-final-check", path=tmp_path / "evidence.jsonl")
+    ledger = EvidenceLedger(
+        session_id="s-final", path=tmp_path / "evidence.jsonl", turn_id_provider=lambda: "turn-2"
+    )
+    # Historical names and failed rows remain records, not current-turn proof.
+    ledger.append(
+        kind="task_preflight",
+        summary="Historical preflight",
+        payload={"preflight": {"schema_version": 1, "required_evidence": ["source_url"]}},
+        turn_id="turn-1",
+    )
+    ledger.append(
+        kind="source_url",
+        summary="Prior failed fetch",
+        payload={"error": "fetch_failed"},
+        turn_id="turn-1",
+    )
+    ledger.append_preflight(capability_graph=graph_summary(graph), preflight=preflight)
+    prior_rows = read_jsonl(ledger.path)
     loop = SimpleNamespace(
-        model="test-model",
-        max_rounds=1,
-        _usage_snapshot=None,
         _evidence_ledger=ledger,
         _task_preflight=preflight,
-        _timeline=None,
-        _total_empty_rounds=0,
-        _consecutive_text_only_rounds=0,
-        _save_checkpoint=lambda user_input, round_idx=0: None,
+        _timeline=MagicMock(),
+        _save_checkpoint=MagicMock(),
     )
-    result = AgenticResult(text="정리했습니다", rounds=1)
-
-    _lifecycle._prepare_final_result(loop, result, "조사해줘", 0)
-
-    kinds = [row["kind"] for row in ledger.rows]
-    assert "final_result" in kinds
-    assert kinds.index("final_result") < kinds.index("evidence_check")
-    check = ledger.rows[-1]
-    assert check["kind"] == "evidence_check"
-    # final_result was appended by the same finalize path → satisfied.
-    assert "final_answer" in check["payload"]["present"]
-    # The stub never recorded source_url evidence → surfaced as missing.
-    assert "source_url" in check["payload"]["missing"]
-
-
-def test_finalize_without_preflight_skips_evidence_check(tmp_path) -> None:
-    """A loop whose preflight never ran (init failure path sets
-    ``_task_preflight = None``) must not append an empty evidence_check."""
-    from types import SimpleNamespace
-
-    from core.agent.loop import _lifecycle
-    from core.agent.loop.models import AgenticResult
-
-    ledger = EvidenceLedger(session_id="s-no-preflight", path=tmp_path / "evidence.jsonl")
-    loop = SimpleNamespace(
-        model="test-model",
-        max_rounds=1,
-        _usage_snapshot=None,
-        _evidence_ledger=ledger,
-        _task_preflight=None,
-        _timeline=None,
-        _total_empty_rounds=0,
-        _consecutive_text_only_rounds=0,
-        _save_checkpoint=lambda user_input, round_idx=0: None,
+    result = AgenticResult(
+        text="Unverified claim", rounds=1, termination_reason=termination_reason, error=error
     )
+    verify_payload = {"passed": False, "rubric_misses": ["verification_error"]}
 
-    _lifecycle._prepare_final_result(loop, AgenticResult(text="done", rounds=1), "u", 0)
+    _lifecycle._persist_final_result(loop, result, "조사해줘", 1, verify_payload)
 
-    kinds = [row["kind"] for row in ledger.rows]
-    assert kinds == ["final_result"]
+    written = read_jsonl(ledger.path)
+    assert written[:-1] == prior_rows
+    assert written[-1]["kind"] == "final_result"
+    assert written[-1]["turn_id"] == "turn-2"
+    assert written[-1]["payload"] == {
+        "termination_reason": termination_reason,
+        "rounds": 1,
+        "tool_count": 0,
+        "error": error,
+    }
+    assert loop._timeline.record_turn_complete.call_args.kwargs["verify"] == verify_payload
+    loop._save_checkpoint.assert_called_once_with("조사해줘", round_idx=1)

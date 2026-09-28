@@ -30,6 +30,16 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
 
+# Views and nonsecret changes admitted by both CLI routing and daemon ingress.
+# Credential entry and browser flows remain owned by the local terminal.
+DAEMON_LOGIN_SUBCOMMANDS = frozenset(
+    {
+        *("status", "list", "ls", "quota", "health", "providers", "provider"),
+        *("use", "use-profile", "useprofile", "profile-use", "order", "route"),
+        *("remove", "rm", "delete", "refresh", "help", "?"),
+    }
+)
+
 
 class RunLocation(Enum):
     """Where a slash command is executed."""

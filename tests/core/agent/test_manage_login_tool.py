@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 from core.cli.tool_handlers import _build_system_handlers
@@ -32,23 +32,21 @@ class TestToolDefinition:
         sub_enum = entry["input_schema"]["properties"]["subcommand"]["enum"]
         for required in (
             "status",
-            "openai",
-            "anthropic",
-            "add",
-            "set-key",
             "use",
             "route",
             "remove",
             "quota",
         ):
             assert required in sub_enum, required
-        assert "oauth" not in sub_enum
+        assert set(sub_enum).isdisjoint({"openai", "anthropic", "add", "set-key", "oauth"})
+        assert set(names).isdisjoint({"set_api_key", "manage_auth"})
 
 
 class TestHandlerWired:
     def test_handler_is_registered(self) -> None:
         handlers = _build_system_handlers(mcp_manager=None)
         assert "manage_login" in handlers
+        assert set(handlers).isdisjoint({"set_api_key", "manage_auth"})
 
     def test_status_returns_structured_snapshot(self) -> None:
         result = _handler()(subcommand="status")
@@ -94,26 +92,15 @@ class TestSafetyRegistration:
 
 
 class TestRouting:
-    def test_set_key_via_tool_persists(self, tmp_path: Path, monkeypatch) -> None:
-        # Redirect auth.toml to tmp so the test never touches ~/.geode
-        monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
-
-        # Store a plan so set-key has a target
-        from core.auth.auth_toml import save_auth_toml
-        from core.llm.strategies.plan_registry import get_plan_registry
-        from core.llm.strategies.plans import GLM_CODING_TIERS
-
-        registry = get_plan_registry()
-        registry.add(GLM_CODING_TIERS["lite"])
-        save_auth_toml()
-
-        result = _handler()(subcommand="set-key", args="glm-coding-lite zai-xx-1234567890")
-        assert result["status"] == "ok"
-
-        bound = [p for p in result["profiles"] if p["plan_id"] == "glm-coding-lite"]
-        assert bound, "set-key did not bind a profile to the plan"
-        assert "zai-xx-1234567890" in (tmp_path / "auth.toml").read_text()
-        assert "zai-xx-1234567890" not in json.dumps(result)
+    @pytest.mark.parametrize(
+        "subcommand", ["set-key", "setkey", "key", "unknown", "set-key secret"]
+    )
+    def test_secret_and_unknown_actions_never_reach_login(self, subcommand: str) -> None:
+        with patch("core.cli.commands.login.run_login") as run:
+            result = _handler()(subcommand=subcommand, args="synthetic-secret")
+        assert "error" in result and result.get("status") != "ok"
+        assert "synthetic-secret" not in json.dumps(result)
+        run.assert_not_called()
 
 
 class TestVerdictPerOwnProvider:
@@ -178,5 +165,28 @@ class TestOutcome:
 
         result = _handler()(subcommand=subcommand)
 
-        assert f"/login {subcommand}" in result["error"]
+        assert "/login add" in result["error"]
+        assert "never request or pass a key" in result["error"]
         run.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("failure", "error_type", "recoverable"),
+    [
+        (PermissionError, "permission", False),
+        (FileNotFoundError, "not_found", True),
+        (TimeoutError, "timeout", True),
+        (ValueError, "validation", True),
+    ],
+)
+def test_manage_login_preserves_failure_category_and_redacts_message(
+    failure, error_type, recoverable
+):
+    secret = "sk-" + "synthetic1234567890" * 2
+    with patch("core.cli.commands.login.run_login", side_effect=failure(f"failed {secret}")):
+        result = _handler()(subcommand="remove", args="example")
+    assert result["error_type"] == error_type
+    assert result["recoverable"] is recoverable
+    assert secret not in result["error"]
+    assert "[REDACTED]" in result["error"]
+    assert result.get("status") != "ok"

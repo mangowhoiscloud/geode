@@ -569,6 +569,24 @@ def _run_agentic(
             exc_info=True,
         )
 
+    hooks_close_attempted = False
+
+    def close_worker_hooks(primary_error: BaseException | None = None) -> None:
+        nonlocal hooks_close_attempted
+        if worker_hooks is None or hooks_close_attempted:
+            return
+        hooks_close_attempted = True
+        try:
+            worker_hooks.close()
+        except BaseException as cleanup_error:
+            if primary_error is None:
+                raise
+            log.warning(
+                "Worker hook cleanup failed while preserving %s: %s",
+                type(primary_error).__name__,
+                type(cleanup_error).__name__,
+            )
+
     async def _execute_worker() -> WorkerResult:
         event_loop = asyncio.get_running_loop()
         task = asyncio.current_task()
@@ -581,6 +599,7 @@ def _run_agentic(
 
         loop: AgenticLoop | None = None
         session_admitted = False
+        primary_error: BaseException | None = None
         try:
             if handle_sigterm:
                 event_loop.add_signal_handler(signal.SIGTERM, _cancel_worker)
@@ -758,14 +777,20 @@ def _run_agentic(
                 usd_spent=usd_spent,
             )
             return result
-        except BaseException:
+        except BaseException as exc:
+            primary_error = exc
             if loop is not None and session_admitted:
-                await loop.amark_session_error()
+                try:
+                    await loop.amark_session_error()
+                except BaseException as cleanup_error:
+                    log.warning(
+                        "Worker session finalization failed while preserving primary failure: %s",
+                        type(cleanup_error).__name__,
+                    )
             raise
         finally:
             try:
-                if worker_hooks is not None:
-                    worker_hooks.close()
+                close_worker_hooks(primary_error)
             finally:
                 if handle_sigterm:
                     event_loop.remove_signal_handler(signal.SIGTERM)
@@ -773,9 +798,11 @@ def _run_agentic(
 
     try:
         return run_process_coroutine(_execute_worker())
+    except BaseException as exc:
+        close_worker_hooks(exc)
+        raise
     finally:
-        if worker_hooks is not None and not worker_hooks.closed:
-            worker_hooks.close()
+        close_worker_hooks()
 
 
 # PR-DEFECT-AB (2026-05-24) — propagate AgenticLoop failures past the
