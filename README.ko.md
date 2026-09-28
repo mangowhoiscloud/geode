@@ -1,718 +1,218 @@
 <p align="center">
-  <img src="assets/geodi-dot.svg" alt="Geodi — GEODE's dot mascot" width="320" />
-</p>
-<p align="center">
-  <sub>Geodi · 22×12 dot sprite · <code>core/ui/geodi_art.py</code></sub>
+  <img src="assets/geodi-dot.svg" alt="GEODE의 도트 마스코트 Geodi" width="240" />
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-E0699F?style=flat-square" alt="while(tool_use)">
-  <img src="https://img.shields.io/badge/scaffold%20optimization-experimental-E0699F?style=flat-square" alt="Experimental scaffold optimization">
-  <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
+  <a href="https://github.com/mangowhoiscloud/geode/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci" alt="CI"></a>
   <a href="https://github.com/mangowhoiscloud/geode/releases/latest"><img src="https://img.shields.io/github/v/release/mangowhoiscloud/geode?style=flat-square&label=release" alt="최신 릴리스"></a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Anthropic-Fable_5-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Fable 5">
-  <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z"><img src="https://img.shields.io/badge/OpenAI-GPT--6_Astra_E2E_smoke_1%2F1-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-6 Astra E2E smoke 1/1"></a>
-  <img src="https://img.shields.io/badge/OpenRouter-inference_router-6b46c1?style=flat-square" alt="OpenRouter">
-  <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.3-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.3">
-</p>
-
-<p align="center">
-  <a href="https://mangowhoiscloud.github.io/geode/">랜딩</a>
-  ·
-  <a href="https://mangowhoiscloud.github.io/geode/docs">문서</a>
-  ·
-  <a href="https://mangowhoiscloud.github.io/geode/self-improving/">Self-improving 허브</a>
-  ·
-  <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts">평가 아티팩트</a>
-  ·
+  <a href="https://mangowhoiscloud.github.io/geode/docs/">문서</a> ·
+  <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts">평가 아티팩트</a> ·
   <a href="README.md">English</a>
 </p>
 
 # GEODE v1.0.30 — Autonomous Agent Runtime + Evaluation Substrate
 
-자율적인 도구 작업을 수행하는 범용 에이전트 런타임입니다. 자연어로
-요청하면 GEODE가 계획을 세우고 도구를 호출한 뒤 결과를 보고합니다. 짧은
-프롬프트와 장시간 세션 모두 같은 런타임 계약을 사용합니다. 실험적 outer
-loop는 scaffold 후보를 변이시키고 증거 기반 안전성 게이트로 admission하지만,
-공개 기록은 아직 지속적인 자기개선을 입증하지 않습니다.
+GEODE는 리서치, 파일 작업, 예약 작업을 위한 Python 에이전트 런타임입니다.
+에이전트는 도구를 호출하고 결과를 읽으며 작업을 이어갑니다.
+데몬이 실행과 세션을 관리하고, 터미널 클라이언트는 IPC로 연결됩니다.
+MCP 서버와 메시징 연동으로 도구와 대화 채널을 확장할 수 있습니다.
 
-> **실험 상태:** SIL(Self-Improving Loop)과 Crucible은 안정된 제품 기능이
-> 아니라 검증 중인 실험입니다. 프로토콜, 승격 게이트, 스키마, 결과는
-> 검증이 진행되면서 달라질 수 있습니다.
+같은 배포판에 평가 도구와 실험적인 스캐폴드 탐색도 포함합니다.
+각 구성요소의 책임은 [패키지 구성](#패키지-구성)에서 설명합니다.
 
-> **ChatGPT Plus, Pro, Business, Edu, Enterprise 결제 중이신가요?** 그 구독을 GEODE 가 그대로 씁니다. API 키 필요 없습니다. [구독 setup ↓](#path-a--chatgpt-구독-openai-사용자에게-권장)
->
-> **Anthropic 사용자라면** — GEODE의 내장 Anthropic 경로는
-> `ANTHROPIC_API_KEY`가 필요합니다. 이전 Claude CLI 구독 통합은 퇴역했으며,
-> 레거시 설정은 dispatch 전에 migration 안내와 함께 중단됩니다.
+## 빠른 시작
 
----
-
-## 하나의 배포판, 세 가지 경계
-
-v1.0.30은 선택한 생성 모델과 effort를 유지하면서, 자격 증명이 있는 Jev를
-판단 모델로 명시적으로 선택할 수 있게 합니다. 동일 조건의 판정 비교,
-후보 선택과 cascade를 위한 선택형 평가 도구도 추가합니다. 도구 결과를
-받은 매 라운드와 최종 응답 전에 Reflection을 수행하고 최종 의미 검증을
-적용하므로, 이전에 검사를 생략하던 설정에서는 판단 호출이 늘 수 있습니다.
-인증 파일의 transaction, 세션 설정 admission, IPC는 자격 증명 저장·설정
-적용·작업 완료·검증 통과를 구분합니다. 갱신된 제공자·문맥·캐시 계약은
-관측된 실패와 미확인 사용량을 보존합니다. 공용 런타임·개발 지침에 backend의
-판단 권한과 async 작업의 소유 책임을 명시하고, heuristic preflight는 참고
-제안으로 유지합니다. [인증](https://mangowhoiscloud.github.io/geode/docs/ops/oauth),
-[프롬프트 조립](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-system),
-[사용량 회계](docs/architecture/usage-accounting.md)에서 적용 범위를 확인하세요.
-평가 도구와 요금 추정치 자체가 비교 성능이나 실제 청구액을 입증하지는 않습니다.
-
-`geode-agent` wheel은 네 개 명령을 함께 배포하지만, 설치된 패키지를 쓰기
-가능한 작업공간으로 사용하지 않습니다.
-
-| 경계 | 책임 | 명령 |
-|---|---|---|
-| `core` | 런타임, 운영자 CLI, 데몬, MCP 서버 | `geode`, `geode-mcp` |
-| `evals` | audit, 벤치마크 어댑터, 증거 생성 | `geode-eval` |
-| `evolve` | 실험적 scaffold 탐색과 Crucible | `geode-evolve` |
-
-설치된 코드와 번들 asset은 불변입니다. 런타임·실험 산출물은 `~/.geode/`
-(또는 명시적 state override)에 두며, 변이와 승격에는 쓰기 가능한 GEODE Git
-checkout이 필요합니다. 자세한 내용은
-[배포 lifecycle](docs/architecture/immutable-distribution-lifecycle.md)을 참고하세요.
-
-## 평가 증거
-
-GEODE는 조건이 다른 run을 하나의 제품 점수로 합치지 않습니다. 공개 결과는
-harness revision, task set, model route, effort, timeout, attempt lineage에
-각각 고정됩니다.
-
-| 트랙 | 공개 증거 경계 |
-|---|---|
-| [Tau2](https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2) | native-user와 GEODE-user 트랙을 분리하며, 미완료·quota 오염 run은 aggregate score 권한 없이 보존합니다. |
-| [MCPMark](https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark) | 서비스 coverage, 과거 available-services 결과, 정정된 paired 관측, full-Verified 한계를 구분합니다. |
-| [Terminal-Bench 2.1](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench) | GPT-6 Astra 구독 E2E는 1 task, 1 repetition smoke입니다. reward 1/1, verifier 6/6이며 suite, 순위, 일반 계정 가용성은 주장하지 않습니다. |
-
-원본 receipt와 개인정보 검토를 통과한 trajectory는
-[평가 artifact 저장소](https://github.com/mangowhoiscloud/geode-eval-artifacts)에 보존합니다.
-
----
-
-## 실험적 scaffold 최적화 loop
-
-GEODE에는 실험적인 **non-parametric scaffold 최적화 loop**가 있습니다.
-모델 가중치는 건드리지 않고 시스템 프롬프트, 도구 정책, 작업 분해,
-reflection, 스킬, 에이전트 계약, 도구 설명의 후보를 변이시킵니다. fitness는
-capability 벤치마크가 아니라 적대적 **안전성** audit이며, critical 안전
-차원에는 hard floor가 적용됩니다. 현재 공개 증거가 입증하는 것은 반복적인
-core 승격이나 단조 성능 향상이 아니라 rejection·invalidation 게이트의
-규율입니다.
-
-선택 계약은 **(1+1) 챔피언 체인**입니다. 변이하고 audit한 뒤 실제 이득이
-있을 때만 승격을 허용하고, 아니면 revert합니다. inner agentic loop는 작업을
-수행하고 outer loop는 scaffold 후보를 평가합니다. 이 계보(Promptbreeder,
-STOP, ADAS, DGM, GEPA)는 이미 잘 정립돼 있습니다. GEODE는 이를 capability에서
-safety로, 가중치에서 scaffold로 다시 겨냥합니다. 새로운 primitive가 아니라
-알려진 메커니즘의 재조합입니다.
-
-- **[closed loop →](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch)** — autoresearch, 변이 / audit / promote / revert 전 과정
-- **[Two loops →](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops)** — inner 와 outer 의 멘탈 모델
-- **[계보와 포지셔닝 →](https://mangowhoiscloud.github.io/geode/docs/capabilities/lineage)** — 기존 self-improving loop 들 사이에서 GEODE 의 위치
-- **[Self-improving 허브 →](https://mangowhoiscloud.github.io/geode/self-improving/)** — 실제 generation, 변이, promote 결정
-- **[Petri bundle →](https://mangowhoiscloud.github.io/geode/self-improving/petri-bundle/)** — 안전성 audit transcript 를 보는 라이브 뷰어
-
----
-
-## 무엇을 시킬 수 있나요
-
-복붙해서 바로 시도해보세요:
-
-```
-"이번 달 arXiv 의 최신 RAG 논문 요약해줘"
-"내 프로필에 맞는 LinkedIn 채용 공고 찾아서 우선순위 매겨줘"
-"평일 오전 9시 스탠드업 알림 만들어줘"
-"hacker news 에서 LangGraph 관련 글 모니터링하다가 Slack 으로 DM 보내줘"
-"코드 리뷰용으로 gpt-5.5 와 claude-opus-4.7 비교해줘"
-"출시 관련 메일을 찾아 요약하고 후속 일정을 Calendar에 추가해줘"
-```
-
-GEODE 는 적합한 도구(웹 검색, 파일 작업, MCP 서버, 서브에이전트)를 골라 실행한 뒤, 출처와 비용까지 포함해 답을 보여줍니다.
-
----
-
-## 5분 setup
-
-### 사전 준비물
-
-<details>
-<summary><strong>이게 뭔지 모르세요?</strong> 클릭하면 1줄 설명이 나옵니다.</summary>
-
-- **Python 3.12 이상** — GEODE 가 작성된 언어. 대부분의 노트북엔 충분히 최신 버전이 안 깔려 있습니다. [python.org/downloads](https://www.python.org/downloads/) 에서 macOS 또는 Windows 인스톨러 다운로드 후 설치.
-- **Git** — GitHub 에서 GEODE 소스를 복사해오는 도구. Mac 은 `xcode-select --install`. Windows 는 [git-scm.com](https://git-scm.com/) 인스톨러.
-- **uv** — 빠른 Python 패키지 매니저(pip 대체). 아래 `curl` 명령을 터미널/PowerShell 에 그대로 붙여넣기.
-
-이 중 하나라도 안 되면 아래 [트러블슈팅](#트러블슈팅) 참고.
-</details>
-
-| 도구 | 설치 | 확인 |
-|------|------|------|
-| Python 3.12+ | [python.org/downloads](https://www.python.org/downloads/) | `python3 --version` |
-| Git | [git-scm.com](https://git-scm.com/) | `git --version` |
-| uv | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `uv --version` |
-
-### 1단계 — GEODE 설치
-
-GEODE 의 PyPI 배포명은 **`geode-agent`** 입니다. 설치되는 실행 명령은 **`geode`** 입니다.
+macOS 또는 Linux에서 Python 3.12 이상과
+[uv](https://docs.astral.sh/uv/getting-started/installation/)를 준비하세요.
+Git은 소스를 받아 개발할 때만 필요합니다.
 
 ```bash
 uv tool install geode-agent
 geode version
+geode setup
+geode
 ```
 
-현재 릴리즈가 아직 PyPI 에 공개되지 않았거나 GEODE 자체를 개발하려면 소스 체크아웃으로 설치하세요:
+설치할 패키지 이름은 **`geode-agent`**, 실행 명령은 **`geode`**입니다.
+설정 마법사에서 ChatGPT 로그인, API 키 입력, dry-run 중 하나를 선택합니다.
+터미널 클라이언트는 필요할 때 데몬을 시작합니다.
+
+세션에서 다음과 같이 요청해 보세요.
+
+```text
+이 디렉터리의 문서를 요약하고 근거가 되는 파일을 표시해줘.
+두 설계안을 비교하고 아직 결정하지 않은 사항을 정리해줘.
+```
+
+웹 접근, 메시징 등 외부 연동에는 별도의 설정과 권한이 필요합니다.
+자세한 내용은 [설정 가이드](docs/setup.ko.md)를 참고하세요.
+
+### 인증과 모델 선택
+
+GEODE 세션 안에서 사용합니다.
+
+| 명령 | 용도 |
+|---|---|
+| `/login openai` | 이용 권한이 있는 ChatGPT 계정으로 기기 코드 로그인 |
+| `/login anthropic` | 화면에 표시되지 않는 입력창으로 Anthropic API 키 등록 |
+| `/login add` | 제공자와 계정 유형을 선택해 자격 증명 추가 |
+| `/login status` | 설정된 인증 상태 확인 |
+| `/model` | 사용 가능한 모델과 추론 노력(effort) 선택 |
+
+OpenAI 구독 경로는 프로세스 내부의 OAuth 어댑터로 Codex 백엔드를 호출합니다.
+기존 Codex 자격 증명도 읽을 수 있으며, 추론을 위해 Codex CLI를 실행하지는
+않습니다. 계정별 이용 권한과 사용 한도는 그대로 적용됩니다.
+Anthropic은 API 키를 사용하며, 이전 Claude CLI 구독 경로는 지원하지 않습니다.
+
+API 키 경로는 Anthropic, OpenAI, OpenRouter, Z.AI를 지원합니다.
+키를 명령이나 대화에 적는 대신 터미널의 숨김 입력을 사용하세요.
+GEODE가 관리하는 제공자 키와 OAuth 계정은 `~/.geode/auth.toml`에 저장합니다.
+이 파일은 소유자 전용 권한을 적용한 평문 파일이며 OS 키체인은 아닙니다.
+외부에서 주입한 환경변수 자격 증명도 사용할 수 있습니다.
+
+소스 선택, 자격 증명 우선순위, 계정 라우팅은
+[제공자 설정](https://mangowhoiscloud.github.io/geode/docs/run/providers/)과
+[인증 가이드](https://mangowhoiscloud.github.io/geode/docs/ops/oauth/)를 참고하세요.
+
+### Jev 판정 선택
+
+v1.0.30은 TypeSafe 또는 OpenRouter를 통한 Jev 판정을 지원합니다.
+사용할 자격 증명을 설정한 뒤 판정 경로를 명시적으로 선택합니다.
+
+```text
+/model judgment typesafe
+/model judgment openrouter
+/model judgment llm
+```
+
+사용할 경로 하나를 선택하며, `llm`은 LLM 판정 경로로 돌아갑니다.
+판정 경로를 바꿔도 생성 모델과 effort는 유지됩니다. 키 등록만으로 Jev가
+활성화되지는 않습니다. Reflection은 런타임 보호 조건에 따라 도구 결과를
+받은 라운드와 최종 응답 전에 수행합니다. 자격 증명, 사용량, 판정 범위는
+[판정 설정](https://mangowhoiscloud.github.io/geode/docs/config/reference/)과
+[검증·평가 가이드](https://mangowhoiscloud.github.io/geode/docs/verification/evaluation/)를
+참고하세요.
+
+## 설정과 운영
+
+| 위치 | 역할 |
+|---|---|
+| `~/.geode/auth.toml` | GEODE가 관리하는 제공자 자격 증명과 계정 정보 |
+| `~/.geode/.env` | 선택적으로 사용하는 환경변수 자격 증명과 연동 시크릿 |
+| `~/.geode/config.toml` | 사용자 공통 동작 기본값 |
+| `./.geode/config.toml` | 프로젝트별 동작 설정 |
+| `~/.geode/` | 런타임 상태, 세션, 진단 기록, 비공개 산출물 |
+
+프로젝트 동작 설정은 사용자 기본값보다 우선합니다. 자격 증명은 선택한
+모델·소스·계정에 따라서도 결정되므로 모든 설정을 하나의 우선순위 목록으로
+설명할 수는 없습니다. Google Workspace OAuth는 별도의
+[계정·키링 저장소](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace/)를
+사용합니다.
+
+```bash
+geode about                    # 실효 모델, 경로, 데몬 상태
+geode doctor                   # 로컬 설정과 자격 증명 가용성 진단
+geode config explain MODEL     # 동작 설정을 결정한 층 확인
+geode update --dry-run          # 업데이트 경로 미리 보기
+geode update                   # 레지스트리 설치: 호환되는 최신 패치
+geode update --latest          # 레지스트리 설치: 마이너·메이저 업데이트 허용
+```
+
+소스 체크아웃과 별도 옵션을 사용한 uv 설치는 처리 방식이 다릅니다.
+[설치·업데이트 계약](docs/architecture/immutable-distribution-lifecycle.md)을
+참고하세요. 런타임 데이터를 남기고 uv로 설치한 CLI만 삭제하려면
+`uv tool uninstall geode-agent`를 사용합니다. `geode uninstall`은 런타임
+데이터도 삭제하므로 먼저 `geode uninstall --dry-run`으로 범위를 확인하세요.
+
+비용 가드는 관측된 사용량과 설정된 요율을 사용합니다. 제공자의 실제 청구액을
+제한하는 장치는 아닙니다. 진행 중인 호출이 임계값을 넘길 수 있고, 사용량을
+받지 못한 호출의 비용을 0으로 간주하지도 않습니다.
+[사용량 회계](docs/architecture/usage-accounting.md)에서 자세히 설명합니다.
+
+### 문제가 생기면
+
+- **명령을 찾을 수 없음:** `uv tool dir --bin`과 셸의 PATH를 확인합니다.
+- **인증 실패:** `/login status`를 확인한 뒤 `/login`으로 다시 로그인하거나
+  키를 교체합니다. 자격 증명을 진단 자료나 이슈에 붙여넣지 마세요.
+- **모델·설정이 예상과 다름:** `geode about`, `/model`,
+  `geode config explain MODEL`을 확인합니다. 실행 중인 세션은 적용된 설정을
+  유지합니다.
+- **데몬 연결 실패:** `geode doctor`, 설정된 Unix 소켓,
+  `~/.geode/logs/serve.log`를 확인합니다. 다른 세션이 사용 중일 수 있으므로
+  종료하기 전에 프로세스의 소유자를 확인합니다.
+
+## 연동
+
+**메시징.** `geode serve`는 데몬과 설정된 Slack·Discord·Telegram·스케줄러
+서비스를 실행합니다. 채널 자격 증명과 연결 대상은 별도로 설정합니다.
+Gateway 세션의 원격 컴퓨터 사용은 명시적으로 허용하기 전까지 비활성화됩니다.
+[Gateway 설정](docs/setup.md#slack-gateway)을 참고하세요.
+
+**MCP 클라이언트.** GEODE의 MCP 설정으로 외부 도구 서버를 연결합니다.
+[MCP 가이드](https://mangowhoiscloud.github.io/geode/docs/runtime/tools/mcp/)를
+참고하세요.
+
+**MCP 서버.** MCP 클라이언트의 stdio 실행 명령을 `geode-mcp`로 설정합니다.
+코어 서버는 `run_agent`, `query_memory`, `get_health`를 제공합니다.
+HTTP 연결은 `geode-mcp --http`를 사용하며 `GEODE_MCP_TOKEN`으로 bearer 인증을
+설정합니다. 루프백 외 주소에 토큰 없이 바인딩하면 시작을 거부합니다.
+이 엔드포인트는 에이전트 도구를 실행할 수 있으므로 접근 권한은 실행 권한을
+포함합니다. 현재 전송 계약은 [서버 구현](core/mcp_server.py)에서 확인할 수 있습니다.
+
+## 패키지 구성
+
+| 패키지 | 역할 | 명령 |
+|---|---|---|
+| `core/` | 에이전트 런타임, 터미널 클라이언트, 데몬, 도구, 메모리, MCP | `geode`, `geode-mcp` |
+| `evals/` | 감사, 벤치마크 어댑터, 평가 증거 | `geode-eval` |
+| `evolve/` | 실험적 스캐폴드 탐색과 Crucible | `geode-evolve` |
+
+설치된 코드·번들 자산은 변경 가능한 상태와 분리합니다.
+스캐폴드를 수정하고 승격하려면 쓰기 가능한 GEODE Git 체크아웃이 필요합니다.
+
+SIL과 Crucible은 **실험 단계**입니다. 모델 가중치를 바꾸지 않고 프롬프트,
+도구 등 스캐폴드의 변경을 평가합니다. 안전성 감사와 벤치마크는 서로 다른
+수락 기준을 사용합니다. 공개 기록은 아직 지속적인 자기개선을 입증하지 않습니다.
+[Self-improving 허브](https://mangowhoiscloud.github.io/geode/self-improving/)와
+[캠페인 가이드](docs/self-improving/campaign-quick-start.md)에서 시작할 수 있습니다.
+
+## 평가 증거
+
+결과를 읽을 때 소스 리비전, 과제 집합, 모델 경로, effort, 제한 시간, 시도
+이력을 함께 확인해야 합니다. 런타임의 완료 메시지, 모델의 판단, 벤치마크
+verifier의 결과는 서로 다른 관측입니다.
+
+| 트랙 | 확인할 범위 |
+|---|---|
+| [Tau2](https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2/) | Native-user·GEODE-user 구분, 실행 완결성, 사용 한도 영향 |
+| [MCPMark](https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark/) | 포함된 서비스, 동일 조건의 비교 관측, full-Verified 한계 |
+| [Terminal-Bench 2.1](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench/) | 특정 계정의 단일 과제 스모크와 전체 과제 집합 결과의 차이 |
+| [Jev 판정](https://mangowhoiscloud.github.io/geode/docs/verification/evaluation/) | 판정 품질, 완료 판단 시점, 전체 과제 수행 결과 |
+
+실행 기록과 개인정보 검토를 통과한 trajectory는
+[평가 아티팩트 저장소](https://github.com/mangowhoiscloud/geode-eval-artifacts)에
+공개합니다. 이 트랙들을 하나의 제품 점수나 프론티어 하네스 순위로 합치지 않습니다.
+
+## 개발
 
 ```bash
 git clone https://github.com/mangowhoiscloud/geode.git
 cd geode
-uv sync                              # 의존성 설치 (~30초)
-uv tool install -e . --force         # `geode` 를 어디서나 쓸 수 있게 등록
+uv sync --locked
+uv run geode version
 ```
 
-### 2단계 — setup wizard 실행
-
-```bash
-geode setup
-```
-
-Wizard 가 세 가지 경로를 제시합니다: ChatGPT 구독, API 키 (붙여넣기), dry-run 으로 일단 둘러보기. 기존 `~/.codex/auth.json` 자격도 가져올 수 있지만, 추론을 위해 Codex CLI를 실행하지는 않습니다.
-
-Codex CLI가 이미 ChatGPT 로그인을 마쳤다면 다음 `geode` 실행에서 그 토큰을
-감지할 수 있습니다. 그 외에는 Codex CLI 설치가 필요 없습니다.
-
-### 3단계 — 경로별 수동 안내 (참고용)
-
-위 wizard 가 아래 내용을 다 처리합니다. 이 섹션은 각 경로가 실제로 무엇을 하는지 알고 싶을 때 참고하세요.
-
----
-
-#### Path A — ChatGPT 구독 (OpenAI 사용자에게 권장)
-
-GEODE는 `/login openai`로 직접 로그인하고 프로세스 내부 `codex-oauth`
-어댑터로 ChatGPT OAuth 자격을 사용해 Codex 백엔드를 호출합니다. 기존
-`~/.codex/auth.json` 자격을 읽을 수도 있지만 Codex CLI 실행 파일을
-호출하지는 않습니다.
-
-```bash
-geode                                 # GEODE 시작
-# 세션 안에서: /login openai         # ChatGPT device-code 로그인
-```
-
-**지원 플랜** ([Codex 공식 가격 문서](https://developers.openai.com/codex/pricing/) 기준): Plus, Pro, Business, Edu, Enterprise.
-
-**사용 한도**는 플랜·모델·속도·workspace에 따라 달라집니다.
-[Codex 요금과 크레딧](https://learn.chatgpt.com/docs/pricing) 및 계정 대시보드에서
-확인합니다. 토큰 크레딧과 API의 달러 요율은 별개입니다.
-
-**참고할 점**:
-- **[GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra)는 순차 배포 중입니다.** GEODE는 `gpt-6-astra`를 ChatGPT
-  구독과 Platform API 양쪽 경로에서 인식합니다. 2026-09-05 현재 구독
-  계정에서는 canonical Terminal-Bench 2.1 task 1건을 reward 1/1, retry와
-  fallback 없이 완료했습니다. 이
-  [불변 E2E smoke](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/a32abcbf78ab6100ea1e85540a2ace9436dc6f76/terminalbench/results-smoke/terminalbench21-astra-high-openssl-smoke-20260904t202725z)는
-  해당 계정과 경로의 증거이며, 전체 계정에 대한 가용성 주장이 아닙니다.
-- **GPT-6 Astra/Sol/Luna와 GPT-5.6 Sol/Terra/Luna는 API와 Codex 경로를 지원합니다.** API 키와 ChatGPT 로그인을 명시적으로 선택합니다. GPT-5.5는 API 모델로 유지되며 Codex 퇴역은 10월 14일 예정입니다. GPT-5.4와 GPT-5.3 Codex의 구독 경로는 지원이 끝났습니다.
-- 기존 Codex CLI 자격은 가져올 수 있지만, `codex-cli`는 GEODE 추론 백엔드가 아닙니다.
-- 플랜별 포함 범위와 순차 배포는 모델 지원과 별개입니다. GEODE 목록에 있다는 사실만으로 계정 접근 권한이 확인되지는 않습니다.
-
-토큰 만료가 임박하면 GEODE 가 알아서 갱신합니다 (만료 120초 전 + 401 재시도). 사용자가 따로 신경 쓸 일은 없습니다.
-
-**Anthropic API-key 경로.** `/login anthropic`은 이제
-`ANTHROPIC_API_KEY`를 설정합니다. 레거시 `claude-cli` 또는 Anthropic
-`oauth` 설정은 migration 오류를 내기 위해서만 읽으며 CLI를 실행하지 않습니다.
-
----
-
-#### Path B — API 키 (사용량 과금)
-
-권장되는 서드파티 연동 경로를 원하는 Anthropic 사용자, ChatGPT Team 사용자,
-그리고 OpenAI 유료 구독이 없는 사용자가 여기 해당합니다. API 크레딧을 직접
-충전하는 방식입니다.
-
-**Anthropic API 키 발급** (4클릭):
-
-1. [console.anthropic.com](https://console.anthropic.com) 가입
-2. 우상단 메뉴 → **Settings** → **API Keys**
-3. **Create Key** → 이름 "geode" → `sk-ant-...` 문자열 **Copy**
-4. GEODE 가 찾을 위치에 저장:
-
-```bash
-mkdir -p ~/.geode
-echo 'ANTHROPIC_API_KEY=sk-ant-여기에-붙여넣기' > ~/.geode/.env
-chmod 600 ~/.geode/.env
-```
-
-OpenAI, OpenRouter 또는 ZhipuAI GLM을 쓰려면 같은 파일에
-`OPENAI_API_KEY=sk-proj-...`, `OPENROUTER_API_KEY=sk-or-v1-...` 또는
-`ZAI_API_KEY=...`를 추가하세요. OpenRouter 모델은
-`/model openrouter/anthropic/claude-sonnet-4`처럼 정확한 참조로 선택합니다.
-
-**Jev 판정 옵션(Unreleased, 소스 체크아웃).** 같은 로컬 비밀정보 파일에 `TYPESAFE_API_KEY` 또는
-`OPENROUTER_API_KEY`를 두고 `/model judgment typesafe` 또는
-`/model judgment openrouter`로 활성화합니다. 키만 등록하면 기존 LLM 판정을
-유지합니다. `/model judgment` 선택 화면에서 `llm`으로 돌아갈 수 있으며,
-루트 생성 모델과 추론 노력 설정은 바뀌지 않습니다. Reflection은 도구 결과를
-반영한 매 라운드와 최종 응답 전에 수행합니다. 키 우선순위, 지원하는 증거와
-비용 경계는 [판정 설정 가이드](https://mangowhoiscloud.github.io/geode/docs/config/reference/)에서 확인하세요.
-
-**비용 제어.** 가격은 model과 workload에 따라 달라집니다. provider의 최신
-가격을 확인한 뒤 `~/.geode/config.toml`에 hard cap을 설정하세요.
-
-```toml
-[cost]
-limit_usd = 5
-```
-
----
-
-### 4단계 — 실행
-
-```bash
-geode                                                # 인터랙티브 채팅
-# 프롬프트에서 입력: 오늘 AI 새 소식 뭐야?
-```
-
-이런 모습이 보이면:
-
-```
-  ✓ web_search → ok (1.5s)
-  ✓ web_fetch → ok (1.1s)
-
-  오늘의 AI 주요 뉴스:
-  • Anthropic, 1M 토큰 컨텍스트 Claude Opus 4.8 출시...
-  • OpenAI, GPT-5.5 시스템 카드 공개; 가격은 4.6 와 동일...
-  • LangGraph 0.6, 도구 호출 네이티브 스트리밍 지원...
-
-  ✢ Worked for 8s · claude-opus-4-8 · ↓2.1k ↑412 · $0.018
-```
-
-성공입니다. 에러가 나면 `geode doctor` 로 진단하거나 [트러블슈팅](#트러블슈팅) 으로.
-
-### 그 외 유용한 명령
-
-```bash
-geode about           # 버전, 모델, 등록된 auth, 경로, 데몬 상태
-geode doctor          # 7-항목 부트스트랩 진단 + fix 힌트
-geode update          # uv 설치: 최신 patch, 소스 설치: pull + rebuild
-geode update --latest # uv 패키지의 minor/major 업데이트를 명시적으로 허용
-geode uninstall       # 런타임 데이터와 설치된 CLI 제거
-geode setup --reset   # ~/.geode/.env 지우고 wizard 재실행
-```
-
-선택 통합: `/login google`로 Gmail, Calendar, Drive, Docs, Sheets, Tasks,
-Contacts를 연결할 수 있습니다. [Google Workspace 연결 가이드](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace)를 참고하세요.
-
----
-
-### 업데이트
-
-GEODE가 persistent uv tool 설치인지 editable 소스 설치인지 자동 판별합니다.
-
-```bash
-geode update
-geode version
-```
-
-표준 registry 기반 uv tool에서는 저장된 설치 요청을 compatible-release
-제약으로 바꾸고 현재 major/minor 안의 최신 patch만 설치합니다. minor/major
-업데이트는 명시적으로 허용해야 합니다.
-
-```bash
-geode update --latest
-```
-
-editable 소스 체크아웃에서는 `geode update`가 `git pull --ff-only`, `uv sync`,
-`uv tool install -e . --force`, `geode version`을 순서대로 실행합니다. 현재
-디렉터리의 다른 Git 저장소가 아니라 설치 메타데이터가 가리키는 GEODE
-checkout을 사용하며, 메타데이터가 없으면 현재 디렉터리로 추측하지 않고
-중단합니다. `geode serve` 데몬이 떠 있었다면 업데이트 검증이 끝날 때까지
-기존 데몬을 먼저 종료한 뒤 설치를 교체합니다. 업데이트가 실패하면 중지 상태를
-유지하고, 성공 시 새 daemon과 설치된 CLI의 버전 일치까지 확인합니다.
-변경 없이 어느 경로가 선택되는지만 확인하려면:
-
-```bash
-geode update --dry-run
-```
-
-extras, `--with` 패키지, constraint, 명시적 Python, resolver 설정이 들어간
-사용자 정의 uv receipt는 해당 설정을 조용히 잃지 않도록 중단하고 수동 갱신
-힌트를 출력합니다. 힌트에는 receipt 경로가 포함되며, 기록된 source를 PyPI로
-바꾸지 않습니다.
-
----
-
-### 삭제
-
-`geode uninstall` 은 GEODE 런타임 데이터를 지우고, 데몬을 중지하며, `geode-agent` uv tool 설치까지 제거합니다. 먼저 어떤 항목이 지워질지 확인할 수 있습니다.
-
-```bash
-geode uninstall --dry-run
-geode uninstall
-```
-
-`~/.geode/` 런타임 데이터는 유지하고 PyPI 로 설치한 CLI 만 제거하려면 uv 를 직접 사용하세요.
-
-```bash
-uv tool uninstall geode-agent
-```
-
-부분 삭제 모드:
-
-```bash
-geode uninstall --keep-config   # .env 와 config.toml 보존
-geode uninstall --keep-data     # vault, identity, user profile 보존
-geode uninstall --force         # 자동화용 확인 생략
-```
-
-제거 확인:
-
-```bash
-which geode               # 출력 없어야 함
-uv tool list | grep geode # geode-agent 가 없어야 함
-pgrep -f "geode serve"    # 출력 없어야 함
-```
-
----
-
-### Optional — Slack / Discord / Telegram 연결
-
-터미널에서 GEODE 가 동작한 뒤에는, 이미 쓰는 메신저 채널에서도 답하게 할 수 있습니다:
-
-```bash
-geode serve                          # 백그라운드 Gateway 데몬 시작
-```
-
-Slack의 `SLACK_BOT_TOKEN`(`xoxb-`)과 Socket Mode `SLACK_APP_TOKEN`(`xapp-`)은 `~/.geode/.env`에, 채널 바인딩과 receiver 설정은 `.geode/config.toml`에 둡니다. 자세한 내용은 [Slack Gateway 설정](docs/setup.ko.md#slack-gateway)을 참고하세요. 설정 후 바운드 채널에서 봇을 멘션하면 push 이벤트가 로컬과 동일한 에이전트 루프로 라우팅되며, 같은 스레드의 후속 대댓글은 재멘션 없이 동일 체크포인트를 이어갑니다.
-
-Gateway의 원격 desktop control은 운영자가
-`[gateway] allow_computer_use = true`를 명시하기 전까지 차단됩니다. 제한된
-binding에서 열기 전에 [computer-use 안내](docs/setup.ko.md#선택-바운드-채널에서-computer-use)를
-확인하세요.
-
-[Slack 실환경 E2E 영수증](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/41e15ca262d5953d1c88f4767777331875c57c9f/reports/e2e-validation/2026-08-17-slack-gateway-live-e2e.json)은
-Socket Mode를 통한 일상 대화와 browser DOM UI 작업의 완료를 보존합니다. Strict
-pixel `computer_use`는 화면 캡처까지 성공했지만 활성 OpenAI subscription
-source에 호환 visual grounding이 없어 좌표를 추측하거나 provider를 몰래
-바꾸지 않고 중단했습니다. Primary 답변은 subscription route였지만 post-turn
-처리에 auxiliary GLM PAYG 호출도 있었으므로 전체 lifecycle을
-subscription-only로 표기하지 않습니다.
-
-### Optional — Self-improving loop 설정 (`~/.geode/config.toml`)
-
-autoresearch / seed-generation / petri audit 드라이버의 model / dim set / banner threshold / PAYG fallback 정책을 조정하려면 [`docs/examples/self_improving_loop.config.toml.example`](docs/examples/self_improving_loop.config.toml.example) 의 `[self_improving_loop.*]` 섹션을 `~/.geode/config.toml` 로 복사하세요. 미설정 섹션은 문서화된 default 로 폴백합니다. 기존 `~/.geode/petri.toml` 의 role 별 entry 를 이전하려면:
-
-```bash
-geode config migrate-petri-toml          # dry-run 미리보기
-geode config migrate-petri-toml --yes    # [self_improving_loop.petri.*] 를 config.toml 에 append
-```
-
-캠페인을 돌리려면 quick-start 부터 시작하세요: [docs/self-improving/campaign-quick-start.md](docs/self-improving/campaign-quick-start.md).
-
----
-
-## 설정
-
-시크릿은 `.env`에, 동작은 `config.toml`에 둡니다. `.env`는 시크릿 전용,
-`config.toml`은 동작 전용이라 두 층은 충돌하지 않고 각각 우선순위 규칙이
-하나씩 있습니다. 상세 경로 설계는
-[storage hierarchy](docs/architecture/storage-hierarchy.md), 독립 다이어그램은
-[context/config paths](docs/diagrams/geode-context-config-paths.html)를 참고하세요.
-
-- 전역 `~/.geode/.env`가 권위를 갖는 시크릿 저장소입니다. 프로젝트 `./.env`는 전역에 없는 키만 채우고 전역 키를 덮지 못합니다. `~/.geode/.env`의 `OPENAI_API_KEY`는 프로젝트 `./.env`가 비어 있어도 이깁니다.
-- 프로젝트 `./.geode/config.toml`이 전역 `~/.geode/config.toml`을 덮습니다. 동작은 프로젝트마다 조정합니다.
-- `~/.geode/auth.toml`은 LLM 프로바이더 자격 프로파일, 플랜 메타데이터, 프로바이더 OAuth 계정 상태를 저장합니다.
-- Google Workspace는 분리됩니다. 비시크릿 계정·scope 메타데이터는 `~/.geode/google/accounts.json`, 장기 시크릿은 OS 키링 `geode.google.oauth`, access token은 프로세스 메모리에만 둡니다.
-
-모든 필드는 하나의 사다리를 탑니다. 위가 이깁니다:
-
-```
-1. os.environ                      셸 export (세션 한정)
-2. 전역  ~/.geode/.env             시크릿: 권위
-3. 프로젝트 ./.env                 전역에 없는 키만 채움
-4. 프로젝트 ./.geode/config.toml   동작: 프로젝트가 이김
-5. 전역  ~/.geode/config.toml
-6. 내장 기본값
-```
-
-`.env`는 전역이 위, `config.toml`은 프로젝트가 위입니다. 자격 증명은 한 곳에 두고 동작은 프로젝트마다 조정한다는 뜻입니다.
-
-자격 증명 추가/전환:
-
-```bash
-geode setup                          # wizard 재실행 (구독 OAuth 또는 API 키)
-/login openai                        # 세션 중: 구독 OAuth
-/login google                        # 세션 중: Google Workspace OAuth
-/key openai sk-proj-...              # 세션 중: API 키 붙여넣기
-/key openrouter sk-or-v1-...         # 세션 중: OpenRouter 크레딧
-echo 'OPENAI_API_KEY=sk-proj-...' >> ~/.geode/.env    # 권위를 갖는 파일 직접 편집
-```
-
-설정을 바꿨는데 안 먹으면 `geode config explain <KEY>`를 실행하세요. 층별 후보를 출력하고 winner와 가려진 층을 파일 경로까지 표시해 고칠 줄을 정확히 짚어 줍니다. `geode about`은 실효 모델을 보여줍니다. 전체 레퍼런스: [설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics).
-
----
-
-## 트러블슈팅
-
-먼저 `geode doctor` 부터 실행하세요. Python 버전, `geode` PATH, `~/.geode/.env`, Codex CLI OAuth, ProfileStore, serve 소켓, `~/.local/bin` PATH 까지 확인하고, 실패한 항목마다 fix 명령을 알려줍니다. 아래 expander 들은 같은 내용을 글로 풀어쓴 것입니다.
-
-<details>
-<summary><strong>"command not found: python3"</strong> — Python 미설치 또는 PATH 누락.</summary>
-
-Mac: `xcode-select --install` 후 `brew install python@3.12`. Windows: [python.org](https://www.python.org/downloads/) 에서 인스톨러 다운로드, 설치 시 "Add Python to PATH" 체크 필수. `python3 --version` 으로 3.12 이상인지 확인.
-</details>
-
-<details>
-<summary><strong>"command not found: uv"</strong> — uv 가 PATH 에 안 잡힘.</summary>
-
-설치 스크립트는 uv 를 `~/.local/bin` 에 둡니다. 터미널 재시작 또는 `source ~/.bashrc` (bash) / `source ~/.zshrc` (zsh) 실행. `uv --version` 으로 확인.
-</details>
-
-<details>
-<summary><strong>"command not found: geode"</strong> — 글로벌 install 미실행.</summary>
-
-PyPI 설치라면 `uv tool install geode-agent` 실행. 소스 체크아웃이라면 `geode/` 디렉토리에서 `uv tool install -e . --force` 실행. 두 경로 모두 `geode` 명령을 `~/.local/bin/` 에 둡니다. 그 경로가 PATH 에 없으면 셸 설정에 `export PATH="$HOME/.local/bin:$PATH"` 추가.
-</details>
-
-<details>
-<summary><strong>"401 Unauthorized" 또는 "Invalid API key"</strong> — 잘못된 키, 만료된 키, 또는 잘못된 파일 위치.</summary>
-
-`~/.geode/.env`의 provider 항목을 로컬 편집기에서 확인하세요. 키를 로그·채팅·이슈에 출력하거나 붙여 넣지 마세요. 불필요한 공백과 provider 콘솔의 키 상태를 확인합니다. ChatGPT 구독 경로(Path A)면 GEODE 안에서 `/login openai`를 다시 실행합니다.
-</details>
-
-<details>
-<summary><strong>"Address already in use" — `geode serve` 실행 시 포트 충돌.</strong></summary>
-
-설정된 IPC socket을 점유한 프로세스와 다른 세션의 사용 여부를 먼저 확인하세요. 정상 데몬은 재사용하고, 재시작이 승인된 경우 소유권을 확인한 프로세스만 중지합니다. GEODE는 Unix-socket IPC를 쓰며 `serve --port` 옵션은 없습니다. [데몬 가이드](docs/setup.ko.md#geode-serve--통합-daemon)를 참고하세요.
-</details>
-
-<details>
-<summary><strong>모델이 도구를 안 쓰거나, 빙빙 도는 느낌.</strong></summary>
-
-`geode model`로 실효 모델을, `/model`로 모델별 effort 선택지를 확인합니다. 배포 기본값은 Claude Opus 5.5, GPT-6 Sol, GLM-5.3이며 기존에 명시한 설정은 유지됩니다. 요청과 실패 원인은 `~/.geode/logs/serve.log`에서 확인합니다.
-</details>
-
-<details>
-<summary><strong>GEODE 내부 동작을 보고 싶어요.</strong></summary>
-
-`tail -f ~/.geode/logs/serve.log` (또는 `geode serve` 수동 실행 시 리다이렉트한 로그 파일). 모든 LLM 호출, 도구 invocation, 의사결정이 타이밍과 함께 기록됩니다. `core.audit.diagnostics` 의 fa4 채널은 cross-process trace 를 월별 파일 `~/.geode/diagnostics/<YYYY-MM>.log` 에 작성합니다.
-</details>
-
-<details>
-<summary><strong>업데이트는 어떻게 하나요?</strong></summary>
-
-```bash
-geode update          # uv 도구: 최신 patch; 소스: pull + rebuild
-geode update --latest # uv 도구: minor/major 업데이트를 명시적으로 허용
-```
-</details>
-
----
-
-## 내부 구성
-
-| 기능 | 설명 |
-|------|------|
-| **`while(tool_use)` 루프** | 모든 자율 행동의 단일 원시 동작. 서브에이전트, 플랜, 배치 모두 같은 루프의 인스턴스 |
-| **실험적 scaffold 최적화 loop** | scaffold 후보를 변이시키고 적대적 안전성 루브릭으로 audit한 뒤, 실제 이득이 있을 때만 승격을 허용합니다. 공개 기록은 현재 지속적 개선보다 게이트 규율을 입증합니다. [closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) 참고 |
-| **Agentic tools + MCP 카탈로그** | 웹 검색, 파일 작업, 스케줄링, 메모리, Slack/Discord, Anthropic 발행 MCP 레지스트리, 선택형 [Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace) 통합. MCP 메타데이터는 `~/.geode/mcp/registry-cache.json`에 캐시 |
-| **명시적 프로바이더 경로** | Anthropic + OpenAI + OpenRouter + ZhipuAI. OpenRouter는 Chat Completions 전송 규격을 재사용하되 독립 identity를 유지하며 실제 청구액과 serving route를 기록합니다. GEODE는 프로바이더를 조용히 넘나들지 않습니다. |
-| **5-tier 메모리** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). 영속화, 데몬 재시작 후에도 유지 |
-| **지속 goal + advisory plan** | `/goal`은 명시적 empty·active·paused·blocked·complete 상태를 관리하고, `/plan`은 관측에 따라 갱신 가능한 checklist를 설치합니다. 둘 다 실행 권한을 갖지 않으며 verify 실패 시 cognitive replan은 유지됩니다. |
-| **Typed 의사결정 + 가시성 제어** | `/grill`은 비순환 dependency frontier만 갱신하고, `/geo`는 fetch·retrieval·citation·placement·absorption·quality·outcome을 단일 점수로 뭉개지 않고 별도 증거 단계로 보존합니다. |
-| **MCP 서버 (`geode-mcp`)** | GEODE 자체를 MCP 서버(stdio)로 노출: `run_agent`, `self_improving_status`, `self_improving_propose`/`apply`(2-step 확인 게이트), `query_memory`, `get_health`. repo의 `.mcp.json`으로 Claude Code에 자동 등록 |
-| **장시간 데몬** | `geode serve` 가 백그라운드로 상주. Slack Socket Mode + Discord / Telegram 폴러 + 스케줄러 tick + thin CLI 용 IPC |
-| **서브에이전트** | 부모 권한 완전 상속, depth/cost 가드, Lane 격리 |
-| **턴 검증** | Rule-based 턴 단위 체크 (empty turn, tool error, plan-step 불일치) + opt-in LLM-judge 채점 (`core/agent/verify.py`); verify FAIL 시 리플래닝 트리거 |
-
-
-### GEODE를 MCP 서버로 쓰기
-
-`geode-mcp`(CLI와 함께 설치)는 stdio로 MCP를 말하므로 Claude Code, Claude Desktop, Cursor 등 어떤 MCP 클라이언트든 GEODE를 도구로 부릴 수 있습니다. 이 repo는 `.mcp.json`을 포함하므로 이 프로젝트에서 연 Claude Code 세션은 서버를 자동 인식합니다. 다른 곳에서는 `claude mcp add geode -- geode-mcp`로 등록합니다.
-
-2026-06-11 라이브 런타임 검증(initialize 핸드셰이크, `tools/list`, 도구 호출):
-
-| 점검 | 결과 |
-|------|------|
-| 핸드셰이크 + 도구 6종 노출 | 통과 |
-| `self_improving_status` / `get_health` / `query_memory` | 통과 (라이브 데이터) |
-| 핸드셰이크의 서버 버전 | mcp SDK 버전("1.26.0")으로 오보고되던 것을 GEODE 버전으로 정정 (SDK `FastMCP.__init__`에 `version` kwarg 부재; `tests/core/test_mcp_server_tools.py`로 핀) |
-| `get_health` 자격증명 정직성 | `*_configured`가 API 키 유무만 봐서 OAuth/CLI-lane 환경에서 false로 오보고 — `*_credential_source` 병기로 정정 |
-| `run_agent`, `self_improving_propose`/`apply` | 자동 점검에서 미실행(토큰 비용/변이 부작용); `apply`는 2-step 확인 게이트 뒤 |
-
-**원격 접근 (v0.99.171):** `geode-mcp --http [--host H] [--port P]`가 같은 도구를 MCP streamable-HTTP 전송으로 서빙합니다. 인증은 `GEODE_MCP_TOKEN` bearer 토큰(시크릿 — `~/.geode/.env`에 기재), 클라이언트는 `Authorization: Bearer <token>` 헤더를 보냅니다. 토큰 없이 비-루프백 바인드는 시작 시 거부됩니다 — `run_agent`가 GEODE 전체 도구면에 닿으므로 무인증 개방은 원격 실행 표면입니다. 개인 기기 간 사용이면 SSH가 무설정 대안입니다: `claude mcp add geode -- ssh <host> geode-mcp`.
-
----
-
-## GEODE 비교
-
-frontier 하네스 (Claude Code, Codex CLI, OpenClaw) 옆에서 GEODE 가 어디 서 있는지 정성적으로 본 표입니다 (2026 년 5 월 기준). 벤치마크가 아니라 자세에 관한 것입니다. 마커: ✅✅ 해당 축의 리더 · ✅ 지원 · ⚠️ 부분 / 제한적 · ❌ 없음 · n/a 적용 불가.
-
-<details>
-<summary><strong>A. 런타임 자세</strong> — 에이전트가 어떻게 떠 있는가</summary>
-
-| | Claude Code | Codex CLI | OpenClaw | **GEODE** |
-|---|---|---|---|---|
-| 상시 데몬 | ❌ per-invocation | ⚠️ opt-in `codex remote-control` | ✅✅ launchd / systemd 컨트롤 plane | ✅ `geode serve` 데몬 |
-| 네이티브 스케줄러 (cron) | ⚠️ scheduled cloud agents (`/schedule`, 클라우드 실행) | ❌ (Codex Cloud Automations 전용 — [issue #8317](https://github.com/openai/codex/issues/8317)) | ✅ `cron add/edit/list` CLI | ✅ cron + 이벤트 트리거 |
-| Thin CLI ↔ 데몬 IPC | ❌ | ⚠️ remote-control 서버 모드 | ✅ Gateway / Agent 분리 | ✅ IPC 서버 |
-| Sub-agent 격리 | ✅ Agent 도구 + `run_in_background` | ✅ `multi_agent` 기능 | ✅✅ Lane Queue + Session bindings | ✅ Lane + depth / cost 가드 |
-| 세션 resume / fork | ✅ JSONL 트랜스크립트 | ✅ `/resume` + `/fork` 슬래시 커맨드 | ✅ Session bindings + TTL | ✅ session resume |
-
-</details>
-
-<details>
-<summary><strong>B. 채널 & UX 표면</strong> — 사용자에게 어떻게 닿는가</summary>
-
-| | Claude Code | Codex CLI | OpenClaw | **GEODE** |
-|---|---|---|---|---|
-| Slack | ❌ (MCP 플러그인 가능) | ⚠️ Codex Cloud 전용, CLI 는 미지원 | ✅ Socket Mode, first-class | ✅ Socket Mode, first-class |
-| Discord / Telegram / 기타 chat | ❌ | ❌ | ✅✅ 다수 채널 (Discord, Telegram, WhatsApp, Signal, iMessage, Teams, Matrix, Feishu, LINE, ...) | ✅ Discord + Telegram 폴러 |
-| IDE 플러그인 | ✅ VS Code · JetBrains | ✅✅ VS Code · JetBrains · Cursor · Windsurf | ❌ | ❌ |
-| Web UI | ✅ claude.ai/code | ✅ Codex Cloud | ⚠️ WebChat 플러그인 | ❌ (문서 사이트만) |
-| MCP 서버 카탈로그 | ✅ first-class | ✅ first-class | ✅ first-class | ✅ Anthropic 배포 레지스트리 (`~/.geode/mcp/registry-cache.json` 캐시) |
-
-</details>
-
-<details>
-<summary><strong>C. LLM 프로바이더 & 비용 거버넌스</strong></summary>
-
-| | Claude Code | Codex CLI | OpenClaw | **GEODE** |
-|---|---|---|---|---|
-| 멀티 프로바이더 라우팅 | ✅ Anthropic + AWS Bedrock + Google Vertex (환경변수 라우팅) | ✅✅ OpenAI + Azure + Bedrock + Ollama + OpenAI-호환 엔드포인트 전체 (`model_providers` 설정) | ✅ `auth.order` 쿨다운 기반 자동 페일오버 | ✅ Anthropic + OpenAI + OpenRouter + ZhipuAI; 조용한 cross-provider 폴백 없음 |
-| 구독 OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini 온보딩 | ChatGPT만 지원; Anthropic은 API key 사용 |
-| 토큰 / 비용 예산 가드 | ⚠️ 캐시 토큰 추적만 | ⚠️ 재시도 cap 만 (`request_max_retries`) | ⚠️ 부분 | ✅ 명시적 토큰 + 비용 예산 거버넌스 |
-| 컨텍스트 overflow 처리 | ✅ 자동 컴팩션 | ⚠️ Skills progressive disclosure + fork | ✅ 컴팩션 + 트랜스크립트 스트리밍 | ✅✅ 계층형 컨텍스트 overflow 처리 |
-| 벤더 간 페일오버 정책 | ❌ | ⚠️ `model_providers` 수동 전환 | ✅ 자동 | ❌ 의도적 (예기치 못한 cross-vendor 과금 방지) |
-
-</details>
-
-<details>
-<summary><strong>D. 영속성, 메모리 & 검증</strong></summary>
-
-| | Claude Code | Codex CLI | OpenClaw | **GEODE** |
-|---|---|---|---|---|
-| 메모리 tier | ✅ CLAUDE.md 머지 + auto memory (`~/.claude/projects/*/memory`) | ✅ 계층적 AGENTS.md (전역 `~/.codex/` + repo + nested dirs) | ⚠️ 세션 범위 | ✅✅ **multi-tier** (SOUL · User · Org · Project · Session) |
-| 진행 / 검토 plan | ✅ TodoWrite 영속화 | ⚠️ resumable 스레드 경유 | ✅ task registry | ✅ advisory `update_plan` + 영속 session event |
-| 권한 / 샌드박스 계층 | ✅ default / auto / bypass 모드 + Confirmation UI | ✅ `sandbox_mode` (read-only / workspace-write / danger-full-access) | ✅✅ Policy Chain, 다수 감사 표면 | ✅ Policy Chain + 도구 게이트 |
-| 다중 계층 가드레일 | ⚠️ 권한 + hooks | ⚠️ hooks + 샌드박스 | ✅ `audit.runtime` 엔진 | ✅ **턴 검증** (rule-based + opt-in LLM-judge, `core/agent/verify.py`) → FAIL 시 리플랜, self-improving 루프의 safety-axis fitness 게이트 별도 |
-| Hook 이벤트 | ✅ PreToolUse / PostToolUse / UserPromptSubmit / Stop / SubagentStop / PreCompact / SessionStart / SessionEnd / Notification | ⚠️ SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop | ✅ 여러 이벤트 타입 · 다수 번들 핸들러 | ✅✅ 넓은 이벤트 표면 (`docs/architecture/hook-system.md`) |
-
-</details>
-
-<details>
-<summary><strong>E. 확장성 & 관측성</strong></summary>
-
-| | Claude Code | Codex CLI | OpenClaw | **GEODE** |
-|---|---|---|---|---|
-| 플러그인 / 확장 표면 | ✅ manifest + 마켓플레이스 (user / project / local 스코프) | ✅ `/plugins` 슬래시 커맨드 + 플러그인 공유 | ✅✅ 확장 지점 (Channel · Tool · Skill · Hook) via `@openclaw/plugin-sdk` | ✅ 런타임 SkillRegistry + MCP/tool 표면 |
-| Skill 시스템 | ✅ Deferred tools + SKILL.md manifest | ✅ SKILL.md + progressive disclosure (`.agents/skills/`) | ✅ 스킬 필터 + archive 업로드 | ✅ 런타임 `SkillRegistry`, bundled/global/project 스코프 |
-| **교체 가능한 파이프라인 DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — DAG 추상화 아님) | ⚠️ 외부 패키지 책임. GEODE core 는 더 이상 파이프라인 포트를 제공하지 않음 |
-| 트레이스 / 리플레이 / Run Log | ✅ `tengu_*` 텔레메트리 + `/insights` HTML | ⚠️ `/status` + `/debug-config` 만 | ✅ ACP 세션 lineage + Task Registry | ✅ 자체 RunLog + Petri eval 통합 |
-| 안전성 게이트 기반 scaffold 최적화 | ❌ | ❌ | ❌ | ⚠️ 실험적 outer loop: scaffold 변이 + 적대적 안전성 audit + (1+1) promote/revert 계약, 공개 core 승격 0건 |
-| 크로스 프로바이더 리뷰 | ❌ | ❌ | ❌ | ⚠️ self-improving 루프의 멀티-voter 크로스 프로바이더 랭킹 패널 (≥2 providers, `evals/seed_generation/agents/ranker.py`); 일치도 캘리브레이션은 WIP |
-
-</details>
-
----
-
-IDE 내부 또는 클라우드 동기화로 짧은 코딩 세션을 돌릴 땐 **Claude Code** /
-**Codex**. 다수의 메시징 표면에 걸친 멀티 채널 chat 에이전트 fleet을 운영할
-땐 **OpenClaw**. 다중 tier 메모리, 다중 계층 검증, 스케줄링, 데몬 기반 도구
-실행으로 몇 시간 또는 며칠 작업을 이어가거나, 증거 기반 안전성 floor 아래에서
-scaffold 후보를 실험하려면 **GEODE**.
-
-> 출처 — Claude Code (역공학 레퍼런스). Codex CLI 릴리즈 노트 + [developers.openai.com/codex/config-reference](https://developers.openai.com/codex/config-reference) + [github.com/openai/codex](https://github.com/openai/codex). OpenClaw (TypeScript). GEODE — `CHANGELOG.md` 와 [self-improving 허브](https://mangowhoiscloud.github.io/geode/self-improving/).
-
----
-
-<details>
-<summary><strong>아키텍처 개요</strong> (기여자용)</summary>
-
-GEODE 는 두 개의 컨트롤 레이어가 있습니다:
-
-- **Scaffold (생산)** — Claude Code + `CLAUDE.md` + 개발 Skills + CI Hooks. GEODE 의 코드를 만들고 품질을 보장하는 외부 하네스. self-improving outer loop 가 이 scaffold 의 일부도 변이시킵니다.
-- **GEODE Runtime (에이전트)** — `while(tool_use)` 루프 + agentic tools + native ToolRegistry + 런타임 Skills + 런타임 Hooks + 다중 계층 Verification. 자율 실행 에이전트의 내부 시스템.
-
-4-Layer Stack (Model → Runtime → Harness → Agent) + 서브에이전트 시스템 + 5-Tier 메모리.
-
-```mermaid
-graph LR
-    AG["Agent<br/>AgenticLoop, SubAgent<br/>CLIPoller, Gateway"] --> HA["Harness<br/>SessionLane, PolicyChain<br/>TaskGraph, HookSystem"]
-    HA --> RT["Runtime<br/>Agentic tools, MCP catalog<br/>Memory, Skills"]
-    RT --> MD["Model<br/>Claude, OpenAI, OpenRouter, GLM"]
-
-    style AG fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
-    style HA fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
-    style RT fill:#1e293b,stroke:#10b981,color:#e2e8f0
-    style MD fill:#1e293b,stroke:#8b5cf6,color:#e2e8f0
-```
-
-| Layer | 핵심 | Entry points |
-|-------|------|--------------|
-| **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway wiring | `core/cli/`, `core/server/`, `core/messaging/`, `core/integrations/messaging/`, `core/wiring/` |
-| **Harness** | SessionLane, LaneQueue, PolicyChain, TaskGraph, HookSystem | `core/orchestration/`, `core/hooks/` |
-| **Runtime** | Agentic tools, native ToolRegistry, MCP Catalog (Anthropic registry + 프로젝트 설정 서버), 런타임 Skills, Memory (multi-tier), advisory Plan | `core/tools/`, `core/memory/`, `core/agent/plan.py` |
-| **Model** | 불변 generation 어댑터 레지스트리: 내장 5개 + 지원 패키지 진입점 | `core/llm/adapters/` |
-
-`.geode/` — 에이전트 컨텍스트 라이프사이클 (모든 LLM 호출에 5-tier 계층 어셈블):
-
-```
-Tier 0    SOUL            GEODE.md — 에이전트 정체성 + 제약
-Tier 0.5  User Profile    ~/.geode/user_profile/ — 역할, 전문성, 언어
-Tier 1    Organization    크로스-프로젝트 데이터 (시그널, 이력)
-Tier 2    Project         .geode/memory/PROJECT.md — 분석 이력 (LRU-50)
-Tier 3    Session         메모리 — 대화, 도구 결과, 플랜
-```
-
-```
-.geode/
-├── config.toml         # Gateway, MCP 서버, 모델
-├── memory/             # T2: 프로젝트 메모리 (LRU 회전)
-├── rules/              # 자동 생성 도메인 규칙
-├── vault/              # 영구 산출물 (리포트, 리서치)
-├── skills/             # 프로젝트 런타임 스킬 (5-tier discovery)
-└── result_cache/       # 파이프라인 LRU (SHA-256, 24h TTL)
-```
-
-[전체 아키텍처 →](docs/architecture/) | [Hook System →](docs/architecture/hook-system.md) | [Wiring Audit →](docs/architecture/wiring-audit-matrix.md)
-
-</details>
-
-<details>
-<summary><strong>개발 워크플로 (Scaffold)</strong></summary>
-
-CANNOT (가드레일)이 CAN (자유)보다 먼저입니다. 근거 중심 워크플로를 따릅니다.
-CI 게이트(pytest + coverage, mypy, Ruff, dependency/import 검사)를 통과해야
-머지합니다. 테스트 삭제는 남는 행동 불변식을 증명해야 하며, 원시 테스트
-개수는 품질 신호로 사용하지 않습니다.
-
-최신 명령과 검사 범위는 [검증 규칙](.agents/skills/geode-workflow/references/verification-gates.md)에서
-관리합니다. Live 테스트에는 명시적인 승인이 필요합니다.
-
-[CONTRIBUTING.md](CONTRIBUTING.md) 와 [docs/workflow.md](docs/workflow.md) 참고.
-
-</details>
-
-<details>
-<summary><strong>Why — 동기</strong></summary>
-
-2026년, AI 코딩 에이전트는 놀랍게 발전했습니다. 코드를 읽고, 쓰고, 고치고, 테스트합니다. 그런데 실제 업무 중 코딩이 차지하는 비중은 얼마나 될까요? 리서치, 문서 분석, 스케줄링, 알림, 데이터 파이프라인, 의사결정용 다축 평가 — 코딩 *너머* 자율 실행이 필요한 공간이 훨씬 넓습니다.
-
-그런데 모든 자율 행동의 핵심은 의외로 단순합니다: LLM 이 도구를 호출하고, 결과를 관찰하고, 다음 행동을 결정하는 것 — `while(tool_use)` 루프. Claude Code, Codex, OpenClaw — 모든 프론티어 하네스가 이 원시 동작 위에 서 있습니다. GEODE 는 이를 장시간 도구 작업을 위한 데몬 기반, 메모리 보유 런타임으로 일반화합니다.
-
-</details>
-
----
-
-## License
-
-Apache License 2.0 — [LICENSE](./LICENSE)
+기여자 규칙은 [AGENTS.md](AGENTS.md), 개발·PR 안내는
+[CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요.
+[워크플로](docs/workflow.md)가 검증과 통합 절차를,
+[아키텍처 문서](docs/architecture/)가 각 구성요소의 계약을 관리합니다.
+
+개발 지침인 `.agents/skills/`와 런타임 스킬인 `.geode/skills/`는 별개입니다.
+런타임 프롬프트의 지침도 실행 코드의 권한 검사를 대체하지 않습니다.
+[프롬프트 조립](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-system/)에서
+적용 경로를 확인할 수 있습니다.
+
+[변경 이력](CHANGELOG.md) · [보안 정책](SECURITY.md) · [Apache 2.0 라이선스](LICENSE)
