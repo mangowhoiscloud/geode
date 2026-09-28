@@ -51,7 +51,7 @@
 .terminal-bench-study .tb-estimate { fill: var(--ink); }
 
 .terminal-bench-study .tb-details { margin-top: 24px; border-top: 1px solid var(--rule); }
-.terminal-bench-study .tb-details > summary { min-height: 44px; padding-block: 14px; color: var(--ink); cursor: pointer; }
+.terminal-bench-study .tb-details > h3 { margin: 0; padding-block: 20px 4px; color: var(--ink); font-size: 1rem; }
 .terminal-bench-study .tb-details code { overflow-wrap: anywhere; }
 .terminal-bench-study .tb-sources td code { display: block; margin-top: 8px; font-size: 14px; }
 

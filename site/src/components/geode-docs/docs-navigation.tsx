@@ -20,6 +20,11 @@ export function DocsNavigation({
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const searching = query.trim().length > 0;
+  const currentGroup = DOCS_NAV_GROUPS.find(group => group.sectionIds.some(id =>
+    DOCS_SITEMAP.find(section => section.id === id)?.pages.some(page => matchesDocPath(page.slug, slug))
+  ))?.id ?? DOCS_NAV_GROUPS[0].id;
+  const [selection, setSelection] = useState<{ slug: string; group: string }>({ slug, group: currentGroup });
+  const selectedGroup = selection.slug === slug ? selection.group : currentGroup;
   const filteredSections = DOCS_SITEMAP.map((section) => ({
     ...section, pages: section.pages.filter((page) => matchesDocQuery(page, query, section)),
   })).filter((section) => section.pages.length > 0);
@@ -34,7 +39,7 @@ export function DocsNavigation({
             aria-current={slug === page.slug ? "page" : matchesDocPath(page.slug, slug) ? "location" : undefined}
             className="docs-nav-link"
           >
-            <span>{t(locale, page.titleKo, page.title)}</span>
+            <span>{t(locale, page.titleKo, page.title)}</span>{" "}
             {directory && <span className="docs-nav-description">{t(locale, page.summaryKo ?? "", page.summary ?? "")}</span>}
           </Link>
         </li>
@@ -68,36 +73,45 @@ export function DocsNavigation({
       </div>
 
       {count === 0 && <p className="docs-find-empty">{t(locale, "일치하는 문서가 없습니다. 다른 단어를 입력하거나 검색어를 지우세요.", "No matching documents. Try another term or clear the filter.")}</p>}
+      {!searching && <div className="docs-topic-picker" role="group" aria-label={t(locale, "문서 분야", "Documentation area")}>
+        {DOCS_NAV_GROUPS.map(group => <button key={group.id} type="button"
+          aria-pressed={selectedGroup === group.id} aria-controls={`${inputId}-results`}
+          onClick={() => setSelection({ slug, group: group.id })}>
+          {t(locale, group.titleKo, group.title)}
+        </button>)}
+      </div>}
+      <div id={`${inputId}-results`}>
       {DOCS_NAV_GROUPS.map((group) => {
         const sections = group.sectionIds.flatMap((id) => filteredSections.filter((section) => section.id === id));
         if (!sections.length) return null;
         return (
-          <section key={group.id} className="docs-nav-group" aria-labelledby={`${inputId}-${group.id}`}>
+          <section key={group.id} className="docs-nav-group" hidden={!searching && selectedGroup !== group.id} aria-labelledby={`${inputId}-${group.id}`}>
             <h2 id={`${inputId}-${group.id}`}>{t(locale, group.titleKo, group.title)}</h2>
             {sections.map((section) => {
               const current = section.pages.some((page) => matchesDocPath(page.slug, slug));
               const chapters = docChapters(section);
               return (
-                <details key={`${section.id}:${slug}:${query}`} open={searching || current} className="docs-nav-topic" data-topic={section.id} data-current={current || undefined}>
-                  <summary>
+                <section key={section.id} className="docs-nav-topic" data-topic={section.id} data-current={current || undefined}>
+                  <h3>
                     <span className="docs-nav-count" aria-hidden="true">{section.pages.length}</span>
                     <span>{t(locale, section.titleKo, section.title)}</span>
-                  </summary>
+                  </h3>
                   {chapters.length ? chapters.map((chapter) => (
-                    <details key={chapter.id} className="docs-nav-chapter" open={searching || chapter.pages.some((page) => matchesDocPath(page.slug, slug))}>
-                      <summary>
+                    <section key={chapter.id} className="docs-nav-chapter">
+                      <h4>
                         <span className="docs-nav-count" aria-hidden="true">{chapter.pages.length}</span>
                         <span>{t(locale, chapter.titleKo, chapter.title)}</span>
-                      </summary>
+                      </h4>
                       {renderPages(chapter.pages)}
-                    </details>
+                    </section>
                   )) : renderPages(section.pages)}
-                </details>
+                </section>
               );
             })}
           </section>
         );
       })}
+      </div>
     </nav>
   );
 }

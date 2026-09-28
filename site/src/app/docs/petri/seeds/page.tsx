@@ -176,8 +176,8 @@ function RunDetailBlock({ detail, locale }: { detail: RunDetail; locale: "ko" | 
   const headerKo = `${run.gen_tag} · target_dim=${run.target_dim}`;
 
   return (
-    <details id={`run-${run.run_id}`} className="my-4 border border-[var(--rule)] rounded-md">
-      <summary className="cursor-pointer px-4 py-3 hover:bg-[var(--paper-2)] select-none">
+    <section id={`run-${run.run_id}`} className="my-8 border-t border-[var(--rule)]">
+      <h2 className="py-3">
         <code className="text-[var(--acc-artifact)]">{run.run_id}</code>
         <span className="ml-3 text-[var(--ink-3)] text-sm">{headerKo}</span>
         {/* GitHub Pages does not serve directory listings, so we link a
@@ -189,8 +189,8 @@ function RunDetailBlock({ detail, locale }: { detail: RunDetail; locale: "ko" | 
         >
           [{rawLinkLabel} ↗]
         </a>
-      </summary>
-      <div className="px-4 py-3 border-t border-[var(--rule-soft)]">
+      </h2>
+      <div>
         {survivorsList.length > 0 && (
           <>
             <h3>{heading}</h3>
@@ -350,7 +350,7 @@ function RunDetailBlock({ detail, locale }: { detail: RunDetail; locale: "ko" | 
           </>
         )}
       </div>
-    </details>
+    </section>
   );
 }
 

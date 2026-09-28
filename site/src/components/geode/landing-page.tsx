@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Repeat2 } from "lucide-react";
+import { useRef } from "react";
+import { ArrowRight, Menu, Repeat2 } from "lucide-react";
 import { GeodiSprite } from "@/components/geode/geodi-sprite";
 import { LocaleProvider, t, useLocale } from "@/components/geode/locale-context";
 import { RecordedRun } from "@/components/geode/landing-run";
@@ -14,6 +15,8 @@ const repository = "https://github.com/mangowhoiscloud/geode";
 
 function LandingContent() {
   const locale = useLocale();
+  const menuRef = useRef<HTMLDialogElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const navigation = [
     { id: "run", label: t(locale, "실행", "Run") },
     { id: "evidence", label: t(locale, "측정", "Evidence") },
@@ -41,17 +44,27 @@ function LandingContent() {
           <nav className="landing-desktop-nav" aria-label={t(locale, "주 메뉴", "Main navigation")}>
             {navigationLinks}
           </nav>
-          <details className="landing-mobile-menu">
-            <summary>{t(locale, "메뉴", "Menu")}</summary>
+          <button ref={menuButtonRef} className="landing-mobile-menu" type="button" aria-haspopup="dialog" aria-controls="landing-menu"
+            onClick={() => menuRef.current?.showModal()}>
+            <Menu size={18} strokeWidth={1.5} aria-hidden="true" />
+            <span>{t(locale, "메뉴", "Menu")}</span>
+          </button>
+          <dialog ref={menuRef} id="landing-menu" className="landing-menu-dialog" aria-labelledby="landing-menu-title"
+            onClose={() => menuButtonRef.current?.focus()}
+            onClick={event => { if (event.target === event.currentTarget) menuRef.current?.close(); }}>
+            <div className="landing-menu-body">
+              <div className="landing-menu-heading"><h2 id="landing-menu-title">{t(locale, "메뉴", "Menu")}</h2>
+                <button type="button" onClick={() => menuRef.current?.close()}>{t(locale, "닫기", "Close")}</button></div>
             <nav
               aria-label={t(locale, "모바일 메뉴", "Mobile navigation")}
               onClick={(event) => {
                 if (event.target instanceof Element && event.target.closest("a")) {
-                  event.currentTarget.closest("details")?.removeAttribute("open");
+                  menuRef.current?.close();
                 }
               }}
             >{navigationLinks}</nav>
-          </details>
+            </div>
+          </dialog>
         </div>
       </header>
 
@@ -194,6 +207,7 @@ function LandingContent() {
         <div className="landing-footer-brand"><GeodiSprite scale={3} /><span>GEODE</span></div>
         <div className="landing-footer-links">
           <a href={locale === "en" ? "/geode/report-en.pdf" : "/geode/report.pdf"}>{t(locale, "기술 보고서 PDF", "Technical report PDF")}</a>
+          <a href={`/geode/resaerch/jev-system1-offloading/?lang=${locale}`}>{t(locale, "Jev 연구 보고서", "Jev research report")}</a>
           <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts">{t(locale, "평가 데이터", "Evaluation data")}</a>
           <a href={`${repository}/releases`}>{t(locale, "릴리즈 노트", "Release notes")}</a>
           <Link href="/about">{t(locale, "만든 사람", "About the author")}</Link>

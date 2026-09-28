@@ -34,14 +34,25 @@ repos:
         args: [--markdown-linebreak-ext=md]
         # Generated Hub pages embed verbatim historical receipts. Lint their
         # templates and source records; never rewrite the rendered evidence.
-        exclude: ^docs/self-improving/.*\.html$
+        # Jev vendor licenses are preserved byte-for-byte and hash-checked below.
+        exclude: >-
+          (?x)^(docs/self-improving/.*\.html|
+          site/public/resaerch/jev-system1-offloading/assets/fonts/(IBM-Plex-LICENSE|Pretendard-OFL|STIX-OFL)\.txt)$
       - id: end-of-file-fixer
+        # Preserve the approved upstream SVG bytes; the integrity hook checks SHA.
+        exclude: ^site/public/resaerch/jev-system1-offloading/assets/geodi-dot\.svg$
       - id: check-yaml
       - id: check-json
       - id: check-toml
       - id: check-added-large-files
         args: [--maxkb=500]
-        exclude: ^site/public/report(?:-en)?\.pdf$
+        # Only the approved oversized Jev files use the SHA/100-MiB gate below.
+        exclude: >-
+          (?x)^site/public/(report(?:-en)?\.pdf|
+          resaerch/jev-system1-offloading/(index\.html|report-(ko|en)\.pdf|
+          assets/(replay-comparison|u8c-a|u8c-b|i6-natural-a|i6-natural-b|u8n-a|u8n-b)\.mp4|
+          assets/fonts/(SourceHanSerifKR-Bold|Pretendard-Regular|Pretendard-Bold|
+          Pretendard-Medium|Pretendard-SemiBold|Pretendard-ExtraBold)\.otf))$
       - id: check-merge-conflict
       - id: debug-statements
 
@@ -76,6 +87,13 @@ repos:
   # Local hooks — use project virtualenv (uv run) for full dependency access
   - repo: local
     hooks:
+      - id: jev-report-publication
+        name: Jev public report integrity
+        entry: node --test site/scripts/test-jev-report-export.mjs
+        language: system
+        pass_filenames: false
+        files: ^(site/public/resaerch/jev-system1-offloading/|site/scripts/(export-jev-report|test-jev-report-export)\.mjs$|docs/research/jev-report-assets\.json$|\.pre-commit-config\.yaml$)
+
       - id: automation-contracts
         name: workflow and shell contracts
         entry: scripts/lint_automation.sh
