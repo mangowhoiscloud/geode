@@ -93,6 +93,11 @@ functional change.
   execution journal landed in the project instead of `~/.geode/` while the
   global folders were still empty. Bootstrap also stops creating the unused
   `snapshots/` folder.
+- `geode setup`, `geode doctor`, the REPL welcome and the startup readiness
+  check of `geode serve` see existing credentials again. Since 1.0.30 the check
+  goes through the LLM adapter registry, which those processes had not filled
+  yet, so every credential (for example a Codex CLI login in
+  `~/.codex/auth.json`) read as missing and setup showed its wizard.
 
 ### Security
 
