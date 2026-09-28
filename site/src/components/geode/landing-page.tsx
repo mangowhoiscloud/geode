@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRef } from "react";
-import { ArrowRight, Repeat2 } from "lucide-react";
+import { ArrowRight, Menu, Repeat2 } from "lucide-react";
 import { GeodiSprite } from "@/components/geode/geodi-sprite";
 import { LocaleProvider, t, useLocale } from "@/components/geode/locale-context";
 import { RecordedRun } from "@/components/geode/landing-run";
@@ -45,7 +45,10 @@ function LandingContent() {
             {navigationLinks}
           </nav>
           <button ref={menuButtonRef} className="landing-mobile-menu" type="button" aria-haspopup="dialog" aria-controls="landing-menu"
-            onClick={() => menuRef.current?.showModal()}>{t(locale, "메뉴", "Menu")}</button>
+            onClick={() => menuRef.current?.showModal()}>
+            <Menu size={18} strokeWidth={1.5} aria-hidden="true" />
+            <span>{t(locale, "메뉴", "Menu")}</span>
+          </button>
           <dialog ref={menuRef} id="landing-menu" className="landing-menu-dialog" aria-labelledby="landing-menu-title"
             onClose={() => menuButtonRef.current?.focus()}
             onClick={event => { if (event.target === event.currentTarget) menuRef.current?.close(); }}>

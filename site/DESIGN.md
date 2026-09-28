@@ -25,13 +25,15 @@ the sole route and previous/next authority. Preserve bilingual routes,
 Markdown twins, keyboard focus and explicit language queries. Do not introduce
 another navigation catalog, a UI dependency, or a site-wide CSS reset.
 Mobile navigation uses a native dialog with explicit Close, Escape dismissal,
-focus restoration and a separately scrollable list. Destination rows use
+focus restoration and a separately scrollable list. Header actions use an
+unframed icon and label, a 44px hit target, and a compact neutral keyboard-focus
+outline; do not stack a colored ring around a permanent button border. Destination rows use
 neutral titles with existing sitemap summaries; reserve color for selected
 state and focus, not a wall of aqua underlines. Non-selected areas remain in
 the HTML so Markdown exports retain the complete document index. Both inline
 labels and descriptions include real whitespace for copying and accessibility.
-The homepage's comparison limits
-and the documentation index's design background stay directly readable.
+The homepage's comparison limits, documentation index's design background,
+benchmark records, Judge guidance and seed-run records stay directly readable.
 Apple's [sheet guidance](https://developer.apple.com/design/human-interface-guidelines/sheets)
 and [Linear's UI hierarchy](https://linear.app/now/how-we-redesigned-the-linear-ui)
 inform the restrained controls; these are local web patterns, not vendor components.

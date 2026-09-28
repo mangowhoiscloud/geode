@@ -81,6 +81,9 @@ assert.equal(matchesDocPath("petri/run", "petri/run"), true);
 // Render the authored body in each language without starting Next or a browser.
 // This checks real href values; a source-string assertion misses conditional links.
 const require = createRequire(import.meta.url);
+for (const file of ["components/geode-docs/benchmark-run-ledger.tsx", "app/docs/benchmarks/terminal-bench/page.tsx", "app/docs/petri/seeds/page.tsx", "app/docs/verification/evaluation/page.tsx"]) {
+  assert(!/<details\b|<summary\b/.test(readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8")), `Evidence sections remain directly readable: ${file}`);
+}
 // Render each initial reader area: direct selection must retain every route and chapter.
 const navigationSource = readFileSync(new URL("../src/components/geode-docs/docs-navigation.tsx", import.meta.url), "utf8");
 const navigationModule = {};

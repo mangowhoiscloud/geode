@@ -92,8 +92,8 @@ function GcodeDevelopmentGate({ ko }: { ko: boolean }) {
       <p><strong>{ko ? "5/5는 개발 조건의 충족이지, repair 효과의 입증은 아닙니다." : "5/5 passes the development gate; it does not prove a repair effect."}</strong>{" "}{ko
         ? "5회 모두 내부 judge가 첫 후보를 수락해 실제 repair는 발생하지 않았습니다. 후보 선정에 사용한 한 과제이며, 새 baseline·native Codex 대조군이나 held-out 평가는 실행하지 않았습니다. 위 full-suite 결과와 제외 규칙, 기존 원본 Replay는 바뀌지 않았습니다."
         : "All five judges accepted candidate attempt zero, so no repair occurred. This is one task used for candidate selection, without a fresh baseline, native Codex control or held-out evaluation. The full-suite results, exclusions and original historical replay remain unchanged."}</p>
-      <details className="tb-details">
-        <summary>{ko ? "소스·원본 보존·공개 범위" : "Source, custody and disclosure"}</summary>
+      <section className="tb-details">
+        <h3>{ko ? "소스·원본 보존·공개 범위" : "Source, custody and disclosure"}</h3>
         <p><code>terminalbench21-sol-max-reflexion-ratchet-r3-20260913</code>{ko
           ? "의 run-spec, attempts, native result, trajectory, verifier receipt, analysis와 녹화는 로컬 private 원본으로 보존했습니다. 이번 5회의 공개 artifact 패키지는 아직 게시하지 않았습니다. 아래 진행 현황은 로컬 갱신 영상과 YouTube 비공개 업로드를 별도로 기록합니다."
           : " retains its run spec, attempts, native results, trajectories, verifier receipts, analysis and recordings as local private evidence. The public artifact package for these five trials has not been posted. The status below separately records the updated local film and its private YouTube upload."}</p>
@@ -101,7 +101,7 @@ function GcodeDevelopmentGate({ ko }: { ko: boolean }) {
           ? "중간 후보 c863c71은 감사 중 SQLite SHM 해시가 바뀌어 canonical closure가 보류됐습니다. 해당 admission을 새 해시로 덮어쓰지 않았으며, 별도로 검증을 통과한 마지막 5회와 섞지 않았습니다."
           : "The intermediate c863c71 candidate remains blocked from canonical closure after an audit changed SQLite SHM bytes. Its admission was not rewritten with a new hash, and it was not mixed into the separately validated final five trials."}</p>
         <p><a href={record}>{ko ? "실험 기록·한계·SHA-256" : "Run record, limitations and SHA-256"}</a>{" · "}<a href="https://github.com/mangowhoiscloud/geode/pull/3315">{ko ? "구현과 CI: PR #3315" : "Implementation and CI: PR #3315"}</a></p>
-      </details>
+      </section>
     </section>
   );
 }
@@ -151,8 +151,8 @@ function ProjectAccounting({ ko }: { ko: boolean }) {
       <p><strong>{ko ? "실제 결제 총액은 확인하지 않았습니다." : "Actual total payments have not been established."}</strong>{" "}{ko
         ? "현재 API Standard·short-context 단가를 기록된 사용량에 일괄 적용하면 약 $4,404부터 $4,436까지입니다. 이는 참고 환산액이며, 구독료·크레딧 구매액이나 요청별 실제 API 청구액이 아닙니다. Long-context·Fast 요율, 외부 도구·AWS·세금·누락된 호출은 반영하지 않았습니다."
         : "Applying current Standard short-context API rates uniformly to recorded usage gives an illustration of $4,404 to $4,436. This is not subscription spending, credit purchases or a request-level API bill. Actual long-context/Fast tiers, external tools, AWS, taxes and missing calls are not included."}{" "}<a href="https://developers.openai.com/api/docs/pricing">{ko ? "API 단가" : "API pricing"}</a>{" · "}<a href="https://developers.openai.com/codex/pricing">{ko ? "구독과 과금 경로" : "Subscription and billing routes"}</a></p>
-      <details className="tb-details">
-        <summary>{ko ? "집계 방식·누락·원본 해시" : "Accounting method, omissions and source hashes"}</summary>
+      <section className="tb-details">
+        <h3>{ko ? "집계 방식·누락·원본 해시" : "Accounting method, omissions and source hashes"}</h3>
         <p>{ko ? "최신 관측 smoke" : "Latest observation smoke"}: <code>terminalbench21-sol-max-uniform-observation-smoke-20260914t105552z</code><br />{ko ? "실행 소스" : "Measured source"}: <code>7c0e927da566866658be6f0771c4ae8dd9743960</code>. {ko ? "아래 analysis와 observation check는 로컬 원본의 해시입니다." : "The analysis and observation-check hashes below identify local source evidence."}</p>
         <p>{ko
           ? "Codex 누적 카운터는 중복 snapshot을 제외하고 초기화 구간별로 합산했습니다. 본 대화의 초기화 17회와 하위 작업 1회의 초기화를 반영했고, 상속된 세션 기록은 대상 thread ID로 구분했습니다. 벤치는 trial UUID로 중복을 제거하고 job 합계와 공개 복사본을 다시 더하지 않았습니다. GEODE 세션 usage와 native event는 cache 복구·대조에만 사용했습니다."
@@ -176,7 +176,7 @@ function ProjectAccounting({ ko }: { ko: boolean }) {
           <tr><th scope="row">Beyond Pass Rates · v38 MP4</th><td><code>3dfb301a8a3ca0705294ebe3459e74e570fa12ea7409d7a9680059f1f408defb</code></td></tr>
         </tbody></table>
         <p><RunLogLink path={`${PAIRED_RUN}/recording/research-v20`} revision={OBSERVABILITY_REVISION} label="Public historical observability · not project-wide billing" /></p>
-      </details>
+      </section>
     </section>
   );
 }
@@ -334,8 +334,8 @@ function Study({ ko }: { ko: boolean }) {
       <ProjectAccounting ko={ko} />
 
       <h2>{ko ? "다음 실험: 점수 확대보다 비교 가능성 복구" : "Next experiment: restore comparability before scaling"}</h2>
-      <details className="tb-details">
-        <summary>{ko ? "캐시·토큰·비용을 읽을 때의 주의점" : "Reading cache, token, and cost accounting"}</summary>
+      <section className="tb-details">
+        <h3>{ko ? "캐시·토큰·비용을 읽을 때의 주의점" : "Reading cache, token, and cost accounting"}</h3>
         <p>
           {ko
             ? "기존 GEODE Harbor 변환부에서 캐시 필드 이름이 맞지 않아, 런타임에 기록된 cache_read_tokens가 결과와 ATIF 출력에서 0으로 표시될 수 있었습니다. 따라서 과거 출력의 캐시 0만으로 캐시가 사용되지 않았다고 판단하지 않습니다. 세션별 원장과 대조한 별도 보정 자료가 필요합니다. 위 replay의 복구 자료는 이 방식으로 공개됐으며, 원본 결과와 성공률은 바꾸지 않습니다."
@@ -346,7 +346,7 @@ function Study({ ko }: { ko: boolean }) {
             ? "시간 초과로 최종 usage가 없으면 미수집 상태입니다. 완료된 호출에서 복구한 토큰은 관측 하한일 뿐, 실행 전체의 합계가 아닙니다. 입력·캐시 읽기·캐시 쓰기·출력을 같은 계측 범위에서 비교하고, 토큰 단가로 계산한 비용 추정치를 구독 계정의 실제 청구액으로 해석하지 않습니다."
             : "Missing final usage after a timeout is unknown. Tokens recovered from completed calls are an observed lower bound, not a whole-trial total. Compare input, cache reads, cache writes, and output over matched coverage; token-price estimates are not the subscription account's actual bill."}
         </p>
-      </details>
+      </section>
       <p>
         {ko
           ? "여러 날에 걸친 구독 경로 실행은 시점, 공급자 용량, 인증 계정의 영향을 런타임 효과와 완전히 분리하지 못합니다. 같은 경로라고 해서 전 기간에 같은 인증 계정을 썼다는 뜻은 아닙니다. Harbor 0.22.0은 공통 seed 제어도 제공하지 않았습니다. 아래는 후속 실험 설계이며 이번 결과에 추가된 측정이 아닙니다."
@@ -367,15 +367,15 @@ function Study({ ko }: { ko: boolean }) {
           : ` requires ${paired.frozenTasks} tasks at k≥${paired.repetitions}, errored trials retained as zero, canonical environments and limits, and maintainer review. The local diagnostic exclusion rule does not apply to official scores. This artifact has no official submission, rank, or product-promotion authority.`}
       </p>
 
-      <details className="tb-details">
-        <summary>{ko ? "원자료·통계·공개 근거 확인" : "Inspect source data, statistics, and provenance"}</summary>
+      <section className="tb-details">
+        <h3>{ko ? "원자료·통계·공개 근거 확인" : "Inspect source data, statistics, and provenance"}</h3>
         <p>{ko ? "공개 스냅샷" : "Public snapshot"}: <code>{paired.commit}</code><br />Run: <code>{paired.runId}</code></p>
         <p>{ko ? "측정한 GEODE revision" : "Measured GEODE revision"}: <code>{paired.geodeRevision}</code><br />Dataset: <code>{paired.dataset}</code><br /><code>{paired.datasetDigest}</code></p>
         <p>{ko ? "이 페이지와 영상은 읽기용 파생 뷰입니다. 성공 여부는 Harbor 결과와 task verifier가, 셀 선택과 해석은 결속된 분석 자료가 소유합니다. 영상 재생만으로 점수를 검증했다고 주장하지 않습니다." : "This page and the film are reading views. Harbor results and task verifiers own success; bound analysis artifacts own cell selection and interpretation. Watching a replay is not score verification."}</p>
         <table className="tb-sources"><thead><tr><th scope="col">{ko ? "자료" : "Artifact"}</th><th scope="col">{ko ? "역할 / SHA-256" : "Role / SHA-256"}</th></tr></thead><tbody>{sources.map((source) => <tr key={source.url}><th scope="row"><a href={source.url}>{source.label}</a></th><td>{source.role}{" "}<code>{source.sha256}</code></td></tr>)}</tbody></table>
-      </details>
-      <details className="tb-details">
-        <summary>{ko ? "별도 기록: GPT-6 Astra 단일 작업 smoke" : "Separate record: GPT-6 Astra single-task smoke"}</summary>
+      </section>
+      <section className="tb-details">
+        <h3>{ko ? "별도 기록: GPT-6 Astra 단일 작업 smoke" : "Separate record: GPT-6 Astra single-task smoke"}</h3>
         <p>
           <code>{astra.model}</code> / <code>{astra.reasoning}</code>, GEODE {astra.geodeVersion}, {astra.harness}: <code>{astra.task}</code>.
           {ko
@@ -384,7 +384,7 @@ function Study({ ko }: { ko: boolean }) {
         </p>
         <p>{ko ? `공개 trace는 scope-complete지만 ${astra.trace.omittedPayloadCount}개 payload 본문이 생략되어 replay-incomplete입니다. 전체 suite 성능이나 일반 계정 접근성을 입증하지 않습니다.` : `The public trace is scope-complete but replay-incomplete, with ${astra.trace.omittedPayloadCount} payload bodies withheld. It does not establish full-suite performance or access for other accounts.`}</p>
         <p><a href={astra.sources.analysis.url}>{ko ? "Astra smoke 분석" : "Astra smoke analysis"}</a>{" / "}<a href={astra.sources.verifier.url}>{ko ? "task verifier 결과" : "Task verifier result"}</a></p>
-      </details>
+      </section>
     </div>
   );
 }

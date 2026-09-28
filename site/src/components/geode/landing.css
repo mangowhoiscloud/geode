@@ -28,12 +28,14 @@ html:has(.geode-landing) { scroll-behavior: auto; }
 .landing-desktop-nav a, .landing-footer-links a { color: var(--ink-2); font-size: 14px; text-decoration: none; padding-block: 12px; }
 .landing-desktop-nav a:hover, .landing-footer-links a:hover { color: var(--acc-artifact); }
 .landing-mobile-menu { display: none; }
+.geode-landing .landing-header :is(a, button):focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; border-radius: 4px; }
 .landing-menu-dialog { position: fixed; inset: 12px 12px auto; width: calc(100% - 24px); max-width: 440px; margin: 0 0 0 auto; padding: 0; max-height: calc(100dvh - 24px); overflow: auto; border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); color: var(--ink); }
 .landing-menu-dialog::backdrop { background: #08090db3; }
 .landing-menu-body { padding: 12px 20px 20px; }
 .landing-menu-heading { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--rule-soft); }
 .landing-menu-heading h2 { font-size: 16px; }
-.landing-menu-heading button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--rule); border-radius: 6px; cursor: pointer; }
+.landing-menu-heading button { min-height: 44px; padding: 8px 12px; border: 0; border-radius: 4px; color: var(--ink-2); cursor: pointer; }
+.landing-mobile-menu:hover, .landing-menu-heading button:hover { color: var(--ink); background: var(--paper-2); }
 .landing-menu-dialog nav { display: grid; gap: 4px; padding-top: 12px; }
 .landing-menu-dialog nav a { display: flex; align-items: center; min-height: 44px; padding-inline: 8px; border-radius: 6px; color: var(--ink-2); font-size: 16px; text-decoration: none; }
 .landing-menu-dialog nav a:hover { background: var(--paper-2); color: var(--ink); }
@@ -138,7 +140,7 @@ html:has(.landing-menu-dialog[open]) { overflow: hidden; }
   .landing-container { width: calc(100% - 40px); }
   .landing-nav-row { min-height: 64px; }
   .landing-desktop-nav { display: none; }
-  .landing-mobile-menu { min-height: 44px; min-width: 64px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--rule); border-radius: 6px; cursor: pointer; font-size: 14px; }
+  .landing-mobile-menu { min-height: 44px; display: inline-flex; gap: 8px; align-items: center; justify-content: center; padding: 8px; border: 0; border-radius: 4px; color: var(--ink-2); cursor: pointer; font-size: 14px; }
   .landing-hero { grid-template-columns: 1fr; gap: 44px; padding-block: 46px 34px; }
   .landing-hero h1 { font-size: clamp(36px, 9.7vw, 62px); }
   .landing-product-label { margin-bottom: 20px; font-size: 14px; }
