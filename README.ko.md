@@ -31,7 +31,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v1.0.29 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.30 — Autonomous Agent Runtime + Evaluation Substrate
 
 자율적인 도구 작업을 수행하는 범용 에이전트 런타임입니다. 자연어로
 요청하면 GEODE가 계획을 세우고 도구를 호출한 뒤 결과를 보고합니다. 짧은
@@ -53,13 +53,19 @@ loop는 scaffold 후보를 변이시키고 증거 기반 안전성 게이트로 
 
 ## 하나의 배포판, 세 가지 경계
 
-v1.0.29는 런타임·Harbor 회계에서 완료되지 않은 호출의 증거를 보존하고,
-병합 전에 CI·설치 스모크·Pages 검증을 요구합니다.
-[런타임 SOUL](GEODE.md)은 행동 지침을 유지하고, 요청별 모델 카드는 카탈로그
-메타데이터를 전달합니다. 상세 안내는 번들 `geode-context` 스킬에서 읽습니다.
-[프롬프트 조립](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-system)과
-[사용량 회계](docs/architecture/usage-accounting.md)의 범위를 확인하세요.
-카탈로그 API 요금은 구독 청구액이나 계정 접근 가능 여부의 증거가 아닙니다.
+v1.0.30은 선택한 생성 모델과 effort를 유지하면서, 자격 증명이 있는 Jev를
+판단 모델로 명시적으로 선택할 수 있게 합니다. 동일 조건의 판정 비교,
+후보 선택과 cascade를 위한 선택형 평가 도구도 추가합니다. 도구 결과를
+받은 매 라운드와 최종 응답 전에 Reflection을 수행하고 최종 의미 검증을
+적용하므로, 이전에 검사를 생략하던 설정에서는 판단 호출이 늘 수 있습니다.
+인증 파일의 transaction, 세션 설정 admission, IPC는 자격 증명 저장·설정
+적용·작업 완료·검증 통과를 구분합니다. 갱신된 제공자·문맥·캐시 계약은
+관측된 실패와 미확인 사용량을 보존합니다. 공용 런타임·개발 지침에 backend의
+판단 권한과 async 작업의 소유 책임을 명시하고, heuristic preflight는 참고
+제안으로 유지합니다. [인증](https://mangowhoiscloud.github.io/geode/docs/ops/oauth),
+[프롬프트 조립](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-system),
+[사용량 회계](docs/architecture/usage-accounting.md)에서 적용 범위를 확인하세요.
+평가 도구와 요금 추정치 자체가 비교 성능이나 실제 청구액을 입증하지는 않습니다.
 
 `geode-agent` wheel은 네 개 명령을 함께 배포하지만, 설치된 패키지를 쓰기
 가능한 작업공간으로 사용하지 않습니다.
