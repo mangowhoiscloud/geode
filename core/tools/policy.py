@@ -229,7 +229,6 @@ class ProfilePolicy:
                     denied_tools={
                         "memory_save",
                         "note_save",
-                        "set_api_key",
                         "manage_login",
                         "profile_update",
                         *GOOGLE_WRITE_TOOLS,

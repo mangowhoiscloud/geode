@@ -24,8 +24,7 @@ Implements three frontier patterns synthesized from Hermes Agent
 
 Migrations recorded here are **path-level** (file renames, directory
 restructures). Data-level migrations (auth.toml schema, etc.) live in
-their respective modules (``core/auth/auth_toml.py``,
-``core/auth/oauth_login.py:_migrate_legacy_auth_json_if_present``).
+their respective modules (for example, ``core/auth/auth_toml.py``).
 
 Adding a new migration:
 

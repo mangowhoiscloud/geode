@@ -22,7 +22,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from core.agent.approval import ApprovalWorkflow
@@ -282,8 +282,8 @@ class TestDecisionParse:
         """Approval suspend must not strand the renderer if input handling fails."""
         from core.cli.ipc_client import IPCClient
 
-        client = IPCClient.__new__(IPCClient)
-        client._sock = object()
+        client = IPCClient()
+        client._sock = Mock()
         sent: list[dict[str, Any]] = []
         ended: list[bool] = []
 
@@ -291,16 +291,19 @@ class TestDecisionParse:
             raise RuntimeError("approval input failed")
 
         with (
-            patch.object(client, "_send_client_capability"),
+            patch.object(client, "_send_client_capability", return_value="capability"),
             patch.object(client, "_send", side_effect=sent.append),
             patch.object(
                 client,
                 "_recv",
-                return_value={
-                    "type": "approval_request",
-                    "approval_id": "approval-1",
-                    "tool_name": "browser_navigate",
-                },
+                side_effect=[
+                    {"type": "ack", "status": "applied", "request_id": "capability"},
+                    {
+                        "type": "approval_request",
+                        "approval_id": "approval-1",
+                        "tool_name": "browser_navigate",
+                    },
+                ],
             ),
             pytest.raises(RuntimeError, match="approval input failed"),
         ):
@@ -312,7 +315,11 @@ class TestDecisionParse:
             )
 
         assert ended == [True]
-        assert sent == [{"type": "prompt", "text": "use browser"}]
+        assert len(sent) == 1
+        assert sent[0]["type"] == "prompt"
+        assert sent[0]["text"] == "use browser"
+        assert sent[0]["request_id"]
+        assert not client.connected
 
 
 # ---------------------------------------------------------------------------
@@ -713,13 +720,16 @@ class TestIPCApprovalRoundTrip:
 
         assert asyncio.run(scenario()) == "n"
 
-    def test_disconnect_wakes_pending_approval_with_deny(self) -> None:
-        """EOF must fail closed immediately instead of waiting 120 seconds."""
+    @pytest.mark.parametrize("disconnect", ["eof", "malformed"])
+    def test_disconnect_wakes_pending_approval_with_deny(self, disconnect: str) -> None:
+        """Disconnect must deny the worker gate and cancel its awaiting owner promptly."""
         from core.server.ipc_server.poller import CLIPoller, _AsyncClientEndpoint
 
-        received: dict[str, str] = {}
+        received: dict[str, Any] = {}
 
         async def scenario() -> None:
+            event_loop = asyncio.get_running_loop()
+            approval_finished = asyncio.Event()
             reader = asyncio.StreamReader()
             writer = _FakeStreamWriter()
             endpoint = _AsyncClientEndpoint(asyncio.get_running_loop(), writer)  # type: ignore[arg-type]
@@ -734,10 +744,21 @@ class TestIPCApprovalRoundTrip:
                 def create_session(self, *args: Any, **kwargs: Any) -> tuple[Any, Any]:
                     callback = kwargs["approval_callback"]
 
+                    def await_approval() -> str:
+                        decision = callback("memory_save", "content", "write", "disconnect-id")
+                        # Observe the gate in its worker thread: cancellation
+                        # correctly prevents the awaiting coroutine continuing.
+                        received["decision"] = decision
+                        event_loop.call_soon_threadsafe(approval_finished.set)
+                        return decision
+
                     async def arun(text: str) -> Any:
-                        received["decision"] = await asyncio.to_thread(
-                            callback, "memory_save", "content", "write", "disconnect-id"
-                        )
+                        try:
+                            await asyncio.to_thread(await_approval)
+                        except asyncio.CancelledError:
+                            received["cancelled"] = True
+                            raise
+                        received["continued"] = True
                         return SimpleNamespace(
                             text="done",
                             rounds=1,
@@ -756,17 +777,28 @@ class TestIPCApprovalRoundTrip:
             poller._propagate_contextvars = lambda: None  # type: ignore[attr-defined]
 
             handler = asyncio.create_task(poller._handle_client_async(reader, endpoint))
-            reader.feed_data(b'{"type":"prompt","text":"save"}\n')
+            reader.feed_data(b'{"type":"prompt","text":"save","request_id":"pending"}\n')
             deadline = time.monotonic() + 2.0
             while not writer.sent("approval_request"):
                 if time.monotonic() > deadline:
                     raise AssertionError("approval_request never sent")
                 await asyncio.sleep(0.01)
-            reader.feed_eof()
+            if disconnect == "eof":
+                reader.feed_eof()
+            else:
+                reader.feed_data(b"\xff\n")
             await asyncio.wait_for(handler, timeout=2.0)
+            await asyncio.wait_for(approval_finished.wait(), timeout=2.0)
+            assert not writer.sent("result")
+            if disconnect == "malformed":
+                error = writer.sent("error")[0]
+                assert error["request_id"] == "pending"
+                assert error["error_type"] == "IPCProtocolError"
 
         asyncio.run(scenario())
         assert received["decision"] == "n"
+        assert received["cancelled"] is True
+        assert "continued" not in received
 
     def test_legacy_reply_without_id_accepted(self) -> None:
         from core.server.ipc_server.poller import _AsyncClientEndpoint
@@ -815,7 +847,12 @@ class TestIPCApprovalRoundTrip:
                             summary="",
                         )
 
-                    fake_loop = SimpleNamespace(_quiet=True, _op_logger=None, arun=arun)
+                    fake_loop = SimpleNamespace(
+                        _quiet=True,
+                        _op_logger=None,
+                        arun=arun,
+                        amark_session_completed=AsyncMock(),
+                    )
                     return SimpleNamespace(), fake_loop
 
                 lane_queue = None
@@ -857,6 +894,7 @@ class TestIPCApprovalRoundTrip:
 
             reader.feed_data(json.dumps({"type": "exit"}).encode() + b"\n")
             await asyncio.wait_for(handler, timeout=5.0)
+            assert writer.sent("exit_ack") == [{"type": "exit_ack"}]
 
         asyncio.run(asyncio.wait_for(scenario(), timeout=15.0))
         assert received["decision"] == "a", (
@@ -868,9 +906,8 @@ class TestIPCApprovalRoundTrip:
 class TestReaderPumpResilience:
     """The pump must always wake the consumer and never grow unbounded."""
 
-    def test_pump_sends_sentinel_on_unexpected_death(self) -> None:
-        """A poisoned line (undecodable bytes) must not silently kill the pump;
-        any unexpected exit still enqueues the None sentinel (Codex MED #1)."""
+    def test_malformed_frame_reports_error_before_disconnect(self) -> None:
+        """A malformed frame must report its error and wake the waiting consumer."""
         from core.server.ipc_server.poller import CLIPoller, _AsyncClientEndpoint
 
         async def scenario() -> list[dict[str, Any]]:
@@ -890,7 +927,10 @@ class TestReaderPumpResilience:
             return writer.lines
 
         messages = asyncio.run(scenario())
-        assert any(message.get("type") == "error" for message in messages)
+        error = next(message for message in messages if message.get("type") == "error")
+        assert error["status"] == "error"
+        assert error["error_type"] == "IPCProtocolError"
+        assert error["message"] == "Invalid IPC JSON"
 
     def test_msg_queue_is_bounded_with_dropping_put(self) -> None:
         """Backpressure: bounded queue + put_nowait drop, never an awaited put

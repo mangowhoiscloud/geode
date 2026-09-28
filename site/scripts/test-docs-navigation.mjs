@@ -8,6 +8,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 import { parseSitemap } from "./sitemap-pages.mjs";
+import { buildTurndown } from "./export-docs-md.mjs";
 
 async function loadTypeScript(relativePath) {
   const path = fileURLToPath(new URL(relativePath, import.meta.url));
@@ -80,6 +81,34 @@ assert.equal(matchesDocPath("petri/run", "petri/run"), true);
 // Render the authored body in each language without starting Next or a browser.
 // This checks real href values; a source-string assertion misses conditional links.
 const require = createRequire(import.meta.url);
+// Render each initial reader area: direct selection must retain every route and chapter.
+const navigationSource = readFileSync(new URL("../src/components/geode-docs/docs-navigation.tsx", import.meta.url), "utf8");
+const navigationModule = {};
+const navigationCode = ts.transpileModule(navigationSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
+}).outputText;
+new Function("require", "exports", navigationCode)((id) => {
+  if (id === "next/link") return function LinkStub({ href, children, ...props }) { return createElement("a", { ...props, href }, children); };
+  if (id === "@/components/geode/locale-context") return { useLocale: () => "en", t: (_locale, _ko, en) => en };
+  if (id === "@/lib/geode-docs/sitemap") return { DOCS_SITEMAP };
+  if (id === "@/lib/geode-docs/navigation") return navigation;
+  return require(id);
+}, navigationModule);
+const visibleRoutes = new Set();
+for (const group of DOCS_NAV_GROUPS) {
+  const slug = DOCS_SITEMAP.find(section => section.id === group.sectionIds[0]).pages[0].slug;
+  const html = renderToStaticMarkup(createElement(navigationModule.DocsNavigation, { slug, directory: true }));
+  assert(!/<details\b|<summary\b/.test(html), "Navigation must not revert to nested disclosures");
+  assert.equal((html.match(/aria-pressed="true"/g) ?? []).length, 1, "Exactly one reader area is selected");
+  assert.equal((html.match(/class="docs-nav-group" hidden=""/g) ?? []).length, 3, "Non-selected areas are hidden, not removed from static exports");
+  const staticLinks = [...html.matchAll(/href="(\/docs[^\"]*)"/g)].map(match => match[1]);
+  assert.deepEqual(staticLinks.sort(), pages.map(page => docsPageHref(page.slug, "en")).sort(), "Every initial render preserves all routes for Markdown export");
+  const markdown = buildTurndown().turndown(html);
+  for (const page of pages) assert(markdown.includes(`](${docsPageHref(page.slug, "en")})`), `Markdown index retains ${page.slug}`);
+  assert([...html.matchAll(/<a\b[^>]*>/g)].some(([tag]) => tag.includes(`href="${docsPageHref(slug, "en")}"`) && tag.includes('aria-current="page"')), "Current route remains identified");
+  for (const match of html.matchAll(/href="(\/docs[^\"]*)"/g)) visibleRoutes.add(match[1]);
+}
+assert.deepEqual([...visibleRoutes].sort(), pages.map(page => docsPageHref(page.slug, "en")).sort(), "Area selection preserves the full sitemap");
 for (const slug of ["verification/evaluation", "benchmarks/terminal-bench", "petri/overview", "petri/judge-dimensions", "petri/bundle", "explanation/rsi-roadmap"]) {
   const source = readFileSync(new URL(`../src/app/docs/${slug}/page.tsx`, import.meta.url), "utf8");
   const { outputText } = ts.transpileModule(source, {

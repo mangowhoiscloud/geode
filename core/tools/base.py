@@ -193,10 +193,10 @@ def tool_error(
         hint: Actionable suggestion for the LLM (e.g. "use memory_search first").
         context: Extra key-value pairs (parameter name, value, etc.).
     """
-    from core.auth.scrub import scrub_credentials
+    from core.observability.redaction import redact_secrets
 
     result: dict[str, Any] = {
-        "error": scrub_credentials(message),
+        "error": redact_secrets(message),
         "error_type": error_type,
         "recoverable": recoverable,
     }

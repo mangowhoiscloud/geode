@@ -479,24 +479,20 @@ class CodexOAuthAdapter:
         ]
 
     def detect_credential(self) -> CredentialDetection | None:
-        from core.llm.providers.codex import resolve_codex_token
-
-        if not resolve_codex_token():
-            return None
         from core.config import CODEX_PRIMARY
 
-        # detect_credential only reports the source path — exact provenance
-        # (GEODE profile vs Codex CLI file) is on EnvironmentReport's checks.
-        source_path = (
-            str(codex_auth_path())
-            if codex_auth_path().is_file()
-            else "GEODE ProfileStore (openai-codex)"
+        return self.detect_model_credential(CODEX_PRIMARY)
+
+    def detect_model_credential(self, model: str) -> CredentialDetection | None:
+        from core.llm.providers.codex import _resolve_codex_token_info
+
+        self._require_model_allowed(model)
+        resolved = _resolve_codex_token_info(
+            force_refresh=True, model=model, sources=self.routing_sources
         )
-        return CredentialDetection(
-            model=CODEX_PRIMARY,
-            provider=self.provider,
-            source_path=source_path,
-        )
+        if resolved is None:
+            return None
+        return CredentialDetection(model=model, provider=self.provider, source_path=resolved.source)
 
 
 def _dump_empty_text_postmortem(

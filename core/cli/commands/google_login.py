@@ -18,42 +18,36 @@ from core.auth.google_oauth import (
 )
 
 
-def cmd_login_google(args: str) -> None:
-    """Handle /login google login, status, account selection, and revoke."""
+def run_login_google(args: str) -> bool:
+    """Execute Google login actions; raise on failure and return False on cancellation."""
     from core.cli import commands as _pkg
 
     try:
         parts = shlex.split(args)
     except ValueError as exc:
-        _pkg.console.print(f"  [warning]Invalid /login google arguments: {exc}[/warning]\n")
-        return
+        raise GoogleOAuthError(f"Invalid /login google arguments: {exc}") from exc
     if parts and parts[0].lower() in ("help", "?"):
         _render_help()
-        return
+        return True
     if parts and parts[0].lower() in ("status", "accounts", "list", "ls"):
         render_google_status()
-        return
+        return True
     if parts and parts[0].lower() == "services":
         _render_services()
-        return
+        return True
     if parts and parts[0].lower() == "use":
         if len(parts) != 2:
-            _pkg.console.print("  [warning]Usage: /login google use <email>[/warning]\n")
-            return
-        try:
-            account = GoogleAccountStore().set_active(parts[1])
-        except GoogleOAuthError as exc:
-            _pkg.console.print(f"  [red]{exc}[/red]\n")
-            return
+            raise GoogleOAuthError("Usage: /login google use <email>")
+        account = GoogleAccountStore().set_active(parts[1])
         _pkg.console.print(f"  [success]Active Google account:[/success] {account.email}\n")
-        return
+        return True
     if parts and parts[0].lower() in ("logout", "remove", "revoke"):
         _logout_google(parts[1:])
-        return
-    _connect_google(parts)
+        return True
+    return _connect_google(parts)
 
 
-def _connect_google(parts: list[str]) -> None:
+def _connect_google(parts: list[str]) -> bool:
     from core.cli import commands as _pkg
 
     client_json: Path | None = None
@@ -90,20 +84,13 @@ def _connect_google(parts: list[str]) -> None:
             else:
                 raise GoogleOAuthError(f"Unknown option: {arg}")
             index += 1
-    except (IndexError, ValueError, GoogleOAuthError) as exc:
-        _pkg.console.print(f"  [warning]{exc}[/warning]")
-        _pkg.console.print(
-            "  [muted]Usage: /login google --client-json PATH "
-            "[--services gmail-send,calendar-read,...] [--new-account][/muted]\n"
-        )
-        return
+    except (IndexError, ValueError) as exc:
+        raise GoogleOAuthError(
+            "Invalid /login google option value; run /login google help"
+        ) from exc
 
     store = GoogleAccountStore()
-    try:
-        active = store.get_active()
-    except GoogleOAuthError as exc:
-        _pkg.console.print(f"  [red]Google account registry error: {exc}[/red]\n")
-        return
+    active = store.get_active()
     if client_json is None and not os.environ.get("GEODE_GOOGLE_CLIENT_JSON") and active is None:
         try:
             entered = _pkg.console.input(
@@ -111,11 +98,9 @@ def _connect_google(parts: list[str]) -> None:
                 "[muted](created in Google Cloud Console)[/muted]: "
             ).strip()
         except (EOFError, KeyboardInterrupt):
-            _pkg.console.print("\n  [muted]Cancelled.[/muted]\n")
-            return
+            return False
         if not entered:
-            _pkg.console.print("  [warning]Client JSON path is required.[/warning]\n")
-            return
+            raise GoogleOAuthError("Client JSON path is required")
         client_json = Path(entered).expanduser()
 
     if not services_explicit:
@@ -124,7 +109,7 @@ def _connect_google(parts: list[str]) -> None:
         else:
             selected_services = _prompt_services()
             if selected_services is None:
-                return
+                return False
             services = selected_services
 
     effective_services = services
@@ -148,19 +133,15 @@ def _connect_google(parts: list[str]) -> None:
         _pkg.console.print("  If the browser does not open, visit:")
         _pkg.console.print(f"  [link={url}]{url}[/link]\n")
 
-    try:
-        account = login_google(
-            client_json=client_json,
-            services=services,
-            timeout_s=max(30.0, min(timeout_s, 900.0)),
-            account_store=store,
-            announce_url=announce,
-            replace_services=replace_services,
-            new_account=new_account,
-        )
-    except GoogleOAuthError as exc:
-        _pkg.console.print(f"  [red]Google login failed: {exc}[/red]\n")
-        return
+    account = login_google(
+        client_json=client_json,
+        services=services,
+        timeout_s=max(30.0, min(timeout_s, 900.0)),
+        account_store=store,
+        announce_url=announce,
+        replace_services=replace_services,
+        new_account=new_account,
+    )
     from core.mcp.google_workspace_client import reset_google_workspace_client
 
     reset_google_workspace_client()
@@ -169,6 +150,8 @@ def _connect_google(parts: list[str]) -> None:
         f"  [muted]Metadata: {store.path} · secrets: OS keyring[/muted]\n"
     )
 
+    return True
+
 
 def _logout_google(parts: list[str]) -> None:
     from core.cli import commands as _pkg
@@ -176,18 +159,11 @@ def _logout_google(parts: list[str]) -> None:
     local_only = "--local-only" in parts
     targets = [part for part in parts if part != "--local-only"]
     if len(targets) > 1:
-        _pkg.console.print(
-            "  [warning]Usage: /login google logout [email] [--local-only][/warning]\n"
-        )
-        return
-    try:
-        removed = revoke_google_account(
-            targets[0] if targets else None,
-            local_only=local_only,
-        )
-    except GoogleOAuthError as exc:
-        _pkg.console.print(f"  [red]Google logout failed: {exc}[/red]\n")
-        return
+        raise GoogleOAuthError("Usage: /login google logout [email] [--local-only]")
+    removed = revoke_google_account(
+        targets[0] if targets else None,
+        local_only=local_only,
+    )
     from core.mcp.google_workspace_client import reset_google_workspace_client
 
     reset_google_workspace_client()
@@ -199,11 +175,7 @@ def render_google_status() -> None:
     """Render non-secret account and scope-bundle status."""
     from core.cli import commands as _pkg
 
-    try:
-        rows = google_account_status()
-    except GoogleOAuthError as exc:
-        _pkg.console.print(f"  [red]Google account registry error: {exc}[/red]\n")
-        return
+    rows = google_account_status()
     _pkg.console.print()
     _pkg.console.print("  [header]Google Workspace[/header]")
     if not rows:
@@ -256,10 +228,8 @@ def _prompt_services() -> tuple[str, ...] | None:
     try:
         entered = _pkg.console.input("  Service bundles (comma-separated): ").strip().lower()
     except (EOFError, KeyboardInterrupt):
-        _pkg.console.print("\n  [muted]Cancelled.[/muted]\n")
         return None
     if not entered:
-        _pkg.console.print("  [warning]No services selected; login cancelled.[/warning]\n")
         return None
     if entered == "recommended":
         return RECOMMENDED_GOOGLE_SERVICES
@@ -267,11 +237,7 @@ def _prompt_services() -> tuple[str, ...] | None:
         return normalize_google_services(tuple(GOOGLE_SERVICE_BUNDLES))
     if entered in ("identity", "identity-only"):
         return ()
-    try:
-        return normalize_google_services(entered.split(","))
-    except GoogleOAuthError as exc:
-        _pkg.console.print(f"  [warning]{exc}[/warning]\n")
-        return None
+    return normalize_google_services(entered.split(","))
 
 
 def _render_help() -> None:

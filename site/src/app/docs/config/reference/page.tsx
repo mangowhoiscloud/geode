@@ -76,7 +76,7 @@ export default function Page() {
             <h3>[judgment] · Unreleased</h3>
             <p>아래 판정 옵션과 상시 Reflection 정책은 소스 체크아웃에 추가된 기능이며 패키지 릴리스는 아직입니다.</p>
             <p><code>engine = &quot;llm&quot;</code>이 기본입니다. <code>engine = &quot;jev&quot;</code>로 선택하고 TypeSafe 또는 OpenRouter 키가 있을 때 Jev 판정을 사용합니다. <code>provider = &quot;auto&quot;</code>는 TypeSafe 키를 먼저 확인하며 <code>typesafe</code>나 <code>openrouter</code>로 고정할 수 있습니다. 키가 없으면 LLM 경로를 유지합니다. <code>/model judgment</code> 선택창과 <code>/model judgment llm|jev|typesafe|openrouter</code>가 같은 설정을 저장하며, 상위 환경변수·프로젝트 설정이 가리면 변경을 거부하고 해당 층을 표시합니다.</p>
-            <p>키는 <code>TYPESAFE_API_KEY</code> 또는 <code>OPENROUTER_API_KEY</code>로 로컬 <code>.env</code>에만 둡니다. 키만 등록해도 Jev가 자동 활성화되지는 않습니다. 요청 실패 시 다른 공급자로 재시도하지 않습니다.</p>
+            <p>TypeSafe는 <code>TYPESAFE_API_KEY</code> 환경 입력을 사용합니다. OpenRouter는 <code>/login add</code>로 등록한 인증 또는 <code>OPENROUTER_API_KEY</code> 환경 입력을 사용합니다. 키만 등록해도 Jev가 자동 활성화되지는 않습니다. 요청 실패 시 다른 공급자로 재시도하지 않습니다.</p>
             <h3>[cognitive]</h3>
             <table>
               <thead>
@@ -126,7 +126,7 @@ export default function Page() {
                 <tr><th>필드</th><th>타입 / 기본값</th><th>용도</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>anthropic_api_key</code> / <code>openai_api_key</code> / <code>zai_api_key</code></td><td>str = <code>&quot;&quot;</code></td><td><code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code> / <code>ZAI_API_KEY</code>로 별칭됩니다. 시크릿이므로 <code>.env</code> 층에 둡니다.</td></tr>
+                <tr><td><code>anthropic_api_key</code> / <code>openai_api_key</code> / <code>zai_api_key</code></td><td>str = <code>&quot;&quot;</code></td><td><code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code> / <code>ZAI_API_KEY</code>로 별칭됩니다. 외부 환경 입력이며, <code>/login</code>으로 등록한 키는 <code>auth.toml</code>에 별도로 저장됩니다.</td></tr>
                 <tr><td><code>ensemble_mode</code></td><td>str = <code>&quot;single&quot;</code></td><td><code>single</code> 또는 <code>cross</code> 멀티 LLM 모드.</td></tr>
                 <tr><td><code>forced_login_method</code></td><td>dict = {`{}`}</td><td>프로바이더별 인증 방식 강제(<code>{`{"openai": "apikey"}`}</code>). 기본은 구독 우선.</td></tr>
               </tbody>
@@ -441,7 +441,7 @@ export default function Page() {
             <h3>[judgment] · Unreleased</h3>
             <p>The judgment option and required Reflection policy below are available from source; a packaged release is still pending.</p>
             <p><code>engine = &quot;llm&quot;</code> is the default. Selecting <code>engine = &quot;jev&quot;</code> with a TypeSafe or OpenRouter key enables Jev judgments. <code>provider = &quot;auto&quot;</code> prefers the TypeSafe key; use <code>typesafe</code> or <code>openrouter</code> to pin a route. Missing keys retain the LLM route. The <code>/model judgment</code> picker and <code>/model judgment llm|jev|typesafe|openrouter</code> persist the same setting. A masking environment or project setting is reported instead of silently overwritten.</p>
-            <p>Keep <code>TYPESAFE_API_KEY</code> or <code>OPENROUTER_API_KEY</code> in the local <code>.env</code>, never in TOML or Git. A key alone does not enable Jev. Request failures never trigger an automatic provider switch.</p>
+            <p>TypeSafe uses the <code>TYPESAFE_API_KEY</code> environment input. OpenRouter accepts credentials registered through <code>/login add</code> or the <code>OPENROUTER_API_KEY</code> environment input. Keep secrets out of Git and behavior configuration. A key alone does not enable Jev. Request failures never trigger an automatic provider switch.</p>
             <h3>[cognitive]</h3>
             <table>
               <thead>
@@ -491,7 +491,7 @@ export default function Page() {
                 <tr><th>Field</th><th>Type / default</th><th>Purpose</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>anthropic_api_key</code> / <code>openai_api_key</code> / <code>zai_api_key</code></td><td>str = <code>&quot;&quot;</code></td><td>Aliased to <code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code> / <code>ZAI_API_KEY</code>. Secrets, so they live on the <code>.env</code> layer.</td></tr>
+                <tr><td><code>anthropic_api_key</code> / <code>openai_api_key</code> / <code>zai_api_key</code></td><td>str = <code>&quot;&quot;</code></td><td>Aliased to <code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code> / <code>ZAI_API_KEY</code>. External environment inputs; keys registered through <code>/login</code> are stored separately in <code>auth.toml</code>.</td></tr>
                 <tr><td><code>ensemble_mode</code></td><td>str = <code>&quot;single&quot;</code></td><td><code>single</code> or <code>cross</code> multi-LLM mode.</td></tr>
                 <tr><td><code>forced_login_method</code></td><td>dict = {`{}`}</td><td>Per-provider auth-mode escape hatch (<code>{`{"openai": "apikey"}`}</code>). Subscription preferred by default.</td></tr>
               </tbody>

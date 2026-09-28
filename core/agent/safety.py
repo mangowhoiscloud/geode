@@ -90,8 +90,6 @@ WRITE_TOOLS: frozenset[str] = frozenset(
     {
         "memory_save",
         "note_save",
-        "set_api_key",
-        "manage_auth",
         "manage_login",
         "profile_update",
         "profile_preference",

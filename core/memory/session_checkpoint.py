@@ -430,23 +430,20 @@ class SessionCheckpoint:
         return normalize_status(data.get("status", SessionStatus.ACTIVE))
 
     def _write_status(self, session_id: str, status: SessionStatus) -> None:
-        """Unvalidated status write (both SoTs) — callers go through
+        """Persist status before its index projection — callers go through
         :meth:`transition` / :meth:`reopen`; never call this directly.
 
-        Updates BOTH SoTs: ``state.json`` and the SQLite index row —
+        Updates ``state.json`` first, then the SQLite index row —
         ``geode session list`` reads the index first, so a JSON-only write
         would keep showing parked/finished sessions as active.
+        Propagate authoritative state-file failures before updating projections
+        or reporting a successful transition.
         """
         state_file = self._dir / session_id / "state.json"
-        if not state_file.exists():
-            return
-        try:
-            data = json.loads(state_file.read_text(encoding="utf-8"))
-            data["status"] = str(status)
-            data["updated_at"] = time.time()
-            atomic_write_json(state_file, data, indent=2)
-        except (json.JSONDecodeError, OSError):
-            pass
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+        data["status"] = str(status)
+        data["updated_at"] = time.time()
+        atomic_write_json(state_file, data, indent=2)
         try:
             from core.memory.session_manager import SessionManager
 
@@ -495,8 +492,8 @@ class SessionCheckpoint:
             if current is None:
                 return False
             if current in (SessionStatus.COMPLETED, SessionStatus.ERROR):
-                log.info("Session %s reopened (%s -> active)", session_id, current)
                 self._write_status(session_id, SessionStatus.ACTIVE)
+                log.info("Session %s reopened (%s -> active)", session_id, current)
                 self._record_transition(
                     session_id, "reopen", from_status=current, to_status=SessionStatus.ACTIVE
                 )

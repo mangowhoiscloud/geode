@@ -50,7 +50,7 @@ def test_source_choice_requires_session_ack_before_saving_defaults(
         lambda *args: calls.append(("persist", args)),
     )
     with patch("core.cli.commands.console"):
-        cmd_login("source openai api_key", client=Client())
+        assert cmd_login("source openai api_key", client=Client()) is accepted
     assert calls[0] == ("apply", {"source": "payg", "reflection_source": "payg"})
     assert [kind for kind, _ in calls] == (["apply", "persist"] if accepted else ["apply"])
     assert config.effort == "low" and config.judge_source == "payg"
@@ -161,17 +161,13 @@ class TestSubcommandRouter:
             patch("getpass.getpass", return_value=key),
             patch("core.cli.commands.console"),
             patch("core.cli.commands._upsert_env") as upsert_env,
-            patch("core.cli.commands.login._persist_credential_source") as persist_source,
-            patch("core.llm.adapters.registry.invalidate_provider_clients") as invalidate,
         ):
             cmd_login("anthropic")
 
         from core.config import settings
 
-        assert settings.anthropic_api_key == key
-        upsert_env.assert_called_once_with("ANTHROPIC_API_KEY", key)
-        persist_source.assert_called_once_with("anthropic", "api_key")
-        invalidate.assert_called_once_with("anthropic")
+        assert settings.anthropic_api_key == ""
+        upsert_env.assert_not_called()
 
         from core.auth.auth_toml import load_auth_toml
         from core.auth.profiles import ProfileStore
@@ -203,13 +199,13 @@ class TestSetKeyAndUse:
         with (
             patch("core.cli.commands.console"),
             patch("core.cli.commands._upsert_env") as upsert,
-            patch("core.cli.commands._seed_payg_plan_from_key") as seed,
+            patch("core.auth.auth_toml.save_api_key") as seed,
         ):
             assert cmd_key(key) is True
 
-        assert settings.openrouter_api_key == key
-        upsert.assert_called_once_with("OPENROUTER_API_KEY", key)
-        seed.assert_called_once_with("openrouter", key)
+        assert settings.openrouter_api_key == ""
+        upsert.assert_not_called()
+        seed.assert_called_once_with(key, provider="openrouter")
 
     def test_set_key_updates_existing_plan(self) -> None:
         _reset_state()
@@ -357,6 +353,117 @@ def test_explicit_key_persists_fresh_profile_and_preserves_borrowed_key(
     assert borrowed.key == "synthetic-original"
 
 
+@pytest.mark.parametrize(
+    ("args", "provider", "field"),
+    [
+        ("openai synthetic-new", "openai", "openai_api_key"),
+        ("openrouter synthetic-new", "openrouter", "openrouter_api_key"),
+        ("glm synthetic-new", "glm", "zai_api_key"),
+        ("sk-ant-synthetic-new", "anthropic", "anthropic_api_key"),
+        ("sk-or-v1-synthetic-new", "openrouter", "openrouter_api_key"),
+        ("sk-proj-synthetic-new", "openai", "openai_api_key"),
+        ("test1234.key56789", "glm", "zai_api_key"),
+    ],
+)
+def test_key_write_failure_preserves_credentials(
+    args: str, provider: str, field: str, tmp_path: Path
+) -> None:
+    from core.auth.rotation import ProfileRotator
+    from core.cli.commands.key import cmd_key
+    from core.config import settings
+    from core.wiring.container import ensure_profile_store
+
+    _reset_state()
+    seed = "sk-ant-synthetic-old" if provider == "anthropic" else f"{provider} synthetic-old"
+    with patch("core.cli.commands._upsert_env"), patch("core.cli.commands.console"):
+        assert cmd_key(seed)
+    prior_value = getattr(settings, field)
+    store = ensure_profile_store()
+    borrowed = ProfileRotator(store).resolve(provider)
+    path = tmp_path / "auth.toml"
+    before = path.read_bytes()
+
+    with (
+        patch("core.memory.atomic_write.os.replace", side_effect=OSError("synthetic failure")),
+        patch("core.cli.commands._upsert_env") as mirror,
+        patch("core.cli.commands.key.clear_dry_run_opt_in") as clear,
+        patch("core.cli.commands.console") as console,
+    ):
+        assert cmd_key(args) is False
+    assert getattr(settings, field) == prior_value
+    assert path.read_bytes() == before
+    assert ProfileRotator(store).resolve(provider) is borrowed
+    mirror.assert_not_called()
+    clear.assert_not_called()
+    output = "\n".join(str(call.args[0]) for call in console.print.call_args_list if call.args)
+    assert "Credential update failed" in output
+    assert "[success]" not in output
+
+
+@pytest.mark.parametrize("entry", ["interactive", "daemon", "thin"])
+def test_key_entry_commits_auth_without_mutating_environment(entry: str, tmp_path: Path) -> None:
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from core.auth.auth_toml import load_auth_toml
+    from core.auth.profiles import ProfileStore
+    from core.cli.commands.key import cmd_key
+    from core.cli.ipc_client import IPCClient
+    from core.cli.routing import run_thin_command
+    from core.config import settings
+    from core.llm.strategies.plan_registry import PlanRegistry
+    from core.server.ipc_server.poller import CLIPoller
+    from core.wiring.container import ensure_profile_store
+
+    _reset_state()
+    key = "synthetic-selected"
+    client = Mock(spec=IPCClient)
+    client.send_command.return_value = {"status": "ok", "output": ""}
+    with (
+        patch("core.cli.commands._upsert_env", side_effect=AssertionError("no secret mirror")),
+        patch("core.cli.commands.console") as console,
+    ):
+        if entry == "interactive":
+            assert cmd_key(f"openai {key}") is True
+        elif entry == "daemon":
+            from core.cli.dispatcher import _handle_command
+
+            poller = object.__new__(CLIPoller)
+            poller._command_handler = _handle_command
+            poller._scheduler_service = None
+            poller._services = SimpleNamespace(
+                command_registry=None, skill_registry=None, mcp_manager=None
+            )
+            result = asyncio.run(
+                poller._handle_command_on_server({"cmd": "/key", "args": f"openai {key}"}, None)
+            )
+            assert result["status"] == "ok"
+        else:
+            with patch("core.ui.console.console", console):
+                run_thin_command(client, "/key", f"openai {key}")
+            client.send_command.assert_called_once_with("/login", "refresh")
+    assert settings.openai_api_key == ""
+    assert ensure_profile_store().get_pinned_active("openai").key == key
+    registry, fresh = PlanRegistry(), ProfileStore()
+    assert load_auth_toml(registry=registry, store=fresh, path=tmp_path / "auth.toml")
+    assert fresh.get_pinned_active("openai").key == key
+
+
+@pytest.mark.parametrize("args", ["openai", "pasted-unknown-secret", "openai key\nINJECT=value"])
+def test_key_rejects_invalid_input_without_echo_or_persistence(args: str) -> None:
+    from core.cli.commands.key import run_key
+
+    with (
+        patch("core.auth.auth_toml.save_api_key") as persist,
+        pytest.raises(ValueError) as error,
+    ):
+        run_key(args)
+    persist.assert_not_called()
+    assert "pasted-unknown-secret" not in str(error.value)
+    assert "INJECT" not in str(error.value)
+
+
 @pytest.mark.parametrize("with_client", [False, True])
 def test_source_conflict_does_not_save_defaults_or_mutate_unrelated_session(
     monkeypatch: pytest.MonkeyPatch,
@@ -380,7 +487,7 @@ def test_source_conflict_does_not_save_defaults_or_mutate_unrelated_session(
         patch("core.cli.commands.console"),
         patch("core.cli.commands.login._persist_credential_source") as persist,
     ):
-        cmd_login("source openai api_key", client=Client() if with_client else None)
+        assert cmd_login("source openai api_key", client=Client() if with_client else None) is False
     persist.assert_not_called()
     assert settings.openai_credential_source == "auto"
 
@@ -401,3 +508,252 @@ def test_status_judges_each_profile_against_its_own_provider(
     out = capsys.readouterr().out
     assert "provider_mismatch" not in out
     assert "openai:work" in out and "anthropic:work" in out
+
+
+@pytest.mark.parametrize("entry", ["add", "anthropic", "set-key"])
+def test_hidden_key_entry_uses_single_auth_owner(entry: str, tmp_path: Path) -> None:
+    from core.auth.auth_toml import save_api_key
+    from core.config import settings
+    from core.wiring.container import ensure_profile_store
+
+    _reset_state()
+    if entry == "set-key":
+        save_api_key("old-synthetic", provider="anthropic")
+    key = "sk-ant-synthetic-hidden"
+    args = "set-key anthropic-payg" if entry == "set-key" else entry
+    with (
+        patch("sys.stdin.isatty", return_value=True),
+        patch("core.cli.commands.login.TerminalMenu") as menu,
+        patch("getpass.getpass", return_value=key) as hidden,
+        patch("core.cli.commands.console") as console,
+        patch("core.cli.commands._upsert_env", side_effect=AssertionError("no env writes")),
+    ):
+        menu.return_value.show.side_effect = [1, 0]
+        assert cmd_login(args)
+    hidden.assert_called_once()
+    console.input.assert_not_called()
+    assert settings.anthropic_api_key == ""
+    assert ensure_profile_store().get_pinned_active("anthropic").key == key
+    assert key in (tmp_path / "auth.toml").read_text()
+    assert (tmp_path / "auth.toml").stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize("key", ["", "two words", "key\nINJECT=value"])
+def test_api_key_owner_rejects_invalid_secret_before_file_creation(
+    key: str, tmp_path: Path
+) -> None:
+    from core.auth.auth_toml import save_api_key
+
+    _reset_state()
+    with pytest.raises(ValueError, match=r"nonempty.*whitespace"):
+        save_api_key(key, provider="openai")
+    assert not (tmp_path / "auth.toml").exists()
+
+
+@pytest.mark.parametrize("provider", ["unknown", "openai-codex", "glm-coding"])
+def test_api_key_owner_rejects_unsupported_payg_route(provider: str, tmp_path: Path) -> None:
+    from core.auth.auth_toml import save_api_key
+    from core.wiring.container import ensure_profile_store
+
+    _reset_state()
+    store = ensure_profile_store()
+    profiles_before = store.list_all()
+    plans_before = get_plan_registry().list_all()
+    with pytest.raises(ValueError, match="supported PAYG"):
+        save_api_key("synthetic-new", provider=provider)
+    assert not (tmp_path / "auth.toml").exists()
+    assert store.list_all() == profiles_before
+    assert get_plan_registry().list_all() == plans_before
+
+
+@pytest.mark.parametrize("managed_by", ["external", ""])
+def test_api_key_owner_preserves_live_credentials_owned_elsewhere(
+    managed_by: str, tmp_path: Path
+) -> None:
+    from core.auth.auth_toml import save_api_key
+    from core.auth.profiles import AuthProfile, CredentialType
+    from core.wiring.container import ensure_profile_store
+
+    _reset_state()
+    store = ensure_profile_store()
+    borrowed = AuthProfile(
+        name="openai-payg:user",
+        provider="openai",
+        credential_type=CredentialType.API_KEY,
+        key="synthetic-old",
+        plan_id="openai-payg",
+        managed_by=managed_by,
+    )
+    store.add(borrowed, activate=True)
+    preferences_before = store.auth_preferences()
+    plans_before = get_plan_registry().list_all()
+    with pytest.raises(ValueError, match="another owner"):
+        save_api_key("synthetic-new", provider="openai")
+    assert not (tmp_path / "auth.toml").exists()
+    assert store.get(borrowed.name) is borrowed
+    assert store.get_pinned_active("openai") is borrowed
+    assert borrowed.key == "synthetic-old"
+    assert store.auth_preferences() == preferences_before
+    assert get_plan_registry().list_all() == plans_before
+
+
+@pytest.mark.parametrize("provider,kind", [("glm", "payg"), ("openai", "subscription")])
+def test_api_key_owner_preserves_conflicting_saved_plan(
+    provider: str, kind: str, tmp_path: Path
+) -> None:
+    from core.auth.auth_toml import save_api_key
+    from core.auth.profiles import AuthProfile, CredentialType
+    from core.llm.strategies.plans import Plan, PlanKind
+    from core.wiring.container import ensure_profile_store
+
+    _reset_state()
+    registry, store = get_plan_registry(), ensure_profile_store()
+    plan = Plan(
+        id="openai-payg",
+        provider=provider,
+        kind=PlanKind(kind),
+        display_name="Existing plan",
+        base_url="https://example.invalid",
+    )
+    registry.add(plan)
+    borrowed = AuthProfile(
+        name="openai-payg:user",
+        provider=provider,
+        credential_type=CredentialType.API_KEY,
+        key="synthetic-old",
+        plan_id=plan.id,
+    )
+    store.add(borrowed, activate=True)
+    path = save_auth_toml(registry=registry, store=store)
+    contents_before = path.read_bytes()
+    preferences_before = store.auth_preferences()
+    with pytest.raises(ValueError, match="conflicts with the requested provider"):
+        save_api_key("synthetic-new", provider="openai")
+    assert path == tmp_path / "auth.toml"
+    assert path.read_bytes() == contents_before
+    assert registry.get(plan.id) is plan
+    assert store.get(borrowed.name) is borrowed
+    assert borrowed.key == "synthetic-old"
+    assert store.auth_preferences() == preferences_before
+
+
+def test_login_rejects_pasted_key_without_echoing_it() -> None:
+    from core.ui.console import capture_output
+    from rich.text import Text
+
+    secret = "sk-" + "synthetic1234567890" * 2
+    with capture_output() as output:
+        assert cmd_login(f"remove {secret}") is False
+    assert secret not in output.getvalue()
+    assert "[REDACTED]" in Text.from_ansi(output.getvalue()).plain
+    assert "Plan not found" in output.getvalue()
+
+
+def test_login_persistence_failure_redacts_credential_in_error() -> None:
+    from core.ui.console import capture_output
+    from rich.text import Text
+
+    secret = "sk-" + "synthetic1234567890" * 2
+    with (
+        patch("core.cli.commands.login.run_login", side_effect=PermissionError(f"denied {secret}")),
+        capture_output() as output,
+    ):
+        assert cmd_login("remove example") is False
+    assert secret not in output.getvalue()
+    assert "[REDACTED]" in Text.from_ansi(output.getvalue()).plain
+    assert "Credential change failed" in output.getvalue()
+
+
+@pytest.mark.parametrize(
+    "args",
+    ["source", "source unknown auto", "source openai unknown", "source anthropic oauth"],
+)
+def test_source_invalid_input_propagates_without_persisting(args: str) -> None:
+    from core.cli.commands.login import run_login
+
+    with (
+        patch("core.cli.commands.login._persist_credential_source") as persist,
+        patch("core.cli.commands.console"),
+    ):
+        with pytest.raises(ValueError):
+            run_login(args)
+        assert cmd_login(args) is False
+    persist.assert_not_called()
+
+
+@pytest.mark.parametrize("with_client", [False, True])
+def test_source_persistence_failure_is_not_reported_as_success(with_client: bool) -> None:
+    from core.config import settings
+    from core.config.session import SessionModelConfig
+    from core.ui.console import capture_output
+
+    _reset_state()
+    config = SessionModelConfig(model="gpt-6-sol", effort="low", source="subscription")
+    applied: list[dict[str, str]] = []
+
+    class Client:
+        model_config = config.model_dump()
+
+        def apply_model_config(self, changes):
+            applied.append(changes)
+            return {"status": "applied"}
+
+    before = settings.openai_credential_source
+    with (
+        patch("core.config.env_io.upsert_config_toml", side_effect=PermissionError("denied")),
+        capture_output() as output,
+    ):
+        assert cmd_login("source openai api_key", client=Client() if with_client else None) is False
+    assert settings.openai_credential_source == before
+    assert applied == ([{"source": "payg"}] if with_client else [])
+    assert "Credential change failed" in output.getvalue()
+    assert "Defaults saved" not in output.getvalue()
+    assert ("Session source applied" in output.getvalue()) is with_client
+
+
+@pytest.mark.parametrize("entry", ["add", "anthropic", "set-key"])
+@pytest.mark.parametrize("input_result", ["", EOFError, KeyboardInterrupt])
+def test_hidden_key_empty_or_cancel_preserves_saved_credential(
+    entry: str, input_result: object, tmp_path: Path
+) -> None:
+    from core.auth.auth_toml import save_api_key
+    from core.wiring.container import ensure_profile_store
+
+    _reset_state()
+    save_api_key("synthetic-old", provider="anthropic")
+    path = tmp_path / "auth.toml"
+    before = path.read_bytes()
+    profile = ensure_profile_store().get_pinned_active("anthropic")
+    args = "set-key anthropic-payg" if entry == "set-key" else entry
+    with (
+        patch("sys.stdin.isatty", return_value=True),
+        patch("core.cli.commands.login.TerminalMenu") as menu,
+        patch("getpass.getpass") as hidden,
+        patch("core.cli.commands.console"),
+    ):
+        menu.return_value.show.side_effect = [1, 0]
+        if input_result == "":
+            hidden.return_value = ""
+        else:
+            hidden.side_effect = input_result
+        assert cmd_login(args) is False
+    assert path.read_bytes() == before
+    assert ensure_profile_store().get_pinned_active("anthropic") is profile
+    assert profile.key == "synthetic-old"
+
+
+@pytest.mark.parametrize("menu_choices", [[None], [1, None]])
+def test_add_menu_cancel_does_not_request_or_save_credential(
+    menu_choices: list[int | None],
+) -> None:
+    with (
+        patch("sys.stdin.isatty", return_value=True),
+        patch("core.cli.commands.login.TerminalMenu") as menu,
+        patch("getpass.getpass") as hidden,
+        patch("core.auth.auth_toml.save_api_key") as save,
+        patch("core.cli.commands.console"),
+    ):
+        menu.return_value.show.side_effect = menu_choices
+        assert cmd_login("add") is False
+    hidden.assert_not_called()
+    save.assert_not_called()

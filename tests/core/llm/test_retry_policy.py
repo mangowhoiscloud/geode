@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import email.utils
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import anthropic
+import httpx
+import openai
 import pytest
 from core.llm.errors import BillingError
 from core.llm.fallback import (
@@ -80,6 +82,143 @@ def test_http_retry_statuses_follow_stainless_contract(status: int, expected: st
     error.status_code = status
 
     assert classify_retry_error(error) == expected
+
+
+@pytest.mark.parametrize("status", [403, 404, 422])
+def test_wrapped_permanent_rejection_cannot_enable_retry(status: int) -> None:
+    cause = httpx.HTTPStatusError(
+        "Request 401-example rejected",
+        request=httpx.Request("POST", "https://example.invalid"),
+        response=httpx.Response(status, headers={"x-should-retry": "true"}),
+    )
+    wrapped = RuntimeError("adapter failed")
+    wrapped.__cause__ = cause
+
+    assert classify_retry_error(wrapped) == "bad_request"
+
+
+@pytest.mark.parametrize("sdk_name", ["anthropic", "openai"])
+@pytest.mark.parametrize("status", [403, 404, 422])
+@pytest.mark.parametrize("policy_name", ["interactive", "provider", "auxiliary"])
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_permanent_sdk_http_rejection_stops_without_retry_or_refresh(
+    sdk_name: str, status: int, policy_name: str, wrapped: bool
+) -> None:
+    async def exercise() -> None:
+        calls: list[str] = []
+
+        def reject(request: httpx.Request) -> httpx.Response:
+            calls.append(str(request.url))
+            return httpx.Response(
+                status,
+                json={
+                    "error": {
+                        "type": "permission_error" if status == 403 else "invalid_request_error",
+                        "message": "Resource access rejected",
+                    }
+                },
+                headers={"x-should-retry": "true"},
+            )
+
+        policy = {
+            "interactive": interactive_retry_policy,
+            "provider": provider_retry_policy,
+            "auxiliary": auxiliary_retry_policy,
+        }[policy_name](max_attempts=3)
+        sdk = anthropic if sdk_name == "anthropic" else openai
+        client_type = anthropic.AsyncAnthropic if sdk_name == "anthropic" else openai.AsyncOpenAI
+        on_retry = AsyncMock()
+        # Refresh is a synchronous owner operation; accepting it would prove an unwanted replay.
+        refresh_owner = Mock(return_value=True)
+        async with client_type(
+            api_key="synthetic-test-key",
+            max_retries=0,
+            http_client=httpx.AsyncClient(transport=httpx.MockTransport(reject)),
+        ) as client:
+
+            async def call(model: str):
+                try:
+                    if isinstance(client, anthropic.AsyncAnthropic):
+                        return await client.messages.create(
+                            model=model,
+                            max_tokens=8,
+                            messages=[{"role": "user", "content": "test"}],
+                        )
+                    return await client.chat.completions.create(
+                        model=model, messages=[{"role": "user", "content": "test"}]
+                    )
+                except sdk.APIStatusError as exc:
+                    if wrapped:
+                        raise sdk.APIConnectionError(request=exc.request) from exc
+                    raise
+
+            with (
+                patch("core.config.is_model_allowed", return_value=True),
+                patch("core.llm.fallback.asyncio.sleep", new_callable=AsyncMock) as sleep,
+                pytest.raises(sdk.APIConnectionError if wrapped else sdk.APIStatusError) as caught,
+            ):
+                await run_with_retry_policy(
+                    ["model-a", "model-b"],
+                    call,
+                    policy=policy,
+                    refresh_auth=refresh_owner,
+                    on_retry=on_retry,
+                )
+
+        http_error = caught.value.__cause__ if wrapped else caught.value
+        assert http_error.status_code == status
+        assert len(calls) == 1
+        refresh_owner.assert_not_called()
+        on_retry.assert_not_called()
+        sleep.assert_not_called()
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("sdk_name", ["anthropic", "openai"])
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (400, "bad_request"),
+        (401, "auth"),
+        (403, "bad_request"),
+        (408, "timeout"),
+        (409, "server"),
+        (429, "rate_limit"),
+    ],
+)
+def test_response_status_overrides_sdk_transport_wrapper(
+    sdk_name: str, status: int, expected: str
+) -> None:
+    sdk = anthropic if sdk_name == "anthropic" else openai
+    request = httpx.Request("POST", "https://example.invalid")
+    wrapped = sdk.APIConnectionError(request=request)
+    wrapped.__cause__ = httpx.HTTPStatusError(
+        "Request rejected", request=request, response=httpx.Response(status, request=request)
+    )
+
+    assert classify_retry_error(wrapped) == expected
+
+
+def test_http_status_preserves_overflow_and_local_replay_rejection() -> None:
+    from core.llm.errors import StreamInterruptedError
+
+    request = httpx.Request("POST", "https://example.invalid")
+    overflow = openai.BadRequestError(
+        "Request too large",
+        response=httpx.Response(400, request=request),
+        body={"code": "context_length_exceeded"},
+    )
+    interruption = StreamInterruptedError("visible output")
+    interruption.__cause__ = httpx.HTTPStatusError(
+        "Retryable response", request=request, response=httpx.Response(429, request=request)
+    )
+    wrapped = openai.APIConnectionError(request=request)
+    wrapped.__cause__ = interruption
+
+    assert classify_retry_error(overflow) == "context_overflow"
+    assert classify_retry_error(interruption) == "stream_interrupted"
+    assert classify_retry_error(wrapped) == "stream_interrupted"
 
 
 def test_retry_delay_honors_server_lower_bound_and_cap() -> None:

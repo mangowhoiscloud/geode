@@ -143,7 +143,9 @@ def test_billing_error_user_message_renders_panel() -> None:
     assert "Resets in: 1h 0m" in msg
     assert "Options:" in msg
     assert "1. Wait for quota reset" in msg
-    assert "/login set-key glm" in msg
+    assert "/login add" in msg
+    assert "<api-key>" not in msg
+    assert "/login set-key" not in msg
     assert "/model" in msg
     assert "https://z.ai/subscribe" in msg
 

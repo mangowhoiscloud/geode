@@ -17,12 +17,24 @@ palette and character, with a dark reading substrate, visible navigation,
 recorded Task/Tool/Result evidence, and install choices. Release labels read
 `generatedSOT`; historical measurements retain their measured version.
 
-The docs shell projects the existing sitemap into four reader tasks. Native
-disclosures expose topics and Experimental Loop chapters; title/summary/path
-filtering works in the sidebar, mobile drawer, and index. The sitemap remains
+The docs shell projects the existing sitemap into four directly selectable
+reader areas. Topics and Experimental Loop chapters use visible headings, not
+nested triangle disclosures; title/summary/path filtering searches all areas
+in the sidebar, mobile dialog, and index. The sitemap remains
 the sole route and previous/next authority. Preserve bilingual routes,
 Markdown twins, keyboard focus and explicit language queries. Do not introduce
 another navigation catalog, a UI dependency, or a site-wide CSS reset.
+Mobile navigation uses a native dialog with explicit Close, Escape dismissal,
+focus restoration and a separately scrollable list. Destination rows use
+neutral titles with existing sitemap summaries; reserve color for selected
+state and focus, not a wall of aqua underlines. Non-selected areas remain in
+the HTML so Markdown exports retain the complete document index. Both inline
+labels and descriptions include real whitespace for copying and accessibility.
+The homepage's comparison limits
+and the documentation index's design background stay directly readable.
+Apple's [sheet guidance](https://developer.apple.com/design/human-interface-guidelines/sheets)
+and [Linear's UI hierarchy](https://linear.app/now/how-we-redesigned-the-linear-ui)
+inform the restrained controls; these are local web patterns, not vendor components.
 
 Benchmark charts disclose the common denominator and uncertainty. The native
 Terminal-Bench replay and recovered cache/phase evidence remain intact; neither

@@ -253,25 +253,28 @@ def test_async_no_stream_progress_keeps_legacy_retry() -> None:
     assert len(calls) == 3
 
 
-def test_async_oauth_refresh_retry_also_guarded(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_async_oauth_refresh_retry_also_guarded() -> None:
     """The OAuth-401 refresh path re-calls the same attempt — it must obey
     the same replay-safety boundary as the transient branch."""
     import core.llm.fallback as fallback_mod
 
-    monkeypatch.setattr(fallback_mod, "_try_oauth_refresh", lambda _label: True)
     progress = StreamProgress()
     calls: list[str] = []
     original = Exception("401 authentication_error mid-stream")
 
-    async def _fn(*, model: str) -> str:
+    async def _fn(model: str) -> str:
         calls.append(model)
         progress.note_delta("text", 3)
         raise original
 
     with pytest.raises(StreamInterruptedError) as exc_info:
         asyncio.run(
-            retry_with_backoff_generic_async(
-                _fn, model="m-test", stream_progress=progress, **_FAST_RETRY_KWARGS
+            fallback_mod.run_with_retry_policy(
+                ["m-test"],
+                _fn,
+                policy=fallback_mod.provider_retry_policy(max_attempts=3),
+                stream_progress=progress,
+                refresh_auth=lambda: True,
             )
         )
     assert len(calls) == 1

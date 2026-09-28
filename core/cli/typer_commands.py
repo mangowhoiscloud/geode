@@ -121,7 +121,7 @@ def setup(
         configure_computer_use_helper,
         env_setup_wizard,
     )
-    from core.wiring.startup import _has_any_llm_key, detect_subscription_oauth
+    from core.wiring.startup import _has_any_llm_key
 
     if reset:
         from core.paths import GLOBAL_ENV_FILE  # PR-CLEANUP-D2 anchor
@@ -135,16 +135,11 @@ def setup(
     # Credential setup (skipped when already satisfied) — then the command
     # sandbox step runs unconditionally so it is reachable on every machine,
     # including ones with credentials already configured and no Docker.
-    oauth_provider = detect_subscription_oauth()
-    if oauth_provider:
-        clear_dry_run_opt_in()
-        console.print(f"  [success]OAuth detected: {oauth_provider}[/success]")
-        console.print("  [muted]No further credential setup needed.[/muted]")
-    elif _has_any_llm_key() and not reset:
+    if _has_any_llm_key() and not reset:
         clear_dry_run_opt_in()
         console.print(
-            "  [success]API key already configured.[/success]\n"
-            "  [muted]Run [cyan]geode setup --reset[/cyan] to start over.[/muted]"
+            "  [success]A usable credential route is already configured.[/success]\n"
+            "  [muted]Use [cyan]/login[/cyan] to manage accounts.[/muted]"
         )
     else:
         env_setup_wizard()
@@ -159,8 +154,8 @@ def doctor(
     """Run diagnostic checks.
 
     ``geode doctor`` (default ``bootstrap``) verifies the first-run
-    surface — Python version, ``geode`` PATH, ``~/.geode/.env`` state,
-    OAuth credentials, API key validity, serve daemon status. Useful
+    surface — Python version, ``geode`` PATH, local credential route availability,
+    and serve daemon status. Credential acceptance is not tested upstream. Useful
     when ``geode`` doesn't behave as expected.
 
     ``geode doctor slack`` checks Slack Gateway integration only.

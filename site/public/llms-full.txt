@@ -2,7 +2,7 @@
 
 > GEODE is an autonomous agent runtime and evaluation substrate: an inner agentic loop runs tasks (research, analysis, automation, scheduling), while an experimental safety-gated outer loop mutates and evaluates scaffold candidates.
 
-Version v1.0.29. Last sync 2026-09-14. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
+Version v1.0.30. Last sync 2026-09-28. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
 
 ## Overview . 개요
 
@@ -15,51 +15,53 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs.md
 
 GEODE를 설치하고 프로바이더를 선택해 첫 작업을 실행합니다.
 
--   [빠른 시작](https://mangowhoiscloud.github.io/geode/docs/quick-start.md)
--   [경로 선택](https://mangowhoiscloud.github.io/geode/docs/run/pick-path.md)
--   [GEODE가 작업을 처리하는 흐름](https://mangowhoiscloud.github.io/geode/docs/overview/how-it-runs.md)
+-   [빠른 시작GEODE를 설치하고 몇 분 안에 첫 작업을 실행합니다.](https://mangowhoiscloud.github.io/geode/docs/quick-start.md)
+-   [경로 선택구독, API 키, 무료 경로 중에서 상황에 맞는 것을 고르는 방법입니다.](https://mangowhoiscloud.github.io/geode/docs/run/pick-path.md)
+-   [GEODE가 작업을 처리하는 흐름요청 하나가 처음부터 끝까지 어떻게 흐르는지 따라갑니다. CLI 작업, 게이트웨이 메시지, 예약된 자기개선 실행이 모두 같은 코어를 지납니다.](https://mangowhoiscloud.github.io/geode/docs/overview/how-it-runs.md)
 
 ## 사용과 확장
 
 명령을 찾고 작업을 예약하거나 도구를 추가합니다.
 
--   [CLI와 슬래시 명령](https://mangowhoiscloud.github.io/geode/docs/harness/cli.md)
--   [작업 예약](https://mangowhoiscloud.github.io/geode/docs/run/schedule.md)
--   [도구 작성](https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool.md)
+-   [CLI와 슬래시 명령전체 레퍼런스입니다. 모든 geode 명령, thin/daemon 라우팅이 붙은 슬래시 명령, geode-mcp 표면까지 다룹니다.](https://mangowhoiscloud.github.io/geode/docs/harness/cli.md)
+-   [작업 예약자연어와 cron을 jitter와 함께 씁니다. 일일 리포트를 명령 한 줄로 예약합니다.](https://mangowhoiscloud.github.io/geode/docs/run/schedule.md)
+-   [도구 작성도구를 정의하고 등록한 뒤 권한 정책으로 게이트를 거는 방법입니다.](https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool.md)
 
 ## 설정과 운영
 
 자격 증명과 서비스를 설정하고 비용과 실행 오류를 확인합니다.
 
--   [설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)
--   [프로바이더 설정](https://mangowhoiscloud.github.io/geode/docs/run/providers.md)
--   [문제 해결](https://mangowhoiscloud.github.io/geode/docs/run/troubleshooting.md)
+-   [설정 기초설정이 어디에 있고, 어떻게 로드되고, override가 어떻게 결정되는지 설명합니다.](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)
+-   [프로바이더 설정Anthropic, OpenAI, GLM의 자격 증명 위치와 ChatGPT 구독 OAuth, 폴백 체인을 다룹니다.](https://mangowhoiscloud.github.io/geode/docs/run/providers.md)
+-   [문제 해결흔한 실패 모드와 살펴볼 곳입니다. 로그, 훅, runlog를 봅니다.](https://mangowhoiscloud.github.io/geode/docs/run/troubleshooting.md)
 
 ## 내부 구조와 평가 근거
 
 런타임 계약과 평가 근거를 읽고 코드베이스를 탐색합니다.
 
--   [안쪽 agentic 루프](https://mangowhoiscloud.github.io/geode/docs/architecture/agentic-loop.md)
--   [Terminal-Bench 2.1](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md)
--   [아키텍처 심화](https://mangowhoiscloud.github.io/geode/docs/develop/architecture.md)
+-   [안쪽 agentic 루프while(tool\_use) 기본 단위입니다. 한 턴이 어떻게 돌고, 어떤 경로로 끝나는지 설명합니다.](https://mangowhoiscloud.github.io/geode/docs/architecture/agentic-loop.md)
+-   [Terminal-Bench 2.1GPT-5.6 Sol·max effort로 Harbor에서 GEODE와 native Codex를 비교한 실험입니다. 대응 결과, 제외 기준, 불확실성과 고정된 공개 증거를 함께 읽습니다.](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md)
+-   [아키텍처 심화서브시스템 지도와 추천 읽기 순서를 데이터 흐름 추적으로 풀어냅니다.](https://mangowhoiscloud.github.io/geode/docs/develop/architecture.md)
 
 ## 전체 문서
 
-주제를 펼쳐 문서를 찾거나 제목·요약·경로로 범위를 좁히세요.
+분야를 선택하거나 제목·요약·경로로 문서를 찾으세요.
 
 문서 찾기
 
 분류·제목·요약·경로에서 찾습니다.
 
+시작하기사용과 확장설정과 운영내부 구조와 평가 근거
+
 ## 시작하기
 
-개요
+### 개요
 
 -   [GEODE 소개안쪽의 agentic 루프로 일을 처리하고, 바깥쪽 루프로 스스로를 개선하는 자율 실행 에이전트입니다. 무엇을 하는지, 누구를 위한 것인지, 다음에 어디로 갈지 안내합니다.](https://mangowhoiscloud.github.io/geode/docs.md)
 -   [GEODE가 작업을 처리하는 흐름요청 하나가 처음부터 끝까지 어떻게 흐르는지 따라갑니다. CLI 작업, 게이트웨이 메시지, 예약된 자기개선 실행이 모두 같은 코어를 지납니다.](https://mangowhoiscloud.github.io/geode/docs/overview/how-it-runs.md)
 -   [5-계층 스택Model, Runtime, Harness, Agent, Self-Improving. 각 계층이 무엇을 맡고, 책임이 어디서 끝나는지 설명합니다.](https://mangowhoiscloud.github.io/geode/docs/architecture/overview.md)
 
-시작하기
+### 시작하기
 
 -   [빠른 시작GEODE를 설치하고 몇 분 안에 첫 작업을 실행합니다.](https://mangowhoiscloud.github.io/geode/docs/quick-start.md)
 -   [경로 선택구독, API 키, 무료 경로 중에서 상황에 맞는 것을 고르는 방법입니다.](https://mangowhoiscloud.github.io/geode/docs/run/pick-path.md)
@@ -69,7 +71,7 @@ GEODE를 설치하고 프로바이더를 선택해 첫 작업을 실행합니다
 
 ## 사용과 확장
 
-가이드
+### 가이드
 
 -   [도구 작성도구를 정의하고 등록한 뒤 권한 정책으로 게이트를 거는 방법입니다.](https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool.md)
 -   [훅과 미들웨어 등록가장 좁은 권한을 고르고 공유 인스턴스 하나를 등록한 뒤 프로덕션 경계의 timeout과 실패 동작을 검증합니다.](https://mangowhoiscloud.github.io/geode/docs/guides/register-hook.md)
@@ -80,7 +82,7 @@ GEODE를 설치하고 프로바이더를 선택해 첫 작업을 실행합니다
 
 ## 설정과 운영
 
-설정
+### 설정
 
 -   [설정 기초설정이 어디에 있고, 어떻게 로드되고, override가 어떻게 결정되는지 설명합니다.](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)
 -   [config.toml 레퍼런스영역별로 묶은 모든 설정 키입니다. Settings 필드, routing.toml, self-improving 루프 섹션을 다룹니다.](https://mangowhoiscloud.github.io/geode/docs/config/reference.md)
@@ -91,7 +93,7 @@ GEODE를 설치하고 프로바이더를 선택해 첫 작업을 실행합니다
 -   [프롬프트 해싱의도하지 않은 drift가 생기면 빌드를 깨뜨리는 프롬프트 해시 핀입니다.](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-hashing.md)
 -   [MCP 서버MCP의 양면입니다. 외부 서버를 붙이는 클라이언트와 GEODE가 출하하는 서버 geode-mcp를 다룹니다.](https://mangowhoiscloud.github.io/geode/docs/runtime/tools/mcp.md)
 
-GEODE 운영
+### GEODE 운영
 
 -   [Serve와 게이트웨이serve 데몬의 메신저 게이트웨이를 운영합니다. poller, binding 라우팅, lane queue를 다룹니다.](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md)
 -   [메신저 연동게이트웨이 어댑터로 GEODE를 Slack, Discord, Telegram에 연결합니다.](https://mangowhoiscloud.github.io/geode/docs/run/messaging.md)
@@ -105,7 +107,7 @@ GEODE 운영
 
 ## 내부 구조와 평가 근거
 
-핵심 개념
+### 핵심 개념
 
 -   [두 개의 루프나머지 문서가 기대는 멘탈 모델입니다. 안쪽 agentic 루프가 작업을 처리하고, 바깥쪽 루프가 작업을 처리하는 시스템 자체를 다듬습니다.](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops.md)
 -   [안쪽 agentic 루프while(tool\_use) 기본 단위입니다. 한 턴이 어떻게 돌고, 어떤 경로로 끝나는지 설명합니다.](https://mangowhoiscloud.github.io/geode/docs/architecture/agentic-loop.md)
@@ -120,13 +122,15 @@ GEODE 운영
 -   [서브에이전트 오케스트레이션서브에이전트를 격리된 워커 프로세스로 병렬 레인에서 띄웁니다. 부모는 요약만 받고, 쓰기 권한은 툴킷 구성으로 통제합니다.](https://mangowhoiscloud.github.io/geode/docs/runtime/orchestration.md)
 -   [스킬도구와 구분되는, 사용자가 호출하는 스킬입니다. 발견, 라이프사이클, override를 다룹니다.](https://mangowhoiscloud.github.io/geode/docs/runtime/skills.md)
 
-Experimental Loop탐색과 선택
+### Experimental Loop
+
+#### 탐색과 선택
 
 -   [스캐폴드 탐색스캐폴드를 변이하고 Petri로 측정한 뒤, 불확실성을 고려한 fitness margin으로 승격하거나 되돌립니다. 모델 가중치는 바꾸지 않습니다.](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md)
 -   [Crucible 제한형 탐색동결된 admission, paired 평가, CAS 전진, 별도 sealed-test 경계를 갖춘 제한형 private search 루프입니다.](https://mangowhoiscloud.github.io/geode/docs/capabilities/outer-loop.md)
 -   [계보와 좌표이 루프가 self-evolving agents 문헌에서 어디에 위치하는지 짚습니다. 새로운 primitive가 아니라, 알려진 조각들을 정직하게 재조합한 결과입니다.](https://mangowhoiscloud.github.io/geode/docs/capabilities/lineage.md)
 
-측정과 판정
+#### 측정과 판정
 
 -   [검증과 평가런타임 수락, 과제 verifier, Petri LLM-as-a-judge, 사람과의 보정, Inspect .eval 기록의 권한을 구분합니다.](https://mangowhoiscloud.github.io/geode/docs/verification/evaluation.md)
 -   [Petri × GEODEAnthropic Alignment Science의 평가 프레임워크를 GEODE 에이전트 위에 얹어 루프의 측정 계층으로 씁니다.](https://mangowhoiscloud.github.io/geode/docs/petri/overview.md)
@@ -134,24 +138,24 @@ Experimental Loop탐색과 선택
 -   [감사 실행geode-eval audit, 또는 raw 경로인 inspect eval을 씁니다. 모델 역할, 차원 세트, seeds, 턴 예산을 고릅니다. 기본은 dry-run입니다.](https://mangowhoiscloud.github.io/geode/docs/petri/run.md)
 -   [Judge 차원22개 judge 차원의 점수 방향과 사람의 라벨을 통한 보정, 별도 18개 차원의 fitness 선택 정책을 설명합니다.](https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions.md)
 
-시나리오 생성
+#### 시나리오 생성
 
 -   [Seed Scenario Generation평가용 scenario corpus를 키우는 9-역할 생성 루프입니다. supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer로 이어집니다.](https://mangowhoiscloud.github.io/geode/docs/capabilities/co-scientist.md)
 -   [Seed 파이프라인세대마다 seed 코퍼스를 다시 구성합니다. picker, orchestrator, manifest, 비용 미리보기와 frontier-band 생존자 선택을 다룹니다.](https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipeline.md)
 
-공개 결과
+#### 공개 결과
 
 -   [Seed 생성 런세대별 대시보드입니다. 런마다 생존 후보, 토큰, 메타리뷰, 다음 세대 prior를 보여줍니다.](https://mangowhoiscloud.github.io/geode/docs/petri/seeds.md)
 -   [감사 트랜스크립트공개된 번들 스냅샷에 포함된 감사 트랜스크립트를 확인합니다. 새 실행 기록은 별도로 게시해야 합니다.](https://mangowhoiscloud.github.io/geode/docs/petri/bundle.md)
 
-벤치마크
+### 벤치마크
 
 -   [GEO 가시성고정 workload와 digest-bound receipt로 F/R/C/P/A/Q/O를 분리 측정하며 단일 GEO 점수를 만들지 않는 계약입니다.](https://mangowhoiscloud.github.io/geode/docs/benchmarks/geo.md)
 -   [Terminal-Bench 2.1GPT-5.6 Sol·max effort로 Harbor에서 GEODE와 native Codex를 비교한 실험입니다. 대응 결과, 제외 기준, 불확실성과 고정된 공개 증거를 함께 읽습니다.](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md)
 -   [Tau2GEODE의 tau2-bench 실측입니다. native user-simulator 트랙 headline, verifier-backed run 기록 전체, 원본 simulation 로그 링크를 담습니다.](https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2.md)
 -   [MCPMarkGEODE의 MCPMark 실측입니다. Verified available-services headline, 서비스 coverage와 blocker, run 기록 전체, 원본 run 로그 링크를 담습니다.](https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark.md)
 
-레퍼런스
+### 레퍼런스
 
 -   [프론티어 비교GEODE가 Claude Code, Codex CLI, OpenClaw, Hermes에서 무엇을 빌려오고, 어디서 갈라지는지 정리합니다. 계보 속 GEODE의 좌표를 짚는 레퍼런스 진입점입니다.](https://mangowhoiscloud.github.io/geode/docs/reference/frontier-comparison.md)
 -   [외부 참고GEODE가 인용하는 frontier 에이전트 시스템, 디자인 표준, 선행 작업입니다. 루프 뒤에 있는 self-evolving agents 계보입니다.](https://mangowhoiscloud.github.io/geode/docs/reference/external-references.md)
@@ -164,7 +168,7 @@ Experimental Loop탐색과 선택
 -   [CHANGELOGmain push마다 CHANGELOG.md에서 동기화되는 전체 버전 이력입니다.](https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md)
 -   [Petri 번들 격리publish 워크플로우, validator, hygiene ratchet의 운영자 레퍼런스입니다.](https://mangowhoiscloud.github.io/geode/docs/reference/petri-bundle-isolation.md)
 
-개발과 아키텍처
+### 개발과 아키텍처
 
 -   [아키텍처 심화서브시스템 지도와 추천 읽기 순서를 데이터 흐름 추적으로 풀어냅니다.](https://mangowhoiscloud.github.io/geode/docs/develop/architecture.md)
 -   [시스템 색인모든 서브시스템과 파일 경로입니다. 평면 카탈로그입니다.](https://mangowhoiscloud.github.io/geode/docs/architecture/system-index.md)
@@ -175,11 +179,9 @@ Experimental Loop탐색과 선택
 -   [릴리스와 PyPI 라이프사이클버전 위치, 검증된 GitHub·PyPI 승격, rebuild 주기를 다룹니다.](https://mangowhoiscloud.github.io/geode/docs/ops/release-pypi-lifecycle.md)
 -   [백로그 처분조용히 삭제하는 대신 흔적을 남기며 아이디어를 정리합니다.](https://mangowhoiscloud.github.io/geode/docs/ops/backlog-dispose.md)
 
-코드베이스 지도
+### 코드베이스 지도
 
 -   [레이어 아키텍처 그래프저장소를 특정 시점에 스냅숏한 지도입니다. 분석된 14개 레이어를 파일 수 크기로, 레이어를 가로지르는 import 의존을 엣지로 그리고, 7단계 읽기 투어를 덧붙입니다. 손으로 그린 것이 아니라 Understand-Anything가 만든 것입니다.](https://mangowhoiscloud.github.io/geode/docs/codebase-map/layer-graph.md)
-
-GEODE의 개념과 설계 배경
 
 ## GEODE는 무엇인가
 
@@ -1141,6 +1143,8 @@ GEODE의 프롬프트는 두 단으로 관리됩니다. 디스크의 마크다�
 
 `ROUTER_SYSTEM`은 응답 서술을,`AGENTIC_SUFFIX`는 요청 범위·완료·실패·증거·도구 사용의 공통 계약을 담습니다. 도구 선택은 고정된 업체 순위가 아니라 현재 도구와 출처에 따릅니다. 상세 조사 절차는 필요할 때`deep-researcher` 스킬로 읽습니다. 로컬 검증 성공은 원격 CI 성공이나 배포 권한을 대신하지 않습니다.
 
+코드 수정 시에는 기존 소유자와 호출 경로를 먼저 확인하고 비동기 네이티브 실행, 명시적 동기 작업 경계, 구조화된 오류와 비밀정보 제거를 따릅니다. 취소 접수는 종료나 부작용 취소를 뜻하지 않으며, 필요한 상태 저장과 정리가 성공해야 완료로 보고합니다. 상세 개발 규약은 공유`AGENTS.md`와 컨벤션 문서가 소유합니다. 프롬프트는 이 행동을 안내하며 실행 권한이나 저장 성공을 강제하는 장치는 아닙니다.
+
 ## 드리프트 감지: 해시 핀
 
 import 시점에 각 상수의 sha256\[:12\] 해시를 계산해 `PROMPT_VERSIONS`에 노출합니다. 핀 대상은 `ROUTER_SYSTEM`, `AGENTIC_SUFFIX`, `REVIEWER_SYSTEM`입니다. `verify_prompt_integrity()`가 라이브 해시를 `_PINNED_HASHES`와 비교하고, CI가 이 함수를 게이트로 씁니다. 프롬프트를 바꾸면 핀을 다시 박아야 하므로, 모든 프롬프트 변경이 리뷰 가능한 코드 변경이 됩니다. 재핀 워크플로는 [프롬프트 해싱](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-hashing.md)을 참고합니다.
@@ -1152,6 +1156,8 @@ import 시점에 각 상수의 sha256\[:12\] 해시를 계산해 `PROMPT_VERSION
 Unreleased: 프로필·프로젝트 기억·학습·저장 규칙의 데이터는 XML 문자로 이스케이프합니다. 후보 평가와 reflection도 작업·상태·관측을 별도 데이터 영역으로 전달합니다. 태그는 내용의 경계를 표현할 뿐, 권한 검사나 프롬프트 주입 방어의 성공을 보장하지 않습니다.
 
 실행 표면이 바인딩되지 않으면 CLI라고 추측하지 않고 플랫폼 힌트를 생략합니다. 명시된 표면도 사용 가능한 도구나 샌드박스 권한을 보증하지 않습니다. 모델·도구 그래프가 바뀌면 이전 preflight 힌트를 무효화하고 시스템 프롬프트를 다시 조립합니다. 필수 검증 조건은 별도 상태로 유지됩니다.
+
+작업 preflight는 요청의 키워드와 현재 도구를 바탕으로 한 참고 정보입니다.`suggested_evidence`는 요구사항이나 완료 판정이 아니며, 이전 턴의 기록이나 최종 응답의 존재만으로 작업 성공을 판단하지 않습니다. 실제 완료 정책은 Verify/PostVerify/Stop 경로가 담당합니다.
 
 ## 레이어 조립: build\_system\_prompt
 
@@ -2190,90 +2196,101 @@ min_interval_minutes = 60
 URL: https://mangowhoiscloud.github.io/geode/docs/verification/evaluation
 Markdown: https://mangowhoiscloud.github.io/geode/docs/verification/evaluation.md
 
-에이전트가 끝났다고 말한 것, 과제 테스트를 통과한 것, judge가 행동을 좋게 평가한 것은 서로 다른 관측입니다. GEODE의 결과를 읽을 때도 이 판정들을 하나의 성공 표시로 합치지 않아야 합니다.
+에이전트의 완료 선언, 과제 테스트 통과, judge의 좋은 평가는 각각 다른 것을 관측합니다. 이 페이지는 GEODE에서 누가 무엇을 근거로 판정하는지, 그 결과를 어디까지 믿을 수 있는지 정리합니다.
 
-## 무엇을, 누가 판정하나요?
+## 누가 무엇을 판정하나
 
-같은 실행을 보더라도 판정의 범위와 권한은 다릅니다.
+같은 실행도 판정 주체마다 보는 증거와 권한이 다릅니다.
 
-| 판정 | 입력 증거 | 결정과 한계 |
+| 판정 | 입력 증거 | 결정과 범위 |
 | --- | --- | --- |
-| 런타임의 턴 검증 | 턴 출력, 도구 호출 기록, 설정된 규칙·훅 | 턴을 수락하거나 제한된 후속 작업을 요청하고, 외부 검토를 위해 결과를 보류할 수도 있습니다. 외부 과제의 정답 판정이 아닙니다. |
-| 벤치마크 verifier | 과제가 소유한 테스트와 실행 후 환경 상태 | 해당 과제의 기준에 따라 reward를 냅니다. 테스트 범위를 넘는 안전성·일반 능력은 보장하지 않습니다. |
-| Petri LLM-as-a-judge | 감사 transcript와 차원별 rubric | 관찰한 행동을 차원별로 채점합니다. 모델의 판단이며 실제 상태 검사나 사람의 정답 라벨과 같지 않습니다. |
-| 아티팩트 무결성 검사 | 스키마, SHA-256, 실행·호출 ID와 기록 범위 | 같은 증거를 읽는지, 기록이 연결되는지 확인합니다. 무결성 통과는 과제 성공이나 높은 점수를 뜻하지 않습니다. |
+| 런타임 턴 검증 | 턴 출력, 도구 호출 기록, 설정된 규칙·훅 | 턴을 수락하거나, 제한된 후속 작업을 요청하거나, 외부 검토로 보류합니다. 외부 과제의 정답 판정은 아닙니다. |
+| 벤치마크 verifier | 과제가 소유한 테스트와 실행 후 환경 상태 | 과제 기준으로 reward를 냅니다. 테스트가 다루는 범위까지만 말해 줍니다. |
+| Petri LLM-as-a-judge | 감사 transcript와 차원별 rubric | 관찰한 행동을 차원별로 채점합니다. 모델의 판단이며, 상태 검사나 사람의 정답 라벨과는 다릅니다. |
+| 아티팩트 무결성 검사 | 스키마, SHA-256, 실행·호출 ID, 기록 범위 | 같은 증거를 읽는지, 기록끼리 연결되는지 확인합니다. 통과해도 과제 성공이나 점수를 뜻하지는 않습니다. |
 
-## Eval은 판정 하나보다 넓습니다
+## 평가 한 번의 구성
 
-1.  실행 전에 질문, 과제, 모델·경로, 예산, 반복 수, 지표와 제외 규칙을 run-spec에 고정합니다.
-2.  각 시도의 실제 실행은 attempts와 native result에 남기고, trajectory는 행동 기록을 연결합니다.
-3.  과제 verifier 또는 rubric 기반 judge가 목적에 맞는 점수를 냅니다. 둘을 함께 쓰면 결과도 따로 기록합니다.
-4.  분석은 고정된 선택 규칙으로 분자·분모와 불확실성을 계산합니다. 외부 루프의 승격은 별도의 게이트가 결정합니다.
+1.  실행 전에 질문, 과제, 모델·경로, 예산, 반복 수, 지표, 제외 규칙을 run-spec에 고정합니다.
+2.  시도마다 attempt와 native result를 남기고, trajectory로 행동 기록을 잇습니다.
+3.  과제 verifier나 rubric 기반 judge가 점수를 냅니다. 둘 다 쓰면 결과를 따로 기록합니다.
+4.  분석은 고정된 선택 규칙으로 분자·분모와 불확실성을 계산하고, 승격은 별도 게이트가 정합니다.
 
-유효하게 실행했지만 틀린 결과는 reward 0일 수 있습니다. 인프라 오류, 미실행, 누락 라벨은 같은 0이 아닙니다. 재시도와 제외를 숨기지 않고 원래 시도에 연결하며, 누락된 판정을 성공·실패로 추정하지 않습니다. [평가 데이터 계약](https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/data-model.md)
+0에도 종류가 있습니다. 정상 실행 후 틀린 답은 reward 0이지만, 인프라 오류·미실행·누락 라벨은 0이 아닌 별도 상태로 남깁니다. 재시도와 제외는 원래 시도에 연결해 기록합니다. [평가 데이터 계약](https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/data-model.md)
 
-## Petri의 judge와 런타임 self-judge
+## 런타임 턴 검증
 
-Petri에서는 auditor가 seed에 따라 감사 상황을 탐색하고, target이 응답하며, judge가 transcript를 rubric으로 채점합니다. judge가 과제 환경을 다시 실행해서 정답을 검증하는 구조는 아닙니다. [Petri 공식 설명](https://github.com/meridianlabs-ai/inspect_petri)
+`core/agent/verify.py`의 `llm_judge`가 기본 최종 검증 경로입니다. 코드가 먼저 빈 실행과 운영자 조치 필요 여부를 확인하고, 선택된 LLM 또는 Jev가 완료 근거를 판정합니다. 예전 off·rule\_based·reflexion 설정은 경고와 함께 이 경로로 해석합니다. 이 판정은 Petri의 외부 감사 점수와 별개입니다.
 
-`core/agent/verify.py`의 `llm_judge`는 기본 최종 의미 검증 경로입니다. 빈 실행·운영자 조치 여부를 코드로 먼저 검사하고, 선택된 LLM 또는 Jev가 완료 근거를 판정합니다. 기존 off·rule\_based·reflexion 설정은 경고와 함께 이 공통 경로로 해석합니다. 내부 판정을 Petri의 외부 감사 점수로 사용하지 않습니다.
+Unreleased: 판정 엔진 선택과 매 라운드 Reflection은 소스 체크아웃 기준이며, 패키지 배포에는 아직 없습니다.
 
-### LLM과 Jev 선택
+런타임 판정의 동작 규칙
 
-Unreleased: 이 선택 기능과 매 라운드·최종 Reflection 정책은 소스 체크아웃 기준이며, 패키지 배포와 구분합니다.
+| 항목 | 동작 |
+| --- | --- |
+| 판정 엔진 | 기본은 LLM입니다. /model judgment에서 Jev를 고르면 TypeSafe 또는 OpenRouter 키로 매 라운드와 최종 후보를 판정하고, 키가 없으면 LLM을 계속 씁니다. judge\_model로 다른 공급자 모델을 써도 주 실행 경로와 도구 권한은 바뀌지 않습니다. |
+| 출력 계약 | judge는 작업 스키마를 물려받지 않고 passed, score와 observation / lesson / next\_check를 반환합니다. 잘못된 JSON·점수, judge 호출 실패는 verification\_error(passed=false, score=0, should\_retry=false)로 기록하고 구조 검사 통과로 대신하지 않습니다. 이 0은 벤치마크 reward가 아니라 내부 검토 오류 값입니다. |
+| 수정 루프 | Reflection은 도구 결과가 나온 매 라운드와 최종 응답 전에 실행합니다. 수정은 원래 마감 안에서 최대 두 번이며, 남은 시간이 3분의 1(최대 300초) 이하면 첫 후보를 검토에 올립니다. 개인정보(REDACT)·시간·비용 가드는 유지되고, 건너뛴 검토는 통과가 아닙니다. |
+| 근거 범위 | 최근 관측 12개를 총 16,000자(필드당 최대 6,000자)로 전달하고 잘린 부분을 표시합니다. 재개한 요청은 이전 턴의 실제 호출·결과 쌍도 포함합니다. 이미지는 별도 창으로 보내고, 후보의 주장·압축 요약·내부 추론은 도구 증거로 쓰지 않습니다. |
+| 후보 선택 | 성공한 후보끼리 상대 평가합니다. 선택이 실패하면 judge\_error를 남기고 첫 성공 후보를 쓰는데, 이 대체는 검증 통과가 아닙니다. |
+| 사용량 | judge와 reflection의 토큰·캐시·비용은 TokenTracker와 비용 가드에 한 번 기록하며, 모델이 도구를 거절하거나 잘못 응답해도 관측된 사용량은 남습니다. 공급자가 보고한 비용과 가격표 추정은 실제 청구액이 아닙니다. |
+| confidence | CognitiveState의 confidence는 작업 진행에 대한 믿음이며 verifier 점수가 아닙니다. 마지막으로 갱신한 라운드를 함께 저장하고, NaN·무한대는 받지 않습니다. |
 
-판정 엔진은 기본 LLM입니다. /model judgment에서 Jev를 선택하면 설정된 TypeSafe 또는 OpenRouter 키로 매 라운드와 최종 후보를 판정합니다. 키가 없으면 LLM 경로를 유지하며, 키 등록 자체는 활성화가 아닙니다. 자연어로 판정 엔진 변경을 요청해도 같은 설정 경로를 사용합니다. 주 실행 모델과 effort, 도구 실행 권한은 바뀌지 않습니다.
+Jev는 생성 모델 선택 목록에 없습니다. 전용 System One API가 텍스트 상태와 유한한 선택지를 받아 분류와 분포를 돌려주고, 이 분포는 confidence나 실행 허가로 쓰이지 않습니다. 이미지가 필요한 근거는 텍스트만으로 통과시키지 않고, 실패한 호출은 다른 엔진의 결과로 메우지 않습니다. [TypeSafe System One](https://docs.typesafe.ai/api) · [OpenRouter System One](https://openrouter.ai/docs/guides/community/typesafe-sdk) · [설정 규약](https://mangowhoiscloud.github.io/geode/docs/config/reference.md)
 
-Jev는 생성 모델 선택기에 들어가지 않습니다. System One 전용 API로 준비된 텍스트 상태와 유한한 선택지를 전달하고, 분류 결과와 분포를 받습니다. 이 분포를 CognitiveState의 confidence나 실행 허가로 바꾸지 않습니다. 이미지가 필수 근거이면 텍스트 전용 판정으로 통과시키지 않으며, 호출 실패도 다른 엔진의 성공으로 대체하지 않습니다.
+### 알려진 한계
 
-[TypeSafe System One](https://docs.typesafe.ai/api) · [OpenRouter System One](https://openrouter.ai/docs/guides/community/typesafe-sdk) · [설정 규약](https://mangowhoiscloud.github.io/geode/docs/config/reference.md)
+-   judge는 후보의 주장보다 근거를 먼저 보고, 풀리지 않는 모호함에는 재검사를 요청하도록 설정돼 있습니다. 그렇다고 오판이 없어지지는 않습니다.
+-   Reflexion은 verdict와 continuation을 기록하지만, 다음 요청이 힌트를 실제로 소비했는지 묶는 digest·event는 아직 없습니다. 성능 개선 효과도 측정되지 않았습니다.
+-   2026-09-13 G-code 개발 검증에서 최종 후보의 신규 5회는 모두 공식 verifier를 통과했지만, 내부 judge가 첫 후보를 모두 수락해 수정은 한 번도 일어나지 않았습니다. 앞선 후보의 오수락 사례와 함께 읽어야 합니다. [G-code 개발 검증 기록](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md#gcode-development-gate) · [턴 검증 구현](https://github.com/mangowhoiscloud/geode/blob/main/core/agent/verify.py)
 
-잘못된 JSON, 필드 타입, 점수와 judge 호출 실패는 verification\_error로 기록합니다. passed=false, score=0, should\_retry=false이며, rule\_based 성공으로 대체하지 않습니다. 이 0은 검토 오류를 나타내는 내부 값이지 벤치마크 reward가 아닙니다.
+Judge를 믿기 전에 확인할 것
 
-최종 judge는 작업 결과의 출력 스키마를 물려받지 않습니다. llm\_judge는 passed / score와 observation / lesson / next\_check 피드백을 요구하고, 이 피드백으로 저장할 판정 사유를 만듭니다. 이전 reflexion 설정도 이 경로로 해석합니다. CognitiveState의 confidence는 별도의 작업 진행 판단이며 verifier 점수가 아닙니다. NaN과 무한대는 신뢰도로 받아들이지 않고, 복원 시에는 미상으로 두며 갱신 시에는 이전 값을 유지합니다.
-
-judge\_model을 별도 공급자의 모델로 지정하면 해당 모델의 어댑터로 검증을 요청합니다. 주 실행 모델의 경로는 바뀌지 않으며 이 호출에는 작업 도구를 주지 않습니다. CognitiveState에는 confidence를 마지막으로 갱신한 라운드도 저장합니다. 이전 세션에 이 정보가 없으면 미상으로 표시하며, 오래된 값을 새 관측처럼 표시하지 않습니다. Reflection 도구의 응답은 클라이언트에서 타입과 유한한 값을 검사합니다. 공급자에 전달되지 않는 strict 옵션으로 서버 측 보장을 주장하지 않습니다.
-
-best-of-N 후보 선택은 성공한 후보 사이의 상대 평가입니다. 공급자가 도구 입력을 객체 또는 JSON 문자열로 반환하더라도 동일하게 해석합니다. 잘못된 입력이나 선택 실패는 judge\_error를 남기고 첫 성공 후보로 돌아가므로, 이 대체 선택을 검증 성공으로 해석하지 않습니다.
-
-Reflection은 별도 실행 모드가 아니라 공통 피드백·수정 경로입니다. 판단 엔진 선택과 분리하며, Jev를 자동으로 선택하지 않습니다. LLM judge를 선택하면 원래 요청, 후보, 제한된 최근 tool 결과와 이미 관찰한 이미지를 검토합니다. 짧은 응답이나 복구한 tool 오류만으로 후보를 탈락시키지 않습니다. 최초 예산 안에서 최대 두 번 수정합니다. 남은 시간이 전체의 3분의 1(최대 300초) 이하이면 다음 모델 호출에서 첫 후보 검토를 요청합니다. 진행 중인 호출을 이 시점에 강제 중단하지는 않습니다. Judge usage는 기존 TokenTracker에 기록합니다. 최종 벤치 점수는 여전히 외부 verifier가 판정합니다. [현재 턴 검증 구현](https://github.com/mangowhoiscloud/geode/blob/main/core/agent/verify.py)
-
-Reflection은 도구 결과를 반영한 매 라운드와 최종 응답 전에 수행합니다. 최종 후보에서는 별도 인지 호출을 중복하지 않고 최종 판정 한 번으로 검토합니다. 개인정보·REDACT 보호, 남은 시간·비용 가드는 유지하며, 건너뛴 검토를 성공으로 기록하지 않습니다. 새 사용자 입력만으로 보호 상태를 해제하지 않고 재개 시에도 유지합니다. 잘못된 hypotheses 목록은 기존 상태를 지우지 않습니다.
-
-완료된 인지 reflection의 토큰·캐시·비용은 기존 tracker와 비용 가드에 한 번 반영합니다. 모델이 도구 호출을 거절하거나 잘못된 응답을 반환해도 관측된 사용량은 남습니다. 실제 공급자를 호출하지 않은 middleware 응답이나 사용량을 받기 전에 중단된 호출을 유료 호출로 만들지는 않습니다. 공급자 보고 비용과 가격표 기반 추정은 실제 청구서와 구분해야 합니다.
-
-이미지 근거는 텍스트 tool 기록과 별도로 선택해, 파일 쓰기나 계획 갱신 때문에 밀려나지 않도록 합니다. 이전 시도와 현재 시도의 관측, 전달하지 못한 이미지도 구분합니다. 이전 자료가 여전히 유용할 수는 있지만 수정 후 새로 확인한 증거와 같지는 않습니다.
-
-재개한 요청의 검증에는 보존된 이전 턴의 실제 도구 호출·결과 쌍도 포함합니다. 호출 ID가 모호하거나 짝이 없으면 제외하고, 이전 관측을 새 검증 시도로 표시하지 않습니다. 최근 12개 관측의 입력·결과는 총 16,000자, 필드당 최대 6,000자 안에서 공간을 나누며 절단을 표시합니다. 후보의 주장·압축 요약·내부 추론은 도구 증거로 승격하지 않습니다. Reflection에는 현재 승인된 요청과 세션 최초 요청을 구분해 전달하며, 개인정보와 이미지 제한은 유지합니다.
-
-관측 근거를 먼저, 후보의 주장을 마지막에 제시합니다. 동일한 값을 쓰고 다시 읽은 일관성이나 실패한 위임은 독립 검증이 아닙니다. 근거로 해소되지 않는 모호함은 통과시키지 말고, 구별 가능한 재검사를 요청하도록 judge를 구성합니다. 이 지시만으로 오판이 사라졌다고 주장하지 않습니다.
-
-Reflexion의 verdict와 continuation 기록은 있지만, 다음 요청에서 힌트를 소비했음을 결속하는 digest/event는 아직 없습니다. 이 기록만으로 힌트 소비까지 전 과정이 실측됐거나 성능 개선 효과가 입증됐다고 주장하지 않습니다.
-
-2026-09-13 G-code 개발 검증에서는 최종 후보의 신규 5회가 공식 verifier를 모두 통과했습니다. 다만 내부 judge가 첫 후보를 모두 수락해 repair는 발생하지 않았습니다. 앞선 후보의 오수락 사례, 실행 조건과 관측 범위를 함께 읽어야 합니다. [G-code 개발 검증 기록](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md#gcode-development-gate)
-
-Judge를 믿기 전에 확인할 항목
-
--   Judge 모델·버전·경로, rubric 원본, 점수 방향, seed와 transcript 범위를 고정합니다. 높은 점수가 좋은지는 차원마다 확인합니다.
--   같은 공급자의 모델을 역할별로 나눴다고 평가가 독립적이라고 단정하지 않습니다. 경고나 보정 계수의 존재만으로 편향이 제거되지는 않습니다.
--   사람이 judge 점수를 보기 전에 동일 rubric으로 라벨을 매기고, 불일치 사례와 차원별 표본 수를 함께 봅니다.
--   GEODE에는 blind labeling과 weighted Cohen’s kappa·ordinal Krippendorff’s alpha를 계산하는 audit-agreement 경로가 있습니다. 기능이 있다는 사실과 실제 라벨로 신뢰도를 입증했다는 사실은 구분합니다.
+-   judge 모델·버전·경로, rubric 원본, 점수 방향, seed, transcript 범위를 고정합니다. 높은 점수가 좋은지는 차원마다 다릅니다.
+-   같은 공급자의 모델을 역할만 나눠 쓰면 독립 평가가 아닙니다. 경고나 보정 계수가 있다고 편향이 사라지지도 않습니다.
+-   사람이 judge 점수를 보기 전에 같은 rubric으로 라벨을 달고, 불일치 사례와 차원별 표본 수를 함께 봅니다.
+-   audit-agreement 경로로 blind labeling, weighted Cohen’s kappa, ordinal Krippendorff’s alpha를 계산할 수 있습니다. 도구가 있다는 것과 실제 라벨로 신뢰도를 보였다는 것은 다른 일입니다.
 
 ```
 geode-eval audit-agreement --help
 ```
 
-[Judge 차원과 해석](https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions.md) · [사람과 judge의 일치도 구현](https://github.com/mangowhoiscloud/geode/blob/main/core/audit/judge_agreement.py)
+[Judge 차원과 해석](https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions.md) · [사람-judge 일치도 구현](https://github.com/mangowhoiscloud/geode/blob/main/core/audit/judge_agreement.py)
 
-## .eval은 Petri 전용 파일이 아닙니다
+## Jev v3 본실험
 
-Eval은 평가 절차를 뜻하고, .eval은 Inspect가 저장하는 평가 로그 형식입니다. Petri는 Inspect 위에서 동작하므로 이 형식을 사용합니다. 모델·실행 설정, 샘플, 메시지와 점수를 함께 읽되, 파일이 존재하거나 실행 상태가 success라고 해서 모든 샘플의 답이 정답이라는 뜻은 아닙니다. [Inspect 로그 계약](https://inspect.aisi.org.uk/eval-logs.html)
+2026-09-27 본실험은 판정 정확도, 확률과 오류 선별, 호출 지연, 실제 과제 완료를 27개 등록 단위로 나눠 측정했습니다. 앞선 M4–M6 파일럿과는 분모를 합치지 않습니다. 자료는 geode-eval-artifacts PR #46으로 공개했고(2026-09-28 원격 재확인), 아래 링크는 공개 커밋 3bcf4044eb5c2411dd48122d672aef72a83fb30e에 고정돼 있습니다.
 
-Harbor의 결과 JSON, Inspect의 .eval, GEODE trajectory를 하나의 형식으로 강제 변환하지 않습니다. 각 원본을 보존하고 실행 ID와 SHA-256으로 연결합니다. 새로운 judge 라벨은 별도 파생 평가로 남기며, 공개된 과거 reward나 원본 transcript를 덮어쓰지 않습니다.
+주요 결과. 앞 수치가 Jev, 뒤 수치가 Astra이고 구간은 95% CI입니다.
 
-## Terminal-Bench 결과를 읽을 때
+| 단위 | 대상 | 결과 | 차이 | 해석 |
+| --- | --- | --- | --- | --- |
+| U4 | Score 통제 풀 | 59/80 · 79/80 | −25.00 pp \[−35.23, −16.25\] | 기준 미달 |
+| X2 | Mind2Web 후보 선택 | 196/240 · 226/240 | −12.50 pp \[−17.22, −8.04\] | 비열등성 미입증 |
+| 의도·대상 | 설계자가 만든 패널 | 216/220 · 220/220 | −5 pp 기준 안 | 기준 충족 |
+| E7 | 같은 12과제, A/B/C × 2회 | 72/72 strict | C의 judge fallback 0회 | 재검토 분기의 효용은 미확인 |
+| E8 | U8n 주입 후속 | 36셀 중 24셀에서 중단 | 주지표 not-measurable | 아래 사후 분석 참고 |
 
-이 사이트의 Sol/max 비교는 task verifier와 고정된 결과 선택 규칙으로 읽습니다. Petri judge가 이 성공률을 채점한 것은 아닙니다. 이후 transcript에 LLM judge를 추가하더라도 행동 진단이라는 별도 질문·rubric·예산으로 등록해야 하며, 기존 성공률에 섞지 않습니다.
+-   U4·X2는 저장된 응답 전체에 수치 파서 교정을 적용한 사후 재채점입니다. 새 모델 호출은 없고 정답·분모·군집·seed·재표집 규칙은 그대로이며, 원래 등록 결과는 따로 보존합니다.
+-   E8: 원 계획(source5)의 U8n은 선행 gate 실패로 실행되지 않았습니다. 별도 후속(source7)은 U0e admission 2/2를 통과한 뒤 24셀에서 멈췄습니다(A 유효 성공 12, B 유효 전달 실패 11과 주입 증거 오류로 무효 1, 미실행 12).
+-   E8 사후 분석(양쪽이 유효한 11쌍, 4개 원천, 두 arm 모두 Astra가 생성·수리): Astra 판정(A)은 11/11을 전달했습니다. Jev Noul 판정(B)은 마지막 후보가 과제 oracle을 11/11 통과했는데도 근거 부족으로 모두 보류해 native strict가 0/11입니다. 맞는 수리 후보를 거부한 셈입니다. 중단 뒤 고른 표본이라 구간이나 일반화는 제시하지 않고, U8n을 더 돌릴 계획은 없습니다.
+-   Noul의 이전 의미 실패, I5의 계약 전달 결함, E6의 무효 중단도 공개 자료에 계보째 남아 있습니다.
+
+-   [한국어 결과 해석](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/INTERPRETATION.ko.md) · [영문 결과 해석](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/INTERPRETATION.md)
+-   [누가 무엇을 채점하는가](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/SCORING.md) · [27개 단위와 계보별 근거](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/units.json)
+-   [무결성 확인·오프라인 재계산·새 실행](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/REPRODUCE.md) · [U4·X2 교정 재채점](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/corrections/numeric-parser-20260928/README.md)
+-   [E8 U8n 사후 완성 쌍 분석](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/analyses/u8n-observed-pairs-20260928/README.md)
+-   [소스·공개 범위 기록](https://github.com/mangowhoiscloud/geode/blob/f0a5ce10cdb87e9738ff41e6e09dfbbfbb97a8f2/docs/eval/jev-v3-study-20260927.md) · [별도 M4–M6 파일럿](https://github.com/mangowhoiscloud/geode/blob/main/docs/eval/jev-verdict-publication-20260924.md)
+
+공개 자료는 투영본 해시와 원 native 해시를 따로 적고, 비공개 추론·인증 정보·머신 식별자·Mind2Web test 본문은 싣지 않았습니다. −10 pp 마진의 업무상 근거와 실제 청구액은 아직 확인되지 않았습니다.
+
+## .eval 파일
+
+.eval은 Inspect의 평가 로그 형식이고, Petri는 Inspect 위에서 돌아서 이 형식을 씁니다. 파일이 있거나 상태가 success여도 모든 답이 맞았다는 뜻은 아니니 설정·샘플·메시지·점수를 함께 읽습니다. Harbor 결과 JSON, .eval, GEODE trajectory는 원본대로 두고 실행 ID와 SHA-256으로 잇습니다. 새 judge 라벨은 파생 평가로 따로 남깁니다. [Inspect 로그 계약](https://inspect.aisi.org.uk/eval-logs.html)
+
+## Terminal-Bench 결과 읽기
+
+이 사이트의 Sol/max 비교는 과제 verifier와 고정된 결과 선택 규칙으로 계산했으며, Petri judge 점수가 아닙니다. transcript에 LLM judge를 더하려면 별도의 질문·rubric·예산으로 등록하고, 기존 통과율과 섞지 않습니다.
 
 [Terminal-Bench 2.1](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench.md) · [Petri × GEODE](https://mangowhoiscloud.github.io/geode/docs/petri/overview.md) · [관측성과 기록 품질](https://mangowhoiscloud.github.io/geode/docs/verification/observability.md) · [증거 게시 절차](https://mangowhoiscloud.github.io/geode/docs/guides/publish-trajectory.md)
 
@@ -3546,6 +3563,10 @@ finally:
 ```
 
 row는 event, dispatch mode, status, handler error count, actor/action/entity, bounded payload hash를 가집니다. payload의 문자열·collection·깊이·전체 bytes에 상한이 있고 secret pattern을 redaction합니다.
+
+## 오류 로그
+
+텍스트와 JSON 로그는 요청 ID·세션 ID·명령 이름·오류 분류·예외 타입을 제한된 길이로 보존합니다. 명령 인자나 임의의 요청 본문은 추가 필드로 기록하지 않습니다. 공통 마스킹은 알려진 키 형식과 인증 헤더, API 키·OAuth 토큰처럼 이름이 명시된 값을 가립니다. 이름이나 형식을 알 수 없는 비밀 값까지 식별하지는 못하므로 원문 인증정보를 기록하면 안 됩니다. 로그의 요청 ID는 진단용 연결 정보이며 작업 완료 증거가 아닙니다.
 
 ## 보존과 수명주기
 
@@ -5878,7 +5899,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 
 `engine = "llm"`이 기본입니다. `engine = "jev"`로 선택하고 TypeSafe 또는 OpenRouter 키가 있을 때 Jev 판정을 사용합니다. `provider = "auto"`는 TypeSafe 키를 먼저 확인하며 `typesafe`나 `openrouter`로 고정할 수 있습니다. 키가 없으면 LLM 경로를 유지합니다. `/model judgment` 선택창과 `/model judgment llm|jev|typesafe|openrouter`가 같은 설정을 저장하며, 상위 환경변수·프로젝트 설정이 가리면 변경을 거부하고 해당 층을 표시합니다.
 
-키는 `TYPESAFE_API_KEY` 또는 `OPENROUTER_API_KEY`로 로컬 `.env`에만 둡니다. 키만 등록해도 Jev가 자동 활성화되지는 않습니다. 요청 실패 시 다른 공급자로 재시도하지 않습니다.
+TypeSafe는 `TYPESAFE_API_KEY` 환경 입력을 사용합니다. OpenRouter는 `/login add`로 등록한 인증 또는 `OPENROUTER_API_KEY` 환경 입력을 사용합니다. 키만 등록해도 Jev가 자동 활성화되지는 않습니다. 요청 실패 시 다른 공급자로 재시도하지 않습니다.
 
 ### \[cognitive\]
 
@@ -5913,7 +5934,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 
 | 필드 | 타입 / 기본값 | 용도 |
 | --- | --- | --- |
-| `anthropic_api_key` / `openai_api_key` / `zai_api_key` | str = `""` | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `ZAI_API_KEY`로 별칭됩니다. 시크릿이므로 `.env` 층에 둡니다. |
+| `anthropic_api_key` / `openai_api_key` / `zai_api_key` | str = `""` | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `ZAI_API_KEY`로 별칭됩니다. 외부 환경 입력이며, `/login`으로 등록한 키는 `auth.toml`에 별도로 저장됩니다. |
 | `ensemble_mode` | str = `"single"` | `single` 또는 `cross` 멀티 LLM 모드. |
 | `forced_login_method` | dict = {} | 프로바이더별 인증 방식 강제(`{"openai": "apikey"}`). 기본은 구독 우선. |
 
@@ -6085,7 +6106,7 @@ env 사이드 채널이 키 몇 개에 붙어 있습니다.`GEODE_HELD_OUT_BENCH
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/auth
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md
 
-GEODE는 구독 경로와 PAYG API 키를 받습니다. 어느 쪽을 쓸지는 `CredentialSource` 하나로 표현됩니다. OpenAI 구독 프로파일과 플랜은 `~/.geode/auth.toml`에, API 키는 `~/.geode/.env`에 저장됩니다.
+GEODE는 구독 경로와 PAYG API 키를 받습니다. 어느 쪽을 쓸지는 `CredentialSource` 하나로 표현됩니다. GEODE에서 등록한 구독 자격과 API 키, 플랜은 `~/.geode/auth.toml`에 저장됩니다. 외부 환경 변수와 기존 `.env` 키는 별도 입력으로 계속 읽습니다.
 
 ## 자격 소스
 
@@ -6108,10 +6129,12 @@ Anthropic과 OpenRouter의 내장 경로는 `api_key`뿐입니다. 과거 `claud
 
 세션 안의 `/login`은 플랜과 자격을 한 화면에서 관리합니다(`core/cli/commands/login.py`). 키 입력과 브라우저 로그인(`add`, `set-key`, `openai`, `anthropic`, `google`)과 `source`는 thin CLI에서 실행합니다. 키는 저장한 뒤 데몬에 리로드를 알립니다. 조회와 plan·프로파일 변경은 실행 중인 상태를 가진 데몬이 처리합니다. 저장하지 못한 변경은 성공으로 표시하지 않습니다.
 
+`/login add`, `/login anthropic`, 온보딩과 레거시 `/key`는 같은 인증 저장 함수를 사용하며`.env`나 전역 설정에 키를 복사하지 않습니다. 저장 실패는 기존 자격을 유지하고, 별도 프로세스의 리로드 실패는 따로 표시합니다. 모델 도구 `manage_login`은 비밀값 없는 조회·선택만 받습니다. 기본 키 등록은 터미널의 숨김 입력으로 진행하며, 기존 `/key …`와 `/login set-key <plan> <key>` 명시 입력도 호환됩니다. 폐기된`set_api_key`와 `manage_auth` 도구는 제거했습니다.
+
 | 서브커맨드 | 동작 |
 | --- | --- |
 | `/login openai` | ChatGPT 구독 OAuth 로그인. device-code 플로우는 `core/auth/oauth_login.py`이고, 결과는 `auth.toml`에 OAUTH\_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다. |
-| `/login anthropic` | `ANTHROPIC_API_KEY`를 등록하고 `api_key` 경로를 선택합니다. |
+| `/login anthropic` | 숨김 입력으로 Anthropic PAYG 키를 등록합니다. 세션 소스 선택은 바꾸지 않습니다. |
 | `/login google` | Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts용 Google Workspace OAuth. 사용자가 만든 Desktop 앱 클라이언트를 가져오며 LLM 프로바이더 자격과 분리됩니다. |
 | `/login add` | 자격 추가. 메뉴에서 플랜 종류(ChatGPT 구독 또는 PAYG API 키)를 고르고, PAYG는 프로바이더(Anthropic, OpenAI, OpenRouter, GLM)를 고른 뒤 키를 입력합니다. |
 | `/login use` / `remove` | 프로파일 선택과 제거. |
@@ -6152,7 +6175,7 @@ Workspace 읽기 결과는 선택한 LLM 프로바이더로 전달될 수 있으
 
 ## PAYG 키
 
-API 키는 시크릿이므로 `~/.geode/.env` 층에 삽니다. 온보딩과 `/login`의 키 기록이 이 계약을 따릅니다 (`core/config/env_io.py`의 `upsert_env`).
+대화형 등록은 권한 0600의 `auth.toml`에 저장합니다.`/login set-key <plan-id>`는 기존 플랜의 키를 숨김 입력으로 바꿉니다. 자동화나 외부 비밀 관리 도구에서 공급하는 환경 변수도 지원합니다. 기존 환경 파일을 자동으로 삭제하거나 옮기지는 않습니다.
 
 ```
 # ~/.geode/.env
@@ -6168,7 +6191,7 @@ GLM은 PAYG API 키 경로를 지원합니다. 2026-09-24 Coding Plan 정책은 
 
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
-| 응답이 비거나 401 | 토큰 만료 또는 키 무효 | `geode doctor`로 자격 상태를 보고 `/login`으로 갱신합니다. Codex 쪽은 `codex login`을 다시 실행합니다. |
+| 응답이 비거나 401 | 토큰 만료 또는 키 무효 | `geode doctor`로 확인한 뒤, GEODE 구독은 `/login openai`, PAYG는 `/login set-key <plan-id>`, 외부 Codex 자격은 `codex login`으로 갱신합니다. |
 | 소스를 바꿨는데 그대로 | 구버전의 `GEODE_*_CREDENTIAL_SOURCE` env 줄이 마스크 | `geode config explain anthropic_credential_source`로 WINNER 층을 확인하고 그 줄을 지웁니다. |
 | 서브프로세스에서 `AdapterNotFoundError` | 어댑터 레지스트리는 프로세스 단위인데 부트스트랩 누락 | 워커가 `core.llm.adapters.registry.bootstrap_builtins()`를 호출하는지 확인합니다. |
 | 구독이 있는데 PAYG로 과금 | `auto`가 OAuth를 못 찾고 키로 해석 | OpenAI는 `/login route`와 `/login quota`를 확인하고 `openai-codex`로 고정합니다. Anthropic은 `api_key`만 지원합니다. |
@@ -6187,37 +6210,27 @@ GLM은 PAYG API 키 경로를 지원합니다. 2026-09-24 Coding Plan 정책은 
 URL: https://mangowhoiscloud.github.io/geode/docs/ops/oauth
 Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/oauth.md
 
-토큰 회전의 코드 홈은 `core/auth/`입니다. 프로파일과 플랜의 SoT는 `~/.geode/auth.toml`(`core/auth/auth_toml.py`,`core/auth/profiles.py`)이고, 호출마다 어느 프로파일을 쓸지와 언제 갱신할지는`core/auth/rotation.py`의`ProfileRotator`가 정합니다.
+GEODE가 등록한 API 키와 ChatGPT 로그인 자격은`~/.geode/auth.toml`에 저장됩니다. 터미널은 키 입력과 로그인 안내를 맡고, `core/auth/`가 검증과 저장을 맡습니다. 모델은 비밀값 없는 상태를 조회하고 허용된 선택을 요청할 수 있습니다.
 
-## 선택과 갱신 규칙
+## 저장과 적용
 
-| 규칙 | 동작 |
-| --- | --- |
-| 타입 우선 선택 | oauth > token > api\_key 순으로 고르고, 같은 타입 안에서는 LRU로 돌립니다. |
-| 선제 갱신 | 관리형(managed) 토큰은 만료 120초 이내면 외부 저장소에서 다시 읽습니다. Hermes의 skew 상수를 그대로 빌렸습니다. |
-| 401 자동 갱신 | 인증 실패(401/403) 시 쿨다운을 적용하기 전에 한 번 더 다시 읽고, 토큰이 바뀌었으면 오류 카운트를 리셋합니다. |
-| 쿨다운 | `calculate_cooldown_ms`가 오류 횟수에 따라 쿨다운을 키웁니다. 키별 상태는 `core/auth/cooldown.py`의 `CooldownTracker`가 보관합니다. |
+인증 파일 변경은 프로세스 간 잠금 안에서 최신 파일을 다시 읽고 후보를 검증한 뒤 교체합니다. 저장이 성공해야 현재 프로세스에 적용합니다. 다른 프로세스는 `/login refresh`로 다시 읽습니다. 제거된 파일 소유 항목도 반영하며, 환경 변수와 외부 관리 자격은 각각의 소유권을 유지합니다. 저장 후 현재 프로세스의 적용이 충돌하면 저장 완료와 적용 실패를 구분하여 갱신을 안내합니다.
 
-`/login openai`으로 발급한 ChatGPT 자격은 GEODE가`~/.geode/auth.toml`에서 직접 관리합니다. 기존`~/.codex/auth.json`을 가져온 프로파일만 외부 저장소를 재독하며, 어느 경우에도 Codex CLI를 추론에 실행하지 않습니다.
+## 요청과 토큰
 
-## 운영 시 알아둘 것
+-   세션이 선택한 프로바이더·과금 소스를 유지하면서 실제 요청의 플랜과 자격을 선택합니다. 키 교체가 진행 중인 요청의 자격을 바꾸지는 않습니다.
+-   외부 Codex 파일에서 가져온 자격은 그 파일이 소유합니다. 다음 조회·요청에서 교체와 삭제를 반영하며 Codex CLI를 추론에 실행하지 않습니다.
+-   GEODE의 ChatGPT device-code 로그인은 같은 저장소에서 한 번에 하나만 진행합니다. 실패·취소는 완료로 처리하지 않으며, 저장이 끝나야 로그인 성공을 반환합니다.
+-   만료된 GEODE 자격은 `/login openai`로 다시 로그인합니다. 외부 Codex 자격은 해당 클라이언트에서 갱신합니다. 오래된 GEODE `auth.json` 자동 이관은 제거했으며 파일은 그대로 보존합니다.
 
--   thin CLI에서 `/login`을 마치면 데몬이 auth 상태를 다시 읽습니다. 이 리로드는 추가 전용입니다. 제거된 항목은 캐시된 싱글톤에서 즉시 빠지지 않으므로, 프로파일을 지운 뒤 확실히 하려면 데몬을 재시작합니다.
--   Codex의 선제 5시간 스로틀을 우회하려면`GEODE_CODEX_OAUTH_POLL_DISABLED=1`을 켭니다. 구독 버킷으로 바로 떨어집니다.
--   `core/llm/credentials.py`의`resolve_provider_key`(OAuth 우선, API 키 폴백)는 deprecated입니다. 어댑터 레지스트리의 소스별 명시 자격이 대체이고, v1.0.0 제거 대상입니다.
+## 상태 표시의 범위
 
-## 실패 모드
+모델 가용성과 시작 준비 상태는 실제 라우팅·정책·자격의 적격성을 확인합니다. 키 문자열의 존재만으로 성공을 표시하지 않습니다. 이 검사는 오프라인 선택 가능성이며 공급자 서버의 키 유효성이나 남은 할당량을 확인하는 네트워크 검사는 아닙니다. 프로파일의 오류·쿨다운 필드는 선택에 반영되지만, 모든 실제 SDK 호출의 성공·실패를 연결하는 자동 건강도 추적은 제공하지 않습니다. 과거 전역 프로파일 추적 코드와 그에 의존한 자동 갱신 주장은 제거했습니다.
 
-| 증상 | 원인 | 해법 |
-| --- | --- | --- |
-| 한 프로파일만 계속 401 | 외부 저장소의 토큰 자체가 만료 | Codex는 `codex login`으로 원본 토큰을 갱신합니다. Anthropic은 `ANTHROPIC_API_KEY`를 교체합니다. |
-| 호출이 점점 뜸해짐 | 반복 실패로 쿨다운 에스컬레이션 | 원인 자격을 고치면 성공 콜백이 쿨다운을 리셋합니다. |
-| 프로파일을 지웠는데 계속 쓰임 | 데몬 리로드가 추가 전용 | 데몬을 재시작합니다. |
+저장소 전체 복원이나 외부 효과의 exactly-once 실행을 인증 파일의 원자적 교체만으로 보장하지 않습니다. 복구 후에는 실제 자격 소스와 세션 선택을 함께 확인합니다.
 
-## 다음
-
--   [인증과 OAuth](https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md). 자격 소스와 /login 표면.
--   [프로바이더 설정](https://mangowhoiscloud.github.io/geode/docs/run/providers.md). 처음 자격을 붙이는 절차.
+-   [인증과 OAuth](https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md)
+-   [프로바이더 설정](https://mangowhoiscloud.github.io/geode/docs/run/providers.md)
 
 ---
 
@@ -6831,6 +6844,8 @@ geode (thin CLI)  ── Unix socket IPC (~/.geode/cli.sock) ──→  geode se
 
 bare `geode`는 환영 화면을 띄우고 소켓을 조사한 뒤, 데몬이 없으면 자동 기동합니다(`start_serve_if_needed`, `core/cli/ipc_client.py`). 동시 기동 경합은 pidfile flock이 막습니다. 그 뒤 thin REPL이 IPC로 붙습니다. 프로토콜은 최대 1 MiB의 줄 단위 JSON인 `geode.ipc.v1`이고 서버 쪽 상대는 `CLIPoller`(`core/server/ipc_server/poller.py`)입니다. 연결 시 지원 기능의 교집합을 협상하고, 각 요청 ID가 스트림·구조화 이벤트·최종 응답에 그대로 붙습니다. v0 envelope는 계속 읽을 수 있지만 세션 설정 적용 기능이 없는 구버전 peer는 실행 전에 명시적으로 거절합니다.
 
+입력과 화면은 CLI가, 실행과 세션 상태는 데몬이 소유합니다. 대화형 로그인은 터미널에서 수행하며 데몬이 브라우저나 비밀 입력을 대신 열지 않습니다. 오류·취소·완료를 구분해 전달하고, 연결이 끊겨 결과를 확인할 수 없으면 같은 작업을 자동으로 재실행하지 않습니다. 요청 취소는 지원 기능을 협상한 뒤 해당 요청 ID에만 적용됩니다. 취소 접수는 작업 종료나 이미 실행한 외부 변경의 복구를 의미하지 않습니다.
+
 ## 환영 화면과 라이브 상태
 
 bare `geode`가 띄우는 환영 화면은 `core/cli/welcome.py`의 `_welcome_screen`이 그립니다. 먼저 Geodi 브랜드 블록(`core/ui/mascot.py`의 `render_mascot`)이 나옵니다. 손으로 찍은 픽셀아트 Geodi(로즈 아졸로틀, `core/ui/geodi_art.py`)를 truecolor 하프블록 스프라이트로 그리고, 오른쪽에 `◆ GEODE v{version}` 마크, `모델 · cwd`, `/help for commands · type naturally` 힌트, 그리고 라우팅이 초기화돼 있으면 활성 플랜/쿼터 한 줄을 붙입니다. 이어서 `.env` 자동 생성, ChatGPT 구독 OAuth 감지, readiness 점검(문제만 표시 — 조용하면 정상), 프로젝트 기억과 사용자 프로파일 초기화가 돌아갑니다.
@@ -7353,9 +7368,9 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 601 |
-| 테스트 Python 파일 | 764 |
-| 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 86 / 86 / 86 / 86 |
+| 프로덕션 Python 파일 | 599 |
+| 테스트 Python 파일 | 765 |
+| 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 84 / 84 / 84 / 84 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |
 | 프로덕션 ContextVar | 25 |

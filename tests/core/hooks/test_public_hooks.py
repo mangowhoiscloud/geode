@@ -509,6 +509,64 @@ async def test_block_stops_lower_priority_handlers() -> None:
     assert called == ["block"]
 
 
+@pytest.mark.parametrize("callable_instance", [False, True])
+def test_async_hook_timeout_owns_coroutine_without_thread_dispatch(
+    monkeypatch: pytest.MonkeyPatch, callable_instance: bool
+) -> None:
+    closed = []
+
+    async def policy(_invocation: HookInvocation) -> HookDecision:
+        try:
+            await asyncio.sleep(10)
+        finally:
+            closed.append(True)
+        return HookDecision()
+
+    class AsyncPolicy:
+        __call__ = staticmethod(policy)
+
+    async def reject_thread(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("An async hook must start on the owning event loop")
+
+    monkeypatch.setattr(asyncio, "to_thread", reject_thread)
+    registry = HookRegistry()
+    registry.register(
+        HookName.USER_PROMPT_SUBMIT,
+        AsyncPolicy() if callable_instance else policy,
+        name="async_policy",
+        timeout_s=0.01,
+    )
+    outcome = asyncio.run(
+        registry.invoke(HookName.USER_PROMPT_SUBMIT, payload={"user_input": "hello"})
+    )
+    assert closed == [True]
+    assert outcome.decisions == ()
+    assert len(outcome.handler_errors) == 1
+    assert "TimeoutError" in outcome.handler_errors[0]
+
+
+def test_timed_out_sync_hook_closes_its_late_coroutine() -> None:
+    late_results = []
+
+    async def result() -> HookDecision:
+        return HookDecision()
+
+    def wrapped(_invocation: HookInvocation) -> Awaitable[HookDecision]:
+        time.sleep(0.03)
+        value = result()
+        late_results.append(value)
+        return value
+
+    registry = HookRegistry()
+    registry.register(HookName.USER_PROMPT_SUBMIT, wrapped, name="wrapped", timeout_s=0.001)
+    outcome = asyncio.run(
+        registry.invoke(HookName.USER_PROMPT_SUBMIT, payload={"user_input": "hello"})
+    )
+    assert len(outcome.handler_errors) == 1
+    assert len(late_results) == 1
+    assert late_results[0].cr_frame is None
+
+
 @_async_test
 async def test_blocking_sync_handler_is_bounded_off_the_event_loop() -> None:
     registry = HookRegistry()

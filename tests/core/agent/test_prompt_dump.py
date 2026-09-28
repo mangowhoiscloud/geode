@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
 from core.agent.prompt_dump import (
     DUMP_SURFACES,
     SKILL_EMPTY_MARKER,
     analyze_prompt,
     assemble_full_prompt,
     dump_matrix,
+    measure_tokens_anthropic,
 )
 from core.llm.prompts import AGENTIC_SUFFIX
 
@@ -91,3 +93,61 @@ def test_dump_matrix_writes_cells(tmp_path) -> None:
     assert cell.chars == len(cell.path.read_text(encoding="utf-8"))
     assert cell.est_tokens == cell.chars // 4, "without --measure the figure is the estimate"
     assert cell.surface in DUMP_SURFACES
+
+
+@pytest.mark.parametrize("custom_endpoint", [False, True])
+@pytest.mark.parametrize("status", [200, 503])
+def test_measure_uses_file_key_and_matching_endpoint_then_closes_client(
+    tmp_path, monkeypatch, custom_endpoint: bool, status: int
+) -> None:
+    import json
+
+    import anthropic
+    import httpx
+    from core.auth.auth_toml import auth_file_transaction, save_api_key
+    from core.auth.profiles import ProfileStore
+    from core.config import ANTHROPIC_PRIMARY, settings
+    from core.llm.strategies import plan_registry
+    from core.wiring import container
+
+    monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
+    monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
+    monkeypatch.setattr(container, "_profile_store", ProfileStore())
+    monkeypatch.setattr(plan_registry, "_plan_registry", plan_registry.PlanRegistry())
+    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    monkeypatch.setattr(settings, "anthropic_credential_source", "auto")
+    monkeypatch.setattr(settings, "forced_login_method", {})
+    plan = save_api_key("synthetic-file-key", provider="anthropic")
+    endpoint = "https://api.anthropic.com"
+    if custom_endpoint:
+        endpoint = "https://anthropic.example.invalid"
+        with auth_file_transaction() as (plans, _profiles):
+            plans.get(plan.id).base_url = endpoint
+            plans.set_routing(ANTHROPIC_PRIMARY, [plan.id])
+    requests = []
+    clients = []
+
+    def transport(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert str(request.url) == f"{endpoint}/v1/messages/count_tokens"
+        assert request.headers["x-api-key"] == "synthetic-file-key"
+        assert json.loads(request.content)["system"] == "Measured prompt"
+        return httpx.Response(status, json={"input_tokens": 123})
+
+    original = anthropic.Anthropic
+
+    def build(**kwargs):
+        client = original(
+            http_client=httpx.Client(transport=httpx.MockTransport(transport)), **kwargs
+        )
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(anthropic, "Anthropic", build)
+    assert measure_tokens_anthropic("Measured prompt") == (123 if status == 200 else None)
+    assert len(requests) == 1
+    assert len(clients) == 1 and clients[0].is_closed()
+    assert settings.anthropic_api_key == ""
+    monkeypatch.setattr(settings, "anthropic_credential_source", "none")
+    assert measure_tokens_anthropic("Disabled route") is None
+    assert len(requests) == 1

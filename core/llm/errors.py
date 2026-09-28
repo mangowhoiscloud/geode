@@ -116,7 +116,6 @@ _OPENAI_BILLING_CODES: frozenset[str] = frozenset(
 )
 _ANTHROPIC_BILLING_TYPES: frozenset[str] = frozenset(
     {
-        "permission_error",  # API key lacks billing access
         "billing_error",
     }
 )
@@ -196,13 +195,10 @@ class BillingError(Exception):
         lines.append("")
         lines.append("Options:")
         lines.append("  1. Wait for quota reset")
-        if self.provider:
-            lines.append(
-                f"  2. Switch auth: /login set-key {self.provider} <api-key>  "
-                "(use a different credential)"
-            )
-        else:
-            lines.append("  2. Switch auth: /login set-key <provider> <api-key>")
+        lines.append(
+            "  2. Review auth in the terminal: /login; "
+            "use /login add to register another credential"
+        )
         lines.append("  3. Switch provider: /model <other-model>")
         if self.upgrade_url:
             lines.append(f"  4. Upgrade plan: {self.upgrade_url}")
@@ -277,7 +273,11 @@ _ERROR_CLASSIFICATION: dict[str, tuple[str, str, str]] = {
         "error",
         "Context window exceeded. Compacting conversation.",
     ),
-    "bad_request": ("bad_request", "error", "Invalid request. Check tool schemas or input."),
+    "bad_request": (
+        "bad_request",
+        "error",
+        "Request rejected. Check model access, endpoint, tool schemas, or input.",
+    ),
     "invalid_response": (
         "invalid_response",
         "error",
@@ -322,8 +322,8 @@ def classify_llm_error(exc: Exception) -> tuple[str, str, str]:
 
     if isinstance(exc, anthropic.RateLimitError):
         # PR-SOURCE-ROUTING (2026-05-28) — mirror the OpenAI branch:
-        # ``is_billing_fatal`` checks for ``permission_error`` /
-        # ``billing_error`` codes (see ``_ANTHROPIC_BILLING_TYPES``) so a
+        # ``is_billing_fatal`` checks for ``billing_error`` codes
+        # (see ``_ANTHROPIC_BILLING_TYPES``) so a
         # quota-exhausted Anthropic key surfaces as billing, not as a
         # transient rate-limit.
         if is_billing_fatal(exc):
@@ -341,6 +341,15 @@ def classify_llm_error(exc: Exception) -> tuple[str, str, str]:
         if _looks_like_context_overflow(exc):
             return _ERROR_CLASSIFICATION["context_overflow"]
         return _ERROR_CLASSIFICATION["bad_request"]
+    if isinstance(
+        exc,
+        (
+            anthropic.PermissionDeniedError,
+            anthropic.NotFoundError,
+            anthropic.UnprocessableEntityError,
+        ),
+    ):
+        return _ERROR_CLASSIFICATION["bad_request"]
 
     # --- OpenAI SDK errors (GLM and OpenAI providers) ---
     result = _classify_openai_error(exc)
@@ -357,7 +366,7 @@ def is_billing_fatal(exc: Exception) -> bool:
     codes that retrying cannot fix:
       - GLM (1113/1114/1301): user must recharge or upgrade plan
       - OpenAI (insufficient_quota, billing_hard_limit): account-level cap
-      - Anthropic (permission_error, billing_error): API key lacks access
+      - Anthropic (billing_error): billing or payment information rejected
 
     Caller should raise BillingError instead of entering the retry loop.
     """
@@ -588,6 +597,11 @@ def _classify_openai_error(exc: Exception) -> tuple[str, str, str] | None:
     if isinstance(exc, openai.BadRequestError):
         if _looks_like_context_overflow(exc):
             return _ERROR_CLASSIFICATION["context_overflow"]
+        return _ERROR_CLASSIFICATION["bad_request"]
+    if isinstance(
+        exc,
+        (openai.PermissionDeniedError, openai.NotFoundError, openai.UnprocessableEntityError),
+    ):
         return _ERROR_CLASSIFICATION["bad_request"]
     # The Codex SSE backend can emit overload as a generic APIError rather
     # than an HTTP-backed InternalServerError (live effort sweep 2026-08-11).

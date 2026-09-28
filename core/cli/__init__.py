@@ -189,6 +189,13 @@ def _thin_interactive_loop(
             from core.cli.fullscreen_app import FullscreenThinCli
 
             FullscreenThinCli(client, command_registry=command_registry).run()
+            if not client.close():
+                from rich.markup import escape
+
+                detail = client.last_error or "The active request outcome is unconfirmed"
+                console.print(
+                    f"  [warning]Session exit was not acknowledged: {escape(detail)}[/warning]"
+                )
             return
         except Exception:
             log.warning("fullscreen CLI failed; falling back to legacy prompt", exc_info=True)
@@ -281,8 +288,10 @@ def _thin_interactive_loop(
 
                     _sys.stdout.write(str(output))
                     _sys.stdout.flush()
-                if response.get("status") == "error":
-                    console.print(f"  [error]{response.get('message', 'Command failed')}[/error]")
+                from core.ipc_protocol import is_ipc_error
+
+                if is_ipc_error(response):
+                    _render_ipc_response(response)
                 elif response.get("should_break"):
                     break
                 continue

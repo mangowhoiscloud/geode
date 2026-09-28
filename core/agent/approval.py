@@ -75,8 +75,6 @@ def _write_denial_with_fallback(tool_name: str) -> dict[str, Any]:
     _WRITE_FALLBACK_HINTS: dict[str, str] = {
         "memory_save": "Try memory_search to read existing data instead.",
         "note_save": "Try reading existing notes or suggest the content to the user.",
-        "set_api_key": "Show the user the /login command to set it themselves.",
-        "manage_auth": "Show the user the /login command to manage credentials.",
         "manage_login": "Show the user the /login command to register plans / keys / OAuth.",
         "profile_update": "Show current profile with profile_get instead.",
         "profile_preference": "Show current preferences with profile_get instead.",
@@ -804,10 +802,6 @@ class ApprovalWorkflow:
             return str(tool_input.get("content", tool_input.get("value", "")))[:80]
         if tool_name == "note_save":
             return str(tool_input.get("content", ""))[:80]
-        if tool_name == "set_api_key":
-            return f"provider={tool_input.get('provider', '?')}"
-        if tool_name == "manage_auth":
-            return f"action={tool_input.get('action', '?')}"
         if tool_name == "manage_login":
             return f"sub={tool_input.get('subcommand', 'status')}" + (
                 f" args={tool_input.get('args', '')[:60]}" if tool_input.get("args") else ""

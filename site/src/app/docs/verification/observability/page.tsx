@@ -166,6 +166,16 @@ export default function Page() {
               상한이 있고 secret pattern을 redaction합니다.
             </p>
 
+            <h2>오류 로그</h2>
+            <p>
+              텍스트와 JSON 로그는 요청 ID·세션 ID·명령 이름·오류 분류·예외 타입을
+              제한된 길이로 보존합니다. 명령 인자나 임의의 요청 본문은 추가 필드로
+              기록하지 않습니다. 공통 마스킹은 알려진 키 형식과 인증 헤더,
+              API 키·OAuth 토큰처럼 이름이 명시된 값을 가립니다. 이름이나 형식을
+              알 수 없는 비밀 값까지 식별하지는 못하므로 원문 인증정보를 기록하면
+              안 됩니다. 로그의 요청 ID는 진단용 연결 정보이며 작업 완료 증거가 아닙니다.
+            </p>
+
             <h2>보존과 수명주기</h2>
             <ul>
               <li>high-volume 7일, standard 30일, audit 180일</li>
@@ -298,6 +308,18 @@ export default function Page() {
               actor/action/entity classification, and a bounded payload hash.
               Strings, collections, nesting depth, and total payload bytes are capped,
               and secret patterns are redacted.
+            </p>
+
+            <h2>Error logs</h2>
+            <p>
+              Text and JSON logs preserve bounded request/session IDs, command
+              names, error categories and exception types. Arbitrary request
+              bodies and command arguments are not serialized as extra fields.
+              The shared scrubber masks known key formats, authorization headers,
+              and explicitly labelled API keys or OAuth tokens. It cannot identify
+              every unlabelled opaque secret, so producers must avoid logging raw
+              credentials. Request IDs correlate diagnostics; they do not prove
+              task completion.
             </p>
 
             <h2>Retention and lifecycle</h2>

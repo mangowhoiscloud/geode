@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRef } from "react";
 import { ArrowRight, Repeat2 } from "lucide-react";
 import { GeodiSprite } from "@/components/geode/geodi-sprite";
 import { LocaleProvider, t, useLocale } from "@/components/geode/locale-context";
@@ -14,6 +15,8 @@ const repository = "https://github.com/mangowhoiscloud/geode";
 
 function LandingContent() {
   const locale = useLocale();
+  const menuRef = useRef<HTMLDialogElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const navigation = [
     { id: "run", label: t(locale, "실행", "Run") },
     { id: "evidence", label: t(locale, "측정", "Evidence") },
@@ -41,17 +44,24 @@ function LandingContent() {
           <nav className="landing-desktop-nav" aria-label={t(locale, "주 메뉴", "Main navigation")}>
             {navigationLinks}
           </nav>
-          <details className="landing-mobile-menu">
-            <summary>{t(locale, "메뉴", "Menu")}</summary>
+          <button ref={menuButtonRef} className="landing-mobile-menu" type="button" aria-haspopup="dialog" aria-controls="landing-menu"
+            onClick={() => menuRef.current?.showModal()}>{t(locale, "메뉴", "Menu")}</button>
+          <dialog ref={menuRef} id="landing-menu" className="landing-menu-dialog" aria-labelledby="landing-menu-title"
+            onClose={() => menuButtonRef.current?.focus()}
+            onClick={event => { if (event.target === event.currentTarget) menuRef.current?.close(); }}>
+            <div className="landing-menu-body">
+              <div className="landing-menu-heading"><h2 id="landing-menu-title">{t(locale, "메뉴", "Menu")}</h2>
+                <button type="button" onClick={() => menuRef.current?.close()}>{t(locale, "닫기", "Close")}</button></div>
             <nav
               aria-label={t(locale, "모바일 메뉴", "Mobile navigation")}
               onClick={(event) => {
                 if (event.target instanceof Element && event.target.closest("a")) {
-                  event.currentTarget.closest("details")?.removeAttribute("open");
+                  menuRef.current?.close();
                 }
               }}
             >{navigationLinks}</nav>
-          </details>
+            </div>
+          </dialog>
         </div>
       </header>
 

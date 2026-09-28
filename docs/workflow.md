@@ -49,8 +49,11 @@ to another session, the parent stops working that scope.
    or current API behaviour with official docs/source.
 4. **Preflight**: capture task class, affected providers, required tools,
    evidence class, and explicit non-goals.
-5. **Plan**: state the smallest measurable change. Define schema, state,
-   provider, or rollback contracts only when the change affects them.
+5. **Plan**: state the problem, allowed changes, preserved behavior, observable
+   acceptance, and evidence needed. Reuse the issue/PR for small work; maintain
+   a durable plan only when resumption or research warrants it. Follow the
+   [requirements and evidence convention](architecture/naming-conventions.md#requirements-plans-and-evidence).
+   Define schema, state, provider, or rollback contracts only when affected.
 6. **Implement**: use existing GEODE registries, adapters, redaction helpers,
    transcript helpers, and atomic-write utilities.
 7. **Observe**: use existing evidence; extend bounded records only when the

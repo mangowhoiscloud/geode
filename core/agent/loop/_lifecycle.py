@@ -181,6 +181,16 @@ def restore_loop_state(loop: AgenticLoop, state: Any) -> None:
     from core.observability.session_metrics import SessionMetrics
 
     timeline = getattr(loop, "_timeline", None)
+    ledger = getattr(loop, "_evidence_ledger", None)
+    if ledger is not None and ledger.session_id != state.session_id:
+        from core.agent.evidence_ledger import EvidenceLedger
+
+        loop._evidence_ledger = EvidenceLedger.for_session(
+            state.session_id, turn_id_provider=lambda: loop._turn_id
+        )
+        attach_ledger = getattr(loop.executor, "attach_evidence_ledger", None)
+        if callable(attach_ledger):
+            attach_ledger(loop._evidence_ledger)
     loop._session_id = state.session_id
     if getattr(getattr(loop, "_session_metrics", None), "session_id", "") != state.session_id:
         loop._session_metrics = SessionMetrics(
@@ -292,14 +302,10 @@ async def _emit_public_session_end(loop: AgenticLoop, *, reason: str) -> None:
 def _mark_session_status(loop: AgenticLoop, *, reason: str) -> bool:
     if loop._checkpoint is None or not loop._session_id:
         return False
-    try:
-        transition = getattr(loop._checkpoint, f"mark_{reason}")
-        transitioned = bool(transition(loop._session_id))
-        current = loop._checkpoint.current_status(loop._session_id)
-        return transitioned and current is not None and str(current) == reason
-    except Exception:
-        log.debug("Checkpoint mark_%s failed", reason, exc_info=True)
-        return False
+    transition = getattr(loop._checkpoint, f"mark_{reason}")
+    transitioned = bool(transition(loop._session_id))
+    current = loop._checkpoint.current_status(loop._session_id)
+    return transitioned and current is not None and str(current) == reason
 
 
 def _record_terminal_timeline(loop: AgenticLoop, *, status: str) -> None:
@@ -465,7 +471,7 @@ def _persist_final_result(
     round_idx: int,
     verify_payload: dict[str, Any] | None = None,
 ) -> None:
-    """Commit timeline, evidence, and checkpoint after stop is final."""
+    """Record timeline, evidence, and checkpoint independently after stop is final."""
     record_timeline_end(loop, result, verify_payload)
     ledger = getattr(loop, "_evidence_ledger", None)
     if ledger is not None:
@@ -473,22 +479,6 @@ def _persist_final_result(
             ledger.append_final(result=result)
         except Exception:
             log.debug("Evidence final row failed", exc_info=True)
-        # Trajectory audit 2026-07-03 — close the declared → recorded →
-        # verified chain. ``_prepare_task_preflight`` appended the
-        # ``required_evidence`` declaration at session start; the row
-        # writers appended evidence as the run progressed; this gate
-        # compares the two and appends a ``kind="evidence_check"`` row
-        # with the present / missing lists. Runs AFTER ``append_final``
-        # so the ``final_answer`` requirement can match the just-written
-        # ``final_result`` row. Never raises — the check is telemetry,
-        # not a hard failure path.
-        preflight = getattr(loop, "_task_preflight", None)
-        required = list(preflight.get("required_evidence", [])) if preflight else []
-        if required:
-            try:
-                ledger.append_evidence_check(required_evidence=required)
-            except Exception:
-                log.debug("Evidence check row failed", exc_info=True)
     loop._save_checkpoint(user_input, round_idx=round_idx)
 
 

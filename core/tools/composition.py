@@ -24,8 +24,6 @@ _ADMINISTRATIVE_TOOLS = frozenset(
     {
         "switch_model",
         "manage_rule",
-        "set_api_key",
-        "manage_auth",
         "manage_login",
         "manage_context",
         "obs_otel_export",
@@ -137,8 +135,6 @@ def _resource_metadata() -> dict[str, tuple[str, Any]]:
         "switch_model": ("runtime-model:v1", constant("active-model")),
         "memory_save": ("project-memory:v1", constant("memory")),
         "manage_rule": ("project-rules:v1", constant("rules")),
-        "set_api_key": ("auth-store:v1", constant("auth")),
-        "manage_auth": ("auth-store:v1", constant("auth")),
         "manage_login": ("auth-store:v1", constant("auth")),
         "schedule_job": ("scheduler-calendar:v1", constant("scheduler")),
         "trigger_event": ("runtime-event:v1", selected("event_name")),
@@ -318,7 +314,6 @@ def compose_tool_plan(
     profile_write_tools = {
         "memory_save",
         "note_save",
-        "set_api_key",
         "manage_login",
         "profile_update",
         *GOOGLE_WRITE_TOOLS,

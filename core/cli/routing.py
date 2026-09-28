@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
+from core.ipc_protocol import is_ipc_error
+
 if TYPE_CHECKING:
     from core.cli.ipc_client import IPCClient
 
@@ -43,7 +45,8 @@ def run_thin_command(
         cmd_model(args, client=client)
         return
     if cmd == "/login":
-        from core.cli.commands.login import DAEMON_LOGIN_SUBCOMMANDS, cmd_login
+        from core.cli.commands.login import cmd_login
+        from core.slash_routing import DAEMON_LOGIN_SUBCOMMANDS
 
         sub = args.split(maxsplit=1)[:1]
         if sub == ["source"]:
@@ -52,25 +55,31 @@ def run_thin_command(
         if not sub or sub[0].lower() in DAEMON_LOGIN_SUBCOMMANDS:
             response = client.send_command("/login", args)
             _render_daemon_result(response)
-            if "error" not in (response.get("status"), response.get("type")):
+            if not is_ipc_error(response):
                 # Local /model and /login source read this process's copy.
                 from core.auth.auth_toml import load_auth_toml
 
                 load_auth_toml()
             return
-        # A failed mirror write can follow a saved auth.toml, so always send
-        # the value-free refresh; an unchanged file reloads as a no-op.
+        # Persistence and cross-process activation are separate outcomes.
+        # Always send a value-free refresh; unchanged state reloads as a no-op.
         cmd_login(args)
+    elif cmd == "/key":
+        from core.observability.redaction import redact_secrets
+
+        try:
+            _handle_command(cmd, args, False, command_registry=command_registry)
+        except (ValueError, OSError) as exc:
+            _render_daemon_result({"status": "error", "message": redact_secrets(str(exc))})
     else:
         _handle_command(cmd, args, False, command_registry=command_registry)
     if cmd in {"/login", "/key"}:
         response = client.send_command("/login", "refresh")
-        if "error" in (response.get("status"), response.get("type")):
+        if is_ipc_error(response):
             from core.ui.console import console
 
             console.print(
-                f"  [warning]Saved locally; daemon refresh failed: "
-                f"{response.get('message')}[/warning]"
+                f"  [warning]Daemon credential refresh failed: {response.get('message')}[/warning]"
             )
         else:
             _render_daemon_result(response)
@@ -85,5 +94,5 @@ def _render_daemon_result(response: Mapping[str, object]) -> None:
     output = str(response.get("output") or "")
     if output:
         console.print(Text.from_ansi(output), end="")
-    if "error" in (response.get("status"), response.get("type")):
+    if is_ipc_error(response):
         console.print(f"  [warning]{escape(str(response.get('message')))}[/warning]\n")

@@ -16,9 +16,9 @@ flowchart TB
     shell["os.environ\nsession override\nnever written by GEODE"]
 
     subgraph home["User-global: GEODE_HOME (default ~/.geode)"]
-        env[".env\nsecrets only\nAPI keys, channel tokens"]
+        env[".env\nexternal secret input\nAPI keys, channel tokens"]
         config["config.toml\nglobal behavior defaults"]
-        auth["auth.toml\nplans, profiles, OAuth metadata"]
+        auth["auth.toml\nregistered API keys, OAuth\nplans and profiles"]
         profile["identity/ + user_profile/\ncross-project user context"]
         runtime["usage/, diagnostics/, logs/,\nprojects/<id>/, self-improving runtime"]
     end
@@ -56,8 +56,10 @@ Read order and write targets are intentionally asymmetric:
 
 - Shell exports are the highest-precedence session override. GEODE never
   writes them.
-- `~/.geode/.env` is the authoritative secret store. `./.env` is an explicit
-  advanced fallback that only fills missing global secrets.
+- `auth.toml` owns GEODE-registered LLM credentials. Environment variables and
+  `~/.geode/.env` remain external secret inputs; `./.env` fills missing global
+  environment values. Registered profile selection follows the routing owner,
+  not the precedence rules for environment-backed settings alone.
 - `./.geode/config.toml` overrides `~/.geode/config.toml` for behavior because
   behavior is often project-specific.
 - Runtime data that is user-private or machine-local stays under
@@ -96,8 +98,8 @@ The split is therefore deliberate, not accidental.
 
 | Question | Answer | Tier |
 |----------|--------|------|
-| Is it a credential / OAuth token? | yes | `~/.geode/auth.toml` |
-| Is it a raw API key or channel token? | yes | `~/.geode/.env` |
+| Is it a GEODE-registered LLM API key / OAuth credential? | yes | `~/.geode/auth.toml` |
+| Is it an externally supplied API key or channel token? | yes | environment / `~/.geode/.env` |
 | Is it a project-only secret fallback? | yes | `./.env` (explicit scope only; never shadows global) |
 | Is it cross-project user identity (career, preferences, learned memory)? | yes | `~/.geode/identity/`, `~/.geode/user_profile/` |
 | Is it queryable project runtime state or an operational event? | yes | `~/.geode/projects/<encoded-cwd>/sessions/sessions.db` |
@@ -173,7 +175,8 @@ reconstructing path literals.
 
 | Writer intent | API / constant | Default target |
 |---------------|----------------|----------------|
-| Save API keys or channel tokens | `core.config.env_io.upsert_env()` | `~/.geode/.env` |
+| Register an LLM API key | `core.auth.auth_toml.save_api_key()` | `~/.geode/auth.toml` |
+| Save channel tokens / external environment input | `core.config.env_io.upsert_env()` | `~/.geode/.env` |
 | Save project-only secret fallback | `upsert_env(..., scope="project")` | `./.env` |
 | Remove stale dotenv masks | `core.config.env_io.remove_env()` | both `~/.geode/.env` and `./.env` |
 | Save behavior globally | `upsert_config_toml(..., scope="global")` | `~/.geode/config.toml` |

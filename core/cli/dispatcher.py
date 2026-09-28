@@ -13,7 +13,6 @@ from typing import Any
 from core.cli.commands import (
     cmd_apply,
     cmd_context,
-    cmd_key,
     cmd_mcp,
     cmd_model,
     cmd_schedule,
@@ -22,6 +21,7 @@ from core.cli.commands import (
     resolve_action,
     show_help,
 )
+from core.cli.commands.key import run_key
 from core.cli.commands.login import run_login
 from core.cli.onboarding import render_readiness
 from core.cli.session_state import _get_readiness
@@ -107,7 +107,7 @@ def _handle_command(
         console.print(f"  Verbose: {state}")
         console.print()
     elif action == "key":
-        changed = cmd_key(args)
+        changed = run_key(args)
         if changed:
             new_readiness = check_readiness()
             from core.cli.session_state import _set_readiness
@@ -133,15 +133,24 @@ def _handle_command(
 
         console.print()
         console.print("  [header]GEODE System Status[/header]")
-        console.print(f"  Model: [bold]{settings.model}[/bold]")
+        from core.llm.routing import model_available
+        from core.wiring.startup import has_available_llm_credential
+
+        model = agentic_ref.model if agentic_ref is not None else settings.model
+        source = agentic_ref._model_settings.source if agentic_ref is not None else None
+        console.print(f"  Model: [bold]{model}[/bold]")
         console.print(f"  Ensemble: [bold]{settings.ensemble_mode}[/bold]")
-        ant_ok = bool(settings.anthropic_api_key)
-        oai_ok = bool(settings.openai_api_key)
+        ant_ok = has_available_llm_credential("anthropic")
+        oai_ok = has_available_llm_credential("openai")
         ant_status = "[success]configured[/success]" if ant_ok else "[red]not set[/red]"
         oai_status = "[success]configured[/success]" if oai_ok else "[red]not set[/red]"
-        console.print(f"  Anthropic API: {ant_status}")
-        console.print(f"  OpenAI API: {oai_status}")
-        readiness = _get_readiness()
+        console.print(f"  Anthropic default route: {ant_status}")
+        console.print(f"  OpenAI default route: {oai_status}")
+        selected_available = model_available(model, source=source)
+        console.print(
+            f"  Selected model route: {'available' if selected_available else 'unavailable'}"
+        )
+        readiness = _get_readiness() or check_readiness()
         if readiness:
             mode = "Full LLM" if not readiness.force_dry_run else "Dry-Run Only"
             console.print(f"  Mode: [bold]{mode}[/bold]")
