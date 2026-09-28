@@ -183,3 +183,27 @@ def test_trust_command(home: Path) -> None:
     assert runner.invoke(app, ["trust", str(home), "--revoke"]).exit_code == 0
     assert not trust.is_project_trusted(home)
     assert runner.invoke(app, ["trust", str(home / "missing")]).exit_code == 1
+
+
+def test_mcp_add_edits_only_the_json_file_privately(
+    tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    from core.mcp.config_catalog import MCPConfigCatalog
+
+    (tmp_path / "home" / "config.toml").write_text(
+        '[mcp.servers.github]\ncommand = "gh-mcp"\nenv = { GITHUB_TOKEN = "t" }\n'
+    )
+    (home / ".claude").mkdir()
+    legacy = home / ".claude" / "mcp_servers.json"
+    legacy.write_text('{"extra": {"command": "repo-server"}}')
+    catalog = MCPConfigCatalog(legacy, project_root=lambda: home)
+    catalog.load()  # untrusted: the JSON's own entry is not loaded
+
+    assert catalog.add("new", "new-server")
+    assert json.loads(legacy.read_text()) == {
+        "extra": {"command": "repo-server"},
+        "new": {"command": "new-server"},
+    }
+    assert oct(legacy.stat().st_mode & 0o777) == "0o600"

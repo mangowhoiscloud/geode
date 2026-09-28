@@ -341,7 +341,6 @@ PETRI_LOGS_DIR = GEODE_HOME / "petri" / "logs"
 LATEST_PETRI_EVAL = PETRI_LOGS_DIR / "latest.eval"
 
 # User identity & profile
-GLOBAL_IDENTITY_DIR = GEODE_HOME / "identity"
 GLOBAL_USER_PROFILE_DIR = GEODE_HOME / "user_profile"
 # P3 (v0.95.x) — user preferences TOML inside user_profile/.
 # Read by `core/tools/policy.py` to seed ProfilePolicy at boot.
@@ -375,12 +374,12 @@ GLOBAL_AUDIT_AGREEMENT_DIR = GEODE_HOME / "audit" / "agreement"
 # autoresearch/seed-generation run) + ``<session_id>/events.jsonl``
 # (P1c, event stream within a single run). See
 # ``docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md``.
-# LEGACY home dir ``~/.geode/autoresearch/handoff/`` — the pre-split policy
-# location, kept ONLY as the lazy-migration source (see ``LEGACY_SOT_DIR``
-# below). Post PR-STATE-SOT-RUNTIME-SPLIT the live runtime handoff is
-# ``AUTORESEARCH_HANDOFF_DIR`` (``RUNTIME_ROOT/handoff``) and the tracked
-# policies live in-repo under ``AUTORESEARCH_POLICIES_DIR``; this constant is
-# neither — it is the rollback breadcrumb the operator may still hold.
+# ``~/.geode/autoresearch/handoff/`` — despite the historical name, a live
+# operator-local tier: per-machine policy overrides (``OPERATOR_LOCAL_*``
+# below), the scaffold-search ledger, auto-trigger state and run timelines.
+# It is also the lazy-migration source (``LEGACY_SOT_DIR``). The runtime
+# handoff is ``AUTORESEARCH_HANDOFF_DIR`` (``RUNTIME_ROOT/handoff``) and the
+# tracked policies live in-repo under ``AUTORESEARCH_POLICIES_DIR``.
 GLOBAL_AUTORESEARCH_HANDOFF_DIR = GEODE_HOME / "autoresearch" / "handoff"
 # PR-RATCHET-1 (2026-05-21) — the 5 mutation-target files now live in
 # the in-repo ``evolve/scaffold_search/state/policies/`` directory rather than
@@ -798,7 +797,6 @@ def ensure_directories() -> None:
         GLOBAL_SCHEDULER_DIR,
         GLOBAL_GOOGLE_DIR,
         GLOBAL_PROJECTS_DIR,
-        GLOBAL_IDENTITY_DIR,
         GLOBAL_USER_PROFILE_DIR,
     ]
     for d in global_dirs:

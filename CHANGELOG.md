@@ -68,13 +68,25 @@ functional change.
 
 - Refine the homepage and documentation reader without changing research content or routes: replace nested disclosure navigation with direct area selection and visible chapter headings, add keyboard-accessible mobile navigation dialogs with unframed header controls, and keep comparison limits, design background and evidence records directly readable.
 - Every config.toml writer (`/model`, `/login` credential source, `geode cost`,
-  self-improving settings, `geode config trust`) now goes through one atomic
-  editor. Files are written 0600, a commented-out template key is filled in
-  place, and an edit that would leave invalid TOML is refused instead of
-  making the loader skip the whole file.
+  self-improving settings, `geode config trust`, `geode init`) now writes
+  atomically with mode 0600, and section edits share one editor. It fills a
+  commented-out template key in place, keeps a symlinked config.toml linked, and
+  refuses an edit that would leave invalid TOML instead of making the loader
+  skip the whole file.
 - REPL input history moves from `~/.geode_history` into GEODE's home as
   `~/.geode/prompt_history` (0600). The old file is adopted on first start, and
   recognizable secrets are redacted before a line is saved.
+
+### Fixed
+
+- `/mcp add` edits only the entries of `.claude/mcp_servers.json` and writes the
+  file 0600. It used to rewrite the file from the merged catalog, copying
+  config.toml servers (with their env) into it, and in an untrusted folder it
+  dropped the file's existing entries.
+- `geode init` no longer writes a career template to `~/.geode/identity/`, which
+  nothing read. Layout migration v5 moves an existing
+  `~/.geode/identity/career.toml` to `~/.geode/user_profile/career.toml`, the
+  file the profile loader uses, unless that file already exists.
 
 ### Security
 

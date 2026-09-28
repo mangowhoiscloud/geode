@@ -127,8 +127,9 @@ def init(
     # 4. config.toml with detected project info
     config_path = Path(".geode/config.toml")
     if not config_path.exists() or force:
-        config_content = generate_config_toml(project_info)
-        config_path.write_text(config_content, encoding="utf-8")
+        from core.memory.atomic_write import atomic_write_text
+
+        atomic_write_text(config_path, generate_config_toml(project_info))  # 0600
         console.print("  Created .geode/config.toml (with detected commands)")
     else:
         console.print("  .geode/config.toml already exists (use --force to overwrite)")
@@ -140,13 +141,13 @@ def init(
             "# Node-level LLM model routing\n"
             "# Uncomment to override default model per pipeline node.\n\n"
             "[nodes]\n"
-            '# analyst = "claude-opus-4-8"\n'
-            '# evaluator = "claude-sonnet-4-6"\n'
+            '# analyst = "claude-opus-5-5"\n'
+            '# evaluator = "claude-sonnet-5"\n'
             '# scoring = "claude-haiku-4-5-20251001"\n'
-            '# synthesizer = "claude-opus-4-8"\n\n'
+            '# synthesizer = "claude-opus-5-5"\n\n'
             "[agentic]\n"
-            '# default = "claude-opus-4-8"\n'
-            '# sub_agent = "claude-sonnet-4-6"\n',
+            '# default = "claude-opus-5-5"\n'
+            '# sub_agent = "claude-sonnet-5"\n',
             encoding="utf-8",
         )
         console.print("  Created .geode/routing.toml (template)")
@@ -162,10 +163,10 @@ def init(
             "# If only denylist is set, listed models are blocked.\n\n"
             "[policy]\n"
             "# allowlist = "
-            '["claude-opus-4-8", "claude-sonnet-4-6", "gpt-5.4"]\n'
+            '["claude-opus-5-5", "claude-sonnet-5", "gpt-6-sol"]\n'
             "# denylist = "
             '["claude-haiku-4-5-20251001"]\n'
-            '# default_model = "claude-sonnet-4-6"\n',
+            '# default_model = "claude-sonnet-5"\n',
             encoding="utf-8",
         )
         console.print("  Created .geode/model-policy.toml (template)")
@@ -227,28 +228,6 @@ def init(
             console.print("  Seeded .geode/user_profile/ from global profile")
     except OSError as e:
         log.debug("Profile seeding skipped: %s", e)
-
-    # 7b. ~/.geode/identity/career.toml template
-    from core.paths import GLOBAL_IDENTITY_DIR  # PR-CLEANUP-D2 anchor
-
-    identity_dir = GLOBAL_IDENTITY_DIR
-    career_toml = identity_dir / "career.toml"
-    if not career_toml.exists():
-        identity_dir.mkdir(parents=True, exist_ok=True)
-        career_toml.write_text(
-            "# Career identity — injected into system prompt context\n"
-            "# Edit this file to personalize GEODE for job search / career tasks.\n\n"
-            "[identity]\n"
-            'title = ""\n'
-            'experience = ""\n'
-            "skills = []\n\n"
-            "[goals]\n"
-            'seeking = ""\n'
-            "target_companies = []\n"
-            'preferred_location = ""\n',
-            encoding="utf-8",
-        )
-        console.print("  Created ~/.geode/identity/career.toml (template)")
 
     # 8. .gitignore entry
     _ensure_gitignore_entry(".geode/", "# GEODE")

@@ -161,7 +161,7 @@ DEFAULT_CONFIG_TOML = """\
 # Uncomment and edit values to override defaults.
 
 [llm]
-# primary_model = "claude-opus-4-8"
+# primary_model = "claude-opus-5-5"
 
 [output]
 # verbose = false

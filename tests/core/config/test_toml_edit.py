@@ -122,3 +122,13 @@ class TestPersistTomlSection:
         cfg.write_text('[agentic]\n# effort = "high"\neffort = "low"\n', encoding="utf-8")
         toml_edit.persist_toml_section("agentic", {"effort": "max"}, path=cfg)
         assert cfg.read_text(encoding="utf-8") == '[agentic]\n# effort = "high"\neffort = "max"\n'
+
+    def test_symlinked_config_keeps_its_link(self, tmp_path: Path) -> None:
+        target = tmp_path / "dotfiles" / "config.toml"
+        target.parent.mkdir()
+        target.write_text('[llm]\nprimary_model = "x"\n', encoding="utf-8")
+        link = tmp_path / "config.toml"
+        link.symlink_to(target)
+        toml_edit.persist_toml_section("llm", {"primary_model": "y"}, path=link)
+        assert link.is_symlink()
+        assert target.read_text(encoding="utf-8") == '[llm]\nprimary_model = "y"\n'

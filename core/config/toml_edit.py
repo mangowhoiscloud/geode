@@ -180,5 +180,6 @@ def persist_toml_section(
         tomllib.loads(new_text)
     except tomllib.TOMLDecodeError as exc:
         raise ValueError(f"Not writing {path}: the result would be invalid TOML ({exc})") from exc
-    atomic_write_text(path, new_text)
+    # Replace the link's target, not a symlinked config (a dotfiles checkout).
+    atomic_write_text(path.resolve() if path.is_symlink() else path, new_text)
     return path

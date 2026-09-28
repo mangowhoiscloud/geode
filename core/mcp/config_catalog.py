@@ -155,24 +155,36 @@ class MCPConfigCatalog:
         args: list[str] | None = None,
         env: dict[str, str] | None = None,
     ) -> bool:
+        from core.memory.atomic_write import atomic_write_text
+
         entry: dict[str, Any] = {"command": command}
         if args:
             entry["args"] = args
         if env:
             entry["env"] = env
-        self.servers[name] = entry
-        self.origins[name] = str(self.config_path)
+        # Edit the file's own entries. The merged view also holds config.toml
+        # servers (and their env), which must not be copied into this file, and
+        # misses the file's entries whenever the folder is untrusted.
         try:
-            self.config_path.parent.mkdir(parents=True, exist_ok=True)
-            self.config_path.write_text(
-                json.dumps(self.servers, indent=2, ensure_ascii=False) + "\n",
-                encoding="utf-8",
+            on_disk = (
+                json.loads(self.config_path.read_text(encoding="utf-8"))
+                if self.config_path.exists()
+                else {}
             )
-            log.info("Added MCP server '%s' and saved config", name)
-            return True
-        except OSError as exc:
+            if not isinstance(on_disk, dict):
+                raise ValueError("top level is not an object")
+            on_disk[name] = entry
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_text(
+                self.config_path, json.dumps(on_disk, indent=2, ensure_ascii=False) + "\n"
+            )
+        except (OSError, ValueError) as exc:
             log.error("Failed to save MCP config after adding '%s': %s", name, exc)
             return False
+        self.servers[name] = entry
+        self.origins[name] = str(self.config_path)
+        log.info("Added MCP server '%s' and saved config", name)
+        return True
 
     def _load_dotenv_cache(self) -> None:
         if self.dotenv_cache:
