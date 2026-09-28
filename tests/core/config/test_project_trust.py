@@ -13,9 +13,8 @@ from typer.testing import CliRunner
 
 @pytest.fixture()
 def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Isolated trust file and global .env; returns a project folder with .geode/."""
+    """Isolated global config and .env; returns a project folder with .geode/."""
     (tmp_path / "home").mkdir()
-    monkeypatch.setattr(trust, "TRUSTED_PROJECTS_FILE", tmp_path / "home" / "trusted_projects.toml")
     global_env = tmp_path / "home" / ".env"
     monkeypatch.setattr(trust, "GLOBAL_ENV_FILE", global_env)
     monkeypatch.setattr("core.paths.GLOBAL_ENV_FILE", global_env)
@@ -25,14 +24,20 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return project
 
 
-def test_trust_file_round_trip_and_unreadable_file(home: Path) -> None:
+def test_trust_lives_in_the_global_config_only(home: Path) -> None:
+    # A repository cannot vouch for itself from its own config.toml.
+    (home / ".geode" / "config.toml").write_text(
+        f'[projects."{home.resolve()}"]\ntrust_level = "trusted"\n', encoding="utf-8"
+    )
     assert not trust.is_project_trusted(home)
+
     written = trust.set_project_trust(home, trusted=True)
     assert trust.is_project_trusted(home)
     assert oct(written.stat().st_mode & 0o777) == "0o600"
     trust.set_project_trust(home, trusted=False)
     assert not trust.is_project_trusted(home)
-    written.write_text("trusted = [", encoding="utf-8")
+    assert 'trust_level = "untrusted"' in written.read_text(encoding="utf-8")
+    written.write_text("[projects", encoding="utf-8")
     assert trust.trusted_projects() == frozenset()
 
 

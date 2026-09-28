@@ -7,8 +7,10 @@ Codex keeps untrusted project config layers off, and Claude Code holds
 capability-granting project settings until the folder is trusted; restrictive
 project settings such as ``[policy.org] denied_tools`` still apply.
 
-Trust decisions live in ``~/.geode/trusted_projects.toml`` (0600), written only by
-``geode config trust`` — a repository cannot trust itself.
+Trust is recorded the way Codex records it, in the global config.toml:
+``[projects."<absolute path>"] trust_level = "trusted"``. Only ``geode config trust``
+writes it, and a project's own config.toml is never consulted, so a repository cannot
+trust itself.
 """
 
 from __future__ import annotations
@@ -19,7 +21,13 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from core.paths import GLOBAL_ENV_FILE, TRUSTED_PROJECTS_FILE
+from core.config.toml_edit import (
+    persist_toml_section,
+    read_config_toml,
+    resolve_config_toml_path,
+    toml_escape,
+)
+from core.paths import GLOBAL_ENV_FILE
 
 log = logging.getLogger(__name__)
 
@@ -66,19 +74,19 @@ def _root(root: Path | None) -> Path:
 
 
 def trusted_projects() -> frozenset[str]:
-    """Absolute paths the user trusts; an unreadable file trusts nothing."""
+    """Absolute paths marked trusted in the global config; an unreadable file trusts nothing."""
+    path = resolve_config_toml_path()
     try:
-        data = tomllib.loads(TRUSTED_PROJECTS_FILE.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return frozenset()
+        projects = read_config_toml(path).get("projects", {})
     except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
-        _warn_once(f"Unreadable {TRUSTED_PROJECTS_FILE}; treating every project as untrusted")
+        _warn_once(f"Unreadable {path}; treating every project as untrusted")
         return frozenset()
-    paths = data.get("trusted", [])
-    return (
-        frozenset(p for p in paths if isinstance(p, str))
-        if isinstance(paths, list)
-        else frozenset()
+    if not isinstance(projects, dict):
+        return frozenset()
+    return frozenset(
+        folder
+        for folder, entry in projects.items()
+        if isinstance(entry, dict) and entry.get("trust_level") == "trusted"
     )
 
 
@@ -87,21 +95,9 @@ def is_project_trusted(root: Path | None = None) -> bool:
 
 
 def set_project_trust(root: Path, *, trusted: bool) -> Path:
-    """Add or remove ``root`` in the trust file; returns the file written."""
-    from core.config.toml_edit import toml_escape
-    from core.memory.atomic_write import atomic_write_text
-
-    key = str(_root(root))
-    paths = set(trusted_projects())
-    if trusted:
-        paths.add(key)
-    else:
-        paths.discard(key)
-    lines = [f'  "{toml_escape(p)}",' for p in sorted(paths)]
-    body = "trusted = [\n" + "\n".join(lines) + "\n]\n" if lines else "trusted = []\n"
-    TRUSTED_PROJECTS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(TRUSTED_PROJECTS_FILE, "# Managed by `geode config trust`.\n" + body)
-    return TRUSTED_PROJECTS_FILE
+    """Record ``root``'s trust in the global config.toml; returns that file."""
+    section = f'projects."{toml_escape(str(_root(root)))}"'
+    return persist_toml_section(section, {"trust_level": "trusted" if trusted else "untrusted"})
 
 
 def filter_project_keys(flat: Mapping[str, Any], *, root: Path | None = None) -> dict[str, Any]:

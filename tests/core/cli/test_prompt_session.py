@@ -265,3 +265,17 @@ def test_toolbar_visibility_noop_when_unstashed(monkeypatch: pytest.MonkeyPatch)
     _apply_toolbar_visibility(session)
 
     assert session.bottom_toolbar is sentinel
+
+
+def test_history_is_adopted_into_geode_home_privately(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    legacy = tmp_path / ".geode_history"
+    legacy.write_text("\n# 2026-09-28\n+hello\n", encoding="utf-8")
+    target = tmp_path / "geode-home" / "prompt_history"
+    monkeypatch.setattr("core.paths.LEGACY_PROMPT_HISTORY_FILE", legacy)
+    monkeypatch.setattr("core.paths.PROMPT_HISTORY_FILE", target)
+
+    assert prompt_session_mod._prompt_history_path() == target
+    assert "+hello" in target.read_text(encoding="utf-8") and not legacy.exists()
+    assert oct(target.stat().st_mode & 0o777) == "0o600"

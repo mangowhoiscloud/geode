@@ -127,8 +127,9 @@ export default function Page() {
 geode config trust --list       # 신뢰한 폴더 목록
 geode config trust PATH --revoke`}</pre>
             <p>
-              신뢰 기록은 <code>~/.geode/trusted_projects.toml</code>(0600)에만
-              저장되므로 저장소가 스스로를 신뢰할 수 없습니다.
+              신뢰 기록은 Codex처럼 전역 <code>~/.geode/config.toml</code>의
+              <code>[projects.&quot;경로&quot;]</code> 표에만 남고 프로젝트의
+              config.toml은 참조하지 않으므로, 저장소가 스스로를 신뢰할 수 없습니다.
               <code>hitl.dangerously_skip_permissions</code>와
               <code>computer_use.helper_path</code>는 신뢰한 폴더에서도
               프로젝트 설정으로 읽지 않습니다. 무시된 항목은 경고 로그와
@@ -398,8 +399,10 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
 geode config trust --list       # list trusted folders
 geode config trust PATH --revoke`}</pre>
             <p>
-              Trust lives only in <code>~/.geode/trusted_projects.toml</code>
-              (0600), so a repository cannot trust itself.
+              As in Codex, trust is recorded only in the global
+              <code>~/.geode/config.toml</code> under
+              <code>[projects.&quot;path&quot;]</code>, and a project&apos;s own
+              config.toml is never consulted, so a repository cannot trust itself.
               <code>hitl.dangerously_skip_permissions</code> and
               <code>computer_use.helper_path</code> are never read from project
               config, even in a trusted folder. Ignored entries appear in a

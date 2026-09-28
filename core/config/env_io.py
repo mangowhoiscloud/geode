@@ -169,52 +169,14 @@ def upsert_config_toml(section: str, key: str, value: str, *, scope: str = "proj
     * ``"global"`` — ``GEODE_CONFIG_TOML`` when set, otherwise the user-global
       ``~/.geode/config.toml``; inherited by projects without an override.
 
-    Section headings use ``[section.subsection]`` notation per TOML.
+    Section headings use ``[section.subsection]`` notation per TOML. The
+    edit itself is :func:`core.config.toml_edit.persist_toml_section`.
     """
-    from core.config.toml_edit import resolve_config_toml_path, toml_escape
+    from core.config.toml_edit import persist_toml_section, resolve_config_toml_path
     from core.paths import PROJECT_CONFIG_TOML
 
     config_path = resolve_config_toml_path() if scope == "global" else PROJECT_CONFIG_TOML
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-
-    target_line = f'{key} = "{toml_escape(value)}"'
-    section_heading = f"[{section}]"
-
-    raw = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
-    lines = raw.splitlines()
-
-    in_section = False
-    found_section = False
-    found_key = False
-    new_lines: list[str] = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped == section_heading:
-            in_section = True
-            found_section = True
-            new_lines.append(line)
-            continue
-        if in_section and stripped.startswith("["):
-            # Hit the next section without finding the key — insert before it
-            if not found_key:
-                new_lines.append(target_line)
-                found_key = True
-            in_section = False
-        if in_section and re.match(rf"^\s*#?\s*{re.escape(key)}\s*=", line):
-            new_lines.append(target_line)
-            found_key = True
-            continue
-        new_lines.append(line)
-
-    if found_section and not found_key:
-        new_lines.append(target_line)
-    elif not found_section:
-        if new_lines and new_lines[-1] != "":
-            new_lines.append("")
-        new_lines.append(section_heading)
-        new_lines.append(target_line)
-
-    config_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+    persist_toml_section(section, {key: value}, path=config_path)
 
 
 def is_glm_key(value: str) -> bool:

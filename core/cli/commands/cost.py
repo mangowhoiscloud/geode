@@ -204,9 +204,6 @@ def _get_cost_budget() -> float:
 
 def _set_cost_budget(amount: float) -> None:
     """Write monthly budget to .geode/config.toml."""
-    from core.config.toml_edit import splice_toml_section
-    from core.memory.atomic_write import atomic_write_text
+    from core.config.toml_edit import persist_toml_section
 
-    config_path = PROJECT_CONFIG_TOML
-    raw = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
-    atomic_write_text(config_path, splice_toml_section(raw, "cost", {"monthly_budget": amount}))
+    persist_toml_section("cost", {"monthly_budget": amount}, path=PROJECT_CONFIG_TOML)

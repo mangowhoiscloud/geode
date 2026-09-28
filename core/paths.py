@@ -328,8 +328,6 @@ def _stringify_relative(path: Path) -> str:
 # Global config & credentials
 GLOBAL_CONFIG_TOML = GEODE_HOME / "config.toml"
 GLOBAL_ENV_FILE = GEODE_HOME / ".env"
-# Folders whose .geode/config.toml and .env the user trusts (core.config.project_trust).
-TRUSTED_PROJECTS_FILE = GEODE_HOME / "trusted_projects.toml"
 GLOBAL_DRY_RUN_MARKER = GEODE_HOME / ".dry-run-opt-in"
 
 # Petri audit runtime logs — single SoT (PR-CLEANUP-D2, 2026-06-10).
@@ -605,6 +603,10 @@ MCP_REGISTRY_CACHE = GEODE_HOME / "mcp" / "registry-cache.json"
 # The writer is retired; this path remains so migration and cleanup tooling can
 # preserve the legacy operator archive without silently deleting user data.
 APPROVE_HISTORY = GEODE_HOME / "approval_history.jsonl"
+# REPL input recall (prompt_toolkit FileHistory), 0600 and secret-redacted.
+PROMPT_HISTORY_FILE = GEODE_HOME / "prompt_history"
+# Pre-1.0.31 location outside GEODE_HOME; core.cli.prompt_session adopts it once.
+LEGACY_PROMPT_HISTORY_FILE = Path.home() / ".geode_history"
 
 # ---------------------------------------------------------------------------
 # Project-level — {workspace}/.geode/

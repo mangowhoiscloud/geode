@@ -67,11 +67,20 @@ functional change.
 ### Changed
 
 - Refine the homepage and documentation reader without changing research content or routes: replace nested disclosure navigation with direct area selection and visible chapter headings, add keyboard-accessible mobile navigation dialogs with unframed header controls, and keep comparison limits, design background and evidence records directly readable.
+- Every config.toml writer (`/model`, `/login` credential source, `geode cost`,
+  self-improving settings, `geode config trust`) now goes through one atomic
+  editor. Files are written 0600, a commented-out template key is filled in
+  place, and an edit that would leave invalid TOML is refused instead of
+  making the loader skip the whole file.
+- REPL input history moves from `~/.geode_history` into GEODE's home as
+  `~/.geode/prompt_history` (0600). The old file is adopted on first start, and
+  recognizable secrets are redacted before a line is saved.
 
 ### Security
 
 - Gate workspace-supplied configuration behind folder trust. Until
-  `geode config trust` records the folder in `~/.geode/trusted_projects.toml`,
+  `geode config trust` records the folder in the global config.toml
+  (`[projects."<path>"] trust_level = "trusted"`, as Codex does),
   GEODE ignores the project `.env` (Settings, daemon promotion and MCP
   `${VAR}` expansion), project MCP servers and gateway config, and project
   `config.toml` keys that widen capability or redirect data (sandbox mode,

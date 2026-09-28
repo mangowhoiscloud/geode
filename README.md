@@ -101,9 +101,8 @@ for credentials, usage, and the scope of each judgment.
 |---|---|
 | `~/.geode/auth.toml` | GEODE-managed provider credentials and account metadata |
 | `~/.geode/.env` | Optional environment credentials and integration secrets |
-| `~/.geode/config.toml` | User-wide behavior defaults |
+| `~/.geode/config.toml` | User-wide behavior defaults and the folders you trusted with `geode config trust` |
 | `./.geode/config.toml`, `./.env` | Project overrides; capability keys apply only in a trusted folder |
-| `~/.geode/trusted_projects.toml` | Folders you trusted with `geode config trust` |
 | `~/.geode/` | Runtime state, sessions, diagnostics, and private artifacts |
 
 Project behavior overrides user defaults. A repository's `.env`, MCP servers,
