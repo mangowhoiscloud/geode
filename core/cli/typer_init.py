@@ -66,14 +66,17 @@ def init(
     global_geode.mkdir(parents=True, exist_ok=True)
     global_env = global_geode / ".env"
     if not global_env.exists():
-        global_env.write_text(
+        from core.memory.atomic_write import atomic_write_text
+
+        atomic_write_text(  # 0600: this file holds secrets
+            global_env,
             "# GEODE global API keys (shared across all projects)\n"
-            "# Keys here are authoritative; project .env only fills missing keys.\n"
+            "# Keys here are authoritative; a project .env only fills missing keys,\n"
+            "# and only in a folder trusted with `geode config trust`.\n"
             "# Priority: env vars > ~/.geode/.env > CWD/.env\n\n"
             "# ANTHROPIC_API_KEY=sk-ant-...\n"
             "# OPENAI_API_KEY=sk-proj-...\n"
             "# BRAVE_API_KEY=...\n",
-            encoding="utf-8",
         )
         global_env.chmod(0o600)
         console.print(f"  Created {global_env} (global API keys)")

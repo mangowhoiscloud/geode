@@ -32,6 +32,19 @@ class TestGeodeInit:
         for subdir in ["vault", "journal", "snapshots", "result_cache", "sessions"]:
             assert not (tmp_path / ".geode" / subdir).exists()
 
+    def test_global_env_template_is_private(self, tmp_path, monkeypatch):
+        """The ~/.geode/.env template holds secrets, so it is created 0600."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr("core.paths.GEODE_HOME", tmp_path / "home")
+        with _mock_user_profile() as mock_cls:
+            mock_cls.return_value.ensure_structure.return_value = False
+            result = runner.invoke(app, ["init"])
+
+        assert result.exit_code == 0, result.output
+        env = tmp_path / "home" / ".env"
+        assert oct(env.stat().st_mode & 0o777) == "0o600"
+        assert "geode config trust" in env.read_text(encoding="utf-8")
+
     def test_creates_config_toml(self, tmp_path, monkeypatch):
         """init creates .geode/config.toml with template content."""
         monkeypatch.chdir(tmp_path)

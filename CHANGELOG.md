@@ -98,6 +98,11 @@ functional change.
   goes through the LLM adapter registry, which those processes had not filled
   yet, so every credential (for example a Codex CLI login in
   `~/.codex/auth.json`) read as missing and setup showed its wizard.
+- Slash-command output relayed from `geode serve` is written as plain text when
+  the thin CLI's stdout is a pipe or file; ANSI color codes used to end up in
+  redirected output.
+- `geode init` creates the `~/.geode/.env` template with mode 0600, and the
+  template notes that a project `.env` applies only in a trusted folder.
 
 ### Security
 
