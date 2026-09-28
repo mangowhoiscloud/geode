@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Menu } from "lucide-react";
 import { useLayoutEffect, useRef, type ReactNode, type CSSProperties } from "react";
 import { GeodiSprite } from "@/components/geode/geodi-sprite";
 import { useLocale, useSetLocale, t } from "@/components/geode/locale-context";
@@ -221,7 +222,10 @@ export function DocsShell({
 
       <div className="docs-mobile-nav">
         <button ref={mobileNavButton} type="button" aria-haspopup="dialog" aria-controls="docs-mobile-dialog"
-          onClick={() => mobileNavRef.current?.showModal()}>{t(locale, "문서 탐색", "Browse docs")}</button>
+          onClick={() => mobileNavRef.current?.showModal()}>
+          <Menu size={18} strokeWidth={1.5} aria-hidden="true" />
+          <span>{t(locale, "문서 탐색", "Browse docs")}</span>
+        </button>
         <span>{displayTitle}</span>
       </div>
       <dialog key={slug} ref={mobileNavRef} id="docs-mobile-dialog" className="docs-mobile-dialog"

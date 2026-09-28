@@ -61,6 +61,8 @@ functional change.
   The corrected v23 source supplies 81 pages per language. A keyboard-contained
   source sheet preserves citation IDs and historical boundaries without adding
   an inline link wall or changing the verified PDFs.
+  The Pages runner supplies ffprobe so replay audio-stream verification remains
+  mandatory in clean CI environments.
 
 ### Changed
 

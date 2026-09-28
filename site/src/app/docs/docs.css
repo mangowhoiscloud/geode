@@ -375,7 +375,9 @@
 .docs-mobile-dialog-body { display: flex; flex-direction: column; height: 100%; }
 .docs-mobile-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--rule-soft); }
 .docs-mobile-heading h2 { font-size: 16px; font-weight: 600; }
-.docs-mobile-heading button,.docs-mobile-nav button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--rule); border-radius: 6px; cursor: pointer; }
+.docs-mobile-heading button,.docs-mobile-nav button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px; border: 0; border-radius: 4px; color: var(--ink-2); cursor: pointer; }
+.docs-mobile-heading button:hover,.docs-mobile-nav button:hover { color: var(--ink); background: var(--paper-2); }
+.geode-docs :is(.docs-mobile-heading,.docs-mobile-nav) button:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
 html:has(.docs-mobile-dialog[open]) { overflow: hidden; }
 
 .geode-docs .docs-task-route { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .8fr); gap: 24px; padding: 24px 0; }

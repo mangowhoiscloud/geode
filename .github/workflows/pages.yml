@@ -167,6 +167,11 @@ jobs:
       - name: Audit locked site dependencies
         run: npm audit --audit-level=moderate
 
+      - name: Install ffprobe for replay stream verification
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+
       - name: Build static export
         run: npm run build
 
