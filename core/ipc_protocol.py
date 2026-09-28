@@ -16,6 +16,7 @@ IPC_FEATURES = (
     "request_correlation",
     "stable_events",
     "session_model_config",
+    "request_cancellation",
 )
 MAX_IPC_MESSAGE_BYTES = 1024 * 1024
 
@@ -85,11 +86,39 @@ _CLIENT_FIELD_TYPES: dict[str, dict[str, type[Any] | tuple[type[Any], ...]]] = {
     },
     "approval_response": {"decision": str, "approval_id": str},
     "exit": {},
+    "cancel": {"target_request_id": str},
 }
 
 
 class IPCProtocolError(ValueError):
     """A wire message violates the negotiated IPC contract."""
+
+
+def ipc_error_response(
+    error: BaseException | str,
+    *,
+    response_type: str = "error",
+    error_type: str = "",
+) -> dict[str, Any]:
+    """Preserve a bounded error outcome without exposing exception secrets."""
+    from core.observability.redaction import redact_and_bound_text
+
+    return {
+        "type": response_type,
+        "status": "error",
+        "error_type": error_type
+        or (type(error).__name__ if isinstance(error, BaseException) else "internal"),
+        "message": redact_and_bound_text(str(error), 2048),
+    }
+
+
+def is_ipc_error(response: Mapping[str, Any]) -> bool:
+    """Recognize both legacy error envelopes and failed command/result outcomes."""
+    return (
+        response.get("type") in {"error", "protocol_error", "resume_error"}
+        or response.get("status") in {"error", "failed"}
+        or bool(response.get("error"))
+    )
 
 
 def new_request_id() -> str:
@@ -199,6 +228,8 @@ __all__ = [
     "IPCProtocolError",
     "decode_message",
     "encode_message",
+    "ipc_error_response",
+    "is_ipc_error",
     "negotiate_protocol",
     "new_request_id",
     "validate_client_message",

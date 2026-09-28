@@ -28,7 +28,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from core.observability.redaction import redact_secrets
+from core.observability.redaction import redact_and_bound_text, redact_secrets
 from core.paths import GEODE_HOME, SERVE_LOG_PATH
 
 LOGS_DIR: Path = GEODE_HOME / "logs"
@@ -53,20 +53,28 @@ _MODE_SPECS: dict[str, tuple[Path | None, str]] = {
 }
 
 
+def _error_context(record: logging.LogRecord) -> dict[str, str]:
+    """Retain only bounded diagnostic identifiers, never arbitrary log extras."""
+    return {
+        name: redact_and_bound_text(value, 128)
+        for name in ("request_id", "session_id", "command", "error_type", "exception_type")
+        if isinstance(value := getattr(record, name, None), (str, int)) and value != ""
+    }
+
+
 class _RedactingTextFormatter(logging.Formatter):
-    """Text formatter that scrubs API-key patterns from the FINAL rendered
-    line (PR-OBS-LOGGING-CONFIG). Redaction at the formatter — not at each of
-    the 240 call sites — makes it AUTOMATIC and unmissable (frontier parity:
-    openclaw/hermes redact at the logger/formatter level, not per-call)."""
+    """Scrub known/labelled secrets from the message and exception traceback."""
 
     def format(self, record: logging.LogRecord) -> str:
-        return redact_secrets(super().format(record))
+        text = redact_secrets(super().format(record))
+        context = _error_context(record)
+        if context:
+            text += " " + json.dumps(context, ensure_ascii=False)
+        return text
 
 
 class _JsonFormatter(logging.Formatter):
-    """One JSON object per line. Machine-filterable by ``logger`` / ``level``;
-    the redacted ``msg`` never carries a raw key. ``trace_id`` / ``span_id``
-    are reserved slots for the follow-up OTel trace↔log coupling (plan A3)."""
+    """One redacted JSON object per line with supplied request/error identity."""
 
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, object] = {
@@ -74,9 +82,12 @@ class _JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "logger": record.name,
             "msg": redact_secrets(record.getMessage()),
+            **_error_context(record),
         }
         if record.exc_info:
             payload["exc"] = redact_secrets(self.formatException(record.exc_info))
+            if record.exc_info[0] is not None:
+                payload["exception_type"] = record.exc_info[0].__name__
         return json.dumps(payload, ensure_ascii=False)
 
 
@@ -94,8 +105,8 @@ def configure_logging(mode: str, *, level: int = logging.INFO) -> None:
     called ``basicConfig`` already) so handlers never double-log — same
     discipline the serve entry point established.
 
-    Both handlers redact API-key patterns automatically (PR-OBS-LOGGING-CONFIG)
-    so a leaked credential never reaches stderr or the rotating file.
+    Both handlers scrub known key formats and labelled credentials. Producers
+    must still avoid logging request bodies or unlabelled opaque secrets.
     """
     if mode not in _MODE_SPECS:
         raise ValueError(f"unknown logging mode {mode!r} (known: {sorted(_MODE_SPECS)})")

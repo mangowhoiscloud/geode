@@ -43,6 +43,7 @@ from core.ipc_protocol import (
     IPCProtocolError,
     decode_message,
     encode_message,
+    ipc_error_response,
     negotiate_protocol,
     validate_client_message,
 )
@@ -57,6 +58,16 @@ if TYPE_CHECKING:
 from core.paths import CLI_SOCKET_PATH  # noqa: E402 — placed after TYPE_CHECKING block
 
 DEFAULT_SOCKET_PATH = CLI_SOCKET_PATH  # P2 — was `Path.home() / ".geode" / "cli.sock"`
+
+
+def _request_error_context(msg: dict[str, Any], loop: Any, exc: Exception) -> dict[str, str]:
+    return {
+        "request_id": str(msg.get("request_id", "")),
+        "session_id": str(getattr(loop, "_session_id", "")),
+        "command": str(msg.get("cmd", "")),
+        "error_type": type(exc).__name__,
+        "exception_type": type(exc).__name__,
+    }
 
 
 def _session_greeting(session_id: str) -> dict[str, Any]:
@@ -110,6 +121,7 @@ class _AsyncClientEndpoint:
         self._writer = writer
         self._write_lock = asyncio.Lock()
         self._pending_sends: set[asyncio.Task[None]] = set()
+        self._send_error: Exception | None = None
         # (decision, approval_id) pairs — the id lets request_approval discard
         # a stale reply left over from a previous (timed-out) prompt instead of
         # misrouting it into the wrong gate (PR-HITL-APPROVAL-FSM).
@@ -118,6 +130,7 @@ class _AsyncClientEndpoint:
         self._width = 120
         self._request_id = ""
         self.session_model_config_applied = False
+        self.features: tuple[str, ...] = ()
 
     async def send_json_async(self, obj: dict[str, Any]) -> None:
         if self._request_id and "request_id" not in obj:
@@ -133,13 +146,19 @@ class _AsyncClientEndpoint:
 
     def send_json_nowait(self, obj: dict[str, Any]) -> None:
         """Schedule a write from the endpoint's own event-loop thread."""
+        if self._request_id and "request_id" not in obj:
+            obj = {**obj, "request_id": self._request_id}
         task = self._loop.create_task(self.send_json_async(obj))
         self._pending_sends.add(task)
 
         def _discard(done: asyncio.Task[None]) -> None:
             self._pending_sends.discard(done)
-            with contextlib.suppress(Exception):
+            try:
                 done.result()
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                self._send_error = self._send_error or exc
 
         task.add_done_callback(_discard)
 
@@ -148,6 +167,9 @@ class _AsyncClientEndpoint:
         while self._pending_sends:
             pending = list(self._pending_sends)
             await asyncio.gather(*pending, return_exceptions=True)
+        if self._send_error is not None:
+            error, self._send_error = self._send_error, None
+            raise error
 
     def send_json_threadsafe(self, obj: dict[str, Any], *, timeout_s: float = 5.0) -> None:
         try:
@@ -157,10 +179,14 @@ class _AsyncClientEndpoint:
         if running_loop is self._loop:
             self.send_json_nowait(obj)
             return
+        if self._request_id and "request_id" not in obj:
+            obj = {**obj, "request_id": self._request_id}
         future = asyncio.run_coroutine_threadsafe(self.send_json_async(obj), self._loop)
         try:
             future.result(timeout=timeout_s)
-        except Exception:
+        except Exception as exc:
+            future.cancel()
+            self._send_error = self._send_error or exc
             log.debug("Async IPC send failed", exc_info=True)
 
     def feed_approval_response(self, decision: str, approval_id: str = "") -> None:
@@ -266,6 +292,8 @@ class _StreamingWriter:
 
     def __init__(self, client: _AsyncClientEndpoint) -> None:
         self._client = client
+        request_id = getattr(client, "_request_id", "")
+        self._request_id = request_id if isinstance(request_id, str) else ""
 
     def write(self, text: str) -> int:
         if not text:
@@ -280,6 +308,8 @@ class _StreamingWriter:
         self._send_json({"type": event_type, **data})
 
     def _send_json(self, obj: dict[str, Any]) -> None:
+        if self._request_id:
+            obj = {**obj, "request_id": self._request_id}
         self._client.send_json_threadsafe(obj)
 
     def request_approval(
@@ -554,14 +584,21 @@ class CLIPoller:
         # approval replies to the endpoint the moment they arrive; everything
         # else is handled strictly in order via the message queue.
         # Bounded: a pipelining/buggy local client must not grow daemon memory
-        # while a prompt stalls processing. put_nowait + drop keeps the pump
-        # reading (an awaited put on a full queue would re-starve approval
-        # replies — the exact defect this pump exists to fix).
+        # while a prompt stalls processing. Reject a full queue explicitly;
+        # awaiting a queue slot would re-starve approval/cancellation replies.
         msg_queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue(maxsize=256)
+        queued_requests: dict[str, str] = {}
+        cancelled_requests: set[str] = set()
+        active_task: asyncio.Task[dict[str, Any] | None] | None = None
+        active_id = ""
+        active_type = ""
+        disconnected = asyncio.Event()
 
-        def _enqueue(msg: dict[str, Any] | None) -> None:
+        async def _enqueue(msg: dict[str, Any] | None) -> None:
             try:
                 msg_queue.put_nowait(msg)
+                if msg is not None and msg.get("request_id"):
+                    queued_requests[str(msg["request_id"])] = str(msg.get("type", ""))
             except asyncio.QueueFull:
                 if msg is None:
                     # Sentinel must land: drop one backlogged message for it.
@@ -570,10 +607,36 @@ class CLIPoller:
                     with contextlib.suppress(asyncio.QueueFull):
                         msg_queue.put_nowait(msg)
                 else:
-                    log.error(
-                        "IPC message queue full (256) — dropping %r from client",
-                        msg.get("type", "?"),
+                    await endpoint.send_json_async(
+                        {
+                            **ipc_error_response(
+                                "IPC request queue is full", error_type="overloaded"
+                            ),
+                            **({"request_id": msg["request_id"]} if msg.get("request_id") else {}),
+                        }
                     )
+
+        async def _cancel_request(msg: dict[str, Any]) -> None:
+            try:
+                validate_client_message(msg)
+                if "request_cancellation" not in endpoint.features:
+                    raise IPCProtocolError("Request cancellation was not negotiated")
+                target = str(msg.get("target_request_id", ""))
+                target_type = active_type if target == active_id else queued_requests.get(target)
+                if not target or target_type not in {"prompt", "command_stream"}:
+                    raise IPCProtocolError("No cancellable request matches target_request_id")
+                if target == active_id and active_task is not None:
+                    endpoint.feed_approval_response("n")
+                    if not active_task.cancelling():
+                        active_task.cancel()
+                else:
+                    cancelled_requests.add(target)
+                response = {"type": "ack", "status": "cancellation_requested"}
+            except IPCProtocolError as exc:
+                response = ipc_error_response(exc, response_type="protocol_error")
+            if msg.get("request_id"):
+                response["request_id"] = str(msg["request_id"])
+            await endpoint.send_json_async(response)
 
         async def _pump_reader() -> None:
             try:
@@ -584,7 +647,7 @@ class CLIPoller:
                     try:
                         msg = decode_message(line.rstrip(b"\n"))
                     except IPCProtocolError:
-                        _enqueue({"type": "_invalid_json"})
+                        await _enqueue({"type": "_invalid_json"})
                         continue
                     if msg.get("type") == "approval_response":
                         endpoint.feed_approval_response(
@@ -592,7 +655,10 @@ class CLIPoller:
                             str(msg.get("approval_id", "")),
                         )
                         continue
-                    _enqueue(msg)
+                    if msg.get("type") == "cancel":
+                        await _cancel_request(msg)
+                        continue
+                    await _enqueue(msg)
             except (ConnectionResetError, BrokenPipeError, OSError):
                 return
             except Exception:
@@ -600,28 +666,58 @@ class CLIPoller:
                 # a silent exit would block msg_queue.get() forever.
                 log.warning("IPC reader pump died unexpectedly", exc_info=True)
             finally:
+                disconnected.set()
                 endpoint.feed_approval_response("n")
-                _enqueue(None)
+                if (
+                    active_task is not None
+                    and not active_task.cancelling()
+                    and active_type in {"prompt", "command_stream"}
+                ):
+                    active_task.cancel()
+                await _enqueue(None)
 
         pump_task = asyncio.get_running_loop().create_task(_pump_reader())
         try:
             while not self._stop_event.is_set():
                 msg = await msg_queue.get()
-                if msg is None:
+                if msg is None or disconnected.is_set():
                     log.info("CLI client disconnected")
                     break
                 try:
                     if msg.get("type") == "_invalid_json":
-                        await endpoint.send_json_async({"type": "error", "message": "Invalid JSON"})
+                        await endpoint.send_json_async(
+                            ipc_error_response("Invalid JSON", error_type="protocol")
+                        )
                         continue
                     endpoint.set_request_id(msg.get("request_id"))
+                    active_id = str(msg.get("request_id", ""))
+                    active_type = str(msg.get("type", ""))
+                    queued_requests.pop(active_id, None)
                     msg["_client"] = endpoint
-                    response = await self._process_message_async(
-                        msg,
-                        agent_loop,
-                        conversation,
-                        session_id,
-                    )
+                    response: dict[str, Any] | None
+                    if active_id in cancelled_requests:
+                        cancelled_requests.discard(active_id)
+                        response = self._cancelled_response()
+                    elif active_type in {"prompt", "command_stream"}:
+                        active_task = asyncio.create_task(
+                            self._process_message_async(msg, agent_loop, conversation, session_id)
+                        )
+                        try:
+                            response = await active_task
+                        except asyncio.CancelledError:
+                            current = asyncio.current_task()
+                            if current is not None and current.cancelling():
+                                raise
+                            response = self._cancelled_response()
+                    else:
+                        # Capability admission owns connection-local ContextVars
+                        # (including permission mode); do not set them in a child
+                        # task whose context disappears before the next prompt.
+                        response = await self._process_message_async(
+                            msg, agent_loop, conversation, session_id
+                        )
+                    if disconnected.is_set():
+                        break
                     if response is None:
                         await endpoint.send_json_async({"type": "exit_ack"})
                         return
@@ -629,15 +725,32 @@ class CLIPoller:
                 except (ConnectionResetError, BrokenPipeError):
                     log.info("CLI client connection lost")
                     break
-                except Exception:
-                    log.warning("CLI handler error", exc_info=True)
-                    await endpoint.send_json_async({"type": "error", "message": "Internal error"})
+                except Exception as exc:
+                    log.warning(
+                        "CLI handler error",
+                        extra=_request_error_context(msg, agent_loop, exc),
+                        exc_info=True,
+                    )
+                    await endpoint.send_json_async(ipc_error_response(exc))
                 finally:
+                    active_task = None
+                    active_id = ""
+                    active_type = ""
                     endpoint.set_request_id("")
         finally:
             pump_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await pump_task
+
+    @staticmethod
+    def _cancelled_response() -> dict[str, Any]:
+        return {
+            "type": "result",
+            "status": "cancelled",
+            "termination": "user_cancelled",
+            "text": "",
+            "message": "Request cancelled; completed side effects remain in place",
+        }
 
     async def _process_message_async(
         self,
@@ -650,7 +763,7 @@ class CLIPoller:
         try:
             validate_client_message(msg)
         except IPCProtocolError as exc:
-            return {"type": "protocol_error", "message": str(exc)}
+            return ipc_error_response(exc, response_type="protocol_error")
 
         endpoint = msg.get("_client")
         if (
@@ -658,12 +771,14 @@ class CLIPoller:
             and not endpoint.session_model_config_applied
             and msg_type in {"prompt", "command", "command_stream", "resume"}
         ):
-            return {"type": "error", "message": "Initial session settings have not been admitted"}
+            return ipc_error_response(
+                "Initial session settings have not been admitted", error_type="not_ready"
+            )
 
         if msg_type == "prompt":
             text = msg.get("text", "").strip()
             if not text:
-                return {"type": "error", "message": "Empty prompt"}
+                return ipc_error_response("Empty prompt", error_type="validation")
             try:
                 return await self._run_prompt_streaming_async(
                     text,
@@ -671,8 +786,12 @@ class CLIPoller:
                     msg.get("_client"),
                 )
             except Exception as exc:
-                log.warning("CLI prompt execution error", exc_info=True)
-                return {"type": "error", "message": str(exc)}
+                log.warning(
+                    "CLI prompt execution error",
+                    extra=_request_error_context(msg, loop, exc),
+                    exc_info=True,
+                )
+                return ipc_error_response(exc)
 
         if msg_type == "command":
             if str(msg.get("cmd") or "").casefold() in {"/goal", "/compact", "/model"}:
@@ -689,81 +808,97 @@ class CLIPoller:
             try:
                 return await self._run_command_streaming_async(msg, loop, msg.get("_client"))
             except Exception as exc:
-                log.warning("CLI streaming command error", exc_info=True)
-                return {"type": "error", "message": str(exc)}
+                log.warning(
+                    "CLI streaming command error",
+                    extra=_request_error_context(msg, loop, exc),
+                    exc_info=True,
+                )
+                return ipc_error_response(exc)
 
         if msg_type == "resume":
             return await self._handle_resume_async(msg, loop, conversation)
 
         if msg_type == "client_capability":
-            try:
-                protocol_version, features = negotiate_protocol(
-                    msg.get("protocol_version"), msg.get("features")
-                )
-            except IPCProtocolError as exc:
-                return {"type": "protocol_error", "message": str(exc)}
-            endpoint = msg.get("_client")
-            is_tty = bool(msg.get("is_tty", True))
-            width_raw = msg.get("width", 120)
-            try:
-                width = int(width_raw)
-            except (TypeError, ValueError):
-                width = 120
-            if isinstance(endpoint, _AsyncClientEndpoint):
-                endpoint.set_capability(is_tty=is_tty, width=width)
-            if "session_model_config" not in features:
-                return {
-                    "type": "error",
-                    "message": "Upgrade and reconnect: client session settings unsupported",
-                }
-            try:
-                if (
-                    isinstance(endpoint, _AsyncClientEndpoint)
-                    and not endpoint.session_model_config_applied
-                    and "model_config" not in msg
-                ):
-                    raise IPCProtocolError("Initial client capability requires model_config")
-                if (
-                    isinstance(endpoint, _AsyncClientEndpoint)
-                    and endpoint.session_model_config_applied
-                    and "model_config" in msg
-                ):
-                    raise IPCProtocolError("Use /model for changes after initial admission")
-                workspace = self._session_workspace(loop, str(msg.get("cwd", "")))
-                applied = (
-                    await self._apply_session_selection(msg, loop, initial=True)
-                    if "model_config" in msg
-                    else {"model_config": loop._model_settings.model_dump()}
-                )
-            except Exception as exc:
-                return {"type": "error", "message": str(exc)}
-            if isinstance(endpoint, _AsyncClientEndpoint):
-                endpoint.session_model_config_applied = True
-            _adopt_skip_permissions(msg)
-            log.debug("client_capability: is_tty=%s width=%d", is_tty, width if width > 0 else 120)
-            return {
-                "type": "ack",
-                "status": "applied",
-                "model_config": applied["model_config"],
-                **workspace,
-                "protocol_version": protocol_version,
-                "features": list(features),
-            }
+            return await self._handle_client_capability_async(msg, loop)
 
         if msg_type == "exit":
             # Clean client exit — the REPL surface's ACTIVE -> COMPLETED
             # edge (docs/architecture/session-state-machine.md § owners).
             try:
                 await loop.amark_session_completed()
-            except Exception:
-                log.debug("amark_session_completed on exit failed", exc_info=True)
+            except Exception as exc:
+                log.warning(
+                    "CLI session completion failed",
+                    extra=_request_error_context(msg, loop, exc),
+                    exc_info=True,
+                )
+                return ipc_error_response(exc)
             return None
 
         if msg_type == "approval_response":
             log.debug("Dropping stale approval_response: %s", msg.get("decision"))
             return {"type": "ack"}
 
-        return {"type": "error", "message": f"Unknown message type: {msg_type}"}
+        return ipc_error_response(f"Unknown message type: {msg_type}", error_type="protocol")
+
+    async def _handle_client_capability_async(
+        self, msg: dict[str, Any], loop: Any
+    ) -> dict[str, Any]:
+        """Negotiate transport and admit initial session settings before execution."""
+        try:
+            protocol_version, features = negotiate_protocol(
+                msg.get("protocol_version"), msg.get("features")
+            )
+        except IPCProtocolError as exc:
+            return ipc_error_response(exc, response_type="protocol_error")
+        endpoint = msg.get("_client")
+        is_tty = bool(msg.get("is_tty", True))
+        width_raw = msg.get("width", 120)
+        try:
+            width = int(width_raw)
+        except (TypeError, ValueError):
+            width = 120
+        if isinstance(endpoint, _AsyncClientEndpoint):
+            endpoint.set_capability(is_tty=is_tty, width=width)
+        if "session_model_config" not in features:
+            return ipc_error_response(
+                "Upgrade and reconnect: client session settings unsupported",
+                error_type="protocol",
+            )
+        try:
+            if (
+                isinstance(endpoint, _AsyncClientEndpoint)
+                and not endpoint.session_model_config_applied
+                and "model_config" not in msg
+            ):
+                raise IPCProtocolError("Initial client capability requires model_config")
+            if (
+                isinstance(endpoint, _AsyncClientEndpoint)
+                and endpoint.session_model_config_applied
+                and "model_config" in msg
+            ):
+                raise IPCProtocolError("Use /model for changes after initial admission")
+            workspace = self._session_workspace(loop, str(msg.get("cwd", "")))
+            applied = (
+                await self._apply_session_selection(msg, loop, initial=True)
+                if "model_config" in msg
+                else {"model_config": loop._model_settings.model_dump()}
+            )
+        except Exception as exc:
+            return ipc_error_response(exc)
+        if isinstance(endpoint, _AsyncClientEndpoint):
+            endpoint.session_model_config_applied = True
+            endpoint.features = features
+        _adopt_skip_permissions(msg)
+        log.debug("client_capability: is_tty=%s width=%d", is_tty, width if width > 0 else 120)
+        return {
+            "type": "ack",
+            "status": "applied",
+            "model_config": applied["model_config"],
+            **workspace,
+            "protocol_version": protocol_version,
+            "features": list(features),
+        }
 
     async def _run_command_streaming_async(
         self,
@@ -911,6 +1046,7 @@ class CLIPoller:
                 if old_op_quiet is not None:
                     loop._op_logger._quiet = old_quiet
 
+        failed = False
         try:
             lane_queue = self._services.lane_queue
             if lane_queue is not None:
@@ -921,12 +1057,28 @@ class CLIPoller:
                     response = await _run_admitted()
             else:
                 response = await _run_admitted()
-            if client is not None:
-                await client.drain_pending_sends()
+        except BaseException:
+            failed = True
+            raise
         finally:
-            if writer:
-                reset_thread_console()
-                _ipc_writer_local.writer = None
+            try:
+                if client is not None:
+                    try:
+                        await asyncio.wait_for(client.drain_pending_sends(), timeout=5.0)
+                    except Exception as exc:
+                        if not failed:
+                            raise
+                        log.warning(
+                            "IPC stream cleanup failed after request failure",
+                            extra=_request_error_context(
+                                {"request_id": client._request_id, "cmd": control_name}, loop, exc
+                            ),
+                            exc_info=True,
+                        )
+            finally:
+                if writer:
+                    reset_thread_console()
+                    _ipc_writer_local.writer = None
         return response
 
     def _build_prompt_result(self, loop: Any, result: Any) -> dict[str, Any]:
@@ -951,9 +1103,18 @@ class CLIPoller:
                     )
         model = getattr(loop, "model", "unknown")
         summary = getattr(result, "summary", "") if result else ""
+        from core.agent.loop.models import is_failure_termination
+        from core.observability.redaction import redact_and_bound_text
+
+        termination = str(result.termination_reason) if result else "unknown"
+        error = redact_and_bound_text(getattr(result, "error", "") or "", 2048) if result else ""
 
         return {
             "type": "result",
+            "status": "error"
+            if error or is_failure_termination(termination)
+            else ("cancelled" if termination == "user_cancelled" else "ok"),
+            "error": error,
             "text": result.text if result else "",
             "rounds": result.rounds if result else 0,
             "tool_calls": tool_calls,
@@ -1028,9 +1189,17 @@ class CLIPoller:
         """
         cmd = msg.get("cmd", "")
         args = msg.get("args", "")
-        from core.slash_routing import RunLocation, lookup
+        from core.slash_routing import DAEMON_LOGIN_SUBCOMMANDS, RunLocation, lookup
 
         spec = lookup(str(cmd).lower(), self._services.command_registry)
+        if str(cmd).lower() == "/login":
+            subcommand = str(args).split(maxsplit=1)[:1]
+            if subcommand and subcommand[0].lower() not in DAEMON_LOGIN_SUBCOMMANDS:
+                return ipc_error_response(
+                    "This login action requires the local terminal",
+                    response_type="command_result",
+                    error_type="terminal_required",
+                )
         if spec is not None and spec.location is RunLocation.DAEMON_STREAM:
             return {
                 "type": "command_result",
@@ -1048,7 +1217,7 @@ class CLIPoller:
             try:
                 return await self._apply_session_selection(msg, loop)
             except Exception as exc:
-                return {"type": "command_result", "status": "error", "message": str(exc)}
+                return ipc_error_response(exc, response_type="command_result")
         buf: StringIO | None = None
         try:
             from core.ui.console import capture_output
@@ -1092,14 +1261,14 @@ class CLIPoller:
         except Exception as exc:
             if isinstance(exc, ValueError | OSError):
                 # Rejected input may echo user text (even a pasted key); log only the class.
-                log.info("CLI command rejected: %s (%s)", cmd, type(exc).__name__)
+                log.info("CLI command rejected", extra=_request_error_context(msg, loop, exc))
             else:
-                log.warning("CLI command error: %s %s", cmd, exc, exc_info=True)
+                log.warning(
+                    "CLI command error", extra=_request_error_context(msg, loop, exc), exc_info=True
+                )
             return {
-                "type": "command_result",
+                **ipc_error_response(exc, response_type="command_result"),
                 "cmd": cmd,
-                "status": "error",
-                "message": str(exc),
                 "output": buf.getvalue() if buf is not None else "",
             }
 
@@ -1125,13 +1294,21 @@ class CLIPoller:
                 if sid:
                     state = await asyncio.to_thread(cp.load, sid)
             if state is None:
-                return {"type": "resume_error", "message": "No resumable session found"}
+                return ipc_error_response(
+                    "No resumable session found",
+                    response_type="resume_error",
+                    error_type="not_found",
+                )
 
             # ``--continue`` chooses the newest candidate before waiting for
             # its Lane.  Reloading happens under that Lane, so refuse a
             # candidate that became terminal while admission was queued.
             if msg.get("_require_resumable") and state.status not in ("active", "paused"):
-                return {"type": "resume_error", "message": "No resumable session found"}
+                return ipc_error_response(
+                    "No resumable session found",
+                    response_type="resume_error",
+                    error_type="not_found",
+                )
 
             from core.agent.loop._model_switching import apply_session_model_config
 
@@ -1175,8 +1352,10 @@ class CLIPoller:
                 "cognitive_state": loop.cognitive_state.to_snapshot(),
             }
         except Exception as exc:
-            log.warning("Session resume failed", exc_info=True)
-            return {"type": "resume_error", "message": str(exc)}
+            log.warning(
+                "Session resume failed", extra=_request_error_context(msg, loop, exc), exc_info=True
+            )
+            return ipc_error_response(exc, response_type="resume_error")
 
     async def _handle_resume_async(
         self,
@@ -1191,7 +1370,11 @@ class CLIPoller:
 
             sessions = await asyncio.to_thread(SessionCheckpoint().list_resumable)
             if not sessions:
-                return {"type": "resume_error", "message": "No resumable session found"}
+                return ipc_error_response(
+                    "No resumable session found",
+                    response_type="resume_error",
+                    error_type="not_found",
+                )
             resolved.pop("continue", None)
             resolved["session_id"] = sessions[0].session_id
             resolved["_require_resumable"] = True

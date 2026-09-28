@@ -1,4 +1,4 @@
-"""System management tool handlers: status, help, model, key, auth, login."""
+"""System management tool handlers: status, help, model and nonsecret login actions."""
 
 from __future__ import annotations
 
@@ -13,9 +13,7 @@ def _build_system_handlers(
     command_registry: Any = None,
 ) -> UniqueEntries[str, Any]:
     """Build system management tool handlers."""
-    from core.cli import _set_readiness
-    from core.cli.commands import cmd_key, show_help
-    from core.cli.onboarding import render_readiness
+    from core.cli.commands import show_help
     from core.wiring.startup import check_readiness
 
     def handle_show_help(**_kwargs: Any) -> dict[str, Any]:
@@ -36,12 +34,24 @@ def _build_system_handlers(
         owner = getattr(kwargs.get("_tool_context"), "agent_loop", None)
         model_config = owner._model_settings.model_dump() if owner is not None else None
         model = owner.model if owner is not None else settings.model
-        ant_ok = bool(settings.anthropic_api_key)
-        oai_ok = bool(settings.openai_api_key)
+        from core.llm.routing import model_available
+        from core.wiring.startup import has_available_llm_credential
+
+        ant_ok = has_available_llm_credential("anthropic")
+        oai_ok = has_available_llm_credential("openai")
+        selected_available = model_available(
+            model, source=owner._model_settings.source if owner is not None else None
+        )
         # Preserve explicit request policy (including audit overrides), but do
         # not infer dry-run from a native host's missing CLI bootstrap.
-        readiness = _get_readiness() or check_readiness()
-        mode = "dry_run" if readiness.force_dry_run else "full_llm"
+        readiness = _get_readiness()
+        if readiness is not None:
+            dry_run = readiness.force_dry_run
+        elif owner is not None:
+            dry_run = not selected_available
+        else:
+            dry_run = check_readiness().force_dry_run
+        mode = "dry_run" if dry_run else "full_llm"
 
         console.print()
         console.print(f"  [header]GEODE v{geode_version}[/header]")
@@ -49,8 +59,11 @@ def _build_system_handlers(
         console.print(f"  Ensemble: [bold]{settings.ensemble_mode}[/bold]")
         ant_status = "[success]configured[/success]" if ant_ok else "[red]not set[/red]"
         oai_status = "[success]configured[/success]" if oai_ok else "[red]not set[/red]"
-        console.print(f"  Anthropic API: {ant_status}")
-        console.print(f"  OpenAI API: {oai_status}")
+        console.print(f"  Anthropic default route: {ant_status}")
+        console.print(f"  OpenAI default route: {oai_status}")
+        console.print(
+            f"  Selected model route: {'available' if selected_available else 'unavailable'}"
+        )
         console.print(f"  Mode: [bold]{mode}[/bold]")
 
         # MCP status
@@ -77,6 +90,7 @@ def _build_system_handlers(
             "action": "status",
             "version": geode_version,
             "model": model,
+            "model_available": selected_available,
             "scope": "session" if owner is not None else "defaults",
             "model_config": model_config,
             "ensemble": settings.ensemble_mode,
@@ -146,52 +160,15 @@ def _build_system_handlers(
         except (RuntimeError, ValueError) as exc:
             return tool_error(str(exc), error_type="validation")
 
-    def handle_set_api_key(**kwargs: Any) -> dict[str, Any]:
-        from core.config import settings
-
-        key_value = kwargs.get("key_value", "")
-        changed = cmd_key(key_value)
-        if changed:
-            new_readiness = check_readiness()
-            _set_readiness(new_readiness)
-            render_readiness(new_readiness)
-        return {
-            "status": "ok",
-            "action": "key",
-            "changed": changed,
-            "anthropic_configured": bool(settings.anthropic_api_key),
-            "openai_configured": bool(settings.openai_api_key),
-        }
-
-    def handle_manage_auth(**kwargs: Any) -> dict[str, Any]:
-        """Deprecated — redirects to ``manage_login``.
-
-        PR #C (2026-05-17) removed the standalone ``/auth`` slash
-        command; this LLM tool entry stays as a backwards-compat
-        adapter so existing prompts that still call ``manage_auth``
-        keep working. The body forwards ``sub_action`` to
-        ``handle_manage_login`` as the ``subcommand`` argument.
-        """
-        sub_action = (kwargs.get("sub_action") or "").strip().lower()
-        # Map legacy /auth subactions to /login equivalents
-        legacy_to_login = {"": "status", "add": "add", "remove": "remove", "set": "source"}
-        first_token = sub_action.split(None, 1)[0] if sub_action else ""
-        login_sub = legacy_to_login.get(first_token, "status")
-        login_args = ""
-        if " " in sub_action:
-            login_args = sub_action.split(None, 1)[1]
-        return handle_manage_login(
-            subcommand=login_sub, args=login_args, _tool_context=kwargs.get("_tool_context")
-        )
-
     def handle_manage_login(**kwargs: Any) -> dict[str, Any]:
-        """Natural-language entry to /login (Plans + Profiles + OAuth + Routing)."""
+        """Expose credential-free status and admitted plan/source changes."""
         from core.cli.commands.login import (
             INTERACTIVE_LOGIN_SUBCOMMANDS,
             build_login_snapshot,
             run_login,
         )
-        from core.tools.base import tool_error
+        from core.slash_routing import DAEMON_LOGIN_SUBCOMMANDS
+        from core.tools.base import classify_tool_exception, tool_error
 
         sub = (kwargs.get("subcommand") or "status").strip().lower()
         args = (kwargs.get("args") or "").strip()
@@ -219,19 +196,21 @@ def _build_system_handlers(
                 }
             except (RuntimeError, ValueError) as exc:
                 return tool_error(str(exc), error_type="validation")
-        if sub in INTERACTIVE_LOGIN_SUBCOMMANDS:
+        if sub in INTERACTIVE_LOGIN_SUBCOMMANDS or sub in {"set-key", "setkey", "key"}:
             # Interactive attempts outlive this tool call's deadline and cannot be
             # cancelled from here; the user's terminal owns them.
             return tool_error(
-                f"/login {sub} needs the user's terminal or browser; "
-                f"ask the user to run `/login {sub}` there",
+                "Credential entry and sign-in require the user's terminal. "
+                "Ask the user to run `/login add` there; never request or pass a key in chat.",
                 error_type="validation",
             )
-        login_input = "" if sub in ("", "status", "list", "ls") else f"{sub} {args}".strip()
+        if sub not in DAEMON_LOGIN_SUBCOMMANDS:
+            return tool_error("Unsupported nonsecret login action", error_type="validation")
+        login_input = "" if sub in ("status", "list", "ls") else f"{sub} {args}".strip()
         try:
             run_login(login_input)
         except (ValueError, OSError) as exc:
-            return tool_error(str(exc), error_type="validation")
+            return classify_tool_exception(exc, "manage_login")
         return {
             "status": "ok",
             "action": "login",
@@ -250,8 +229,6 @@ def _build_system_handlers(
             ("show_help", handle_show_help),
             ("check_status", handle_check_status),
             ("switch_model", handle_switch_model),
-            ("set_api_key", handle_set_api_key),
-            ("manage_auth", handle_manage_auth),
             ("manage_login", handle_manage_login),
             ("doctor_slack", handle_doctor_slack),
         )

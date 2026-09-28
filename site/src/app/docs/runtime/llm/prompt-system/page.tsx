@@ -56,6 +56,14 @@ export default function Page() {
               <code>deep-researcher</code> 스킬로 읽습니다. 로컬 검증 성공은
               원격 CI 성공이나 배포 권한을 대신하지 않습니다.
             </p>
+            <p>
+              코드 수정 시에는 기존 소유자와 호출 경로를 먼저 확인하고 비동기 네이티브
+              실행, 명시적 동기 작업 경계, 구조화된 오류와 비밀정보 제거를 따릅니다.
+              취소 접수는 종료나 부작용 취소를 뜻하지 않으며, 필요한 상태 저장과
+              정리가 성공해야 완료로 보고합니다. 상세 개발 규약은 공유
+              <code>AGENTS.md</code>와 컨벤션 문서가 소유합니다. 프롬프트는 이
+              행동을 안내하며 실행 권한이나 저장 성공을 강제하는 장치는 아닙니다.
+            </p>
 
             <h2>드리프트 감지: 해시 핀</h2>
             <p>
@@ -265,6 +273,16 @@ export default function Page() {
               Detailed research procedures load through <code>deep-researcher</code>
               when needed. Local verification does not establish remote CI
               success or authorize publication.
+            </p>
+            <p>
+              For code changes, the shared suffix directs inspection of existing
+              owners and callers, async-native execution, explicit synchronous
+              boundaries, structured errors, and secret redaction. Cancellation
+              acknowledgement does not establish termination or rollback;
+              completion requires the relevant persistence and cleanup to succeed.
+              Shared <code>AGENTS.md</code> and convention documents own detailed
+              contributor rules. Prompt guidance does not enforce permissions or
+              successful storage.
             </p>
 
             <h2>Drift detection: hash pins</h2>

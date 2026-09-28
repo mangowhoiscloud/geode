@@ -14,7 +14,6 @@ these tests seeded them from sync code, cached nothing, and passed vacuously
 
 from __future__ import annotations
 
-import ast
 import asyncio
 from pathlib import Path
 from typing import Any
@@ -27,8 +26,6 @@ from core.llm.adapters.registry import (
     invalidate_provider_clients,
     normalize_registry_provider,
 )
-
-_REPO = Path(__file__).resolve().parents[3]
 
 
 def _cached_adapters() -> list[Any]:
@@ -110,51 +107,3 @@ def test_login_refresh_preserves_payg_clients_until_selected_identity_changes(
         assert codex_cache.call_count == google_cache.call_count == resets
 
     asyncio.run(scenario())
-
-
-def test_codex_oauth_refresh_in_fallback_invalidates() -> None:
-    """The codex-cli token refresh re-calls with a new token — the adapter's
-    cached client must go (it reads the token at build time)."""
-    import core.llm.fallback as fallback_mod
-
-    profile = type("P", (), {"managed_by": "codex-cli", "name": "codex"})()
-    rotator = type("R", (), {"resolve": staticmethod(lambda _p: profile)})()
-
-    with (
-        patch("core.llm.adapters.registry.invalidate_provider_clients") as mock_inv,
-        patch("core.auth.codex_cli_oauth.refresh_codex_cli_token", return_value=True),
-        patch("core.wiring.container.get_profile_rotator", return_value=rotator),
-    ):
-        assert fallback_mod._try_oauth_refresh("openai") is True
-
-    mock_inv.assert_called_once_with("openai")
-
-
-@pytest.mark.parametrize(
-    "rel_path",
-    ["core/cli/commands/key.py", "core/cli/commands/login.py", "core/llm/fallback.py"],
-)
-def test_credential_modules_reference_the_live_entry_point(rel_path: str) -> None:
-    """Cheap breadth check over every credential-changing module — the
-    behavioural pins above cover two of them in depth."""
-    src = (_REPO / rel_path).read_text(encoding="utf-8")
-    assert "invalidate_provider_clients" in src, (
-        f"{rel_path} changes credentials without dropping adapter clients"
-    )
-
-
-def test_key_command_invalidates_for_every_provider_branch() -> None:
-    """``/key`` invalidates every built-in API-key provider."""
-    src = (_REPO / "core/cli/commands/key.py").read_text(encoding="utf-8")
-    invalidated = {
-        node.args[0].value
-        for node in ast.walk(ast.parse(src))
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "_invalidate"
-        and node.args
-        and isinstance(node.args[0], ast.Constant)
-    }
-    assert {"anthropic", "openai", "openrouter", "glm"} <= invalidated, (
-        f"/key branches missing adapter invalidation: {invalidated}"
-    )

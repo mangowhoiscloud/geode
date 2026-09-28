@@ -23,6 +23,18 @@ from core.observability.hook_persistence import HookPersistenceSink
 from pydantic import SecretStr
 
 
+@pytest.fixture(autouse=True)
+def _isolated_auth(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from core.auth.profiles import ProfileStore
+    from core.llm.strategies import plan_registry
+    from core.wiring import container
+
+    monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
+    monkeypatch.setattr(container, "_profile_store", ProfileStore())
+    monkeypatch.setattr(plan_registry, "_plan_registry", plan_registry.PlanRegistry())
+    monkeypatch.setattr(settings, "forced_login_method", {})
+
+
 @pytest.mark.parametrize("provider", ["typesafe", "openrouter"])
 @pytest.mark.parametrize(
     "outcome",
@@ -41,7 +53,14 @@ def test_round_then_terminal_dispatch_once_with_native_usage_and_no_synthetic_be
     monkeypatch.setattr(settings, "judgment_engine", "jev")
     monkeypatch.setattr(settings, "jev_provider", provider)
     monkeypatch.setattr(settings, "typesafe_api_key", SecretStr("test-secret"))
-    monkeypatch.setattr(settings, "openrouter_api_key", "test-secret")
+    monkeypatch.setattr(settings, "openrouter_api_key", "")
+    if provider == "openrouter":
+        from core.auth.auth_toml import auth_file_transaction, save_api_key
+
+        plan = save_api_key("test-secret", provider="openrouter")
+        with auth_file_transaction() as (plans, _profiles):
+            plans.get(plan.id).base_url = "https://jev.example.invalid/v1"
+            plans.set_routing(typesafe.OPENROUTER_JEV_MODEL, [plan.id])
     monkeypatch.setenv("GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR", "1")
     tracker = token_tracker.TokenTracker()
     monkeypatch.setattr(token_tracker, "get_tracker", lambda: tracker)
@@ -80,6 +99,9 @@ def test_round_then_terminal_dispatch_once_with_native_usage_and_no_synthetic_be
     requests: list[dict[str, Any]] = []
 
     def transport(request: httpx.Request) -> httpx.Response:
+        assert request.headers["authorization"] == "Bearer test-secret"
+        if provider == "openrouter":
+            assert str(request.url) == "https://jev.example.invalid/v1/systemone"
         payload = json.loads(request.content)
         requests.append(payload)
         question = next(iter(payload["questions"]))
@@ -121,7 +143,9 @@ def test_round_then_terminal_dispatch_once_with_native_usage_and_no_synthetic_be
             monkeypatch.setattr(
                 typesafe,
                 "SystemOneAdapter",
-                lambda provider, key: original_adapter(provider, key, client=client),
+                lambda provider, key, base_url=None: original_adapter(
+                    provider, key, base_url, client=client
+                ),
             )
             loop.cognitive_state.record_round(action="read", observation="value observed")
             await loop._maybe_reflect([{"tool_use_id": "read-1", "content": "Observed value: 7"}])
@@ -284,7 +308,9 @@ def test_jev_reflection_snapshot_limit_does_not_discard_retained_correction(monk
             monkeypatch.setattr(
                 typesafe,
                 "SystemOneAdapter",
-                lambda provider, key: original_adapter(provider, key, client=client),
+                lambda provider, key, base_url=None: original_adapter(
+                    provider, key, base_url, client=client
+                ),
             )
             await reflect_async(
                 state,

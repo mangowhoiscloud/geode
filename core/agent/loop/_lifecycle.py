@@ -181,6 +181,16 @@ def restore_loop_state(loop: AgenticLoop, state: Any) -> None:
     from core.observability.session_metrics import SessionMetrics
 
     timeline = getattr(loop, "_timeline", None)
+    ledger = getattr(loop, "_evidence_ledger", None)
+    if ledger is not None and ledger.session_id != state.session_id:
+        from core.agent.evidence_ledger import EvidenceLedger
+
+        loop._evidence_ledger = EvidenceLedger.for_session(
+            state.session_id, turn_id_provider=lambda: loop._turn_id
+        )
+        attach_ledger = getattr(loop.executor, "attach_evidence_ledger", None)
+        if callable(attach_ledger):
+            attach_ledger(loop._evidence_ledger)
     loop._session_id = state.session_id
     if getattr(getattr(loop, "_session_metrics", None), "session_id", "") != state.session_id:
         loop._session_metrics = SessionMetrics(
@@ -292,14 +302,10 @@ async def _emit_public_session_end(loop: AgenticLoop, *, reason: str) -> None:
 def _mark_session_status(loop: AgenticLoop, *, reason: str) -> bool:
     if loop._checkpoint is None or not loop._session_id:
         return False
-    try:
-        transition = getattr(loop._checkpoint, f"mark_{reason}")
-        transitioned = bool(transition(loop._session_id))
-        current = loop._checkpoint.current_status(loop._session_id)
-        return transitioned and current is not None and str(current) == reason
-    except Exception:
-        log.debug("Checkpoint mark_%s failed", reason, exc_info=True)
-        return False
+    transition = getattr(loop._checkpoint, f"mark_{reason}")
+    transitioned = bool(transition(loop._session_id))
+    current = loop._checkpoint.current_status(loop._session_id)
+    return transitioned and current is not None and str(current) == reason
 
 
 def _record_terminal_timeline(loop: AgenticLoop, *, status: str) -> None:

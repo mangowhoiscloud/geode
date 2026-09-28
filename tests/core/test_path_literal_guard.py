@@ -27,8 +27,6 @@ _FILE_ALLOWLIST: frozenset[str] = frozenset(
     {
         # The single source of truth — every other module reads from here.
         "core/paths.py",
-        # Legacy migration detection markers (S4 from PR #1098 audit).
-        "core/auth/oauth_login.py",  # LEGACY_AUTH_STORE_PATH
         # Project init bootstrap — `geode init` creates the full `.geode/`
         # tree on first run. Some of these subdirs (journal/transcripts,
         # vault/profile, etc.) have no SoT constants because nothing else

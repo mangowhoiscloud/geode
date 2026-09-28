@@ -252,14 +252,15 @@ class OpenAIPaygAdapter:
     def detect_credential(self) -> CredentialDetection | None:
         from core.config import OPENAI_PRIMARY
 
-        api_key, _, source_path = self._credential()
-        if not api_key:
+        return self.detect_model_credential(OPENAI_PRIMARY)
+
+    def detect_model_credential(self, model: str) -> CredentialDetection | None:
+        from core.config.env_io import is_placeholder
+
+        api_key, _, source_path = self._credential(model)
+        if not api_key or is_placeholder(api_key):
             return None
-        return CredentialDetection(
-            model=OPENAI_PRIMARY,
-            provider=self.provider,
-            source_path=source_path,
-        )
+        return CredentialDetection(model=model, provider=self.provider, source_path=source_path)
 
 
 __all__ = ["OpenAIPaygAdapter"]

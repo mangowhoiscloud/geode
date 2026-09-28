@@ -146,7 +146,7 @@ class TestErrorRecoveryStrategy:
 
     def test_write_tools_excluded(self, strategy: ErrorRecoveryStrategy) -> None:
         """WRITE tools (memory_save, note_save, etc.) are not eligible."""
-        for tool in ("memory_save", "note_save", "set_api_key", "manage_auth"):
+        for tool in ("memory_save", "note_save", "manage_login"):
             assert not strategy.is_recoverable(tool)
             result = _run_recovery(strategy, tool, {}, failure_count=2)
             assert result.recovered is False
@@ -159,8 +159,7 @@ class TestErrorRecoveryStrategy:
         assert "computer_use" in _EXCLUDED_TOOLS
         assert "memory_save" in _EXCLUDED_TOOLS
         assert "note_save" in _EXCLUDED_TOOLS
-        assert "set_api_key" in _EXCLUDED_TOOLS
-        assert "manage_auth" in _EXCLUDED_TOOLS
+        assert "manage_login" in _EXCLUDED_TOOLS
         # Safe tools should NOT be excluded
         assert "check_status" not in _EXCLUDED_TOOLS
 

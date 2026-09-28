@@ -115,8 +115,16 @@ def _render_ipc_response(response: dict[str, Any], *, streamed: bool = False) ->
     """
     rtype = response.get("type", "")
 
-    if rtype == "error":
-        console.print(f"\n  [error]{response.get('message', 'Unknown error')}[/error]\n")
+    from rich.markup import escape
+
+    from core.ipc_protocol import is_ipc_error
+
+    if is_ipc_error(response):
+        message = response.get("message") or response.get("error") or response.get("termination")
+        console.print(f"\n  [error]{escape(str(message or 'Unknown error'))}[/error]\n")
+        return
+    if response.get("status") == "cancelled" or response.get("termination") == "user_cancelled":
+        console.print("\n  [warning]Cancelled. Completed side effects remain in place.[/warning]\n")
         return
 
     if rtype == "result":

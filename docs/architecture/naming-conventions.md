@@ -342,6 +342,11 @@ identifiers.
 - Every setter/binder has an explicit reset or teardown path.
 - I/O-facing provider and runtime APIs are async-native. A sync wrapper belongs
   only at a real CLI, SDK, or compatibility boundary.
+- Async callers await the domain owner on its existing loop; do not bounce
+  through a sync wrapper that creates or blocks another loop. Offload genuinely
+  synchronous work with explicit ownership. Cancelling the waiter does not stop
+  its thread: dispose of late coroutine results, observe failures, and do not
+  report rollback or completion from cancellation acknowledgement alone.
 - A background task has an owner, cancellation path, and awaited shutdown.
 - Close files, clients, subprocesses, and database resources in `finally`, a
   context manager, or the owning lifecycle's shutdown method.
@@ -419,6 +424,19 @@ separate axes; never advance one as a proxy for another.
   credentials. Use the existing redaction helpers.
 - Do not silently convert an exception into an empty success. A recoverable
   result must encode its error type and recovery guidance explicitly.
+- Keep error categories with their actual decision owner: LLM retry categories
+  in `core/llm/errors.py` / `fallback.py`, tool failures in `core/tools/base.py`,
+  and transport envelopes in `core/ipc_protocol.py`. Preserve an existing
+  category across IPC; the CLI renders the backend outcome rather than parsing
+  message wording to infer success or retry. A transport acknowledgement is
+  not a completed operation. Lost replies leave application unconfirmed and
+  must not cause automatic replay of a mutation.
+- At an IPC failure, include the supplied `request_id`, `session_id`, command
+  name, error category and exception class in bounded log metadata. Do not log
+  command arguments, credentials or arbitrary request payloads. The shared
+  `core/observability/redaction.py` scrubber covers known key formats and
+  explicitly labelled credentials; it cannot identify every unlabelled opaque
+  value. Apply it before error text crosses a wire, display or durable sink.
 - Register cleanup when a resource is acquired, before publishing its owner.
   Failed construction releases only the resources it created; successful
   construction transfers that responsibility to the established lifetime owner.

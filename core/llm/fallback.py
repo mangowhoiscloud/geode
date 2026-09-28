@@ -181,7 +181,7 @@ def provider_retry_policy(
     base_delay_s: float | None = None,
     max_delay_s: float | None = None,
 ) -> RetryPolicy:
-    """Provider compatibility retry with one OAuth refresh."""
+    """Provider compatibility retry; an explicit auth refresher may run once."""
     from core.config import settings
 
     return RetryPolicy(
@@ -299,6 +299,9 @@ def _guard_stream_replay(
 
 def _is_auth_error(exc: Exception) -> bool:
     """Check if exception is an authentication/401 error from any provider."""
+    status = _status_code(exc)
+    if status is not None:
+        return status == 401
     anthropic_auth_error: type[Exception] | None = None
     try:
         from anthropic import AuthenticationError
@@ -312,72 +315,6 @@ def _is_auth_error(exc: Exception) -> bool:
         if type(link).__name__ == "AuthenticationError" or "401" in str(link)[:50]:
             return True
     return False
-
-
-def _try_oauth_refresh(provider_label: str) -> bool:
-    """Attempt OAuth token refresh for managed profiles + reset clients.
-
-    Returns True if a token was refreshed and clients were reset.
-    """
-    try:
-        from core.wiring.container import get_profile_rotator
-
-        rotator = get_profile_rotator()
-        if not rotator:
-            return False
-
-        provider = "anthropic" if "LLM" in provider_label else "openai"
-        profile = rotator.resolve(provider)
-        if not profile or not profile.managed_by:
-            return False
-
-        # Only GEODE-managed Codex profiles have a refresh operation here.
-        if profile.managed_by == "codex-cli":
-            from core.auth.codex_cli_oauth import (
-                refresh_codex_cli_token,
-            )
-            from core.llm.adapters.registry import invalidate_provider_clients
-
-            if refresh_codex_cli_token(profile):
-                # Live path is the adapter cache (the providers/ sync client
-                # this used to reset was deleted 2026-07-29 as dead code).
-                invalidate_provider_clients("openai")
-                return True
-    except Exception as exc:
-        log.debug("OAuth refresh failed: %s", exc)
-    return False
-
-
-def _resolve_rotator_provider(provider_label: str) -> str:
-    """Map provider_label (e.g. 'LLM', 'OpenAI', 'GLM') to rotator provider name."""
-    label = provider_label.lower()
-    if label in ("llm", "anthropic"):
-        return "anthropic"
-    if label in ("openai",):
-        return "openai"
-    if label in ("glm", "zhipuai"):
-        return "glm"
-    return label
-
-
-def _notify_success(provider: str) -> None:
-    """Notify ProfileRotator of LLM call success (non-blocking)."""
-    try:
-        from core.llm.credentials import notify_llm_success
-
-        notify_llm_success(provider)
-    except Exception:
-        log.debug("Profile notify_success failed for %s", provider, exc_info=True)
-
-
-def _notify_failure(provider: str, exc: Exception) -> None:
-    """Notify ProfileRotator of LLM call failure (non-blocking)."""
-    try:
-        from core.llm.credentials import notify_llm_failure
-
-        notify_llm_failure(provider, exc)
-    except Exception:
-        log.debug("Profile notify_failure failed for %s", provider, exc_info=True)
 
 
 def _resolve_plan_for_billing_error(
@@ -527,6 +464,7 @@ def classify_retry_error(
     """Project provider exceptions onto the single retry classification alphabet."""
     from core.llm.errors import (
         BillingError,
+        StreamInterruptedError,
         classify_llm_error,
         is_billing_fatal,
         is_request_fatal,
@@ -537,6 +475,11 @@ def classify_retry_error(
         for link in exception_chain(exc)
     ):
         return "billing"
+    if any(isinstance(link, StreamInterruptedError) for link in exception_chain(exc)):
+        return "stream_interrupted"
+    classified, _severity, _hint = classify_llm_error(exc)
+    if classified in {"context_overflow", "invalid_response"}:
+        return classified
     if _is_auth_error(exc):
         return "auth"
     status = _status_code(exc)
@@ -552,13 +495,16 @@ def classify_retry_error(
         and any(marker in str(exc).lower() for marker in ("billing", "credit"))
     ):
         return "billing"
-    classified, _severity, _hint = classify_llm_error(exc)
+    # HTTP status survives even a connection/timeout SDK wrapper. Preserve
+    # local replay/response validation and structured billing/overflow above.
+    if status is not None and 400 <= status < 500 and status != 429:
+        return "bad_request"
+    if status == 429:
+        return "rate_limit"
     if classified != "unknown":
         return classified
     if is_connection_transient(exc):
         return "connection"
-    if status == 429:
-        return "rate_limit"
     if isinstance(status, int) and status >= 500:
         return "server"
     headers = _response_headers(exc)
@@ -650,17 +596,21 @@ async def run_with_retry_policy(
                         message=billing_message,
                         routing_sources=routing_sources,
                     ) from exc
-                if classification == "auth" and policy.refresh_auth_once and attempt_index == 0:
-                    refresh = refresh_auth or (lambda: _try_oauth_refresh(provider_label))
-                    if refresh():
-                        _guard_stream_replay(
-                            stream_progress,
-                            exc,
-                            provider_label=provider_label,
-                            model=current_model,
-                        )
-                        log.info("OAuth token refreshed for %s, retrying", provider_label)
-                        continue
+                if (
+                    classification == "auth"
+                    and policy.refresh_auth_once
+                    and attempt_index == 0
+                    and refresh_auth is not None
+                    and refresh_auth()
+                ):
+                    _guard_stream_replay(
+                        stream_progress,
+                        exc,
+                        provider_label=provider_label,
+                        model=current_model,
+                    )
+                    log.info("OAuth token refreshed for %s, retrying", provider_label)
+                    continue
 
                 action = policy.action_for(classification)
                 if action is RetryAction.TERMINAL:
@@ -800,13 +750,10 @@ async def retry_with_backoff_generic_async(
         compatibility_retryable_errors=retryable_errors,
         compatibility_bad_request_error=bad_request_error,
     )
-    provider = _resolve_rotator_provider(provider_label)
     if outcome.succeeded:
-        _notify_success(provider)
         return outcome.value
     if outcome.last_error is None:
         raise RuntimeError("All retries exhausted with no error recorded")
-    _notify_failure(provider, outcome.last_error)
     log.error(
         "All %s models and async retries exhausted. Last error: %s",
         provider_label,

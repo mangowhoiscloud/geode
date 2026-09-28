@@ -265,3 +265,44 @@ def resolve_routing(
     if explicit:
         raise RuntimeError(f"model {model!r} has no available account on its selected plan")
     return None
+
+
+def model_available(model_id: str, *, source: str | None = None) -> bool:
+    """Inspect the request's credential route without making a provider call.
+
+    Startup/CLI callers hydrate persisted accounts; managed caches follow their
+    credential owner. No provider call or billing switch is made. Availability
+    is not proof a key is accepted upstream or a model call will succeed.
+    """
+    try:
+        from core.config import _resolve_provider
+        from core.config.env_io import is_placeholder
+        from core.config.runtime_policy_sources import build_policy_source_bundle
+        from core.llm.adapters.base import (
+            CredentialDetectionCapable,
+            EnvironmentDiagnosticCapable,
+            ModelCredentialDetectionCapable,
+        )
+        from core.llm.adapters.registry import resolve_for
+        from core.llm.model_catalog import model_source_unavailable_reason
+
+        sources = build_policy_source_bundle().get("provider_routing")
+        provider = _resolve_provider(model_id)
+        selected = (
+            source
+            if source is not None
+            else infer_source(provider, model=model_id, sources=sources)
+        )
+        if model_source_unavailable_reason(model_id, provider=provider, source=selected):
+            return False
+        adapter = resolve_for(provider, selected)
+        if isinstance(adapter, ModelCredentialDetectionCapable):
+            return adapter.detect_model_credential(model_id) is not None
+        target = resolve_routing(model_id, provider=provider, source=selected, sources=sources)
+        if target is not None:
+            return not is_placeholder(target.profile.key)
+        if isinstance(adapter, CredentialDetectionCapable):
+            return adapter.detect_credential() is not None
+        return isinstance(adapter, EnvironmentDiagnosticCapable) and adapter.test_environment().ok
+    except Exception:
+        return False

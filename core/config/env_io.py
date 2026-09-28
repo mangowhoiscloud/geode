@@ -42,7 +42,7 @@ def is_placeholder(value: str) -> bool:
     """True if a credential value is a ``.env.example`` placeholder, not a real key.
 
     The one home for this rule (was duplicated in ``core.wiring.startup``).
-    Readiness (``_has_any_llm_key`` / ``_has_available_profile``), ``.env``
+    Credential route inspection, ``.env``
     auto-generation, and the environment profile seeder in ``build_auth`` all
     share it so a stale ``sk-ant-...`` is rejected uniformly. Empty string is
     NOT a placeholder (callers handle empty first).

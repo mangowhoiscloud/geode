@@ -199,7 +199,15 @@ class TestBreadcrumbFormatter:
     def test_empty_verdicts_emits_no_profiles_message(self) -> None:
         note = fmt_breadcrumb([], attempted_provider="openai")
         assert "no profiles registered" in note
-        assert "manage_login" in note
+        assert "/login add" in note
+        assert "never request or pass a key" in note
+
+    def test_missing_key_directs_secret_entry_to_terminal(self) -> None:
+        s = _store_with(AuthProfile("openai:empty", "openai", CredentialType.API_KEY, key=""))
+        note = fmt_breadcrumb(s.evaluate_eligibility("openai"), attempted_provider="openai")
+        assert "/login add" in note
+        assert "never request or pass a key" in note
+        assert "manage_login(subcommand='set-key'" not in note and "<key>" not in note
 
     def test_excludes_provider_mismatch_noise(self) -> None:
         # Only an anthropic profile present, but we asked for openai.

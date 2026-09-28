@@ -1,6 +1,6 @@
 """Managed credential cache for external credential owners.
 
-The Codex CLI reader uses a thread-safe, TTL-based cache with file mtime
+The Codex CLI reader uses a thread-safe, TTL-based cache with file snapshot
 invalidation. This module keeps that lifecycle independent from the provider.
 """
 
@@ -40,7 +40,7 @@ _DEFAULT_TTL_S = 900  # 15 min (OpenClaw EXTERNAL_CLI_SYNC_TTL_MS)
 
 
 class CredentialCache:
-    """Thread-safe credential cache with TTL and file mtime fingerprint.
+    """Thread-safe credential cache with TTL and a file identity fingerprint.
 
     Args:
         file_path: Path relative to $HOME for mtime tracking.
@@ -57,52 +57,52 @@ class CredentialCache:
         self._lock = threading.Lock()
         self._value: Any = None
         self._read_at: float = 0.0
-        self._mtime: float = 0.0
-        self._resolved_path: Path | None = None
+        self._snapshot: tuple[Path, int, int, int, int] | None = None
 
     def file_path(self) -> Path:
         return _credential_path(self._file_path)
 
-    def get_file_mtime(self) -> float:
-        """Get mtime of the tracked file (0.0 if not found)."""
+    def _fingerprint(self) -> tuple[Path, int, int, int, int] | None:
+        path = self.file_path()
         try:
-            return self.file_path().stat().st_mtime
+            stat = path.stat()
         except OSError:
-            return 0.0
+            return None
+        return path, stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns
 
-    def is_valid(self) -> bool:
-        """Check if cached value is still valid. Must be called under lock."""
-        if self._value is None:
-            return False
-        if (time.time() - self._read_at) >= self._ttl_s:
-            return False
-        if self._resolved_path != self.file_path():
-            return False
-        current_mtime = self.get_file_mtime()
-        return not (current_mtime > 0 and current_mtime != self._mtime)
-
-    def get_if_valid(self, *, force_refresh: bool = False) -> tuple[bool, Any]:
-        """Return (hit, value). If hit=True, value is the cached credential."""
+    def read(self, loader: Callable[[], Any], *, force_refresh: bool = False) -> Any:
+        """Serialize reads and invalidation; cache only an unchanged file snapshot."""
         with self._lock:
-            if not force_refresh and self.is_valid():
-                return True, self._value
-        return False, None
-
-    def update(self, value: Any, mtime: float) -> None:
-        """Store a new value in cache."""
-        with self._lock:
-            self._value = value
-            self._read_at = time.time()
-            self._mtime = mtime
-            self._resolved_path = self.file_path()
+            before = self._fingerprint()
+            if (
+                not force_refresh
+                and self._value is not None
+                and before is not None
+                and before == self._snapshot
+                and time.monotonic() - self._read_at < self._ttl_s
+            ):
+                return self._value
+            for _ in range(2):
+                if before is None:
+                    break
+                value = loader()
+                after = self._fingerprint()
+                if before == after:
+                    self._value = value
+                    self._snapshot = after
+                    self._read_at = time.monotonic()
+                    return value
+                before = after
+            self._value = None
+            self._snapshot = None
+            return None
 
     def invalidate(self) -> None:
-        """Force next read to bypass cache."""
+        """Force the next read to bypass cache, including an in-flight read."""
         with self._lock:
             self._value = None
             self._read_at = 0.0
-            self._mtime = 0.0
-            self._resolved_path = None
+            self._snapshot = None
 
 
 def refresh_managed_token(
@@ -120,15 +120,21 @@ def refresh_managed_token(
     Returns:
         True if token was updated, False otherwise.
     """
+    previous = (profile.key, profile.refresh_token, profile.expires_at)
     creds = read_fn(force_refresh=True)
     if not creds:
         log.warning("%s credentials unavailable for refresh", provider_name)
+        return False
+
+    if previous != (profile.key, profile.refresh_token, profile.expires_at):
+        log.debug("%s profile changed during refresh; discarding stale read", provider_name)
         return False
 
     new_token = creds["access_token"]
     if new_token != profile.key:
         profile.key = new_token
         profile.expires_at = creds.get("expires_at", 0.0)
+        profile.refresh_token = creds.get("refresh_token", "")
         log.info("%s OAuth token refreshed (managed)", provider_name)
         return True
 

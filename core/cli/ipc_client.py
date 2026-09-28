@@ -14,6 +14,8 @@ import logging
 import os
 import socket
 import sys
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -23,8 +25,10 @@ from core.ipc_protocol import (
     IPC_FEATURES,
     IPC_PROTOCOL_VERSION,
     MAX_IPC_MESSAGE_BYTES,
+    IPCProtocolError,
     decode_message,
     encode_message,
+    ipc_error_response,
     negotiate_protocol,
     new_request_id,
 )
@@ -181,8 +185,11 @@ class IPCClient:
         self.features: tuple[str, ...] = ()
         self.model_config: dict[str, Any] = {}
         self.last_error = ""
+        self._transport_error: dict[str, Any] | None = None
+        self._send_lock = threading.RLock()
+        self._active_request_id = ""
 
-    def connect(self) -> bool:
+    def connect(self, *, timeout_s: float = 5.0) -> bool:
         """Connect to serve. Returns True on success.
 
         Right after the session greeting is received, sends a
@@ -193,12 +200,17 @@ class IPCClient:
         thin CLI's stdout is not a terminal (heredoc, pipe, CI).
         """
         try:
+            deadline = time.monotonic() + timeout_s
             self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self._sock.settimeout(timeout_s)
+            self._buf = b""
+            self._transport_error = None
+            self.last_error = ""
             self._sock.connect(str(self._socket_path))
             # Read session greeting
-            msg = self._recv()
+            msg = self._recv(deadline=deadline)
             if not msg or msg.get("type") != "session":
-                raise ValueError("Invalid IPC session greeting")
+                raise ValueError(str((msg or {}).get("message", "Invalid IPC session greeting")))
             self.session_id = msg.get("session_id", "")
             self.protocol_version, self.features = negotiate_protocol(
                 msg.get("protocol_version"), msg.get("features")
@@ -214,7 +226,7 @@ class IPCClient:
             # one-shot reads (``send_command`` / ``request_resume``)
             # see their actual response, not the stale ack.
             capability_request_id = self._send_client_capability(include_model_config=True)
-            ack = self._recv_for(capability_request_id)
+            ack = self._recv_for(capability_request_id, deadline=deadline)
             if not ack or ack.get("type") != "ack" or ack.get("status") != "applied":
                 raise ValueError(
                     str((ack or {}).get("message", "Session settings were not applied"))
@@ -228,14 +240,11 @@ class IPCClient:
                 self.protocol_version, self.features = negotiate_protocol(
                     ack.get("protocol_version"), ack.get("features")
                 )
+            self._sock.settimeout(None)
             return True
         except (ConnectionRefusedError, OSError, ValueError) as exc:
-            self.last_error = str(exc)
-            log.warning("IPC connect failed: %s", exc)
-            if self._sock is not None:
-                with contextlib.suppress(OSError):
-                    self._sock.close()
-            self._sock = None
+            self._fail_transport(exc)
+            log.warning("IPC connect failed: %s", self.last_error)
             return False
 
     def _send_client_capability(self, *, include_model_config: bool = False) -> str:
@@ -302,15 +311,50 @@ class IPCClient:
             }
         )
 
-    def close(self) -> None:
-        """Disconnect from serve."""
-        if self._sock:
+    def close(self, *, timeout_s: float = 2.0) -> bool:
+        """Bound the exit handshake; return whether the server acknowledged clean exit."""
+        if not self._sock:
+            return False
+        if self._active_request_id:
+            self._disconnect()
+            return False
+        try:
+            deadline = time.monotonic() + timeout_s
+            self._sock.settimeout(timeout_s)
+            request_id = self._send({"type": "exit"})
+            response = self._recv_for(request_id, deadline=deadline)
+            if response is not None and response.get("type") == "exit_ack":
+                return True
+            self.last_error = str((response or {}).get("message", "Session exit unconfirmed"))
+            return False
+        finally:
+            self._disconnect()
+
+    def _disconnect(self) -> None:
+        sock, self._sock = self._sock, None
+        self._buf = b""
+        if sock is not None:
             with contextlib.suppress(OSError):
-                self._send({"type": "exit"})
-                self._recv()
+                sock.shutdown(socket.SHUT_RDWR)
             with contextlib.suppress(OSError):
-                self._sock.close()
-            self._sock = None
+                sock.close()
+
+    def _fail_transport(self, error: BaseException) -> dict[str, Any]:
+        response = ipc_error_response(error)
+        self.last_error = str(response["message"])
+        self._transport_error = response
+        self._disconnect()
+        return response
+
+    def cancel_current(self) -> bool:
+        """Request cancellation without racing the existing stream reader."""
+        with self._send_lock:
+            if not self._sock or not self._active_request_id:
+                return False
+            if "request_cancellation" not in self.features:
+                return False
+            self._send({"type": "cancel", "target_request_id": self._active_request_id})
+            return self.connected
 
     @property
     def connected(self) -> bool:
@@ -374,8 +418,44 @@ class IPCClient:
         # happens at connect-time, but users often resize the terminal between
         # runs; stale Rich widths make streamed panels/code blocks paint a
         # stair-step background at the old column count.
-        self._send_client_capability()
-        request_id = self._send(payload)
+        capability_id = self._send_client_capability()
+        ack = self._recv_for(capability_id)
+        if not ack or ack.get("type") != "ack" or ack.get("status") != "applied":
+            return ack or ipc_error_response("Terminal capability refresh was not applied")
+        request_id = new_request_id()
+        payload = {**payload, "request_id": request_id}
+        try:
+            with self._send_lock:
+                self._active_request_id = request_id
+                self._send(payload)
+            return self._read_streaming_result(
+                request_id,
+                on_stream=on_stream,
+                on_event=on_event,
+                on_approval_start=on_approval_start,
+                on_approval_end=on_approval_end,
+                on_approval_request=on_approval_request,
+            )
+        except KeyboardInterrupt:
+            # The legacy blocking CLI has no continuing reader after Ctrl+C.
+            # EOF cancels this connection's task; do not leave it running or
+            # claim a terminal outcome that this client has not observed.
+            self._disconnect()
+            raise
+        finally:
+            with self._send_lock:
+                self._active_request_id = ""
+
+    def _read_streaming_result(
+        self,
+        request_id: str,
+        *,
+        on_stream: Any,
+        on_event: Any,
+        on_approval_start: Any,
+        on_approval_end: Any,
+        on_approval_request: Any,
+    ) -> dict[str, Any]:
 
         while True:
             response = self._recv()
@@ -608,31 +688,48 @@ class IPCClient:
 
     def _send(self, data: dict[str, Any]) -> str:
         """Send line-delimited JSON."""
-        assert self._sock is not None
         request_id = str(data.setdefault("request_id", new_request_id()))
-        self._sock.sendall(encode_message(data))
+        try:
+            with self._send_lock:
+                if self._sock is None:
+                    return request_id
+                self._sock.sendall(encode_message(data))
+        except (OSError, IPCProtocolError) as exc:
+            self._fail_transport(exc)
         return request_id
 
-    def _recv(self) -> dict[str, Any] | None:
+    def _recv(self, *, deadline: float | None = None) -> dict[str, Any] | None:
         """Receive one line-delimited JSON message."""
-        assert self._sock is not None
-        while b"\n" not in self._buf:
-            try:
-                chunk = self._sock.recv(65536)
+        sock = self._sock
+        if sock is None:
+            return self._transport_error or ipc_error_response("Not connected")
+        try:
+            while b"\n" not in self._buf:
+                if deadline is not None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError("IPC response timed out")
+                    sock.settimeout(remaining)
+                chunk = sock.recv(65536)
                 if not chunk:
-                    return None
+                    raise ConnectionError("Connection lost; request outcome is unconfirmed")
                 self._buf += chunk
                 if b"\n" not in self._buf and len(self._buf) > MAX_IPC_MESSAGE_BYTES:
-                    raise ValueError("IPC response exceeds the protocol size limit")
-            except (ConnectionResetError, OSError):
-                return None
-        line, self._buf = self._buf.split(b"\n", 1)
-        return decode_message(line)
+                    raise IPCProtocolError("IPC response exceeds the protocol size limit")
+            line, self._buf = self._buf.split(b"\n", 1)
+            return decode_message(line)
+        except (OSError, IPCProtocolError) as exc:
+            return self._fail_transport(exc)
 
-    def _recv_for(self, request_id: str) -> dict[str, Any] | None:
+    def _recv_for(self, request_id: str, *, deadline: float | None = None) -> dict[str, Any] | None:
         """Receive the matching response, accepting legacy uncorrelated peers."""
         while True:
-            response = self._recv()
+            if deadline is not None and self._sock is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return self._fail_transport(TimeoutError("IPC response timed out"))
+                self._sock.settimeout(remaining)
+            response = self._recv(deadline=deadline) if deadline is not None else self._recv()
             if response is None:
                 return None
             response_request_id = response.get("request_id")

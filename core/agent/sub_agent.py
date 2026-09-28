@@ -101,8 +101,6 @@ def get_subagent_context() -> tuple[bool, str]:
 # Compatibility denials for unbound and plan-external sub-agent tools. Native
 # plan-owned tools derive the same boundary from ``SafetyPolicy.allow_subagents``.
 SUBAGENT_DENIED_TOOLS: set[str] = {
-    "set_api_key",  # credential changes — parent only
-    "manage_auth",  # auth profile management — parent only
     "manage_login",  # plans + credentials + routing — parent only
     "profile_update",  # user profile changes — parent only
     *PERSONAL_DATA_TOOLS,  # personal Workspace data — parent approval only

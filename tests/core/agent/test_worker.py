@@ -476,8 +476,14 @@ class TestWorkerSubprocess:
 
 
 @pytest.mark.parametrize("signal_phase", ["turn", "session_close"])
+@pytest.mark.parametrize("persistence_fails", [False, True])
+@pytest.mark.parametrize("hook_close_fails", [False, True])
 def test_sigterm_cancels_turn_closes_error_session_and_flushes_hooks(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, signal_phase: str
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    signal_phase: str,
+    persistence_fails: bool,
+    hook_close_fails: bool,
 ) -> None:
     import asyncio
     import io
@@ -506,13 +512,21 @@ def test_sigterm_cancels_turn_closes_error_session_and_flushes_hooks(
 
     async def close_session() -> None:
         lifecycle.append("session_error")
+        if persistence_fails:
+            raise OSError("checkpoint unavailable")
 
     loop = _worker_loop_double()
     loop.arun = run_until_signal
     loop.amark_session_error = AsyncMock(side_effect=close_session)
     loop.amark_session_completed = AsyncMock(side_effect=close_completed)
+
+    def close_hooks() -> None:
+        lifecycle.append("hooks_closed")
+        if hook_close_fails:
+            raise OSError("hook sink flush failed")
+
     hooks = MagicMock()
-    hooks.close.side_effect = lambda: lifecycle.append("hooks_closed")
+    hooks.close.side_effect = close_hooks
     stdout = io.StringIO()
     monkeypatch.setattr(sys, "stdin", io.StringIO('{"task_id":"cancel-worker"}\n'))
     monkeypatch.setattr(sys, "stdout", stdout)
@@ -533,9 +547,47 @@ def test_sigterm_cancels_turn_closes_error_session_and_flushes_hooks(
     cancelled_phase = "turn_cancelled" if signal_phase == "turn" else "close_cancelled"
     assert lifecycle == [cancelled_phase, "session_error", "hooks_closed"]
     loop.amark_session_error.assert_awaited_once()
+    hooks.close.assert_called_once()
     assert loop.amark_session_completed.await_count == (signal_phase == "session_close")
     assert signal.getsignal(signal.SIGTERM) is previous_sigterm
     assert json.loads((tmp_path / "cancel-worker.result.json").read_text()) == result
+
+
+def test_successful_turn_with_hook_close_failure_reports_worker_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from unittest.mock import AsyncMock, patch
+
+    from core.agent.worker import main
+
+    loop = _worker_loop_double()
+    loop.arun = AsyncMock(
+        return_value=AgenticResult(text="completed work", termination_reason="natural")
+    )
+    loop.amark_session_completed = AsyncMock()
+    loop.amark_session_error = AsyncMock()
+    hooks = MagicMock()
+    hooks.close.side_effect = OSError("hook sink flush failed")
+    stdout = StringIO()
+    monkeypatch.setattr(sys, "stdin", StringIO('{"task_id":"hook-close-failure"}\n'))
+    monkeypatch.setattr(sys, "stdout", stdout)
+    monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
+    with (
+        patch("core.agent.tool_executor.ToolExecutor"),
+        patch("core.agent.loop.AgenticLoop", return_value=loop),
+        patch("core.wiring.bootstrap.build_worker_hooks", return_value=hooks),
+        patch("core.observability.logging_config.configure_logging"),
+    ):
+        main(_empty_tool_plan_builder)
+
+    result = json.loads(stdout.getvalue())
+    assert result["task_id"] == "hook-close-failure"
+    assert result["success"] is False
+    assert result["error"] == "Worker crash: OSError: hook sink flush failed"
+    loop.arun.assert_awaited_once()
+    loop.amark_session_completed.assert_awaited_once()
+    hooks.close.assert_called_once()
+    assert json.loads((tmp_path / "hook-close-failure.result.json").read_text()) == result
 
 
 class TestResolveWorkerOutcome:

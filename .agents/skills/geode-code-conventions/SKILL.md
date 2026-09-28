@@ -84,6 +84,9 @@ Executable configuration remains authoritative:
 - Treat observed zero/false/empty values separately from missing `None`/`null`.
 - Keep direct output in CLIs and scripts; library modules use structured,
   redacted logging.
+- Prefer async-native runtime I/O and explicit ownership of offloaded work;
+  apply §§3.3 and 5 to cancellation, terminal persistence, IPC error propagation,
+  auth authority, and bounded diagnostic fields.
 - Mirror production package paths in tests and prove wiring pairs together.
 - Routine post-1.0 releases are PATCH; MINOR/MAJOR require operator approval.
 
