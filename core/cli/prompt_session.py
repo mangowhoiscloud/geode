@@ -67,6 +67,21 @@ def _invalidate_on_text_changed(_buffer: Any) -> None:
         log.debug("invalidate skipped: no running prompt application", exc_info=True)
 
 
+def _prompt_history_path() -> Path:
+    """``~/.geode/prompt_history`` (0600), adopting the pre-1.0.31 ``~/.geode_history`` once."""
+    import shutil
+
+    from core.paths import LEGACY_PROMPT_HISTORY_FILE, PROMPT_HISTORY_FILE
+
+    PROMPT_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if LEGACY_PROMPT_HISTORY_FILE.is_file() and not PROMPT_HISTORY_FILE.exists():
+        # ponytail: one-time adoption; drop this branch once 1.0.30 installs are gone.
+        shutil.move(LEGACY_PROMPT_HISTORY_FILE, PROMPT_HISTORY_FILE)
+    PROMPT_HISTORY_FILE.touch(mode=0o600, exist_ok=True)
+    PROMPT_HISTORY_FILE.chmod(0o600)
+    return PROMPT_HISTORY_FILE
+
+
 def _build_prompt_session(
     quota_thresholds: tuple[float, float] | None = None,
 ) -> Any:
@@ -86,12 +101,14 @@ def _build_prompt_session(
     from prompt_toolkit.history import FileHistory
     from prompt_toolkit.key_binding import KeyBindings
 
+    from core.observability.redaction import redact_secrets
     from core.ui import spinner_glyph
     from core.unicode_safety import replace_lone_surrogates
 
     class _SurrogateSafeFileHistory(FileHistory):
         def store_string(self, string: str) -> None:
-            super().store_string(replace_lone_surrogates(string))
+            # A pasted key must not outlive the prompt in plain text.
+            super().store_string(redact_secrets(replace_lone_surrogates(string)))
 
     kb = KeyBindings()
 
@@ -105,7 +122,7 @@ def _build_prompt_session(
         """Escape+Enter inserts a real newline for intentional multi-line."""
         event.current_buffer.insert_text("\n")
 
-    history_path = Path.home() / ".geode_history"
+    history_path = _prompt_history_path()
 
     # PR-γ1 — install + bind the subscription quota banner. Product shells
     # may supply thresholds explicitly; the kernel keeps neutral defaults.

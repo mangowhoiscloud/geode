@@ -99,13 +99,19 @@ for credentials, usage, and the scope of each judgment.
 
 | Location | Responsibility |
 |---|---|
-| `~/.geode/auth.toml` | GEODE-managed provider credentials and account metadata |
+| `~/.geode/auth.toml` | Provider credentials and account metadata saved by `geode setup` and `/login` (0600) |
 | `~/.geode/.env` | Optional environment credentials and integration secrets |
-| `~/.geode/config.toml` | User-wide behavior defaults |
-| `./.geode/config.toml` | Project behavior overrides |
+| `~/.geode/config.toml` | User-wide behavior defaults and the folders you trusted with `geode config trust` |
+| `~/.geode/extension-policy.json` | Grants for MCP servers, hooks, skills, and adapters that are not bundled |
+| `./.geode/config.toml` | Project behavior overrides; gitignored, and capability keys apply only in a trusted folder |
+| `./.env` | Project environment values, read only in a trusted folder; fills keys the global file lacks |
 | `~/.geode/` | Runtime state, sessions, diagnostics, and private artifacts |
 
-Project behavior overrides user defaults. Credential resolution also depends
+Project behavior overrides user defaults. A repository's `.env`, MCP servers,
+gateway config, and keys that widen capability (sandbox, computer use,
+webhooks, storage paths) apply only after `geode config trust` in that folder.
+[Configuration basics](https://mangowhoiscloud.github.io/geode/docs/config/basics/)
+has the full resolution order. Credential resolution also depends
 on the selected model, source, and account; it is not one flat settings ladder.
 Google Workspace OAuth has its own
 [account and keyring storage](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace/).
@@ -148,6 +154,8 @@ Remote computer use is disabled in Gateway sessions unless explicitly enabled.
 See [Gateway setup](docs/setup.md#slack-gateway).
 
 **MCP client.** Attach external tool servers through GEODE's MCP configuration.
+A server that is not bundled loads only with a grant in `~/.geode/extension-policy.json`,
+and servers defined by a project load only in a trusted folder.
 See the [MCP guide](https://mangowhoiscloud.github.io/geode/docs/runtime/tools/mcp/).
 
 **MCP server.** Configure an MCP client's stdio command as `geode-mcp`.

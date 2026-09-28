@@ -611,7 +611,7 @@ class TestReadinessProfileStatus:
         assert report.has_profile is False
         profile_cap = next(c for c in report.capabilities if c.name == "User Profile")
         assert profile_cap.available is False
-        assert "/profile" in profile_cap.reason
+        assert "geode init" in profile_cap.reason  # /profile does not exist
 
     def test_profile_load_exception_handled(self, tmp_path: Path):
         """If FileBasedUserProfile raises, profile shows as unavailable."""
@@ -680,3 +680,18 @@ class TestGeodeInitProfileSeeding:
 
         # Project profile should be untouched
         assert "local" in (project_profile / "profile.md").read_text()
+
+
+def test_credential_check_works_before_a_runtime_registers_adapters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # `geode setup`, `geode doctor`, the REPL welcome and serve's pre-runtime
+    # readiness all ask before any runtime exists. An empty adapter registry
+    # used to read as "no credential", so setup re-ran its wizard every time.
+    from core.config import settings
+    from core.llm.adapters import registry
+    from core.wiring.startup import has_available_llm_credential
+
+    monkeypatch.setattr(settings, "anthropic_api_key", "sk-ant-" + "x" * 40)
+    registry._reset_for_test()
+    assert has_available_llm_credential("anthropic")

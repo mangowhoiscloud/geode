@@ -162,6 +162,10 @@ def _isolate_state_root(
     monkeypatch.setattr(cp, "AUTORESEARCH_STATE_DIR", sandbox / "autoresearch")
     monkeypatch.setattr(cp, "AUTORESEARCH_HANDOFF_DIR", sandbox / "autoresearch" / "handoff")
     monkeypatch.setattr(cp, "STATE_SEED_GENERATION_DIR", sandbox / "seed_generation")
+    # Building a prompt session creates the history file and adopts the legacy
+    # one; neither may touch the developer's real home.
+    monkeypatch.setattr(cp, "PROMPT_HISTORY_FILE", sandbox / "prompt_history")
+    monkeypatch.setattr(cp, "LEGACY_PROMPT_HISTORY_FILE", sandbox / ".geode_history")
     monkeypatch.setattr(
         cp,
         "STATE_LATEST_POINTER_PATH",

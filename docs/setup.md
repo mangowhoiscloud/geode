@@ -49,6 +49,9 @@ geode (thin CLI) ── Unix socket IPC ──→ geode serve (unified daemon)
 
 ### 1. API Keys
 
+`geode setup` and `/login` store API keys in `~/.geode/auth.toml`. `~/.geode/.env`
+is optional: it holds variables you set by hand, such as the Slack tokens below.
+
 Edit `~/.geode/.env`, preserving existing entries and adding only the credentials
 you need. If creating the file, restrict it to owner read/write (`0600`) before
 adding secrets. The following is example file content, not a replacement
@@ -73,7 +76,9 @@ Check that the file remains owner-only after editing:
 chmod 600 ~/.geode/.env
 ```
 
-**시크릿(`.env`) 우선순위**: 수동 env export > 전역 `~/.geode/.env` > 프로젝트 `.env`. 전역이 권위를 갖는 시크릿 저장소이고, 프로젝트 `.env`는 전역에 없는 키만 채웁니다 (전역 키를 덮지 못함, Hermes 2026-06-15). 동작 설정(`config.toml`)은 방향이 반대로, 프로젝트가 전역을 덮습니다. 실효값은 `geode config explain <KEY>`로 확인하세요.
+For the order in which exported variables, `~/.geode/.env`, a project `.env` and
+`config.toml` apply, see
+[Configuration basics](https://mangowhoiscloud.github.io/geode/docs/config/basics/).
 
 ### 2. Project Setup
 
@@ -84,6 +89,9 @@ uv run geode init
 
 For manual secret configuration, use `.env.example` as a reference and merge
 only needed entries into an existing project `.env`; do not replace it.
+The project `.env` and the `.geode/config.toml` settings that widen what the
+agent may do apply only after you run `geode config trust` in the folder; see
+[project trust](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust).
 
 ### 3. Global CLI Install
 
@@ -184,26 +192,16 @@ geode → is_serve_running()? → No → start_serve_if_needed(30s) → connect 
 - Put both `SLACK_BOT_TOKEN=xoxb-...` and `SLACK_APP_TOKEN=xapp-...` in
   `~/.geode/.env`, and run `/invite @geode` in every bound channel
 
-### 2. Channel Binding (`.geode/config.toml`)
+### 2. Channel Binding (`config.toml`)
 
-Use `.geode/config.toml.example` as a reference. Merge the gateway settings below
-into `.geode/config.toml`, preserving unrelated sections and existing bindings.
-Update an existing `[gateway]` table rather than declaring it twice.
-
-```toml
-[gateway]
-enabled = true
-allow_computer_use = false  # remote desktop control stays fail-closed
-
-[gateway.bindings]
-
-[[gateway.bindings.rules]]
-channel = "slack"
-channel_id = "C0XXXXXXXXX"   # Slack channel → click name → bottom "Channel ID"
-auto_respond = true
-require_mention = true        # true: @mention only
-max_rounds = 5
-```
+Turn the gateway on with `[gateway] enabled = true` in `~/.geode/config.toml`,
+then add a `[[gateway.bindings.rules]]` entry for each Slack channel, in the same
+file or in a project `.geode/config.toml`. The rule format is in
+[Configure a binding](https://mangowhoiscloud.github.io/geode/docs/guides/binding/).
+Update an existing `[gateway]` table rather than declaring it twice. In Slack, the
+channel ID is at the bottom of the dialog that opens when you click the channel
+name. A project `[gateway]` table applies only in a
+[trusted folder](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust).
 
 ### 3. Verify
 
@@ -287,8 +285,9 @@ can resume after a daemon restart.
 
 ### Persistence
 
-- Jobs: `~/.geode/scheduler/jobs.json` (atomic write, fcntl lock)
-- Run logs: `~/.geode/scheduler/logs/{job_id}.jsonl` (auto-prune 2MB/2000 lines)
+- Jobs: project `.geode/scheduled_tasks.json` (atomic write, `scheduled_tasks.lock` lock file)
+- Run logs: project `.geode/scheduler_logs/{job_id}.jsonl` (auto-prune 2MB/2000 lines)
+- Legacy `~/.geode/scheduler/jobs.json` is read only when the project has no job file
 - Guardrail: `action=""` jobs rejected (no zombie no-ops)
 
 ---
@@ -314,14 +313,10 @@ can resume after a daemon restart.
 | `/compact` | | Compact context |
 | `/quit` | `/q` | Exit |
 
-**Model resolution** (precedence, highest first): CLI flag → manual env export
-(`GEODE_MODEL`) → project `./.geode/config.toml` `[llm] primary_model` → global
-`~/.geode/config.toml` → routing default (`claude-opus-4-8`). Each session uses
-**its own project's** model — the thin CLI resolves the model at your working
-directory and the daemon adopts it, so the displayed model matches the executed
-model. A leftover `GEODE_MODEL` in any `.env` from older releases overrides the
-config files; clear it if a `/model` switch seems "stuck". Current GEODE tools
-write model choices to `config.toml`, not `.env`.
+For the model resolution order and a `/model` switch that does not stick, see
+[Configuration basics](https://mangowhoiscloud.github.io/geode/docs/config/basics/);
+the default model is listed in
+[Configure providers](https://mangowhoiscloud.github.io/geode/docs/run/providers/).
 
 ---
 
@@ -342,10 +337,11 @@ geode serve [-p 3.0]                   # Headless daemon
 
 ## Configuration Reference
 
-Secrets belong in the user-global `~/.geode/.env`. Project `./.env` is an
-advanced fallback that only fills missing global secrets. Behavior belongs in
-`config.toml`; project `./.geode/config.toml` overrides
-`~/.geode/config.toml`.
+[Configuration basics](https://mangowhoiscloud.github.io/geode/docs/config/basics/)
+covers which file holds what and
+[when project files apply](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust);
+the full on-disk layout is in
+[storage-hierarchy.md](architecture/storage-hierarchy.md).
 
 Environment settings (declarations: [`core/config/_settings.py`](../core/config/_settings.py)):
 
@@ -356,7 +352,7 @@ Environment settings (declarations: [`core/config/_settings.py`](../core/config/
 | `OPENAI_API_KEY` | | GPT API key (OpenAI adapter) |
 | `OPENROUTER_API_KEY` | | OpenRouter credit-backed API key; select exact refs as `openrouter/<publisher>/<model>` |
 | `ZAI_API_KEY` | | ZhipuAI GLM key |
-| `GEODE_MODEL` | `claude-opus-4-8` | Manual session override only; persist model choices in `config.toml` |
+| `GEODE_MODEL` | [routing default](https://mangowhoiscloud.github.io/geode/docs/run/providers/) | Manual session override only; persist model choices in `config.toml` |
 | `GEODE_ENSEMBLE_MODE` | `single` | Manual session override only; prefer `config.toml` for durable behavior |
 | **Gateway** | | |
 | `GEODE_GATEWAY_ENABLED` | `false` | Manual session override; prefer `[gateway] enabled = true` in `config.toml` |

@@ -32,7 +32,13 @@ from typing import Any
 
 from dotenv import dotenv_values
 
-from core.config import _TOML_TO_SETTINGS, PROJECT_CONFIG_PATH, _flatten_toml
+from core.config import (
+    _TOML_ENV_ONLY_FIELDS,
+    _TOML_TO_SETTINGS,
+    PROJECT_CONFIG_PATH,
+    _flatten_toml,
+)
+from core.config.project_trust import PROJECT_DENIED_KEYS, TRUST_REQUIRED_KEYS, is_project_trusted
 from core.config.toml_edit import read_config_toml, resolve_config_toml_path
 from core.paths import GLOBAL_ENV_FILE
 
@@ -83,8 +89,26 @@ class FieldReport:
 _FIELD_TO_TOML: dict[str, str] = {v: k for k, v in _TOML_TO_SETTINGS.items()}
 
 
+_UNTRUSTED = " (ignored until `geode config trust`)"
+
+
 def _env_var_for(field_name: str) -> str:
+    """The variable pydantic reads: an uppercase alias (API keys) or ``GEODE_<FIELD>``."""
+    from core.config._settings import Settings
+
+    info = Settings.model_fields.get(field_name)
+    for choice in getattr(getattr(info, "validation_alias", None), "choices", ()):
+        if isinstance(choice, str) and choice.isupper():
+            return choice
     return f"GEODE_{field_name.upper()}"
+
+
+def _redact(value: Any) -> Any:
+    """Report whether a secret is set without revealing any of it."""
+    if value is None:
+        return None
+    raw = value.get_secret_value() if hasattr(value, "get_secret_value") else value
+    return "<set>" if raw else ""
 
 
 def explain_field(field_name: str) -> FieldReport:
@@ -93,6 +117,7 @@ def explain_field(field_name: str) -> FieldReport:
 
     env_var = _env_var_for(field_name)
     toml_key = _FIELD_TO_TOML.get(field_name)
+    trusted = is_project_trusted()
 
     candidates: list[LayerValue] = []
 
@@ -106,9 +131,11 @@ def explain_field(field_name: str) -> FieldReport:
     global_env = dotenv_values(GLOBAL_ENV_FILE) if GLOBAL_ENV_FILE.exists() else {}
     project_env = dotenv_values(PROJECT_ENV_FILE) if PROJECT_ENV_FILE.exists() else {}
     candidates.append(LayerValue("global .env", str(GLOBAL_ENV_FILE), global_env.get(env_var)))
-    candidates.append(
-        LayerValue("project .env", str(PROJECT_ENV_FILE.resolve()), project_env.get(env_var))
-    )
+    project_env_value = project_env.get(env_var)
+    project_env_source = str(PROJECT_ENV_FILE.resolve())
+    if project_env_value is not None and not trusted:
+        project_env_value, project_env_source = None, project_env_source + _UNTRUSTED
+    candidates.append(LayerValue("project .env", project_env_source, project_env_value))
 
     def _toml_value(path: Path) -> Any | None:
         if toml_key is None or not path.exists():
@@ -119,13 +146,17 @@ def explain_field(field_name: str) -> FieldReport:
             return None
         return flat.get(toml_key)
 
-    candidates.append(
-        LayerValue(
-            "project config.toml",
-            str(PROJECT_CONFIG_PATH.resolve()),
-            _toml_value(PROJECT_CONFIG_PATH),
-        )
-    )
+    project_value = _toml_value(PROJECT_CONFIG_PATH)
+    project_source = str(PROJECT_CONFIG_PATH.resolve())
+    if project_value is not None:
+        global_path = _global_toml_path()
+        if global_path.exists() and PROJECT_CONFIG_PATH.resolve() == global_path.resolve():
+            project_value, project_source = None, project_source + " (the global file)"
+        elif toml_key in PROJECT_DENIED_KEYS:
+            project_value, project_source = None, project_source + " (never read from a project)"
+        elif toml_key in TRUST_REQUIRED_KEYS and not trusted:
+            project_value, project_source = None, project_source + _UNTRUSTED
+    candidates.append(LayerValue("project config.toml", project_source, project_value))
     candidates.append(
         # H9 (C-4): GEODE_CONFIG_TOML redirects the global file for the main
         # loader too — report the path actually read.
@@ -150,11 +181,17 @@ def explain_field(field_name: str) -> FieldReport:
         else:
             entry.is_masked = True
 
+    effective = getattr(settings, field_name, None)
+    if field_name in _TOML_ENV_ONLY_FIELDS:
+        for entry in candidates:
+            entry.value = _redact(entry.value)
+        effective = _redact(effective)
+
     return FieldReport(
         field_name=field_name,
         env_var=env_var,
         toml_key=toml_key,
-        effective=getattr(settings, field_name, None),
+        effective=effective,
         layers=candidates,
     )
 

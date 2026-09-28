@@ -67,6 +67,65 @@ functional change.
 ### Changed
 
 - Refine the homepage and documentation reader without changing research content or routes: replace nested disclosure navigation with direct area selection and visible chapter headings, add keyboard-accessible mobile navigation dialogs with unframed header controls, and keep comparison limits, design background and evidence records directly readable.
+- Every config.toml writer (`/model`, `/login` credential source, `geode cost`,
+  self-improving settings, `geode config trust`, `geode init`) now writes
+  atomically with mode 0600, and section edits share one editor. It fills a
+  commented-out template key in place, keeps a symlinked config.toml linked, and
+  refuses an edit that would leave invalid TOML instead of making the loader
+  skip the whole file.
+- REPL input history moves from `~/.geode_history` into GEODE's home as
+  `~/.geode/prompt_history` (0600). The old file is adopted on first start, and
+  recognizable secrets are redacted before a line is saved.
+
+### Fixed
+
+- `/mcp add` edits only the entries of `.claude/mcp_servers.json` and writes the
+  file 0600. It used to rewrite the file from the merged catalog, copying
+  config.toml servers (with their env) into it, and in an untrusted folder it
+  dropped the file's existing entries.
+- `geode init` no longer writes a career template to `~/.geode/identity/`, which
+  nothing read. Layout migration v5 moves an existing
+  `~/.geode/identity/career.toml` to `~/.geode/user_profile/career.toml`, the
+  file the profile loader uses, unless that file already exists.
+- `geode init` now creates only the live project folders (`memory`, `rules`,
+  `skills`, `reports`). Its empty legacy `.geode/vault/` and `.geode/journal/`
+  subfolders won the backward-compatibility fallback, so vault artifacts and the
+  execution journal landed in the project instead of `~/.geode/` while the
+  global folders were still empty. Bootstrap also stops creating the unused
+  `snapshots/` folder.
+- `geode setup`, `geode doctor`, the REPL welcome and the startup readiness
+  check of `geode serve` see existing credentials again. Since 1.0.30 the check
+  goes through the LLM adapter registry, which those processes had not filled
+  yet, so every credential (for example a Codex CLI login in
+  `~/.codex/auth.json`) read as missing and setup showed its wizard.
+- Slash-command output relayed from `geode serve` is written as plain text when
+  the thin CLI's stdout is a pipe or file; ANSI color codes used to end up in
+  redirected output.
+- `geode init` creates the `~/.geode/.env` template with mode 0600, and the
+  template notes that a project `.env` applies only in a trusted folder.
+- The thin CLI shows a failed turn's diagnostic (for example a ChatGPT usage
+  limit with the next step) instead of the bare `model_action_required` code,
+  and the welcome screen points a missing user profile to `geode init` rather
+  than the nonexistent `/profile` command.
+
+### Security
+
+- Gate workspace-supplied configuration behind folder trust. Until
+  `geode config trust` records the folder in the global config.toml
+  (`[projects."<path>"] trust_level = "trusted"`, as Codex does),
+  GEODE ignores the project `.env` (Settings, daemon promotion and MCP
+  `${VAR}` expansion), project MCP servers and gateway config, and project
+  `config.toml` keys that widen capability or redirect data (sandbox mode,
+  computer use, webhooks, notifications, storage and policy paths, cost limit,
+  scheduler auto-start). `hitl.dangerously_skip_permissions` and
+  `computer_use.helper_path` are never read from project config. A project
+  server could previously replace an operator-granted MCP server's command
+  under the same name. Restrictions such as `[policy.org] denied_tools` still
+  apply without trust. Folders that relied on a project `.env` or these keys
+  need one `geode config trust`.
+- `geode config explain` now reads API-key fields from their real variables
+  (for example `ANTHROPIC_API_KEY`) and reports only whether a secret is set,
+  instead of printing the effective key.
 
 ## [1.0.30] - 2026-09-28
 

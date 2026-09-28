@@ -30,26 +30,26 @@ export default function Page() {
                   <td>1. ChatGPT 구독 OAuth</td>
                   <td>ChatGPT 구독 OAuth</td>
                   <td><code>/login openai</code>로 device-code 로그인. 기존 <code>~/.codex/auth.json</code> 자격도 가져올 수 있습니다.</td>
-                  <td>이미 ChatGPT를 결제 중이고 API 키를 따로 만들기 싫을 때. <code>gpt-5.5</code>는 이 경로로만 라우팅됩니다.</td>
+                  <td>이미 ChatGPT를 결제 중이고 API 키를 따로 만들기 싫을 때.</td>
                 </tr>
                 <tr>
                   <td>2. PAYG API 키</td>
                   <td><code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>ZAI_API_KEY</code></td>
-                  <td><code>~/.geode/.env</code>에 키만 적습니다. <code>geode setup</code> 또는 <code>/login add</code>로 기록할 수도 있습니다.</td>
+                  <td><code>geode setup</code> 또는 <code>/login add</code>로 등록하면 <code>~/.geode/auth.toml</code>에 저장됩니다. 환경 변수나 <code>~/.geode/.env</code>에 둔 키도 읽습니다.</td>
                   <td>토큰 단위로 비용을 직접 통제하고 싶을 때. 팀 계정과 CI에도 맞습니다.</td>
                 </tr>
                 <tr>
                   <td>3. 저비용 GLM 경로</td>
                   <td><code>ZAI_API_KEY</code> (GLM)</td>
-                  <td>같은 방식으로 <code>~/.geode/.env</code>에 등록합니다.</td>
+                  <td>2번과 같은 방식으로 등록합니다.</td>
                   <td>거의 무료로 먼저 체험할 때. <code>glm-4.7-flash</code>는 한시 무료 티어입니다.</td>
                 </tr>
               </tbody>
             </table>
             <p>
-              <code>~/.geode/.env</code>는 시크릿 전용 파일입니다. 모델 선택
-              같은 동작 설정은 <code>~/.geode/config.toml</code>에 저장되며,
-              .env에 모델을 적는 방식은 더 이상 쓰지 않습니다.
+              모델은 키와 별개로 고릅니다. <code>/model</code>은 프로젝트{" "}
+              <code>.geode/config.toml</code>에, <code>/model global &lt;model&gt;</code>은{" "}
+              <code>~/.geode/config.toml</code>에 저장합니다(<a href="/geode/docs/config/basics">설정 기초</a>).
             </p>
 
             <h2>가장 빠른 길 찾기</h2>
@@ -72,7 +72,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>특정 프로바이더를 키 인증으로 강제하고 싶습니다</td>
-                  <td><code>/login source &lt;provider&gt; api_key</code>. 선택은 <code>config.toml</code>에만 저장됩니다.</td>
+                  <td><code>/login source &lt;provider&gt; api_key</code>. 선택은 프로젝트 <code>.geode/config.toml</code>에 저장됩니다.</td>
                 </tr>
                 <tr>
                   <td>지금 뭐가 잡혀 있는지 확인하고 싶습니다</td>
@@ -164,27 +164,27 @@ geode about              # 실효 모델 + 자격 상태 확인`}</pre>
                   <td>1. ChatGPT subscription OAuth</td>
                   <td>ChatGPT subscription OAuth</td>
                   <td><code>/login openai</code> runs device-code login. Existing <code>~/.codex/auth.json</code> credentials can also be imported.</td>
-                  <td>You already pay for ChatGPT and do not want a separate API key. <code>gpt-5.5</code> routes only through this lane.</td>
+                  <td>You already pay for ChatGPT and do not want a separate API key.</td>
                 </tr>
                 <tr>
                   <td>2. PAYG API keys</td>
                   <td><code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>ZAI_API_KEY</code></td>
-                  <td>Keys go in <code>~/.geode/.env</code>, written for you by <code>geode setup</code> or <code>/login add</code>.</td>
+                  <td><code>geode setup</code> or <code>/login add</code> saves the key to <code>~/.geode/auth.toml</code>. Keys exported as environment variables or kept in <code>~/.geode/.env</code> are read too.</td>
                   <td>You want per-token cost control. Also the right fit for team accounts and CI.</td>
                 </tr>
                 <tr>
                   <td>3. Budget GLM lane</td>
                   <td><code>ZAI_API_KEY</code> (GLM)</td>
-                  <td>Same mechanism, a key in <code>~/.geode/.env</code>.</td>
+                  <td>Same mechanism as path 2.</td>
                   <td>Trying GEODE at near-zero cost. <code>glm-4.7-flash</code> is a limited-time free tier.</td>
                 </tr>
               </tbody>
             </table>
             <p>
-              <code>~/.geode/.env</code> is a secrets-only file. Behavior
-              settings such as the model choice persist in
-              <code>~/.geode/config.toml</code>; putting a model in .env is no
-              longer how persistence works.
+              The model is picked separately from keys: <code>/model</code> saves
+              it to the project <code>.geode/config.toml</code>, and{" "}
+              <code>/model global &lt;model&gt;</code> to <code>~/.geode/config.toml</code>{" "}
+              (see <a href="/geode/docs/config/basics">Configuration basics</a>).
             </p>
 
             <h2>Fastest path by goal</h2>
@@ -207,7 +207,7 @@ geode about              # 실효 모델 + 자격 상태 확인`}</pre>
                 </tr>
                 <tr>
                   <td>I want to force a provider onto key authentication</td>
-                  <td><code>/login source &lt;provider&gt; api_key</code>. The choice persists in <code>config.toml</code> only.</td>
+                  <td><code>/login source &lt;provider&gt; api_key</code>. The choice is saved to the project <code>.geode/config.toml</code>.</td>
                 </tr>
                 <tr>
                   <td>I want to see what is wired up right now</td>

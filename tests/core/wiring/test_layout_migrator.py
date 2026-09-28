@@ -619,3 +619,29 @@ class TestV3ToV4MessagesBackfill:
         v4 = [s for s in report.steps if s.name.startswith("v3→v4")]
         assert v4
         assert any("projects/ dir absent" in s for s in v4[0].skipped)
+
+
+class TestV4ToV5CareerProfile:
+    """v4→v5 — the never-read ``identity/career.toml`` joins ``user_profile/``."""
+
+    def test_career_moves_and_empty_identity_dir_goes(self, fake_geode_home: Path) -> None:
+        from core.wiring.layout_migrator import _migrate_v4_to_v5
+
+        (fake_geode_home / "identity").mkdir()
+        (fake_geode_home / "identity" / "career.toml").write_text('[identity]\ntitle = "x"\n')
+        result = _migrate_v4_to_v5()
+        moved = fake_geode_home / "user_profile" / "career.toml"
+        assert moved.read_text() == '[identity]\ntitle = "x"\n'
+        assert not (fake_geode_home / "identity").exists()
+        assert result.moved and not result.warnings
+
+    def test_existing_profile_career_is_never_overwritten(self, fake_geode_home: Path) -> None:
+        from core.wiring.layout_migrator import _migrate_v4_to_v5
+
+        (fake_geode_home / "identity").mkdir()
+        (fake_geode_home / "identity" / "career.toml").write_text("old\n")
+        (fake_geode_home / "user_profile").mkdir()
+        (fake_geode_home / "user_profile" / "career.toml").write_text("kept\n")
+        result = _migrate_v4_to_v5()
+        assert (fake_geode_home / "user_profile" / "career.toml").read_text() == "kept\n"
+        assert (fake_geode_home / "identity" / "career.toml").exists() and result.warnings

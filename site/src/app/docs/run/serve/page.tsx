@@ -62,10 +62,10 @@ export default function Page() {
             <p>
               <code>geode serve</code>는 <code>gateway_enabled</code>가 꺼져도
               로컬 CLI IPC와 스케줄러를 시작합니다. Slack, Discord, Telegram,
-              webhook도 쓰려면 <code>~/.geode/.env</code>에 한 줄을 추가합니다.
+              webhook도 쓰려면{" "}
+              <a href="/geode/docs/harness/serve-gateway#start-stop">Serve와 게이트웨이</a>에
+              적힌 대로 게이트웨이를 켭니다.
             </p>
-            <pre>{`# ~/.geode/.env
-GEODE_GATEWAY_ENABLED=true`}</pre>
             <pre>{`geode serve              # 포그라운드 실행
 geode serve --poll 5     # poll 기반 receiver 주기 5초`}</pre>
 
@@ -112,7 +112,7 @@ geode serve --poll 5     # poll 기반 receiver 주기 5초`}</pre>
                 <tr>
                   <td>외부 채널 메시지가 들어오지 않음</td>
                   <td>gateway 비활성</td>
-                  <td>로컬 CLI는 그대로 동작합니다. 외부 채널도 쓰려면 <code>GEODE_GATEWAY_ENABLED=true</code>를 설정합니다.</td>
+                  <td>로컬 CLI는 그대로 동작합니다. 외부 채널도 쓰려면 <a href="/geode/docs/harness/serve-gateway#start-stop">게이트웨이를 켭니다</a>.</td>
                 </tr>
                 <tr>
                   <td>배너 모델과 응답 모델이 다름</td>
@@ -191,11 +191,9 @@ geode serve --poll 5     # poll 기반 receiver 주기 5초`}</pre>
             <p>
               <code>geode serve</code> starts local CLI IPC and the scheduler
               even while <code>gateway_enabled</code> is off. To also run Slack,
-              Discord, Telegram, and webhooks, add one line to
-              <code>~/.geode/.env</code>.
+              Discord, Telegram, and webhooks, enable the gateway as described
+              in <a href="/geode/docs/harness/serve-gateway#start-stop">Serve and gateway</a>.
             </p>
-            <pre>{`# ~/.geode/.env
-GEODE_GATEWAY_ENABLED=true`}</pre>
             <pre>{`geode serve              # run in the foreground
 geode serve --poll 5     # 5-second interval for polling paths`}</pre>
 
@@ -243,7 +241,7 @@ geode serve --poll 5     # 5-second interval for polling paths`}</pre>
                 <tr>
                   <td>External channel messages do not arrive</td>
                   <td>Gateway disabled</td>
-                  <td>The local CLI still works. Set <code>GEODE_GATEWAY_ENABLED=true</code> to also run external channels.</td>
+                  <td>The local CLI still works. To also run external channels, <a href="/geode/docs/harness/serve-gateway#start-stop">enable the gateway</a>.</td>
                 </tr>
                 <tr>
                   <td>Banner model differs from the answering model</td>

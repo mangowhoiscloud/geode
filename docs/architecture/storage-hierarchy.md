@@ -19,14 +19,14 @@ flowchart TB
         env[".env\nexternal secret input\nAPI keys, channel tokens"]
         config["config.toml\nglobal behavior defaults"]
         auth["auth.toml\nregistered API keys, OAuth\nplans and profiles"]
-        profile["identity/ + user_profile/\ncross-project user context"]
+        profile["user_profile/\ncross-project user context"]
         runtime["usage/, diagnostics/, logs/,\nprojects/<id>/, self-improving runtime"]
     end
 
     subgraph workspace["Workspace: <project>/.geode"]
         project_config["config.toml\nproject behavior overrides"]
         memory["memory/, rules/, skills/\nproject context"]
-        project_runtime["reports/, scheduler logs,\nresult_cache/"]
+        project_runtime["reports/, scheduler logs,\ntool-offload/"]
     end
 
     subgraph repo["Repo-tracked source"]
@@ -57,14 +57,19 @@ Read order and write targets are intentionally asymmetric:
 - Shell exports are the highest-precedence session override. GEODE never
   writes them.
 - `auth.toml` owns GEODE-registered LLM credentials. Environment variables and
-  `~/.geode/.env` remain external secret inputs; `./.env` fills missing global
-  environment values. Registered profile selection follows the routing owner,
-  not the precedence rules for environment-backed settings alone.
+  `~/.geode/.env` remain external secret inputs; in a trusted folder `./.env`
+  fills missing global environment values. Registered profile selection
+  follows the routing owner, not the precedence rules for environment-backed
+  settings alone.
 - `./.geode/config.toml` overrides `~/.geode/config.toml` for behavior because
-  behavior is often project-specific.
+  behavior is often project-specific. Its MCP servers, `[gateway]` table and
+  keys that widen capability apply only in a trusted folder;
+  `geode config trust` records trust in the global `config.toml` under
+  `[projects."<path>"]` (see
+  [project trust](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust)).
 - Runtime data that is user-private or machine-local stays under
-  `~/.geode/`. Project context that may travel with a workspace stays under
-  `<workspace>/.geode/`.
+  `~/.geode/`. Project context stays under `<workspace>/.geode/`, which
+  bootstrap adds to the workspace `.gitignore`.
 
 ## Three frontier patterns
 
@@ -100,17 +105,17 @@ The split is therefore deliberate, not accidental.
 |----------|--------|------|
 | Is it a GEODE-registered LLM API key / OAuth credential? | yes | `~/.geode/auth.toml` |
 | Is it an externally supplied API key or channel token? | yes | environment / `~/.geode/.env` |
-| Is it a project-only secret fallback? | yes | `./.env` (explicit scope only; never shadows global) |
-| Is it cross-project user identity (career, preferences, learned memory)? | yes | `~/.geode/identity/`, `~/.geode/user_profile/` |
+| Is it a project-only secret fallback? | yes | `./.env` (explicit scope only; read only in trusted folders; never shadows global) |
+| Is it cross-project user identity (career, preferences, learned memory)? | yes | `~/.geode/user_profile/` |
 | Is it queryable project runtime state or an operational event? | yes | `~/.geode/projects/<encoded-cwd>/sessions/sessions.db` |
 | Is it a portable, bounded run projection? | yes | owning run directory `events.jsonl` |
 | Is it an immutable evaluation trajectory? | yes | owning artifact bundle `trajectory.json` |
 | Is it a reviewed public trajectory release? | yes | external `geode-eval-artifacts/trajectories/<content-id>/` |
 | Is it an append-only cost series or diagnostic log? | yes | owning JSONL/log directory under `~/.geode/` |
 | Is it project-bound but user-private (per-project session, snapshot, cache)? | yes | `~/.geode/projects/<encoded-cwd>/` (Claude Code parity) |
-| Is it project-bound + meant to be committed / team-shareable? | yes | `{workspace}/.geode/` (rules, skills, custom config) |
+| Is it project-bound config or context (rules, skills, project settings)? | yes | `{workspace}/.geode/` (project-local; gitignored by default) |
 | Is it project-bound + user-generated output? | yes | `{workspace}/.geode/reports/` |
-| Is it a project-scoped scheduled job? | yes | `{workspace}/.geode/scheduled_tasks.json` (the schedule travels with the workspace) |
+| Is it a project-scoped scheduled job? | yes | `{workspace}/.geode/scheduled_tasks.json` (scoped to that workspace) |
 
 ## Writer contract
 
@@ -194,13 +199,18 @@ git-reviewable evidence ledgers.
 ~/.geode/                                  user-private state
 ├── auth.toml                              # credentials + plans + routing
 ├── .auth.toml.lock                        # serializes auth.toml changes
-├── config.toml                            # global config overrides
+├── config.toml                            # global config; also records project trust
+├── routing.toml                           # user override of core/config/routing.toml
+├── extension-policy.json                  # grants for non-bundled MCP, hooks, skills, adapters
 ├── cli.sock                               # thin-CLI ↔ serve IPC
 ├── .env                                   # secrets
 ├── .layout-version                        # migration marker (v0.95.x+)
+├── prompt_history                         # REPL input history (0600, secrets redacted)
 │
-├── identity/career.toml                   # cross-project user identity
-├── user_profile/{learned,preferences,profile}.md
+├── user_profile/                          # cross-project user identity
+│   ├── {profile,learned}.md
+│   ├── preferences.json
+│   └── career.toml                        # moved from identity/ by layout v5
 ├── skills/                                # personal skills (user-tier)
 │
 ├── usage/<YYYY-MM>.jsonl                  # LLM cost time-series
@@ -215,11 +225,10 @@ git-reviewable evidence ledgers.
 ├── petri/logs/*.eval                      # Petri evaluation raw
 │
 ├── projects/<encoded-cwd>/                # per-project user-private state
-│   ├── journal/{runs,errors}.jsonl        # execution journal
+│   ├── journal/runs.jsonl                 # execution journal
 │   ├── sessions/
 │   │   └── sessions.db                    # checkpoints + session_events + hook_events SoT
-│   ├── snapshots/snap-*.json              # langgraph checkpoints
-│   └── result_cache/                      # tool result memoization
+│   └── result_cache/                      # pipeline result LRU cache
 │
 ├── runs/{*.jsonl,_archive/}               # retired global archives; no new session history
 ├── workers/<task>.{result.json,stderr.log} # delegate worker output
@@ -229,12 +238,15 @@ git-reviewable evidence ledgers.
 └── models/                                # reserved (empty)
 
 
-{workspace}/.geode/                        project-bound, potentially team-shareable
-├── config.toml                            # project-level config overrides
+{workspace}/.geode/                        project-local, gitignored by default
+├── config.toml                            # project config overrides (capability keys need trust)
 ├── memory/PROJECT.md                      # project insights (`G4` tier in system prompt)
 ├── rules/*.md                             # project rules (loaded by tag)
 ├── skills/                                # project-specific skills
+├── hooks/                                 # project hook plugins (need an extension-policy grant)
+├── user_profile/                          # project overrides of ~/.geode/user_profile/
 ├── reports/                               # generated reports (user output)
+├── tool-offload/<session>/                # large tool results kept out of context
 ├── scheduled_tasks.json + .lock           # project-scoped cron jobs
 └── scheduler_logs/                        # scheduler run history
 
@@ -254,15 +266,18 @@ git-reviewable evidence ledgers.
 
 Migrations live in `core/wiring/layout_migrator.py` and run at every
 bootstrap via `core.paths.ensure_directories()` (idempotent — module-level
-once-flag, dotfile marker `~/.geode/.layout-version`).
+once-flag, dotfile marker `~/.geode/.layout-version`). The current target is
+v5 (`GEODE_LAYOUT_VERSION`).
 
 | Version | Step | Status |
 |---------|------|--------|
-| v0 → v1 | Path reconciliation — `serve.log`, `approve_history.json`, `mcp-registry-cache.json` to canonical locations | done |
-| v1 → v2 | Vestigial constant cleanup — `PROJECT_EMBEDDING_CACHE` has no writer; remove if confirmed unused after one release window | this PR (marker bump only) |
+| v0 → v1 | Path reconciliation — `serve.log` → `logs/serve.log`, `approve_history.json` → `approval_history.jsonl`, `mcp-registry-cache.json` → `mcp/registry-cache.json` | done |
+| v1 → v2 | Vestigial directory archival — the current workspace's `.geode/embedding-cache/` and `.geode/vectors/` move to `.geode/_archive/<name>-<UTC>/`; empty ones are removed | done |
+| v2 → v3 | TTL archival — entries in `runs/`, `vault/general/`, `vault/research/` and `projects/` not modified for 30 days (`GEODE_ARCHIVE_TTL_DAYS`) move to that directory's `_archive/<YYYY-MM>/` | done |
+| v3 → v4 | Messages backfill — each session's `messages.json` is copied into the `messages` table of its `sessions.db` | done |
+| v4 → v5 | Career profile — `identity/career.toml` → `user_profile/career.toml`; an empty `identity/` is removed | done |
 | schema-only | Add `sessions.db:hook_events`; leave legacy run JSONL untouched | additive `CREATE IF NOT EXISTS` (no layout marker bump) |
 | schema-only | Add `sessions.db:session_events` + `session_event_imports`; retire new global transcript writes | additive, explicit digest-backed import |
-| v3 → v4 | TBD — vault TTL policy (`~/.geode/vault/{general,research}/` currently 1800+ flat files) | backlog |
 
 Pattern for adding a new migration (mirrors Hermes
 `SessionDB._init_schema` at `hermes-agent/hermes_state.py:550-678`):
@@ -284,5 +299,5 @@ Pattern for adding a new migration (mirrors Hermes
 - `core/observability/trajectory.py` — validated evaluation export
 - `core/observability/trajectory_release.py` — public staging, scan, digest, read-back
 - `core/memory/project.py` — project memory cascade (project → global)
-- `core/cli/cmd_lifecycle.py` — `/clean` / `/uninstall` consumers (must
+- `core/cli/commands/lifecycle.py` — `/clean` / `/uninstall` consumers (must
   honour the same tier rules)

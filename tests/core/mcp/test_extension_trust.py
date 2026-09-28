@@ -179,6 +179,7 @@ def test_config_precedence_reports_collision(tmp_path: Path, monkeypatch) -> Non
     global_config.write_text('[mcp.servers.same]\ncommand = "global"\n', encoding="utf-8")
     project_config.write_text('[mcp.servers.same]\ncommand = "project"\n', encoding="utf-8")
     monkeypatch.setenv("GEODE_CONFIG_TOML", str(global_config))
+    monkeypatch.setattr("core.config.project_trust.is_project_trusted", lambda root=None: True)
     catalog = MCPConfigCatalog(
         tmp_path / "absent.json",
         project_root=lambda: project,

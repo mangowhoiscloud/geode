@@ -75,14 +75,29 @@ def _toml_literal(value: str | float) -> str:
     return f'"{toml_escape(value)}"' if isinstance(value, str) else str(value)
 
 
+def _sets_key(line: str, key: str, *, commented: bool = False) -> bool:
+    """``key = ...`` (``# key = ...`` when ``commented``); ``key\t=v`` counts too.
+
+    The trailing ``=`` check keeps prefix safety: ``default_model`` never matches
+    ``default_model_x``.
+    """
+    stripped = line.lstrip()
+    if commented:
+        if not stripped.startswith("#"):
+            return False
+        stripped = stripped[1:].lstrip()
+    return stripped.startswith(key) and stripped[len(key) :].lstrip(" \t").startswith("=")
+
+
 def splice_toml_section(text: str, section: str, updates: Mapping[str, str | float]) -> str:
     """Return ``text`` with ``[section]`` carrying every ``updates`` entry.
 
     Strings are escaped and quoted; numeric budgets remain TOML numbers. An empty-string
     value (``value == ""``) signals "delete this key": the matching line is dropped
     rather than replaced, and a fresh section never picks up a delete request.
-    If the section is missing it is appended; existing keys are replaced in
-    place; new keys are inserted at the end of the section block.
+    If the section is missing it is appended; an existing key, or failing that a
+    commented-out ``# key = ...`` template line, is replaced in place; other new
+    keys are inserted at the end of the section block.
     """
     header = f"[{section}]"
     lines = text.splitlines(keepends=False)
@@ -107,19 +122,21 @@ def splice_toml_section(text: str, section: str, updates: Mapping[str, str | flo
         if re.fullmatch(r"\[.*\]\s*(?:#.*)?", stripped):
             end_idx = j
             break
+    body = lines[header_idx + 1 : end_idx]
+    # A commented-out template line (``# key = ...``) is the slot for a key the
+    # section does not set yet, so picking a value uncomments it in place.
+    for key, val in updates.items():
+        if val == "" or any(_sets_key(line, key) for line in body):
+            continue
+        slot = next(
+            (i for i, line in enumerate(body) if _sets_key(line, key, commented=True)), None
+        )
+        if slot is not None:
+            body[slot] = f"{key} = {_toml_literal(val)}"
     remaining = dict(updates)
     keep_lines: list[str] = []
-    for k in range(header_idx + 1, end_idx):
-        line = lines[k]
-        matched_key: str | None = None
-        for key in list(remaining):
-            # Match ``key`` followed by optional whitespace then ``=`` (TOML allows
-            # ``key = v`` / ``key=v`` / ``key\t= v``). The trailing ``=`` check keeps
-            # prefix-safety so ``default_model`` never matches ``default_model_x``.
-            stripped = line.lstrip()
-            if stripped.startswith(key) and stripped[len(key) :].lstrip(" \t").startswith("="):
-                matched_key = key
-                break
+    for line in body:
+        matched_key = next((key for key in remaining if _sets_key(line, key)), None)
         if matched_key is None:
             keep_lines.append(line)
             continue
@@ -139,19 +156,30 @@ def splice_toml_section(text: str, section: str, updates: Mapping[str, str | flo
     return result
 
 
-def persist_toml_section(section: str, updates: dict[str, str]) -> Path:
-    """Splice ``updates`` into ``[section]`` of the resolved config TOML, atomically.
+def persist_toml_section(
+    section: str, updates: Mapping[str, str | float], *, path: Path | None = None
+) -> Path:
+    """Splice ``updates`` into ``[section]`` of a config TOML, atomically (0600).
 
-    Resolves the write path through :func:`resolve_config_toml_path` (same helper
-    the loader reads) so a ``GEODE_CONFIG_TOML`` override keeps read/write parity.
-    Returns the written path. A no-op (empty ``updates``) still returns the path.
+    ``path`` defaults to :func:`resolve_config_toml_path` (the file the loader
+    reads), so a ``GEODE_CONFIG_TOML`` override keeps read/write parity. Every
+    config.toml writer goes through here. Returns the written path; a no-op
+    (empty ``updates``) still returns it.
     """
     from core.memory.atomic_write import atomic_write_text
 
-    path = resolve_config_toml_path()
+    path = resolve_config_toml_path(path)
     if not updates:
         return path
     path.parent.mkdir(parents=True, exist_ok=True)
     text = path.read_text(encoding="utf-8") if path.is_file() else ""
-    atomic_write_text(path, splice_toml_section(text, section, updates))
+    new_text = splice_toml_section(text, section, updates)
+    try:
+        # A header spelled differently by hand (``[ llm ]``) would become a
+        # duplicate table, and the loader skips an invalid file entirely.
+        tomllib.loads(new_text)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f"Not writing {path}: the result would be invalid TOML ({exc})") from exc
+    # Replace the link's target, not a symlinked config (a dotfiles checkout).
+    atomic_write_text(path.resolve() if path.is_symlink() else path, new_text)
     return path

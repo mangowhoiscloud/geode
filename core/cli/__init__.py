@@ -132,6 +132,20 @@ def _relay_streaming(call: Callable[..., dict[str, Any]]) -> tuple[dict[str, Any
     return response, stream_started
 
 
+def _write_daemon_output(output: object) -> None:
+    """Relay text serve rendered with ANSI styles; a pipe or file gets plain text."""
+    import sys
+
+    from rich.text import Text
+
+    text = str(output)
+    if not sys.stdout.isatty():
+        # from_ansi splits lines, so the closing newline has to be restored.
+        text = Text.from_ansi(text).plain + ("\n" if text.endswith("\n") else "")
+    sys.stdout.write(text)
+    sys.stdout.flush()
+
+
 def _thin_interactive_loop(
     *,
     resume_session: str = "",
@@ -223,10 +237,7 @@ def _thin_interactive_loop(
                 response = client.send_command("/quit", "")
                 output = response.get("output", "")
                 if output:
-                    import sys as _sys
-
-                    _sys.stdout.write(output)
-                    _sys.stdout.flush()
+                    _write_daemon_output(output)
                 break
 
             # Slash commands
@@ -284,10 +295,7 @@ def _thin_interactive_loop(
                 # Render captured output from serve (ANSI-styled text)
                 output = response.get("output", "")
                 if output:
-                    import sys as _sys
-
-                    _sys.stdout.write(str(output))
-                    _sys.stdout.flush()
+                    _write_daemon_output(output)
                 from core.ipc_protocol import is_ipc_error
 
                 if is_ipc_error(response):

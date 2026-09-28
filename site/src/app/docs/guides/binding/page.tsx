@@ -25,7 +25,10 @@ export default function Page() {
             <h2>1. config.toml에 바인딩을 선언합니다</h2>
             <p>
               바인딩은 프로젝트의 <code>.geode/config.toml</code>{" "}
-              <code>[gateway]</code> 섹션에서 선언합니다.{" "}
+              <code>[gateway]</code> 섹션에서 선언합니다. 이 섹션은{" "}
+              <a href="/geode/docs/config/basics#project-trust">신뢰한 폴더</a>에서만
+              읽고, 전역 <code>~/.geode/config.toml</code>의{" "}
+              <code>[gateway]</code>는 같은 형식이며 신뢰가 필요 없습니다.{" "}
               <code>ChannelManager.load_bindings_from_config</code>(
               <code>core/messaging/binding.py</code>)이 이 형식을
               읽습니다. 각 규칙은 <code>channel</code>과 <code>channel_id</code>가
@@ -107,11 +110,11 @@ time_budget_s = 90`}</pre>
               바인딩이 실제로 로드됐는지 활성 gateway에서 확인합니다.
             </p>
             <pre>{`uv run python -c "
-import tomllib
-from pathlib import Path
 from core.messaging.binding import ChannelManager
+from core.wiring.adapters import _load_gateway_config
 
-cfg = tomllib.loads(Path('.geode/config.toml').read_text())
+cfg, sources = _load_gateway_config()  # global + trusted project, as serve reads it
+print('sources', sources)
 m = ChannelManager()
 n = m.load_bindings_from_config(cfg)
 print('loaded', n, 'bindings')
@@ -147,7 +150,12 @@ for b in m.list_bindings():
             <h2>1. Declare the binding in config.toml</h2>
             <p>
               Bindings are declared in the <code>[gateway]</code> section of the
-              project&apos;s <code>.geode/config.toml</code>.{" "}
+              project&apos;s <code>.geode/config.toml</code>. That section is read
+              only in a{" "}
+              <a href="/geode/docs/config/basics#project-trust">trusted folder</a>;
+              a <code>[gateway]</code> section in the global{" "}
+              <code>~/.geode/config.toml</code> uses the same format and needs no
+              trust.{" "}
               <code>ChannelManager.load_bindings_from_config</code> in{" "}
               <code>core/messaging/binding.py</code> reads this format.
               Each rule requires <code>channel</code> and <code>channel_id</code>.
@@ -227,11 +235,11 @@ time_budget_s = 90`}</pre>
             <h2>Verify</h2>
             <p>Confirm the bindings actually loaded from an active gateway.</p>
             <pre>{`uv run python -c "
-import tomllib
-from pathlib import Path
 from core.messaging.binding import ChannelManager
+from core.wiring.adapters import _load_gateway_config
 
-cfg = tomllib.loads(Path('.geode/config.toml').read_text())
+cfg, sources = _load_gateway_config()  # global + trusted project, as serve reads it
+print('sources', sources)
 m = ChannelManager()
 n = m.load_bindings_from_config(cfg)
 print('loaded', n, 'bindings')

@@ -26,7 +26,6 @@ def clean_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr("core.paths.GLOBAL_MCP_DIR", geode_home / "mcp")
     monkeypatch.setattr("core.paths.GLOBAL_SCHEDULER_DIR", geode_home / "scheduler")
     monkeypatch.setattr("core.paths.GLOBAL_PROJECTS_DIR", geode_home / "projects")
-    monkeypatch.setattr("core.paths.GLOBAL_IDENTITY_DIR", geode_home / "identity")
     monkeypatch.setattr("core.paths.GLOBAL_USER_PROFILE_DIR", geode_home / "user_profile")
 
     proj_geode = Path(".geode")
@@ -57,7 +56,7 @@ class TestEnsureDirectories:
         assert (home / "mcp").is_dir()
         assert (home / "scheduler").is_dir()
         assert (home / "projects").is_dir()
-        assert (home / "identity").is_dir()
+        assert not (home / "identity").exists()  # career.toml lives in user_profile/
         assert (home / "user_profile").is_dir()
 
     def test_creates_project_dirs(self, clean_dirs: Path) -> None:
@@ -78,7 +77,7 @@ class TestEnsureDirectories:
         assert proj_data.is_dir()
         assert (proj_data / "journal").is_dir()
         assert (proj_data / "sessions").is_dir()
-        assert (proj_data / "snapshots").is_dir()
+        assert not (proj_data / "snapshots").exists()  # nothing writes snapshots
         assert (proj_data / "result_cache").is_dir()
 
     def test_idempotent(self, clean_dirs: Path) -> None:

@@ -283,10 +283,16 @@ def model_available(model_id: str, *, source: str | None = None) -> bool:
             EnvironmentDiagnosticCapable,
             ModelCredentialDetectionCapable,
         )
-        from core.llm.adapters.registry import resolve_for
+        from core.llm.adapters.registry import bootstrap_builtins, resolve_for
         from core.llm.model_catalog import model_source_unavailable_reason
 
-        sources = build_policy_source_bundle().get("provider_routing")
+        bundle = build_policy_source_bundle()
+        # CLI processes (setup, doctor, the REPL welcome, serve's pre-runtime
+        # readiness) ask before any runtime registered adapters; an empty
+        # registry read as "no credential". Idempotent, and the runtime
+        # bootstraps with this same bundle.
+        bootstrap_builtins(policy_sources=bundle)
+        sources = bundle.get("provider_routing")
         provider = _resolve_provider(model_id)
         selected = (
             source

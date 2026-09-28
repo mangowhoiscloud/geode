@@ -31,7 +31,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td>builtin</td><td><code>&lt;package&gt;/.geode/skills/</code> (wheel과 함께 배포)</td><td>코드와 같이 버전 관리</td></tr>
-                <tr><td>project</td><td><code>.geode/skills/</code></td><td>팀 공유, git에 커밋</td></tr>
+                <tr><td>project</td><td><code>.geode/skills/</code></td><td>프로젝트 로컬. <code>.geode/</code>는 기본으로 gitignore됨</td></tr>
                 <tr><td>personal</td><td><code>~/.geode/skills/</code></td><td>개인 로컬 전용</td></tr>
               </tbody>
             </table>
@@ -203,7 +203,7 @@ argument-hint: "[issue-number]"
               </thead>
               <tbody>
                 <tr><td>builtin</td><td><code>&lt;package&gt;/.geode/skills/</code> (ships in the wheel)</td><td>Versioned with the code</td></tr>
-                <tr><td>project</td><td><code>.geode/skills/</code></td><td>Team-shared, committed to git</td></tr>
+                <tr><td>project</td><td><code>.geode/skills/</code></td><td>Project-local; <code>.geode/</code> is gitignored by default</td></tr>
                 <tr><td>personal</td><td><code>~/.geode/skills/</code></td><td>Local-only</td></tr>
               </tbody>
             </table>
