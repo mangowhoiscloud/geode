@@ -1,9 +1,9 @@
 {
   "schema": "jev-report-publication-v1",
   "status": "prepared-not-published",
-  "source_sha256": "708b2e7b6526c1c6ed4b8aa6c4dafea6618308ca6bed80724eb4b11ac8417e8a",
-  "html_sha256": "73658576441c26a056644f4fc07dc5f4eb374e760e8816c374c35e46a36df013",
-  "generator_sha256": "46d3eddbd3989ddf9a4ac21c5d70c2a5b9939f6b4e42043275cbe063b3a2b351",
+  "source_sha256": "37d8e11cabce01fe368d8c9f6d623a28a4ee7965d12bc8129e7efb529a73ff34",
+  "html_sha256": "49ccbd64d055b3efe040cc38e9f42f0029f9520894ab25c7a7f1d9d33b6c8a50",
+  "generator_sha256": "027b1a6ba8988c745790d976f06c31ab491bd393fa5e87a1cb618a4488b57f22",
   "evidence_readme": "https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/README.md",
   "date": "2026-09-28",
   "video_url": null,
@@ -202,8 +202,8 @@
     {
       "language": "ko",
       "file": "report-ko.pdf",
-      "sha256": "d96e2cb46dc4ecf3298228f513750d40f854530fb2b7b46cc754ff66a11350a4",
-      "bytes": 20018876,
+      "sha256": "37d1fca8d821eea0ad0febc081f1a97fbf4a25cad165e706361711ccbafe7dc2",
+      "bytes": 19830056,
       "pages": [
         {
           "scene_id": "cover",
@@ -224,10 +224,6 @@
         {
           "scene_id": "jev-public-design",
           "build": 1
-        },
-        {
-          "scene_id": "jev-public-design",
-          "build": 2
         },
         {
           "scene_id": "v21-question",
@@ -538,8 +534,8 @@
     {
       "language": "en",
       "file": "report-en.pdf",
-      "sha256": "33db0af3f50d60658c8b2bf9421f07d871f6ae787fc8723f8e47a86f8486ea87",
-      "bytes": 18237712,
+      "sha256": "da05703b5052dc029db7ccdab94643f2c20322aa1b639b88009b9fb08c17ce92",
+      "bytes": 18049608,
       "pages": [
         {
           "scene_id": "cover",
@@ -560,10 +556,6 @@
         {
           "scene_id": "jev-public-design",
           "build": 1
-        },
-        {
-          "scene_id": "jev-public-design",
-          "build": 2
         },
         {
           "scene_id": "v21-question",
@@ -877,5 +869,8 @@
     "Video export identity",
     "Public URL readback"
   ],
-  "total_bytes": 79662350
+  "asset_package_manifest_sha256": "9e4c3442ebcf78df611c43ae9b032a7b221dc0d9489cfe2726a37485198d3986",
+  "pdf_generator_sha256": "2d3b336ba98802f1d7c876589fdd19357cb26adcdf9631fd9a3fffe19810956f",
+  "pdf_reused_from_manifest_sha256": "9e4c3442ebcf78df611c43ae9b032a7b221dc0d9489cfe2726a37485198d3986",
+  "total_bytes": 79298871
 }

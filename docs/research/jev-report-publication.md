@@ -1,13 +1,17 @@
 # Jev research report publication
 
-The public artifact at `/geode/research/jev/` reuses the approved film HTML's
+The public artifact at `/geode/resaerch/jev-system1-offloading/` uses the
+operator's literal path and reuses the approved film HTML's
 slide navigation, build steps and bilingual text. It is not another metric
 producer. The source film remains unchanged. Packaging and local rendering do
 not establish publication or visual approval.
 
 ## Inputs and authority
 
-- Freeze the final film HTML SHA after the owner finishes the U8n narrative.
+- The corrected v23 film HTML is frozen at
+  `37d8e11cabce01fe368d8c9f6d623a28a4ee7965d12bc8129e7efb529a73ff34`:
+  57 scenes and 81 settled builds per language. This is the research source;
+  the outer reader UI originated in v22 and is not a second content edition.
 - Use an explicit asset list with relative `source`, relative `target`, and
   exact `sha256` fields. Include font licenses. Do not copy the source directory.
   Existing replay aliases outside the source directory require explicit
@@ -56,9 +60,23 @@ node site/scripts/export-jev-report.mjs \
 ```
 
 Omit `--pdf` only for packaging diagnostics; its PDF links do not represent
-existing deliverables. Final output requires both PDFs. The writer refuses an
+existing deliverables. Final output requires both PDFs. To change reader chrome
+without rerendering an unchanged source, use `--reuse-pdfs /path/to/prior-package`
+instead of `--pdf`. Reuse verifies the source SHA, identical slide markup and
+approved assets, bilingual page inventory, PDF hashes and original PDF generator
+identity. The new receipt preserves `pdf_generator_sha256` and the prior manifest
+digest separately from the current HTML generator. This explicit reuse mode
+also reads approved asset targets from that package and checks every digest;
+it does not need the private source's former media aliases. The writer refuses an
 existing output directory, preserves each prior attempt, and refuses output
-under `site/public/` without both `--release` and `--pdf`.
+under `site/public/` without `--release` and either rendered or verified reused PDFs.
+
+For a changed source that requires newly rendered PDFs, use `--pdf` together with
+`--asset-package /path/to/prior-approved-package`. Only the approved assets are
+reused: each target must match both the allowlist and that package's receipt,
+and its actual bytes and replay streams are checked again. The new receipt binds
+the asset package manifest digest. This does not reuse the old PDFs, restore
+missing private aliases, or permit combining `--asset-package` with `--reuse-pdfs`.
 
 Each PDF page is one settled build, not one scene. The exporter uses
 `window.__film.pages()` and `window.__film.go()`, finishes finite animation,
@@ -81,14 +99,26 @@ their original whitespace/EOF bytes; their hashes remain mandatory.
 
 ## Review and deployment
 
+For the exact route, reader-only preservation contract, current workflow audit
+and remaining release gates, see the
+[reader deployment strategy](jev-reader-deployment-strategy.md).
+
+The local package now contains newly generated v23 PDFs, followed by a
+wrapper-only source-sheet update using verified `--reuse-pdfs`. The complete
+KO and EN PDFs were visually read as 162 actual PDF raster pages. Source links
+remain in a single native dialog, not nested disclosures. The source sheet's
+open/close, keyboard, 375px layout and HTTP download checks are separate from
+PDF inspection. The manifest and deployment strategy bind their exact identities;
+neither local preparation nor the user's deployment approval is a live receipt.
+
 1. Reopen all final PDF pages and the actual web preview in both languages.
    Check settled-page completeness, replay stills, mobile overflow, keyboard
    navigation, language switching and the two download targets.
 2. Verify every source/asset/PDF digest, PDF page count, local link and private
    path exclusion. Check the actual `site/out` size, not only source asset size.
 3. After owner approval, add the complete package under
-   `site/public/research/jev/`, a sitemap entry and the minimal discovery link.
-   Add `site/out/research/**/*.html` to the existing Pages link-check scope;
+   `site/public/resaerch/jev-system1-offloading/`, a sitemap entry and the minimal discovery link.
+   Add `site/out/resaerch/jev-system1-offloading/**/*.html` to the existing Pages link-check scope;
    the current scope does not cover new research paths automatically.
 4. Run site lint, type/build and relevant link/metadata/export checks. Keep
    generated docs under their existing producers. Use the existing guarded

@@ -37,10 +37,10 @@ repos:
         # Jev vendor licenses are preserved byte-for-byte and hash-checked below.
         exclude: >-
           (?x)^(docs/self-improving/.*\.html|
-          site/public/research/jev/assets/fonts/(IBM-Plex-LICENSE|Pretendard-OFL|STIX-OFL)\.txt)$
+          site/public/resaerch/jev-system1-offloading/assets/fonts/(IBM-Plex-LICENSE|Pretendard-OFL|STIX-OFL)\.txt)$
       - id: end-of-file-fixer
         # Preserve the approved upstream SVG bytes; the integrity hook checks SHA.
-        exclude: ^site/public/research/jev/assets/geodi-dot\.svg$
+        exclude: ^site/public/resaerch/jev-system1-offloading/assets/geodi-dot\.svg$
       - id: check-yaml
       - id: check-json
       - id: check-toml
@@ -49,7 +49,7 @@ repos:
         # Only the approved oversized Jev files use the SHA/100-MiB gate below.
         exclude: >-
           (?x)^site/public/(report(?:-en)?\.pdf|
-          research/jev/(index\.html|report-(ko|en)\.pdf|
+          resaerch/jev-system1-offloading/(index\.html|report-(ko|en)\.pdf|
           assets/(replay-comparison|u8c-a|u8c-b|i6-natural-a|i6-natural-b|u8n-a|u8n-b)\.mp4|
           assets/fonts/(SourceHanSerifKR-Bold|Pretendard-Regular|Pretendard-Bold|
           Pretendard-Medium|Pretendard-SemiBold|Pretendard-ExtraBold)\.otf))$
@@ -92,7 +92,7 @@ repos:
         entry: node --test site/scripts/test-jev-report-export.mjs
         language: system
         pass_filenames: false
-        files: ^(site/public/research/jev/|site/scripts/(export-jev-report|test-jev-report-export)\.mjs$|docs/research/jev-report-assets\.json$|\.pre-commit-config\.yaml$)
+        files: ^(site/public/resaerch/jev-system1-offloading/|site/scripts/(export-jev-report|test-jev-report-export)\.mjs$|docs/research/jev-report-assets\.json$|\.pre-commit-config\.yaml$)
 
       - id: automation-contracts
         name: workflow and shell contracts

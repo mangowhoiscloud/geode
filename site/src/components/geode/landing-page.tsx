@@ -194,7 +194,7 @@ function LandingContent() {
         <div className="landing-footer-brand"><GeodiSprite scale={3} /><span>GEODE</span></div>
         <div className="landing-footer-links">
           <a href={locale === "en" ? "/geode/report-en.pdf" : "/geode/report.pdf"}>{t(locale, "기술 보고서 PDF", "Technical report PDF")}</a>
-          <a href={`/geode/research/jev/?lang=${locale}`}>{t(locale, "Jev 연구 보고서", "Jev research report")}</a>
+          <a href={`/geode/resaerch/jev-system1-offloading/?lang=${locale}`}>{t(locale, "Jev 연구 보고서", "Jev research report")}</a>
           <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts">{t(locale, "평가 데이터", "Evaluation data")}</a>
           <a href={`${repository}/releases`}>{t(locale, "릴리즈 노트", "Release notes")}</a>
           <Link href="/about">{t(locale, "만든 사람", "About the author")}</Link>
