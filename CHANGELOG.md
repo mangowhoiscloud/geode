@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.30] - 2026-09-28
+
 ### Infrastructure
 
 - Partition the complete pytest collection into four file-preserving CI shards,
