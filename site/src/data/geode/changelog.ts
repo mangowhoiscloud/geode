@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Fixed\n\n- **Eval run specs reject directory artifact references.** `validate_run_spec`\n  now fails when an artifact path (or a symlink) resolves to a directory;\n  directory evidence goes through a manifest file."
   },
   {
     "version": "1.0.31",

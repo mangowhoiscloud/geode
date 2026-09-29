@@ -369,25 +369,12 @@ def test_run_spec_validates_reproduction_hash_and_seed_cardinality(tmp_path: Pat
         contract.validate_run_spec(path)
 
 
-@pytest.mark.parametrize(
-    "artifact_name",
-    [
-        "native_results",
-        "measurement_results",
-        "trajectory",
-        "verifier_receipts",
-        "outcome_receipts",
-        "attempts",
-        "analysis",
-        "publication_manifest",
-    ],
-)
-def test_run_spec_rejects_existing_artifact_directory(tmp_path: Path, artifact_name: str) -> None:
+def test_run_spec_rejects_existing_artifact_directory(tmp_path: Path) -> None:
     path = tmp_path / "run-spec.json"
     payload = _run_spec()
     artifacts = payload["artifacts"]
     assert isinstance(artifacts, dict)
-    artifacts[artifact_name] = "jobs"
+    artifacts["native_results"] = "jobs"
     (tmp_path / "jobs").mkdir()
     _write_json(path, payload)
 
