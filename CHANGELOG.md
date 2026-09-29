@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Escaped runtime prompt sections.** A shared `render_prompt_section` helper
+  now frames caller-supplied session directives, memory-recall, tool-hint and
+  rubric-warning blocks, platform hints and model guidance, so stored text or a
+  tool error can no longer close its envelope or open a sibling section. Memory
+  layers and verification continuations use the same helper; authored model
+  card and identity text stay verbatim.
+
 ## [1.0.31] - 2026-09-29
 
 This release applies a repository's own configuration only after you trust the
