@@ -65,3 +65,14 @@ def test_rolling_experiment_state_is_rejected() -> None:
     ) == [
         "wheel: mutable experiment state is packaged: evolve/scaffold_search/state/mutations.jsonl"
     ]
+
+
+def test_development_scaffolds_are_rejected_in_both_artifacts() -> None:
+    paths = {f"{root}/skills/geode-workflow/SKILL.md" for root in (".agents", ".claude")}
+    for label, prefixes in (
+        ("wheel", artifacts.BANNED_WHEEL_PREFIXES),
+        ("sdist", artifacts.BANNED_SDIST_PREFIXES),
+    ):
+        assert artifacts._check_banned(label, paths, prefixes) == [
+            f"{label}: banned path {path}" for path in sorted(paths)
+        ]
