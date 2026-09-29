@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+### Security
+
+- PyJWT is locked at 2.14.0, which fixes CVE-2026-102274. GEODE does not import
+  it directly; `mcp` and `supabase-auth` depend on it. The runtime dependency
+  audit in CI had failed on 2.13.0 for every code change.
+
 ## [1.0.32] - 2026-09-29
 
 1.0.31 was stamped but never published: its release run stopped in
