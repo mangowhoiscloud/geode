@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Changed\n\n- **One provider-reported cost rule.** `validate_reported_cost_usd` beside\n  `UsageSummary` in `core/llm/adapters/base.py` now owns the reported-cost check for\n  `UsageSummary`, `TokenTracker.record` and the TypeSafe adapter, replacing\n  three copies. `TokenTracker.record` now raises `TypeError` for a non-numeric\n  cost, matching `UsageSummary`."
   },
   {
     "version": "1.0.31",

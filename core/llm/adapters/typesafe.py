@@ -18,7 +18,12 @@ from typing import Annotated, Any, Literal
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
-from core.llm.adapters.base import AdapterCallRequest, AdapterCallResult, UsageSummary
+from core.llm.adapters.base import (
+    AdapterCallRequest,
+    AdapterCallResult,
+    UsageSummary,
+    validate_reported_cost_usd,
+)
 from core.llm.registry import AdapterBillingType
 from core.observability.redaction import redact_secrets
 
@@ -157,8 +162,11 @@ async def _call_systemone(
         for value in [raw_usage.get(key)]
     }
     cost = raw_usage.get("cost") if provider == "openrouter" else None
-    valid_cost = cost is None or (type(cost) in (int, float) and math.isfinite(cost) and cost >= 0)
-    reported_cost = float(cost) if valid_cost and cost is not None else None
+    try:
+        reported_cost = None if cost is None else validate_reported_cost_usd(cost)
+    except (TypeError, ValueError):
+        reported_cost = None
+    valid_cost = cost is None or reported_cost is not None
     return AdapterCallResult(
         text=json.dumps(body.get("answers")),
         usage=UsageSummary(

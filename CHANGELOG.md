@@ -47,11 +47,13 @@ functional change.
 
 ## [Unreleased]
 
-### Fixed
+### Changed
 
-- **Invalid provider-reported cost stays unknown.** LLM call observation now
-  rejects a negative, non-finite, boolean or non-numeric `reported_cost_usd`
-  and records `cost_usd` as unknown, matching `TokenTracker.record`.
+- **One provider-reported cost rule.** `validate_reported_cost_usd` beside
+  `UsageSummary` in `core/llm/adapters/base.py` now owns the reported-cost check for
+  `UsageSummary`, `TokenTracker.record` and the TypeSafe adapter, replacing
+  three copies. `TokenTracker.record` now raises `TypeError` for a non-numeric
+  cost, matching `UsageSummary`.
 
 ## [1.0.31] - 2026-09-29
 

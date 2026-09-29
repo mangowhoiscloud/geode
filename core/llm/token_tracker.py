@@ -19,7 +19,6 @@ Pricing verified 2026-03-14 against:
 from __future__ import annotations
 
 import logging
-import math
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple
@@ -273,14 +272,10 @@ class TokenTracker:
         """Record one LLM call: cost → accumulator → persistent store."""
         _validate_cache_write_split(cache_creation_tokens, cache_creation_1h_tokens)
         if reported_cost_usd is not None:
-            if (
-                isinstance(reported_cost_usd, bool)
-                or not isinstance(reported_cost_usd, (int, float))
-                or not math.isfinite(float(reported_cost_usd))
-                or reported_cost_usd < 0
-            ):
-                raise ValueError("reported_cost_usd must be finite and non-negative")
-            cost = float(reported_cost_usd)
+            # Lazy: the adapters package imports this module while it loads.
+            from core.llm.adapters.base import validate_reported_cost_usd
+
+            cost = validate_reported_cost_usd(reported_cost_usd)
         else:
             cost = self.calculate_cost(
                 model,
