@@ -21,7 +21,6 @@ import os
 import re
 from datetime import datetime
 from functools import lru_cache
-from html import escape
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +39,7 @@ from core.config.policy_source import (
 )
 from core.llm.model_guidance import render_model_guidance
 from core.llm.platform_hints import render_platform_hint
-from core.llm.prompt_assembler import with_math_output_formatting
+from core.llm.prompt_assembler import render_prompt_section, with_math_output_formatting
 from core.llm.prompts import AGENTIC_SUFFIX, ROUTER_SYSTEM
 from core.paths import get_project_root
 
@@ -500,11 +499,6 @@ def _build_model_card(model: str) -> str:
         return ""
 
 
-def _render_memory_data(tag: str, text: str) -> str:
-    """Frame stored data without letting its text create prompt sections."""
-    return f"<{tag}>\n{escape(text, quote=False)}\n</{tag}>"
-
-
 def _build_user_context(profile: Any = None) -> str:
     """Build user context from profile + career identity.
 
@@ -550,7 +544,7 @@ def _build_user_context(profile: Any = None) -> str:
             "Use it to tailor responses to the user's expertise and preferences. "
             "Never present the user's profile as your own."
         )
-        return _render_memory_data("user_context", header + "\n" + "\n".join(parts))
+        return render_prompt_section("user_context", header + "\n" + "\n".join(parts))
     except Exception:
         log.debug("Failed to build user context", exc_info=True)
         return ""
@@ -638,7 +632,7 @@ def _build_geode_memory_context() -> str:
             return ""
 
         capped = meaningful[:_MAX_SECTION_LINES]
-        return _render_memory_data("project_memory", "\n".join(capped))
+        return render_prompt_section("project_memory", "\n".join(capped))
     except Exception:
         log.debug("Failed to build geode memory context (G2 layer)", exc_info=True)
         return ""
@@ -686,7 +680,7 @@ def _build_learning_context(profile: Any = None) -> str:
         sanitized = [s for s in sanitized if s]
         if not sanitized:
             return ""
-        return _render_memory_data(
+        return render_prompt_section(
             "agent_learning",
             "Patterns learned from the user's behaviour. Apply them to tailor "
             "responses, but never adopt them as your own traits.\n" + "\n".join(sanitized),
@@ -722,7 +716,7 @@ def _build_project_memory_context() -> str:
 
         if not parts:
             return ""
-        return _render_memory_data("runtime_rules", "\n\n".join(parts))
+        return render_prompt_section("runtime_rules", "\n\n".join(parts))
     except Exception:
         log.debug("Failed to build project memory context (G4 layer)", exc_info=True)
         return ""

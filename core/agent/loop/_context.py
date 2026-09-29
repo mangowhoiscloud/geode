@@ -13,6 +13,7 @@ from html import escape
 from typing import TYPE_CHECKING, Any
 
 from core.agent.system_prompt import build_system_prompt as _build_system_prompt
+from core.llm.prompt_assembler import render_prompt_section
 from core.llm.prompts import AGENTIC_SUFFIX
 from core.skills.skill_catalog_policy import (
     _load_skill_catalog_override,
@@ -140,7 +141,7 @@ def build_system_prompt(loop: AgenticLoop) -> str:
         )
     if loop._system_suffix:
         prompt = inject_runtime_hints(
-            prompt, "<session_directives>\n" + loop._system_suffix + "\n</session_directives>"
+            prompt, render_prompt_section("session_directives", loop._system_suffix)
         )
     return prompt
 
@@ -172,7 +173,7 @@ def render_verification_continuation_hint(instruction: str) -> str:
     text = instruction.strip()
     if not text:
         return ""
-    return f"<verification_continuation>\n{escape(text, quote=False)}\n</verification_continuation>"
+    return render_prompt_section("verification_continuation", text)
 
 
 def render_goal_continuation_hint(goal: Any) -> str:

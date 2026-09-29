@@ -44,6 +44,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.llm.prompt_assembler import render_prompt_section
+
 log = logging.getLogger(__name__)
 
 __all__ = [
@@ -220,9 +222,8 @@ def format_rubric_block(rows: list[DimRegression]) -> str:
     """
     if not rows:
         return ""
-    lines = ["<rubric-warning>"]
+    lines: list[str] = []
     for row in rows:
         directive = row.rubric or "watch this dim — recent regression detected"
         lines.append(f"- [{row.dim}] {directive}")
-    lines.append("</rubric-warning>")
-    return "\n".join(lines)
+    return render_prompt_section("rubric-warning", "\n".join(lines))

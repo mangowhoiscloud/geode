@@ -47,8 +47,22 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **One provider-reported cost rule.** `validate_reported_cost_usd` beside
+  `UsageSummary` in `core/llm/adapters/base.py` now owns the reported-cost check for
+  `UsageSummary`, `TokenTracker.record` and the TypeSafe adapter, replacing
+  three copies. `TokenTracker.record` now raises `TypeError` for a non-numeric
+  cost, matching `UsageSummary`.
+
 ### Fixed
 
+- **Escaped runtime prompt sections.** A shared `render_prompt_section` helper
+  now frames caller-supplied session directives, memory-recall, tool-hint and
+  rubric-warning blocks, platform hints and model guidance, so stored text or a
+  tool error can no longer close its envelope or open a sibling section. Memory
+  layers and verification continuations use the same helper; authored model
+  card and identity text stay verbatim.
 - **Eval run specs reject directory artifact references.** `validate_run_spec`
   now fails when an artifact path (or a symlink) resolves to a directory;
   directory evidence goes through a manifest file.
