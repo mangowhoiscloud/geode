@@ -46,6 +46,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.llm.prompt_assembler import render_prompt_section
 from core.paths import GLOBAL_MEMORY_DIR
 
 log = logging.getLogger(__name__)
@@ -192,7 +193,7 @@ def format_memory_block(entries: list[MemoryEntry]) -> str:
     """Render ranked entries as a ``<memory-recall>`` block, or ``""`` if empty."""
     if not entries:
         return ""
-    lines = ["<memory-recall>"]
+    lines: list[str] = []
     for entry in entries:
         type_tag = f"[{entry.type}]" if entry.type else "[memory]"
         # Explicit branches — earlier ``desc = a or b.splitlines()[0] if b else ""``
@@ -205,8 +206,7 @@ def format_memory_block(entries: list[MemoryEntry]) -> str:
         else:
             desc = ""
         lines.append(f"- {type_tag} {desc}".rstrip())
-    lines.append("</memory-recall>")
-    return "\n".join(lines)
+    return render_prompt_section("memory-recall", "\n".join(lines))
 
 
 # ---------------------------------------------------------------------------

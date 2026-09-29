@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-09-28
+ * Last sync: 2026-09-29
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -20,6 +20,11 @@ export const CHANGELOG: ChangelogEntry[] = [
     "version": "Unreleased",
     "date": "",
     "body": ""
+  },
+  {
+    "version": "1.0.32",
+    "date": "2026-09-29",
+    "body": "1.0.31 was stamped but never published: its release run stopped in\nvalidation because `release.yml` did not install the `ffprobe` that the site\nbuild needs. 1.0.32 is the first published package that carries 1.0.31's\nchanges, so upgrading from 1.0.30 also brings the folder trust gate described\nunder 1.0.31. This release itself escapes caller-supplied and stored text in\nruntime prompt sections, so a session directive, stored memory or tool error\ncan no longer close its section or open a new one, and gives provider-reported\ncost a single validation rule.\n\n### Changed\n\n- **One provider-reported cost rule.** `validate_reported_cost_usd` beside\n  `UsageSummary` in `core/llm/adapters/base.py` now owns the reported-cost check for\n  `UsageSummary`, `TokenTracker.record` and the TypeSafe adapter, replacing\n  three copies. `TokenTracker.record` now raises `TypeError` for a non-numeric\n  cost, matching `UsageSummary`.\n\n### Fixed\n\n- **Escaped runtime prompt sections.** A shared `render_prompt_section` helper\n  now frames caller-supplied session directives, memory-recall, tool-hint and\n  rubric-warning blocks, platform hints and model guidance, so stored text or a\n  tool error can no longer close its envelope or open a sibling section. Memory\n  layers and verification continuations use the same helper; authored model\n  card and identity text stay verbatim.\n- **Eval run specs reject directory artifact references.** `validate_run_spec`\n  now fails when an artifact path (or a symlink) resolves to a directory;\n  directory evidence goes through a manifest file.\n\n### Infrastructure\n\n- **Release validation installs ffprobe.** The release docs gate runs the full\n  site build, whose terminal-replay check needs `ffprobe`; `release.yml` now\n  installs it like `pages.yml`. The v1.0.31 release run failed at this step and\n  published nothing. A workflow contract test pins the order for every job that\n  builds the site.\n- **Package boundary rejects `.agents/`.** `check_package_artifacts.py` now\n  bans the development scaffold directory from both wheel and sdist, matching\n  `.claude/`."
   },
   {
     "version": "1.0.31",
@@ -2553,4 +2558,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-09-28";
+export const CHANGELOG_SYNCED_AT = "2026-09-29";

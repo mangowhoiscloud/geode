@@ -174,6 +174,16 @@ class AdapterCallRequest:
     response_schema: dict[str, Any] | None = None
 
 
+def validate_reported_cost_usd(value: object) -> float:
+    """Return a provider-reported USD charge, rejecting non-numbers and invalid amounts."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError("reported_cost_usd must be a number or None")
+    cost = float(value)
+    if not math.isfinite(cost) or cost < 0:
+        raise ValueError("reported_cost_usd must be finite and non-negative")
+    return cost
+
+
 @dataclass(frozen=True)
 class UsageSummary:
     """Token accounting block from a single LLM call.
@@ -216,15 +226,10 @@ class UsageSummary:
             or not 0 <= long_write <= self.cache_write_tokens
         ):
             raise ValueError("cache_write_1h_tokens must be a nonnegative subset of cache writes")
-        cost = self.reported_cost_usd
-        if cost is None:
-            return
-        if isinstance(cost, bool) or not isinstance(cost, (int, float)):
-            raise TypeError("reported_cost_usd must be a number or None")
-        normalized = float(cost)
-        if not math.isfinite(normalized) or normalized < 0:
-            raise ValueError("reported_cost_usd must be finite and non-negative")
-        object.__setattr__(self, "reported_cost_usd", normalized)
+        if self.reported_cost_usd is not None:
+            object.__setattr__(
+                self, "reported_cost_usd", validate_reported_cost_usd(self.reported_cost_usd)
+            )
 
 
 @dataclass(frozen=True)
@@ -606,4 +611,5 @@ __all__ = [
     "UsageSummary",
     "WebSearchCapable",
     "WebSearchResult",
+    "validate_reported_cost_usd",
 ]

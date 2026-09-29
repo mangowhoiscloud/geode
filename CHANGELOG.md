@@ -47,6 +47,48 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.32] - 2026-09-29
+
+1.0.31 was stamped but never published: its release run stopped in
+validation because `release.yml` did not install the `ffprobe` that the site
+build needs. 1.0.32 is the first published package that carries 1.0.31's
+changes, so upgrading from 1.0.30 also brings the folder trust gate described
+under 1.0.31. This release itself escapes caller-supplied and stored text in
+runtime prompt sections, so a session directive, stored memory or tool error
+can no longer close its section or open a new one, and gives provider-reported
+cost a single validation rule.
+
+### Changed
+
+- **One provider-reported cost rule.** `validate_reported_cost_usd` beside
+  `UsageSummary` in `core/llm/adapters/base.py` now owns the reported-cost check for
+  `UsageSummary`, `TokenTracker.record` and the TypeSafe adapter, replacing
+  three copies. `TokenTracker.record` now raises `TypeError` for a non-numeric
+  cost, matching `UsageSummary`.
+
+### Fixed
+
+- **Escaped runtime prompt sections.** A shared `render_prompt_section` helper
+  now frames caller-supplied session directives, memory-recall, tool-hint and
+  rubric-warning blocks, platform hints and model guidance, so stored text or a
+  tool error can no longer close its envelope or open a sibling section. Memory
+  layers and verification continuations use the same helper; authored model
+  card and identity text stay verbatim.
+- **Eval run specs reject directory artifact references.** `validate_run_spec`
+  now fails when an artifact path (or a symlink) resolves to a directory;
+  directory evidence goes through a manifest file.
+
+### Infrastructure
+
+- **Release validation installs ffprobe.** The release docs gate runs the full
+  site build, whose terminal-replay check needs `ffprobe`; `release.yml` now
+  installs it like `pages.yml`. The v1.0.31 release run failed at this step and
+  published nothing. A workflow contract test pins the order for every job that
+  builds the site.
+- **Package boundary rejects `.agents/`.** `check_package_artifacts.py` now
+  bans the development scaffold directory from both wheel and sdist, matching
+  `.claude/`.
+
 ## [1.0.31] - 2026-09-29
 
 This release applies a repository's own configuration only after you trust the

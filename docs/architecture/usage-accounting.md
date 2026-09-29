@@ -157,7 +157,10 @@ remain outside this estimate. The 2026-09-24 model and source audit
 lives in [the provider inventory](../research/provider-refresh-20260924.md).
 
 `TokenTracker.record()` preserves finite nonnegative `reported_cost_usd`,
-including zero; otherwise it estimates from model prices. Both paths validate
+including zero; otherwise it estimates from model prices. One validator beside
+[`UsageSummary`](../../core/llm/adapters/base.py),
+`validate_reported_cost_usd`, owns that rule for the adapter boundary, the
+tracker and the TypeSafe adapter. Both paths validate
 the one-hour write subset before updating the accumulator or monthly file. Its legacy output
 does not retain the price revision or which cost source won. API-price
 estimates are not subscription invoices. `UsageRecord.source` identifies a

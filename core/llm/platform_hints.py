@@ -43,6 +43,8 @@ import contextvars
 import logging
 import os
 
+from core.llm.prompt_assembler import render_prompt_section
+
 log = logging.getLogger(__name__)
 
 __all__ = [
@@ -177,4 +179,4 @@ def render_platform_hint(surface: str | None = None) -> str:
     body = PLATFORM_HINTS.get(target)
     if not body:
         return ""
-    return f"<platform_hint surface={target!r}>\n{body}\n</platform_hint>"
+    return render_prompt_section("platform_hint", body, surface=target)
