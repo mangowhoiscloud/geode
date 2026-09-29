@@ -47,6 +47,14 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **One provider-reported cost rule.** `validate_reported_cost_usd` beside
+  `UsageSummary` in `core/llm/adapters/base.py` now owns the reported-cost check for
+  `UsageSummary`, `TokenTracker.record` and the TypeSafe adapter, replacing
+  three copies. `TokenTracker.record` now raises `TypeError` for a non-numeric
+  cost, matching `UsageSummary`.
+
 ### Fixed
 
 - **Escaped runtime prompt sections.** A shared `render_prompt_section` helper
