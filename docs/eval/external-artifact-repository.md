@@ -164,6 +164,8 @@ diagnostic with `promotion_authority=none` and does not alter Tau2's native
 | `artifacts/eval/harnesses/mcpmark/results-geode-agentworld/` | `mcpmark/results-geode-agentworld/` |
 | `artifacts/eval/harnesses/mcpmark/logs*/` | `mcpmark/logs*/` |
 | tau2 simulation result directories | `tau2/simulations/` |
+| Terminal-Bench 2.1 paired, smoke, and other single-benchmark runs | `terminal-bench/results-<kind>/<run-id>/` |
+| multi-harness research packets (for example Jev) | `reports/e2e-validation/<study>/` |
 | `artifacts/eval/runs/crucible/campaigns/` | `crucible/runs/campaigns/` |
 | `artifacts/eval/runs/crucible/{row-cache,trajectory-snapshots}/` | `crucible/runs/{row-cache,trajectory-snapshots}/` |
 | approved Crucible launch/report packets | `crucible/runs/launch-packets/` |
@@ -172,6 +174,18 @@ diagnostic with `promotion_authority=none` and does not alter Tau2's native
 | `docs/e2e/` dated validation records (migrated 2026-07-13) | `reports/e2e-validation/` |
 | `docs/eval/crucible-power-admission-2026-07-13.md` (migrated 2026-07-13) | `crucible/gate-provenance/` |
 | normalized trajectory releases (`TRAJECTORIES.md` contract; first release 2026-07-28, MCP spec-response E2E) | `trajectories/<source>-<scope>-<published-utc>-<digest12>/` |
+
+New single-benchmark runs use `<benchmark>/results-<kind>/<run-id>/`; the
+canonical Terminal-Bench 2.1 directory is `terminal-bench/` (run ids keep the
+`terminalbench21-*` prefix). Research packets that answer one question across
+several harnesses, such as Jev, are separate publication units under
+`reports/e2e-validation/<study>/`. Paths bound by a frozen publication manifest
+stay where they are: the Terminal-Bench full-suite run at
+`terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/`
+and the Jev packets. Earlier paired and smoke runs moved from `terminalbench/`
+to `terminal-bench/` in
+[`geode-eval-artifacts#49`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/49);
+commit-pinned links and frozen `*.publication.json` records keep the old path.
 
 Validated `run-spec.json`, `attempts.jsonl`, and `analysis.json` sidecars stay
 beside their benchmark-specific native run rather than entering a second

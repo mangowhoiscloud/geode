@@ -162,7 +162,11 @@ Follow `docs/eval/benchmark-publishing-cycle.md` and
 3. Build `artifact-publish-manifest.template.json`, privacy review the exact
    bytes, publish append-only, and verify remote read-back at the pinned commit.
    Validate portable paths, classification, byte counts, SHA-256 identities,
-   and prepared/published state before copying:
+   and prepared/published state before copying.
+   Place a single-benchmark run at `<benchmark>/results-<kind>/<run-id>/`
+   (Terminal-Bench 2.1 uses `terminal-bench/`, never `terminalbench/`) and a
+   multi-harness research packet at `reports/e2e-validation/<study>/`; never
+   move a path a frozen publication manifest already binds:
 
    ```bash
    uv run python scripts/eval/contract.py validate-publication \
