@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Eval run specs reject directory artifact references.** `validate_run_spec`
+  now fails when an artifact path (or a symlink) resolves to a directory;
+  directory evidence goes through a manifest file.
+
 ## [1.0.31] - 2026-09-29
 
 This release applies a repository's own configuration only after you trust the
