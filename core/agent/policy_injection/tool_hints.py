@@ -37,6 +37,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from core.llm.prompt_assembler import render_prompt_section
+
 log = logging.getLogger(__name__)
 
 __all__ = [
@@ -164,7 +166,7 @@ def format_tool_hints_block(hints: list[ToolHint]) -> str:
     """Render the failing-tool hints as a ``<tool-hints>`` block, or ``""`` if empty."""
     if not hints:
         return ""
-    lines = ["<tool-hints>"]
+    lines: list[str] = []
     for h in hints:
         if h.recent_error:
             lines.append(
@@ -172,5 +174,4 @@ def format_tool_hints_block(hints: list[ToolHint]) -> str:
             )
         else:
             lines.append(f"- [{h.tool_name}] {h.fail_count}/{h.total} failed")
-    lines.append("</tool-hints>")
-    return "\n".join(lines)
+    return render_prompt_section("tool-hints", "\n".join(lines))

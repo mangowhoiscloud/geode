@@ -100,7 +100,7 @@ _FAMILY_SAMPLE_MODEL: dict[str, str] = {
 def test_render_returns_xml_block_for_each_family(family: str):
     sample = _FAMILY_SAMPLE_MODEL[family]
     block = render_model_guidance(sample)
-    assert block.startswith(f"<model_guidance family={family!r}>"), f"family={family}"
+    assert block.startswith(f'<model_guidance family="{family}">'), f"family={family}"
     assert block.rstrip().endswith("</model_guidance>"), f"family={family}"
     assert MODEL_GUIDANCE[family] in block, f"family={family} body missing"
 

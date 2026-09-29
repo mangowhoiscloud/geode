@@ -85,14 +85,14 @@ def test_env_beats_context_var(monkeypatch: pytest.MonkeyPatch):
 def test_render_uses_resolved_surface(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv(GEODE_SURFACE_TYPE_ENV, SURFACE_SLACK)
     block = render_platform_hint()
-    assert block.startswith("<platform_hint surface='slack'>")
+    assert block.startswith('<platform_hint surface="slack">')
     assert block.rstrip().endswith("</platform_hint>")
     assert PLATFORM_HINTS[SURFACE_SLACK] in block
 
 
 def test_render_explicit_surface_overrides_lookup():
     block = render_platform_hint(SURFACE_MCP_REMOTE)
-    assert "surface='mcp_remote'" in block
+    assert 'surface="mcp_remote"' in block
     assert PLATFORM_HINTS[SURFACE_MCP_REMOTE] in block
 
 
@@ -111,7 +111,7 @@ def test_surface_labels_do_not_grant_tools_or_imply_worktree_cleanup():
 @pytest.mark.parametrize("surface", sorted(VALID_SURFACES))
 def test_render_returns_xml_block_for_each_surface(surface: str):
     block = render_platform_hint(surface)
-    assert block.startswith(f"<platform_hint surface={surface!r}>"), f"surface={surface}"
+    assert block.startswith(f'<platform_hint surface="{surface}">'), f"surface={surface}"
     assert block.rstrip().endswith("</platform_hint>"), f"surface={surface}"
     assert PLATFORM_HINTS[surface] in block, f"surface={surface} body missing"
 

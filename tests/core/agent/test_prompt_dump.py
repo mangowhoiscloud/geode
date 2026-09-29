@@ -51,8 +51,8 @@ def test_assembled_prompt_binds_configured_profile_when_missing(monkeypatch) -> 
 def test_surface_pin_reaches_platform_hint() -> None:
     cli_prompt = assemble_full_prompt("claude-opus-4-8", "cli")
     slack_prompt = assemble_full_prompt("claude-opus-4-8", "slack")
-    assert "surface='cli'" in cli_prompt
-    assert "surface='slack'" in slack_prompt
+    assert 'surface="cli"' in cli_prompt
+    assert 'surface="slack"' in slack_prompt
 
 
 def test_dump_preserves_literal_context_data(monkeypatch) -> None:

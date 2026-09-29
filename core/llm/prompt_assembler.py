@@ -8,6 +8,7 @@ active path.
 
 from __future__ import annotations
 
+from html import escape
 from typing import Final
 
 MATH_OUTPUT_FORMATTING_INSTRUCTION: Final[str] = """## Math formatting
@@ -17,6 +18,16 @@ When writing formulas, do not emit raw LaTeX-like text.
 $$
 IC_t = \\frac{\\sum_i S_i y_i}{\\sqrt{\\sum_i S_i^2}\\sqrt{\\sum_i y_i^2}}
 $$"""
+
+
+def render_prompt_section(tag: str, body: str, **attributes: str) -> str:
+    """Wrap opaque text in an XML section; tag and attribute names are code-owned.
+
+    Escaping keeps the text from closing its envelope or opening a sibling
+    section. XML framing does not grant instruction authority.
+    """
+    attrs = "".join(f' {key}="{escape(value, quote=True)}"' for key, value in attributes.items())
+    return f"<{tag}{attrs}>\n{escape(body, quote=False)}\n</{tag}>"
 
 
 def with_math_output_formatting(system: str) -> str:

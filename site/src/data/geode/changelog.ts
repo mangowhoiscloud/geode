@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Fixed\n\n- **Escaped runtime prompt sections.** A shared `render_prompt_section` helper\n  now frames caller-supplied session directives, memory-recall, tool-hint and\n  rubric-warning blocks, platform hints and model guidance, so stored text or a\n  tool error can no longer close its envelope or open a sibling section. Memory\n  layers and verification continuations use the same helper; authored model\n  card and identity text stay verbatim."
   },
   {
     "version": "1.0.31",
