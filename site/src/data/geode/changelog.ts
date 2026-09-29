@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Security\n\n- PyJWT is locked at 2.14.0, which fixes CVE-2026-102274. GEODE does not import\n  it directly; `mcp` and `supabase-auth` depend on it. The runtime dependency\n  audit in CI had failed on 2.13.0 for every code change."
   },
   {
     "version": "1.0.32",
