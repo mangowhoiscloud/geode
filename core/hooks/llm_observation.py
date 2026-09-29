@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
@@ -49,6 +50,13 @@ def _completed_attempt_payload(
     cost_usd = None
     try:
         if reported_cost is not None:
+            if (
+                isinstance(reported_cost, bool)
+                or not isinstance(reported_cost, (int, float))
+                or not math.isfinite(reported_cost)
+                or reported_cost < 0
+            ):
+                raise ValueError(f"invalid reported cost {reported_cost!r}")
             cost_usd = float(reported_cost)
         elif cost_estimator is not None and input_tokens is not None and output_tokens is not None:
             cost_usd = float(
