@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from core.llm.pricing_loader import ModelPrice
@@ -21,6 +22,27 @@ from core.llm.token_tracker import TokenTracker
 
 def _tracker(price: ModelPrice) -> TokenTracker:
     return TokenTracker(pricing={"m": price})
+
+
+@pytest.mark.parametrize(
+    ("reported_cost", "error"),
+    [
+        (-1.0, ValueError),
+        (float("inf"), ValueError),
+        (float("nan"), ValueError),
+        (True, TypeError),
+        ("0.1", TypeError),
+    ],
+)
+def test_invalid_reported_cost_is_rejected_before_accumulation(
+    reported_cost: Any, error: type[Exception]
+) -> None:
+    tracker = _tracker(ModelPrice(input=1.0, output=2.0))
+
+    with pytest.raises(error):
+        tracker.record("m", 100, 20, reported_cost_usd=reported_cost)
+
+    assert tracker.accumulator.calls == []
 
 
 @pytest.mark.parametrize("category", ["cached", "cache_write"])

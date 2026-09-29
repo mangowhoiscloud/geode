@@ -30,6 +30,8 @@ from __future__ import annotations
 import logging
 import re
 
+from core.llm.prompt_assembler import render_prompt_section
+
 log = logging.getLogger(__name__)
 
 __all__ = [
@@ -186,4 +188,4 @@ def render_model_guidance(model: str) -> str:
     body = MODEL_GUIDANCE.get(family)
     if not body:
         return ""
-    return f"<model_guidance family={family!r}>\n{body}\n</model_guidance>"
+    return render_prompt_section("model_guidance", body, family=family)

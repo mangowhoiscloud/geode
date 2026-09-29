@@ -26,12 +26,12 @@ def _clear_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_platform_hint_block_appears_under_env_override(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv(GEODE_SURFACE_TYPE_ENV, SURFACE_SLACK)
     prompt = system_prompt.build_system_prompt(model="claude-opus-4-7")
-    assert "<platform_hint surface='slack'>" in prompt
+    assert '<platform_hint surface="slack">' in prompt
 
 
 def test_model_guidance_block_appears_for_known_family(monkeypatch: pytest.MonkeyPatch):
     prompt = system_prompt.build_system_prompt(model="claude-opus-4-7")
-    assert "<model_guidance family='anthropic'>" in prompt
+    assert '<model_guidance family="anthropic">' in prompt
 
 
 def test_model_guidance_omitted_for_unknown_model(monkeypatch: pytest.MonkeyPatch):
