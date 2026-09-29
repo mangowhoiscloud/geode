@@ -369,6 +369,48 @@ def test_run_spec_validates_reproduction_hash_and_seed_cardinality(tmp_path: Pat
         contract.validate_run_spec(path)
 
 
+def test_run_spec_rejects_existing_artifact_directory(tmp_path: Path) -> None:
+    path = tmp_path / "run-spec.json"
+    payload = _run_spec()
+    artifacts = payload["artifacts"]
+    assert isinstance(artifacts, dict)
+    artifacts["native_results"] = "jobs"
+    (tmp_path / "jobs").mkdir()
+    _write_json(path, payload)
+
+    with pytest.raises(ValueError, match="artifact must reference a file, not a directory"):
+        contract.validate_run_spec(path)
+
+
+def test_run_spec_rejects_symlink_to_artifact_directory(tmp_path: Path) -> None:
+    path = tmp_path / "run-spec.json"
+    payload = _run_spec()
+    artifacts = payload["artifacts"]
+    assert isinstance(artifacts, dict)
+    artifacts["native_results"] = "native.json"
+    (tmp_path / "jobs").mkdir()
+    (tmp_path / "native.json").symlink_to("jobs", target_is_directory=True)
+    _write_json(path, payload)
+
+    with pytest.raises(ValueError, match="artifact must reference a file, not a directory"):
+        contract.validate_run_spec(path)
+
+
+@pytest.mark.parametrize("exists", [False, True])
+def test_run_spec_accepts_planned_or_existing_artifact_file(tmp_path: Path, exists: bool) -> None:
+    path = tmp_path / "run-spec.json"
+    payload = _run_spec()
+    artifacts = payload["artifacts"]
+    assert isinstance(artifacts, dict)
+    artifacts["native_results"] = "jobs/native-manifest.json"
+    if exists:
+        (tmp_path / "jobs").mkdir()
+        _write_json(tmp_path / "jobs/native-manifest.json", {"files": []})
+    _write_json(path, payload)
+
+    assert contract.validate_run_spec(path)["run_id"] == payload["run_id"]
+
+
 @pytest.mark.parametrize(
     "raw, message",
     [
