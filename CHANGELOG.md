@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- **Package boundary rejects `.agents/`.** `check_package_artifacts.py` now
+  bans the development scaffold directory from both wheel and sdist, matching
+  `.claude/`.
+
 ## [1.0.31] - 2026-09-29
 
 This release applies a repository's own configuration only after you trust the

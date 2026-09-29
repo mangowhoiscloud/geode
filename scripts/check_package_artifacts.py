@@ -143,6 +143,7 @@ BANNED_COMMON_PARTS = {
 }
 
 BANNED_WHEEL_PREFIXES = (
+    ".agents/",
     ".claude/",
     ".geode/",
     ".github/",
@@ -155,6 +156,7 @@ BANNED_WHEEL_PREFIXES = (
 )
 
 BANNED_SDIST_PREFIXES = (
+    ".agents/",
     ".claude/",
     ".geode/",
     ".github/",
