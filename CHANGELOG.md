@@ -47,6 +47,17 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.32] - 2026-09-29
+
+1.0.31 was stamped but never published: its release run stopped in
+validation because `release.yml` did not install the `ffprobe` that the site
+build needs. 1.0.32 is the first published package that carries 1.0.31's
+changes, so upgrading from 1.0.30 also brings the folder trust gate described
+under 1.0.31. This release itself escapes caller-supplied and stored text in
+runtime prompt sections, so a session directive, stored memory or tool error
+can no longer close its section or open a new one, and gives provider-reported
+cost a single validation rule.
+
 ### Changed
 
 - **One provider-reported cost rule.** `validate_reported_cost_usd` beside

@@ -13,7 +13,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v1.0.31 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.32 — Autonomous Agent Runtime + Evaluation Substrate
 
 GEODE is a Python agent runtime for research, file work, and scheduled tasks.
 Its agentic loop calls tools, reads their results, and continues the task.

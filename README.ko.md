@@ -13,7 +13,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v1.0.31 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.32 — Autonomous Agent Runtime + Evaluation Substrate
 
 GEODE는 리서치, 파일 작업, 예약 작업을 위한 Python 에이전트 런타임입니다.
 에이전트는 도구를 호출하고 결과를 읽으며 작업을 이어갑니다.
