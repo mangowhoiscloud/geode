@@ -77,6 +77,10 @@ rounded to four significant decimal places.
 `exact` timing requires a known timezone offset; RFC 3339 `-00:00` remains
 unknown and is rejected. Evidence references are portable POSIX-relative and
 digest-bound: URI, UNC, drive-root, backslash, and parent traversal forms are rejected.
+Artifact slots name files, not raw output directories. Run-spec validation
+rejects an existing directory, including a directory symlink, and permits a
+not-yet-created output file; reference directory evidence through a manifest
+file.
 If an invalid or aborted attempt is selected for provenance, the primary metric
 must be `not-measurable` with null counts and the decision cannot promote or
 reject.

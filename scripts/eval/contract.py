@@ -591,6 +591,11 @@ def validate_run_spec(path: Path) -> dict[str, Any]:
     for artifact_name, reference in payload["artifacts"].items():
         if reference is not None:
             _validate_relative_reference(str(reference), label=f"{path}:{artifact_name}")
+            if (path.parent / str(reference)).is_dir():
+                raise ValueError(
+                    f"{path}:{artifact_name}: artifact must reference a file, not a directory; "
+                    "use a manifest for directory evidence"
+                )
     if payload["privacy"]["classification"] == "public" and _contains_machine_local_path(payload):
         raise ValueError(f"{path}: public run spec contains a machine-local path")
     return payload

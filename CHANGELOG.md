@@ -63,6 +63,9 @@ functional change.
   tool error can no longer close its envelope or open a sibling section. Memory
   layers and verification continuations use the same helper; authored model
   card and identity text stay verbatim.
+- **Eval run specs reject directory artifact references.** `validate_run_spec`
+  now fails when an artifact path (or a symlink) resolves to a directory;
+  directory evidence goes through a manifest file.
 
 ### Infrastructure
 
