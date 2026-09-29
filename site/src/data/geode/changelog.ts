@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Infrastructure\n\n- **Package boundary rejects `.agents/`.** `check_package_artifacts.py` now\n  bans the development scaffold directory from both wheel and sdist, matching\n  `.claude/`."
   },
   {
     "version": "1.0.31",
