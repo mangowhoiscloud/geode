@@ -91,6 +91,36 @@ def test_release_checks_lock_before_uv_and_probes_installed_daemon() -> None:
     assert "cleanup_daemon" in smoke
 
 
+def _runs_full_site_build(command: str) -> bool:
+    return "npm run build" in command or any(
+        "scripts/check_official_docs.py" in line
+        and "--skip-build" not in line
+        and "--check-map" not in line
+        for line in command.splitlines()
+    )
+
+
+def test_full_site_builds_install_the_replay_stream_prober_first() -> None:
+    """The site build verifies terminal replays with ffprobe, provided by ffmpeg."""
+    building_jobs: list[str] = []
+    for path in sorted(WORKFLOW_PATH.parent.glob("*.yml")):
+        workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for job_name, job in workflow["jobs"].items():
+            runs = [str(step.get("run", "")) for step in job.get("steps", [])]
+            builds = [index for index, run in enumerate(runs) if _runs_full_site_build(run)]
+            if not builds:
+                continue
+            building_jobs.append(f"{path.stem}/{job_name}")
+            installs = [
+                index for index, run in enumerate(runs) if "install" in run and "ffmpeg" in run
+            ]
+            assert installs and installs[0] < builds[0], (
+                f"{path.name} / {job_name} builds the site before installing ffmpeg"
+            )
+
+    assert {"pages/build", "release/validate-build"} <= set(building_jobs)
+
+
 @pytest.mark.parametrize("name", ["ci", "pages", "install-smoke", "petri-publish"])
 def test_ci_project_sync_rejects_uncommitted_lock_updates(name: str) -> None:
     workflow = yaml.safe_load((WORKFLOW_PATH.parent / f"{name}.yml").read_text())
